@@ -26,7 +26,28 @@ class CleanupEquations {
   static_assert(exception_categories.size() < 64);
 public:
   using Reads = std::map<size_t, std::set<size_t>>;
-  struct Effects { Reads reads; std::set<size_t> initialized; };
+  // Compiler-only targets selected by explicit returns. A cleanup path may
+  // preserve its incoming selection, replace it, or join both possibilities.
+  struct Returned {
+    bool preserves = true;
+    std::set<size_t> targets, uninitialized;
+    bool operator==(const Returned &) const = default;
+    void initialize(const std::set<size_t> &known) {
+      std::erase_if(uninitialized, [&](size_t target) { return known.contains(target); });
+    }
+    void merge(const Returned &other) {
+      preserves = preserves || other.preserves;
+      targets.insert(other.targets.begin(), other.targets.end());
+      uninitialized.insert(other.uninitialized.begin(), other.uninitialized.end());
+    }
+    void then(const Returned &next) {
+      const bool keep = preserves && next.preserves;
+      if (!next.preserves) { targets.clear(); uninitialized.clear(); }
+      merge(next);
+      preserves = keep;
+    }
+  };
+  struct Effects { Reads reads; std::set<size_t> initialized; Returned returned{}; };
   struct Path { std::uint64_t inputs; Completion completion; size_t queue; Effects effects{}; };
   struct Action { bool guarded = false; std::vector<Path> paths; };
 private:
@@ -45,6 +66,8 @@ private:
       merge_read(result.reads, read, before);
     }
     result.initialized.insert(second.initialized.begin(), second.initialized.end());
+    result.returned.then(second.returned);
+    result.returned.initialize(result.initialized);
     return result;
   }
   static bool merge(std::map<size_t, Effects> &result, size_t completion, const Effects &effects) {
@@ -53,9 +76,11 @@ private:
     auto &known = found->second;
     const auto previous_reads = known.reads;
     const auto previous_initialized = known.initialized.size();
+    const auto previous_returned = known.returned;
     for (const auto &[read, before] : effects.reads) merge_read(known.reads, read, before);
     std::erase_if(known.initialized, [&](size_t id) { return !effects.initialized.contains(id); });
-    return previous_reads != known.reads || previous_initialized != known.initialized.size();
+    known.returned.merge(effects.returned);
+    return previous_reads != known.reads || previous_initialized != known.initialized.size() || previous_returned != known.returned;
   }
 public:
   static void merge_read(Reads &reads, size_t read, const std::set<size_t> &before) {

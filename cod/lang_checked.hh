@@ -102,6 +102,7 @@ struct LexicalState {
   std::set<size_t> expired_bindings;
   std::map<size_t, std::set<size_t>> target_versions;
   std::set<size_t> initialized_targets;
+  CleanupEquations::Returned returned;
   std::map<size_t, size_t> queues{{0, 0}};
   std::uint64_t inputs = 1;
   bool live = true;
@@ -117,6 +118,7 @@ struct LexicalState {
 struct CallEffects {
   std::set<std::pair<size_t, std::set<size_t>>> reads;
   std::map<size_t, std::set<size_t>> initialized;
+  CleanupEquations::Returned returned;
 };
 struct CheckedInstance {
   size_t method;
@@ -313,6 +315,7 @@ class ScalarChecker {
   }
   void initialize(size_t id) {
     lexical_.initialized.insert(id);
+    lexical_.returned.uninitialized.erase(id);
     for (const auto input : inputs(lexical_.inputs)) lexical_.input_initialized[input].insert(id);
   }
   static void add_requirement(LexicalState &state, size_t read, std::uint64_t inputs, const std::set<size_t> &before) {
@@ -343,6 +346,8 @@ class ScalarChecker {
       state.initialized.insert(id);
       for (const auto input : inputs(state.inputs)) state.input_initialized[input].insert(id);
     }
+    state.returned.then(effects.returned);
+    state.returned.initialize(state.initialized);
   }
   static std::set<size_t> call_reasons(const CheckedMethod &method) {
     std::set<size_t> reasons{0, 2};
@@ -423,6 +428,8 @@ class ScalarChecker {
     lexical_.bindings_available = a_exits ? b.bindings_available : b_exits ? a.bindings_available : intersect(a.bindings_available, b.bindings_available);
     lexical_.available = a_exits ? b.available : b_exits ? a.available : intersect(a.available, b.available);
     lexical_.initialized = a_exits ? b.initialized : b_exits ? a.initialized : intersect(a.initialized, b.initialized);
+    lexical_.returned = a_exits ? b.returned : a.returned;
+    if (!a_exits && !b_exits) lexical_.returned.merge(b.returned);
     lexical_.input_initialized = a_exits ? b.input_initialized : a.input_initialized;
     lexical_.requirements = a_exits ? b.requirements : a.requirements;
     if (!a_exits && !b_exits) {
@@ -756,6 +763,7 @@ class ScalarChecker {
         join(body_state, true, entries.front(), false, handler.at);
         for (size_t p = 1; p < entries.size(); ++p) { const auto joined = lexical_; join(joined, false, entries[p], false, handler.at); }
       }
+      lexical_.returned = {};
       lexical_.scopes.push_back({next_scope_++, {}});
       const auto id = declare(handler.text, type, true, true, handler.at);
       lexical_.scopes.back().declarations = false;
@@ -796,12 +804,17 @@ class ScalarChecker {
     }
     AbruptFlow final_exits{before.scopes.size(), {}};
     abrupt_ = &final_exits;
+    const auto final_returned = lexical_.returned;
+    if (finalizer) lexical_.returned = {};
     const auto cleanup = finalizer ? check(*finalizer, instance, operations) : Type{Type::void_type};
     if (cleanup != Type::void_type && cleanup != Type::never) fail(expr.at, "finally must complete with void or an explicit return");
     const auto final_state = lexical_;
     abrupt_ = outer;
     for (const auto &path : final_exits.paths) {
       lexical_ = path.state;
+      lexical_.returned = final_returned;
+      lexical_.returned.then(path.state.returned);
+      lexical_.returned.initialize(lexical_.initialized);
       if (path.completion.reason == 1) note_abrupt(path.at, path.exceptions, path.completion);
       else {
         bool pending_return = false, pending_normal = !normals.empty();
@@ -816,6 +829,9 @@ class ScalarChecker {
     if (cleanup != Type::never) {
       for (const auto *paths : {&outgoing.paths, &control_inputs}) for (const auto &path : *paths) {
         lexical_ = finalizer ? final_state : path.state;
+        lexical_.returned = path.state.returned;
+        if (finalizer) lexical_.returned.then(final_state.returned);
+        lexical_.returned.initialize(lexical_.initialized);
         lexical_.inputs = finalizer ? path.state.inputs & final_state.inputs : path.state.inputs;
         lexical_.live = lexical_.live && lexical_.inputs;
         refresh_initialized(lexical_);
@@ -830,6 +846,9 @@ class ScalarChecker {
     if (finalizer) {
       const auto normal = lexical_;
       lexical_ = final_state;
+      lexical_.returned = normal.returned;
+      lexical_.returned.then(final_state.returned);
+      lexical_.returned.initialize(final_state.initialized);
       lexical_.bindings_available.insert(normal.bindings_available.begin(), normal.bindings_available.end());
       lexical_.available.insert(normal.available.begin(), normal.available.end());
       lexical_.initialized.insert(normal.initialized.begin(), normal.initialized.end());
@@ -1095,19 +1114,20 @@ class ScalarChecker {
         operation.borrowed_result = operation.view = true;
         operation.read_only = definition.result_const;
         operation.owners = {owners.at(definition.result_owner)};
-        operation.initialized_target = definition.result_kind != "ptr";
-        for (size_t i = 0; i < views.size(); ++i)
-          if (definition.parameters[i].owner == definition.result_owner && arguments[i] == operation.type) {
-            operation.targets.insert(views[i].targets.begin(), views[i].targets.end());
-            operation.origins.insert(views[i].origins.begin(), views[i].origins.end());
-          }
-        if (definition.result_kind == "ptr") operation.targets.insert(null_target);
-        else operation.targets.erase(null_target);
+        operation.initialized_target = true;
+        for (const auto parameter : target.effects.returned.targets) {
+          if (parameter == null_target) { operation.targets.insert(null_target); continue; }
+          const auto &view = views.at(parameter);
+          operation.targets.insert(view.targets.begin(), view.targets.end());
+          operation.origins.insert(view.origins.begin(), view.origins.end());
+          if (target.effects.returned.uninitialized.contains(parameter) && !view.initialized_target &&
+              !std::all_of(view.targets.begin(), view.targets.end(), [&](size_t place) {
+                return place == null_target || lexical_.initialized.contains(place);
+              })) operation.initialized_target = false;
+        }
+        if (!target.effects.returned.targets.contains(null_target)) operation.targets.erase(null_target);
+        if (definition.result_kind != "ptr") operation.targets.erase(null_target);
         select_targets(operation, operation.targets);
-        operation.initialized_target = operation.initialized_target ||
-            std::all_of(operation.targets.begin(), operation.targets.end(), [&](size_t place) {
-              return place == null_target || lexical_.initialized.contains(place);
-            });
         if (read && !discard && &expr != prepared_call_) read_view(operation, expr.at, "borrowed result");
       }
       break;
@@ -1420,6 +1440,9 @@ class ScalarChecker {
         if (method->result_kind != "ptr" && !selected.initialized_target)
           for (const auto place : selected.targets) require_initialized(place, expr.at, "borrowed result");
         operation.borrowed_result = true;
+        lexical_.returned = {false, selected.targets, {}};
+        if (method->result_kind == "ptr" && !selected.initialized_target) for (const auto place : selected.targets)
+          if (place != null_target && !lexical_.initialized.contains(place)) lexical_.returned.uninitialized.insert(place);
       } else if (value != Type::never && !transfers_bits(value, instance->result))
         fail(expr.at, "return type '" + type_name(value) + "' does not satisfy '" + type_name(instance->result) + "'");
       operation.type = Type::never;
@@ -1485,6 +1508,7 @@ class ScalarChecker {
         lexical_.inputs = 1;
         lexical_.input_initialized = {{0, lexical_.initialized}};
         lexical_.requirements.clear();
+        lexical_.returned = {};
         lexical_.live = true;
         AbruptFlow flow{lexical_.scopes.size(), {}};
         abrupt_ = &flow;
@@ -1495,7 +1519,8 @@ class ScalarChecker {
           const auto queue = path.state.queues.at(cleanup_scope_);
           for (const auto input : inputs(path.state.inputs)) {
             const auto selected = std::uint64_t{1} << input;
-            CleanupEquations::Effects effects{{}, path.state.input_initialized.at(input)};
+            CleanupEquations::Effects effects{{}, path.state.input_initialized.at(input), path.state.returned};
+            effects.returned.initialize(effects.initialized);
             for (const auto &[read, requirement] : path.state.requirements) if (requirement.inputs & selected)
               effects.reads.emplace(read, requirement.before);
             if (path.exceptions.empty()) summary.paths.push_back({selected, path.completion, queue, effects});
@@ -1566,6 +1591,11 @@ class ScalarChecker {
     for (const auto id : state.initialized) if (storage(id).borrowed) known.insert(id);
     const auto [found, inserted] = observed_.initialized.emplace(reason, known);
     if (!inserted) found->second = intersect(found->second, known);
+    if (!reason && borrowed_result(*checking_method_->source)) {
+      auto returned = state.returned;
+      returned.initialize(state.initialized);
+      observed_.returned.merge(returned);
+    }
     for (const auto &[read, requirement] : state.requirements)
       if (requirement.inputs & state.inputs) observe_read(cleanup_.binding(read), requirement.before);
   }
@@ -1705,8 +1735,9 @@ public:
       demand(i, program_.methods[i].parameters, method.at);
     }
     check_entry();
-    // Terminating-path guarantees descend from all external inputs. Reads then
-    // grow from actual obligations, retaining writes that precede each read.
+    // Terminating-path write guarantees descend from all external inputs while
+    // returned targets grow from actual selections. Reads then use the closed
+    // guarantees, retaining writes that precede each read.
     for (const bool reads : {false, true}) {
       bool changed;
       do {
@@ -1716,7 +1747,10 @@ public:
           auto &known = program_.instances[i].effects;
           if (reads) {
             if (known.reads != effects.reads) { known.reads = effects.reads; changed = true; }
-          } else if (known.initialized != effects.initialized) { known.initialized = effects.initialized; changed = true; }
+          } else {
+            if (known.initialized != effects.initialized) { known.initialized = effects.initialized; changed = true; }
+            if (known.returned != effects.returned) { known.returned = effects.returned; changed = true; }
+          }
         }
       } while (changed);
     }
