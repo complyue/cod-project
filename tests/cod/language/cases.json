@@ -1550,7 +1550,7 @@
     "file": "nullable-call-owner.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "regional result would outlive"
+    "stderr_contains": "result does not belong to its declared owner"
   },
   {
     "file": "nullable-call-read.cod",
@@ -3901,5 +3901,44 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "perform requires an unavailable definition-time capture"
+  },
+  {
+    "file": "closures/callable-recomposed-factory-selection.cod",
+    "exit": 0,
+    "stdout": "1029\n15708\n1\n700\n777\n700\n7\n15708\n1029\n"
+  },
+  {
+    "file": "closures/callable-recomposed-factory-regional.cod",
+    "exit": 0,
+    "stdout": "1029\n22701\n1\n700\n777\n700\n7000\n22701\n1029\n"
+  },
+  {
+    "file": "closures/callable-recomposed-factory-partial.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "shared-region constraint violated",
+      "a partial perform replay may require explicit touch"
+    ]
+  },
+  {
+    "file": "closures/callable-recomposed-factory-missing.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "missing required binding"
+  },
+  {
+    "file": "closures/callable-recomposed-factory-expired.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "regional value requires a live owning region",
+      "note: the referenced region was acquired here"
+    ]
+  },
+  {
+    "file": "closures/callable-recomposed-factory-forwarded.cod",
+    "exit": 0,
+    "stdout": "32\n"
   }
 ]

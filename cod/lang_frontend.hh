@@ -619,6 +619,7 @@ class Compiler {
     std::map<size_t, size_t> initialized = {};
     std::array<std::map<size_t, size_t>, concrete_exception_count> failure_initialized = {};
     std::map<size_t, llvm::WeakTrackingVH> environment_bases = {};
+    size_t scope = 0;
   };
   std::deque<NativeCallDemand> native_call_demands_;
   size_t callable_compilations_ = 0;
@@ -4538,15 +4539,17 @@ class Compiler {
     ir_.enter(destination.block);
     auto result = join_completions(destination.incoming, form.at, false);
     if (form.result_kind != "ptr" && result.nullable) result = read_value(std::move(result), at);
-    scopes_[scope_id] = false;
-    result = finish_scope(holding_begin, native_scope, std::move(result), at, parent_module, parent_scope);
-    active_calls_.erase(&form);
-    if (instantiated.result) result = admit(std::move(result), *instantiated.result, lexical, form.at);
+    // Validate borrowed provenance before complete-value scope escape can
+    // carry a local callable image into caller storage.
     if (!form.result_owner.empty()) {
       const auto owner = owner_values.find(form.result_owner);
       if (owner == owner_values.end() || storage_owner(result) != storage_owner(owner->second))
         fail(form.at, "result does not belong to its declared owner");
     }
+    scopes_[scope_id] = false;
+    result = finish_scope(holding_begin, native_scope, std::move(result), at, parent_module, parent_scope);
+    active_calls_.erase(&form);
+    if (instantiated.result) result = admit(std::move(result), *instantiated.result, lexical, form.at);
     if (form.result_const && has_storage_owner(result)) result.read_only = true;
     if (!form.result_const && !form.result_owner.empty())
       require_writable(result.read_only, form.at, "a writable borrowed result cannot return a read-only view");
@@ -5706,23 +5709,31 @@ class Compiler {
         std::any_of(native_activations_.begin(), native_activations_.end(),
         [&](const auto &active) { return active.call == &demand; });
   }
-  bool resolve_native_flow(size_t flow, std::set<NativeCallDemand *> &resolving) {
+  bool resolve_native_flow(size_t flow, std::set<NativeCallDemand *> &resolving, bool demand_bodies = true) {
     bool progressed = false;
     for (;;) {
       bool changed = resolve_callable_substitutions();
-      std::set<size_t> unresolved;
-      if (callable_choices(flow, &unresolved).closed) return progressed || changed;
-      for (const auto id : unresolved) {
-        auto *demand = callable_flows_.at(id).producer;
-        if (!demand || active_native_call(*demand) || !resolving.insert(demand).second) continue;
-        changed |= resolve_native_flow(demand->flow, resolving);
-        changed |= compile_native_call(*demand);
-        const auto choices = callable_choices(demand->flow);
-        if (choices.closed && (demand->reused || std::all_of(choices.definitions.begin(), choices.definitions.end(),
-            [&](const auto &source) { return demand->emitted.contains(source.get()); })))
-          changed |= close_callable_effects(*demand);
-        resolving.erase(demand);
-      }
+      if (callable_choices(flow).closed) return progressed || changed;
+      // A dependency graph can reach the same producer through many paths.
+      // Visit it once per pass; newly supplied facts are observed next pass.
+      std::set<NativeCallDemand *> visited;
+      const auto resolve = [&](auto &&self, size_t input) -> void {
+        std::set<size_t> unresolved;
+        if (callable_choices(input, &unresolved).closed) return;
+        for (size_t id : unresolved) {
+          auto *demand = callable_flows_.at(id).producer;
+          if (!demand || active_native_call(*demand) || !visited.insert(demand).second ||
+              !resolving.insert(demand).second) continue;
+          self(self, demand->flow);
+          if (demand_bodies) changed |= compile_native_call(*demand);
+          const auto choices = callable_choices(demand->flow);
+          if (choices.closed && (demand->reused || std::all_of(choices.definitions.begin(), choices.definitions.end(),
+              [&](const auto &source) { return demand->emitted.contains(source.get()); })))
+            changed |= close_callable_effects(*demand);
+          resolving.erase(demand);
+        }
+      };
+      resolve(resolve, flow);
       if (!changed) return progressed;
       progressed = true;
     }
@@ -6012,8 +6023,13 @@ class Compiler {
     };
     if (values) {
       const auto a = callable_choices(left.flow), b = callable_choices(right.flow);
-      if (!std::is_permutation(a.definitions.begin(), a.definitions.end(),
-          b.definitions.begin(), b.definitions.end())) {
+      // Each covered body is checked independently by this adapter. A call
+      // reaching fewer of those same bodies needs no image-schema substitution.
+      // Known alternatives form a recursive hypothesis; refinement and final
+      // context validation check coverage again after the flows close.
+      const bool covered = std::all_of(b.definitions.begin(), b.definitions.end(),
+          [&](const auto &source) { return std::find(a.definitions.begin(), a.definitions.end(), source) != a.definitions.end(); });
+      if (!covered) {
         if (!preserved_outputs(left) || !preserved_outputs(right) ||
             !pair_images(a, b, [&](const auto &x, const auto &y) { return same_image(same_image, x, y); }))
           return false;
@@ -6091,29 +6107,6 @@ class Compiler {
       }
       return true;
     };
-    // Current invocation reads complete values from its caller's holders or
-    // inherited replay. Captured invocation reads the selected image instead;
-    // its caller's unrelated callable bindings are not body inputs.
-    if (!left.captured) for (const auto &[id, a] : left.environment.bindings) {
-      const bool current_holder = a->storage && !left.environment.captured(id, a);
-      if (!native_callable(*a) || (!a->replayed && !(values && current_holder))) continue;
-      const auto *b = right.environment.lookup(id);
-      if (!b || !native_callable(*b) || a->replayed != b->replayed) return false;
-      if (current_holder) {
-        if (!b->storage || right.environment.captured(id, b) ||
-            !same_callable_input(*a, *b, bound_callable_choices(*a, left.state.callables),
-                bound_callable_choices(*b, right.state.callables))) return false;
-        continue;
-      }
-      if (!capture_required(*a) && !capture_required(*b)) continue;
-      if (a->type != b->type || a->read_only != b->read_only || a->nullable != b->nullable ||
-          a->storage || b->storage || a->callable_address || b->callable_address ||
-          a->target_flow != b->target_flow || a->pointer_view != b->pointer_view ||
-          a->binding_read_only != b->binding_read_only || a->required_reference != b->required_reference ||
-          a->reference_read_only != b->reference_read_only) return false;
-      if (!same_callable_input(*a, *b, callable_choices(a->callable_flow), callable_choices(b->callable_flow)))
-        return false;
-    }
     for (size_t i = 0; i < left.arguments.size(); ++i) {
       const auto &first = left.arguments[i], &second = right.arguments[i];
       // Recursive return facts can depend on this very adapter. Its reuse is
@@ -6189,6 +6182,40 @@ class Compiler {
             return std::find(a.definitions.begin(), a.definitions.end(), source) != a.definitions.end();
           })) continue;
       if (!same_callable_input(first, second, a, b)) return false;
+    }
+    // Current invocation reads complete values from its caller's holders or
+    // inherited replay. Captured invocation reads the selected image instead;
+    // its caller's unrelated callable bindings are not body inputs.
+    if (!left.captured) for (const auto &[id, a] : left.environment.bindings) {
+      const bool current_holder = a->storage && !left.environment.captured(id, a);
+      if (!native_callable(*a) || (!a->replayed && !(values && current_holder))) continue;
+      const auto *b = right.environment.lookup(id);
+      if (!b || !native_callable(*b) || a->replayed != b->replayed) return false;
+      if (current_holder) {
+        // Already checked producers can close the evidence needed here.
+        // Comparing contexts must not recursively demand unrelated bodies.
+        if (query.demand_entries) {
+          std::set<NativeCallDemand *> resolving;
+          const auto resolve = [&](const Value &value, const CallableMemory &memory) {
+            for (size_t holder : callable_targets(value.callable_address).holders)
+              if (const auto *flow = memory.lookup(holder)) resolve_native_flow(*flow, resolving, false);
+          };
+          resolve(*a, left.state.callables);
+          resolve(*b, right.state.callables);
+        }
+        if (!b->storage || right.environment.captured(id, b) ||
+            !same_callable_input(*a, *b, bound_callable_choices(*a, left.state.callables),
+                bound_callable_choices(*b, right.state.callables))) return false;
+        continue;
+      }
+      if (!capture_required(*a) && !capture_required(*b)) continue;
+      if (a->type != b->type || a->read_only != b->read_only || a->nullable != b->nullable ||
+          a->storage || b->storage || a->callable_address || b->callable_address ||
+          a->target_flow != b->target_flow || a->pointer_view != b->pointer_view ||
+          a->binding_read_only != b->binding_read_only || a->required_reference != b->required_reference ||
+          a->reference_read_only != b->reference_read_only) return false;
+      if (!same_callable_input(*a, *b, callable_choices(a->callable_flow), callable_choices(b->callable_flow)))
+        return false;
     }
     const bool renamed_regions = std::any_of(regional_owners.begin(), regional_owners.end(),
         [](const auto &entry) { return entry.first != entry.second; });
@@ -6541,6 +6568,8 @@ class Compiler {
     auto previous_ir = ir_.begin_native(active.definition, demand.tail);
     const auto previous_flow = flow_state();
     const auto previous_scopes = scopes_;
+    const auto lexical_scope = llvm::SaveAndRestore(local_scope_, demand.scope);
+    const auto cleanup_scope = llvm::SaveAndRestore(ir_.cleanup_owner(), demand.scope);
     // A deferred check runs after its caller's capture loads have been
     // restored. Lower against the bases supplied at this invocation boundary.
     std::map<size_t, llvm::Value *> previous_bases;
@@ -6778,6 +6807,7 @@ class Compiler {
         type.pure_callable ? Environment{} : env, captured, type,
         flow_state(), definition, context, caller_conformances_, scopes_, call_path_});
     auto &demand = native_call_demands_.back();
+    demand.scope = local_scope_;
     for (const auto &[id, value] : demand.environment.bindings)
       if (value->region_id) demand.environment_bases.emplace(*value->region_id, regions_.at(*value->region_id).owner);
     demand.conversion_parameter = conversion_parameter;
