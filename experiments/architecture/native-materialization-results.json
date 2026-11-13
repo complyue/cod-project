@@ -1,0 +1,585 @@
+{
+  "schema": 1,
+  "recordedUtc": "2026-11-13T07:31:43.461122+00:00",
+  "baselineCommit": "6437079bf72891e16b6a26ec6fb87d4bd32b34c2",
+  "platform": "Linux-6.12.116+deb13-amd64-x86_64-with-glibc2.41",
+  "repetitions": 5,
+  "experiment": "LLVM function-level versus whole-module materialization",
+  "provenance": {
+    "kind": "historical LLVM rows extracted without rerunning",
+    "source_commit": "0c0efbfde4dccb3f3397b6f961bd82bd9a12c848",
+    "source_path": "experiments/architecture/results.json",
+    "source_sha256": "dcaaa8743e1ca81e26583a3b2b01042993b53dc38a803dd005b41f0c639b2362",
+    "selected_field": "llvmProbe",
+    "source_generator_path": "experiments/architecture/run_experiments.py",
+    "source_generator_sha256": "506770f67bff6184ff58423ea41a8db7e3b0cc17b25473a6b3a923e959583b66"
+  },
+  "tools": {
+    "lli": {
+      "path": "build/bin/lli",
+      "sha256": "55c25dad0013f981bce76fba9b00be055ac1e58b84d1652b73b81824e0d4f09f"
+    }
+  },
+  "llvmProbe": [
+    {
+      "coldDefinitions": 10,
+      "wholeModule": false,
+      "repeat": 0,
+      "irBytes": 2023,
+      "irSha256": "29900ce849f589729dbe2e71b03ed30b4e0a1bc62821fa53acc612e9ce5ccb88",
+      "materializedColdCount": 0,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc-lazy",
+        "--orc-lazy-debug=funcs-to-stdout",
+        "/tmp/cod-architecture-59wqkodf/world-10.ll"
+      ],
+      "exit": 0,
+      "seconds": 0.025650306022726,
+      "stdout": "[ main ]\n[ ]\n[ suppressed_operand ]\n[ shared ]\n[ current ]\n[ dependency ]\n31 43 1043 43\n[ __lljit_run_atexits atexit ]\n[ __lljit_run_atexits atexit ]\n",
+      "stderr": ""
+    },
+    {
+      "coldDefinitions": 10,
+      "wholeModule": true,
+      "repeat": 0,
+      "irBytes": 2023,
+      "irSha256": "29900ce849f589729dbe2e71b03ed30b4e0a1bc62821fa53acc612e9ce5ccb88",
+      "materializedColdCount": 10,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc-lazy",
+        "--orc-lazy-debug=funcs-to-stdout",
+        "--per-module-lazy",
+        "/tmp/cod-architecture-59wqkodf/world-10.ll"
+      ],
+      "exit": 0,
+      "seconds": 0.017853319994173944,
+      "stdout": "[ shared current dependency suppressed_operand main cold_0 cold_1 cold_2 cold_3 cold_4 cold_5 cold_6 cold_7 cold_8 cold_9 ]\n31 43 1043 43\n[ __lljit_run_atexits atexit ]\n[ __lljit_run_atexits atexit ]\n",
+      "stderr": ""
+    },
+    {
+      "coldDefinitions": 10,
+      "wholeModule": true,
+      "repeat": 1,
+      "irBytes": 2023,
+      "irSha256": "29900ce849f589729dbe2e71b03ed30b4e0a1bc62821fa53acc612e9ce5ccb88",
+      "materializedColdCount": 10,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc-lazy",
+        "--orc-lazy-debug=funcs-to-stdout",
+        "--per-module-lazy",
+        "/tmp/cod-architecture-59wqkodf/world-10.ll"
+      ],
+      "exit": 0,
+      "seconds": 0.018001150048803538,
+      "stdout": "[ shared current dependency suppressed_operand main cold_0 cold_1 cold_2 cold_3 cold_4 cold_5 cold_6 cold_7 cold_8 cold_9 ]\n31 43 1043 43\n[ __lljit_run_atexits atexit ]\n[ __lljit_run_atexits atexit ]\n",
+      "stderr": ""
+    },
+    {
+      "coldDefinitions": 10,
+      "wholeModule": false,
+      "repeat": 1,
+      "irBytes": 2023,
+      "irSha256": "29900ce849f589729dbe2e71b03ed30b4e0a1bc62821fa53acc612e9ce5ccb88",
+      "materializedColdCount": 0,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc-lazy",
+        "--orc-lazy-debug=funcs-to-stdout",
+        "/tmp/cod-architecture-59wqkodf/world-10.ll"
+      ],
+      "exit": 0,
+      "seconds": 0.024373015970923007,
+      "stdout": "[ main ]\n[ ]\n[ suppressed_operand ]\n[ shared ]\n[ current ]\n[ dependency ]\n31 43 1043 43\n[ __lljit_run_atexits atexit ]\n[ __lljit_run_atexits atexit ]\n",
+      "stderr": ""
+    },
+    {
+      "coldDefinitions": 10,
+      "wholeModule": false,
+      "repeat": 2,
+      "irBytes": 2023,
+      "irSha256": "29900ce849f589729dbe2e71b03ed30b4e0a1bc62821fa53acc612e9ce5ccb88",
+      "materializedColdCount": 0,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc-lazy",
+        "--orc-lazy-debug=funcs-to-stdout",
+        "/tmp/cod-architecture-59wqkodf/world-10.ll"
+      ],
+      "exit": 0,
+      "seconds": 0.020109240955207497,
+      "stdout": "[ main ]\n[ ]\n[ suppressed_operand ]\n[ shared ]\n[ current ]\n[ dependency ]\n31 43 1043 43\n[ __lljit_run_atexits atexit ]\n[ __lljit_run_atexits atexit ]\n",
+      "stderr": ""
+    },
+    {
+      "coldDefinitions": 10,
+      "wholeModule": true,
+      "repeat": 2,
+      "irBytes": 2023,
+      "irSha256": "29900ce849f589729dbe2e71b03ed30b4e0a1bc62821fa53acc612e9ce5ccb88",
+      "materializedColdCount": 10,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc-lazy",
+        "--orc-lazy-debug=funcs-to-stdout",
+        "--per-module-lazy",
+        "/tmp/cod-architecture-59wqkodf/world-10.ll"
+      ],
+      "exit": 0,
+      "seconds": 0.01940212503541261,
+      "stdout": "[ shared current dependency suppressed_operand main cold_0 cold_1 cold_2 cold_3 cold_4 cold_5 cold_6 cold_7 cold_8 cold_9 ]\n31 43 1043 43\n[ __lljit_run_atexits atexit ]\n[ __lljit_run_atexits atexit ]\n",
+      "stderr": ""
+    },
+    {
+      "coldDefinitions": 10,
+      "wholeModule": true,
+      "repeat": 3,
+      "irBytes": 2023,
+      "irSha256": "29900ce849f589729dbe2e71b03ed30b4e0a1bc62821fa53acc612e9ce5ccb88",
+      "materializedColdCount": 10,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc-lazy",
+        "--orc-lazy-debug=funcs-to-stdout",
+        "--per-module-lazy",
+        "/tmp/cod-architecture-59wqkodf/world-10.ll"
+      ],
+      "exit": 0,
+      "seconds": 0.02005319599993527,
+      "stdout": "[ shared current dependency suppressed_operand main cold_0 cold_1 cold_2 cold_3 cold_4 cold_5 cold_6 cold_7 cold_8 cold_9 ]\n31 43 1043 43\n[ __lljit_run_atexits atexit ]\n[ __lljit_run_atexits atexit ]\n",
+      "stderr": ""
+    },
+    {
+      "coldDefinitions": 10,
+      "wholeModule": false,
+      "repeat": 3,
+      "irBytes": 2023,
+      "irSha256": "29900ce849f589729dbe2e71b03ed30b4e0a1bc62821fa53acc612e9ce5ccb88",
+      "materializedColdCount": 0,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc-lazy",
+        "--orc-lazy-debug=funcs-to-stdout",
+        "/tmp/cod-architecture-59wqkodf/world-10.ll"
+      ],
+      "exit": 0,
+      "seconds": 0.019876932026818395,
+      "stdout": "[ main ]\n[ ]\n[ suppressed_operand ]\n[ shared ]\n[ current ]\n[ dependency ]\n31 43 1043 43\n[ __lljit_run_atexits atexit ]\n[ __lljit_run_atexits atexit ]\n",
+      "stderr": ""
+    },
+    {
+      "coldDefinitions": 10,
+      "wholeModule": false,
+      "repeat": 4,
+      "irBytes": 2023,
+      "irSha256": "29900ce849f589729dbe2e71b03ed30b4e0a1bc62821fa53acc612e9ce5ccb88",
+      "materializedColdCount": 0,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc-lazy",
+        "--orc-lazy-debug=funcs-to-stdout",
+        "/tmp/cod-architecture-59wqkodf/world-10.ll"
+      ],
+      "exit": 0,
+      "seconds": 0.021050144045148045,
+      "stdout": "[ main ]\n[ ]\n[ suppressed_operand ]\n[ shared ]\n[ current ]\n[ dependency ]\n31 43 1043 43\n[ __lljit_run_atexits atexit ]\n[ __lljit_run_atexits atexit ]\n",
+      "stderr": ""
+    },
+    {
+      "coldDefinitions": 10,
+      "wholeModule": true,
+      "repeat": 4,
+      "irBytes": 2023,
+      "irSha256": "29900ce849f589729dbe2e71b03ed30b4e0a1bc62821fa53acc612e9ce5ccb88",
+      "materializedColdCount": 10,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc-lazy",
+        "--orc-lazy-debug=funcs-to-stdout",
+        "--per-module-lazy",
+        "/tmp/cod-architecture-59wqkodf/world-10.ll"
+      ],
+      "exit": 0,
+      "seconds": 0.01774209999712184,
+      "stdout": "[ shared current dependency suppressed_operand main cold_0 cold_1 cold_2 cold_3 cold_4 cold_5 cold_6 cold_7 cold_8 cold_9 ]\n31 43 1043 43\n[ __lljit_run_atexits atexit ]\n[ __lljit_run_atexits atexit ]\n",
+      "stderr": ""
+    },
+    {
+      "coldDefinitions": 100,
+      "wholeModule": false,
+      "repeat": 0,
+      "irBytes": 9673,
+      "irSha256": "577d27a296662cbfac9408f746f7d15322fa1bfb50ba9a88f34eceb8f283347c",
+      "materializedColdCount": 0,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc-lazy",
+        "--orc-lazy-debug=funcs-to-stdout",
+        "/tmp/cod-architecture-59wqkodf/world-100.ll"
+      ],
+      "exit": 0,
+      "seconds": 0.02384318399708718,
+      "stdout": "[ main ]\n[ ]\n[ suppressed_operand ]\n[ shared ]\n[ current ]\n[ dependency ]\n31 43 1043 43\n[ __lljit_run_atexits atexit ]\n[ __lljit_run_atexits atexit ]\n",
+      "stderr": ""
+    },
+    {
+      "coldDefinitions": 100,
+      "wholeModule": true,
+      "repeat": 0,
+      "irBytes": 9673,
+      "irSha256": "577d27a296662cbfac9408f746f7d15322fa1bfb50ba9a88f34eceb8f283347c",
+      "materializedColdCount": 100,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc-lazy",
+        "--orc-lazy-debug=funcs-to-stdout",
+        "--per-module-lazy",
+        "/tmp/cod-architecture-59wqkodf/world-100.ll"
+      ],
+      "exit": 0,
+      "seconds": 0.034934727009385824,
+      "stdout": "[ shared current dependency suppressed_operand main cold_0 cold_1 cold_2 cold_3 cold_4 cold_5 cold_6 cold_7 cold_8 cold_9 cold_10 cold_11 cold_12 cold_13 cold_14 cold_15 cold_16 cold_17 cold_18 cold_19 cold_20 cold_21 cold_22 cold_23 cold_24 cold_25 cold_26 cold_27 cold_28 cold_29 cold_30 cold_31 cold_32 cold_33 cold_34 cold_35 cold_36 cold_37 cold_38 cold_39 cold_40 cold_41 cold_42 cold_43 cold_44 cold_45 cold_46 cold_47 cold_48 cold_49 cold_50 cold_51 cold_52 cold_53 cold_54 cold_55 cold_56 cold_57 cold_58 cold_59 cold_60 cold_61 cold_62 cold_63 cold_64 cold_65 cold_66 cold_67 cold_68 cold_69 cold_70 cold_71 cold_72 cold_73 cold_74 cold_75 cold_76 cold_77 cold_78 cold_79 cold_80 cold_81 cold_82 cold_83 cold_84 cold_85 cold_86 cold_87 cold_88 cold_89 cold_90 cold_91 cold_92 cold_93 cold_94 cold_95 cold_96 cold_97 cold_98 cold_99 ]\n31 43 1043 43\n[ __lljit_run_atexits atexit ]\n[ __lljit_run_atexits atexit ]\n",
+      "stderr": ""
+    },
+    {
+      "coldDefinitions": 100,
+      "wholeModule": true,
+      "repeat": 1,
+      "irBytes": 9673,
+      "irSha256": "577d27a296662cbfac9408f746f7d15322fa1bfb50ba9a88f34eceb8f283347c",
+      "materializedColdCount": 100,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc-lazy",
+        "--orc-lazy-debug=funcs-to-stdout",
+        "--per-module-lazy",
+        "/tmp/cod-architecture-59wqkodf/world-100.ll"
+      ],
+      "exit": 0,
+      "seconds": 0.0423415859695524,
+      "stdout": "[ shared current dependency suppressed_operand main cold_0 cold_1 cold_2 cold_3 cold_4 cold_5 cold_6 cold_7 cold_8 cold_9 cold_10 cold_11 cold_12 cold_13 cold_14 cold_15 cold_16 cold_17 cold_18 cold_19 cold_20 cold_21 cold_22 cold_23 cold_24 cold_25 cold_26 cold_27 cold_28 cold_29 cold_30 cold_31 cold_32 cold_33 cold_34 cold_35 cold_36 cold_37 cold_38 cold_39 cold_40 cold_41 cold_42 cold_43 cold_44 cold_45 cold_46 cold_47 cold_48 cold_49 cold_50 cold_51 cold_52 cold_53 cold_54 cold_55 cold_56 cold_57 cold_58 cold_59 cold_60 cold_61 cold_62 cold_63 cold_64 cold_65 cold_66 cold_67 cold_68 cold_69 cold_70 cold_71 cold_72 cold_73 cold_74 cold_75 cold_76 cold_77 cold_78 cold_79 cold_80 cold_81 cold_82 cold_83 cold_84 cold_85 cold_86 cold_87 cold_88 cold_89 cold_90 cold_91 cold_92 cold_93 cold_94 cold_95 cold_96 cold_97 cold_98 cold_99 ]\n31 43 1043 43\n[ __lljit_run_atexits atexit ]\n[ __lljit_run_atexits atexit ]\n",
+      "stderr": ""
+    },
+    {
+      "coldDefinitions": 100,
+      "wholeModule": false,
+      "repeat": 1,
+      "irBytes": 9673,
+      "irSha256": "577d27a296662cbfac9408f746f7d15322fa1bfb50ba9a88f34eceb8f283347c",
+      "materializedColdCount": 0,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc-lazy",
+        "--orc-lazy-debug=funcs-to-stdout",
+        "/tmp/cod-architecture-59wqkodf/world-100.ll"
+      ],
+      "exit": 0,
+      "seconds": 0.022313576948363334,
+      "stdout": "[ main ]\n[ ]\n[ suppressed_operand ]\n[ shared ]\n[ current ]\n[ dependency ]\n31 43 1043 43\n[ __lljit_run_atexits atexit ]\n[ __lljit_run_atexits atexit ]\n",
+      "stderr": ""
+    },
+    {
+      "coldDefinitions": 100,
+      "wholeModule": false,
+      "repeat": 2,
+      "irBytes": 9673,
+      "irSha256": "577d27a296662cbfac9408f746f7d15322fa1bfb50ba9a88f34eceb8f283347c",
+      "materializedColdCount": 0,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc-lazy",
+        "--orc-lazy-debug=funcs-to-stdout",
+        "/tmp/cod-architecture-59wqkodf/world-100.ll"
+      ],
+      "exit": 0,
+      "seconds": 0.024211280047893524,
+      "stdout": "[ main ]\n[ ]\n[ suppressed_operand ]\n[ shared ]\n[ current ]\n[ dependency ]\n31 43 1043 43\n[ __lljit_run_atexits atexit ]\n[ __lljit_run_atexits atexit ]\n",
+      "stderr": ""
+    },
+    {
+      "coldDefinitions": 100,
+      "wholeModule": true,
+      "repeat": 2,
+      "irBytes": 9673,
+      "irSha256": "577d27a296662cbfac9408f746f7d15322fa1bfb50ba9a88f34eceb8f283347c",
+      "materializedColdCount": 100,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc-lazy",
+        "--orc-lazy-debug=funcs-to-stdout",
+        "--per-module-lazy",
+        "/tmp/cod-architecture-59wqkodf/world-100.ll"
+      ],
+      "exit": 0,
+      "seconds": 0.03343759203562513,
+      "stdout": "[ shared current dependency suppressed_operand main cold_0 cold_1 cold_2 cold_3 cold_4 cold_5 cold_6 cold_7 cold_8 cold_9 cold_10 cold_11 cold_12 cold_13 cold_14 cold_15 cold_16 cold_17 cold_18 cold_19 cold_20 cold_21 cold_22 cold_23 cold_24 cold_25 cold_26 cold_27 cold_28 cold_29 cold_30 cold_31 cold_32 cold_33 cold_34 cold_35 cold_36 cold_37 cold_38 cold_39 cold_40 cold_41 cold_42 cold_43 cold_44 cold_45 cold_46 cold_47 cold_48 cold_49 cold_50 cold_51 cold_52 cold_53 cold_54 cold_55 cold_56 cold_57 cold_58 cold_59 cold_60 cold_61 cold_62 cold_63 cold_64 cold_65 cold_66 cold_67 cold_68 cold_69 cold_70 cold_71 cold_72 cold_73 cold_74 cold_75 cold_76 cold_77 cold_78 cold_79 cold_80 cold_81 cold_82 cold_83 cold_84 cold_85 cold_86 cold_87 cold_88 cold_89 cold_90 cold_91 cold_92 cold_93 cold_94 cold_95 cold_96 cold_97 cold_98 cold_99 ]\n31 43 1043 43\n[ __lljit_run_atexits atexit ]\n[ __lljit_run_atexits atexit ]\n",
+      "stderr": ""
+    },
+    {
+      "coldDefinitions": 100,
+      "wholeModule": true,
+      "repeat": 3,
+      "irBytes": 9673,
+      "irSha256": "577d27a296662cbfac9408f746f7d15322fa1bfb50ba9a88f34eceb8f283347c",
+      "materializedColdCount": 100,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc-lazy",
+        "--orc-lazy-debug=funcs-to-stdout",
+        "--per-module-lazy",
+        "/tmp/cod-architecture-59wqkodf/world-100.ll"
+      ],
+      "exit": 0,
+      "seconds": 0.033094593964051455,
+      "stdout": "[ shared current dependency suppressed_operand main cold_0 cold_1 cold_2 cold_3 cold_4 cold_5 cold_6 cold_7 cold_8 cold_9 cold_10 cold_11 cold_12 cold_13 cold_14 cold_15 cold_16 cold_17 cold_18 cold_19 cold_20 cold_21 cold_22 cold_23 cold_24 cold_25 cold_26 cold_27 cold_28 cold_29 cold_30 cold_31 cold_32 cold_33 cold_34 cold_35 cold_36 cold_37 cold_38 cold_39 cold_40 cold_41 cold_42 cold_43 cold_44 cold_45 cold_46 cold_47 cold_48 cold_49 cold_50 cold_51 cold_52 cold_53 cold_54 cold_55 cold_56 cold_57 cold_58 cold_59 cold_60 cold_61 cold_62 cold_63 cold_64 cold_65 cold_66 cold_67 cold_68 cold_69 cold_70 cold_71 cold_72 cold_73 cold_74 cold_75 cold_76 cold_77 cold_78 cold_79 cold_80 cold_81 cold_82 cold_83 cold_84 cold_85 cold_86 cold_87 cold_88 cold_89 cold_90 cold_91 cold_92 cold_93 cold_94 cold_95 cold_96 cold_97 cold_98 cold_99 ]\n31 43 1043 43\n[ __lljit_run_atexits atexit ]\n[ __lljit_run_atexits atexit ]\n",
+      "stderr": ""
+    },
+    {
+      "coldDefinitions": 100,
+      "wholeModule": false,
+      "repeat": 3,
+      "irBytes": 9673,
+      "irSha256": "577d27a296662cbfac9408f746f7d15322fa1bfb50ba9a88f34eceb8f283347c",
+      "materializedColdCount": 0,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc-lazy",
+        "--orc-lazy-debug=funcs-to-stdout",
+        "/tmp/cod-architecture-59wqkodf/world-100.ll"
+      ],
+      "exit": 0,
+      "seconds": 0.022909594990778714,
+      "stdout": "[ main ]\n[ ]\n[ suppressed_operand ]\n[ shared ]\n[ current ]\n[ dependency ]\n31 43 1043 43\n[ __lljit_run_atexits atexit ]\n[ __lljit_run_atexits atexit ]\n",
+      "stderr": ""
+    },
+    {
+      "coldDefinitions": 100,
+      "wholeModule": false,
+      "repeat": 4,
+      "irBytes": 9673,
+      "irSha256": "577d27a296662cbfac9408f746f7d15322fa1bfb50ba9a88f34eceb8f283347c",
+      "materializedColdCount": 0,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc-lazy",
+        "--orc-lazy-debug=funcs-to-stdout",
+        "/tmp/cod-architecture-59wqkodf/world-100.ll"
+      ],
+      "exit": 0,
+      "seconds": 0.027801649004686624,
+      "stdout": "[ main ]\n[ ]\n[ suppressed_operand ]\n[ shared ]\n[ current ]\n[ dependency ]\n31 43 1043 43\n[ __lljit_run_atexits atexit ]\n[ __lljit_run_atexits atexit ]\n",
+      "stderr": ""
+    },
+    {
+      "coldDefinitions": 100,
+      "wholeModule": true,
+      "repeat": 4,
+      "irBytes": 9673,
+      "irSha256": "577d27a296662cbfac9408f746f7d15322fa1bfb50ba9a88f34eceb8f283347c",
+      "materializedColdCount": 100,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc-lazy",
+        "--orc-lazy-debug=funcs-to-stdout",
+        "--per-module-lazy",
+        "/tmp/cod-architecture-59wqkodf/world-100.ll"
+      ],
+      "exit": 0,
+      "seconds": 0.032926996995229274,
+      "stdout": "[ shared current dependency suppressed_operand main cold_0 cold_1 cold_2 cold_3 cold_4 cold_5 cold_6 cold_7 cold_8 cold_9 cold_10 cold_11 cold_12 cold_13 cold_14 cold_15 cold_16 cold_17 cold_18 cold_19 cold_20 cold_21 cold_22 cold_23 cold_24 cold_25 cold_26 cold_27 cold_28 cold_29 cold_30 cold_31 cold_32 cold_33 cold_34 cold_35 cold_36 cold_37 cold_38 cold_39 cold_40 cold_41 cold_42 cold_43 cold_44 cold_45 cold_46 cold_47 cold_48 cold_49 cold_50 cold_51 cold_52 cold_53 cold_54 cold_55 cold_56 cold_57 cold_58 cold_59 cold_60 cold_61 cold_62 cold_63 cold_64 cold_65 cold_66 cold_67 cold_68 cold_69 cold_70 cold_71 cold_72 cold_73 cold_74 cold_75 cold_76 cold_77 cold_78 cold_79 cold_80 cold_81 cold_82 cold_83 cold_84 cold_85 cold_86 cold_87 cold_88 cold_89 cold_90 cold_91 cold_92 cold_93 cold_94 cold_95 cold_96 cold_97 cold_98 cold_99 ]\n31 43 1043 43\n[ __lljit_run_atexits atexit ]\n[ __lljit_run_atexits atexit ]\n",
+      "stderr": ""
+    },
+    {
+      "coldDefinitions": 1000,
+      "wholeModule": false,
+      "repeat": 0,
+      "irBytes": 87973,
+      "irSha256": "b3458c80d2d1ed9261f93f6acb08735cefe9cf70875576cacb983366e3d063c0",
+      "materializedColdCount": 0,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc-lazy",
+        "--orc-lazy-debug=funcs-to-stdout",
+        "/tmp/cod-architecture-59wqkodf/world-1000.ll"
+      ],
+      "exit": 0,
+      "seconds": 0.04710331198293716,
+      "stdout": "[ main ]\n[ ]\n[ suppressed_operand ]\n[ shared ]\n[ current ]\n[ dependency ]\n31 43 1043 43\n[ __lljit_run_atexits atexit ]\n[ __lljit_run_atexits atexit ]\n",
+      "stderr": ""
+    },
+    {
+      "coldDefinitions": 1000,
+      "wholeModule": true,
+      "repeat": 0,
+      "irBytes": 87973,
+      "irSha256": "b3458c80d2d1ed9261f93f6acb08735cefe9cf70875576cacb983366e3d063c0",
+      "materializedColdCount": 1000,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc-lazy",
+        "--orc-lazy-debug=funcs-to-stdout",
+        "--per-module-lazy",
+        "/tmp/cod-architecture-59wqkodf/world-1000.ll"
+      ],
+      "exit": 0,
+      "seconds": 0.17935434501850978,
+      "stdout": "[ shared current dependency suppressed_operand main cold_0 cold_1 cold_2 cold_3 cold_4 cold_5 cold_6 cold_7 cold_8 cold_9 cold_10 cold_11 cold_12 cold_13 cold_14 cold_15 cold_16 cold_17 cold_18 cold_19 cold_20 cold_21 cold_22 cold_23 cold_24 cold_25 cold_26 cold_27 cold_28 cold_29 cold_30 cold_31 cold_32 cold_33 cold_34 cold_35 cold_36 cold_37 cold_38 cold_39 cold_40 cold_41 cold_42 cold_43 cold_44 cold_45 cold_46 cold_47 cold_48 cold_49 cold_50 cold_51 cold_52 cold_53 cold_54 cold_55 cold_56 cold_57 cold_58 cold_59 cold_60 cold_61 cold_62 cold_63 cold_64 cold_65 cold_66 cold_67 cold_68 cold_69 cold_70 cold_71 cold_72 cold_73 cold_74 cold_75 cold_76 cold_77 cold_78 cold_79 cold_80 cold_81 cold_82 cold_83 cold_84 cold_85 cold_86 cold_87 cold_88 cold_89 cold_90 cold_91 cold_92 cold_93 cold_94 cold_95 cold_96 cold_97 cold_98 cold_99 cold_100 cold_101 cold_102 cold_103 cold_104 cold_105 cold_106 cold_107 cold_108 cold_109 cold_110 cold_111 cold_112 cold_113 cold_114 cold_115 cold_116 cold_117 cold_118 cold_119 cold_120 cold_121 cold_122 cold_123 cold_124 cold_125 cold_126 cold_127 cold_128 cold_129 cold_130 cold_131 cold_132 cold_133 cold_134 cold_135 cold_136 cold_137 cold_138 cold_139 cold_140 cold_141 cold_142 cold_143 cold_144 cold_145 cold_146 cold_147 cold_148 cold_149 cold_150 cold_151 cold_152 cold_153 cold_154 cold_155 cold_156 cold_157 cold_158 cold_159 cold_160 cold_161 cold_162 cold_163 cold_164 cold_165 cold_166 cold_167 cold_168 cold_169 cold_170 cold_171 cold_172 cold_173 cold_174 cold_175 cold_176 cold_177 cold_178 cold_179 cold_180 cold_181 cold_182 cold_183 cold_184 cold_185 cold_186 cold_187 cold_188 cold_189 cold_190 cold_191 cold_192 cold_193 cold_194 cold_195 cold_196 cold_197 cold_198 cold_199 cold_200 cold_201 cold_202 cold_203 cold_204 cold_205 cold_206 cold_207 cold_208 cold_209 cold_210 cold_211 cold_212 cold_213 cold_214 cold_215 cold_216 cold_217 cold_218 cold_219 cold_220 cold_221 cold_222 cold_223 cold_224 cold_225 cold_226 cold_227 cold_228 cold_229 cold_230 cold_231 cold_232 cold_233 cold_234 cold_235 cold_236 cold_237 cold_238 cold_239 cold_240 cold_241 cold_242 cold_243 cold_244 cold_245 cold_246 cold_247 cold_248 cold_249 cold_250 cold_251 cold_252 cold_253 cold_254 cold_255 cold_256 cold_257 cold_258 cold_259 cold_260 cold_261 cold_262 cold_263 cold_264 cold_265 cold_266 cold_267 cold_268 cold_269 cold_270 cold_271 cold_272 cold_273 cold_274 cold_275 cold_276 cold_277 cold_278 cold_279 cold_280 cold_281 cold_282 cold_283 cold_284 cold_285 cold_286 cold_287 cold_288 cold_289 cold_290 cold_291 cold_292 cold_293 cold_294 cold_295 cold_296 cold_297 cold_298 cold_299 cold_300 cold_301 cold_302 cold_303 cold_304 cold_305 cold_306 cold_307 cold_308 cold_309 cold_310 cold_311 cold_312 cold_313 cold_314 cold_315 cold_316 cold_317 cold_318 cold_319 cold_320 cold_321 cold_322 cold_323 cold_324 cold_325 cold_326 cold_327 cold_328 cold_329 cold_330 cold_331 cold_332 cold_333 cold_334 cold_335 cold_336 cold_337 cold_338 cold_339 cold_340 cold_341 cold_342 cold_343 cold_344 cold_345 cold_346 cold_347 cold_348 cold_349 cold_350 cold_351 cold_352 cold_353 cold_354 cold_355 cold_356 cold_357 cold_358 cold_359 cold_360 cold_361 cold_362 cold_363 cold_364 cold_365 cold_366 cold_367 cold_368 cold_369 cold_370 cold_371 cold_372 cold_373 cold_374 cold_375 cold_376 cold_377 cold_378 cold_379 cold_380 cold_381 cold_382 cold_383 cold_384 cold_385 cold_386 cold_387 cold_388 cold_389 cold_390 cold_391 cold_392 cold_393 cold_394 cold_395 cold_396 cold_397 cold_398 cold_399 cold_400 cold_401 cold_402 cold_403 cold_404 cold_405 cold_406 cold_407 cold_408 cold_409 cold_410 cold_411 cold_412 cold_413 cold_414 cold_415 cold_416 cold_417 cold_418 cold_419 cold_420 cold_421 cold_422 cold_423 cold_424 cold_425 cold_426 cold_427 cold_428 cold_429 cold_430 cold_431 cold_432 cold_433 cold_434 cold_435 cold_436 cold_437 cold_438 cold_439 cold_440 cold_441 cold_442 cold_443 cold_444 cold_445 cold_446 cold_447 cold_448 cold_449 cold_450 cold_451 cold_452 cold_453 cold_454 cold_455 cold_456 cold_457 cold_458 cold_459 cold_460 cold_461 cold_462 cold_463 cold_464 cold_465 cold_466 cold_467 cold_468 cold_469 cold_470 cold_471 cold_472 cold_473 cold_474 cold_475 cold_476 cold_477 cold_478 cold_479 cold_480 cold_481 cold_482 cold_483 cold_484 cold_485 cold_486 cold_487 cold_488 cold_489 cold_490 cold_491 cold_492 cold_493 cold_494 cold_495 cold_496 cold_497 cold_498 cold_499 cold_500 cold_501 cold_502 cold_503 cold_504 cold_505 cold_506 cold_507 cold_508 cold_509 cold_510 cold_511 cold_512 cold_513 cold_514 cold_515 cold_516 cold_517 cold_518 cold_519 cold_520 cold_521 cold_522 cold_523 cold_524 cold_525 cold_526 cold_527 cold_528 cold_529 cold_530 cold_531 cold_532 cold_533 cold_534 cold_535 cold_536 cold_537 cold_538 cold_539 cold_540 cold_541 cold_542 cold_543 cold_544 cold_545 cold_546 cold_547 cold_548 cold_549 cold_550 cold_551 cold_552 cold_553 cold_554 cold_555 cold_556 cold_557 cold_558 cold_559 cold_560 cold_561 cold_562 cold_563 cold_564 cold_565 cold_566 cold_567 cold_568 cold_569 cold_570 cold_571 cold_572 cold_573 cold_574 cold_575 cold_576 cold_577 cold_578 cold_579 cold_580 cold_581 cold_582 cold_583 cold_584 cold_585 cold_586 cold_587 cold_588 cold_589 cold_590 cold_591 cold_592 cold_593 cold_594 cold_595 cold_596 cold_597 cold_598 cold_599 cold_600 cold_601 cold_602 cold_603 cold_604 cold_605 cold_606 cold_607 cold_608 cold_609 cold_610 cold_611 cold_612 cold_613 cold_614 cold_615 cold_616 cold_617 cold_618 cold_619 cold_620 cold_621 cold_622 cold_623 cold_624 cold_625 cold_626 cold_627 cold_628 cold_629 cold_630 cold_631 cold_632 cold_633 cold_634 cold_635 cold_636 cold_637 cold_638 cold_639 cold_640 cold_641 cold_642 cold_643 cold_644 cold_645 cold_646 cold_647 cold_648 cold_649 cold_650 cold_651 cold_652 cold_653 cold_654 cold_655 cold_656 cold_657 cold_658 cold_659 cold_660 cold_661 cold_662 cold_663 cold_664 cold_665 cold_666 cold_667 cold_668 cold_669 cold_670 cold_671 cold_672 cold_673 cold_674 cold_675 cold_676 cold_677 cold_678 cold_679 cold_680 cold_681 cold_682 cold_683 cold_684 cold_685 cold_686 cold_687 cold_688 cold_689 cold_690 cold_691 cold_692 cold_693 cold_694 cold_695 cold_696 cold_697 cold_698 cold_699 cold_700 cold_701 cold_702 cold_703 cold_704 cold_705 cold_706 cold_707 cold_708 cold_709 cold_710 cold_711 cold_712 cold_713 cold_714 cold_715 cold_716 cold_717 cold_718 cold_719 cold_720 cold_721 cold_722 cold_723 cold_724 cold_725 cold_726 cold_727 cold_728 cold_729 cold_730 cold_731 cold_732 cold_733 cold_734 cold_735 cold_736 cold_737 cold_738 cold_739 cold_740 cold_741 cold_742 cold_743 cold_744 cold_745 cold_746 cold_747 cold_748 cold_749 cold_750 cold_751 cold_752 cold_753 cold_754 cold_755 cold_756 cold_757 cold_758 cold_759 cold_760 cold_761 cold_762 cold_763 cold_764 cold_765 cold_766 cold_767 cold_768 cold_769 cold_770 cold_771 cold_772 cold_773 cold_774 cold_775 cold_776 cold_777 cold_778 cold_779 cold_780 cold_781 cold_782 cold_783 cold_784 cold_785 cold_786 cold_787 cold_788 cold_789 cold_790 cold_791 cold_792 cold_793 cold_794 cold_795 cold_796 cold_797 cold_798 cold_799 cold_800 cold_801 cold_802 cold_803 cold_804 cold_805 cold_806 cold_807 cold_808 cold_809 cold_810 cold_811 cold_812 cold_813 cold_814 cold_815 cold_816 cold_817 cold_818 cold_819 cold_820 cold_821 cold_822 cold_823 cold_824 cold_825 cold_826 cold_827 cold_828 cold_829 cold_830 cold_831 cold_832 cold_833 cold_834 cold_835 cold_836 cold_837 cold_838 cold_839 cold_840 cold_841 cold_842 cold_843 cold_844 cold_845 cold_846 cold_847 cold_848 cold_849 cold_850 cold_851 cold_852 cold_853 cold_854 cold_855 cold_856 cold_857 cold_858 cold_859 cold_860 cold_861 cold_862 cold_863 cold_864 cold_865 cold_866 cold_867 cold_868 cold_869 cold_870 cold_871 cold_872 cold_873 cold_874 cold_875 cold_876 cold_877 cold_878 cold_879 cold_880 cold_881 cold_882 cold_883 cold_884 cold_885 cold_886 cold_887 cold_888 cold_889 cold_890 cold_891 cold_892 cold_893 cold_894 cold_895 cold_896 cold_897 cold_898 cold_899 cold_900 cold_901 cold_902 cold_903 cold_904 cold_905 cold_906 cold_907 cold_908 cold_909 cold_910 cold_911 cold_912 cold_913 cold_914 cold_915 cold_916 cold_917 cold_918 cold_919 cold_920 cold_921 cold_922 cold_923 cold_924 cold_925 cold_926 cold_927 cold_928 cold_929 cold_930 cold_931 cold_932 cold_933 cold_934 cold_935 cold_936 cold_937 cold_938 cold_939 cold_940 cold_941 cold_942 cold_943 cold_944 cold_945 cold_946 cold_947 cold_948 cold_949 cold_950 cold_951 cold_952 cold_953 cold_954 cold_955 cold_956 cold_957 cold_958 cold_959 cold_960 cold_961 cold_962 cold_963 cold_964 cold_965 cold_966 cold_967 cold_968 cold_969 cold_970 cold_971 cold_972 cold_973 cold_974 cold_975 cold_976 cold_977 cold_978 cold_979 cold_980 cold_981 cold_982 cold_983 cold_984 cold_985 cold_986 cold_987 cold_988 cold_989 cold_990 cold_991 cold_992 cold_993 cold_994 cold_995 cold_996 cold_997 cold_998 cold_999 ]\n31 43 1043 43\n[ __lljit_run_atexits atexit ]\n[ __lljit_run_atexits atexit ]\n",
+      "stderr": ""
+    },
+    {
+      "coldDefinitions": 1000,
+      "wholeModule": true,
+      "repeat": 1,
+      "irBytes": 87973,
+      "irSha256": "b3458c80d2d1ed9261f93f6acb08735cefe9cf70875576cacb983366e3d063c0",
+      "materializedColdCount": 1000,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc-lazy",
+        "--orc-lazy-debug=funcs-to-stdout",
+        "--per-module-lazy",
+        "/tmp/cod-architecture-59wqkodf/world-1000.ll"
+      ],
+      "exit": 0,
+      "seconds": 0.19085276901023462,
+      "stdout": "[ shared current dependency suppressed_operand main cold_0 cold_1 cold_2 cold_3 cold_4 cold_5 cold_6 cold_7 cold_8 cold_9 cold_10 cold_11 cold_12 cold_13 cold_14 cold_15 cold_16 cold_17 cold_18 cold_19 cold_20 cold_21 cold_22 cold_23 cold_24 cold_25 cold_26 cold_27 cold_28 cold_29 cold_30 cold_31 cold_32 cold_33 cold_34 cold_35 cold_36 cold_37 cold_38 cold_39 cold_40 cold_41 cold_42 cold_43 cold_44 cold_45 cold_46 cold_47 cold_48 cold_49 cold_50 cold_51 cold_52 cold_53 cold_54 cold_55 cold_56 cold_57 cold_58 cold_59 cold_60 cold_61 cold_62 cold_63 cold_64 cold_65 cold_66 cold_67 cold_68 cold_69 cold_70 cold_71 cold_72 cold_73 cold_74 cold_75 cold_76 cold_77 cold_78 cold_79 cold_80 cold_81 cold_82 cold_83 cold_84 cold_85 cold_86 cold_87 cold_88 cold_89 cold_90 cold_91 cold_92 cold_93 cold_94 cold_95 cold_96 cold_97 cold_98 cold_99 cold_100 cold_101 cold_102 cold_103 cold_104 cold_105 cold_106 cold_107 cold_108 cold_109 cold_110 cold_111 cold_112 cold_113 cold_114 cold_115 cold_116 cold_117 cold_118 cold_119 cold_120 cold_121 cold_122 cold_123 cold_124 cold_125 cold_126 cold_127 cold_128 cold_129 cold_130 cold_131 cold_132 cold_133 cold_134 cold_135 cold_136 cold_137 cold_138 cold_139 cold_140 cold_141 cold_142 cold_143 cold_144 cold_145 cold_146 cold_147 cold_148 cold_149 cold_150 cold_151 cold_152 cold_153 cold_154 cold_155 cold_156 cold_157 cold_158 cold_159 cold_160 cold_161 cold_162 cold_163 cold_164 cold_165 cold_166 cold_167 cold_168 cold_169 cold_170 cold_171 cold_172 cold_173 cold_174 cold_175 cold_176 cold_177 cold_178 cold_179 cold_180 cold_181 cold_182 cold_183 cold_184 cold_185 cold_186 cold_187 cold_188 cold_189 cold_190 cold_191 cold_192 cold_193 cold_194 cold_195 cold_196 cold_197 cold_198 cold_199 cold_200 cold_201 cold_202 cold_203 cold_204 cold_205 cold_206 cold_207 cold_208 cold_209 cold_210 cold_211 cold_212 cold_213 cold_214 cold_215 cold_216 cold_217 cold_218 cold_219 cold_220 cold_221 cold_222 cold_223 cold_224 cold_225 cold_226 cold_227 cold_228 cold_229 cold_230 cold_231 cold_232 cold_233 cold_234 cold_235 cold_236 cold_237 cold_238 cold_239 cold_240 cold_241 cold_242 cold_243 cold_244 cold_245 cold_246 cold_247 cold_248 cold_249 cold_250 cold_251 cold_252 cold_253 cold_254 cold_255 cold_256 cold_257 cold_258 cold_259 cold_260 cold_261 cold_262 cold_263 cold_264 cold_265 cold_266 cold_267 cold_268 cold_269 cold_270 cold_271 cold_272 cold_273 cold_274 cold_275 cold_276 cold_277 cold_278 cold_279 cold_280 cold_281 cold_282 cold_283 cold_284 cold_285 cold_286 cold_287 cold_288 cold_289 cold_290 cold_291 cold_292 cold_293 cold_294 cold_295 cold_296 cold_297 cold_298 cold_299 cold_300 cold_301 cold_302 cold_303 cold_304 cold_305 cold_306 cold_307 cold_308 cold_309 cold_310 cold_311 cold_312 cold_313 cold_314 cold_315 cold_316 cold_317 cold_318 cold_319 cold_320 cold_321 cold_322 cold_323 cold_324 cold_325 cold_326 cold_327 cold_328 cold_329 cold_330 cold_331 cold_332 cold_333 cold_334 cold_335 cold_336 cold_337 cold_338 cold_339 cold_340 cold_341 cold_342 cold_343 cold_344 cold_345 cold_346 cold_347 cold_348 cold_349 cold_350 cold_351 cold_352 cold_353 cold_354 cold_355 cold_356 cold_357 cold_358 cold_359 cold_360 cold_361 cold_362 cold_363 cold_364 cold_365 cold_366 cold_367 cold_368 cold_369 cold_370 cold_371 cold_372 cold_373 cold_374 cold_375 cold_376 cold_377 cold_378 cold_379 cold_380 cold_381 cold_382 cold_383 cold_384 cold_385 cold_386 cold_387 cold_388 cold_389 cold_390 cold_391 cold_392 cold_393 cold_394 cold_395 cold_396 cold_397 cold_398 cold_399 cold_400 cold_401 cold_402 cold_403 cold_404 cold_405 cold_406 cold_407 cold_408 cold_409 cold_410 cold_411 cold_412 cold_413 cold_414 cold_415 cold_416 cold_417 cold_418 cold_419 cold_420 cold_421 cold_422 cold_423 cold_424 cold_425 cold_426 cold_427 cold_428 cold_429 cold_430 cold_431 cold_432 cold_433 cold_434 cold_435 cold_436 cold_437 cold_438 cold_439 cold_440 cold_441 cold_442 cold_443 cold_444 cold_445 cold_446 cold_447 cold_448 cold_449 cold_450 cold_451 cold_452 cold_453 cold_454 cold_455 cold_456 cold_457 cold_458 cold_459 cold_460 cold_461 cold_462 cold_463 cold_464 cold_465 cold_466 cold_467 cold_468 cold_469 cold_470 cold_471 cold_472 cold_473 cold_474 cold_475 cold_476 cold_477 cold_478 cold_479 cold_480 cold_481 cold_482 cold_483 cold_484 cold_485 cold_486 cold_487 cold_488 cold_489 cold_490 cold_491 cold_492 cold_493 cold_494 cold_495 cold_496 cold_497 cold_498 cold_499 cold_500 cold_501 cold_502 cold_503 cold_504 cold_505 cold_506 cold_507 cold_508 cold_509 cold_510 cold_511 cold_512 cold_513 cold_514 cold_515 cold_516 cold_517 cold_518 cold_519 cold_520 cold_521 cold_522 cold_523 cold_524 cold_525 cold_526 cold_527 cold_528 cold_529 cold_530 cold_531 cold_532 cold_533 cold_534 cold_535 cold_536 cold_537 cold_538 cold_539 cold_540 cold_541 cold_542 cold_543 cold_544 cold_545 cold_546 cold_547 cold_548 cold_549 cold_550 cold_551 cold_552 cold_553 cold_554 cold_555 cold_556 cold_557 cold_558 cold_559 cold_560 cold_561 cold_562 cold_563 cold_564 cold_565 cold_566 cold_567 cold_568 cold_569 cold_570 cold_571 cold_572 cold_573 cold_574 cold_575 cold_576 cold_577 cold_578 cold_579 cold_580 cold_581 cold_582 cold_583 cold_584 cold_585 cold_586 cold_587 cold_588 cold_589 cold_590 cold_591 cold_592 cold_593 cold_594 cold_595 cold_596 cold_597 cold_598 cold_599 cold_600 cold_601 cold_602 cold_603 cold_604 cold_605 cold_606 cold_607 cold_608 cold_609 cold_610 cold_611 cold_612 cold_613 cold_614 cold_615 cold_616 cold_617 cold_618 cold_619 cold_620 cold_621 cold_622 cold_623 cold_624 cold_625 cold_626 cold_627 cold_628 cold_629 cold_630 cold_631 cold_632 cold_633 cold_634 cold_635 cold_636 cold_637 cold_638 cold_639 cold_640 cold_641 cold_642 cold_643 cold_644 cold_645 cold_646 cold_647 cold_648 cold_649 cold_650 cold_651 cold_652 cold_653 cold_654 cold_655 cold_656 cold_657 cold_658 cold_659 cold_660 cold_661 cold_662 cold_663 cold_664 cold_665 cold_666 cold_667 cold_668 cold_669 cold_670 cold_671 cold_672 cold_673 cold_674 cold_675 cold_676 cold_677 cold_678 cold_679 cold_680 cold_681 cold_682 cold_683 cold_684 cold_685 cold_686 cold_687 cold_688 cold_689 cold_690 cold_691 cold_692 cold_693 cold_694 cold_695 cold_696 cold_697 cold_698 cold_699 cold_700 cold_701 cold_702 cold_703 cold_704 cold_705 cold_706 cold_707 cold_708 cold_709 cold_710 cold_711 cold_712 cold_713 cold_714 cold_715 cold_716 cold_717 cold_718 cold_719 cold_720 cold_721 cold_722 cold_723 cold_724 cold_725 cold_726 cold_727 cold_728 cold_729 cold_730 cold_731 cold_732 cold_733 cold_734 cold_735 cold_736 cold_737 cold_738 cold_739 cold_740 cold_741 cold_742 cold_743 cold_744 cold_745 cold_746 cold_747 cold_748 cold_749 cold_750 cold_751 cold_752 cold_753 cold_754 cold_755 cold_756 cold_757 cold_758 cold_759 cold_760 cold_761 cold_762 cold_763 cold_764 cold_765 cold_766 cold_767 cold_768 cold_769 cold_770 cold_771 cold_772 cold_773 cold_774 cold_775 cold_776 cold_777 cold_778 cold_779 cold_780 cold_781 cold_782 cold_783 cold_784 cold_785 cold_786 cold_787 cold_788 cold_789 cold_790 cold_791 cold_792 cold_793 cold_794 cold_795 cold_796 cold_797 cold_798 cold_799 cold_800 cold_801 cold_802 cold_803 cold_804 cold_805 cold_806 cold_807 cold_808 cold_809 cold_810 cold_811 cold_812 cold_813 cold_814 cold_815 cold_816 cold_817 cold_818 cold_819 cold_820 cold_821 cold_822 cold_823 cold_824 cold_825 cold_826 cold_827 cold_828 cold_829 cold_830 cold_831 cold_832 cold_833 cold_834 cold_835 cold_836 cold_837 cold_838 cold_839 cold_840 cold_841 cold_842 cold_843 cold_844 cold_845 cold_846 cold_847 cold_848 cold_849 cold_850 cold_851 cold_852 cold_853 cold_854 cold_855 cold_856 cold_857 cold_858 cold_859 cold_860 cold_861 cold_862 cold_863 cold_864 cold_865 cold_866 cold_867 cold_868 cold_869 cold_870 cold_871 cold_872 cold_873 cold_874 cold_875 cold_876 cold_877 cold_878 cold_879 cold_880 cold_881 cold_882 cold_883 cold_884 cold_885 cold_886 cold_887 cold_888 cold_889 cold_890 cold_891 cold_892 cold_893 cold_894 cold_895 cold_896 cold_897 cold_898 cold_899 cold_900 cold_901 cold_902 cold_903 cold_904 cold_905 cold_906 cold_907 cold_908 cold_909 cold_910 cold_911 cold_912 cold_913 cold_914 cold_915 cold_916 cold_917 cold_918 cold_919 cold_920 cold_921 cold_922 cold_923 cold_924 cold_925 cold_926 cold_927 cold_928 cold_929 cold_930 cold_931 cold_932 cold_933 cold_934 cold_935 cold_936 cold_937 cold_938 cold_939 cold_940 cold_941 cold_942 cold_943 cold_944 cold_945 cold_946 cold_947 cold_948 cold_949 cold_950 cold_951 cold_952 cold_953 cold_954 cold_955 cold_956 cold_957 cold_958 cold_959 cold_960 cold_961 cold_962 cold_963 cold_964 cold_965 cold_966 cold_967 cold_968 cold_969 cold_970 cold_971 cold_972 cold_973 cold_974 cold_975 cold_976 cold_977 cold_978 cold_979 cold_980 cold_981 cold_982 cold_983 cold_984 cold_985 cold_986 cold_987 cold_988 cold_989 cold_990 cold_991 cold_992 cold_993 cold_994 cold_995 cold_996 cold_997 cold_998 cold_999 ]\n31 43 1043 43\n[ __lljit_run_atexits atexit ]\n[ __lljit_run_atexits atexit ]\n",
+      "stderr": ""
+    },
+    {
+      "coldDefinitions": 1000,
+      "wholeModule": false,
+      "repeat": 1,
+      "irBytes": 87973,
+      "irSha256": "b3458c80d2d1ed9261f93f6acb08735cefe9cf70875576cacb983366e3d063c0",
+      "materializedColdCount": 0,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc-lazy",
+        "--orc-lazy-debug=funcs-to-stdout",
+        "/tmp/cod-architecture-59wqkodf/world-1000.ll"
+      ],
+      "exit": 0,
+      "seconds": 0.04674453201005235,
+      "stdout": "[ main ]\n[ ]\n[ suppressed_operand ]\n[ shared ]\n[ current ]\n[ dependency ]\n31 43 1043 43\n[ __lljit_run_atexits atexit ]\n[ __lljit_run_atexits atexit ]\n",
+      "stderr": ""
+    },
+    {
+      "coldDefinitions": 1000,
+      "wholeModule": false,
+      "repeat": 2,
+      "irBytes": 87973,
+      "irSha256": "b3458c80d2d1ed9261f93f6acb08735cefe9cf70875576cacb983366e3d063c0",
+      "materializedColdCount": 0,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc-lazy",
+        "--orc-lazy-debug=funcs-to-stdout",
+        "/tmp/cod-architecture-59wqkodf/world-1000.ll"
+      ],
+      "exit": 0,
+      "seconds": 0.04199896700447425,
+      "stdout": "[ main ]\n[ ]\n[ suppressed_operand ]\n[ shared ]\n[ current ]\n[ dependency ]\n31 43 1043 43\n[ __lljit_run_atexits atexit ]\n[ __lljit_run_atexits atexit ]\n",
+      "stderr": ""
+    },
+    {
+      "coldDefinitions": 1000,
+      "wholeModule": true,
+      "repeat": 2,
+      "irBytes": 87973,
+      "irSha256": "b3458c80d2d1ed9261f93f6acb08735cefe9cf70875576cacb983366e3d063c0",
+      "materializedColdCount": 1000,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc-lazy",
+        "--orc-lazy-debug=funcs-to-stdout",
+        "--per-module-lazy",
+        "/tmp/cod-architecture-59wqkodf/world-1000.ll"
+      ],
+      "exit": 0,
+      "seconds": 0.17909605498425663,
+      "stdout": "[ shared current dependency suppressed_operand main cold_0 cold_1 cold_2 cold_3 cold_4 cold_5 cold_6 cold_7 cold_8 cold_9 cold_10 cold_11 cold_12 cold_13 cold_14 cold_15 cold_16 cold_17 cold_18 cold_19 cold_20 cold_21 cold_22 cold_23 cold_24 cold_25 cold_26 cold_27 cold_28 cold_29 cold_30 cold_31 cold_32 cold_33 cold_34 cold_35 cold_36 cold_37 cold_38 cold_39 cold_40 cold_41 cold_42 cold_43 cold_44 cold_45 cold_46 cold_47 cold_48 cold_49 cold_50 cold_51 cold_52 cold_53 cold_54 cold_55 cold_56 cold_57 cold_58 cold_59 cold_60 cold_61 cold_62 cold_63 cold_64 cold_65 cold_66 cold_67 cold_68 cold_69 cold_70 cold_71 cold_72 cold_73 cold_74 cold_75 cold_76 cold_77 cold_78 cold_79 cold_80 cold_81 cold_82 cold_83 cold_84 cold_85 cold_86 cold_87 cold_88 cold_89 cold_90 cold_91 cold_92 cold_93 cold_94 cold_95 cold_96 cold_97 cold_98 cold_99 cold_100 cold_101 cold_102 cold_103 cold_104 cold_105 cold_106 cold_107 cold_108 cold_109 cold_110 cold_111 cold_112 cold_113 cold_114 cold_115 cold_116 cold_117 cold_118 cold_119 cold_120 cold_121 cold_122 cold_123 cold_124 cold_125 cold_126 cold_127 cold_128 cold_129 cold_130 cold_131 cold_132 cold_133 cold_134 cold_135 cold_136 cold_137 cold_138 cold_139 cold_140 cold_141 cold_142 cold_143 cold_144 cold_145 cold_146 cold_147 cold_148 cold_149 cold_150 cold_151 cold_152 cold_153 cold_154 cold_155 cold_156 cold_157 cold_158 cold_159 cold_160 cold_161 cold_162 cold_163 cold_164 cold_165 cold_166 cold_167 cold_168 cold_169 cold_170 cold_171 cold_172 cold_173 cold_174 cold_175 cold_176 cold_177 cold_178 cold_179 cold_180 cold_181 cold_182 cold_183 cold_184 cold_185 cold_186 cold_187 cold_188 cold_189 cold_190 cold_191 cold_192 cold_193 cold_194 cold_195 cold_196 cold_197 cold_198 cold_199 cold_200 cold_201 cold_202 cold_203 cold_204 cold_205 cold_206 cold_207 cold_208 cold_209 cold_210 cold_211 cold_212 cold_213 cold_214 cold_215 cold_216 cold_217 cold_218 cold_219 cold_220 cold_221 cold_222 cold_223 cold_224 cold_225 cold_226 cold_227 cold_228 cold_229 cold_230 cold_231 cold_232 cold_233 cold_234 cold_235 cold_236 cold_237 cold_238 cold_239 cold_240 cold_241 cold_242 cold_243 cold_244 cold_245 cold_246 cold_247 cold_248 cold_249 cold_250 cold_251 cold_252 cold_253 cold_254 cold_255 cold_256 cold_257 cold_258 cold_259 cold_260 cold_261 cold_262 cold_263 cold_264 cold_265 cold_266 cold_267 cold_268 cold_269 cold_270 cold_271 cold_272 cold_273 cold_274 cold_275 cold_276 cold_277 cold_278 cold_279 cold_280 cold_281 cold_282 cold_283 cold_284 cold_285 cold_286 cold_287 cold_288 cold_289 cold_290 cold_291 cold_292 cold_293 cold_294 cold_295 cold_296 cold_297 cold_298 cold_299 cold_300 cold_301 cold_302 cold_303 cold_304 cold_305 cold_306 cold_307 cold_308 cold_309 cold_310 cold_311 cold_312 cold_313 cold_314 cold_315 cold_316 cold_317 cold_318 cold_319 cold_320 cold_321 cold_322 cold_323 cold_324 cold_325 cold_326 cold_327 cold_328 cold_329 cold_330 cold_331 cold_332 cold_333 cold_334 cold_335 cold_336 cold_337 cold_338 cold_339 cold_340 cold_341 cold_342 cold_343 cold_344 cold_345 cold_346 cold_347 cold_348 cold_349 cold_350 cold_351 cold_352 cold_353 cold_354 cold_355 cold_356 cold_357 cold_358 cold_359 cold_360 cold_361 cold_362 cold_363 cold_364 cold_365 cold_366 cold_367 cold_368 cold_369 cold_370 cold_371 cold_372 cold_373 cold_374 cold_375 cold_376 cold_377 cold_378 cold_379 cold_380 cold_381 cold_382 cold_383 cold_384 cold_385 cold_386 cold_387 cold_388 cold_389 cold_390 cold_391 cold_392 cold_393 cold_394 cold_395 cold_396 cold_397 cold_398 cold_399 cold_400 cold_401 cold_402 cold_403 cold_404 cold_405 cold_406 cold_407 cold_408 cold_409 cold_410 cold_411 cold_412 cold_413 cold_414 cold_415 cold_416 cold_417 cold_418 cold_419 cold_420 cold_421 cold_422 cold_423 cold_424 cold_425 cold_426 cold_427 cold_428 cold_429 cold_430 cold_431 cold_432 cold_433 cold_434 cold_435 cold_436 cold_437 cold_438 cold_439 cold_440 cold_441 cold_442 cold_443 cold_444 cold_445 cold_446 cold_447 cold_448 cold_449 cold_450 cold_451 cold_452 cold_453 cold_454 cold_455 cold_456 cold_457 cold_458 cold_459 cold_460 cold_461 cold_462 cold_463 cold_464 cold_465 cold_466 cold_467 cold_468 cold_469 cold_470 cold_471 cold_472 cold_473 cold_474 cold_475 cold_476 cold_477 cold_478 cold_479 cold_480 cold_481 cold_482 cold_483 cold_484 cold_485 cold_486 cold_487 cold_488 cold_489 cold_490 cold_491 cold_492 cold_493 cold_494 cold_495 cold_496 cold_497 cold_498 cold_499 cold_500 cold_501 cold_502 cold_503 cold_504 cold_505 cold_506 cold_507 cold_508 cold_509 cold_510 cold_511 cold_512 cold_513 cold_514 cold_515 cold_516 cold_517 cold_518 cold_519 cold_520 cold_521 cold_522 cold_523 cold_524 cold_525 cold_526 cold_527 cold_528 cold_529 cold_530 cold_531 cold_532 cold_533 cold_534 cold_535 cold_536 cold_537 cold_538 cold_539 cold_540 cold_541 cold_542 cold_543 cold_544 cold_545 cold_546 cold_547 cold_548 cold_549 cold_550 cold_551 cold_552 cold_553 cold_554 cold_555 cold_556 cold_557 cold_558 cold_559 cold_560 cold_561 cold_562 cold_563 cold_564 cold_565 cold_566 cold_567 cold_568 cold_569 cold_570 cold_571 cold_572 cold_573 cold_574 cold_575 cold_576 cold_577 cold_578 cold_579 cold_580 cold_581 cold_582 cold_583 cold_584 cold_585 cold_586 cold_587 cold_588 cold_589 cold_590 cold_591 cold_592 cold_593 cold_594 cold_595 cold_596 cold_597 cold_598 cold_599 cold_600 cold_601 cold_602 cold_603 cold_604 cold_605 cold_606 cold_607 cold_608 cold_609 cold_610 cold_611 cold_612 cold_613 cold_614 cold_615 cold_616 cold_617 cold_618 cold_619 cold_620 cold_621 cold_622 cold_623 cold_624 cold_625 cold_626 cold_627 cold_628 cold_629 cold_630 cold_631 cold_632 cold_633 cold_634 cold_635 cold_636 cold_637 cold_638 cold_639 cold_640 cold_641 cold_642 cold_643 cold_644 cold_645 cold_646 cold_647 cold_648 cold_649 cold_650 cold_651 cold_652 cold_653 cold_654 cold_655 cold_656 cold_657 cold_658 cold_659 cold_660 cold_661 cold_662 cold_663 cold_664 cold_665 cold_666 cold_667 cold_668 cold_669 cold_670 cold_671 cold_672 cold_673 cold_674 cold_675 cold_676 cold_677 cold_678 cold_679 cold_680 cold_681 cold_682 cold_683 cold_684 cold_685 cold_686 cold_687 cold_688 cold_689 cold_690 cold_691 cold_692 cold_693 cold_694 cold_695 cold_696 cold_697 cold_698 cold_699 cold_700 cold_701 cold_702 cold_703 cold_704 cold_705 cold_706 cold_707 cold_708 cold_709 cold_710 cold_711 cold_712 cold_713 cold_714 cold_715 cold_716 cold_717 cold_718 cold_719 cold_720 cold_721 cold_722 cold_723 cold_724 cold_725 cold_726 cold_727 cold_728 cold_729 cold_730 cold_731 cold_732 cold_733 cold_734 cold_735 cold_736 cold_737 cold_738 cold_739 cold_740 cold_741 cold_742 cold_743 cold_744 cold_745 cold_746 cold_747 cold_748 cold_749 cold_750 cold_751 cold_752 cold_753 cold_754 cold_755 cold_756 cold_757 cold_758 cold_759 cold_760 cold_761 cold_762 cold_763 cold_764 cold_765 cold_766 cold_767 cold_768 cold_769 cold_770 cold_771 cold_772 cold_773 cold_774 cold_775 cold_776 cold_777 cold_778 cold_779 cold_780 cold_781 cold_782 cold_783 cold_784 cold_785 cold_786 cold_787 cold_788 cold_789 cold_790 cold_791 cold_792 cold_793 cold_794 cold_795 cold_796 cold_797 cold_798 cold_799 cold_800 cold_801 cold_802 cold_803 cold_804 cold_805 cold_806 cold_807 cold_808 cold_809 cold_810 cold_811 cold_812 cold_813 cold_814 cold_815 cold_816 cold_817 cold_818 cold_819 cold_820 cold_821 cold_822 cold_823 cold_824 cold_825 cold_826 cold_827 cold_828 cold_829 cold_830 cold_831 cold_832 cold_833 cold_834 cold_835 cold_836 cold_837 cold_838 cold_839 cold_840 cold_841 cold_842 cold_843 cold_844 cold_845 cold_846 cold_847 cold_848 cold_849 cold_850 cold_851 cold_852 cold_853 cold_854 cold_855 cold_856 cold_857 cold_858 cold_859 cold_860 cold_861 cold_862 cold_863 cold_864 cold_865 cold_866 cold_867 cold_868 cold_869 cold_870 cold_871 cold_872 cold_873 cold_874 cold_875 cold_876 cold_877 cold_878 cold_879 cold_880 cold_881 cold_882 cold_883 cold_884 cold_885 cold_886 cold_887 cold_888 cold_889 cold_890 cold_891 cold_892 cold_893 cold_894 cold_895 cold_896 cold_897 cold_898 cold_899 cold_900 cold_901 cold_902 cold_903 cold_904 cold_905 cold_906 cold_907 cold_908 cold_909 cold_910 cold_911 cold_912 cold_913 cold_914 cold_915 cold_916 cold_917 cold_918 cold_919 cold_920 cold_921 cold_922 cold_923 cold_924 cold_925 cold_926 cold_927 cold_928 cold_929 cold_930 cold_931 cold_932 cold_933 cold_934 cold_935 cold_936 cold_937 cold_938 cold_939 cold_940 cold_941 cold_942 cold_943 cold_944 cold_945 cold_946 cold_947 cold_948 cold_949 cold_950 cold_951 cold_952 cold_953 cold_954 cold_955 cold_956 cold_957 cold_958 cold_959 cold_960 cold_961 cold_962 cold_963 cold_964 cold_965 cold_966 cold_967 cold_968 cold_969 cold_970 cold_971 cold_972 cold_973 cold_974 cold_975 cold_976 cold_977 cold_978 cold_979 cold_980 cold_981 cold_982 cold_983 cold_984 cold_985 cold_986 cold_987 cold_988 cold_989 cold_990 cold_991 cold_992 cold_993 cold_994 cold_995 cold_996 cold_997 cold_998 cold_999 ]\n31 43 1043 43\n[ __lljit_run_atexits atexit ]\n[ __lljit_run_atexits atexit ]\n",
+      "stderr": ""
+    },
+    {
+      "coldDefinitions": 1000,
+      "wholeModule": true,
+      "repeat": 3,
+      "irBytes": 87973,
+      "irSha256": "b3458c80d2d1ed9261f93f6acb08735cefe9cf70875576cacb983366e3d063c0",
+      "materializedColdCount": 1000,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc-lazy",
+        "--orc-lazy-debug=funcs-to-stdout",
+        "--per-module-lazy",
+        "/tmp/cod-architecture-59wqkodf/world-1000.ll"
+      ],
+      "exit": 0,
+      "seconds": 0.1818062469828874,
+      "stdout": "[ shared current dependency suppressed_operand main cold_0 cold_1 cold_2 cold_3 cold_4 cold_5 cold_6 cold_7 cold_8 cold_9 cold_10 cold_11 cold_12 cold_13 cold_14 cold_15 cold_16 cold_17 cold_18 cold_19 cold_20 cold_21 cold_22 cold_23 cold_24 cold_25 cold_26 cold_27 cold_28 cold_29 cold_30 cold_31 cold_32 cold_33 cold_34 cold_35 cold_36 cold_37 cold_38 cold_39 cold_40 cold_41 cold_42 cold_43 cold_44 cold_45 cold_46 cold_47 cold_48 cold_49 cold_50 cold_51 cold_52 cold_53 cold_54 cold_55 cold_56 cold_57 cold_58 cold_59 cold_60 cold_61 cold_62 cold_63 cold_64 cold_65 cold_66 cold_67 cold_68 cold_69 cold_70 cold_71 cold_72 cold_73 cold_74 cold_75 cold_76 cold_77 cold_78 cold_79 cold_80 cold_81 cold_82 cold_83 cold_84 cold_85 cold_86 cold_87 cold_88 cold_89 cold_90 cold_91 cold_92 cold_93 cold_94 cold_95 cold_96 cold_97 cold_98 cold_99 cold_100 cold_101 cold_102 cold_103 cold_104 cold_105 cold_106 cold_107 cold_108 cold_109 cold_110 cold_111 cold_112 cold_113 cold_114 cold_115 cold_116 cold_117 cold_118 cold_119 cold_120 cold_121 cold_122 cold_123 cold_124 cold_125 cold_126 cold_127 cold_128 cold_129 cold_130 cold_131 cold_132 cold_133 cold_134 cold_135 cold_136 cold_137 cold_138 cold_139 cold_140 cold_141 cold_142 cold_143 cold_144 cold_145 cold_146 cold_147 cold_148 cold_149 cold_150 cold_151 cold_152 cold_153 cold_154 cold_155 cold_156 cold_157 cold_158 cold_159 cold_160 cold_161 cold_162 cold_163 cold_164 cold_165 cold_166 cold_167 cold_168 cold_169 cold_170 cold_171 cold_172 cold_173 cold_174 cold_175 cold_176 cold_177 cold_178 cold_179 cold_180 cold_181 cold_182 cold_183 cold_184 cold_185 cold_186 cold_187 cold_188 cold_189 cold_190 cold_191 cold_192 cold_193 cold_194 cold_195 cold_196 cold_197 cold_198 cold_199 cold_200 cold_201 cold_202 cold_203 cold_204 cold_205 cold_206 cold_207 cold_208 cold_209 cold_210 cold_211 cold_212 cold_213 cold_214 cold_215 cold_216 cold_217 cold_218 cold_219 cold_220 cold_221 cold_222 cold_223 cold_224 cold_225 cold_226 cold_227 cold_228 cold_229 cold_230 cold_231 cold_232 cold_233 cold_234 cold_235 cold_236 cold_237 cold_238 cold_239 cold_240 cold_241 cold_242 cold_243 cold_244 cold_245 cold_246 cold_247 cold_248 cold_249 cold_250 cold_251 cold_252 cold_253 cold_254 cold_255 cold_256 cold_257 cold_258 cold_259 cold_260 cold_261 cold_262 cold_263 cold_264 cold_265 cold_266 cold_267 cold_268 cold_269 cold_270 cold_271 cold_272 cold_273 cold_274 cold_275 cold_276 cold_277 cold_278 cold_279 cold_280 cold_281 cold_282 cold_283 cold_284 cold_285 cold_286 cold_287 cold_288 cold_289 cold_290 cold_291 cold_292 cold_293 cold_294 cold_295 cold_296 cold_297 cold_298 cold_299 cold_300 cold_301 cold_302 cold_303 cold_304 cold_305 cold_306 cold_307 cold_308 cold_309 cold_310 cold_311 cold_312 cold_313 cold_314 cold_315 cold_316 cold_317 cold_318 cold_319 cold_320 cold_321 cold_322 cold_323 cold_324 cold_325 cold_326 cold_327 cold_328 cold_329 cold_330 cold_331 cold_332 cold_333 cold_334 cold_335 cold_336 cold_337 cold_338 cold_339 cold_340 cold_341 cold_342 cold_343 cold_344 cold_345 cold_346 cold_347 cold_348 cold_349 cold_350 cold_351 cold_352 cold_353 cold_354 cold_355 cold_356 cold_357 cold_358 cold_359 cold_360 cold_361 cold_362 cold_363 cold_364 cold_365 cold_366 cold_367 cold_368 cold_369 cold_370 cold_371 cold_372 cold_373 cold_374 cold_375 cold_376 cold_377 cold_378 cold_379 cold_380 cold_381 cold_382 cold_383 cold_384 cold_385 cold_386 cold_387 cold_388 cold_389 cold_390 cold_391 cold_392 cold_393 cold_394 cold_395 cold_396 cold_397 cold_398 cold_399 cold_400 cold_401 cold_402 cold_403 cold_404 cold_405 cold_406 cold_407 cold_408 cold_409 cold_410 cold_411 cold_412 cold_413 cold_414 cold_415 cold_416 cold_417 cold_418 cold_419 cold_420 cold_421 cold_422 cold_423 cold_424 cold_425 cold_426 cold_427 cold_428 cold_429 cold_430 cold_431 cold_432 cold_433 cold_434 cold_435 cold_436 cold_437 cold_438 cold_439 cold_440 cold_441 cold_442 cold_443 cold_444 cold_445 cold_446 cold_447 cold_448 cold_449 cold_450 cold_451 cold_452 cold_453 cold_454 cold_455 cold_456 cold_457 cold_458 cold_459 cold_460 cold_461 cold_462 cold_463 cold_464 cold_465 cold_466 cold_467 cold_468 cold_469 cold_470 cold_471 cold_472 cold_473 cold_474 cold_475 cold_476 cold_477 cold_478 cold_479 cold_480 cold_481 cold_482 cold_483 cold_484 cold_485 cold_486 cold_487 cold_488 cold_489 cold_490 cold_491 cold_492 cold_493 cold_494 cold_495 cold_496 cold_497 cold_498 cold_499 cold_500 cold_501 cold_502 cold_503 cold_504 cold_505 cold_506 cold_507 cold_508 cold_509 cold_510 cold_511 cold_512 cold_513 cold_514 cold_515 cold_516 cold_517 cold_518 cold_519 cold_520 cold_521 cold_522 cold_523 cold_524 cold_525 cold_526 cold_527 cold_528 cold_529 cold_530 cold_531 cold_532 cold_533 cold_534 cold_535 cold_536 cold_537 cold_538 cold_539 cold_540 cold_541 cold_542 cold_543 cold_544 cold_545 cold_546 cold_547 cold_548 cold_549 cold_550 cold_551 cold_552 cold_553 cold_554 cold_555 cold_556 cold_557 cold_558 cold_559 cold_560 cold_561 cold_562 cold_563 cold_564 cold_565 cold_566 cold_567 cold_568 cold_569 cold_570 cold_571 cold_572 cold_573 cold_574 cold_575 cold_576 cold_577 cold_578 cold_579 cold_580 cold_581 cold_582 cold_583 cold_584 cold_585 cold_586 cold_587 cold_588 cold_589 cold_590 cold_591 cold_592 cold_593 cold_594 cold_595 cold_596 cold_597 cold_598 cold_599 cold_600 cold_601 cold_602 cold_603 cold_604 cold_605 cold_606 cold_607 cold_608 cold_609 cold_610 cold_611 cold_612 cold_613 cold_614 cold_615 cold_616 cold_617 cold_618 cold_619 cold_620 cold_621 cold_622 cold_623 cold_624 cold_625 cold_626 cold_627 cold_628 cold_629 cold_630 cold_631 cold_632 cold_633 cold_634 cold_635 cold_636 cold_637 cold_638 cold_639 cold_640 cold_641 cold_642 cold_643 cold_644 cold_645 cold_646 cold_647 cold_648 cold_649 cold_650 cold_651 cold_652 cold_653 cold_654 cold_655 cold_656 cold_657 cold_658 cold_659 cold_660 cold_661 cold_662 cold_663 cold_664 cold_665 cold_666 cold_667 cold_668 cold_669 cold_670 cold_671 cold_672 cold_673 cold_674 cold_675 cold_676 cold_677 cold_678 cold_679 cold_680 cold_681 cold_682 cold_683 cold_684 cold_685 cold_686 cold_687 cold_688 cold_689 cold_690 cold_691 cold_692 cold_693 cold_694 cold_695 cold_696 cold_697 cold_698 cold_699 cold_700 cold_701 cold_702 cold_703 cold_704 cold_705 cold_706 cold_707 cold_708 cold_709 cold_710 cold_711 cold_712 cold_713 cold_714 cold_715 cold_716 cold_717 cold_718 cold_719 cold_720 cold_721 cold_722 cold_723 cold_724 cold_725 cold_726 cold_727 cold_728 cold_729 cold_730 cold_731 cold_732 cold_733 cold_734 cold_735 cold_736 cold_737 cold_738 cold_739 cold_740 cold_741 cold_742 cold_743 cold_744 cold_745 cold_746 cold_747 cold_748 cold_749 cold_750 cold_751 cold_752 cold_753 cold_754 cold_755 cold_756 cold_757 cold_758 cold_759 cold_760 cold_761 cold_762 cold_763 cold_764 cold_765 cold_766 cold_767 cold_768 cold_769 cold_770 cold_771 cold_772 cold_773 cold_774 cold_775 cold_776 cold_777 cold_778 cold_779 cold_780 cold_781 cold_782 cold_783 cold_784 cold_785 cold_786 cold_787 cold_788 cold_789 cold_790 cold_791 cold_792 cold_793 cold_794 cold_795 cold_796 cold_797 cold_798 cold_799 cold_800 cold_801 cold_802 cold_803 cold_804 cold_805 cold_806 cold_807 cold_808 cold_809 cold_810 cold_811 cold_812 cold_813 cold_814 cold_815 cold_816 cold_817 cold_818 cold_819 cold_820 cold_821 cold_822 cold_823 cold_824 cold_825 cold_826 cold_827 cold_828 cold_829 cold_830 cold_831 cold_832 cold_833 cold_834 cold_835 cold_836 cold_837 cold_838 cold_839 cold_840 cold_841 cold_842 cold_843 cold_844 cold_845 cold_846 cold_847 cold_848 cold_849 cold_850 cold_851 cold_852 cold_853 cold_854 cold_855 cold_856 cold_857 cold_858 cold_859 cold_860 cold_861 cold_862 cold_863 cold_864 cold_865 cold_866 cold_867 cold_868 cold_869 cold_870 cold_871 cold_872 cold_873 cold_874 cold_875 cold_876 cold_877 cold_878 cold_879 cold_880 cold_881 cold_882 cold_883 cold_884 cold_885 cold_886 cold_887 cold_888 cold_889 cold_890 cold_891 cold_892 cold_893 cold_894 cold_895 cold_896 cold_897 cold_898 cold_899 cold_900 cold_901 cold_902 cold_903 cold_904 cold_905 cold_906 cold_907 cold_908 cold_909 cold_910 cold_911 cold_912 cold_913 cold_914 cold_915 cold_916 cold_917 cold_918 cold_919 cold_920 cold_921 cold_922 cold_923 cold_924 cold_925 cold_926 cold_927 cold_928 cold_929 cold_930 cold_931 cold_932 cold_933 cold_934 cold_935 cold_936 cold_937 cold_938 cold_939 cold_940 cold_941 cold_942 cold_943 cold_944 cold_945 cold_946 cold_947 cold_948 cold_949 cold_950 cold_951 cold_952 cold_953 cold_954 cold_955 cold_956 cold_957 cold_958 cold_959 cold_960 cold_961 cold_962 cold_963 cold_964 cold_965 cold_966 cold_967 cold_968 cold_969 cold_970 cold_971 cold_972 cold_973 cold_974 cold_975 cold_976 cold_977 cold_978 cold_979 cold_980 cold_981 cold_982 cold_983 cold_984 cold_985 cold_986 cold_987 cold_988 cold_989 cold_990 cold_991 cold_992 cold_993 cold_994 cold_995 cold_996 cold_997 cold_998 cold_999 ]\n31 43 1043 43\n[ __lljit_run_atexits atexit ]\n[ __lljit_run_atexits atexit ]\n",
+      "stderr": ""
+    },
+    {
+      "coldDefinitions": 1000,
+      "wholeModule": false,
+      "repeat": 3,
+      "irBytes": 87973,
+      "irSha256": "b3458c80d2d1ed9261f93f6acb08735cefe9cf70875576cacb983366e3d063c0",
+      "materializedColdCount": 0,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc-lazy",
+        "--orc-lazy-debug=funcs-to-stdout",
+        "/tmp/cod-architecture-59wqkodf/world-1000.ll"
+      ],
+      "exit": 0,
+      "seconds": 0.05216528702294454,
+      "stdout": "[ main ]\n[ ]\n[ suppressed_operand ]\n[ shared ]\n[ current ]\n[ dependency ]\n31 43 1043 43\n[ __lljit_run_atexits atexit ]\n[ __lljit_run_atexits atexit ]\n",
+      "stderr": ""
+    },
+    {
+      "coldDefinitions": 1000,
+      "wholeModule": false,
+      "repeat": 4,
+      "irBytes": 87973,
+      "irSha256": "b3458c80d2d1ed9261f93f6acb08735cefe9cf70875576cacb983366e3d063c0",
+      "materializedColdCount": 0,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc-lazy",
+        "--orc-lazy-debug=funcs-to-stdout",
+        "/tmp/cod-architecture-59wqkodf/world-1000.ll"
+      ],
+      "exit": 0,
+      "seconds": 0.05331258196383715,
+      "stdout": "[ main ]\n[ ]\n[ suppressed_operand ]\n[ shared ]\n[ current ]\n[ dependency ]\n31 43 1043 43\n[ __lljit_run_atexits atexit ]\n[ __lljit_run_atexits atexit ]\n",
+      "stderr": ""
+    },
+    {
+      "coldDefinitions": 1000,
+      "wholeModule": true,
+      "repeat": 4,
+      "irBytes": 87973,
+      "irSha256": "b3458c80d2d1ed9261f93f6acb08735cefe9cf70875576cacb983366e3d063c0",
+      "materializedColdCount": 1000,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc-lazy",
+        "--orc-lazy-debug=funcs-to-stdout",
+        "--per-module-lazy",
+        "/tmp/cod-architecture-59wqkodf/world-1000.ll"
+      ],
+      "exit": 0,
+      "seconds": 0.18736533302580938,
+      "stdout": "[ shared current dependency suppressed_operand main cold_0 cold_1 cold_2 cold_3 cold_4 cold_5 cold_6 cold_7 cold_8 cold_9 cold_10 cold_11 cold_12 cold_13 cold_14 cold_15 cold_16 cold_17 cold_18 cold_19 cold_20 cold_21 cold_22 cold_23 cold_24 cold_25 cold_26 cold_27 cold_28 cold_29 cold_30 cold_31 cold_32 cold_33 cold_34 cold_35 cold_36 cold_37 cold_38 cold_39 cold_40 cold_41 cold_42 cold_43 cold_44 cold_45 cold_46 cold_47 cold_48 cold_49 cold_50 cold_51 cold_52 cold_53 cold_54 cold_55 cold_56 cold_57 cold_58 cold_59 cold_60 cold_61 cold_62 cold_63 cold_64 cold_65 cold_66 cold_67 cold_68 cold_69 cold_70 cold_71 cold_72 cold_73 cold_74 cold_75 cold_76 cold_77 cold_78 cold_79 cold_80 cold_81 cold_82 cold_83 cold_84 cold_85 cold_86 cold_87 cold_88 cold_89 cold_90 cold_91 cold_92 cold_93 cold_94 cold_95 cold_96 cold_97 cold_98 cold_99 cold_100 cold_101 cold_102 cold_103 cold_104 cold_105 cold_106 cold_107 cold_108 cold_109 cold_110 cold_111 cold_112 cold_113 cold_114 cold_115 cold_116 cold_117 cold_118 cold_119 cold_120 cold_121 cold_122 cold_123 cold_124 cold_125 cold_126 cold_127 cold_128 cold_129 cold_130 cold_131 cold_132 cold_133 cold_134 cold_135 cold_136 cold_137 cold_138 cold_139 cold_140 cold_141 cold_142 cold_143 cold_144 cold_145 cold_146 cold_147 cold_148 cold_149 cold_150 cold_151 cold_152 cold_153 cold_154 cold_155 cold_156 cold_157 cold_158 cold_159 cold_160 cold_161 cold_162 cold_163 cold_164 cold_165 cold_166 cold_167 cold_168 cold_169 cold_170 cold_171 cold_172 cold_173 cold_174 cold_175 cold_176 cold_177 cold_178 cold_179 cold_180 cold_181 cold_182 cold_183 cold_184 cold_185 cold_186 cold_187 cold_188 cold_189 cold_190 cold_191 cold_192 cold_193 cold_194 cold_195 cold_196 cold_197 cold_198 cold_199 cold_200 cold_201 cold_202 cold_203 cold_204 cold_205 cold_206 cold_207 cold_208 cold_209 cold_210 cold_211 cold_212 cold_213 cold_214 cold_215 cold_216 cold_217 cold_218 cold_219 cold_220 cold_221 cold_222 cold_223 cold_224 cold_225 cold_226 cold_227 cold_228 cold_229 cold_230 cold_231 cold_232 cold_233 cold_234 cold_235 cold_236 cold_237 cold_238 cold_239 cold_240 cold_241 cold_242 cold_243 cold_244 cold_245 cold_246 cold_247 cold_248 cold_249 cold_250 cold_251 cold_252 cold_253 cold_254 cold_255 cold_256 cold_257 cold_258 cold_259 cold_260 cold_261 cold_262 cold_263 cold_264 cold_265 cold_266 cold_267 cold_268 cold_269 cold_270 cold_271 cold_272 cold_273 cold_274 cold_275 cold_276 cold_277 cold_278 cold_279 cold_280 cold_281 cold_282 cold_283 cold_284 cold_285 cold_286 cold_287 cold_288 cold_289 cold_290 cold_291 cold_292 cold_293 cold_294 cold_295 cold_296 cold_297 cold_298 cold_299 cold_300 cold_301 cold_302 cold_303 cold_304 cold_305 cold_306 cold_307 cold_308 cold_309 cold_310 cold_311 cold_312 cold_313 cold_314 cold_315 cold_316 cold_317 cold_318 cold_319 cold_320 cold_321 cold_322 cold_323 cold_324 cold_325 cold_326 cold_327 cold_328 cold_329 cold_330 cold_331 cold_332 cold_333 cold_334 cold_335 cold_336 cold_337 cold_338 cold_339 cold_340 cold_341 cold_342 cold_343 cold_344 cold_345 cold_346 cold_347 cold_348 cold_349 cold_350 cold_351 cold_352 cold_353 cold_354 cold_355 cold_356 cold_357 cold_358 cold_359 cold_360 cold_361 cold_362 cold_363 cold_364 cold_365 cold_366 cold_367 cold_368 cold_369 cold_370 cold_371 cold_372 cold_373 cold_374 cold_375 cold_376 cold_377 cold_378 cold_379 cold_380 cold_381 cold_382 cold_383 cold_384 cold_385 cold_386 cold_387 cold_388 cold_389 cold_390 cold_391 cold_392 cold_393 cold_394 cold_395 cold_396 cold_397 cold_398 cold_399 cold_400 cold_401 cold_402 cold_403 cold_404 cold_405 cold_406 cold_407 cold_408 cold_409 cold_410 cold_411 cold_412 cold_413 cold_414 cold_415 cold_416 cold_417 cold_418 cold_419 cold_420 cold_421 cold_422 cold_423 cold_424 cold_425 cold_426 cold_427 cold_428 cold_429 cold_430 cold_431 cold_432 cold_433 cold_434 cold_435 cold_436 cold_437 cold_438 cold_439 cold_440 cold_441 cold_442 cold_443 cold_444 cold_445 cold_446 cold_447 cold_448 cold_449 cold_450 cold_451 cold_452 cold_453 cold_454 cold_455 cold_456 cold_457 cold_458 cold_459 cold_460 cold_461 cold_462 cold_463 cold_464 cold_465 cold_466 cold_467 cold_468 cold_469 cold_470 cold_471 cold_472 cold_473 cold_474 cold_475 cold_476 cold_477 cold_478 cold_479 cold_480 cold_481 cold_482 cold_483 cold_484 cold_485 cold_486 cold_487 cold_488 cold_489 cold_490 cold_491 cold_492 cold_493 cold_494 cold_495 cold_496 cold_497 cold_498 cold_499 cold_500 cold_501 cold_502 cold_503 cold_504 cold_505 cold_506 cold_507 cold_508 cold_509 cold_510 cold_511 cold_512 cold_513 cold_514 cold_515 cold_516 cold_517 cold_518 cold_519 cold_520 cold_521 cold_522 cold_523 cold_524 cold_525 cold_526 cold_527 cold_528 cold_529 cold_530 cold_531 cold_532 cold_533 cold_534 cold_535 cold_536 cold_537 cold_538 cold_539 cold_540 cold_541 cold_542 cold_543 cold_544 cold_545 cold_546 cold_547 cold_548 cold_549 cold_550 cold_551 cold_552 cold_553 cold_554 cold_555 cold_556 cold_557 cold_558 cold_559 cold_560 cold_561 cold_562 cold_563 cold_564 cold_565 cold_566 cold_567 cold_568 cold_569 cold_570 cold_571 cold_572 cold_573 cold_574 cold_575 cold_576 cold_577 cold_578 cold_579 cold_580 cold_581 cold_582 cold_583 cold_584 cold_585 cold_586 cold_587 cold_588 cold_589 cold_590 cold_591 cold_592 cold_593 cold_594 cold_595 cold_596 cold_597 cold_598 cold_599 cold_600 cold_601 cold_602 cold_603 cold_604 cold_605 cold_606 cold_607 cold_608 cold_609 cold_610 cold_611 cold_612 cold_613 cold_614 cold_615 cold_616 cold_617 cold_618 cold_619 cold_620 cold_621 cold_622 cold_623 cold_624 cold_625 cold_626 cold_627 cold_628 cold_629 cold_630 cold_631 cold_632 cold_633 cold_634 cold_635 cold_636 cold_637 cold_638 cold_639 cold_640 cold_641 cold_642 cold_643 cold_644 cold_645 cold_646 cold_647 cold_648 cold_649 cold_650 cold_651 cold_652 cold_653 cold_654 cold_655 cold_656 cold_657 cold_658 cold_659 cold_660 cold_661 cold_662 cold_663 cold_664 cold_665 cold_666 cold_667 cold_668 cold_669 cold_670 cold_671 cold_672 cold_673 cold_674 cold_675 cold_676 cold_677 cold_678 cold_679 cold_680 cold_681 cold_682 cold_683 cold_684 cold_685 cold_686 cold_687 cold_688 cold_689 cold_690 cold_691 cold_692 cold_693 cold_694 cold_695 cold_696 cold_697 cold_698 cold_699 cold_700 cold_701 cold_702 cold_703 cold_704 cold_705 cold_706 cold_707 cold_708 cold_709 cold_710 cold_711 cold_712 cold_713 cold_714 cold_715 cold_716 cold_717 cold_718 cold_719 cold_720 cold_721 cold_722 cold_723 cold_724 cold_725 cold_726 cold_727 cold_728 cold_729 cold_730 cold_731 cold_732 cold_733 cold_734 cold_735 cold_736 cold_737 cold_738 cold_739 cold_740 cold_741 cold_742 cold_743 cold_744 cold_745 cold_746 cold_747 cold_748 cold_749 cold_750 cold_751 cold_752 cold_753 cold_754 cold_755 cold_756 cold_757 cold_758 cold_759 cold_760 cold_761 cold_762 cold_763 cold_764 cold_765 cold_766 cold_767 cold_768 cold_769 cold_770 cold_771 cold_772 cold_773 cold_774 cold_775 cold_776 cold_777 cold_778 cold_779 cold_780 cold_781 cold_782 cold_783 cold_784 cold_785 cold_786 cold_787 cold_788 cold_789 cold_790 cold_791 cold_792 cold_793 cold_794 cold_795 cold_796 cold_797 cold_798 cold_799 cold_800 cold_801 cold_802 cold_803 cold_804 cold_805 cold_806 cold_807 cold_808 cold_809 cold_810 cold_811 cold_812 cold_813 cold_814 cold_815 cold_816 cold_817 cold_818 cold_819 cold_820 cold_821 cold_822 cold_823 cold_824 cold_825 cold_826 cold_827 cold_828 cold_829 cold_830 cold_831 cold_832 cold_833 cold_834 cold_835 cold_836 cold_837 cold_838 cold_839 cold_840 cold_841 cold_842 cold_843 cold_844 cold_845 cold_846 cold_847 cold_848 cold_849 cold_850 cold_851 cold_852 cold_853 cold_854 cold_855 cold_856 cold_857 cold_858 cold_859 cold_860 cold_861 cold_862 cold_863 cold_864 cold_865 cold_866 cold_867 cold_868 cold_869 cold_870 cold_871 cold_872 cold_873 cold_874 cold_875 cold_876 cold_877 cold_878 cold_879 cold_880 cold_881 cold_882 cold_883 cold_884 cold_885 cold_886 cold_887 cold_888 cold_889 cold_890 cold_891 cold_892 cold_893 cold_894 cold_895 cold_896 cold_897 cold_898 cold_899 cold_900 cold_901 cold_902 cold_903 cold_904 cold_905 cold_906 cold_907 cold_908 cold_909 cold_910 cold_911 cold_912 cold_913 cold_914 cold_915 cold_916 cold_917 cold_918 cold_919 cold_920 cold_921 cold_922 cold_923 cold_924 cold_925 cold_926 cold_927 cold_928 cold_929 cold_930 cold_931 cold_932 cold_933 cold_934 cold_935 cold_936 cold_937 cold_938 cold_939 cold_940 cold_941 cold_942 cold_943 cold_944 cold_945 cold_946 cold_947 cold_948 cold_949 cold_950 cold_951 cold_952 cold_953 cold_954 cold_955 cold_956 cold_957 cold_958 cold_959 cold_960 cold_961 cold_962 cold_963 cold_964 cold_965 cold_966 cold_967 cold_968 cold_969 cold_970 cold_971 cold_972 cold_973 cold_974 cold_975 cold_976 cold_977 cold_978 cold_979 cold_980 cold_981 cold_982 cold_983 cold_984 cold_985 cold_986 cold_987 cold_988 cold_989 cold_990 cold_991 cold_992 cold_993 cold_994 cold_995 cold_996 cold_997 cold_998 cold_999 ]\n31 43 1043 43\n[ __lljit_run_atexits atexit ]\n[ __lljit_run_atexits atexit ]\n",
+      "stderr": ""
+    }
+  ],
+  "boundaries": [
+    "Rows retain the original commands, timings, outputs and IR hashes; extraction is not a new execution or validation run.",
+    "Both modes receive the same complete generated LLVM IR; materialization savings do not establish frontend savings.",
+    "Process durations include startup, code generation and trace output; no steady-state throughput or production code-lifetime result is established."
+  ]
+}
