@@ -757,8 +757,55 @@ class LLVMEmission {
     if (const auto found = value_owners_.find(value); found != value_owners_.end()) value_owners_[prepared] = found->second;
     return prepared;
   }
+  llvm::Value *prepare_argument(const Expression &expr, size_t index, bool copy) {
+    const auto &child = *expr.children[index];
+    const auto prepare = [&](ArgumentMode mode) -> llvm::Value * {
+      auto *value = emit_expression(child, mode == ArgumentMode::value);
+      if (!reachable()) return nullptr;
+      if (mode != ArgumentMode::value) {
+        if (mode == ArgumentMode::borrowed_read) value = checked_address(value, child, child.at);
+        return pack_view(value, child);
+      }
+      value = prepare_value(expr, index, value);
+      return copy ? copy_temporary(value, child.at) : value;
+    };
+    std::map<ArgumentMode, std::vector<size_t>> alternatives;
+    for (size_t i = 0; i < facts_.size(); ++i)
+      alternatives[facts_[i]->at(&expr).arguments.at(index).mode].push_back(i);
+    if (alternatives.size() == 1) return prepare(alternatives.begin()->first);
+
+    const auto all_facts = facts_;
+    const auto all_contexts = frame_types_;
+    auto *join = block("argument.prepared");
+    auto *saved = environments_ ? owned_slot(*temporaries_, "argument.value") : nullptr;
+    std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> incoming;
+    for (const auto &[mode, indices] : alternatives) {
+      auto *selected = block("argument.prepare"), *next = block("argument.next");
+      llvm::Value *condition = b_.getFalse();
+      facts_.clear(); frame_types_.clear();
+      for (const auto i : indices) {
+        condition = b_.CreateOr(condition, matches(arguments_, *all_contexts.at(i)));
+        facts_.push_back(all_facts[i]); frame_types_.push_back(all_contexts[i]);
+      }
+      b_.CreateCondBr(condition, selected, next);
+      b_.SetInsertPoint(selected);
+      auto *value = prepare(mode);
+      if (reachable()) {
+        if (saved) assign_value(saved, value, child.at);
+        incoming.emplace_back(value, b_.GetInsertBlock()); b_.CreateBr(join);
+      }
+      b_.SetInsertPoint(next);
+    }
+    facts_ = all_facts; frame_types_ = all_contexts;
+    fail_path(ExceptionCategory::unsound_runtime_typing, child.at);
+    b_.SetInsertPoint(join);
+    if (incoming.empty()) { b_.CreateUnreachable(); return nullptr; }
+    if (saved) { auto *value = load(saved); value_owners_[value] = saved; return value; }
+    auto *value = b_.CreatePHI(scalar_, incoming.size(), "argument.value");
+    for (const auto &[prepared, from] : incoming) value->addIncoming(prepared, from);
+    return value;
+  }
   std::vector<llvm::Value *> prepare_arguments(const Expression &expr, bool deferred = false) {
-    const auto &modes = facts_.front()->at(&expr).arguments;
     std::vector<llvm::Value *> arguments;
     const auto &fact = facts_.front()->at(&expr);
     const size_t offset = expr.kind == Expression::Kind::value_call ? 1 : 0;
@@ -771,17 +818,8 @@ class LLVMEmission {
     }
 
     for (size_t i = 0; i < expr.children.size(); ++i) {
-      const auto mode = modes.at(i).mode;
-      const auto &child = *expr.children[i];
-      auto *value = emit_expression(child, mode == ArgumentMode::value);
+      auto *value = prepare_argument(expr, i, !offset || i || protect);
       if (!reachable()) return {};
-      if (mode != ArgumentMode::value) {
-        if (mode == ArgumentMode::borrowed_read) value = checked_address(value, child, child.at);
-        value = pack_view(value, child);
-      } else {
-        value = prepare_value(expr, i, value);
-        if (!offset || i || protect) value = copy_temporary(value, child.at);
-      }
       arguments.push_back(value);
     }
     return arguments;

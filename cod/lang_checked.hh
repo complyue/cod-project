@@ -249,17 +249,30 @@ class ScalarChecker {
     dereference(view, at);
     if (!view.initialized_target) for (const auto place : view.targets) require_initialized(place, at, name);
   }
-  std::vector<ArgumentMode> argument_modes(const Expression &expr) const {
-    std::optional<std::vector<ArgumentMode>> modes;
+  struct ArgumentPreparation {
+    ArgumentMode mode = ArgumentMode::value;
+    std::optional<Type> view;
+  };
+  ArgumentPreparation argument_preparation(const Expression &expr, const std::vector<Type> &prefix) const {
+    if (expr.intrinsic) return {};
+    std::optional<ArgumentMode> mode;
+    std::optional<Type> view;
+    bool consistent_view = true;
     if (const auto family = families_.find(expr.text); family != families_.end()) for (const auto id : family->second) {
-      const auto &parameters = program_.methods[id].source->parameters;
-      if (parameters.size() != expr.children.size()) continue;
-      std::vector<ArgumentMode> candidate;
-      for (const auto &parameter : parameters) candidate.push_back(argument_mode(parameter));
-      if (modes && *modes != candidate) implementation_gap(expr.at, "overloads with different argument preparation contracts");
-      modes = std::move(candidate);
+      const auto &candidate = program_.methods[id];
+      if (candidate.parameters.size() != expr.children.size()) continue;
+      const auto bindings = match_prefix(candidate, prefix);
+      if (!bindings) continue;
+      const auto passing = argument_mode(candidate.source->parameters[prefix.size()]);
+      if (mode && *mode != passing)
+        implementation_gap(expr.children[prefix.size()]->at, "overloads with different argument preparation contracts before this argument's type is established");
+      mode = passing;
+      const auto expected = substitute(candidate.parameters[prefix.size()], candidate, *bindings, true);
+      if (expected.kind != Type::procedure || nested_binder(candidate, expected) || (view && *view != expected))
+        consistent_view = false;
+      else view = expected;
     }
-    return modes.value_or(std::vector<ArgumentMode>(expr.children.size(), ArgumentMode::value));
+    return {mode.value_or(ArgumentMode::value), consistent_view ? view : std::nullopt};
   }
 
   LexicalState::Scope &declaration_scope(const std::string &name, const Location &at) {
@@ -1515,28 +1528,13 @@ class ScalarChecker {
       }
       if (expr.intrinsic && !eager && expr.text != "cause_at")
         implementation_gap(expr.at, "explicit intrinsic has no implemented builtin '" + expr.text + "'");
-      const auto modes = expr.intrinsic ? std::vector<ArgumentMode>(expr.children.size(), ArgumentMode::value) : argument_modes(expr);
       std::vector<Type> arguments;
       std::vector<CheckedOperation> views;
       for (size_t i = 0; i < expr.children.size(); ++i) {
-        const auto mode = modes[i];
-        std::optional<Type> argument_view;
-        if (const auto family = families_.find(expr.text); !expr.intrinsic && family != families_.end()) {
-          bool consistent = true;
-          for (const auto id : family->second) {
-            const auto &candidate = program_.methods[id];
-            if (candidate.parameters.size() != expr.children.size()) continue;
-            const auto bindings = match_prefix(candidate, arguments);
-            if (!bindings) continue;
-            const auto view = substitute(candidate.parameters[i], candidate, *bindings, true);
-            if (view.kind != Type::procedure || nested_binder(candidate, view) || (argument_view && *argument_view != view)) {
-              consistent = false; break;
-            }
-            argument_view = view;
-          }
-          if (!consistent) argument_view.reset();
-        }
-        arguments.push_back(check(*expr.children[i], instance, operations, mode == ArgumentMode::value, false, argument_view ? &*argument_view : nullptr));
+        const auto preparation = argument_preparation(expr, arguments);
+        const auto mode = preparation.mode;
+        arguments.push_back(check(*expr.children[i], instance, operations, mode == ArgumentMode::value, false,
+                                  preparation.view ? &*preparation.view : nullptr));
         operation.arguments.push_back({mode, arguments.back()});
         require_value(arguments.back());
         if (mode == ArgumentMode::value && arguments.back().kind == Type::procedure)
