@@ -21,8 +21,17 @@ proc caught_query_context()->void{
   observe(9091u64);
  };
 }
+proc recursive_name_queries(f:func(u64)->const u64)->void{
+ observe(9010u64);
+ func recur(n:u64)->const u64{
+  func q=func()->const u64{val x<-make local typeof(recur(1u64)){39u64};return x;};
+  return q();
+ };
+ observe(recur(1u64));
+ observe(9011u64);
+}
 {{
- func f=wrap(base);lexical_queries(f);
+ func f=wrap(base);lexical_queries(f);recursive_name_queries(f);
  func a=mixed_query(f,1);func b=mixed_query(f,true);
  observe(a(1u64));observe(b(2u64));
  observe(9030u64);
@@ -35,7 +44,7 @@ runner.HARNESS=runner.HARNESS.replace('checkpoints==14','checkpoints==15').repla
 runner.HARNESS=runner.HARNESS.replace('  if(value==9000)', '''  if(value==9090){assert(!query_record && query_records==1);query_records=0;query_record=true;return;}
   if(value==9091){assert(query_record && query_records==1);query_record=false;return;}
   if(value==9000)''')
-runner.EXPECTED_VALUES+=['36','37','2','3','4','38']
+runner.EXPECTED_VALUES+=['36','37','39','2','3','4','38']
 runner.EXTRA_SOURCES+=[Path(fixture.__file__),Path(__file__)]
 if __name__=='__main__':
  raise SystemExit(runner.main())

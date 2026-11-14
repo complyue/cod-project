@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Lexical callable name resolution
+
+<a id="k-680"></a>
+**K-680 — Lexical-name continuity.** Agent assessment under H-257/H-295/H-329/H-331/H-342/H-343/H-381/H-398/H-420, D-10r147/D-14r91/D-18r91/D-21r11/D-26r13 and charter §§3.2/5.3/6.3/12: registry r687→688 and source reference301→302 share nearest-name resolution for value and capture operands. Recursive lexical identities cannot fall through to same-spelled module methods; unsupported self-value materialization reports an implementation gap. Nested type-only queries retain established lexical signatures without runtime construction. Preserve source context, shadowing, complete captures, direct recursion, owners and cleanup. Recursive self-value capture semantics remain under review; no capture-time, lifetime, ABI or new design qualification is selected. Prior capability reference: `3eaabe8fbe34e412bf49071964017568cf456214:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Lexical callable family coverage
 
 <a id="k-679"></a>

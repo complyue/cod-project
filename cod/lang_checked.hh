@@ -1538,6 +1538,7 @@ class ScalarChecker {
     const auto &free = free_bindings(source).captures;
     const auto required = [&](const Capture &capture) {
       return lexical_.lookup(capture.name).has_value() ||
+          lexical_self(capture.name, checking_instance_ ? std::optional<size_t>{checking_instance_->method} : std::nullopt) ||
           std::any_of(query_environment().bindings.begin(), query_environment().bindings.end(), [&](const auto &binding) { return binding.name == capture.name; }) ||
           (!module_names().callables.contains(capture.name) && !has_declarations(capture.name) && !module_names().symbols.contains(capture.name) &&
            capture.name != "isnull" && capture.name != "cause_at");
@@ -2765,6 +2766,12 @@ class ScalarChecker {
     for (const auto &query : method.queries) {
       check_query_binding(query.name, query.at);
       const auto found = state.bindings.find(query.name);
+      if (found == state.bindings.end() && lexical_self(query.name, state.method)) {
+        const auto type = callable_query({*state.method}, nullptr, query.at, state);
+        if (!type) implementation_gap(query.at, "typeof requires a known lexical declaration with a proved result contract");
+        environment.bindings.push_back({query.name, *type, {false, false, {}}});
+        continue;
+      }
       if (found == state.bindings.end() || !found->second)
         implementation_gap(query.at, "typeof requires a known lexical declaration with a proved result contract");
       auto view = state.views.at(query.name);
@@ -3026,8 +3033,7 @@ class ScalarChecker {
     std::vector<CheckedOperation> captures;
     for (const auto &capture : definition.captures) {
       Expression name{}; name.kind = Expression::Kind::name; name.at = capture.at; name.text = capture.name;
-      const auto value = !lexical_.lookup(capture.name) && module_names().callables.contains(capture.name)
-          ? materialize(family_methods(module_names().callables.at(capture.name)), nullptr, capture.at) : read_binding(name);
+      const auto value = named_value(name);
       if (value.type.kind != Type::procedure || (value.binding && !bindings_->at(*value.binding).callable_value))
         implementation_gap(capture.at, "capture of ordinary lexical cells or non-callable values");
       environment.push_back(value.type); captures.push_back(value);
@@ -3337,6 +3343,17 @@ class ScalarChecker {
     }
     return operation;
   }
+  CheckedOperation named_value(const Expression &expr, const Type *expected = nullptr, bool read = true) {
+    if (lexical_.lookup(expr.text)) return read_binding(expr, read);
+    const auto family = named_family(expr.text);
+    if (family.context)
+      implementation_gap(expr.at, "materialization of the current lexical callable requires its complete retained environment");
+    if (!family.methods.empty()) return materialize(family.methods, expected, expr.at);
+    if (has_declarations(expr.text)) fail(expr.at, "no applicable implementation for declared callable '" + expr.text + "'");
+    if (module_names().symbols.contains(expr.text))
+      implementation_gap(expr.at, "materialization of a compile-time symbol object");
+    return read_binding(expr, read);
+  }
   Type check(const Expression &expr, CheckedInstance *instance,
              std::map<const Expression *, CheckedOperation> &operations, bool read = true, bool discard = false, const Type *expected = nullptr) {
     using K = Expression::Kind;
@@ -3374,16 +3391,7 @@ class ScalarChecker {
       operation.type = Type::null_ref; operation.view = true; select_targets(operation, {null_target});
       if (!expr.owner_name.empty()) operation.owners = {expr.owner_name == "here" ? cleanup_scope_ : named_owner(expr.owner_name, expr.at)};
       break;
-    case K::name: {
-      if (!lexical_.lookup(expr.text) && module_names().callables.contains(expr.text))
-        operation = materialize(family_methods(module_names().callables.at(expr.text)), expected, expr.at);
-      else if (!lexical_.lookup(expr.text) && has_declarations(expr.text))
-        fail(expr.at, "no applicable implementation for declared callable '" + expr.text + "'");
-      else if (!lexical_.lookup(expr.text) && module_names().symbols.contains(expr.text))
-        implementation_gap(expr.at, "materialization of a compile-time symbol object");
-      else operation = read_binding(expr, read);
-      break;
-    }
+    case K::name: operation = named_value(expr, expected, read); break;
     case K::callable: {
       operation = materialize({lexical_method(expr.definition.get())}, expected, expr.at, true);
       if (!expr.definition->name.empty()) {
