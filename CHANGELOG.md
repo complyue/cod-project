@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Cleanup target relationships
+
+<a id="k-646"></a>
+**K-646 — Cleanup target continuity.** Agent assessment: registry r646→647 and source reference267→268 continue D-14r82/H-297/C-65/P-258's initialization-before-read contract and D-17r54/C-63/P-235/P-236/P-321–P-324's cleanup ordering, under D-18r90 alias/native constraints, D-21r11/D-26r9 coverage and charter §§3.3/6.3/12. Finite target relationships compose rebinding with physical initialization across actions; weak updates retain entry alternatives and nullness remains independent of cell initialization. Acceptance preserves earlier-read obligations, failed registration, selected-address retention, category-specific completion and exact release in both native modes without runtime initialization flags. Complete selected-write histories, wider saved-target/queue correlations, regional mechanisms, permanent ABI and pending designs remain excluded. Prior capability reference: `f3da9988f20c7e6d35643ad703a01b050160dd24:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Selected-target cleanup initialization
 
 <a id="k-645"></a>

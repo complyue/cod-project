@@ -3,6 +3,7 @@
 
 #include "lang_exceptions.hh"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <map>
@@ -25,27 +26,105 @@ struct Completion {
 class CleanupEquations {
   static_assert(exception_categories.size() < 64);
 public:
+  struct Targets {
+    // Physical cells only; absence cannot justify initializing a cell.
+    std::set<size_t> places;
+    bool nullable = false;
+    // A weak update can also retain the selection present on entry.
+    bool preserves = false;
+    bool operator==(const Targets &) const = default;
+    void merge(const Targets &other) {
+      places.insert(other.places.begin(), other.places.end());
+      nullable = nullable || other.nullable;
+      preserves = preserves || other.preserves;
+    }
+  };
   // A selection fact describes the current target, so rebinding can invalidate it.
   struct Selections {
     std::set<size_t> initialized, invalidated;
+    std::map<size_t, Targets> targets;
     bool operator==(const Selections &) const = default;
-    void invalidate(size_t id) { initialized.erase(id); invalidated.insert(id); }
-    void then(const Selections &next) {
+    void invalidate(size_t id) { initialized.erase(id); invalidated.insert(id); targets.erase(id); }
+    void assign(size_t id, Targets next) {
+      if (next.preserves) {
+        if (const auto previous = targets.find(id); previous != targets.end()) {
+          next.preserves = false;
+          next.merge(previous->second);
+        } else if (invalidated.contains(id)) { invalidate(id); return; }
+      }
+      invalidate(id);
+      targets.emplace(id, std::move(next));
+    }
+    void resolve(std::set<size_t> &known) {
+      bool changed;
+      do {
+        changed = false;
+        for (const auto &[id, target] : targets) if (!target.preserves) {
+          if (std::all_of(target.places.begin(), target.places.end(), [&](size_t place) { return known.contains(place); }))
+            changed = initialized.insert(id).second || changed;
+          if (!target.nullable && target.places.size() == 1 && initialized.contains(id))
+            changed = known.insert(*target.places.begin()).second || changed;
+        }
+      } while (changed);
+    }
+    void then(const Selections &next, std::set<size_t> &known) {
+      const auto before = *this;
       for (const auto id : next.invalidated) invalidate(id);
+      for (const auto &[id, update] : next.targets) {
+        auto target = update;
+        if (target.preserves) {
+          if (before.initialized.contains(id) && std::all_of(target.places.begin(), target.places.end(),
+              [&](size_t place) { return known.contains(place); })) initialized.insert(id);
+          if (const auto previous = before.targets.find(id); previous != before.targets.end()) {
+            target.preserves = false;
+            target.merge(previous->second);
+          } else if (before.invalidated.contains(id)) continue;
+        }
+        targets[id] = std::move(target);
+      }
       initialized.insert(next.initialized.begin(), next.initialized.end());
+      resolve(known);
     }
     void merge(const Selections &other) {
+      const auto before = *this;
       std::erase_if(initialized, [&](size_t id) { return !other.initialized.contains(id); });
       invalidated.insert(other.invalidated.begin(), other.invalidated.end());
+      for (auto it = targets.begin(); it != targets.end();) {
+        if (const auto next = other.targets.find(it->first); next != other.targets.end()) {
+          it->second.merge(next->second); ++it;
+        } else if (other.invalidated.contains(it->first)) it = targets.erase(it);
+        else { it->second.preserves = true; ++it; }
+      }
+      for (const auto &[id, target] : other.targets) if (!before.targets.contains(id) && !before.invalidated.contains(id)) {
+        auto merged = target; merged.preserves = true;
+        targets.emplace(id, std::move(merged));
+      }
     }
   };
   struct ReadRequirement {
     std::set<size_t> initialized;
     std::optional<size_t> selection = {};
+    // A sufficient cover of the actual non-null read target.
+    std::optional<std::set<size_t>> targets = {};
     bool operator==(const ReadRequirement &) const = default;
+    bool satisfied(size_t place, const std::set<size_t> &known, const Selections &selections) const {
+      const auto ready = [&](size_t id) { return initialized.contains(id) || known.contains(id); };
+      return ready(place) || (selection && selections.initialized.contains(*selection)) ||
+          (targets && std::all_of(targets->begin(), targets->end(), ready));
+    }
+    void substitute(const Selections &before) {
+      if (!selection) return;
+      if (const auto target = before.targets.find(*selection); target != before.targets.end() && !target->second.preserves) {
+        if (!targets) targets = target->second.places;
+        else std::erase_if(*targets, [&](size_t id) { return !target->second.places.contains(id); });
+      }
+      if (before.invalidated.contains(*selection)) selection.reset();
+    }
     void merge(const ReadRequirement &other) {
       std::erase_if(initialized, [&](size_t id) { return !other.initialized.contains(id); });
       if (selection != other.selection) selection.reset();
+      if (targets && other.targets) targets->insert(other.targets->begin(), other.targets->end());
+      else targets.reset();
     }
   };
   using Reads = std::map<size_t, ReadRequirement>;
@@ -84,15 +163,15 @@ private:
   std::vector<Relation> solved_;
   Effects compose(const Effects &first, const Effects &second) const {
     auto result = first;
-    for (const auto &[read, known] : second.reads) if (!first.initialized.contains(reads_.at(read)) &&
-        (!known.selection || !first.selections.initialized.contains(*known.selection))) {
+    for (const auto &[read, known] : second.reads) if (!known.satisfied(reads_.at(read), first.initialized, first.selections)) {
       auto before = known;
       before.initialized.insert(first.initialized.begin(), first.initialized.end());
-      if (before.selection && first.selections.invalidated.contains(*before.selection)) before.selection.reset();
+      before.substitute(first.selections);
+      if (before.satisfied(reads_.at(read), first.initialized, {})) continue;
       merge_read(result.reads, read, before);
     }
     result.initialized.insert(second.initialized.begin(), second.initialized.end());
-    result.selections.then(second.selections);
+    result.selections.then(second.selections, result.initialized);
     result.returned.then(second.returned);
     result.returned.initialize(result.initialized);
     return result;
@@ -102,14 +181,15 @@ private:
     if (inserted) return true;
     auto &known = found->second;
     const auto previous_reads = known.reads;
-    const auto previous_initialized = known.initialized.size();
+    const auto previous_initialized = known.initialized;
     const auto previous_returned = known.returned;
     const auto previous_selections = known.selections;
     for (const auto &[read, before] : effects.reads) merge_read(known.reads, read, before);
     std::erase_if(known.initialized, [&](size_t id) { return !effects.initialized.contains(id); });
     known.returned.merge(effects.returned);
     known.selections.merge(effects.selections);
-    return previous_reads != known.reads || previous_initialized != known.initialized.size() ||
+    known.selections.resolve(known.initialized);
+    return previous_reads != known.reads || previous_initialized != known.initialized ||
         previous_returned != known.returned || previous_selections != known.selections;
   }
 public:

@@ -446,7 +446,7 @@ class ScalarChecker {
       lexical_.null_sources[id] = targets.contains(null_target) ? std::set<size_t>{null_target} : std::set<size_t>{};
       lexical_.owners[id] = target_owners(targets);
       lexical_.target_versions[id] = {next_target_version_++};
-      invalidate_selection(lexical_, id);
+      assign_selection(lexical_, id, selection_targets(targets));
     }
     if (!proving_) {
       possible_targets_.push_back(targets);
@@ -485,12 +485,17 @@ class ScalarChecker {
     else if (operation.null_sources.empty()) operation.null_sources.insert(null_target);
     operation.place = targets.size() == 1 && !targets.contains(null_target) ? std::optional<size_t>{*targets.begin()} : std::nullopt;
   }
-  void assign_targets(size_t binding, const CheckedOperation &source) {
+  static CleanupEquations::Targets selection_targets(const std::set<size_t> &places, bool preserves = false) {
+    CleanupEquations::Targets result{places, places.contains(null_target), preserves};
+    result.places.erase(null_target);
+    return result;
+  }
+  void assign_targets(size_t binding, const CheckedOperation &source, std::optional<CleanupEquations::Targets> update = {}) {
     lexical_.targets[binding] = source.targets;
     lexical_.null_sources[binding] = source.null_sources;
     lexical_.owners[binding].insert(source.owners.begin(), source.owners.end());
     lexical_.target_versions[binding] = {next_target_version_++};
-    invalidate_selection(lexical_, binding);
+    assign_selection(lexical_, binding, update.value_or(selection_targets(source.targets)));
     if (source.initialized_target) initialize_selection(lexical_, binding);
     if (!proving_) {
       possible_targets_.at(binding).insert(source.targets.begin(), source.targets.end());
@@ -547,7 +552,8 @@ class ScalarChecker {
       if (!intersect(written, physical_slots({id})).empty()) affected.push_back(id);
     for (const auto id : affected) {
       auto selected = source;
-      if (target.slots.size() != 1 || !target.slots.contains(id)) {
+      const bool weak = target.slots.size() != 1 || !target.slots.contains(id);
+      if (weak) {
         const auto &previous = lexical_.targets.at(id);
         selected.targets.insert(previous.begin(), previous.end());
         const auto &nulls = lexical_.null_sources.at(id);
@@ -556,7 +562,7 @@ class ScalarChecker {
         selected.initialized_target = selected.initialized_target && (lexical_.selections.initialized.contains(id) ||
             std::all_of(previous.begin(), previous.end(), [&](size_t place) { return lexical_.initialized.contains(place); }));
       }
-      assign_targets(id, selected);
+      assign_targets(id, selected, selection_targets(source.targets, weak));
       if (!proving_) rebound_.insert(id);
     }
   }
@@ -644,10 +650,17 @@ class ScalarChecker {
     lexical_.initialized.insert(id);
     lexical_.returned.uninitialized.erase(id);
     for (const auto input : inputs(lexical_.inputs)) lexical_.input_initialized[input].insert(id);
+    refresh_initialized(lexical_);
   }
   static void initialize_selection(LexicalState &state, size_t id) {
     state.selections.initialized.insert(id);
     for (const auto input : inputs(state.inputs)) state.input_selections[input].initialized.insert(id);
+    refresh_initialized(state);
+  }
+  static void assign_selection(LexicalState &state, size_t id, const CleanupEquations::Targets &targets) {
+    state.selections.assign(id, targets);
+    for (const auto input : inputs(state.inputs)) state.input_selections[input].assign(id, targets);
+    refresh_initialized(state);
   }
   static void invalidate_selection(LexicalState &state, size_t id) {
     state.selections.invalidate(id);
@@ -673,11 +686,11 @@ class ScalarChecker {
   void apply_effects(LexicalState &state, const CleanupEquations::Effects &effects) {
     if (proving_) for (const auto &[read, before] : effects.reads) {
       const auto place = cleanup_.binding(read);
-      if (state.initialized.contains(place) || before.initialized.contains(place) ||
-          (before.selection && state.selections.initialized.contains(*before.selection))) continue;
+      if (before.satisfied(place, state.initialized, state.selections)) continue;
       auto known = before;
       known.initialized.insert(state.initialized.begin(), state.initialized.end());
-      if (known.selection && state.selections.invalidated.contains(*known.selection)) known.selection.reset();
+      known.substitute(state.selections);
+      if (known.satisfied(place, state.initialized, {})) continue;
       if (!storage(place).borrowed && (!delayed_ || !deferred_inputs_.contains(place)) && validating_)
         fail(read_sites_.at(read), "cannot prove initialization of '" + storage(place).name + "' for deferred or borrowed read");
       add_requirement(state, read, state.inputs, known);
@@ -687,8 +700,8 @@ class ScalarChecker {
       state.initialized.insert(id);
       for (const auto input : inputs(state.inputs)) state.input_initialized[input].insert(id);
     }
-    state.selections.then(effects.selections);
-    for (const auto input : inputs(state.inputs)) state.input_selections[input].then(effects.selections);
+    for (const auto input : inputs(state.inputs)) state.input_selections[input].then(effects.selections, state.input_initialized[input]);
+    refresh_initialized(state);
     state.returned.then(effects.returned);
     state.returned.initialize(state.initialized);
   }
@@ -866,19 +879,22 @@ class ScalarChecker {
       fail(at, "read of '" + name + "' before definite initialization of every possible target");
     const auto obligation = cleanup_.read(place);
     read_sites_.push_back(at);
-    if (selection && lexical_.selections.invalidated.contains(*selection)) selection.reset();
-    add_requirement(lexical_, obligation, missing, {lexical_.initialized, selection});
+    CleanupEquations::ReadRequirement before{lexical_.initialized, selection};
+    before.substitute(lexical_.selections);
+    add_requirement(lexical_, obligation, missing, before);
     observe_read(place, lexical_.initialized);
   }
   static void refresh_initialized(LexicalState &state) {
     bool first = true;
     for (const auto input : inputs(state.inputs)) {
+      state.input_selections.at(input).resolve(state.input_initialized.at(input));
       const auto &known = state.input_initialized.at(input);
       state.initialized = first ? known : intersect(state.initialized, known);
       if (first) state.selections = state.input_selections.at(input);
       else state.selections.merge(state.input_selections.at(input));
       first = false;
     }
+    state.returned.initialize(state.initialized);
   }
   void join(const LexicalState &a, bool a_exits, const LexicalState &b, bool b_exits, const Location &at) {
     a_exits = a_exits || !a.live;
@@ -949,13 +965,17 @@ class ScalarChecker {
       state.expired_bindings.erase(id);
       state.target_versions.erase(id);
       state.selections.initialized.erase(id);
-      for (auto &[input, selections] : state.input_selections) selections.initialized.erase(id);
+      state.selections.targets.erase(id);
+      for (auto &[input, selections] : state.input_selections) { selections.initialized.erase(id); selections.targets.erase(id); }
     }
     for (const auto &[id, owners] : state.owners) if (owners.contains(scope.id)) state.expired_bindings.insert(id);
     if (const auto owned = scope_storage_.find(scope.id); owned != scope_storage_.end()) for (const auto id : owned->second) {
       state.available.erase(id);
       state.initialized.erase(id);
       for (auto &[input, initialized] : state.input_initialized) initialized.erase(id);
+      std::erase_if(state.selections.targets, [&](const auto &entry) { return entry.second.places.contains(id); });
+      for (auto &[input, selections] : state.input_selections)
+        std::erase_if(selections.targets, [&](const auto &entry) { return entry.second.places.contains(id); });
       state.exceptions.erase(id);
     }
     state.queues.erase(scope.id);
@@ -991,6 +1011,14 @@ class ScalarChecker {
     auto &targets = lexical_.targets.at(test.binding);
     const bool null = value == test.null_when_true;
     std::erase_if(targets, [&](size_t place) { return (place == null_target) != null; });
+    const auto refine_selection = [&](CleanupEquations::Selections &selections) {
+      if (auto found = selections.targets.find(test.binding); found != selections.targets.end()) {
+        found->second.nullable = null;
+        if (null) found->second.places.clear();
+      }
+    };
+    refine_selection(lexical_.selections);
+    for (const auto input : inputs(lexical_.inputs)) refine_selection(lexical_.input_selections.at(input));
     if (!null) lexical_.null_sources.at(test.binding).clear();
     lexical_.live = lexical_.live && !targets.empty();
   }
@@ -3211,6 +3239,7 @@ class ScalarChecker {
           if (parameter.declaration_kind == "ptr") {
             lexical_.targets[p].insert(null_target);
             lexical_.null_sources[p] = {p};
+            assign_selection(lexical_, p, selection_targets(lexical_.targets[p]));
             if (!proving) { possible_targets_[p].insert(null_target); possible_null_sources_[p] = {p}; }
           }
         }
