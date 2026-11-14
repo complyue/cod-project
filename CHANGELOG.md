@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Common-result compiler-reference alignment
+
+<a id="k-654"></a>
+**K-654 — Current-contract continuity.** Agent assessment under H-424 and charter §§3.3/5.3/6.3/8/12: source reference275→276 and registry r657→658 align the compiler boundary with D-24r7/D-26r13's confirmed unique least common result rule. Inference remains implementation work; existing scalar/owner behavior and scoped authority remain unchanged. Preserve independent recursive anchors, existing conversions, return-boundary sequencing, exact owners/access and native coverage. No design alternative is reopened or broader mechanism qualified. Integrated design source: `97bf56dfd0e1799bd37aa7fba95a7c42d58c1393`.
+
 ## 2026-11-14 — Unique least common callable results
 
 <a id="h-424"></a>
