@@ -1,67 +1,79 @@
 # Callable result-type inference
 
-Discussion revision: 3 · Recorded: 2026-11-14 · Status: pending topic discussion and whole-file approval.
+Design revision: 6 · Recorded: 2026-11-14 · Status: scoped result-inference contract; common-result synthesis remains open.
 
 ## Design authority
 
-- **Registry / scope:** [D-24](DesignAuthorityRegistry.md#d-24), revision 3, all sections, `pending-human`. There is no human-confirmed baseline for this proposal and no delegated implementation contract.
-- **Candidate value path:** C-84/P-356 relates inferred method results to C-01/C-06: source can omit redundant type spelling while the semantic graph retains a complete, inspectable contract. P-357 organizes that value in this document. Charter §§2–3/§5.3/§6/§8/§12 require checked meaning, finite cyclic representation and native behavior consistent with the selected program. These relationships require confirmation rather than borrowing authority from dependencies.
-- **Confirmed constraints:** H-258 requires explicit parameter/result signatures on bodyless declarations. H-361 requires explicit value returns; H-362 permits void fallthrough. H-343 requires native recursion. H-413/H-414 make bare scalar T a val result and scalar T in O a ref result, rejecting val T in O; H-273/H-342 preserve explicit owners and complete callable values; H-417 requires each inferred ref/ptr result to have one statically provable owner, rejecting missing or ambiguous owner evidence; H-196 excludes dynamic effects from functions. These constraints do not independently select omitted-result inference.
-- **Dependencies / exclusions:** P-358 depends on D-10 method/context selection, D-14 owner/access/initialization, D-17 completion, D-18 callable/native transport, D-16 numeric validity, and D-21/D-22/D-23 unresolved dispatch/construction/result boundaries. No owner union, runtime type tag, scalar materialization beyond D-23, new conversion, effect permission, pure syntax implementation or TCO is selected.
-- **Acceptance:** After topic resolution and whole-file approval, explicit and inferred forms must agree across named calls, callable values, recursive graphs, selected module contexts and deferred invocation. Invalid return types, owners, access and initialization remain rejected. Inference must terminate or report an identified unresolved constraint; finite native recursion must not depend on source expansion depth.
+- **Scope / baseline:** [D-24](DesignAuthorityRegistry.md#d-24), r6. H-421/H-422 establishes callable-wide omission and independent recursive anchors; [H-423](../CHANGELOG.md#h-423) accepts reuse of explicit declarations and delegates routine consequences. Func/proc and named/anonymous definitions share this policy. The registry retains the precise qualification of each scope.
+- **Value path:** C-84/P-356–P-357 relates reduced source repetition and complete inspectable signatures to C-01/C-06 and charter §§3.3/5.3/6.3/8/12. The local rationale is accepted; broader document/value-path qualification remains separate from the settled source requirements.
+- **Dependencies / invariants:** P-358 links D-10/D-14/D-17/D-18/D-21/D-22/D-23 and D-16. Preserve callable effects, explicit value returns, scalar value/view modes, unique owners, access, initialization, cleanup and numerical compatibility. No implicit value return, owner union, new capture permission, regional copy, fraction promotion/implementation or permanent ABI follows.
+- **Acceptance / continuity:** The cases below define observable requirements. [K-INFERENCE-CLEANUP-20261114](../CHANGELOG.md#k-inference-cleanup-20261114) records r5→6 and distinguishes H-423's confirmation from the agent's routine resolutions. Source implementation coverage remains in the [compiler reference](../tests/cod/language/README.md).
 
-## Topic: when may a result annotation be omitted?
+## Establishing a result contract
 
-The proposal asks whether an implemented named function may omit its result annotation:
+A callable definition obtains its result contract from an explicit annotation, an independently established applicable declaration/expected callable type, or independent evidence in its body. Callable kind controls effects and callable compatibility; it does not select a different result-inference policy. Bodyless declarations require explicit parameter/result signatures under H-258.
+
+A separate declaration already states the result; the definition need not repeat it:
 
 ```text
-func view(region r:Item, n:u64) {
-  if (n == 0u64) { return root(r); } else {};
-  return view(r, n - 1u64);
+func sum_to(n:u64) -> u64;
+func sum_to(n:u64) {
+  return n + sum_to(n - 1u64);
 }
 ```
 
-Its apparent result is an existing Item owned by r. The explicit form is `func view(region r:Item, n:u64) -> Item { ... }`. Its acceptance requires a separately qualified inference policy; implementation observations cannot choose that policy.
+The declaration establishes val u64 before the recursive body is checked. This is an explicit contract, not circular inference. The same principle applies when a callable definition has an independently known expected callable type. It supplies any missing result contract, including result mode, target access and owner constraints. An ordinary scalar result defaults to val when no explicit reference-result contract applies; an owner annotation never attaches an owner to val bits.
 
-Two source policies are available:
+All applicable declarations remain obligations. Identical result requirements are consistent; incompatible requirements reject. If applicability or the result remains unresolved, require enough explicit information to establish the contract. An annotation cannot waive an incompatible declaration. A candidate overload's guessed result expectation cannot justify selecting that same candidate; ordinary dispatch remains independent of result-type tie breaking.
 
-| Policy | Business-source consequence | Compiler obligation |
-| --- | --- | --- |
-| Permit omitted results on implemented named functions | The method body supplies its result type; bodyless declarations retain explicit contracts. | Infer and validate the result before selecting native transport, including cyclic calls and runtime callable selection. |
-| Require explicit result annotations on every definition | The programmer writes the signature; existing omitted-result examples migrate in one coordinated change. | Check the body against the declared result and diagnose omission directly. |
+Context checks a definition or a callable view against an established contract. It does not retroactively change an existing callable's checked method signature for each consumer. A call's receiving val/ref variable and `=`/`<-` operation supply no result-type evidence to the callee; D-23 governs receiving storage after the call's result is established. Parameter inference, new anonymous syntax and capture permissions are separate contracts.
 
-The proposed direction is to permit omission on implemented named functions. It reduces repeated source information while keeping complete checked signatures available to tools and native lowering. Its cost is a separate inference obligation and potentially less local diagnostics. Requiring annotations makes the signature locally readable and reduces inference complexity, at the cost of more source declarations. Neither policy is activated by this draft.
+## Independent evidence in recursive bodies
 
-## Proposed meaning if omission is retained
+```text
+func sum_to(n:u64) {
+  if (n == 0u64) { return 0u64; } else {};
+  return n + sum_to(n - 1u64);
+}
+```
 
-An omitted annotation requests type inference from the callable's explicit returns. It is not a void declaration and does not enable implicit return expressions. The inferred result must satisfy the existing result-category, access, owner and lifetime rules; inference cannot turn a borrowed object into a copied value or extend its owner.
+`return 0u64;` independently establishes u64. The recursive call, addition and remaining return are then checked against that result contract. A typed parameter or nonrecursive expression can also supply independent evidence; a literal is not required. Source order does not change which returns supply evidence.
 
-All reachable returning alternatives participate. Existing type compatibility and explicitly permitted conversions remain authoritative. A runtime-selected callable cannot use the first checked body as the result contract for other bodies. The result and its native representation must be established for every admitted call before executable output is published.
+`return n + sum_to(n - 1u64);` supplies no independent anchor. Knowing n's type, the recursive argument types or possible `+` overloads cannot establish the missing recursive result. Without a declaration, annotation or other independent anchor, this body rejects. An explicit result contract permits type checking without claiming that execution terminates.
 
-Recursive calls form constraints between signatures. A recursive edge is not evidence that the result is void, and copying the body repeatedly cannot establish its type. In the example, the explicit `return root(r)` supplies an Item constraint and the recursive edge forwards it. Reversing branch order or placing the base return after the recursive branch must preserve the result.
+Mutual recursion follows the same rule: establish contracts from independent evidence, then check every dependent return. A component whose result constraints only refer back to its unresolved results requires an explicit contract. Repeated body expansion, inferred void and an invented non-returning type cannot repair that cycle.
 
-Inference uses the selected lexical/module implementation context and instantiated type/owner parameters. Results discovered for one world or argument instantiation cannot silently qualify another. Existing caller-provided callable destinations and regional/lexical result provenance remain separate from the inferred target type.
+Evidence belongs to the selected lexical/module context and instantiated type/owner parameters. It does not transfer silently to another world or instantiation. Every returning alternative must satisfy the established result, including permitted conversions and owner/access/initialization checks. These are dependency obligations, not a prescribed compiler pass order.
 
-This scope proposes omission only for implemented named functions. Extending it to procedure definitions, anonymous definitions or bodyless declarations is not implied. The deferred pure-function proposal remains separate.
+## Completion without a value
 
-## Topics to finish before whole-file approval
+When no explicit result contract applies, a body with no value-producing return and an independently established normal completion supplies void evidence. This infers a no-value contract; it does not add implicit value-return expressions. A normal no-value exit supplies a type constraint without requiring proof that execution reaches it. A body containing an unresolved `return expression` cannot discard that obligation and infer void from another fallthrough path.
 
-- Decide between the two source policies above.
-- If inference is retained, settle a recursive cycle with no type-defining returning path: whether it infers a non-returning result, requires an annotation, or follows another explicit rule. Ordinary void fallthrough and missing-return failure must remain distinguishable.
-- Specify whether a separate explicit callable declaration may supply the method's result constraint, including when several declarations apply.
-- Define where inference must stop at an abstract result boundary. Existing required family dispatch behavior remains, while unresolved differing-concrete evidence/ABI is not selected here.
+If a value result is established, a path that falls through without providing it retains H-361's missing-return behavior and diagnostics. If the body supplies neither a value result nor normal no-value completion evidence, as with a throw-only body or an unanchored recursive cycle, require an explicit result contract. An already declared result remains valid across exceptional/non-returning paths; those paths do not fabricate a payload. H-362's cleanup replacement and void completion rules remain unchanged.
 
-The [scalar-result contract](ScalarCallResults.md) fixes bare scalar T as an independent val result and T in O as ref T in O; val T in O is invalid. Reading an existing scalar in a value return does not infer a borrow. The receiving declaration or assignment then determines copying, materialization or binding under that contract. Whether an entire result annotation may be omitted remains this document's pending topic; inference cannot silently select a different result mode, invent an owner association for a value, or join incompatible borrowed owners. H-415 requires `<-` for scalar val declaration initialization; receiving syntax does not change these result categories.
+## Open decision: combining different independent result types
 
-## Acceptance after approval
+An established expected result already determines how each return is checked. Returns with the same independently established result contract also require no new joining rule. The material unresolved case is different independent anchor types with no expected result:
 
-1. Explicit and inferred versions of the regional example return the same alias; later writes remain visible and expired/readonly access rejects.
-2. Self and mutual recursion, both branch orders, generic instantiations and nested forwarding use finite native call graphs with equivalent results.
-3. Named, copied, runtime-selected and deferred callable paths establish the same result contract before native transport. Operand evaluation, pending completion and cleanup are unchanged.
-4. Unanchored cycles follow the selected policy. Incompatible returning alternatives and conflicting declarations receive clear diagnostics without unbounded expansion or an invented result type.
-5. Captured/current effects, module-world selection, owner/initialization checks and exceptional release retain their existing contracts.
-6. Measure inference work and emitted code growth on composed programs; do not claim general acceptance from one recursive example.
+```text
+func choose(flag:bool) {
+  if (flag) { return 1u32; } else { return 2u64; };
+}
+```
 
-## Implementation boundary
+Existing numeric compatibility allows u32 to widen to u64 when u64 is required. It does not by itself decide whether an omitted result should choose that common type.
 
-Current compiler availability is recorded in the [source reference](../tests/cod/language/README.md). Existing parser acceptance or rejection does not qualify either proposed source policy. [K-UNIQUE-OWNER-20261114](../CHANGELOG.md#k-unique-owner-20261114) records r2→3 dependency alignment with H-417's unique static owner requirement; the inference proposal, exclusions and pending-human status remain unchanged.
+| Policy | Consequence |
+| --- | --- |
+| Require matching independent result types; otherwise require an explicit result | The example needs `-> u64`. Adding a differently typed branch forces the source to state its result boundary. |
+| Infer a unique least common result under existing permitted conversions | The example infers val u64. Adding a wider branch can change the inferred signature; incomparable candidates require an explicit result. |
+
+Neither alternative permits first-return wins, declaration-order choice, value-dependent numeric narrowing, a synthesized owner union or a new implicit conversion. The choice also needs a clear boundary for nominal/abstract result joins and future fraction representations. Abstract results must preserve actual concrete-type method selection under D-18/D-21/D-26; physical evidence transport remains their separate question. Generic/aggregate result classification remains in D-22. No option in this table is activated by this cleanup.
+
+## Acceptance
+
+1. Equivalent explicit, separately declared, independently contextual and body-inferred contracts produce the same result behavior across func/proc and named/anonymous definitions. Conflicting declarations reject; ordinary call receiving syntax does not change a signature.
+2. Literal/parameter/nonrecursive anchors work in either source order and through self/mutual recursion. Recursive-expression-only inference rejects without an explicit contract; checking never uses an overload assumption to prove itself.
+3. Normal no-value completion, a missing required value, throw-only bodies and unresolved recursive results remain distinct. Pending/replaced returns and exceptional cleanup preserve D-17's rules.
+4. Scalar values, retained reference targets, unique owners, access, initialization and callable environments retain D-14/D-18/D-23's contracts. Copies cannot repair invalid escapes or grant reference covariance; ordinary numerical compatibility and D-16 fraction constraints remain intact.
+5. Named, copied, selected and deferred calls establish complete checked result contracts before native transport. Validate generic/world substitutions and finite recursive code graphs; do not claim broad support from one example or this documentation review.

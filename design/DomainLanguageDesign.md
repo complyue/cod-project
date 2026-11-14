@@ -1,10 +1,8 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 154
+Discussion revision: 155
 
-Recorded: 2026-10-22
-
-Current discussion: 2026-11-13
+Recorded: 2026-11-14
 
 Phase: coordinated language/SNN design, implementation planning and validation.
 
@@ -15,7 +13,7 @@ Phase: coordinated language/SNN design, implementation planning and validation.
 - **Contract boundary:** G-01–G-07, DL-01–DL-16 and DD-001–DD-151 retain the decision/acceptance inventory. H-351/H-352 settles library graph-transfer responsibility and IPC/DBMR planning directions, not protocols, ABI, concurrency, snapshot failure or retention. Past work-period permissions are not a new task.
 - **Invariants / non-goals:** preserve zero-cost relocation, region-only non-bits storage, no regional object copy/move, owner provenance, non-consuming capture replay and no dynamic effect/procedure calls from functions. No module namespace, runtime interface wrapper, allocator policy, bootstrap/toolchain change or SNN modeling choice is introduced. The confirmed method-selection increment does not settle qualifiers, ownership construction/transfer, standalone abstract signatures or mailbox semantics.
 - **Acceptance:** Examples must distinguish source/caller contexts, visibility, conformance, use/extension permission, unique/ambiguous dispatch and demanded/unused implementations while preserving lifetimes and relocation. Current compiler availability is recorded in the [source capability reference](../tests/cod/language/README.md).
-- **Evidence / continuity:** human baselines are the H records identified by the registry; [K-632](../CHANGELOG.md#k-632) covers this editorial consolidation without changing qualification or semantic scope.
+- **Evidence / continuity:** human baselines remain the H records identified by the registry; [K-INFERENCE-CLEANUP-20261114](../CHANGELOG.md#k-inference-cleanup-20261114) covers r154→155: consolidate standalone-declaration semantics against D-10/H-258 and D-24/H-423, preserving unrelated local decisions and pending scopes.
 
 ## Declaration annotations
 
@@ -185,46 +183,15 @@ A fold accumulator retains its explicit type guarantees and facts for its concre
 
 Lean acceptance must show one data identity with head-only conformance declarations in different modules, rejection of structural lookalikes without a declaration, adapter-import permission versus using-only declaration rejection, and consumer acceptance through using the adapter, invalid direct abstract construction, deterministic unique-best selection and an ambiguous crossed-specialization rejection. Product/sum construction and exhaustiveness need separate cases once their grammar is selected; no full GADT or general multiple-inheritance implementation is implied by this declaration split.
 
-#### Standalone method declarations: review draft
+#### Standalone callable declarations
 
-**Pending human confirmation; not native syntax.** H-216 supplies distributed abstract methods and demanded implementation checks. The exact declaration and specialization contract below is a proposal under C-56/C-57 and P-194/P-195. Its purpose is to state an interface operation without inventing an executable body, while preserving the existing identity, visibility and WPO boundaries. It does not qualify new compiler behavior.
+[D-10](SymbolicDynamicScope.md#callable-declarations-and-methods) owns callable identities, signature declarations and methods. H-258 requires explicit parameter/result signatures on a bodyless declaration. [D-24](CallableResultInference.md#establishing-a-result-contract) applies H-423: an independently established declaration can supply a definition's omitted result contract. The same rules govern func/proc and named/anonymous definitions where applicable.
 
-The proposed surface reuses the existing callable header and ends it with a semicolon:
+A declaration supplies requirements, not an executable dispatch candidate. Ordinary body-bearing methods compete under the existing applicability/specificity rules. An applicable inherited or generic body may satisfy a more-specific declaration if it meets that declaration's result, kind, access and owner obligations. A declaration does not implicitly introduce a negative or abstract override that blocks an otherwise applicable body.
 
-```text
-function read(store:SlotStore, slot:u32(Slot)) -> i64;
-function cell(store:SlotStore, slot:u32(Slot)) -> i64;
-proc flush(store:SlotStore) -> void;
-export read;
-export cell;
-export flush;
-```
+A demanded call requires an applicable implementation satisfying the applicable declarations in its selected module world. A result or callable-kind mismatch is an error even if a particular caller discards the result or could otherwise accept it. Multiple declarations remain compatible obligations; declaration order supplies no tie-breaker, and a local annotation cannot waive a conflicting contract. Ordinary overload selection still does not dispatch on result types.
 
-An explicit result type is required because there is no body from which to infer it. These are ordinary lexical callable declarations; `symbol @p:proc(...) -> ...;` already expresses a required dynamic procedure binding. A bodyless symbolic-procedure shorthand is not needed for this slice. There is no Interface body, module namespace, runtime method table, execution step or capture event attached to a head. Public selection and extension follow the same using/import/export rules as implemented methods. Importing a declaration supplies the family to extend; it does not manufacture an implementation. Mixin still requires a body.
-
-The pool example makes the need concrete. Its interface declares read/cell/acquire/release families, its storage module implements them for Pool, and a separate module defines replace/peek/locate using only interface types. The adapter imports the algorithm helpers into the implementation context it selects. The native example currently uses deliberately unavailable fallback bodies to expose the families; those are test scaffolding, not the proposed declaration syntax or a runtime failure mechanism.
-
-Two decisions must be resolved together before implementing the heads:
-
-1. **Does a head compete with implementations?** Proposed: it records an operation requirement and is not a body-bearing dispatch candidate. A visible generic parent implementation can satisfy a demanded child operation when applicable. The alternative treats a more-specific head as an abstract override that blocks a less-specific body. For `Reader <: Store`, a read(Store) body plus a read(Reader) head would succeed under the first rule and require a Reader-specific body under the second. H-216's demanded-visible-implementation rule alone does not choose between them. The first avoids introducing negative overrides implicitly; either rule must remain independent of declaration order.
-2. **Does a head add an interface contract beyond ordinary overload selection?** A contract-head design checks the applicable head's result requirement and callable kind at each demanded call; a function requirement would need a function implementation. A declaration-only design uses the head for family/signature visibility and takes the selected overload's own result/kind, with the surrounding caller enforcing its requirements. These alternatives differ even when a concrete call is otherwise valid. Neither is confirmed. Borrowed results must retain actual provenance in either case; general qualifier compatibility and typed-root generics remain separate work.
-
-The method-head review distinguishes a declared interface from selected body-bearing overloads. Consider a Parent/Child pair and an imported adapter:
-
-| Selected concrete overload | Direct call from module scope | Call through a function declared to return i64 |
-| --- | --- | --- |
-| proc score(Child) → i64, returning7 | Returns7. | Rejects the procedure call inside the function. |
-| function score(Child) → bool, returning true | Returns true. | Rejects the helper’s bool result against its i64 declaration. |
-
-Those executed sources all have bodies. They are evidence of current dispatch and call-site checks, not tests of proposed heads. Replacing the broad body by a contract-bearing head would add an obligation that can reject the direct calls too. That may be useful when an abstraction promises a result/effect contract; it must be an explicit choice, rather than an incidental consequence of parsing a semicolon. H-155’s mixed operation kinds and H-197/H-198’s function boundary remain in force. A stronger head must define its scope without silently redefining ordinary body-bearing overloads.
-
-If contract heads are selected, the rule for which inherited/applicable heads constrain a selected body must also be specified. This draft does not assume an intersection of every visible requirement, result covariance, a new effect subtype relation, or eager validation of all conformances. Declaration-only heads can reuse the current selected-method and caller checks, but do not promise that every concrete implementation preserves an abstract head’s result/kind in all calling contexts.
-
-The pool’s unavailable fallback bodies are also not neutral stand-ins for a head. A more-specific fallback body is a real dispatch candidate and blocks a less-specific inherited implementation. A requirement-only head would not do that. The parent-body/child-head example must therefore be checked explicitly when replacing that scaffolding. Missing unused operations may stay harmless under either rule; demanded availability is the existing requirement.
-
-Neither choice permits structural conformance inference, an eager inventory of every possible operation, or globally published adapters. An unused operation without a body stays harmless. A demanded call must select a visible implementation; statically established missing or ambiguous cases diagnose with the operation declaration and demanded path. For abstract actual-type dispatch, D-21 must cover the admitted alternatives and settle any uncovered failure-timing contract without arbitrary method fallback. The existing concrete argument type and region owner must survive the call.
-
-A minimal acceptance increment should replace the pool's fallback scaffolding, run the same shared algorithm against two storage layouts, reject a demanded missing method while accepting an unused one, preserve a returned payload reference, and exercise the chosen parent-body/head and result/kind rules. Parsing a semicolon or changing the missing-call diagnostic alone would not establish this contract. Until confirmation, the parser continues to require callable bodies and the native records claim only that implemented subset.
+Declaration visibility, import/extension permission, explicit nominal conformance and selected module contexts remain governed by D-10/D-15. A declaration performs no capture or execution and does not manufacture a body, publish an unselected adapter or select general result covariance/effect subtyping. Current compiler support is recorded in the [source capability reference](../tests/cod/language/README.md).
 
 #### Type-associated method visibility and extension
 
