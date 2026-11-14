@@ -333,8 +333,20 @@ class ScalarChecker {
     for (const auto &view : views) access.push_back(access_of(view));
     return access;
   }
+  static bool variadic(const CheckedMethod &method) {
+    return !method.source->parameters.empty() && method.source->parameters.back().variadic;
+  }
+  static bool accepts_arity(const CheckedMethod &method, size_t count) {
+    return variadic(method) ? count + 1 >= method.parameters.size() : count == method.parameters.size();
+  }
+  static size_t parameter_index(const CheckedMethod &method, size_t argument) {
+    return variadic(method) ? std::min(argument, method.parameters.size() - 1) : argument;
+  }
+  static const Parameter &parameter_at(const CheckedMethod &method, size_t argument) {
+    return method.source->parameters[parameter_index(method, argument)];
+  }
   static bool admits_parameter_access(const CheckedMethod &method, size_t i, bool readonly) {
-    const auto &parameter = method.source->parameters[i];
+    const auto &parameter = parameter_at(method, i);
     if (method.source->operation && swap_operation(method.source->name)) return readonly == parameter.read_only;
     return !readonly || parameter.owner.empty() || parameter.read_only;
   }
@@ -374,11 +386,11 @@ class ScalarChecker {
     return owners;
   }
   static bool same_owner(const CheckedMethod &method, size_t a, size_t b) {
-    const auto &parameters = method.source->parameters;
-    return !parameters[a].owner.empty() && parameters[a].owner == parameters[b].owner;
+    const auto &owner = parameter_at(method, a).owner;
+    return !owner.empty() && owner == parameter_at(method, b).owner;
   }
   static bool implies_owners(const CheckedMethod &narrow, const CheckedMethod &broad) {
-    for (size_t i = 0; i < broad.parameters.size(); ++i) for (size_t j = 0; j < i; ++j)
+    for (size_t i = 0; i < narrow.parameters.size(); ++i) for (size_t j = 0; j < i; ++j)
       if (same_owner(broad, i, j) && !same_owner(narrow, i, j)) return false;
     return true;
   }
@@ -403,7 +415,8 @@ class ScalarChecker {
   }
   OwnerMatch match_owners(const CheckedMethod &method, const Owners &owners, const TypeEvidenceState *state = nullptr) const {
     auto result = OwnerMatch::satisfied;
-    for (size_t i = 0; i < method.parameters.size(); ++i) for (size_t j = 0; j < i; ++j) {
+    const auto count = variadic(method) ? owners.size() : method.parameters.size();
+    for (size_t i = 0; i < count; ++i) for (size_t j = 0; j < i; ++j) {
       if (!same_owner(method, i, j)) continue;
       const auto compared = i < owners.size() ? compare_owners(owners[i], owners[j], state) : OwnerMatch::unknown;
       if (compared == OwnerMatch::mismatch) return compared;
@@ -1406,6 +1419,7 @@ class ScalarChecker {
   }
   static bool bind_parameter(const CheckedMethod &method, size_t index, const Type &argument,
                              Substitutions &substitutions, bool widening) {
+    index = parameter_index(method, index);
     if (bind_type(method, method.parameters[index], argument, substitutions, true)) return true;
     if (!widening || argument_mode(method.source->parameters[index]) != ArgumentMode::value) return false;
     auto target = method.parameters[index];
@@ -1419,11 +1433,17 @@ class ScalarChecker {
   }
   static std::optional<Substitutions> match(const CheckedMethod &method, const std::vector<Type> &arguments,
                                           const std::vector<Type> &retained = {}, bool widening = false) {
-    if (method.parameters.size() != arguments.size() || method.retained_types.size() != retained.size()) return {};
+    if (!accepts_arity(method, arguments.size()) || method.retained_types.size() != retained.size()) return {};
     auto substitutions = type_context(method, retained);
     for (size_t i = 0; i < arguments.size(); ++i) {
       if (!bind_parameter(method, i, arguments[i], substitutions, widening)) return {};
     }
+    return substitutions;
+  }
+  std::optional<Substitutions> declaration_match(const CheckedMethod &method, const std::vector<Type> &arguments) const {
+    auto substitutions = match(method, arguments, {}, true);
+    if (substitutions && variadic(method) && nested_binder(method, substitute(method.parameters.back(), method, *substitutions, true)))
+      implementation_gap(method.source->at, "variadic element type is not determined by the inputs");
     return substitutions;
   }
   std::vector<Type> prepared_types(const CheckedMethod &method, const std::vector<Type> &arguments,
@@ -1502,7 +1522,7 @@ class ScalarChecker {
     const auto found = declarations_.find(method.source->name);
     if (found == declarations_.end()) return obligations;
     for (const auto &declaration : found->second) {
-      if (!match(declaration, arguments, {}, true)) continue;
+      if (!declaration_match(declaration, arguments)) continue;
       const auto access = access_coverage(method, declaration);
       if (access == AccessCoverage::disjoint) continue;
       // A result contract belongs to the method instance, not to a caller's
@@ -1511,7 +1531,7 @@ class ScalarChecker {
       for (size_t i = 0; i < domain.size(); ++i) {
         if (accepts_exception(domain[i], method.parameters[i])) domain[i] = independent_input(method.parameters[i], i);
         else if (numeric(method.parameters[i]) && widens(domain[i], method.parameters[i])) domain[i] = method.parameters[i];
-        if (argument_mode(method.source->parameters[i]) != argument_mode(declaration.source->parameters[i]))
+        if (argument_mode(parameter_at(method, i)) != argument_mode(parameter_at(declaration, i)))
           implementation_gap(method.source->at, "declaration applicability across different parameter passing modes");
       }
       if (!match(declaration, domain, {}, true) || access != AccessCoverage::contained || !implies_owners(method, declaration))
@@ -1534,7 +1554,7 @@ class ScalarChecker {
         implementation_gap(method.source->at, "declared result type parameter is not determined by the arguments");
       if (result.borrowed()) {
         std::optional<std::string> owner;
-        for (size_t i = 0; i < arguments.size(); ++i) if (declaration->source->parameters[i].owner == result.owner) {
+        for (size_t i = 0; i < arguments.size(); ++i) if (parameter_at(*declaration, i).owner == result.owner) {
           const auto &mapped = method.source->parameters[i].owner;
           if (owner && owner != mapped) throw std::logic_error("unchecked declaration owner mapping");
           owner = mapped;
@@ -1549,7 +1569,7 @@ class ScalarChecker {
   static ViewEvidence result_view(const CheckedMethod &method, const ResultContract &result, const Owners &owners) {
     ViewEvidence view{result.read_only, result.borrowed(), {}};
     if (result.borrowed()) for (size_t i = 0; i < owners.size(); ++i)
-      if (method.source->parameters[i].owner == result.owner && owners[i]) view.owner = owners[i];
+      if (parameter_at(method, i).owner == result.owner && owners[i]) view.owner = owners[i];
     return view;
   }
   static bool same_result(const ResultContract &a, const ResultContract &b) {
@@ -2396,7 +2416,7 @@ class ScalarChecker {
         std::optional<Type> result;
         std::optional<ResultMode> mode;
         for (const auto &declaration : declarations_.at(expr.text)) {
-          const auto substitutions = match(declaration, arguments, {}, true);
+          const auto substitutions = declaration_match(declaration, arguments);
           if (!substitutions || !admits_access(declaration, access)) continue;
           const auto equality = match_owners(declaration, owners, &state);
           if (equality == OwnerMatch::mismatch) continue;
@@ -2405,7 +2425,7 @@ class ScalarChecker {
             return {};
           }
           if (state.required) for (size_t i = 0; i < arguments.size(); ++i)
-            if (argument_mode(declaration.source->parameters[i]) != ArgumentMode::value && (views[i].view != true || views[i].mixed_view))
+            if (argument_mode(parameter_at(declaration, i)) != ArgumentMode::value && (views[i].view != true || views[i].mixed_view))
               implementation_gap(expr.at, "borrowed parameter requires an existing view");
           const auto type = substitute(*declaration.result.type, declaration, *substitutions, true);
           const auto next = result_view(declaration, declaration.result, owners);
@@ -3969,8 +3989,8 @@ public:
       for (const auto &parameter : form->parameters) {
         if (!names.insert(parameter.name).second) fail(parameter.at, "duplicate parameter name");
         if (!parameter.owner.empty() && !owners.contains(parameter.owner)) fail(parameter.at, "unknown parameter owner '" + parameter.owner + "'");
-        if (parameter.variadic || parameter.automatic_conversion)
-          implementation_gap(parameter.at, "variadic, conversion or borrowed parameter contract");
+        if (parameter.variadic && form->body) implementation_gap(parameter.at, "variadic method bodies");
+        if (parameter.automatic_conversion) implementation_gap(parameter.at, "automatic parameter conversion contract");
         prepared.parameters.push_back(resolve_signature(parameter.type));
         signature_type(prepared, prepared.parameters.back(), parameter.at);
       }

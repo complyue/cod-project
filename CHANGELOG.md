@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Variadic declaration contracts
+
+<a id="k-662"></a>
+**K-662 — Variadic-signature continuity.** Agent assessment under H-258/H-261/H-420–H-424, D-10/D-14r91/D-17r57/D-18/D-24r7/D-26r13 and charter §§5.3/6.3/12: registry r669→670 and source reference283→284 record variadic signature obligations on fixed-arity implementations and type queries. Every actual tail argument retains type/access/owner obligations; empty tails invent no type, target or owner. Preserve original-input result promises, checked failures, preparation, cleanup and native identity. Executable packs, bounds/forwarding, variadic callable views, broader declaration coverage, regional layout and fractions remain outside this increment; no new allocation, public ABI or design approval. Prior capability reference: `73fb0baebedb03860db4d4c881d7593d6abf965f:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Lossless method selection
 
 <a id="k-661"></a>
