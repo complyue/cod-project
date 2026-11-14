@@ -444,31 +444,21 @@ class ScalarChecker {
     if (expr.text == "cause_at" && (expr.intrinsic || (!families_.contains(expr.text) && !declarations_.contains(expr.text))) && expr.children.size() == 2)
       return {ArgumentMode::value, prefix.empty() ? exception_type(0) : Type{Type::uint64}};
     if (expr.intrinsic) return {};
-    std::vector<size_t> applicable;
-    std::map<size_t, Substitutions> substitutions;
+    std::vector<std::optional<Type>> arguments;
     Access access;
     Owners owners;
-    for (const auto &item : evidence) { access.push_back(item.read_only); owners.push_back(item.owner); }
+    for (const auto &item : evidence) { arguments.push_back(item.type); access.push_back(item.read_only); owners.push_back(item.owner); }
+    for (size_t i = 0; i < prefix.size(); ++i) arguments[i] = prefix[i];
     for (size_t i = 0; i < prefix_access.size(); ++i) access[i] = prefix_access[i];
     for (size_t i = 0; i < prefix_owners.size(); ++i) owners[i] = prefix_owners[i];
     bool complete = true;
     for (size_t i = prefix.size(); i < evidence.size(); ++i)
       complete = complete && evidence[i].type.has_value() && evidence[i].type != Type::never;
     const auto family = named_family(expr.text, state);
-    for (const auto id : family.methods) {
-      const auto &candidate = program_.methods[id];
-      if (candidate.parameters.size() != expr.children.size() || !admits_access(candidate, access) ||
-          match_owners(candidate, owners, state) == OwnerMatch::mismatch) continue;
-      auto bindings = match_prefix(candidate, prefix, family.retained_types());
-      if (!bindings) continue;
-      bool matches = true;
-      for (size_t i = prefix.size(); i < evidence.size(); ++i)
-        if (evidence[i].type && evidence[i].type != Type::never &&
-            !bind_type(candidate, candidate.parameters[i], *evidence[i].type, *bindings, true)) matches = false;
-      if (matches) { applicable.push_back(id); substitutions.emplace(id, std::move(*bindings)); }
-    }
+    const auto candidates = method_candidates(family.methods, arguments, family.retained_types(), access, owners, state);
+    auto applicable = candidates.methods;
     if (complete) {
-      applicable = most_specific(applicable, access, owners, state);
+      applicable = most_specific(applicable, access, owners, state, candidates.widening);
       if (required && applicable.size() > 1 && std::all_of(applicable.begin() + 1, applicable.end(), [&](size_t id) {
             const auto &first = program_.methods[applicable.front()], &other = program_.methods[id];
             return same_access(first, other) && implies_owners(first, other) && implies_owners(other, first);
@@ -487,7 +477,7 @@ class ScalarChecker {
         implementation_gap(expr.children[prefix.size()]->at, "overloads with different argument preparation contracts without sufficient operand type evidence");
       }
       mode = passing;
-      const auto expected = substitute(candidate.parameters[prefix.size()], candidate, substitutions.at(id), true);
+      const auto expected = substitute(candidate.parameters[prefix.size()], candidate, candidates.substitutions.at(id), true);
       if (nested_binder(candidate, expected) || (type && *type != expected))
         consistent_type = false;
       else type = expected;
@@ -1414,38 +1404,74 @@ class ScalarChecker {
     for (size_t i = 0; i < retained.size(); ++i) substitutions.at(method.source->type_parameters.size() + i) = retained[i];
     return substitutions;
   }
-  static std::optional<Substitutions> match_prefix(const CheckedMethod &method, const std::vector<Type> &arguments,
-                                                 const std::vector<Type> &retained = {}) {
-    if (method.parameters.size() < arguments.size() || method.retained_types.size() != retained.size()) return {};
+  static bool bind_parameter(const CheckedMethod &method, size_t index, const Type &argument,
+                             Substitutions &substitutions, bool widening) {
+    if (bind_type(method, method.parameters[index], argument, substitutions, true)) return true;
+    if (!widening || argument_mode(method.source->parameters[index]) != ArgumentMode::value) return false;
+    auto target = method.parameters[index];
+    if (const auto type = binder(method, target)) {
+      // An enclosing type is already fixed. This method's own binders still
+      // constrain actual input identities, including repeated occurrences.
+      if (*type < method.source->type_parameters.size() || !substitutions[*type]) return false;
+      target = *substitutions[*type];
+    }
+    return numeric(target) && widens(argument, target);
+  }
+  static std::optional<Substitutions> match(const CheckedMethod &method, const std::vector<Type> &arguments,
+                                          const std::vector<Type> &retained = {}, bool widening = false) {
+    if (method.parameters.size() != arguments.size() || method.retained_types.size() != retained.size()) return {};
     auto substitutions = type_context(method, retained);
     for (size_t i = 0; i < arguments.size(); ++i) {
-      if (!bind_type(method, method.parameters[i], arguments[i], substitutions, true)) return {};
+      if (!bind_parameter(method, i, arguments[i], substitutions, widening)) return {};
     }
     return substitutions;
   }
-  static std::optional<Substitutions> match(const CheckedMethod &method, const std::vector<Type> &arguments,
-                                          const std::vector<Type> &retained = {}) {
-    return method.parameters.size() == arguments.size() ? match_prefix(method, arguments, retained) : std::nullopt;
+  std::vector<Type> prepared_types(const CheckedMethod &method, const std::vector<Type> &arguments,
+                                   const std::vector<Type> &retained) const {
+    const auto substitutions = match(method, arguments, retained, true);
+    if (!substitutions) throw std::logic_error("unchecked method arguments");
+    auto prepared = method.parameters;
+    for (auto &type : prepared) type = substitute(type, method, *substitutions);
+    return prepared;
   }
-  bool widening_candidate(const std::vector<size_t> &family, const std::vector<Type> &arguments,
-                           const std::vector<Type> &retained = {}, const Access &access = {}, const Owners &owners = {},
-                           const TypeEvidenceState *state = nullptr) const {
-    // Until method-selection widening is proved, it must not permit builtin
-    // fallback. Concrete value parameters may widen; same-T and views may not.
-    return std::any_of(family.begin(), family.end(), [&](size_t id) {
-      const auto &method = program_.methods[id];
-      if (method.parameters.size() != arguments.size() || method.retained_types.size() != retained.size() ||
-          !admits_access(method, access) || match_owners(method, owners, state) == OwnerMatch::mismatch) return false;
-      auto substitutions = type_context(method, retained);
-      bool widened = false;
-      for (size_t i = 0; i < arguments.size(); ++i) {
-        if (bind_type(method, method.parameters[i], arguments[i], substitutions, true)) continue;
-        if (argument_mode(method.source->parameters[i]) != ArgumentMode::value ||
-            !numeric(method.parameters[i]) || !widens(arguments[i], method.parameters[i])) return false;
-        widened = true;
+  struct MethodCandidates {
+    std::vector<size_t> methods;
+    std::map<size_t, Substitutions> substitutions;
+    bool widening = false, type_match = false, access_match = false;
+  };
+  MethodCandidates method_candidates(const std::vector<size_t> &family, const std::vector<std::optional<Type>> &arguments,
+                                     const std::vector<Type> &retained, const Access &access, const Owners &owners,
+                                     const TypeEvidenceState *state = nullptr, bool allow_widening = true) const {
+    MethodCandidates result;
+    const bool complete = std::all_of(arguments.begin(), arguments.end(), [](const auto &type) { return type && type != Type::never; });
+    for (const bool widening : {false, true}) {
+      if (widening && !allow_widening) break;
+      for (const auto id : family) {
+        const auto &method = program_.methods[id];
+        if (method.parameters.size() != arguments.size() || method.retained_types.size() != retained.size()) continue;
+        auto substitutions = type_context(method, retained);
+        bool matches = true;
+        for (size_t i = 0; i < arguments.size(); ++i)
+          if (arguments[i] && arguments[i] != Type::never && !bind_parameter(method, i, *arguments[i], substitutions, widening)) matches = false;
+        if (!matches) continue;
+        result.type_match = true;
+        if (!admits_access(method, access)) continue;
+        result.access_match = true;
+        if (match_owners(method, owners, state) == OwnerMatch::mismatch) continue;
+        if (result.substitutions.emplace(id, std::move(substitutions)).second) result.methods.push_back(id);
       }
-      return widened;
-    });
+      if (complete && !result.methods.empty()) {
+        result.widening = widening;
+        break;
+      }
+    }
+    return result;
+  }
+  MethodCandidates method_candidates(const std::vector<size_t> &family, const std::vector<Type> &arguments,
+                                     const std::vector<Type> &retained, const Access &access, const Owners &owners,
+                                     const TypeEvidenceState *state = nullptr, bool allow_widening = true) const {
+    return method_candidates(family, std::vector<std::optional<Type>>{arguments.begin(), arguments.end()},
+        retained, access, owners, state, allow_widening);
   }
   static Type rigid_type(const CheckedMethod &method, const Type &type) {
     if (const auto index = binder(method, type)) return {Type::parameter, {}, *index + 1};
@@ -1462,13 +1488,13 @@ class ScalarChecker {
     return type;
   }
   // Signature containment includes repeated binders; layout equality is irrelevant.
-  static bool implies(const CheckedMethod &narrow, const CheckedMethod &broad) {
+  static bool implies(const CheckedMethod &narrow, const CheckedMethod &broad, bool widening = false) {
     if (narrow.parameters.size() != broad.parameters.size()) return false;
     std::vector<Type> arguments;
     for (size_t i = 0; i < narrow.parameters.size(); ++i) {
       arguments.push_back(independent_input(rigid_type(narrow, narrow.parameters[i]), i));
     }
-    return match(broad, arguments).has_value();
+    return match(broad, arguments, {}, widening).has_value();
   }
   std::vector<const CheckedMethod *> declaration_obligations(const CheckedMethod &method, const std::vector<Type> &arguments) const {
     std::vector<const CheckedMethod *> obligations;
@@ -1476,7 +1502,7 @@ class ScalarChecker {
     const auto found = declarations_.find(method.source->name);
     if (found == declarations_.end()) return obligations;
     for (const auto &declaration : found->second) {
-      if (!match(declaration, arguments)) continue;
+      if (!match(declaration, arguments, {}, true)) continue;
       const auto access = access_coverage(method, declaration);
       if (access == AccessCoverage::disjoint) continue;
       // A result contract belongs to the method instance, not to a caller's
@@ -1484,10 +1510,11 @@ class ScalarChecker {
       auto domain = arguments;
       for (size_t i = 0; i < domain.size(); ++i) {
         if (accepts_exception(domain[i], method.parameters[i])) domain[i] = independent_input(method.parameters[i], i);
+        else if (numeric(method.parameters[i]) && widens(domain[i], method.parameters[i])) domain[i] = method.parameters[i];
         if (argument_mode(method.source->parameters[i]) != argument_mode(declaration.source->parameters[i]))
           implementation_gap(method.source->at, "declaration applicability across different parameter passing modes");
       }
-      if (!match(declaration, domain) || access != AccessCoverage::contained || !implies_owners(method, declaration))
+      if (!match(declaration, domain, {}, true) || access != AccessCoverage::contained || !implies_owners(method, declaration))
         implementation_gap(method.source->at, "declaration applicability requires an independent owner, access or input-domain proof");
       if (method.source->kind != declaration.source->kind)
         fail(method.source->at, "implementation kind does not satisfy callable declaration");
@@ -1502,7 +1529,7 @@ class ScalarChecker {
     std::vector<ResultContract> results;
     for (const auto *declaration : declaration_obligations(method, arguments)) {
       auto result = declaration->result;
-      result.type = substitute(*result.type, *declaration, *match(*declaration, arguments), true);
+      result.type = substitute(*result.type, *declaration, *match(*declaration, arguments, {}, true), true);
       if (nested_binder(*declaration, *result.type))
         implementation_gap(method.source->at, "declared result type parameter is not determined by the arguments");
       if (result.borrowed()) {
@@ -1540,17 +1567,21 @@ class ScalarChecker {
   size_t demand(size_t method, std::vector<Type> arguments, const Location &at, const std::vector<Type> &environment = {},
                 const std::vector<Type> &retained = {}, size_t query_environment = 0) {
     auto &definition = program_.methods[method];
-    for (size_t i = 0; i < arguments.size(); ++i)
-      if (accepts_exception(arguments[i], definition.parameters[i])) arguments[i] = definition.parameters[i];
+    const auto declared = declared_results(definition, arguments);
+    arguments = prepared_types(definition, arguments, retained);
     for (const auto id : definition.instances)
       if (program_.instances[id].arguments == arguments && program_.instances[id].environment == environment &&
-          program_.instances[id].retained_types == retained && program_.instances[id].query_environment == query_environment) return id;
+          program_.instances[id].retained_types == retained && program_.instances[id].query_environment == query_environment) {
+        check_declared_results(definition, program_.instances[id].result, declared);
+        return id;
+      }
     if (program_.instances.size() == instance_limit)
       fail(at, "compiler resource limit: 4096 scalar checking obligations while preparing '" + definition.source->name + "'");
     const auto substitutions = match(definition, arguments, retained);
     if (!substitutions) throw std::logic_error("unchecked method demand");
     const auto &supplied = program_.query_environments[query_environment].result;
     auto result = supplied ? *supplied : require_result(method, arguments, retained, at);
+    check_declared_results(definition, result, declared);
     definition.contextual_result = definition.contextual_result || supplied.has_value();
     const auto id = program_.instances.size();
     auto context = arguments; context.insert(context.end(), environment.begin(), environment.end());
@@ -1561,16 +1592,16 @@ class ScalarChecker {
     return id;
   }
   std::vector<size_t> most_specific(const std::vector<size_t> &applicable, const Access &access = {}, const Owners &owners = {},
-                                    const TypeEvidenceState *state = nullptr) const {
+                                    const TypeEvidenceState *state = nullptr, bool widening = false) const {
     std::vector<size_t> best;
     for (const auto candidate : applicable) {
       const auto &definition = program_.methods[candidate];
       const bool dominated = std::any_of(applicable.begin(), applicable.end(), [&](size_t other) {
         const auto &alternative = program_.methods[other];
-        if (!implies(alternative, definition) || !implies_owners(alternative, definition)) return false;
+        if (!implies(alternative, definition, widening) || !implies_owners(alternative, definition)) return false;
         const bool stricter_owners = !implies_owners(definition, alternative);
         if (stricter_owners && match_owners(alternative, owners, state) != OwnerMatch::satisfied) return false;
-        bool strict = !implies(definition, alternative) || stricter_owners;
+        bool strict = !implies(definition, alternative, widening) || stricter_owners;
         for (size_t i = 0; i < alternative.parameters.size(); ++i) {
           const auto exact = alternative.source->parameters[i].read_only;
           if (exact == definition.source->parameters[i].read_only) continue;
@@ -1585,23 +1616,12 @@ class ScalarChecker {
   }
   size_t select_method(const std::vector<size_t> &family, const std::vector<Type> &arguments, const Location &at, const std::string &name,
                        const std::vector<Type> &retained = {}, const Access &access = {}, const Owners &owners = {},
-                       const TypeEvidenceState *state = nullptr) const {
-    std::vector<size_t> applicable;
-    bool type_match = false, access_match = false;
-    for (const auto method : family) {
-      const auto &candidate = program_.methods[method];
-      if (!match(candidate, arguments, retained)) continue;
-      type_match = true;
-      if (!admits_access(candidate, access)) continue;
-      access_match = true;
-      if (match_owners(candidate, owners, state) != OwnerMatch::mismatch) applicable.push_back(method);
-    }
-    const auto best = most_specific(applicable, access, owners, state);
+                       const TypeEvidenceState *state = nullptr, bool allow_widening = true) const {
+    const auto candidates = method_candidates(family, arguments, retained, access, owners, state, allow_widening);
+    const auto best = most_specific(candidates.methods, access, owners, state, candidates.widening);
     if (best.empty()) {
-      if (widening_candidate(family, arguments, retained, access, owners, state))
-        implementation_gap(at, "numeric widening during method selection");
-      if (access_match) fail(at, "arguments for one owner role have different actual owners");
-      if (type_match) fail(at, "readonly argument cannot supply a writable borrowed parameter");
+      if (candidates.access_match) fail(at, "arguments for one owner role have different actual owners");
+      if (candidates.type_match) fail(at, "readonly argument cannot supply a writable borrowed parameter");
       fail(at, "no applicable method for '" + name + "' (argument types or same-T relation do not match)");
     }
     if (!owners.empty() && std::any_of(best.begin(), best.end(), [&](size_t id) {
@@ -1627,10 +1647,7 @@ class ScalarChecker {
   }
   bool applicable_operation(const std::string &name, const std::vector<Type> &arguments, const Access &access = {}, const Owners &owners = {}) const {
     const auto family = families_.find(name);
-    return family != families_.end() && std::any_of(family->second.begin(), family->second.end(), [&](size_t id) {
-      return match(program_.methods[id], arguments).has_value() && admits_access(program_.methods[id], access) &&
-          match_owners(program_.methods[id], owners) != OwnerMatch::mismatch;
-    });
+    return family != families_.end() && !method_candidates(family->second, arguments, {}, access, owners).methods.empty();
   }
   void finish_named_call(const Expression &expr, const std::vector<Type> &arguments,
                          const std::vector<CheckedOperation> &views, CheckedOperation &operation,
@@ -1907,8 +1924,8 @@ class ScalarChecker {
   std::optional<ResultContract> infer_result(size_t method, std::vector<Type> arguments, const std::vector<Type> &retained,
                                    const TypeEvidenceState *state = nullptr) const {
     const auto &definition = program_.methods[method];
-    for (size_t i = 0; i < arguments.size(); ++i)
-      if (accepts_exception(arguments[i], definition.parameters[i])) arguments[i] = definition.parameters[i];
+    const auto input_declared = declared_results(definition, arguments);
+    arguments = prepared_types(definition, arguments, retained);
     auto supplied = definition.result;
     if (supplied.type) supplied.type = substitute(*supplied.type, definition, *match(definition, arguments, retained), true);
     const auto declared = declared_results(definition, arguments);
@@ -1918,7 +1935,11 @@ class ScalarChecker {
         if (!same_result(supplied, contract))
           implementation_gap(definition.source->at, "declarations do not establish one result contract; provide an explicit compatible result");
     }
-    if (supplied.type) { check_declared_results(definition, supplied, declared); return supplied; }
+    if (supplied.type) {
+      check_declared_results(definition, supplied, declared);
+      check_declared_results(definition, supplied, input_declared);
+      return supplied;
+    }
     const auto context = result_context(method, state);
     const auto found = std::find_if(result_obligations_.begin(), result_obligations_.end(), [&](const auto &node) {
       return node.method == method && node.arguments == arguments && node.retained == retained &&
@@ -1940,7 +1961,12 @@ class ScalarChecker {
       if (definition.source->operation && swap_operation(definition.source->name) && *result != Type::void_type)
         fail(definition.source->at, "swap method must return void");
     }
-    return result ? std::optional<ResultContract>{ResultContract{result}} : std::nullopt;
+    if (result) {
+      const ResultContract contract{result};
+      check_declared_results(definition, contract, input_declared);
+      return contract;
+    }
+    return {};
   }
   ResultContract require_result(size_t method, const std::vector<Type> &arguments, const std::vector<Type> &retained, const Location &at) const {
     if (const auto result = infer_result(method, arguments, retained)) {
@@ -2362,18 +2388,15 @@ class ScalarChecker {
         return exception_type(0);
       }
       if (!complete) return {};
-      std::vector<size_t> applicable;
       const auto family = expr.intrinsic ? NamedFamily{} : named_family(expr.text, &state);
       const auto &retained = family.retained_types();
-      for (const auto id : family.methods)
-        if (match(program_.methods[id], arguments, retained) && admits_access(program_.methods[id], access) &&
-            match_owners(program_.methods[id], owners, &state) != OwnerMatch::mismatch) applicable.push_back(id);
+      const auto candidates = method_candidates(family.methods, arguments, retained, access, owners, &state);
       if (family.methods.empty() && !expr.intrinsic && declarations_.contains(expr.text) &&
           (!eager_operation(expr.text) || !eager_types(expr, arguments).error.empty())) {
         std::optional<Type> result;
         std::optional<ResultMode> mode;
         for (const auto &declaration : declarations_.at(expr.text)) {
-          const auto substitutions = match(declaration, arguments);
+          const auto substitutions = match(declaration, arguments, {}, true);
           if (!substitutions || !admits_access(declaration, access)) continue;
           const auto equality = match_owners(declaration, owners, &state);
           if (equality == OwnerMatch::mismatch) continue;
@@ -2397,18 +2420,14 @@ class ScalarChecker {
       }
       if (state.required && family.methods.empty() && !eager_operation(expr.text))
         implementation_gap(expr.at, "typeof requires a known callable signature without outer value capture");
-      if (applicable.empty() && widening_candidate(family.methods, arguments, retained, access, owners, &state)) {
-        if (state.required) implementation_gap(expr.at, "numeric widening during method selection");
-        return {};
-      }
-      if (applicable.empty() && eager_operation(expr.text)) {
+      if (candidates.methods.empty() && eager_operation(expr.text)) {
         const auto types = eager_types(expr, arguments);
         if (state.required && !types.error.empty()) fail(expr.at, types.error);
         if (types.error.empty()) builtin_declarations(expr, arguments, types.result);
         return types.error.empty() ? std::optional<Type>{types.result} : std::nullopt;
       }
       const auto best = state.required ? std::vector<size_t>{select_method(family.methods, arguments, expr.at, expr.text, retained, access, owners, &state)}
-                                       : most_specific(applicable, access, owners, &state);
+                                       : most_specific(candidates.methods, access, owners, &state, candidates.widening);
       std::optional<Type> result;
       for (const auto id : best) {
         const auto &method = program_.methods[id];
@@ -2579,7 +2598,7 @@ class ScalarChecker {
     Access access;
     if (expected) for (size_t i = 0; i < expected->parameters.size(); ++i)
       access.push_back(!expected->const_views.empty() && expected->const_views[i]);
-    const auto selected = select_method(family, arguments, at, "callable value", retained, access, {}, state);
+    const auto selected = select_method(family, arguments, at, "callable value", retained, access, {}, state, false);
     const auto &method = program_.methods[selected];
     const bool contextual_result = definition_site && expected && !method.result.type && method.source->name.empty();
     const auto supplied = contextual_result ? std::optional<ResultContract>{expected_result(method, *expected, at)} : std::nullopt;
@@ -3115,8 +3134,6 @@ class ScalarChecker {
         break;
       }
       if (eager && (expr.intrinsic || !applicable_operation(expr.text, arguments, access_of(views), owners_of(views)))) {
-        if (!expr.intrinsic && widening_candidate(named_family(expr.text).methods, arguments, {}, access_of(views), owners_of(views)))
-          implementation_gap(expr.at, "numeric widening during method selection");
         if (std::any_of(operation.arguments.begin(), operation.arguments.end(), [](const auto &argument) { return argument.mode != ArgumentMode::value; }))
           implementation_gap(expr.at, "builtin fallback requires value preparation before later operand effects");
         check_eager(expr, arguments, views, operation);

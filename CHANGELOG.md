@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Lossless method selection
+
+<a id="k-661"></a>
+**K-661 — Numeric-dispatch continuity.** Agent assessment under H-258/H-261/P-231/H-420–H-424, D-10/D-14r91/D-17r57/D-18/D-24r7/D-26r13 and charter §§5.3/6.3/12: registry r668→669 and source reference282→283 record shared exact-before-lossless candidate selection, normalized formal inputs and preserved original-input declaration promises. Preserve same-T, fixed callable signatures, owners/access, ordered preparation, result independence, checked failures, cleanup and finite native sharing; partial declaration domains remain unproved. No new conversion policy, quantity/fraction mechanism, regional representation, callable adapter or permanent ABI. Prior capability reference: `19289bb8b62de12538b26f5704da02e66ecaafb0:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Lossless numeric value preparation
 
 <a id="k-660"></a>
