@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Compile-time type queries
+
+<a id="k-640"></a>
+**K-640 — Type-query continuity.** Agent assessment: registry r640→641 and source reference261→262 continue D-14r82/H-295/P-257's bounded compile-time query and local storage contract, with D-18r90 capture/native boundaries and D-21r11/D-26r9 shared semantic selection under charter §§5/6.3/12. Required queries reuse declaration/type evidence without runtime reads, calls, demands or inferred captures; separate initialization preserves its effects. Acceptance includes overload/access/owner rejection, absent query-only native bodies, empty caught-value capture payloads and both native modes. Outer type-only dependencies, broader source forms, body-result inference, RTTI and pending designs remain outside coverage. Prior capability reference: `b92d35825ee6a1526d4c38b14a6f5b45e492e05e:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Selected lexical reference slots
 
 <a id="k-639"></a>

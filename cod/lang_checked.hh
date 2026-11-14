@@ -1086,6 +1086,10 @@ class ScalarChecker {
         bound.insert(expr.text);
         return;
       }
+      if (expr.kind == K::make_local && !expr.annotation) {
+        for (size_t i = 1; i < expr.children.size(); ++i) visit(*expr.children[i], bound);
+        return;
+      }
       if (expr.kind == K::range_for || expr.kind == K::fold) {
         const bool fold = expr.kind == K::fold;
         for (size_t i = 0; i < (fold ? 3 : 2); ++i) visit(*expr.children[i], bound);
@@ -1262,9 +1266,8 @@ class ScalarChecker {
     }
     return best;
   }
-  size_t select_family(const std::vector<size_t> &family, const std::vector<Type> &arguments, const Location &at, const std::string &name,
-                       const std::vector<Type> &environment = {}, const std::vector<Type> &retained = {},
-                       const Access &access = {}, const Owners &owners = {}) {
+  size_t select_method(const std::vector<size_t> &family, const std::vector<Type> &arguments, const Location &at, const std::string &name,
+                       const std::vector<Type> &retained = {}, const Access &access = {}, const Owners &owners = {}) const {
     std::vector<size_t> applicable;
     bool type_match = false, access_match = false;
     for (const auto method : family) {
@@ -1285,7 +1288,12 @@ class ScalarChecker {
           return match_owners(program_.methods[id], owners) == OwnerMatch::unknown;
         })) implementation_gap(at, "method selection requires an unproved owner equality");
     if (best.size() != 1) fail(at, "ambiguous methods for '" + name + "'");
-    return demand(best.front(), arguments, at, environment, retained);
+    return best.front();
+  }
+  size_t select_family(const std::vector<size_t> &family, const std::vector<Type> &arguments, const Location &at, const std::string &name,
+                       const std::vector<Type> &environment = {}, const std::vector<Type> &retained = {},
+                       const Access &access = {}, const Owners &owners = {}) {
+    return demand(select_method(family, arguments, at, name, retained, access, owners), arguments, at, environment, retained);
   }
   size_t select(const Expression &expr, const std::vector<Type> &arguments, const Access &access, const Owners &owners) {
     const auto family = named_family(expr.text);
@@ -1393,9 +1401,64 @@ class ScalarChecker {
     if (nested_binder(method, result) || std::any_of(arguments.begin(), arguments.end(), [&](const auto &type) { return nested_binder(method, type); })) return {};
     return callable_type(*method.source, arguments, result);
   }
+  static CheckedOperation literal(const Expression &expr) {
+    using K = Expression::Kind;
+    CheckedOperation operation;
+    switch (expr.kind) {
+    case K::integer: {
+      auto digits = std::string_view(expr.text);
+      operation.type = Type::integer;
+      if (digits.ends_with("u8")) { operation.type = Type::uint8; digits.remove_suffix(2); }
+      else if (digits.ends_with("u32")) { operation.type = Type::uint32; digits.remove_suffix(3); }
+      else if (digits.ends_with("u64")) { operation.type = Type::uint64; digits.remove_suffix(3); }
+      const auto parsed = std::from_chars(digits.data(), digits.data() + digits.size(), operation.integer);
+      const auto limit = operation.type == Type::uint8 ? std::uint64_t{255} :
+          operation.type == Type::uint32 ? std::uint64_t{0xffffffff} :
+          operation.type == Type::integer ? std::uint64_t{0x7fffffffffffffff} : std::numeric_limits<std::uint64_t>::max();
+      if (parsed.ec != std::errc{} || parsed.ptr != digits.data() + digits.size() || operation.integer > limit)
+        fail(expr.at, "integer literal is outside " + type_name(operation.type));
+      break;
+    }
+    case K::real: {
+      operation.type = expr.text.ends_with("f32") ? Type::float32 : Type::float64;
+      auto digits = std::string_view(expr.text);
+      if (digits.ends_with("f32") || digits.ends_with("f64")) digits.remove_suffix(3);
+      const auto in_range = [&](auto value) {
+        const auto parsed = std::from_chars(digits.data(), digits.data() + digits.size(), value);
+        return parsed.ec == std::errc{} && parsed.ptr == digits.data() + digits.size() && std::isfinite(value);
+      };
+      if (!(operation.type == Type::float32 ? in_range(float{}) : in_range(double{})))
+        fail(expr.at, "floating literal is outside " + type_name(operation.type) + " range");
+      break;
+    }
+    default: throw std::logic_error("expected scalar literal");
+    }
+    return operation;
+  }
+  bool signed_minimum(const Expression &expr) const {
+    if (expr.kind != Expression::Kind::unary || expr.text != "-" || expr.children.front()->kind != Expression::Kind::integer) return false;
+    auto magnitude = std::string_view(expr.children.front()->text);
+    while (magnitude.starts_with('0')) magnitude.remove_prefix(1);
+    if (magnitude != "9223372036854775808") return false;
+    if (applicable_operation(expr.text, {Type::integer}))
+      implementation_gap(expr.at, "signed minimum literal with overloaded unary negation");
+    return true;
+  }
+  static void check_exception_field(const Expression &expr) {
+    if (expr.text != "category" && expr.text != "site" && expr.text != "requested" && expr.text != "available" && expr.text != "cause_count")
+      fail(expr.at, "unknown intrinsic exception field '" + expr.text + "'");
+  }
+  void check_query_binding(const std::string &name, const Location &at) const {
+    if (const auto id = lexical_.lookup(name)) {
+      if (!lexical_.bindings_available.contains(*id))
+        fail(at, "binding '" + name + "' is not available on every reaching path");
+      if (bindings_->at(*id).owner_binding) fail(at, "owner binding is not a value in typeof");
+    }
+  }
   struct ViewEvidence {
     std::optional<bool> read_only, view, value_binding;
     std::optional<size_t> owner = {};
+    bool mixed_view = false;
     bool operator==(const ViewEvidence &) const = default;
   };
   static ViewEvidence join_views(const ViewEvidence &a, const ViewEvidence &b) {
@@ -1404,7 +1467,7 @@ class ScalarChecker {
       return x && y ? std::optional<bool>{false} : std::nullopt;
     };
     return {either(a.read_only, b.read_only), either(a.view, b.view), a.value_binding == b.value_binding ? a.value_binding : std::nullopt,
-            a.owner == b.owner ? a.owner : std::nullopt};
+            a.owner == b.owner ? a.owner : std::nullopt, a.mixed_view || b.mixed_view || a.view != b.view};
   }
   struct TypeEvidenceState {
     std::map<std::string, std::optional<Type>> bindings;
@@ -1412,6 +1475,7 @@ class ScalarChecker {
     ViewEvidence value;
     std::optional<size_t> current_owner;
     bool complete = true;
+    bool required = false;
   };
   static TypeEvidenceState merge_evidence(TypeEvidenceState left, const TypeEvidenceState &right) {
     for (auto &[name, type] : left.bindings) {
@@ -1430,10 +1494,11 @@ class ScalarChecker {
     return left;
   }
   // Evidence only: no reads, captures, demands, storage or cleanup equations are created here.
-  // Unknown binding effects invalidate subsequent name queries; the ordered checker validates every operand.
+  // Operand hints defer validation to ordered checking; required typeof queries validate their bounded source forms here.
   std::optional<Type> type_evidence(const Expression &expr, TypeEvidenceState &state, bool contextual = false) const {
     ViewEvidence view{false, false, {}};
     const auto type = query_evidence(expr, state, view, contextual);
+    if (state.required && !type) implementation_gap(expr.at, "typeof requires a known declaration or operand type without body inference");
     state.value = type && type != Type::never ? view : ViewEvidence{};
     return type;
   }
@@ -1443,21 +1508,35 @@ class ScalarChecker {
     const auto annotation = [&](const Type &type) {
       return checking_instance_ ? substitute(type, *checking_method_, checking_instance_->substitutions, true) : resolve_type(type);
     };
+    if (state.required) {
+      if (expr.spread) implementation_gap(expr.at, "spread operands in typeof");
+      if (signed_minimum(expr)) return Type::integer;
+      switch (expr.kind) {
+      case K::integer: case K::real: case K::boolean: case K::null_ref: case K::name:
+      case K::unary: case K::binary: case K::call: case K::value_call: case K::field:
+      case K::conditional: case K::block: break;
+      default: implementation_gap(expr.at, "typeof for this expression form");
+      }
+    }
     switch (expr.kind) {
     case K::integer:
+      if (state.required) return literal(expr).type;
       if (expr.text.ends_with("u8")) return Type::uint8;
       if (expr.text.ends_with("u32")) return Type::uint32;
       if (expr.text.ends_with("u64")) return Type::uint64;
       return Type::integer;
-    case K::real: return expr.text.ends_with("f32") ? Type::float32 : Type::float64;
+    case K::real:
+      if (state.required) return literal(expr).type;
+      return expr.text.ends_with("f32") ? Type::float32 : Type::float64;
     case K::boolean: return Type::boolean;
-    case K::null_ref: return Type::null_ref;
+    case K::null_ref: view.view = true; return Type::null_ref;
     case K::name:
       if (!state.complete) return {};
       if (const auto found = state.bindings.find(expr.text); found != state.bindings.end()) {
+        if (state.required) check_query_binding(expr.text, expr.at);
         view = state.views.at(expr.text); return found->second;
       }
-      if (!contextual) if (const auto family = families_.find(expr.text); family != families_.end() && family->second.size() == 1)
+      if (!contextual || state.required) if (const auto family = families_.find(expr.text); family != families_.end() && family->second.size() == 1)
         return callable_evidence(family->second.front());
       return {};
     case K::block: {
@@ -1505,11 +1584,17 @@ class ScalarChecker {
       return Type::void_type;
     }
     case K::make_local: {
+      std::optional<Type> type;
+      if (expr.annotation) type = annotation(*expr.annotation);
+      else {
+        auto query = state;
+        type = type_evidence(*expr.children.front(), query);
+      }
       bool completes = true;
-      for (size_t i = 0; i < expr.children.size(); ++i)
-        if (type_evidence(*expr.children[i], state) == Type::never && (expr.annotation || i)) completes = false;
+      for (size_t i = expr.annotation ? 0 : 1; i < expr.children.size(); ++i)
+        if (type_evidence(*expr.children[i], state) == Type::never) completes = false;
       if (!completes) return Type::never;
-      return expr.annotation ? std::optional<Type>{annotation(*expr.annotation)} : std::nullopt;
+      return type;
     }
     case K::transfer: case K::rebind: {
       const auto type = child(0); view = state.value;
@@ -1520,6 +1605,7 @@ class ScalarChecker {
     }
     case K::conditional: {
       const auto condition = child(0);
+      if (state.required && condition != Type::boolean) fail(expr.at, "condition requires bool");
       auto yes_state = state, no_state = state;
       const auto yes = type_evidence(*expr.children[1], yes_state, contextual), no = type_evidence(*expr.children[2], no_state, contextual);
       state = merge_evidence(std::move(yes_state), no_state);
@@ -1575,7 +1661,8 @@ class ScalarChecker {
     }
     case K::binary:
       if (expr.text == "&&" || expr.text == "||") {
-        const auto left = child(0); auto skipped = state; child(1);
+        const auto left = child(0); auto skipped = state; const auto right = child(1);
+        if (state.required && (left != Type::boolean || right != Type::boolean)) fail(expr.at, "logical operation requires bool operands");
         state = merge_evidence(std::move(skipped), state);
         return left == Type::never ? Type{Type::never} : Type{Type::boolean};
       }
@@ -1586,22 +1673,42 @@ class ScalarChecker {
       if (expr.kind == K::value_call) { target = child(0); local = true; }
       else if (!expr.intrinsic && state.complete) {
         if (const auto found = state.bindings.find(expr.text); found != state.bindings.end()) {
+          if (state.required) check_query_binding(expr.text, expr.at);
           target = found->second; local = true;
         }
       }
       std::vector<Type> arguments;
       Access access;
       Owners owners;
+      std::vector<ViewEvidence> views;
       bool complete = true;
       bool exits = target == Type::never;
       for (size_t i = expr.kind == K::value_call ? 1 : 0; i < expr.children.size(); ++i) {
         const auto type = child(i, true); complete = complete && type.has_value();
         exits = exits || type == Type::never;
         arguments.push_back(type.value_or(Type::never)); access.push_back(state.value.read_only); owners.push_back(state.value.owner);
+        views.push_back(state.value);
       }
       if (exits) return Type::never;
       if (local) {
+        if (state.required && (!target || target->kind != Type::procedure || !target->target))
+          fail(expr.at, "nearest binding '" + expr.text + "' is not callable");
+        if (state.required && target->parameters.size() != arguments.size()) fail(expr.at, "callable argument count does not match its view");
         if (!target || target->kind != Type::procedure || !target->target || target->parameters.size() != arguments.size()) return {};
+        if (state.required) for (size_t i = 0; i < arguments.size(); ++i) {
+          if (arguments[i] != target->parameters[i] && !accepts_exception(arguments[i], target->parameters[i]))
+            fail(expr.children[i + (expr.kind == K::value_call)]->at, "argument does not satisfy the callable view type");
+          const auto mode = target->argument_modes.empty() ? ArgumentMode::value : target->argument_modes[i];
+          if (mode != ArgumentMode::value && (views[i].view != true || views[i].mixed_view))
+            implementation_gap(expr.at, "borrowed parameter requires an existing view");
+          if (mode != ArgumentMode::value && access[i].value_or(false) && (target->const_views.empty() || !target->const_views[i]))
+            fail(expr.at, "readonly argument cannot supply a writable borrowed parameter");
+          for (size_t j = 0; j < i; ++j) if (!target->owners.empty() && target->owners[i] && target->owners[i] == target->owners[j]) {
+            const auto relation = compare_owners(owners[i], owners[j]);
+            if (relation == OwnerMatch::mismatch) fail(expr.at, "arguments for one owner role have different actual owners");
+            if (relation == OwnerMatch::unknown) implementation_gap(expr.at, "typeof callable view requires an unproved owner equality");
+          }
+        }
         const bool borrowed = !target->owners.empty() && target->owners.back();
         view = {borrowed && !target->const_views.empty() && target->const_views.back(), borrowed, {}};
         if (borrowed) for (size_t i = 0; i < owners.size(); ++i)
@@ -1609,24 +1716,42 @@ class ScalarChecker {
         return *target->target;
       }
       if (!state.complete) return {};
-      if (expr.text == "isnull") return Type::boolean;
-      if (swap_operation(expr.text)) return Type::void_type;
-      if (expr.text == "cause_at" && (expr.intrinsic || !families_.contains(expr.text))) return exception_type(0);
+      if (expr.text == "isnull") {
+        if (state.required && (arguments.size() != 1 || views.front().view != true || views.front().mixed_view))
+          fail(expr.at, "isnull requires one reference view");
+        return Type::boolean;
+      }
+      if (swap_operation(expr.text)) {
+        if (state.required) implementation_gap(expr.at, "storage exchange in typeof");
+        return Type::void_type;
+      }
+      if (expr.text == "cause_at" && (expr.intrinsic || !families_.contains(expr.text))) {
+        if (state.required && (arguments.size() != 2 || arguments[0].kind != Type::exception || arguments[1] != Type::uint64))
+          fail(expr.at, "cause_at requires an exception and a u64 index");
+        return exception_type(0);
+      }
       if (!complete) return {};
       std::vector<size_t> applicable;
       const auto family = expr.intrinsic ? NamedFamily{} : named_family(expr.text);
       const auto &retained = family.retained_types();
+      if (state.required && family.methods.empty() && !eager_operation(expr.text))
+        implementation_gap(expr.at, "typeof requires a known callable signature without outer value capture");
       for (const auto id : family.methods)
         if (match(program_.methods[id], arguments, retained) && admits_access(program_.methods[id], access) &&
             match_owners(program_.methods[id], owners) != OwnerMatch::mismatch) applicable.push_back(id);
       if (applicable.empty() && eager_operation(expr.text)) {
         const auto types = eager_types(expr, arguments);
+        if (state.required && !types.error.empty()) fail(expr.at, types.error);
         return types.error.empty() ? std::optional<Type>{types.result} : std::nullopt;
       }
-      const auto best = most_specific(applicable, access, owners);
+      const auto best = state.required ? std::vector<size_t>{select_method(family.methods, arguments, expr.at, expr.text, retained, access, owners)}
+                                       : most_specific(applicable, access, owners);
       std::optional<Type> result;
       for (const auto id : best) {
         const auto &method = program_.methods[id];
+        if (state.required) for (size_t i = 0; i < arguments.size(); ++i)
+          if (argument_mode(method.source->parameters[i]) != ArgumentMode::value && (views[i].view != true || views[i].mixed_view))
+            implementation_gap(expr.at, "borrowed parameter requires an existing view");
         const auto type = substitute(method.result, method, *match(method, arguments, retained), true);
         if (nested_binder(method, type) || (result && *result != type)) return {};
         const bool borrowed = borrowed_result(*method.source);
@@ -1641,6 +1766,7 @@ class ScalarChecker {
     case K::field: {
       const auto type = child(0);
       if (type == Type::never) return Type::never;
+      if (state.required && type && type->kind == Type::exception) check_exception_field(expr);
       return type && type->kind == Type::exception ? std::optional<Type>{Type::uint64} : std::nullopt;
     }
     case K::behave: case K::perform: {
@@ -1667,10 +1793,7 @@ class ScalarChecker {
       return {};
     }
   }
-  std::vector<ArgumentEvidence> argument_evidence(const Expression &expr) const {
-    std::vector<ArgumentEvidence> result(expr.children.size());
-    if (expr.intrinsic) return result;
-    if (named_family(expr.text).methods.empty()) return result;
+  TypeEvidenceState evidence_state() const {
     TypeEvidenceState state;
     state.current_owner = std::find_if(lexical_.scopes.rbegin(), lexical_.scopes.rend(), [](const auto &scope) { return scope.declarations; })->id;
     for (const auto &scope : lexical_.scopes) for (const auto &[name, id] : scope.bindings) {
@@ -1680,6 +1803,13 @@ class ScalarChecker {
       const auto owner = found != lexical_.owners.end() && found->second.size() == 1 ? std::optional<size_t>{*found->second.begin()} : std::nullopt;
       state.views[name] = {binding.read_only, true, binding.value_binding, owner};
     }
+    return state;
+  }
+  std::vector<ArgumentEvidence> argument_evidence(const Expression &expr) const {
+    std::vector<ArgumentEvidence> result(expr.children.size());
+    if (expr.intrinsic) return result;
+    if (named_family(expr.text).methods.empty()) return result;
+    auto state = evidence_state();
     for (size_t i = 0; i < expr.children.size(); ++i) {
       result[i].type = type_evidence(*expr.children[i], state, true);
       result[i].read_only = state.value.read_only;
@@ -2005,32 +2135,7 @@ class ScalarChecker {
       implementation_gap(expr.at, "module-local binding lookup and capture in callable bodies");
     if (expr.spread) implementation_gap(expr.at, "spread arguments");
     switch (expr.kind) {
-    case K::integer: {
-      auto digits = std::string_view(expr.text);
-      operation.type = Type::integer;
-      if (digits.ends_with("u8")) { operation.type = Type::uint8; digits.remove_suffix(2); }
-      else if (digits.ends_with("u32")) { operation.type = Type::uint32; digits.remove_suffix(3); }
-      else if (digits.ends_with("u64")) { operation.type = Type::uint64; digits.remove_suffix(3); }
-      const auto parsed = std::from_chars(digits.data(), digits.data() + digits.size(), operation.integer);
-      const auto limit = operation.type == Type::uint8 ? std::uint64_t{255} :
-          operation.type == Type::uint32 ? std::uint64_t{0xffffffff} :
-          operation.type == Type::integer ? std::uint64_t{0x7fffffffffffffff} : std::numeric_limits<std::uint64_t>::max();
-      if (parsed.ec != std::errc{} || parsed.ptr != digits.data() + digits.size() || operation.integer > limit)
-        fail(expr.at, "integer literal is outside " + type_name(operation.type));
-      break;
-    }
-    case K::real: {
-      operation.type = expr.text.ends_with("f32") ? Type::float32 : Type::float64;
-      auto digits = std::string_view(expr.text);
-      if (digits.ends_with("f32") || digits.ends_with("f64")) digits.remove_suffix(3);
-      const auto in_range = [&](auto value) {
-        const auto parsed = std::from_chars(digits.data(), digits.data() + digits.size(), value);
-        return parsed.ec == std::errc{} && parsed.ptr == digits.data() + digits.size() && std::isfinite(value);
-      };
-      if (!(operation.type == Type::float32 ? in_range(float{}) : in_range(double{})))
-        fail(expr.at, "floating literal is outside " + type_name(operation.type) + " range");
-      break;
-    }
+    case K::integer: case K::real: operation = literal(expr); break;
     case K::boolean: operation.type = Type::boolean; operation.integer = expr.text == "true"; break;
     case K::null_ref:
       if (read) implementation_gap(expr.at, "untyped null in a payload expression; bind a typed ptr view first");
@@ -2053,16 +2158,10 @@ class ScalarChecker {
       break;
     }
     case K::unary: {
-      if (expr.text == "-" && expr.children.front()->kind == K::integer) {
-        auto magnitude = std::string_view(expr.children.front()->text);
-        while (magnitude.starts_with('0')) magnitude.remove_prefix(1);
-        if (magnitude == "9223372036854775808") {
-          if (applicable_operation(expr.text, {Type::integer}))
-            implementation_gap(expr.at, "signed minimum literal with overloaded unary negation");
-          operation.type = operation.operand_type = Type::integer;
-          operation.minimum_literal = true;
-          break;
-        }
+      if (signed_minimum(expr)) {
+        operation.type = operation.operand_type = Type::integer;
+        operation.minimum_literal = true;
+        break;
       }
       [[fallthrough]];
     }
@@ -2421,20 +2520,9 @@ class ScalarChecker {
         if (initializer.kind == K::make_local) {
           if (initializer.annotation) initial_type = resolve_local_type(*initializer.annotation, instance, initializer.at);
           else {
-            const auto &query = *initializer.children.front();
-            const auto *name = &query;
-            const bool null_query = query.kind == K::call && query.text == "isnull";
-            if (null_query) {
-              if (query.children.size() != 1) fail(query.at, "isnull requires one reference view");
-              name = query.children.front().get();
-            }
-            if (name->kind == K::name) {
-              const auto binding = lexical_.lookup(name->text);
-              if (!binding) fail(name->at, "unknown value in typeof: '" + name->text + "'");
-              if (!lexical_.bindings_available.contains(*binding)) fail(name->at, "binding '" + name->text + "' is not available on every reaching path");
-              initial_type = (*bindings_)[*binding].type;
-            } else if (!null_query || name->kind != K::null_ref) implementation_gap(query.at, "typeof on a non-name local initializer");
-            if (null_query) initial_type = Type::boolean;
+            auto state = evidence_state();
+            state.required = true;
+            initial_type = *type_evidence(*initializer.children.front(), state);
           }
           const size_t value_index = initializer.annotation ? 0 : 1;
           if (initial_type.kind == Type::procedure) implementation_gap(initializer.at, "raw callable storage construction");
@@ -2632,8 +2720,7 @@ class ScalarChecker {
     case K::field: {
       const auto source = child(0);
       if (source.kind != Type::exception && source != Type::never) implementation_gap(expr.at, "non-exception field selection");
-      if (expr.text != "category" && expr.text != "site" && expr.text != "requested" && expr.text != "available" && expr.text != "cause_count")
-        fail(expr.at, "unknown intrinsic exception field '" + expr.text + "'");
+      check_exception_field(expr);
       operation.type = source == Type::never ? Type{Type::never} : Type{Type::uint64};
       break;
     }
