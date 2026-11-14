@@ -19,6 +19,7 @@ effect @f;
 behave @print(behave @f(1u8));behave @print(behave @f(1u64));
 for(i in 0u64..10u64){effect @f;behave @f(1u8);};
 '''
+EXTRA_SOURCES = []
 
 def main():
     results = []
@@ -51,7 +52,7 @@ def main():
     count = sum(result['passed'] for result in results)
     if report := os.environ.get('COD_LANGUAGE_REPORT'):
         sources = [ROOT / 'cod/main.cc', *sorted((ROOT / 'cod').glob('lang_*.hh')), Path(__file__),
-                   Path(__file__).with_name('foundation_tests.py'), Path(__file__).with_name('callable_value_staging_tests.py')]
+                   Path(__file__).with_name('foundation_tests.py'), Path(__file__).with_name('callable_value_staging_tests.py'), *EXTRA_SOURCES]
         digest = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
         Path(report).write_text(json.dumps(dict(recorded_utc=datetime.datetime.now(datetime.timezone.utc).isoformat(),
             toolchain=MODE, passed=count, total=len(results), results=results, executable_sha256=digest(COD),

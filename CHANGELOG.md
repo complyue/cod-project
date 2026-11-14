@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Family value-result adaptation
+
+<a id="k-677"></a>
+**K-677 — Family-result continuity.** Agent assessment under H-261/H-269/H-372–H-378/H-398/H-407/H-420, D-10r147/D-14r91/D-17r57/D-18r91/D-21r11/D-26r13 and charter §§2/3.2/5.3/6.3/12: registry r684→685 and source reference298→299 record family value results using existing lossless numeric and concrete-to-common exception transfers after method completion. Preserve full-domain checks, actual exception identity, selected interpretations, captures, failure outcomes, cleanup and native reuse. Borrowed targets, callable signatures, access/owner rules and ordinary method materialization retain their contracts. Correct the stale exact-argument limitation for established callable views. No general covariance, new conversion policy, fraction mechanism, permanent ABI or additional design qualification. Prior capability reference: `f49186c628f2faff93f9dbd274cae7798fa7e59e:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Independent return-expression alternatives
 
 <a id="k-676"></a>

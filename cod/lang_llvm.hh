@@ -488,6 +488,18 @@ class LLVMEmission {
     }
     auto *result = native_call(target, method, std::move(arguments), image, instance_id);
     for (const auto &[symbol, previous] : saved) b_.CreateStore(previous, symbols_.at(symbol));
+    if (!instance.result.borrowed() && *instance.result.type != *value.type.target) {
+      auto *adapt = block("callable.result.prepare"), *join = block("callable.result.prepared");
+      auto *previous = b_.GetInsertBlock();
+      b_.CreateCondBr(failed(result), join, adapt);
+      b_.SetInsertPoint(adapt);
+      auto *converted = convert_value(b_.CreateExtractValue(result, 0), *instance.result.type, *value.type.target);
+      auto *completed = b_.CreateInsertValue(result, converted, 0);
+      b_.CreateBr(join); b_.SetInsertPoint(join);
+      auto *joined = b_.CreatePHI(outcome_, 2);
+      joined->addIncoming(result, previous); joined->addIncoming(completed, adapt);
+      result = joined;
+    }
     return result;
   }
   llvm::Value *invoke_value(const Expression &expr, const std::vector<llvm::Value *> &prepared) {

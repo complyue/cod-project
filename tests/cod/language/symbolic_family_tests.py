@@ -41,7 +41,7 @@ runner.CASES = {
     'callee_before_argument_effect': (IO + 'symbol @f:proc(u64)->u64;proc @f(x:T)->u64 where T{return 7u64;}proc other(x:u64)->u64{return 9u64;}'
         'effect @f;behave @print(behave @f({effect @f=other;1u8}));behave @print(behave @f(1u8));', 0, '7\n9\n', ''),
     'missing_domain_method': ('symbol @f:proc(u64)->u64;proc @f(x:u8)->u64{return 1u64;}effect @f;', 2, '', 'no applicable method'),
-    'result_adapter_remains_unproved': ('symbol @f:proc(u64)->u64;proc @f(x:u64)->u32{return 1u32;}effect @f;', 2, '', 'unproved symbolic family result/access/view compatibility'),
+    'lossless_result_adapter': (IO + 'symbol @f:proc(u64)->u64;proc @f(x:u64)->u32{return 1u32;}effect @f;behave @print(behave @f(2u8));', 0, '1\n', ''),
     'ambiguous_unused_domain': ('symbol @f:proc(u64,u64)->u64;proc @f(x:u64,y:T)->u64 where T{return 1u64;}proc @f(x:T,y:u64)->u64 where T{return 2u64;}effect @f;', 2, '', 'ambiguous methods'),
     'checked_failure_unused_domain': ('using "std:exceptions" StaticallyUnknownType;symbol @f:proc(u64)->u64;proc @f(x:u64)->u64{return 1u64;}'
         'proc @f(x:T)->u64 throws StaticallyUnknownType where T{return 7u64;}effect @f;', 2, '', 'callable view omits a required checked exception'),

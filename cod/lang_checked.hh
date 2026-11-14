@@ -3017,6 +3017,10 @@ class ScalarChecker {
         contract.throws_types = view.throws_types;
         // Selected value parameters may prepare a lossless wider representation.
         contract.parameters = view.parameters;
+        // Value results use ordinary transfer compatibility after the method completes.
+        // Borrowed targets and all other view obligations retain their exact contract.
+        if (contract.value_result && view.value_result && transfers_value(*contract.target, *view.target))
+          contract.target = view.target;
         if (contract != view) implementation_gap(at, "unproved symbolic family result/access/view compatibility");
         value.dispatch.emplace_back(arguments, target);
       };
