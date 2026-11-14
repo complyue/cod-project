@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Primitive dynamic binding and restoration
+
+<a id="k-668"></a>
+**K-668 — Dynamic-binding continuity.** Agent assessment under H-98/P-89, H-277–H-281/P-248, H-286/P-252, H-319/H-356/H-365/H-371/P-326, H-420, D-10r147/D-14r91/D-17r57/D-18/D-26r13 and charter §§2/3.2/5.3/6.3/12: registry r675→676 and source reference289→290 record primitive TLS installation/read/touch, current-binding requirements through calls and cleanup, and full-scope/iteration/else restoration. Preserve identity, function exclusion, lossless preparation, RHS effects, completion, deferred timing, allocation-free restoration and thread isolation. Declaration-only queries allocate no TLS storage. Incoming dynamic captures, non-primitive bindings, symbolic family installation/composition, regional resources and public/persistent ABI remain outside coverage. No new language permission, owner rule, fraction mechanism or whole-design qualification. Prior capability reference: `ba07cb6da10963a66dfd76c3e79b02d9821bbe0d:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Typed symbol declaration evidence
 
 <a id="k-667"></a>

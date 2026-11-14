@@ -212,7 +212,14 @@ public:
       preserves = keep;
     }
   };
-  struct Effects { Reads reads; std::set<size_t> initialized; Returned returned{}; Selections selections{}; };
+  struct Effects {
+    Reads reads;
+    std::set<size_t> initialized;
+    Returned returned{};
+    Selections selections{};
+    // Cleanup may require current bindings; its own installations restore before it returns.
+    std::set<size_t> symbols{};
+  };
   struct Path { std::uint64_t inputs; Completion completion; size_t queue; Effects effects{}; };
   struct Action { bool guarded = false; std::vector<Path> paths; };
 private:
@@ -225,6 +232,7 @@ private:
   std::vector<Relation> solved_;
   Effects compose(const Effects &first, const Effects &second) const {
     auto result = first;
+    result.symbols.insert(second.symbols.begin(), second.symbols.end());
     for (const auto &[read, known] : second.reads) if (!known.satisfied(reads_.at(read), first.initialized, first.selections)) {
       auto before = known;
       before.initialized.insert(first.initialized.begin(), first.initialized.end());
@@ -247,13 +255,15 @@ private:
     const auto previous_initialized = known.initialized;
     const auto previous_returned = known.returned;
     const auto previous_selections = known.selections;
+    const auto previous_symbols = known.symbols;
+    known.symbols.insert(effects.symbols.begin(), effects.symbols.end());
     for (const auto &[read, before] : effects.reads) merge_read(known.reads, read, before);
     std::erase_if(known.initialized, [&](size_t id) { return !effects.initialized.contains(id); });
     known.returned.merge(effects.returned);
     known.selections.merge(effects.selections);
     known.selections.resolve(known.initialized);
     return previous_reads != known.reads || previous_initialized != known.initialized ||
-        previous_returned != known.returned || previous_selections != known.selections;
+        previous_returned != known.returned || previous_selections != known.selections || previous_symbols != known.symbols;
   }
 public:
   static void merge_read(Reads &reads, size_t read, const ReadRequirement &before) {

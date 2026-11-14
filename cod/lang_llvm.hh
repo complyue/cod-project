@@ -41,6 +41,7 @@ class LLVMEmission {
   llvm::Value *environment_ = nullptr;
   std::vector<Type> callable_types_;
   std::vector<llvm::Function *> general_, specialized_;
+  std::vector<llvm::GlobalVariable *> symbols_;
   std::vector<const std::map<const Expression *, CheckedOperation> *> facts_;
   std::vector<llvm::Value *> arguments_, retained_types_;
   std::vector<llvm::AllocaInst *> storage_, bindings_;
@@ -715,6 +716,43 @@ class LLVMEmission {
     }
     return value;
   }
+  void collect_effects(const Expression &expr, std::set<size_t> &symbols) const {
+    using K = Expression::Kind;
+    if ((expr.kind == K::block && expr.scoped) || expr.kind == K::callable) return;
+    if (expr.kind == K::effect) symbols.insert(*facts_.front()->at(&expr).symbol);
+    const size_t children = expr.kind == K::range_for ? 2 : expr.kind == K::fold ? 3 : expr.children.size();
+    for (size_t i = 0; i < children; ++i) collect_effects(*expr.children[i], symbols);
+  }
+  using SavedEffects = std::vector<std::pair<size_t, llvm::Value *>>;
+  SavedEffects save_effects(const std::vector<const Expression *> &expressions) {
+    std::set<size_t> symbols;
+    for (const auto *expr : expressions) collect_effects(*expr, symbols);
+    SavedEffects saved;
+    for (const auto id : symbols) saved.emplace_back(id, b_.CreateLoad(scalar_, symbols_.at(id), "effect.previous"));
+    return saved;
+  }
+  void restore_effects(const SavedEffects &saved) {
+    for (const auto &[id, value] : saved) b_.CreateStore(value, symbols_.at(id));
+  }
+  llvm::Value *iteration(const Expression &expr, bool discard) {
+    const auto saved = save_effects({&expr});
+    if (saved.empty()) return emit_expression(expr, Projection::value, discard);
+    Control control{control_, block("iteration.restore")};
+    control_ = &control;
+    auto *result = slot(scalar_, "iteration.value");
+    auto *value = emit_expression(expr, Projection::value, discard);
+    if (reachable()) { b_.CreateStore(value, result); b_.CreateBr(control.exit); }
+    b_.SetInsertPoint(control.exit);
+    restore_effects(saved);
+    control_ = control.parent;
+    auto *continuation = block("iteration.continue");
+    b_.CreateCondBr(b_.CreateICmpEQ(load(exit_), b_.getInt8(0)), continuation, control_->exit);
+    b_.SetInsertPoint(continuation);
+    if (std::all_of(facts_.begin(), facts_.end(), [&](const auto *facts) { return facts->at(&expr).type == Type::never; })) {
+      b_.CreateUnreachable(); return nullptr;
+    }
+    return load(result);
+  }
   llvm::Value *full_scope(const std::vector<const Expression *> &expressions, bool callable,
                           const Location &at, llvm::Value *returns_value = nullptr, Projection projection = Projection::value, bool discard_last = false) {
     const bool read_last = projection == Projection::value;
@@ -729,6 +767,7 @@ class LLVMEmission {
     temporaries_ = &scope.values;
     b_.CreateStore(null_pointer(), scope.head);
     for (const auto *expr : expressions) collect_deferred(*expr, scope);
+    const auto effects = save_effects(expressions);
     if (!environments_ || !read_last || callable) b_.CreateStore(read_last ? empty_scalar() : null_pointer(), saved);
     auto *value = sequence(expressions, projection, discard_last);
     if (reachable()) {
@@ -736,7 +775,7 @@ class LLVMEmission {
       else b_.CreateStore(value, saved);
       b_.CreateBr(scope.cleanup);
     }
-    drain(scope); release_values(scope.values);
+    drain(scope); release_values(scope.values); restore_effects(effects);
     scope_ = scope.parent; control_ = control.parent; temporaries_ = outer_temporaries;
     if (callable) {
       if (returns_value) {
@@ -1036,6 +1075,15 @@ class LLVMEmission {
     }
     switch (expr.kind) {
     case K::null_ref: return null_pointer();
+    case K::symbol: return b_.CreateLoad(scalar_, symbols_.at(*fact.symbol), "effect.current");
+    case K::touch: return empty_scalar();
+    case K::effect: {
+      auto *value = emit_expression(*expr.children.front());
+      if (!reachable()) return nullptr;
+      value = convert_result(expr, *expr.children.front(), value);
+      b_.CreateStore(value, symbols_.at(*fact.symbol));
+      return empty_scalar();
+    }
     case K::integer: case K::boolean:
       return pack(llvm::ConstantInt::get(llvm::cast<llvm::IntegerType>(native_type(fact.type)), fact.integer), fact.type);
     case K::real: {
@@ -1139,7 +1187,7 @@ class LLVMEmission {
       auto *body = block("range.body"), *empty = block("range.empty"), *done = block("range.done");
       b_.CreateCondBr(test(), body, empty);
       b_.SetInsertPoint(body);
-      auto *next = emit_expression(*expr.children[fold ? 3 : 2], Projection::value, !fold);
+      auto *next = iteration(*expr.children[fold ? 3 : 2], !fold);
       if (reachable()) {
         if (fold) {
           next = convert_result(expr, *expr.children[3], next, &CheckedOperation::type);
@@ -1156,7 +1204,7 @@ class LLVMEmission {
         b_.CreateCondBr(test(), body, done);
       }
       b_.SetInsertPoint(empty);
-      if (!fold && expr.children.size() == 4) emit_expression(*expr.children[3], Projection::value, true);
+      if (!fold && expr.children.size() == 4) iteration(*expr.children[3], true);
       if (reachable()) b_.CreateBr(done);
       b_.SetInsertPoint(done);
       if (fact.type == Type::never) { b_.CreateUnreachable(); return nullptr; }
@@ -1451,6 +1499,24 @@ public:
     if (program.exception_values) fields.push_back(exception_);
     if (environments_) { environment_field_ = fields.size(); fields.push_back(b_.getPtrTy()); }
     scalar_->setBody(fields);
+    std::set<size_t> used_symbols;
+    const auto collect_symbols = [&](const auto &operations) {
+      for (const auto &[expr, operation] : operations)
+        if (operation.symbol && (expr->kind == Expression::Kind::symbol || expr->kind == Expression::Kind::effect))
+          used_symbols.insert(*operation.symbol);
+    };
+    collect_symbols(program.entry);
+    for (const auto &instance : program.instances) collect_symbols(instance.operations);
+    for (size_t i = 0; i < program.symbols.size(); ++i) {
+      const auto &symbol = program.symbols[i];
+      llvm::GlobalVariable *slot = nullptr;
+      if (used_symbols.contains(i) && symbol.type && scalar_type(*symbol.type)) {
+        slot = new llvm::GlobalVariable(module_, scalar_, false, llvm::GlobalValue::InternalLinkage,
+            llvm::Constant::getNullValue(scalar_), "cod.symbol." + std::to_string(i));
+        slot->setThreadLocalMode(llvm::GlobalVariable::GeneralDynamicTLSModel);
+      }
+      symbols_.push_back(slot);
+    }
     for (const auto &instance : program.instances)
       if (!instance.complete) throw std::logic_error("incomplete checking obligation reached native emission");
     const llvm::Triple triple(llvm::sys::getDefaultTargetTriple());

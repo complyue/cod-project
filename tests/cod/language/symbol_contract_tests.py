@@ -50,7 +50,7 @@ runner.CASES = {
     'unknown_symbol': ('val x<-make local typeof(@missing){0u64};', 2, '', "unknown symbol 'missing'"),
     'duplicate_symbol': ('symbol gain:u64;symbol @gain:u64;', 2, '', 'duplicate symbol binding'),
     'bare_symbol_is_not_payload': (SYMBOL + 'val x<-gain;', 2, '', 'materialization of a compile-time symbol object'),
-    'runtime_read_boundary': (SYMBOL + '@gain;', 2, '', 'runtime symbol reads'),
+    'unbound_read_requires_installation': (SYMBOL + '@gain;', 2, '', 'cannot prove an installed binding'),
     'installation_boundary': ('symbol p:proc(u64)->const u64;effect @p;', 2, '', 'installation'),
     'inline_installation_boundary': ('symbol p:proc(u64)->const u64;{{effect @p}};', 2, '', 'installation'),
     'source_dynamic_call_boundary': ('symbol p:proc(u64)->const u64;behave @p(1u64);', 2, '', 'dynamic procedure call other than'),

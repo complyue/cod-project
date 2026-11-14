@@ -127,8 +127,14 @@ struct CheckedBinding {
 };
 
 struct LexicalState {
-  struct Scope { size_t id; std::map<std::string, size_t> bindings; bool declarations = true; };
+  struct Scope {
+    size_t id;
+    std::map<std::string, size_t> bindings;
+    bool declarations = true;
+    std::optional<std::set<size_t>> symbol_entry = {};
+  };
   std::vector<Scope> scopes{{0, {}}};
+  std::set<size_t> bound_symbols, required_symbols;
   std::set<size_t> bindings_available, available, initialized;
   std::map<size_t, std::set<size_t>> input_initialized{{0, {}}};
   struct Requirement { std::uint64_t inputs; CleanupEquations::ReadRequirement before; };
@@ -155,10 +161,11 @@ struct LexicalState {
 
 // Substitutions are checking obligations, not semantic methods or activation records.
 struct CallEffects {
-  // Every index is an incoming operand ordinal, independent of callee storage.
+  // Operand summaries use incoming ordinals, independent of callee storage.
   std::set<std::pair<size_t, std::set<size_t>>> reads;
   std::map<size_t, std::set<size_t>> initialized;
   CleanupEquations::Returned returned;
+  std::set<size_t> symbols; // Required current symbol identities, not operand positions.
 };
 enum class OwnerMatch { satisfied, unknown, mismatch };
 struct ViewEvidence {
@@ -235,6 +242,7 @@ struct CheckedCallable { Type type; size_t instance; };
 struct CheckedSymbol {
   std::optional<Type> type;
   bool intrinsic_print = false;
+  std::string name;
 };
 
 struct CheckedProgram {
@@ -822,11 +830,19 @@ class ScalarChecker {
     for (const auto id : known) if (storage(id).borrowed) external.insert(input_ordinal(id));
     observed_.reads.emplace(input_ordinal(place), std::move(external));
   }
-  void apply_effects(LexicalState &state, const CleanupEquations::Effects &effects) {
+  void require_symbol(LexicalState &state, size_t symbol, const Location &at) {
+    if (!proving_ || !state.live || state.bound_symbols.contains(symbol)) return;
+    if (!delayed_ && !checking_instance_ && validating_)
+      fail(at, "cannot prove an installed binding for symbol '" + program_.symbols[symbol].name + "'");
+    state.required_symbols.insert(symbol);
+    if (!delayed_) observed_.symbols.insert(symbol);
+  }
+  void apply_effects(LexicalState &state, const CleanupEquations::Effects &effects, const Location &at) {
     for (const auto input : inputs(state.inputs)) state.input_selections[input].constrain(effects.selections);
     refresh_initialized(state);
     state.live = state.live && state.selections.possible;
     if (!state.live) return;
+    for (const auto symbol : effects.symbols) require_symbol(state, symbol, at);
     if (proving_) for (const auto &[read, before] : effects.reads) {
       const auto place = cleanup_.binding(read);
       if (before.satisfied(place, state.initialized, state.selections)) continue;
@@ -897,6 +913,7 @@ class ScalarChecker {
       const auto found = target.initialized.find(reason);
       auto &effect = effects.emplace(reason, CleanupEquations::Effects{reads,
           found == target.initialized.end() ? std::set<size_t>{} : written_targets(found->second, views)}).first->second;
+      effect.symbols = target.symbols;
       if (found != target.initialized.end()) for (const auto parameter : found->second)
         if (const auto binding = selection(views.at(parameter))) {
           effect.selections.initialize(*binding);
@@ -932,6 +949,7 @@ class ScalarChecker {
       const auto &next = program_.instances[callable.instance].effects;
       if (first) { effects = next; first = false; continue; }
       effects.reads.insert(next.reads.begin(), next.reads.end());
+      effects.symbols.insert(next.symbols.begin(), next.symbols.end());
       for (auto &[reason, known] : effects.initialized) {
         const auto found = next.initialized.find(reason);
         known = found == next.initialized.end() ? std::set<size_t>{} : intersect(known, found->second);
@@ -979,10 +997,10 @@ class ScalarChecker {
     if (&expr != prepared_call_) {
       const auto before = lexical_;
       for (const auto &[reason, effects] : operation.invocation) if (reason) {
-        lexical_ = before; apply_effects(lexical_, effects);
+        lexical_ = before; apply_effects(lexical_, effects, expr.at);
         note_abrupt(expr.at, reason >= 3 ? std::set<size_t>{reason - 3} : std::set<size_t>{}, {reason, false});
       }
-      lexical_ = before; apply_effects(lexical_, operation.invocation.at(0));
+      lexical_ = before; apply_effects(lexical_, operation.invocation.at(0), expr.at);
     }
     const auto result_owner = contract.owners.empty() ? 0 : contract.owners.back();
     if (result_owner) {
@@ -1056,6 +1074,8 @@ class ScalarChecker {
       }
     lexical_.bindings_available = a_exits ? b.bindings_available : b_exits ? a.bindings_available : intersect(a.bindings_available, b.bindings_available);
     lexical_.available = a_exits ? b.available : b_exits ? a.available : intersect(a.available, b.available);
+    lexical_.bound_symbols = a_exits ? b.bound_symbols : b_exits ? a.bound_symbols : intersect(a.bound_symbols, b.bound_symbols);
+    lexical_.required_symbols.insert(b.required_symbols.begin(), b.required_symbols.end());
     lexical_.initialized = a_exits ? b.initialized : b_exits ? a.initialized : intersect(a.initialized, b.initialized);
     lexical_.returned = a_exits ? b.returned : a.returned;
     if (!a_exits && !b_exits) lexical_.returned.merge(b.returned);
@@ -1105,6 +1125,7 @@ class ScalarChecker {
   }
   void retire_scope(LexicalState &state) {
     const auto &scope = state.scopes.back();
+    if (scope.symbol_entry) state.bound_symbols = *scope.symbol_entry;
     for (const auto &[name, id] : scope.bindings) {
       state.bindings_available.erase(id);
       if (!bindings_->at(id).selection.empty()) continue;
@@ -1219,7 +1240,7 @@ class ScalarChecker {
         state.initialized = path.state.input_initialized.at(origin);
         state.selections = path.state.input_selections.at(origin);
         for (auto &[read, requirement] : state.requirements) requirement.inputs &= state.inputs;
-        apply_effects(state, effects);
+        apply_effects(state, effects, at);
         state.input_initialized = {{origin, state.initialized}};
         state.input_selections = {{origin, state.selections}};
         if (cleanup_.has_actions(queue)) {
@@ -2219,6 +2240,9 @@ class ScalarChecker {
       const auto id = resolve_symbol(expr.text, expr.at, symbol_shadowed(expr.text, state), state.method);
       return program_.symbols[id].type;
     }
+    case K::effect:
+      return !expr.children.empty() && child(0) == Type::never ? Type{Type::never} : Type{Type::void_type};
+    case K::touch: return Type::void_type;
     case K::name:
       if (!state.complete) return {};
       if (const auto found = state.bindings.find(expr.text); found != state.bindings.end()) {
@@ -2745,6 +2769,8 @@ class ScalarChecker {
                          [&](const auto &used) { return used.name == capture.name; }))
           program_.warnings.push_back({Warning::unused_capture, capture.at, "unused callable capture '" + capture.name + "' remains retained"});
     const auto selected = demand(selection.method, selection.arguments, at, environment, selection.retained, retain_query_environment(definition, selection.definition_result));
+    if (validating_ && !program_.instances[selected].effects.symbols.empty())
+      implementation_gap(at, "procedure value construction with dynamic binding captures");
     const auto &type = selection.type;
     const auto found = std::find_if(program_.callables.begin(), program_.callables.end(), [&](const auto &value) {
       return value.instance == selected && value.type == type;
@@ -3238,11 +3264,30 @@ class ScalarChecker {
       finish_named_call(expr, arguments, views, operation, read, discard, completes);
       break;
     }
-    case K::symbol: case K::effect: case K::touch:
+    case K::symbol: case K::effect: case K::touch: {
       operation.symbol = resolve_symbol(expr.text, expr.at,
           lexical_.lookup(expr.text).has_value() || query_environment().symbol_shadows.contains(expr.text),
           instance ? std::optional<size_t>{instance->method} : std::nullopt);
-      implementation_gap(expr.at, "runtime symbol reads, installation and capture dependencies");
+      const auto &symbol = program_.symbols[*operation.symbol];
+      if (!symbol.type || !scalar_type(*symbol.type))
+        implementation_gap(expr.at, "runtime non-scalar symbol reads, installation and capture dependencies");
+      if (method && method->kind == Form::Kind::function)
+        fail(expr.at, "a function cannot access dynamic bindings");
+      if (expr.kind == K::effect) {
+        if (expr.children.empty()) fail(expr.at, "a scalar symbol installation requires an explicit value");
+        if (expr.binding != "<-") fail(expr.at, "bits symbols require effect '<-' transfer");
+        const auto source = child(0);
+        if (source != Type::never && !transfers_value(source, *symbol.type))
+          fail(expr.at, "effect value does not satisfy the declared symbol type");
+        operation.operand_type = *symbol.type;
+        operation.type = source == Type::never ? Type{Type::never} : Type{Type::void_type};
+        if (source != Type::never && lexical_.live) lexical_.bound_symbols.insert(*operation.symbol);
+      } else {
+        require_symbol(lexical_, *operation.symbol, expr.at);
+        operation.type = expr.kind == K::touch ? Type{Type::void_type} : *symbol.type;
+      }
+      break;
+    }
     case K::behave: case K::perform: {
       operation.symbol = resolve_symbol(expr.text, expr.at,
           lexical_.lookup(expr.text).has_value() || query_environment().symbol_shadows.contains(expr.text),
@@ -3313,7 +3358,7 @@ class ScalarChecker {
       const auto parent_scope = cleanup_scope_;
       if (expr.scoped) {
         cleanup_scope_ = next_scope_++;
-        lexical_.scopes.push_back({cleanup_scope_, {}});
+        lexical_.scopes.push_back({cleanup_scope_, {}, true, lexical_.bound_symbols});
         lexical_.queues[cleanup_scope_] = 0;
       }
       AbruptFlow flow{lexical_.scopes.size(), {}};
@@ -3365,7 +3410,7 @@ class ScalarChecker {
       lexical_.live = lexical_.live && body_possible;
       for (auto &[id, categories] : lexical_.exceptions)
         if (!(*storage_)[id].read_only) categories = exception_possibilities((*storage_)[id].type);
-      lexical_.scopes.push_back({next_scope_++, {}});
+      lexical_.scopes.push_back({next_scope_++, {}, true, lexical_.bound_symbols});
       operation.place = declare(expr.text, index, true, true, expr.at);
       initialize(*operation.place);
       loop_controls_.insert(*operation.place);
@@ -3387,7 +3432,9 @@ class ScalarChecker {
         cleanup_.backedge(header, cleanup_.known(lexical_.queues.at(cleanup_scope_), lexical_.initialized));
       lexical_ = before;
       lexical_.live = lexical_.live && empty_possible;
+      lexical_.scopes.push_back({next_scope_++, {}, true, lexical_.bound_symbols});
       const auto otherwise = !fold && expr.children.size() == 4 ? child(3, true, true) : Type{Type::void_type};
+      leave_scope();
       const auto empty_state = lexical_;
       const bool body_exits = !body_possible || body == Type::never;
       const bool empty_exits = !empty_possible || otherwise == Type::never;
@@ -3682,6 +3729,8 @@ class ScalarChecker {
         auto *outer = abrupt_;
         delayed_controls_.insert(loop_controls_.begin(), loop_controls_.end());
         delayed_ = true;
+        lexical_.bound_symbols.clear();
+        lexical_.required_symbols.clear();
         deferred_inputs_ = before.available;
         if (proving_) for (size_t place = 0; place < catalog_storage_.size(); ++place)
           if (std::any_of(before.scopes.begin(), before.scopes.end(), [&](const auto &scope) { return scope.id == catalog_storage_[place].scope; }))
@@ -3705,6 +3754,7 @@ class ScalarChecker {
           for (const auto input : inputs(path.state.inputs)) {
             const auto selected = std::uint64_t{1} << input;
             CleanupEquations::Effects effects{{}, path.state.input_initialized.at(input), path.state.returned, path.state.input_selections.at(input)};
+            effects.symbols = path.state.required_symbols;
             effects.returned.initialize(effects.initialized);
             for (const auto &[read, requirement] : path.state.requirements) if (requirement.inputs & selected)
               effects.reads.emplace(read, requirement.before);
@@ -4003,7 +4053,7 @@ public:
       if (form->kind == Form::Kind::using_resource && form->using_symbol && form->path == "std:io" && form->name == "print") {
         if (!print_symbol) {
           print_symbol = program_.symbols.size();
-          program_.symbols.push_back({{}, true});
+          program_.symbols.push_back({{}, true, "print"});
         }
         if (!symbol_names_.emplace(form->alias, *print_symbol).second) fail(form->at, "duplicate print symbol binding");
         continue;
@@ -4016,7 +4066,7 @@ public:
         signature_type(contract, type, form->at);
         if (!symbol_names_.emplace(form->name, program_.symbols.size()).second)
           fail(form->at, "duplicate symbol binding '" + form->name + "'");
-        program_.symbols.push_back({type, false});
+        program_.symbols.push_back({type, false, form->name});
         continue;
       }
       if (form->kind != Form::Kind::function && form->kind != Form::Kind::procedure)
@@ -4157,6 +4207,7 @@ public:
             auto &known = program_.instances[i].effects;
             if (reads) {
               if (known.reads != effects.reads) { known.reads = effects.reads; changed = true; }
+              if (known.symbols != effects.symbols) { known.symbols = effects.symbols; changed = true; }
             } else {
               if (known.initialized != effects.initialized) { known.initialized = effects.initialized; changed = true; }
               if (known.returned != effects.returned) { known.returned = effects.returned; changed = true; }
