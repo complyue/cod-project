@@ -5,6 +5,7 @@
 #include "lang_diagnostics.hh"
 #include "lang_exceptions.hh"
 #include "lang_completion.hh"
+#include "lang_callable_flow.hh"
 
 #include <charconv>
 #include <bit>
@@ -66,6 +67,8 @@ struct CheckedOperation {
   std::vector<CheckedOperation> callable_captures;
   bool callable_call = false;
   bool callable_nullable = false;
+  std::set<size_t> callable_targets;
+  std::optional<std::set<size_t>> callable_choices;
   std::optional<size_t> place;
   std::optional<size_t> binding;
   std::set<size_t> targets, owners, origins, selection_versions;
@@ -183,6 +186,9 @@ struct CheckedProgram {
 
 class ScalarChecker {
   CheckedProgram program_;
+  using CallableChoices = std::vector<std::map<const Expression *, std::set<size_t>>>;
+  CallableChoices callable_choices_;
+  size_t checking_context_ = 0;
   std::map<std::string, std::vector<size_t>> families_;
   std::set<std::string> print_symbols_;
   std::map<const Form *, size_t> lexical_methods_;
@@ -498,6 +504,14 @@ class ScalarChecker {
       if (!exception_categories[category].checked || method.throws_categories.contains(category)) reasons.insert(3 + category);
     return reasons;
   }
+  static CallEffects initial_effects(const CheckedMethod &method) {
+    CallEffects effects;
+    std::set<size_t> borrowed;
+    for (size_t p = 0; p < method.source->parameters.size(); ++p)
+      if (!method.source->parameters[p].owner.empty()) borrowed.insert(p);
+    for (const auto reason : call_reasons(method)) effects.initialized[reason] = borrowed;
+    return effects;
+  }
   static std::set<size_t> written_targets(const std::set<size_t> &parameters, const std::vector<CheckedOperation> &views) {
     std::set<size_t> written;
     for (const auto parameter : parameters) {
@@ -549,10 +563,12 @@ class ScalarChecker {
       if (!exception_categories[category].checked || categories.contains(category)) reasons.insert(3 + category);
     return reasons;
   }
-  CallEffects callable_effects(const Type &contract) const {
+  CallEffects callable_effects(const Type &contract, const std::optional<std::set<size_t>> &choices) const {
     CallEffects effects;
     bool first = true;
-    for (const auto &callable : program_.callables) if (callable.type == contract) {
+    for (size_t id = 0; id < program_.callables.size(); ++id) {
+      const auto &callable = program_.callables[id];
+      if (callable.type != contract || (choices && !choices->contains(id))) continue;
       const auto &next = program_.instances[callable.instance].effects;
       if (first) { effects = next; first = false; continue; }
       effects.reads.insert(next.reads.begin(), next.reads.end());
@@ -1087,10 +1103,7 @@ class ScalarChecker {
     auto context = arguments; context.insert(context.end(), environment.begin(), environment.end());
     context.insert(context.end(), retained.begin(), retained.end());
     program_.instances.push_back({method, arguments, result, {}, false, {}, {}, {}, environment, std::move(context), retained, *substitutions});
-    std::set<size_t> borrowed;
-    for (size_t p = 0; p < definition.source->parameters.size(); ++p)
-      if (!definition.source->parameters[p].owner.empty()) borrowed.insert(p);
-    for (const auto reason : call_reasons(definition)) program_.instances.back().effects.initialized[reason] = borrowed;
+    program_.instances.back().effects = initial_effects(definition);
     definition.instances.push_back(id);
     return id;
   }
@@ -1861,6 +1874,7 @@ class ScalarChecker {
         if (!offset) {
           operation.callable_binding = target.binding; operation.callable_place = target.place;
           operation.callable_nullable = target.targets.contains(null_target);
+          operation.callable_targets = target.targets;
         }
         if (offset) operation.arguments.push_back({ArgumentMode::value, contract});
         bool completes = true;
@@ -1883,7 +1897,10 @@ class ScalarChecker {
           operation.arguments.push_back({mode, parameter});
         }
         if (!completes) { operation.type = Type::never; break; }
-        finish_call(expr, contract, callable_effects(contract), call_reasons(contract), arguments, views,
+        if (checking_context_ < callable_choices_.size())
+          if (const auto found = callable_choices_[checking_context_].find(&expr); found != callable_choices_[checking_context_].end())
+            operation.callable_choices = found->second;
+        finish_call(expr, contract, callable_effects(contract, operation.callable_choices), call_reasons(contract), arguments, views,
                     operation, read, discard, offset);
         break;
       }
@@ -2411,6 +2428,130 @@ class ScalarChecker {
     return operation.type;
   }
 
+  CallableChoices reaching_callables() const {
+    CallableFlow flow;
+    using Node = CallableFlow::Node;
+    using Facts = std::map<const Expression *, CheckedOperation>;
+    struct Context {
+      const Facts *facts;
+      const std::vector<CheckedStorage> *storage;
+      std::map<const Expression *, Node> expressions, calls;
+      std::vector<Node> places;
+      Node result;
+    };
+    std::vector<Context> contexts;
+    const auto context = [&](const Facts &facts, const std::vector<CheckedStorage> &storage) {
+      Context result{&facts, &storage, {}, {}, {}, flow.node()};
+      for (size_t i = 0; i < storage.size(); ++i) result.places.push_back(flow.node());
+      return result;
+    };
+    contexts.push_back(context(program_.entry, program_.entry_storage));
+    for (const auto &instance : program_.instances) contexts.push_back(context(instance.operations, instance.storage));
+    const auto expression = [&](size_t c, const Expression *expr) {
+      auto &nodes = contexts[c].expressions;
+      if (const auto found = nodes.find(expr); found != nodes.end()) return found->second;
+      return nodes.emplace(expr, flow.node()).first->second;
+    };
+    std::function<void(size_t, const CheckedOperation &, Node)> value;
+    value = [&](size_t c, const CheckedOperation &fact, Node node) {
+      if (fact.callable) {
+        flow.seed(node, *fact.callable);
+        const auto target = program_.callables[*fact.callable].instance + 1;
+        const auto count = program_.instances[target - 1].arguments.size();
+        for (size_t i = 0; i < fact.callable_captures.size(); ++i)
+          value(c, fact.callable_captures[i], contexts[target].places.at(count + i));
+      }
+      if (fact.type.kind == Type::procedure)
+        for (const auto place : fact.targets) if (place != null_target)
+          flow.link(contexts[c].places.at(place), node);
+    };
+    const auto invocation = [&](size_t c, const Expression &expr, const CheckedOperation &fact, size_t target, size_t offset) {
+      CallableFlow::Edges edges;
+      const auto &instance = program_.instances[target - 1];
+      const auto &definition = *program_.methods[instance.method].source;
+      for (size_t i = 0; i < instance.arguments.size(); ++i) {
+        if (instance.arguments[i].kind != Type::procedure) continue;
+        const auto *argument = expr.children.at(i + offset).get();
+        edges.emplace_back(expression(c, argument), contexts[target].places.at(i));
+        if (!definition.parameters[i].owner.empty()) {
+          const auto &view = contexts[c].facts->at(argument);
+          for (const auto place : view.targets) if (place != null_target)
+            edges.emplace_back(contexts[target].places.at(i), contexts[c].places.at(place));
+        }
+      }
+      if (instance.result.kind == Type::procedure) edges.emplace_back(contexts[target].result, expression(c, &expr));
+      if (fact.callee && !instance.environment.empty()) {
+        const auto count = program_.instances.at(c - 1).arguments.size();
+        for (size_t i = 0; i < instance.environment.size(); ++i)
+          edges.emplace_back(contexts[c].places.at(count + i), contexts[target].places.at(instance.arguments.size() + i));
+      }
+      return edges;
+    };
+    using K = Expression::Kind;
+    for (size_t c = 0; c < contexts.size(); ++c) {
+      for (const auto &[expr, fact] : *contexts[c].facts) {
+        const auto node = expression(c, expr);
+        value(c, fact, node);
+        if ((expr->kind == K::pointer || expr->kind == K::callable) && fact.place &&
+            contexts[c].storage->at(*fact.place).type.kind == Type::procedure) {
+          flow.link(expr->kind == K::callable ? node : expression(c, expr->children.front().get()), contexts[c].places.at(*fact.place));
+        }
+        if (expr->kind == K::transfer && fact.operand_type.kind == Type::procedure)
+          for (const auto place : fact.targets) if (place != null_target)
+            flow.link(expression(c, expr->children[1].get()), contexts[c].places.at(place));
+        if (expr->kind == K::return_value && c && !expr->children.empty())
+          flow.link(expression(c, expr->children.front().get()), contexts[c].result);
+        if (fact.callee && fact.type != Type::never) {
+          for (const auto &[from, to] : invocation(c, *expr, fact, *fact.callee + 1, 0)) flow.link(from, to);
+        } else if (fact.callable_call && fact.type != Type::never) {
+          const auto callee = flow.node(); contexts[c].calls.emplace(expr, callee);
+          const size_t offset = expr->kind == K::value_call ? 1 : 0;
+          if (offset) flow.link(expression(c, expr->children.front().get()), callee);
+          else for (const auto place : fact.callable_targets) if (place != null_target)
+            flow.link(contexts[c].places.at(place), callee);
+          for (size_t id = 0; id < program_.callables.size(); ++id) {
+            const auto &candidate = program_.callables[id];
+            if (candidate.type == fact.operand_type)
+              flow.when(callee, id, invocation(c, *expr, fact, candidate.instance + 1, offset));
+          }
+        }
+        if (fact.type.kind != Type::procedure || fact.callable || fact.callee || fact.callable_call) continue;
+        const auto input = [&](const Expression *child) { flow.link(expression(c, child), node); };
+        switch (expr->kind) {
+        case K::block:
+          if (!expr->children.empty()) input(expr->children.back().get());
+          break;
+        case K::conditional:
+          input(expr->children[1].get()); input(expr->children[2].get()); break;
+        case K::try_scope:
+          input(expr->children.front().get());
+          for (const auto &child : expr->children) if (child->kind == K::handler) input(child->children.front().get());
+          break;
+        case K::fold:
+          if (fact.accumulator) {
+            const auto accumulator = contexts[c].places.at(*fact.accumulator);
+            flow.link(expression(c, expr->children[2].get()), accumulator);
+            flow.link(expression(c, expr->children[3].get()), accumulator);
+            flow.link(accumulator, node);
+          }
+          break;
+        case K::name: case K::transfer: case K::rebind: break;
+        default:
+          // An uncovered value source must not narrow a call's implementation set.
+          for (size_t id = 0; id < program_.callables.size(); ++id)
+            if (program_.callables[id].type == fact.type) flow.seed(node, id);
+          break;
+        }
+      }
+    }
+    flow.solve();
+    CallableChoices result(contexts.size());
+    for (size_t c = 0; c < contexts.size(); ++c)
+      for (const auto &[expr, node] : contexts[c].calls)
+        if (!flow.values(node).empty()) result[c].emplace(expr, flow.values(node));
+    return result;
+  }
+
   void begin_check(std::vector<CheckedStorage> &storage, std::vector<CheckedBinding> &bindings,
                    std::map<const Expression *, CheckedOperation> &operations, bool proving) {
     proving_ = proving; observed_ = {};
@@ -2426,6 +2567,7 @@ class ScalarChecker {
   }
 
   void check_entry() {
+    checking_context_ = 0;
     checking_method_ = nullptr;
     checking_instance_ = nullptr;
     for (const bool proving : {false, true}) {
@@ -2454,6 +2596,7 @@ class ScalarChecker {
       if (requirement.inputs & state.inputs) observe_read(cleanup_.binding(read), requirement.before);
   }
   CallEffects check_instance(size_t i) {
+    checking_context_ = i + 1;
     auto &instance = program_.instances[i];
     checking_instance_ = &instance;
     const auto &method = *program_.methods[instance.method].source;
@@ -2636,29 +2779,38 @@ public:
       demand(i, program_.methods[i].parameters, method.at);
     }
     check_entry();
-    // Solve terminating-path writes and returned selections together. Reads
-    // then use the closed guarantees, retaining writes preceding each read.
-    for (const bool reads : {false, true}) {
-      bool changed;
-      do {
-        changed = false;
-        const auto callable_count = program_.callables.size();
-        for (size_t i = 0; i < program_.instances.size(); ++i) {
-          const auto effects = check_instance(i);
-          auto &known = program_.instances[i].effects;
-          if (reads) {
-            if (known.reads != effects.reads) { known.reads = effects.reads; changed = true; }
-          } else {
-            if (known.initialized != effects.initialized) { known.initialized = effects.initialized; changed = true; }
-            if (known.returned != effects.returned) { known.returned = effects.returned; changed = true; }
+    // Write guarantees use a greatest fixed point, with returned selections
+    // joining before read requirements close. Narrower callees require fresh
+    // assumptions for recursive cycles.
+    for (;;) {
+      for (auto &instance : program_.instances) instance.effects = initial_effects(program_.methods[instance.method]);
+      for (const bool reads : {false, true}) {
+        bool changed;
+        do {
+          changed = false;
+          const auto callable_count = program_.callables.size(), instance_count = program_.instances.size();
+          check_entry();
+          for (size_t i = 0; i < program_.instances.size(); ++i) {
+            const auto effects = check_instance(i);
+            auto &known = program_.instances[i].effects;
+            if (reads) {
+              if (known.reads != effects.reads) { known.reads = effects.reads; changed = true; }
+            } else {
+              if (known.initialized != effects.initialized) { known.initialized = effects.initialized; changed = true; }
+              if (known.returned != effects.returned) { known.returned = effects.returned; changed = true; }
+            }
           }
-        }
-        changed = changed || callable_count != program_.callables.size();
-      } while (changed);
+          changed = changed || callable_count != program_.callables.size() || instance_count != program_.instances.size();
+        } while (changed);
+      }
+      auto choices = reaching_callables();
+      if (choices == callable_choices_) break;
+      callable_choices_ = std::move(choices);
     }
     validating_ = true;
     check_entry();
     for (size_t i = 0; i < program_.instances.size(); ++i) check_instance(i);
+    if (reaching_callables() != callable_choices_) throw std::logic_error("callable flow changed after validation");
     for (const auto &method : program_.methods) if (!method.instances.empty()) {
       const auto &first = program_.instances[method.instances.front()];
       for (const auto id : method.instances) {

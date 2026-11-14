@@ -446,6 +446,10 @@ class LLVMEmission {
       for (size_t id = 0; id < program_->callables.size(); ++id) {
         const auto &value = program_->callables[id];
         if (value.type != choice.inputs.front()) continue;
+        if (std::none_of(facts_.begin(), facts_.end(), [&](const auto *facts) {
+              const auto &fact = facts->at(&expr);
+              return fact.type != Type::never && fact.operand_type == value.type && (!fact.callable_choices || fact.callable_choices->contains(id));
+            })) continue;
         auto *selected = block("callable.selected"); select->addCase(integer(id + 1), selected);
         b_.SetInsertPoint(selected);
         const auto &instance = program_->instances[value.instance];
@@ -1269,7 +1273,7 @@ class LLVMEmission {
       };
       const auto lower = [&](auto &&self, CheckedOperation &operation) -> void {
         optional(operation.place); optional(operation.callable_place); optional(operation.accumulator); optional(operation.captured_place);
-        set(operation.targets); set(operation.captures);
+        set(operation.targets); set(operation.callable_targets); set(operation.captures);
         for (auto &capture : operation.callable_captures) self(self, capture);
       };
       operations.push_back(checked.operations);
