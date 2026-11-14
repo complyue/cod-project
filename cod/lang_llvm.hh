@@ -42,7 +42,7 @@ class LLVMEmission {
   std::vector<Type> callable_types_;
   std::vector<llvm::Function *> general_, specialized_;
   std::vector<const std::map<const Expression *, CheckedOperation> *> facts_;
-  std::vector<llvm::Value *> arguments_;
+  std::vector<llvm::Value *> arguments_, retained_types_;
   std::vector<llvm::AllocaInst *> storage_, bindings_;
   std::vector<llvm::AllocaInst *> parameter_values_;
   std::vector<const std::vector<Type> *> frame_types_;
@@ -76,6 +76,7 @@ class LLVMEmission {
   struct Choice {
     std::vector<Type> inputs;
     const CheckedOperation *operation;
+    std::vector<std::vector<Type>> contexts = {};
   };
 
   llvm::ConstantInt *integer(std::uint64_t value) { return b_.getInt64(value); }
@@ -293,15 +294,21 @@ class LLVMEmission {
   }
   std::vector<Choice> choices(const Expression &expr, const std::vector<const Expression *> &inputs) {
     std::vector<Choice> result;
-    for (const auto *facts : facts_) {
+    for (size_t i = 0; i < facts_.size(); ++i) {
+      const auto *facts = facts_[i];
       Choice choice{{}, &facts->at(&expr)};
       for (const auto *input : inputs) choice.inputs.push_back(facts->at(input).type);
       const auto same = [&](const Choice &other) {
         return other.inputs == choice.inputs && other.operation->callee == choice.operation->callee &&
             other.operation->type == choice.operation->type && other.operation->operand_type == choice.operation->operand_type;
       };
-      if (std::none_of(result.begin(), result.end(), same)) result.push_back(std::move(choice));
+      auto found = std::find_if(result.begin(), result.end(), same);
+      if (found == result.end()) { result.push_back(std::move(choice)); found = std::prev(result.end()); }
+      if (i < frame_types_.size()) found->contexts.push_back(*frame_types_[i]);
     }
+    for (auto &choice : result)
+      if (std::none_of(result.begin(), result.end(), [&](const auto &other) { return &choice != &other && choice.inputs == other.inputs; }))
+        choice.contexts.clear();
     return result;
   }
   llvm::Value *matches(const std::vector<llvm::Value *> &values, const std::vector<Type> &types) {
@@ -317,7 +324,13 @@ class LLVMEmission {
     std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> incoming;
     for (const auto &choice : cases) {
       auto *selected = block("operation.selected"), *next = block("operation.next");
-      b_.CreateCondBr(matches(inputs, choice.inputs), selected, next);
+      auto *condition = matches(inputs, choice.inputs);
+      if (!choice.contexts.empty()) {
+        llvm::Value *context = b_.getFalse();
+        for (const auto &types : choice.contexts) context = b_.CreateOr(context, matches(arguments_, types));
+        condition = b_.CreateAnd(condition, context);
+      }
+      b_.CreateCondBr(condition, selected, next);
       b_.SetInsertPoint(selected);
       auto *value = emit_choice(choice);
       if (reachable()) { incoming.emplace_back(value, b_.GetInsertBlock()); b_.CreateBr(join); }
@@ -332,6 +345,16 @@ class LLVMEmission {
     auto *result = b_.CreatePHI(result_type, incoming.size(), "operation.result");
     for (const auto &[value, predecessor] : incoming) result->addIncoming(value, predecessor);
     return result;
+  }
+  llvm::Value *convert_result(const Expression &expr, const Expression &input, llvm::Value *value) {
+    const auto cases = choices(expr, {&input});
+    if (std::all_of(cases.begin(), cases.end(), [](const Choice &choice) {
+          return choice.inputs.front() == choice.operation->operand_type;
+        })) return value;
+    return choose(expr, {value}, cases, scalar_, [&](const Choice &choice) {
+      if (choice.inputs.front() == Type::void_type) return empty_scalar();
+      return convert_value(value, choice.inputs.front(), choice.operation->operand_type);
+    });
   }
   llvm::Value *binary(const Expression &expr, llvm::Value *left, llvm::Value *right, const Choice &choice) {
     const auto type = choice.operation->operand_type;
@@ -383,7 +406,8 @@ class LLVMEmission {
     const auto &instances = program_->methods[method].instances;
     return std::any_of(instances.begin(), instances.end(), [&](size_t id) { return program_->instances[id].result.kind == Type::procedure; });
   }
-  llvm::Value *native_call(llvm::Function *target, size_t method, std::vector<llvm::Value *> prepared, llvm::Value *captured = nullptr) {
+  llvm::Value *native_call(llvm::Function *target, size_t method, std::vector<llvm::Value *> prepared,
+                           llvm::Value *captured = nullptr, std::optional<size_t> instance = {}) {
     for (size_t i = 0; i < prepared.size(); ++i) {
       if (program_->methods[method].source->parameters[i].owner.empty()) take_value(prepared[i]);
       const auto &type = program_->methods[method].parameters[i];
@@ -392,6 +416,13 @@ class LLVMEmission {
     }
     llvm::AllocaInst *destination = nullptr;
     if (!program_->methods[method].captures.empty()) prepared.push_back(captured ? captured : environment_);
+    if (instance) {
+      for (const auto &type : program_->instances[*instance].retained_types) prepared.push_back(b_.getInt32(tag(type)));
+    } else if (!program_->methods[method].retained_types.empty()) {
+      if (program_->methods[method].retained_types.size() != retained_types_.size())
+        throw std::logic_error("native call lacks its lexical type context");
+      prepared.insert(prepared.end(), retained_types_.begin(), retained_types_.end());
+    }
     if (caller_destination(method)) { destination = slot(scalar_, "callable.result"); prepared.push_back(destination); }
     llvm::Value *result = b_.CreateCall(target, prepared);
     if (destination) result = b_.CreateInsertValue(result, load(destination), 0);
@@ -418,7 +449,7 @@ class LLVMEmission {
         b_.SetInsertPoint(selected);
         const auto method = program_->instances[value.instance].method;
         auto *target = specialize_ ? specialized_[value.instance] : general_[method];
-        auto *result = native_call(target, method, {prepared.begin() + 1, prepared.end()}, environment(prepared.front()));
+        auto *result = native_call(target, method, {prepared.begin() + 1, prepared.end()}, environment(prepared.front()), value.instance);
         incoming.emplace_back(result, b_.GetInsertBlock()); b_.CreateBr(join);
       }
       b_.SetInsertPoint(invalid);
@@ -936,9 +967,7 @@ class LLVMEmission {
             initializer = initializer->children[initializer->annotation ? 0 : 1].get();
           auto *value = emit_expression(*initializer);
           if (!reachable()) return nullptr;
-          value = choose(*declaration, {value}, choices(*declaration, {initializer}), scalar_, [&](const Choice &choice) {
-            return convert_value(value, choice.inputs.front(), choice.operation->operand_type);
-          });
+          value = convert_result(*declaration, *initializer, value);
           assign_value(address, value, declaration->at);
         }
         if (auto *slot = bindings_.at(*binding.binding)) b_.CreateStore(address, slot);
@@ -951,9 +980,7 @@ class LLVMEmission {
       address = checked_address(address, *expr.children[0], expr.at);
       auto *value = emit_expression(*expr.children[1]);
       if (!reachable()) return nullptr;
-      value = choose(expr, {value}, choices(expr, {expr.children[1].get()}), scalar_, [&](const Choice &choice) {
-        return convert_value(value, choice.inputs.front(), choice.operation->operand_type);
-      });
+      value = convert_result(expr, *expr.children[1], value);
       assign_value(address, value, expr.at);
       return read ? b_.CreateLoad(scalar_, address) : address;
     }
@@ -971,13 +998,7 @@ class LLVMEmission {
         value = emit_expression(*expr.children.front(), !fact.borrowed_result);
         if (!reachable()) return nullptr;
         if (fact.borrowed_result) value = pack_view(value, expr, true);
-        else {
-          auto *original = value;
-          value = choose(expr, {value}, choices(expr, {expr.children.front().get()}), scalar_, [&](const Choice &choice) {
-            if (choice.inputs.front() == Type::void_type) return empty_scalar();
-            return convert_value(original, choice.inputs.front(), choice.operation->operand_type);
-          });
-        }
+        else value = convert_result(expr, *expr.children.front(), value);
       }
       assign_value(result_, value, expr.at); b_.CreateStore(integer(0), category_); b_.CreateStore(null_pointer(), fatal_);
       b_.CreateStore(b_.getTrue(), returning_);
@@ -1049,15 +1070,16 @@ class LLVMEmission {
     default: throw std::logic_error("unchecked expression reached LLVM emission");
     }
   }
-  llvm::Function *declare(const std::string &name, size_t arity, bool destination, bool environment) {
+  llvm::Function *declare(const std::string &name, size_t arity, bool destination, bool environment, size_t retained) {
     std::vector<llvm::Type *> parameters(arity, scalar_);
     if (environment) parameters.push_back(b_.getPtrTy());
+    parameters.insert(parameters.end(), retained, b_.getInt32Ty());
     if (destination) parameters.push_back(b_.getPtrTy());
     return llvm::Function::Create(llvm::FunctionType::get(outcome_, parameters, false),
         llvm::GlobalValue::InternalLinkage, name, module_);
   }
   void begin(llvm::Function *function, const std::vector<CheckedStorage> &storage, const std::vector<CheckedBinding> &bindings, size_t arity = 0) {
-    function_ = function; arguments_.clear(); parameter_values_.clear(); value_owners_.clear(); environment_ = nullptr; temporaries_ = nullptr;
+    function_ = function; arguments_.clear(); retained_types_.clear(); parameter_values_.clear(); value_owners_.clear(); environment_ = nullptr; temporaries_ = nullptr;
     for (size_t i = 0; i < arity; ++i) arguments_.push_back(function->getArg(i));
     b_.SetInsertPoint(block("entry")); finish_ = block("completion"); scope_ = nullptr; control_ = nullptr;
     result_ = slot(scalar_, "return.value"); category_ = slot(b_.getInt64Ty(), "exception.category");
@@ -1100,6 +1122,11 @@ class LLVMEmission {
         b_.CreateStore(captured, storage_.at(method.parameters.size() + c)); arguments_.push_back(captured);
       }
     }
+    for (size_t i = 0; i < method.retained_types.size(); ++i) {
+      auto *type = function->getArg(method.parameters.size() + !method.captures.empty() + i);
+      retained_types_.push_back(type);
+      arguments_.push_back(b_.CreateInsertValue(empty_scalar(), type, 1));
+    }
     llvm::Value *returns_value = nullptr;
     if (instance) {
       facts_.push_back(&program_->instances[*instance].operations);
@@ -1134,7 +1161,7 @@ class LLVMEmission {
       b_.CreateCondBr(b_.CreateICmpEQ(load(exit_), b_.getInt8(2)), failed, ready);
       b_.SetInsertPoint(failed); clear_value(result_); b_.CreateBr(ready); b_.SetInsertPoint(ready);
     }
-    const auto result_index = method.parameters.size() + !method.captures.empty();
+    const auto result_index = method.parameters.size() + !method.captures.empty() + method.retained_types.size();
     if (function->arg_size() > result_index) b_.CreateStore(load(result_), function->getArg(result_index));
     b_.CreateRet(outcome(load(result_), load(category_), load(site_), load(fatal_), load(requested_), load(available_), load(cause_)));
   }
@@ -1173,21 +1200,21 @@ public:
     for (size_t i = 0; i < program.methods.size(); ++i) {
       const auto &method = program.methods[i]; if (method.instances.empty()) continue;
       const auto prefix = "cod.method." + std::to_string(i) + "." + method.source->name;
-      if (method.source->type_parameters.empty() && method.captures.empty()) {
-        general_[i] = declare(prefix + ".native", method.source->parameters.size(), caller_destination(i), false);
+      if (method.source->type_parameters.empty() && method.captures.empty() && method.retained_types.empty()) {
+        general_[i] = declare(prefix + ".native", method.source->parameters.size(), caller_destination(i), false, 0);
         specialized_[method.instances.front()] = general_[i];
         continue;
       }
-      general_[i] = declare(prefix + ".general", method.source->parameters.size(), caller_destination(i), !method.captures.empty());
+      general_[i] = declare(prefix + ".general", method.source->parameters.size(), caller_destination(i), !method.captures.empty(), method.retained_types.size());
       if (specialize) for (const auto id : method.instances) {
         std::string name = prefix + ".specialized";
         for (const auto &type : program.instances[id].context) name += "." + type_name(type);
-        specialized_[id] = declare(name, method.source->parameters.size(), caller_destination(i), !method.captures.empty());
+        specialized_[id] = declare(name, method.source->parameters.size(), caller_destination(i), !method.captures.empty(), method.retained_types.size());
       }
     }
     for (size_t i = 0; i < program.methods.size(); ++i) {
       const auto &method = program.methods[i]; if (method.instances.empty()) continue;
-      if (method.source->type_parameters.empty() && method.captures.empty()) {
+      if (method.source->type_parameters.empty() && method.captures.empty() && method.retained_types.empty()) {
         body(general_[i], method, method.instances.front());
         continue;
       }

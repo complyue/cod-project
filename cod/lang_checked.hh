@@ -139,16 +139,20 @@ struct CheckedInstance {
   std::vector<CheckedStorage> storage;
   std::vector<CheckedBinding> bindings;
   CallEffects effects;
-  std::vector<Type> environment, context;
+  std::vector<Type> environment, context, retained_types;
+  std::vector<std::optional<Type>> substitutions;
 };
 struct CheckedMethod {
-  const Form *source;
+  const Form *source = nullptr;
   std::vector<size_t> instances;
   std::vector<Type> parameters;
   Type result;
   std::set<size_t> throws_categories;
   std::vector<Capture> captures;
   bool captures_resolved = false;
+  std::vector<std::string> type_parameters;
+  std::vector<size_t> retained_types;
+  std::optional<size_t> parent;
 };
 struct CheckedCallable { Type type; size_t instance; };
 struct CheckedProgram {
@@ -169,6 +173,7 @@ class ScalarChecker {
   std::set<std::string> print_symbols_;
   std::map<const Form *, size_t> lexical_methods_;
   std::map<const Form *, std::vector<Capture>> free_captures_;
+  std::map<const Form *, std::set<std::string>> free_types_;
   std::set<const Form *> warned_captures_;
   std::set<std::string> module_values_;
   std::map<std::string, Type> exception_types_;
@@ -628,21 +633,48 @@ class ScalarChecker {
   Type resolve_local_type(const Type &type, const CheckedInstance *instance, const Location &at) const {
     Type resolved;
     if (instance) {
-      const auto &method = *program_.methods[instance->method].source;
-      resolved = substitute(type, method, *match(program_.methods[instance->method], instance->arguments));
+      const auto &method = program_.methods[instance->method];
+      resolved = substitute(type, method, instance->substitutions);
     } else resolved = resolve_type(type);
     if (!lexical_value_type(resolved)) implementation_gap(at, "non-value local storage type '" + type_name(type) + "'");
     return resolved;
   }
-  Type resolve_type(const Type &type) const {
+  Type resolve_type(const Type &type, const CheckedMethod *method = nullptr) const {
+    if (method && binder(*method, type)) return type;
     if (type.kind == Type::named) if (const auto found = exception_types_.find(type.name); found != exception_types_.end()) return found->second;
     auto resolved = type;
     if (type.kind == Type::procedure) {
-      for (auto &parameter : resolved.parameters) parameter = resolve_type(parameter);
-      for (auto &failure : resolved.throws_types) failure = resolve_type(failure);
-      if (type.target) resolved.target = std::make_shared<Type>(resolve_type(*type.target));
+      for (auto &parameter : resolved.parameters) parameter = resolve_type(parameter, method);
+      for (auto &failure : resolved.throws_types) failure = resolve_type(failure, method);
+      if (type.target) resolved.target = std::make_shared<Type>(resolve_type(*type.target, method));
     }
     return resolved;
+  }
+
+  const std::set<std::string> &free_type_names(const Form &method) {
+    if (const auto found = free_types_.find(&method); found != free_types_.end()) return found->second;
+    std::set<std::string> required;
+    const std::function<void(const Type &)> type = [&](const Type &t) {
+      if (t.kind == Type::named) required.insert(t.name);
+      if (t.target) type(*t.target);
+      for (const auto &p : t.parameters) type(p);
+      for (const auto &p : t.throws_types) type(p);
+      for (const auto &p : t.bounds) type(p);
+    };
+    for (const auto &p : method.parameters) type(p.type);
+    if (method.result_type) type(*method.result_type);
+    for (const auto &t : method.throws_types) type(t);
+    const std::function<void(const Expression &)> visit = [&](const Expression &expr) {
+      if (expr.annotation) type(*expr.annotation);
+      if (expr.definition) {
+        const auto &nested = free_type_names(*expr.definition);
+        required.insert(nested.begin(), nested.end());
+      }
+      for (const auto &child : expr.children) visit(*child);
+    };
+    if (method.body) visit(*method.body);
+    for (const auto &p : method.type_parameters) required.erase(p.name);
+    return free_types_.emplace(&method, std::move(required)).first->second;
   }
 
   const std::vector<Capture> &free_captures(const Form &method) {
@@ -716,35 +748,35 @@ class ScalarChecker {
     method.captures_resolved = true;
   }
 
-  static std::optional<size_t> binder(const Form &method, const Type &type) {
+  static std::optional<size_t> binder(const CheckedMethod &method, const Type &type) {
     if (type.kind != Type::named) return {};
     for (size_t i = 0; i < method.type_parameters.size(); ++i)
-      if (method.type_parameters[i].name == type.name) return i;
+      if (method.type_parameters[i] == type.name) return i;
     return {};
   }
   using Substitutions = std::vector<std::optional<Type>>;
-  Type substitute(const Type &type, const Form &method, const Substitutions &bindings, bool partial = false) const {
+  Type substitute(const Type &type, const CheckedMethod &method, const Substitutions &bindings, bool partial = false) const {
     if (const auto index = binder(method, type)) {
       if (!bindings[*index]) {
         if (partial) return type;
-        implementation_gap(method.at, "type parameter is not determined by the arguments");
+        implementation_gap(method.source->at, "type parameter is not determined by the arguments");
       }
       return *bindings[*index];
     }
-    auto result = resolve_type(type);
+    auto result = resolve_type(type, &method);
     if (result.kind == Type::procedure) {
       for (auto &parameter : result.parameters) parameter = substitute(parameter, method, bindings, partial);
       if (result.target) result.target = std::make_shared<Type>(substitute(*result.target, method, bindings, partial));
     }
     return result;
   }
-  static bool nested_binder(const Form &method, const Type &type) {
+  static bool nested_binder(const CheckedMethod &method, const Type &type) {
     if (binder(method, type)) return true;
     return type.kind == Type::procedure &&
         ((type.target && nested_binder(method, *type.target)) ||
          std::any_of(type.parameters.begin(), type.parameters.end(), [&](const auto &p) { return nested_binder(method, p); }));
   }
-  static void signature_type(const Form &method, const Type &type, const Location &at, bool result = false) {
+  static void signature_type(const CheckedMethod &method, const Type &type, const Location &at, bool result = false) {
     if (bits_type(type) || binder(method, type) || (result && type == Type::void_type)) return;
     if (type.kind == Type::procedure && type.target) {
       if (type.variadic || !type.capture_owners.empty() || !type.capture_regions.empty() || !type.owners.empty() ||
@@ -761,7 +793,7 @@ class ScalarChecker {
     }
     implementation_gap(at, "non-scalar signature type '" + type_name(type) + "'");
   }
-  static bool bind_type(const Form &method, const Type &pattern, const Type &actual, Substitutions &substitutions, bool parameter = false) {
+  static bool bind_type(const CheckedMethod &method, const Type &pattern, const Type &actual, Substitutions &substitutions, bool parameter = false) {
     if (const auto index = binder(method, pattern)) {
       auto &bound = substitutions[*index];
       if (bound && *bound != actual) return false;
@@ -779,18 +811,25 @@ class ScalarChecker {
     }
     return pattern == actual || (parameter && accepts_exception(actual, pattern));
   }
-  static std::optional<Substitutions> match_prefix(const CheckedMethod &method, const std::vector<Type> &arguments) {
-    if (method.parameters.size() < arguments.size()) return {};
-    Substitutions substitutions(method.source->type_parameters.size());
+  static Substitutions type_context(const CheckedMethod &method, const std::vector<Type> &retained) {
+    Substitutions substitutions(method.type_parameters.size());
+    for (size_t i = 0; i < retained.size(); ++i) substitutions.at(method.source->type_parameters.size() + i) = retained[i];
+    return substitutions;
+  }
+  static std::optional<Substitutions> match_prefix(const CheckedMethod &method, const std::vector<Type> &arguments,
+                                                 const std::vector<Type> &retained = {}) {
+    if (method.parameters.size() < arguments.size() || method.retained_types.size() != retained.size()) return {};
+    auto substitutions = type_context(method, retained);
     for (size_t i = 0; i < arguments.size(); ++i) {
-      if (!bind_type(*method.source, method.parameters[i], arguments[i], substitutions, true)) return {};
+      if (!bind_type(method, method.parameters[i], arguments[i], substitutions, true)) return {};
     }
     return substitutions;
   }
-  static std::optional<Substitutions> match(const CheckedMethod &method, const std::vector<Type> &arguments) {
-    return method.parameters.size() == arguments.size() ? match_prefix(method, arguments) : std::nullopt;
+  static std::optional<Substitutions> match(const CheckedMethod &method, const std::vector<Type> &arguments,
+                                          const std::vector<Type> &retained = {}) {
+    return method.parameters.size() == arguments.size() ? match_prefix(method, arguments, retained) : std::nullopt;
   }
-  static Type rigid_type(const Form &method, const Type &type) {
+  static Type rigid_type(const CheckedMethod &method, const Type &type) {
     if (const auto index = binder(method, type)) return {Type::parameter, {}, *index + 1};
     auto rigid = type;
     if (type.kind == Type::procedure) {
@@ -804,27 +843,30 @@ class ScalarChecker {
     if (narrow.parameters.size() != broad.parameters.size()) return false;
     std::vector<Type> arguments;
     for (size_t i = 0; i < narrow.parameters.size(); ++i) {
-      auto type = rigid_type(*narrow.source, narrow.parameters[i]);
+      auto type = rigid_type(narrow, narrow.parameters[i]);
       // Each broad exception parameter admits an independent concrete category.
       if (type.kind == Type::exception && !type.identity) type.name += ".alternative." + std::to_string(i);
       arguments.push_back(std::move(type));
     }
     return match(broad, arguments).has_value();
   }
-  size_t demand(size_t method, std::vector<Type> arguments, const Location &at, const std::vector<Type> &environment = {}) {
+  size_t demand(size_t method, std::vector<Type> arguments, const Location &at, const std::vector<Type> &environment = {},
+                const std::vector<Type> &retained = {}) {
     auto &definition = program_.methods[method];
     for (size_t i = 0; i < arguments.size(); ++i)
       if (accepts_exception(arguments[i], definition.parameters[i])) arguments[i] = definition.parameters[i];
     for (const auto id : definition.instances)
-      if (program_.instances[id].arguments == arguments && program_.instances[id].environment == environment) return id;
+      if (program_.instances[id].arguments == arguments && program_.instances[id].environment == environment &&
+          program_.instances[id].retained_types == retained) return id;
     if (program_.instances.size() == instance_limit)
       fail(at, "compiler resource limit: 4096 scalar checking obligations while preparing '" + definition.source->name + "'");
-    const auto substitutions = match(definition, arguments);
+    const auto substitutions = match(definition, arguments, retained);
     if (!substitutions) throw std::logic_error("unchecked method demand");
-    auto result = substitute(definition.result, *definition.source, *substitutions);
+    auto result = substitute(definition.result, definition, *substitutions);
     const auto id = program_.instances.size();
     auto context = arguments; context.insert(context.end(), environment.begin(), environment.end());
-    program_.instances.push_back({method, arguments, result, {}, false, {}, {}, {}, environment, std::move(context)});
+    context.insert(context.end(), retained.begin(), retained.end());
+    program_.instances.push_back({method, arguments, result, {}, false, {}, {}, {}, environment, std::move(context), retained, *substitutions});
     std::set<size_t> borrowed;
     for (size_t p = 0; p < definition.source->parameters.size(); ++p)
       if (!definition.source->parameters[p].owner.empty()) borrowed.insert(p);
@@ -833,10 +875,10 @@ class ScalarChecker {
     return id;
   }
   size_t select_family(const std::vector<size_t> &family, const std::vector<Type> &arguments, const Location &at, const std::string &name,
-                       const std::vector<Type> &environment = {}) {
+                       const std::vector<Type> &environment = {}, const std::vector<Type> &retained = {}) {
     std::vector<size_t> applicable;
     for (const auto method : family)
-      if (match(program_.methods[method], arguments)) applicable.push_back(method);
+      if (match(program_.methods[method], arguments, retained)) applicable.push_back(method);
     std::vector<size_t> best;
     for (const auto candidate : applicable) {
       const auto &definition = program_.methods[candidate];
@@ -848,11 +890,12 @@ class ScalarChecker {
     }
     if (best.empty()) fail(at, "no applicable method for '" + name + "' (argument types or same-T relation do not match)");
     if (best.size() != 1) fail(at, "ambiguous methods for '" + name + "'");
-    return demand(best.front(), arguments, at, environment);
+    return demand(best.front(), arguments, at, environment, retained);
   }
   size_t select(const Expression &expr, const std::vector<Type> &arguments) {
     if (checking_method_ && lexical_methods_.contains(checking_method_->source) && expr.text == checking_method_->source->name) {
-      return select_family({lexical_methods_.at(checking_method_->source)}, arguments, expr.at, expr.text, checking_instance_->environment);
+      return select_family({lexical_methods_.at(checking_method_->source)}, arguments, expr.at, expr.text,
+                           checking_instance_->environment, checking_instance_->retained_types);
     }
     const auto family = families_.find(expr.text);
     if (family == families_.end()) fail(expr.at, "unknown callable '" + expr.text + "'");
@@ -861,10 +904,21 @@ class ScalarChecker {
   CheckedOperation materialize(const std::vector<size_t> &family, const Type *expected, const Location &at) {
     auto &definition = program_.methods[family.front()];
     if (lexical_methods_.contains(definition.source)) resolve_captures(definition);
-    if (expected) signature_type(Form{}, *expected, at);
+    if (expected) signature_type(CheckedMethod{}, *expected, at);
     if (!expected && (family.size() != 1 || !program_.methods[family.front()].source->type_parameters.empty()))
       implementation_gap(at, "overloaded or generic callable values require an explicit concrete view type");
-    const auto arguments = expected ? expected->parameters : program_.methods[family.front()].parameters;
+    std::vector<Type> retained;
+    if (!definition.retained_types.empty()) {
+      if (!checking_instance_ || definition.parent != checking_instance_->method)
+        throw std::logic_error("callable materialized outside its lexical type context");
+      for (const auto index : definition.retained_types) {
+        const auto &type = checking_instance_->substitutions.at(index);
+        if (!type) implementation_gap(at, "enclosing type parameter is not determined by the arguments");
+        retained.push_back(*type);
+      }
+    }
+    auto arguments = expected ? expected->parameters : definition.parameters;
+    if (!expected) for (auto &type : arguments) type = substitute(type, definition, type_context(definition, retained));
     std::vector<Type> environment;
     std::vector<CheckedOperation> captures;
     for (const auto &capture : definition.captures) {
@@ -880,7 +934,7 @@ class ScalarChecker {
         if (std::none_of(free_captures(*definition.source).begin(), free_captures(*definition.source).end(),
                          [&](const auto &used) { return used.name == capture.name; }))
           program_.warnings.push_back({Warning::unused_capture, capture.at, "unused callable capture '" + capture.name + "' remains retained"});
-    const auto selected = select_family(family, arguments, at, "callable value", environment);
+    const auto selected = select_family(family, arguments, at, "callable value", environment, retained);
     const auto &instance = program_.instances[selected];
     const auto &method = *program_.methods[instance.method].source;
     if (borrowed_result(method) || std::any_of(method.parameters.begin(), method.parameters.end(), [](const auto &p) { return !p.owner.empty(); }))
@@ -891,7 +945,7 @@ class ScalarChecker {
     type.const_views.push_back(method.result_const);
     if (std::none_of(type.const_views.begin(), type.const_views.end(), [](bool v) { return v; })) type.const_views.clear();
     for (const auto &failure : method.throws_types) type.throws_types.push_back(resolve_type(failure));
-    signature_type(method, type, at);
+    signature_type(definition, type, at);
     if (expected) {
       std::set<size_t> allowed;
       for (const auto &failure : expected->throws_types) {
@@ -944,7 +998,7 @@ class ScalarChecker {
       const auto &handler = *expr.children[i];
       if (handler.kind == Expression::Kind::block) { finalizer = &handler; break; }
       program_.exception_values = true;
-      if (handler.annotation && instance && binder(*program_.methods[instance->method].source, *handler.annotation))
+      if (handler.annotation && instance && binder(program_.methods[instance->method], *handler.annotation))
         implementation_gap(handler.at, "generic typed-catch selection");
       const auto type = handler.annotation ? resolve_type(*handler.annotation) : exception_type(0);
       if (type.kind != Type::exception) fail(handler.at, "catch requires a selected intrinsic exception type");
@@ -1327,8 +1381,8 @@ class ScalarChecker {
             if (candidate.parameters.size() != expr.children.size()) continue;
             const auto bindings = match_prefix(candidate, arguments);
             if (!bindings) continue;
-            const auto view = substitute(candidate.parameters[i], *candidate.source, *bindings, true);
-            if (view.kind != Type::procedure || nested_binder(*candidate.source, view) || (argument_view && *argument_view != view)) {
+            const auto view = substitute(candidate.parameters[i], candidate, *bindings, true);
+            if (view.kind != Type::procedure || nested_binder(candidate, view) || (argument_view && *argument_view != view)) {
               consistent = false; break;
             }
             argument_view = view;
@@ -1991,15 +2045,19 @@ public:
         implementation_gap(form->at, "module declaration or selection '" + form->name + "'");
       definitions.push_back(form.get());
     }
-    const std::function<void(const Expression &)> collect = [&](const Expression &expr) {
+    std::map<const Form *, const Form *> parents;
+    std::map<const Form *, size_t> method_ids;
+    const std::function<void(const Expression &, const Form *)> collect = [&](const Expression &expr, const Form *parent) {
       if (expr.definition) {
         lexical_methods_.emplace(expr.definition.get(), 0);
+        if (parent) parents.emplace(expr.definition.get(), parent);
         definitions.push_back(expr.definition.get());
-        collect(*expr.definition->body);
+        collect(*expr.definition->body, expr.definition.get());
       }
-      for (const auto &child : expr.children) collect(*child);
+      for (const auto &child : expr.children) collect(*child, parent);
     };
-    for (const auto &form : forms) if (form->body) collect(*form->body);
+    for (const auto &form : forms) if (form->body)
+      collect(*form->body, form->kind == Form::Kind::expression ? nullptr : form.get());
     for (const auto *form : definitions) {
       if (form->symbolic || form->operation || form->conversion || (!lexical_methods_.contains(form) && !form->captures.empty()) || !form->body)
         implementation_gap(form->at, "callable captures, effects, declarations, operators, owners or throws contracts");
@@ -2014,9 +2072,20 @@ public:
       if (borrowed_result(*form) && *form->result_type == Type::void_type) fail(form->at, "void cannot be a borrowed result");
       if (*form->result_type != Type::void_type && form->result_type->kind != Type::procedure && !borrowed_result(*form) && (!form->result_const || !form->result_kind.empty()))
         implementation_gap(form->at, "non-const scalar result contract");
-      const auto resolve_signature = [&](const Type &type) { return binder(*form, type) ? type : resolve_type(type); };
-      CheckedMethod prepared{form, {}, {}, resolve_signature(*form->result_type), {}, {}, false};
-      signature_type(*form, prepared.result, form->at, true);
+      CheckedMethod prepared;
+      prepared.source = form;
+      for (const auto &p : form->type_parameters) prepared.type_parameters.push_back(p.name);
+      if (const auto parent = parents.find(form); parent != parents.end()) {
+        prepared.parent = method_ids.at(parent->second);
+        const auto required = free_type_names(*form);
+        const auto &context = program_.methods[*prepared.parent].type_parameters;
+        for (size_t i = 0; i < context.size(); ++i) if (required.contains(context[i])) {
+          prepared.type_parameters.push_back(context[i]); prepared.retained_types.push_back(i);
+        }
+      }
+      const auto resolve_signature = [&](const Type &type) { return resolve_type(type, &prepared); };
+      prepared.result = resolve_signature(*form->result_type);
+      signature_type(prepared, prepared.result, form->at, true);
       for (const auto &type : form->throws_types) {
         const auto resolved = resolve_type(type);
         if (resolved.kind != Type::exception) implementation_gap(form->at, "throws contracts require selected intrinsic exception types");
@@ -2030,7 +2099,7 @@ public:
         if (parameter.variadic || parameter.automatic_conversion)
           implementation_gap(parameter.at, "variadic, conversion or borrowed parameter contract");
         prepared.parameters.push_back(resolve_signature(parameter.type));
-        signature_type(*form, prepared.parameters.back(), parameter.at);
+        signature_type(prepared, prepared.parameters.back(), parameter.at);
       }
       for (const auto &parameter : form->type_parameters)
         if (parameter.bound) implementation_gap(parameter.at, "bounded type parameters");
@@ -2055,6 +2124,7 @@ public:
         if (definition.source->kind != form->kind) implementation_gap(form->at, "mixed function/procedure family");
       }
       program_.methods.push_back(std::move(prepared));
+      method_ids.emplace(form, id);
       if (lexical) lexical_methods_[form] = id;
       else families_[form->name].push_back(id);
     }
