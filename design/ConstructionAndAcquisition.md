@@ -1,13 +1,13 @@
 # CoD construction, bits ADTs and region acquisition
 
-Design revision: 2 · Recorded: 2026-11-12 · Status: discussion draft with confirmed requirements; whole-document approval pending; implementation incomplete.
+Design revision: 6 · Recorded: 2026-11-14 · Status: discussion draft with confirmed requirements; RHS normalization and explicit-region capacity proposals under review; whole-document approval pending; implementation incomplete.
 
 ## Design authority
 
-- **Registry / coverage:** [D-22](DesignAuthorityRegistry.md#d-22), revision2. [H-383–H-385](../CHANGELOG.md#h-383) records the reviewed construction handoff; [H-386](../CHANGELOG.md#h-386) accepts contextual owner inference, prefers coordinated migration without a transition period, and requires topic discussion followed by whole-file approval. P-348–P-350 remain candidate value relationships. This document is not yet a qualified delegated implementation contract; [K-545](../CHANGELOG.md#k-545) records the discussion integration, not final document approval.
-- **Candidate value path:** C-39/C-65/C-72 → C-01/C-06 (P-348) makes storage, access and lifetime intent explicit and checkable in readable source; C-09/C-54 → C-05 (P-349) separates persistent data from acquisition responsibility and preserves inspectable preparation effects. D-22 organizes these responsibilities through P-350. Charter §§2–5/§7–8 governs those boundaries; §§6/12 requires practical native execution and measured costs. These scoped paths do not qualify the wider ownership or DBMR designs.
-- **Dependencies:** P-351: D-01 physical allocation/relative references; D-14 owners, capabilities, fields and qualifiers; D-17 initialization, failure and cleanup; D-10/D-15/D-18/D-21 dynamic context, values and native dispatch; D-16 bits validity, layout and numeric compatibility. Dependency edges grant no authority.
-- **Invariants / non-goals:** no ordinary reference ownership, per-object cleanup, non-bits lexical/general-heap allocation, hidden region, cross-owner stored edge, implicit graph copy, lifetime extension or native callable environment in a regional field. Regional C++ types remain region-only and noncopyable. Actual-owner unions, abstract-result RTTI, fraction execution, pure/TCO and the compiler pilot remain separate.
+- **Registry / coverage:** [D-22](DesignAuthorityRegistry.md#d-22), revision6. H-383–H-386 confirms the scoped construction requirements; H-425–H-427 develops RHS normalization and intentional lifetime separation without move semantics. H-428 confirms allocation effects without language checkpoints/rewind. [H-429](../CHANGELOG.md#h-429) establishes distinct regional/lexical storage directions; [D-28](RegionalAndLexicalStorageRefactor.md) owns that refactoring and the proposed C++ external_ptr naming. Detailed RHS and explicit-region capacity proposals remain under review; P-348–P-350 and whole-document qualification remain pending-human. [K-STORAGE-SPLIT-20261114](../CHANGELOG.md#k-storage-split-20261114) records the current boundary.
+- **Candidate value path:** C-39/C-65/C-72 → C-01/C-06 (P-348) makes storage, access and lifetime intent explicit and checkable in readable source, including distinct lexical/regional construction and explicit initialization effects; C-09/C-54 → C-05 (P-349) separates persistent data from acquisition responsibility and preserves inspectable preparation effects. D-22 organizes these responsibilities through P-350. Charter §§2–5/§7–8 governs those boundaries; §§6/12 requires practical native execution and measured costs. These scoped paths do not qualify the wider ownership or DBMR designs.
+- **Dependencies:** P-351: D-01 physical allocation/relative references; D-14 owners, capabilities, fields and qualifiers; D-23 scalar value/view reception; D-17 initialization, failure and cleanup; D-10/D-15/D-18/D-21 dynamic context, values and native dispatch; D-16 bits validity, layout and numeric compatibility. Dependency edges grant no authority.
+- **Invariants / non-goals:** no ordinary reference ownership, per-object cleanup, nonregional graph allocation, cross-owner stored edge, implicit graph copy/move, lifetime extension or native callable environment in a regional field. Lexical scopes are not backed by implicit regions; D-28 separately reviews direct/global lexical reference representation and any future lexical non-bits layout. Regional C++ types remain region-only and noncopyable. Actual-owner unions, abstract-result RTTI, fraction execution, pure/TCO and the compiler pilot remain separate.
 - **Human baseline:** current project user in [the construction side chat](codex://threads/01a1d051-f608-7c13-b98a-684f065884d7), recorded 2026-11-12 America/Los_Angeles; exact message timestamps/personal name unavailable. H-383 preserves the ownership/allocation corrections; H-384 confirms R1, explicit R2 owner syntax/mismatch rejection and autonomous R3/R4 comparison with final selection reserved; H-385 confirms result-only constness. The [active main chat](codex://threads/01a1cefe-fe25-7251-b25b-b3908d803ff6) subsequently accepts contextual inference and prefers one coordinated migration without compatibility staging (H-386). DBMR protocols, aggregate ABI and final whole-file approval remain outstanding.
 - **Acceptance:** the matrix below requires composed positive/rejection cases, exact acquisition/release accounting, relocation and measured compilation/runtime costs. No implementation or new performance result is claimed by this revision.
 
@@ -19,9 +19,9 @@ Every ADT instance/storage view has an actual owner. Direct/val bits fields occu
 
 R1 admits a concrete ADT as bits when its finite fixed representation recursively consists only of bits fields/alternatives/tags, without stored references, ownership carriers, managed environments or implicit cleanup. This includes finite products, sums and qualifying generic instantiations. A one-word reference is still non-bits. An unresolved/abstract type requires sufficient bits evidence; R1 does not choose the source spelling for that constraint, a sum encoding, ABI, packing or validity of arbitrary bit patterns.
 
-Bits ADTs may occupy lexical or regional storage, including a region root. Fresh lexical bits construction belongs to the current full scope; an ordinary grouping block adds no owner. Non-bits ADTs remain region-only with relative stored references. Adding a reference field invalidates dependent bits uses rather than selecting a hidden allocator. The current compiler's product-only/scalar-bits subset is an implementation limit, not the language definition.
+Bits ADTs may occupy lexical or regional storage, including a region root. Fresh lexical bits construction belongs to the current full scope; an ordinary grouping block adds no owner. Non-bits ADTs remain region-only with relative stored references. Adding a reference field invalidates dependent bits uses rather than selecting a hidden allocator. D-28 reviews whether lexical reference-bearing ADTs receive a distinct direct-reference layout; no such placement or graph-copy extension is selected here. The current compiler's product-only/scalar-bits subset is an implementation limit, not the language definition.
 
-The ordinary construction direction is `make T [in o]`; intrinsic resource acquisition uses `make region`. Explicit `in o` selects the actual owner and a receiving-variable owner mismatch is a compile error. Equal root types or lifetimes do not establish owner equality. Existing-reference initializers preserve provenance and access. An inferred `where {owner o}` binding supplies provenance, not implicit region allocation capability.
+The ordinary construction direction is `make T [in o]`; intrinsic resource acquisition uses `make region`. Explicit `in o` selects the actual owner and a receiving-variable owner mismatch is a compile error. Equal root types or lifetimes do not establish owner equality. Aliasing preserves provenance and access. RHS normalization below proposes a separate bits-copy path for value/readonly inputs; its interaction with D-23 reception is under review. An inferred `where {owner o}` binding supplies provenance, not implicit region allocation capability.
 
 `make const region` restricts the published result view. Explicit preparation writes, including selected create/initialize/expand/eligible-trim operations, may precede that result subject to permissions and the selected protocol. Constness does not freeze the file, imply a snapshot or remove the owning acquisition's release obligation. Final DBMR grammar, sharing/defaults and operation/failure protocols remain unselected.
 
@@ -53,8 +53,8 @@ The proposed compiler check for the confirmed construction behavior carries the 
 | Omitted owner, receiver has one unique owner and suitable allocation access | Construct there. A field may supply its containing owner to an explicitly written nested make. H-386 accepts this contextual inference. |
 | Omitted owner, no destination | Bits use the current full lexical scope. Non-bits diagnose the missing regional destination. No TLS fallback or hidden region. H-386 accepts this fallback boundary; missing capability never causes a hidden allocator or fallback. |
 | Receiver names provenance without allocator capability | Do not manufacture capability from identity. Require a usable allocation path; do not silently select another owner. |
-| Initializer is an existing reference | Check its actual owner/access; never promote, allocate or copy a graph to satisfy an expected owner. |
-| Ref/ptr field initialized without explicit make | Bind an existing admissible target; no automatic target allocation. |
+| Initializer retains a reference result | Check actual owner/access. A non-bits graph is never implicitly copied; value/readonly bits normalization is reviewed below. |
+| Ref/ptr field initialized without explicit make | Use the proposed RHS classification below: value/readonly bits materialize a target; retained views alias. Regional materialization remains under review. |
 
 Illustrative candidate source, not current parser acceptance:
 
@@ -66,6 +66,102 @@ owned region arena:Root <- make region Root(capacity = bytes) { ... };
 ```
 
 Construction must preserve initializer order and effects and publish only a valid initialized result. Existing D-17 failed acquisition cleanup does not promise rollback of effects or arbitrary reservations in an already-live region. Nested constructor naming/access, partial construction and allocator-policy interaction require review before implementing an uncovered case. Explicit owner spelling cannot bypass readonly allocation checks or same-owner stored edges.
+
+## Unified lexical and regional initialization — proposal
+
+The proposed common model is: select an owner with construction access, establish storage, initialize it, and establish the completed group bindings. Allocation is an allowed initialization side effect under H-428. P-348/P-350's candidate value is explicit allocation and lifetime policy in readable source, while charter §§3.3/4.3/6.3/7.2 requires preserved sharing, effects, access and failure behavior. H-426/H-427 proposes new RHS policies; affected D-14/D-23 reception and explicit D-01 region-growth extensions need the scoped review below. D-28 owns the distinct storage/representation refactoring. H-428 preserves D-17's separation of initialization effects from whole-region cleanup. Source examples illustrate design, not current compiler acceptance.
+
+### RHS categories, grouping and value normalization
+
+For copyable bits, the proposed initialization rule is determined by the checked RHS category, independently of whether source and destination owners happen to agree:
+
+| RHS category | Ref/ptr initialization with `=` |
+| --- | --- |
+| Independent val bits, including a scalar value-result call | Allocate a fresh destination in the selected owner and initialize its payload. |
+| Readonly target view of initialized bits | Read the bits into a fresh destination; do not grant write access to the source. This proposed copy default changes D-23's general existing-view initializer rule. |
+| Mutable target view | Alias the target, preserving actual owner/type/access and checking destination compatibility. |
+| Non-bits object view | Preserve the regional target and access; readonly access supplies no graph-copy permission. |
+| Nullable/absent pointer view | Preserve pointer absence/provenance under D-14. Neither null nor an ordinary pointer view silently becomes a bits payload read. |
+
+Here readonly describes target access (`ref r:const T`), not declaration-leading const (`const ref r:T`), which only restricts rebinding the reference slot. A const binding may still expose a writable target. Copy eligibility does not depend on a machine representation being one word: ordinary references, intrinsic ownership carriers and callable environments retain their separate categories.
+
+H-427 permits grouping to yield a value. **Proposed precise scalar rule:** `(x)` groups the expression and projects readable bits to an independent val result. Nested grouping is idempotent with respect to value category; it performs no ownership transfer, invalidation or move. A bare addressable storage expression still supplies its place/view, including when the storage was declared val; the declaration's storage kind and the expression's result category are distinct. This last spelling rule is part of the proposal's concrete review scope, not inferred from C++ terminology.
+
+```text
+data Box { ref n:u64; }
+# r supplies live allocation access.
+val local:u64 <- 7u64;
+ref a:Box in r = make Box in r { n = (local); }; # Fresh copied bits in r.
+ref b:Box in r = make Box in r { n = a.n; };     # Mutable view: alias a.n.
+ref c:Box in r = make Box in r { n = (a.n); };   # Fresh copied bits, even in r.
+```
+
+A `val T in O` remains invalid. Fresh target placement comes from the receiver/containing object or the full-scope default, with usable allocation access; the copied value carries no owner. No owner-mismatch heuristic selects copying. Independent targets remain distinct even when their bits compare equal. Direct/val fields use `<-` to initialize inline payloads, without a separate target. Ref declaration `<-` stays rejected; later `=` rebinding and `<-` payload writes retain their separate contracts. D-14's ptr transfer-declaration shorthand is not silently extended or removed.
+
+Grouping now has observable category consequences: `consume(x)` versus `consume((x))` may select different admissible access/parameter behavior, and `(x) <- value` cannot write through an independent bits result. Assignment-result views must be checked through grouping without changing the operator's own result contract. Retaining a readonly scalar alias needs a clearly specified borrow/alias path; the existing ordinary-place alias can name an existing place but is not a general syntax for retaining an arbitrary returned view. Non-bits grouping must retain a view without copy/move; whether it narrows access remains a separate precise rule. Complete callable values retain D-18 rather than being reclassified as scalar bits. These are outstanding integration cases, not new operators or ABI choices.
+
+### Conditional results
+
+The proposed scalar conditional computes one result category before receiving initialization. For a mix of a view and val bits, normalize the selected branch to val bits; then materialize one receiving target. Do not branch between aliasing and allocating implicitly:
+
+```text
+ref chosen:u64 in r = if (reuse) { existing } else { 7u64 };
+# Either path initializes a fresh target; writing chosen does not change existing.
+```
+
+Only the selected branch evaluates. Any required bits read occurs while that source is still live, before its producing scope/cleanup ends. A value join can combine readable bits from different owners because no reference escapes; a readonly-reference join still needs one statically provable owner. Same-owner compatible mutable-view alternatives may retain their reference category when no value normalization is required. Non-bits alternatives require the existing compatible view/owner rules, not implicit graph cloning. Numeric joins use existing permitted conversions and preserve units/fraction constraints; none of this changes an already established callable result signature.
+
+### Initialization order and allowed allocation effects
+
+H-427's joint initialization establishes the group bindings on success; H-428 explicitly permits allocation as an initialization side effect. There is no CoD allocation checkpoint, automatic cursor rewind or implied transaction over initializer effects. Initializers run in source order and evaluate once. For a fresh target, H-416's conceptual order remains reserve, evaluate/convert, initialize; failure to reserve may prevent RHS effects. Earlier bindings are available to later initializers and the final group block. Lookup in an individual initializer still uses the preceding lexical environment. Owner liveness and allocation access must survive every pending write.
+
+If a group fails, its incomplete bindings are not made available as successfully initialized results. Allocations already made in an existing live region remain governed by that region, and earlier valid writes/effects remain. An initializer can publish a fully initialized target into pre-existing same-owner state; a subsequent failure does not reclaim that target behind the surviving reference. Merely allocated or partly initialized targets still cannot be exposed as readable valid objects.
+
+```text
+data Holder { ptr saved:u64; }
+proc publish(x:u64 in r, holder:Holder in r) -> u64 where {owner r} {
+    holder.saved = x;
+    return 0u64;
+}
+# holder predates this group; fail() throws; r remains live in the caller.
+ref a:u64 in r = 7u64,
+    b:u64 in r = publish(a, holder),
+    c:u64 in r = fail();
+# After catching the failure, holder.saved still targets valid initialized 7u64.
+# Allocation and publication were effects; no group rewind invalidates them.
+```
+
+D-17's cleanup remains category-specific. A newly acquired whole region that fails before successful acquisition publication releases its resources exactly once. Existing-region construction does not gain that whole-region cleanup responsibility. Scope exit, deferred work and completion replacement retain their existing rules; grouping does not invent an additional defer scope. Neither earlier existing-state writes nor I/O are implicitly undone.
+
+Applications and third-party libraries may provide allocation-undo frameworks with explicit ownership, lifetime and publication contracts, for example constructing in an independently owned temporary region. The language's ordinary validity rules still apply; the possibility of such a framework supplies no general permission to rewind storage behind live references, graph-copy between regions or detach a scope owner. No new standard rollback API or allocator mechanism is selected here.
+
+## Regional and lexical storage boundaries
+
+[Regional and lexical storage refactoring](RegionalAndLexicalStorageRefactor.md) owns the current direction: a regional stored graph uses relative/local references, while lexical execution storage uses direct/global views. A lexical scope is a lifetime owner, not an implicit region. A view's binding lifetime and the referenced payload's owner remain distinct; libraries/frameworks may exploit that separation to decouple memory management from business processing.
+
+Construction can share an owner/access/initialization model across those domains without sharing their allocator or reference encoding. Current full-scope and ordinary-grouping boundaries retain D-17. Lexical bits construction remains available; reference-bearing lexical ADTs need D-28's separate layout/placement decision. No scope-region resource, lexical region-capacity hint, automatic capture permission or new outer-selector syntax is implied.
+
+### Explicit-region growth policy and capacity hints
+
+For explicit region construction, the proposal under review is growable capacity by default; an explicit fixed-capacity policy opts out. A supplied capacity is an initial sizing hint in the growable mode, not a proof of sufficiency or a hard budget. Fixed mode must define its enforceable payload limit, alignment/header accounting and unchecked RegionCapacityExceeded behavior. Growth failure remains an unchecked allocation failure and leaves existing valid targets usable; growth creates no optional/null result or automatic retry of user initializer effects.
+
+A user-supplied region hint affects allocation policy without changing type, actual owner or access. Exact syntax, units/rounding, whether a hint guarantees an initial reservation, growth factor, hard limits and diagnostics remain open. A hint is neither a guaranteed upper bound nor permission to change program results. Lexical scopes have no region-capacity policy. D-28 tracks the interaction between regional growth and live external/direct views independently of lexical storage allocation.
+
+Owner identity must remain stable if growth changes the physical base. Stored self-relative edges survive uniform whole-region relocation; external native addresses and references to the old region header do not. The current `global_ptr` holds a C++ reference to that header, so it does not itself provide live relocation through a stable owner descriptor. Existing DBMR opening/preparation can remap before returning its handle; this is not evidence for resizing under live borrows.
+
+| Candidate implementation | Consequence to assess |
+| --- | --- |
+| Reserve contiguous virtual address space, commit backing as needed | Can keep live addresses stable within its reservation; address-space limits and exhaustion policy need definition. |
+| Relocate the complete region with a stable owner/base mechanism | Preserve offsets and reload derived addresses after possible growth. Calls, captures, suspended frames, cleanup and native borrowed addresses must respect relocation boundaries. No permanent reference ABI is implied. |
+| Discontiguous chunks | Independent chunk relocation does not preserve the current self-relative whole-image contract. It requires a separate encoding/mapping design, not an assumed drop-in allocator change. |
+
+Physical growth may move bytes while preserving the identities and relative graph. This introduces no CoD move expression or per-object move operation, and zero per-edge relocation work is not a promise of zero byte-copy cost. Growth under native address borrowing, reentrant calls, concurrent access or shared DBMR mappings needs an explicit stability/coordination policy. A capacity hint alone cannot establish it.
+
+### TLS and numeric boundaries
+
+H-426 retains inline TLS payloads for bits ADTs and the separately defined callable-view category. Symbolic reference declarations still require `in <some-owner>` and valid owner/access/lifetime relations; TLS is not an inline non-bits object arena. D-10 currently also requires region-symbol backing for object bindings. The direct/global lexical representation does not itself broaden that backing permission or extend a target lifetime. Intrinsic region-resource bindings retain their existing ownership/restoration role; no generic ADT can carry an intrinsic owning resource.
+
+D-16 fractions remain fixed valid bits with nonzero denominators. Storage representation, grouping/copying and initialization effects introduce no all-zero default, hidden canonicalization, numeric widening, component-validity relaxation or fraction implementation. General bits-ADT copying and callable transport still need their own representation/ABI integration.
 
 ## Source migration
 
@@ -109,7 +205,7 @@ The [source capability reference](../tests/cod/language/README.md) owns current 
 
 [DBMR](../include/shilos/dbmr.hh) acquisition must be assessed against the proposed exclusive creation, validation, capacity, access, failure and coordination contract. Existing storage primitives do not establish full graph/schema validation, failure atomicity or durable publication. Measurements must distinguish counted operations from observed latency and resource totals.
 
-[K-632](../CHANGELOG.md#k-632) records editorial continuity; whole-file and unresolved acquisition qualification remain pending-human.
+[K-STORAGE-SPLIT-20261114](../CHANGELOG.md#k-storage-split-20261114) records the current proposal review; whole-file and unresolved construction/acquisition qualification remain pending-human.
 
 ## Acceptance and decisions before implementation
 
@@ -117,6 +213,9 @@ The [source capability reference](../tests/cod/language/README.md) owns current 
 | --- | --- |
 | Bits and owners | Local/regional nested products, finite sums and generic instances; copies independent across owners; aliases retain owner/access; reference/owner/callable-bearing types fail bits classification; invalid local escape and cross-owner edge reject. |
 | Construction | Explicit owner agrees with receiver; equal root type never hides distinct owners; selected inference requires usable capability; existing borrows retain provenance; once-only ordered initialization, premature-read rejection and partial-failure cleanup. |
+| Unified initialization proposal | Compare bare places, grouped val results, readonly bits, retained mutable/non-bits views and null across declarations/fields. Check normalized conditional identity, live source reads before cleanup, grouping/dispatch effects, const-binding separation, explicit readonly aliases and unchanged later assignment. |
+| Initialization effects | A later initializer failure preserves earlier valid publications and allocations in an existing live region; incomplete bindings/readable objects are not exposed. Preserve source order, exact cleanup for failed whole-region acquisition, nested effects and existing defer/completion rules. No implicit allocation or graph rollback. |
+| Distinct storage and explicit-region growth | Use D-28 representation/placement acceptance; no implicit scope-region or unqualified lexical graph layout. Cover region hint/fixed limits, alignment, live views across growth, native borrowing, failure preserving old targets and TLS restrictions. |
 | Composition | Aggregate arguments/results through native recursion, callable captures/dynamic bindings, deferred execution and loops preserve value/view semantics and existing ownership transfer timing. |
 | File acquisition | Selected source/access/capacity operation matrix, invalid image rejection, exact handle/mapping release, relocation preserving sharing/cycles and observable preparation effects before const publication. |
 | Costs | Compile time, generated text/bitcode, stack/backing bytes, region/mapping count and peak extent; no accidental per-object cleanup or graph copy. No numeric target is assumed. |
@@ -128,7 +227,9 @@ Discuss unresolved design topics in terms of source examples, behavior, alternat
 Contextual owner inference and the coordinated migration direction are recorded above and need no repeated preference question. The remaining topics are:
 
 - **Aggregate values and native calls:** define concrete product/sum representation, sufficient generic bits evidence, initialization granularity and parameter/result transport while preserving nominal identity, relative graphs, complete callable values and fraction validity. Distinguish internal compiler choices from observable layout or validity commitments.
-- **Construction and allocator access:** specify usable allocation capability, nested initializer access/order and the state left by partial construction in an existing region. Expected-owner inference must preserve the accepted no-fallback rule and cannot manufacture allocation permission.
+- **RHS normalization:** complete bare-place/grouped-value semantics, readonly alias reception, non-bits grouping and operator/parameter interactions. Conditional bits normalize to a value; no implicit move or graph copy follows.
+- **Initialization integration:** preserve H-428 allowed allocation effects and D-17 cleanup while completing precise RHS/name/order checking. No checkpoint or publication-rollback choice remains open at the language level.
+- **Storage refactoring and explicit-region growth:** D-28 owns lexical/regional reference representation, any lexical non-bits layout and external_ptr naming. Region hint/fixed-capacity, live-address stability and DBMR protocols remain separate unselected policies.
 - **Persistent acquisition:** complete the source/access/capacity/failure/coordination matrix and compare its implementations before choosing the DBMR surface. Result-only constness is already confirmed; mapping protection, capacity units, partial effects, validation and release/durability outcomes remain explicit topics.
 
 The candidate value rationale, constraints, non-goals and acceptance remain part of the eventual whole-document review. No separate approval of internal relationship numbers is requested.

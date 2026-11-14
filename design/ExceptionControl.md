@@ -1,6 +1,6 @@
 # CoD exception control and regional cleanup
 
-Design revision: 54 · Recorded: 2026-11-13 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; current implementation availability is recorded in the source capability reference.
+Design revision: 55 · Recorded: 2026-11-14 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; current implementation availability is recorded in the source capability reference.
 
 ## Design authority
 
@@ -9,7 +9,7 @@ Design revision: 54 · Recorded: 2026-11-13 · Status: confirmed bounded excepti
 - **Contract boundary:** Acceptance: construction failure, exact release, explicit causes, owner/effect restoration, pre-entry versus callee failure, completion replacement and deferred queues. Complete integration/proof coverage remains work. No regional copy, lifetime extension, native-handle/out policy, RTTI, persistent transaction or broad D-04 guarantee follows.
 - **Invariants / non-goals:** P-237 links D-14's ownership/borrowing, P-238 links D-10's scoped bindings, and P-239 links D-01's allocation, allocator symmetry and relocation. H-180/H-181 preserves hidden/captured owners; H-262/H-263 separates consumed names from valid local views. H-265/P-240 supplies the unchecked-OOM constraint. H-251 reserves RTTI decisions for human discussion. one cleanup responsibility per region; no per-object ownership, implicit owner resurrection, allocation-dependent OOM delivery, graph rollback, foreign-world editing or general RTTI decision. No C++ exception type or ABI becomes a CoD user type by implication.
 - **Acceptance:** Nested normal and exceptional paths preserve values, cleanup and effect restoration; controlled construction failures neither leak nor double-release; invalid exceptional-path borrows reject. Deferred registration, execution and completion replacement preserve their specified ordering. Current compiler availability is recorded in the [source capability reference](../tests/cod/language/README.md).
-- **Evidence / continuity:** human baselines are the H records identified by the registry; [K-633](../CHANGELOG.md#k-633) covers the current category/declaration scope; K-632 covers editorial consolidation. Both preserve the confirmed contract and exclusions.
+- **Evidence / continuity:** human baselines remain the H records identified by the registry. [K-STORAGE-SPLIT-20261114](../CHANGELOG.md#k-storage-split-20261114) continues r54→55 under H-428's allowed initialization allocation effects, preserving the qualified category/declaration, cleanup and completion contracts. No language allocation checkpoint or graph rollback is introduced.
 
 ## Selected direction
 
@@ -18,6 +18,8 @@ CoD provides `try`, `catch` and `finally` control in the accepted contract. Ulti
 `make` continues to produce its normal `owned region :Root` result when construction succeeds. OOM is an exceptional exit, not an implicit null owner or a mandatory optional/result wrapper. H-265 does not select automatic allocation retries, region growth, compaction or a process recovery policy. “Ultimate” failure describes exhaustion after any separately defined policy has failed; no such policy is introduced here.
 
 The initial error taxonomy distinguishes `OutOfMemory` (the memory provider cannot supply storage), `RegionCapacityExceeded` (placement exceeds an existing region's fixed budget), and `InvalidCapacity` (an invalid or unrepresentable capacity request). All three are unchecked; none implies automatic growth or retry.
+
+H-428 confirms allocation as an allowed initialization side effect. A failing initialization group does not rewind an existing region or undo earlier valid publication/effects. Its incomplete bindings are not successful results, while an already initialized target published into surviving same-owner state remains live with its region. Failed acquisition of a new whole region still releases its acquired resources exactly once. Application/library undo frameworks require their own contracts; the language supplies no allocation checkpoint or automatic rollback.
 
 Compile-time type, moved-name, escape and binding errors remain compile errors. Other runtime checks are not all reclassified as catchable exceptions merely because OOM becomes catchable.
 

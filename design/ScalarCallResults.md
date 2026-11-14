@@ -1,13 +1,13 @@
 # Scalar call results and receiving storage
 
-Design revision: 9 · Recorded: 2026-11-14 · Status: scalar result and receiving-storage requirements confirmed within the registry scope.
+Design revision: 10 · Recorded: 2026-11-14 · Status: scalar result and receiving-storage requirements confirmed within the registry scope.
 
 ## Design authority
 
-- **Scope / baseline:** [D-23](DesignAuthorityRegistry.md#d-23), r9. H-413–H-419 confirms scalar defaults, declaration operators and unique/null-owner requirements; H-420 authorizes integration and implementation of those rules. Whole-document value-path qualification retains its registry status.
+- **Scope / baseline:** [D-23](DesignAuthorityRegistry.md#d-23), r10. H-413–H-419 confirms scalar defaults, declaration operators and unique/null-owner requirements; H-420 authorizes integration and implementation of those rules. Whole-document value-path qualification retains its registry status.
 - **Value path:** P-354 relates C-65 storage/lifetimes, C-72 bits and C-54 value/resource distinctions to readable result and receiving intent under charter §§3.3/5.3/6.3/8/12. Its broader document derivation remains pending-human; the source decisions below are settled.
 - **Dependencies / invariants:** P-355 links D-14 storage/access/initialization, D-17 completion, D-18 complete callable values, D-16 numeric/fraction validity and D-22 construction. Preserve assignment-family destination views, parameter passing, unique owners, readonly restrictions and cleanup. No regional copy/allocation, lifetime extension, aggregate/generic result classification or permanent ABI is selected.
-- **Acceptance / continuity:** The matrices, cleanup examples and final acceptance cases specify observable behavior. [K-653](../CHANGELOG.md#k-653) integrates both r8 capability/editorial revisions as r9; H-413–H-420's scalar contract is unchanged.
+- **Acceptance / continuity:** The matrices, cleanup examples and final acceptance cases specify the established receiving baseline. [K-STORAGE-SPLIT-20261114](../CHANGELOG.md#k-storage-split-20261114) continues r9→10 with explicit review boundaries: H-426/H-427's grouped-value/readonly-bits reception proposal belongs to D-22; H-429's carrier/placement refactoring belongs to D-28. These pending extensions do not silently change the implemented matrix or a callee's result mode. H-428 permits initialization allocation effects without rollback.
 
 ## Result mode belongs to the callable
 
@@ -34,6 +34,8 @@ The receiver does not change the callee's mode. A ref declaration receiving valu
 Within a value-result callable, branches returning x and x + 1 both supply values, without a result-owner alternative. Within an explicit borrowed-result callable, each returning branch must supply admissible live storage; a bare fresh arithmetic value is not such a target. H-417 requires all admitted borrowed-result alternatives to have one statically provable owner. If owner inference is unknown or non-unique, reject; simultaneous liveness of different owners is insufficient. Callable selection must preserve each checked result mode; receiver syntax cannot silently adapt an arbitrary union of incompatible callable contracts.
 
 ## Call-site matrix: new declarations
+
+[D-22](ConstructionAndAcquisition.md#rhs-categories-grouping-and-value-normalization) reviews grouped scalar values and copying readonly bits during initialization; its detailed alias/grouping integration remains pending. [D-28](RegionalAndLexicalStorageRefactor.md) separates stored-reference representation from actual target owner and result mode. The matrix below retains its independently confirmed baseline until those affected extensions are qualified; it does not veto the proposed changes or claim their implementation.
 
 In these tables V() has an independent scalar value result and B() has an explicit non-null scalar view result. Both have compatible scalar types. Each RHS is evaluated once. Copies require readable initialized source bits and obey existing numerical compatibility rules; borrows preserve exact target type, access and owner. The tables describe ordinary builtin scalar behavior, not arbitrary operator overloads or regional field construction.
 
