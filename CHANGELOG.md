@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Cleanup target flow
+
+<a id="k-648"></a>
+**K-648 — Cleanup target-flow continuity.** Agent assessment: registry r648→649 and source reference269→270 continue D-14r82/H-297/H-313–H-315/C-65/P-258's initialization and null-view constraints and D-17r54/C-63/P-235/P-236/P-321–P-324's cleanup completion, under D-18r90 owner/alias constraints, D-21r11/D-26r9 native coverage and charter §§3.3/6.3/12. Completed cleanup refines continuation targets; actual null-check conditions distinguish reachable read obligations from contradictory paths without waiving declared callable failures or initializing absent payloads. Acceptance preserves earlier reads, failed registrations, saved targets and exact release in both native modes without runtime initialization flags. Complete alias/predicate/loop correlations, regional mechanisms, permanent ABI and pending designs remain excluded. Prior capability reference: `29e76663aa56d48b7326b8ecb1735ac78f1cb6f8:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Cleanup entry-target initialization
 
 <a id="k-647"></a>

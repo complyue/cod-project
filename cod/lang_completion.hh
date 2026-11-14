@@ -44,6 +44,9 @@ public:
     std::set<size_t> initialized, invalidated;
     // Initialization of entry targets survives changes to the current selection.
     std::set<size_t> entry_initialized, entry_nonnull;
+    // Actual branch conditions are separate from conditional callee guarantees.
+    std::set<size_t> null_inputs, nonnull_inputs;
+    bool possible = true;
     std::map<size_t, Targets> targets;
     bool operator==(const Selections &) const = default;
     void initialize(size_t id) {
@@ -51,11 +54,27 @@ public:
       if (!invalidated.contains(id)) entry_initialized.insert(id);
     }
     void refine(size_t id, bool null) {
+      // Null never reads a payload.
+      if (null) initialize(id);
       if (!null && !invalidated.contains(id)) entry_nonnull.insert(id);
       if (auto target = targets.find(id); target != targets.end()) {
-        target->second.nullable = null;
+        if (null || !target->second.places.empty() || target->second.preserves) target->second.nullable = null;
         if (null) target->second.places.clear();
       }
+    }
+    void test(size_t id, bool null) {
+      if (!invalidated.contains(id)) {
+        (null ? null_inputs : nonnull_inputs).insert(id);
+        if ((null ? nonnull_inputs : null_inputs).contains(id)) possible = false;
+      }
+      if (const auto target = targets.find(id); target != targets.end() && !target->second.preserves)
+        if (null ? !target->second.nullable : target->second.places.empty()) possible = false;
+      refine(id, null);
+    }
+    void constrain(const Selections &next) {
+      possible = possible && next.possible;
+      for (const auto id : next.null_inputs) test(id, true);
+      for (const auto id : next.nonnull_inputs) test(id, false);
     }
     void invalidate(size_t id) { initialized.erase(id); invalidated.insert(id); targets.erase(id); }
     void assign(size_t id, Targets next) {
@@ -93,6 +112,7 @@ public:
       return preserved;
     }
     void then(const Selections &next, std::set<size_t> &known) {
+      constrain(next);
       auto before = *this;
       for (const auto id : next.entry_nonnull) { before.refine(id, false); refine(id, false); }
       const auto entries = before.substitute_entries(next.entry_initialized, next.entry_nonnull, known);
@@ -114,10 +134,14 @@ public:
       resolve(known);
     }
     void merge(const Selections &other) {
+      if (!other.possible) return;
+      if (!possible) { *this = other; return; }
       const auto before = *this;
       std::erase_if(initialized, [&](size_t id) { return !other.initialized.contains(id); });
       std::erase_if(entry_initialized, [&](size_t id) { return !other.entry_initialized.contains(id); });
       std::erase_if(entry_nonnull, [&](size_t id) { return !other.entry_nonnull.contains(id); });
+      std::erase_if(null_inputs, [&](size_t id) { return !other.null_inputs.contains(id); });
+      std::erase_if(nonnull_inputs, [&](size_t id) { return !other.nonnull_inputs.contains(id); });
       invalidated.insert(other.invalidated.begin(), other.invalidated.end());
       for (auto it = targets.begin(); it != targets.end();) {
         if (const auto next = other.targets.find(it->first); next != other.targets.end()) {
@@ -215,6 +239,7 @@ private:
     return result;
   }
   static bool merge(std::map<size_t, Effects> &result, size_t completion, const Effects &effects) {
+    if (!effects.selections.possible) return false;
     auto [found, inserted] = result.try_emplace(completion, effects);
     if (inserted) return true;
     auto &known = found->second;
