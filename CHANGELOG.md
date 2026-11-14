@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Contextual callable type evidence
+
+<a id="k-641"></a>
+**K-641 — Callable evidence continuity.** Agent assessment: registry r641→642 and source reference262→263 continue D-14r82/H-295/P-257's compile-time query scope, D-18r90/H-337–H-344/P-299/P-301/P-302's complete callable/native contract and D-21r11/D-26r9 semantic selection under charter §§5/6.3/12. Declared operand relationships establish callable views through shared preparation; signature selection preserves kind/result/access/owner/throws checks separately from runtime construction. Acceptance covers nested queries without body demand, ordered real snapshots/failures, exact cleanup and native inventory/compilation observations in both modes. Outer type-only dependencies, anonymous query operands, unproved inference, ABI and pending designs remain outside coverage. Prior capability reference: `9d02aa0953f990cea42b25fd5cdd5b86bb6a4988:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Compile-time type queries
 
 <a id="k-640"></a>
