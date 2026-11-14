@@ -28,13 +28,15 @@ class LLVMEmission {
   llvm::LLVMContext context_;
   llvm::Module module_{"cod.program", context_};
   llvm::IRBuilder<> b_{context_};
-  // Private execution-local bits transport. Exception payloads contain no host pointers.
+  // Private execution-local value transport. Callable payloads have empty
+  // environments; they remain lexical values, not regional-storable bits.
   llvm::StructType *exception_ = llvm::StructType::get(context_, std::vector<llvm::Type *>(5, b_.getInt64Ty()));
   llvm::StructType *scalar_ = llvm::StructType::create(context_, {b_.getInt64Ty(), b_.getInt32Ty()}, "cod.scalar");
   llvm::StructType *outcome_ = llvm::StructType::create(context_,
       {scalar_, b_.getInt64Ty(), b_.getInt64Ty(), b_.getPtrTy(), b_.getInt64Ty(), b_.getInt64Ty(), b_.getInt64Ty()}, "cod.outcome");
   const CheckedProgram *program_ = nullptr;
   bool specialize_ = true;
+  std::vector<Type> callable_types_;
   std::vector<llvm::Function *> general_, specialized_;
   std::vector<const std::map<const Expression *, CheckedOperation> *> facts_;
   std::vector<llvm::Value *> arguments_;
@@ -78,7 +80,13 @@ class LLVMEmission {
     return entry.CreateAlloca(type, nullptr, name);
   }
   llvm::Value *load(llvm::AllocaInst *place) { return b_.CreateLoad(place->getAllocatedType(), place); }
-  static unsigned tag(const Type &type) {
+  unsigned tag(const Type &type) {
+    if (type.kind == Type::procedure) {
+      const auto found = std::find(callable_types_.begin(), callable_types_.end(), type);
+      const auto id = std::distance(callable_types_.begin(), found);
+      if (found == callable_types_.end()) callable_types_.push_back(type);
+      return 8 + exception_categories.size() + id;
+    }
     switch (type.kind) {
     case Type::integer: return 1; case Type::uint8: return 2; case Type::uint32: return 3;
     case Type::uint64: return 4; case Type::boolean: return 5; case Type::float32: return 6;
@@ -89,7 +97,7 @@ class LLVMEmission {
   }
   llvm::Type *native_type(const Type &type) {
     switch (type.kind) {
-    case Type::integer: case Type::uint64: return b_.getInt64Ty();
+    case Type::integer: case Type::uint64: case Type::procedure: return b_.getInt64Ty();
     case Type::uint8: return b_.getInt8Ty(); case Type::uint32: return b_.getInt32Ty();
     case Type::boolean: return b_.getInt1Ty(); case Type::float32: return b_.getFloatTy();
     case Type::float64: return b_.getDoubleTy();
@@ -280,19 +288,61 @@ class LLVMEmission {
     if (!result) throw std::logic_error("unchecked scalar operator");
     return pack(result, choice.operation->type);
   }
+  bool caller_destination(size_t method) const {
+    if (borrowed_result(*program_->methods[method].source)) return false;
+    const auto &instances = program_->methods[method].instances;
+    return std::any_of(instances.begin(), instances.end(), [&](size_t id) { return program_->instances[id].result.kind == Type::procedure; });
+  }
+  llvm::Value *native_call(llvm::Function *target, size_t method, std::vector<llvm::Value *> prepared) {
+    for (size_t i = 0; i < prepared.size(); ++i) {
+      const auto &type = program_->methods[method].parameters[i];
+      if (type.kind == Type::exception && program_->methods[method].source->parameters[i].owner.empty())
+        prepared[i] = pack(unpack(prepared[i], type), type);
+    }
+    llvm::AllocaInst *destination = nullptr;
+    if (caller_destination(method)) { destination = slot(scalar_, "callable.result"); prepared.push_back(destination); }
+    llvm::Value *result = b_.CreateCall(target, prepared);
+    if (destination) result = b_.CreateInsertValue(result, load(destination), 0);
+    return result;
+  }
+  llvm::Value *invoke_value(const Expression &expr, const std::vector<llvm::Value *> &prepared) {
+    std::vector<Choice> cases;
+    for (const auto *facts : facts_) {
+      const auto &fact = facts->at(&expr);
+      Choice choice{{fact.operand_type}, &fact};
+      for (size_t i = expr.kind == Expression::Kind::value_call ? 1 : 0; i < expr.children.size(); ++i)
+        choice.inputs.push_back(facts->at(expr.children[i].get()).type);
+      if (std::none_of(cases.begin(), cases.end(), [&](const auto &other) { return other.inputs == choice.inputs; }))
+        cases.push_back(std::move(choice));
+    }
+    return choose(expr, prepared, cases, outcome_, [&](const Choice &choice) -> llvm::Value * {
+      auto *join = block("callable.completed"), *invalid = block("callable.invalid");
+      auto *select = b_.CreateSwitch(b_.CreateExtractValue(prepared.front(), 0), invalid);
+      std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> incoming;
+      for (size_t id = 0; id < program_->callables.size(); ++id) {
+        const auto &value = program_->callables[id];
+        if (value.type != choice.inputs.front()) continue;
+        auto *selected = block("callable.selected"); select->addCase(integer(id + 1), selected);
+        b_.SetInsertPoint(selected);
+        const auto method = program_->instances[value.instance].method;
+        auto *target = specialize_ ? specialized_[value.instance] : general_[method];
+        auto *result = native_call(target, method, {prepared.begin() + 1, prepared.end()});
+        incoming.emplace_back(result, b_.GetInsertBlock()); b_.CreateBr(join);
+      }
+      b_.SetInsertPoint(invalid);
+      incoming.emplace_back(outcome(empty_scalar(), integer(exception_id(ExceptionCategory::unsound_runtime_typing)), integer(site(expr.at)), null_pointer()), invalid);
+      b_.CreateBr(join); b_.SetInsertPoint(join);
+      auto *result = b_.CreatePHI(outcome_, incoming.size());
+      for (const auto &[value, from] : incoming) result->addIncoming(value, from);
+      return result;
+    });
+  }
   llvm::Value *invoke(const Expression &expr, const std::vector<llvm::Value *> &arguments) {
+    if (facts_.front()->at(&expr).callable_call) return invoke_value(expr, arguments);
     std::vector<const Expression *> source_inputs;
     for (const auto &argument : expr.children) source_inputs.push_back(argument.get());
     const auto cases = choices(expr, source_inputs);
-    const auto call = [&](llvm::Function *target, size_t method) {
-      auto prepared = arguments;
-      for (size_t i = 0; i < prepared.size(); ++i) {
-        const auto &type = program_->methods[method].parameters[i];
-        if (type.kind == Type::exception && program_->methods[method].source->parameters[i].owner.empty())
-          prepared[i] = pack(unpack(prepared[i], type), type);
-      }
-      return b_.CreateCall(target, prepared);
-    };
+    const auto call = [&](llvm::Function *target, size_t method) { return native_call(target, method, arguments); };
     if (cases.front().operation->callee && (cases.size() > 1 || !specialize_)) {
       const auto method = program_->instances[*cases.front().operation->callee].method;
       if (std::all_of(cases.begin(), cases.end(), [&](const Choice &choice) {
@@ -345,7 +395,7 @@ class LLVMEmission {
     const auto &captures = facts_.front()->at(&expr).captures;
     for (const auto *facts : facts_)
       if (facts->at(&expr).captures != captures) throw std::logic_error("inconsistent checked catch captures");
-    fields.insert(fields.end(), body.kind == Expression::Kind::block ? captures.size() : body.children.size(), scalar_);
+    fields.insert(fields.end(), body.kind == Expression::Kind::block ? captures.size() : prepared_count(body), scalar_);
     scope.deferred.push_back({&expr, llvm::StructType::get(context_, fields)});
   }
   void complete_cleanup(const std::function<void()> &emit, bool handles_failure = false) {
@@ -422,7 +472,7 @@ class LLVMEmission {
         continue;
       }
       std::vector<llvm::Value *> arguments;
-      for (size_t j = 0; j < body.children.size(); ++j)
+      for (size_t j = 0; j < prepared_count(body); ++j)
         arguments.push_back(b_.CreateLoad(scalar_, b_.CreateStructGEP(descriptor.layout, record, j + 1)));
       // Prepared values and checked borrowed addresses do not refer into their record.
       b_.CreateCall(release, {record});
@@ -530,9 +580,18 @@ class LLVMEmission {
     b_.SetInsertPoint(present);
     return address;
   }
+  size_t prepared_count(const Expression &expr) const {
+    return expr.children.size() + (expr.kind == Expression::Kind::call && facts_.front()->at(&expr).callable_call ? 1 : 0);
+  }
   std::vector<llvm::Value *> prepare_arguments(const Expression &expr) {
     const auto &modes = facts_.front()->at(&expr).arguments;
     std::vector<llvm::Value *> arguments;
+    const auto &fact = facts_.front()->at(&expr);
+    if (expr.kind == Expression::Kind::call && fact.callable_call) {
+      auto *address = bindings_.at(*fact.callable_binding) ? load(bindings_.at(*fact.callable_binding)) : storage_.at(*fact.callable_place);
+      arguments.push_back(b_.CreateLoad(scalar_, checked_address(address, expr, expr.at)));
+    }
+
     for (size_t i = 0; i < expr.children.size(); ++i) {
       const auto mode = modes.empty() ? ArgumentMode::value : modes.at(i);
       const auto &child = *expr.children[i];
@@ -549,6 +608,20 @@ class LLVMEmission {
   llvm::Value *emit_expression(const Expression &expr, bool read = true, bool discard = false) {
     using K = Expression::Kind;
     const auto &fact = facts_.front()->at(&expr);
+    if (fact.callable) {
+      const bool definition = expr.kind == K::callable && fact.place.has_value();
+      const auto materialize = [&](const CheckedOperation &value) {
+        return pack(integer(*value.callable + 1), definition ? value.operand_type : value.type);
+      };
+      llvm::Value *value;
+      if (std::any_of(facts_.begin(), facts_.end(), [&](const auto *facts) { return facts->at(&expr).callable != fact.callable; })) {
+        std::vector<Choice> cases;
+        for (size_t i = 0; i < facts_.size(); ++i) cases.push_back({*frame_types_[i], &facts_[i]->at(&expr)});
+        value = choose(expr, arguments_, cases, scalar_, [&](const Choice &choice) { return materialize(*choice.operation); });
+      } else value = materialize(fact);
+      if (expr.kind == K::callable && fact.place) b_.CreateStore(value, storage_.at(*fact.place));
+      return definition ? empty_scalar() : value;
+    }
     switch (expr.kind) {
     case K::null_ref: return null_pointer();
     case K::integer: case K::boolean:
@@ -601,7 +674,7 @@ class LLVMEmission {
       return choose(expr, {left, right}, choices(expr, {expr.children[0].get(), expr.children[1].get()}), scalar_,
           [&](const Choice &choice) { return binary(expr, left, right, choice); });
     }
-    case K::call: case K::behave: case K::perform: {
+    case K::value_call: case K::call: case K::behave: case K::perform: {
       if (fact.is_null) {
         auto *address = emit_expression(*expr.children.front(), false);
         if (!reachable()) return nullptr;
@@ -811,13 +884,15 @@ class LLVMEmission {
     default: throw std::logic_error("unchecked expression reached LLVM emission");
     }
   }
-  llvm::Function *declare(const std::string &name, size_t arity) {
-    return llvm::Function::Create(llvm::FunctionType::get(outcome_, std::vector<llvm::Type *>(arity, scalar_), false),
+  llvm::Function *declare(const std::string &name, size_t arity, bool destination) {
+    std::vector<llvm::Type *> parameters(arity, scalar_);
+    if (destination) parameters.push_back(b_.getPtrTy());
+    return llvm::Function::Create(llvm::FunctionType::get(outcome_, parameters, false),
         llvm::GlobalValue::InternalLinkage, name, module_);
   }
-  void begin(llvm::Function *function, const std::vector<CheckedStorage> &storage, const std::vector<CheckedBinding> &bindings) {
+  void begin(llvm::Function *function, const std::vector<CheckedStorage> &storage, const std::vector<CheckedBinding> &bindings, size_t arity = 0) {
     function_ = function; arguments_.clear();
-    for (auto &argument : function->args()) arguments_.push_back(&argument);
+    for (size_t i = 0; i < arity; ++i) arguments_.push_back(function->getArg(i));
     b_.SetInsertPoint(block("entry")); finish_ = block("completion"); scope_ = nullptr; control_ = nullptr;
     result_ = slot(scalar_, "return.value"); category_ = slot(b_.getInt64Ty(), "exception.category");
     site_ = slot(b_.getInt64Ty(), "exception.site"); fatal_ = slot(b_.getPtrTy(), "numeric.failure");
@@ -840,7 +915,7 @@ class LLVMEmission {
   }
   void body(llvm::Function *function, const CheckedMethod &method, std::optional<size_t> instance) {
     const auto &layout = program_->instances[instance ? *instance : method.instances.front()];
-    begin(function, layout.storage, layout.bindings); facts_.clear(); frame_types_.clear();
+    begin(function, layout.storage, layout.bindings, method.parameters.size()); facts_.clear(); frame_types_.clear();
     if (instance) {
       facts_.push_back(&program_->instances[*instance].operations);
       frame_types_.push_back(&program_->instances[*instance].arguments);
@@ -861,6 +936,7 @@ class LLVMEmission {
     }
     full_scope({method.source->body.get()}, true, method.source->at, *method.source->result_type != Type::void_type, true, true);
     b_.SetInsertPoint(finish_);
+    if (function->arg_size() > method.parameters.size()) b_.CreateStore(load(result_), function->getArg(method.parameters.size()));
     b_.CreateRet(outcome(load(result_), load(category_), load(site_), load(fatal_), load(requested_), load(available_), load(cause_)));
   }
   void emit_sites() {
@@ -895,15 +971,15 @@ public:
       const auto &method = program.methods[i]; if (method.instances.empty()) continue;
       const auto prefix = "cod.method." + std::to_string(i) + "." + method.source->name;
       if (method.source->type_parameters.empty()) {
-        general_[i] = declare(prefix + ".native", method.source->parameters.size());
+        general_[i] = declare(prefix + ".native", method.source->parameters.size(), caller_destination(i));
         specialized_[method.instances.front()] = general_[i];
         continue;
       }
-      general_[i] = declare(prefix + ".general", method.source->parameters.size());
+      general_[i] = declare(prefix + ".general", method.source->parameters.size(), caller_destination(i));
       if (specialize) for (const auto id : method.instances) {
         std::string name = prefix + ".specialized";
         for (const auto &type : program.instances[id].arguments) name += "." + type_name(type);
-        specialized_[id] = declare(name, method.source->parameters.size());
+        specialized_[id] = declare(name, method.source->parameters.size(), caller_destination(i));
       }
     }
     for (size_t i = 0; i < program.methods.size(); ++i) {
