@@ -44,6 +44,8 @@ class LLVMEmission {
   std::vector<const std::map<const Expression *, CheckedOperation> *> facts_;
   std::vector<llvm::Value *> arguments_, retained_types_;
   std::vector<llvm::AllocaInst *> storage_, bindings_;
+  std::vector<llvm::AllocaInst *> selections_;
+  const std::vector<CheckedBinding> *binding_layout_ = nullptr;
   std::vector<llvm::AllocaInst *> parameter_values_;
   std::vector<const CheckedInstance *> frame_contexts_;
   llvm::Value *query_environment_ = nullptr;
@@ -92,6 +94,16 @@ class LLVMEmission {
     return entry.CreateAlloca(type, nullptr, name);
   }
   llvm::Value *load(llvm::AllocaInst *place) { return b_.CreateLoad(place->getAllocatedType(), place); }
+  llvm::Value *binding_slot(size_t id) {
+    return selections_.at(id) ? load(selections_[id]) : bindings_.at(id);
+  }
+  llvm::Value *binding_address(size_t id, std::optional<size_t> place) {
+    if (selections_.at(id)) {
+      auto *selected = load(selections_[id]);
+      return binding_layout_->at(id).value_binding ? selected : b_.CreateLoad(b_.getPtrTy(), selected);
+    }
+    return bindings_.at(id) ? load(bindings_[id]) : storage_.at(*place);
+  }
   llvm::Value *environment(llvm::Value *value) {
     return environments_ ? b_.CreateExtractValue(value, environment_field_) : null_pointer();
   }
@@ -765,7 +777,7 @@ class LLVMEmission {
     auto *done = block("try.continue");
     b_.CreateCondBr(b_.CreateICmpEQ(load(exit_), b_.getInt8(0)), done, control_->exit);
     b_.SetInsertPoint(done);
-    if (discard) return empty_scalar();
+    if (read && discard) return empty_scalar();
     if (facts_.front()->at(&expr).type == Type::never) { b_.CreateUnreachable(); return nullptr; }
     auto *result = load(saved);
     if (environments_ && read) value_owners_[result] = saved;
@@ -861,7 +873,7 @@ class LLVMEmission {
     const bool protect = deferred || std::any_of(expr.children.begin() + offset, expr.children.end(),
                                                [](const auto &child) { return !inert_argument(*child); });
     if (expr.kind == Expression::Kind::call && fact.callable_call) {
-      auto *address = bindings_.at(*fact.callable_binding) ? load(bindings_.at(*fact.callable_binding)) : storage_.at(*fact.callable_place);
+      auto *address = binding_address(*fact.callable_binding, fact.callable_place);
       auto *value = b_.CreateLoad(scalar_, checked_address(address, expr, expr.at, true));
       arguments.push_back(protect ? copy_temporary(value, expr.at) : value);
     }
@@ -875,7 +887,7 @@ class LLVMEmission {
   }
   llvm::Value *captured_value(const CheckedOperation &fact) {
     if (fact.callable) return pack(integer(*fact.callable + 1), fact.type);
-    auto *address = bindings_.at(*fact.binding) ? load(bindings_.at(*fact.binding)) : storage_.at(*fact.place);
+    auto *address = binding_address(*fact.binding, fact.place);
     return b_.CreateLoad(scalar_, address);
   }
   llvm::Value *materialize(const CheckedOperation &fact, const Type &type, const Location &at) {
@@ -993,13 +1005,13 @@ class LLVMEmission {
       return pack(llvm::ConstantFP::get(native_type(fact.type), text), fact.type);
     }
     case K::name: {
-      if (projection == Projection::slot) return bindings_.at(*fact.binding);
+      if (projection == Projection::slot) return binding_slot(*fact.binding);
       std::map<std::optional<size_t>, std::vector<size_t>> alternatives;
       for (size_t i = 0; i < facts_.size(); ++i) alternatives[facts_[i]->at(&expr).captured_place].push_back(i);
       auto *address = contextual_value(expr, alternatives, "storage.address", [&](std::optional<size_t> captured) {
         const auto &selected = facts_.front()->at(&expr);
-        auto *address = !bindings_.at(*selected.binding) ? static_cast<llvm::Value *>(storage_.at(*selected.place)) : load(bindings_.at(*selected.binding));
-        if (captured && bindings_.at(*selected.binding))
+        auto *address = binding_address(*selected.binding, selected.place);
+        if (captured && !binding_layout_->at(*selected.binding).value_binding)
           address = b_.CreateSelect(b_.CreateICmpEQ(address, null_pointer()), null_pointer(), storage_.at(*captured));
         return address;
       }, b_.getPtrTy());
@@ -1127,9 +1139,13 @@ class LLVMEmission {
       if (fact.type == Type::never) { b_.CreateUnreachable(); return nullptr; }
       return fold ? load(accumulator) : empty_scalar();
     }
-    case K::alias:
-      emit_expression(*expr.children.front(), Projection::target, true);
+    case K::alias: {
+      const bool selected = fact.binding.has_value();
+      const bool value = !selected || binding_layout_->at(*fact.binding).value_binding;
+      auto *address = emit_expression(*expr.children.front(), value ? Projection::target : Projection::slot, true);
+      if (reachable() && selected) b_.CreateStore(address, selections_.at(*fact.binding));
       return reachable() ? empty_scalar() : nullptr;
+    }
     case K::pointer_group: {
       for (const auto &declaration : expr.children) {
         if (declaration->kind == K::block) {
@@ -1272,8 +1288,11 @@ class LLVMEmission {
       storage_.push_back(place);
       if (place && environments_) initialize_value(place);
     }
-    bindings_.clear();
-    for (const auto &binding : bindings) bindings_.push_back(binding.value_binding || binding.alias ? nullptr : slot(b_.getPtrTy(), "reference.target"));
+    bindings_.clear(); selections_.clear(); binding_layout_ = &bindings;
+    for (const auto &binding : bindings) {
+      bindings_.push_back(binding.value_binding || binding.alias || !binding.selection.empty() ? nullptr : slot(b_.getPtrTy(), "reference.target"));
+      selections_.push_back(binding.selection.empty() ? nullptr : slot(b_.getPtrTy(), "alias.selection"));
+    }
     for (size_t i = 0; i < arguments_.size(); ++i) {
       if (storage[i].borrowed) { b_.CreateStore(view_address(arguments_[i]), bindings_[i]); continue; }
       b_.CreateStore(arguments_[i], storage_[i]);

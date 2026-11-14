@@ -81,7 +81,7 @@ runner.CASES = {
     'duplicate_alias': ('val x=1;var a->x;var a->x;',2,'','duplicate declaration'),
     'loop_requires_explicit_scope': ('val x=1;for(i in 0..1){var a->x;};',2,'','requires a nested per-iteration'),
     'defer_requires_explicit_scope': ('val x=1;defer{var a->x;};',2,'','requires a nested explicit'),
-    'runtime_selected_slot_gap': ('val x=1,y=2;ptr p=x,q=y;var a->if(true){p}else{q};',2,'','alias of a runtime-selected or non-binding storage place'),
+    'runtime_selected_slot': ('val x=1,y=2;ptr p=x,q=y;var a->if(true){p}else{q};',0,'',''),
     'alias_does_not_promote_cell_capture': ('proc run()->void{val x=1;var a->x;func f=func[a]()->const i64{return a;};}run();',2,'','capture of ordinary lexical cells'),
 }
 runner.CASE_ARGUMENTS = {}

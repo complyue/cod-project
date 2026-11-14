@@ -47,7 +47,7 @@ runner.CASES = {
     'owner_remains_fixed': ('func f(flag:bool)->void{val x=1;ptr a=x,b=x;{{val y=2;(if(flag){a}else{b})=y;}};}', 2, '', 'initializer-fixed owner'),
     'ended_slot_still_rejected': ('val x=1;({{ptr p=x;p}})=x;', 2, '', "reference binding's lexical scope has ended"),
     'borrowed_result_is_not_a_slot': ('func get(ref x:i64 in O)->ref i64 in O where {owner O}{return x;}val x=1;get(x)=x;', 2, '', 'reference operation requires a binding slot'),
-    'runtime_slot_alias_remains_separate': ('val x=1,y=2;ptr a=x,b=y;ptr var p->if(true){a}else{b};', 2, '', 'alias of a runtime-selected'),
+    'runtime_slot_alias': ('val x=1,y=2;ptr a=x,b=y;ptr var p->if(true){a}else{b};', 0, '', ''),
 }
 runner.CASE_ARGUMENTS = {}
 runner.EXTRA_SOURCES = [Path(__file__)]

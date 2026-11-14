@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Runtime-selected ordinary aliases
+
+<a id="k-644"></a>
+**K-644 — Selected alias continuity.** Agent assessment: registry r644→645 and source reference265→266 continue D-18r90/H-327/C-75/P-295's once-only ordinary-place aliases, D-14r82/P-327's independent permissions and initialization/owner constraints, D-17r54 cleanup, and D-21r11/D-26r9 shared native coverage under charter §§3.3/6.3/12. A selected alias retains an existing slot without a new user holder, copy or ownership transfer. Overlapping mutations preserve conservative target facts; lexical names do not extend storage lifetime. Acceptance covers both selection paths, cleanup timing, generic recursion, complete callable replacement and exact resource release in both native modes. Mixed kinds, unproved owner alternatives and post-cleanup selected-target initialization remain implementation/proof gaps. Regional fields/arrays, lexical-cell capture, permanent ABI, D-16 fractions and pending designs remain excluded. Prior capability reference: `3ce248dd0b3eb3f677d29c29f32c9fefd8d8a18b:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Outer lexical declaration evidence
 
 <a id="k-643"></a>
