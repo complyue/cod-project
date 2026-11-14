@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026-11-14 — Resize design and mainline synchronization
+
+<a id="k-resize-sync-20261114"></a>
+**K-RESIZE-SYNC-20261114 — Preserve independent mainline continuity.** Agent reconciliation of K-EXPLICIT-GROW-20261114/K-RESIZE-20261114 with K-658 at `c246909498a9abd3c8bf1248f54e82951621624e:design/DesignAuthorityRegistry.md`: registry r666 combines the design branch's r665 scope with mainline r664/source reference280. D-28r3's capability pointer is refreshed; D-14r91/D-17r57/D-22r8 and all pending representation/capacity boundaries remain unchanged. This resolves documentation overlap only and adds no source, build, test or implementation authority.
+
+## 2026-11-14 — Lossless consuming region resize
+
+<a id="h-432"></a>
+**H-432 — Unify capacity growth and shrinkage.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-14 America/Los_Angeles; exact timestamp and personal name unavailable. The user says: “grow(r) 签名不全，或者考虑一个统一的 resize(r, new_cap) 兼顾扩容和缩减容量，当然需要无损，否则该抛异常抛异常”. This proposes replacing the growth-only shape in H-430 with one explicit-capacity resize covering lossless growth and shrinkage, with exceptions when it cannot succeed. It retains H-431 ordinary consuming cleanup; exact capacity units, shrink algorithm, equal-capacity treatment, error mapping and backing protocols are not separately selected by this statement.
+
+<a id="k-resize-20261114"></a>
+**K-RESIZE-20261114 — Resize integration review.** Agent assessment under H-423/H-430–H-432 and charter §§3.3/4.3/6.3/7.1/8/12: D-28r2→3/D-22r7→8 proposes exact payload capacity using D-17 E5 units, offset-preserving shrink down to the retained allocated extent, no implicit compaction, uniform consuming ownership for equal capacity and reuse of existing failure categories. D-14r90→91/D-17r56→57 and registry r664→665 reconcile names/references while continuing existing entry, cleanup and owner rules; new detailed resize/backend scope remains under review. Successful losslessness does not restore consumed input on failure, including rejected shrink. Acceptance covers extent/capacity/alignment/overflow boundaries, graph/value preservation, stale views and exact resource cleanup. D-16 validity and unrelated qualified contracts remain unchanged. Committed baseline: `798867ecc2fe8656598b3a3709a5dd7213e26576:design/RegionalAndLexicalStorageRefactor.md` and the same commit's affected design/registry paths; preceding draft review: K-EXPLICIT-GROW-20261114. No implementation, build or test claim.
+
+## 2026-11-14 — Explicit consuming region growth
+
+<a id="h-430"></a>
+**H-430 — Growth replaces an owned region.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-14 America/Los_Angeles; exact timestamp and personal name unavailable. The user says: “"automatic growth with live references" 这个问题我倾向于是禁止，CoD语言层面不允许 region 的 inplace growth ，只能将 `owned region` ref 传给一个 intrinsic `func grow(r:owned region:R) -> owned region:R where {R}` 得到一个新的， grown region。” This selects the explicit consuming-replacement direction rather than automatic/in-place language growth. Growth size, exact grammar, no-op requests, allocator/backing-file protocol and physical address behavior are not specified.
+
+<a id="h-431"></a>
+**H-431 — Keep ordinary owned-parameter failure cleanup.** Same human/chat/date as H-430. Asked whether failure after grow takes ownership should release the input under the existing consuming-call rule or require recovery of the original region, the user selects “Use ordinary owned-parameter cleanup (Recommended)”. This accepts callee cleanup with no implicit return of input ownership on failure. The subsequent question asking to verify irreversible call transfer and owning return only on success is checked against D-17 E4; it does not supply a new argument-evaluation rule.
+
+<a id="k-explicit-grow-20261114"></a>
+**K-EXPLICIT-GROW-20261114 — Growth and ownership-boundary review.** Agent assessment under H-430/H-431, H-423 routine-consequence delegation and charter §§3.3/4.3/6.3/7.1/8/12: D-22r6→7/D-28r1→2 and P-385 replace automatic/live-borrow growth alternatives with consuming replacement and ordinary failure cleanup. D-14r89→90 distinguishes replacement from H-263 same-region owner forwarding; D-17r55→56 clarifies existing pre-entry preparation, consuming entry and result delivery after successful cleanup. Registry r663→664 preserves unrelated qualifications. Fresh output owner/views and no use of old views after replacement are recorded as direct replacement consequences, not new blanket approval of carriers/ABI. Acceptance covers pre-entry and post-entry failure, abandoned owning results, exact release, graph preservation and rejected old-view uses. Current source reference279 excludes regional values; no grow implementation or test claim. Baseline: `798867ecc2fe8656598b3a3709a5dd7213e26576` at the affected design paths and registry. No source/build/test change.
+
 ## 2026-11-14 — Operator signature obligations
 
 <a id="k-658"></a>

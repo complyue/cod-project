@@ -1,10 +1,10 @@
 # CoD construction, bits ADTs and region acquisition
 
-Design revision: 6 · Recorded: 2026-11-14 · Status: discussion draft with confirmed requirements; RHS normalization and explicit-region capacity proposals under review; whole-document approval pending; implementation incomplete.
+Design revision: 8 · Recorded: 2026-11-14 · Status: discussion draft with confirmed requirements; consuming resize direction recorded; RHS normalization and capacity/backend details under review; whole-document approval pending; implementation incomplete.
 
 ## Design authority
 
-- **Registry / coverage:** [D-22](DesignAuthorityRegistry.md#d-22), revision6. H-383–H-386 confirms the scoped construction requirements; H-425–H-427 develops RHS normalization and intentional lifetime separation without move semantics. H-428 confirms allocation effects without language checkpoints/rewind. [H-429](../CHANGELOG.md#h-429) establishes distinct regional/lexical storage directions; [D-28](RegionalAndLexicalStorageRefactor.md) owns that refactoring and the proposed C++ external_ptr naming. Detailed RHS and explicit-region capacity proposals remain under review; P-348–P-350 and whole-document qualification remain pending-human. [K-STORAGE-SPLIT-20261114](../CHANGELOG.md#k-storage-split-20261114) records the current boundary.
+- **Registry / coverage:** [D-22](DesignAuthorityRegistry.md#d-22), revision8. H-383–H-386 confirms the scoped construction requirements; H-425–H-427 develops RHS normalization and intentional lifetime separation without move semantics. H-428 confirms allocation effects without language checkpoints/rewind. [H-429](../CHANGELOG.md#h-429) establishes distinct regional/lexical storage directions; [D-28](RegionalAndLexicalStorageRefactor.md) owns that refactoring and the proposed C++ external_ptr naming. [H-430](../CHANGELOG.md#h-430) rules out automatic/in-place language growth in favor of consuming replacement; [H-431](../CHANGELOG.md#h-431) selects ordinary owned-parameter failure cleanup. H-432 proposes lossless resize(r, new_cap) for growth and shrinkage. Detailed RHS, capacity/error mapping and resize backend protocols remain under review; P-348–P-350 and whole-document qualification remain pending-human. [K-RESIZE-20261114](../CHANGELOG.md#k-resize-20261114) records the current boundary.
 - **Candidate value path:** C-39/C-65/C-72 → C-01/C-06 (P-348) makes storage, access and lifetime intent explicit and checkable in readable source, including distinct lexical/regional construction and explicit initialization effects; C-09/C-54 → C-05 (P-349) separates persistent data from acquisition responsibility and preserves inspectable preparation effects. D-22 organizes these responsibilities through P-350. Charter §§2–5/§7–8 governs those boundaries; §§6/12 requires practical native execution and measured costs. These scoped paths do not qualify the wider ownership or DBMR designs.
 - **Dependencies:** P-351: D-01 physical allocation/relative references; D-14 owners, capabilities, fields and qualifiers; D-23 scalar value/view reception; D-17 initialization, failure and cleanup; D-10/D-15/D-18/D-21 dynamic context, values and native dispatch; D-16 bits validity, layout and numeric compatibility. Dependency edges grant no authority.
 - **Invariants / non-goals:** no ordinary reference ownership, per-object cleanup, nonregional graph allocation, cross-owner stored edge, implicit graph copy/move, lifetime extension or native callable environment in a regional field. Lexical scopes are not backed by implicit regions; D-28 separately reviews direct/global lexical reference representation and any future lexical non-bits layout. Regional C++ types remain region-only and noncopyable. Actual-owner unions, abstract-result RTTI, fraction execution, pure/TCO and the compiler pilot remain separate.
@@ -69,7 +69,7 @@ Construction must preserve initializer order and effects and publish only a vali
 
 ## Unified lexical and regional initialization — proposal
 
-The proposed common model is: select an owner with construction access, establish storage, initialize it, and establish the completed group bindings. Allocation is an allowed initialization side effect under H-428. P-348/P-350's candidate value is explicit allocation and lifetime policy in readable source, while charter §§3.3/4.3/6.3/7.2 requires preserved sharing, effects, access and failure behavior. H-426/H-427 proposes new RHS policies; affected D-14/D-23 reception and explicit D-01 region-growth extensions need the scoped review below. D-28 owns the distinct storage/representation refactoring. H-428 preserves D-17's separation of initialization effects from whole-region cleanup. Source examples illustrate design, not current compiler acceptance.
+The proposed common model is: select an owner with construction access, establish storage, initialize it, and establish the completed group bindings. Allocation is an allowed initialization side effect under H-428. P-348/P-350's candidate value is explicit allocation and lifetime policy in readable source, while charter §§3.3/4.3/6.3/7.2 requires preserved sharing, effects, access and failure behavior. H-426/H-427 proposes new RHS policies; affected D-14/D-23 reception and explicit D-01 region-resize extensions need the scoped review below. D-28 owns the distinct storage/representation refactoring. H-428 preserves D-17's separation of initialization effects from whole-region cleanup. Source examples illustrate design, not current compiler acceptance.
 
 ### RHS categories, grouping and value normalization
 
@@ -141,21 +141,21 @@ Applications and third-party libraries may provide allocation-undo frameworks wi
 
 Construction can share an owner/access/initialization model across those domains without sharing their allocator or reference encoding. Current full-scope and ordinary-grouping boundaries retain D-17. Lexical bits construction remains available; reference-bearing lexical ADTs need D-28's separate layout/placement decision. No scope-region resource, lexical region-capacity hint, automatic capture permission or new outer-selector syntax is implied.
 
-### Explicit-region growth policy and capacity hints
+### Explicit consuming region resize
 
-For explicit region construction, the proposal under review is growable capacity by default; an explicit fixed-capacity policy opts out. A supplied capacity is an initial sizing hint in the growable mode, not a proof of sufficiency or a hard budget. Fixed mode must define its enforceable payload limit, alignment/header accounting and unchecked RegionCapacityExceeded behavior. Growth failure remains an unchecked allocation failure and leaves existing valid targets usable; growth creates no optional/null result or automatic retry of user initializer effects.
+H-430 selects explicit replacement rather than automatic or in-place capacity growth at the CoD language level. Ordinary allocation uses the region's established capacity and retains D-17's unchecked capacity-exhaustion behavior. Initial capacity is not permission to grow implicitly or a promise that failed initializers will be retried. Lexical scopes have no region-capacity policy.
 
-A user-supplied region hint affects allocation policy without changing type, actual owner or access. Exact syntax, units/rounding, whether a hint guarantees an initial reservation, growth factor, hard limits and diagnostics remain open. A hint is neither a guaranteed upper bound nor permission to change program results. Lexical scopes have no region-capacity policy. D-28 tracks the interaction between regional growth and live external/direct views independently of lexical storage allocation.
+H-432 proposes a unified intrinsic with an explicit capacity argument. The current candidate shape is:
 
-Owner identity must remain stable if growth changes the physical base. Stored self-relative edges survive uniform whole-region relocation; external native addresses and references to the old region header do not. The current `global_ptr` holds a C++ reference to that header, so it does not itself provide live relocation through a stable owner descriptor. Existing DBMR opening/preparation can remap before returning its handle; this is not evidence for resizing under live borrows.
+```text
+func resize(r:owned region:R, new_cap:u64) -> owned region:R where {R}
+```
 
-| Candidate implementation | Consequence to assess |
-| --- | --- |
-| Reserve contiguous virtual address space, commit backing as needed | Can keep live addresses stable within its reservation; address-space limits and exhaustion policy need definition. |
-| Relocate the complete region with a stable owner/base mechanism | Preserve offsets and reload derived addresses after possible growth. Calls, captures, suspended frames, cleanup and native borrowed addresses must respect relocation boundaries. No permanent reference ABI is implied. |
-| Discontiguous chunks | Independent chunk relocation does not preserve the current self-relative whole-image contract. It requires a separate encoding/mapping design, not an assumed drop-in allocator change. |
+[The resize contract in D-28](RegionalAndLexicalStorageRefactor.md#explicit-resize-consumes-and-replaces-the-region) owns the replacement/lifetime boundary. The input's cleanup responsibility transfers at callee entry after argument evaluation/conversion. Success returns ownership of the resized replacement; old direct/external views do not follow it. H-431 explicitly retains ordinary cleanup if failure occurs after entry: release what the callee still owns, with no input ownership restored to the caller. Failure before entry has not transferred the input merely because a call expression began evaluating.
 
-Physical growth may move bytes while preserving the identities and relative graph. This introduces no CoD move expression or per-object move operation, and zero per-edge relocation work is not a promise of zero byte-copy cost. Growth under native address borrowing, reentrant calls, concurrent access or shared DBMR mappings needs an explicit stability/coordination policy. A capacity hint alone cannot establish it.
+The result preserves root type and graph contents/sharing/cycles without exposing two independently owned copies or adding CoD object move/copy semantics. D-28 recommends new_cap as an exact payload byte budget under D-17 E5, lossless shrink only down to the retained allocated extent, unchanged offsets and a uniform consuming boundary even for equal capacity. Too-small requests throw instead of truncating or compacting; post-entry rejection retains H-431 cleanup, not input preservation. Exact source grammar, capacity/error integration and backend/mapping/file protocols remain under review. Physical relocation and allocator strategy must satisfy the replacement contract; no observable stable-address or automatic-borrow-refresh promise follows.
+
+Acquisition-time file preparation and independently shared mappings retain separate DBMR protocols. An owned handle conveys cleanup responsibility, not proof that no other mapping or actor can observe the backing file. The explicit intrinsic does not silently authorize shared-file resize, flush/durability behavior, allocator switching or read-only access escalation.
 
 ### TLS and numeric boundaries
 
@@ -171,7 +171,7 @@ Migrate live fixtures, generated programs and examples together, and diagnose un
 
 ## DBMR alternatives and protocol work
 
-These are comparison candidates. Both preserve confirmed result-only constness and keep acquisition, live resize, compaction and snapshot publication distinct.
+These are comparison candidates. Both preserve confirmed result-only constness and keep acquisition preparation, explicit consuming resize, compaction and snapshot publication distinct.
 
 | Criterion | A: clauses on acquisition | B: typed acquisition request |
 | --- | --- | --- |
@@ -194,7 +194,7 @@ The operation matrix below applies to either candidate and is still proposed. A 
 | Expansion/trim request already satisfied | Specify exact-size versus minimum-capacity semantics, total/payload/free-byte units, limits and idempotence; do not inherit the C++ reserve-free API accidentally. |
 | Trim intersects occupied storage | Reject. Tail trim preserves retained offsets and is not compaction. Validate under the selected coordination boundary. |
 | Partial acquisition/preparation failure | Release every acquired handle/mapping exactly once; specify remaining file contents/extent. File rollback is not supplied by region cleanup. |
-| Shared mapping/concurrent resize | Define admissible access and coordination. Shared mapping supplies neither shared ownership, locking nor transactions; relative offsets alone do not make concurrent unmapping safe. |
+| Shared mapping and preparation/replacement | Define admissible access and coordination. H-430 excludes ordinary in-place language growth; acquisition preparation or a consuming replacement still needs a backing-file/shared-mapping protocol. Shared mapping supplies neither ownership exclusivity, locking nor transactions. |
 | Release/flush failure | Define explicit observable failure and cleanup behavior; closing an acquisition does not delete data or guarantee durable publication. |
 
 Before final R3 selection, compare a concrete capacity/failure/coordination contract and its costs against the existing primitives. Include a state-by-state failure table, access requirements and publication point. Existing snapshot save/replace (C-78) and compatibility-marker planning (C-77) remain separate inputs, not completed protocols.
@@ -205,7 +205,7 @@ The [source capability reference](../tests/cod/language/README.md) owns current 
 
 [DBMR](../include/shilos/dbmr.hh) acquisition must be assessed against the proposed exclusive creation, validation, capacity, access, failure and coordination contract. Existing storage primitives do not establish full graph/schema validation, failure atomicity or durable publication. Measurements must distinguish counted operations from observed latency and resource totals.
 
-[K-STORAGE-SPLIT-20261114](../CHANGELOG.md#k-storage-split-20261114) records the current proposal review; whole-file and unresolved construction/acquisition qualification remain pending-human.
+[K-RESIZE-20261114](../CHANGELOG.md#k-resize-20261114) records the current proposal review; whole-file and unresolved construction/acquisition qualification remain pending-human.
 
 ## Acceptance and decisions before implementation
 
@@ -215,7 +215,7 @@ The [source capability reference](../tests/cod/language/README.md) owns current 
 | Construction | Explicit owner agrees with receiver; equal root type never hides distinct owners; selected inference requires usable capability; existing borrows retain provenance; once-only ordered initialization, premature-read rejection and partial-failure cleanup. |
 | Unified initialization proposal | Compare bare places, grouped val results, readonly bits, retained mutable/non-bits views and null across declarations/fields. Check normalized conditional identity, live source reads before cleanup, grouping/dispatch effects, const-binding separation, explicit readonly aliases and unchanged later assignment. |
 | Initialization effects | A later initializer failure preserves earlier valid publications and allocations in an existing live region; incomplete bindings/readable objects are not exposed. Preserve source order, exact cleanup for failed whole-region acquisition, nested effects and existing defer/completion rules. No implicit allocation or graph rollback. |
-| Distinct storage and explicit-region growth | Use D-28 representation/placement acceptance; no implicit scope-region or unqualified lexical graph layout. Cover region hint/fixed limits, alignment, live views across growth, native borrowing, failure preserving old targets and TLS restrictions. |
+| Distinct storage and explicit resize | Use D-28 placement/representation acceptance. Cover grow/shrink/equal-capacity replacement, lossless retained extent, pre-entry failure, consuming entry, old-view invalidation, fresh result views, post-entry rejection/failure cleanup and abandoned owning results. No automatic growth, ownership restoration or scope-region backing; capacity/backend details need their own acceptance. |
 | Composition | Aggregate arguments/results through native recursion, callable captures/dynamic bindings, deferred execution and loops preserve value/view semantics and existing ownership transfer timing. |
 | File acquisition | Selected source/access/capacity operation matrix, invalid image rejection, exact handle/mapping release, relocation preserving sharing/cycles and observable preparation effects before const publication. |
 | Costs | Compile time, generated text/bitcode, stack/backing bytes, region/mapping count and peak extent; no accidental per-object cleanup or graph copy. No numeric target is assumed. |
@@ -229,7 +229,7 @@ Contextual owner inference and the coordinated migration direction are recorded 
 - **Aggregate values and native calls:** define concrete product/sum representation, sufficient generic bits evidence, initialization granularity and parameter/result transport while preserving nominal identity, relative graphs, complete callable values and fraction validity. Distinguish internal compiler choices from observable layout or validity commitments.
 - **RHS normalization:** complete bare-place/grouped-value semantics, readonly alias reception, non-bits grouping and operator/parameter interactions. Conditional bits normalize to a value; no implicit move or graph copy follows.
 - **Initialization integration:** preserve H-428 allowed allocation effects and D-17 cleanup while completing precise RHS/name/order checking. No checkpoint or publication-rollback choice remains open at the language level.
-- **Storage refactoring and explicit-region growth:** D-28 owns lexical/regional reference representation, any lexical non-bits layout and external_ptr naming. Region hint/fixed-capacity, live-address stability and DBMR protocols remain separate unselected policies.
+- **Storage refactoring and explicit-region resize:** D-28 owns lexical/regional reference representation, any lexical non-bits layout and external_ptr naming. H-430–H-432 supplies explicit consuming resize with lossless success and ordinary failure cleanup; review the capacity/error mapping and DBMR backing protocols.
 - **Persistent acquisition:** complete the source/access/capacity/failure/coordination matrix and compare its implementations before choosing the DBMR surface. Result-only constness is already confirmed; mapping protection, capacity units, partial effects, validation and release/durability outcomes remain explicit topics.
 
 The candidate value rationale, constraints, non-goals and acceptance remain part of the eventual whole-document review. No separate approval of internal relationship numbers is requested.

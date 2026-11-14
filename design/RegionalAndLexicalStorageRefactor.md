@@ -1,14 +1,14 @@
 # Regional and lexical storage: reference-model refactoring
 
-Design revision: 1 · Recorded: 2026-11-14 · Status: refactoring direction and dedicated tracking authorized; detailed contracts, naming and implementation plan pending-human.
+Design revision: 3 · Recorded: 2026-11-14 · Status: refactoring direction and dedicated tracking authorized; detailed contracts, naming and implementation plan pending-human.
 
 ## Design authority
 
-- **Registry / scope:** [D-28](DesignAuthorityRegistry.md#d-28), r1, all sections. [H-429](../CHANGELOG.md#h-429) withdraws region-backed lexical storage and directs regional references toward relative/local representation and lexical references toward direct/global representation. It requests this dedicated refactoring document and proposes considering the C++ `global_ptr` → `external_ptr` rename. This is not approval of every layout, source form, ABI or migration choice below.
+- **Registry / scope:** [D-28](DesignAuthorityRegistry.md#d-28), r3, all sections. [H-429](../CHANGELOG.md#h-429) withdraws region-backed lexical storage and directs regional references toward relative/local representation and lexical references toward direct/global representation. It requests this dedicated refactoring document and proposes considering the C++ `global_ptr` → `external_ptr` rename. H-430/P-385 selects explicit consuming replacement instead of automatic/in-place language growth; H-431 selects ordinary owned-parameter failure cleanup. H-432 proposes a single resize(r, new_cap) for lossless growth/shrink, with exceptions when it cannot succeed. These scoped directions do not approve every layout, source form, ABI or migration choice below.
 - **Candidate value path:** C-91/P-381 derives from C-39/C-65 and C-01/C-06: distinguish relocatable regional graphs from lexical execution storage while keeping target identity, access and lifetime explicit. Charter §§2/3.3/4.3/6.3/7.1/8/12 supports that rationale. P-383 organizes this document; both paths remain pending-human beyond H-429's stated direction.
 - **Dependencies:** P-384 links D-01 physical storage, D-07 nominal types, D-10/D-15 TLS/worlds, D-14 owner/access/initialization, D-16 numeric validity, D-17 completion, D-18 callable values/captures, D-21/D-26 native transport and D-22/D-23/D-24 construction/result contracts. These dependencies confer no new authority.
 - **Invariants / non-goals:** statically unique target owners; no lifetime extension, access escalation, owner unions, CoD move semantics, implicit graph copy or allocation rollback. Regional storage preserves relative edges and zero per-edge relocation work. Intrinsic region cleanup and assignment/value semantics retain their separate rules. No general heap allocation, lexical non-bits layout, new capture permission or permanent ABI is selected.
-- **Acceptance / baseline:** H-429's current project-user messages are the human baseline; exact timestamp/personal identity are unavailable. [K-STORAGE-SPLIT-20261114](../CHANGELOG.md#k-storage-split-20261114) records charter/dependency review and the current draft. Acceptance requires the composed cases below, a reconciled source/design inventory and measured native costs. No implementation, build or test evidence is claimed here.
+- **Acceptance / baseline:** H-429's current project-user messages are the human baseline; exact timestamp/personal identity are unavailable. [K-RESIZE-20261114](../CHANGELOG.md#k-resize-20261114) records the resize/capacity review, preserving the existing charter/dependency boundaries. Acceptance requires the composed cases below, a reconciled source/design inventory and measured native costs. No implementation, build or test evidence is claimed here.
 
 ## Problem and current direction
 
@@ -69,6 +69,68 @@ The following semantic dimensions remain separate throughout checking and loweri
 
 No representation choice weakens H-417 unique-owner inference. A lexical direct view still cannot choose between different target owners at runtime without an independently admitted value operation; a regional edge still cannot point outside its owner. H-428 allows allocation effects on initialization failure, with no automatic rewind. H-426/H-427 RHS normalization remains in D-22; selecting a carrier neither approves that pending copy policy nor introduces move semantics.
 
+## Explicit resize consumes and replaces the region
+
+H-430/H-431 establishes explicit consuming replacement and ordinary owned-parameter cleanup. H-432 proposes one lossless intrinsic for both growth and shrinkage. The current candidate signature is:
+
+```text
+func resize(r:owned region:R, new_cap:u64) -> owned region:R where {R}
+```
+
+The schematic signature makes the requested capacity explicit; exact generic/parameter spelling remains subject to source integration. Ordinary allocation cannot grow a region automatically, and resize does not preserve an old language region with live direct/external views. It consumes cleanup responsibility for the input and returns a replacement on success. This is a design contract under review, not current parser/compiler support.
+
+The direct lifetime consequence of replacement is that the old region's lifetime ends and the output has a new actual owner identity. Root type R is preserved, but type equality does not equate the old and new owners. Existing references, aliases and captured/deferred views into the old region cannot be used after replacement or refreshed merely by receiving the output. A reference binding whose owner is fixed to the input cannot be rebound to the output; callers obtain fresh views instead.
+
+```text
+# r is an owned region with root type Root.
+ref before = root(r);
+# Reads/writes through before are valid while r remains live.
+owned region resized:Root <- resize(r, 65536u64);
+ref after = root(resized);  # Fresh view associated with the returned owner.
+# root(r) rejects: r was consumed.
+# Using before after resize rejects: its target owner ended.
+```
+
+This is distinct from D-14/H-263's ordinary local ownership transfer, which may keep the same region and existing views live under a different cleanup holder. An owned-input/owned-output signature alone does not imply replacement: resize's intrinsic contract supplies that additional fact. Nor does owned mean no borrows exist. The checker must reject surviving uses through aliases, captures, TLS, prepared deferred work or other admitted access paths. A local reference name need not vanish lexically if it is no longer used; no blanket ban on ever taking a borrow before resize follows. Unproved overlapping access is not made safe by a consuming parameter annotation.
+
+The retained regional graph preserves payload, sharing and cycles with relative edges intact under uniform relocation. This is whole-region replacement, with no per-object CoD move/copy operation, implicit graph duplication or per-edge fixup. Runtime base-address equality is not owner identity; no exact physical address or allocator strategy is selected. Root/target access cannot become more permissive through resize.
+
+### Requested capacity and lossless shrinkage
+
+The recommended capacity convention reuses D-17 E5: new_cap is the exact usable payload byte budget, including the root, payload allocations and their alignment consumption, excluding the fixed region header. It is neither an increment nor a requested amount of free space. Physical page/allocation rounding may reserve more bytes without increasing that language-visible budget. Header addition, representability and alignment arithmetic must be checked.
+
+Let C be the current payload capacity and E the end of the retained allocated payload extent, measured from the payload start. Under the current bump allocator, E corresponds to occupation minus the region-header size. It includes alignment gaps and previously allocated storage; it is not the sum of root-reachable live object sizes. A separately specified reclamation policy may establish a smaller retained extent, but resize does not infer one by tracing or inspecting payloads.
+
+| Request | Recommended outcome |
+| --- | --- |
+| new_cap > C, representable and supported | Return a larger-capacity replacement, preserving retained contents and offsets. New free storage is not implicitly initialized. |
+| E <= new_cap < C | Trim only unused tail capacity; return a smaller-capacity replacement. |
+| new_cap == C | Retain the same consuming/result-owner boundary. Backend work may be elided if the contract is preserved; old views do not regain validity based on a runtime size comparison. |
+| new_cap < E | Throw rather than truncate allocated storage, silently clamp capacity or compact objects. |
+| Invalid/unrepresentable request or provider failure | Throw under the selected failure category; no partial or nullable successful region result. |
+
+Losslessness preserves initialized payloads, validity, root/concrete-type evidence, object offsets, sharing and cycles. The region's capacity metadata changes; no guarantee of copying uninitialized bytes as readable values is implied. Shrinkage does not discard an allocated object merely because it is unreachable from the root. It does not pack holes, rewrite stored offsets or invoke object constructors/copy/move operations. Compaction and application-managed reclamation require their own explicit contracts. A zero request is not an alternate release operation and cannot succeed when the root/retained extent does not fit.
+
+The proposed exception mapping reuses D-17 categories: InvalidCapacity for invalid/unrepresentable requests or size arithmetic; RegionCapacityExceeded when a representable requested budget cannot contain the retained extent; OutOfMemory when the provider cannot supply required backing. Capacity checks inside resize occur after consuming entry. H-431 therefore applies even to a rejected shrink: input ownership is not restored and callee cleanup releases what it still owns. Successful resize is lossless; failure does not promise preservation of the input region. Argument computation/conversion that fails before entry retains the separate E4 rule. Backend/file failures still require a selected resource protocol.
+
+This exact-capacity, offset-preserving shrink and equal-capacity rule is the agent's concrete integration recommendation under H-432 and H-423, with D-17's established capacity units retained. It is not an independently approved compaction algorithm, new exception taxonomy or storage backend.
+
+### Entry, failure and returned ownership
+
+H-431 chooses D-17 E4 exactly; there is no resize-specific ownership recovery exception:
+
+| Boundary / outcome | Input ownership | Returned ownership |
+| --- | --- | --- |
+| Argument evaluation or conversion fails before entry | This call has not consumed an existing named input; earlier explicit argument effects remain. | None. |
+| Callee entry | Caller binding is consumed; callee receives cleanup responsibility. | None yet. |
+| Validation/allocation/processing fails after entry | Callee cleans up resources it still owns, including the input or a prepared replacement as applicable. Input ownership is not restored to the caller. | None. |
+| Normal result selected, but required cleanup fails | The selected owning result is abandoned and released exactly once. | None. |
+| Successful completion including required cleanup | Old input has been replaced/retired under resize's contract. | Caller receives exactly one owning result. |
+
+A catch does not undo the transfer or make the consumed input name usable. Choosing an owning return inside the callee does not deliver it before finally/deferred cleanup completes. If caller-side receiving work later fails, normal temporary/local result cleanup applies; that is not restoration of input ownership. A successful ordinary consuming function may deliberately return the same region, but that is an explicit owning result rather than rollback; resize supplies the stronger replacement rule.
+
+The contract is semantic. The current [source capability reference](../tests/cod/language/README.md) excludes regional values from implemented coverage; existing historical fixtures do not establish current resize support. Implementation acceptance must exercise the complete entry/result/cleanup boundaries with exact resource accounting.
+
 ## Material decisions still required
 
 | Decision | Alternatives / consequence | Current boundary |
@@ -76,7 +138,7 @@ No representation choice weakens H-417 unique-owner inference. A lexical direct 
 | Lexical ADTs with reference fields | Permit a distinct direct-reference layout, provide representation-dependent layouts for one nominal ADT, or retain regional-only placement for such ADTs. Layout-polymorphic access would affect field offsets, generic calls and actual-type evidence. | H-429 withdraws scope-region backing; it does not by itself choose a lexical non-bits layout or graph-copy semantics. |
 | Direct/global carrier | Define when a plain address is sufficient and where owner/base/type evidence must be retained. | No universal fat pointer, raw-pointer ABI or new intrinsic type is selected. |
 | Nominal type and placement | A logical field shape may need separate representation facts. Decide whether placement is a type constraint, a view/layout property or an explicit distinct type. | Physical similarity is not nominal identity; existing bits and regional graph contracts remain. |
-| Borrowed views across explicit region growth | Stable addresses, pinned borrows or an explicitly refreshed owner/base mechanism have different cost and API consequences. | Lexical direct views into a region still require validity if that explicit region grows or relocates. Lexical storage has no region-capacity hint. |
+| Resize capacity/backing protocol | Review exact payload budget, retained-extent shrink bounds, equal-capacity handling and existing-error mapping above; specify backend and shared-mapping behavior. | H-430–H-432 retains consuming replacement, lossless success and ordinary failure cleanup. Old views never follow the replacement; no automatic growth or implicit compaction. |
 | Cross-owner references in a future lexical aggregate | Direct representation can encode such addresses, but field-wise owner/lifetime relationships must be specified before admitting them. | Do not apply an owner union or lift regional same-owner edges by implication. |
 | Naming and migration | `external_ptr` is the recommended C++ handle name; lexical direct/global terminology must not promise global lifetime or persistence. | Source/API migration remains planned; no blanket rename changes semantics. |
 
@@ -106,7 +168,7 @@ This is planning authorization, not an implementation/build/test request. No boo
 3. Same-owner runtime target selection succeeds; ambiguous owner joins, expired scopes, invalid source cleanup, cross-owner stored edges and readonly escalation reject.
 4. Calls, returns, generic/abstract dispatch, closure captures, TLS shadow restoration and deferred argument preparation preserve the selected target/slot and required concrete/layout evidence.
 5. Failure after a valid publication into an existing region leaves that target live; failed whole-region acquisition releases exactly once. No allocation checkpoint, CoD move or implicit graph copy appears.
-6. Region relocation preserves all stored edges without per-edge rewriting. The chosen live-view stability policy is separately exercised at every admitted growth/native-borrow boundary.
+6. Resize grows or trims an unused tail without changing retained payload/offsets/sharing/cycles; test E-1, E, C and C+1 capacity boundaries, alignment/header accounting, overflow and allocation failure. Equal-capacity requests retain consuming/result-owner semantics. Reject lossy truncation, implicit compaction and old-view use; fresh output views succeed. Cover pre-entry failure, post-entry rejection/failure and abandoned owning results with exact release and no implicit ownership restoration or automatic/in-place growth.
 7. Any selected lexical non-bits support has explicit layout, construction, lifetime, cross-owner-field and native-call acceptance; no support claim follows merely from renaming a C++ handle.
 8. Qualified source/API migration updates declarations, helpers, YAML, fixtures, instructions and current docs together. Old spellings remain only where they describe still-current external interfaces or immutable changelog evidence.
 9. Measure reference representation, emitted native code, allocation and access costs for representative lexical/region paths. A new name or more explicit type model is not itself a performance result.

@@ -1,6 +1,6 @@
 # CoD regional ownership: syntax, semantics and use
 
-Design revision: 89 · Recorded: 2026-11-14 · Status: design draft with scoped confirmed requirements.
+Design revision: 91 · Recorded: 2026-11-14 · Status: design draft with scoped confirmed requirements.
 
 ## Design authority
 
@@ -9,7 +9,7 @@ Design revision: 89 · Recorded: 2026-11-14 · Status: design draft with scoped 
 - **Contract boundary:** Preserve actual fixed owners, non-escalating access, initialization and cleanup. D-17/D-18 supplies completion/callable contracts; D-22 owns new construction/aggregates; D-28 owns H-429 relative/local regional versus direct/global lexical representation review. Scope-region backing is not the selected model. Owner-alternative ref/ptr joins are rejected under H-417. General transport, runtime lifetime machinery and whole-file qualification remain outside this scoped contract.
 - **Invariants / non-goals:** Regional objects remain region-only and relocatable without copy/move. Borrowing cannot extend lifetime or duplicate ownership. Functions cannot access dynamic bindings or call procedures. No per-object owner, runtime borrow registry, immutable snapshot or SNN policy is introduced.
 - **Acceptance:** Validate complete construction, edit, transfer and cleanup workflows with exact release, definite initialization and invalid-access rejection. Open construction and transport choices remain separate. Current compiler availability is recorded in the [source capability reference](../tests/cod/language/README.md).
-- **Evidence / continuity:** [H-420](../CHANGELOG.md#h-420) authorizes integration and compiler development under these confirmed rules. [K-STORAGE-SPLIT-20261114](../CHANGELOG.md#k-storage-split-20261114) covers r88→89 linkage to H-428 initialization effects and D-28 storage review; current capability references and unrelated confirmed rules retain their scope. Human baselines remain the H records identified by the registry: null states its owner through the receiving declaration or an explicit literal qualifier; here and named owners are supported design forms, with no outer syntax. H-417's static unique-owner rule remains. H-413–H-416 scalar/initializer choices and existing assignment, access, cleanup and regional contracts retain their baselines. The call-site matrices in D-23 are acceptance requirements, not current implementation evidence.
+- **Evidence / continuity:** [H-420](../CHANGELOG.md#h-420) authorizes integration and compiler development under these confirmed rules. [K-RESIZE-20261114](../CHANGELOG.md#k-resize-20261114) covers r90→91 consuming-resize integration under H-430–H-432, preserving H-428 effects, D-28 storage review and unrelated confirmed rules. Human baselines remain the H records identified by the registry: null states its owner through the receiving declaration or an explicit literal qualifier; here and named owners are supported design forms, with no outer syntax. H-417's static unique-owner rule remains. H-413–H-416 scalar/initializer choices and existing assignment, access, cleanup and regional contracts retain their baselines. The call-site matrices in D-23 are acceptance requirements, not current implementation evidence.
 
 ## Ref and ptr declaration direction
 
@@ -412,9 +412,15 @@ view.sequence <- 9u64; # Valid while @state's owner remains alive and accessible
 # root(packet) is invalid: the original owning declaration was consumed.
 ```
 
-H-263 selects this behavior. Moving a whole-region handle changes cleanup responsibility, not the region instance or its internal references. The compiler must associate view validity with that actual region and the new owner's lifetime/access. It must not blindly attach every borrow to the original variable's availability. Conversely, consuming an outer owner into an inner scope can shorten the region's remaining lifetime: views may be used within the inner owning scope, but not after it ends. Dynamic shadowing alone does not end a hidden owner's lifetime; H-180's capture/shadow rule remains unchanged.
+H-263 selects this behavior. Transferring a whole-region handle changes cleanup responsibility, not the region instance or its internal references. The compiler must associate view validity with that actual region and the new owner's lifetime/access. It must not blindly attach every borrow to the original variable's availability. Conversely, consuming an outer owner into an inner scope can shorten the region's remaining lifetime: views may be used within the inner owning scope, but not after it ends. Dynamic shadowing alone does not end a hidden owner's lifetime; H-180's capture/shadow rule remains unchanged.
 
 The analysis may reject uncertain paths but cannot accept use after the actual owner ends. Branches, argument evaluation and nested calls must preserve this distinction. This does not add a runtime borrow registry, reference count or per-pointer generation field, nor does it settle how revoked sender views behave if a send error later returns the same region.
+
+### Explicit consuming resize
+
+H-430 directs capacity growth through consuming replacement; H-432 proposes resize(r, new_cap) for lossless growth and shrinkage. Ordinary automatic/in-place growth is not a CoD operation. [D-28](RegionalAndLexicalStorageRefactor.md#explicit-resize-consumes-and-replaces-the-region) states the replacement boundary and proposed capacity rules, separately from H-263's same-region local transfer. The original owner binding is consumed at callee entry, and successful replacement ends the old target lifetime: direct/external references do not follow the output. Fresh views must be obtained from the returned owner; the root type's equality does not equate owner identities.
+
+H-431 retains D-17 E4: argument evaluation/conversion precedes entry; after entry, failure releases resources still owned by the callee without restoring input ownership. An owning result is delivered only after successful completion of required cleanup. Catching a failure cannot undo the transfer. General same-region ownership transfer still preserves borrows when their actual region remains alive; grow has the stronger replacement contract. Size policy, no-op requests and backend/mapping protocols remain pending, and no current implementation support is claimed.
 
 ### Construction-to-installation walkthrough
 
