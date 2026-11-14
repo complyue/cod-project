@@ -446,9 +446,16 @@ class LLVMEmission {
         if (value.type != choice.inputs.front()) continue;
         auto *selected = block("callable.selected"); select->addCase(integer(id + 1), selected);
         b_.SetInsertPoint(selected);
-        const auto method = program_->instances[value.instance].method;
+        const auto &instance = program_->instances[value.instance];
+        const auto method = instance.method;
         auto *target = specialize_ ? specialized_[value.instance] : general_[method];
-        auto *result = native_call(target, method, {prepared.begin() + 1, prepared.end()}, environment(prepared.front()), value.instance);
+        std::vector<llvm::Value *> arguments{prepared.begin() + 1, prepared.end()};
+        for (size_t i = 0; i < arguments.size(); ++i) if (value.type.parameters[i] != instance.arguments[i]) {
+          auto *original = arguments[i];
+          arguments[i] = convert_value(original, value.type.parameters[i], instance.arguments[i]);
+          if (const auto owned = value_owners_.find(original); owned != value_owners_.end()) value_owners_[arguments[i]] = owned->second;
+        }
+        auto *result = native_call(target, method, std::move(arguments), environment(prepared.front()), value.instance);
         incoming.emplace_back(result, b_.GetInsertBlock()); b_.CreateBr(join);
       }
       b_.SetInsertPoint(invalid);

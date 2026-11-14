@@ -52,7 +52,7 @@ runner.CASES = {
  'borrowed_operator_checks_fresh_value':(OP+'1+2;',2,'','borrowed arguments require existing target views'),
  'borrowed_operator_checks_owner':(OP+'{{val x=1;x}}+2;',2,'','owner has ended'),
  'borrowed_operator_checks_ref_null':(NPE+OP+'func test(ptr x:i64 in O)->const i64 throws NullPointerException where {owner O}{return x+2;}',2,'','ref argument requires a proven non-null target'),
- 'unknown_guarded_operand_is_explicit_gap':(PICK+'val x=1;pick(x,try{false}catch(e){false});',2,'','different argument preparation contracts'),
+ 'guarded_operand_type':(IO+PICK+'val x=1;behave @print(pick(x,try{false}catch(e){false}));',0,'2\n',''),
  'unknown_binding_effects_do_not_use_outer_name':(PICK+'val x=1,tag=0;{{pick({try{val tag=false;}catch(e){};x},tag);}};',2,'','different argument preparation contracts'),
  'ambiguous_passing_modes_remain_ambiguous':('func pick(ref x:i64 in O,y:T)->const i64 where {T,owner O}{return x;}func pick(x:T,y:i64)->const i64 where T{return y;}val x=1;pick(x,2);',2,'','ambiguous methods'),
  'declared_type_does_not_hide_bad_initializer':(PICK+'val x=1;pick(x,{{val tag:bool=0;tag}});',2,'','initializer does not satisfy'),

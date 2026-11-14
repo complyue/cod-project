@@ -1080,6 +1080,35 @@ class ScalarChecker {
       if (&expr != prepared_call_) note_abrupt(expr.at);
     }
   }
+  Type callable_type(const Form &method, const std::vector<Type> &arguments, const Type &result) const {
+    Type type{Type::procedure}; type.pure_callable = method.kind == Form::Kind::function;
+    type.parameters = arguments; type.target = std::make_shared<Type>(result);
+    for (const auto &parameter : method.parameters) type.const_views.push_back(parameter.read_only);
+    type.const_views.push_back(method.result_const);
+    if (std::none_of(type.const_views.begin(), type.const_views.end(), [](bool v) { return v; })) type.const_views.clear();
+    for (const auto &failure : method.throws_types) type.throws_types.push_back(resolve_type(failure));
+    return type;
+  }
+  std::optional<Type> callable_evidence(size_t id) const {
+    const auto &method = program_.methods[id];
+    if (!method.source->type_parameters.empty() || borrowed_result(*method.source) ||
+        std::any_of(method.source->parameters.begin(), method.source->parameters.end(), [](const auto &p) { return !p.owner.empty(); })) return {};
+    std::vector<Type> retained;
+    if (!method.retained_types.empty()) {
+      if (!checking_instance_ || method.parent != checking_instance_->method) return {};
+      for (const auto index : method.retained_types) {
+        const auto &type = checking_instance_->substitutions.at(index);
+        if (!type) return {};
+        retained.push_back(*type);
+      }
+    }
+    const auto bindings = type_context(method, retained);
+    auto arguments = method.parameters;
+    for (auto &argument : arguments) argument = substitute(argument, method, bindings, true);
+    const auto result = substitute(method.result, method, bindings, true);
+    if (nested_binder(method, result) || std::any_of(arguments.begin(), arguments.end(), [&](const auto &type) { return nested_binder(method, type); })) return {};
+    return callable_type(*method.source, arguments, result);
+  }
   struct TypeEvidenceState {
     std::map<std::string, std::optional<Type>> bindings;
     bool complete = true;
@@ -1096,9 +1125,9 @@ class ScalarChecker {
   }
   // Evidence only: no reads, captures, demands, storage or cleanup equations are created here.
   // Unknown binding effects invalidate subsequent name queries; the ordered checker validates every operand.
-  std::optional<Type> type_evidence(const Expression &expr, TypeEvidenceState &state) const {
+  std::optional<Type> type_evidence(const Expression &expr, TypeEvidenceState &state, bool contextual = false) const {
     using K = Expression::Kind;
-    const auto child = [&](size_t i) { return type_evidence(*expr.children.at(i), state); };
+    const auto child = [&](size_t i, bool context = false) { return type_evidence(*expr.children.at(i), state, context); };
     const auto annotation = [&](const Type &type) {
       return checking_instance_ ? substitute(type, *checking_method_, checking_instance_->substitutions, true) : resolve_type(type);
     };
@@ -1112,15 +1141,18 @@ class ScalarChecker {
     case K::boolean: return Type::boolean;
     case K::null_ref: return Type::null_ref;
     case K::name:
-      if (state.complete) if (const auto found = state.bindings.find(expr.text); found != state.bindings.end()) return found->second;
+      if (!state.complete) return {};
+      if (const auto found = state.bindings.find(expr.text); found != state.bindings.end()) return found->second;
+      if (!contextual) if (const auto family = families_.find(expr.text); family != families_.end() && family->second.size() == 1)
+        return callable_evidence(family->second.front());
       return {};
     case K::block: {
       auto inner = state;
       auto &active = expr.scoped ? inner : state;
       std::optional<Type> result = Type::void_type;
       bool exits = false;
-      for (const auto &item : expr.children) {
-        result = type_evidence(*item, active);
+      for (size_t i = 0; i < expr.children.size(); ++i) {
+        result = type_evidence(*expr.children[i], active, contextual && i + 1 == expr.children.size());
         exits = exits || result == Type::never;
       }
       return exits ? std::optional<Type>{Type::never} : result;
@@ -1128,7 +1160,7 @@ class ScalarChecker {
     case K::pointer_group:
       for (const auto &declaration : expr.children) {
         if (declaration->kind == K::block) { type_evidence(*declaration, state); continue; }
-        const auto initial = type_evidence(*declaration->children.front(), state);
+        const auto initial = type_evidence(*declaration->children.front(), state, declaration->annotation.has_value());
         state.bindings[declaration->text] = declaration->annotation ? annotation(*declaration->annotation) : initial;
       }
       return Type::void_type;
@@ -1146,11 +1178,48 @@ class ScalarChecker {
     case K::conditional: {
       child(0);
       auto yes_state = state, no_state = state;
-      const auto yes = type_evidence(*expr.children[1], yes_state), no = type_evidence(*expr.children[2], no_state);
+      const auto yes = type_evidence(*expr.children[1], yes_state, contextual), no = type_evidence(*expr.children[2], no_state, contextual);
       state = merge_evidence(std::move(yes_state), no_state);
       if (yes == Type::never) return no;
       if (no == Type::never || yes == no) return yes;
       return {};
+    }
+    case K::try_scope: {
+      const auto before = state;
+      auto result = child(0, contextual);
+      const auto body_state = state;
+      const auto catch_entry = merge_evidence(before, body_state);
+      for (size_t i = 1; i < expr.children.size(); ++i) {
+        const auto &handler = *expr.children[i];
+        if (handler.kind == K::block) {
+          if (type_evidence(handler, state) == Type::never) result = Type::never;
+          break;
+        }
+        auto caught = catch_entry;
+        caught.bindings[handler.text] = handler.annotation ? annotation(*handler.annotation) : exception_type(0);
+        const auto type = type_evidence(*handler.children.front(), caught, contextual);
+        if (const auto outer = catch_entry.bindings.find(handler.text); outer != catch_entry.bindings.end())
+          caught.bindings[handler.text] = outer->second;
+        else caught.bindings.erase(handler.text);
+        state = merge_evidence(std::move(state), caught);
+        if (result == Type::never) result = type;
+        else if (type != Type::never && type != result) result.reset();
+      }
+      return result;
+    }
+    case K::range_for: case K::fold: {
+      const bool fold = expr.kind == K::fold;
+      const auto index = child(0); child(1);
+      const auto accumulator = fold ? child(2) : std::optional<Type>{Type::void_type};
+      auto iteration = state;
+      iteration.bindings[expr.text] = index;
+      if (fold) iteration.bindings[expr.binding] = accumulator;
+      type_evidence(*expr.children[fold ? 3 : 2], iteration);
+      if (!fold && expr.children.size() == 4) {
+        auto empty = state; type_evidence(*expr.children[3], empty);
+        state = merge_evidence(std::move(state), empty);
+      }
+      return accumulator;
     }
     case K::binary:
       if (expr.text == "&&" || expr.text == "||") {
@@ -1171,7 +1240,7 @@ class ScalarChecker {
       std::vector<Type> arguments;
       bool complete = true;
       for (size_t i = expr.kind == K::value_call ? 1 : 0; i < expr.children.size(); ++i) {
-        const auto type = child(i); complete = complete && type.has_value();
+        const auto type = child(i, true); complete = complete && type.has_value();
         arguments.push_back(type.value_or(Type::never));
       }
       if (local) return target && target->kind == Type::procedure && target->target ? std::optional<Type>{*target->target} : std::nullopt;
@@ -1215,10 +1284,10 @@ class ScalarChecker {
       return Type::never;
     case K::callable:
       if (!expr.definition->name.empty()) {
-        state.bindings[expr.definition->name] = std::nullopt;
+        state.bindings[expr.definition->name] = callable_evidence(lexical_methods_.at(expr.definition.get()));
         return Type::void_type;
       }
-      return {};
+      return contextual ? std::nullopt : callable_evidence(lexical_methods_.at(expr.definition.get()));
     default:
       state.complete = false;
       return {};
@@ -1241,7 +1310,7 @@ class ScalarChecker {
     if (!needed) return result;
     TypeEvidenceState state;
     for (const auto &scope : lexical_.scopes) for (const auto &[name, id] : scope.bindings) state.bindings[name] = bindings_->at(id).type;
-    for (size_t i = 0; i < expr.children.size(); ++i) result[i] = type_evidence(*expr.children[i], state);
+    for (size_t i = 0; i < expr.children.size(); ++i) result[i] = type_evidence(*expr.children[i], state, true);
     return result;
   }
   CheckedOperation materialize(const std::vector<size_t> &family, const Type *expected, const Location &at) {
@@ -1282,12 +1351,7 @@ class ScalarChecker {
     const auto &method = *program_.methods[instance.method].source;
     if (borrowed_result(method) || std::any_of(method.parameters.begin(), method.parameters.end(), [](const auto &p) { return !p.owner.empty(); }))
       implementation_gap(at, "callable views with external borrowed parameters or results");
-    Type type{Type::procedure}; type.pure_callable = method.kind == Form::Kind::function;
-    type.parameters = arguments; type.target = std::make_shared<Type>(instance.result);
-    for (const auto &parameter : method.parameters) type.const_views.push_back(parameter.read_only);
-    type.const_views.push_back(method.result_const);
-    if (std::none_of(type.const_views.begin(), type.const_views.end(), [](bool v) { return v; })) type.const_views.clear();
-    for (const auto &failure : method.throws_types) type.throws_types.push_back(resolve_type(failure));
+    auto type = callable_type(method, arguments, instance.result);
     signature_type(definition, type, at);
     if (expected) {
       std::set<size_t> allowed;
