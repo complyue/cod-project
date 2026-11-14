@@ -38,7 +38,7 @@ public:
     auto [text, bitcode] = LLVMEmission{}.emit(checked, emit_text, emit_bitcode, specialize_);
     Compilation result;
     for (const auto &module : source.modules) result.scanned_modules.push_back(module.path.string());
-    for (const auto module : source.execution_order) result.execution_order.push_back(source.modules[module].path.string());
+    for (const auto module : checked.execution_order) result.execution_order.push_back(source.modules[module].path.string());
     result.warnings = std::move(warnings); result.llvm_ir = std::move(text); result.bitcode = std::move(bitcode);
     return result;
   }

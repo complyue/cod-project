@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Checked module initialization planning
+
+<a id="k-675"></a>
+**K-675 — Initialization-phase continuity.** Agent assessment under H-106/H-109/H-140/H-166/H-245/H-398, D-10r147/D-15r22/D-21r11 and charter §§2/3.2/5.3/6.3/12: registry r682→683 and source reference296→297 place ordered initialization and module-origin records in the checked program, independently of source discovery. Preserve source isolation, once-only header encounter order, effect/cleanup behavior and native execution. Conditional first-reference policy, interleaved incorporation, retained dependency scopes/shutdown and symbolic installation cancellation remain open or unproved; no new language, lifetime, ABI, regional or fraction policy is chosen. Prior capability reference: `5fae80b57abb865c2a81251f274aa37b85365cee:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Ordinary callable import interpretation
 
 <a id="k-674"></a>

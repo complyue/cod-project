@@ -1637,7 +1637,9 @@ public:
       if (specialize) for (const auto id : method.instances) body(specialized_[id], method, id);
     }
     auto *main = llvm::Function::Create(llvm::FunctionType::get(b_.getInt32Ty(), false), llvm::GlobalValue::ExternalLinkage, "main", module_);
-    begin(main, program.entry_storage, program.entry_bindings); facts_ = {&program.entry}; full_scope(program.initializers, true, Location{}, nullptr, Projection::value, true);
+    std::vector<const Expression *> initializers;
+    for (const auto &initializer : program.initializers) initializers.push_back(initializer.expression);
+    begin(main, program.entry_storage, program.entry_bindings); facts_ = {&program.entry}; full_scope(initializers, true, Location{}, nullptr, Projection::value, true);
     b_.SetInsertPoint(finish_);
     auto *fatal = block("fatal"), *exception = block("exception"), *normal = block("normal");
     b_.CreateCondBr(b_.CreateICmpNE(load(fatal_), null_pointer()), fatal, exception);

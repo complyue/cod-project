@@ -1,4 +1,4 @@
-//===--- lang_modules.hh - Source modules and incorporation order ---===//
+//===--- lang_modules.hh - Source module discovery ------------------===//
 #pragma once
 
 #include "lang_syntax.hh"
@@ -19,14 +19,12 @@ struct SourceModule {
 struct SourceProgram {
   std::vector<SourceModule> modules;
   std::vector<size_t> construction_order;
-  std::vector<size_t> execution_order;
-  std::vector<std::pair<size_t, const Expression *>> initializers;
 };
 
 class ModuleLoader {
   SourceProgram program_;
   std::map<std::filesystem::path, size_t> paths_;
-  std::set<size_t> scanning_, incorporated_;
+  std::set<size_t> scanning_;
 
   size_t scan(const std::filesystem::path &path, const Location &at) {
     std::error_code error;
@@ -47,14 +45,9 @@ class ModuleLoader {
     scanning_.insert(id);
     // Source forms have stable addresses while recursive scans grow the catalog.
     std::vector<const Form *> selections;
-    bool execution_started = false;
     for (const auto &form : program_.modules[id].forms) {
-      if (form->kind == Form::Kind::expression) execution_started = true;
-      if (!form->path.empty() && !form->path.starts_with("std:")) {
-        if (execution_started)
-          fail(form->at, "micro-dispatch implementation gap: source selections after execution expressions require first-reference incorporation analysis; this is not a language restriction");
+      if (!form->path.empty() && !form->path.starts_with("std:"))
         selections.push_back(form.get());
-      }
     }
     for (const auto *form : selections) {
       const auto dependency = scan(resolved.parent_path() / form->path, form->at);
@@ -65,20 +58,9 @@ class ModuleLoader {
     return id;
   }
 
-  void incorporate(size_t module) {
-    if (!incorporated_.insert(module).second) return;
-    program_.execution_order.push_back(module);
-    const auto &source = program_.modules[module];
-    for (const auto &form : source.forms) {
-      if (const auto dependency = source.dependencies.find(form.get()); dependency != source.dependencies.end())
-        incorporate(dependency->second);
-      if (form->kind == Form::Kind::expression) program_.initializers.emplace_back(module, form->body.get());
-    }
-  }
-
 public:
   SourceProgram load(const std::filesystem::path &entry) {
-    incorporate(scan(entry, {entry.string()}));
+    scan(entry, {entry.string()});
     return std::move(program_);
   }
 };

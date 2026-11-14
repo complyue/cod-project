@@ -289,6 +289,7 @@ struct CheckedFamily {
 };
 
 struct CheckedProgram {
+  struct Initializer { size_t module; const Expression *expression; };
   std::vector<CheckedSymbol> symbols;
   std::deque<CheckedFamily> families;
   std::vector<QueryEnvironment> query_environments{{}};
@@ -296,7 +297,8 @@ struct CheckedProgram {
   std::deque<CheckedMethod> methods;
   std::deque<CheckedInstance> instances;
   std::map<const Expression *, CheckedOperation> entry;
-  std::vector<const Expression *> initializers;
+  std::vector<Initializer> initializers;
+  std::vector<size_t> execution_order;
   std::vector<WarningDiagnostic> warnings;
   std::vector<CheckedStorage> entry_storage;
   std::vector<CheckedBinding> entry_bindings;
@@ -372,7 +374,6 @@ class ScalarChecker {
     if (parent) if (const auto found = lexical_variants_.find({form, *parent}); found != lexical_variants_.end()) return found->second;
     return lexical_methods_.at(form);
   }
-  std::map<const Expression *, size_t> initializer_modules_;
   std::map<const Form *, size_t> lexical_methods_;
   struct FreeBindings { std::vector<Capture> captures, queries, symbols; };
   mutable std::map<const Form *, FreeBindings> free_bindings_;
@@ -4236,15 +4237,15 @@ class ScalarChecker {
       AbruptFlow entry_flow{1, {}};
       abrupt_ = &entry_flow;
       std::vector<std::map<std::string, size_t>> bindings(modules_.size());
-      for (const auto *expr : program_.initializers) {
-        const ModuleLookup lookup(module_, initializer_modules_.at(expr));
+      for (const auto &[module, expr] : program_.initializers) {
+        const ModuleLookup lookup(module_, module);
         lexical_.scopes.front().bindings.swap(bindings[module_]);
         if (check(*expr, nullptr, program_.entry, true, true) == Type::never) lexical_.live = false;
         for (const auto &[name, id] : lexical_.scopes.front().bindings) module_names().values.insert(name);
         lexical_.scopes.front().bindings.swap(bindings[module_]);
       }
       CheckedOperation entry_result; entry_result.type = lexical_.live ? Type{Type::void_type} : Type{Type::never};
-      finish_scope(entry_result, entry_flow, nullptr, 0, program_.initializers.empty() ? Location{} : program_.initializers.front()->at);
+      finish_scope(entry_result, entry_flow, nullptr, 0, program_.initializers.empty() ? Location{} : program_.initializers.front().expression->at);
       if (!proving) solve_targets();
     }
   }
@@ -4513,6 +4514,28 @@ class ScalarChecker {
     }
   }
 
+  void plan_initialization(const SourceProgram &source) {
+    std::set<size_t> incorporated;
+    const std::function<void(size_t)> incorporate = [&](size_t module) {
+      if (!incorporated.insert(module).second) return;
+      program_.execution_order.push_back(module);
+      const auto &unit = source.modules[module];
+      bool execution_started = false;
+      for (const auto &form : unit.forms) {
+        if (const auto dependency = unit.dependencies.find(form.get()); dependency != unit.dependencies.end()) {
+          if (execution_started)
+            implementation_gap(form->at, "source selections after execution expressions require first-reference incorporation analysis");
+          incorporate(dependency->second);
+        }
+        if (form->kind != Form::Kind::expression) continue;
+        execution_started = true;
+        if (module) check_dependency_lifetime(*form->body);
+        program_.initializers.push_back({module, form->body.get()});
+      }
+    };
+    incorporate(0);
+  }
+
   void register_module(const SourceModule &source, std::optional<size_t> &print_symbol) {
     const auto &forms = source.forms;
     for (const auto &form : forms)
@@ -4727,11 +4750,7 @@ public:
       register_module(source.modules[module], print_symbol);
     }
     prepare_interpretations();
-    for (const auto &[module, expr] : source.initializers) {
-      if (module) check_dependency_lifetime(*expr);
-      program_.initializers.push_back(expr);
-      initializer_modules_.emplace(expr, module);
-    }
+    plan_initialization(source);
     for (size_t i = 0; i < program_.methods.size(); ++i) {
       const auto &method = *program_.methods[i].source;
       if (program_.methods[i].definition != i || !method.type_parameters.empty() || lexical_methods_.contains(&method)) continue;
