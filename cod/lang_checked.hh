@@ -2309,16 +2309,23 @@ class ScalarChecker {
   }
   // Evidence only: no reads, captures, demands, storage or cleanup equations are created here.
   // Operand hints defer validation to ordered checking; required typeof queries validate their bounded source forms here.
-  std::optional<Type> type_evidence(const Expression &expr, TypeEvidenceState &state, bool contextual = false, const Type *expected = nullptr) const {
+  std::optional<Type> type_evidence(const Expression &expr, TypeEvidenceState &state, bool contextual = false,
+                                    const Type *expected = nullptr, std::vector<Type> *alternatives = nullptr) const {
     const ModuleLookup lookup(module_, state.method ? program_.methods[*state.method].module : module_);
     const ModuleLookup context(interpretation_, state.method ? program_.methods[*state.method].interpretation : interpretation_);
     ViewEvidence view{false, false, {}};
-    const auto type = query_evidence(expr, state, view, contextual, expected);
+    std::vector<Type> independent;
+    const auto type = query_evidence(expr, state, view, contextual, expected, alternatives ? &independent : nullptr);
+    if (alternatives && type != Type::never) {
+      if (type) alternatives->push_back(*type);
+      else alternatives->insert(alternatives->end(), independent.begin(), independent.end());
+    }
     if (state.required && !type) implementation_gap(expr.at, "typeof requires a known declaration or operand type with a proved result contract");
     state.value = type && type != Type::never ? view : ViewEvidence{};
     return type;
   }
-  std::optional<Type> query_evidence(const Expression &expr, TypeEvidenceState &state, ViewEvidence &view, bool contextual, const Type *expected) const {
+  std::optional<Type> query_evidence(const Expression &expr, TypeEvidenceState &state, ViewEvidence &view,
+                                     bool contextual, const Type *expected, std::vector<Type> *alternatives) const {
     using K = Expression::Kind;
     const auto child = [&](size_t i, bool context = false) { return type_evidence(*expr.children.at(i), state, context); };
     const auto annotation = [&](const Type &type) {
@@ -2381,7 +2388,8 @@ class ScalarChecker {
       std::optional<Type> result = Type::void_type;
       bool exits = false;
       for (size_t i = 0; i < expr.children.size(); ++i) {
-        result = type_evidence(*expr.children[i], active, contextual && i + 1 == expr.children.size(), i + 1 == expr.children.size() ? expected : nullptr);
+        const bool last = i + 1 == expr.children.size();
+        result = type_evidence(*expr.children[i], active, contextual && last, last ? expected : nullptr, last ? alternatives : nullptr);
         exits = exits || result == Type::never;
         if (active.returns && exits) break;
       }
@@ -2449,7 +2457,8 @@ class ScalarChecker {
       if (state.returns && condition == Type::never) return Type::never;
       if (state.required && condition != Type::boolean) fail(expr.at, "condition requires bool");
       auto yes_state = state, no_state = state;
-      const auto yes = type_evidence(*expr.children[1], yes_state, contextual, expected), no = type_evidence(*expr.children[2], no_state, contextual, expected);
+      const auto yes = type_evidence(*expr.children[1], yes_state, contextual, expected, alternatives);
+      const auto no = type_evidence(*expr.children[2], no_state, contextual, expected, alternatives);
       state = merge_evidence(std::move(yes_state), no_state);
       view = yes == Type::never ? no_state.value : no == Type::never ? yes_state.value : join_views(yes_state.value, no_state.value);
       if (condition == Type::never) return Type::never;
@@ -2465,7 +2474,7 @@ class ScalarChecker {
       [[fallthrough]];
     case K::try_scope: {
       const auto before = state;
-      auto result = child(0, contextual); view = state.value;
+      auto result = type_evidence(*expr.children.front(), state, contextual, nullptr, alternatives); view = state.value;
       const auto body_state = state;
       const auto catch_entry = merge_evidence(before, body_state);
       for (size_t i = 1; i < expr.children.size(); ++i) {
@@ -2478,7 +2487,7 @@ class ScalarChecker {
         caught.bindings[handler.text] = handler.annotation ? annotation(*handler.annotation) : exception_type(0);
         caught.owner_bindings.erase(handler.text);
         caught.views[handler.text] = {true, true, true};
-        const auto type = type_evidence(*handler.children.front(), caught, contextual);
+        const auto type = type_evidence(*handler.children.front(), caught, contextual, nullptr, alternatives);
         if (const auto outer = catch_entry.bindings.find(handler.text); outer != catch_entry.bindings.end())
           caught.bindings[handler.text] = outer->second;
         else caught.bindings.erase(handler.text);
@@ -2689,11 +2698,12 @@ class ScalarChecker {
       return type && type->kind == Type::exception ? std::optional<Type>{Type::uint64} : std::nullopt;
     }
     case K::return_value: {
-      const auto result = expr.children.empty() ? std::optional<Type>{Type::void_type} : child(0);
+      const auto result = expr.children.empty() ? std::optional<Type>{Type::void_type} :
+          type_evidence(*expr.children.front(), state, false, nullptr, state.returns ? &state.returns->types : nullptr);
       if (state.returns) {
         state.returns->value_obligation |= !expr.children.empty() && result != Type::void_type;
         state.returns->unresolved |= !result;
-        if (result && result != Type::never) state.returns->types.push_back(*result);
+        if (expr.children.empty()) state.returns->types.push_back(Type::void_type);
       }
       return Type::never;
     }

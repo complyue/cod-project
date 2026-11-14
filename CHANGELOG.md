@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Independent return-expression alternatives
+
+<a id="k-676"></a>
+**K-676 — Result-alternative continuity.** Agent assessment under H-398/H-407/H-421–H-424, D-14r91/D-17r57/D-18r91/D-23r10/D-24r7/D-26r13 and charter §§2/3.2/5.3/6.3/12: registry r683→684 and source reference297→298 record independent return evidence through conditional, block and try/catch result alternatives. Preserve separate lexical/module interpretations, generic/capture context, recursive-component anchors, completed expression checks, owner/access constraints and cleanup. Operand guesses, unreachable/always-abrupt results and unanchored cycles supply no contract; no conditional conversion, result-mode, fraction, lifetime or ABI policy changes. Whole D-24 value-path qualification and broader proof boundaries remain separate. Prior capability reference: `20a10f9f4b10f7bc64f5751632a2395adb134bbb:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Checked module initialization planning
 
 <a id="k-675"></a>
