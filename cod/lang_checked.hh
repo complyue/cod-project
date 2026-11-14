@@ -330,15 +330,31 @@ class ScalarChecker {
     for (const auto &view : views) access.push_back(access_of(view));
     return access;
   }
+  static bool admits_parameter_access(const CheckedMethod &method, size_t i, bool readonly) {
+    const auto &parameter = method.source->parameters[i];
+    if (method.source->operation && swap_operation(method.source->name)) return readonly == parameter.read_only;
+    return !readonly || parameter.owner.empty() || parameter.read_only;
+  }
   static bool admits_access(const CheckedMethod &method, const Access &access) {
     for (size_t i = 0; i < access.size(); ++i) {
-      const auto &parameter = method.source->parameters[i];
-      if (method.source->operation && swap_operation(method.source->name) && access[i] && *access[i] != parameter.read_only)
-        return false;
-      if (access[i].value_or(false) && !parameter.owner.empty() && !parameter.read_only)
-        return false;
+      if (access[i] && !admits_parameter_access(method, i, *access[i])) return false;
     }
     return true;
+  }
+  enum class AccessCoverage { disjoint, partial, contained };
+  static AccessCoverage access_coverage(const CheckedMethod &method, const CheckedMethod &declaration) {
+    bool contained = true;
+    for (size_t i = 0; i < method.parameters.size(); ++i) {
+      bool overlaps = false;
+      for (const bool readonly : {false, true}) {
+        const auto admitted = admits_parameter_access(method, i, readonly);
+        const auto covered = admits_parameter_access(declaration, i, readonly);
+        overlaps = overlaps || (admitted && covered);
+        contained = contained && (!admitted || covered);
+      }
+      if (!overlaps) return AccessCoverage::disjoint;
+    }
+    return contained ? AccessCoverage::contained : AccessCoverage::partial;
   }
   static bool same_access(const CheckedMethod &a, const CheckedMethod &b) {
     for (size_t i = 0; i < a.parameters.size(); ++i)
@@ -1417,15 +1433,17 @@ class ScalarChecker {
     }
     return rigid;
   }
+  static Type independent_input(Type type, size_t parameter) {
+    // A broad exception parameter admits an independent concrete category.
+    if (type.kind == Type::exception && !type.identity) type.name += ".alternative." + std::to_string(parameter);
+    return type;
+  }
   // Signature containment includes repeated binders; layout equality is irrelevant.
   static bool implies(const CheckedMethod &narrow, const CheckedMethod &broad) {
     if (narrow.parameters.size() != broad.parameters.size()) return false;
     std::vector<Type> arguments;
     for (size_t i = 0; i < narrow.parameters.size(); ++i) {
-      auto type = rigid_type(narrow, narrow.parameters[i]);
-      // Each broad exception parameter admits an independent concrete category.
-      if (type.kind == Type::exception && !type.identity) type.name += ".alternative." + std::to_string(i);
-      arguments.push_back(std::move(type));
+      arguments.push_back(independent_input(rigid_type(narrow, narrow.parameters[i]), i));
     }
     return match(broad, arguments).has_value();
   }
@@ -1436,16 +1454,17 @@ class ScalarChecker {
     if (found == declarations_.end()) return obligations;
     for (const auto &declaration : found->second) {
       if (!match(declaration, arguments)) continue;
+      const auto access = access_coverage(method, declaration);
+      if (access == AccessCoverage::disjoint) continue;
       // A result contract belongs to the method instance, not to a caller's
       // accidental owner equality, access or narrower exception category.
       auto domain = arguments;
       for (size_t i = 0; i < domain.size(); ++i) {
-        if (accepts_exception(domain[i], method.parameters[i])) domain[i] = method.parameters[i];
+        if (accepts_exception(domain[i], method.parameters[i])) domain[i] = independent_input(method.parameters[i], i);
         if (argument_mode(method.source->parameters[i]) != argument_mode(declaration.source->parameters[i]))
           implementation_gap(method.source->at, "declaration applicability across different parameter passing modes");
       }
-      if (!match(declaration, domain) || !same_access(method, declaration) ||
-          !implies_owners(method, declaration) || !implies_owners(declaration, method))
+      if (!match(declaration, domain) || access != AccessCoverage::contained || !implies_owners(method, declaration))
         implementation_gap(method.source->at, "declaration applicability requires an independent owner, access or input-domain proof");
       if (method.source->kind != declaration.source->kind)
         fail(method.source->at, "implementation kind does not satisfy callable declaration");

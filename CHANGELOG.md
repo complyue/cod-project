@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Declaration input-domain proofs
+
+<a id="k-659"></a>
+**K-659 — Declaration-coverage continuity.** Agent assessment under H-258/H-420–H-424, C-84/P-356, D-10/D-14r91/D-17r57/D-18/D-24/D-26 and charter §§5.3/6.3/12: registry r666→667 and source reference280→281 record contained owner/access domains, disjoint destination contracts and independent broad exception inputs. Reuse existing argument-admission rules; preserve method permissions, actual owners, result contracts, checked failures, dispatch and native coverage. Partial applicability remains unproved; a common exception view does not establish same-T. H-430–H-432 and D-28r3 retain the integrated growth/consumption decisions and pending resize/layout mechanisms. No new source permission, owner union, conversion, capture mechanism, regional representation, fraction behavior or permanent ABI. Prior capability reference: `c246909498a9abd3c8bf1248f54e82951621624e:tests/cod/language/README.md`; integrated design: `8209c5ff4ff22c6275180114e86e40bc88b62dc2`.
+
 ## 2026-11-14 — Resize design and mainline synchronization
 
 <a id="k-resize-sync-20261114"></a>
