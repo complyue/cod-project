@@ -871,6 +871,29 @@ class LLVMEmission {
     }
     return b_.CreateInsertValue(value, image, environment_field_);
   }
+  llvm::Value *declare_local(const Expression &declaration) {
+    std::map<bool, std::vector<size_t>> alternatives;
+    for (size_t i = 0; i < facts_.size(); ++i) alternatives[facts_[i]->at(&declaration).view].push_back(i);
+    return contextual_value(declaration, alternatives, "storage", [&](bool borrowed) {
+      const auto &binding = facts_.front()->at(&declaration);
+      llvm::Value *address = binding.place ? static_cast<llvm::Value *>(storage_.at(*binding.place)) : null_pointer();
+      if (environments_ && binding.place && !borrowed) scope_->values.values.push_back(storage_.at(*binding.place));
+      if (borrowed) {
+        address = emit_expression(*declaration.children.front(), false);
+        if (!reachable()) return static_cast<llvm::Value *>(nullptr);
+      } else if (binding.initializes) {
+        const auto *initializer = declaration.children.front().get();
+        if (initializer->kind == Expression::Kind::make_local)
+          initializer = initializer->children[initializer->annotation ? 0 : 1].get();
+        auto *value = emit_expression(*initializer);
+        if (!reachable()) return static_cast<llvm::Value *>(nullptr);
+        value = convert_result(declaration, *initializer, value);
+        assign_value(address, value, declaration.at);
+      }
+      if (auto *slot = bindings_.at(*binding.binding)) b_.CreateStore(address, slot);
+      return empty_scalar();
+    });
+  }
   llvm::Value *emit_expression(const Expression &expr, bool read = true, bool discard = false) {
     using K = Expression::Kind;
     const auto &fact = facts_.front()->at(&expr);
@@ -1063,22 +1086,8 @@ class LLVMEmission {
           if (!reachable()) return nullptr;
           continue;
         }
-        const auto &binding = facts_.front()->at(declaration.get());
-        llvm::Value *address = binding.place ? static_cast<llvm::Value *>(storage_.at(*binding.place)) : null_pointer();
-        if (environments_ && binding.place && !binding.view) scope_->values.values.push_back(storage_.at(*binding.place));
-        if (binding.view) {
-          address = emit_expression(*declaration->children.front(), false);
-          if (!reachable()) return nullptr;
-        } else if (binding.initializes) {
-          const auto *initializer = declaration->children.front().get();
-          if (initializer->kind == K::make_local)
-            initializer = initializer->children[initializer->annotation ? 0 : 1].get();
-          auto *value = emit_expression(*initializer);
-          if (!reachable()) return nullptr;
-          value = convert_result(*declaration, *initializer, value);
-          assign_value(address, value, declaration->at);
-        }
-        if (auto *slot = bindings_.at(*binding.binding)) b_.CreateStore(address, slot);
+        declare_local(*declaration);
+        if (!reachable()) return nullptr;
       }
       return empty_scalar();
     }
@@ -1216,7 +1225,40 @@ class LLVMEmission {
   }
   void body(llvm::Function *function, const CheckedMethod &method, std::optional<size_t> instance) {
     const auto &layout = program_->instances[instance ? *instance : method.instances.front()];
-    begin(function, layout.storage, layout.bindings, method.parameters.size()); facts_.clear(); frame_types_.clear();
+    const auto instances = instance ? std::vector<size_t>{*instance} : method.instances;
+    std::vector<CheckedStorage> storage;
+    std::map<size_t, size_t> places;
+    std::deque<std::map<const Expression *, CheckedOperation>> operations;
+    std::vector<const std::map<const Expression *, CheckedOperation> *> lowered;
+    // A lexical declaration has one frame role even when a checked context
+    // borrows an existing target and another constructs local payload storage.
+    for (const auto id : instances) for (const auto &place : program_->instances[id].storage)
+      if (places.emplace(place.binding, storage.size()).second) storage.push_back(place);
+    for (const auto id : instances) {
+      const auto &checked = program_->instances[id];
+      const auto remap = [&](size_t place) { return place == null_target ? place : places.at(checked.storage.at(place).binding); };
+      bool unchanged = true;
+      for (size_t i = 0; i < checked.storage.size(); ++i) unchanged = unchanged && remap(i) == i;
+      if (unchanged) { lowered.push_back(&checked.operations); continue; }
+      const auto optional = [&](std::optional<size_t> &place) { if (place) place = remap(*place); };
+      const auto set = [&](std::set<size_t> &source) {
+        std::set<size_t> result;
+        for (const auto place : source) result.insert(remap(place));
+        source = std::move(result);
+      };
+      const auto lower = [&](auto &&self, CheckedOperation &operation) -> void {
+        optional(operation.place); optional(operation.callable_place); optional(operation.accumulator); optional(operation.captured_place);
+        set(operation.targets); set(operation.captures);
+        for (auto &capture : operation.callable_captures) self(self, capture);
+      };
+      operations.push_back(checked.operations);
+      for (auto &[expr, operation] : operations.back()) lower(lower, operation);
+      lowered.push_back(&operations.back());
+    }
+    begin(function, storage, layout.bindings, method.parameters.size()); facts_ = std::move(lowered); frame_types_.clear();
+    for (size_t i = 0; i < instances.size(); ++i) {
+      frame_types_.push_back(&program_->instances[instances[i]].context);
+    }
     if (!method.captures.empty()) {
       environment_ = function->getArg(method.parameters.size());
       auto fields = std::vector<llvm::Type *>{b_.getInt64Ty()}; fields.insert(fields.end(), method.captures.size(), scalar_);
@@ -1237,8 +1279,6 @@ class LLVMEmission {
     }
     llvm::Value *returns_value = nullptr;
     if (instance) {
-      facts_.push_back(&program_->instances[*instance].operations);
-      frame_types_.push_back(&program_->instances[*instance].context);
       if (program_->instances[*instance].result != Type::void_type) returns_value = b_.getTrue();
     }
     else {
@@ -1247,8 +1287,6 @@ class LLVMEmission {
       if (all_return) returns_value = b_.getTrue();
       llvm::Value *admitted = b_.getFalse();
       for (const auto id : method.instances) {
-        facts_.push_back(&program_->instances[id].operations);
-        frame_types_.push_back(&program_->instances[id].context);
         auto *context = matches(arguments_, program_->instances[id].context);
         admitted = b_.CreateOr(admitted, context);
         if (!all_return && program_->instances[id].result != Type::void_type)

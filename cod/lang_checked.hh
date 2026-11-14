@@ -97,6 +97,7 @@ struct CheckedStorage {
   bool read_only;
   bool borrowed = false;
   bool captured = false;
+  size_t binding = 0;
 };
 
 struct CheckedBinding {
@@ -329,7 +330,7 @@ class ScalarChecker {
     const auto id = storage_->size();
     storage_->push_back({name, type, scope, read_only});
     scope_storage_[scope].push_back(id);
-    bind(name, type, {id}, read_only, value_binding, false, at);
+    storage_->back().binding = bind(name, type, {id}, read_only, value_binding, false, at);
     lexical_.available.insert(id);
     return id;
   }
@@ -2606,12 +2607,23 @@ public:
       const auto &first = program_.instances[method.instances.front()];
       for (const auto id : method.instances) {
         const auto &instance = program_.instances[id];
-        if (instance.storage.size() != first.storage.size() || instance.bindings.size() != first.bindings.size())
-          implementation_gap(method.source->at, "generic instances with different storage/view layouts");
+        if (instance.bindings.size() != first.bindings.size())
+          implementation_gap(method.source->at, "generic instances with different lexical binding layouts");
+        for (size_t i = 0; i < instance.bindings.size(); ++i)
+          if (instance.bindings[i].value_binding != first.bindings[i].value_binding || instance.bindings[i].alias != first.bindings[i].alias)
+            implementation_gap(method.source->at, "generic instances with different lexical binding layouts");
+        const auto capture_bindings = [](const CheckedInstance &instance, const std::set<size_t> &places) {
+          std::set<size_t> result;
+          for (const auto place : places) result.insert(instance.storage.at(place).binding);
+          return result;
+        };
+        const auto captured_binding = [](const CheckedInstance &instance, std::optional<size_t> place) -> std::optional<size_t> {
+          return place ? std::optional<size_t>{instance.storage.at(*place).binding} : std::nullopt;
+        };
         for (const auto &[expr, operation] : instance.operations) {
           const auto &baseline = first.operations.at(expr);
-          if (operation.captures != baseline.captures ||
-              operation.snapshot != baseline.snapshot || operation.captured_place != baseline.captured_place)
+          if (capture_bindings(instance, operation.captures) != capture_bindings(first, baseline.captures) ||
+              operation.snapshot != baseline.snapshot || captured_binding(instance, operation.captured_place) != captured_binding(first, baseline.captured_place))
             implementation_gap(expr->at, "generic instances with different deferred capture layouts");
         }
       }
