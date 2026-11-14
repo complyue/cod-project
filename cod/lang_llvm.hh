@@ -748,8 +748,10 @@ class LLVMEmission {
     if (environments_ && read) value_owners_[result] = saved;
     return result;
   }
-  llvm::Value *checked_address(llvm::Value *address, const Expression &expr, const Location &at) {
-    if (std::none_of(facts_.begin(), facts_.end(), [&](const auto *facts) { return facts->at(&expr).targets.contains(null_target); })) return address;
+  llvm::Value *checked_address(llvm::Value *address, const Expression &expr, const Location &at, bool callable = false) {
+    if (std::none_of(facts_.begin(), facts_.end(), [&](const auto *facts) {
+          return callable ? facts->at(&expr).callable_nullable : facts->at(&expr).targets.contains(null_target);
+        })) return address;
     auto *present = block("reference.present"), *absent = block("reference.absent");
     b_.CreateCondBr(b_.CreateICmpEQ(address, null_pointer()), absent, present);
     b_.SetInsertPoint(absent); fail_path(ExceptionCategory::null_pointer, at);
@@ -836,7 +838,7 @@ class LLVMEmission {
                                                [](const auto &child) { return !inert_argument(*child); });
     if (expr.kind == Expression::Kind::call && fact.callable_call) {
       auto *address = bindings_.at(*fact.callable_binding) ? load(bindings_.at(*fact.callable_binding)) : storage_.at(*fact.callable_place);
-      auto *value = b_.CreateLoad(scalar_, checked_address(address, expr, expr.at));
+      auto *value = b_.CreateLoad(scalar_, checked_address(address, expr, expr.at, true));
       arguments.push_back(protect ? copy_temporary(value, expr.at) : value);
     }
 

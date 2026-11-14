@@ -25,7 +25,6 @@ inline bool scalar_type(const Type &type) { return numeric(type) || type == Type
 inline bool bits_type(const Type &type) { return scalar_type(type) || type.kind == Type::exception; }
 inline bool lexical_value_type(const Type &type) { return bits_type(type) || type.kind == Type::procedure; }
 inline constexpr size_t null_target = std::numeric_limits<size_t>::max();
-enum class ArgumentMode { value, borrowed_read, borrowed_ref, borrowed_ptr };
 enum class BuiltinOperation { none, unary, binary, is_null, cause_at, reference_swap, bits_swap, print };
 inline bool eager_operation(std::string_view name) {
   return name == "+" || name == "-" || name == "*" || name == "/" || name == "%" || name == "!" ||
@@ -66,6 +65,7 @@ struct CheckedOperation {
   std::optional<size_t> callable, callable_binding, callable_place;
   std::vector<CheckedOperation> callable_captures;
   bool callable_call = false;
+  bool callable_nullable = false;
   std::optional<size_t> place;
   std::optional<size_t> binding;
   std::set<size_t> targets, owners, origins, selection_versions;
@@ -506,10 +506,10 @@ class ScalarChecker {
     }
     return written;
   }
-  std::map<size_t, CleanupEquations::Effects> invocation_effects(const CheckedInstance &target,
+  std::map<size_t, CleanupEquations::Effects> invocation_effects(const CallEffects &target, const std::set<size_t> &reasons,
       const std::vector<CheckedOperation> &views, const Location &at) {
     CleanupEquations::Reads reads;
-    if (proving_) for (const auto &[parameter, before] : target.effects.reads) {
+    if (proving_) for (const auto &[parameter, before] : target.reads) {
       const auto &view = views.at(parameter);
       if (view.initialized_target) continue;
       const bool same_selection = view.binding && std::any_of(before.begin(), before.end(), [&](size_t other) {
@@ -523,12 +523,112 @@ class ScalarChecker {
       }
     }
     std::map<size_t, CleanupEquations::Effects> effects;
-    for (const auto reason : call_reasons(program_.methods[target.method])) {
-      const auto found = target.effects.initialized.find(reason);
+    for (const auto reason : reasons) {
+      const auto found = target.initialized.find(reason);
       effects.emplace(reason, CleanupEquations::Effects{reads,
-          found == target.effects.initialized.end() ? std::set<size_t>{} : written_targets(found->second, views)});
+          found == target.initialized.end() ? std::set<size_t>{} : written_targets(found->second, views)});
     }
     return effects;
+  }
+  void prepare_borrow(const CheckedOperation &view, ArgumentMode mode, const Location &at) {
+    if (mode == ArgumentMode::value) return;
+    if (!view.view || view.mixed_view) implementation_gap(at, "borrowed arguments require existing target views");
+    if (mode == ArgumentMode::borrowed_read) read_view(view, at, "borrowed argument");
+    if (mode == ArgumentMode::borrowed_ref && proving_ && lexical_.live && view.targets.contains(null_target))
+      fail(at, "ref argument requires a proven non-null target");
+    if (mode == ArgumentMode::borrowed_ref && !view.initialized_target)
+      for (const auto place : view.targets) require_initialized(place, at, "ref argument");
+  }
+  static std::set<size_t> call_reasons(const Type &contract) {
+    std::set<size_t> categories;
+    for (const auto &failure : contract.throws_types) {
+      const auto selected = exception_possibilities(failure); categories.insert(selected.begin(), selected.end());
+    }
+    std::set<size_t> reasons{0, 2};
+    for (size_t category = 1; category < exception_categories.size(); ++category)
+      if (!exception_categories[category].checked || categories.contains(category)) reasons.insert(3 + category);
+    return reasons;
+  }
+  CallEffects callable_effects(const Type &contract) const {
+    CallEffects effects;
+    bool first = true;
+    for (const auto &callable : program_.callables) if (callable.type == contract) {
+      const auto &next = program_.instances[callable.instance].effects;
+      if (first) { effects = next; first = false; continue; }
+      effects.reads.insert(next.reads.begin(), next.reads.end());
+      for (auto &[reason, known] : effects.initialized) {
+        const auto found = next.initialized.find(reason);
+        known = found == next.initialized.end() ? std::set<size_t>{} : intersect(known, found->second);
+      }
+      effects.returned.merge(next.returned);
+    }
+    for (const auto reason : call_reasons(contract)) effects.initialized.try_emplace(reason);
+    return effects;
+  }
+  void finish_call(const Expression &expr, const Type &contract, const CallEffects &summary,
+      const std::set<size_t> &reasons, const std::vector<Type> &arguments,
+      const std::vector<CheckedOperation> &views, CheckedOperation &operation, bool read, bool discard, size_t offset = 0) {
+    std::map<size_t, size_t> owners;
+    for (size_t i = 0; i < arguments.size(); ++i) {
+      const auto role = contract.owners.empty() ? 0 : contract.owners.at(i);
+      if (!role) continue;
+      const bool readonly = !contract.const_views.empty() && contract.const_views.at(i);
+      const auto &view = views[i];
+      if (view.owners.size() != 1) implementation_gap(expr.children[i + offset]->at, "borrowed argument requires one established owner");
+      const auto owner = *view.owners.begin();
+      if (!owner_alive(owner)) fail(expr.children[i + offset]->at, "borrowed argument's lexical owner has ended");
+      if (&expr == prepared_call_ && !external_owner(owner)) {
+        const auto scope = std::find_if(lexical_.scopes.begin(), lexical_.scopes.end(), [&](const auto &entry) { return entry.id == owner; });
+        const auto cleanup = std::find_if(lexical_.scopes.begin(), lexical_.scopes.end(), [&](const auto &entry) { return entry.id == cleanup_scope_; });
+        if (scope > cleanup) fail(expr.children[i + offset]->at, "deferred borrowed argument does not outlive its cleanup scope");
+      }
+      if (const auto [found, inserted] = owners.emplace(role, owner); !inserted && found->second != owner)
+        fail(expr.at, "arguments for one owner role have different actual owners");
+      if (!readonly && view.read_only) fail(expr.children[i + offset]->at, "readonly argument cannot supply a writable borrowed parameter");
+      if (!readonly) for (const auto place : view.targets) if (place != null_target && storage(place).captured)
+        implementation_gap(expr.children[i + offset]->at, "writable borrowing of a captured callable payload");
+      if (arguments[i] != contract.parameters[i]) implementation_gap(expr.children[i + offset]->at, "borrowed exception upcasts");
+      if (!readonly) for (const auto place : view.targets) if (place != null_target && storage(place).type.kind == Type::exception)
+        lexical_.exceptions[place] = exception_possibilities(storage(place).type);
+    }
+    operation.type = *contract.target;
+    operation.exceptions = exception_possibilities(operation.type);
+    operation.invocation = invocation_effects(summary, reasons, views, expr.at);
+    if (&expr != prepared_call_) {
+      const auto before = lexical_;
+      for (const auto &[reason, effects] : operation.invocation) if (reason) {
+        lexical_ = before; apply_effects(lexical_, effects);
+        if (const auto found = summary.initialized.find(reason); found != summary.initialized.end())
+          initialize_selections(lexical_, found->second, views);
+        note_abrupt(expr.at, reason >= 3 ? std::set<size_t>{reason - 3} : std::set<size_t>{}, {reason, false});
+      }
+      lexical_ = before; apply_effects(lexical_, operation.invocation.at(0));
+      if (const auto found = summary.initialized.find(0); found != summary.initialized.end())
+        initialize_selections(lexical_, found->second, views);
+    }
+    const auto result_owner = contract.owners.empty() ? 0 : contract.owners.back();
+    if (result_owner) {
+      operation.targets.clear();
+      if (!owners.contains(result_owner)) implementation_gap(expr.at, "result owner is not determined by borrowed arguments");
+      operation.borrowed_result = operation.view = true;
+      operation.read_only = !contract.const_views.empty() && contract.const_views.back();
+      operation.owners = {owners.at(result_owner)};
+      operation.initialized_target = true;
+      for (const auto parameter : summary.returned.targets) {
+        if (parameter == null_target) { operation.targets.insert(null_target); continue; }
+        const auto &view = views.at(parameter);
+        operation.targets.insert(view.targets.begin(), view.targets.end());
+        operation.origins.insert(view.origins.begin(), view.origins.end());
+        if (summary.returned.uninitialized.contains(parameter) && !view.initialized_target &&
+            !std::all_of(view.targets.begin(), view.targets.end(), [&](size_t place) {
+              return place == null_target || lexical_.initialized.contains(place);
+            })) operation.initialized_target = false;
+      }
+      if (!summary.returned.targets.contains(null_target)) operation.targets.erase(null_target);
+      if (contract.nullable_views.empty() || !contract.nullable_views.back()) operation.targets.erase(null_target);
+      select_targets(operation, operation.targets);
+      if (read && !discard && &expr != prepared_call_) read_view(operation, expr.at, "borrowed result");
+    }
   }
   static void initialize_selections(LexicalState &state, const std::set<size_t> &parameters,
       const std::vector<CheckedOperation> &views) {
@@ -899,12 +999,12 @@ class ScalarChecker {
   static void signature_type(const CheckedMethod &method, const Type &type, const Location &at, bool result = false) {
     if (bits_type(type) || binder(method, type) || (result && type == Type::void_type)) return;
     if (type.kind == Type::procedure && type.target) {
-      if (type.variadic || !type.capture_owners.empty() || !type.capture_regions.empty() || !type.owners.empty() ||
-          std::any_of(type.nullable_views.begin(), type.nullable_views.end(), [](bool v) { return v; }))
+      if (type.variadic || !type.capture_owners.empty() || !type.capture_regions.empty() ||
+          (type.owners.empty() && std::any_of(type.nullable_views.begin(), type.nullable_views.end(), [](bool v) { return v; })))
         implementation_gap(at, "callable view captures, owners or nullable passing modes");
       for (const auto &parameter : type.parameters) signature_type(method, parameter, at);
       signature_type(method, *type.target, at, true);
-      if (type.target->kind != Type::procedure && *type.target != Type::void_type &&
+      if (type.owners.empty() && type.target->kind != Type::procedure && *type.target != Type::void_type &&
           (type.const_views.size() <= type.parameters.size() || !type.const_views.back()))
         implementation_gap(at, "callable views with borrowed results");
       for (const auto &failure : type.throws_types)
@@ -1085,16 +1185,29 @@ class ScalarChecker {
   Type callable_type(const Form &method, const std::vector<Type> &arguments, const Type &result) const {
     Type type{Type::procedure}; type.pure_callable = method.kind == Form::Kind::function;
     type.parameters = arguments; type.target = std::make_shared<Type>(result);
-    for (const auto &parameter : method.parameters) type.const_views.push_back(parameter.read_only);
+    std::map<std::string, size_t> roles;
+    const auto role = [&](const std::string &owner) {
+      if (owner.empty()) return size_t{0};
+      return roles.try_emplace(owner, roles.size() + 1).first->second;
+    };
+    for (const auto &parameter : method.parameters) {
+      type.const_views.push_back(parameter.read_only);
+      type.owners.push_back(role(parameter.owner));
+      type.argument_modes.push_back(argument_mode(parameter));
+      type.nullable_views.push_back(argument_mode(parameter) == ArgumentMode::borrowed_ptr);
+    }
+    type.owners.push_back(borrowed_result(method) ? role(method.result_owner) : 0);
     type.const_views.push_back(method.result_const);
+    type.nullable_views.push_back(borrowed_result(method) && method.result_kind == "ptr");
+    if (roles.empty()) { type.owners.clear(); type.argument_modes.clear(); }
     if (std::none_of(type.const_views.begin(), type.const_views.end(), [](bool v) { return v; })) type.const_views.clear();
+    if (std::none_of(type.nullable_views.begin(), type.nullable_views.end(), [](bool v) { return v; })) type.nullable_views.clear();
     for (const auto &failure : method.throws_types) type.throws_types.push_back(resolve_type(failure));
     return type;
   }
   std::optional<Type> callable_evidence(size_t id) const {
     const auto &method = program_.methods[id];
-    if (!method.source->type_parameters.empty() || borrowed_result(*method.source) ||
-        std::any_of(method.source->parameters.begin(), method.source->parameters.end(), [](const auto &p) { return !p.owner.empty(); })) return {};
+    if (!method.source->type_parameters.empty()) return {};
     std::vector<Type> retained;
     if (!method.retained_types.empty()) {
       if (!checking_instance_ || method.parent != checking_instance_->method) return {};
@@ -1351,8 +1464,6 @@ class ScalarChecker {
     const auto selected = select_family(family, arguments, at, "callable value", environment, retained);
     const auto &instance = program_.instances[selected];
     const auto &method = *program_.methods[instance.method].source;
-    if (borrowed_result(method) || std::any_of(method.parameters.begin(), method.parameters.end(), [](const auto &p) { return !p.owner.empty(); }))
-      implementation_gap(at, "callable views with external borrowed parameters or results");
     auto type = callable_type(method, arguments, instance.result);
     signature_type(definition, type, at);
     if (expected) {
@@ -1749,38 +1860,31 @@ class ScalarChecker {
         operation.callable_call = true; operation.operand_type = contract;
         if (!offset) {
           operation.callable_binding = target.binding; operation.callable_place = target.place;
-          operation.targets = target.targets;
+          operation.callable_nullable = target.targets.contains(null_target);
         }
         if (offset) operation.arguments.push_back({ArgumentMode::value, contract});
         bool completes = true;
+        std::vector<Type> arguments;
+        std::vector<CheckedOperation> views;
         for (size_t i = offset; i < expr.children.size(); ++i) {
           const auto &parameter = contract.parameters[i - offset];
-          const auto argument = check(*expr.children[i], instance, operations, true, false,
+          const auto mode = contract.argument_modes.empty() ? ArgumentMode::value : contract.argument_modes.at(i - offset);
+          const auto argument = check(*expr.children[i], instance, operations, mode == ArgumentMode::value, false,
                                       parameter.kind == Type::procedure ? &parameter : nullptr);
-          if (argument.kind == Type::procedure) note_abrupt(expr.children[i]->at, {exception_id(ExceptionCategory::out_of_memory)});
+          if (mode == ArgumentMode::value && argument.kind == Type::procedure)
+            note_abrupt(expr.children[i]->at, {exception_id(ExceptionCategory::out_of_memory)});
           completes = completes && argument != Type::never;
           if (argument != Type::never && argument != parameter && !accepts_exception(argument, parameter)) {
             if (transfers_value(argument, parameter)) implementation_gap(expr.children[i]->at, "callable view argument adaptation");
             fail(expr.children[i]->at, "argument does not satisfy the callable view type");
           }
-          operation.arguments.push_back({ArgumentMode::value, parameter});
+          arguments.push_back(argument); views.push_back(operations.at(expr.children[i].get()));
+          if (argument != Type::never) prepare_borrow(views.back(), mode, expr.children[i]->at);
+          operation.arguments.push_back({mode, parameter});
         }
         if (!completes) { operation.type = Type::never; break; }
-        operation.type = *contract.target;
-        operation.exceptions = exception_possibilities(operation.type);
-        std::set<size_t> categories;
-        for (const auto &failure : contract.throws_types) {
-          const auto selected = exception_possibilities(failure); categories.insert(selected.begin(), selected.end());
-        }
-        for (size_t category = 1; category < exception_categories.size(); ++category)
-          if (!exception_categories[category].checked) categories.insert(category);
-        operation.invocation.emplace(0, CleanupEquations::Effects{});
-        operation.invocation.emplace(2, CleanupEquations::Effects{});
-        for (const auto category : categories) operation.invocation.emplace(3 + category, CleanupEquations::Effects{});
-        if (&expr != prepared_call_) {
-          note_abrupt(expr.at);
-          note_abrupt(expr.at, categories);
-        }
+        finish_call(expr, contract, callable_effects(contract), call_reasons(contract), arguments, views,
+                    operation, read, discard, offset);
         break;
       }
       if (expr.text == "isnull") {
@@ -1811,14 +1915,7 @@ class ScalarChecker {
         if (mode == ArgumentMode::value && arguments.back().kind == Type::procedure)
           note_abrupt(expr.children[i]->at, {exception_id(ExceptionCategory::out_of_memory)});
         views.push_back(operations.at(expr.children[i].get()));
-        if (mode == ArgumentMode::value) continue;
-        const auto &view = views.back();
-        if (!view.view || view.mixed_view) implementation_gap(expr.children[i]->at, "borrowed arguments require existing target views");
-        if (mode == ArgumentMode::borrowed_read) read_view(view, expr.children[i]->at, "borrowed argument");
-        if (mode == ArgumentMode::borrowed_ref && proving_ && lexical_.live && view.targets.contains(null_target))
-          fail(expr.children[i]->at, "ref argument requires a proven non-null target");
-        if (mode == ArgumentMode::borrowed_ref && !view.initialized_target)
-          for (const auto place : view.targets) require_initialized(place, expr.children[i]->at, "ref argument");
+        prepare_borrow(views.back(), mode, expr.children[i]->at);
       }
       for (size_t i = 0; i < arguments.size(); ++i)
         if (evidence[i] && *evidence[i] != arguments[i])
@@ -1843,64 +1940,8 @@ class ScalarChecker {
       }
       if (method && method->kind == Form::Kind::function && definition.kind == Form::Kind::procedure)
         fail(expr.at, "a function cannot invoke a procedure");
-      std::map<std::string, size_t> owners;
-      for (size_t i = 0; i < arguments.size(); ++i) {
-        const auto &parameter = definition.parameters[i];
-        if (parameter.owner.empty()) continue;
-        const auto &view = views[i];
-        if (view.owners.size() != 1) implementation_gap(expr.children[i]->at, "borrowed argument requires one established owner");
-        const auto owner = *view.owners.begin();
-        if (!owner_alive(owner)) fail(expr.children[i]->at, "borrowed argument's lexical owner has ended");
-        if (&expr == prepared_call_ && !external_owner(owner)) {
-          const auto scope = std::find_if(lexical_.scopes.begin(), lexical_.scopes.end(), [&](const auto &entry) { return entry.id == owner; });
-          const auto cleanup = std::find_if(lexical_.scopes.begin(), lexical_.scopes.end(), [&](const auto &entry) { return entry.id == cleanup_scope_; });
-          if (scope > cleanup) fail(expr.children[i]->at, "deferred borrowed argument does not outlive its cleanup scope");
-        }
-        if (const auto [found, inserted] = owners.emplace(parameter.owner, owner); !inserted && found->second != owner)
-          fail(expr.at, "arguments for owner '" + parameter.owner + "' have different actual owners");
-        if (!parameter.read_only && view.read_only) fail(expr.children[i]->at, "readonly argument cannot supply a writable borrowed parameter");
-        if (!parameter.read_only) for (const auto place : view.targets) if (place != null_target && storage(place).captured)
-          implementation_gap(expr.children[i]->at, "writable borrowing of a captured callable payload");
-        if (arguments[i] != target.arguments[i]) implementation_gap(expr.children[i]->at, "borrowed exception upcasts");
-        if (!parameter.read_only) for (const auto place : view.targets) if (place != null_target && storage(place).type.kind == Type::exception)
-          lexical_.exceptions[place] = exception_possibilities(storage(place).type);
-      }
-      operation.type = target.result;
-      operation.exceptions = exception_possibilities(operation.type);
-      operation.invocation = invocation_effects(target, views, expr.at);
-      if (&expr != prepared_call_) {
-        const auto before = lexical_;
-        for (const auto &[reason, effects] : operation.invocation) if (reason) {
-          lexical_ = before; apply_effects(lexical_, effects);
-          if (const auto found = target.effects.initialized.find(reason); found != target.effects.initialized.end())
-            initialize_selections(lexical_, found->second, views);
-          note_abrupt(expr.at, reason >= 3 ? std::set<size_t>{reason - 3} : std::set<size_t>{}, {reason, false});
-        }
-        lexical_ = before; apply_effects(lexical_, operation.invocation.at(0));
-        if (const auto found = target.effects.initialized.find(0); found != target.effects.initialized.end())
-          initialize_selections(lexical_, found->second, views);
-      }
-      if (borrowed_result(definition)) {
-        if (!owners.contains(definition.result_owner)) implementation_gap(expr.at, "result owner is not determined by borrowed arguments");
-        operation.borrowed_result = operation.view = true;
-        operation.read_only = definition.result_const;
-        operation.owners = {owners.at(definition.result_owner)};
-        operation.initialized_target = true;
-        for (const auto parameter : target.effects.returned.targets) {
-          if (parameter == null_target) { operation.targets.insert(null_target); continue; }
-          const auto &view = views.at(parameter);
-          operation.targets.insert(view.targets.begin(), view.targets.end());
-          operation.origins.insert(view.origins.begin(), view.origins.end());
-          if (target.effects.returned.uninitialized.contains(parameter) && !view.initialized_target &&
-              !std::all_of(view.targets.begin(), view.targets.end(), [&](size_t place) {
-                return place == null_target || lexical_.initialized.contains(place);
-              })) operation.initialized_target = false;
-        }
-        if (!target.effects.returned.targets.contains(null_target)) operation.targets.erase(null_target);
-        if (definition.result_kind != "ptr") operation.targets.erase(null_target);
-        select_targets(operation, operation.targets);
-        if (read && !discard && &expr != prepared_call_) read_view(operation, expr.at, "borrowed result");
-      }
+      finish_call(expr, callable_type(definition, target.arguments, target.result), target.effects,
+          call_reasons(program_.methods[target.method]), arguments, views, operation, read, discard);
       break;
     }
     case K::behave: case K::perform: {
@@ -2601,6 +2642,7 @@ public:
       bool changed;
       do {
         changed = false;
+        const auto callable_count = program_.callables.size();
         for (size_t i = 0; i < program_.instances.size(); ++i) {
           const auto effects = check_instance(i);
           auto &known = program_.instances[i].effects;
@@ -2611,6 +2653,7 @@ public:
             if (known.returned != effects.returned) { known.returned = effects.returned; changed = true; }
           }
         }
+        changed = changed || callable_count != program_.callables.size();
       } while (changed);
     }
     validating_ = true;

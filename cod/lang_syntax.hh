@@ -157,6 +157,8 @@ inline std::vector<Token> tokenize(const std::string &source, const std::string 
   return tokens;
 }
 
+enum class ArgumentMode { value, borrowed_read, borrowed_ref, borrowed_ptr };
+
 struct Type {
   enum Kind { integer, uint8, uint32, uint64, boolean, void_type, procedure, float32, float64,
               named, unit, quantity, region, regional, array, reference, null_ref, abstract_type, arguments, parameter,
@@ -170,6 +172,7 @@ struct Type {
   std::vector<Type> owner_bounds;
   std::vector<Type> throws_types;
   std::vector<size_t> owners;
+  std::vector<ArgumentMode> argument_modes;
   std::vector<std::string> capture_owners; // Source names anchoring a callable environment's regional dependencies.
   std::vector<std::optional<size_t>> capture_owner_regions; // Bound actual owner for each visible with-name.
   std::vector<size_t> capture_formals; // Nonzero indices refer to the enclosing callable's owner binders.
@@ -199,7 +202,7 @@ struct Type {
   bool operator==(const Type &other) const {
     return kind == other.kind && name == other.name && identity == other.identity &&
            parameters == other.parameters && bounds == other.bounds && variadic == other.variadic && owned == other.owned && pure_callable == other.pure_callable &&
-           throws_types == other.throws_types && owner_bounds == other.owner_bounds && owners == other.owners && const_views == other.const_views && nullable_views == other.nullable_views &&
+           throws_types == other.throws_types && owner_bounds == other.owner_bounds && owners == other.owners && argument_modes == other.argument_modes && const_views == other.const_views && nullable_views == other.nullable_views &&
            same_capture_contract(other) &&
            ((!target && !other.target) || (target && other.target && *target == *other.target));
   }
