@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Operator signature obligations
+
+<a id="k-658"></a>
+**K-658 — Operator-declaration continuity.** Agent assessment under H-258/H-420–H-424, C-84/P-356, D-10/D-14/D-17/D-18/D-24/D-26 constraints and charter §§5.3/6.3/12: registry r663→664 and source reference279→280 extend shared signature obligations to eager operators and bits swaps. User methods reuse declared results; builtin signatures remain established and satisfy applicable contracts, including declared checked failures. Explicit intrinsic bypass, dispatch, argument sequencing, result conversion, owners/access, cleanup and native coverage remain unchanged. Broader declaration applicability, abrupt-operand builtin evidence, local declarations, D-24 whole-document qualification and D-28 representation decisions retain their separate boundaries. No new conversion, capture permission, regional mechanism, fraction behavior or permanent ABI. Prior capability reference: `798867ecc2fe8656598b3a3709a5dd7213e26576:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Independent expected callable results
 
 <a id="k-657"></a>

@@ -1644,6 +1644,35 @@ class ScalarChecker {
     }
     return types;
   }
+  std::set<size_t> builtin_declarations(const Expression &expr, const std::vector<Type> &arguments,
+                                      const Type &result, bool destinations = false) const {
+    if (expr.intrinsic || !declarations_.contains(expr.text)) return {};
+    // Builtins have established signatures. Declarations constrain these just
+    // as they constrain explicit methods; they cannot retarget a builtin result.
+    Form source;
+    source.kind = Form::Kind::function; source.name = expr.text; source.at = expr.at; source.operation = true;
+    for (size_t i = 0; i < arguments.size(); ++i) {
+      Parameter parameter;
+      parameter.name = "argument" + std::to_string(i); parameter.type = arguments[i]; parameter.at = expr.at;
+      if (destinations) parameter.owner = "owner" + std::to_string(i);
+      source.parameters.push_back(std::move(parameter));
+    }
+    CheckedMethod method;
+    method.source = &source; method.parameters = arguments; method.result.type = result;
+    check_declared_results(method, method.result, declared_results(method, arguments));
+    std::set<size_t> failures;
+    for (const auto *declaration : declaration_obligations(method, arguments))
+      failures.insert(declaration->throws_categories.begin(), declaration->throws_categories.end());
+    return failures;
+  }
+  void check_builtin_declarations(const Expression &expr, const std::vector<Type> &arguments,
+                                  CheckedOperation &operation, bool destinations = false) {
+    const auto failures = builtin_declarations(expr, arguments, operation.type, destinations);
+    if (failures.empty()) return;
+    operation.invocation.try_emplace(0);
+    for (const auto category : failures) operation.invocation.try_emplace(3 + category);
+    if (&expr != prepared_call_) note_abrupt(expr.at, failures);
+  }
   void check_eager(const Expression &expr, const std::vector<Type> &arguments,
                    const std::vector<CheckedOperation> &views, CheckedOperation &operation) {
     const auto types = eager_types(expr, arguments);
@@ -1655,6 +1684,7 @@ class ScalarChecker {
       if (operation.null_test) operation.null_test->null_when_true = !operation.null_test->null_when_true;
     }
     operation.invocation.emplace(0, CleanupEquations::Effects{});
+    check_builtin_declarations(expr, arguments, operation);
     if (types.failing) {
       operation.invocation.emplace(2, CleanupEquations::Effects{});
       if (&expr != prepared_call_) note_abrupt(expr.at);
@@ -1999,7 +2029,10 @@ class ScalarChecker {
     };
     if (state.required) {
       if (expr.spread) implementation_gap(expr.at, "spread operands in typeof");
-      if (signed_minimum(expr)) return Type::integer;
+      if (signed_minimum(expr)) {
+        builtin_declarations(expr, {Type::integer}, Type::integer);
+        return Type::integer;
+      }
       switch (expr.kind) {
       case K::integer: case K::real: case K::boolean: case K::null_ref: case K::name:
       case K::unary: case K::binary: case K::call: case K::value_call: case K::field:
@@ -2287,7 +2320,8 @@ class ScalarChecker {
       for (const auto id : family.methods)
         if (match(program_.methods[id], arguments, retained) && admits_access(program_.methods[id], access) &&
             match_owners(program_.methods[id], owners, &state) != OwnerMatch::mismatch) applicable.push_back(id);
-      if (family.methods.empty() && !expr.intrinsic && declarations_.contains(expr.text)) {
+      if (family.methods.empty() && !expr.intrinsic && declarations_.contains(expr.text) &&
+          (!eager_operation(expr.text) || !eager_types(expr, arguments).error.empty())) {
         std::optional<Type> result;
         std::optional<ResultMode> mode;
         for (const auto &declaration : declarations_.at(expr.text)) {
@@ -2318,6 +2352,7 @@ class ScalarChecker {
       if (applicable.empty() && eager_operation(expr.text)) {
         const auto types = eager_types(expr, arguments);
         if (state.required && !types.error.empty()) fail(expr.at, types.error);
+        if (types.error.empty()) builtin_declarations(expr, arguments, types.result);
         return types.error.empty() ? std::optional<Type>{types.result} : std::nullopt;
       }
       const auto best = state.required ? std::vector<size_t>{select_method(family.methods, arguments, expr.at, expr.text, retained, access, owners, &state)}
@@ -2844,6 +2879,7 @@ class ScalarChecker {
       if (signed_minimum(expr)) {
         operation.type = operation.operand_type = Type::integer;
         operation.minimum_literal = true;
+        check_builtin_declarations(expr, {Type::integer}, operation);
         break;
       }
       [[fallthrough]];
@@ -2915,6 +2951,7 @@ class ScalarChecker {
           require_borrow_lifetime(right, expr.children[1]->at, &expr == prepared_call_);
           read_view(left, expr.at, "left swap target"); read_view(right, expr.at, "right swap target");
           for (auto &argument : operation.arguments) argument.mode = ArgumentMode::borrowed_read;
+          check_builtin_declarations(expr, arguments, operation, true);
           if (&expr != prepared_call_) {
             const auto left_exceptions = stored_exceptions(left), right_exceptions = stored_exceptions(right);
             write_exceptions(left, right_exceptions); write_exceptions(right, left_exceptions);
@@ -3807,7 +3844,7 @@ public:
     for (const auto &form : forms) if (form->body)
       collect(*form->body, form->kind == Form::Kind::expression ? nullptr : form.get());
     for (const auto *form : definitions) {
-      if (form->symbolic || (form->operation && !eager_operation(form->name) && form->name != "<->") || form->conversion || (!lexical_methods_.contains(form) && !form->captures.empty()) || (!form->body && (form->operation || lexical_methods_.contains(form))))
+      if (form->symbolic || (form->operation && !eager_operation(form->name) && form->name != "<->") || form->conversion || (!lexical_methods_.contains(form) && !form->captures.empty()) || (!form->body && lexical_methods_.contains(form)))
         implementation_gap(form->at, "callable captures, effects, declarations, operators, owners or throws contracts");
       if (form->operation) {
         const auto arity = form->parameters.size();
