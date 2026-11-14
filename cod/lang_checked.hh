@@ -26,6 +26,7 @@ inline bool bits_type(const Type &type) { return scalar_type(type) || type.kind 
 inline bool lexical_value_type(const Type &type) { return bits_type(type) || type.kind == Type::procedure; }
 inline constexpr size_t null_target = std::numeric_limits<size_t>::max();
 enum class ArgumentMode { value, borrowed_read, borrowed_ref, borrowed_ptr };
+enum class StorageSwap { none, reference, bits };
 struct CheckedArgument {
   ArgumentMode mode;
   Type type;
@@ -80,6 +81,7 @@ struct CheckedOperation {
   bool mixed_view = false;
   bool is_null = false;
   bool borrowed_result = false;
+  StorageSwap swap = StorageSwap::none;
   std::vector<CheckedArgument> arguments;
   std::map<size_t, CleanupEquations::Effects> invocation;
   struct NullTest { size_t binding; std::set<size_t> versions; bool null_when_true = true; };
@@ -323,6 +325,66 @@ class ScalarChecker {
     if (!proving_) {
       possible_targets_.at(binding).insert(source.targets.begin(), source.targets.end());
       target_dependencies_.at(binding).insert(source.origins.begin(), source.origins.end());
+    }
+  }
+  void require_live_view(const CheckedOperation &view, const Location &at) const {
+    if (lexical_.live) for (const auto owner : view.owners)
+      if (!owner_alive(owner)) fail(at, "storage view's lexical owner has ended");
+  }
+  const CheckedBinding &reference_destination(const CheckedOperation &view, const Location &at) const {
+    if (!view.binding) implementation_gap(at, "runtime-selected reference binding destination");
+    if (!lexical_.bindings_available.contains(*view.binding)) fail(at, "reference binding's lexical scope has ended");
+    const auto &binding = bindings_->at(*view.binding);
+    if (binding.value_binding) fail(at, "val storage has no reference binding; use '<-' for bits transfer");
+    if (view.fixed_binding || binding.fixed) fail(at, "cannot rebind a const reference binding");
+    return binding;
+  }
+  void check_rebind(const CheckedOperation &target, const CheckedOperation &source, const Location &at) {
+    const auto &binding = reference_destination(target, at);
+    if (!source.view || source.mixed_view) implementation_gap(at, "rebinding from a fresh value without an existing target");
+    if (source.type != Type::null_ref && source.type != target.type) fail(at, "reference rebinding requires the exact target type");
+    if (!binding.read_only && source.read_only) fail(at, "readonly source cannot rebind a writable reference target");
+    auto owners = lexical_.owners.at(*target.binding);
+    owners.insert(source.owners.begin(), source.owners.end());
+    if (owners.size() > 1) fail(at, "reference rebinding cannot change the initializer-fixed owner");
+    if (binding.requires_initialized && proving_ && lexical_.live && source.targets.contains(null_target))
+      fail(at, "ref requires a proven non-null target");
+    require_live_view(source, at);
+    if (binding.requires_initialized && !source.initialized_target)
+      for (const auto place : source.targets) require_initialized(place, at, "ref target");
+  }
+  void rebind(const CheckedOperation &target, const CheckedOperation &source) {
+    assign_targets(*target.binding, source);
+    if (!proving_) rebound_.insert(*target.binding);
+  }
+  CheckedOperation current_selection(CheckedOperation view, const Location &at) const {
+    reference_destination(view, at);
+    const auto binding = *view.binding;
+    if (lexical_.live && lexical_.expired_bindings.contains(binding))
+      fail(at, "reference binding's target owner has ended or may expire across a loop backedge");
+    select_targets(view, lexical_.targets.at(binding));
+    view.owners = lexical_.owners.at(binding);
+    view.selection_versions = lexical_.target_versions.at(binding);
+    view.origins = {binding};
+    view.initialized_target = lexical_.initialized_targets.contains(binding) ||
+        std::all_of(view.targets.begin(), view.targets.end(), [&](size_t place) { return lexical_.initialized.contains(place); });
+    require_live_view(view, at);
+    return view;
+  }
+  std::set<size_t> stored_exceptions(const CheckedOperation &view) const {
+    std::set<size_t> result;
+    for (const auto place : view.targets) if (place != null_target) {
+      const auto found = lexical_.exceptions.find(place);
+      const auto categories = delayed_ || found == lexical_.exceptions.end() ? exception_possibilities(view.type) : found->second;
+      result.insert(categories.begin(), categories.end());
+    }
+    return result;
+  }
+  void write_exceptions(const CheckedOperation &target, const std::set<size_t> &categories) {
+    if (target.type.kind != Type::exception) return;
+    for (const auto place : target.targets) if (place != null_target) {
+      if (target.place) lexical_.exceptions[place] = categories;
+      else lexical_.exceptions[place].insert(categories.begin(), categories.end());
     }
   }
   void widen_targets(LexicalState &state) {
@@ -754,7 +816,8 @@ class ScalarChecker {
         for (const auto &child : expr.children) visit(*child, caught);
         return;
       }
-      if (expr.kind == K::name || expr.kind == K::call) use(expr.text, expr.at, bound);
+      if (expr.kind == K::name || (expr.kind == K::call && !expr.intrinsic && !swap_operation(expr.text)))
+        use(expr.text, expr.at, bound);
       auto local = bound;
       auto &scope = expr.kind == K::block && expr.scoped ? local : bound;
       for (const auto &child : expr.children) visit(*child, scope);
@@ -1338,6 +1401,33 @@ class ScalarChecker {
       break;
     }
     case K::value_call: case K::call: {
+      if (expr.kind == K::call && swap_operation(expr.text)) {
+        if (&expr == prepared_call_) implementation_gap(expr.at, "deferred storage intrinsics; use a defer block");
+        if (expr.children.size() != 2) fail(expr.at, "swap requires two destinations");
+        child(0, false);
+        auto left = operations.at(expr.children[0].get());
+        child(1, false);
+        auto right = operations.at(expr.children[1].get());
+        if (!left.view || !right.view) fail(expr.at, "swap requires two storage destinations");
+        if (left.mixed_view || right.mixed_view) implementation_gap(expr.at, "swap through a mixed value/storage view");
+        operation.swap = expr.text == "<=>" ? StorageSwap::reference : StorageSwap::bits;
+        if (operation.swap == StorageSwap::reference) {
+          left = current_selection(left, expr.at);
+          right = current_selection(right, expr.at);
+          check_rebind(left, right, expr.at);
+          check_rebind(right, left, expr.at);
+          if (left.binding != right.binding) { rebind(left, right); rebind(right, left); }
+        } else {
+          if (!bits_type(left.type) || !bits_type(right.type)) fail(expr.at, "builtin bits swap requires two bits storage destinations");
+          if (left.type != right.type) fail(expr.at, "bits swap requires the exact same type");
+          if (left.read_only || right.read_only) fail(expr.at, "cannot swap bits through a readonly destination");
+          require_live_view(left, expr.at); require_live_view(right, expr.at);
+          read_view(left, expr.at, "left swap target"); read_view(right, expr.at, "right swap target");
+          const auto left_exceptions = stored_exceptions(left), right_exceptions = stored_exceptions(right);
+          write_exceptions(left, right_exceptions); write_exceptions(right, left_exceptions);
+        }
+        break;
+      }
       if (expr.kind == K::value_call || lexical_.lookup(expr.text)) {
         const size_t offset = expr.kind == K::value_call ? 1 : 0;
         CheckedOperation target;
@@ -1787,30 +1877,13 @@ class ScalarChecker {
       const bool binding_live = target.binding && lexical_.bindings_available.contains(*target.binding);
       const auto versions = target.selection_versions;
       if (expr.kind == K::rebind) {
-        if (!target.binding) implementation_gap(expr.at, "runtime-selected reference binding destination");
-        if (!binding_live) fail(expr.at, "reference binding's lexical scope has ended");
-        const auto binding = (*bindings_)[*target.binding];
-        if (binding.value_binding) fail(expr.at, "val storage has no reference binding; use '<-' for bits transfer");
-        if (target.fixed_binding || binding.fixed) fail(expr.at, "cannot rebind a const reference binding");
-        const auto source = child(1, false);
+        reference_destination(target, expr.at);
+        child(1, false);
         const auto &selected = operations.at(expr.children[1].get());
-        if (!selected.view || selected.mixed_view) implementation_gap(expr.at, "rebinding from a fresh value without an existing target");
-        if (source != Type::null_ref && source != destination) fail(expr.at, "reference rebinding requires the exact target type");
-        if (!binding.read_only && selected.read_only) fail(expr.at, "readonly source cannot rebind a writable reference target");
-        const auto &owners = selected.owners;
-        auto combined = lexical_.owners.at(*target.binding);
-        combined.insert(owners.begin(), owners.end());
-        if (combined.size() > 1) fail(expr.at, "reference rebinding cannot change the initializer-fixed owner");
-        if (binding.requires_initialized && proving_ && lexical_.live && selected.targets.contains(null_target))
-          fail(expr.at, "ref requires a proven non-null target");
-        if (lexical_.live) for (const auto owner : owners)
-          if (!owner_alive(owner))
-            fail(expr.at, "reference source's lexical owner has ended");
-        for (const auto place : selected.targets) if (place != null_target) {
-          if (!selected.initialized_target && (binding.requires_initialized || (read && !discard))) require_initialized(place, expr.at, expr.children[0]->text);
-        }
-        assign_targets(*target.binding, selected);
-        if (!proving_) rebound_.insert(*target.binding);
+        check_rebind(target, selected, expr.at);
+        if (!selected.initialized_target && read && !discard)
+          for (const auto place : selected.targets) require_initialized(place, expr.at, expr.children[0]->text);
+        rebind(target, selected);
         operation = selected;
         operation.type = destination;
         operation.owners = lexical_.owners.at(*target.binding);
@@ -1840,10 +1913,7 @@ class ScalarChecker {
       operation.read_only = operation.view = true;
       operation.initialized_target = true;
       operation.exceptions = operations.at(expr.children[1].get()).exceptions;
-      if (destination.kind == Type::exception) for (const auto place : target.targets) if (place != null_target) {
-        if (target.place) lexical_.exceptions[place] = operation.exceptions;
-        else lexical_.exceptions[place].insert(operation.exceptions.begin(), operation.exceptions.end());
-      }
+      write_exceptions(target, operation.exceptions);
       break;
     }
     case K::return_value: {

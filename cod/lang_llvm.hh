@@ -883,6 +883,23 @@ class LLVMEmission {
           [&](const Choice &choice) { return binary(expr, left, right, choice); });
     }
     case K::value_call: case K::call: case K::behave: case K::perform: {
+      if (fact.swap != StorageSwap::none) {
+        auto *left = emit_expression(*expr.children[0], false);
+        if (!reachable()) return nullptr;
+        auto *right = emit_expression(*expr.children[1], false);
+        if (!reachable()) return nullptr;
+        if (fact.swap == StorageSwap::reference) {
+          left = bindings_.at(*facts_.front()->at(expr.children[0].get()).binding);
+          right = bindings_.at(*facts_.front()->at(expr.children[1].get()).binding);
+        } else {
+          left = checked_address(left, *expr.children[0], expr.at);
+          right = checked_address(right, *expr.children[1], expr.at);
+        }
+        auto *type = fact.swap == StorageSwap::reference ? static_cast<llvm::Type *>(b_.getPtrTy()) : scalar_;
+        auto *left_value = b_.CreateLoad(type, left), *right_value = b_.CreateLoad(type, right);
+        b_.CreateStore(right_value, left); b_.CreateStore(left_value, right);
+        return empty_scalar();
+      }
       if (fact.is_null) {
         auto *address = emit_expression(*expr.children.front(), false);
         if (!reachable()) return nullptr;
