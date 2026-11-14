@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Ordinary callable import interpretation
+
+<a id="k-674"></a>
+**K-674 — Import-identity continuity.** Agent assessment under H-230/H-232/H-245/H-247–H-249/H-252/H-253/H-258/H-375–H-378/H-398, D-10r147/D-15r22/D-17r57/D-18r91/D-21r11/D-26r13 and charter §§2/3.2/4/5.3/6.3/12: registry r681→682 and source reference295→296 record ordinary receiver import through shared identity records and selected interpretation chains. Preserve source definitions, non-callable lookup, resolved signatures/throws, nested contexts, complete captures, actual owners and cleanup; retain inherited overloads and reject conflicts without alias-order arbitration. Bodyless publication and export-import preserve explicit identity. Symbolic import/cancellation, first-reference incorporation, retained module scopes/shutdown, same-alias unions, mixin, broader context equivalence and persistent ABI remain unproved; whole D-15 qualification and fraction/regional mechanisms remain unchanged. Prior capability reference: `c032c34f9e0bea3632404e1a17e54746d1307755:tests/cod/language/README.md`.
+
 
 ## 2026-11-14 — Source-preserving module contexts
 

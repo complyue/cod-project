@@ -1612,7 +1612,8 @@ public:
     for (size_t i = 0; i < program.methods.size(); ++i) {
       const auto &method = program.methods[i]; if (method.instances.empty()) continue;
       const auto arity = input_frame(i).inputs.size();
-      const auto prefix = "cod.method." + std::to_string(i) + "." + method.source->name;
+      const auto prefix = "cod.method." + std::to_string(method.definition) + "." + method.source->name +
+          (i == method.definition ? std::string{} : ".interpretation." + std::to_string(i));
       if (method.source->type_parameters.empty() && method.captures.empty() && method.retained_types.empty() && !method.declaration_context()) {
         general_[i] = declare(prefix + ".native", arity, caller_destination(i), false, 0);
         specialized_[method.instances.front()] = general_[i];

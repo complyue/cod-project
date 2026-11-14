@@ -15,6 +15,7 @@
 #include <functional>
 #include <limits>
 #include <map>
+#include <tuple>
 
 namespace cod::language {
 
@@ -225,11 +226,14 @@ struct CheckedInstance {
 };
 struct CheckedMethod {
   const Form *source = nullptr;
-  size_t module = 0;
+  size_t module = 0, interpretation = 0, definition = null_target;
+  std::optional<size_t> family;
+  std::vector<size_t> nested;
   std::vector<size_t> instances;
   std::vector<Type> parameters;
   ResultContract result;
   std::set<size_t> throws_categories;
+  std::vector<Type> throws_types;
   std::vector<Capture> captures;
   std::vector<Capture> queries;
   bool captures_resolved = false;
@@ -276,16 +280,20 @@ struct CheckedSymbol {
   std::string name;
 };
 struct CheckedFamily {
-  size_t symbol, module;
+  std::optional<size_t> symbol;
+  size_t module, origin;
+  Location at;
+  std::optional<size_t> imported_from;
   std::vector<size_t> methods;
+  std::vector<CheckedMethod> declarations;
 };
 
 struct CheckedProgram {
   std::vector<CheckedSymbol> symbols;
-  std::vector<CheckedFamily> families;
+  std::deque<CheckedFamily> families;
   std::vector<QueryEnvironment> query_environments{{}};
   std::vector<CheckedCallable> callables;
-  std::vector<CheckedMethod> methods;
+  std::deque<CheckedMethod> methods;
   std::deque<CheckedInstance> instances;
   std::map<const Expression *, CheckedOperation> entry;
   std::vector<const Expression *> initializers;
@@ -309,8 +317,10 @@ class ScalarChecker {
   CallableChoices callable_choices_;
   size_t checking_context_ = 0;
   struct ModuleNames {
-    std::map<std::string, std::vector<size_t>> callables;
-    std::map<std::string, std::vector<CheckedMethod>> declarations;
+    std::map<std::string, size_t> callables;
+    std::map<size_t, size_t> imports;
+    std::set<std::string> imported_aliases;
+    std::map<size_t, std::map<std::string, Location>> extensions;
     std::map<std::string, size_t> symbols;
     std::map<size_t, size_t> families;
     std::set<size_t> selected_symbols;
@@ -320,7 +330,6 @@ class ScalarChecker {
       enum class Kind { symbol, callable, exception } kind;
       size_t symbol = 0;
       std::optional<size_t> family;
-      std::vector<size_t> methods;
       Type type;
       bool operator==(const Resource &) const = default;
     };
@@ -338,6 +347,31 @@ class ScalarChecker {
   };
   ModuleNames &module_names() { return modules_.at(module_); }
   const ModuleNames &module_names() const { return modules_.at(module_); }
+  struct Interpretation { size_t parent, receiver; };
+  std::vector<Interpretation> interpretations_{{0, 0}};
+  std::map<std::pair<size_t, size_t>, size_t> interpretation_ids_;
+  mutable size_t interpretation_ = 0;
+  struct FamilyView { size_t identity; std::vector<size_t> methods; std::string unproved; };
+  std::map<std::pair<size_t, size_t>, FamilyView> family_views_;
+  std::map<std::tuple<size_t, size_t, size_t, size_t>, size_t> adapted_methods_;
+  std::map<std::pair<const Form *, size_t>, size_t> lexical_variants_;
+  const std::vector<size_t> &family_methods(size_t family) const {
+    if (!interpretation_) return program_.families.at(family).methods;
+    const auto &view = family_views_.at({family, interpretation_});
+    if (!view.unproved.empty()) implementation_gap(program_.families[family].at, view.unproved);
+    return view.methods;
+  }
+  const std::vector<CheckedMethod> &declarations(const std::string &name) const {
+    static const std::vector<CheckedMethod> empty;
+    const auto found = module_names().callables.find(name);
+    return found == module_names().callables.end() ? empty : program_.families[found->second].declarations;
+  }
+  bool has_declarations(const std::string &name) const { return !declarations(name).empty(); }
+  size_t lexical_method(const Form *form, std::optional<size_t> parent = {}) const {
+    if (!parent && checking_instance_) parent = checking_instance_->method;
+    if (parent) if (const auto found = lexical_variants_.find({form, *parent}); found != lexical_variants_.end()) return found->second;
+    return lexical_methods_.at(form);
+  }
   std::map<const Expression *, size_t> initializer_modules_;
   std::map<const Form *, size_t> lexical_methods_;
   struct FreeBindings { std::vector<Capture> captures, queries, symbols; };
@@ -559,6 +593,7 @@ class ScalarChecker {
   }
   NamedFamily named_family(const std::string &name, const TypeEvidenceState *state = nullptr) const {
     const ModuleLookup lookup(module_, state && state->method ? program_.methods[*state->method].module : module_);
+    const ModuleLookup context(interpretation_, state && state->method ? program_.methods[*state->method].interpretation : interpretation_);
     if (state) {
       if (state->method) {
         const auto &method = program_.methods[*state->method];
@@ -566,16 +601,21 @@ class ScalarChecker {
           return {{*state->method}, nullptr, state->retained};
       }
       const auto found = module_names().callables.find(name);
-      return found == module_names().callables.end() ? NamedFamily{} : NamedFamily{found->second};
+      return found == module_names().callables.end() ? NamedFamily{} : NamedFamily{family_methods(found->second)};
     }
     if (checking_method_ && lexical_methods_.contains(checking_method_->source) && name == checking_method_->source->name)
       return {{checking_instance_->method}, checking_instance_};
     const auto found = module_names().callables.find(name);
-    return found == module_names().callables.end() ? NamedFamily{} : NamedFamily{found->second};
+    return found == module_names().callables.end() ? NamedFamily{} : NamedFamily{family_methods(found->second)};
+  }
+  [[noreturn]] void ambiguous_methods(const Location &at, const std::string &name, const std::vector<size_t> &methods) const {
+    std::string message = "ambiguous methods for '" + name + "':";
+    for (const auto method : methods) message += " " + location_text(program_.methods[method].source->at);
+    fail(at, message);
   }
   ArgumentPreparation argument_preparation(const Expression &expr, const std::vector<Type> &prefix,
                                             const std::vector<ArgumentEvidence> &evidence, const Access &prefix_access, const Owners &prefix_owners, bool required = true, const TypeEvidenceState *state = nullptr) const {
-    if (expr.text == "cause_at" && (expr.intrinsic || (!module_names().callables.contains(expr.text) && !module_names().declarations.contains(expr.text))) && expr.children.size() == 2)
+    if (expr.text == "cause_at" && (expr.intrinsic || (!module_names().callables.contains(expr.text) && !has_declarations(expr.text))) && expr.children.size() == 2)
       return {ArgumentMode::value, prefix.empty() ? exception_type(0) : Type{Type::uint64}};
     if (expr.intrinsic) return {};
     std::vector<std::optional<Type>> arguments;
@@ -596,7 +636,7 @@ class ScalarChecker {
       if (required && applicable.size() > 1 && std::all_of(applicable.begin() + 1, applicable.end(), [&](size_t id) {
             const auto &first = program_.methods[applicable.front()], &other = program_.methods[id];
             return same_access(first, other) && implies_owners(first, other) && implies_owners(other, first);
-          })) fail(expr.at, "ambiguous methods for '" + expr.text + "'");
+          })) ambiguous_methods(expr.at, expr.text, applicable);
     }
     std::optional<ArgumentMode> mode;
     std::optional<Type> type;
@@ -1496,13 +1536,13 @@ class ScalarChecker {
 
   void resolve_captures(CheckedMethod &method) {
     if (method.captures_resolved) return;
-    const ModuleLookup lookup(module_, method.module);
+    const ModuleLookup lookup(module_, method.module), context(interpretation_, method.interpretation);
     const auto &source = *method.source;
     const auto &free = free_bindings(source).captures;
     const auto required = [&](const Capture &capture) {
       return lexical_.lookup(capture.name).has_value() ||
           std::any_of(query_environment().bindings.begin(), query_environment().bindings.end(), [&](const auto &binding) { return binding.name == capture.name; }) ||
-          (!module_names().callables.contains(capture.name) && !module_names().declarations.contains(capture.name) && !module_names().symbols.contains(capture.name) &&
+          (!module_names().callables.contains(capture.name) && !has_declarations(capture.name) && !module_names().symbols.contains(capture.name) &&
            capture.name != "isnull" && capture.name != "cause_at");
     };
     if (source.explicit_captures) {
@@ -1678,9 +1718,8 @@ class ScalarChecker {
     std::vector<const CheckedMethod *> obligations;
     const ModuleLookup lookup(module_, method.module);
     if (lexical_methods_.contains(method.source)) return obligations;
-    const auto found = module_names().declarations.find(method.source->name);
-    if (found == module_names().declarations.end()) return obligations;
-    for (const auto &declaration : found->second) {
+    if (!method.family) return obligations;
+    for (const auto &declaration : program_.families[*method.family].declarations) {
       if (!declaration_match(declaration, arguments)) continue;
       const auto access = access_coverage(method, declaration);
       if (access == AccessCoverage::disjoint) continue;
@@ -1806,7 +1845,7 @@ class ScalarChecker {
     if (!owners.empty() && std::any_of(best.begin(), best.end(), [&](size_t id) {
           return match_owners(program_.methods[id], owners, state) == OwnerMatch::unknown;
         })) implementation_gap(at, "method selection requires an unproved owner equality");
-    if (best.size() != 1) fail(at, "ambiguous methods for '" + name + "'");
+    if (best.size() != 1) ambiguous_methods(at, name, best);
     const auto selected = best.front();
     declaration_obligations(program_.methods[selected], arguments);
     return selected;
@@ -1818,7 +1857,7 @@ class ScalarChecker {
   }
   size_t select(const Expression &expr, const std::vector<Type> &arguments, const Access &access, const Owners &owners) {
     const auto family = named_family(expr.text);
-    if (family.methods.empty()) fail(expr.at, module_names().declarations.contains(expr.text)
+    if (family.methods.empty()) fail(expr.at, has_declarations(expr.text)
         ? "no applicable implementation for declared callable '" + expr.text + "'" : "unknown callable '" + expr.text + "'");
     return select_family(family.methods, arguments, expr.at, expr.text,
         family.context ? family.context->environment : std::vector<Type>{}, family.retained_types(), access, owners,
@@ -1826,7 +1865,7 @@ class ScalarChecker {
   }
   bool applicable_operation(const std::string &name, const std::vector<Type> &arguments, const Access &access = {}, const Owners &owners = {}) const {
     const auto family = module_names().callables.find(name);
-    return family != module_names().callables.end() && !method_candidates(family->second, arguments, {}, access, owners).methods.empty();
+    return family != module_names().callables.end() && !method_candidates(family_methods(family->second), arguments, {}, access, owners).methods.empty();
   }
   void finish_named_call(const Expression &expr, const std::vector<Type> &arguments,
                          const std::vector<CheckedOperation> &views, CheckedOperation &operation,
@@ -1904,7 +1943,7 @@ class ScalarChecker {
   }
   std::set<size_t> builtin_declarations(const Expression &expr, const std::vector<Type> &arguments,
                                       const Type &result, bool destinations = false) const {
-    if (expr.intrinsic || !module_names().declarations.contains(expr.text)) return {};
+    if (expr.intrinsic || !has_declarations(expr.text)) return {};
     // Builtins have established signatures. Declarations constrain these just
     // as they constrain explicit methods; they cannot retarget a builtin result.
     Form source;
@@ -1916,7 +1955,7 @@ class ScalarChecker {
       source.parameters.push_back(std::move(parameter));
     }
     CheckedMethod method;
-    method.source = &source; method.parameters = arguments; method.result.type = result;
+    method.source = &source; method.module = module_; method.family = module_names().callables.at(expr.text); method.parameters = arguments; method.result.type = result;
     check_declared_results(method, method.result, declared_results(method, arguments));
     std::set<size_t> failures;
     for (const auto *declaration : declaration_obligations(method, arguments))
@@ -1971,13 +2010,11 @@ class ScalarChecker {
     if (roles.empty()) { type.owners.clear(); type.argument_modes.clear(); }
     if (std::none_of(type.const_views.begin(), type.const_views.end(), [](bool v) { return v; })) type.const_views.clear();
     if (std::none_of(type.nullable_views.begin(), type.nullable_views.end(), [](bool v) { return v; })) type.nullable_views.clear();
-    for (const auto &failure : method.throws_types) type.throws_types.push_back(resolve_type(failure));
+    type.throws_types = checked.throws_types;
     for (const auto *declaration : declaration_obligations(checked, arguments))
-      for (const auto &failure : declaration->source->throws_types) {
-        const auto resolved = resolve_type(failure);
-        if (std::find(type.throws_types.begin(), type.throws_types.end(), resolved) == type.throws_types.end())
-          type.throws_types.push_back(resolved);
-      }
+      for (const auto &failure : declaration->throws_types)
+        if (std::find(type.throws_types.begin(), type.throws_types.end(), failure) == type.throws_types.end())
+          type.throws_types.push_back(failure);
     return resolve_type(std::move(type));
   }
   struct ResultObligation {
@@ -2273,6 +2310,7 @@ class ScalarChecker {
   // Operand hints defer validation to ordered checking; required typeof queries validate their bounded source forms here.
   std::optional<Type> type_evidence(const Expression &expr, TypeEvidenceState &state, bool contextual = false, const Type *expected = nullptr) const {
     const ModuleLookup lookup(module_, state.method ? program_.methods[*state.method].module : module_);
+    const ModuleLookup context(interpretation_, state.method ? program_.methods[*state.method].interpretation : interpretation_);
     ViewEvidence view{false, false, {}};
     const auto type = query_evidence(expr, state, view, contextual, expected);
     if (state.required && !type) implementation_gap(expr.at, "typeof requires a known declaration or operand type with a proved result contract");
@@ -2583,7 +2621,7 @@ class ScalarChecker {
         if (state.required) implementation_gap(expr.at, "storage exchange in typeof");
         return Type::void_type;
       }
-      if (expr.text == "cause_at" && (expr.intrinsic || (!module_names().callables.contains(expr.text) && !module_names().declarations.contains(expr.text)))) {
+      if (expr.text == "cause_at" && (expr.intrinsic || (!module_names().callables.contains(expr.text) && !has_declarations(expr.text)))) {
         if (state.required && (arguments.size() != 2 || arguments[0].kind != Type::exception || arguments[1] != Type::uint64))
           fail(expr.at, "cause_at requires an exception and a u64 index");
         return exception_type(0);
@@ -2592,11 +2630,11 @@ class ScalarChecker {
       const auto family = expr.intrinsic ? NamedFamily{} : named_family(expr.text, &state);
       const auto &retained = family.retained_types();
       const auto candidates = method_candidates(family.methods, arguments, retained, access, owners, &state);
-      if (family.methods.empty() && !expr.intrinsic && module_names().declarations.contains(expr.text) &&
+      if (family.methods.empty() && !expr.intrinsic && has_declarations(expr.text) &&
           (!eager_operation(expr.text) || !eager_types(expr, arguments).error.empty())) {
         std::optional<Type> result;
         std::optional<ResultMode> mode;
-        for (const auto &declaration : module_names().declarations.at(expr.text)) {
+        for (const auto &declaration : declarations(expr.text)) {
           const auto substitutions = declaration_match(declaration, arguments);
           if (!substitutions || !admits_access(declaration, access)) continue;
           const auto equality = match_owners(declaration, owners, &state);
@@ -2663,14 +2701,14 @@ class ScalarChecker {
       return Type::never;
     case K::callable:
       if (!expr.definition->name.empty()) {
-        state.bindings[expr.definition->name] = callable_evidence(lexical_methods_.at(expr.definition.get()), &state);
+        state.bindings[expr.definition->name] = callable_evidence(lexical_method(expr.definition.get(), state.method), &state);
         state.owner_bindings.erase(expr.definition->name);
         state.views[expr.definition->name] = {false, true, true, state.current_owner};
         return Type::void_type;
       }
       if (expected && expected->kind == Type::procedure)
-        return callable_query({lexical_methods_.at(expr.definition.get())}, expected, expr.at, state, true);
-      return contextual && !state.required ? std::nullopt : callable_evidence(lexical_methods_.at(expr.definition.get()), &state);
+        return callable_query({lexical_method(expr.definition.get(), state.method)}, expected, expr.at, state, true);
+      return contextual && !state.required ? std::nullopt : callable_evidence(lexical_method(expr.definition.get(), state.method), &state);
     default:
       state.complete = false;
       return {};
@@ -2777,6 +2815,7 @@ class ScalarChecker {
   }
   std::optional<CallableSelection> try_select_callable(const std::vector<size_t> &family, const Type *expected, const Location &at,
                                                         const TypeEvidenceState *state = nullptr, bool definition_site = false) const {
+    if (family.empty()) fail(at, "no applicable implementation for declared callable value");
     const auto &definition = program_.methods[family.front()];
     if (expected) signature_type(CheckedMethod{}, *expected, at);
     if (!expected && (family.size() != 1 || !program_.methods[family.front()].source->type_parameters.empty()))
@@ -2832,6 +2871,7 @@ class ScalarChecker {
     return {};
   }
   CheckedOperation materialize(const std::vector<size_t> &family, const Type *expected, const Location &at, bool definition_site = false) {
+    if (family.empty()) fail(at, "no applicable implementation for declared callable value");
     auto &definition = program_.methods[family.front()];
     if (lexical_methods_.contains(definition.source)) resolve_captures(definition);
     const auto selection = select_callable(family, expected, at, definition_site);
@@ -2840,7 +2880,7 @@ class ScalarChecker {
     for (const auto &capture : definition.captures) {
       Expression name{}; name.kind = Expression::Kind::name; name.at = capture.at; name.text = capture.name;
       const auto value = !lexical_.lookup(capture.name) && module_names().callables.contains(capture.name)
-          ? materialize(module_names().callables.at(capture.name), nullptr, capture.at) : read_binding(name);
+          ? materialize(family_methods(module_names().callables.at(capture.name)), nullptr, capture.at) : read_binding(name);
       if (value.type.kind != Type::procedure || (value.binding && !bindings_->at(*value.binding).callable_value))
         implementation_gap(capture.at, "capture of ordinary lexical cells or non-callable values");
       environment.push_back(value.type); captures.push_back(value);
@@ -3283,8 +3323,8 @@ class ScalarChecker {
       break;
     case K::name: {
       if (!lexical_.lookup(expr.text) && module_names().callables.contains(expr.text))
-        operation = materialize(module_names().callables.at(expr.text), expected, expr.at);
-      else if (!lexical_.lookup(expr.text) && module_names().declarations.contains(expr.text))
+        operation = materialize(family_methods(module_names().callables.at(expr.text)), expected, expr.at);
+      else if (!lexical_.lookup(expr.text) && has_declarations(expr.text))
         fail(expr.at, "no applicable implementation for declared callable '" + expr.text + "'");
       else if (!lexical_.lookup(expr.text) && module_names().symbols.contains(expr.text))
         implementation_gap(expr.at, "materialization of a compile-time symbol object");
@@ -3292,7 +3332,7 @@ class ScalarChecker {
       break;
     }
     case K::callable: {
-      operation = materialize({lexical_methods_.at(expr.definition.get())}, expected, expr.at, true);
+      operation = materialize({lexical_method(expr.definition.get())}, expected, expr.at, true);
       if (!expr.definition->name.empty()) {
         const auto id = declare(expr.definition->name, operation.type, false, true, expr.at);
         initialize(id); operation.place = id;
@@ -3451,7 +3491,7 @@ class ScalarChecker {
             (evidence[i].read_only && *evidence[i].read_only != views[i].read_only) ||
             (evidence[i].owner && evidence[i].owner != one_owner(views[i]))))
           implementation_gap(expr.children[i]->at, "operand type/access/owner evidence depends on completion or contextual inference");
-      if (expr.text == "cause_at" && (expr.intrinsic || (!module_names().callables.contains(expr.text) && !module_names().declarations.contains(expr.text)))) {
+      if (expr.text == "cause_at" && (expr.intrinsic || (!module_names().callables.contains(expr.text) && !has_declarations(expr.text)))) {
         if (arguments.size() != 2 || arguments[0].kind != Type::exception || arguments[1] != Type::uint64)
           fail(expr.at, "cause_at requires an exception and a u64 index");
         operation.type = completes ? exception_type(0) : Type{Type::never};
@@ -4229,6 +4269,7 @@ class ScalarChecker {
     auto &instance = program_.instances[i];
     checking_instance_ = &instance;
     const ModuleLookup lookup(module_, program_.methods[instance.method].module);
+    const ModuleLookup context(interpretation_, program_.methods[instance.method].interpretation);
     const auto &method = *program_.methods[instance.method].source;
     checking_method_ = &program_.methods[instance.method];
     for (const bool proving : {false, true}) {
@@ -4296,17 +4337,127 @@ class ScalarChecker {
     return observed_;
   }
 
+  size_t adapt_method(size_t method, size_t receiver, std::optional<size_t> family = {}, std::optional<size_t> parent = {}) {
+    const auto &original = program_.methods[method];
+    if (original.module == receiver) return method;
+    if (original.interpretation && interpretations_[original.interpretation].receiver == receiver &&
+        (!family || family == original.family) && (!parent || parent == original.parent)) return method;
+    const auto key = std::tuple{method, receiver, family.value_or(null_target), parent.value_or(null_target)};
+    if (const auto found = adapted_methods_.find(key); found != adapted_methods_.end()) return found->second;
+    if (program_.methods.size() >= instance_limit)
+      fail(original.source->at, "compiler resource limit: 4096 selected method interpretations; coverage remains unproved");
+    auto context = original.interpretation;
+    if (!context || interpretations_[context].receiver != receiver) {
+      const auto [found, inserted] = interpretation_ids_.emplace(std::pair{context, receiver}, interpretations_.size());
+      if (inserted) interpretations_.push_back({context, receiver});
+      context = found->second;
+    }
+    auto adapted = original;
+    adapted.interpretation = context;
+    if (family) adapted.family = family;
+    if (parent) adapted.parent = parent;
+    adapted.instances.clear(); adapted.nested.clear();
+    adapted.captures.clear(); adapted.queries.clear(); adapted.captures_resolved = false;
+    const auto id = program_.methods.size();
+    program_.methods.push_back(std::move(adapted));
+    adapted_methods_.emplace(key, id);
+    for (const auto child : original.nested) {
+      const auto nested = adapt_method(child, receiver, {}, id);
+      program_.methods[id].nested.push_back(nested);
+      lexical_variants_.emplace(std::pair{program_.methods[nested].source, id}, nested);
+    }
+    return id;
+  }
+
+  size_t import_family(size_t source, const Location &at) {
+    if (const auto found = module_names().imports.find(source); found != module_names().imports.end()) return found->second;
+    const auto &original = program_.families[source];
+    const auto id = program_.families.size();
+    program_.families.push_back({{}, module_, original.origin, at, source, {}, original.declarations});
+    module_names().imports.emplace(source, id);
+    for (auto &declaration : program_.families[id].declarations) declaration.family = id;
+    for (const auto method : original.methods) program_.families[id].methods.push_back(adapt_method(method, module_, id));
+    return id;
+  }
+
+  const FamilyView &prepare_family_view(size_t family, size_t context) {
+    const auto key = std::pair{family, context};
+    if (const auto found = family_views_.find(key); found != family_views_.end()) return found->second;
+    if (!context) return family_views_.emplace(key, FamilyView{family, program_.families[family].methods, {}}).first->second;
+    const auto interpretation = interpretations_[context];
+    const auto inherited = prepare_family_view(family, interpretation.parent);
+    const auto &receiver = modules_.at(interpretation.receiver);
+    std::set<size_t> selected;
+    for (const auto &[name, id] : receiver.callables) selected.insert(id);
+    FamilyView view{inherited.identity, {}, inherited.unproved};
+    for (const auto method : inherited.methods) view.methods.push_back(adapt_method(method, interpretation.receiver));
+    std::optional<size_t> replacement;
+    // An explicit receiver import is the receiver's interpretation of that identity.
+    // A separately named using view retains its own identity and context.
+    if (const auto imported = receiver.imports.find(inherited.identity); imported != receiver.imports.end()) {
+      view.identity = imported->second;
+      replacement = view.identity;
+    } else if (selected.contains(inherited.identity)) replacement = inherited.identity;
+    if (replacement) for (const auto method : program_.families[*replacement].methods) {
+      const auto previous = std::find_if(view.methods.begin(), view.methods.end(), [&](size_t candidate) {
+        return program_.methods[candidate].definition == program_.methods[method].definition;
+      });
+      if (previous == view.methods.end()) view.methods.push_back(method);
+      else *previous = method;
+    }
+    std::map<size_t, size_t> definitions;
+    for (const auto method : view.methods) definitions.emplace(program_.methods[method].definition, method);
+    const auto retained = definitions;
+    for (const auto id : selected) {
+      if (program_.families[id].origin != program_.families[inherited.identity].origin) continue;
+      for (const auto method : program_.families[id].methods) {
+        const auto definition = program_.methods[method].definition;
+        if (retained.contains(definition)) continue;
+        const auto [found, added] = definitions.emplace(definition, method);
+        if (added) view.methods.push_back(method);
+        else if (found->second != method)
+          view.unproved = "multiple selected interpretations of one inherited definition require an independent equivalence proof";
+      }
+    }
+    return family_views_.emplace(key, std::move(view)).first->second;
+  }
+
+  void prepare_interpretations() {
+    // Resolve source names by identity before checking bodies. This closure adds
+    // interpretation records, never source definitions or runtime registrations.
+    for (size_t id = 0; id < program_.methods.size(); ++id) {
+      const auto &method = program_.methods[id];
+      if (!method.interpretation) continue;
+      const auto &names = modules_.at(method.module).callables;
+      const std::function<void(const Expression &)> visit = [&](const Expression &expr) {
+        if (const auto found = names.find(expr.text); found != names.end())
+          prepare_family_view(found->second, method.interpretation);
+        for (const auto &child : expr.children) visit(*child);
+      };
+      visit(*method.source->body);
+      for (const auto &capture : method.source->captures)
+        if (const auto found = names.find(capture.name); found != names.end()) prepare_family_view(found->second, method.interpretation);
+    }
+  }
+
+  void publish(const std::string &name, const ModuleNames::Resource &resource, const Location &at) {
+    const auto [published, inserted] = module_names().exports.emplace(name, resource);
+    if (!inserted && published->second != resource) fail(at, "conflicting public alias '" + name + "'");
+  }
+
   void select_module_resource(const Form &form, size_t dependency) {
     using Resource = ModuleNames::Resource;
-    if (form.kind != Form::Kind::using_resource && form.kind != Form::Kind::symbol_from)
-      implementation_gap(form.at, "receiver-adapted import and mixin module contexts remain unproved");
+    const bool importing = form.kind == Form::Kind::import_resource;
+    if (form.kind != Form::Kind::using_resource && form.kind != Form::Kind::symbol_from && !importing)
+      implementation_gap(form.at, "mixin body redefinition remains unproved");
     const auto &exports = modules_.at(dependency).exports;
     const auto found = exports.find(form.name);
     if (found == exports.end()) fail(form.at, "source module does not export '" + form.name + "'");
-    const auto &resource = found->second;
+    auto resource = found->second;
     if (form.symbolic != (resource.kind == Resource::Kind::symbol))
       fail(form.at, "selected resource does not match the requested symbol or lexical category");
     if (resource.kind == Resource::Kind::symbol) {
+      if (importing) implementation_gap(form.at, "symbolic import and entry-installation composition remain unproved");
       if (form.kind == Form::Kind::using_resource && !form.using_symbol)
         implementation_gap(form.at, "symbolic destination selection; select its identity with 'symbol from' and install explicitly");
       const auto [alias, inserted] = module_names().symbols.emplace(form.alias, resource.symbol);
@@ -4321,11 +4472,14 @@ class ScalarChecker {
       const auto [alias, inserted] = module_names().exception_types.emplace(form.alias, resource.type);
       if (!inserted && alias->second != resource.type) fail(form.at, "conflicting type alias '" + form.alias + "'");
     } else {
-      const auto [alias, inserted] = module_names().callables.emplace(form.alias, resource.methods);
-      if (!inserted && alias->second != resource.methods)
+      if (importing) resource.family = import_family(*resource.family, form.at);
+      const auto [alias, inserted] = module_names().callables.emplace(form.alias, *resource.family);
+      if (!inserted && alias->second != *resource.family)
         implementation_gap(form.at, "same-alias callable composition remains unproved");
-      module_names().selected_callables.insert(form.alias);
+      if (importing) module_names().imported_aliases.insert(form.alias);
+      else module_names().selected_callables.insert(form.alias);
     }
+    if (form.exporting) publish(form.alias, resource, form.at);
   }
 
   void publish_module(const SourceModule &source) {
@@ -4338,14 +4492,11 @@ class ScalarChecker {
         resource.kind = Resource::Kind::symbol; resource.symbol = found->second;
         if (const auto family = module_names().families.find(resource.symbol); family != module_names().families.end()) resource.family = family->second;
       } else if (const auto found = module_names().callables.find(form->name); found != module_names().callables.end()) {
-        resource.kind = Resource::Kind::callable; resource.methods = found->second;
+        resource.kind = Resource::Kind::callable; resource.family = found->second;
       } else if (const auto found = module_names().exception_types.find(form->name); found != module_names().exception_types.end()) {
         resource.kind = Resource::Kind::exception; resource.type = found->second;
-      } else if (module_names().declarations.contains(form->name)) {
-        implementation_gap(form->at, "publication of a bodyless callable contract remains unproved");
       } else fail(form->at, "unknown exported resource '" + form->name + "'");
-      const auto [published, inserted] = module_names().exports.emplace(form->name, resource);
-      if (!inserted && published->second != resource) fail(form->at, "conflicting public alias '" + form->name + "'");
+      publish(form->name, resource, form->at);
     }
   }
 
@@ -4364,8 +4515,6 @@ class ScalarChecker {
 
   void register_module(const SourceModule &source, std::optional<size_t> &print_symbol) {
     const auto &forms = source.forms;
-    for (const auto &form : forms) if (form->exporting)
-      implementation_gap(form->at, "export import publication remains unproved; use source-preserving selection and standalone export where applicable");
     for (const auto &form : forms)
       if (const auto dependency = source.dependencies.find(form.get()); dependency != source.dependencies.end())
         select_module_resource(*form, dependency->second);
@@ -4374,6 +4523,12 @@ class ScalarChecker {
       const auto found = std::find_if(exception_categories.begin(), exception_categories.end(), [&](const ExceptionDescriptor &entry) { return form->name == entry.name; });
       if (found == exception_categories.end()) fail(form->at, "unknown intrinsic exception selection '" + form->name + "'");
       if (!module_names().exception_types.emplace(form->alias, exception_type(exception_id(found->category))).second) fail(form->at, "duplicate exception type selection");
+      if (form->exporting) {
+        ModuleNames::Resource resource{};
+        resource.kind = ModuleNames::Resource::Kind::exception;
+        resource.type = exception_type(exception_id(found->category));
+        publish(form->alias, resource, form->at);
+      }
       program_.exception_values = true;
     }
     std::vector<const Form *> definitions;
@@ -4471,6 +4626,7 @@ class ScalarChecker {
         if (resolved.kind != Type::exception) implementation_gap(form->at, "throws contracts require selected intrinsic exception types");
         const auto categories = exception_possibilities(resolved);
         prepared.throws_categories.insert(categories.begin(), categories.end());
+        prepared.throws_types.push_back(resolved);
       }
       std::set<std::string> names;
       for (const auto &parameter : form->parameters) {
@@ -4504,17 +4660,28 @@ class ScalarChecker {
         fail(form->at, "using and symbol selection do not grant callable extension permission");
       if (!symbol && !lexical && module_names().selected_callables.contains(form->name))
         fail(form->at, "using does not grant callable extension permission");
+      const auto new_family = [&] {
+        const auto family = program_.families.size();
+        program_.families.push_back({symbol, module_, family, form->at, {}, {}, {}});
+        return family;
+      };
+      if (symbol) {
+        if (!module_names().families.contains(*symbol)) module_names().families.emplace(*symbol, new_family());
+        prepared.family = module_names().families.at(*symbol);
+      } else if (!lexical) {
+        if (!module_names().callables.contains(form->name)) module_names().callables.emplace(form->name, new_family());
+        prepared.family = module_names().callables.at(form->name);
+        if (module_names().imported_aliases.contains(form->name))
+          module_names().extensions[*prepared.family].emplace(form->name, form->at);
+      }
       if (!form->body) {
-        module_names().declarations[form->name].push_back(std::move(prepared));
+        program_.families[*prepared.family].declarations.push_back(std::move(prepared));
         continue;
       }
       const auto id = program_.methods.size();
+      prepared.definition = id;
       std::vector<size_t> local_family;
-      if (symbol && !module_names().families.contains(*symbol)) {
-        module_names().families.emplace(*symbol, program_.families.size());
-        program_.families.push_back({*symbol, module_, {}});
-      }
-      auto &family = symbol ? program_.families[module_names().families.at(*symbol)].methods : lexical ? local_family : module_names().callables[form->name];
+      auto &family = prepared.family ? program_.families[*prepared.family].methods : local_family;
       for (const auto other : lexical ? std::vector<size_t>{} : family) {
         const auto &definition = program_.methods[other];
         if (implies(prepared, definition) && implies(definition, prepared)) {
@@ -4529,25 +4696,25 @@ class ScalarChecker {
           implementation_gap(form->at, "mixed function/procedure family");
       }
       program_.methods.push_back(std::move(prepared));
+      if (const auto parent = program_.methods.back().parent) program_.methods[*parent].nested.push_back(id);
       method_ids.emplace(form, id);
       if (lexical) lexical_methods_[form] = id;
       else family.push_back(id);
     }
-    for (const auto &[name, contracts] : module_names().declarations)
-      if (module_names().symbols.contains(name) && std::any_of(contracts.begin(), contracts.end(), [](const auto &contract) { return !contract.source->symbolic; })) {
-        if (!program_.symbols[module_names().symbols.at(name)].intrinsic_print)
-          implementation_gap(contracts.front().source->at, "same-scope callable and symbol declarations");
-        fail(contracts.front().source->at, "callable conflicts with symbol '" + name + "'");
-      }
     for (const auto &[name, id] : module_names().symbols)
       if (module_names().callables.contains(name)) {
         if (!program_.symbols[id].intrinsic_print)
-          implementation_gap(program_.methods[module_names().callables[name].front()].source->at, "same-scope callable and symbol declarations");
-        fail(program_.methods[module_names().callables[name].front()].source->at, "callable conflicts with symbol '" + name + "'");
+          implementation_gap(program_.families[module_names().callables.at(name)].at, "same-scope callable and symbol declarations");
+        fail(program_.families[module_names().callables.at(name)].at, "callable conflicts with symbol '" + name + "'");
       }
     for (const auto &[name, type] : module_names().exception_types)
-      if (module_names().symbols.contains(name) || module_names().callables.contains(name) || module_names().declarations.contains(name))
+      if (module_names().symbols.contains(name) || module_names().callables.contains(name))
         implementation_gap({source.path.string()}, "same-scope type and callable/symbol bindings");
+    for (const auto &[family, aliases] : module_names().extensions) if (aliases.size() > 1) {
+      std::string message = "one callable identity is extended through multiple aliases:";
+      for (const auto &[name, at] : aliases) message += " '" + name + "' at " + location_text(at);
+      program_.warnings.push_back({Warning::multi_alias_extension, aliases.begin()->second, std::move(message)});
+    }
     publish_module(source);
   }
 
@@ -4559,6 +4726,7 @@ public:
       const ModuleLookup lookup(module_, module);
       register_module(source.modules[module], print_symbol);
     }
+    prepare_interpretations();
     for (const auto &[module, expr] : source.initializers) {
       if (module) check_dependency_lifetime(*expr);
       program_.initializers.push_back(expr);
@@ -4566,7 +4734,7 @@ public:
     }
     for (size_t i = 0; i < program_.methods.size(); ++i) {
       const auto &method = *program_.methods[i].source;
-      if (!method.type_parameters.empty() || lexical_methods_.contains(&method)) continue;
+      if (program_.methods[i].definition != i || !method.type_parameters.empty() || lexical_methods_.contains(&method)) continue;
       demand(i, program_.methods[i].parameters, method.at);
     }
     check_entry();

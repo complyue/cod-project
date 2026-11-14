@@ -91,8 +91,8 @@ runner.CASES = {
     'private_symbol_rejected': ({'base.cod': 'symbol @p:u64;', 'main.cod': 'symbol from "base.cod" @p;'}, 2, '', 'does not export'),
     'using_extension_rejected': ({'base.cod': BASE, 'main.cod': 'using "base.cod" score;func score(x:u64)->u64{return 7u64;}'}, 2, '', 'does not grant callable extension'),
     'symbol_selection_extension_rejected': ({'base.cod': FAMILY, 'main.cod': 'symbol from "base.cod" @score;proc @score(x:u32)->u64{return 9u64;}'}, 2, '', 'do not grant callable extension'),
-    'import_remains_unproved': ({'base.cod': BASE, 'main.cod': 'import "base.cod" score;'}, 2, '', 'receiver-adapted import'),
-    'mixin_remains_unproved': ({'base.cod': BASE, 'main.cod': 'mixin "base.cod" score;'}, 2, '', 'receiver-adapted import'),
+    'import_retains_source_definition': ({'base.cod': BASE, 'main.cod': IO + 'import "base.cod" score;behave @print(score(1u64));'}, 0, '1\n', ''),
+    'mixin_remains_unproved': ({'base.cod': BASE, 'main.cod': 'mixin "base.cod" score;'}, 2, '', 'mixin body redefinition'),
     'symbol_destination_boundary': ({'base.cod': FAMILY, 'main.cod': 'symbol @score:proc(u64)->u64;using "base.cod" @score;'}, 2, '', 'symbolic destination selection'),
     'conflicting_aliases': ({'base.cod': 'symbol @p:u64;export @p;', 'other.cod': 'symbol @p:u64;export @p;',
         'main.cod': 'symbol from "base.cod" @p;symbol from "other.cod" @p;'}, 2, '', 'conflicting symbol alias'),
@@ -163,7 +163,7 @@ runner.CASES = {
     'export_import_is_not_silently_ignored': ({
         'base.cod': 'export import "std:exceptions" MissingReturnException;',
         'main.cod': 'using "base.cod" MissingReturnException;',
-    }, 2, '', 'export import publication remains unproved'),
+    }, 0, '', ''),
 }
 runner.CASE_ARGUMENTS = {}
 runner.EXTRA_SOURCES = [Path(__file__)]
