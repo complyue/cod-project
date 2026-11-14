@@ -426,7 +426,7 @@ class LLVMEmission {
     return pack(result, choice.operation->type);
   }
   bool caller_destination(size_t method) const {
-    if (borrowed_result(*program_->methods[method].source)) return false;
+    if (program_->methods[method].result.borrowed()) return false;
     const auto &instances = program_->methods[method].instances;
     return std::any_of(instances.begin(), instances.end(), [&](size_t id) { return program_->instances[id].result.kind == Type::procedure; });
   }

@@ -42,7 +42,6 @@ inline ArgumentMode argument_mode(const Parameter &parameter) {
   if (parameter.declaration_kind == "ref") return ArgumentMode::borrowed_ref;
   return ArgumentMode::borrowed_read;
 }
-inline bool borrowed_result(const Form &method) { return !method.result_owner.empty(); }
 inline Type exception_type(size_t category) { return {Type::exception, exception_categories.at(category).name, category}; }
 inline bool accepts_exception(const Type &source, const Type &target) {
   return source.kind == Type::exception && target.kind == Type::exception && (!target.identity || source == target);
@@ -187,11 +186,20 @@ struct CheckedInstance {
   std::vector<std::optional<Type>> substitutions;
   size_t query_environment = 0;
 };
+enum class ResultMode { value, borrowed_ref, borrowed_ptr };
+struct ResultContract {
+  Type type;
+  ResultMode mode = ResultMode::value;
+  std::string owner;
+  bool read_only = false;
+  bool borrowed() const { return mode != ResultMode::value; }
+  bool nullable() const { return mode == ResultMode::borrowed_ptr; }
+};
 struct CheckedMethod {
   const Form *source = nullptr;
   std::vector<size_t> instances;
   std::vector<Type> parameters;
-  Type result;
+  ResultContract result;
   std::set<size_t> throws_categories;
   std::vector<Capture> captures;
   std::vector<Capture> queries;
@@ -1395,7 +1403,7 @@ class ScalarChecker {
       fail(at, "compiler resource limit: 4096 scalar checking obligations while preparing '" + definition.source->name + "'");
     const auto substitutions = match(definition, arguments, retained);
     if (!substitutions) throw std::logic_error("unchecked method demand");
-    auto result = substitute(definition.result, definition, *substitutions);
+    auto result = substitute(definition.result.type, definition, *substitutions);
     const auto id = program_.instances.size();
     auto context = arguments; context.insert(context.end(), environment.begin(), environment.end());
     context.insert(context.end(), retained.begin(), retained.end());
@@ -1487,7 +1495,7 @@ class ScalarChecker {
     if (checking_method_ && checking_method_->source->kind == Form::Kind::function && definition.kind == Form::Kind::procedure)
       fail(expr.at, "a function cannot invoke a procedure");
     if (!completes) { operation.type = Type::never; return; }
-    finish_call(expr, callable_type(definition, target.arguments, target.result), target.effects,
+    finish_call(expr, callable_type(program_.methods[target.method], target.arguments, target.result), target.effects,
         call_reasons(program_.methods[target.method]), arguments, views, operation, read, discard);
   }
   struct EagerTypes {
@@ -1541,9 +1549,11 @@ class ScalarChecker {
       if (&expr != prepared_call_) note_abrupt(expr.at);
     }
   }
-  Type callable_type(const Form &method, const std::vector<Type> &arguments, const Type &result) const {
+  Type callable_type(const CheckedMethod &checked, const std::vector<Type> &arguments, const Type &result) const {
+    const auto &method = *checked.source;
+    const auto &contract = checked.result;
     Type type{Type::procedure}; type.pure_callable = method.kind == Form::Kind::function;
-    type.value_result = !borrowed_result(method);
+    type.value_result = !contract.borrowed();
     type.parameters = arguments; type.target = std::make_shared<Type>(result);
     std::map<std::string, size_t> roles;
     const auto role = [&](const std::string &owner) {
@@ -1556,9 +1566,9 @@ class ScalarChecker {
       type.argument_modes.push_back(argument_mode(parameter));
       type.nullable_views.push_back(argument_mode(parameter) == ArgumentMode::borrowed_ptr);
     }
-    type.owners.push_back(borrowed_result(method) ? role(method.result_owner) : 0);
-    type.const_views.push_back(method.result_const);
-    type.nullable_views.push_back(borrowed_result(method) && method.result_kind == "ptr");
+    type.owners.push_back(contract.borrowed() ? role(contract.owner) : 0);
+    type.const_views.push_back(contract.read_only);
+    type.nullable_views.push_back(contract.nullable());
     if (roles.empty()) { type.owners.clear(); type.argument_modes.clear(); }
     if (std::none_of(type.const_views.begin(), type.const_views.end(), [](bool v) { return v; })) type.const_views.clear();
     if (std::none_of(type.nullable_views.begin(), type.nullable_views.end(), [](bool v) { return v; })) type.nullable_views.clear();
@@ -1580,9 +1590,9 @@ class ScalarChecker {
     const auto bindings = type_context(method, retained);
     auto arguments = method.parameters;
     for (auto &argument : arguments) argument = substitute(argument, method, bindings, true);
-    const auto result = substitute(method.result, method, bindings, true);
+    const auto result = substitute(method.result.type, method, bindings, true);
     if (nested_binder(method, result) || std::any_of(arguments.begin(), arguments.end(), [&](const auto &type) { return nested_binder(method, type); })) return {};
-    return callable_type(*method.source, arguments, result);
+    return callable_type(method, arguments, result);
   }
   static CheckedOperation literal(const Expression &expr) {
     using K = Expression::Kind;
@@ -1987,12 +1997,12 @@ class ScalarChecker {
         if (state.required) for (size_t i = 0; i < arguments.size(); ++i)
           if (argument_mode(method.source->parameters[i]) != ArgumentMode::value && (views[i].view != true || views[i].mixed_view))
             implementation_gap(expr.at, "borrowed parameter requires an existing view");
-        const auto type = substitute(method.result, method, *match(method, arguments, retained), true);
+        const auto type = substitute(method.result.type, method, *match(method, arguments, retained), true);
         if (nested_binder(method, type) || (result && *result != type)) return {};
-        const bool borrowed = borrowed_result(*method.source);
-        ViewEvidence next{borrowed && method.source->result_const, borrowed, {}};
+        const bool borrowed = method.result.borrowed();
+        ViewEvidence next{method.result.read_only, borrowed, {}};
         if (borrowed) for (size_t i = 0; i < owners.size(); ++i)
-          if (method.source->parameters[i].owner == method.source->result_owner && owners[i]) next.owner = owners[i];
+          if (method.source->parameters[i].owner == method.result.owner && owners[i]) next.owner = owners[i];
         view = !result || view == next ? next : ViewEvidence{};
         result = type;
       }
@@ -2120,8 +2130,8 @@ class ScalarChecker {
       access.push_back(!expected->const_views.empty() && expected->const_views[i]);
     const auto selected = select_method(family, arguments, at, "callable value", retained, access);
     const auto &method = program_.methods[selected];
-    const auto result = substitute(method.result, method, *match(method, arguments, retained));
-    auto type = callable_type(*method.source, arguments, result);
+    const auto result = substitute(method.result.type, method, *match(method, arguments, retained));
+    auto type = callable_type(method, arguments, result);
     signature_type(definition, type, at);
     if (expected) {
       std::set<size_t> allowed;
@@ -3006,7 +3016,8 @@ class ScalarChecker {
     }
     case K::return_value: {
       if (!instance) fail(expr.at, "return requires an enclosing callable");
-      const bool borrowed = borrowed_result(*method);
+      const auto &contract = program_.methods[instance->method].result;
+      const bool borrowed = contract.borrowed();
       const auto value = expr.children.empty() ? Type{Type::void_type} : check(*expr.children[0], instance, operations, !borrowed, false, instance->result.kind == Type::procedure ? &instance->result : nullptr);
       if (!borrowed && value.kind == Type::procedure) note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
       if (borrowed && value != Type::never) {
@@ -3014,16 +3025,16 @@ class ScalarChecker {
         const auto &selected = operations.at(expr.children.front().get());
         if (!selected.view || selected.mixed_view) implementation_gap(expr.at, "fresh ordinary borrowed results require a separate storage contract");
         if (value != Type::null_ref && value != instance->result) fail(expr.at, "borrowed return requires the exact target type");
-        if (!method->result_const && selected.read_only) fail(expr.at, "readonly target cannot supply a writable borrowed result");
-        const auto owner = external_owners_.at(method->result_owner);
+        if (!contract.read_only && selected.read_only) fail(expr.at, "readonly target cannot supply a writable borrowed result");
+        const auto owner = external_owners_.at(contract.owner);
         if (!selected.owners.empty() && selected.owners != std::set<size_t>{owner})
           fail(expr.at, "borrowed result does not retain its declared external owner");
-        if (method->result_kind != "ptr" && proving_ && validating_ && lexical_.live && selected.targets.contains(null_target))
+        if (!contract.nullable() && proving_ && validating_ && lexical_.live && selected.targets.contains(null_target))
           fail(expr.at, "borrowed ref result requires a proven non-null target");
-        if (method->result_kind != "ptr") require_initialized(selected, expr.at, "borrowed result");
+        if (!contract.nullable()) require_initialized(selected, expr.at, "borrowed result");
         operation.borrowed_result = true;
         lexical_.returned = {false, selected.targets, {}, selected.null_sources};
-        if (method->result_kind == "ptr" && !selected.initialized_target) for (const auto place : selected.targets)
+        if (contract.nullable() && !selected.initialized_target) for (const auto place : selected.targets)
           if (place != null_target && !lexical_.initialized.contains(place)) lexical_.returned.uninitialized.insert(place);
       } else if (value != Type::never && !transfers_value(value, instance->result))
         fail(expr.at, "return type '" + type_name(value) + "' does not satisfy '" + type_name(instance->result) + "'");
@@ -3304,7 +3315,7 @@ class ScalarChecker {
     for (const auto id : state.initialized) if (storage(id).borrowed) known.insert(id);
     const auto [found, inserted] = observed_.initialized.emplace(reason, known);
     if (!inserted) found->second = intersect(found->second, known);
-    if (!reason && borrowed_result(*checking_method_->source)) {
+    if (!reason && checking_method_->result.borrowed()) {
       auto returned = state.returned;
       returned.initialize(state.initialized);
       observed_.returned.merge(returned);
@@ -3435,8 +3446,7 @@ public:
           if (parameter.owner.empty() || parameter.variadic || parameter.automatic_conversion)
             fail(parameter.at, "swap destinations require explicit external owners without variadic parameters or conversions");
       }
-      if (!form->result_owner.empty() && !borrowed_result(*form)) implementation_gap(form->at, "owner annotations on independent const results");
-      if (borrowed_result(*form) && *form->result_type == Type::void_type) fail(form->at, "void cannot be a borrowed result");
+      if (!form->result_owner.empty() && *form->result_type == Type::void_type) fail(form->at, "void cannot be a borrowed result");
       CheckedMethod prepared;
       prepared.source = form;
       for (const auto &p : form->type_parameters) prepared.type_parameters.push_back(p.name);
@@ -3449,13 +3459,18 @@ public:
         }
       }
       const auto resolve_signature = [&](const Type &type) { return resolve_type(type, &prepared); };
-      prepared.result = resolve_signature(*form->result_type);
-      if (form->result_kind == "val" && !scalar_type(prepared.result))
+      prepared.result.type = resolve_signature(*form->result_type);
+      prepared.result.owner = form->result_owner;
+      if (!form->result_owner.empty()) {
+        prepared.result.mode = form->result_kind == "ptr" ? ResultMode::borrowed_ptr : ResultMode::borrowed_ref;
+        prepared.result.read_only = form->result_const;
+      }
+      if (form->result_kind == "val" && !scalar_type(prepared.result.type))
         implementation_gap(form->at, "explicit val results for non-scalar or generic types");
-      if (!borrowed_result(*form) && prepared.result != Type::void_type && prepared.result.kind != Type::procedure && !scalar_type(prepared.result)) {
+      if (!prepared.result.borrowed() && prepared.result.type != Type::void_type && prepared.result.type.kind != Type::procedure && !scalar_type(prepared.result.type)) {
         if (!form->result_const) implementation_gap(form->at, "default result mode for non-scalar or generic types");
       }
-      signature_type(prepared, prepared.result, form->at, true);
+      signature_type(prepared, prepared.result.type, form->at, true);
       for (const auto &type : form->throws_types) {
         const auto resolved = resolve_type(type);
         if (resolved.kind != Type::exception) implementation_gap(form->at, "throws contracts require selected intrinsic exception types");
