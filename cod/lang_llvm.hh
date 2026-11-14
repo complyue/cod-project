@@ -687,9 +687,14 @@ class LLVMEmission {
       if (handler.kind == Expression::Kind::block) { finalizer = &handler; break; }
       const auto &fact = facts_.front()->at(&handler);
       auto *selected = block("catch.selected"), *next = block("catch.next");
-      b_.CreateCondBr(fact.type.identity ? b_.CreateICmpEQ(load(category_), integer(fact.type.identity)) : b_.getTrue(), selected, next);
+      auto *caught = choose(handler, {}, choices(handler, {}), scalar_, [&](const Choice &choice) -> llvm::Value * {
+        const auto &type = choice.operation->type;
+        auto *value = pack(active_exception(), type);
+        return type.identity ? b_.CreateSelect(b_.CreateICmpEQ(load(category_), integer(type.identity)), value, empty_scalar()) : value;
+      });
+      b_.CreateCondBr(b_.CreateICmpNE(b_.CreateExtractValue(caught, 1), b_.getInt32(0)), selected, next);
       b_.SetInsertPoint(selected);
-      b_.CreateStore(pack(active_exception(), fact.type), storage_.at(*fact.place));
+      b_.CreateStore(caught, storage_.at(*fact.place));
       b_.CreateStore(b_.getInt8(0), exit_); b_.CreateStore(integer(0), category_); b_.CreateStore(null_pointer(), fatal_);
       b_.CreateStore(b_.getFalse(), returning_);
       clear_value(result_);

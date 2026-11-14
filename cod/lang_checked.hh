@@ -992,9 +992,9 @@ class ScalarChecker {
       const auto &handler = *expr.children[i];
       if (handler.kind == Expression::Kind::block) { finalizer = &handler; break; }
       program_.exception_values = true;
-      if (handler.annotation && instance && binder(program_.methods[instance->method], *handler.annotation))
-        implementation_gap(handler.at, "generic typed-catch selection");
-      const auto type = handler.annotation ? resolve_type(*handler.annotation) : exception_type(0);
+      const auto type = !handler.annotation ? exception_type(0) : instance
+          ? substitute(*handler.annotation, program_.methods[instance->method], instance->substitutions)
+          : resolve_type(*handler.annotation);
       if (type.kind != Type::exception) fail(handler.at, "catch requires a selected intrinsic exception type");
       if (handler.annotation && !type.identity) fail(handler.at, "use an untyped catch for SystemException");
       if (!handled.insert(type.identity).second) fail(handler.at, "duplicate exception category in catch clauses");
