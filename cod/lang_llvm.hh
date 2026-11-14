@@ -302,7 +302,7 @@ class LLVMEmission {
       const auto same = [&](const Choice &other) {
         return other.inputs == choice.inputs && other.operation->callee == choice.operation->callee &&
             other.operation->type == choice.operation->type && other.operation->operand_type == choice.operation->operand_type &&
-            other.operation->arguments == choice.operation->arguments;
+            other.operation->arguments == choice.operation->arguments && other.operation->builtin == choice.operation->builtin;
       };
       auto found = std::find_if(result.begin(), result.end(), same);
       if (found == result.end()) { result.push_back(std::move(choice)); found = std::prev(result.end()); }
@@ -459,6 +459,16 @@ class LLVMEmission {
       return result;
     });
   }
+  llvm::Value *eager_builtin(const Expression &expr, const std::vector<llvm::Value *> &arguments, const Choice &choice) {
+    if (choice.operation->builtin == BuiltinOperation::binary) return binary(expr, arguments[0], arguments[1], choice);
+    const auto type = choice.operation->operand_type;
+    auto *argument = unpack(arguments.front(), type);
+    if (expr.text == "!") return pack(b_.CreateNot(argument), type);
+    if (expr.text == "+") return arguments.front();
+    if (floating(type)) return pack(b_.CreateFNeg(argument), type);
+    auto *zero = pack(llvm::ConstantInt::get(llvm::cast<llvm::IntegerType>(native_type(type)), 0), type);
+    return binary(expr, zero, arguments.front(), Choice{{type, type}, choice.operation});
+  }
   llvm::Value *invoke(const Expression &expr, const std::vector<llvm::Value *> &arguments) {
     if (facts_.front()->at(&expr).callable_call) return invoke_value(expr, arguments);
     std::vector<const Expression *> source_inputs;
@@ -478,7 +488,9 @@ class LLVMEmission {
         auto *target = specialize_ && cases.size() == 1 ? specialized_[id] : general_[program_->instances[id].method];
         return call(target, program_->instances[id].method);
       }
-      if (choice.operation->cause_at) {
+      if (choice.operation->builtin == BuiltinOperation::unary || choice.operation->builtin == BuiltinOperation::binary)
+        return outcome(eager_builtin(expr, arguments, choice), integer(0), integer(0), null_pointer());
+      if (choice.operation->builtin == BuiltinOperation::cause_at) {
         auto *payload = unpack(arguments[0], choice.inputs[0]);
         auto *buffer = slot(exception_, "exception.cause");
         b_.CreateCall(runtime("cod_lang_exception_cause", b_.getVoidTy(), {b_.getInt64Ty(), b_.getInt64Ty(), b_.getPtrTy()}),
@@ -489,6 +501,7 @@ class LLVMEmission {
         for (unsigned i = 0; i < 4; ++i) result = b_.CreateInsertValue(result, b_.CreateExtractValue(loaded, i), i + 1);
         return outcome(pack(result, exception_type(0)), integer(0), integer(0), null_pointer());
       }
+      if (choice.operation->builtin != BuiltinOperation::print) throw std::logic_error("unchecked call reached native invocation");
       const auto type = choice.inputs.front();
       auto *argument = unpack(arguments.front(), type);
       std::string suffix;
@@ -812,6 +825,18 @@ class LLVMEmission {
   llvm::Value *emit_expression(const Expression &expr, bool read = true, bool discard = false) {
     using K = Expression::Kind;
     const auto &fact = facts_.front()->at(&expr);
+    if (std::all_of(facts_.begin(), facts_.end(), [&](const auto *facts) {
+          const auto builtin = facts->at(&expr).builtin;
+          return builtin == BuiltinOperation::unary || builtin == BuiltinOperation::binary;
+        })) {
+      std::vector<llvm::Value *> arguments;
+      std::vector<const Expression *> inputs;
+      for (const auto &child : expr.children) {
+        arguments.push_back(emit_expression(*child)); inputs.push_back(child.get());
+        if (!reachable()) return nullptr;
+      }
+      return choose(expr, arguments, choices(expr, inputs), scalar_, [&](const Choice &choice) { return eager_builtin(expr, arguments, choice); });
+    }
     if (fact.callable) {
       const bool definition = expr.kind == K::callable && fact.place.has_value();
       const auto materialize = [&](const CheckedOperation &value) {
@@ -846,24 +871,13 @@ class LLVMEmission {
         address = b_.CreateSelect(b_.CreateICmpEQ(address, null_pointer()), null_pointer(), storage_.at(*fact.captured_place));
       return read ? b_.CreateLoad(scalar_, checked_address(address, expr, expr.at)) : address;
     }
-    case K::unary: {
+    case K::unary:
       if (fact.minimum_literal) return pack(integer(std::uint64_t{1} << 63), Type::integer);
-      auto *argument = emit_expression(*expr.children.front());
-      if (!reachable()) return nullptr;
-      return choose(expr, {argument}, choices(expr, {expr.children.front().get()}), scalar_, [&](const Choice &choice) {
-        const auto type = choice.operation->type;
-        auto *value = unpack(argument, type);
-        if (expr.text == "!") return pack(b_.CreateNot(value), type);
-        if (expr.text == "+") return argument;
-        if (floating(type)) return pack(b_.CreateFNeg(value), type);
-        auto *zero = pack(llvm::ConstantInt::get(llvm::cast<llvm::IntegerType>(native_type(type)), 0), type);
-        return binary(expr, zero, argument, Choice{{type, type}, choice.operation});
-      });
-    }
+      [[fallthrough]];
     case K::binary: {
-      auto *left = emit_expression(*expr.children[0]);
-      if (!reachable()) return nullptr;
       if (expr.text == "&&" || expr.text == "||") {
+        auto *left = emit_expression(*expr.children[0]);
+        if (!reachable()) return nullptr;
         auto *start = b_.GetInsertBlock(), *right_block = block("logical.right"), *join = block("logical.join");
         b_.CreateCondBr(unpack(left, Type::boolean), expr.text == "&&" ? right_block : join, expr.text == "&&" ? join : right_block);
         b_.SetInsertPoint(right_block);
@@ -877,30 +891,27 @@ class LLVMEmission {
         if (right_reaches) value->addIncoming(right, right_end);
         return value;
       }
-      auto *right = emit_expression(*expr.children[1]);
-      if (!reachable()) return nullptr;
-      return choose(expr, {left, right}, choices(expr, {expr.children[0].get(), expr.children[1].get()}), scalar_,
-          [&](const Choice &choice) { return binary(expr, left, right, choice); });
+      [[fallthrough]];
     }
     case K::value_call: case K::call: case K::behave: case K::perform: {
-      if (fact.swap != StorageSwap::none) {
+      if (fact.builtin == BuiltinOperation::reference_swap || fact.builtin == BuiltinOperation::bits_swap) {
         auto *left = emit_expression(*expr.children[0], false);
         if (!reachable()) return nullptr;
         auto *right = emit_expression(*expr.children[1], false);
         if (!reachable()) return nullptr;
-        if (fact.swap == StorageSwap::reference) {
+        if (fact.builtin == BuiltinOperation::reference_swap) {
           left = bindings_.at(*facts_.front()->at(expr.children[0].get()).binding);
           right = bindings_.at(*facts_.front()->at(expr.children[1].get()).binding);
         } else {
           left = checked_address(left, *expr.children[0], expr.at);
           right = checked_address(right, *expr.children[1], expr.at);
         }
-        auto *type = fact.swap == StorageSwap::reference ? static_cast<llvm::Type *>(b_.getPtrTy()) : scalar_;
+        auto *type = fact.builtin == BuiltinOperation::reference_swap ? static_cast<llvm::Type *>(b_.getPtrTy()) : scalar_;
         auto *left_value = b_.CreateLoad(type, left), *right_value = b_.CreateLoad(type, right);
         b_.CreateStore(right_value, left); b_.CreateStore(left_value, right);
         return empty_scalar();
       }
-      if (fact.is_null) {
+      if (fact.builtin == BuiltinOperation::is_null) {
         auto *address = emit_expression(*expr.children.front(), false);
         if (!reachable()) return nullptr;
         return pack(b_.CreateICmpEQ(address, null_pointer()), Type::boolean);

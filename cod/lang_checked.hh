@@ -26,7 +26,11 @@ inline bool bits_type(const Type &type) { return scalar_type(type) || type.kind 
 inline bool lexical_value_type(const Type &type) { return bits_type(type) || type.kind == Type::procedure; }
 inline constexpr size_t null_target = std::numeric_limits<size_t>::max();
 enum class ArgumentMode { value, borrowed_read, borrowed_ref, borrowed_ptr };
-enum class StorageSwap { none, reference, bits };
+enum class BuiltinOperation { none, unary, binary, is_null, cause_at, reference_swap, bits_swap, print };
+inline bool eager_operation(std::string_view name) {
+  return name == "+" || name == "-" || name == "*" || name == "/" || name == "%" || name == "!" ||
+      name == "==" || name == "!=" || name == "<" || name == ">" || name == "<=" || name == ">=";
+}
 struct CheckedArgument {
   ArgumentMode mode;
   Type type;
@@ -74,14 +78,12 @@ struct CheckedOperation {
   bool initializes = false;
   std::set<size_t> exceptions;
   std::set<size_t> captures;
-  bool cause_at = false;
   bool snapshot = false;
   std::optional<size_t> captured_place;
   bool initialized_target = false;
   bool mixed_view = false;
-  bool is_null = false;
   bool borrowed_result = false;
-  StorageSwap swap = StorageSwap::none;
+  BuiltinOperation builtin = BuiltinOperation::none;
   std::vector<CheckedArgument> arguments;
   std::map<size_t, CleanupEquations::Effects> invocation;
   struct NullTest { size_t binding; std::set<size_t> versions; bool null_when_true = true; };
@@ -709,7 +711,7 @@ class ScalarChecker {
     const auto &fact = operations.at(&expr);
     if (expr.kind == Expression::Kind::integer) return fact.integer;
     if (fact.minimum_literal) return std::uint64_t{1} << 63;
-    if (expr.kind == Expression::Kind::unary && (expr.text == "+" || expr.text == "-"))
+    if (fact.builtin == BuiltinOperation::unary && (expr.text == "+" || expr.text == "-"))
       if (const auto value = constant_integer(*expr.children.front(), operations))
         return expr.text == "-" ? std::uint64_t{0} - *value : *value;
     return {};
@@ -816,7 +818,7 @@ class ScalarChecker {
         for (const auto &child : expr.children) visit(*child, caught);
         return;
       }
-      if (expr.kind == K::name || (expr.kind == K::call && !expr.intrinsic && !swap_operation(expr.text)))
+      if (expr.kind == K::name || (expr.kind == K::call && !expr.intrinsic && !swap_operation(expr.text) && !eager_operation(expr.text)))
         use(expr.text, expr.at, bound);
       auto local = bound;
       auto &scope = expr.kind == K::block && expr.scoped ? local : bound;
@@ -985,6 +987,49 @@ class ScalarChecker {
     const auto family = families_.find(expr.text);
     if (family == families_.end()) fail(expr.at, "unknown callable '" + expr.text + "'");
     return select_family(family->second, arguments, expr.at, expr.text);
+  }
+  bool applicable_operation(const std::string &name, const std::vector<Type> &arguments) const {
+    const auto family = families_.find(name);
+    return family != families_.end() && std::any_of(family->second.begin(), family->second.end(), [&](size_t id) {
+      return match(program_.methods[id], arguments).has_value();
+    });
+  }
+  void check_eager(const Expression &expr, const std::vector<Type> &arguments,
+                   const std::vector<CheckedOperation> &views, CheckedOperation &operation) {
+    const bool unary = arguments.size() == 1 && (expr.text == "+" || expr.text == "-" || expr.text == "!");
+    if (!unary && (arguments.size() != 2 || expr.text == "!")) fail(expr.at, "builtin operator argument count does not match");
+    operation.builtin = unary ? BuiltinOperation::unary : BuiltinOperation::binary;
+    bool failing = false;
+    if (unary) {
+      const auto &argument = arguments.front();
+      if (expr.text == "!") {
+        if (argument != Type::boolean) fail(expr.at, "logical negation requires bool");
+        operation.null_test = views.front().null_test;
+        if (operation.null_test) operation.null_test->null_when_true = !operation.null_test->null_when_true;
+      } else if (argument != Type::integer && !(expr.text == "-" && floating(argument)))
+        fail(expr.at, "numeric unary operation requires i64, or floating point for negation");
+      operation.type = operation.operand_type = argument;
+      failing = expr.text == "-" && argument == Type::integer;
+    } else {
+      const auto &left = arguments[0], &right = arguments[1];
+      const bool equality = expr.text == "==" || expr.text == "!=";
+      const bool comparison = equality || expr.text == "<" || expr.text == ">" || expr.text == "<=" || expr.text == ">=";
+      if (equality && left == Type::boolean && right == Type::boolean) operation.operand_type = Type::boolean;
+      else {
+        if (!numeric(left) || !numeric(right)) fail(expr.at, "no applicable numeric operation '" + expr.text + "'");
+        if (widens(left, right)) operation.operand_type = right;
+        else if (widens(right, left)) operation.operand_type = left;
+        else fail(expr.at, "numeric operands have no lossless common type");
+        if (expr.text == "%" && floating(operation.operand_type)) fail(expr.at, "remainder requires integer operands");
+      }
+      operation.type = comparison ? Type{Type::boolean} : operation.operand_type;
+      failing = !comparison && integral(operation.operand_type);
+    }
+    operation.invocation.emplace(0, CleanupEquations::Effects{});
+    if (failing) {
+      operation.invocation.emplace(2, CleanupEquations::Effects{});
+      if (&expr != prepared_call_) note_abrupt(expr.at);
+    }
   }
   CheckedOperation materialize(const std::vector<size_t> &family, const Type *expected, const Location &at) {
     auto &definition = program_.methods[family.front()];
@@ -1353,54 +1398,35 @@ class ScalarChecker {
         auto magnitude = std::string_view(expr.children.front()->text);
         while (magnitude.starts_with('0')) magnitude.remove_prefix(1);
         if (magnitude == "9223372036854775808") {
+          if (applicable_operation(expr.text, {Type::integer}))
+            implementation_gap(expr.at, "signed minimum literal with overloaded unary negation");
           operation.type = operation.operand_type = Type::integer;
           operation.minimum_literal = true;
           break;
         }
       }
-      const auto argument = child(0);
-      require_value(argument);
-      if (expr.text == "!") {
-        if (argument != Type::boolean) fail(expr.at, "logical negation requires bool");
-        operation.null_test = operations.at(expr.children[0].get()).null_test;
-        if (operation.null_test) operation.null_test->null_when_true = !operation.null_test->null_when_true;
-      } else if (argument != Type::integer && !(expr.text == "-" && floating(argument)))
-        fail(expr.at, "numeric unary operation requires i64, or floating point for negation");
-      operation.type = operation.operand_type = argument;
-      if (expr.text == "-" && argument == Type::integer) note_abrupt(expr.at);
-      break;
+      [[fallthrough]];
     }
     case K::binary: {
-      const bool logical = expr.text == "&&" || expr.text == "||";
-      const auto left = child(0);
-      const auto before_right = lexical_;
-      if (logical) refine(*expr.children[0], expr.text == "&&", operations);
-      const auto right = child(1);
-      const auto after_right = lexical_;
-      if (logical) {
+      if (expr.text == "&&" || expr.text == "||") {
+        const auto left = child(0);
+        const auto before_right = lexical_;
+        refine(*expr.children[0], expr.text == "&&", operations);
+        const auto right = child(1);
+        const auto after_right = lexical_;
         lexical_ = before_right;
         refine(*expr.children[0], expr.text != "&&", operations);
         const auto skipped = lexical_;
         join(skipped, false, after_right, right == Type::never, expr.at);
-      }
-      require_value(left); require_value(right);
-      const bool equality = expr.text == "==" || expr.text == "!=";
-      const bool comparison = equality || expr.text == "<" || expr.text == ">" || expr.text == "<=" || expr.text == ">=";
-      if (logical || (equality && left == Type::boolean && right == Type::boolean)) {
+        require_value(left); require_value(right);
         if (left != Type::boolean || right != Type::boolean) fail(expr.at, "logical operation requires bool operands");
-        operation.operand_type = Type::boolean;
-      } else {
-        if (!numeric(left) || !numeric(right)) fail(expr.at, "no applicable numeric operation '" + expr.text + "'");
-        if (widens(left, right)) operation.operand_type = right;
-        else if (widens(right, left)) operation.operand_type = left;
-        else fail(expr.at, "numeric operands have no lossless common type");
-        if (expr.text == "%" && floating(operation.operand_type)) fail(expr.at, "remainder requires integer operands");
+        operation.type = operation.operand_type = Type::boolean;
+        break;
       }
-      operation.type = comparison || logical ? Type{Type::boolean} : operation.operand_type;
-      if (!comparison && !logical && integral(operation.operand_type)) note_abrupt(expr.at);
-      break;
+      [[fallthrough]];
     }
     case K::value_call: case K::call: {
+      const bool eager = expr.kind != K::value_call && eager_operation(expr.text);
       if (expr.kind == K::call && swap_operation(expr.text)) {
         if (&expr == prepared_call_) implementation_gap(expr.at, "deferred storage intrinsics; use a defer block");
         if (expr.children.size() != 2) fail(expr.at, "swap requires two destinations");
@@ -1410,8 +1436,8 @@ class ScalarChecker {
         auto right = operations.at(expr.children[1].get());
         if (!left.view || !right.view) fail(expr.at, "swap requires two storage destinations");
         if (left.mixed_view || right.mixed_view) implementation_gap(expr.at, "swap through a mixed value/storage view");
-        operation.swap = expr.text == "<=>" ? StorageSwap::reference : StorageSwap::bits;
-        if (operation.swap == StorageSwap::reference) {
+        operation.builtin = expr.text == "<=>" ? BuiltinOperation::reference_swap : BuiltinOperation::bits_swap;
+        if (operation.builtin == BuiltinOperation::reference_swap) {
           left = current_selection(left, expr.at);
           right = current_selection(right, expr.at);
           check_rebind(left, right, expr.at);
@@ -1428,7 +1454,7 @@ class ScalarChecker {
         }
         break;
       }
-      if (expr.kind == K::value_call || lexical_.lookup(expr.text)) {
+      if (expr.kind == K::value_call || (!expr.intrinsic && lexical_.lookup(expr.text))) {
         const size_t offset = expr.kind == K::value_call ? 1 : 0;
         CheckedOperation target;
         if (offset) { child(0); target = operations.at(expr.children.front().get()); }
@@ -1483,17 +1509,19 @@ class ScalarChecker {
         if (lexical_.live) for (const auto owner : argument.owners)
           if (!owner_alive(owner))
             fail(expr.at, "null-test view's lexical owner has ended");
-        operation.type = Type::boolean; operation.is_null = true;
+        operation.type = Type::boolean; operation.builtin = BuiltinOperation::is_null;
         if (argument.binding) operation.null_test = CheckedOperation::NullTest{*argument.binding, argument.selection_versions};
         break;
       }
-      const auto modes = argument_modes(expr);
+      if (expr.intrinsic && !eager && expr.text != "cause_at")
+        implementation_gap(expr.at, "explicit intrinsic has no implemented builtin '" + expr.text + "'");
+      const auto modes = expr.intrinsic ? std::vector<ArgumentMode>(expr.children.size(), ArgumentMode::value) : argument_modes(expr);
       std::vector<Type> arguments;
       std::vector<CheckedOperation> views;
       for (size_t i = 0; i < expr.children.size(); ++i) {
         const auto mode = modes[i];
         std::optional<Type> argument_view;
-        if (const auto family = families_.find(expr.text); family != families_.end()) {
+        if (const auto family = families_.find(expr.text); !expr.intrinsic && family != families_.end()) {
           bool consistent = true;
           for (const auto id : family->second) {
             const auto &candidate = program_.methods[id];
@@ -1523,10 +1551,14 @@ class ScalarChecker {
         if (mode == ArgumentMode::borrowed_ref && !view.initialized_target)
           for (const auto place : view.targets) require_initialized(place, expr.children[i]->at, "ref argument");
       }
-      if (expr.text == "cause_at" && !families_.contains(expr.text)) {
+      if (expr.text == "cause_at" && (expr.intrinsic || !families_.contains(expr.text))) {
         if (arguments.size() != 2 || arguments[0].kind != Type::exception || arguments[1] != Type::uint64)
           fail(expr.at, "cause_at requires an exception and a u64 index");
-        operation.type = exception_type(0); operation.exceptions = exception_possibilities(operation.type); operation.cause_at = true;
+        operation.type = exception_type(0); operation.exceptions = exception_possibilities(operation.type); operation.builtin = BuiltinOperation::cause_at;
+        break;
+      }
+      if (eager && (expr.intrinsic || !applicable_operation(expr.text, arguments))) {
+        check_eager(expr, arguments, views, operation);
         break;
       }
       operation.callee = select(expr, arguments);
@@ -1604,6 +1636,7 @@ class ScalarChecker {
       const auto argument = child(0);
       if (!scalar_type(argument)) fail(expr.at, "print requires one primitive scalar argument");
       operation.arguments.push_back({ArgumentMode::value, argument});
+      operation.builtin = BuiltinOperation::print;
       operation.type = Type::void_type;
       break;
     }
@@ -2194,8 +2227,16 @@ public:
     for (const auto &form : forms) if (form->body)
       collect(*form->body, form->kind == Form::Kind::expression ? nullptr : form.get());
     for (const auto *form : definitions) {
-      if (form->symbolic || form->operation || form->conversion || (!lexical_methods_.contains(form) && !form->captures.empty()) || !form->body)
+      if (form->symbolic || (form->operation && !eager_operation(form->name)) || form->conversion || (!lexical_methods_.contains(form) && !form->captures.empty()) || !form->body)
         implementation_gap(form->at, "callable captures, effects, declarations, operators, owners or throws contracts");
+      if (form->operation) {
+        const auto arity = form->parameters.size();
+        if (!arity || arity > 2 || (form->name == "!" && arity != 1) ||
+            (form->name != "+" && form->name != "-" && form->name != "!" && arity != 2))
+          implementation_gap(form->at, "eager operator method arity");
+        if (std::any_of(form->parameters.begin(), form->parameters.end(), [](const auto &p) { return !p.owner.empty(); }))
+          implementation_gap(form->at, "eager operators with external borrowed argument preparation");
+      }
       std::set<std::string> owners;
       for (const auto &owner : form->owner_parameters) {
         if (owner.root || owner.explicit_parameter) implementation_gap(owner.at, "region-specific owner parameters");
@@ -2256,7 +2297,8 @@ public:
               implementation_gap(form->at, "target-access-qualified overload selection");
           fail(form->at, "duplicate method signature for '" + form->name + "'");
         }
-        if (definition.source->kind != form->kind) implementation_gap(form->at, "mixed function/procedure family");
+        if (definition.source->kind != form->kind && !(form->operation && definition.source->operation))
+          implementation_gap(form->at, "mixed function/procedure family");
       }
       program_.methods.push_back(std::move(prepared));
       method_ids.emplace(form, id);
