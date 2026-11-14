@@ -89,6 +89,8 @@ struct CheckedOperation {
   bool mixed_view = false;
   bool borrowed_result = false;
   BuiltinOperation builtin = BuiltinOperation::none;
+  // Destination calls select every address before checking entry-read promises.
+  bool destination_arguments = false;
   std::vector<CheckedArgument> arguments;
   std::map<size_t, CleanupEquations::Effects> invocation;
   struct NullTest { size_t binding; std::set<size_t> versions; bool null_when_true = true; };
@@ -296,9 +298,13 @@ class ScalarChecker {
     return access;
   }
   static bool admits_access(const CheckedMethod &method, const Access &access) {
-    for (size_t i = 0; i < access.size(); ++i)
-      if (access[i].value_or(false) && !method.source->parameters[i].owner.empty() && !method.source->parameters[i].read_only)
+    for (size_t i = 0; i < access.size(); ++i) {
+      const auto &parameter = method.source->parameters[i];
+      if (method.source->operation && swap_operation(method.source->name) && access[i] && *access[i] != parameter.read_only)
         return false;
+      if (access[i].value_or(false) && !parameter.owner.empty() && !parameter.read_only)
+        return false;
+    }
     return true;
   }
   static bool same_access(const CheckedMethod &a, const CheckedMethod &b) {
@@ -1325,7 +1331,8 @@ class ScalarChecker {
         if (!bind_type(method, pattern.parameters[i], actual.parameters[i], substitutions)) return false;
       return bind_type(method, *pattern.target, *actual.target, substitutions);
     }
-    return pattern == actual || (parameter && accepts_exception(actual, pattern));
+    return pattern == actual || (parameter && !(method.source->operation && swap_operation(method.source->name)) &&
+                                  accepts_exception(actual, pattern));
   }
   static Substitutions type_context(const CheckedMethod &method, const std::vector<Type> &retained) {
     Substitutions substitutions(method.type_parameters.size());
@@ -1451,6 +1458,27 @@ class ScalarChecker {
       return match(program_.methods[id], arguments).has_value() && admits_access(program_.methods[id], access) &&
           match_owners(program_.methods[id], owners) != OwnerMatch::mismatch;
     });
+  }
+  void finish_named_call(const Expression &expr, const std::vector<Type> &arguments,
+                         const std::vector<CheckedOperation> &views, CheckedOperation &operation,
+                         bool read, bool discard, bool completes = true) {
+    operation.callee = select(expr, arguments, access_of(views), owners_of(views));
+    const auto &target = program_.instances[*operation.callee];
+    const auto &definition = *program_.methods[target.method].source;
+    for (size_t i = 0; i < arguments.size(); ++i) {
+      const auto mode = argument_mode(definition.parameters[i]);
+      if (operation.destination_arguments) {
+        operation.arguments[i].mode = mode;
+        if (completes) prepare_borrow(views[i], mode, expr.children[i]->at);
+      } else if (operation.arguments[i].mode != mode)
+        throw std::logic_error("argument preparation disagrees with selected method");
+      operation.arguments[i].type = target.arguments[i];
+    }
+    if (checking_method_ && checking_method_->source->kind == Form::Kind::function && definition.kind == Form::Kind::procedure)
+      fail(expr.at, "a function cannot invoke a procedure");
+    if (!completes) { operation.type = Type::never; return; }
+    finish_call(expr, callable_type(definition, target.arguments, target.result), target.effects,
+        call_reasons(program_.methods[target.method]), arguments, views, operation, read, discard);
   }
   struct EagerTypes {
     Type result, operand;
@@ -2411,33 +2439,50 @@ class ScalarChecker {
     case K::value_call: case K::call: {
       const bool eager = expr.kind != K::value_call && eager_operation(expr.text);
       if (expr.kind == K::call && swap_operation(expr.text)) {
-        if (&expr == prepared_call_) implementation_gap(expr.at, "deferred storage intrinsics; use a defer block");
         if (expr.children.size() != 2) fail(expr.at, "swap requires two destinations");
+        const bool reference = expr.text == "<=>";
         child(0, false);
         auto left = operations.at(expr.children[0].get());
         child(1, false);
         auto right = operations.at(expr.children[1].get());
-        operation.builtin = expr.text == "<=>" ? BuiltinOperation::reference_swap : BuiltinOperation::bits_swap;
         for (const auto *operand : {&left, &right}) if (operand->type != Type::never) {
           if (!operand->view) fail(expr.at, "swap requires two storage destinations");
           if (operand->mixed_view) implementation_gap(expr.at, "swap through a mixed value/storage view");
-          if (operation.builtin == BuiltinOperation::reference_swap) reference_destination(*operand, expr.at);
-          else {
+          if (reference) reference_destination(*operand, expr.at);
+        }
+        operation.destination_arguments = !reference;
+        operation.arguments = {{ArgumentMode::borrowed_ptr, left.type}, {ArgumentMode::borrowed_ptr, right.type}};
+        const auto check_bits_destinations = [&] {
+          for (const auto *operand : {&left, &right}) if (operand->type != Type::never) {
             if (!bits_type(operand->type)) fail(expr.at, "builtin bits swap requires two bits storage destinations");
             if (operand->read_only) fail(expr.at, "cannot swap bits through a readonly destination");
           }
+        };
+        if (reference) operation.builtin = BuiltinOperation::reference_swap;
+        if (left.type == Type::never || right.type == Type::never) {
+          if (!reference && (expr.intrinsic || named_family(expr.text).methods.empty())) check_bits_destinations();
+          operation.type = Type::never; break;
         }
-        if (left.type == Type::never || right.type == Type::never) { operation.type = Type::never; break; }
-        if (operation.builtin == BuiltinOperation::reference_swap) {
+        const std::vector<CheckedOperation> views{left, right};
+        const std::vector<Type> arguments{left.type, right.type};
+        if (!reference && !expr.intrinsic && applicable_operation(expr.text, arguments, access_of(views), owners_of(views))) {
+          finish_named_call(expr, arguments, views, operation, read, discard);
+          break;
+        }
+        if (&expr == prepared_call_) implementation_gap(expr.at, "deferred storage intrinsics; use a defer block");
+        operation.builtin = reference ? BuiltinOperation::reference_swap : BuiltinOperation::bits_swap;
+        if (reference) {
           left = current_selection(left, expr.at);
           right = current_selection(right, expr.at);
           check_rebind(left, right, expr.at);
           check_rebind(right, left, expr.at);
           if (!left.binding || left.binding != right.binding) { rebind(left, right); rebind(right, left); }
         } else {
+          check_bits_destinations();
           if (left.type != right.type) fail(expr.at, "bits swap requires the exact same type");
           require_live_view(left, expr.at); require_live_view(right, expr.at);
           read_view(left, expr.at, "left swap target"); read_view(right, expr.at, "right swap target");
+          for (auto &argument : operation.arguments) argument.mode = ArgumentMode::borrowed_read;
           const auto left_exceptions = stored_exceptions(left), right_exceptions = stored_exceptions(right);
           write_exceptions(left, right_exceptions); write_exceptions(right, left_exceptions);
         }
@@ -2554,19 +2599,7 @@ class ScalarChecker {
         if (!completes) operation.type = Type::never;
         break;
       }
-      operation.callee = select(expr, arguments, access_of(views), owners_of(views));
-      const auto &target = program_.instances[*operation.callee];
-      const auto &definition = *program_.methods[target.method].source;
-      for (size_t i = 0; i < arguments.size(); ++i) {
-        if (operation.arguments[i].mode != argument_mode(definition.parameters[i]))
-          throw std::logic_error("argument preparation disagrees with selected method");
-        operation.arguments[i].type = target.arguments[i];
-      }
-      if (method && method->kind == Form::Kind::function && definition.kind == Form::Kind::procedure)
-        fail(expr.at, "a function cannot invoke a procedure");
-      if (!completes) { operation.type = Type::never; break; }
-      finish_call(expr, callable_type(definition, target.arguments, target.result), target.effects,
-          call_reasons(program_.methods[target.method]), arguments, views, operation, read, discard);
+      finish_named_call(expr, arguments, views, operation, read, discard, completes);
       break;
     }
     case K::behave: case K::perform: {
@@ -3338,7 +3371,7 @@ public:
     for (const auto &form : forms) if (form->body)
       collect(*form->body, form->kind == Form::Kind::expression ? nullptr : form.get());
     for (const auto *form : definitions) {
-      if (form->symbolic || (form->operation && !eager_operation(form->name)) || form->conversion || (!lexical_methods_.contains(form) && !form->captures.empty()) || !form->body)
+      if (form->symbolic || (form->operation && !eager_operation(form->name) && form->name != "<->") || form->conversion || (!lexical_methods_.contains(form) && !form->captures.empty()) || !form->body)
         implementation_gap(form->at, "callable captures, effects, declarations, operators, owners or throws contracts");
       if (form->operation) {
         const auto arity = form->parameters.size();
@@ -3353,6 +3386,12 @@ public:
       }
       if (!form->result_owner.empty() && !owners.contains(form->result_owner)) fail(form->at, "unknown result owner '" + form->result_owner + "'");
       if (!form->result_type) implementation_gap(form->at, "omitted callable result type");
+      if (form->operation && swap_operation(form->name)) {
+        if (*form->result_type != Type::void_type) fail(form->at, "swap method must return void");
+        for (const auto &parameter : form->parameters)
+          if (parameter.owner.empty() || parameter.variadic || parameter.automatic_conversion)
+            fail(parameter.at, "swap destinations require explicit external owners without variadic parameters or conversions");
+      }
       if (!form->result_owner.empty() && !borrowed_result(*form)) implementation_gap(form->at, "owner annotations on independent const results");
       if (borrowed_result(*form) && *form->result_type == Type::void_type) fail(form->at, "void cannot be a borrowed result");
       if (*form->result_type != Type::void_type && form->result_type->kind != Type::procedure && !borrowed_result(*form) && (!form->result_const || !form->result_kind.empty()))

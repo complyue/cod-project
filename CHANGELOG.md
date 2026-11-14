@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Bits-swap method dispatch
+
+<a id="k-649"></a>
+**K-649 — Destination-method continuity.** Agent assessment: registry r649→650 and source reference270→271 continue D-14r82/H-306/C-69/P-268/P-269's distinct storage exchanges through shared method selection, with D-18r90 complete values/borrowing/recursion, D-17r54 preparation/cleanup and D-21r11/D-26r9 native coverage under charter §§3.3/6.3/12. Bits-swap overloads preserve exact destination types/access, actual owners, ordered address selection and parameter read promises; builtin fallback and selected bodies use shared native dispatch. Acceptance includes generic/deferred calls, complete callable replacement, injected failures and exact release in both modes. Caller-binding reference-swap methods, broader mutation proofs, regional mechanisms, permanent ABI and pending designs remain excluded. Prior capability reference: `4c8b9c086117829176f22177494b3925f964a656:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Cleanup target flow
 
 <a id="k-648"></a>

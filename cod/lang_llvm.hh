@@ -528,6 +528,12 @@ class LLVMEmission {
       }
       if (choice.operation->builtin == BuiltinOperation::unary || choice.operation->builtin == BuiltinOperation::binary)
         return outcome(eager_builtin(expr, arguments, choice), integer(0), integer(0), null_pointer());
+      if (choice.operation->builtin == BuiltinOperation::bits_swap) {
+        auto *left = view_address(arguments[0]), *right = view_address(arguments[1]);
+        auto *left_value = b_.CreateLoad(scalar_, left), *right_value = b_.CreateLoad(scalar_, right);
+        b_.CreateStore(right_value, left); b_.CreateStore(left_value, right);
+        return outcome(empty_scalar(), integer(0), integer(0), null_pointer());
+      }
       if (choice.operation->builtin == BuiltinOperation::cause_at) {
         auto *payload = unpack(arguments[0], choice.inputs[0]);
         auto *buffer = slot(exception_, "exception.cause");
@@ -855,7 +861,8 @@ class LLVMEmission {
       auto *value = emit_expression(child, mode == ArgumentMode::value ? Projection::value : Projection::target);
       if (!reachable()) return nullptr;
       if (mode != ArgumentMode::value) {
-        if (mode == ArgumentMode::borrowed_read) value = checked_address(value, child, child.at);
+        if (mode == ArgumentMode::borrowed_read && !facts_.front()->at(&expr).destination_arguments)
+          value = checked_address(value, child, child.at);
         return pack_view(value, child);
       }
       value = prepare_value(expr, index, value);
@@ -882,6 +889,15 @@ class LLVMEmission {
       auto *value = prepare_argument(expr, i, !offset || i || protect);
       if (!reachable()) return {};
       arguments.push_back(value);
+    }
+    if (fact.destination_arguments) for (size_t i = 0; i < arguments.size(); ++i) {
+      std::map<bool, std::vector<size_t>> alternatives;
+      for (size_t j = 0; j < facts_.size(); ++j)
+        alternatives[facts_[j]->at(&expr).arguments.at(i).mode == ArgumentMode::borrowed_read].push_back(j);
+      contextual_value(*expr.children[i], alternatives, "destination.check", [&](bool read) {
+        if (read) checked_address(view_address(arguments[i]), *expr.children[i], expr.at);
+        return b_.getTrue();
+      }, b_.getInt1Ty());
     }
     return arguments;
   }
@@ -1040,17 +1056,12 @@ class LLVMEmission {
       [[fallthrough]];
     }
     case K::value_call: case K::call: case K::behave: case K::perform: {
-      if (fact.builtin == BuiltinOperation::reference_swap || fact.builtin == BuiltinOperation::bits_swap) {
-        const auto selected = fact.builtin == BuiltinOperation::reference_swap ? Projection::slot : Projection::target;
-        auto *left = emit_expression(*expr.children[0], selected);
+      if (fact.builtin == BuiltinOperation::reference_swap) {
+        auto *left = emit_expression(*expr.children[0], Projection::slot);
         if (!reachable()) return nullptr;
-        auto *right = emit_expression(*expr.children[1], selected);
+        auto *right = emit_expression(*expr.children[1], Projection::slot);
         if (!reachable()) return nullptr;
-        if (fact.builtin == BuiltinOperation::bits_swap) {
-          left = checked_address(left, *expr.children[0], expr.at);
-          right = checked_address(right, *expr.children[1], expr.at);
-        }
-        auto *type = fact.builtin == BuiltinOperation::reference_swap ? static_cast<llvm::Type *>(b_.getPtrTy()) : scalar_;
+        auto *type = b_.getPtrTy();
         auto *left_value = b_.CreateLoad(type, left), *right_value = b_.CreateLoad(type, right);
         b_.CreateStore(right_value, left); b_.CreateStore(left_value, right);
         return empty_scalar();
