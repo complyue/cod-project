@@ -1518,6 +1518,9 @@ class ScalarChecker {
       case K::integer: case K::real: case K::boolean: case K::null_ref: case K::name:
       case K::unary: case K::binary: case K::call: case K::value_call: case K::field:
       case K::conditional: case K::block: break;
+      case K::callable:
+        if (expr.definition->name.empty()) break;
+        [[fallthrough]];
       default: implementation_gap(expr.at, "typeof for this expression form");
       }
     }
@@ -1824,7 +1827,7 @@ class ScalarChecker {
       }
       if (expected && expected->kind == Type::procedure)
         return select_callable({lexical_methods_.at(expr.definition.get())}, expected, expr.at).type;
-      return contextual ? std::nullopt : callable_evidence(lexical_methods_.at(expr.definition.get()));
+      return contextual && !state.required ? std::nullopt : callable_evidence(lexical_methods_.at(expr.definition.get()));
     default:
       state.complete = false;
       return {};

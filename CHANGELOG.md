@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Anonymous callable signature queries
+
+<a id="k-642"></a>
+**K-642 — Declared callable query continuity.** Agent assessment: registry r642→643 and source reference263→264 continue D-14r82/H-295/P-257's compile-time query scope and D-18r90/P-299/P-301/P-302's callable contract through D-21r11/D-26r9 semantic selection under charter §§5/6.3/12. Anonymous expressions supply established declared signatures through the existing evidence path without body demand, capture construction or runtime effects. Acceptance covers contextual/concrete signatures, declared throws/access/owner checks, unchanged ordinary construction obligations, allocation-free queries and native inventory in both modes. Outer type-only context, body-result inference, arbitrary statement queries, permanent ABI and pending designs remain outside coverage. Prior capability reference: `16975e4306af33b11a72ae837f487335dbb167c0:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Contextual callable type evidence
 
 <a id="k-641"></a>

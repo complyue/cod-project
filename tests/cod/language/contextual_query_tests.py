@@ -44,7 +44,7 @@ runner.CASES={
  'runtime_context_preserves_effect_order':(IO+ID+APPLY+'proc one()->const i64{behave @print(1);return 24;}behave @print(apply({behave @print(2);identity},apply(identity,one())));',0,'2\n1\n24\n',''),
  'runtime_context_preserves_throws':(NPE+'func identity(x:T)->const T throws NullPointerException where T{return x;}'+APPLY+'apply(identity,1);',2,'','required checked exception'),
  'ordinary_signature_requires_known_result':('func unknown(x:T)->const U where {T,U}{return x;}'+APPLY+'val x=make local typeof(apply(unknown,1));',2,'','type parameter is not determined'),
- 'anonymous_query_boundary':(query('apply(func(x:T)->const T where T{return x;},1)'),2,'','typeof for this expression form'),
+ 'anonymous_query_signature':(query('apply(func(x:T)->const T where T{return x;},1)'),0,'7\n',''),
  'lexical_self_query_retains_context':(IO+APPLY+'func outer(x:T)->const T where T{func self(x:T)->const T{val y=make local typeof(apply(self,x)){x};return y;};return self(x);}behave @print(outer(25));behave @print(outer(true));',0,'25\ntrue\n',''),
 }
 runner.CASE_ARGUMENTS={}
