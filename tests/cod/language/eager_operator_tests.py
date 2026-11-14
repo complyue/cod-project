@@ -53,7 +53,7 @@ runner.CASES = {
  'duplicate_kind_is_not_tiebreaker':('func (+)(x:i64,y:i64)->const i64{return x;}proc (+)(x:i64,y:i64)->const i64{return y;}',2,'','duplicate method signature'),
  'intrinsic_does_not_fallback_to_user':(BOOL+'intrinsic (+)(false,true);',2,'','no applicable numeric operation'),
  'intrinsic_wrong_arity':('intrinsic (!)(true,false);',2,'','builtin operator argument count'),
- 'borrowed_operator_boundary':('func (+)(ref x:i64 in O,ref y:i64 in O)->const i64 where {owner O}{return x;}',2,'','external borrowed argument preparation'),
+ 'borrowed_operator_method':(IO+'func (+)(ref x:i64 in O,ref y:i64 in O)->const i64 where {owner O}{x<-y;return x;}val x=1,y=3;behave @print(x+y);behave @print(x);',0,'3\n3\n',''),
  'short_circuit_overload_boundary':('func (&&)(x:bool,y:bool)->const bool{return x;}',2,'','short-circuit operators are control expressions'),
  'signed_minimum_overload_boundary':('func (-)(x:i64)->const i64{return x;}-9223372036854775808;',2,'','signed minimum literal with overloaded unary negation'),
  'ordinary_family_kind_boundary':('func f(x:i64)->const i64{return x;}proc f(x:bool)->const bool{return x;}',2,'','mixed function/procedure family'),

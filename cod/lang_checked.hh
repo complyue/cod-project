@@ -249,25 +249,44 @@ class ScalarChecker {
     dereference(view, at);
     if (!view.initialized_target) for (const auto place : view.targets) require_initialized(place, at, name);
   }
+  using Substitutions = std::vector<std::optional<Type>>;
   struct ArgumentPreparation {
     ArgumentMode mode = ArgumentMode::value;
     std::optional<Type> view;
   };
-  ArgumentPreparation argument_preparation(const Expression &expr, const std::vector<Type> &prefix) const {
+  ArgumentPreparation argument_preparation(const Expression &expr, const std::vector<Type> &prefix,
+                                            const std::vector<std::optional<Type>> &evidence) const {
     if (expr.intrinsic) return {};
-    std::optional<ArgumentMode> mode;
-    std::optional<Type> view;
-    bool consistent_view = true;
+    std::vector<size_t> applicable;
+    std::map<size_t, Substitutions> substitutions;
+    bool complete = true;
+    for (size_t i = prefix.size(); i < evidence.size(); ++i) complete = complete && evidence[i].has_value();
     if (const auto family = families_.find(expr.text); family != families_.end()) for (const auto id : family->second) {
       const auto &candidate = program_.methods[id];
       if (candidate.parameters.size() != expr.children.size()) continue;
-      const auto bindings = match_prefix(candidate, prefix);
+      auto bindings = match_prefix(candidate, prefix);
       if (!bindings) continue;
+      bool matches = true;
+      for (size_t i = prefix.size(); i < evidence.size(); ++i)
+        if (evidence[i] && !bind_type(candidate, candidate.parameters[i], *evidence[i], *bindings, true)) matches = false;
+      if (matches) { applicable.push_back(id); substitutions.emplace(id, std::move(*bindings)); }
+    }
+    if (complete) {
+      applicable = most_specific(applicable);
+      if (applicable.size() > 1) fail(expr.at, "ambiguous methods for '" + expr.text + "'");
+    }
+    std::optional<ArgumentMode> mode;
+    std::optional<Type> view;
+    bool consistent_view = true;
+    // Without complete type evidence, an eager operation may still use its value-taking builtin.
+    if (eager_operation(expr.text) && !complete) mode = ArgumentMode::value;
+    for (const auto id : applicable) {
+      const auto &candidate = program_.methods[id];
       const auto passing = argument_mode(candidate.source->parameters[prefix.size()]);
       if (mode && *mode != passing)
-        implementation_gap(expr.children[prefix.size()]->at, "overloads with different argument preparation contracts before this argument's type is established");
+        implementation_gap(expr.children[prefix.size()]->at, "overloads with different argument preparation contracts without sufficient operand type evidence");
       mode = passing;
-      const auto expected = substitute(candidate.parameters[prefix.size()], candidate, *bindings, true);
+      const auto expected = substitute(candidate.parameters[prefix.size()], candidate, substitutions.at(id), true);
       if (expected.kind != Type::procedure || nested_binder(candidate, expected) || (view && *view != expected))
         consistent_view = false;
       else view = expected;
@@ -738,7 +757,6 @@ class ScalarChecker {
     if (!lexical_value_type(resolved)) implementation_gap(at, "non-value local storage type '" + type_name(type) + "'");
     return resolved;
   }
-  using Substitutions = std::vector<std::optional<Type>>;
   Type resolve_type(Type type, const CheckedMethod *method = nullptr, const Substitutions *bindings = nullptr,
                     bool partial = false) const {
     if (method) if (const auto index = binder(*method, type)) {
@@ -974,11 +992,7 @@ class ScalarChecker {
     definition.instances.push_back(id);
     return id;
   }
-  size_t select_family(const std::vector<size_t> &family, const std::vector<Type> &arguments, const Location &at, const std::string &name,
-                       const std::vector<Type> &environment = {}, const std::vector<Type> &retained = {}) {
-    std::vector<size_t> applicable;
-    for (const auto method : family)
-      if (match(program_.methods[method], arguments, retained)) applicable.push_back(method);
+  std::vector<size_t> most_specific(const std::vector<size_t> &applicable) const {
     std::vector<size_t> best;
     for (const auto candidate : applicable) {
       const auto &definition = program_.methods[candidate];
@@ -988,6 +1002,14 @@ class ScalarChecker {
       });
       if (!dominated) best.push_back(candidate);
     }
+    return best;
+  }
+  size_t select_family(const std::vector<size_t> &family, const std::vector<Type> &arguments, const Location &at, const std::string &name,
+                       const std::vector<Type> &environment = {}, const std::vector<Type> &retained = {}) {
+    std::vector<size_t> applicable;
+    for (const auto method : family)
+      if (match(program_.methods[method], arguments, retained)) applicable.push_back(method);
+    const auto best = most_specific(applicable);
     if (best.empty()) fail(at, "no applicable method for '" + name + "' (argument types or same-T relation do not match)");
     if (best.size() != 1) fail(at, "ambiguous methods for '" + name + "'");
     return demand(best.front(), arguments, at, environment, retained);
@@ -1007,42 +1029,220 @@ class ScalarChecker {
       return match(program_.methods[id], arguments).has_value();
     });
   }
-  void check_eager(const Expression &expr, const std::vector<Type> &arguments,
-                   const std::vector<CheckedOperation> &views, CheckedOperation &operation) {
-    const bool unary = arguments.size() == 1 && (expr.text == "+" || expr.text == "-" || expr.text == "!");
-    if (!unary && (arguments.size() != 2 || expr.text == "!")) fail(expr.at, "builtin operator argument count does not match");
-    operation.builtin = unary ? BuiltinOperation::unary : BuiltinOperation::binary;
-    bool failing = false;
-    if (unary) {
+  struct EagerTypes {
+    Type result, operand;
+    bool unary = false, failing = false;
+    std::string error;
+  };
+  static EagerTypes eager_types(const Expression &expr, const std::vector<Type> &arguments) {
+    EagerTypes types;
+    types.unary = arguments.size() == 1 && (expr.text == "+" || expr.text == "-" || expr.text == "!");
+    const auto error = [&](const std::string &message) { types.error = message; return types; };
+    if (!types.unary && (arguments.size() != 2 || expr.text == "!")) return error("builtin operator argument count does not match");
+    if (types.unary) {
       const auto &argument = arguments.front();
       if (expr.text == "!") {
-        if (argument != Type::boolean) fail(expr.at, "logical negation requires bool");
-        operation.null_test = views.front().null_test;
-        if (operation.null_test) operation.null_test->null_when_true = !operation.null_test->null_when_true;
+        if (argument != Type::boolean) return error("logical negation requires bool");
       } else if (argument != Type::integer && !(expr.text == "-" && floating(argument)))
-        fail(expr.at, "numeric unary operation requires i64, or floating point for negation");
-      operation.type = operation.operand_type = argument;
-      failing = expr.text == "-" && argument == Type::integer;
+        return error("numeric unary operation requires i64, or floating point for negation");
+      types.result = types.operand = argument;
+      types.failing = expr.text == "-" && argument == Type::integer;
     } else {
       const auto &left = arguments[0], &right = arguments[1];
       const bool equality = expr.text == "==" || expr.text == "!=";
       const bool comparison = equality || expr.text == "<" || expr.text == ">" || expr.text == "<=" || expr.text == ">=";
-      if (equality && left == Type::boolean && right == Type::boolean) operation.operand_type = Type::boolean;
+      if (equality && left == Type::boolean && right == Type::boolean) types.operand = Type::boolean;
       else {
-        if (!numeric(left) || !numeric(right)) fail(expr.at, "no applicable numeric operation '" + expr.text + "'");
-        if (widens(left, right)) operation.operand_type = right;
-        else if (widens(right, left)) operation.operand_type = left;
-        else fail(expr.at, "numeric operands have no lossless common type");
-        if (expr.text == "%" && floating(operation.operand_type)) fail(expr.at, "remainder requires integer operands");
+        if (!numeric(left) || !numeric(right)) return error("no applicable numeric operation '" + expr.text + "'");
+        if (widens(left, right)) types.operand = right;
+        else if (widens(right, left)) types.operand = left;
+        else return error("numeric operands have no lossless common type");
+        if (expr.text == "%" && floating(types.operand)) return error("remainder requires integer operands");
       }
-      operation.type = comparison ? Type{Type::boolean} : operation.operand_type;
-      failing = !comparison && integral(operation.operand_type);
+      types.result = comparison ? Type{Type::boolean} : types.operand;
+      types.failing = !comparison && integral(types.operand);
+    }
+    return types;
+  }
+  void check_eager(const Expression &expr, const std::vector<Type> &arguments,
+                   const std::vector<CheckedOperation> &views, CheckedOperation &operation) {
+    const auto types = eager_types(expr, arguments);
+    if (!types.error.empty()) fail(expr.at, types.error);
+    operation.builtin = types.unary ? BuiltinOperation::unary : BuiltinOperation::binary;
+    operation.type = types.result; operation.operand_type = types.operand;
+    if (types.unary && expr.text == "!") {
+      operation.null_test = views.front().null_test;
+      if (operation.null_test) operation.null_test->null_when_true = !operation.null_test->null_when_true;
     }
     operation.invocation.emplace(0, CleanupEquations::Effects{});
-    if (failing) {
+    if (types.failing) {
       operation.invocation.emplace(2, CleanupEquations::Effects{});
       if (&expr != prepared_call_) note_abrupt(expr.at);
     }
+  }
+  struct TypeEvidenceState {
+    std::map<std::string, std::optional<Type>> bindings;
+    bool complete = true;
+  };
+  static TypeEvidenceState merge_evidence(TypeEvidenceState left, const TypeEvidenceState &right) {
+    for (auto &[name, type] : left.bindings) {
+      const auto other = right.bindings.find(name);
+      if (other == right.bindings.end() || other->second != type) type.reset();
+    }
+    for (const auto &[name, type] : right.bindings)
+      if (!left.bindings.contains(name)) left.bindings.emplace(name, std::nullopt);
+    left.complete = left.complete && right.complete;
+    return left;
+  }
+  // Evidence only: no reads, captures, demands, storage or cleanup equations are created here.
+  // Unknown binding effects invalidate subsequent name queries; the ordered checker validates every operand.
+  std::optional<Type> type_evidence(const Expression &expr, TypeEvidenceState &state) const {
+    using K = Expression::Kind;
+    const auto child = [&](size_t i) { return type_evidence(*expr.children.at(i), state); };
+    const auto annotation = [&](const Type &type) {
+      return checking_instance_ ? substitute(type, *checking_method_, checking_instance_->substitutions, true) : resolve_type(type);
+    };
+    switch (expr.kind) {
+    case K::integer:
+      if (expr.text.ends_with("u8")) return Type::uint8;
+      if (expr.text.ends_with("u32")) return Type::uint32;
+      if (expr.text.ends_with("u64")) return Type::uint64;
+      return Type::integer;
+    case K::real: return expr.text.ends_with("f32") ? Type::float32 : Type::float64;
+    case K::boolean: return Type::boolean;
+    case K::null_ref: return Type::null_ref;
+    case K::name:
+      if (state.complete) if (const auto found = state.bindings.find(expr.text); found != state.bindings.end()) return found->second;
+      return {};
+    case K::block: {
+      auto inner = state;
+      auto &active = expr.scoped ? inner : state;
+      std::optional<Type> result = Type::void_type;
+      bool exits = false;
+      for (const auto &item : expr.children) {
+        result = type_evidence(*item, active);
+        exits = exits || result == Type::never;
+      }
+      return exits ? std::optional<Type>{Type::never} : result;
+    }
+    case K::pointer_group:
+      for (const auto &declaration : expr.children) {
+        if (declaration->kind == K::block) { type_evidence(*declaration, state); continue; }
+        const auto initial = type_evidence(*declaration->children.front(), state);
+        state.bindings[declaration->text] = declaration->annotation ? annotation(*declaration->annotation) : initial;
+      }
+      return Type::void_type;
+    case K::alias: {
+      const auto type = child(0);
+      state.bindings[expr.text] = type;
+      return Type::void_type;
+    }
+    case K::make_local:
+      for (const auto &item : expr.children) type_evidence(*item, state);
+      return expr.annotation ? std::optional<Type>{annotation(*expr.annotation)} : std::nullopt;
+    case K::transfer: case K::rebind: {
+      const auto type = child(0); child(1); return type;
+    }
+    case K::conditional: {
+      child(0);
+      auto yes_state = state, no_state = state;
+      const auto yes = type_evidence(*expr.children[1], yes_state), no = type_evidence(*expr.children[2], no_state);
+      state = merge_evidence(std::move(yes_state), no_state);
+      if (yes == Type::never) return no;
+      if (no == Type::never || yes == no) return yes;
+      return {};
+    }
+    case K::binary:
+      if (expr.text == "&&" || expr.text == "||") {
+        child(0); auto skipped = state; child(1);
+        state = merge_evidence(std::move(skipped), state);
+        return Type::boolean;
+      }
+      [[fallthrough]];
+    case K::unary: case K::call: case K::value_call: {
+      std::optional<Type> target;
+      bool local = false;
+      if (expr.kind == K::value_call) { target = child(0); local = true; }
+      else if (!expr.intrinsic && state.complete) {
+        if (const auto found = state.bindings.find(expr.text); found != state.bindings.end()) {
+          target = found->second; local = true;
+        }
+      }
+      std::vector<Type> arguments;
+      bool complete = true;
+      for (size_t i = expr.kind == K::value_call ? 1 : 0; i < expr.children.size(); ++i) {
+        const auto type = child(i); complete = complete && type.has_value();
+        arguments.push_back(type.value_or(Type::never));
+      }
+      if (local) return target && target->kind == Type::procedure && target->target ? std::optional<Type>{*target->target} : std::nullopt;
+      if (!state.complete) return {};
+      if (expr.text == "isnull") return Type::boolean;
+      if (swap_operation(expr.text)) return Type::void_type;
+      if (expr.text == "cause_at" && (expr.intrinsic || !families_.contains(expr.text))) return exception_type(0);
+      if (!complete) return {};
+      std::vector<size_t> applicable;
+      std::vector<Type> retained;
+      if (!expr.intrinsic) {
+        if (checking_method_ && lexical_methods_.contains(checking_method_->source) && expr.text == checking_method_->source->name) {
+          retained = checking_instance_->retained_types;
+          const auto id = lexical_methods_.at(checking_method_->source);
+          if (match(program_.methods[id], arguments, retained)) applicable.push_back(id);
+        } else if (const auto family = families_.find(expr.text); family != families_.end())
+          for (const auto id : family->second) if (match(program_.methods[id], arguments)) applicable.push_back(id);
+      }
+      if (applicable.empty() && eager_operation(expr.text)) {
+        const auto types = eager_types(expr, arguments);
+        return types.error.empty() ? std::optional<Type>{types.result} : std::nullopt;
+      }
+      const auto best = most_specific(applicable);
+      if (best.size() != 1) return {};
+      const auto &method = program_.methods[best.front()];
+      const auto type = substitute(method.result, method, *match(method, arguments, retained), true);
+      return nested_binder(method, type) ? std::nullopt : std::optional<Type>{type};
+    }
+    case K::field: {
+      const auto type = child(0);
+      return type && type->kind == Type::exception ? std::optional<Type>{Type::uint64} : std::nullopt;
+    }
+    case K::behave: case K::perform:
+      for (const auto &item : expr.children) type_evidence(*item, state);
+      return print_symbols_.contains(expr.text) ? std::optional<Type>{Type::void_type} : std::nullopt;
+    case K::deferred:
+      if (expr.children.front()->kind != K::block) child(0);
+      return Type::void_type;
+    case K::return_value: case K::raise:
+      for (const auto &item : expr.children) type_evidence(*item, state);
+      return Type::never;
+    case K::callable:
+      if (!expr.definition->name.empty()) {
+        state.bindings[expr.definition->name] = std::nullopt;
+        return Type::void_type;
+      }
+      return {};
+    default:
+      state.complete = false;
+      return {};
+    }
+  }
+  std::vector<std::optional<Type>> argument_evidence(const Expression &expr) const {
+    std::vector<std::optional<Type>> result(expr.children.size());
+    if (expr.intrinsic) return result;
+    const auto family = families_.find(expr.text);
+    if (family == families_.end()) return result;
+    std::vector<ArgumentMode> modes;
+    bool needed = false;
+    for (const auto id : family->second) {
+      const auto &parameters = program_.methods[id].source->parameters;
+      if (parameters.size() != expr.children.size()) continue;
+      if (modes.empty()) for (const auto &parameter : parameters) modes.push_back(argument_mode(parameter));
+      for (size_t i = 0; i < parameters.size(); ++i)
+        needed = needed || modes[i] != argument_mode(parameters[i]) || (eager_operation(expr.text) && modes[i] != ArgumentMode::value);
+    }
+    if (!needed) return result;
+    TypeEvidenceState state;
+    for (const auto &scope : lexical_.scopes) for (const auto &[name, id] : scope.bindings) state.bindings[name] = bindings_->at(id).type;
+    for (size_t i = 0; i < expr.children.size(); ++i) result[i] = type_evidence(*expr.children[i], state);
+    return result;
   }
   CheckedOperation materialize(const std::vector<size_t> &family, const Type *expected, const Location &at) {
     auto &definition = program_.methods[family.front()];
@@ -1530,8 +1730,9 @@ class ScalarChecker {
         implementation_gap(expr.at, "explicit intrinsic has no implemented builtin '" + expr.text + "'");
       std::vector<Type> arguments;
       std::vector<CheckedOperation> views;
+      const auto evidence = argument_evidence(expr);
       for (size_t i = 0; i < expr.children.size(); ++i) {
-        const auto preparation = argument_preparation(expr, arguments);
+        const auto preparation = argument_preparation(expr, arguments, evidence);
         const auto mode = preparation.mode;
         arguments.push_back(check(*expr.children[i], instance, operations, mode == ArgumentMode::value, false,
                                   preparation.view ? &*preparation.view : nullptr));
@@ -1549,6 +1750,9 @@ class ScalarChecker {
         if (mode == ArgumentMode::borrowed_ref && !view.initialized_target)
           for (const auto place : view.targets) require_initialized(place, expr.children[i]->at, "ref argument");
       }
+      for (size_t i = 0; i < arguments.size(); ++i)
+        if (evidence[i] && *evidence[i] != arguments[i])
+          implementation_gap(expr.children[i]->at, "operand type evidence depends on completion or contextual inference");
       if (expr.text == "cause_at" && (expr.intrinsic || !families_.contains(expr.text))) {
         if (arguments.size() != 2 || arguments[0].kind != Type::exception || arguments[1] != Type::uint64)
           fail(expr.at, "cause_at requires an exception and a u64 index");
@@ -1562,7 +1766,11 @@ class ScalarChecker {
       operation.callee = select(expr, arguments);
       const auto &target = program_.instances[*operation.callee];
       const auto &definition = *program_.methods[target.method].source;
-      for (size_t i = 0; i < arguments.size(); ++i) operation.arguments[i].type = target.arguments[i];
+      for (size_t i = 0; i < arguments.size(); ++i) {
+        if (operation.arguments[i].mode != argument_mode(definition.parameters[i]))
+          throw std::logic_error("argument preparation disagrees with selected method");
+        operation.arguments[i].type = target.arguments[i];
+      }
       if (method && method->kind == Form::Kind::function && definition.kind == Form::Kind::procedure)
         fail(expr.at, "a function cannot invoke a procedure");
       std::map<std::string, size_t> owners;
@@ -2232,8 +2440,6 @@ public:
         if (!arity || arity > 2 || (form->name == "!" && arity != 1) ||
             (form->name != "+" && form->name != "-" && form->name != "!" && arity != 2))
           implementation_gap(form->at, "eager operator method arity");
-        if (std::any_of(form->parameters.begin(), form->parameters.end(), [](const auto &p) { return !p.owner.empty(); }))
-          implementation_gap(form->at, "eager operators with external borrowed argument preparation");
       }
       std::set<std::string> owners;
       for (const auto &owner : form->owner_parameters) {
