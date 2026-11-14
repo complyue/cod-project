@@ -72,6 +72,8 @@ struct CheckedOperation {
   std::optional<size_t> place;
   std::optional<size_t> binding;
   std::set<size_t> targets, owners, origins, selection_versions;
+  // Formal nullable inputs, or null_target for an independently absent view.
+  std::set<size_t> null_sources;
   std::optional<size_t> accumulator;
   bool read_only = false;
   bool fixed_binding = false;
@@ -125,6 +127,7 @@ struct LexicalState {
   std::map<size_t, Requirement> requirements;
   std::map<size_t, std::set<size_t>> exceptions;
   std::map<size_t, std::set<size_t>> targets;
+  std::map<size_t, std::set<size_t>> null_sources;
   std::map<size_t, std::set<size_t>> owners;
   std::set<size_t> expired_bindings;
   std::map<size_t, std::set<size_t>> target_versions;
@@ -206,7 +209,7 @@ class ScalarChecker {
   bool proving_ = false;
   bool validating_ = false;
   CallEffects observed_;
-  std::vector<std::set<size_t>> possible_targets_, target_dependencies_;
+  std::vector<std::set<size_t>> possible_targets_, possible_null_sources_, target_dependencies_;
   std::vector<CheckedStorage> catalog_storage_;
   size_t next_target_version_ = 0;
   std::set<size_t> rebound_;
@@ -320,11 +323,13 @@ class ScalarChecker {
     bindings_->back().alias = alias;
     if (!alias) {
       lexical_.targets[id] = targets;
+      lexical_.null_sources[id] = targets.contains(null_target) ? std::set<size_t>{null_target} : std::set<size_t>{};
       lexical_.owners[id] = target_owners(targets);
       lexical_.target_versions[id] = {next_target_version_++};
     }
     if (!proving_) {
       possible_targets_.push_back(targets);
+      possible_null_sources_.push_back({});
       target_dependencies_.push_back({});
     }
     scope.bindings.emplace(name, id);
@@ -355,16 +360,20 @@ class ScalarChecker {
   }
   void select_targets(CheckedOperation &operation, const std::set<size_t> &targets) const {
     operation.targets = targets;
+    if (!targets.contains(null_target)) operation.null_sources.clear();
+    else if (operation.null_sources.empty()) operation.null_sources.insert(null_target);
     operation.place = targets.size() == 1 && !targets.contains(null_target) ? std::optional<size_t>{*targets.begin()} : std::nullopt;
   }
   void assign_targets(size_t binding, const CheckedOperation &source) {
     lexical_.targets[binding] = source.targets;
+    lexical_.null_sources[binding] = source.null_sources;
     lexical_.owners[binding].insert(source.owners.begin(), source.owners.end());
     lexical_.target_versions[binding] = {next_target_version_++};
     lexical_.initialized_targets.erase(binding);
     if (source.initialized_target) lexical_.initialized_targets.insert(binding);
     if (!proving_) {
       possible_targets_.at(binding).insert(source.targets.begin(), source.targets.end());
+      possible_null_sources_.at(binding).insert(source.null_sources.begin(), source.null_sources.end());
       target_dependencies_.at(binding).insert(source.origins.begin(), source.origins.end());
     }
   }
@@ -388,7 +397,7 @@ class ScalarChecker {
     auto owners = lexical_.owners.at(*target.binding);
     owners.insert(source.owners.begin(), source.owners.end());
     if (owners.size() > 1) fail(at, "reference rebinding cannot change the initializer-fixed owner");
-    if (binding.requires_initialized && proving_ && lexical_.live && source.targets.contains(null_target))
+    if (binding.requires_initialized && proving_ && validating_ && lexical_.live && source.targets.contains(null_target))
       fail(at, "ref requires a proven non-null target");
     require_live_view(source, at);
     if (binding.requires_initialized && !source.initialized_target)
@@ -403,6 +412,7 @@ class ScalarChecker {
     const auto binding = *view.binding;
     if (lexical_.live && lexical_.expired_bindings.contains(binding))
       fail(at, "reference binding's target owner has ended or may expire across a loop backedge");
+    view.null_sources = lexical_.null_sources.at(binding);
     select_targets(view, lexical_.targets.at(binding));
     view.owners = lexical_.owners.at(binding);
     view.selection_versions = lexical_.target_versions.at(binding);
@@ -432,6 +442,8 @@ class ScalarChecker {
     if (!proving_) return;
     for (auto &[binding, targets] : state.targets) {
       targets = possible_targets_.at(binding);
+      state.null_sources[binding] = possible_null_sources_.at(binding);
+      if (targets.contains(null_target) && state.null_sources[binding].empty()) state.null_sources[binding].insert(null_target);
       const auto owners = target_owners(targets);
       state.owners[binding].insert(owners.begin(), owners.end());
       if (rebound_.contains(binding)) {
@@ -448,6 +460,9 @@ class ScalarChecker {
         const auto before = possible_targets_[i].size();
         possible_targets_[i].insert(possible_targets_[source].begin(), possible_targets_[source].end());
         changed = changed || before != possible_targets_[i].size();
+        const auto nulls = possible_null_sources_[i].size();
+        possible_null_sources_[i].insert(possible_null_sources_[source].begin(), possible_null_sources_[source].end());
+        changed = changed || nulls != possible_null_sources_[i].size();
       }
     } while (changed);
     catalog_storage_ = *storage_;
@@ -548,7 +563,7 @@ class ScalarChecker {
     if (mode == ArgumentMode::value) return;
     if (!view.view || view.mixed_view) implementation_gap(at, "borrowed arguments require existing target views");
     if (mode == ArgumentMode::borrowed_read) read_view(view, at, "borrowed argument");
-    if (mode == ArgumentMode::borrowed_ref && proving_ && lexical_.live && view.targets.contains(null_target))
+    if (mode == ArgumentMode::borrowed_ref && proving_ && validating_ && lexical_.live && view.targets.contains(null_target))
       fail(at, "ref argument requires a proven non-null target");
     if (mode == ArgumentMode::borrowed_ref && !view.initialized_target)
       for (const auto place : view.targets) require_initialized(place, at, "ref argument");
@@ -631,16 +646,21 @@ class ScalarChecker {
       operation.owners = {owners.at(result_owner)};
       operation.initialized_target = true;
       for (const auto parameter : summary.returned.targets) {
-        if (parameter == null_target) { operation.targets.insert(null_target); continue; }
+        if (parameter == null_target) continue;
         const auto &view = views.at(parameter);
-        operation.targets.insert(view.targets.begin(), view.targets.end());
+        for (const auto target : view.targets) if (target != null_target) operation.targets.insert(target);
         operation.origins.insert(view.origins.begin(), view.origins.end());
         if (summary.returned.uninitialized.contains(parameter) && !view.initialized_target &&
             !std::all_of(view.targets.begin(), view.targets.end(), [&](size_t place) {
               return place == null_target || lexical_.initialized.contains(place);
             })) operation.initialized_target = false;
       }
-      if (!summary.returned.targets.contains(null_target)) operation.targets.erase(null_target);
+      for (const auto source : summary.returned.null_sources) {
+        if (source == null_target) operation.null_sources.insert(null_target);
+        else if (views.at(source).targets.contains(null_target))
+          operation.null_sources.insert(views[source].null_sources.begin(), views[source].null_sources.end());
+      }
+      if (!operation.null_sources.empty()) operation.targets.insert(null_target);
       if (contract.nullable_views.empty() || !contract.nullable_views.back()) operation.targets.erase(null_target);
       select_targets(operation, operation.targets);
       if (read && !discard && &expr != prepared_call_) read_view(operation, expr.at, "borrowed result");
@@ -703,6 +723,7 @@ class ScalarChecker {
     if (!a_exits && !b_exits) for (const auto &[id, categories] : b.exceptions)
       lexical_.exceptions[id].insert(categories.begin(), categories.end());
     lexical_.targets = a_exits ? b.targets : a.targets;
+    lexical_.null_sources = a_exits ? b.null_sources : a.null_sources;
     lexical_.owners = a_exits ? b.owners : a.owners;
     lexical_.expired_bindings = a_exits ? b.expired_bindings : a.expired_bindings;
     if (!a_exits && !b_exits) {
@@ -716,6 +737,8 @@ class ScalarChecker {
     lexical_.initialized_targets = a_exits ? b.initialized_targets : b_exits ? a.initialized_targets : intersect(a.initialized_targets, b.initialized_targets);
     if (!a_exits && !b_exits) for (const auto &[id, targets] : b.targets) {
       lexical_.targets[id].insert(targets.begin(), targets.end());
+      const auto &nulls = b.null_sources.at(id);
+      lexical_.null_sources[id].insert(nulls.begin(), nulls.end());
       const auto &versions = b.target_versions.at(id);
       lexical_.target_versions[id].insert(versions.begin(), versions.end());
     }
@@ -732,6 +755,7 @@ class ScalarChecker {
     for (const auto &[name, id] : scope.bindings) {
       state.bindings_available.erase(id);
       state.targets.erase(id);
+      state.null_sources.erase(id);
       state.owners.erase(id);
       state.expired_bindings.erase(id);
       state.target_versions.erase(id);
@@ -762,7 +786,7 @@ class ScalarChecker {
     if (!lexical_.live) return;
     if (!exceptions.empty()) completion.reason = 3 + *exceptions.begin();
     if (!abrupt_) {
-      if (!proving_) return;
+      if (!proving_ || !validating_) return;
       for (const auto category : exceptions)
         if (exception_categories.at(category).checked && (!checking_method_ || !checking_method_->throws_categories.contains(category)))
           fail(at, "checked exception '" + std::string(exception_categories[category].name) + "' requires a covering catch or throws declaration");
@@ -777,6 +801,7 @@ class ScalarChecker {
     auto &targets = lexical_.targets.at(test.binding);
     const bool null = value == test.null_when_true;
     std::erase_if(targets, [&](size_t place) { return (place == null_target) != null; });
+    if (!null) lexical_.null_sources.at(test.binding).clear();
     lexical_.live = lexical_.live && !targets.empty();
   }
   void refine(const Expression &expr, bool value, const std::map<const Expression *, CheckedOperation> &operations) {
@@ -850,7 +875,7 @@ class ScalarChecker {
       for (size_t i = 1; i < normals.size(); ++i) { const auto previous = lexical_; join(previous, false, normals[i], false, at); }
       result.type = *normal_type;
       if (result.type == Type::void_type) {
-        result.place.reset(); result.binding.reset(); result.targets.clear(); result.origins.clear();
+        result.place.reset(); result.binding.reset(); result.targets.clear(); result.origins.clear(); result.null_sources.clear();
         result.view = result.read_only = false; result.exceptions.clear();
       }
     }
@@ -1667,6 +1692,7 @@ class ScalarChecker {
         if (result.place != view->place) result.place.reset();
         if (result.binding != view->binding) result.binding.reset();
         result.targets.insert(view->targets.begin(), view->targets.end());
+        result.null_sources.insert(view->null_sources.begin(), view->null_sources.end());
         result.owners.insert(view->owners.begin(), view->owners.end());
         result.origins.insert(view->origins.begin(), view->origins.end());
         result.selection_versions.insert(view->selection_versions.begin(), view->selection_versions.end());
@@ -1697,6 +1723,7 @@ class ScalarChecker {
     operation.binding = selected;
     operation.owners = lexical_.owners.at(selected);
     operation.selection_versions = lexical_.target_versions.at(selected);
+    operation.null_sources = lexical_.null_sources.at(selected);
     select_targets(operation, lexical_.targets.at(selected));
     operation.origins = {selected};
     operation.type = slot.type;
@@ -1730,6 +1757,7 @@ class ScalarChecker {
       operation.place = source.place;
       operation.binding = source.binding;
       operation.targets = source.targets;
+      operation.null_sources = source.null_sources;
       operation.owners = source.owners;
       operation.origins = source.origins;
       operation.selection_versions = source.selection_versions;
@@ -2005,6 +2033,8 @@ class ScalarChecker {
         if (yes_fact.view && no_fact.view) {
           auto targets = yes_fact.targets;
           targets.insert(no_fact.targets.begin(), no_fact.targets.end());
+          operation.null_sources = yes_fact.null_sources;
+          operation.null_sources.insert(no_fact.null_sources.begin(), no_fact.null_sources.end());
           select_targets(operation, targets);
         }
         operation.origins = yes_fact.origins;
@@ -2176,7 +2206,7 @@ class ScalarChecker {
             if (!owner_alive(owner))
               fail(initializer.at, "reference initializer's lexical owner has ended");
           if (expr.declaration_kind == "ref") {
-            if (proving_ && lexical_.live && source.targets.contains(null_target)) fail(initializer.at, "ref requires a proven non-null target");
+            if (proving_ && validating_ && lexical_.live && source.targets.contains(null_target)) fail(initializer.at, "ref requires a proven non-null target");
             if (!source.initialized_target) for (const auto place : source.targets) require_initialized(place, initializer.at, declaration->text);
           }
         }
@@ -2301,12 +2331,12 @@ class ScalarChecker {
         const auto owner = external_owners_.at(method->result_owner);
         if (!selected.owners.empty() && selected.owners != std::set<size_t>{owner})
           fail(expr.at, "borrowed result does not retain its declared external owner");
-        if (method->result_kind != "ptr" && proving_ && lexical_.live && selected.targets.contains(null_target))
+        if (method->result_kind != "ptr" && proving_ && validating_ && lexical_.live && selected.targets.contains(null_target))
           fail(expr.at, "borrowed ref result requires a proven non-null target");
         if (method->result_kind != "ptr" && !selected.initialized_target)
           for (const auto place : selected.targets) require_initialized(place, expr.at, "borrowed result");
         operation.borrowed_result = true;
-        lexical_.returned = {false, selected.targets, {}};
+        lexical_.returned = {false, selected.targets, {}, selected.null_sources};
         if (method->result_kind == "ptr" && !selected.initialized_target) for (const auto place : selected.targets)
           if (place != null_target && !lexical_.initialized.contains(place)) lexical_.returned.uninitialized.insert(place);
       } else if (value != Type::never && !transfers_value(value, instance->result))
@@ -2557,7 +2587,7 @@ class ScalarChecker {
     proving_ = proving; observed_ = {};
     storage_ = &storage; bindings_ = &bindings;
     storage.clear(); bindings.clear(); operations.clear();
-    if (!proving) { possible_targets_.clear(); target_dependencies_.clear(); catalog_storage_.clear(); rebound_.clear(); loop_owners_.clear(); }
+    if (!proving) { possible_targets_.clear(); possible_null_sources_.clear(); target_dependencies_.clear(); catalog_storage_.clear(); rebound_.clear(); loop_owners_.clear(); }
     lexical_ = {}; cleanup_ = {}; scope_storage_.clear(); read_sites_.clear(); external_owners_.clear();
     loop_controls_.clear(); delayed_controls_.clear(); deferred_inputs_.clear();
     caught_.reset(); catch_bindings_.clear(); caught_inputs_.clear();
@@ -2619,7 +2649,8 @@ class ScalarChecker {
           lexical_.owners[p] = {owner};
           if (parameter.declaration_kind == "ptr") {
             lexical_.targets[p].insert(null_target);
-            if (!proving) possible_targets_[p].insert(null_target);
+            lexical_.null_sources[p] = {p};
+            if (!proving) { possible_targets_[p].insert(null_target); possible_null_sources_[p] = {p}; }
           }
         }
         if (argument_mode(parameter) != ArgumentMode::borrowed_ptr) initialize(id);

@@ -30,7 +30,7 @@ public:
   // preserve its incoming selection, replace it, or join both possibilities.
   struct Returned {
     bool preserves = true;
-    std::set<size_t> targets, uninitialized;
+    std::set<size_t> targets, uninitialized, null_sources;
     bool operator==(const Returned &) const = default;
     void initialize(const std::set<size_t> &known) {
       std::erase_if(uninitialized, [&](size_t target) { return known.contains(target); });
@@ -39,10 +39,11 @@ public:
       preserves = preserves || other.preserves;
       targets.insert(other.targets.begin(), other.targets.end());
       uninitialized.insert(other.uninitialized.begin(), other.uninitialized.end());
+      null_sources.insert(other.null_sources.begin(), other.null_sources.end());
     }
     void then(const Returned &next) {
       const bool keep = preserves && next.preserves;
-      if (!next.preserves) { targets.clear(); uninitialized.clear(); }
+      if (!next.preserves) { targets.clear(); uninitialized.clear(); null_sources.clear(); }
       merge(next);
       preserves = keep;
     }
