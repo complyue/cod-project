@@ -1,5 +1,42 @@
 # Changelog
 
+## 2026-11-14 — Lexical pointer checkpoint integration
+
+<a id="k-lexical-checkpoint-sync-20261114"></a>
+**K-LEXICAL-CHECKPOINT-SYNC-20261114 — Preserve numeric mainline continuity.** Agent reconciliation of the H-433–H-436/D-28r7/D-22r12/D-14r94 documentation checkpoint with `73fb0baebedb03860db4d4c881d7593d6abf965f:design/DesignAuthorityRegistry.md`: registry r671 combines the design draft's r670 scope with mainline r669/K-660/K-661 and source reference283. All selected versus pending pointer/layout boundaries and independent numeric contracts retain their scope. Documentation overlap only; no source/build/test change or new design approval.
+
+## 2026-11-14 — Lexical slot location and reference contents
+
+<a id="h-436"></a>
+**H-436 — Separate slot addressing, payload interpretation and optimization.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-14 America/Los_Angeles; exact timestamp and personal name unavailable. The user says: “lexical allocation 和 offset ptr 语义还要明确： 不排斥 register/stack allocation 优化可能性； offset 仅限找到 lexical 变量存储位置，其实际内容是 ref/ptr 时，只有同 local scope 为 owner 时按相同 offset 语义存储和deref，指向其它 owner 归属内容时，另外按不同的语义解释。” This clarifies H-435: physical register/stack optimization remains available; a lexical storage locator does not determine the meaning of its contents; only same-local-owner ref/ptr contents use the same offset convention. Other-owner carriers, native ABI and optimization algorithms are not selected, and same-owner ADT-field constraints are not relaxed.
+
+<a id="k-lexical-slot-payload-20261114"></a>
+**K-LEXICAL-SLOT-PAYLOAD-20261114 — Representation-boundary clarification.** Agent integration under H-436, H-435/H-423 and charter §§2/3.3/4.3/6.2–6.3/7.1/8/12: D-28r6→7/D-22r11→12/D-14r93→94 and registry r669→670 distinguish storage locators, typed bits, same-scope offset payloads and other-owner references. Record caller/callee representation adaptation, aliases of slots versus new bindings, independent slot/target growth and optimization-equivalence acceptance. Preserve dynamic capacity, unique owners, H-428 effects, region resize, D-16 validity and unchanged capture/TLS/field-owner restrictions; no mandatory heap frame or inter-owner ABI follows. Published baseline: `733826b30b9880d930443a6545b249af0c977f48` at the affected paths; preceding scoped draft decision: K-SCOPE-OFFSET-ADOPT-20261114. Documentation only; no implementation/build/test claim.
+
+## 2026-11-14 — Adopt owner-base lexical references
+
+<a id="h-435"></a>
+**H-435 — Independent lexical-capacity and offset decision.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-14 America/Los_Angeles; exact timestamp and personal name unavailable. The user says: “这个方案几乎是可以独立确认采纳的，lexical scope 容量动态分配是已确认语言特性，我看目前 offset ptr 是最优实现方式。” This reaffirms dynamic lexical capacity and selects the H-434 owner-base-offset direction independently of the wider ADT refactoring. Its local rationale is preserving lexical variables/targets while replacing backing; it does not select anchor ABI, exact allocator/capability syntax, native interop, growth policy or a default graph-transfer algorithm. The preference is a design judgment, not benchmark evidence.
+
+<a id="k-scope-offset-adopt-20261114"></a>
+**K-SCOPE-OFFSET-ADOPT-20261114 — Selected scope and mainline continuity.** Agent integration under H-435/H-423 and charter §§2/3.3/4.3/6.3/7.1/8/12: D-28r5→6/D-22r10→11/D-14r92→93 and registry r668→669 record D-28-SCOPE/C-92/P-386 independently selected lexical requirements. Retain actual-owner base resolution, semantic identity across growth, selected-place preservation and existing-target validity until replacement is ready as direct consequences; physical anchor/allocation/native protocols and broader qualification remain open. H-433 lexical ADTs remain the target; H-206/H-208/H-351 library graph policy, H-428 effects, region resize and D-16 validity remain separate. Reconcile drafts with `733826b30b9880d930443a6545b249af0c977f48:design/DesignAuthorityRegistry.md` and its K-659/source reference281, preserving all evidence; dedicated branch fast-forwarded to that published main commit. Documentation only; no implementation/build/test claim.
+
+## 2026-11-14 — Lexical owner-base offsets
+
+<a id="h-434"></a>
+**H-434 — Evaluate relocatable lexical storage fragments.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-14 America/Los_Angeles; exact timestamp and personal name unavailable. The user proposes: “有一个技术处理方案是： lexical scope owner 的指针变量，其指针值也不是global/direct，而是相对于当前 lexical scope storage 的 heap frag base addr 的 offset，这样 heap frag ，可以随着分配需要重新从heap分配，而不影响 lexical 变量”. This places the lexical direct/global physical candidate under renewed review in favor of considering owner-base offsets and reallocatable lexical payload fragments. Stable owner anchors, cross-call address invalidation, allocation/failure protocol and raw native-address exposure are not yet selected. Region-only relative graphs and explicit consuming region resize remain separate.
+
+<a id="k-scope-offsets-20261114"></a>
+**K-SCOPE-OFFSETS-20261114 — Relocation feasibility and authority boundary.** Agent assessment under H-433/H-434 and charter §§2/3.3/4.3/6.3/7.1/8/12: D-28r4→5/D-22r9→10/D-14r91→92 and registry r667→668 review target-owner base resolution, stable anchors, retained selected places across allocation/calls, native-address exposure, all four transfer pairs and scope cleanup. P-382's lexical direct encoding needs reconfirmation; storage separation, unique owners, regional resize/cleanup, D-16 validity and unrelated qualified scopes remain. Candidate lexical growth retains semantic owner identity and may preserve old backing on pre-publication allocation failure; it is not consuming region resize, graph copying or H-428 rollback. Baseline: `8209c5ff4ff22c6275180114e86e40bc88b62dc2` at affected design/registry paths; preceding evaluation: K-POINTER-LAYOUT-20261114. No source/build/test or measured-performance claim.
+
+## 2026-11-14 — Lexical pointer-bearing ADT feasibility
+
+<a id="h-433"></a>
+**H-433 — Target lexical ADTs with automatic pointer addressing.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-14 America/Los_Angeles; exact timestamp and personal name unavailable. Asked about one nominal ADT in both storage domains, the user requests: “评估技术可行性及UX友好性： ADT 在 lexical scope 中分配时，使用 direct ptr ，而在 region 中分配时，使用 relative ptr，需要 CoD 自动识别和处理 bits/graph transfer 过程中的指针寻址方式差异”. They clarify: “保守兜底是 lexical scope 只允许分配 bits ADT，但是理想目标是 lexical scope 也能支持含指针的 ADT”. This establishes the design target/fallback and authorizes feasibility/UX evaluation. It does not select a physical layout carrier, scope allocation API, cross-owner fields or a default graph-cloning algorithm; H-206/H-208/H-351 library transfer remains the baseline.
+
+<a id="k-pointer-layout-20261114"></a>
+**K-POINTER-LAYOUT-20261114 — Layout and transfer feasibility review.** Agent assessment under H-429/H-433 and charter §§2/3.3/4.3/5.3/6.3/7.1/8/12: D-28r3→4/D-22r8→9 and registry r666→667 distinguish target layout, selected slot encoding and semantic owner/access evidence. Evaluate one nominal ADT, automatic field/transfer addressing and all four lexical/regional transfer pairs; retain H-206/H-208/H-351 library topology/allocation policy and H-428 failure effects. Caller-scope construction capability and native layout evidence are material open choices; no lexical heap lifetime, capture/TLS extension, graph copier or pointer ABI is qualified. D-16 bits validity and unrelated qualified contracts continue. Baseline: `8209c5ff4ff22c6275180114e86e40bc88b62dc2:design/RegionalAndLexicalStorageRefactor.md` and the same commit's affected paths. Source inspection only; no implementation/build/test or performance claim.
+
 ## 2026-11-14 — Lossless method selection
 
 <a id="k-661"></a>
