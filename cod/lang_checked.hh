@@ -173,19 +173,6 @@ struct QueryEnvironment {
   std::vector<std::vector<OwnerMatch>> owners;
   bool operator==(const QueryEnvironment &) const = default;
 };
-struct CheckedInstance {
-  size_t method;
-  std::vector<Type> arguments;
-  Type result;
-  std::map<const Expression *, CheckedOperation> operations;
-  bool complete = false;
-  std::vector<CheckedStorage> storage;
-  std::vector<CheckedBinding> bindings;
-  CallEffects effects;
-  std::vector<Type> environment, context, retained_types;
-  std::vector<std::optional<Type>> substitutions;
-  size_t query_environment = 0;
-};
 enum class ResultMode { value, borrowed_ref, borrowed_ptr };
 struct ResultContract {
   std::optional<Type> type;
@@ -194,6 +181,19 @@ struct ResultContract {
   bool read_only = false;
   bool borrowed() const { return mode != ResultMode::value; }
   bool nullable() const { return mode == ResultMode::borrowed_ptr; }
+};
+struct CheckedInstance {
+  size_t method;
+  std::vector<Type> arguments;
+  ResultContract result;
+  std::map<const Expression *, CheckedOperation> operations;
+  bool complete = false;
+  std::vector<CheckedStorage> storage;
+  std::vector<CheckedBinding> bindings;
+  CallEffects effects;
+  std::vector<Type> environment, context, retained_types;
+  std::vector<std::optional<Type>> substitutions;
+  size_t query_environment = 0;
 };
 struct CheckedMethod {
   const Form *source = nullptr;
@@ -228,6 +228,7 @@ class ScalarChecker {
   CallableChoices callable_choices_;
   size_t checking_context_ = 0;
   std::map<std::string, std::vector<size_t>> families_;
+  std::map<std::string, std::vector<CheckedMethod>> declarations_;
   std::set<std::string> print_symbols_;
   std::map<const Form *, size_t> lexical_methods_;
   struct FreeBindings { std::vector<Capture> captures, queries; };
@@ -417,7 +418,7 @@ class ScalarChecker {
   }
   ArgumentPreparation argument_preparation(const Expression &expr, const std::vector<Type> &prefix,
                                             const std::vector<ArgumentEvidence> &evidence, const Access &prefix_access, const Owners &prefix_owners, bool required = true, const TypeEvidenceState *state = nullptr) const {
-    if (expr.text == "cause_at" && (expr.intrinsic || !families_.contains(expr.text)) && expr.children.size() == 2)
+    if (expr.text == "cause_at" && (expr.intrinsic || (!families_.contains(expr.text) && !declarations_.contains(expr.text))) && expr.children.size() == 2)
       return {ArgumentMode::value, prefix.empty() ? exception_type(0) : Type{Type::uint64}};
     if (expr.intrinsic) return {};
     std::vector<size_t> applicable;
@@ -1318,7 +1319,7 @@ class ScalarChecker {
     const auto required = [&](const Capture &capture) {
       return lexical_.lookup(capture.name).has_value() ||
           std::any_of(query_environment().bindings.begin(), query_environment().bindings.end(), [&](const auto &binding) { return binding.name == capture.name; }) ||
-          (!families_.contains(capture.name) && capture.name != "isnull" && capture.name != "cause_at");
+          (!families_.contains(capture.name) && !declarations_.contains(capture.name) && capture.name != "isnull" && capture.name != "cause_at");
     };
     if (source.explicit_captures) {
       std::set<std::string> listed;
@@ -1424,6 +1425,72 @@ class ScalarChecker {
     }
     return match(broad, arguments).has_value();
   }
+  std::vector<const CheckedMethod *> declaration_obligations(const CheckedMethod &method, const std::vector<Type> &arguments) const {
+    std::vector<const CheckedMethod *> obligations;
+    if (lexical_methods_.contains(method.source)) return obligations;
+    const auto found = declarations_.find(method.source->name);
+    if (found == declarations_.end()) return obligations;
+    for (const auto &declaration : found->second) {
+      if (!match(declaration, arguments)) continue;
+      // A result contract belongs to the method instance, not to a caller's
+      // accidental owner equality, access or narrower exception category.
+      auto domain = arguments;
+      for (size_t i = 0; i < domain.size(); ++i) {
+        if (accepts_exception(domain[i], method.parameters[i])) domain[i] = method.parameters[i];
+        if (argument_mode(method.source->parameters[i]) != argument_mode(declaration.source->parameters[i]))
+          implementation_gap(method.source->at, "declaration applicability across different parameter passing modes");
+      }
+      if (!match(declaration, domain) || !same_access(method, declaration) ||
+          !implies_owners(method, declaration) || !implies_owners(declaration, method))
+        implementation_gap(method.source->at, "declaration applicability requires an independent owner, access or input-domain proof");
+      if (method.source->kind != declaration.source->kind)
+        fail(method.source->at, "implementation kind does not satisfy callable declaration");
+      for (const auto category : method.throws_categories)
+        if (exception_categories[category].checked && !declaration.throws_categories.contains(category))
+          fail(method.source->at, "implementation exposes a checked exception outside its callable declaration");
+      obligations.push_back(&declaration);
+    }
+    return obligations;
+  }
+  std::vector<ResultContract> declared_results(const CheckedMethod &method, const std::vector<Type> &arguments) const {
+    std::vector<ResultContract> results;
+    for (const auto *declaration : declaration_obligations(method, arguments)) {
+      auto result = declaration->result;
+      result.type = substitute(*result.type, *declaration, *match(*declaration, arguments), true);
+      if (nested_binder(*declaration, *result.type))
+        implementation_gap(method.source->at, "declared result type parameter is not determined by the arguments");
+      if (result.borrowed()) {
+        std::optional<std::string> owner;
+        for (size_t i = 0; i < arguments.size(); ++i) if (declaration->source->parameters[i].owner == result.owner) {
+          const auto &mapped = method.source->parameters[i].owner;
+          if (owner && owner != mapped) throw std::logic_error("unchecked declaration owner mapping");
+          owner = mapped;
+        }
+        if (!owner || owner->empty()) implementation_gap(method.source->at, "declared result owner is not established by a parameter");
+        result.owner = *owner;
+      }
+      results.push_back(std::move(result));
+    }
+    return results;
+  }
+  static ViewEvidence result_view(const CheckedMethod &method, const ResultContract &result, const Owners &owners) {
+    ViewEvidence view{result.read_only, result.borrowed(), {}};
+    if (result.borrowed()) for (size_t i = 0; i < owners.size(); ++i)
+      if (method.source->parameters[i].owner == result.owner && owners[i]) view.owner = owners[i];
+    return view;
+  }
+  static bool same_result(const ResultContract &a, const ResultContract &b) {
+    return a.type == b.type && a.mode == b.mode && a.owner == b.owner && a.read_only == b.read_only;
+  }
+  static void check_declared_results(const CheckedMethod &method, const ResultContract &result,
+                                     const std::vector<ResultContract> &declared) {
+    for (const auto &contract : declared) {
+      const bool compatible = result.mode == contract.mode && result.owner == contract.owner &&
+          (!result.borrowed() ? transfers_value(*result.type, *contract.type)
+                            : result.type == contract.type && (!result.read_only || contract.read_only));
+      if (!compatible) fail(method.source->at, "implementation result does not satisfy callable declaration");
+    }
+  }
   size_t demand(size_t method, std::vector<Type> arguments, const Location &at, const std::vector<Type> &environment = {},
                 const std::vector<Type> &retained = {}, size_t query_environment = 0) {
     auto &definition = program_.methods[method];
@@ -1491,7 +1558,9 @@ class ScalarChecker {
           return match_owners(program_.methods[id], owners, state) == OwnerMatch::unknown;
         })) implementation_gap(at, "method selection requires an unproved owner equality");
     if (best.size() != 1) fail(at, "ambiguous methods for '" + name + "'");
-    return best.front();
+    const auto selected = best.front();
+    declaration_obligations(program_.methods[selected], arguments);
+    return selected;
   }
   size_t select_family(const std::vector<size_t> &family, const std::vector<Type> &arguments, const Location &at, const std::string &name,
                        const std::vector<Type> &environment = {}, const std::vector<Type> &retained = {},
@@ -1500,7 +1569,8 @@ class ScalarChecker {
   }
   size_t select(const Expression &expr, const std::vector<Type> &arguments, const Access &access, const Owners &owners) {
     const auto family = named_family(expr.text);
-    if (family.methods.empty()) fail(expr.at, "unknown callable '" + expr.text + "'");
+    if (family.methods.empty()) fail(expr.at, declarations_.contains(expr.text)
+        ? "no applicable implementation for declared callable '" + expr.text + "'" : "unknown callable '" + expr.text + "'");
     return select_family(family.methods, arguments, expr.at, expr.text,
         family.context ? family.context->environment : std::vector<Type>{}, family.retained_types(), access, owners,
         family.context ? family.context->query_environment : 0);
@@ -1530,8 +1600,8 @@ class ScalarChecker {
     if (checking_method_ && checking_method_->source->kind == Form::Kind::function && definition.kind == Form::Kind::procedure)
       fail(expr.at, "a function cannot invoke a procedure");
     if (!completes) { operation.type = Type::never; return; }
-    finish_call(expr, callable_type(program_.methods[target.method], target.arguments, target.result), target.effects,
-        call_reasons(program_.methods[target.method]), arguments, views, operation, read, discard);
+    const auto contract = callable_type(program_.methods[target.method], target.arguments, target.result);
+    finish_call(expr, contract, target.effects, call_reasons(contract), arguments, views, operation, read, discard);
   }
   struct EagerTypes {
     Type result, operand;
@@ -1584,12 +1654,11 @@ class ScalarChecker {
       if (&expr != prepared_call_) note_abrupt(expr.at);
     }
   }
-  Type callable_type(const CheckedMethod &checked, const std::vector<Type> &arguments, const Type &result) const {
+  Type callable_type(const CheckedMethod &checked, const std::vector<Type> &arguments, const ResultContract &contract) const {
     const auto &method = *checked.source;
-    const auto &contract = checked.result;
     Type type{Type::procedure}; type.pure_callable = method.kind == Form::Kind::function;
     type.value_result = !contract.borrowed();
-    type.parameters = arguments; type.target = std::make_shared<Type>(result);
+    type.parameters = arguments; type.target = std::make_shared<Type>(*contract.type);
     std::map<std::string, size_t> roles;
     const auto role = [&](const std::string &owner) {
       if (owner.empty()) return size_t{0};
@@ -1608,6 +1677,12 @@ class ScalarChecker {
     if (std::none_of(type.const_views.begin(), type.const_views.end(), [](bool v) { return v; })) type.const_views.clear();
     if (std::none_of(type.nullable_views.begin(), type.nullable_views.end(), [](bool v) { return v; })) type.nullable_views.clear();
     for (const auto &failure : method.throws_types) type.throws_types.push_back(resolve_type(failure));
+    for (const auto *declaration : declaration_obligations(checked, arguments))
+      for (const auto &failure : declaration->source->throws_types) {
+        const auto resolved = resolve_type(failure);
+        if (std::find(type.throws_types.begin(), type.throws_types.end(), resolved) == type.throws_types.end())
+          type.throws_types.push_back(resolved);
+      }
     return resolve_type(std::move(type));
   }
   struct ResultObligation {
@@ -1745,12 +1820,21 @@ class ScalarChecker {
     } while (result_graph_changed_);
     results_solved_ = true;
   }
-  std::optional<Type> infer_result(size_t method, std::vector<Type> arguments, const std::vector<Type> &retained,
+  std::optional<ResultContract> infer_result(size_t method, std::vector<Type> arguments, const std::vector<Type> &retained,
                                    const TypeEvidenceState *state = nullptr) const {
     const auto &definition = program_.methods[method];
     for (size_t i = 0; i < arguments.size(); ++i)
       if (accepts_exception(arguments[i], definition.parameters[i])) arguments[i] = definition.parameters[i];
-    if (definition.result.type) return substitute(*definition.result.type, definition, *match(definition, arguments, retained), true);
+    auto supplied = definition.result;
+    if (supplied.type) supplied.type = substitute(*supplied.type, definition, *match(definition, arguments, retained), true);
+    const auto declared = declared_results(definition, arguments);
+    if (!supplied.type && !declared.empty()) {
+      supplied = declared.front();
+      for (const auto &contract : declared)
+        if (!same_result(supplied, contract))
+          implementation_gap(definition.source->at, "declarations do not establish one result contract; provide an explicit compatible result");
+    }
+    if (supplied.type) { check_declared_results(definition, supplied, declared); return supplied; }
     const auto context = result_context(method, state);
     const auto found = std::find_if(result_obligations_.begin(), result_obligations_.end(), [&](const auto &node) {
       return node.method == method && node.arguments == arguments && node.retained == retained &&
@@ -1772,11 +1856,11 @@ class ScalarChecker {
       if (definition.source->operation && swap_operation(definition.source->name) && *result != Type::void_type)
         fail(definition.source->at, "swap method must return void");
     }
-    return result;
+    return result ? std::optional<ResultContract>{ResultContract{result}} : std::nullopt;
   }
-  Type require_result(size_t method, const std::vector<Type> &arguments, const std::vector<Type> &retained, const Location &at) const {
+  ResultContract require_result(size_t method, const std::vector<Type> &arguments, const std::vector<Type> &retained, const Location &at) const {
     if (const auto result = infer_result(method, arguments, retained)) {
-      if (nested_binder(program_.methods[method], *result))
+      if (nested_binder(program_.methods[method], *result->type))
         implementation_gap(at, "type parameter is not determined by the arguments");
       return *result;
     }
@@ -1802,7 +1886,7 @@ class ScalarChecker {
     for (auto &argument : arguments) argument = substitute(argument, method, bindings, true);
     if (std::any_of(arguments.begin(), arguments.end(), [&](const auto &type) { return nested_binder(method, type); })) return {};
     const auto result = infer_result(id, arguments, retained, state);
-    if (!result || nested_binder(method, *result)) return {};
+    if (!result || nested_binder(method, *result->type)) return {};
     return callable_type(method, arguments, *result);
   }
   static CheckedOperation literal(const Expression &expr) {
@@ -2183,7 +2267,7 @@ class ScalarChecker {
         if (state.required) implementation_gap(expr.at, "storage exchange in typeof");
         return Type::void_type;
       }
-      if (expr.text == "cause_at" && (expr.intrinsic || !families_.contains(expr.text))) {
+      if (expr.text == "cause_at" && (expr.intrinsic || (!families_.contains(expr.text) && !declarations_.contains(expr.text)))) {
         if (state.required && (arguments.size() != 2 || arguments[0].kind != Type::exception || arguments[1] != Type::uint64))
           fail(expr.at, "cause_at requires an exception and a u64 index");
         return exception_type(0);
@@ -2192,11 +2276,37 @@ class ScalarChecker {
       std::vector<size_t> applicable;
       const auto family = expr.intrinsic ? NamedFamily{} : named_family(expr.text, &state);
       const auto &retained = family.retained_types();
-      if (state.required && family.methods.empty() && !eager_operation(expr.text))
-        implementation_gap(expr.at, "typeof requires a known callable signature without outer value capture");
       for (const auto id : family.methods)
         if (match(program_.methods[id], arguments, retained) && admits_access(program_.methods[id], access) &&
             match_owners(program_.methods[id], owners, &state) != OwnerMatch::mismatch) applicable.push_back(id);
+      if (family.methods.empty() && !expr.intrinsic && declarations_.contains(expr.text)) {
+        std::optional<Type> result;
+        std::optional<ResultMode> mode;
+        for (const auto &declaration : declarations_.at(expr.text)) {
+          const auto substitutions = match(declaration, arguments);
+          if (!substitutions || !admits_access(declaration, access)) continue;
+          const auto equality = match_owners(declaration, owners, &state);
+          if (equality == OwnerMatch::mismatch) continue;
+          if (equality == OwnerMatch::unknown) {
+            if (state.required) implementation_gap(expr.at, "declared signature requires an unproved owner equality");
+            return {};
+          }
+          if (state.required) for (size_t i = 0; i < arguments.size(); ++i)
+            if (argument_mode(declaration.source->parameters[i]) != ArgumentMode::value && (views[i].view != true || views[i].mixed_view))
+              implementation_gap(expr.at, "borrowed parameter requires an existing view");
+          const auto type = substitute(*declaration.result.type, declaration, *substitutions, true);
+          const auto next = result_view(declaration, declaration.result, owners);
+          if (nested_binder(declaration, type) || (result && (*result != type || view != next || mode != declaration.result.mode))) {
+            if (state.required) implementation_gap(expr.at, "declarations do not establish one inspected result contract");
+            return {};
+          }
+          result = type; view = next; mode = declaration.result.mode;
+        }
+        if (state.required && !result) fail(expr.at, "no applicable declared signature for '" + expr.text + "'");
+        return result;
+      }
+      if (state.required && family.methods.empty() && !eager_operation(expr.text))
+        implementation_gap(expr.at, "typeof requires a known callable signature without outer value capture");
       if (applicable.empty() && eager_operation(expr.text)) {
         const auto types = eager_types(expr, arguments);
         if (state.required && !types.error.empty()) fail(expr.at, types.error);
@@ -2211,13 +2321,10 @@ class ScalarChecker {
           if (argument_mode(method.source->parameters[i]) != ArgumentMode::value && (views[i].view != true || views[i].mixed_view))
             implementation_gap(expr.at, "borrowed parameter requires an existing view");
         const auto type = infer_result(id, arguments, retained, &state);
-        if (!type || nested_binder(method, *type) || (result && *result != *type)) return {};
-        const bool borrowed = method.result.borrowed();
-        ViewEvidence next{method.result.read_only, borrowed, {}};
-        if (borrowed) for (size_t i = 0; i < owners.size(); ++i)
-          if (method.source->parameters[i].owner == method.result.owner && owners[i]) next.owner = owners[i];
+        if (!type || nested_binder(method, *type->type) || (result && result != type->type)) return {};
+        const auto next = result_view(method, *type, owners);
         view = !result || view == next ? next : ViewEvidence{};
-        result = type;
+        result = type->type;
       }
       return result;
     }
@@ -2368,7 +2475,7 @@ class ScalarChecker {
         implementation_gap(at, "result establishment from an independently expected callable contract");
       return {};
     }
-    if (nested_binder(method, *result)) {
+    if (nested_binder(method, *result->type)) {
       if (result_probe_) return {};
       implementation_gap(at, "type parameter is not determined by the arguments");
     }
@@ -2379,7 +2486,7 @@ class ScalarChecker {
       for (const auto &failure : expected->throws_types) {
         const auto categories = exception_possibilities(failure); allowed.insert(categories.begin(), categories.end());
       }
-      for (const auto category : method.throws_categories)
+      for (const auto &failure : type.throws_types) for (const auto category : exception_possibilities(failure))
         if (exception_categories[category].checked && !allowed.contains(category)) fail(at, "callable view omits a required checked exception");
       type.throws_types = expected->throws_types;
       if (type != *expected) {
@@ -2699,6 +2806,8 @@ class ScalarChecker {
     case K::name: {
       if (!lexical_.lookup(expr.text) && families_.contains(expr.text))
         operation = materialize(families_.at(expr.text), expected, expr.at);
+      else if (!lexical_.lookup(expr.text) && declarations_.contains(expr.text))
+        fail(expr.at, "no applicable implementation for declared callable '" + expr.text + "'");
       else operation = read_binding(expr, read);
       break;
     }
@@ -2892,7 +3001,7 @@ class ScalarChecker {
             (evidence[i].read_only && *evidence[i].read_only != views[i].read_only) ||
             (evidence[i].owner && evidence[i].owner != one_owner(views[i]))))
           implementation_gap(expr.children[i]->at, "operand type/access/owner evidence depends on completion or contextual inference");
-      if (expr.text == "cause_at" && (expr.intrinsic || !families_.contains(expr.text))) {
+      if (expr.text == "cause_at" && (expr.intrinsic || (!families_.contains(expr.text) && !declarations_.contains(expr.text)))) {
         if (arguments.size() != 2 || arguments[0].kind != Type::exception || arguments[1] != Type::uint64)
           fail(expr.at, "cause_at requires an exception and a u64 index");
         operation.type = completes ? exception_type(0) : Type{Type::never};
@@ -3271,15 +3380,15 @@ class ScalarChecker {
     }
     case K::return_value: {
       if (!instance) fail(expr.at, "return requires an enclosing callable");
-      const auto &contract = program_.methods[instance->method].result;
+      const auto &contract = instance->result;
       const bool borrowed = contract.borrowed();
-      const auto value = expr.children.empty() ? Type{Type::void_type} : check(*expr.children[0], instance, operations, !borrowed, false, instance->result.kind == Type::procedure ? &instance->result : nullptr);
+      const auto value = expr.children.empty() ? Type{Type::void_type} : check(*expr.children[0], instance, operations, !borrowed, false, instance->result.type->kind == Type::procedure ? &*instance->result.type : nullptr);
       if (!borrowed && value.kind == Type::procedure) note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
       if (borrowed && value != Type::never) {
         if (expr.children.empty()) fail(expr.at, "borrowed result requires an explicit target view");
         const auto &selected = operations.at(expr.children.front().get());
         if (!selected.view || selected.mixed_view) implementation_gap(expr.at, "fresh ordinary borrowed results require a separate storage contract");
-        if (value != Type::null_ref && value != instance->result) fail(expr.at, "borrowed return requires the exact target type");
+        if (value != Type::null_ref && value != *instance->result.type) fail(expr.at, "borrowed return requires the exact target type");
         if (!contract.read_only && selected.read_only) fail(expr.at, "readonly target cannot supply a writable borrowed result");
         const auto owner = external_owners_.at(contract.owner);
         if (!selected.owners.empty() && selected.owners != std::set<size_t>{owner})
@@ -3291,10 +3400,10 @@ class ScalarChecker {
         lexical_.returned = {false, selected.targets, {}, selected.null_sources};
         if (contract.nullable() && !selected.initialized_target) for (const auto place : selected.targets)
           if (place != null_target && !lexical_.initialized.contains(place)) lexical_.returned.uninitialized.insert(place);
-      } else if (value != Type::never && !transfers_value(value, instance->result))
-        fail(expr.at, "return type '" + type_name(value) + "' does not satisfy '" + type_name(instance->result) + "'");
+      } else if (value != Type::never && !transfers_value(value, *instance->result.type))
+        fail(expr.at, "return type '" + type_name(value) + "' does not satisfy '" + type_name(*instance->result.type) + "'");
       operation.type = Type::never;
-      operation.operand_type = instance->result;
+      operation.operand_type = *instance->result.type;
       note_abrupt(expr.at, {}, {1, true});
       break;
     }
@@ -3462,7 +3571,7 @@ class ScalarChecker {
             edges.emplace_back(contexts[target].places.at(i), contexts[c].places.at(place));
         }
       }
-      if (instance.result.kind == Type::procedure) edges.emplace_back(contexts[target].result, expression(c, &expr));
+      if (instance.result.type->kind == Type::procedure) edges.emplace_back(contexts[target].result, expression(c, &expr));
       if (fact.callee && !instance.environment.empty()) {
         const auto count = program_.instances.at(c - 1).arguments.size();
         for (size_t i = 0; i < instance.environment.size(); ++i)
@@ -3570,7 +3679,7 @@ class ScalarChecker {
     for (const auto id : state.initialized) if (storage(id).borrowed) known.insert(id);
     const auto [found, inserted] = observed_.initialized.emplace(reason, known);
     if (!inserted) found->second = intersect(found->second, known);
-    if (!reason && checking_method_->result.borrowed()) {
+    if (!reason && checking_instance_->result.borrowed()) {
       auto returned = state.returned;
       returned.initialize(state.initialized);
       observed_.returned.merge(returned);
@@ -3626,11 +3735,11 @@ class ScalarChecker {
       CheckedOperation completed;
       completed.type = check(*method.body, &instance, instance.operations, true, true) == Type::never ? Type{Type::never} : Type{Type::void_type};
       const auto completion = finish_scope(completed, flow, &outcomes, 0, method.at).type;
-      if (validating_ && proving && instance.result != Type::void_type && completion != Type::never && warned_missing_return_.insert(instance.method).second)
+      if (validating_ && proving && *instance.result.type != Type::void_type && completion != Type::never && warned_missing_return_.insert(instance.method).second)
         program_.warnings.push_back({Warning::missing_return, method.at, "callable may finish without an explicit return"});
       if (proving) {
         if (completion != Type::never && lexical_.live)
-          observe_outcome(instance.result == Type::void_type ? 0 : 3 + exception_id(ExceptionCategory::missing_return), lexical_);
+          observe_outcome(*instance.result.type == Type::void_type ? 0 : 3 + exception_id(ExceptionCategory::missing_return), lexical_);
         const auto normal = lexical_;
         for (const auto &path : outcomes.paths) {
           observe_outcome(path.completion.reason == 1 ? 0 : path.completion.reason, path.state);
@@ -3673,14 +3782,14 @@ public:
         lexical_methods_.emplace(expr.definition.get(), 0);
         if (parent) parents.emplace(expr.definition.get(), parent);
         definitions.push_back(expr.definition.get());
-        collect(*expr.definition->body, expr.definition.get());
+        if (expr.definition->body) collect(*expr.definition->body, expr.definition.get());
       }
       for (const auto &child : expr.children) collect(*child, parent);
     };
     for (const auto &form : forms) if (form->body)
       collect(*form->body, form->kind == Form::Kind::expression ? nullptr : form.get());
     for (const auto *form : definitions) {
-      if (form->symbolic || (form->operation && !eager_operation(form->name) && form->name != "<->") || form->conversion || (!lexical_methods_.contains(form) && !form->captures.empty()) || !form->body)
+      if (form->symbolic || (form->operation && !eager_operation(form->name) && form->name != "<->") || form->conversion || (!lexical_methods_.contains(form) && !form->captures.empty()) || (!form->body && (form->operation || lexical_methods_.contains(form))))
         implementation_gap(form->at, "callable captures, effects, declarations, operators, owners or throws contracts");
       if (form->operation) {
         const auto arity = form->parameters.size();
@@ -3742,6 +3851,10 @@ public:
       }
       for (const auto &parameter : form->type_parameters)
         if (parameter.bound) implementation_gap(parameter.at, "bounded type parameters");
+      if (!form->body) {
+        declarations_[form->name].push_back(std::move(prepared));
+        continue;
+      }
       const auto id = program_.methods.size();
       const bool lexical = lexical_methods_.contains(form);
       for (const auto other : lexical ? std::vector<size_t>{} : families_[form->name]) {
@@ -3762,6 +3875,8 @@ public:
       if (lexical) lexical_methods_[form] = id;
       else families_[form->name].push_back(id);
     }
+    for (const auto &[name, contracts] : declarations_)
+      if (print_symbols_.contains(name)) fail(contracts.front().source->at, "callable conflicts with symbol '" + name + "'");
     for (const auto &symbol : print_symbols_)
       if (families_.contains(symbol)) fail(program_.methods[families_[symbol].front()].source->at, "callable conflicts with symbol '" + symbol + "'");
     for (size_t i = 0; i < program_.methods.size(); ++i) {

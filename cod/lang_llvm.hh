@@ -426,9 +426,8 @@ class LLVMEmission {
     return pack(result, choice.operation->type);
   }
   bool caller_destination(size_t method) const {
-    if (program_->methods[method].result.borrowed()) return false;
     const auto &instances = program_->methods[method].instances;
-    return std::any_of(instances.begin(), instances.end(), [&](size_t id) { return program_->instances[id].result.kind == Type::procedure; });
+    return std::any_of(instances.begin(), instances.end(), [&](size_t id) { return !program_->instances[id].result.borrowed() && program_->instances[id].result.type->kind == Type::procedure; });
   }
   llvm::Value *native_call(llvm::Function *target, size_t method, std::vector<llvm::Value *> prepared,
                            llvm::Value *captured = nullptr, std::optional<size_t> instance = {}) {
@@ -582,8 +581,9 @@ class LLVMEmission {
   }
   void complete_cleanup(const std::function<void()> &emit, bool handles_failure = false) {
     // Suspend the pending completion while cleanup executes its own control flow.
+    const auto places = {result_, category_, site_, fatal_, requested_, available_, cause_, exit_, returning_};
     std::map<llvm::AllocaInst *, llvm::Value *> pending;
-    for (auto *place : {result_, category_, site_, fatal_, requested_, available_, cause_, exit_, returning_}) pending.emplace(place, load(place));
+    for (auto *place : places) pending.emplace(place, load(place));
     if (environments_) b_.CreateStore(empty_scalar(), result_);
     auto *pending_failure = b_.CreateICmpEQ(pending.at(exit_), b_.getInt8(2));
     auto *entered_failure = handles_failure ? pending_failure : b_.getFalse();
@@ -601,7 +601,7 @@ class LLVMEmission {
     b_.CreateCondBr(b_.CreateICmpEQ(load(exit_), b_.getInt8(0)), restore, replace);
     b_.SetInsertPoint(restore);
     if (environments_) clear_value(result_);
-    for (const auto &[place, value] : pending) b_.CreateStore(value, place);
+    for (auto *place : places) b_.CreateStore(pending.at(place), place);
     if (handles_failure) {
       auto *resumed = b_.CreateSelect(pending.at(returning_), b_.getInt8(1), b_.getInt8(0));
       b_.CreateStore(b_.CreateSelect(pending_failure, resumed, pending.at(exit_)), exit_);
@@ -1369,17 +1369,17 @@ class LLVMEmission {
       query_environment_ = function->getArg(method.parameters.size() + !method.captures.empty() + method.retained_types.size());
     llvm::Value *returns_value = nullptr;
     if (instance) {
-      if (program_->instances[*instance].result != Type::void_type) returns_value = b_.getTrue();
+      if (*program_->instances[*instance].result.type != Type::void_type) returns_value = b_.getTrue();
     }
     else {
       const bool all_return = std::all_of(method.instances.begin(), method.instances.end(),
-          [&](size_t id) { return program_->instances[id].result != Type::void_type; });
+          [&](size_t id) { return *program_->instances[id].result.type != Type::void_type; });
       if (all_return) returns_value = b_.getTrue();
       llvm::Value *admitted = b_.getFalse();
       for (const auto id : method.instances) {
         auto *context = matches_context(program_->instances[id]);
         admitted = b_.CreateOr(admitted, context);
-        if (!all_return && program_->instances[id].result != Type::void_type)
+        if (!all_return && *program_->instances[id].result.type != Type::void_type)
           returns_value = returns_value ? b_.CreateOr(returns_value, context) : context;
       }
       auto *valid = block("arguments.valid"), *invalid = block("arguments.invalid");

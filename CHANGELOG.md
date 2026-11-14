@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Declared callable result contracts
+
+<a id="k-656"></a>
+**K-656 — Declaration-result continuity.** Agent assessment under H-258/H-420–H-424, C-84/P-356, existing D-10/D-14/D-17/D-18/D-26 constraints and charter §§5.3/6.3/12: registry r659→660 and source reference277→278 record module-declaration result establishment, per-instance value/view/owner contracts and preserved checked-failure obligations. Declarations remain constraints rather than executable methods; native cleanup restoration has a deterministic field order. Preserve ordinary dispatch, explicit returns, existing conversions, owner/access/initialization, preparation, cleanup and native coverage. Broader declaration applicability, independent expected contracts, non-scalar classification, recursive proof coverage and D-24's whole-document value path retain their separate status. No new conversion, owner union, capture permission, fraction mechanism or permanent ABI. Prior capability reference: `f4b427b8ee7d305d82f8ac4f87ef28fad94e52cd:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Independent callable result evidence
 
 <a id="k-655"></a>
