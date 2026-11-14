@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-13 — Storage operand completion
+
+<a id="k-636"></a>
+**K-636 — Storage completion continuity.** Agent assessment: registry r636→637 and source reference257→258 continue D-14r82's H-297/H-306/C-65/C-69/P-258/P-269/P-327, D-17r54/H-361/H-362/P-323/P-324, D-18r90 complete values and D-21r11/D-26r9 native coverage under charter §§2–3/6.3/12. Aborted typed initialization, assignment and swaps preserve earlier effects and cleanup without creating payload/target facts or performing the mutation. Acceptance covers grouped/constructor exits, fixed/access/initialization rejection, complete callable results and both native modes. Missing types, wider construction/alias proofs, numeric compatibility and pending designs retain their boundaries. Prior capability reference: `876c20877834e167ab5648395d9c4a0122c615d1:tests/cod/language/README.md`.
+
 ## 2026-11-13 — Named-call preparation completion
 
 <a id="k-635"></a>
