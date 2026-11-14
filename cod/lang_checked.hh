@@ -26,6 +26,11 @@ inline bool bits_type(const Type &type) { return scalar_type(type) || type.kind 
 inline bool lexical_value_type(const Type &type) { return bits_type(type) || type.kind == Type::procedure; }
 inline constexpr size_t null_target = std::numeric_limits<size_t>::max();
 enum class ArgumentMode { value, borrowed_read, borrowed_ref, borrowed_ptr };
+struct CheckedArgument {
+  ArgumentMode mode;
+  Type type;
+  bool operator==(const CheckedArgument &) const = default;
+};
 inline ArgumentMode argument_mode(const Parameter &parameter) {
   if (parameter.owner.empty()) return ArgumentMode::value;
   if (parameter.declaration_kind == "ptr") return ArgumentMode::borrowed_ptr;
@@ -74,7 +79,7 @@ struct CheckedOperation {
   bool mixed_view = false;
   bool is_null = false;
   bool borrowed_result = false;
-  std::vector<ArgumentMode> arguments;
+  std::vector<CheckedArgument> arguments;
   std::map<size_t, CleanupEquations::Effects> invocation;
   struct NullTest { size_t binding; std::set<size_t> versions; bool null_when_true = true; };
   std::optional<NullTest> null_test;
@@ -1321,16 +1326,17 @@ class ScalarChecker {
           operation.callable_binding = target.binding; operation.callable_place = target.place;
           operation.targets = target.targets;
         }
-        operation.arguments.assign(expr.children.size(), ArgumentMode::value);
+        if (offset) operation.arguments.push_back({ArgumentMode::value, contract});
         for (size_t i = offset; i < expr.children.size(); ++i) {
           const auto &parameter = contract.parameters[i - offset];
           const auto argument = check(*expr.children[i], instance, operations, true, false,
                                       parameter.kind == Type::procedure ? &parameter : nullptr);
           if (argument.kind == Type::procedure) note_abrupt(expr.children[i]->at, {exception_id(ExceptionCategory::out_of_memory)});
-          if (argument != parameter) {
+          if (argument != parameter && !accepts_exception(argument, parameter)) {
             if (transfers_value(argument, parameter)) implementation_gap(expr.children[i]->at, "callable view argument adaptation");
             fail(expr.children[i]->at, "argument does not satisfy the callable view type");
           }
+          operation.arguments.push_back({ArgumentMode::value, parameter});
         }
         operation.type = *contract.target;
         operation.exceptions = exception_possibilities(operation.type);
@@ -1362,11 +1368,11 @@ class ScalarChecker {
         if (argument.binding) operation.null_test = CheckedOperation::NullTest{*argument.binding, argument.selection_versions};
         break;
       }
-      operation.arguments = argument_modes(expr);
+      const auto modes = argument_modes(expr);
       std::vector<Type> arguments;
       std::vector<CheckedOperation> views;
       for (size_t i = 0; i < expr.children.size(); ++i) {
-        const auto mode = operation.arguments[i];
+        const auto mode = modes[i];
         std::optional<Type> argument_view;
         if (const auto family = families_.find(expr.text); family != families_.end()) {
           bool consistent = true;
@@ -1384,6 +1390,7 @@ class ScalarChecker {
           if (!consistent) argument_view.reset();
         }
         arguments.push_back(check(*expr.children[i], instance, operations, mode == ArgumentMode::value, false, argument_view ? &*argument_view : nullptr));
+        operation.arguments.push_back({mode, arguments.back()});
         require_value(arguments.back());
         if (mode == ArgumentMode::value && arguments.back().kind == Type::procedure)
           note_abrupt(expr.children[i]->at, {exception_id(ExceptionCategory::out_of_memory)});
@@ -1406,6 +1413,7 @@ class ScalarChecker {
       operation.callee = select(expr, arguments);
       const auto &target = program_.instances[*operation.callee];
       const auto &definition = *program_.methods[target.method].source;
+      for (size_t i = 0; i < arguments.size(); ++i) operation.arguments[i].type = target.arguments[i];
       if (method && method->kind == Form::Kind::function && definition.kind == Form::Kind::procedure)
         fail(expr.at, "a function cannot invoke a procedure");
       std::map<std::string, size_t> owners;
@@ -1474,7 +1482,9 @@ class ScalarChecker {
       if (!print_symbols_.contains(expr.text)) implementation_gap(expr.at, "dynamic procedure call other than selected std:io print");
       if (method && method->kind == Form::Kind::function) fail(expr.at, "a function cannot invoke a dynamic procedure");
       if (expr.children.size() != 1) fail(expr.at, "print requires one scalar argument");
-      if (!scalar_type(child(0))) fail(expr.at, "print requires one primitive scalar argument");
+      const auto argument = child(0);
+      if (!scalar_type(argument)) fail(expr.at, "print requires one primitive scalar argument");
+      operation.arguments.push_back({ArgumentMode::value, argument});
       operation.type = Type::void_type;
       break;
     }

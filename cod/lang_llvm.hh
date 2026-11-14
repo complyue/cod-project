@@ -292,15 +292,17 @@ class LLVMEmission {
     fail_path(ExceptionCategory::system, at, b_.CreateGlobalString(location_text(at) + ": " + message));
     b_.SetInsertPoint(good);
   }
-  std::vector<Choice> choices(const Expression &expr, const std::vector<const Expression *> &inputs) {
+  std::vector<Choice> choices(const Expression &expr, const std::vector<const Expression *> &inputs, bool prepared = false) {
     std::vector<Choice> result;
     for (size_t i = 0; i < facts_.size(); ++i) {
       const auto *facts = facts_[i];
       Choice choice{{}, &facts->at(&expr)};
-      for (const auto *input : inputs) choice.inputs.push_back(facts->at(input).type);
+      for (size_t p = 0; p < inputs.size(); ++p)
+        choice.inputs.push_back(prepared ? choice.operation->arguments.at(p).type : facts->at(inputs[p]).type);
       const auto same = [&](const Choice &other) {
         return other.inputs == choice.inputs && other.operation->callee == choice.operation->callee &&
-            other.operation->type == choice.operation->type && other.operation->operand_type == choice.operation->operand_type;
+            other.operation->type == choice.operation->type && other.operation->operand_type == choice.operation->operand_type &&
+            other.operation->arguments == choice.operation->arguments;
       };
       auto found = std::find_if(result.begin(), result.end(), same);
       if (found == result.end()) { result.push_back(std::move(choice)); found = std::prev(result.end()); }
@@ -410,9 +412,6 @@ class LLVMEmission {
                            llvm::Value *captured = nullptr, std::optional<size_t> instance = {}) {
     for (size_t i = 0; i < prepared.size(); ++i) {
       if (program_->methods[method].source->parameters[i].owner.empty()) take_value(prepared[i]);
-      const auto &type = program_->methods[method].parameters[i];
-      if (type.kind == Type::exception && program_->methods[method].source->parameters[i].owner.empty())
-        prepared[i] = pack(unpack(prepared[i], type), type);
     }
     llvm::AllocaInst *destination = nullptr;
     if (!program_->methods[method].captures.empty()) prepared.push_back(captured ? captured : environment_);
@@ -434,7 +433,7 @@ class LLVMEmission {
       const auto &fact = facts->at(&expr);
       Choice choice{{fact.operand_type}, &fact};
       for (size_t i = expr.kind == Expression::Kind::value_call ? 1 : 0; i < expr.children.size(); ++i)
-        choice.inputs.push_back(facts->at(expr.children[i].get()).type);
+        choice.inputs.push_back(fact.arguments.at(i).type);
       if (std::none_of(cases.begin(), cases.end(), [&](const auto &other) { return other.inputs == choice.inputs; }))
         cases.push_back(std::move(choice));
     }
@@ -464,7 +463,7 @@ class LLVMEmission {
     if (facts_.front()->at(&expr).callable_call) return invoke_value(expr, arguments);
     std::vector<const Expression *> source_inputs;
     for (const auto &argument : expr.children) source_inputs.push_back(argument.get());
-    const auto cases = choices(expr, source_inputs);
+    const auto cases = choices(expr, source_inputs, true);
     const auto call = [&](llvm::Function *target, size_t method) { return native_call(target, method, arguments); };
     if (cases.front().operation->callee && (cases.size() > 1 || !specialize_)) {
       const auto method = program_->instances[*cases.front().operation->callee].method;
@@ -732,6 +731,19 @@ class LLVMEmission {
     using K = Expression::Kind;
     return expr.kind == K::name || expr.kind == K::integer || expr.kind == K::real || expr.kind == K::boolean || expr.kind == K::null_ref;
   }
+  llvm::Value *prepare_value(const Expression &expr, size_t index, llvm::Value *value) {
+    const auto &child = *expr.children[index];
+    const auto cases = choices(expr, {&child});
+    if (std::all_of(cases.begin(), cases.end(), [&](const Choice &choice) {
+          return choice.inputs.front() == choice.operation->arguments.at(index).type;
+        })) return value;
+    auto *prepared = choose(child, {value}, cases, scalar_, [&](const Choice &choice) {
+      return convert_value(value, choice.inputs.front(), choice.operation->arguments.at(index).type);
+    });
+    // Type adaptation preserves the ownership of an independent prepared value.
+    if (const auto found = value_owners_.find(value); found != value_owners_.end()) value_owners_[prepared] = found->second;
+    return prepared;
+  }
   std::vector<llvm::Value *> prepare_arguments(const Expression &expr, bool deferred = false) {
     const auto &modes = facts_.front()->at(&expr).arguments;
     std::vector<llvm::Value *> arguments;
@@ -746,14 +758,17 @@ class LLVMEmission {
     }
 
     for (size_t i = 0; i < expr.children.size(); ++i) {
-      const auto mode = modes.empty() ? ArgumentMode::value : modes.at(i);
+      const auto mode = modes.at(i).mode;
       const auto &child = *expr.children[i];
       auto *value = emit_expression(child, mode == ArgumentMode::value);
       if (!reachable()) return {};
       if (mode != ArgumentMode::value) {
         if (mode == ArgumentMode::borrowed_read) value = checked_address(value, child, child.at);
         value = pack_view(value, child);
-      } else if (!offset || i || protect) value = copy_temporary(value, child.at);
+      } else {
+        value = prepare_value(expr, i, value);
+        if (!offset || i || protect) value = copy_temporary(value, child.at);
+      }
       arguments.push_back(value);
     }
     return arguments;
