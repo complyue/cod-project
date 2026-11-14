@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Selected-target cleanup initialization
+
+<a id="k-645"></a>
+**K-645 — Cleanup initialization continuity.** Agent assessment: registry r645→646 and source reference266→267 continue D-14r82/H-297/C-65/P-258's initialization-before-read contract and D-17r54/C-63/P-235/P-236/P-321–P-324's deferred timing/completion, with D-18r90 alias/native constraints and D-21r11/D-26r9 coverage under charter §§3.3/6.3/12. Shared completion summaries distinguish persistent physical-storage initialization from current-selection guarantees invalidated by rebinding. Reads, writes and overlapping aliases compose through nested cleanup and category-specific outcomes. Acceptance includes failed registration, replaced completion, prepared target retention, exact release and both native modes without runtime initialization flags. Conditional initialization implications, wider saved-target/queue correlations, regional mechanisms, permanent ABI and pending designs remain outside this proof increment. Prior capability reference: `f2b47d46b56f86f66ab4f2a5553ced1c42e6fc4c:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Runtime-selected ordinary aliases
 
 <a id="k-644"></a>

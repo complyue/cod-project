@@ -58,7 +58,7 @@ runner.CASES = {
     'late_uninitialized_target': ('{{val a=1,b=make local i64;ptr p=a;defer{p;};p=b;}};', 2, '', 'cannot prove initialization'),
     'late_target_initialized': (IO + '{{val a=1,b=make local i64;ptr p=a;defer{behave @print(p);};p=b;b<-4;}};', 0, '4\n', ''),
     'later_declared_target': (IO + '{{val a=1;ptr p=a;defer{behave @print(p);};val b=2;p=b;}};', 0, '2\n', ''),
-    'future_target_in_earlier_scope': ('val a=1;ptr p=a;{{defer{p;};}};val b=2;p=b;', 2, '', 'cannot prove initialization'),
+    'future_target_in_earlier_scope': (IO + 'val a=1;ptr p=a;{{defer{behave @print(p);};}};val b=2;p=b;behave @print(p);', 0, '1\n2\n', ''),
     'destination_initialization_survives_rhs_rebind': (IO + 'val a=make local i64,b=2;ptr p=a;p<-{p=b;10};behave @print(a);behave @print(p);', 0, '10\n2\n', ''),
     'new_target_not_initialized_by_old_destination_write': ('val a=1,b=make local i64;ptr p=a;p<-{p=b;10};p;', 2, '', 'before definite initialization'),
     'late_setter_registration_can_fail': ('{{val a=1,b=make local i64;ptr p=a;defer{p;};p=b;defer{b<-4;};}};', 2, '', 'cannot prove initialization'),

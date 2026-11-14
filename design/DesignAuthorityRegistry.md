@@ -1,10 +1,10 @@
 # Design authority and value lineage
 
-Registry revision: 645 · Audit date: 2026-11-14 (America/Los_Angeles)
+Registry revision: 646 · Audit date: 2026-11-14 (America/Los_Angeles)
 
 ## Design authority
 
-[D-GOV](#d-gov), registry revision 645 and all maintenance sections. Value path: V-03 → GOV-01 → GOV-02 through E-11/E-12, serving traceable, human-scoped delegation. H-05/H-388/H-391/H-403/H-411 governs scoped authority, concise decision summaries and current-state records; [K-632](../CHANGELOG.md#k-632) covers editorial continuity; [K-644](../CHANGELOG.md#k-644) covers the current selected ordinary-slot alias reference; K-633–K-643 retain exception declaration, callable preparation, storage/completion, contextual capture, reference-slot and compile-time query continuity. The [charter](RegionalSemanticPlatformCharter.md) and [AGENTS.md](../AGENTS.md) govern.
+[D-GOV](#d-gov), registry revision 646 and all maintenance sections. Value path: V-03 → GOV-01 → GOV-02 through E-11/E-12, serving traceable, human-scoped delegation. H-05/H-388/H-391/H-403/H-411 governs scoped authority, concise decision summaries and current-state records; [K-632](../CHANGELOG.md#k-632) covers editorial continuity; [K-645](../CHANGELOG.md#k-645) covers the current cleanup initialization reference; K-633–K-644 retain exception declaration, callable preparation, storage/completion, contextual capture, reference-slot and compile-time query continuity. The [charter](RegionalSemanticPlatformCharter.md) and [AGENTS.md](../AGENTS.md) govern.
 
 Acceptance: preserve stable IDs, value/dependency endpoints and kinds, current qualification, exclusions and unresolved decisions; retrieve original human evidence when exact scope matters. Maintenance grants no product qualification. Human decisions and agent assessments have distinct [changelog evidence locators](../CHANGELOG.md#authority-evidence-index).
 
@@ -25,7 +25,7 @@ Revision labels identify inspected text, not approval of every section. **Pendin
 | Contract / inspected revision | Authority and lineage | Boundary, acceptance and open work |
 | --- | --- | --- |
 | <a id="d-00"></a>**D-00** [Charter](RegionalSemanticPlatformCharter.md) | H-01–H-04 confirms V-01–V-03/E-01–E-10 directions; H-04 authorizes the charter’s creation. Initial charter commit `3fe2cd1dfd06ec41481f265386d23f3dce7e2ff6`, blob `9f0154035d52f976232000ab1601088b91948c0b`. | Value root, not blanket approval of generated details, examples, roadmap or §14 mechanisms. |
-| <a id="d-gov"></a>**D-GOV** registry r645; AGENTS governance | **Continued** H-05/E-11/E-12 under H-388/H-391/H-403/H-411; K-632–K-644. | Traceable scoped delegation, current decisions and recoverable evidence. Side-chat evidence uses attributed decision paraphrases. No charter, build/test or toolchain permission change; H-412 governs hygiene delivery. H-407 is separate human design approval, not qualification by registry maintenance. |
+| <a id="d-gov"></a>**D-GOV** registry r646; AGENTS governance | **Continued** H-05/E-11/E-12 under H-388/H-391/H-403/H-411; K-632–K-645. | Traceable scoped delegation, current decisions and recoverable evidence. Side-chat evidence uses attributed decision paraphrases. No charter, build/test or toolchain permission change; H-412 governs hygiene delivery. H-407 is separate human design approval, not qualification by registry maintenance. |
 | <a id="d-01"></a>**D-01** [Regional storage](MemoryRegionAndRegionalTypes.md); blob `8dc4ed4012d1127087d83faf9e13ed49db5345d5` | **Pending-human**, P-01/P-02. | Find a confirmed pointer/lifetime/acceptance baseline before delegating this whole file. AGENTS regional invariants remain mandatory independently. |
 | <a id="d-02"></a>**D-02** [C++ driver](CompileOnDemand.md); blob `cbd294de3eb9825c8522b9eb7781e44a5ba8d844` | **Pending-human**, P-03/P-04. | Stage-specific build-and-run facility; its no-JIT boundary does not define the platform’s long-term execution strategy. |
 | <a id="d-03"></a>**D-03** [Package management](CodProjectStructureAndPkgMgmt.md); blob `4146412997de5179146a7010b5b034e32fcebfb9` | **Pending-human**, P-05. | Git/UUID/branch/lock mechanisms and semantic-unit distribution need scoped confirmation. Existing code is not approval. |

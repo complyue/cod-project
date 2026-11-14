@@ -40,7 +40,7 @@ runner.CASES={
  'deferred_current_binding':(run('var p->if(flag){a}else{b};defer{behave @print(p);};a=z;b=x;',show=''),0,'3\n1\n',''),
  'deferred_rebind':(run('var p->if(flag){a}else{b};{{defer{p=z;};}};'),0,'3\n2\n3\n1\n3\n3\n',''),
  'initialization_inside_deferred_action':(run('var p->if(flag){a}else{b};defer{p<-15;behave @print(p);};',setup='val x=make local i64,y=make local i64;ptr a=x,b=y;',show=''),0,'15\n15\n',''),
- 'post_cleanup_selected_initialization_unproved':(run('var p->if(flag){a}else{b};{{defer{p<-15;};}};behave @print(p);',setup='val x=make local i64,y=make local i64;ptr a=x,b=y;',show=''),2,'','before definite initialization'),
+ 'post_cleanup_selected_initialization':(run('var p->if(flag){a}else{b};{{defer{p<-15;};}};behave @print(p);',setup='val x=make local i64,y=make local i64;ptr a=x,b=y;',show=''),0,'15\n15\n',''),
  'loop_local_alias':(run('for(i in 0..2){ {{var p->if(flag){a}else{b};p=z;flag<-!flag;}}; };'),0,'3\n3\n3\n3\n3\n3\n',''),
  'generic_borrowed_alias':(IO+'func run(ref x:T in O,ref y:T in O,flag:bool)->const T where {T,owner O}{var p->if(flag){x}else{y};return p;}val a=16,b=17,c=false,d=true;behave @print(run(a,b,true));behave @print(run(c,d,false));',0,'16\ntrue\n',''),
  'recursive_borrowed_alias':(IO+'func run(ref x:i64 in O,ref y:i64 in O,n:u64)->const i64 where {owner O}{var p->if(n%2u64==0u64){x}else{y};if(n==0u64){p<-18;return p;}else{return run(p,y,n-1u64);};}val x=1,y=2;behave @print(run(x,y,30u64));',0,'18\n',''),
