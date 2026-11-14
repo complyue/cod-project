@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026-11-14 — One result policy for callable definitions
+
+<a id="h-422"></a>
+**H-422 — Define return-type rules at callable scope.** Human/source: current project user in this design-discussion chat, recorded 2026-11-14 America/Los_Angeles; exact message timestamp, personal name and durable message URL unavailable. In response to the assistant asking whether H-421's rules should also apply to named proc definitions, the user states:
+
+> 你是说 return type 问题上， func 和 proc 是分开的？ 为什么不一起在callable口径上定规则？
+
+Accepted direction: unify return-type rules at callable scope rather than treating func/proc as separate result-policy decisions. D-24r5 applies the same explicit/inferred result defaults and H-421 independent-anchor requirement to callable definitions with bodies, including named and anonymous forms. Callable kind still governs effects/compatibility; H-258 still requires bodyless signatures. This records the user's scope correction, not approval of parameter inference, contextual expected-type precedence, new captures/implicit returns, pure-function syntax, abstract joins, a concrete algorithm or whole-file/value-path qualification. H-421 remains the independent-anchor baseline; its function-only discussion boundary no longer limits the current callable policy.
+
+<a id="k-callable-result-20261114"></a>
+**K-CALLABLE-RESULT-20261114 — Callable-wide result scope integration.** Agent assessment under H-422 and charter §§3.3/5.3/6.3/8/12: registry r653→654 and D-24r4→5 state one result policy across func/proc and named/anonymous definitions, preserving H-421's anchors and explicit-annotation fallback. C-84/P-356–P-358 retains the local rationale and separately pending broader value path; contextual constraints, no-value-return bodies and abstract joins remain independent questions. D-26r10→11/P-373 aligns the dependency while preserving H-407 native coverage, effect restrictions, owners, complete values, cleanup and D-16 numeric/fraction constraints. No source, build or test change. Committed starting text remains `81bfe82714c24063ea9cf9c471592fbc18035765` at `design/CallableResultInference.md`, `design/GenericAndRecursiveClosure.md` and `design/DesignAuthorityRegistry.md`; H-421/K-RESULT-ANCHOR-20261114 records the intervening discussion revision.
+
+## 2026-11-14 — Independent anchors for omitted function results
+
+<a id="h-421"></a>
+**H-421 — Permit named-function result inference with independent anchors.** Human/source: current project user in this design-discussion chat, recorded 2026-11-14 America/Los_Angeles; exact message timestamp, personal name and durable message URL unavailable. Asked to allow omitted result annotations on implemented named functions with explicit returns, scalar val defaults, unchanged compatibility/bodyless signatures and an explicit annotation for an unanchored recursive cycle, the user agrees and clarifies:
+
+> 同意。 `return 0u64;` 可以作为依据， `return n + sum_to(n - 1u64);` 不可以，如果只有后者，也要求显式声明返回类型
+
+Accepted scope: D-24r4's named-function source policy, its reduced-spelling/complete-checked-signature rationale and the independent-anchor restriction. The literal return establishes u64; the recursive arithmetic return is checked afterward and cannot establish the recursive result from its known operand or operator constraints. A body containing only that recursive return requires an explicit result annotation. This selects neither a termination proof nor an inferred void/non-returning result. Procedure/anonymous omission, separate-declaration constraints, no-value-return bodies, abstract joins, concrete algorithms, broader charter/document derivation and whole-file approval remain outside this confirmation.
+
+<a id="k-result-anchor-20261114"></a>
+**K-RESULT-ANCHOR-20261114 — Result inference decision integration.** Agent assessment under H-421 and charter §§3.3/5.3/6.3/8/12: registry r652→653 and D-24r3→4 replace resolved alternatives with named-function omission, independent recursive anchors and explicit-annotation fallback. C-84/P-356–P-358 preserves the local value rationale and separate pending broader paths; remaining questions and acceptance distinguish establishing a result from checking dependent returns, including mutual recursion and branch order. D-26r9→10/P-373 aligns the dependency while continuing H-407's qualified native coverage contract; no algorithm, ABI or body-unrolling permission follows. D-14/D-17/D-18/D-23 result/owner/completion contracts and D-16 numerical/fraction constraints remain unchanged. No source, build or test change. Prior text: `81bfe82714c24063ea9cf9c471592fbc18035765` at `design/CallableResultInference.md`, `design/GenericAndRecursiveClosure.md` and `design/DesignAuthorityRegistry.md`.
+
 ## 2026-11-14 — Confirmed scalar and owner design integration
 
 <a id="k-651"></a>
