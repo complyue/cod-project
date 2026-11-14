@@ -968,6 +968,9 @@ class LLVMEmission {
       if (fact.type == Type::never) { b_.CreateUnreachable(); return nullptr; }
       return fold ? load(accumulator) : empty_scalar();
     }
+    case K::alias:
+      emit_expression(*expr.children.front(), false, true);
+      return reachable() ? empty_scalar() : nullptr;
     case K::pointer_group: {
       for (const auto &declaration : expr.children) {
         if (declaration->kind == K::block) {
@@ -1118,7 +1121,7 @@ class LLVMEmission {
       if (place && environments_) initialize_value(place);
     }
     bindings_.clear();
-    for (const auto &binding : bindings) bindings_.push_back(binding.value_binding ? nullptr : slot(b_.getPtrTy(), "reference.target"));
+    for (const auto &binding : bindings) bindings_.push_back(binding.value_binding || binding.alias ? nullptr : slot(b_.getPtrTy(), "reference.target"));
     for (size_t i = 0; i < arguments_.size(); ++i) {
       if (storage[i].borrowed) { b_.CreateStore(view_address(arguments_[i]), bindings_[i]); continue; }
       b_.CreateStore(arguments_[i], storage_[i]);
