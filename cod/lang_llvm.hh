@@ -488,26 +488,29 @@ class LLVMEmission {
             })) continue;
         auto *selected = block("callable.selected"); select->addCase(integer(id + 1), selected);
         b_.SetInsertPoint(selected);
-        const auto &instance = program_->instances[value.instance];
+        const std::vector<Type> actual{choice.inputs.begin() + 1, choice.inputs.end()};
+        const auto instance_id = value.target(actual);
+        const auto &instance = program_->instances[instance_id];
         const auto method = instance.method;
-        auto *target = specialize_ ? specialized_[value.instance] : general_[method];
+        auto *target = specialize_ ? specialized_[instance_id] : general_[method];
         std::vector<llvm::Value *> arguments{prepared.begin() + 1, prepared.end()};
-        for (size_t i = 0; i < arguments.size(); ++i) if (value.type.parameters[i] != instance.arguments[i]) {
+        for (size_t i = 0; i < arguments.size(); ++i) if (actual[i] != instance.arguments[i]) {
           auto *original = arguments[i];
-          arguments[i] = convert_value(original, value.type.parameters[i], instance.arguments[i]);
+          arguments[i] = convert_value(original, actual[i], instance.arguments[i]);
           if (const auto owned = value_owners_.find(original); owned != value_owners_.end()) value_owners_[arguments[i]] = owned->second;
         }
         std::vector<std::pair<size_t, llvm::Value *>> saved;
         auto *image = environment(prepared.front());
-        if (expr.kind == Expression::Kind::perform && !instance.effects.symbols.empty()) {
+        const auto symbols = program_->captured_symbols(value);
+        if (expr.kind == Expression::Kind::perform && !symbols.empty()) {
           size_t index = program_->methods[method].captures.size();
-          auto *layout = image_layout(index + instance.effects.symbols.size());
-          for (const auto symbol : instance.effects.symbols) {
+          auto *layout = image_layout(index + symbols.size());
+          for (const auto symbol : symbols) {
             saved.emplace_back(symbol, b_.CreateLoad(scalar_, symbols_.at(symbol), "replay.previous"));
             b_.CreateStore(image_capture(layout, image, index++), symbols_.at(symbol));
           }
         }
-        auto *result = native_call(target, method, std::move(arguments), image, value.instance);
+        auto *result = native_call(target, method, std::move(arguments), image, instance_id);
         for (const auto &[symbol, previous] : saved) b_.CreateStore(previous, symbols_.at(symbol));
         incoming.emplace_back(result, b_.GetInsertBlock()); b_.CreateBr(join);
       }
@@ -731,7 +734,7 @@ class LLVMEmission {
   void collect_effects(const Expression &expr, std::set<size_t> &symbols) const {
     using K = Expression::Kind;
     if ((expr.kind == K::block && expr.scoped) || expr.kind == K::callable) return;
-    if (expr.kind == K::effect) symbols.insert(*facts_.front()->at(&expr).symbol);
+    if (expr.kind == K::effect || expr.kind == K::procedure_effect) symbols.insert(*facts_.front()->at(&expr).symbol);
     const size_t children = expr.kind == K::range_for ? 2 : expr.kind == K::fold ? 3 : expr.children.size();
     for (size_t i = 0; i < children; ++i) collect_effects(*expr.children[i], symbols);
   }
@@ -1021,7 +1024,7 @@ class LLVMEmission {
   }
   llvm::Value *create_callable_image(const CheckedOperation &fact, const Type &type, const Location &at) {
     auto *value = pack(integer(*fact.callable + 1), type);
-    const auto &symbols = program_->instances[program_->callables[*fact.callable].instance].effects.symbols;
+    const auto symbols = program_->captured_symbols(program_->callables[*fact.callable]);
     const auto count = fact.callable_captures.size() + symbols.size();
     if (!count) return value;
     auto *layout = image_layout(count);
@@ -1109,8 +1112,9 @@ class LLVMEmission {
     }
     if (fact.callable) {
       const bool definition = expr.kind == K::callable && fact.place.has_value();
+      const bool installation = expr.kind == K::effect || expr.kind == K::procedure_effect;
       const auto materialize = [&](const CheckedOperation &value) {
-        return this->materialize(value, definition ? value.operand_type : value.type, expr.at);
+        return this->materialize(value, definition || installation ? value.operand_type : value.type, expr.at);
       };
       llvm::Value *value;
       if (std::any_of(facts_.begin(), facts_.end(), [&](const auto *facts) { return facts->at(&expr).callable != fact.callable; })) {
@@ -1118,12 +1122,16 @@ class LLVMEmission {
         for (size_t i = 0; i < facts_.size(); ++i) cases.push_back({{}, &facts_[i]->at(&expr), {frame_contexts_[i]}});
         value = choose(expr, {}, cases, scalar_, [&](const Choice &choice) { return materialize(*choice.operation); });
       } else value = materialize(fact);
-      if (definition) {
+      if (installation) {
+        auto *owned = effect_values_.at(*fact.symbol);
+        assign_value(owned, own_value(value), expr.at);
+        b_.CreateStore(load(owned), symbols_.at(*fact.symbol));
+      } else if (definition) {
         auto *place = storage_.at(*fact.place);
         if (environments_) { scope_->values.values.push_back(place); clear_value(place); }
         b_.CreateStore(value, place);
       } else value = own_value(value);
-      return definition ? empty_scalar() : value;
+      return definition || installation ? empty_scalar() : value;
     }
     switch (expr.kind) {
     case K::null_ref: return null_pointer();
@@ -1546,7 +1554,7 @@ public:
   std::pair<std::string, std::string> emit(const CheckedProgram &program, bool emit_text, bool emit_bitcode, bool specialize = true) {
     program_ = &program; specialize_ = specialize;
     environments_ = std::any_of(program.methods.begin(), program.methods.end(), [](const auto &method) { return !method.captures.empty(); }) ||
-        std::any_of(program.callables.begin(), program.callables.end(), [&](const auto &value) { return !program.instances[value.instance].effects.symbols.empty(); });
+        std::any_of(program.callables.begin(), program.callables.end(), [&](const auto &value) { return !program.captured_symbols(value).empty(); });
     std::vector<llvm::Type *> fields{b_.getInt64Ty(), b_.getInt32Ty()};
     if (program.exception_values) fields.push_back(exception_);
     if (environments_) { environment_field_ = fields.size(); fields.push_back(b_.getPtrTy()); }
@@ -1554,13 +1562,13 @@ public:
     std::set<size_t> used_symbols;
     const auto collect_symbols = [&](const auto &operations) {
       for (const auto &[expr, operation] : operations)
-        if (operation.symbol && (expr->kind == Expression::Kind::symbol || expr->kind == Expression::Kind::effect || operation.callable_call))
+        if (operation.symbol && (expr->kind == Expression::Kind::symbol || expr->kind == Expression::Kind::effect || expr->kind == Expression::Kind::procedure_effect || operation.callable_call))
           used_symbols.insert(*operation.symbol);
     };
     collect_symbols(program.entry);
     for (const auto &instance : program.instances) collect_symbols(instance.operations);
     for (const auto &value : program.callables) {
-      const auto &symbols = program.instances[value.instance].effects.symbols;
+      const auto symbols = program.captured_symbols(value);
       used_symbols.insert(symbols.begin(), symbols.end());
     }
     for (size_t i = 0; i < program.symbols.size(); ++i) {

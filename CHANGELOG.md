@@ -1,5 +1,11 @@
 # Changelog
 
+
+## 2026-11-14 — Symbolic family source execution
+
+<a id="k-671"></a>
+**K-671 — Family-value continuity.** Agent assessment under H-372–H-378/H-381/H-382/H-398/H-407/H-409, D-10r147/D-18r91/D-21r11/D-26r13 and charter §§2/3.2/5.3/6.3/12: registry r678→679 and source reference292→293 record module-local symbolic families with primitive value-input views. Preserve actual-type semantic selection before parameter preparation, source identity across installation, full admitted-domain checking/capture, complete independent values and ordered cleanup. Reuse shared general bodies and existing image/TLS ownership; registration, materialization and installation remain separate. Broader family proofs, module composition/cancellation, permanent ABI, regional storage and fraction mechanisms retain their boundaries. Prior capability reference: `e7aae20e8bba8125dc13bb5156f3ce0172fd0c4e:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Exception-valued dynamic bindings
 
 <a id="k-670"></a>

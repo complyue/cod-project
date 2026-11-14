@@ -85,7 +85,7 @@ runner.CASES = {
     'wrong_effect_type': (P+'effect @p=1u64;', 2, '', 'effect value does not satisfy'),
     'wrong_call_arity': (P+'proc read()->u64{return 1u64;}effect @p=read;perform @p(2u64);', 2, '', 'argument count'),
     'not_a_procedure_symbol': ('symbol @x:u64;effect @x<-1u64;perform @x();', 2, '', 'dynamic invocation requires a procedure symbol'),
-    'family_materialization_boundary': (P+'effect @p;', 2, '', 'whole callable family materialization'),
+    'family_without_implementation': (P+'effect @p;', 2, '', 'symbolic family has no applicable implementation'),
 }
 for name, (source, status, output, diagnostic) in list(runner.CASES.items()):
     if MISSING in source and status == 0:

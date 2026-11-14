@@ -238,11 +238,30 @@ struct CheckedMethod {
   std::vector<size_t> retained_types;
   std::optional<size_t> parent;
 };
-struct CheckedCallable { Type type; size_t instance; };
+struct CheckedCallable {
+  Type type;
+  std::optional<size_t> instance;
+  std::optional<size_t> family = {};
+  // Actual input identities select semantic methods before parameter preparation.
+  std::vector<std::pair<std::vector<Type>, size_t>> dispatch = {};
+  std::set<size_t> implementations() const {
+    if (instance) return {*instance};
+    std::set<size_t> result;
+    for (const auto &[inputs, target] : dispatch) result.insert(target);
+    return result;
+  }
+  size_t target(const std::vector<Type> &arguments) const {
+    if (instance) return *instance;
+    const auto found = std::find_if(dispatch.begin(), dispatch.end(), [&](const auto &entry) { return entry.first == arguments; });
+    if (found == dispatch.end()) throw std::logic_error("unchecked symbolic family invocation");
+    return found->second;
+  }
+};
 struct CheckedSymbol {
   std::optional<Type> type;
   bool intrinsic_print = false;
   std::string name;
+  std::vector<size_t> methods = {};
 };
 
 struct CheckedProgram {
@@ -257,6 +276,14 @@ struct CheckedProgram {
   std::vector<CheckedStorage> entry_storage;
   std::vector<CheckedBinding> entry_bindings;
   bool exception_values = false;
+  std::set<size_t> captured_symbols(const CheckedCallable &value) const {
+    std::set<size_t> result;
+    for (const auto target : value.implementations()) {
+      const auto &symbols = instances[target].effects.symbols;
+      result.insert(symbols.begin(), symbols.end());
+    }
+    return result;
+  }
 };
 
 class ScalarChecker {
@@ -940,13 +967,14 @@ class ScalarChecker {
       if (!exception_categories[category].checked || categories.contains(category)) reasons.insert(3 + category);
     return reasons;
   }
-  CallEffects callable_effects(const Type &contract, const std::optional<std::set<size_t>> &choices) const {
+  CallEffects callable_effects(const Type &contract, const std::vector<Type> &arguments,
+                              const std::optional<std::set<size_t>> &choices) const {
     CallEffects effects;
     bool first = true;
     for (size_t id = 0; id < program_.callables.size(); ++id) {
       const auto &callable = program_.callables[id];
       if (callable.type != contract || (choices && !choices->contains(id))) continue;
-      const auto &next = program_.instances[callable.instance].effects;
+      const auto &next = program_.instances[callable.target(arguments)].effects;
       if (first) { effects = next; first = false; continue; }
       effects.reads.insert(next.reads.begin(), next.reads.end());
       effects.symbols.insert(next.symbols.begin(), next.symbols.end());
@@ -1425,7 +1453,8 @@ class ScalarChecker {
     const auto required = [&](const Capture &capture) {
       return lexical_.lookup(capture.name).has_value() ||
           std::any_of(query_environment().bindings.begin(), query_environment().bindings.end(), [&](const auto &binding) { return binding.name == capture.name; }) ||
-          (!families_.contains(capture.name) && !declarations_.contains(capture.name) && capture.name != "isnull" && capture.name != "cause_at");
+          (!families_.contains(capture.name) && !declarations_.contains(capture.name) && !symbol_names_.contains(capture.name) &&
+           capture.name != "isnull" && capture.name != "cause_at");
     };
     if (source.explicit_captures) {
       std::set<std::string> listed;
@@ -2240,7 +2269,7 @@ class ScalarChecker {
       const auto id = resolve_symbol(expr.text, expr.at, symbol_shadowed(expr.text, state), state.method);
       return program_.symbols[id].type;
     }
-    case K::effect:
+    case K::procedure_effect: case K::effect:
       return !expr.children.empty() && child(0) == Type::never ? Type{Type::never} : Type{Type::void_type};
     case K::touch: return Type::void_type;
     case K::name:
@@ -2784,6 +2813,77 @@ class ScalarChecker {
     if (!environment.empty() || !symbols.empty()) note_abrupt(at, {exception_id(ExceptionCategory::out_of_memory)});
     return value;
   }
+  CheckedOperation materialize_family(size_t symbol, const Type &view, const Location &at) {
+    if (view.kind != Type::procedure || view.pure_callable)
+      fail(at, "a symbolic procedure family requires a procedure view");
+    const auto &family = program_.symbols[symbol].methods;
+    if (family.empty()) fail(at, "symbolic family has no applicable implementation");
+    const auto found = std::find_if(program_.callables.begin(), program_.callables.end(), [&](const auto &value) {
+      return value.family == symbol && value.type == view;
+    });
+    const auto id = std::distance(program_.callables.begin(), found);
+    if (found == program_.callables.end()) {
+      // A complete family value covers its admitted domain, including unused
+      // alternatives. The finite primitive proof does not define a general ABI.
+      for (size_t i = 0; i < view.parameters.size(); ++i) {
+        if ((!view.argument_modes.empty() && view.argument_modes[i] != ArgumentMode::value) ||
+            !scalar_type(view.parameters[i]))
+          implementation_gap(at, "unproved symbolic family view with non-primitive or borrowed inputs");
+      }
+      CheckedCallable value{view, {}, symbol};
+      std::vector<Type> arguments;
+      size_t obligations = 0;
+      const std::function<void()> cover = [&] {
+        if (arguments.size() != view.parameters.size()) {
+          for (const auto kind : {Type::boolean, Type::uint8, Type::uint32, Type::uint64, Type::integer, Type::float32, Type::float64})
+            if (transfers_value(kind, view.parameters[arguments.size()])) {
+              arguments.push_back(kind); cover(); arguments.pop_back();
+            }
+          return;
+        }
+        Access access;
+        std::optional<size_t> selected;
+        const std::function<void()> prove_access = [&] {
+          if (++obligations > 4096) implementation_gap(at, "symbolic family coverage exceeded the compiler resource limit");
+          if (access.size() != arguments.size()) {
+            for (const bool readonly : {false, true}) {
+              access.push_back(readonly); prove_access(); access.pop_back();
+            }
+            return;
+          }
+          const auto method = select_method(family, arguments, at, program_.symbols[symbol].name, {}, access);
+          if (selected && *selected != method)
+            implementation_gap(at, "unproved symbolic family selection depending on argument access");
+          selected = method;
+        };
+        prove_access();
+        const auto target = demand(*selected, arguments, at);
+        const auto &instance = program_.instances[target];
+        auto contract = callable_type(program_.methods[*selected], instance.arguments, instance.result);
+        std::set<size_t> allowed;
+        for (const auto &failure : view.throws_types) {
+          const auto categories = exception_possibilities(failure); allowed.insert(categories.begin(), categories.end());
+        }
+        for (const auto &failure : contract.throws_types) for (const auto category : exception_possibilities(failure))
+          if (exception_categories[category].checked && !allowed.contains(category))
+            fail(at, "callable view omits a required checked exception");
+        contract.throws_types = view.throws_types;
+        // Selected value parameters may prepare a lossless wider representation.
+        contract.parameters = view.parameters;
+        if (contract != view) implementation_gap(at, "unproved symbolic family result/access/view compatibility");
+        value.dispatch.emplace_back(arguments, target);
+      };
+      cover();
+      program_.callables.push_back(std::move(value));
+    }
+    const auto symbols = program_.captured_symbols(program_.callables[id]);
+    if (!symbols.empty() && checking_method_ && checking_method_->source->kind == Form::Kind::function)
+      fail(at, "a function cannot capture dynamic bindings");
+    for (const auto required : symbols) require_symbol(lexical_, required, at);
+    if (!symbols.empty()) note_abrupt(at, {exception_id(ExceptionCategory::out_of_memory)});
+    CheckedOperation value; value.type = view; value.callable = id;
+    return value;
+  }
   void check_value_call(const Expression &expr, const Type &contract, size_t offset, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation, bool read, bool discard) {
     note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
@@ -2808,13 +2908,13 @@ class ScalarChecker {
       }
       arguments.push_back(argument); views.push_back(operations.at(expr.children[i].get()));
       if (argument != Type::never) prepare_borrow(views.back(), mode, expr.children[i]->at);
-      operation.arguments.push_back({mode, parameter});
+      operation.arguments.push_back({mode, argument == Type::never ? parameter : argument});
     }
     if (!completes) { operation.type = Type::never; return; }
     if (checking_context_ < callable_choices_.size())
       if (const auto found = callable_choices_[checking_context_].find(&expr); found != callable_choices_[checking_context_].end())
         operation.callable_choices = found->second;
-    auto effects = callable_effects(contract, operation.callable_choices);
+    auto effects = callable_effects(contract, arguments, operation.callable_choices);
     if (expr.kind == Expression::Kind::perform) effects.symbols.clear();
     finish_call(expr, contract, effects, call_reasons(contract), arguments, views,
                 operation, read, discard, offset);
@@ -3272,7 +3372,7 @@ class ScalarChecker {
       finish_named_call(expr, arguments, views, operation, read, discard, completes);
       break;
     }
-    case K::symbol: case K::effect: case K::touch: {
+    case K::symbol: case K::procedure_effect: case K::effect: case K::touch: {
       operation.symbol = resolve_symbol(expr.text, expr.at,
           lexical_.lookup(expr.text).has_value() || query_environment().symbol_shadows.contains(expr.text),
           instance ? std::optional<size_t>{instance->method} : std::nullopt);
@@ -3281,16 +3381,28 @@ class ScalarChecker {
         implementation_gap(expr.at, "runtime symbol payload outside supported bits and complete-callable values");
       if (method && method->kind == Form::Kind::function)
         fail(expr.at, "a function cannot access dynamic bindings");
-      if (expr.kind == K::effect) {
+      if (expr.kind == K::effect || expr.kind == K::procedure_effect) {
         if (expr.children.empty()) {
-          if (symbol.type->kind == Type::procedure) implementation_gap(expr.at, "whole callable family materialization");
-          fail(expr.at, "a scalar symbol installation requires an explicit value");
+          if (symbol.type->kind != Type::procedure) fail(expr.at, "a scalar symbol installation requires an explicit value");
+          const auto id = *operation.symbol;
+          operation = materialize_family(id, *symbol.type, expr.at);
+          operation.symbol = id; operation.operand_type = operation.type; operation.type = Type::void_type;
+          if (lexical_.live) lexical_.bound_symbols.insert(id);
+          break;
         }
         if (symbol.type->kind == Type::procedure) {
           if (expr.binding != "=") fail(expr.at, "procedure symbols require effect '=' installation");
         } else if (expr.binding != "<-") fail(expr.at, "bits symbols require effect '<-' transfer");
-        const auto source = check(*expr.children[0], instance, operations, true, false,
-                                  symbol.type->kind == Type::procedure ? &*symbol.type : nullptr);
+        const auto &operand = *expr.children[0];
+        Type source;
+        if (symbol.type->kind == Type::procedure && operand.kind == K::name &&
+            !lexical_.lookup(operand.text) && symbol_names_.contains(operand.text)) {
+          const auto selected = resolve_symbol(operand.text, operand.at,
+              query_environment().symbol_shadows.contains(operand.text), instance ? std::optional<size_t>{instance->method} : std::nullopt);
+          operations[&operand] = materialize_family(selected, *symbol.type, operand.at);
+          source = operations[&operand].type;
+        } else source = check(operand, instance, operations, true, false,
+                              symbol.type->kind == Type::procedure ? &*symbol.type : nullptr);
         if (source != Type::never && !transfers_value(source, *symbol.type))
           fail(expr.at, "effect value does not satisfy the declared symbol type");
         operation.operand_type = *symbol.type;
@@ -3848,10 +3960,12 @@ class ScalarChecker {
     value = [&](size_t c, const CheckedOperation &fact, Node node) {
       if (fact.callable) {
         flow.seed(node, *fact.callable);
-        const auto target = program_.callables[*fact.callable].instance + 1;
-        const auto &frame = program_.instances[target - 1].frame;
-        for (size_t i = 0; i < fact.callable_captures.size(); ++i)
-          value(c, fact.callable_captures[i], contexts[target].places.at(frame.captures.at(i)));
+        if (!fact.callable_captures.empty()) {
+          const auto target = *program_.callables[*fact.callable].instance + 1;
+          const auto &frame = program_.instances[target - 1].frame;
+          for (size_t i = 0; i < fact.callable_captures.size(); ++i)
+            value(c, fact.callable_captures[i], contexts[target].places.at(frame.captures.at(i)));
+        }
       }
       if (fact.type.kind == Type::procedure)
         for (const auto place : fact.targets) if (place != null_target)
@@ -3884,8 +3998,8 @@ class ScalarChecker {
       for (const auto &[expr, fact] : *contexts[c].facts) {
         const auto node = expression(c, expr);
         value(c, fact, node);
-        if (expr->kind == K::effect && fact.operand_type.kind == Type::procedure && !expr->children.empty())
-          flow.link(expression(c, expr->children.front().get()), symbols.at(*fact.symbol));
+        if ((expr->kind == K::effect || expr->kind == K::procedure_effect) && fact.operand_type.kind == Type::procedure)
+          flow.link(fact.callable ? node : expression(c, expr->children.front().get()), symbols.at(*fact.symbol));
         if (expr->kind == K::symbol && fact.type.kind == Type::procedure)
           flow.link(symbols.at(*fact.symbol), node);
         if ((expr->kind == K::pointer || expr->kind == K::callable) && fact.place &&
@@ -3908,8 +4022,11 @@ class ScalarChecker {
             flow.link(contexts[c].places.at(place), callee);
           for (size_t id = 0; id < program_.callables.size(); ++id) {
             const auto &candidate = program_.callables[id];
-            if (candidate.type == fact.operand_type)
-              flow.when(callee, id, invocation(c, *expr, fact, candidate.instance + 1, offset));
+            if (candidate.type == fact.operand_type) {
+              std::vector<Type> arguments;
+              for (size_t i = offset; i < fact.arguments.size(); ++i) arguments.push_back(fact.arguments[i].type);
+              flow.when(callee, id, invocation(c, *expr, fact, candidate.target(arguments) + 1, offset));
+            }
           }
         }
         if (fact.type.kind != Type::procedure || fact.callable || fact.callee || fact.callable_call) continue;
@@ -4107,7 +4224,9 @@ public:
     std::map<const Form *, size_t> method_ids;
     const std::function<void(const Expression &, const Form *)> collect = [&](const Expression &expr, const Form *parent) {
       if (expr.definition) {
-        lexical_methods_.emplace(expr.definition.get(), 0);
+        if (expr.kind == Expression::Kind::procedure_effect) {
+          if (parent) implementation_gap(expr.at, "symbolic family definitions inside callable bodies");
+        } else lexical_methods_.emplace(expr.definition.get(), 0);
         if (parent) parents.emplace(expr.definition.get(), parent);
         definitions.push_back(expr.definition.get());
         if (expr.definition->body) collect(*expr.definition->body, expr.definition.get());
@@ -4117,7 +4236,7 @@ public:
     for (const auto &form : forms) if (form->body)
       collect(*form->body, form->kind == Form::Kind::expression ? nullptr : form.get());
     for (const auto *form : definitions) {
-      if (form->symbolic || (form->operation && !eager_operation(form->name) && form->name != "<->") || form->conversion || (!lexical_methods_.contains(form) && !form->captures.empty()) || (!form->body && lexical_methods_.contains(form)))
+      if ((form->operation && !eager_operation(form->name) && form->name != "<->") || form->conversion || (!lexical_methods_.contains(form) && !form->captures.empty()) || (!form->body && lexical_methods_.contains(form)))
         implementation_gap(form->at, "callable captures, effects, declarations, operators, owners or throws contracts");
       if (form->operation) {
         const auto arity = form->parameters.size();
@@ -4179,13 +4298,31 @@ public:
       }
       for (const auto &parameter : form->type_parameters)
         if (parameter.bound) implementation_gap(parameter.at, "bounded type parameters");
+      std::optional<size_t> symbol;
+      if (form->symbolic) {
+        if (exception_types_.contains(form->name)) implementation_gap(form->at, "same-scope type and symbol declarations");
+        if (const auto found = symbol_names_.find(form->name); found != symbol_names_.end()) symbol = found->second;
+        else {
+          if (!prepared.type_parameters.empty() || !prepared.result.type)
+            implementation_gap(form->at, "implicit symbolic declaration requires an independently established concrete signature");
+          const auto type = callable_type(prepared, prepared.parameters, prepared.result);
+          signature_type(prepared, type, form->at);
+          symbol = program_.symbols.size(); symbol_names_.emplace(form->name, *symbol);
+          program_.symbols.push_back({type, false, form->name});
+        }
+        const auto &declared = program_.symbols[*symbol];
+        if (!declared.type || declared.type->kind != Type::procedure || declared.type->pure_callable)
+          fail(form->at, "symbolic procedure definition requires a procedure symbol");
+      }
       if (!form->body) {
         declarations_[form->name].push_back(std::move(prepared));
         continue;
       }
       const auto id = program_.methods.size();
       const bool lexical = lexical_methods_.contains(form);
-      for (const auto other : lexical ? std::vector<size_t>{} : families_[form->name]) {
+      std::vector<size_t> local_family;
+      auto &family = symbol ? program_.symbols[*symbol].methods : lexical ? local_family : families_[form->name];
+      for (const auto other : lexical ? std::vector<size_t>{} : family) {
         const auto &definition = program_.methods[other];
         if (implies(prepared, definition) && implies(definition, prepared)) {
           for (size_t p = 0; p < form->parameters.size(); ++p) {
@@ -4201,10 +4338,10 @@ public:
       program_.methods.push_back(std::move(prepared));
       method_ids.emplace(form, id);
       if (lexical) lexical_methods_[form] = id;
-      else families_[form->name].push_back(id);
+      else family.push_back(id);
     }
     for (const auto &[name, contracts] : declarations_)
-      if (symbol_names_.contains(name)) {
+      if (symbol_names_.contains(name) && std::any_of(contracts.begin(), contracts.end(), [](const auto &contract) { return !contract.source->symbolic; })) {
         if (!program_.symbols[symbol_names_.at(name)].intrinsic_print)
           implementation_gap(contracts.front().source->at, "same-scope callable and symbol declarations");
         fail(contracts.front().source->at, "callable conflicts with symbol '" + name + "'");

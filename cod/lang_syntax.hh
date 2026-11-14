@@ -612,7 +612,7 @@ class Parser {
     form.conversion = take("conversion");
     if (form.conversion && !is("function")) fail(peek().at, "conversion requires a pure function");
     const bool function = take("function") || take("func");
-    if (!function && !take("proc")) expect("procedure");
+    if (!function && !(inline_effect && peek().kind == TokenKind::symbol) && !take("proc")) expect("procedure");
     form.kind = function ? Form::Kind::function : Form::Kind::procedure;
     form.symbolic = !function && peek().kind == TokenKind::symbol;
     if (!(expression_form && (is("(") || is("["))))
@@ -916,7 +916,7 @@ class Parser {
       fail(token.at, "use ref/ptr for reference bindings or val for independent bits storage");
 
     if (take("effect")) {
-      if (is("proc") || is("procedure")) {
+      if (is("proc") || is("procedure") || (peek().kind == TokenKind::symbol && is("(", 1))) {
         auto definition = std::make_shared<Form>();
         definition->at = peek().at;
         callable(*definition, true);
