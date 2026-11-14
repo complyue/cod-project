@@ -3,7 +3,7 @@ using "std:exceptions" NullPointerException;
 region symbol @arena;
 proc run()->void throws NullPointerException {
   try {effect @arena <- region(0u64);} catch(first) {
-    try {ptr absent:u64 = null; behave @print(absent);} catch(second) {
+    try {ptr absent:u64 = null in here; behave @print(absent);} catch(second) {
       fold(i in 0u64 .. 2u64, error = first) {{
         if(i == 1u64) {throw error;} else {};
         second

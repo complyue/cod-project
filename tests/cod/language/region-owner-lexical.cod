@@ -12,7 +12,7 @@ proc inspect(region arena) -> u64 { return capacity_bytes(forward(arena)) }
 effect @a <- region(4096u64);
 {
   region view = forward(@a);
-  val capacity = inspect(view);
+  val capacity <- inspect(view);
   ref cell = create(repeat(view, 3u32), 7);
   {
     effect @a <- region(8192u64);

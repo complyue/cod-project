@@ -15,7 +15,7 @@ proc later(tag:T,ref f:func(u64)->const u64 in O)->void where {T,owner O}{defer 
 {{
   func f=wrap(base);
   observe(inspect(false,f,20u64));observe(inspect(0,f,21u64));observe(probe(false,f));
-  observe(9010u64);val sum=0u64;
+  observe(9010u64);val sum<-0u64;
   for(i in 0u64..10000u64){sum<-sum+inspect(false,f,i);};
   observe(9011u64);observe(sum);
   observe(9030u64);

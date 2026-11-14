@@ -23,7 +23,7 @@ observe(9000u64);
 '''
 runner.SOURCE += '''
 func stable_storage(tag:T,ref f:func(u64)->const u64 in O)->const u64 where {T,owner O}{
- ptr local=choose_storage(tag,f);val sum=0u64;
+ ptr local=choose_storage(tag,f);val sum<-0u64;
  for(i in 0u64..10000u64){sum<-sum+local(i);};return sum;
 }
 {{func f=wrap(base);observe(9010u64);observe(stable_storage(false,f));observe(9011u64);observe(stable_storage(0,f));}};

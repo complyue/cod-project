@@ -13,7 +13,7 @@ from foundation_tests import ROOT, MODE, COD
 SOURCE = '''
 using symbol "std:io" @print;
 func factory(x:T)->func(T)->const T where T{return func[](y:T)->const T{return y;};}
-func hidden(x:T)->func()->const i64 where T{return func[]()->const i64{val y:T=1u8;return 2;};}
+func hidden(x:T)->func()->const i64 where T{return func[]()->const i64{val y:T<-1u8;return 2;};}
 func wrap(f:func(T)->const T)->func(T)->const T where T{return func[f](x:T)->const T{return f(x);};}
 func recurse(f:func(T)->const T,x:T,n:u64)->const T where T{
   if(n==0u64){return f(x);}else{return recurse(f,x,n-1u64);};

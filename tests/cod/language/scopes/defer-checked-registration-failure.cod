@@ -4,7 +4,7 @@ using "std:exceptions" OutOfMemory;
 proc run()->void {
   try {defer catch(e:const NullPointerException) {};}
   catch(e:const OutOfMemory) {};
-  ptr absent:i64 = null;
+  ptr absent:i64 = null in here;
   behave @print(absent);
 }
 run();

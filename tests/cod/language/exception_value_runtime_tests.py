@@ -29,8 +29,8 @@ try{records();}catch(e:const OutOfMemory){
   behave @print(e.cause_count);
   behave @print(9002u64);
 };
-val original=error();
-val saved=try{throw original from original;}catch(e:const MissingReturnException){e};
+val original<-error();
+val saved<-try{throw original from original;}catch(e:const MissingReturnException){e};
 behave @print(saved.cause_count);
 behave @print(9011u64);
 try{throw saved from saved;}catch(e:const OutOfMemory){

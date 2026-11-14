@@ -1,2 +1,2 @@
-{ val item = 1u64; };
-{ val item = 2u64; };
+{ val item <- 1u64; };
+{ val item <- 2u64; };

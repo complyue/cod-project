@@ -42,7 +42,7 @@ inline ArgumentMode argument_mode(const Parameter &parameter) {
   if (parameter.declaration_kind == "ref") return ArgumentMode::borrowed_ref;
   return ArgumentMode::borrowed_read;
 }
-inline bool borrowed_result(const Form &method) { return !method.result_owner.empty() && (!method.result_const || !method.result_kind.empty()); }
+inline bool borrowed_result(const Form &method) { return !method.result_owner.empty(); }
 inline Type exception_type(size_t category) { return {Type::exception, exception_categories.at(category).name, category}; }
 inline bool accepts_exception(const Type &source, const Type &target) {
   return source.kind == Type::exception && target.kind == Type::exception && (!target.identity || source == target);
@@ -834,7 +834,7 @@ class ScalarChecker {
       if (!role) continue;
       const bool readonly = !contract.const_views.empty() && contract.const_views.at(i);
       const auto &view = views[i];
-      if (view.owners.size() != 1) implementation_gap(expr.children[i + offset]->at, "borrowed argument requires one established owner");
+      if (view.owners.size() != 1) fail(expr.children[i + offset]->at, "borrowed argument requires one statically provable owner");
       const auto owner = *view.owners.begin();
       require_borrow_lifetime(view, expr.children[i + offset]->at, &expr == prepared_call_);
       if (const auto [found, inserted] = owners.emplace(role, owner); !inserted) {
@@ -1165,6 +1165,12 @@ class ScalarChecker {
       // Throws declarations are resolved independently of argument inference.
       for (auto &failure : type.throws_types) failure = resolve_type(std::move(failure), method);
       if (type.target) type.target = std::make_shared<Type>(resolve_type(*type.target, method, bindings, partial));
+      // Independent results have a passing mode, not a target-access qualifier.
+      if (type.value_result &&
+          type.const_views.size() > type.parameters.size()) {
+        type.const_views.back() = false;
+        if (std::none_of(type.const_views.begin(), type.const_views.end(), [](bool value) { return value; })) type.const_views.clear();
+      }
     }
     return type;
   }
@@ -1252,6 +1258,8 @@ class ScalarChecker {
         for (const auto &child : expr.children) visit(*child, caught, query);
         return;
       }
+      if (expr.kind == K::null_ref && !expr.owner_name.empty() && expr.owner_name != "here")
+        use(expr.owner_name, expr.at, bound, query);
       if (expr.kind == K::name || (expr.kind == K::call && !expr.intrinsic && !swap_operation(expr.text) && !eager_operation(expr.text)))
         use(expr.text, expr.at, bound, query);
       auto local = bound;
@@ -1309,9 +1317,8 @@ class ScalarChecker {
         implementation_gap(at, "callable view captures, owners or nullable passing modes");
       for (const auto &parameter : type.parameters) signature_type(method, parameter, at);
       signature_type(method, *type.target, at, true);
-      if (type.owners.empty() && type.target->kind != Type::procedure && *type.target != Type::void_type &&
-          (type.const_views.size() <= type.parameters.size() || !type.const_views.back()))
-        implementation_gap(at, "callable views with borrowed results");
+      if (type.owners.empty() && !type.value_result)
+        implementation_gap(at, "callable result mode without an owner or explicit generic value contract");
       for (const auto &failure : type.throws_types)
         if (failure.kind != Type::exception) implementation_gap(at, "callable view throws require intrinsic exceptions");
       return;
@@ -1536,6 +1543,7 @@ class ScalarChecker {
   }
   Type callable_type(const Form &method, const std::vector<Type> &arguments, const Type &result) const {
     Type type{Type::procedure}; type.pure_callable = method.kind == Form::Kind::function;
+    type.value_result = !borrowed_result(method);
     type.parameters = arguments; type.target = std::make_shared<Type>(result);
     std::map<std::string, size_t> roles;
     const auto role = [&](const std::string &owner) {
@@ -1555,7 +1563,7 @@ class ScalarChecker {
     if (std::none_of(type.const_views.begin(), type.const_views.end(), [](bool v) { return v; })) type.const_views.clear();
     if (std::none_of(type.nullable_views.begin(), type.nullable_views.end(), [](bool v) { return v; })) type.nullable_views.clear();
     for (const auto &failure : method.throws_types) type.throws_types.push_back(resolve_type(failure));
-    return type;
+    return resolve_type(std::move(type));
   }
   std::optional<Type> callable_evidence(size_t id) const {
     const auto &method = program_.methods[id];
@@ -1641,12 +1649,22 @@ class ScalarChecker {
   struct TypeEvidenceState {
     std::map<std::string, std::optional<Type>> bindings;
     std::map<std::string, ViewEvidence> views;
+    std::map<std::string, size_t> owner_bindings;
     ViewEvidence value;
     std::optional<size_t> current_owner;
     bool complete = true;
     bool required = false;
   };
+  static std::optional<size_t> owner_evidence(const std::string &name, const TypeEvidenceState &state, const Location &at) {
+    if (const auto found = state.owner_bindings.find(name); found != state.owner_bindings.end()) return found->second;
+    if (state.required) fail(at, state.bindings.contains(name) ? "nearest binding '" + name + "' is not an owner" : "unknown owner '" + name + "'");
+    return {};
+  }
   static TypeEvidenceState merge_evidence(TypeEvidenceState left, const TypeEvidenceState &right) {
+    std::erase_if(left.owner_bindings, [&](const auto &owner) {
+      const auto found = right.owner_bindings.find(owner.first);
+      return found == right.owner_bindings.end() || found->second != owner.second;
+    });
     for (auto &[name, type] : left.bindings) {
       const auto other = right.bindings.find(name);
       if (other == right.bindings.end() || other->second != type) type.reset();
@@ -1701,7 +1719,10 @@ class ScalarChecker {
       if (state.required) return literal(expr).type;
       return expr.text.ends_with("f32") ? Type::float32 : Type::float64;
     case K::boolean: return Type::boolean;
-    case K::null_ref: view.view = true; return Type::null_ref;
+    case K::null_ref:
+      view.view = true;
+      if (!expr.owner_name.empty()) view.owner = expr.owner_name == "here" ? state.current_owner : owner_evidence(expr.owner_name, state, expr.at);
+      return Type::null_ref;
     case K::name:
       if (!state.complete) return {};
       if (const auto found = state.bindings.find(expr.text); found != state.bindings.end()) {
@@ -1733,16 +1754,18 @@ class ScalarChecker {
           if (type_evidence(*declaration, state) == Type::never) completes = false;
           continue;
         }
+        const auto declared_owner = declaration->owner_name.empty() ? std::optional<size_t>{} : owner_evidence(declaration->owner_name, state, declaration->at);
         const auto initial = type_evidence(*declaration->children.front(), state, declaration->annotation.has_value());
         if (initial == Type::never) completes = false;
         state.bindings[declaration->text] = declaration->annotation ? annotation(*declaration->annotation) : initial;
+        state.owner_bindings.erase(declaration->text);
         const bool value = expr.declaration_kind == "val" || expr.declaration_kind == "func" || expr.declaration_kind == "proc";
         std::optional<bool> readonly = declaration->read_only || (value && expr.fixed_binding);
         if (!*readonly && !value && declaration->binding != "<-") {
           if (state.value.view.value_or(false)) readonly = state.value.read_only;
           else if (!state.value.view && state.value.read_only != false) readonly.reset();
         }
-        const auto owner = !declaration->owner_name.empty() ? std::nullopt :
+        const auto owner = !declaration->owner_name.empty() ? declared_owner :
             value || declaration->binding == "<-" || state.value.view == false ? state.current_owner : state.value.owner;
         state.views[declaration->text] = {readonly, true, value, owner};
       }
@@ -1751,6 +1774,7 @@ class ScalarChecker {
     case K::alias: {
       const auto type = child(0);
       state.bindings[expr.text] = type;
+      state.owner_bindings.erase(expr.text);
       auto selected = state.value;
       if (expr.read_only || (expr.fixed_binding && selected.value_binding.value_or(false))) selected.read_only = true;
       else if (expr.fixed_binding && !selected.value_binding) selected.read_only.reset();
@@ -1802,11 +1826,14 @@ class ScalarChecker {
         }
         auto caught = catch_entry;
         caught.bindings[handler.text] = handler.annotation ? annotation(*handler.annotation) : exception_type(0);
+        caught.owner_bindings.erase(handler.text);
         caught.views[handler.text] = {true, true, true};
         const auto type = type_evidence(*handler.children.front(), caught, contextual);
         if (const auto outer = catch_entry.bindings.find(handler.text); outer != catch_entry.bindings.end())
           caught.bindings[handler.text] = outer->second;
         else caught.bindings.erase(handler.text);
+        if (const auto owner = catch_entry.owner_bindings.find(handler.text); owner != catch_entry.owner_bindings.end())
+          caught.owner_bindings.emplace(*owner);
         const auto caught_view = caught.value;
         if (const auto outer = catch_entry.views.find(handler.text); outer != catch_entry.views.end()) caught.views[handler.text] = outer->second;
         else caught.views.erase(handler.text);
@@ -1824,7 +1851,11 @@ class ScalarChecker {
       const auto accumulator = fold ? child(2) : std::optional<Type>{Type::void_type};
       auto iteration = state;
       iteration.bindings[expr.text] = index; iteration.views[expr.text] = {true, true, true};
-      if (fold) { iteration.bindings[expr.binding] = accumulator; iteration.views[expr.binding] = {true, true, true}; }
+      iteration.owner_bindings.erase(expr.text);
+      if (fold) {
+        iteration.bindings[expr.binding] = accumulator; iteration.views[expr.binding] = {true, true, true};
+        iteration.owner_bindings.erase(expr.binding);
+      }
       type_evidence(*expr.children[fold ? 3 : 2], iteration);
       if (!fold && expr.children.size() == 4) {
         auto empty = state; type_evidence(*expr.children[3], empty);
@@ -1988,6 +2019,7 @@ class ScalarChecker {
     case K::callable:
       if (!expr.definition->name.empty()) {
         state.bindings[expr.definition->name] = callable_evidence(lexical_methods_.at(expr.definition.get()));
+        state.owner_bindings.erase(expr.definition->name);
         state.views[expr.definition->name] = {false, true, true, state.current_owner};
         return Type::void_type;
       }
@@ -2011,6 +2043,8 @@ class ScalarChecker {
     for (const auto &scope : lexical_.scopes) for (const auto &[name, id] : scope.bindings) {
       const auto &binding = bindings_->at(id);
       state.bindings[name] = binding.type;
+      if (binding.owner_binding) state.owner_bindings[name] = *binding.owner_binding;
+      else state.owner_bindings.erase(name);
       const auto found = lexical_.owners.find(binding.alias.value_or(id));
       const auto owner = found != lexical_.owners.end() && found->second.size() == 1 ? std::optional<size_t>{*found->second.begin()} : std::nullopt;
       state.views[name] = {binding.read_only, true, binding.value_binding, owner};
@@ -2394,7 +2428,9 @@ class ScalarChecker {
     case K::boolean: operation.type = Type::boolean; operation.integer = expr.text == "true"; break;
     case K::null_ref:
       if (read) implementation_gap(expr.at, "untyped null in a payload expression; bind a typed ptr view first");
-      operation.type = Type::null_ref; operation.view = true; select_targets(operation, {null_target}); break;
+      operation.type = Type::null_ref; operation.view = true; select_targets(operation, {null_target});
+      if (!expr.owner_name.empty()) operation.owners = {expr.owner_name == "here" ? cleanup_scope_ : named_owner(expr.owner_name, expr.at)};
+      break;
     case K::name: {
       if (!lexical_.lookup(expr.text) && families_.contains(expr.text))
         operation = materialize(families_.at(expr.text), expected, expr.at);
@@ -2824,6 +2860,7 @@ class ScalarChecker {
         if (borrowed && completes) {
           const auto &owners = source.owners;
           if (owners.size() > 1) fail(initializer.at, "reference initializer joins different owners");
+          if (owners.empty() && !owner) fail(initializer.at, "reference initializer requires one statically provable owner; qualify null with 'in here' or 'in O'");
           if (lexical_.live) for (const auto owner : owners)
             if (!owner_alive(owner))
               fail(initializer.at, "reference initializer's lexical owner has ended");
@@ -2885,7 +2922,7 @@ class ScalarChecker {
         if (kind_of(binding) != kind) implementation_gap(expr.at, "alias selection with different storage kinds");
         if (owner && *owner != binding.scope) fail(expr.at, "alias owner must match the selected binding storage, not its target owner");
       }
-      if (source.owners.size() > 1) implementation_gap(expr.at, "alias selection with different target owners");
+      if (source.owners.size() != 1) fail(expr.at, "alias selection requires one statically provable target owner");
       if (expr.annotation && resolve_local_type(*expr.annotation, instance, expr.at) != type)
         fail(expr.at, "alias annotation requires the exact selected type");
       if (expr.annotation && !expr.read_only && source.read_only)
@@ -3400,8 +3437,6 @@ public:
       }
       if (!form->result_owner.empty() && !borrowed_result(*form)) implementation_gap(form->at, "owner annotations on independent const results");
       if (borrowed_result(*form) && *form->result_type == Type::void_type) fail(form->at, "void cannot be a borrowed result");
-      if (*form->result_type != Type::void_type && form->result_type->kind != Type::procedure && !borrowed_result(*form) && (!form->result_const || !form->result_kind.empty()))
-        implementation_gap(form->at, "non-const scalar result contract");
       CheckedMethod prepared;
       prepared.source = form;
       for (const auto &p : form->type_parameters) prepared.type_parameters.push_back(p.name);
@@ -3415,6 +3450,11 @@ public:
       }
       const auto resolve_signature = [&](const Type &type) { return resolve_type(type, &prepared); };
       prepared.result = resolve_signature(*form->result_type);
+      if (form->result_kind == "val" && !scalar_type(prepared.result))
+        implementation_gap(form->at, "explicit val results for non-scalar or generic types");
+      if (!borrowed_result(*form) && prepared.result != Type::void_type && prepared.result.kind != Type::procedure && !scalar_type(prepared.result)) {
+        if (!form->result_const) implementation_gap(form->at, "default result mode for non-scalar or generic types");
+      }
       signature_type(prepared, prepared.result, form->at, true);
       for (const auto &type : form->throws_types) {
         const auto resolved = resolve_type(type);

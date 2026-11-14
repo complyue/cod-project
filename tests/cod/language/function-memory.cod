@@ -4,7 +4,7 @@ region symbol arena;
 symbol values : Values;
 
 function tick(values:Values in O1) -> i64 where {owner O1} {
-  val old = values[0u32];
+  val old <- values[0u32];
   store(values, 0u32, old + 1);
   return values[0u32]
 }
@@ -21,7 +21,7 @@ function update(values:Values in O1) -> i64 where {owner O1} {
   return cell(deref(values))
 }
 function observe(values:Values in O1) -> i64 where {owner O1} {
-  val before = values[0u32];
+  val before <- values[0u32];
   tick(values);
   return before * 100 + values[0u32]
 }

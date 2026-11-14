@@ -27,10 +27,10 @@ proc absent(ptr x:u64 in O)->ptr u64 in O where {owner O}{
 func initialized(ptr x:u64 in O)->ptr u64 in O throws NullPointerException where {owner O}{
   defer{x<-84u64;};return x;
 }
-val a=81u64,b=make local u64,c=82u64;
+val a<-81u64,b<-make local u64,c<-82u64;
 try{observe(retained(a,b));observe(replacement(a,c));}catch(e:const NullPointerException){observe(99u64);};
 try{absent(a);{}}catch(e:const MissingReturnException){observe(4u64);};
-val d=make local u64,e=make local u64;ptr p=if(true){d}else{e};
+val d<-make local u64,e<-make local u64;ptr p=if(true){d}else{e};
 try{observe(initialized(p));}catch(e:const NullPointerException){observe(99u64);};
 '''
 runner.HARNESS = runner.HARNESS.replace('created==4 && peak==2 && failures==3',

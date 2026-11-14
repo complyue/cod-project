@@ -44,7 +44,7 @@ try { optional(absent)({ behave @print(999u64); 1u64 }); {} }
 catch(e:const NullPointerException) { behave @print(21u64); };
 try { behave @print(optional(current)(4u64)); }
 catch(e:const NullPointerException) { behave @print(999u64); };
-try { acquire(state)({ ptr missing:u64 = null; missing }); {} }
+try { acquire(state)({ ptr missing:u64 = null in here; missing }); {} }
 catch(e:const NullPointerException) { behave @print(state.trace); };
 
 symbol @bias:u64;

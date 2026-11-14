@@ -89,8 +89,8 @@ def main():
                 path = scratch / "main.cod"
                 loop = 'for(i in 0..n){{defer consume(i);}};' if local else 'defer consume(-1);for(i in 0..n){defer consume(i);};defer consume(-2);'
                 if delayed:
-                    loop = ('for(i in 0..n){{val copy=i;defer{consume(copy);};}};' if local else
-                            'val current=n;defer{consume(-1);};for(i in 0..n){defer{current<-current-1;consume(current);};};defer{consume(-2);};')
+                    loop = ('for(i in 0..n){{val copy<-i;defer{consume(copy);};}};' if local else
+                            'val current<-n;defer{consume(-1);};for(i in 0..n){defer{current<-current-1;consume(current);};};defer{consume(-2);};')
                 if name == "block_during_cleanup":
                     loop = 'defer{consume(-1);};defer{consume(42);defer{consume(-2);};};'
                 path.write_text('using symbol "std:io" @print;\nproc consume(x:T)->void where T {behave @print(x);}\n'

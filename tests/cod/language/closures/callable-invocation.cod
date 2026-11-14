@@ -34,7 +34,7 @@ proc failing = proc()->void throws NullPointerException {
   @action <- replacement;
   proc copy = replacement;
   behave @print(copy(3u64));
-  ptr absent:u64 = null;
+  ptr absent:u64 = null in here;
   absent;
   {}
 };

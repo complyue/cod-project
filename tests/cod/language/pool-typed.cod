@@ -19,10 +19,10 @@ behave @print(scalar(class_set_begin(deref(@layout), ClassId(16u32))));
 behave @print(scalar(class_slot_begin(deref(@layout), ClassId(16u32))));
 behave @print(scalar(global_slot(deref(@layout), ClassId(15u32), ClassSetId(9u64), LocalSlot(18431u32))));
 for (j in 0u32 .. 16u32) {{
-  val first = scalar(class_set_begin(deref(@layout), ClassId(j)));
-  val count = scalar(sets(deref(@layout), ClassId(j)));
+  val first <- scalar(class_set_begin(deref(@layout), ClassId(j)));
+  val count <- scalar(sets(deref(@layout), ClassId(j)));
   for (which in 0u32 .. 3u32) {{
-    val local = if (which == 0u32) { 0u64 } else { if (which == 1u32) { count / 2u64 } else { count - 1u64 } };
+    val local <- if (which == 0u32) { 0u64 } else { if (which == 1u32) { count / 2u64 } else { count - 1u64 } };
     ref found = locate(deref(@layout), GlobalSetId(first + local), @location);
     behave @assert(scalar(found.class_id) == j);
     behave @assert(scalar(found.local) == local);

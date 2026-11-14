@@ -1,7 +1,7 @@
 using "std:exceptions" NullPointerException;
 unit raw; unit normalized;
 conversion function normalize(x:u64(raw))->const u64(normalized) throws NullPointerException {
- ptr missing:u64=null;
+ ptr missing:u64=null in here;
  return normalized(missing)
 }
 function automatic(x:u64(normalized*))->const u64{return scalar(x)}

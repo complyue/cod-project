@@ -13,23 +13,23 @@ proc observe(x:u64)->void{behave @print(x);}
 func missing()->const u64{}
 proc set(ptr x:u64 in O)->void throws NullPointerException where {owner O}{observe(9003u64);x<-71u64;}
 proc read(ptr x:u64 in O)->void throws NullPointerException where {owner O}{observe(x);}
-proc direct()->void throws NullPointerException{val x=make local u64;set(x);read(x);}
-proc prepared()->void throws NullPointerException{val x=make local u64;{{defer set(x);}};read(x);}
+proc direct()->void throws NullPointerException{val x<-make local u64;set(x);read(x);}
+proc prepared()->void throws NullPointerException{val x<-make local u64;{{defer set(x);}};read(x);}
 proc denied()->void throws NullPointerException{
-  val x=make local u64;defer{observe(9002u64);};observe(9001u64);defer set(x);
+  val x<-make local u64;defer{observe(9002u64);};observe(9001u64);defer set(x);
 }
 proc fail_after(ptr x:u64 in O)->void throws NullPointerException where {owner O}{x<-73u64;missing();}
 proc cleanup(ptr x:u64 in O)->void throws NullPointerException where {owner O}{defer{x<-74u64;};}
 proc alias(ptr x:u64 in O,ptr y:u64 in O)->void throws NullPointerException where {owner O}{defer{x<-75u64;observe(y);};}
 try{direct();prepared();}catch(e:const NullPointerException){observe(99u64);};
 try{denied();}catch(e:const OutOfMemory){observe(1u64);}catch(e:const NullPointerException){observe(99u64);};
-val a=make local u64;
+val a<-make local u64;
 try{fail_after(a);}catch(e:const MissingReturnException){observe(a);}catch(e:const NullPointerException){observe(99u64);};
-val b=make local u64;
+val b<-make local u64;
 try{cleanup(b);observe(b);}catch(e:const NullPointerException){observe(99u64);};
-val c=make local u64;
+val c<-make local u64;
 try{alias(c,c);observe(c);}catch(e:const NullPointerException){observe(99u64);};
-val d=make local u64;
+val d<-make local u64;
 try{{defer read(d);d<-76u64;{}}}catch(e:const NullPointerException){observe(99u64);};
 '''
 runner.HARNESS=runner.HARNESS.replace('static bool deny_record=false;',

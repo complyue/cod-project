@@ -7,7 +7,7 @@ proc current = first;
 effect @action = current;
 proc change = proc(fail:bool)->void throws NullPointerException {
   @action <- second;
-  if (fail) { ptr absent:u64 = null; absent; {} } else {};
+  if (fail) { ptr absent:u64 = null in here; absent; {} } else {};
 };
 proc relay(fail:bool)->void throws NullPointerException { change(fail) }
 behave @print(current(2u64));

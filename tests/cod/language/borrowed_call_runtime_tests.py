@@ -13,17 +13,17 @@ proc show(x:u64 in O)->void where {owner O}{observe(x);}
 proc set(x:u64 in O)->void where {owner O}{x<-33u64;}
 proc nullable(ptr x:u64 in O)->void throws NullPointerException where {owner O}{observe(x);}
 proc prepared()->void {
-  val a=31u64,b=32u64;ptr p=a;
+  val a<-31u64,b<-32u64;ptr p=a;
   {{defer show(p);defer set(p);p=b;}};
   observe(a);observe(p);
 }
 proc failed()->void {
-  val a=34u64;
+  val a<-34u64;
   defer{observe(a);observe(9002u64);};
   observe(9001u64);defer set(a);
 }
 proc null_deferred()->void throws NullPointerException {
-  val a=36u64;ptr p=a;p=null;
+  val a<-36u64;ptr p=a;p=null;
   defer{observe(37u64);};defer nullable(p);p=a;
 }
 func cleanup(x:u64 in O)->ref u64 in O where {owner O}{defer{x<-39u64;};return x;}
@@ -33,7 +33,7 @@ func recursive(ref x:T in O,n:u64)->ref T in O where {T,owner O}{
 prepared();
 try{failed();}catch(e:const OutOfMemory){observe(1u64);};
 try{null_deferred();}catch(e:const NullPointerException){observe(4u64);};
-val a=38u64;observe(cleanup(a));recursive(a,40u64)<-40u64;observe(a);
+val a<-38u64;observe(cleanup(a));recursive(a,40u64)<-40u64;observe(a);
 '''
 runner.HARNESS = runner.HARNESS.replace('static bool deny_record=false;',
     'static bool deny_record=false;static std::uint64_t borrows=0;')

@@ -51,8 +51,8 @@ behave @print(behave @walk(3u64));
 using "std:exceptions" NullPointerException;
 symbol @failing:proc()->const u64 throws NullPointerException;
 proc fail = proc()->const u64 throws NullPointerException {
-  val observed = @node.value;
-  ptr absent:u64 = null;
+  val observed <- @node.value;
+  ptr absent:u64 = null in here;
   return observed + absent
 };
 effect @failing = fail;

@@ -53,7 +53,7 @@ behave @print(current());
 using "std:exceptions" NullPointerException;
 function bottom(n:u64)->(func()->const u64) throws NullPointerException {
   func local = func()->const u64 { return 1u64 };
-  return if (n == 0u64) {{ ptr absent:i64 = null; val ignored = absent; local }}
+  return if (n == 0u64) {{ ptr absent:i64 = null in here; val ignored <- absent; local }}
   else {{ bottom(n - 1u64) }}
 }
 try {{ func result_value = bottom(8u64); behave @print(result_value()); }}
@@ -76,7 +76,7 @@ try {{
 behave @print(@bias);
 proc failing = proc(n:u64)->(proc()->const u64) throws NullPointerException {
   effect @bias <- @bias + 1u64;
-  return if (n == 0u64) {{ ptr absent:i64 = null; val ignored = absent; proc()->const u64 { return @bias } }}
+  return if (n == 0u64) {{ ptr absent:i64 = null in here; val ignored <- absent; proc()->const u64 { return @bias } }}
   else {{ behave @recursive(n - 1u64) }}
 };
 effect @recursive = failing;

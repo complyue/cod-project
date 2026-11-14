@@ -4,28 +4,28 @@ func update(x:u64) -> const u64 { x <- x + 1u64; return x; }
 func explicit(const ptr x:u64) -> const u64 { x <- 9u64; return x; }
 func first(x:u64,y:u64) -> const u64 { return x; }
 func generic(x:T) -> const T where T {
-  val saved = x;
+  val saved <- x;
   saved <- saved + saved;
   x <- x + x + x;
   return saved + x;
 }
 func initialized(flag:bool) -> const u64 {
-  val result = make local u64;
+  val result <- make local u64;
   if (flag) { return 5u64; } else { result <- 6u64; {} };
   return result;
 }
 func choose(flag:bool) -> const u64 {
-  val result = make local u64;
+  val result <- make local u64;
   if (flag) { result <- 7u64; {} } else { result <- 8u64; {} };
   return result;
 }
 func typed(x:T) -> const T where T {
-  val saved = make local T;
+  val saved <- make local T;
   saved <- x;
   return saved;
 }
 val original:u64 <- 3u64;
-val copied = original;
+val copied <- original;
 copied <- 4u64;
 behave @print(original);
 behave @print(copied);
@@ -43,14 +43,14 @@ behave @print(choose(true));
 behave @print(choose(false));
 behave @print(typed(11u64));
 behave @print(typed(true));
-val allocated = make local u64;
-val queried = make local typeof(allocated);
+val allocated <- make local u64;
+val queried <- make local typeof(allocated);
 allocated <- 2u64;
 queried <- allocated + 1u64;
 behave @print(queried);
-val inside = {{ val temporary <- 12u64; temporary }};
+val inside <- {{ val temporary <- 12u64; temporary }};
 behave @print(inside);
-val n = 1u8, wide:u32 = n, { wide <- wide + 2u32; };
+val n <- 1u8, wide:u32 <- n, { wide <- wide + 2u32; };
 behave @print(wide);
 {{
   defer observe(original);

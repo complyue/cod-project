@@ -7,15 +7,15 @@ runner.SOURCE+='''
 func unproved(x:T)->const T where T{return x+x;}
 proc type_queries(f:func(u64)->const u64)->void{
  observe(9010u64);
- val x=make local typeof(f(3u64)){29u64};
- val y=make local typeof(unproved(true)){true};
+ val x<-make local typeof(f(3u64)){29u64};
+ val y<-make local typeof(unproved(true)){true};
  observe(9011u64);
  observe(x);if(y){observe(30u64);}else{};
 }
 proc query_catch()->void{
  try{throw bound_error();}catch(e:const MissingReturnException){
   observe(9080u64);
-  defer{{val x=make local typeof(e.category){31u64};observe(x);}};
+  defer{{val x<-make local typeof(e.category){31u64};observe(x);}};
   observe(9081u64);
  };
 }

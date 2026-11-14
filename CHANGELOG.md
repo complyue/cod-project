@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Scalar results, receiving storage and null owners
+
+<a id="k-652"></a>
+**K-652 — Scoped compiler and capability continuity.** Agent assessment under H-413–H-420 and charter §§3.3/4.3/5.3/6.3/8/12: source reference273→274, registry r652→653, D-14r87→88 and D-23r7→8 record primitive scalar value/borrowed result modes, val/ref initialization operators and statically unique/null-owner checking. Callable value-passing mode is independent of target access; prepared operand evidence preserves qualified null owners. Source fixtures use the confirmed syntax without a compatibility parser. Focused source/native, failure-injection, sanitizer and staging acceptance distinguish saved bits from saved targets, preserve cleanup and reject invalid owners. Design edits update capability references only: existing value/dependency paths, scoped human baselines, invariants and acceptance remain. D-23's whole-file/P-354 value path and unrelated generic/aggregate defaults, quantities, construction, regional representation, fractions, purity and permanent ABI retain their separate boundaries. No bootstrap/toolchain change.
+
 ## 2026-11-14 — Confirmed scalar and owner design integration
 
 <a id="k-651"></a>

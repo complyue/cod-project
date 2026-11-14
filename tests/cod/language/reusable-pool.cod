@@ -26,9 +26,9 @@ function initialize(pool:Pool in O1) -> void throws NullPointerException where {
 }
 
 function create(region arena, capacity:u32) -> Pool throws NullPointerException {
-  val payloads = alloc arena Payloads(u64(capacity), 0);
-  val links = alloc arena Links(u64(capacity), Slot(0u32));
-  val pool = deref(alloc arena Pool(Slot(0u32), payloads, links));
+  val payloads <- alloc arena Payloads(u64(capacity), 0);
+  val links <- alloc arena Links(u64(capacity), Slot(0u32));
+  val pool <- deref(alloc arena Pool(Slot(0u32), payloads, links));
   initialize(pool);
   return pool
 }
@@ -46,7 +46,7 @@ function create(bytes:u64, capacity:u32) -> owned region :Pool throws NullPointe
 
 # Exhaustion returns the capacity sentinel without modifying the pool.
 function acquire(pool:Pool in O1, value:i64) -> const u32(Slot) throws NullPointerException where {owner O1} {
-  val slot = pool.head;
+  val slot <- pool.head;
   return if (slot == end_slot(pool)) {
     slot
   } else {

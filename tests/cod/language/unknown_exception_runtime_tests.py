@@ -47,8 +47,8 @@ proc delayed_unknown()->void{
  defer{unknown_boundary();};
 }
 {{
- val original=unknown_value();observe(bounce(original).category);observe(bounce(missing_value()).category);
- val linked=try{throw original from original;}catch(e:const StaticallyUnknownType){e};
+ val original<-unknown_value();observe(bounce(original).category);observe(bounce(missing_value()).category);
+ val linked<-try{throw original from original;}catch(e:const StaticallyUnknownType){e};
  observe(linked.category);observe(linked.site);observe(linked.requested);observe(linked.available);observe(linked.cause_count);
  observe(cause_at(linked,0u64).category);observe(cause_at(linked,0u64).requested);
  try{relay_exception(linked);}catch(e:const StaticallyUnknownType){defer{observe(e.category);};}catch(e){observe(9999u64);};
@@ -59,7 +59,7 @@ proc delayed_unknown()->void{
  observe(9050u64);try{0;{{defer f();}};}catch(e:const OutOfMemory){observe(9051u64);}catch(e:const StaticallyUnknownType){observe(9999u64);};
  delayed_unknown();observe(saved_unknown()(1u64));observe(replaced_unknown()(1u64));
  try{typing_boundary();{}}catch(e:const UnsoundRuntimeTyping){observe(e.category);};
- observe(9010u64);val total=0u64;
+ observe(9010u64);val total<-0u64;
  for(i in 0u64..10000u64){try{f();}catch(e:const StaticallyUnknownType){total<-total+1u64;};};
  observe(9011u64);observe(total);
 }};

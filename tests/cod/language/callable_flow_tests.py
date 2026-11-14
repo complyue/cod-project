@@ -5,7 +5,7 @@ import foundation_tests as runner
 
 PRE='using symbol "std:io" @print;using "std:exceptions" NullPointerException;\n'
 METHODS='proc set(ptr x:i64 in O)->void throws NullPointerException where {owner O}{x<-7;}proc other(ptr x:i64 in O)->void throws NullPointerException where {owner O}{x<-8;}proc ignore(ptr x:i64 in O)->void throws NullPointerException where {owner O}{}\n'
-BASE=PRE+METHODS+'proc unrelated=ignore;proc selected=set;val x=make local i64;\n'
+BASE=PRE+METHODS+'proc unrelated=ignore;proc selected=set;val x<-make local i64;\n'
 OBS='behave @print(x);'
 TRY=lambda body:'try{'+body+'}catch(e:const NullPointerException){};'
 runner.CASES={
@@ -18,7 +18,7 @@ runner.CASES={
  'scoped_selection':(BASE+'proc chosen={{proc local=selected;local}};'+TRY('chosen(x);'+OBS),0,'7\n',''),
  'selected_nonwriter':(BASE+TRY('unrelated(x);'+OBS),2,'','before definite initialization'),
  'mixed_implementations_rejected':(BASE+'proc chosen=if(false){selected}else{unrelated};'+TRY('chosen(x);'+OBS),2,'','before definite initialization'),
- 'selected_read_obligation':(PRE+METHODS+'proc read(ptr x:i64 in O)->void throws NullPointerException where {owner O}{x;{}}proc selected=read;val x=make local i64;'+TRY('selected(x);'),2,'','cannot prove initialization'),
+ 'selected_read_obligation':(PRE+METHODS+'proc read(ptr x:i64 in O)->void throws NullPointerException where {owner O}{x;{}}proc selected=read;val x<-make local i64;'+TRY('selected(x);'),2,'','cannot prove initialization'),
  'generic_argument':(BASE+'proc invoke(f:F,ptr x:i64 in O)->void throws NullPointerException where {F,owner O}{f(x);}'+TRY('invoke(selected,x);'+OBS),0,'7\n',''),
  'recursive_argument':(BASE+'proc invoke(f:F,ptr x:i64 in O,n:i64)->void throws NullPointerException where {F,owner O}{if(n==0){f(x);}else{invoke(f,x,n-1);};}'+TRY('invoke(selected,x,40);'+OBS),0,'7\n',''),
  'mutual_argument':(BASE+'proc invoke(f:F,ptr x:i64 in O,n:i64)->void throws NullPointerException where {F,owner O}{if(n==0){f(x);}else{relay(f,x,n-1);};}proc relay(f:F,ptr x:i64 in O,n:i64)->void throws NullPointerException where {F,owner O}{invoke(f,x,n);}'+TRY('invoke(selected,x,40);'+OBS),0,'7\n',''),

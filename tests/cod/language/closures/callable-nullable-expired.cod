@@ -5,4 +5,4 @@ owned region state:State <- make State(capacity=128u64) { value <- 3u64 };
 ptr missing = state.value;
 missing = null;
 func callback = absent;
-val invalid = callback(missing,release(state));
+val invalid <- callback(missing,release(state));

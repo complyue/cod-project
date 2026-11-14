@@ -16,7 +16,7 @@ proc walk_writer(f:F,ptr x:u64 in O,n:u64)->void throws NullPointerException whe
 {{
  proc unused=ignore_target;proc selected=set_target;
  for(i in 0u64..80u64){{selected<-wrap_writer(selected);}};
- val x=make local u64;
+ val x<-make local u64;
  try{walk_writer(selected,x,40u64);observe(x);}catch(e:const NullPointerException){observe(9999u64);};
  observe(9020u64);try{selected<-wrap_writer(selected);{}}catch(e:const OutOfMemory){observe(9021u64);};
  proc other=wrap_writer(set_target);

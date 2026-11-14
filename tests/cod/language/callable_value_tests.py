@@ -53,7 +53,7 @@ runner.CASES = {
     'argument_count_mismatch': (INC+'func f=inc;f();',2,'','argument count'),
     'wrong_callable_category': (IO+PROC+'func f=one;',2,'','matching func/proc'),
     'function_cannot_call_procedure_value': (IO+PROC+'func wrong()->void{proc f=one;f(1);}',2,'','function cannot invoke a procedure'),
-    'lexical_capture_not_promoted': ('proc run()->void{val x=1;func f=func[x]()->const i64{return x;};}',2,'','implementation gap'),
+    'lexical_capture_not_promoted': ('proc run()->void{val x<-1;func f=func[x]()->const i64{return x;};}',2,'','implementation gap'),
     'callable_not_numeric_bits': (INC+'func f=inc;f+f;',2,'','no applicable numeric operation'),
     'checked_view_declaration': (PRE+'func f(x:i64)->const i64 throws NullPointerException{return x;}func g=f;g(1);',2,'','requires a covering catch'),
     'checked_view_handler': (PRE+'func f(x:i64)->const i64 throws NullPointerException{return x;}func g=f;try{behave @print(g(47));}catch(e:const NullPointerException){};',0,'47\n',''),

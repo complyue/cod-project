@@ -1,7 +1,7 @@
 using symbol "std:io" @print;
 using "std:exceptions" NullPointerException;
 proc bad()->void throws NullPointerException {
-  ptr absent:i64 = null;
+  ptr absent:i64 = null in here;
   behave @print(absent);
 }
 proc run()->void {defer catch(e:const NullPointerException) {bad();}; bad();}

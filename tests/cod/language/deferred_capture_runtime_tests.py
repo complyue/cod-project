@@ -15,7 +15,7 @@ func chain(e:MissingReturnException)->const MissingReturnException {
   return try{throw e from e;}catch(e:const MissingReturnException){e};
 }
 proc snapshots()->void {
-  val saved=error();
+  val saved<-error();
   for(i in 0..4){
     saved<-chain(saved);
     try{throw saved;}catch(e){defer{defer{behave @print(e.cause_count);};};};

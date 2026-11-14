@@ -10,7 +10,7 @@ proc stop_storage(ref f:func(u64)->const u64 in O)->const u64 where {owner O}{
  observe(9999u64);return 0u64;
 }
 func image_storage(f:func(u64)->const u64)->const (func(u64)->const u64){
- val unused=make local u64 {return wrap(f);};return base;
+ val unused<-make local u64 {return wrap(f);};return base;
 }
 proc rebind_storage(ref f:func(u64)->const u64 in O)->const u64 where {owner O}{
  ptr p=f;defer{observe(p(1u64));};p={{return 42u64;}};return 0u64;

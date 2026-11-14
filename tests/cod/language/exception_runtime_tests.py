@@ -123,7 +123,7 @@ catch(seed) {{
       behave @assert(error.cause_count == 0u64)
     }}
   }};
-  val first = try {{throw seed from seed}} catch(error) {{error}};
+  val first <- try {{throw seed from seed}} catch(error) {{error}};
   try {{
     owned region inner:Packet <- make Packet(capacity=16u64){value<-0u64};
     throw first from seed
@@ -134,7 +134,7 @@ catch(seed) {{
     behave @assert(root(keep).value == 7u64);
     behave @print(10)
   }};
-  val retry = try {{throw first from first}} catch(error) {{error}};
+  val retry <- try {{throw first from first}} catch(error) {{error}};
   behave @assert(retry.cause_count == 2u64 && first.cause_count == 1u64)
 }};
 }} catch(unexpected:const NullPointerException) {{behave @assert(false)}};
@@ -327,10 +327,10 @@ catch(seed) {
       try {throw root(saved).error}
       catch(unexpected:const NullPointerException) {behave @assert(false);}
     } else {};
-    val cause = try {
+    val cause <- try {
       owned region small:Packet <- make Packet(capacity=1u64){value<-0u64}; seed
     } catch(error) {error};
-    val chained = try {throw seed from cause} catch(error) {error};
+    val chained <- try {throw seed from cause} catch(error) {error};
     setfield(root(saved), error, chained)
   }}
 };

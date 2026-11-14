@@ -34,7 +34,7 @@ proc middle_value = proc(n:u64)->const u64 { return behave @last(n) };
 proc last_value = proc(n:u64)->const u64 { return @bias + n };
 proc failing_value = proc()->const i64 throws NullPointerException {
   effect @bias <- 100u64;
-  ptr absent:i64 = null;
+  ptr absent:i64 = null in here;
   return absent
 };
 {{ effect @middle = middle_value; effect @last = last_value; behave @print(outer(2u64)); }};
@@ -43,7 +43,7 @@ try {{
   perform @failing();
   {}
 }} catch (e:const NullPointerException) {{ behave @print(@bias); }};
-ptr optional:proc(u64)->const u64 = null;
+ptr optional:proc(u64)->const u64 = null in here;
 try {{ optional(2u64); {} }}
 catch (e:const NullPointerException) {{ behave @print(99u64); }};
 optional = selected;
@@ -92,7 +92,7 @@ catch (e:const NullPointerException) {{ behave @print(0u64); }};
 }};
 {{
   proc recursive_failure = proc(depth:u64)->const i64 throws NullPointerException {
-    return if (depth == 0u64) {{ ptr absent:i64 = null; absent }}
+    return if (depth == 0u64) {{ ptr absent:i64 = null in here; absent }}
     else {{ effect @bias <- @bias + 1u64; behave @checked(depth - 1u64) }}
   };
   effect @checked = recursive_failure;

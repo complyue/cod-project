@@ -16,10 +16,10 @@ proc dispatch(ref x:T in O,ref y:T in P,n:u64)->void where {T,owner O,owner P}{
 }
 proc show_bool(x:bool)->void{observe(if(x){1u64}else{0u64});}
 {{
- val a=false,b=true,x=1u64,y=2u64;
+ val a<-false,b<-true,x<-1u64,y<-2u64;
  dispatch(a,b,3u64);show_bool(a);show_bool(b);
  dispatch(x,y,2u64);observe(x);observe(y);
- a<-false;b<-true;val c=false;ptr p=a,q=b;
+ a<-false;b<-true;val c<-false;ptr p=a,q=b;
  {{defer (<->)(p,q);p=c;}};show_bool(a);show_bool(b);show_bool(p);
  a<-false;b<-true;observe(9050u64);
  try{ {{defer (<->)(a,b);}};}catch(e:const OutOfMemory){observe(9051u64);};

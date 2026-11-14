@@ -7,8 +7,8 @@ runner.SOURCE+='''
 func query_apply(f:func(T)->const T,x:T)->const T where T{return f(x);}
 proc contextual_queries(f:func(u64)->const u64)->void{
  observe(9010u64);
- val x=make local typeof(query_apply(unproved,true)){true};
- val y=make local typeof(query_apply(f,3u64)){32u64};
+ val x<-make local typeof(query_apply(unproved,true)){true};
+ val y<-make local typeof(query_apply(f,3u64)){32u64};
  observe(9011u64);if(x){observe(y);}else{};
 }
 proc query_later()->const u64{observe(33u64);return 1u64;}

@@ -22,10 +22,10 @@ proc check() -> void throws NullPointerException {
     owned region invalid:Packet <- make Packet(capacity=0u64){sequence<-0u64};
     {}
   } catch(seed) {
-    val initial = try {throw seed} catch(exact:const InvalidCapacity) {exact};
-    val secondary = capacity_failure(seed);
-    val first = chain(secondary, initial);
-    val second = chain(initial, first);
+    val initial <- try {throw seed} catch(exact:const InvalidCapacity) {exact};
+    val secondary <- capacity_failure(seed);
+    val first <- chain(secondary, initial);
+    val second <- chain(initial, first);
     behave @assert(first.category == 2u64 && first.cause_count == 1u64);
     behave @assert(second.category == 3u64 && second.cause_count == 2u64);
     behave @assert(cause_at(second, 0u64).category == 2u64);
@@ -34,9 +34,9 @@ proc check() -> void throws NullPointerException {
     behave @assert(cause_at(second, 1u64).requested == 0u64);
     behave @assert(cause_at(second, 0u64).site == secondary.site);
     behave @assert(cause_at(second, 1u64).site == initial.site);
-    val replaced = chain(second, initial);
+    val replaced <- chain(second, initial);
     behave @assert(replaced.cause_count == 1u64 && second.cause_count == 2u64);
-    val self = chain(first, first);
+    val self <- chain(first, first);
     behave @assert(self.cause_count == 2u64 && first.cause_count == 1u64);
 
     owned region saved:Saved <- make Saved(capacity=256u64){error<-second; exact<-initial};
@@ -47,7 +47,7 @@ proc check() -> void throws NullPointerException {
     };
     ref record = alloc saved Saved(second, initial);
     setfield(root(saved), error, deref(record).error);
-    val escaped = {
+    val escaped <- {
       owned region temporary:Saved <- make Saved(capacity=72u64){error<-first; exact<-initial};
       root(temporary).error
     };
@@ -56,7 +56,7 @@ proc check() -> void throws NullPointerException {
       behave @assert(error.cause_count == 1u64)
     };
     for(i in 0u64 .. 2u64) {{
-      val error = selected(i, secondary, second);
+      val error <- selected(i, secondary, second);
       behave @assert(error.category == 2u64 + i);
       try {throw error}
       catch(capacity_error:const RegionCapacityExceeded) {behave @assert(i == 0u64)}

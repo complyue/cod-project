@@ -39,7 +39,7 @@ behave @print(sharing(original,original));
 behave @print(sharing(original,separate));
 function fail_after(action:func()->const u64 in O)->void throws NullPointerException where {owner O} {
  action <- three;
- ptr missing:u64 = null;
+ ptr missing:u64 = null in here;
  missing; {}
 }
 func failing = fail_after;

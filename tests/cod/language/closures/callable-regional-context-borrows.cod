@@ -82,7 +82,7 @@ proc run()->void {
  absent=null;
  ptr missing=nullable(absent,20u64);
  behave @print(isnull(missing));
- try {val ignored=missing;}catch(e:const NullPointerException){behave @print(82u64);};
+ try {val ignored<-missing;}catch(e:const NullPointerException){behave @print(82u64);};
  try {ref failed_record=failure(state,20u64);}catch(e:const InvalidCapacity){behave @print(result.value);};
  behave @print(@arena.value);
  owned region delivered:Item<-fresh_owner(20u64);

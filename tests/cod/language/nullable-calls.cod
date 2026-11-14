@@ -26,7 +26,7 @@ behave @print(isnull(forwarded));
 try {behave @print(value(found)); value(missing_value)}
 catch(e:const NullPointerException){behave @print(7); 0};
 val number<-9;
-ptr number_view:i64=null;
+ptr number_view:i64=null in here;
 number_view=number;
 number_view=null;
 ptr returned=scalar_view(number_view);

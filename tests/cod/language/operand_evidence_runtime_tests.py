@@ -14,9 +14,9 @@ runner.SOURCE += '''
 func (+)(ref f:func(u64)->const u64 in O,x:u64)->const u64 where {owner O}{return f(x);}
 func add(ref f:T in O,x:u64)->const u64 where {T,owner O}{return f+x;}
 {{
-  func f=wrap(base);val n=1u64;
+  func f=wrap(base);val n<-1u64;
   observe(add(f,24u64));observe(add(n,24u64));
-  observe(9010u64);val sum=0u64;
+  observe(9010u64);val sum<-0u64;
   for(i in 0u64..10000u64){sum<-sum+add(f,i);};
   observe(9011u64);observe(sum);
   observe(9050u64);

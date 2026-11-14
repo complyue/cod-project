@@ -38,7 +38,7 @@ CASES = {
     "function_effect": (PRELUDE + 'func wrong()->void { behave @print(1u64); } wrong();', 2, "", "function cannot invoke a dynamic procedure"),
     "nearest_symbol": (PRELUDE + 'proc wrong(print:u64)->void { behave @print(1u64); } wrong(3u64);', 2, "", "nearest binding 'print' is not a symbol"),
     "nearest_callable": ('func f()->const u64 {return 1u64;} func g(f:u64)->const u64 {return f();} g(1u64);', 2, "", "nearest binding 'f' is not callable"),
-    "local_storage": ('proc go()->void { val x=1u64; } go();', 0, "", ""),
+    "local_storage": ('proc go()->void { val x<-1u64; } go();', 0, "", ""),
     "unselected_throws_type": ('func f(x:T)->const T throws StaticallyUnknownType where T { return x; } f(1u64);', 2, "", "throws contracts"),
     "missing_return_error": ('func f()->const u64 { 3u64 } f();', 2, "", "treated as error"),
     "empty": ("", 0, "", ""),

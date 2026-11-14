@@ -11,7 +11,7 @@ function locate(layout:Layout in O1, index:u64(GlobalSetId), found:SetLocation i
   setfield(found, class_id, ClassId(0u32));
   setfield(found, local, ClassSetId(0u64));
   for (j in 0u32 .. layout.classes) {{
-    val first = scalar(class_set_begin(layout, ClassId(j)));
+    val first <- scalar(class_set_begin(layout, ClassId(j)));
     if (scalar(index) >= first && scalar(index) < first + scalar(sets(layout, ClassId(j)))) {
       setfield(found, class_id, ClassId(j));
       setfield(found, local, ClassSetId(scalar(index) - first));

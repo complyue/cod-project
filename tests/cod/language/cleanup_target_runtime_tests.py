@@ -5,9 +5,9 @@ import cleanup_selection_runtime_tests as fixture
 runner = fixture.runner
 runner.SOURCE += '''
 proc cleanup_targets(flag:bool)->void{
- val x=make local u64,y=make local u64,z=make local u64;
- val w=make local u64,v=make local u64,t=make local u64;
- val s=make local u64,r=make local u64,u=make local u64,k=make local u64,last=make local u64,gated=make local u64;
+ val x<-make local u64,y<-make local u64,z<-make local u64;
+ val w<-make local u64,v<-make local u64,t<-make local u64;
+ val s<-make local u64,r<-make local u64,u<-make local u64,k<-make local u64,last<-make local u64,gated<-make local u64;
  ptr a=x,b=y;var p->if(flag){a}else{b};
  {{defer{z<-46u64;};defer{p=z;};}};observe(p);
  p=w;{{defer{p<-47u64;};}};observe(w);

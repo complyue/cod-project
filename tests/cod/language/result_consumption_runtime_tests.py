@@ -16,7 +16,7 @@ proc fail_selected(tag:T,ref f:func(u64)->const u64 in O)->void where {T,owner O
 }
 proc discard_selected(tag:T,ref f:func(u64)->const u64 in O)->void where {T,owner O}{defer choose_result(tag,f);}
 func repeat_selected(tag:T,ref f:func(u64)->const u64 in O)->const u64 where {T,owner O}{
- val sum=0u64;for(i in 0u64..100u64){sum<-sum+choose_result(tag,f)(i);};return sum;
+ val sum<-0u64;for(i in 0u64..100u64){sum<-sum+choose_result(tag,f)(i);};return sum;
 }
 proc later_selected(tag:T,ref f:func(u64)->const u64 in O)->void where {T,owner O}{
  defer apply(copy_selected(tag,f),20u64);f<-wrap(other);

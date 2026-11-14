@@ -49,7 +49,7 @@ behave @print(inspect(first));
 behave @print(inspect(second));
 using "std:exceptions" NullPointerException;
 function checked(region state:State, n:u64)->const u64 throws NullPointerException {
- return if(n == 0u64) { ptr absent:u64 = null; val value = absent; value }
+ return if(n == 0u64) { ptr absent:u64 = null in here; val value <- absent; value }
  else { state.ticks <- state.ticks + 1u64; checked(state,n-1u64) }
 }
 func failing = checked;

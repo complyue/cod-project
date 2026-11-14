@@ -6,18 +6,18 @@ runner=fixture.runner
 runner.SOURCE+='''
 proc lexical_queries(f:func(u64)->const u64)->void{
  observe(9010u64);
- func q=func()->const u64{val x=make local typeof(f(1u64)){36u64};return x;};
- func nested=func()->func()->const u64{return func()->const u64{val x=make local typeof(f(1u64)){37u64};return x;};};
+ func q=func()->const u64{val x<-make local typeof(f(1u64)){36u64};return x;};
+ func nested=func()->func()->const u64{return func()->const u64{val x<-make local typeof(f(1u64)){37u64};return x;};};
  observe(q());observe(nested()());
  observe(9011u64);
 }
 func mixed_query(f:func(u64)->const u64,tag:T)->func(u64)->const u64 where T{
- return func(x:u64)->const u64{val unused=make local typeof(tag);return f(x);};
+ return func(x:u64)->const u64{val unused<-make local typeof(tag);return f(x);};
 }
 proc caught_query_context()->void{
  try{throw bound_error();}catch(e:const MissingReturnException){
   observe(9090u64);
-  defer{{func q=func()->const u64{val x=make local typeof(e.category){38u64};return x;};observe(q());}};
+  defer{{func q=func()->const u64{val x<-make local typeof(e.category){38u64};return x;};observe(q());}};
   observe(9091u64);
  };
 }

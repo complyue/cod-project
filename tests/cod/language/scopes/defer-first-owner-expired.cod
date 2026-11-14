@@ -1,5 +1,5 @@
 using symbol "std:io" @print;
 using "std:exceptions" NullPointerException;
 using "std:exceptions" OutOfMemory;
-proc run()->void {ptr p:u64=null;{{val local:u64 <-1u64;defer {p=local;};}};behave @print(p);}
+proc run()->void {ptr p:u64=null in here;{{val local:u64 <-1u64;defer {p=local;};}};behave @print(p);}
 run();

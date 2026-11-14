@@ -10,23 +10,23 @@ using "std:exceptions" MissingReturnException;
 func missing()->const i64 {}
 proc observe(x:u64)->void{behave @print(x);}
 proc normal()->void {
-  val x=make local u64;
+  val x<-make local u64;
   {{defer{observe(x);}finally{};defer{x<-41u64;};}};
   observe(x);
 }
 proc failed_registration()->void {
-  val x=make local u64;
+  val x<-make local u64;
   defer{observe(x);}finally{observe(9002u64);};
   observe(9001u64);
   defer{x<-42u64;};
 }
 proc failed_action()->void {
-  val x=make local u64;
+  val x<-make local u64;
   defer{observe(x);}catch(e:const MissingReturnException){observe(x);};
   defer{x<-43u64;missing();};
 }
 proc nested()->void {
-  val x=make local u64;
+  val x<-make local u64;
   defer{
     x<-44u64;observe(9001u64);
     try{defer{observe(x);};}catch(e:const OutOfMemory){observe(x);observe(9002u64);};

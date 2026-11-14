@@ -2,7 +2,7 @@ using symbol "std:io" @print;
 proc observe(x:T) -> void where T { behave @print(x); }
 proc bound(x:i64) -> const i64 { behave @print(x); return x; }
 func last_or(first:i64, last:i64) -> const i64 {
-  val result = make local i64;
+  val result <- make local i64;
   for (i in first .. last) {{ result <- i; }} else { result <- -1; };
   return result;
 }
@@ -38,13 +38,13 @@ for (i in bound(1) .. bound(3)) { behave @print(i + 10); } else { behave @print(
   };
   defer observe(91);
 }};
-for (i in 0 .. 3) {{ val copy = i; defer observe(copy); }};
+for (i in 0 .. 3) {{ val copy <- i; defer observe(copy); }};
 {{
   for (i in 0 .. 2) { for (j in 0 .. 2) { defer observe(i * 10 + j); }; };
 }};
 for (i in 2 .. 1) { behave @print(99); } else { defer observe(80); };
 behave @print(early());
-val empty = make local i64, nonempty = make local i64;
+val empty <- make local i64, nonempty <- make local i64;
 for (i in 2u32 .. 1u32) {{}} else { empty <- 10; };
 for (i in -1 .. 0) {{ nonempty <- 20; }} else {};
 behave @print(empty + nonempty);

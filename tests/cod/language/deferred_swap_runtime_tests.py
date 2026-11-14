@@ -11,7 +11,7 @@ using "std:exceptions" MissingReturnException;
 proc observe(x:u64)->void{behave @print(x);}
 func missing()->const u64{}
 proc batch(n:u64)->void{
- val x=11u64,y=12u64,z=13u64;
+ val x<-11u64,y<-12u64,z<-13u64;
  defer{observe(x);observe(y);observe(z);};
  for(i in 0u64..n){
   if(i%2u64==0u64){defer (<->)(x,y);}else{defer (<->)(y,z);};
@@ -22,15 +22,15 @@ batch(0u64);observe(9000u64);
 batch(3u64);observe(9000u64);
 batch(10000u64);observe(9000u64);
 proc per_iteration(n:u64)->void{
- val x=1u64,y=2u64;
+ val x<-1u64,y<-2u64;
  for(i in 0u64..n){{defer intrinsic (<->)(x,y);}};
  observe(x);observe(y);
 }
 per_iteration(10000u64);observe(9000u64);
-{{val x=1u64,y=2u64;defer{observe(x);observe(y);};defer{defer (<->)(x,y);};}};
+{{val x<-1u64,y<-2u64;defer{observe(x);observe(y);};defer{defer (<->)(x,y);};}};
 observe(9000u64);
 proc denied_registration()->void{
- val x=1u64,y=2u64,z=3u64;ptr p=x,q=y;
+ val x<-1u64,y<-2u64,z<-3u64;ptr p=x,q=y;
  {{
   defer (<->)(x,y);
   observe(9050u64);
@@ -42,7 +42,7 @@ proc denied_registration()->void{
 }
 denied_registration();observe(9000u64);
 proc null_preparation()->void{
- val x=1u64;ptr p:u64=null;
+ val x<-1u64;ptr p:u64=null in here;
  observe(9040u64);
  try{defer (<->)(p,{observe(75u64);x});}
  catch(e:const NullPointerException){observe(9041u64);};
@@ -50,7 +50,7 @@ proc null_preparation()->void{
 }
 null_preparation();observe(9000u64);
 proc partial_batch(n:u64)->void{
- val x=1u64,y=2u64;
+ val x<-1u64,y<-2u64;
  defer{observe(x);observe(y);};
  observe(9060u64);
  for(i in 0u64..n){defer (<->)(x,y);};
@@ -58,7 +58,7 @@ proc partial_batch(n:u64)->void{
 try{partial_batch(1000u64);}catch(e:const OutOfMemory){observe(9061u64);};
 observe(9000u64);
 {{
- val x=1u64,y=2u64;
+ val x<-1u64,y<-2u64;
  defer catch(e:const MissingReturnException){observe(x);observe(y);}finally{observe(78u64);};
  defer (<->)(x,y);
  missing();{}

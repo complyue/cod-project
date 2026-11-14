@@ -8,7 +8,7 @@ using "std:exceptions" RegionCapacityExceeded;
 try {
 # Fail at the root, first array header, second header and second payload.
 for (stage in 0u64 .. 4u64) {{
-  val bytes = if(stage == 0u64) {23u64} else {
+  val bytes <- if(stage == 0u64) {23u64} else {
     if(stage == 1u64) {24u64} else {if(stage == 2u64) {72u64} else {88u64}}
   };
   try {create(bytes, 4u32); behave @assert(false)}
@@ -17,7 +17,7 @@ for (stage in 0u64 .. 4u64) {{
 {
   owned region arena:Pool <- create(8192u64, 4u32);
   ref pool = root(arena);
-  val occupation = used_bytes(arena);
+  val occupation <- used_bytes(arena);
   for (i in 0u32 .. 4u32) {{
     behave @assert(acquire(pool, i64(i) + 10) == Slot(i));
   }};

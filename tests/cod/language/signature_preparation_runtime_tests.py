@@ -22,7 +22,7 @@ proc show_prepared(f:func(T)->const T,x:T)->void where T{observe(f(x)(1u64));}
  observe(9030u64);try{proc c=recur;}catch(e:const OutOfMemory){observe(9031u64);};
  observe(9050u64);try{defer recur(g,2u64);}catch(e:const OutOfMemory){observe(9051u64);};
  try{apply_prepared(identity_prepared,missing_prepared());{}}catch(e:const MissingReturnException){observe(320u64);};
- observe(9010u64);val total=0u64;
+ observe(9010u64);val total<-0u64;
  for(i in 0u64..10000u64){total<-read(g,0u64)+total;};
  observe(9011u64);observe(total);
  defer recur(g,2u64);defer show_prepared(identity_prepared,g);g<-wrap(other);observe(g(1u64));

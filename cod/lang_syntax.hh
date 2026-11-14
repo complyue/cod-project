@@ -182,6 +182,7 @@ struct Type {
   bool variadic = false;
   bool owned = false;
   bool pure_callable = false;
+  bool value_result = false;
   Type(Kind kind = void_type, std::string name = {}, size_t identity = 0)
       : kind(kind), name(std::move(name)), identity(identity) {}
   bool same_capture_contract(const Type &other) const {
@@ -201,7 +202,7 @@ struct Type {
   }
   bool operator==(const Type &other) const {
     return kind == other.kind && name == other.name && identity == other.identity &&
-           parameters == other.parameters && bounds == other.bounds && variadic == other.variadic && owned == other.owned && pure_callable == other.pure_callable &&
+           parameters == other.parameters && bounds == other.bounds && variadic == other.variadic && owned == other.owned && pure_callable == other.pure_callable && value_result == other.value_result &&
            throws_types == other.throws_types && owner_bounds == other.owner_bounds && owners == other.owners && argument_modes == other.argument_modes && const_views == other.const_views && nullable_views == other.nullable_views &&
            same_capture_contract(other) &&
            ((!target && !other.target) || (target && other.target && *target == *other.target));
@@ -490,7 +491,11 @@ class Parser {
       bool result_const = false;
       std::string result_mode;
       type.target = std::make_shared<Type>(signature_type(result_const, result_mode));
-      if (result_mode == "val") fail(token.at, "val declares storage or a parameter, not a result binding");
+      if (result_mode == "val" && !numeric(*type.target) && *type.target != Type::boolean)
+        fail(token.at, "micro-dispatch implementation gap: explicit val callable results require a concrete scalar type; this is not a language restriction");
+      type.value_result = result_mode != "ref" && result_mode != "ptr" &&
+          (result_const || result_mode == "val" || numeric(*type.target) || *type.target == Type::boolean ||
+           *type.target == Type::void_type || type.target->kind == Type::procedure);
       type.const_views.push_back(result_const);
       type.nullable_views.push_back(result_mode == "ptr");
       if (std::none_of(type.const_views.begin(), type.const_views.end(), [](bool value) { return value; })) type.const_views.clear();
@@ -661,10 +666,11 @@ class Parser {
     if (preceding_where) generic_clause(form);
     if (take("->")) {
       form.result_type = signature_type(form.result_const, form.result_kind);
-      if (form.result_kind == "val") fail(form.at, "val declares storage or a parameter, not a result binding");
       if (take("in")) form.result_owner = ordinary_name().text;
     }
-    if (!form.result_kind.empty() && form.result_owner.empty())
+    if (form.result_kind == "val" && !form.result_owner.empty())
+      fail(form.at, "a val result has no owner association; use ref T in O for a borrowed result");
+    if ((form.result_kind == "ref" || form.result_kind == "ptr") && form.result_owner.empty())
       fail(form.at, "a ref/ptr result requires an explicit external owner: use in O");
     if (take("throws")) form.throws_types.push_back(parse_type());
     if (take("where")) {
@@ -900,6 +906,8 @@ class Parser {
         if (take("in")) expr->owner_name = ordinary_name().text;
         if (take("<-")) expr->binding = "<-";
         else { expect("="); expr->binding = "="; }
+        if (mode == "val" && expr->binding != "<-") fail(expr->at, "val initialization requires '<-', not '='");
+        if (mode == "ref" && expr->binding != "=") fail(expr->at, "ref initialization requires '='; use val for an independent copy");
         expr->children.push_back(expression());
         group->children.push_back(std::move(expr));
       } while (take(","));
@@ -991,7 +999,11 @@ class Parser {
     }
     if (token.kind == TokenKind::identifier) {
       ++cursor_;
-      if (token.text == "null") return make(Expression::Kind::null_ref, token);
+      if (token.text == "null") {
+        auto expr = make(Expression::Kind::null_ref, token);
+        if (take("in")) expr->owner_name = ordinary_name().text;
+        return expr;
+      }
       if (token.text == "true" || token.text == "false") return make(Expression::Kind::boolean, token);
       if (token.text == "procedure" || token.text == "proc" || token.text == "function" || token.text == "global" || token.text == "symbol")
         fail(token.at, "prototype declarations belong at module top level");

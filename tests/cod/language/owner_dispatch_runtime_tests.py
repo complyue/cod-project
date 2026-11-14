@@ -25,7 +25,7 @@ func walk_owner(select:F,ref f:func(u64)->const u64 in O,n:u64)->const u64 where
  {{defer visit_owner(f,g);}};observe(f(0u64));
  func first=owner_first;func second=owner_second;
  observe(walk_owner(first,f,40u64));observe(walk_owner(second,f,40u64));
- observe(9010u64);val total=0u64;
+ observe(9010u64);val total<-0u64;
  for(i in 0u64..10000u64){total<-walk_owner(second,f,0u64)+total;};
  observe(9011u64);observe(total);
 }};

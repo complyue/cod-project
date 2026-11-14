@@ -4,9 +4,9 @@ from pathlib import Path
 import deferred_initialization_runtime_tests as initialization
 
 runner = initialization.runner
-runner.SOURCE = runner.SOURCE.replace('val x=make local u64;',
-    'val x=make local u64;const ptr alias=x;const ptr reader=alias;')
 runner.SOURCE = runner.SOURCE.replace('observe(x)', 'observe(reader)').replace('x<-', 'alias<-')
+runner.SOURCE = runner.SOURCE.replace('val alias<-make local u64;',
+    'val x<-make local u64;const ptr alias=x;const ptr reader=alias;')
 runner.SOURCE += """
 proc captured()->void {
   try{missing();{}}catch(e:const MissingReturnException){

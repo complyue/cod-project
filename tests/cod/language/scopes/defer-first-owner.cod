@@ -2,38 +2,38 @@ using symbol "std:io" @print;
 using "std:exceptions" NullPointerException;
 using "std:exceptions" OutOfMemory;
 using "std:exceptions" InvalidCapacity;
-proc basic()->void {val value:u64 <-1u64;ptr p:u64=null;defer {p=value;};}
+proc basic()->void {val value:u64 <-1u64;ptr p:u64=null in here;defer {p=value;};}
 basic();
-proc after()->void {val value:u64 <-2u64;ptr p:u64=null; {{defer {p=value;};}};behave @print(p);}
+proc after()->void {val value:u64 <-2u64;ptr p:u64=null in here; {{defer {p=value;};}};behave @print(p);}
 after();
-proc reader()->void {val value:u64 <-3u64;ptr p:u64=null; defer {behave @print(p);} catch(e:const OutOfMemory) {throw e;};defer {p=value;};}
+proc reader()->void {val value:u64 <-3u64;ptr p:u64=null in here; defer {behave @print(p);} catch(e:const OutOfMemory) {throw e;};defer {p=value;};}
 reader();
-proc chain()->void {val value:u64 <-4u64;ptr p:u64=null;ptr q:u64=null;defer {behave @print(p);} catch(e:const OutOfMemory) {throw e;};defer {p=q;};defer {q=value;};}
+proc chain()->void {val value:u64 <-4u64;ptr p:u64=null in here;ptr q:u64=null in here;defer {behave @print(p);} catch(e:const OutOfMemory) {throw e;};defer {p=q;};defer {q=value;};}
 chain();
 data Item {value:u64;}
-proc regional_target()->void {owned region r <-make Item(capacity=512u64){value <- 5u64};ptr p:Item=null;{{defer {p=root(r);};}};behave @print(p.value);}
+proc regional_target()->void {owned region r <-make Item(capacity=512u64){value <- 5u64};ptr p:Item=null in here;{{defer {p=root(r);};}};behave @print(p.value);}
 regional_target();
-proc field()->void {owned region r <-make Item(capacity=512u64){value <- 6u64};ptr p:u64=null;{{defer {p=root(r).value;};}};behave @print(p);}
+proc field()->void {owned region r <-make Item(capacity=512u64){value <- 6u64};ptr p:u64=null in here;{{defer {p=root(r).value;};}};behave @print(p);}
 field();
-proc loop(count:u64)->void {val value:u64 <-7u64;ptr p:u64=null;for(i in 0u64..count) {{if(isnull(p)) {behave @print(0u64);} else {behave @print(p);};defer {p=value;};}};}
+proc loop(count:u64)->void {val value:u64 <-7u64;ptr p:u64=null in here;for(i in 0u64..count) {{if(isnull(p)) {behave @print(0u64);} else {behave @print(p);};defer {p=value;};}};}
 loop(3u64);
 proc pick(value:u64 in O)->ref u64 in O where {owner O} {behave @print(8u64);return value;}
-proc borrowed_result()->void {val value:u64 <-9u64;ptr p:u64=null;{{defer {p=pick(value);};behave @print(10u64);}};behave @print(p);}
+proc borrowed_result()->void {val value:u64 <-9u64;ptr p:u64=null in here;{{defer {p=pick(value);};behave @print(10u64);}};behave @print(p);}
 borrowed_result();
-proc null_only()->void {ptr p:u64=null;defer {p=null;};}
+proc null_only()->void {ptr p:u64=null in here;defer {p=null;};}
 null_only();
 
 func one()->const u64 {return 12u64;}
 proc callable()->void {
   func target = one;
-  ptr action:func()->const u64 = null;
+  ptr action:func()->const u64 = null in here;
   {{defer {action = target;};}};
   behave @print(action());
 }
 callable();
 proc initialize()->void {
   ptr value = make local u64;
-  ptr p:u64 = null;
+  ptr p:u64 = null in here;
   {{
     defer {behave @print(p);} catch(e:const OutOfMemory) {throw e;};
     defer {p <- 13u64;} catch(e:const OutOfMemory) {throw e;};
@@ -44,7 +44,7 @@ proc initialize()->void {
 initialize();
 proc earlier_null()->void {
   val value:u64 <- 14u64;
-  ptr p:u64 = null;
+  ptr p:u64 = null in here;
   {{
     defer {p = value;};
     defer {behave @print(p);} catch(e:const NullPointerException) {behave @print(15u64);};
@@ -55,21 +55,21 @@ earlier_null();
 proc conditional(yes:bool)->void {
   val first:u64 <- 16u64;
   val second:u64 <- 17u64;
-  ptr p:u64 = null;
+  ptr p:u64 = null in here;
   {{defer {p = if(yes) {first} else {second};};}};
   behave @print(p);
 }
 conditional(true); conditional(false);
 proc allocated()->void {
   owned region r:Item <- make Item(capacity=512u64){value <- 18u64};
-  ptr p:Item = null;
+  ptr p:Item = null in here;
   {{defer {p = alloc r Item(19u64);};}};
   behave @print(p.value);
 }
 allocated();
 proc shadow()->void {
   val first:u64 <- 20u64;
-  ptr p:u64 = null;
+  ptr p:u64 = null in here;
   {{
     defer {p = first;};
     defer {{{val second:u64 <- 21u64;ptr p = second;p = second;behave @print(p);}}};
@@ -79,7 +79,7 @@ proc shadow()->void {
 shadow();
 proc accumulated(count:u64)->void {
   val value:u64 <- 22u64;
-  ptr p:u64 = null;
+  ptr p:u64 = null in here;
   defer {behave @print(p);} catch(e:const NullPointerException) {behave @print(23u64);};
   for(i in 0u64 .. count) {defer {p = value;};};
 }
@@ -88,7 +88,7 @@ accumulated(0u64); accumulated(3u64);
 proc two_regions()->void {
   owned region first:Item <-make Item(capacity=256u64){value<-24u64};
   owned region second:Item <-make Item(capacity=256u64){value<-25u64};
-  ptr p:Item=null;
+  ptr p:Item=null in here;
   defer {behave @print(p.value);} catch(e:const OutOfMemory) {throw e;};
   defer {p=root(second);};
 }
@@ -96,8 +96,8 @@ two_regions();
 
 proc chained()->void {
   val target:u64 <-29u64;
-  ptr p:u64 = null;
-  ptr q:u64 = null;
+  ptr p:u64 = null in here;
+  ptr q:u64 = null in here;
   {{defer {p = q = target;};}};
   behave @print(p); behave @print(q);
 }
@@ -106,7 +106,7 @@ chained();
 proc retained_borrow(failure:bool)->void {
   owned region original:Item <-make Item(capacity=256u64){value<-32u64};
   ref borrowed = root(original);
-  ptr p:Item = null;
+  ptr p:Item = null in here;
   defer {behave @print(p.value);}
     catch(e:const InvalidCapacity) {behave @print(p.value);}
     catch(e:const OutOfMemory) {throw e;};
@@ -118,7 +118,7 @@ retained_borrow(false); retained_borrow(true);
 
 proc ordinary_loop(count:u64)->void {
   val target:u64 <-30u64;
-  ptr p:u64 = null;
+  ptr p:u64 = null in here;
   for(i in 0u64 .. count) {
     if(isnull(p)) {p = target; {};} else {behave @print(p);};
   };

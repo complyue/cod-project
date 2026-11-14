@@ -10,29 +10,29 @@ proc borrow_region()->void {
 borrow_region();
 
 proc borrow_lexical()->void {
- val input=1u64;
+ val input<-1u64;
  proc view=proc(v:u64 in o)->u64 where {owner o} {return v;};
  ref result=view(input); result <-2u64; behave @print(input);
 }
 borrow_lexical();
 
 proc independent()->void {
- val input=1u64;
+ val input<-1u64;
  proc view=proc(v:u64 in o)->const u64 where {owner o} {return v+1u64;};
  ref result=view(input); result <-3u64; behave @print(input); behave @print(result);
 }
 independent();
 
 proc borrow_cleanup()->void {
- val input=1u64;
+ val input<-1u64;
  proc view=proc(v:u64 in o)->u64 where {owner o} {defer {v<-2u64;}; return v;};
  ref result=view(input); behave @print(result);
 }
 borrow_cleanup();
 
 proc select_borrow(flag:bool)->void {
-  val a=1u64;
-  val b=2u64;
+  val a<-1u64;
+  val b<-2u64;
   proc first=proc(x:u64 in o,y:u64 in o)->u64 where {owner o} {return x;};
   proc second=proc(x:u64 in o,y:u64 in o)->u64 where {owner o} {return y;};
   proc selected=if(flag){first}else{second};
@@ -45,7 +45,7 @@ select_borrow(true);
 select_borrow(false);
 
 proc copy_cleanup()->void {
-  val input=1u64;
+  val input<-1u64;
   proc view=proc(v:u64 in o)->const u64 where {owner o} {defer {v<-2u64;}; return v;};
   ref result=view(input);
   behave @print(input);

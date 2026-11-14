@@ -66,7 +66,7 @@ behave @print(@bias);
 
 using "std:exceptions" NullPointerException;
 func failing = func(n:u64)->const u64 throws NullPointerException {
-  ptr absent:u64 = null;
+  ptr absent:u64 = null in here;
   return absent + n
 };
 func checked = func(action:func(u64)->const u64 throws NullPointerException,n:u64)

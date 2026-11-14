@@ -19,7 +19,7 @@ func walk_borrow(select:F,ref f:func(u64)->const u64 in O,n:u64)->ref (func(u64)
  observe(9030u64);try{captured({observe(9999u64);f});{}}catch(e:const OutOfMemory){observe(9031u64);};
  observe(9050u64);try{defer writer(f,g);}catch(e:const OutOfMemory){observe(9051u64);};
  f<-wrap(base);{{defer writer(f,g);f<-wrap(wrap(base));}};observe(f(4u64));
- observe(9010u64);val total=0u64;for(i in 0u64..10000u64){{ptr live=select(f);total<-total+live(i);}};observe(9011u64);observe(total);
+ observe(9010u64);val total<-0u64;for(i in 0u64..10000u64){{ptr live=select(f);total<-total+live(i);}};observe(9011u64);observe(total);
  observe(walk_borrow(select,f,40u64)(5u64));
 }};
 observe(9000u64);

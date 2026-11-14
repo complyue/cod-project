@@ -49,7 +49,7 @@ behave @print(a());
 behave @print(b());
 function recover(a:func()->const u64 in O,b:func()->const u64 in O,fail:bool)
  -> (func()->const u64) in O where {owner O} {
- return try { if(fail){ptr absent:u64 = null; absent; a}else{a} }
+ return try { if(fail){ptr absent:u64 = null in here; absent; a}else{a} }
  catch(e:const NullPointerException){b}
 }
 func recover_view = recover;

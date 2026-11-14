@@ -28,7 +28,7 @@ try{failed();}catch(e:const OutOfMemory){observe(1u64);};
 try{preparation();}catch(e:const MissingReturnException){observe(3u64);};
 observe(replaced()(40u64));{{defer (maker())(40u64);}};
 observe(9003u64);
-val total=0u64;
+val total<-0u64;
 for(i in 0u64..10000u64){{func a=factory(true);func b=a;a<-minus;total<-total+b(i);}};
 observe(9004u64);observe(total);
 '''

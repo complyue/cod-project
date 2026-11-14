@@ -39,7 +39,7 @@ behave @print(pair(first, { first <- 9u64; first }));
 func mixed = func (x:f64, y:f32) -> const f64 { return x + f64(y) };
 behave @print(mixed(1u8, 2.5f32));
 func checked = func (x:i64) -> const i64 throws NullPointerException {
-  ptr absent:i64 = null;
+  ptr absent:i64 = null in here;
   return if (x == 0) { absent } else { x }
 };
 try { checked(0); {} } catch (e:const NullPointerException) { behave @print(99u64); };

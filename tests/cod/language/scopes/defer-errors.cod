@@ -27,7 +27,7 @@ try {
   try {bad();} catch(original:const InvalidCapacity) { {{ defer {throw;}; }}; };
 } catch(e:const InvalidCapacity) {behave @print(107u64);};
 {{
-  defer { {{ ptr absent:i64 = null; behave @print(absent); }} }
+  defer { {{ ptr absent:i64 = null in here; behave @print(absent); }} }
   catch(e:const NullPointerException) {behave @print(108u64);}
   finally {behave @print(109u64);};
 }};

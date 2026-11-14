@@ -14,7 +14,7 @@ proc second = factory(2u64);
 proc fail(n:u64)->(proc()->const u64) throws NullPointerException {
   effect @bias <- @bias + 1u64;
   proc temporary = proc()->const u64 { return @bias };
-  return if (n == 0u64) { ptr absent:i64 = null; val ignored = absent; temporary }
+  return if (n == 0u64) { ptr absent:i64 = null in here; val ignored <- absent; temporary }
   else { fail(n - 1u64) }
 }
 try { proc result = fail(8u64); behave @print(result()); }

@@ -21,7 +21,7 @@ behave @print(read(cell));
 behave @print(total(deref(@rates)));
 
 function sample_then_mutate(p:f32 in O1) -> f32 where {owner O1} {
-  val saved = deref(p);
+  val saved <- deref(p);
   store(p, 12.0f32);
   return saved + deref(p)
 }

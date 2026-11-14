@@ -55,7 +55,7 @@ behave @print(perform @saved(2u64));
 using "std:exceptions" NullPointerException;
 symbol @checked:proc()->const i64 throws NullPointerException;
 symbol @attempt:proc()->const i64 throws NullPointerException;
-proc fails = proc()->const i64 throws NullPointerException { ptr absent:i64 = null; return absent };
+proc fails = proc()->const i64 throws NullPointerException { ptr absent:i64 = null in here; return absent };
 effect @checked = fails;
 proc attempt_value = proc()->const i64 throws NullPointerException { return perform @checked() };
 proc succeeds = proc()->const i64 { return 42 };

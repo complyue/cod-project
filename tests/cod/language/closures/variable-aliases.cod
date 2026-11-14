@@ -20,7 +20,7 @@ behave @print(cursor);
 ref var readonly:const u64 -> cursor_alias;
 cursor = first;
 behave @print(readonly);
-val pending = make local u64;
+val pending <- make local u64;
 val var pending_alias -> pending;
 pending_alias <- 17u64;
 behave @print(pending);

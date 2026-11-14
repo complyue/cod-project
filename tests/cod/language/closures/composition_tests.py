@@ -49,7 +49,7 @@ def main():
         frame = frame.replace('using symbol "std:io" @print;',
                               'using symbol "std:io" @print;\nusing symbol "std:io" @assert;')
         frame = frame.replace('func step = updater(state);',
-                              'const val occupied = used_bytes(state);\nfunc step = updater(state);')
+                              'const val occupied <- used_bytes(state);\nfunc step = updater(state);')
         frame = frame.replace('frame in 0 .. 3', 'frame in 0 .. 10000')
         frame += '\nbehave @assert(used_bytes(state) == occupied);\n'
         entry.write_text(frame)

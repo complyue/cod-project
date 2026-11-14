@@ -1,7 +1,7 @@
 using symbol "std:io" @print;
 proc run()->void {
   defer catch(error) {throw;};
-  ptr absent:u64 = null;
+  ptr absent:u64 = null in here;
   behave @print(absent);
 }
 run();

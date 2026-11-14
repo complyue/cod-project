@@ -23,7 +23,7 @@ func walk_access(select:F,ref f:func(u64)->const u64 in O,n:u64)->const u64 wher
  {{defer visit(observed);f<-wrap(base);}};
  func writable=borrow_holder;func readonly=read_holder;
  observe(walk_access(writable,f,40u64));observe(walk_access(readonly,f,40u64));
- observe(9010u64);val total=0u64;
+ observe(9010u64);val total<-0u64;
  for(i in 0u64..10000u64){total<-walk_access(readonly,f,0u64)+total;};
  observe(9011u64);observe(total);
 }};

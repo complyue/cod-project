@@ -323,7 +323,7 @@ behave @print(9042u64);
                 source += '''
 proc failed_first_owner()->void {
   val value:u64 <-26u64;
-  ptr p:u64=null;
+  ptr p:u64=null in here;
   defer catch(e:const OutOfMemory) {
     if(isnull(p)) {behave @print(27u64);} else {behave @print(999u64);};
   };
@@ -334,7 +334,7 @@ failed_first_owner();
 behave @print(9002u64);
 proc first_stress(count:u64)->void {
   val value:u64 <-28u64;
-  ptr p:u64=null;
+  ptr p:u64=null in here;
   for(i in 0u64 .. count) {{defer {p=value;};}};
   if(isnull(p)) {behave @print(999u64);} else {behave @print(p);};
 }

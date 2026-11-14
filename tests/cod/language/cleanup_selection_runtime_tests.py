@@ -5,7 +5,7 @@ import selected_alias_runtime_tests as fixture
 runner=fixture.runner
 runner.SOURCE+='''
 proc cleanup_selected(flag:bool)->void{
- val x=make local u64,y=make local u64,z=make local u64;
+ val x<-make local u64,y<-make local u64,z<-make local u64;
  ptr a=x,b=y;var p->if(flag){a}else{b};
  {{defer{p<-41u64;};}};observe(p);
  {{defer{p<-42u64;};defer{p=z;};}};observe(p);

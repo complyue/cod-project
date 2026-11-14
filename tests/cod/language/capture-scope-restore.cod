@@ -14,15 +14,15 @@ procedure @left() -> i64 { return @x }
 procedure @right() -> i64 { return @y }
 effect @route = @left;
 procedure @nested() -> i64 {
-  val middle = {{
+  val middle <- {{
     effect @route = @right;
-    val inner = {{ effect @route = @left; behave @route() }};
+    val inner <- {{ effect @route = @left; behave @route() }};
     inner * 1000 + behave @route()
   }};
   return middle * 1000 + behave @route()
 }
 procedure @branch(flag:bool) -> i64 {
-  val selected = if (flag) {{
+  val selected <- if (flag) {{
     effect @route = @right;
     behave @route()
   }} else {{

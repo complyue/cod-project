@@ -34,7 +34,7 @@ func retained()->func(u64)->const u64{
 observe(9000u64);
 {{
   func f=base;for(i in 0u64..80u64){{f<-wrap(f);}};
-  observe(9010u64);val total=0u64;
+  observe(9010u64);val total<-0u64;
   for(i in 0u64..10000u64){total<-total+f(i);};
   observe(9011u64);observe(total);
 }};

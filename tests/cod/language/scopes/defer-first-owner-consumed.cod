@@ -1,7 +1,7 @@
 data Item {value:u64;}
 proc run()->void {
  owned region original:Item <-make Item(capacity=256u64){value<-1u64};
- ptr p:Item=null;
+ ptr p:Item=null in here;
  defer {p=root(original);};
  owned region moved:Item <-original;
 }
