@@ -664,6 +664,7 @@ class ScalarChecker {
     lexical_.live = lexical_.live && !targets.empty();
   }
   void refine(const Expression &expr, bool value, const std::map<const Expression *, CheckedOperation> &operations) {
+    if (operations.at(&expr).type == Type::never) { lexical_.live = false; return; }
     if (const auto &test = operations.at(&expr).null_test) { refine_test(*test, value); return; }
     if (expr.kind != Expression::Kind::binary || (expr.text != "&&" && expr.text != "||")) return;
     const bool conjunction = expr.text == "&&";
@@ -1696,9 +1697,10 @@ class ScalarChecker {
         refine(*expr.children[0], expr.text != "&&", operations);
         const auto skipped = lexical_;
         join(skipped, false, after_right, right == Type::never, expr.at);
-        require_value(left); require_value(right);
-        if (left != Type::boolean || right != Type::boolean) fail(expr.at, "logical operation requires bool operands");
-        operation.type = operation.operand_type = Type::boolean;
+        if ((left != Type::boolean && left != Type::never) || (right != Type::boolean && right != Type::never))
+          fail(expr.at, "logical operation requires bool operands");
+        operation.operand_type = Type::boolean;
+        operation.type = left == Type::never ? Type{Type::never} : Type{Type::boolean};
         break;
       }
       [[fallthrough]];
@@ -1750,17 +1752,20 @@ class ScalarChecker {
           operation.targets = target.targets;
         }
         if (offset) operation.arguments.push_back({ArgumentMode::value, contract});
+        bool completes = true;
         for (size_t i = offset; i < expr.children.size(); ++i) {
           const auto &parameter = contract.parameters[i - offset];
           const auto argument = check(*expr.children[i], instance, operations, true, false,
                                       parameter.kind == Type::procedure ? &parameter : nullptr);
           if (argument.kind == Type::procedure) note_abrupt(expr.children[i]->at, {exception_id(ExceptionCategory::out_of_memory)});
-          if (argument != parameter && !accepts_exception(argument, parameter)) {
+          completes = completes && argument != Type::never;
+          if (argument != Type::never && argument != parameter && !accepts_exception(argument, parameter)) {
             if (transfers_value(argument, parameter)) implementation_gap(expr.children[i]->at, "callable view argument adaptation");
             fail(expr.children[i]->at, "argument does not satisfy the callable view type");
           }
           operation.arguments.push_back({ArgumentMode::value, parameter});
         }
+        if (!completes) { operation.type = Type::never; break; }
         operation.type = *contract.target;
         operation.exceptions = exception_possibilities(operation.type);
         std::set<size_t> categories;
@@ -1905,14 +1910,16 @@ class ScalarChecker {
       if (method && method->kind == Form::Kind::function) fail(expr.at, "a function cannot invoke a dynamic procedure");
       if (expr.children.size() != 1) fail(expr.at, "print requires one scalar argument");
       const auto argument = child(0);
-      if (!scalar_type(argument)) fail(expr.at, "print requires one primitive scalar argument");
       operation.arguments.push_back({ArgumentMode::value, argument});
+      if (argument == Type::never) { operation.type = Type::never; break; }
+      if (!scalar_type(argument)) fail(expr.at, "print requires one primitive scalar argument");
       operation.builtin = BuiltinOperation::print;
       operation.type = Type::void_type;
       break;
     }
     case K::conditional: {
-      if (child(0) != Type::boolean) fail(expr.at, "if condition requires bool");
+      const auto condition = child(0);
+      if (condition != Type::boolean && condition != Type::never) fail(expr.at, "if condition requires bool");
       const auto before = lexical_;
       refine(*expr.children[0], true, operations);
       const auto yes = check(*expr.children[1], instance, operations, read, discard, expected);
@@ -1951,6 +1958,7 @@ class ScalarChecker {
         operation.selection_versions = yes_fact.selection_versions;
         operation.selection_versions.insert(no_fact.selection_versions.begin(), no_fact.selection_versions.end());
       }
+      if (condition == Type::never) operation.type = Type::never;
       break;
     }
     case K::block: {
@@ -2204,6 +2212,7 @@ class ScalarChecker {
         implementation_gap(expr.at, "replacement of a captured callable payload");
       dereference(target, expr.at);
       const auto source = check(*expr.children[1], instance, operations, true, false, destination.kind == Type::procedure ? &destination : nullptr);
+      if (source == Type::never) { operation.type = Type::never; break; }
       if (!transfers_value(source, destination)) fail(expr.at, "bits transfer source does not satisfy destination type");
       if (destination.kind == Type::procedure) note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
       auto written = target.targets; written.erase(null_target);
@@ -2250,10 +2259,11 @@ class ScalarChecker {
       break;
     }
     case K::field: {
-      if (child(0).kind != Type::exception) implementation_gap(expr.at, "non-exception field selection");
+      const auto source = child(0);
+      if (source.kind != Type::exception && source != Type::never) implementation_gap(expr.at, "non-exception field selection");
       if (expr.text != "category" && expr.text != "site" && expr.text != "requested" && expr.text != "available" && expr.text != "cause_count")
         fail(expr.at, "unknown intrinsic exception field '" + expr.text + "'");
-      operation.type = Type::uint64;
+      operation.type = source == Type::never ? Type{Type::never} : Type{Type::uint64};
       break;
     }
     case K::raise: {
@@ -2265,9 +2275,10 @@ class ScalarChecker {
       } else {
         type = child(0); operation.exceptions = operations.at(expr.children[0].get()).exceptions;
       }
-      if (type.kind != Type::exception) fail(expr.at, "throw requires an intrinsic exception value");
+      if (type.kind != Type::exception && type != Type::never) fail(expr.at, "throw requires an intrinsic exception value");
       if (expr.children.size() == 2) {
-        if (child(1).kind != Type::exception) fail(expr.at, "explicit cause requires an exception value");
+        const auto cause = child(1);
+        if (cause.kind != Type::exception && cause != Type::never) fail(expr.at, "explicit cause requires an exception value");
         note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
       }
       const auto binding = expr.children.empty() ? caught_ : expr.children[0]->kind == K::name ? operations.at(expr.children[0].get()).place : std::optional<size_t>{};
@@ -2338,9 +2349,10 @@ class ScalarChecker {
       } else {
         const auto *prepared = prepared_call_;
         prepared_call_ = expr.children.front().get();
-        child(0);
+        const auto completed = child(0);
         prepared_call_ = prepared;
         const auto &call = operations.at(expr.children.front().get());
+        if (completed == Type::never) { operation.type = Type::never; break; }
         if (!call.invocation.empty()) {
           for (const auto &[reason, effects] : call.invocation) summary.paths.push_back({1, {reason, false}, 0, effects});
         } else summary.paths.push_back({1, {0, false}, 0});
@@ -2353,6 +2365,7 @@ class ScalarChecker {
     }
     default: implementation_gap(expr.at, "source expression '" + expr.text + "' is outside the scalar-method foundation");
     }
+    if (operation.type == Type::never) lexical_.live = false;
     operations[&expr] = operation;
     return operation.type;
   }

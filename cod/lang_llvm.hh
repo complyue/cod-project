@@ -296,6 +296,7 @@ class LLVMEmission {
     std::vector<Choice> result;
     for (size_t i = 0; i < facts_.size(); ++i) {
       const auto *facts = facts_[i];
+      if (std::any_of(inputs.begin(), inputs.end(), [&](const auto *input) { return facts->at(input).type == Type::never; })) continue;
       Choice choice{{}, &facts->at(&expr)};
       for (size_t p = 0; p < inputs.size(); ++p)
         choice.inputs.push_back(prepared ? choice.operation->arguments.at(p).type : facts->at(inputs[p]).type);
@@ -431,6 +432,7 @@ class LLVMEmission {
     std::vector<Choice> cases;
     for (const auto *facts : facts_) {
       const auto &fact = facts->at(&expr);
+      if (fact.type == Type::never) continue;
       Choice choice{{fact.operand_type}, &fact};
       for (size_t i = expr.kind == Expression::Kind::value_call ? 1 : 0; i < expr.children.size(); ++i)
         choice.inputs.push_back(fact.arguments.at(i).type);
@@ -533,6 +535,8 @@ class LLVMEmission {
     for (const auto &child : expr.children) collect_deferred(*child, scope);
     if (expr.kind != Expression::Kind::deferred) return;
     const auto &body = *expr.children.front();
+    if (body.kind != Expression::Kind::block && std::all_of(facts_.begin(), facts_.end(),
+        [&](const auto *facts) { return facts->at(&body).type == Type::never; })) return;
     std::vector<llvm::Type *> fields{deferred_header_};
     const auto &captures = facts_.front()->at(&expr).captures;
     for (const auto *facts : facts_)
@@ -622,9 +626,17 @@ class LLVMEmission {
         arguments.push_back(b_.CreateLoad(scalar_, b_.CreateStructGEP(descriptor.layout, record, j + 1)));
       // Prepared values and checked borrowed addresses do not refer into their record.
       b_.CreateCall(release, {record});
+      const auto all_facts = facts_;
+      const auto all_contexts = frame_types_;
+      facts_.clear(); frame_types_.clear();
+      for (size_t j = 0; j < all_facts.size(); ++j) if (all_facts[j]->at(&body).type != Type::never) {
+        facts_.push_back(all_facts[j]);
+        if (!all_contexts.empty()) frame_types_.push_back(all_contexts.at(j));
+      }
       auto *result = invoke(body, arguments);
       release_value(b_.CreateExtractValue(result, 0));
       if (facts_.front()->at(&body).callable_call) release_value(arguments.front());
+      facts_ = all_facts; frame_types_ = all_contexts;
       auto *replace = block("defer.failed");
       b_.CreateCondBr(failed(result), replace, scope.cleanup);
       b_.SetInsertPoint(replace); save_failure(result); b_.CreateBr(scope.cleanup);
@@ -895,6 +907,14 @@ class LLVMEmission {
     });
   }
   llvm::Value *emit_expression(const Expression &expr, bool read = true, bool discard = false) {
+    auto *value = emit_checked_expression(expr, read, discard);
+    if (std::all_of(facts_.begin(), facts_.end(), [&](const auto *facts) { return facts->at(&expr).type == Type::never; })) {
+      if (reachable()) b_.CreateUnreachable();
+      return nullptr;
+    }
+    return value;
+  }
+  llvm::Value *emit_checked_expression(const Expression &expr, bool read, bool discard) {
     using K = Expression::Kind;
     const auto &fact = facts_.front()->at(&expr);
     if (std::any_of(facts_.begin(), facts_.end(), [&](const auto *facts) {
@@ -1026,7 +1046,6 @@ class LLVMEmission {
       std::vector<const Expression *> expressions;
       for (const auto &child : expr.children) expressions.push_back(child.get());
       auto *value = expr.scoped ? full_scope(expressions, false, expr.at, nullptr, read, discard) : sequence(expressions, read, discard);
-      if (fact.type == Type::never && reachable()) { b_.CreateUnreachable(); return nullptr; }
       return value;
     }
     case K::range_for: case K::fold: {
@@ -1160,12 +1179,12 @@ class LLVMEmission {
     case K::deferred: {
       return temporary_scope(expr.at, scalar_, [&]() -> llvm::Value * {
       const auto &body = *expr.children.front();
-      auto record = std::find_if(scope_->deferred.begin(), scope_->deferred.end(), [&](const Deferred &entry) { return entry.action == &expr; });
-      if (record == scope_->deferred.end()) throw std::logic_error("uncollected deferred action");
       std::vector<llvm::Value *> arguments;
       if (body.kind == K::block) for (const auto id : fact.captures) arguments.push_back(load(storage_.at(id)));
       else arguments = prepare_arguments(body, true);
       if (!reachable()) return nullptr;
+      auto record = std::find_if(scope_->deferred.begin(), scope_->deferred.end(), [&](const Deferred &entry) { return entry.action == &expr; });
+      if (record == scope_->deferred.end()) throw std::logic_error("uncollected deferred action");
       auto *status = slot(b_.getInt64Ty(), "defer.status");
       b_.CreateStore(integer(0), status);
       const auto bytes = module_.getDataLayout().getTypeAllocSize(record->layout).getFixedValue();
