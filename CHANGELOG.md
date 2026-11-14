@@ -1,6 +1,11 @@
 # Changelog
 
 
+## 2026-11-14 — Source-preserving module contexts
+
+<a id="k-673"></a>
+**K-673 — Module-context continuity.** Agent assessment under H-106/H-109/H-166/H-212/H-231/H-233/H-245/H-247–H-249/H-372–H-378/H-398, D-10r147/D-15r22/D-17r57/D-18r91/D-21r11/D-26r13 and charter §§2/3.2/4/5.3/6.3/12: registry r680→681 and source reference294→295 record source-preserving file selection, explicit alias publication, separate lookup/symbol/family records and once-only encounter-ordered initialization. Preserve private definition context, full family coverage/capture, actual owners, explicit initialization-scope cleanup and shared native methods. Interleaved selection/first-reference incorporation, retained dependency scopes/shutdown, import adaptation, mixin, broader composition, cyclic construction, module-local callable captures, entry-installation cancellation and persistent ABI remain unproved; D-15’s whole operational/value-path qualification remains pending. No source-policy, regional allocation or fraction mechanism is selected. Prior capability reference: `8689f8465da4c964cb700802d3690b71431a4e94:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Family input contracts
 
 <a id="k-672"></a>

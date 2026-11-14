@@ -4,8 +4,6 @@
 #include "lang_syntax.hh"
 #include "lang_llvm.hh"
 
-#include <fstream>
-#include <iterator>
 #include <set>
 #include <string>
 #include <vector>
@@ -29,12 +27,8 @@ public:
       : warnings_(std::move(warnings)), specialize_(specialize) {}
 
   Compilation compile(const std::filesystem::path &entry, bool emit_text, bool emit_bitcode) {
-    std::ifstream input(entry, std::ios::binary);
-    if (!input) fail({entry.string()}, "cannot read CoD source");
-    const std::string source{std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
-    if (input.bad()) fail({entry.string()}, "failed while reading CoD source");
-    const auto forms = Parser(source, entry.string()).parse();
-    auto checked = ScalarChecker{}.check(forms);
+    const auto source = ModuleLoader{}.load(entry);
+    auto checked = ScalarChecker{}.check(source);
     std::vector<std::string> warnings;
     for (const auto &warning : checked.warnings) {
       if (warnings_.as_errors || warnings_.errors.contains(warning.kind))
@@ -42,7 +36,11 @@ public:
       warnings.push_back(warning.text());
     }
     auto [text, bitcode] = LLVMEmission{}.emit(checked, emit_text, emit_bitcode, specialize_);
-    return {{entry.string()}, {entry.string()}, std::move(warnings), std::move(text), std::move(bitcode), false};
+    Compilation result;
+    for (const auto &module : source.modules) result.scanned_modules.push_back(module.path.string());
+    for (const auto module : source.execution_order) result.execution_order.push_back(source.modules[module].path.string());
+    result.warnings = std::move(warnings); result.llvm_ir = std::move(text); result.bitcode = std::move(bitcode);
+    return result;
   }
 };
 

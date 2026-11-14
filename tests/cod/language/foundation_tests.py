@@ -63,7 +63,14 @@ def main():
         for name in selected:
             source, code, stdout, diagnostic = CASES[name]
             path = DIRECTORY / "foundation" / f"{name}.cod"
-            if source is not None:
+            if isinstance(source, dict):
+                directory = scratch / name
+                for filename, contents in source.items():
+                    target = directory / filename
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_text(contents)
+                path = directory / "main.cod"
+            elif source is not None:
                 path = scratch / f"{name}.cod"
                 path.write_text(source)
             for general in (False, True):

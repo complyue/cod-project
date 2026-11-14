@@ -1,7 +1,7 @@
 //===--- lang_checked.hh - LLVM-independent scalar obligations ------===//
 #pragma once
 
-#include "lang_syntax.hh"
+#include "lang_modules.hh"
 #include "lang_diagnostics.hh"
 #include "lang_exceptions.hh"
 #include "lang_completion.hh"
@@ -225,6 +225,7 @@ struct CheckedInstance {
 };
 struct CheckedMethod {
   const Form *source = nullptr;
+  size_t module = 0;
   std::vector<size_t> instances;
   std::vector<Type> parameters;
   ResultContract result;
@@ -273,11 +274,15 @@ struct CheckedSymbol {
   std::optional<Type> type;
   bool intrinsic_print = false;
   std::string name;
-  std::vector<size_t> methods = {};
+};
+struct CheckedFamily {
+  size_t symbol, module;
+  std::vector<size_t> methods;
 };
 
 struct CheckedProgram {
   std::vector<CheckedSymbol> symbols;
+  std::vector<CheckedFamily> families;
   std::vector<QueryEnvironment> query_environments{{}};
   std::vector<CheckedCallable> callables;
   std::vector<CheckedMethod> methods;
@@ -303,16 +308,42 @@ class ScalarChecker {
   using CallableChoices = std::vector<std::map<const Expression *, std::set<size_t>>>;
   CallableChoices callable_choices_;
   size_t checking_context_ = 0;
-  std::map<std::string, std::vector<size_t>> families_;
-  std::map<std::string, std::vector<CheckedMethod>> declarations_;
-  std::map<std::string, size_t> symbol_names_;
+  struct ModuleNames {
+    std::map<std::string, std::vector<size_t>> callables;
+    std::map<std::string, std::vector<CheckedMethod>> declarations;
+    std::map<std::string, size_t> symbols;
+    std::map<size_t, size_t> families;
+    std::set<size_t> selected_symbols;
+    std::set<std::string> selected_callables, values;
+    std::map<std::string, Type> exception_types;
+    struct Resource {
+      enum class Kind { symbol, callable, exception } kind;
+      size_t symbol = 0;
+      std::optional<size_t> family;
+      std::vector<size_t> methods;
+      Type type;
+      bool operator==(const Resource &) const = default;
+    };
+    std::map<std::string, Resource> exports;
+  };
+  std::vector<ModuleNames> modules_;
+  mutable size_t module_ = 0;
+  struct ModuleLookup {
+    size_t &current;
+    size_t previous;
+    ModuleLookup(size_t &current, size_t selected) : current(current), previous(current) { current = selected; }
+    ~ModuleLookup() { current = previous; }
+    ModuleLookup(const ModuleLookup &) = delete;
+    ModuleLookup &operator=(const ModuleLookup &) = delete;
+  };
+  ModuleNames &module_names() { return modules_.at(module_); }
+  const ModuleNames &module_names() const { return modules_.at(module_); }
+  std::map<const Expression *, size_t> initializer_modules_;
   std::map<const Form *, size_t> lexical_methods_;
   struct FreeBindings { std::vector<Capture> captures, queries, symbols; };
   mutable std::map<const Form *, FreeBindings> free_bindings_;
   std::map<const Form *, std::set<std::string>> free_types_;
   std::set<const Form *> warned_captures_;
-  std::set<std::string> module_values_;
-  std::map<std::string, Type> exception_types_;
   std::set<size_t> warned_missing_return_;
   std::set<const Expression *> warned_shadow_;
   LexicalState lexical_;
@@ -518,31 +549,33 @@ class ScalarChecker {
   }
   size_t resolve_symbol(const std::string &name, const Location &at, bool local,
                         std::optional<size_t> method = {}) const {
+    const ModuleLookup lookup(module_, method ? program_.methods[*method].module : module_);
     if (local || lexical_self(name, method)) fail(at, "nearest binding '" + name + "' is not a symbol");
-    if (method && module_values_.contains(name))
+    if (method && module_names().values.contains(name))
       implementation_gap(at, "module-local binding lookup and capture in callable bodies");
-    const auto found = symbol_names_.find(name);
-    if (found == symbol_names_.end()) fail(at, "unknown symbol '" + name + "'");
+    const auto found = module_names().symbols.find(name);
+    if (found == module_names().symbols.end()) fail(at, "unknown symbol '" + name + "'");
     return found->second;
   }
   NamedFamily named_family(const std::string &name, const TypeEvidenceState *state = nullptr) const {
+    const ModuleLookup lookup(module_, state && state->method ? program_.methods[*state->method].module : module_);
     if (state) {
       if (state->method) {
         const auto &method = program_.methods[*state->method];
         if (lexical_methods_.contains(method.source) && name == method.source->name)
           return {{*state->method}, nullptr, state->retained};
       }
-      const auto found = families_.find(name);
-      return found == families_.end() ? NamedFamily{} : NamedFamily{found->second};
+      const auto found = module_names().callables.find(name);
+      return found == module_names().callables.end() ? NamedFamily{} : NamedFamily{found->second};
     }
     if (checking_method_ && lexical_methods_.contains(checking_method_->source) && name == checking_method_->source->name)
       return {{checking_instance_->method}, checking_instance_};
-    const auto found = families_.find(name);
-    return found == families_.end() ? NamedFamily{} : NamedFamily{found->second};
+    const auto found = module_names().callables.find(name);
+    return found == module_names().callables.end() ? NamedFamily{} : NamedFamily{found->second};
   }
   ArgumentPreparation argument_preparation(const Expression &expr, const std::vector<Type> &prefix,
                                             const std::vector<ArgumentEvidence> &evidence, const Access &prefix_access, const Owners &prefix_owners, bool required = true, const TypeEvidenceState *state = nullptr) const {
-    if (expr.text == "cause_at" && (expr.intrinsic || (!families_.contains(expr.text) && !declarations_.contains(expr.text))) && expr.children.size() == 2)
+    if (expr.text == "cause_at" && (expr.intrinsic || (!module_names().callables.contains(expr.text) && !module_names().declarations.contains(expr.text))) && expr.children.size() == 2)
       return {ArgumentMode::value, prefix.empty() ? exception_type(0) : Type{Type::uint64}};
     if (expr.intrinsic) return {};
     std::vector<std::optional<Type>> arguments;
@@ -593,8 +626,8 @@ class ScalarChecker {
       ++selected;
     }
     auto &scope = *selected;
-    if (!checking_instance_ && !scope.id && symbol_names_.contains(name) &&
-        !program_.symbols[symbol_names_.at(name)].intrinsic_print)
+    if (!checking_instance_ && !scope.id && module_names().symbols.contains(name) &&
+        !program_.symbols[module_names().symbols.at(name)].intrinsic_print)
       implementation_gap(at, "same-scope value and symbol declarations");
     if (scope.bindings.contains(name)) fail(at, "duplicate declaration of '" + name + "' in one lexical scope");
     return scope;
@@ -1340,13 +1373,14 @@ class ScalarChecker {
   }
   Type resolve_type(Type type, const CheckedMethod *method = nullptr, const Substitutions *bindings = nullptr,
                     bool partial = false) const {
+    const ModuleLookup lookup(module_, method ? method->module : module_);
     if (method) if (const auto index = binder(*method, type)) {
       if (!bindings) return type;
       if (const auto &bound = (*bindings)[*index]) return *bound;
       if (partial) return type;
       implementation_gap(method->source->at, "type parameter is not determined by the arguments");
     }
-    if (type.kind == Type::named) if (const auto found = exception_types_.find(type.name); found != exception_types_.end()) return found->second;
+    if (type.kind == Type::named) if (const auto found = module_names().exception_types.find(type.name); found != module_names().exception_types.end()) return found->second;
     if (type.kind == Type::procedure) {
       for (auto &parameter : type.parameters) parameter = resolve_type(std::move(parameter), method, bindings, partial);
       // Throws declarations are resolved independently of argument inference.
@@ -1462,12 +1496,13 @@ class ScalarChecker {
 
   void resolve_captures(CheckedMethod &method) {
     if (method.captures_resolved) return;
+    const ModuleLookup lookup(module_, method.module);
     const auto &source = *method.source;
     const auto &free = free_bindings(source).captures;
     const auto required = [&](const Capture &capture) {
       return lexical_.lookup(capture.name).has_value() ||
           std::any_of(query_environment().bindings.begin(), query_environment().bindings.end(), [&](const auto &binding) { return binding.name == capture.name; }) ||
-          (!families_.contains(capture.name) && !declarations_.contains(capture.name) && !symbol_names_.contains(capture.name) &&
+          (!module_names().callables.contains(capture.name) && !module_names().declarations.contains(capture.name) && !module_names().symbols.contains(capture.name) &&
            capture.name != "isnull" && capture.name != "cause_at");
     };
     if (source.explicit_captures) {
@@ -1641,9 +1676,10 @@ class ScalarChecker {
   }
   std::vector<const CheckedMethod *> declaration_obligations(const CheckedMethod &method, const std::vector<Type> &arguments) const {
     std::vector<const CheckedMethod *> obligations;
+    const ModuleLookup lookup(module_, method.module);
     if (lexical_methods_.contains(method.source)) return obligations;
-    const auto found = declarations_.find(method.source->name);
-    if (found == declarations_.end()) return obligations;
+    const auto found = module_names().declarations.find(method.source->name);
+    if (found == module_names().declarations.end()) return obligations;
     for (const auto &declaration : found->second) {
       if (!declaration_match(declaration, arguments)) continue;
       const auto access = access_coverage(method, declaration);
@@ -1782,15 +1818,15 @@ class ScalarChecker {
   }
   size_t select(const Expression &expr, const std::vector<Type> &arguments, const Access &access, const Owners &owners) {
     const auto family = named_family(expr.text);
-    if (family.methods.empty()) fail(expr.at, declarations_.contains(expr.text)
+    if (family.methods.empty()) fail(expr.at, module_names().declarations.contains(expr.text)
         ? "no applicable implementation for declared callable '" + expr.text + "'" : "unknown callable '" + expr.text + "'");
     return select_family(family.methods, arguments, expr.at, expr.text,
         family.context ? family.context->environment : std::vector<Type>{}, family.retained_types(), access, owners,
         family.context ? family.context->query_environment : 0);
   }
   bool applicable_operation(const std::string &name, const std::vector<Type> &arguments, const Access &access = {}, const Owners &owners = {}) const {
-    const auto family = families_.find(name);
-    return family != families_.end() && !method_candidates(family->second, arguments, {}, access, owners).methods.empty();
+    const auto family = module_names().callables.find(name);
+    return family != module_names().callables.end() && !method_candidates(family->second, arguments, {}, access, owners).methods.empty();
   }
   void finish_named_call(const Expression &expr, const std::vector<Type> &arguments,
                          const std::vector<CheckedOperation> &views, CheckedOperation &operation,
@@ -1868,7 +1904,7 @@ class ScalarChecker {
   }
   std::set<size_t> builtin_declarations(const Expression &expr, const std::vector<Type> &arguments,
                                       const Type &result, bool destinations = false) const {
-    if (expr.intrinsic || !declarations_.contains(expr.text)) return {};
+    if (expr.intrinsic || !module_names().declarations.contains(expr.text)) return {};
     // Builtins have established signatures. Declarations constrain these just
     // as they constrain explicit methods; they cannot retarget a builtin result.
     Form source;
@@ -1913,6 +1949,7 @@ class ScalarChecker {
     }
   }
   Type callable_type(const CheckedMethod &checked, const std::vector<Type> &arguments, const ResultContract &contract) const {
+    const ModuleLookup lookup(module_, checked.module);
     const auto &method = *checked.source;
     Type type{Type::procedure}; type.pure_callable = method.kind == Form::Kind::function;
     type.value_result = !contract.borrowed();
@@ -2235,6 +2272,7 @@ class ScalarChecker {
   // Evidence only: no reads, captures, demands, storage or cleanup equations are created here.
   // Operand hints defer validation to ordered checking; required typeof queries validate their bounded source forms here.
   std::optional<Type> type_evidence(const Expression &expr, TypeEvidenceState &state, bool contextual = false, const Type *expected = nullptr) const {
+    const ModuleLookup lookup(module_, state.method ? program_.methods[*state.method].module : module_);
     ViewEvidence view{false, false, {}};
     const auto type = query_evidence(expr, state, view, contextual, expected);
     if (state.required && !type) implementation_gap(expr.at, "typeof requires a known declaration or operand type with a proved result contract");
@@ -2545,7 +2583,7 @@ class ScalarChecker {
         if (state.required) implementation_gap(expr.at, "storage exchange in typeof");
         return Type::void_type;
       }
-      if (expr.text == "cause_at" && (expr.intrinsic || (!families_.contains(expr.text) && !declarations_.contains(expr.text)))) {
+      if (expr.text == "cause_at" && (expr.intrinsic || (!module_names().callables.contains(expr.text) && !module_names().declarations.contains(expr.text)))) {
         if (state.required && (arguments.size() != 2 || arguments[0].kind != Type::exception || arguments[1] != Type::uint64))
           fail(expr.at, "cause_at requires an exception and a u64 index");
         return exception_type(0);
@@ -2554,11 +2592,11 @@ class ScalarChecker {
       const auto family = expr.intrinsic ? NamedFamily{} : named_family(expr.text, &state);
       const auto &retained = family.retained_types();
       const auto candidates = method_candidates(family.methods, arguments, retained, access, owners, &state);
-      if (family.methods.empty() && !expr.intrinsic && declarations_.contains(expr.text) &&
+      if (family.methods.empty() && !expr.intrinsic && module_names().declarations.contains(expr.text) &&
           (!eager_operation(expr.text) || !eager_types(expr, arguments).error.empty())) {
         std::optional<Type> result;
         std::optional<ResultMode> mode;
-        for (const auto &declaration : declarations_.at(expr.text)) {
+        for (const auto &declaration : module_names().declarations.at(expr.text)) {
           const auto substitutions = declaration_match(declaration, arguments);
           if (!substitutions || !admits_access(declaration, access)) continue;
           const auto equality = match_owners(declaration, owners, &state);
@@ -2801,8 +2839,8 @@ class ScalarChecker {
     std::vector<CheckedOperation> captures;
     for (const auto &capture : definition.captures) {
       Expression name{}; name.kind = Expression::Kind::name; name.at = capture.at; name.text = capture.name;
-      const auto value = !lexical_.lookup(capture.name) && families_.contains(capture.name)
-          ? materialize(families_.at(capture.name), nullptr, capture.at) : read_binding(name);
+      const auto value = !lexical_.lookup(capture.name) && module_names().callables.contains(capture.name)
+          ? materialize(module_names().callables.at(capture.name), nullptr, capture.at) : read_binding(name);
       if (value.type.kind != Type::procedure || (value.binding && !bindings_->at(*value.binding).callable_value))
         implementation_gap(capture.at, "capture of ordinary lexical cells or non-callable values");
       environment.push_back(value.type); captures.push_back(value);
@@ -2830,10 +2868,13 @@ class ScalarChecker {
   CheckedOperation materialize_family(size_t symbol, const Type &view, const Location &at) {
     if (view.kind != Type::procedure || view.pure_callable)
       fail(at, "a symbolic procedure family requires a procedure view");
-    const auto &family = program_.symbols[symbol].methods;
+    const auto selected = module_names().families.find(symbol);
+    if (selected == module_names().families.end()) fail(at, "symbolic family has no applicable implementation");
+    const auto family_id = selected->second;
+    const auto &family = program_.families[family_id].methods;
     if (family.empty()) fail(at, "symbolic family has no applicable implementation");
     const auto found = std::find_if(program_.callables.begin(), program_.callables.end(), [&](const auto &value) {
-      return value.family == symbol && value.type == view;
+      return value.family == family_id && value.type == view;
     });
     const auto id = std::distance(program_.callables.begin(), found);
     if (found == program_.callables.end()) {
@@ -2857,7 +2898,7 @@ class ScalarChecker {
         else implementation_gap(at, "unproved symbolic family input domain");
         domains.push_back(std::move(domain));
       }
-      CheckedCallable value{view, {}, symbol};
+      CheckedCallable value{view, {}, family_id};
       std::vector<Type> arguments;
       size_t obligations = 0;
       const auto account = [&] {
@@ -3228,7 +3269,7 @@ class ScalarChecker {
     };
     const auto &method = instance ? program_.methods[instance->method].source : nullptr;
     if (instance && !(lexical_methods_.contains(method) && expr.text == method->name) &&
-        !lexical_.lookup(expr.text) && module_values_.contains(expr.text) &&
+        !lexical_.lookup(expr.text) && module_names().values.contains(expr.text) &&
         (expr.kind == K::name || expr.kind == K::call || expr.kind == K::perform || expr.kind == K::behave))
       implementation_gap(expr.at, "module-local binding lookup and capture in callable bodies");
     if (expr.spread) implementation_gap(expr.at, "spread arguments");
@@ -3241,11 +3282,11 @@ class ScalarChecker {
       if (!expr.owner_name.empty()) operation.owners = {expr.owner_name == "here" ? cleanup_scope_ : named_owner(expr.owner_name, expr.at)};
       break;
     case K::name: {
-      if (!lexical_.lookup(expr.text) && families_.contains(expr.text))
-        operation = materialize(families_.at(expr.text), expected, expr.at);
-      else if (!lexical_.lookup(expr.text) && declarations_.contains(expr.text))
+      if (!lexical_.lookup(expr.text) && module_names().callables.contains(expr.text))
+        operation = materialize(module_names().callables.at(expr.text), expected, expr.at);
+      else if (!lexical_.lookup(expr.text) && module_names().declarations.contains(expr.text))
         fail(expr.at, "no applicable implementation for declared callable '" + expr.text + "'");
-      else if (!lexical_.lookup(expr.text) && symbol_names_.contains(expr.text))
+      else if (!lexical_.lookup(expr.text) && module_names().symbols.contains(expr.text))
         implementation_gap(expr.at, "materialization of a compile-time symbol object");
       else operation = read_binding(expr, read);
       break;
@@ -3410,7 +3451,7 @@ class ScalarChecker {
             (evidence[i].read_only && *evidence[i].read_only != views[i].read_only) ||
             (evidence[i].owner && evidence[i].owner != one_owner(views[i]))))
           implementation_gap(expr.children[i]->at, "operand type/access/owner evidence depends on completion or contextual inference");
-      if (expr.text == "cause_at" && (expr.intrinsic || (!families_.contains(expr.text) && !declarations_.contains(expr.text)))) {
+      if (expr.text == "cause_at" && (expr.intrinsic || (!module_names().callables.contains(expr.text) && !module_names().declarations.contains(expr.text)))) {
         if (arguments.size() != 2 || arguments[0].kind != Type::exception || arguments[1] != Type::uint64)
           fail(expr.at, "cause_at requires an exception and a u64 index");
         operation.type = completes ? exception_type(0) : Type{Type::never};
@@ -3451,7 +3492,7 @@ class ScalarChecker {
         const auto &operand = *expr.children[0];
         Type source;
         if (symbol.type->kind == Type::procedure && operand.kind == K::name &&
-            !lexical_.lookup(operand.text) && symbol_names_.contains(operand.text)) {
+            !lexical_.lookup(operand.text) && module_names().symbols.contains(operand.text)) {
           const auto selected = resolve_symbol(operand.text, operand.at,
               query_environment().symbol_shadows.contains(operand.text), instance ? std::optional<size_t>{instance->method} : std::nullopt);
           operations[&operand] = materialize_family(selected, *symbol.type, operand.at);
@@ -4154,13 +4195,18 @@ class ScalarChecker {
       begin_check(program_.entry_storage, program_.entry_bindings, program_.entry, proving);
       AbruptFlow entry_flow{1, {}};
       abrupt_ = &entry_flow;
-      for (const auto *expr : program_.initializers)
+      std::vector<std::map<std::string, size_t>> bindings(modules_.size());
+      for (const auto *expr : program_.initializers) {
+        const ModuleLookup lookup(module_, initializer_modules_.at(expr));
+        lexical_.scopes.front().bindings.swap(bindings[module_]);
         if (check(*expr, nullptr, program_.entry, true, true) == Type::never) lexical_.live = false;
+        for (const auto &[name, id] : lexical_.scopes.front().bindings) module_names().values.insert(name);
+        lexical_.scopes.front().bindings.swap(bindings[module_]);
+      }
       CheckedOperation entry_result; entry_result.type = lexical_.live ? Type{Type::void_type} : Type{Type::never};
       finish_scope(entry_result, entry_flow, nullptr, 0, program_.initializers.empty() ? Location{} : program_.initializers.front()->at);
       if (!proving) solve_targets();
     }
-    for (const auto &[name, id] : lexical_.scopes.front().bindings) module_values_.insert(name);
   }
   void observe_outcome(size_t reason, const LexicalState &state) {
     std::set<size_t> known;
@@ -4182,6 +4228,7 @@ class ScalarChecker {
     checking_context_ = i + 1;
     auto &instance = program_.instances[i];
     checking_instance_ = &instance;
+    const ModuleLookup lookup(module_, program_.methods[instance.method].module);
     const auto &method = *program_.methods[instance.method].source;
     checking_method_ = &program_.methods[instance.method];
     for (const bool proving : {false, true}) {
@@ -4249,35 +4296,106 @@ class ScalarChecker {
     return observed_;
   }
 
-public:
-  CheckedProgram check(const std::vector<std::unique_ptr<Form>> &forms) {
+  void select_module_resource(const Form &form, size_t dependency) {
+    using Resource = ModuleNames::Resource;
+    if (form.kind != Form::Kind::using_resource && form.kind != Form::Kind::symbol_from)
+      implementation_gap(form.at, "receiver-adapted import and mixin module contexts remain unproved");
+    const auto &exports = modules_.at(dependency).exports;
+    const auto found = exports.find(form.name);
+    if (found == exports.end()) fail(form.at, "source module does not export '" + form.name + "'");
+    const auto &resource = found->second;
+    if (form.symbolic != (resource.kind == Resource::Kind::symbol))
+      fail(form.at, "selected resource does not match the requested symbol or lexical category");
+    if (resource.kind == Resource::Kind::symbol) {
+      if (form.kind == Form::Kind::using_resource && !form.using_symbol)
+        implementation_gap(form.at, "symbolic destination selection; select its identity with 'symbol from' and install explicitly");
+      const auto [alias, inserted] = module_names().symbols.emplace(form.alias, resource.symbol);
+      if (!inserted && alias->second != resource.symbol) fail(form.at, "conflicting symbol alias '" + form.alias + "'");
+      if (resource.family) {
+        const auto [family, new_family] = module_names().families.emplace(resource.symbol, *resource.family);
+        if (!new_family && family->second != *resource.family)
+          implementation_gap(form.at, "composition of distinct selected interpretations for one symbol");
+      }
+      module_names().selected_symbols.insert(resource.symbol);
+    } else if (resource.kind == Resource::Kind::exception) {
+      const auto [alias, inserted] = module_names().exception_types.emplace(form.alias, resource.type);
+      if (!inserted && alias->second != resource.type) fail(form.at, "conflicting type alias '" + form.alias + "'");
+    } else {
+      const auto [alias, inserted] = module_names().callables.emplace(form.alias, resource.methods);
+      if (!inserted && alias->second != resource.methods)
+        implementation_gap(form.at, "same-alias callable composition remains unproved");
+      module_names().selected_callables.insert(form.alias);
+    }
+  }
+
+  void publish_module(const SourceModule &source) {
+    using Resource = ModuleNames::Resource;
+    for (const auto &form : source.forms) if (form->kind == Form::Kind::export_resource) {
+      Resource resource{};
+      if (form->symbolic) {
+        const auto found = module_names().symbols.find(form->name);
+        if (found == module_names().symbols.end()) fail(form->at, "unknown exported symbol '" + form->name + "'");
+        resource.kind = Resource::Kind::symbol; resource.symbol = found->second;
+        if (const auto family = module_names().families.find(resource.symbol); family != module_names().families.end()) resource.family = family->second;
+      } else if (const auto found = module_names().callables.find(form->name); found != module_names().callables.end()) {
+        resource.kind = Resource::Kind::callable; resource.methods = found->second;
+      } else if (const auto found = module_names().exception_types.find(form->name); found != module_names().exception_types.end()) {
+        resource.kind = Resource::Kind::exception; resource.type = found->second;
+      } else if (module_names().declarations.contains(form->name)) {
+        implementation_gap(form->at, "publication of a bodyless callable contract remains unproved");
+      } else fail(form->at, "unknown exported resource '" + form->name + "'");
+      const auto [published, inserted] = module_names().exports.emplace(form->name, resource);
+      if (!inserted && published->second != resource) fail(form->at, "conflicting public alias '" + form->name + "'");
+    }
+  }
+
+  static void check_dependency_lifetime(const Expression &expr, bool iteration = false) {
+    using K = Expression::Kind;
+    if (expr.kind == K::block && expr.scoped) return;
+    if (expr.kind == K::deferred || expr.kind == K::pointer_group || expr.kind == K::alias ||
+        expr.kind == K::region_binding || (expr.kind == K::callable && !expr.definition->name.empty()) ||
+        (!iteration && (expr.kind == K::effect || expr.kind == K::procedure_effect)))
+      implementation_gap(expr.at, "retained dependency initialization scope remains unproved; use an explicit full scope for resources that end during initialization");
+    for (size_t i = 0; i < expr.children.size(); ++i) {
+      const bool loop_body = (expr.kind == K::range_for && i == 2) || (expr.kind == K::fold && i == 3);
+      check_dependency_lifetime(*expr.children[i], iteration || loop_body);
+    }
+  }
+
+  void register_module(const SourceModule &source, std::optional<size_t> &print_symbol) {
+    const auto &forms = source.forms;
+    for (const auto &form : forms) if (form->exporting)
+      implementation_gap(form->at, "export import publication remains unproved; use source-preserving selection and standalone export where applicable");
+    for (const auto &form : forms)
+      if (const auto dependency = source.dependencies.find(form.get()); dependency != source.dependencies.end())
+        select_module_resource(*form, dependency->second);
     for (const auto &form : forms) {
       if ((form->kind != Form::Kind::using_resource && form->kind != Form::Kind::import_resource) || form->path != "std:exceptions" || form->using_symbol) continue;
       const auto found = std::find_if(exception_categories.begin(), exception_categories.end(), [&](const ExceptionDescriptor &entry) { return form->name == entry.name; });
       if (found == exception_categories.end()) fail(form->at, "unknown intrinsic exception selection '" + form->name + "'");
-      if (!exception_types_.emplace(form->alias, exception_type(exception_id(found->category))).second) fail(form->at, "duplicate exception type selection");
+      if (!module_names().exception_types.emplace(form->alias, exception_type(exception_id(found->category))).second) fail(form->at, "duplicate exception type selection");
       program_.exception_values = true;
     }
     std::vector<const Form *> definitions;
-    std::optional<size_t> print_symbol;
     for (const auto &form : forms) {
-      if (form->kind == Form::Kind::expression) { program_.initializers.push_back(form->body.get()); continue; }
+      if (source.dependencies.contains(form.get())) continue;
+      if (form->kind == Form::Kind::expression || form->kind == Form::Kind::export_resource) continue;
       if ((form->kind == Form::Kind::using_resource || form->kind == Form::Kind::import_resource) && form->path == "std:exceptions" && !form->using_symbol) continue;
       if (form->kind == Form::Kind::using_resource && form->using_symbol && form->path == "std:io" && form->name == "print") {
         if (!print_symbol) {
           print_symbol = program_.symbols.size();
           program_.symbols.push_back({{}, true, "print"});
         }
-        if (!symbol_names_.emplace(form->alias, *print_symbol).second) fail(form->at, "duplicate print symbol binding");
+        if (!module_names().symbols.emplace(form->alias, *print_symbol).second) fail(form->at, "duplicate print symbol binding");
         continue;
       }
       if (form->kind == Form::Kind::symbol) {
         if (form->symbol_owner) implementation_gap(form->at, "regional symbol ownership contracts");
-        if (exception_types_.contains(form->name)) implementation_gap(form->at, "same-scope type and symbol declarations");
+        if (module_names().exception_types.contains(form->name)) implementation_gap(form->at, "same-scope type and symbol declarations");
         const auto type = resolve_type(*form->result_type);
         CheckedMethod contract; contract.source = form.get();
         signature_type(contract, type, form->at);
-        if (!symbol_names_.emplace(form->name, program_.symbols.size()).second)
+        if (!module_names().symbols.emplace(form->name, program_.symbols.size()).second)
           fail(form->at, "duplicate symbol binding '" + form->name + "'");
         program_.symbols.push_back({type, false, form->name});
         continue;
@@ -4325,6 +4443,7 @@ public:
       if (!form->result_owner.empty() && form->result_type == Type::void_type) fail(form->at, "void cannot be a borrowed result");
       CheckedMethod prepared;
       prepared.source = form;
+      prepared.module = module_;
       for (const auto &p : form->type_parameters) prepared.type_parameters.push_back(p.name);
       if (const auto parent = parents.find(form); parent != parents.end()) {
         prepared.parent = method_ids.at(parent->second);
@@ -4366,28 +4485,36 @@ public:
         if (parameter.bound) implementation_gap(parameter.at, "bounded type parameters");
       std::optional<size_t> symbol;
       if (form->symbolic) {
-        if (exception_types_.contains(form->name)) implementation_gap(form->at, "same-scope type and symbol declarations");
-        if (const auto found = symbol_names_.find(form->name); found != symbol_names_.end()) symbol = found->second;
+        if (module_names().exception_types.contains(form->name)) implementation_gap(form->at, "same-scope type and symbol declarations");
+        if (const auto found = module_names().symbols.find(form->name); found != module_names().symbols.end()) symbol = found->second;
         else {
           if (!prepared.type_parameters.empty() || !prepared.result.type)
             implementation_gap(form->at, "implicit symbolic declaration requires an independently established concrete signature");
           const auto type = callable_type(prepared, prepared.parameters, prepared.result);
           signature_type(prepared, type, form->at);
-          symbol = program_.symbols.size(); symbol_names_.emplace(form->name, *symbol);
+          symbol = program_.symbols.size(); module_names().symbols.emplace(form->name, *symbol);
           program_.symbols.push_back({type, false, form->name});
         }
         const auto &declared = program_.symbols[*symbol];
         if (!declared.type || declared.type->kind != Type::procedure || declared.type->pure_callable)
           fail(form->at, "symbolic procedure definition requires a procedure symbol");
       }
+      const bool lexical = lexical_methods_.contains(form);
+      if (symbol && module_names().selected_symbols.contains(*symbol))
+        fail(form->at, "using and symbol selection do not grant callable extension permission");
+      if (!symbol && !lexical && module_names().selected_callables.contains(form->name))
+        fail(form->at, "using does not grant callable extension permission");
       if (!form->body) {
-        declarations_[form->name].push_back(std::move(prepared));
+        module_names().declarations[form->name].push_back(std::move(prepared));
         continue;
       }
       const auto id = program_.methods.size();
-      const bool lexical = lexical_methods_.contains(form);
       std::vector<size_t> local_family;
-      auto &family = symbol ? program_.symbols[*symbol].methods : lexical ? local_family : families_[form->name];
+      if (symbol && !module_names().families.contains(*symbol)) {
+        module_names().families.emplace(*symbol, program_.families.size());
+        program_.families.push_back({*symbol, module_, {}});
+      }
+      auto &family = symbol ? program_.families[module_names().families.at(*symbol)].methods : lexical ? local_family : module_names().callables[form->name];
       for (const auto other : lexical ? std::vector<size_t>{} : family) {
         const auto &definition = program_.methods[other];
         if (implies(prepared, definition) && implies(definition, prepared)) {
@@ -4406,18 +4533,37 @@ public:
       if (lexical) lexical_methods_[form] = id;
       else family.push_back(id);
     }
-    for (const auto &[name, contracts] : declarations_)
-      if (symbol_names_.contains(name) && std::any_of(contracts.begin(), contracts.end(), [](const auto &contract) { return !contract.source->symbolic; })) {
-        if (!program_.symbols[symbol_names_.at(name)].intrinsic_print)
+    for (const auto &[name, contracts] : module_names().declarations)
+      if (module_names().symbols.contains(name) && std::any_of(contracts.begin(), contracts.end(), [](const auto &contract) { return !contract.source->symbolic; })) {
+        if (!program_.symbols[module_names().symbols.at(name)].intrinsic_print)
           implementation_gap(contracts.front().source->at, "same-scope callable and symbol declarations");
         fail(contracts.front().source->at, "callable conflicts with symbol '" + name + "'");
       }
-    for (const auto &[name, id] : symbol_names_)
-      if (families_.contains(name)) {
+    for (const auto &[name, id] : module_names().symbols)
+      if (module_names().callables.contains(name)) {
         if (!program_.symbols[id].intrinsic_print)
-          implementation_gap(program_.methods[families_[name].front()].source->at, "same-scope callable and symbol declarations");
-        fail(program_.methods[families_[name].front()].source->at, "callable conflicts with symbol '" + name + "'");
+          implementation_gap(program_.methods[module_names().callables[name].front()].source->at, "same-scope callable and symbol declarations");
+        fail(program_.methods[module_names().callables[name].front()].source->at, "callable conflicts with symbol '" + name + "'");
       }
+    for (const auto &[name, type] : module_names().exception_types)
+      if (module_names().symbols.contains(name) || module_names().callables.contains(name) || module_names().declarations.contains(name))
+        implementation_gap({source.path.string()}, "same-scope type and callable/symbol bindings");
+    publish_module(source);
+  }
+
+public:
+  CheckedProgram check(const SourceProgram &source) {
+    modules_.resize(source.modules.size());
+    std::optional<size_t> print_symbol;
+    for (const auto module : source.construction_order) {
+      const ModuleLookup lookup(module_, module);
+      register_module(source.modules[module], print_symbol);
+    }
+    for (const auto &[module, expr] : source.initializers) {
+      if (module) check_dependency_lifetime(*expr);
+      program_.initializers.push_back(expr);
+      initializer_modules_.emplace(expr, module);
+    }
     for (size_t i = 0; i < program_.methods.size(); ++i) {
       const auto &method = *program_.methods[i].source;
       if (!method.type_parameters.empty() || lexical_methods_.contains(&method)) continue;

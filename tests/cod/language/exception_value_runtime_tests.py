@@ -88,6 +88,7 @@ extern "C" void cod_lang_exception_finish() noexcept {
 '''
 EXPECTED_VALUES = ['1', '1', '0', '1', '1', '0', '0', '1', '5']
 EXTRA_SOURCES = []
+SOURCE_FILES = {}
 
 
 def main():
@@ -96,6 +97,10 @@ def main():
     with tempfile.TemporaryDirectory(prefix="cod-exception-runtime-") as directory:
         scratch = Path(directory)
         entry = scratch / "main.cod"
+        for name, contents in SOURCE_FILES.items():
+            path = scratch / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(contents)
         entry.write_text(SOURCE)
         for general in (False, True):
             ir, bc, runtime = [scratch / name for name in ("main.ll", "main.bc", "runtime.cc")]
