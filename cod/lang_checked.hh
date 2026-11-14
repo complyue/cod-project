@@ -167,20 +167,22 @@ struct QueryBinding {
   ViewEvidence view;
   bool operator==(const QueryBinding &) const = default;
 };
-// Declaration evidence has no runtime payload or authority to access retained storage.
-struct QueryEnvironment {
-  std::vector<QueryBinding> bindings;
-  std::vector<std::vector<OwnerMatch>> owners;
-  bool operator==(const QueryEnvironment &) const = default;
-};
 enum class ResultMode { value, borrowed_ref, borrowed_ptr };
 struct ResultContract {
   std::optional<Type> type;
   ResultMode mode = ResultMode::value;
-  std::string owner;
+  std::string owner = {};
   bool read_only = false;
   bool borrowed() const { return mode != ResultMode::value; }
   bool nullable() const { return mode == ResultMode::borrowed_ptr; }
+  bool operator==(const ResultContract &) const = default;
+};
+// Declaration evidence has no runtime payload or authority to access retained storage.
+struct QueryEnvironment {
+  std::vector<QueryBinding> bindings;
+  std::vector<std::vector<OwnerMatch>> owners;
+  std::optional<ResultContract> result;
+  bool operator==(const QueryEnvironment &) const = default;
 };
 struct CheckedInstance {
   size_t method;
@@ -204,6 +206,8 @@ struct CheckedMethod {
   std::vector<Capture> captures;
   std::vector<Capture> queries;
   bool captures_resolved = false;
+  bool contextual_result = false;
+  bool declaration_context() const { return contextual_result || !queries.empty(); }
   std::vector<std::string> type_parameters;
   std::vector<size_t> retained_types;
   std::optional<size_t> parent;
@@ -1503,7 +1507,9 @@ class ScalarChecker {
       fail(at, "compiler resource limit: 4096 scalar checking obligations while preparing '" + definition.source->name + "'");
     const auto substitutions = match(definition, arguments, retained);
     if (!substitutions) throw std::logic_error("unchecked method demand");
-    auto result = require_result(method, arguments, retained, at);
+    const auto &supplied = program_.query_environments[query_environment].result;
+    auto result = supplied ? *supplied : require_result(method, arguments, retained, at);
+    definition.contextual_result = definition.contextual_result || supplied.has_value();
     const auto id = program_.instances.size();
     auto context = arguments; context.insert(context.end(), environment.begin(), environment.end());
     context.insert(context.end(), retained.begin(), retained.end());
@@ -2052,9 +2058,11 @@ class ScalarChecker {
           continue;
         }
         const auto declared_owner = declaration->owner_name.empty() ? std::optional<size_t>{} : owner_evidence(declaration->owner_name, state, declaration->at);
-        const auto initial = type_evidence(*declaration->children.front(), state, declaration->annotation.has_value());
+        const auto declared = declaration->annotation ? std::optional<Type>{annotation(*declaration->annotation)} : std::nullopt;
+        const auto initial = type_evidence(*declaration->children.front(), state, declared.has_value(),
+            declared && declared->kind == Type::procedure ? &*declared : nullptr);
         if (initial == Type::never) completes = false;
-        state.bindings[declaration->text] = declaration->annotation ? annotation(*declaration->annotation) : initial;
+        state.bindings[declaration->text] = declared ? declared : initial;
         state.owner_bindings.erase(declaration->text);
         const bool value = expr.declaration_kind == "val" || expr.declaration_kind == "func" || expr.declaration_kind == "proc";
         std::optional<bool> readonly = declaration->read_only || (value && expr.fixed_binding);
@@ -2360,7 +2368,7 @@ class ScalarChecker {
         return Type::void_type;
       }
       if (expected && expected->kind == Type::procedure)
-        return callable_query({lexical_methods_.at(expr.definition.get())}, expected, expr.at, state);
+        return callable_query({lexical_methods_.at(expr.definition.get())}, expected, expr.at, state, true);
       return contextual && !state.required ? std::nullopt : callable_evidence(lexical_methods_.at(expr.definition.get()), &state);
     default:
       state.complete = false;
@@ -2397,9 +2405,10 @@ class ScalarChecker {
       state.owner_relations[{owner, other}] = compare_owners(owner, other);
     return state;
   }
-  size_t retain_query_environment(const CheckedMethod &method) {
-    if (method.queries.empty()) return 0;
+  size_t retain_query_environment(const CheckedMethod &method, const std::optional<ResultContract> &result = {}) {
+    if (method.queries.empty() && !result) return 0;
     QueryEnvironment environment;
+    environment.result = result;
     const auto state = evidence_state();
     std::vector<size_t> owners;
     for (const auto &query : method.queries) {
@@ -2442,9 +2451,26 @@ class ScalarChecker {
     size_t method;
     std::vector<Type> arguments, retained;
     Type type;
+    std::optional<ResultContract> definition_result;
   };
+  static ResultContract expected_result(const CheckedMethod &method, const Type &expected, const Location &at) {
+    ResultContract result{*expected.target};
+    if (expected.value_result) return result;
+    const auto role = expected.owners.empty() ? 0 : expected.owners.back();
+    if (!role) implementation_gap(at, "expected borrowed result requires an independently established owner");
+    for (size_t i = 0; i < expected.parameters.size(); ++i) if (expected.owners[i] == role) {
+      const auto &owner = method.source->parameters[i].owner;
+      if (owner.empty() || (!result.owner.empty() && result.owner != owner))
+        implementation_gap(at, "expected result owner does not map to one definition owner");
+      result.owner = owner;
+    }
+    if (result.owner.empty()) implementation_gap(at, "expected result owner is not established by a parameter");
+    result.mode = !expected.nullable_views.empty() && expected.nullable_views.back() ? ResultMode::borrowed_ptr : ResultMode::borrowed_ref;
+    result.read_only = !expected.const_views.empty() && expected.const_views.back();
+    return result;
+  }
   std::optional<CallableSelection> try_select_callable(const std::vector<size_t> &family, const Type *expected, const Location &at,
-                                                        const TypeEvidenceState *state = nullptr) const {
+                                                        const TypeEvidenceState *state = nullptr, bool definition_site = false) const {
     const auto &definition = program_.methods[family.front()];
     if (expected) signature_type(CheckedMethod{}, *expected, at);
     if (!expected && (family.size() != 1 || !program_.methods[family.front()].source->type_parameters.empty()))
@@ -2468,13 +2494,10 @@ class ScalarChecker {
       access.push_back(!expected->const_views.empty() && expected->const_views[i]);
     const auto selected = select_method(family, arguments, at, "callable value", retained, access, {}, state);
     const auto &method = program_.methods[selected];
-    const auto result = infer_result(selected, arguments, retained, state);
-    const bool contextual_result = expected && !method.source->result_type && method.source->name.empty();
-    if (!result) {
-      if (contextual_result && !result_probe_)
-        implementation_gap(at, "result establishment from an independently expected callable contract");
-      return {};
-    }
+    const bool contextual_result = definition_site && expected && !method.result.type && method.source->name.empty();
+    const auto supplied = contextual_result ? std::optional<ResultContract>{expected_result(method, *expected, at)} : std::nullopt;
+    const auto result = supplied ? supplied : infer_result(selected, arguments, retained, state);
+    if (!result) return {};
     if (nested_binder(method, *result->type)) {
       if (result_probe_) return {};
       implementation_gap(at, "type parameter is not determined by the arguments");
@@ -2489,28 +2512,23 @@ class ScalarChecker {
       for (const auto &failure : type.throws_types) for (const auto category : exception_possibilities(failure))
         if (exception_categories[category].checked && !allowed.contains(category)) fail(at, "callable view omits a required checked exception");
       type.throws_types = expected->throws_types;
-      if (type != *expected) {
-        if (contextual_result && type.pure_callable == expected->pure_callable &&
-            type.parameters == expected->parameters)
-          implementation_gap(at, "result establishment from an independently expected callable contract");
-        fail(at, "selected method does not satisfy the callable view contract");
-      }
+      if (type != *expected) fail(at, "selected method does not satisfy the callable view contract");
     }
-    return CallableSelection{selected, std::move(arguments), std::move(retained), std::move(type)};
+    return CallableSelection{selected, std::move(arguments), std::move(retained), std::move(type), supplied};
   }
-  CallableSelection select_callable(const std::vector<size_t> &family, const Type *expected, const Location &at) const {
-    if (const auto selected = try_select_callable(family, expected, at)) return *selected;
+  CallableSelection select_callable(const std::vector<size_t> &family, const Type *expected, const Location &at, bool definition_site = false) const {
+    if (const auto selected = try_select_callable(family, expected, at, nullptr, definition_site)) return *selected;
     implementation_gap(at, "unproved callable result; provide an independent result contract");
   }
   std::optional<Type> callable_query(const std::vector<size_t> &family, const Type *expected, const Location &at,
-                                   const TypeEvidenceState &state) const {
-    if (const auto selected = try_select_callable(family, expected, at, &state)) return selected->type;
+                                   const TypeEvidenceState &state, bool definition_site = false) const {
+    if (const auto selected = try_select_callable(family, expected, at, &state, definition_site)) return selected->type;
     return {};
   }
-  CheckedOperation materialize(const std::vector<size_t> &family, const Type *expected, const Location &at) {
+  CheckedOperation materialize(const std::vector<size_t> &family, const Type *expected, const Location &at, bool definition_site = false) {
     auto &definition = program_.methods[family.front()];
     if (lexical_methods_.contains(definition.source)) resolve_captures(definition);
-    const auto selection = select_callable(family, expected, at);
+    const auto selection = select_callable(family, expected, at, definition_site);
     std::vector<Type> environment;
     std::vector<CheckedOperation> captures;
     for (const auto &capture : definition.captures) {
@@ -2526,7 +2544,7 @@ class ScalarChecker {
         if (std::none_of(free_bindings(*definition.source).captures.begin(), free_bindings(*definition.source).captures.end(),
                          [&](const auto &used) { return used.name == capture.name; }))
           program_.warnings.push_back({Warning::unused_capture, capture.at, "unused callable capture '" + capture.name + "' remains retained"});
-    const auto selected = demand(selection.method, selection.arguments, at, environment, selection.retained, retain_query_environment(definition));
+    const auto selected = demand(selection.method, selection.arguments, at, environment, selection.retained, retain_query_environment(definition, selection.definition_result));
     const auto &type = selection.type;
     const auto found = std::find_if(program_.callables.begin(), program_.callables.end(), [&](const auto &value) {
       return value.instance == selected && value.type == type;
@@ -2812,7 +2830,7 @@ class ScalarChecker {
       break;
     }
     case K::callable: {
-      operation = materialize({lexical_methods_.at(expr.definition.get())}, expected, expr.at);
+      operation = materialize({lexical_methods_.at(expr.definition.get())}, expected, expr.at, true);
       if (!expr.definition->name.empty()) {
         const auto id = declare(expr.definition->name, operation.type, false, true, expr.at);
         initialize(id); operation.place = id;
@@ -3917,7 +3935,15 @@ public:
     check_entry();
     for (size_t i = 0; i < program_.instances.size(); ++i) check_instance(i);
     if (reaching_callables() != callable_choices_) throw std::logic_error("callable flow changed after validation");
-    for (const auto &method : program_.methods) if (!method.instances.empty()) {
+    for (auto &method : program_.methods) if (!method.instances.empty()) {
+      // Carry definition-result evidence only when ordinary type context cannot
+      // distinguish the checked bodies. Fixed contracts need no extra native input.
+      method.contextual_result = std::any_of(method.instances.begin(), method.instances.end(), [&](size_t a) {
+        return std::any_of(method.instances.begin(), method.instances.end(), [&](size_t b) {
+          return program_.instances[a].context == program_.instances[b].context &&
+                 !same_result(program_.instances[a].result, program_.instances[b].result);
+        });
+      });
       const auto &first = program_.instances[method.instances.front()];
       for (const auto id : method.instances) {
         const auto &instance = program_.instances[id];

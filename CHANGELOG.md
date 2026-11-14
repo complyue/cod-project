@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Independent expected callable results
+
+<a id="k-657"></a>
+**K-657 — Contextual-result continuity.** Agent assessment under H-420–H-424, C-84/P-356 and charter §§5.3/6.3/12: registry r662→663 and source reference278→279 cover missing result contracts supplied at fresh callable definitions, retained generic context and unchanged existing callable signatures. Preserve parameter/kind/effect contracts, unique owners, access/initialization, ordered evaluation, cleanup and finite shared native coverage; fixed contracts need no added native context input. H-428/H-429 and D-14r89/D-17r55/D-23r10/D-28r1 retain their qualified versus pending boundaries. This increment chooses no storage layout, live-growth mechanism, C++ rename, RHS normalization, fraction conversion or permanent ABI. Prior capability reference: `1b43a1737de90f2791936e2e78135c49e3fe3d2c:tests/cod/language/README.md`; integrated design scope: `1379158e0397b3da00272e320b522702ff0a8e1e`.
+
 ## 2026-11-14 — Distinct regional and lexical storage
 
 <a id="h-429"></a>

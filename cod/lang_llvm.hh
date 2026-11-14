@@ -443,7 +443,7 @@ class LLVMEmission {
         throw std::logic_error("native call lacks its lexical type context");
       prepared.insert(prepared.end(), retained_types_.begin(), retained_types_.end());
     }
-    if (!program_->methods[method].queries.empty()) {
+    if (program_->methods[method].declaration_context()) {
       if (!instance && !query_environment_) throw std::logic_error("native call lacks its declaration evidence context");
       prepared.push_back(instance ? b_.getInt32(program_->instances[*instance].query_environment) : query_environment_);
     }
@@ -1365,7 +1365,7 @@ class LLVMEmission {
       retained_types_.push_back(type);
       arguments_.push_back(b_.CreateInsertValue(empty_scalar(), type, 1));
     }
-    if (!method.queries.empty())
+    if (method.declaration_context())
       query_environment_ = function->getArg(method.parameters.size() + !method.captures.empty() + method.retained_types.size());
     llvm::Value *returns_value = nullptr;
     if (instance) {
@@ -1397,7 +1397,7 @@ class LLVMEmission {
       b_.CreateCondBr(b_.CreateICmpEQ(load(exit_), b_.getInt8(2)), failed, ready);
       b_.SetInsertPoint(failed); clear_value(result_); b_.CreateBr(ready); b_.SetInsertPoint(ready);
     }
-    const auto result_index = method.parameters.size() + !method.captures.empty() + method.retained_types.size() + !method.queries.empty();
+    const auto result_index = method.parameters.size() + !method.captures.empty() + method.retained_types.size() + method.declaration_context();
     if (function->arg_size() > result_index) b_.CreateStore(load(result_), function->getArg(result_index));
     b_.CreateRet(outcome(load(result_), load(category_), load(site_), load(fatal_), load(requested_), load(available_), load(cause_)));
   }
@@ -1436,22 +1436,22 @@ public:
     for (size_t i = 0; i < program.methods.size(); ++i) {
       const auto &method = program.methods[i]; if (method.instances.empty()) continue;
       const auto prefix = "cod.method." + std::to_string(i) + "." + method.source->name;
-      if (method.source->type_parameters.empty() && method.captures.empty() && method.retained_types.empty() && method.queries.empty()) {
+      if (method.source->type_parameters.empty() && method.captures.empty() && method.retained_types.empty() && !method.declaration_context()) {
         general_[i] = declare(prefix + ".native", method.source->parameters.size(), caller_destination(i), false, 0);
         specialized_[method.instances.front()] = general_[i];
         continue;
       }
-      general_[i] = declare(prefix + ".general", method.source->parameters.size(), caller_destination(i), !method.captures.empty(), method.retained_types.size() + !method.queries.empty());
+      general_[i] = declare(prefix + ".general", method.source->parameters.size(), caller_destination(i), !method.captures.empty(), method.retained_types.size() + method.declaration_context());
       if (specialize) for (const auto id : method.instances) {
         std::string name = prefix + ".specialized";
         for (const auto &type : program.instances[id].context) name += "." + type_name(type);
-        if (!method.queries.empty()) name += ".query." + std::to_string(program.instances[id].query_environment);
-        specialized_[id] = declare(name, method.source->parameters.size(), caller_destination(i), !method.captures.empty(), method.retained_types.size() + !method.queries.empty());
+        if (method.declaration_context()) name += ".query." + std::to_string(program.instances[id].query_environment);
+        specialized_[id] = declare(name, method.source->parameters.size(), caller_destination(i), !method.captures.empty(), method.retained_types.size() + method.declaration_context());
       }
     }
     for (size_t i = 0; i < program.methods.size(); ++i) {
       const auto &method = program.methods[i]; if (method.instances.empty()) continue;
-      if (method.source->type_parameters.empty() && method.captures.empty() && method.retained_types.empty() && method.queries.empty()) {
+      if (method.source->type_parameters.empty() && method.captures.empty() && method.retained_types.empty() && !method.declaration_context()) {
         body(general_[i], method, method.instances.front());
         continue;
       }
