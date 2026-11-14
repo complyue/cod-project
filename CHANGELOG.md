@@ -1,5 +1,84 @@
 # Changelog
 
+## 2026-11-14 — Current design integration and compiler handoff
+
+<a id="h-420"></a>
+**H-420 — Integrate the confirmed rules and retain the design worktree.** Human/source: current project user in this design-discussion chat, recorded 2026-11-14 America/Los_Angeles; exact timestamp, personal name and durable message URL unavailable. The user requests removal of obsolete owner-acquisition wording from current repository content, commit/push, and notification of the main development chat to merge at its next suitable point and “让祂按最新规则推进编译器开发”. The user also directs this worktree to retain its dedicated branch and rebase onto merged main before continuing design updates. This authorizes delivery/integration and compiler development under H-413–H-419's confirmed scalar, initializer and unique/null-owner rules and their established consequences. It does not approve the whole D-23/P-354 value path, unrelated pending mechanisms, a permanent ABI, fractions or build/toolchain reconfiguration. Historical evidence remains in this changelog under the repository's current-state rule.
+
+<a id="k-current-design-20261114"></a>
+**K-CURRENT-DESIGN-20261114 — Current-state cleanup and scoped integration.** Agent assessment under H-420 and charter §§3.3/4.3/5.3/6.3/8/12: registry r650→651; D-14r86→87, D-23r6→7 and source reference267→268 remove obsolete null-owner narrative from current documents, record the explicit integration/development scope and distinguish compiler migration gaps from acceptance requirements. H-413–H-419's contract, existing value/dependency paths, constraints and acceptance remain; D-10r147/D-18r91/D-24r3 dependencies are unchanged. No source, test, build or toolchain change. Committed starting material: `f3da9988f20c7e6d35643ad703a01b050160dd24:design/RegionalOwnership.md`, `design/ScalarCallResults.md`, `design/DesignAuthorityRegistry.md` and `tests/cod/language/README.md`; this commit includes the preceding design-discussion records.
+
+## 2026-11-14 — Explicit null owners without outer syntax
+
+<a id="h-418"></a>
+**H-418 — Put null ownership on the declaration or literal.** Human/source: current project user in this design-discussion chat, recorded 2026-11-14 America/Los_Angeles; exact timestamp, personal name and durable URL unavailable. The user states:
+
+> 我建议引入 `null in here|<some-region>|outer[ outer [outer ...]]` 语法，`ptr p:T = null` 直接拒绝，必须在变量侧或者 null 侧声明要给owner。
+
+Accepted direction: owner-qualified null and rejection of a direct null-initialized ptr declaration without owner information on either side. The proposed forms name the current scope or a region; outer traversal was separately questioned and then withdrawn by H-419. No target allocation, runtime owner metadata, lifetime extension or whole-file approval is inferred.
+
+<a id="h-419"></a>
+**H-419 — No outer owner selector.** Human/source: same user/chat/date, answer to `request_user_input_async` call `call_afc77220a09841b0ac465973d7f25e92`, item 0. Asked whether outer should walk enclosing lexical scopes without implicit caller-scope access, the user replies:
+
+> 我想想算了，就不支持 outer 语法了，用户自己在想要的scope声明一个变量，内层可以直接 = 那个变量把 owner 隐含带过来
+
+Accepted: omit outer/repeated-outer syntax from H-418's proposal. Use a variable declared in the desired scope as the reference initializer to carry its owner into an inner scope. Current forms retain here and named owners. Owner propagation is ordinary checked reference initialization, including nullable views; it does not alias a pointer binding slot, create a target or extend the target owner's lifetime. D-14r86/D-10r147/D-23r6 records this source scope; final document approval remains outstanding.
+
+<a id="k-null-owner-20261114"></a>
+**K-NULL-OWNER-20261114 — Null owner syntax integration.** Agent assessment under H-418/H-419 and charter §§3.3/4.3/5.3/6.3/8/12: registry r649→650; D-14r85→86, D-23r5→6 and D-10r146→147 extend P-282's statically unique-owner constraint with explicit declaration/literal forms. Here follows existing full lexical scopes, named generic/region owners retain their checked meaning, explicit mismatches reject, and null views preserve owner evidence through initialization/clearing. Outer is not part of the grammar. Existing scalar, reference, cleanup, non-bits placement and fraction contracts remain; no source implementation, tests, build change or broader qualification. H-417/K-UNIQUE-OWNER-20261114 records the underlying static-owner decision.
+
+## 2026-11-14 — Statically unique reference owners
+
+<a id="h-417"></a>
+**H-417 — Ref/ptr owners must be statically unique.** Human/source: current project user in this design-discussion chat, recorded 2026-11-14 America/Los_Angeles; exact timestamp, personal name and durable URL unavailable. The user states:
+
+> CoD 要求 ref/ptr 必须有静态可证明的唯一 owner
+>
+> 声明不显式写出 `in xxx` 时，由编译器根据它的初始化表达式静态推断，推断结果不唯一则报错。
+
+Accepted: each ref/ptr has one statically provable owner; omission requests inference from initialization, and non-unique inference is an error. This closes the different-owner reference-result alternative question instead of authorizing an owner union or keeping multiple candidate owners alive. H-271's fixed-owner rules remain. Symbolic generic owners and runtime target choice within one owner remain possible; neither physical owner addresses nor one common owner for all captures is required. D-14r85/D-18r91/D-23r5 carries this scope; D-10r146/D-24r3 carries dependency alignment. The strict rule supersedes H-314's ownerless-null first-assignment exception; the null-specific syntax is discussed separately. No abstract concrete-type representation, runtime owner metadata, whole-file approval or compiler implementation is selected.
+
+<a id="k-unique-owner-20261114"></a>
+**K-UNIQUE-OWNER-20261114 — Owner policy closure.** Agent assessment under H-417 and charter §§3.3/4.3/5.3/6.3/8/12: registry r648→649; D-14r84→85 and D-18r90→91 require unique reference-owner proof through initializers, aliases and borrowed-result joins, updating P-244/P-246/P-282/P-300. D-23r4→5 removes the pending different-owner policy; D-10r145→146/D-24r2→3 aligns null/inference dependencies. Null absence supplies no owner, so the universal rule requires owner evidence at initialization rather than first later assignment. The checker may use one symbolic owner and proved equality; live-but-distinct alternatives reject. Complete callable values, cleanup, scalar snapshots, non-bits placement and fraction constraints remain; abstract type evidence and full-document qualifications retain their separate boundaries. No code, build or test change. Earlier scoped decisions remain in H-413–H-416; committed starting texts are at `f3da9988f20c7e6d35643ad703a01b050160dd24` under `design/`.
+
+## 2026-11-14 — Reference initializer simplification and hidden results
+
+<a id="h-416"></a>
+**H-416 — Ref declarations bind with equals.** Human/source: current project user in this design-discussion chat, recorded 2026-11-14 America/Los_Angeles; exact timestamp, personal name and durable URL unavailable. Asked about simplifying ref initialization, the assistant recommended rejecting `ref r <- ...`, preserving existing-target aliasing with `ref r = existing`, and materializing only independent scalar RHS values. The user replied:
+
+> 同意。
+
+Accepted: the stated ref-initializer simplification in D-23r4/D-14r84. Conceptual construction plus transfer is one initialization operation, preserving once-only evaluation and preventing exposure of an uninitialized readable ref. This replaces the analogous ref transfer shorthand, not H-296's separately confirmed ptr shorthand, later payload writes, or alias/access/lifetime rules. The same message asks whether a hidden uninitialized val result slot is a useful model and asks about non-val results; those are explanation/review questions, not a mandatory ABI, new cleanup policy or whole-file approval. Scalar snapshots and the existing explicit completion-replacement rules remain independently applicable.
+
+<a id="k-scalar-init-20261114"></a>
+**K-SCALAR-INIT-20261114 — Reference initialization and result retention.** Agent assessment under H-416 and charter §§3.3/5.3/6.3/8/12: registry r647→648, D-23r3→4 and D-14r83→84 apply the ref syntax correction through P-255/P-257 while preserving H-413–H-415 scalar/default-owner/val rules. D-23 explains pending private bits versus retained target selection, abrupt return, successful delivery and replacement under H-361/H-362/D-17. It preserves D-18 complete callable/capture and D-17 unique owning-result cleanup contracts; different-owner alternatives, abstract evidence transport, aggregates and full document/value-path approval remain separate. No mandatory result allocation, code, build or test change. Earlier discussion decisions remain H-413–H-415/K-SCALAR-VAL-20261114; committed starting text is `f3da9988f20c7e6d35643ad703a01b050160dd24:design/ScalarCallResults.md`.
+
+## 2026-11-14 — Scalar value results and call-site storage
+
+<a id="h-413"></a>
+**H-413 — Scalar results default to val.** Human/source: current project user in this design-discussion chat, recorded 2026-11-14 America/Los_Angeles; exact message timestamp, personal name and durable URL unavailable. The user states:
+
+> 这要结合接收此调用的 call site 语义语法一起看，另外 scalar  返回类型我决定应该默认 val 性质而非 ref。 call-site 的接收变量是 val/ref ，以及用了 = 还是 <- 会有区别，你细化厘清各种组合，没有疑义的直接定，然后把需要和我讨论敲定的再过一遍
+
+Accepted: ordinary bare scalar results have independent val semantics; examine receiving val/ref declarations and `=`/`<-` together, settle direct consequences and return genuine choices for discussion. This replaces H-201's bare-scalar borrowed-result default, not explicit borrowed results, non-bits regional rules or assignment-family destination views. It does not approve the whole D-23 file, an initializer exception, generic/aggregate result defaults, an ABI or implementation work.
+
+<a id="h-414"></a>
+**H-414 — Scalar owner annotations select views.** Human/source: same user/chat/date, subsequent message; exact timestamp and durable URL unavailable:
+
+> 感觉 对于 scalar 类型 T， `T in o` 应该视为 `ref  T in o` ，仅 `T` 才视为 `val T` 。 val 性质不应该有 owner 限制/关联，也不允许声明 `val T in o` 这种类型。
+
+Accepted: scalar T without an owner defaults to val; T in o means ref T in o; val carries no owner restriction/association and val T in o is invalid. This retains H-273's explicit-owner shorthand alongside H-413's new default. Storage containing bits still has a lifetime for references to it; no hidden regional placement, ownership transfer, aggregate policy or whole-file approval follows. Current scope: D-23r3/D-14r83, with D-24r2 as a constrained inference dependency.
+
+<a id="h-415"></a>
+**H-415 — Val initialization requires bits transfer.** Human/source: same user/design chat, recorded 2026-11-14 America/Los_Angeles, structured answer to `request_user_input_async` call `call_ca13c997039e490ebc76c72bb2cd1797`, item 0; exact timestamp unavailable. Asked whether a new scalar val requires `val n:T <- f()` or also permits `val n:T = f()` as a declaration-only copy, with later `n = f()` remaining invalid, the user selected:
+
+> Require `<-` for val initialization (Recommended)
+
+Accepted: scalar val declaration initialization requires `<-`; `=` is rejected for both initialization and later assignment to val storage. Ref initialization/materialization and rebinding retain their separate contracts. D-23r3/D-14r83 records this final topic choice; complete-file/value-path approval remains outstanding, and no compiler implementation or callable-declaration redesign is authorized.
+
+<a id="k-scalar-val-20261114"></a>
+**K-SCALAR-VAL-20261114 — Scalar call-site integration.** Agent assessment under H-413–H-415 and charter §§2–3/§5.3/§6/§8/§12: registry r646→647, D-23r2→3 and D-14r82→83 record the confirmed scalar replacement/val initializer rule and derive declaration/assignment, materialization, access, cleanup and failure consequences from H-270/H-292/H-296/H-313/H-361/H-362/H-366–H-369. P-172/P-246/P-255 reflect the bounded update; P-354 remains a pending value path and P-355 dependency-only. D-24r1→2 aligns its dependency without qualifying inference. Existing explicit borrowed, assignment-family, callable, regional and fraction contracts continue; scalar topic choices are resolved, while complete-file/value-path approval remains outstanding. No code, build or test change. Prior texts: `f3da9988f20c7e6d35643ad703a01b050160dd24` at `design/ScalarCallResults.md`, `design/RegionalOwnership.md` and `design/CallableResultInference.md`.
+
 ## 2026-11-14 — Selected-target cleanup initialization
 
 <a id="k-645"></a>

@@ -1,6 +1,6 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 145 · Recorded: 2026-11-13 · Phase: language/application co-design.
+Design revision: 147 · Recorded: 2026-11-14 · Phase: language/application co-design.
 
 ## Design authority
 
@@ -9,11 +9,11 @@ Design revision: 145 · Recorded: 2026-11-13 · Phase: language/application co-d
 - **Contract boundary:** Preserve identities, selected contexts, perform/current-binding distinction, owners and function effect exclusion. D-14 owns storage, D-15 worlds, D-17 completion, D-18 callable values, D-21 families. Cyclic initialization, persistent ABI, broader captures/results/contexts and family mechanisms remain open; old passing reports do not qualify them.
 - **Invariants / non-goals:** preserve region-only non-bits storage, zero-cost relocation, no regional copy/move, same-owner stored edges, preserved hidden/captured owners and no dynamic access or procedure calls from functions. No module namespace, runtime interface/borrow registry, immutable snapshot, allocator/toolchain change or SNN model is selected. Compound views, higher-order overload values, full qualifiers/ownership construction/transfer and mailbox remain bounded or pending.
 - **Acceptance:** Validate lexical and captured/current calls, explicit-memory versus dynamic effects, scope restoration, owner preservation and cleanup across normal and exceptional completion. Current compiler availability is recorded in the [source capability reference](../tests/cod/language/README.md).
-- **Evidence / continuity:** human baselines are the H records identified by the registry; [K-632](../CHANGELOG.md#k-632) covers this editorial consolidation without changing qualification or semantic scope.
+- **Evidence / continuity:** human baselines are the H records identified by the registry; [K-NULL-OWNER-20261114](../CHANGELOG.md#k-null-owner-20261114) covers r146→147's ordinary-reference null-owner syntax alignment under H-418/H-419. Symbolic installation, current/captured context and independent qualified behavior retain their scope.
 
 ## Ordinary storage and checked nullable access
 
-H-309–H-315 distinguishes direct val bits, initialization-checked ref targets and nullable ptr targets. [D-14](RegionalOwnership.md#ref-and-ptr-declaration-direction) owns field storage, local lifetimes and first non-null owner acquisition. [D-17](ExceptionControl.md#checked-nullpointerexception) owns checked NPE: local handling or immediate func/proc throws, with mandatory handling at module top level. Symbolic procedure signatures retain this contract; neither perform captures nor behave's current bindings erase it. Null is a reserved literal and isnull does not dereference its pointer operand.
+H-309–H-315 distinguishes direct val bits, initialization-checked ref targets and nullable ptr targets. [D-14](RegionalOwnership.md#ref-and-ptr-declaration-direction) owns field storage, local lifetimes and H-417's unique static owner requirement and H-418/H-419's declaration-side or literal-side null owner, with here/named-owner qualification and no outer syntax. [D-17](ExceptionControl.md#checked-nullpointerexception) owns checked NPE: local handling or immediate func/proc throws, with mandatory handling at module top level. Symbolic procedure signatures retain this contract; neither perform captures nor behave's current bindings erase it. Null is a reserved literal and isnull does not dereference its pointer operand.
 
 These ordinary storage declarations do not replace the flat typed TLS slots. Effect-only writes, capture, shadow restoration, region-symbol backing and non-extractable resources retain their contracts. Val parameters copy supported bits into callee-local storage, while external references retain explicit owners. New source acceptance is recorded with the current validation; earlier native evidence retains its source/compiler scope.
 
