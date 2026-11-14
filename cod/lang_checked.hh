@@ -653,8 +653,8 @@ class ScalarChecker {
     refresh_initialized(lexical_);
   }
   static void initialize_selection(LexicalState &state, size_t id) {
-    state.selections.initialized.insert(id);
-    for (const auto input : inputs(state.inputs)) state.input_selections[input].initialized.insert(id);
+    state.selections.initialize(id);
+    for (const auto input : inputs(state.inputs)) state.input_selections[input].initialize(id);
     refresh_initialized(state);
   }
   static void assign_selection(LexicalState &state, size_t id, const CleanupEquations::Targets &targets) {
@@ -755,7 +755,10 @@ class ScalarChecker {
       auto &effect = effects.emplace(reason, CleanupEquations::Effects{reads,
           found == target.initialized.end() ? std::set<size_t>{} : written_targets(found->second, views)}).first->second;
       if (found != target.initialized.end()) for (const auto parameter : found->second)
-        if (const auto binding = selection(views.at(parameter))) effect.selections.initialized.insert(*binding);
+        if (const auto binding = selection(views.at(parameter))) {
+          effect.selections.initialize(*binding);
+          effect.selections.refine(*binding, false);
+        }
     }
     return effects;
   }
@@ -965,8 +968,13 @@ class ScalarChecker {
       state.expired_bindings.erase(id);
       state.target_versions.erase(id);
       state.selections.initialized.erase(id);
+      state.selections.entry_initialized.erase(id);
+      state.selections.entry_nonnull.erase(id);
       state.selections.targets.erase(id);
-      for (auto &[input, selections] : state.input_selections) { selections.initialized.erase(id); selections.targets.erase(id); }
+      for (auto &[input, selections] : state.input_selections) {
+        selections.initialized.erase(id); selections.entry_initialized.erase(id);
+        selections.entry_nonnull.erase(id); selections.targets.erase(id);
+      }
     }
     for (const auto &[id, owners] : state.owners) if (owners.contains(scope.id)) state.expired_bindings.insert(id);
     if (const auto owned = scope_storage_.find(scope.id); owned != scope_storage_.end()) for (const auto id : owned->second) {
@@ -1011,14 +1019,8 @@ class ScalarChecker {
     auto &targets = lexical_.targets.at(test.binding);
     const bool null = value == test.null_when_true;
     std::erase_if(targets, [&](size_t place) { return (place == null_target) != null; });
-    const auto refine_selection = [&](CleanupEquations::Selections &selections) {
-      if (auto found = selections.targets.find(test.binding); found != selections.targets.end()) {
-        found->second.nullable = null;
-        if (null) found->second.places.clear();
-      }
-    };
-    refine_selection(lexical_.selections);
-    for (const auto input : inputs(lexical_.inputs)) refine_selection(lexical_.input_selections.at(input));
+    lexical_.selections.refine(test.binding, null);
+    for (const auto input : inputs(lexical_.inputs)) lexical_.input_selections.at(input).refine(test.binding, null);
     if (!null) lexical_.null_sources.at(test.binding).clear();
     lexical_.live = lexical_.live && !targets.empty();
   }

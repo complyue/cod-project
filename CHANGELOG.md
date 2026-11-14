@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Cleanup entry-target initialization
+
+<a id="k-647"></a>
+**K-647 — Entry-target proof continuity.** Agent assessment: registry r647→648 and source reference268→269 continue D-14r82/H-297/C-65/P-258's initialization-before-read contract and D-17r54/C-63/P-235/P-236/P-321–P-324's cleanup ordering/completion, under D-18r90 owner/alias constraints, D-21r11/D-26r9 native coverage and charter §§3.3/6.3/12. Shared summaries retain initialization and proved presence of entry targets independently of later rebinding; read obligations retain their ordering. Acceptance includes generic nullable parameters, failed checks/registrations, guarded recovery, repeated actions and exact native release without runtime initialization flags. Complete overlapping-alias histories, wider saved-target/queue correlations, regional mechanisms, permanent ABI and pending designs remain excluded. Prior capability reference: `a8c2f5f2bd2ccfb0be67deb9a099ff1ecd27968c:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Cleanup target relationships
 
 <a id="k-646"></a>

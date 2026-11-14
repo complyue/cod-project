@@ -42,8 +42,21 @@ public:
   // A selection fact describes the current target, so rebinding can invalidate it.
   struct Selections {
     std::set<size_t> initialized, invalidated;
+    // Initialization of entry targets survives changes to the current selection.
+    std::set<size_t> entry_initialized, entry_nonnull;
     std::map<size_t, Targets> targets;
     bool operator==(const Selections &) const = default;
+    void initialize(size_t id) {
+      initialized.insert(id);
+      if (!invalidated.contains(id)) entry_initialized.insert(id);
+    }
+    void refine(size_t id, bool null) {
+      if (!null && !invalidated.contains(id)) entry_nonnull.insert(id);
+      if (auto target = targets.find(id); target != targets.end()) {
+        target->second.nullable = null;
+        if (null) target->second.places.clear();
+      }
+    }
     void invalidate(size_t id) { initialized.erase(id); invalidated.insert(id); targets.erase(id); }
     void assign(size_t id, Targets next) {
       if (next.preserves) {
@@ -59,21 +72,36 @@ public:
       bool changed;
       do {
         changed = false;
-        for (const auto &[id, target] : targets) if (!target.preserves) {
-          if (std::all_of(target.places.begin(), target.places.end(), [&](size_t place) { return known.contains(place); }))
+        for (const auto &[id, target] : targets) {
+          if ((!target.preserves || entry_initialized.contains(id)) &&
+              std::all_of(target.places.begin(), target.places.end(), [&](size_t place) { return known.contains(place); }))
             changed = initialized.insert(id).second || changed;
-          if (!target.nullable && target.places.size() == 1 && initialized.contains(id))
+          if (!target.preserves && !target.nullable && target.places.size() == 1 && initialized.contains(id))
             changed = known.insert(*target.places.begin()).second || changed;
         }
       } while (changed);
     }
+    std::set<size_t> substitute_entries(const std::set<size_t> &entries, const std::set<size_t> &nonnull,
+                                        std::set<size_t> &known) const {
+      std::set<size_t> preserved;
+      for (const auto id : entries) {
+        if (const auto target = targets.find(id); target != targets.end() && !target->second.preserves &&
+            (!target->second.nullable || nonnull.contains(id)) && target->second.places.size() == 1)
+          known.insert(*target->second.places.begin());
+        if (!invalidated.contains(id)) preserved.insert(id);
+      }
+      return preserved;
+    }
     void then(const Selections &next, std::set<size_t> &known) {
-      const auto before = *this;
+      auto before = *this;
+      for (const auto id : next.entry_nonnull) { before.refine(id, false); refine(id, false); }
+      const auto entries = before.substitute_entries(next.entry_initialized, next.entry_nonnull, known);
+      entry_initialized.insert(entries.begin(), entries.end());
       for (const auto id : next.invalidated) invalidate(id);
       for (const auto &[id, update] : next.targets) {
         auto target = update;
         if (target.preserves) {
-          if (before.initialized.contains(id) && std::all_of(target.places.begin(), target.places.end(),
+          if ((before.initialized.contains(id) || next.entry_initialized.contains(id)) && std::all_of(target.places.begin(), target.places.end(),
               [&](size_t place) { return known.contains(place); })) initialized.insert(id);
           if (const auto previous = before.targets.find(id); previous != before.targets.end()) {
             target.preserves = false;
@@ -88,6 +116,8 @@ public:
     void merge(const Selections &other) {
       const auto before = *this;
       std::erase_if(initialized, [&](size_t id) { return !other.initialized.contains(id); });
+      std::erase_if(entry_initialized, [&](size_t id) { return !other.entry_initialized.contains(id); });
+      std::erase_if(entry_nonnull, [&](size_t id) { return !other.entry_nonnull.contains(id); });
       invalidated.insert(other.invalidated.begin(), other.invalidated.end());
       for (auto it = targets.begin(); it != targets.end();) {
         if (const auto next = other.targets.find(it->first); next != other.targets.end()) {
@@ -106,6 +136,8 @@ public:
     std::optional<size_t> selection = {};
     // A sufficient cover of the actual non-null read target.
     std::optional<std::set<size_t>> targets = {};
+    std::set<size_t> entry_initialized = {};
+    std::set<size_t> entry_nonnull = {};
     bool operator==(const ReadRequirement &) const = default;
     bool satisfied(size_t place, const std::set<size_t> &known, const Selections &selections) const {
       const auto ready = [&](size_t id) { return initialized.contains(id) || known.contains(id); };
@@ -113,6 +145,10 @@ public:
           (targets && std::all_of(targets->begin(), targets->end(), ready));
     }
     void substitute(const Selections &before) {
+      entry_initialized = before.substitute_entries(entry_initialized, entry_nonnull, initialized);
+      entry_initialized.insert(before.entry_initialized.begin(), before.entry_initialized.end());
+      std::erase_if(entry_nonnull, [&](size_t id) { return before.invalidated.contains(id); });
+      entry_nonnull.insert(before.entry_nonnull.begin(), before.entry_nonnull.end());
       if (!selection) return;
       if (const auto target = before.targets.find(*selection); target != before.targets.end() && !target->second.preserves) {
         if (!targets) targets = target->second.places;
@@ -122,6 +158,8 @@ public:
     }
     void merge(const ReadRequirement &other) {
       std::erase_if(initialized, [&](size_t id) { return !other.initialized.contains(id); });
+      std::erase_if(entry_initialized, [&](size_t id) { return !other.entry_initialized.contains(id); });
+      std::erase_if(entry_nonnull, [&](size_t id) { return !other.entry_nonnull.contains(id); });
       if (selection != other.selection) selection.reset();
       if (targets && other.targets) targets->insert(other.targets->begin(), other.targets->end());
       else targets.reset();
