@@ -2546,9 +2546,9 @@ public:
           implementation_gap(method.source->at, "generic instances with different storage/view layouts");
         for (const auto &[expr, operation] : instance.operations) {
           const auto &baseline = first.operations.at(expr);
-          if (operation.borrowed_result != baseline.borrowed_result || operation.captures != baseline.captures ||
+          if (operation.captures != baseline.captures ||
               operation.snapshot != baseline.snapshot || operation.captured_place != baseline.captured_place)
-            implementation_gap(expr->at, "generic instances with different value/view call contracts");
+            implementation_gap(expr->at, "generic instances with different deferred capture layouts");
         }
       }
     }

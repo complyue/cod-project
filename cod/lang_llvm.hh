@@ -757,6 +757,41 @@ class LLVMEmission {
     if (const auto found = value_owners_.find(value); found != value_owners_.end()) value_owners_[prepared] = found->second;
     return prepared;
   }
+  template <typename Key, typename Emit>
+  llvm::Value *contextual_value(const Expression &expr, const std::map<Key, std::vector<size_t>> &alternatives,
+                                 const std::string &label, const Emit &emit) {
+    if (alternatives.size() == 1) return emit(alternatives.begin()->first);
+    const auto all_facts = facts_;
+    const auto all_contexts = frame_types_;
+    auto *join = block(label + ".prepared");
+    auto *saved = environments_ ? owned_slot(*temporaries_, label + ".value") : nullptr;
+    std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> incoming;
+    for (const auto &[key, indices] : alternatives) {
+      auto *selected = block(label + ".prepare"), *next = block(label + ".next");
+      llvm::Value *condition = b_.getFalse();
+      facts_.clear(); frame_types_.clear();
+      for (const auto i : indices) {
+        condition = b_.CreateOr(condition, matches(arguments_, *all_contexts.at(i)));
+        facts_.push_back(all_facts[i]); frame_types_.push_back(all_contexts[i]);
+      }
+      b_.CreateCondBr(condition, selected, next);
+      b_.SetInsertPoint(selected);
+      auto *value = emit(key);
+      if (reachable()) {
+        if (saved) assign_value(saved, value, expr.at);
+        incoming.emplace_back(value, b_.GetInsertBlock()); b_.CreateBr(join);
+      }
+      b_.SetInsertPoint(next);
+    }
+    facts_ = all_facts; frame_types_ = all_contexts;
+    fail_path(ExceptionCategory::unsound_runtime_typing, expr.at);
+    b_.SetInsertPoint(join);
+    if (incoming.empty()) { b_.CreateUnreachable(); return nullptr; }
+    if (saved) { auto *value = load(saved); value_owners_[value] = saved; return value; }
+    auto *value = b_.CreatePHI(scalar_, incoming.size(), label + ".value");
+    for (const auto &[prepared, from] : incoming) value->addIncoming(prepared, from);
+    return value;
+  }
   llvm::Value *prepare_argument(const Expression &expr, size_t index, bool copy) {
     const auto &child = *expr.children[index];
     const auto prepare = [&](ArgumentMode mode) -> llvm::Value * {
@@ -772,38 +807,7 @@ class LLVMEmission {
     std::map<ArgumentMode, std::vector<size_t>> alternatives;
     for (size_t i = 0; i < facts_.size(); ++i)
       alternatives[facts_[i]->at(&expr).arguments.at(index).mode].push_back(i);
-    if (alternatives.size() == 1) return prepare(alternatives.begin()->first);
-
-    const auto all_facts = facts_;
-    const auto all_contexts = frame_types_;
-    auto *join = block("argument.prepared");
-    auto *saved = environments_ ? owned_slot(*temporaries_, "argument.value") : nullptr;
-    std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> incoming;
-    for (const auto &[mode, indices] : alternatives) {
-      auto *selected = block("argument.prepare"), *next = block("argument.next");
-      llvm::Value *condition = b_.getFalse();
-      facts_.clear(); frame_types_.clear();
-      for (const auto i : indices) {
-        condition = b_.CreateOr(condition, matches(arguments_, *all_contexts.at(i)));
-        facts_.push_back(all_facts[i]); frame_types_.push_back(all_contexts[i]);
-      }
-      b_.CreateCondBr(condition, selected, next);
-      b_.SetInsertPoint(selected);
-      auto *value = prepare(mode);
-      if (reachable()) {
-        if (saved) assign_value(saved, value, child.at);
-        incoming.emplace_back(value, b_.GetInsertBlock()); b_.CreateBr(join);
-      }
-      b_.SetInsertPoint(next);
-    }
-    facts_ = all_facts; frame_types_ = all_contexts;
-    fail_path(ExceptionCategory::unsound_runtime_typing, child.at);
-    b_.SetInsertPoint(join);
-    if (incoming.empty()) { b_.CreateUnreachable(); return nullptr; }
-    if (saved) { auto *value = load(saved); value_owners_[value] = saved; return value; }
-    auto *value = b_.CreatePHI(scalar_, incoming.size(), "argument.value");
-    for (const auto &[prepared, from] : incoming) value->addIncoming(prepared, from);
-    return value;
+    return contextual_value(child, alternatives, "argument", prepare);
   }
   std::vector<llvm::Value *> prepare_arguments(const Expression &expr, bool deferred = false) {
     std::vector<llvm::Value *> arguments;
@@ -863,6 +867,14 @@ class LLVMEmission {
   llvm::Value *emit_expression(const Expression &expr, bool read = true, bool discard = false) {
     using K = Expression::Kind;
     const auto &fact = facts_.front()->at(&expr);
+    if (std::any_of(facts_.begin(), facts_.end(), [&](const auto *facts) {
+          return facts->at(&expr).borrowed_result != fact.borrowed_result;
+        })) {
+      if (!read) implementation_gap(expr.at, "context-dependent value/view results without a common value-consuming boundary");
+      std::map<bool, std::vector<size_t>> alternatives;
+      for (size_t i = 0; i < facts_.size(); ++i) alternatives[facts_[i]->at(&expr).borrowed_result].push_back(i);
+      return contextual_value(expr, alternatives, "result", [&](bool) { return emit_expression(expr, read, discard); });
+    }
     if (std::all_of(facts_.begin(), facts_.end(), [&](const auto *facts) {
           const auto builtin = facts->at(&expr).builtin;
           return builtin == BuiltinOperation::unary || builtin == BuiltinOperation::binary;
