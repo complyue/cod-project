@@ -48,7 +48,7 @@ runner.CASES = {
  'operator_borrow_read_is_early':(IO+NPE+'func (+)(x:i64 in O,y:i64)->const i64 where {owner O}{return x;}proc later()->const i64{behave @print(99);return 2;}val x=1;ptr p=x;p=null;try{p+later();{}}catch(e:const NullPointerException){behave @print(7);};',0,'7\n',''),
  'deferred_borrowed_operator':(IO+'proc (+)(ref x:i64 in O,y:i64)->void where {owner O}{behave @print(intrinsic (+)(x,y));}{{val x=1;defer (+)(x,2);x<-9;}};',0,'11\n',''),
  'borrowed_unary_operator':(IO+'func (!)(ref x:i64 in O)->const bool where {owner O}{x<-9;return true;}val x=1;behave @print(!x);behave @print(x);behave @print(!false);',0,'true\n9\ntrue\n',''),
- 'borrowed_operator_checks_readonly':(OP+'const val x=1;x+2;',2,'','readonly argument'),
+ 'readonly_operator_uses_builtin':(IO+OP+'const val x=1;behave @print(x+2);',0,'3\n',''),
  'borrowed_operator_checks_fresh_value':(OP+'1+2;',2,'','borrowed arguments require existing target views'),
  'borrowed_operator_checks_owner':(OP+'{{val x=1;x}}+2;',2,'','owner has ended'),
  'borrowed_operator_checks_ref_null':(NPE+OP+'func test(ptr x:i64 in O)->const i64 throws NullPointerException where {owner O}{return x+2;}',2,'','ref argument requires a proven non-null target'),

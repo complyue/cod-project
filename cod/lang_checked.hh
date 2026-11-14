@@ -260,30 +260,53 @@ class ScalarChecker {
     if (!view.initialized_target) for (const auto place : view.targets) require_initialized(place, at, name);
   }
   using Substitutions = std::vector<std::optional<Type>>;
+  using Access = std::vector<std::optional<bool>>;
+  static Access access_of(const std::vector<CheckedOperation> &views) {
+    Access access;
+    for (const auto &view : views) access.push_back(view.read_only);
+    return access;
+  }
+  static bool admits_access(const CheckedMethod &method, const Access &access) {
+    for (size_t i = 0; i < access.size(); ++i)
+      if (access[i].value_or(false) && !method.source->parameters[i].owner.empty() && !method.source->parameters[i].read_only)
+        return false;
+    return true;
+  }
+  static bool same_access(const CheckedMethod &a, const CheckedMethod &b) {
+    for (size_t i = 0; i < a.parameters.size(); ++i)
+      if (a.source->parameters[i].read_only != b.source->parameters[i].read_only) return false;
+    return true;
+  }
+  struct ArgumentEvidence { std::optional<Type> type; std::optional<bool> read_only; };
   struct ArgumentPreparation {
     ArgumentMode mode = ArgumentMode::value;
     std::optional<Type> view;
   };
   ArgumentPreparation argument_preparation(const Expression &expr, const std::vector<Type> &prefix,
-                                            const std::vector<std::optional<Type>> &evidence) const {
+                                            const std::vector<ArgumentEvidence> &evidence, const std::vector<CheckedOperation> &views) const {
     if (expr.intrinsic) return {};
     std::vector<size_t> applicable;
     std::map<size_t, Substitutions> substitutions;
+    Access access;
+    for (const auto &item : evidence) access.push_back(item.read_only);
+    for (size_t i = 0; i < views.size(); ++i) access[i] = views[i].read_only;
     bool complete = true;
-    for (size_t i = prefix.size(); i < evidence.size(); ++i) complete = complete && evidence[i].has_value();
+    for (size_t i = prefix.size(); i < evidence.size(); ++i) complete = complete && evidence[i].type.has_value();
     if (const auto family = families_.find(expr.text); family != families_.end()) for (const auto id : family->second) {
       const auto &candidate = program_.methods[id];
-      if (candidate.parameters.size() != expr.children.size()) continue;
+      if (candidate.parameters.size() != expr.children.size() || !admits_access(candidate, access)) continue;
       auto bindings = match_prefix(candidate, prefix);
       if (!bindings) continue;
       bool matches = true;
       for (size_t i = prefix.size(); i < evidence.size(); ++i)
-        if (evidence[i] && !bind_type(candidate, candidate.parameters[i], *evidence[i], *bindings, true)) matches = false;
+        if (evidence[i].type && !bind_type(candidate, candidate.parameters[i], *evidence[i].type, *bindings, true)) matches = false;
       if (matches) { applicable.push_back(id); substitutions.emplace(id, std::move(*bindings)); }
     }
     if (complete) {
-      applicable = most_specific(applicable);
-      if (applicable.size() > 1) fail(expr.at, "ambiguous methods for '" + expr.text + "'");
+      applicable = most_specific(applicable, access);
+      if (applicable.size() > 1 && std::all_of(applicable.begin() + 1, applicable.end(), [&](size_t id) {
+            return same_access(program_.methods[applicable.front()], program_.methods[id]);
+          })) fail(expr.at, "ambiguous methods for '" + expr.text + "'");
     }
     std::optional<ArgumentMode> mode;
     std::optional<Type> view;
@@ -1132,41 +1155,53 @@ class ScalarChecker {
     definition.instances.push_back(id);
     return id;
   }
-  std::vector<size_t> most_specific(const std::vector<size_t> &applicable) const {
+  std::vector<size_t> most_specific(const std::vector<size_t> &applicable, const Access &access = {}) const {
     std::vector<size_t> best;
     for (const auto candidate : applicable) {
       const auto &definition = program_.methods[candidate];
       const bool dominated = std::any_of(applicable.begin(), applicable.end(), [&](size_t other) {
         const auto &alternative = program_.methods[other];
-        return implies(alternative, definition) && !implies(definition, alternative);
+        if (!implies(alternative, definition)) return false;
+        bool strict = !implies(definition, alternative);
+        for (size_t i = 0; i < alternative.parameters.size(); ++i) {
+          const auto exact = alternative.source->parameters[i].read_only;
+          if (exact == definition.source->parameters[i].read_only) continue;
+          if (i >= access.size() || !access[i] || exact != *access[i]) return false;
+          strict = true;
+        }
+        return strict;
       });
       if (!dominated) best.push_back(candidate);
     }
     return best;
   }
   size_t select_family(const std::vector<size_t> &family, const std::vector<Type> &arguments, const Location &at, const std::string &name,
-                       const std::vector<Type> &environment = {}, const std::vector<Type> &retained = {}) {
+                       const std::vector<Type> &environment = {}, const std::vector<Type> &retained = {}, const Access &access = {}) {
     std::vector<size_t> applicable;
     for (const auto method : family)
-      if (match(program_.methods[method], arguments, retained)) applicable.push_back(method);
-    const auto best = most_specific(applicable);
-    if (best.empty()) fail(at, "no applicable method for '" + name + "' (argument types or same-T relation do not match)");
+      if (match(program_.methods[method], arguments, retained) && admits_access(program_.methods[method], access)) applicable.push_back(method);
+    const auto best = most_specific(applicable, access);
+    if (best.empty()) {
+      if (std::any_of(family.begin(), family.end(), [&](size_t id) { return match(program_.methods[id], arguments, retained).has_value(); }))
+        fail(at, "readonly argument cannot supply a writable borrowed parameter");
+      fail(at, "no applicable method for '" + name + "' (argument types or same-T relation do not match)");
+    }
     if (best.size() != 1) fail(at, "ambiguous methods for '" + name + "'");
     return demand(best.front(), arguments, at, environment, retained);
   }
-  size_t select(const Expression &expr, const std::vector<Type> &arguments) {
+  size_t select(const Expression &expr, const std::vector<Type> &arguments, const Access &access) {
     if (checking_method_ && lexical_methods_.contains(checking_method_->source) && expr.text == checking_method_->source->name) {
       return select_family({lexical_methods_.at(checking_method_->source)}, arguments, expr.at, expr.text,
-                           checking_instance_->environment, checking_instance_->retained_types);
+                           checking_instance_->environment, checking_instance_->retained_types, access);
     }
     const auto family = families_.find(expr.text);
     if (family == families_.end()) fail(expr.at, "unknown callable '" + expr.text + "'");
-    return select_family(family->second, arguments, expr.at, expr.text);
+    return select_family(family->second, arguments, expr.at, expr.text, {}, {}, access);
   }
-  bool applicable_operation(const std::string &name, const std::vector<Type> &arguments) const {
+  bool applicable_operation(const std::string &name, const std::vector<Type> &arguments, const Access &access = {}) const {
     const auto family = families_.find(name);
     return family != families_.end() && std::any_of(family->second.begin(), family->second.end(), [&](size_t id) {
-      return match(program_.methods[id], arguments).has_value();
+      return match(program_.methods[id], arguments).has_value() && admits_access(program_.methods[id], access);
     });
   }
   struct EagerTypes {
@@ -1262,8 +1297,21 @@ class ScalarChecker {
     if (nested_binder(method, result) || std::any_of(arguments.begin(), arguments.end(), [&](const auto &type) { return nested_binder(method, type); })) return {};
     return callable_type(*method.source, arguments, result);
   }
+  struct ViewEvidence {
+    std::optional<bool> read_only, view, value_binding;
+    bool operator==(const ViewEvidence &) const = default;
+  };
+  static ViewEvidence join_views(const ViewEvidence &a, const ViewEvidence &b) {
+    const auto either = [](std::optional<bool> x, std::optional<bool> y) -> std::optional<bool> {
+      if (x.value_or(false) || y.value_or(false)) return true;
+      return x && y ? std::optional<bool>{false} : std::nullopt;
+    };
+    return {either(a.read_only, b.read_only), either(a.view, b.view), a.value_binding == b.value_binding ? a.value_binding : std::nullopt};
+  }
   struct TypeEvidenceState {
     std::map<std::string, std::optional<Type>> bindings;
+    std::map<std::string, ViewEvidence> views;
+    ViewEvidence value;
     bool complete = true;
   };
   static TypeEvidenceState merge_evidence(TypeEvidenceState left, const TypeEvidenceState &right) {
@@ -1273,12 +1321,24 @@ class ScalarChecker {
     }
     for (const auto &[name, type] : right.bindings)
       if (!left.bindings.contains(name)) left.bindings.emplace(name, std::nullopt);
+    for (auto &[name, view] : left.views) {
+      const auto other = right.views.find(name);
+      if (other == right.views.end() || other->second != view) view = {};
+    }
+    for (const auto &[name, view] : right.views)
+      if (!left.views.contains(name)) left.views.emplace(name, ViewEvidence{});
     left.complete = left.complete && right.complete;
     return left;
   }
   // Evidence only: no reads, captures, demands, storage or cleanup equations are created here.
   // Unknown binding effects invalidate subsequent name queries; the ordered checker validates every operand.
   std::optional<Type> type_evidence(const Expression &expr, TypeEvidenceState &state, bool contextual = false) const {
+    ViewEvidence view{false, false, {}};
+    const auto type = query_evidence(expr, state, view, contextual);
+    state.value = type ? view : ViewEvidence{};
+    return type;
+  }
+  std::optional<Type> query_evidence(const Expression &expr, TypeEvidenceState &state, ViewEvidence &view, bool contextual) const {
     using K = Expression::Kind;
     const auto child = [&](size_t i, bool context = false) { return type_evidence(*expr.children.at(i), state, context); };
     const auto annotation = [&](const Type &type) {
@@ -1295,7 +1355,9 @@ class ScalarChecker {
     case K::null_ref: return Type::null_ref;
     case K::name:
       if (!state.complete) return {};
-      if (const auto found = state.bindings.find(expr.text); found != state.bindings.end()) return found->second;
+      if (const auto found = state.bindings.find(expr.text); found != state.bindings.end()) {
+        view = state.views.at(expr.text); return found->second;
+      }
       if (!contextual) if (const auto family = families_.find(expr.text); family != families_.end() && family->second.size() == 1)
         return callable_evidence(family->second.front());
       return {};
@@ -1308,6 +1370,7 @@ class ScalarChecker {
         result = type_evidence(*expr.children[i], active, contextual && i + 1 == expr.children.size());
         exits = exits || result == Type::never;
       }
+      if (!expr.children.empty()) view = active.value;
       return exits ? std::optional<Type>{Type::never} : result;
     }
     case K::pointer_group:
@@ -1315,31 +1378,45 @@ class ScalarChecker {
         if (declaration->kind == K::block) { type_evidence(*declaration, state); continue; }
         const auto initial = type_evidence(*declaration->children.front(), state, declaration->annotation.has_value());
         state.bindings[declaration->text] = declaration->annotation ? annotation(*declaration->annotation) : initial;
+        const bool value = expr.declaration_kind == "val" || expr.declaration_kind == "func" || expr.declaration_kind == "proc";
+        std::optional<bool> readonly = declaration->read_only || (value && expr.fixed_binding);
+        if (!*readonly && !value && declaration->binding != "<-") {
+          if (state.value.view.value_or(false)) readonly = state.value.read_only;
+          else if (!state.value.view && state.value.read_only != false) readonly.reset();
+        }
+        state.views[declaration->text] = {readonly, true, value};
       }
       return Type::void_type;
     case K::alias: {
       const auto type = child(0);
       state.bindings[expr.text] = type;
+      auto selected = state.value;
+      if (expr.read_only || (expr.fixed_binding && selected.value_binding.value_or(false))) selected.read_only = true;
+      else if (expr.fixed_binding && !selected.value_binding) selected.read_only.reset();
+      state.views[expr.text] = selected;
       return Type::void_type;
     }
     case K::make_local:
       for (const auto &item : expr.children) type_evidence(*item, state);
       return expr.annotation ? std::optional<Type>{annotation(*expr.annotation)} : std::nullopt;
     case K::transfer: case K::rebind: {
-      const auto type = child(0); child(1); return type;
+      const auto type = child(0); view = state.value; child(1);
+      if (expr.kind == K::transfer) view.read_only = true;
+      return type;
     }
     case K::conditional: {
       child(0);
       auto yes_state = state, no_state = state;
       const auto yes = type_evidence(*expr.children[1], yes_state, contextual), no = type_evidence(*expr.children[2], no_state, contextual);
       state = merge_evidence(std::move(yes_state), no_state);
+      view = yes == Type::never ? no_state.value : no == Type::never ? yes_state.value : join_views(yes_state.value, no_state.value);
       if (yes == Type::never) return no;
       if (no == Type::never || yes == no) return yes;
       return {};
     }
     case K::try_scope: {
       const auto before = state;
-      auto result = child(0, contextual);
+      auto result = child(0, contextual); view = state.value;
       const auto body_state = state;
       const auto catch_entry = merge_evidence(before, body_state);
       for (size_t i = 1; i < expr.children.size(); ++i) {
@@ -1350,10 +1427,15 @@ class ScalarChecker {
         }
         auto caught = catch_entry;
         caught.bindings[handler.text] = handler.annotation ? annotation(*handler.annotation) : exception_type(0);
+        caught.views[handler.text] = {true, true, true};
         const auto type = type_evidence(*handler.children.front(), caught, contextual);
         if (const auto outer = catch_entry.bindings.find(handler.text); outer != catch_entry.bindings.end())
           caught.bindings[handler.text] = outer->second;
         else caught.bindings.erase(handler.text);
+        const auto caught_view = caught.value;
+        if (const auto outer = catch_entry.views.find(handler.text); outer != catch_entry.views.end()) caught.views[handler.text] = outer->second;
+        else caught.views.erase(handler.text);
+        view = result == Type::never ? caught_view : type == Type::never ? view : join_views(view, caught_view);
         state = merge_evidence(std::move(state), caught);
         if (result == Type::never) result = type;
         else if (type != Type::never && type != result) result.reset();
@@ -1365,8 +1447,8 @@ class ScalarChecker {
       const auto index = child(0); child(1);
       const auto accumulator = fold ? child(2) : std::optional<Type>{Type::void_type};
       auto iteration = state;
-      iteration.bindings[expr.text] = index;
-      if (fold) iteration.bindings[expr.binding] = accumulator;
+      iteration.bindings[expr.text] = index; iteration.views[expr.text] = {true, true, true};
+      if (fold) { iteration.bindings[expr.binding] = accumulator; iteration.views[expr.binding] = {true, true, true}; }
       type_evidence(*expr.children[fold ? 3 : 2], iteration);
       if (!fold && expr.children.size() == 4) {
         auto empty = state; type_evidence(*expr.children[3], empty);
@@ -1391,12 +1473,18 @@ class ScalarChecker {
         }
       }
       std::vector<Type> arguments;
+      Access access;
       bool complete = true;
       for (size_t i = expr.kind == K::value_call ? 1 : 0; i < expr.children.size(); ++i) {
         const auto type = child(i, true); complete = complete && type.has_value();
-        arguments.push_back(type.value_or(Type::never));
+        arguments.push_back(type.value_or(Type::never)); access.push_back(state.value.read_only);
       }
-      if (local) return target && target->kind == Type::procedure && target->target ? std::optional<Type>{*target->target} : std::nullopt;
+      if (local) {
+        if (!target || target->kind != Type::procedure || !target->target) return {};
+        const bool borrowed = !target->owners.empty() && target->owners.back();
+        view = {borrowed && !target->const_views.empty() && target->const_views.back(), borrowed, {}};
+        return *target->target;
+      }
       if (!state.complete) return {};
       if (expr.text == "isnull") return Type::boolean;
       if (swap_operation(expr.text)) return Type::void_type;
@@ -1408,19 +1496,26 @@ class ScalarChecker {
         if (checking_method_ && lexical_methods_.contains(checking_method_->source) && expr.text == checking_method_->source->name) {
           retained = checking_instance_->retained_types;
           const auto id = lexical_methods_.at(checking_method_->source);
-          if (match(program_.methods[id], arguments, retained)) applicable.push_back(id);
+          if (match(program_.methods[id], arguments, retained) && admits_access(program_.methods[id], access)) applicable.push_back(id);
         } else if (const auto family = families_.find(expr.text); family != families_.end())
-          for (const auto id : family->second) if (match(program_.methods[id], arguments)) applicable.push_back(id);
+          for (const auto id : family->second) if (match(program_.methods[id], arguments) && admits_access(program_.methods[id], access)) applicable.push_back(id);
       }
       if (applicable.empty() && eager_operation(expr.text)) {
         const auto types = eager_types(expr, arguments);
         return types.error.empty() ? std::optional<Type>{types.result} : std::nullopt;
       }
-      const auto best = most_specific(applicable);
-      if (best.size() != 1) return {};
-      const auto &method = program_.methods[best.front()];
-      const auto type = substitute(method.result, method, *match(method, arguments, retained), true);
-      return nested_binder(method, type) ? std::nullopt : std::optional<Type>{type};
+      const auto best = most_specific(applicable, access);
+      std::optional<Type> result;
+      for (const auto id : best) {
+        const auto &method = program_.methods[id];
+        const auto type = substitute(method.result, method, *match(method, arguments, retained), true);
+        if (nested_binder(method, type) || (result && *result != type)) return {};
+        const bool borrowed = borrowed_result(*method.source);
+        const ViewEvidence next{borrowed && method.source->result_const, borrowed, {}};
+        view = !result || view == next ? next : ViewEvidence{};
+        result = type;
+      }
+      return result;
     }
     case K::field: {
       const auto type = child(0);
@@ -1438,6 +1533,7 @@ class ScalarChecker {
     case K::callable:
       if (!expr.definition->name.empty()) {
         state.bindings[expr.definition->name] = callable_evidence(lexical_methods_.at(expr.definition.get()));
+        state.views[expr.definition->name] = {false, true, true};
         return Type::void_type;
       }
       return contextual ? std::nullopt : callable_evidence(lexical_methods_.at(expr.definition.get()));
@@ -1446,24 +1542,34 @@ class ScalarChecker {
       return {};
     }
   }
-  std::vector<std::optional<Type>> argument_evidence(const Expression &expr) const {
-    std::vector<std::optional<Type>> result(expr.children.size());
+  std::vector<ArgumentEvidence> argument_evidence(const Expression &expr) const {
+    std::vector<ArgumentEvidence> result(expr.children.size());
     if (expr.intrinsic) return result;
     const auto family = families_.find(expr.text);
     if (family == families_.end()) return result;
     std::vector<ArgumentMode> modes;
+    std::optional<size_t> baseline;
     bool needed = false;
     for (const auto id : family->second) {
       const auto &parameters = program_.methods[id].source->parameters;
       if (parameters.size() != expr.children.size()) continue;
+      if (!baseline) baseline = id;
+      else needed = needed || !same_access(program_.methods[*baseline], program_.methods[id]);
       if (modes.empty()) for (const auto &parameter : parameters) modes.push_back(argument_mode(parameter));
       for (size_t i = 0; i < parameters.size(); ++i)
         needed = needed || modes[i] != argument_mode(parameters[i]) || (eager_operation(expr.text) && modes[i] != ArgumentMode::value);
     }
     if (!needed) return result;
     TypeEvidenceState state;
-    for (const auto &scope : lexical_.scopes) for (const auto &[name, id] : scope.bindings) state.bindings[name] = bindings_->at(id).type;
-    for (size_t i = 0; i < expr.children.size(); ++i) result[i] = type_evidence(*expr.children[i], state, true);
+    for (const auto &scope : lexical_.scopes) for (const auto &[name, id] : scope.bindings) {
+      const auto &binding = bindings_->at(id);
+      state.bindings[name] = binding.type;
+      state.views[name] = {binding.read_only, true, binding.value_binding};
+    }
+    for (size_t i = 0; i < expr.children.size(); ++i) {
+      result[i].type = type_evidence(*expr.children[i], state, true);
+      result[i].read_only = state.value.read_only;
+    }
     return result;
   }
   CheckedOperation materialize(const std::vector<size_t> &family, const Type *expected, const Location &at) {
@@ -1499,7 +1605,10 @@ class ScalarChecker {
         if (std::none_of(free_captures(*definition.source).begin(), free_captures(*definition.source).end(),
                          [&](const auto &used) { return used.name == capture.name; }))
           program_.warnings.push_back({Warning::unused_capture, capture.at, "unused callable capture '" + capture.name + "' remains retained"});
-    const auto selected = select_family(family, arguments, at, "callable value", environment, retained);
+    Access access;
+    if (expected) for (size_t i = 0; i < expected->parameters.size(); ++i)
+      access.push_back(!expected->const_views.empty() && expected->const_views[i]);
+    const auto selected = select_family(family, arguments, at, "callable value", environment, retained, access);
     const auto &instance = program_.instances[selected];
     const auto &method = *program_.methods[instance.method].source;
     auto type = callable_type(method, arguments, instance.result);
@@ -1951,7 +2060,7 @@ class ScalarChecker {
       std::vector<CheckedOperation> views;
       const auto evidence = argument_evidence(expr);
       for (size_t i = 0; i < expr.children.size(); ++i) {
-        const auto preparation = argument_preparation(expr, arguments, evidence);
+        const auto preparation = argument_preparation(expr, arguments, evidence, views);
         const auto mode = preparation.mode;
         arguments.push_back(check(*expr.children[i], instance, operations, mode == ArgumentMode::value, false,
                                   preparation.view ? &*preparation.view : nullptr));
@@ -1963,19 +2072,22 @@ class ScalarChecker {
         prepare_borrow(views.back(), mode, expr.children[i]->at);
       }
       for (size_t i = 0; i < arguments.size(); ++i)
-        if (evidence[i] && *evidence[i] != arguments[i])
-          implementation_gap(expr.children[i]->at, "operand type evidence depends on completion or contextual inference");
+        if ((evidence[i].type && *evidence[i].type != arguments[i]) ||
+            (evidence[i].read_only && *evidence[i].read_only != views[i].read_only))
+          implementation_gap(expr.children[i]->at, "operand type/access evidence depends on completion or contextual inference");
       if (expr.text == "cause_at" && (expr.intrinsic || !families_.contains(expr.text))) {
         if (arguments.size() != 2 || arguments[0].kind != Type::exception || arguments[1] != Type::uint64)
           fail(expr.at, "cause_at requires an exception and a u64 index");
         operation.type = exception_type(0); operation.exceptions = exception_possibilities(operation.type); operation.builtin = BuiltinOperation::cause_at;
         break;
       }
-      if (eager && (expr.intrinsic || !applicable_operation(expr.text, arguments))) {
+      if (eager && (expr.intrinsic || !applicable_operation(expr.text, arguments, access_of(views)))) {
+        if (std::any_of(operation.arguments.begin(), operation.arguments.end(), [](const auto &argument) { return argument.mode != ArgumentMode::value; }))
+          implementation_gap(expr.at, "builtin fallback requires value preparation before later operand effects");
         check_eager(expr, arguments, views, operation);
         break;
       }
-      operation.callee = select(expr, arguments);
+      operation.callee = select(expr, arguments, access_of(views));
       const auto &target = program_.instances[*operation.callee];
       const auto &definition = *program_.methods[target.method].source;
       for (size_t i = 0; i < arguments.size(); ++i) {
@@ -2789,10 +2901,7 @@ public:
                   (definition.source->parameters[p].owner == definition.source->parameters[q].owner))
                 implementation_gap(form->at, "owner-constrained overload selection");
           }
-          for (size_t p = 0; p < form->parameters.size(); ++p)
-            if (form->parameters[p].read_only != definition.source->parameters[p].read_only)
-              implementation_gap(form->at, "target-access-qualified overload selection");
-          fail(form->at, "duplicate method signature for '" + form->name + "'");
+          if (same_access(prepared, definition)) fail(form->at, "duplicate method signature for '" + form->name + "'");
         }
         if (definition.source->kind != form->kind && !(form->operation && definition.source->operation))
           implementation_gap(form->at, "mixed function/procedure family");
