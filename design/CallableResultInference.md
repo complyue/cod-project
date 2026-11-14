@@ -1,13 +1,13 @@
 # Callable result-type inference
 
-Discussion revision: 1 · Recorded: 2026-11-13 · Status: pending topic discussion and whole-file approval.
+Discussion revision: 3 · Recorded: 2026-11-14 · Status: pending topic discussion and whole-file approval.
 
 ## Design authority
 
-- **Registry / scope:** [D-24](DesignAuthorityRegistry.md#d-24), revision 1, all sections, `pending-human`. There is no human-confirmed baseline for this proposal and no delegated implementation contract.
+- **Registry / scope:** [D-24](DesignAuthorityRegistry.md#d-24), revision 3, all sections, `pending-human`. There is no human-confirmed baseline for this proposal and no delegated implementation contract.
 - **Candidate value path:** C-84/P-356 relates inferred method results to C-01/C-06: source can omit redundant type spelling while the semantic graph retains a complete, inspectable contract. P-357 organizes that value in this document. Charter §§2–3/§5.3/§6/§8/§12 require checked meaning, finite cyclic representation and native behavior consistent with the selected program. These relationships require confirmation rather than borrowing authority from dependencies.
-- **Confirmed constraints:** H-258 requires explicit parameter/result signatures on bodyless declarations. H-361 requires explicit value returns; H-362 permits void fallthrough. H-343 requires native recursion. H-201/H-273/H-342 preserve result storage, owners and complete callable values; H-196 excludes dynamic effects from functions. These constraints do not independently select omitted-result inference.
-- **Dependencies / exclusions:** P-358 depends on D-10 method/context selection, D-14 owner/access/initialization, D-17 completion, D-18 callable/native transport, D-16 numeric validity, and D-21/D-22/D-23 unresolved dispatch/construction/result boundaries. No owner union, runtime type tag, fresh scalar storage, new conversion, effect permission, pure syntax implementation or TCO is selected.
+- **Confirmed constraints:** H-258 requires explicit parameter/result signatures on bodyless declarations. H-361 requires explicit value returns; H-362 permits void fallthrough. H-343 requires native recursion. H-413/H-414 make bare scalar T a val result and scalar T in O a ref result, rejecting val T in O; H-273/H-342 preserve explicit owners and complete callable values; H-417 requires each inferred ref/ptr result to have one statically provable owner, rejecting missing or ambiguous owner evidence; H-196 excludes dynamic effects from functions. These constraints do not independently select omitted-result inference.
+- **Dependencies / exclusions:** P-358 depends on D-10 method/context selection, D-14 owner/access/initialization, D-17 completion, D-18 callable/native transport, D-16 numeric validity, and D-21/D-22/D-23 unresolved dispatch/construction/result boundaries. No owner union, runtime type tag, scalar materialization beyond D-23, new conversion, effect permission, pure syntax implementation or TCO is selected.
 - **Acceptance:** After topic resolution and whole-file approval, explicit and inferred forms must agree across named calls, callable values, recursive graphs, selected module contexts and deferred invocation. Invalid return types, owners, access and initialization remain rejected. Inference must terminate or report an identified unresolved constraint; finite native recursion must not depend on source expansion depth.
 
 ## Topic: when may a result annotation be omitted?
@@ -51,7 +51,7 @@ This scope proposes omission only for implemented named functions. Extending it 
 - Specify whether a separate explicit callable declaration may supply the method's result constraint, including when several declarations apply.
 - Define where inference must stop at an abstract result boundary. Existing required family dispatch behavior remains, while unresolved differing-concrete evidence/ABI is not selected here.
 
-Fresh arithmetic in an ordinary scalar result remains the separate [scalar-result topic](ScalarCallResults.md). Inferring `u64` alone does not decide where a fresh value lives or permit mixing an external borrow with a fresh result owner. Whole-file approval must retain that exclusion unless the scalar topic is explicitly settled too.
+The [scalar-result contract](ScalarCallResults.md) fixes bare scalar T as an independent val result and T in O as ref T in O; val T in O is invalid. Reading an existing scalar in a value return does not infer a borrow. The receiving declaration or assignment then determines copying, materialization or binding under that contract. Whether an entire result annotation may be omitted remains this document's pending topic; inference cannot silently select a different result mode, invent an owner association for a value, or join incompatible borrowed owners. H-415 requires `<-` for scalar val declaration initialization; receiving syntax does not change these result categories.
 
 ## Acceptance after approval
 
@@ -64,4 +64,4 @@ Fresh arithmetic in an ordinary scalar result remains the separate [scalar-resul
 
 ## Implementation boundary
 
-Current compiler availability is recorded in the [source reference](../tests/cod/language/README.md). Existing parser acceptance or rejection does not qualify either proposed source policy. [K-632](../CHANGELOG.md#k-632) covers editorial continuity; D-24 remains pending-human.
+Current compiler availability is recorded in the [source reference](../tests/cod/language/README.md). Existing parser acceptance or rejection does not qualify either proposed source policy. [K-UNIQUE-OWNER-20261114](../CHANGELOG.md#k-unique-owner-20261114) records r2→3 dependency alignment with H-417's unique static owner requirement; the inference proposal, exclusions and pending-human status remain unchanged.
