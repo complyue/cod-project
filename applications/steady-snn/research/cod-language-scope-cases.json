@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "status": "specified_with_selected_native_evidence_and_capture_category_review",
-  "recorded_date": "2026-11-07",
+  "status": "specified_with_current_implementation_coverage_tracked_separately",
+  "recorded_date": "2026-11-13",
   "design_authority": {
     "registry": "../../../design/DesignAuthorityRegistry.md#d-08",
     "revision": 220,
@@ -13,9 +13,10 @@
     ],
     "rationale": "Concrete application cases make scoped language behavior and its native evidence reviewable without selecting neuron dynamics.",
     "invariants_and_non_goals": "Preserve symbol identity, definition-time dynamic-value capture for perform, current-binding behave, owner-preserving resource shadowing, regional lifetimes and once-only post-scan module incorporation. Packet transfer and effect-resource construction are distinct. Full capture-category/interior-pointer rules remain under review; no neuron law, concurrency protocol or persistent ABI is selected.",
-    "acceptance": "Keep confirmed local semantics distinct from open proposals; link only the execution evidence actually obtained and retain its limits.",
-    "human_baseline": "H-96-H-121 supply local symbols/callables/modules; H-123 limits the increment to language/runtime support; H-140 confirms once-only module incorporation; H-148 confirms per-argument conversion sequencing. H-166 supersedes source-module initialization-return teardown with process-lifetime top-level scopes. H-172 confirms effect @name <- rhs as the sole binding syntax; H-173 requests analysis, not implementation, of a narrower dynamic value set. H-176 supersedes definition-time dynamic value capture with required compile-time symbol identities; H-177 permits ordinary lexical region owners without duplicating ownership. H-180 corrects H-176: procedures capture used definition-time dynamic values for temporary perform shadows without consuming or destroying captured/hidden owners. It separates packet transfer from effect-resource construction. H-184 permits lexical and symbolic procedures, assignment of an existing lexical procedure as an effect and mandatory types on each symbol definition. The earlier symbolic-only procedure restriction is superseded. H-185 fixes perform/behave as symbol-only dynamic calls and direct procedure calls as lexical.",
-    "assessment": "../../../design/DesignAuthorityRegistry.md#k-305"
+    "acceptance": "Keep confirmed local semantics distinct from open proposals; distinguish acceptance targets from current implementation coverage.",
+    "human_baseline": "H-96–H-121 supplies local symbols/callables/modules; H-123 limits application-driven increments to language/runtime support. Current supersession, capture, owner, module and conversion scope is maintained by D-08/D-10/D-14/D-15/D-18 in the authority registry; the complete application contract remains pending-human.",
+    "assessment": "../../../CHANGELOG.md#k-305",
+    "continuity": "K-632: editorial evidence consolidation; catalog cases and their design qualification are unchanged."
   },
   "design_documents": [
     "../../../design/SymbolicDynamicScope.md",
@@ -24,9 +25,8 @@
   "purpose": "Reviewable language semantics and SNN execution expectations for joint development.",
   "execution_evidence": {
     "reference": "../../../tests/cod/language/README.md",
-    "record": "../../../tests/cod/language/validation.json",
-    "scope": "Contract-focused native CoD corpus with direct LLVM IR emission, regional storage and expected diagnostics. The linked record identifies the current source run and a historical four-group component-suite run by commit. Each evidence record retains its own source hashes and run scope; this is not execution of all 25 catalog cases.",
-    "selected_fixture_links": {
+    "scope": "The source capability reference owns current runnable coverage. This catalog specifies acceptance targets and does not establish execution of all 25 cases.",
+    "candidate_fixture_links": {
       "CS-01": [
         "identity.cod",
         "identity-restore.cod",
@@ -82,15 +82,7 @@
         "procedure-lexical-perform.cod",
         "symbol-type-required.cod"
       ]
-    },
-    "partial_coverage_notes": [
-      "Identity uses distinct canonical local module paths, not resolved versioned package origins.",
-      "Scope/capture fixtures exercise equivalent scalar cases, not every exact trace or unwind form in the catalog.",
-      "Function, binding and type diagnostics cover contract-distinct scenarios, not every spelling variant.",
-      "CS-12 has a multi-step regional A/B gather check; its exact two-scalar reverse-traversal trace is not executed. Distinct A/B storage is established by the program, not a unique-view type.",
-      "Scan-before-execution and once-only diamond composition are checked; the exact CS-18 scan/encounter trace remains separate.",
-      "Local input-reachable snapshots across independent live owners, returned existing references and relocation have native evidence. Stored cross-region fields, persistent escaping captures, concurrency and resolved package-version identity remain open."
-    ]
+    }
   },
   "cases": [
     {
@@ -638,7 +630,7 @@
     }
   ],
   "limits": [
-    "The complete catalog remains a specification; selected actual native prototype evidence is linked separately.",
+    "This catalog is a specification. Candidate fixtures are acceptance examples; consult current source coverage before treating a case as implemented.",
     "Candidate type/lifetime, initialization-composition and expression-result rules remain separate from confirmed user semantics. Missing required bindings are compilation errors.",
     "No package-identity byte format, TLS ABI, cross-region pointer representation or neural model is selected."
   ]

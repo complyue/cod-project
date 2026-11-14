@@ -4,7 +4,7 @@ Revision: 1 · 2026-11-13 America/Los_Angeles.
 
 ## Design authority
 
-- **D-21 link continuity:** [K-596](../../design/DesignAuthorityRegistry.md#k-596) updates the execution-preparation document locator; this document’s semantic revision, qualified scope and exclusions are unchanged.
+- **D-21 link continuity:** [K-596](../../CHANGELOG.md#k-596) updates the execution-preparation document locator; this document’s semantic revision, qualified scope and exclusions are unchanged.
 
 Supporting implementation/assessment under [D-21r7](../../design/AheadOfTimeExecutionPreparation.md) and [D-25r11](../../design/CompilationRuntimeArchitectureExploration.md), H-396/H-397 and K-585. The user authorizes design replacement, focused native evidence and conditional merge of the supported scope. C-82/C-83 and H-378 preserve abstract family behavior and prepared native execution. C-86/C-87/C-88 with P-363–P-370 connect shared method bodies, concrete evidence and separate root compatibility to inspectable intent and affordable execution; detailed production qualification remains pending. Charter §§1–3, 4.3, 5.3–5.4, 6.3, 8 and 12 governs. Preserve conformance, actual owners, complete captures, dynamic context, ordered completion and relocation. Acceptance is an explained native route and discriminating observations with specialization disabled, including unchanged saved data across separately prepared worlds. No production ABI, full checker, loader/migration protocol, generic solver, performance class or ORC implementation is selected.
 
@@ -16,7 +16,7 @@ The implementation is a scoped native prototype, not the CoD source compiler. `m
 
 ## Domain workload and independent expectations
 
-The compiler-domain planning and abstract-family requirements were selectively reused from `25ccc75121140d5b901a5a9d590c47f1bb2b3cd8:experiments/local-dispatch/WORKLOAD.md`. They provide domain operations and falsifiers, not the prior BBV implementation or recommendation.
+Compiler-domain planning and abstract-family requirements provide the experiment’s domain operations and falsifiers.
 
 `Plan` has a nominal child `LiteralPlan`. Example conforms to LiteralPlan and SourceLocated; Other conforms to Plan and SourceLocated. They represent compiler plans with two independently polymorphic fields: x is an IntegerLiteral or BooleanLiteral; y is a LocalSlot or RegionalSlot. Example and Other have different field offsets. A separate destination argument also admits local/regional destinations. These are experimental representations, not proposed source syntax or a permanent compiler schema.
 
@@ -107,6 +107,6 @@ python3 experiments/micro-dispatch/run.py --output /tmp/cod-micro-dispatch-obser
 
 The runner uses a fresh temporary directory, generates/compiles the baseline, call-site/declaration-order control and independently prepared readers, and runs the focused observations. It uses existing Linux `build/bin/clang++`, `llvm-nm` and `libLLVM.so.23.1`. It configures or installs no toolchain. Full generated sources, canonical planning descriptions and binaries remain in the reported temporary directory. Checked-in source hashes identify the evidence revision; generated snapshots are for inspection.
 
-Selective reuse from archive `25ccc75121140d5b901a5a9d590c47f1bb2b3cd8` is limited to the independent workload requirements; the small symbolic-rectangle proof adapted from `families.py`; `context.py`; and the reseatable borrow/LLVM lifecycle utility patterns from `runtime.hh`. The BBV IR, versioner, composed CFG, cap and recommendation are not imported. Existing shilos and LLVM libraries are reused unchanged. No external engine, new dependency or production language feature is added.
+The experiment uses its bounded workload, symbolic coverage, context and native lifecycle utilities alongside existing shilos and LLVM libraries. It introduces no external engine, new dependency or production language feature.
 
-The [work log](WORK_LOG.md) records the exact repository build, current validation/merge gate, branch ancestry and checkpoint accounting. The required `cmake --build ./build` is distinct from these isolated native observations; it does not by itself validate their semantics.
+The required `cmake --build ./build` is distinct from these isolated native observations; it does not by itself validate their semantics.

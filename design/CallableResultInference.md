@@ -12,7 +12,7 @@ Discussion revision: 1 · Recorded: 2026-11-13 · Status: pending topic discussi
 
 ## Topic: when may a result annotation be omitted?
 
-The prototype accepts an implemented named function without an arrow/result annotation:
+The proposal asks whether an implemented named function may omit its result annotation:
 
 ```text
 func view(region r:Item, n:u64) {
@@ -21,7 +21,7 @@ func view(region r:Item, n:u64) {
 }
 ```
 
-Its apparent result is an existing Item owned by r. The explicit form is `func view(region r:Item, n:u64) -> Item { ... }`. The current compiler accepts the nonrecursive omitted-result form, but the recursive form falls back to source expansion and rejects the recursive call. This observation establishes an implementation difference, not approval of an inference language policy.
+Its apparent result is an existing Item owned by r. The explicit form is `func view(region r:Item, n:u64) -> Item { ... }`. Its acceptance requires a separately qualified inference policy; implementation observations cannot choose that policy.
 
 Two source policies are available:
 
@@ -62,6 +62,6 @@ Fresh arithmetic in an ordinary scalar result remains the separate [scalar-resul
 5. Captured/current effects, module-world selection, owner/initialization checks and exceptional release retain their existing contracts.
 6. Measure inference work and emitted code growth on composed programs; do not claim general acceptance from one recursive example.
 
-## Observed prototype evidence
+## Implementation boundary
 
-At commit `ed1e40ee3f7499220e39cf75a7021d31e52f13d6`, a closed nonrecursive function returning a regional object without an annotation checks successfully. The recursive example rejects with `recursive call is outside the first prototype`. `procedure_type` also uses void when a named function has no declared result, and native materialization requires a declared result. These are implementation facts to resolve after the source policy is qualified; they are not normative inference rules.
+Current compiler availability is recorded in the [source reference](../tests/cod/language/README.md). Existing parser acceptance or rejection does not qualify either proposed source policy. [K-632](../CHANGELOG.md#k-632) covers editorial continuity; D-24 remains pending-human.

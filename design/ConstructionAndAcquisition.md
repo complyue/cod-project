@@ -4,7 +4,7 @@ Design revision: 2 · Recorded: 2026-11-12 · Status: discussion draft with conf
 
 ## Design authority
 
-- **Registry / coverage:** [D-22](DesignAuthorityRegistry.md#d-22), revision2. [H-383–H-385](DesignAuthorityRegistry.md#h-383) records the reviewed construction handoff; [H-386](DesignAuthorityRegistry.md#h-386) accepts contextual owner inference, prefers coordinated migration without a transition period, and requires topic discussion followed by whole-file approval. P-348–P-350 remain candidate value relationships. This document is not yet a qualified delegated implementation contract; [K-545](DesignAuthorityRegistry.md#k-545) records the discussion integration, not final document approval.
+- **Registry / coverage:** [D-22](DesignAuthorityRegistry.md#d-22), revision2. [H-383–H-385](../CHANGELOG.md#h-383) records the reviewed construction handoff; [H-386](../CHANGELOG.md#h-386) accepts contextual owner inference, prefers coordinated migration without a transition period, and requires topic discussion followed by whole-file approval. P-348–P-350 remain candidate value relationships. This document is not yet a qualified delegated implementation contract; [K-545](../CHANGELOG.md#k-545) records the discussion integration, not final document approval.
 - **Candidate value path:** C-39/C-65/C-72 → C-01/C-06 (P-348) makes storage, access and lifetime intent explicit and checkable in readable source; C-09/C-54 → C-05 (P-349) separates persistent data from acquisition responsibility and preserves inspectable preparation effects. D-22 organizes these responsibilities through P-350. Charter §§2–5/§7–8 governs those boundaries; §§6/12 requires practical native execution and measured costs. These scoped paths do not qualify the wider ownership or DBMR designs.
 - **Dependencies:** P-351: D-01 physical allocation/relative references; D-14 owners, capabilities, fields and qualifiers; D-17 initialization, failure and cleanup; D-10/D-15/D-18/D-21 dynamic context, values and native dispatch; D-16 bits validity, layout and numeric compatibility. Dependency edges grant no authority.
 - **Invariants / non-goals:** no ordinary reference ownership, per-object cleanup, non-bits lexical/general-heap allocation, hidden region, cross-owner stored edge, implicit graph copy, lifetime extension or native callable environment in a regional field. Regional C++ types remain region-only and noncopyable. Actual-owner unions, abstract-result RTTI, fraction execution, pure/TCO and the compiler pilot remain separate.
@@ -69,20 +69,9 @@ Construction must preserve initializer order and effects and publish only a vali
 
 ## Source migration
 
-The user prefers a single coordinated migration with no transition stage, stating that CoD has no users yet and should acquire no legacy compatibility burden. The implementation plan follows that direction. The comparison below explains the trade-off; compatibility staging is not the selected direction. Final approval of this complete design remains separate.
+H-386 selects one coordinated cutover after this design and the required representation integration are qualified. Use one semantic construction model: ordinary `make T [in o]` is distinct from whole-region `make region Root(...)`; a receiving variable’s `owned` qualifier cannot silently select allocation.
 
-Both alternatives use one semantic construction model. Neither chooses allocation by guessing from a receiving variable's `owned` qualifier or treats the same bare make as both object and resource construction.
-
-| Criterion | M1: coordinated cutover | M2: bounded compatibility period |
-| --- | --- | --- |
-| Ordinary / resource form | `make T [in o]` / `make region Root(...)` exclusively after one migration checkpoint. | Same target forms; temporarily recognize `make local T` and legacy `make Root(capacity=...)` as explicitly marked legacy syntax. |
-| Existing source | Update tracked fixtures, generated programs and current examples together; old forms get actionable diagnostics. | Old source compiles with migration warnings until a published removal checkpoint; ambiguity with the legacy capacity shape requires a temporary reserved form. |
-| User mistakes | Diagnostic distinguishes object construction from region acquisition and suggests the exact replacement. | Warning must explain which semantic form the old source denotes; new ordinary constructors cannot silently acquire regions. |
-| Technical debt | One maintained grammar/check path; one coordinated source update. | Additional parser branches, warnings, acceptance/rejection cases and a later removal; both lower to the same checks. |
-| Runtime / generated code | No syntax-compatibility runtime cost expected. | No extra cost expected if compatibility resolves entirely during parsing; this is an estimate, not benchmark evidence. |
-| Compile / maintenance cost | Smaller ongoing parser surface; migration review is concentrated. | Additional parse/diagnostic work expected to be small but unmeasured; two supported spellings enlarge documentation and validation until removal. |
-
-**Implementation direction: one coordinated cutover**, after this design and the necessary representation integration are qualified. Migrate live fixtures, generated programs and current examples together; reject legacy forms with actionable diagnostics. There is no compatibility period or permanent parallel syntax. This direction does not settle aggregate ABI or DBMR protocols. Historical registry quotations/reports retain their original source; only current examples and live fixtures migrate.
+Migrate live fixtures, generated programs and examples together, and diagnose unsupported spellings with an actionable replacement. There is no compatibility period or permanent parallel syntax. This direction does not settle aggregate ABI or DBMR protocols.
 
 ## DBMR alternatives and protocol work
 
@@ -114,29 +103,13 @@ The operation matrix below applies to either candidate and is still proposed. A 
 
 Before final R3 selection, compare a concrete capacity/failure/coordination contract and its costs against the existing primitives. Include a state-by-state failure table, access requirements and publication point. Existing snapshot save/replace (C-78) and compatibility-marker planning (C-77) remain separate inputs, not completed protocols.
 
-## Repository evidence and implementation dependencies
+## Implementation dependencies
 
-Read-only audit baseline: `43260856432484ce0dbe9016a9d1a3e7b3315ad6`. Counts are regex occurrences in tracked text, including comments/string literals, not parsed-program counts or runtime measurements.
+The [source capability reference](../tests/cod/language/README.md) owns current compiler support. Construction integration must keep syntax, payload placement, field access, owner/access/initialization proofs, callable transport and cleanup consistent. A bits predicate alone cannot establish aggregate transport or lexical field-place support.
 
-| File class | `make local` occurrences / files | Legacy `make Name(capacity=...)` occurrences / files |
-| --- | --- | --- |
-| `.cod` | 70 / 33 | 215 / 140 |
-| `.py` | 2 / 1 | 31 / 6 |
-| `.md` | 42 / 5 | 17 / 5 |
-| `.hh` | 1 / 1 | 0 / 0 |
+[DBMR](../include/shilos/dbmr.hh) acquisition must be assessed against the proposed exclusive creation, validation, capacity, access, failure and coordination contract. Existing storage primitives do not establish full graph/schema validation, failure atomicity or durable publication. Measurements must distinguish counted operations from observed latency and resource totals.
 
-| Current source | Observed boundary and required integration |
-| --- | --- |
-| [Syntax](../cod/lang_syntax.hh), `Type`, make parsing | `Type::regional` represents nominal data products; `make_local` and `make_region` are separate AST cases. Legacy bare make is resource acquisition. Preserve source locations while normalizing the chosen forms. |
-| [Frontend](../cod/lang_frontend.hh), `local_bits`, `object_type`, `local_storage` | Local bits are numeric representations, bool and intrinsic exceptions. Nominal products are object types. A predicate-only extension would leave call, owner and storage paths inconsistent. |
-| Frontend `record_field`, `make_expression`, `allocate_expression` | Product field access requires a region pointer; root make allocates a whole region and checks every field; alloc uses an explicit region. Separate ordinary payload placement from acquisition while preserving field order and cleanup. |
-| [LLVM emission](../cod/lang_llvm.hh), `type_of`, `read`, `write`, `field` | Regional products transport offsets; reads produce references and writes reject aggregate copies. Record layouts exist, but aggregate bits transport and lexical field places need explicit integration. |
-| Frontend initialization/native/callable flow | Allocation cells, field reads, copies, native arguments/results, dynamic bindings and captures must agree on payload versus borrowed view. Defer completion facts need no new runtime initialization flag merely because payloads are aggregates. |
-| [DBMR](../include/shilos/dbmr.hh), `create_or_open`, `create` | Creation opens existing paths (`OPEN_ALWAYS`/`O_CREAT`) and resizes them. It cannot implement proposed exclusive-new semantics unchanged. |
-| DBMR validation and writable constructor | Checks header bounds, occupation, root extent/alignment and UUID. Insufficient free capacity performs unmap → resize → remap → metadata write/flush. This is evidence about existing operations, not full graph/schema validation or a failure-atomic protocol. |
-| DBMR readonly/destructor/file helpers | Readonly maps without write access; optional close-time trimming writes capacity metadata. Flush/unmap/close return errors are ignored and truncate errors are printed. The API lacks the explicit access/failure contract required for a language acquisition surface. |
-
-No DBMR mutation, compiler change, build or test is part of this audit. No new performance result or fresh sanitizer coverage is claimed. R3 measurements must identify compiler/source versions and distinguish counted operations from observed latency/resource totals.
+[K-632](../CHANGELOG.md#k-632) records editorial continuity; whole-file and unresolved acquisition qualification remain pending-human.
 
 ## Acceptance and decisions before implementation
 
