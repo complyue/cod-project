@@ -256,6 +256,18 @@ struct CheckedCallable {
     if (found == dispatch.end()) throw std::logic_error("unchecked symbolic family invocation");
     return found->second;
   }
+  std::vector<std::pair<std::vector<Type>, size_t>> alternatives(const std::vector<Type> &arguments) const {
+    if (instance) return {{arguments, *instance}};
+    std::vector<std::pair<std::vector<Type>, size_t>> result;
+    for (const auto &entry : dispatch) {
+      bool admitted = entry.first.size() == arguments.size();
+      for (size_t i = 0; admitted && i < arguments.size(); ++i)
+        admitted = entry.first[i] == arguments[i] || accepts_exception(entry.first[i], arguments[i]);
+      if (admitted) result.push_back(entry);
+    }
+    if (result.empty()) throw std::logic_error("unchecked symbolic family invocation");
+    return result;
+  }
 };
 struct CheckedSymbol {
   std::optional<Type> type;
@@ -974,15 +986,17 @@ class ScalarChecker {
     for (size_t id = 0; id < program_.callables.size(); ++id) {
       const auto &callable = program_.callables[id];
       if (callable.type != contract || (choices && !choices->contains(id))) continue;
-      const auto &next = program_.instances[callable.target(arguments)].effects;
-      if (first) { effects = next; first = false; continue; }
-      effects.reads.insert(next.reads.begin(), next.reads.end());
-      effects.symbols.insert(next.symbols.begin(), next.symbols.end());
-      for (auto &[reason, known] : effects.initialized) {
-        const auto found = next.initialized.find(reason);
-        known = found == next.initialized.end() ? std::set<size_t>{} : intersect(known, found->second);
+      for (const auto &[inputs, target] : callable.alternatives(arguments)) {
+        const auto &next = program_.instances[target].effects;
+        if (first) { effects = next; first = false; continue; }
+        effects.reads.insert(next.reads.begin(), next.reads.end());
+        effects.symbols.insert(next.symbols.begin(), next.symbols.end());
+        for (auto &[reason, known] : effects.initialized) {
+          const auto found = next.initialized.find(reason);
+          known = found == next.initialized.end() ? std::set<size_t>{} : intersect(known, found->second);
+        }
+        effects.returned.merge(next.returned);
       }
-      effects.returned.merge(next.returned);
     }
     for (const auto reason : call_reasons(contract)) effects.initialized.try_emplace(reason);
     return effects;
@@ -2823,42 +2837,83 @@ class ScalarChecker {
     });
     const auto id = std::distance(program_.callables.begin(), found);
     if (found == program_.callables.end()) {
-      // A complete family value covers its admitted domain, including unused
-      // alternatives. The finite primitive proof does not define a general ABI.
+      // Cover every admitted input, independently of observed invocations.
+      // This finite proof does not define a general family representation.
+      std::vector<std::vector<Type>> domains;
       for (size_t i = 0; i < view.parameters.size(); ++i) {
-        if ((!view.argument_modes.empty() && view.argument_modes[i] != ArgumentMode::value) ||
-            !scalar_type(view.parameters[i]))
-          implementation_gap(at, "unproved symbolic family view with non-primitive or borrowed inputs");
+        const auto &parameter = view.parameters[i];
+        const auto mode = view.argument_modes.empty() ? ArgumentMode::value : view.argument_modes[i];
+        std::vector<Type> domain;
+        if (mode != ArgumentMode::value) {
+          if (parameter.kind == Type::exception && !parameter.identity)
+            implementation_gap(at, "unproved symbolic family borrowing through a common exception view");
+          domain.push_back(parameter);
+        } else if (scalar_type(parameter)) {
+          for (const auto kind : {Type::boolean, Type::uint8, Type::uint32, Type::uint64, Type::integer, Type::float32, Type::float64})
+            if (transfers_value(kind, parameter)) domain.push_back(kind);
+        } else if (parameter.kind == Type::exception) {
+          for (const auto category : exception_possibilities(parameter)) domain.push_back(exception_type(category));
+        } else if (parameter.kind == Type::procedure) domain.push_back(parameter);
+        else implementation_gap(at, "unproved symbolic family input domain");
+        domains.push_back(std::move(domain));
       }
       CheckedCallable value{view, {}, symbol};
       std::vector<Type> arguments;
       size_t obligations = 0;
+      const auto account = [&] {
+        if (++obligations > 4096) implementation_gap(at, "symbolic family coverage exceeded the compiler resource limit");
+      };
       const std::function<void()> cover = [&] {
-        if (arguments.size() != view.parameters.size()) {
-          for (const auto kind : {Type::boolean, Type::uint8, Type::uint32, Type::uint64, Type::integer, Type::float32, Type::float64})
-            if (transfers_value(kind, view.parameters[arguments.size()])) {
-              arguments.push_back(kind); cover(); arguments.pop_back();
-            }
+        account();
+        if (arguments.size() != domains.size()) {
+          for (const auto &type : domains[arguments.size()]) {
+            arguments.push_back(type); cover(); arguments.pop_back();
+          }
           return;
         }
         Access access;
+        Owners owners(arguments.size());
+        std::map<size_t, size_t> roles;
         std::optional<size_t> selected;
-        const std::function<void()> prove_access = [&] {
-          if (++obligations > 4096) implementation_gap(at, "symbolic family coverage exceeded the compiler resource limit");
-          if (access.size() != arguments.size()) {
-            for (const bool readonly : {false, true}) {
-              access.push_back(readonly); prove_access(); access.pop_back();
+        TypeEvidenceState proof;
+        const std::function<void(size_t, size_t)> prove_owners = [&](size_t i, size_t classes) {
+          account();
+          if (i != arguments.size()) {
+            const auto role = view.owners.empty() ? 0 : view.owners[i];
+            if (!role) { prove_owners(i + 1, classes); return; }
+            if (const auto found = roles.find(role); found != roles.end()) {
+              owners[i] = found->second; prove_owners(i + 1, classes); return;
+            }
+            // Distinct formal owners admit both equal and different actual owners.
+            for (size_t group = 0; group <= classes; ++group) {
+              roles.emplace(role, group); owners[i] = group;
+              prove_owners(i + 1, std::max(classes, group + 1));
+              roles.erase(role);
             }
             return;
           }
-          const auto method = select_method(family, arguments, at, program_.symbols[symbol].name, {}, access);
+          const auto method = select_method(family, arguments, at, program_.symbols[symbol].name, {}, access, owners, &proof);
           if (selected && *selected != method)
-            implementation_gap(at, "unproved symbolic family selection depending on argument access");
+            implementation_gap(at, "unproved symbolic family selection depending on argument access or owner relations");
           selected = method;
+        };
+        const std::function<void()> prove_access = [&] {
+          account();
+          if (access.size() == arguments.size()) { prove_owners(0, 0); return; }
+          const auto i = access.size();
+          const auto mode = view.argument_modes.empty() ? ArgumentMode::value : view.argument_modes[i];
+          const bool readonly = !view.const_views.empty() && view.const_views[i];
+          access.push_back(false); prove_access(); access.pop_back();
+          if (mode == ArgumentMode::value || readonly) {
+            access.push_back(true); prove_access(); access.pop_back();
+          }
         };
         prove_access();
         const auto target = demand(*selected, arguments, at);
         const auto &instance = program_.instances[target];
+        for (size_t i = 0; i < arguments.size(); ++i)
+          if (!view.argument_modes.empty() && view.argument_modes[i] != ArgumentMode::value && instance.arguments[i] != arguments[i])
+            implementation_gap(at, "unproved symbolic family borrowed target adaptation");
         auto contract = callable_type(program_.methods[*selected], instance.arguments, instance.result);
         std::set<size_t> allowed;
         for (const auto &failure : view.throws_types) {
@@ -3993,6 +4048,16 @@ class ScalarChecker {
       }
       return edges;
     };
+    // A family view admits every compatible complete callable in this closed
+    // artifact, even when no observed call supplies that value to this target.
+    for (const auto &family : program_.callables) if (family.family)
+      for (const auto target : family.implementations()) {
+        const auto &instance = program_.instances[target];
+        for (size_t i = 0; i < instance.arguments.size(); ++i) if (instance.arguments[i].kind == Type::procedure)
+          for (size_t id = 0; id < program_.callables.size(); ++id)
+            if (program_.callables[id].type == instance.arguments[i])
+              flow.seed(contexts[target + 1].places.at(instance.frame.inputs.at(i).place), id);
+      }
     using K = Expression::Kind;
     for (size_t c = 0; c < contexts.size(); ++c) {
       for (const auto &[expr, fact] : *contexts[c].facts) {
@@ -4025,7 +4090,8 @@ class ScalarChecker {
             if (candidate.type == fact.operand_type) {
               std::vector<Type> arguments;
               for (size_t i = offset; i < fact.arguments.size(); ++i) arguments.push_back(fact.arguments[i].type);
-              flow.when(callee, id, invocation(c, *expr, fact, candidate.target(arguments) + 1, offset));
+              for (const auto &[inputs, target] : candidate.alternatives(arguments))
+                flow.when(callee, id, invocation(c, *expr, fact, target + 1, offset));
             }
           }
         }

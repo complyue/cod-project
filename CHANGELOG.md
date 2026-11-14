@@ -1,6 +1,12 @@
 # Changelog
 
 
+## 2026-11-14 — Family input contracts
+
+<a id="k-672"></a>
+**K-672 — Family-input continuity.** Agent assessment under H-269/H-273/H-302/H-342/H-344/H-356/H-372–H-378/H-398/H-407/H-409/H-417/H-420, D-10r147/D-14r91/D-17r57/D-18r91/D-21r11/D-26r13 and charter §§2/3.2/5.3/6.3/12: registry r679→680 and source reference293→294 record concrete-category dispatch through common exception values, complete callable input coverage and exact borrowed family contracts. Preserve actual type/owner identity, access, initialization, result targets, prepared snapshots, complete captures and exact cleanup through shared checked/native invocation. Common-exception borrowing, broader adapters, permanent ABI, external input, regional storage and fraction mechanisms retain their boundaries. Prior capability reference: `7919ec0afb9956f3ee4755d375ea5d26317db754:tests/cod/language/README.md`.
+
+
 ## 2026-11-14 — Symbolic family source execution
 
 <a id="k-671"></a>

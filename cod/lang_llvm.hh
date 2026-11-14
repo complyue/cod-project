@@ -464,6 +464,32 @@ class LLVMEmission {
     if (destination) result = b_.CreateInsertValue(result, load(destination), 0);
     return result;
   }
+  llvm::Value *invoke_callable(const Expression &expr, const CheckedCallable &value,
+      const std::vector<Type> &actual, std::vector<llvm::Value *> arguments, llvm::Value *callee) {
+    const auto instance_id = value.target(actual);
+    const auto &instance = program_->instances[instance_id];
+    const auto method = instance.method;
+    auto *target = specialize_ ? specialized_[instance_id] : general_[method];
+    for (size_t i = 0; i < arguments.size(); ++i) if (actual[i] != instance.arguments[i]) {
+      auto *original = arguments[i];
+      arguments[i] = convert_value(original, actual[i], instance.arguments[i]);
+      if (const auto owned = value_owners_.find(original); owned != value_owners_.end()) value_owners_[arguments[i]] = owned->second;
+    }
+    std::vector<std::pair<size_t, llvm::Value *>> saved;
+    auto *image = environment(callee);
+    const auto symbols = program_->captured_symbols(value);
+    if (expr.kind == Expression::Kind::perform && !symbols.empty()) {
+      size_t index = program_->methods[method].captures.size();
+      auto *layout = image_layout(index + symbols.size());
+      for (const auto symbol : symbols) {
+        saved.emplace_back(symbol, b_.CreateLoad(scalar_, symbols_.at(symbol), "replay.previous"));
+        b_.CreateStore(image_capture(layout, image, index++), symbols_.at(symbol));
+      }
+    }
+    auto *result = native_call(target, method, std::move(arguments), image, instance_id);
+    for (const auto &[symbol, previous] : saved) b_.CreateStore(previous, symbols_.at(symbol));
+    return result;
+  }
   llvm::Value *invoke_value(const Expression &expr, const std::vector<llvm::Value *> &prepared) {
     std::vector<Choice> cases;
     for (const auto *facts : facts_) {
@@ -488,30 +514,21 @@ class LLVMEmission {
             })) continue;
         auto *selected = block("callable.selected"); select->addCase(integer(id + 1), selected);
         b_.SetInsertPoint(selected);
-        const std::vector<Type> actual{choice.inputs.begin() + 1, choice.inputs.end()};
-        const auto instance_id = value.target(actual);
-        const auto &instance = program_->instances[instance_id];
-        const auto method = instance.method;
-        auto *target = specialize_ ? specialized_[instance_id] : general_[method];
+        const std::vector<Type> admitted{choice.inputs.begin() + 1, choice.inputs.end()};
+        std::vector<Choice> selections;
+        for (const auto &[inputs, target] : value.alternatives(admitted)) selections.push_back({inputs, choice.operation});
         std::vector<llvm::Value *> arguments{prepared.begin() + 1, prepared.end()};
-        for (size_t i = 0; i < arguments.size(); ++i) if (actual[i] != instance.arguments[i]) {
-          auto *original = arguments[i];
-          arguments[i] = convert_value(original, actual[i], instance.arguments[i]);
-          if (const auto owned = value_owners_.find(original); owned != value_owners_.end()) value_owners_[arguments[i]] = owned->second;
-        }
-        std::vector<std::pair<size_t, llvm::Value *>> saved;
-        auto *image = environment(prepared.front());
-        const auto symbols = program_->captured_symbols(value);
-        if (expr.kind == Expression::Kind::perform && !symbols.empty()) {
-          size_t index = program_->methods[method].captures.size();
-          auto *layout = image_layout(index + symbols.size());
-          for (const auto symbol : symbols) {
-            saved.emplace_back(symbol, b_.CreateLoad(scalar_, symbols_.at(symbol), "replay.previous"));
-            b_.CreateStore(image_capture(layout, image, index++), symbols_.at(symbol));
+        if (value.family) for (size_t i = 0; i < admitted.size(); ++i)
+          if (admitted[i].kind == Type::exception && !admitted[i].identity) {
+            auto *category = b_.CreateExtractValue(unpack(arguments[i], admitted[i]), 0);
+            auto *valid = b_.CreateAnd(b_.CreateICmpUGT(category, integer(0)),
+                                      b_.CreateICmpULT(category, integer(exception_categories.size())));
+            auto *identity = b_.CreateAdd(b_.CreateTrunc(category, b_.getInt32Ty()), b_.getInt32(tag(exception_type(0))));
+            arguments[i] = b_.CreateInsertValue(arguments[i], b_.CreateSelect(valid, identity, b_.getInt32(0)), 1);
           }
-        }
-        auto *result = native_call(target, method, std::move(arguments), image, instance_id);
-        for (const auto &[symbol, previous] : saved) b_.CreateStore(previous, symbols_.at(symbol));
+        auto *result = choose(expr, arguments, selections, outcome_, [&](const Choice &selected) {
+          return invoke_callable(expr, value, selected.inputs, arguments, prepared.front());
+        });
         incoming.emplace_back(result, b_.GetInsertBlock()); b_.CreateBr(join);
       }
       b_.SetInsertPoint(invalid);
