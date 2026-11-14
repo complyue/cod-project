@@ -150,6 +150,25 @@ struct CallEffects {
   std::map<size_t, std::set<size_t>> initialized;
   CleanupEquations::Returned returned;
 };
+enum class OwnerMatch { satisfied, unknown, mismatch };
+struct ViewEvidence {
+  std::optional<bool> read_only, view, value_binding;
+  std::optional<size_t> owner = {};
+  bool mixed_view = false;
+  bool operator==(const ViewEvidence &) const = default;
+};
+struct QueryBinding {
+  std::string name;
+  Type type;
+  ViewEvidence view;
+  bool operator==(const QueryBinding &) const = default;
+};
+// Declaration evidence has no runtime payload or authority to access retained storage.
+struct QueryEnvironment {
+  std::vector<QueryBinding> bindings;
+  std::vector<std::vector<OwnerMatch>> owners;
+  bool operator==(const QueryEnvironment &) const = default;
+};
 struct CheckedInstance {
   size_t method;
   std::vector<Type> arguments;
@@ -161,6 +180,7 @@ struct CheckedInstance {
   CallEffects effects;
   std::vector<Type> environment, context, retained_types;
   std::vector<std::optional<Type>> substitutions;
+  size_t query_environment = 0;
 };
 struct CheckedMethod {
   const Form *source = nullptr;
@@ -169,6 +189,7 @@ struct CheckedMethod {
   Type result;
   std::set<size_t> throws_categories;
   std::vector<Capture> captures;
+  std::vector<Capture> queries;
   bool captures_resolved = false;
   std::vector<std::string> type_parameters;
   std::vector<size_t> retained_types;
@@ -176,6 +197,7 @@ struct CheckedMethod {
 };
 struct CheckedCallable { Type type; size_t instance; };
 struct CheckedProgram {
+  std::vector<QueryEnvironment> query_environments{{}};
   std::vector<CheckedCallable> callables;
   std::vector<CheckedMethod> methods;
   std::deque<CheckedInstance> instances;
@@ -195,7 +217,8 @@ class ScalarChecker {
   std::map<std::string, std::vector<size_t>> families_;
   std::set<std::string> print_symbols_;
   std::map<const Form *, size_t> lexical_methods_;
-  std::map<const Form *, std::vector<Capture>> free_captures_;
+  struct FreeBindings { std::vector<Capture> captures, queries; };
+  std::map<const Form *, FreeBindings> free_bindings_;
   std::map<const Form *, std::set<std::string>> free_types_;
   std::set<const Form *> warned_captures_;
   std::set<std::string> module_values_;
@@ -298,10 +321,18 @@ class ScalarChecker {
       if (same_owner(broad, i, j) && !same_owner(narrow, i, j)) return false;
     return true;
   }
-  enum class OwnerMatch { satisfied, unknown, mismatch };
+  static constexpr size_t query_owner_base = null_target / 2;
+  const QueryEnvironment &query_environment() const {
+    return program_.query_environments[checking_instance_ ? checking_instance_->query_environment : 0];
+  }
   OwnerMatch compare_owners(std::optional<size_t> a, std::optional<size_t> b) const {
     if (!a || !b) return OwnerMatch::unknown;
     if (a == b) return OwnerMatch::satisfied;
+    const auto &relations = query_environment().owners;
+    const auto retained = [&](size_t owner) { return owner >= query_owner_base && owner - query_owner_base < relations.size(); };
+    if (retained(*a) && retained(*b)) return relations[*a - query_owner_base][*b - query_owner_base];
+    if (retained(*a) || retained(*b))
+      return external_owner(retained(*a) ? *b : *a) ? OwnerMatch::unknown : OwnerMatch::mismatch;
     // Distinct formal names admit equal actual owners; local scopes do not.
     return external_owner(*a) && external_owner(*b) ? OwnerMatch::unknown : OwnerMatch::mismatch;
   }
@@ -1055,74 +1086,80 @@ class ScalarChecker {
     return free_types_.emplace(&method, std::move(required)).first->second;
   }
 
-  const std::vector<Capture> &free_captures(const Form &method) {
-    if (const auto found = free_captures_.find(&method); found != free_captures_.end()) return found->second;
-    std::vector<Capture> required;
+  const FreeBindings &free_bindings(const Form &method) {
+    if (const auto found = free_bindings_.find(&method); found != free_bindings_.end()) return found->second;
+    FreeBindings required;
     std::set<std::string> names;
     for (const auto &p : method.parameters) names.insert(p.name);
     for (const auto &p : method.owner_parameters) names.insert(p.name);
     if (!method.name.empty()) names.insert(method.name);
-    const auto use = [&](const std::string &name, const Location &at, const std::set<std::string> &bound) {
-      if (!bound.contains(name) && std::none_of(required.begin(), required.end(), [&](const auto &c) { return c.name == name; }))
-        required.push_back({name, at});
+    const auto use = [&](const std::string &name, const Location &at, const std::set<std::string> &bound, bool query) {
+      auto &dependencies = query ? required.queries : required.captures;
+      if (!bound.contains(name) && std::none_of(dependencies.begin(), dependencies.end(), [&](const auto &c) { return c.name == name; }))
+        dependencies.push_back({name, at});
     };
-    const std::function<void(const Expression &, std::set<std::string> &)> visit = [&](const Expression &expr, auto &bound) {
+    const std::function<void(const Expression &, std::set<std::string> &, bool)> visit = [&](const Expression &expr, auto &bound, bool query) {
       using K = Expression::Kind;
       if (expr.definition) {
+        if (query) return;
         const auto &nested = *expr.definition;
-        for (const auto &capture : free_captures(nested)) use(capture.name, capture.at, bound);
-        for (const auto &capture : nested.captures) use(capture.name, capture.at, bound);
+        const auto &dependencies = free_bindings(nested);
+        for (const auto &capture : dependencies.captures) use(capture.name, capture.at, bound, false);
+        for (const auto &capture : dependencies.queries) use(capture.name, capture.at, bound, true);
+        for (const auto &capture : nested.captures) use(capture.name, capture.at, bound, false);
         if (!nested.name.empty()) bound.insert(nested.name);
         return;
       }
       if (expr.kind == K::pointer_group) {
         for (const auto &declaration : expr.children) {
-          if (declaration->kind == K::block) { visit(*declaration, bound); continue; }
-          for (const auto &child : declaration->children) visit(*child, bound);
+          if (declaration->kind == K::block) { visit(*declaration, bound, query); continue; }
+          for (const auto &child : declaration->children) visit(*child, bound, query);
           bound.insert(declaration->text);
         }
         return;
       }
       if (expr.kind == K::alias) {
-        for (const auto &child : expr.children) visit(*child, bound);
-        if (!expr.owner_name.empty()) use(expr.owner_name, expr.at, bound);
+        for (const auto &child : expr.children) visit(*child, bound, query);
+        if (!expr.owner_name.empty()) use(expr.owner_name, expr.at, bound, query);
         bound.insert(expr.text);
         return;
       }
       if (expr.kind == K::make_local && !expr.annotation) {
-        for (size_t i = 1; i < expr.children.size(); ++i) visit(*expr.children[i], bound);
+        auto queried = bound; visit(*expr.children.front(), queried, true);
+        for (size_t i = 1; i < expr.children.size(); ++i) visit(*expr.children[i], bound, query);
         return;
       }
       if (expr.kind == K::range_for || expr.kind == K::fold) {
         const bool fold = expr.kind == K::fold;
-        for (size_t i = 0; i < (fold ? 3 : 2); ++i) visit(*expr.children[i], bound);
+        for (size_t i = 0; i < (fold ? 3 : 2); ++i) visit(*expr.children[i], bound, query);
         auto iteration = bound; iteration.insert(expr.text);
         if (fold) iteration.insert(expr.binding);
-        visit(*expr.children[fold ? 3 : 2], iteration);
-        if (!fold && expr.children.size() == 4) visit(*expr.children[3], bound);
+        visit(*expr.children[fold ? 3 : 2], iteration, query);
+        if (!fold && expr.children.size() == 4) visit(*expr.children[3], bound, query);
         return;
       }
       if (expr.kind == K::handler) {
         auto caught = bound; caught.insert(expr.text);
-        for (const auto &child : expr.children) visit(*child, caught);
+        for (const auto &child : expr.children) visit(*child, caught, query);
         return;
       }
       if (expr.kind == K::name || (expr.kind == K::call && !expr.intrinsic && !swap_operation(expr.text) && !eager_operation(expr.text)))
-        use(expr.text, expr.at, bound);
+        use(expr.text, expr.at, bound, query);
       auto local = bound;
       auto &scope = expr.kind == K::block && expr.scoped ? local : bound;
-      for (const auto &child : expr.children) visit(*child, scope);
+      for (const auto &child : expr.children) visit(*child, scope, query);
     };
-    visit(*method.body, names);
-    return free_captures_.emplace(&method, std::move(required)).first->second;
+    visit(*method.body, names, false);
+    return free_bindings_.emplace(&method, std::move(required)).first->second;
   }
 
   void resolve_captures(CheckedMethod &method) {
     if (method.captures_resolved) return;
     const auto &source = *method.source;
-    const auto &free = free_captures(source);
+    const auto &free = free_bindings(source).captures;
     const auto required = [&](const Capture &capture) {
       return lexical_.lookup(capture.name).has_value() ||
+          std::any_of(query_environment().bindings.begin(), query_environment().bindings.end(), [&](const auto &binding) { return binding.name == capture.name; }) ||
           (!families_.contains(capture.name) && capture.name != "isnull" && capture.name != "cause_at");
     };
     if (source.explicit_captures) {
@@ -1134,6 +1171,9 @@ class ScalarChecker {
       for (const auto &capture : free) if (required(capture) && !listed.contains(capture.name))
         fail(capture.at, "explicit capture list omits '" + capture.name + "'");
     } else for (const auto &capture : free) if (required(capture)) method.captures.push_back(capture);
+    for (const auto &query : free_bindings(source).queries)
+      if (required(query) && std::none_of(method.captures.begin(), method.captures.end(), [&](const auto &capture) { return capture.name == query.name; }))
+        method.queries.push_back(query);
     method.captures_resolved = true;
   }
 
@@ -1227,13 +1267,13 @@ class ScalarChecker {
     return match(broad, arguments).has_value();
   }
   size_t demand(size_t method, std::vector<Type> arguments, const Location &at, const std::vector<Type> &environment = {},
-                const std::vector<Type> &retained = {}) {
+                const std::vector<Type> &retained = {}, size_t query_environment = 0) {
     auto &definition = program_.methods[method];
     for (size_t i = 0; i < arguments.size(); ++i)
       if (accepts_exception(arguments[i], definition.parameters[i])) arguments[i] = definition.parameters[i];
     for (const auto id : definition.instances)
       if (program_.instances[id].arguments == arguments && program_.instances[id].environment == environment &&
-          program_.instances[id].retained_types == retained) return id;
+          program_.instances[id].retained_types == retained && program_.instances[id].query_environment == query_environment) return id;
     if (program_.instances.size() == instance_limit)
       fail(at, "compiler resource limit: 4096 scalar checking obligations while preparing '" + definition.source->name + "'");
     const auto substitutions = match(definition, arguments, retained);
@@ -1242,7 +1282,7 @@ class ScalarChecker {
     const auto id = program_.instances.size();
     auto context = arguments; context.insert(context.end(), environment.begin(), environment.end());
     context.insert(context.end(), retained.begin(), retained.end());
-    program_.instances.push_back({method, arguments, result, {}, false, {}, {}, {}, environment, std::move(context), retained, *substitutions});
+    program_.instances.push_back({method, arguments, result, {}, false, {}, {}, {}, environment, std::move(context), retained, *substitutions, query_environment});
     program_.instances.back().effects = initial_effects(definition);
     definition.instances.push_back(id);
     return id;
@@ -1295,14 +1335,15 @@ class ScalarChecker {
   }
   size_t select_family(const std::vector<size_t> &family, const std::vector<Type> &arguments, const Location &at, const std::string &name,
                        const std::vector<Type> &environment = {}, const std::vector<Type> &retained = {},
-                       const Access &access = {}, const Owners &owners = {}) {
-    return demand(select_method(family, arguments, at, name, retained, access, owners), arguments, at, environment, retained);
+                       const Access &access = {}, const Owners &owners = {}, size_t query_environment = 0) {
+    return demand(select_method(family, arguments, at, name, retained, access, owners), arguments, at, environment, retained, query_environment);
   }
   size_t select(const Expression &expr, const std::vector<Type> &arguments, const Access &access, const Owners &owners) {
     const auto family = named_family(expr.text);
     if (family.methods.empty()) fail(expr.at, "unknown callable '" + expr.text + "'");
     return select_family(family.methods, arguments, expr.at, expr.text,
-        family.context ? family.context->environment : std::vector<Type>{}, family.retained_types(), access, owners);
+        family.context ? family.context->environment : std::vector<Type>{}, family.retained_types(), access, owners,
+        family.context ? family.context->query_environment : 0);
   }
   bool applicable_operation(const std::string &name, const std::vector<Type> &arguments, const Access &access = {}, const Owners &owners = {}) const {
     const auto family = families_.find(name);
@@ -1458,12 +1499,6 @@ class ScalarChecker {
       if (bindings_->at(*id).owner_binding) fail(at, "owner binding is not a value in typeof");
     }
   }
-  struct ViewEvidence {
-    std::optional<bool> read_only, view, value_binding;
-    std::optional<size_t> owner = {};
-    bool mixed_view = false;
-    bool operator==(const ViewEvidence &) const = default;
-  };
   static ViewEvidence join_views(const ViewEvidence &a, const ViewEvidence &b) {
     const auto either = [](std::optional<bool> x, std::optional<bool> y) -> std::optional<bool> {
       if (x.value_or(false) || y.value_or(false)) return true;
@@ -1836,6 +1871,12 @@ class ScalarChecker {
   TypeEvidenceState evidence_state() const {
     TypeEvidenceState state;
     state.current_owner = std::find_if(lexical_.scopes.rbegin(), lexical_.scopes.rend(), [](const auto &scope) { return scope.declarations; })->id;
+    for (const auto &binding : query_environment().bindings) {
+      state.bindings[binding.name] = binding.type;
+      auto view = binding.view;
+      if (view.owner) *view.owner += query_owner_base;
+      state.views[binding.name] = view;
+    }
     for (const auto &scope : lexical_.scopes) for (const auto &[name, id] : scope.bindings) {
       const auto &binding = bindings_->at(id);
       state.bindings[name] = binding.type;
@@ -1844,6 +1885,35 @@ class ScalarChecker {
       state.views[name] = {binding.read_only, true, binding.value_binding, owner};
     }
     return state;
+  }
+  size_t retain_query_environment(const CheckedMethod &method) {
+    if (method.queries.empty()) return 0;
+    QueryEnvironment environment;
+    const auto state = evidence_state();
+    std::vector<size_t> owners;
+    for (const auto &query : method.queries) {
+      check_query_binding(query.name, query.at);
+      const auto found = state.bindings.find(query.name);
+      if (found == state.bindings.end() || !found->second)
+        implementation_gap(query.at, "typeof requires a known lexical declaration without body inference");
+      auto view = state.views.at(query.name);
+      if (view.owner) {
+        const auto prior = std::find(owners.begin(), owners.end(), *view.owner);
+        const auto id = std::distance(owners.begin(), prior);
+        if (prior == owners.end()) owners.push_back(*view.owner);
+        view.owner = id;
+      }
+      environment.bindings.push_back({query.name, *found->second, view});
+    }
+    for (const auto owner : owners) {
+      std::vector<OwnerMatch> relations;
+      for (const auto other : owners) relations.push_back(compare_owners(owner, other));
+      environment.owners.push_back(std::move(relations));
+    }
+    const auto found = std::find(program_.query_environments.begin(), program_.query_environments.end(), environment);
+    const auto id = std::distance(program_.query_environments.begin(), found);
+    if (found == program_.query_environments.end()) program_.query_environments.push_back(std::move(environment));
+    return id;
   }
   std::vector<ArgumentEvidence> argument_evidence(const Expression &expr) const {
     std::vector<ArgumentEvidence> result(expr.children.size());
@@ -1916,10 +1986,10 @@ class ScalarChecker {
     }
     if (validating_ && definition.source->explicit_captures && warned_captures_.insert(definition.source).second)
       for (const auto &capture : definition.captures)
-        if (std::none_of(free_captures(*definition.source).begin(), free_captures(*definition.source).end(),
+        if (std::none_of(free_bindings(*definition.source).captures.begin(), free_bindings(*definition.source).captures.end(),
                          [&](const auto &used) { return used.name == capture.name; }))
           program_.warnings.push_back({Warning::unused_capture, capture.at, "unused callable capture '" + capture.name + "' remains retained"});
-    const auto selected = demand(selection.method, selection.arguments, at, environment, selection.retained);
+    const auto selected = demand(selection.method, selection.arguments, at, environment, selection.retained, retain_query_environment(definition));
     const auto &type = selection.type;
     const auto found = std::find_if(program_.callables.begin(), program_.callables.end(), [&](const auto &value) {
       return value.instance == selected && value.type == type;

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Outer lexical declaration evidence
+
+<a id="k-643"></a>
+**K-643 — Lexical query continuity.** Agent assessment: registry r643→644 and source reference264→265 continue D-14r82/H-295/P-257's nonexecuting queries, D-18r90/H-329/H-331/P-297's explicit capture obligations and P-299/P-301/P-302's native callable contract under D-21r11/D-26r9 and charter §§5/6.3/12. Known outer declarations supply type/access/owner-relation evidence independently of runtime values. Checking and shared native selection preserve distinct contexts without outer payload reads, storage retention or runtime owner identities. Acceptance includes shadowing/availability, returned and recursive contexts, unknown-owner rejection, allocation-free queries and exact real-capture cleanup in both modes. Unavailable declarations, outer lexical method-family evidence, body inference, permanent ABI, regional mechanisms and pending designs remain excluded. Prior capability reference: `67c3d8be50b024e78e5a49224aca1cab4421d6ce:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Anonymous callable signature queries
 
 <a id="k-642"></a>

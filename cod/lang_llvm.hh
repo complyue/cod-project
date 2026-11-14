@@ -45,7 +45,8 @@ class LLVMEmission {
   std::vector<llvm::Value *> arguments_, retained_types_;
   std::vector<llvm::AllocaInst *> storage_, bindings_;
   std::vector<llvm::AllocaInst *> parameter_values_;
-  std::vector<const std::vector<Type> *> frame_types_;
+  std::vector<const CheckedInstance *> frame_contexts_;
+  llvm::Value *query_environment_ = nullptr;
   llvm::Function *function_ = nullptr;
   llvm::BasicBlock *finish_ = nullptr;
   llvm::AllocaInst *result_ = nullptr, *category_ = nullptr, *site_ = nullptr, *fatal_ = nullptr, *exit_ = nullptr;
@@ -78,7 +79,7 @@ class LLVMEmission {
   struct Choice {
     std::vector<Type> inputs;
     const CheckedOperation *operation;
-    std::vector<std::vector<Type>> contexts = {};
+    std::vector<const CheckedInstance *> contexts = {};
   };
 
   llvm::ConstantInt *integer(std::uint64_t value) { return b_.getInt64(value); }
@@ -227,12 +228,12 @@ class LLVMEmission {
       std::optional<size_t> parameter;
       for (size_t p = 0; p < arguments_.size(); ++p) {
         bool same = true;
-        for (size_t i = 0; i < facts_.size(); ++i) same = same && frame_types_[i]->at(p) == type(i);
+        for (size_t i = 0; i < facts_.size(); ++i) same = same && frame_contexts_[i]->context.at(p) == type(i);
         if (same) { parameter = p; break; }
       }
       if (parameter) identity = b_.CreateExtractValue(arguments_[*parameter], 1);
       else for (size_t i = 1; i < facts_.size(); ++i)
-        identity = b_.CreateSelect(matches(arguments_, *frame_types_[i]), b_.getInt32(tag(type(i))), identity);
+        identity = b_.CreateSelect(matches_context(*frame_contexts_[i]), b_.getInt32(tag(type(i))), identity);
     }
     auto *value = b_.CreateInsertValue(empty_scalar(), b_.CreatePtrToInt(address, b_.getInt64Ty()), 0);
     return b_.CreateInsertValue(value, identity, 1);
@@ -309,7 +310,7 @@ class LLVMEmission {
       };
       auto found = std::find_if(result.begin(), result.end(), same);
       if (found == result.end()) { result.push_back(std::move(choice)); found = std::prev(result.end()); }
-      if (i < frame_types_.size()) found->contexts.push_back(*frame_types_[i]);
+      if (i < frame_contexts_.size()) found->contexts.push_back(frame_contexts_[i]);
     }
     for (auto &choice : result)
       if (std::none_of(result.begin(), result.end(), [&](const auto &other) { return &choice != &other && choice.inputs == other.inputs; }))
@@ -322,6 +323,12 @@ class LLVMEmission {
       condition = b_.CreateAnd(condition, b_.CreateICmpEQ(b_.CreateExtractValue(values[i], 1), b_.getInt32(tag(types[i]))));
     return condition;
   }
+  llvm::Value *matches_context(const CheckedInstance &instance) {
+    auto *condition = matches(arguments_, instance.context);
+    if (query_environment_)
+      condition = b_.CreateAnd(condition, b_.CreateICmpEQ(query_environment_, b_.getInt32(instance.query_environment)));
+    return condition;
+  }
   llvm::Value *choose(const Expression &expr, const std::vector<llvm::Value *> &inputs, const std::vector<Choice> &cases,
                       llvm::Type *result_type, const std::function<llvm::Value *(const Choice &)> &emit_choice) {
     if (cases.size() == 1) return emit_choice(cases.front());
@@ -332,7 +339,7 @@ class LLVMEmission {
       auto *condition = matches(inputs, choice.inputs);
       if (!choice.contexts.empty()) {
         llvm::Value *context = b_.getFalse();
-        for (const auto &types : choice.contexts) context = b_.CreateOr(context, matches(arguments_, types));
+        for (const auto *checked : choice.contexts) context = b_.CreateOr(context, matches_context(*checked));
         condition = b_.CreateAnd(condition, context);
       }
       b_.CreateCondBr(condition, selected, next);
@@ -424,6 +431,10 @@ class LLVMEmission {
       if (program_->methods[method].retained_types.size() != retained_types_.size())
         throw std::logic_error("native call lacks its lexical type context");
       prepared.insert(prepared.end(), retained_types_.begin(), retained_types_.end());
+    }
+    if (!program_->methods[method].queries.empty()) {
+      if (!instance && !query_environment_) throw std::logic_error("native call lacks its declaration evidence context");
+      prepared.push_back(instance ? b_.getInt32(program_->instances[*instance].query_environment) : query_environment_);
     }
     if (caller_destination(method)) { destination = slot(scalar_, "callable.result"); prepared.push_back(destination); }
     llvm::Value *result = b_.CreateCall(target, prepared);
@@ -610,13 +621,13 @@ class LLVMEmission {
       dispatch->addCase(integer(i), run);
       b_.SetInsertPoint(run);
       const auto all_facts = facts_;
-      const auto all_contexts = frame_types_;
-      facts_.clear(); frame_types_.clear();
+      const auto all_contexts = frame_contexts_;
+      facts_.clear(); frame_contexts_.clear();
       for (size_t j = 0; j < all_facts.size(); ++j)
         if (all_facts[j]->at(descriptor.action).captures == descriptor.captures &&
             (body.kind == Expression::Kind::block || all_facts[j]->at(&body).type != Type::never)) {
           facts_.push_back(all_facts[j]);
-          if (!all_contexts.empty()) frame_types_.push_back(all_contexts.at(j));
+          if (!all_contexts.empty()) frame_contexts_.push_back(all_contexts.at(j));
         }
       if (body.kind == Expression::Kind::block) {
         std::vector<std::pair<size_t, llvm::AllocaInst *>> bindings;
@@ -634,7 +645,7 @@ class LLVMEmission {
           else emit_finally(*descriptor.action, Projection::value, true, pending_failure);
         }, descriptor.action->children.size() > 1);
         for (const auto &[id, place] : bindings) storage_[id] = place;
-        facts_ = all_facts; frame_types_ = all_contexts;
+        facts_ = all_facts; frame_contexts_ = all_contexts;
         b_.CreateBr(scope.cleanup);
         continue;
       }
@@ -646,7 +657,7 @@ class LLVMEmission {
       auto *result = invoke(body, arguments);
       release_value(b_.CreateExtractValue(result, 0));
       if (facts_.front()->at(&body).callable_call) release_value(arguments.front());
-      facts_ = all_facts; frame_types_ = all_contexts;
+      facts_ = all_facts; frame_contexts_ = all_contexts;
       auto *replace = block("defer.failed");
       b_.CreateCondBr(failed(result), replace, scope.cleanup);
       b_.SetInsertPoint(replace); save_failure(result); b_.CreateBr(scope.cleanup);
@@ -796,17 +807,17 @@ class LLVMEmission {
     if (alternatives.size() == 1) return emit(alternatives.begin()->first);
     if (!result_type) result_type = scalar_;
     const auto all_facts = facts_;
-    const auto all_contexts = frame_types_;
+    const auto all_contexts = frame_contexts_;
     auto *join = block(label + ".prepared");
     auto *saved = environments_ && result_type == scalar_ ? owned_slot(*temporaries_, label + ".value") : nullptr;
     std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> incoming;
     for (const auto &[key, indices] : alternatives) {
       auto *selected = block(label + ".prepare"), *next = block(label + ".next");
       llvm::Value *condition = b_.getFalse();
-      facts_.clear(); frame_types_.clear();
+      facts_.clear(); frame_contexts_.clear();
       for (const auto i : indices) {
-        condition = b_.CreateOr(condition, matches(arguments_, *all_contexts.at(i)));
-        facts_.push_back(all_facts[i]); frame_types_.push_back(all_contexts[i]);
+        condition = b_.CreateOr(condition, matches_context(*all_contexts.at(i)));
+        facts_.push_back(all_facts[i]); frame_contexts_.push_back(all_contexts[i]);
       }
       b_.CreateCondBr(condition, selected, next);
       b_.SetInsertPoint(selected);
@@ -817,7 +828,7 @@ class LLVMEmission {
       }
       b_.SetInsertPoint(next);
     }
-    facts_ = all_facts; frame_types_ = all_contexts;
+    facts_ = all_facts; frame_contexts_ = all_contexts;
     fail_path(ExceptionCategory::unsound_runtime_typing, expr.at);
     b_.SetInsertPoint(join);
     if (incoming.empty()) { b_.CreateUnreachable(); return nullptr; }
@@ -961,8 +972,8 @@ class LLVMEmission {
       llvm::Value *value;
       if (std::any_of(facts_.begin(), facts_.end(), [&](const auto *facts) { return facts->at(&expr).callable != fact.callable; })) {
         std::vector<Choice> cases;
-        for (size_t i = 0; i < facts_.size(); ++i) cases.push_back({*frame_types_[i], &facts_[i]->at(&expr)});
-        value = choose(expr, arguments_, cases, scalar_, [&](const Choice &choice) { return materialize(*choice.operation); });
+        for (size_t i = 0; i < facts_.size(); ++i) cases.push_back({{}, &facts_[i]->at(&expr), {frame_contexts_[i]}});
+        value = choose(expr, {}, cases, scalar_, [&](const Choice &choice) { return materialize(*choice.operation); });
       } else value = materialize(fact);
       if (definition) {
         auto *place = storage_.at(*fact.place);
@@ -1243,7 +1254,7 @@ class LLVMEmission {
         llvm::GlobalValue::InternalLinkage, name, module_);
   }
   void begin(llvm::Function *function, const std::vector<CheckedStorage> &storage, const std::vector<CheckedBinding> &bindings, size_t arity = 0) {
-    function_ = function; arguments_.clear(); retained_types_.clear(); parameter_values_.clear(); value_owners_.clear(); environment_ = nullptr; temporaries_ = nullptr;
+    function_ = function; arguments_.clear(); retained_types_.clear(); parameter_values_.clear(); value_owners_.clear(); environment_ = nullptr; query_environment_ = nullptr; temporaries_ = nullptr;
     for (size_t i = 0; i < arity; ++i) arguments_.push_back(function->getArg(i));
     b_.SetInsertPoint(block("entry")); finish_ = block("completion"); scope_ = nullptr; control_ = nullptr;
     result_ = slot(scalar_, "return.value"); category_ = slot(b_.getInt64Ty(), "exception.category");
@@ -1302,9 +1313,9 @@ class LLVMEmission {
       for (auto &[expr, operation] : operations.back()) lower(lower, operation);
       lowered.push_back(&operations.back());
     }
-    begin(function, storage, layout.bindings, method.parameters.size()); facts_ = std::move(lowered); frame_types_.clear();
+    begin(function, storage, layout.bindings, method.parameters.size()); facts_ = std::move(lowered); frame_contexts_.clear();
     for (size_t i = 0; i < instances.size(); ++i) {
-      frame_types_.push_back(&program_->instances[instances[i]].context);
+      frame_contexts_.push_back(&program_->instances[instances[i]]);
     }
     if (!method.captures.empty()) {
       environment_ = function->getArg(method.parameters.size());
@@ -1324,6 +1335,8 @@ class LLVMEmission {
       retained_types_.push_back(type);
       arguments_.push_back(b_.CreateInsertValue(empty_scalar(), type, 1));
     }
+    if (!method.queries.empty())
+      query_environment_ = function->getArg(method.parameters.size() + !method.captures.empty() + method.retained_types.size());
     llvm::Value *returns_value = nullptr;
     if (instance) {
       if (program_->instances[*instance].result != Type::void_type) returns_value = b_.getTrue();
@@ -1334,7 +1347,7 @@ class LLVMEmission {
       if (all_return) returns_value = b_.getTrue();
       llvm::Value *admitted = b_.getFalse();
       for (const auto id : method.instances) {
-        auto *context = matches(arguments_, program_->instances[id].context);
+        auto *context = matches_context(program_->instances[id]);
         admitted = b_.CreateOr(admitted, context);
         if (!all_return && program_->instances[id].result != Type::void_type)
           returns_value = returns_value ? b_.CreateOr(returns_value, context) : context;
@@ -1354,7 +1367,7 @@ class LLVMEmission {
       b_.CreateCondBr(b_.CreateICmpEQ(load(exit_), b_.getInt8(2)), failed, ready);
       b_.SetInsertPoint(failed); clear_value(result_); b_.CreateBr(ready); b_.SetInsertPoint(ready);
     }
-    const auto result_index = method.parameters.size() + !method.captures.empty() + method.retained_types.size();
+    const auto result_index = method.parameters.size() + !method.captures.empty() + method.retained_types.size() + !method.queries.empty();
     if (function->arg_size() > result_index) b_.CreateStore(load(result_), function->getArg(result_index));
     b_.CreateRet(outcome(load(result_), load(category_), load(site_), load(fatal_), load(requested_), load(available_), load(cause_)));
   }
@@ -1393,21 +1406,22 @@ public:
     for (size_t i = 0; i < program.methods.size(); ++i) {
       const auto &method = program.methods[i]; if (method.instances.empty()) continue;
       const auto prefix = "cod.method." + std::to_string(i) + "." + method.source->name;
-      if (method.source->type_parameters.empty() && method.captures.empty() && method.retained_types.empty()) {
+      if (method.source->type_parameters.empty() && method.captures.empty() && method.retained_types.empty() && method.queries.empty()) {
         general_[i] = declare(prefix + ".native", method.source->parameters.size(), caller_destination(i), false, 0);
         specialized_[method.instances.front()] = general_[i];
         continue;
       }
-      general_[i] = declare(prefix + ".general", method.source->parameters.size(), caller_destination(i), !method.captures.empty(), method.retained_types.size());
+      general_[i] = declare(prefix + ".general", method.source->parameters.size(), caller_destination(i), !method.captures.empty(), method.retained_types.size() + !method.queries.empty());
       if (specialize) for (const auto id : method.instances) {
         std::string name = prefix + ".specialized";
         for (const auto &type : program.instances[id].context) name += "." + type_name(type);
-        specialized_[id] = declare(name, method.source->parameters.size(), caller_destination(i), !method.captures.empty(), method.retained_types.size());
+        if (!method.queries.empty()) name += ".query." + std::to_string(program.instances[id].query_environment);
+        specialized_[id] = declare(name, method.source->parameters.size(), caller_destination(i), !method.captures.empty(), method.retained_types.size() + !method.queries.empty());
       }
     }
     for (size_t i = 0; i < program.methods.size(); ++i) {
       const auto &method = program.methods[i]; if (method.instances.empty()) continue;
-      if (method.source->type_parameters.empty() && method.captures.empty() && method.retained_types.empty()) {
+      if (method.source->type_parameters.empty() && method.captures.empty() && method.retained_types.empty() && method.queries.empty()) {
         body(general_[i], method, method.instances.front());
         continue;
       }

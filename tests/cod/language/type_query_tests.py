@@ -61,7 +61,7 @@ runner.CASES={
  'borrow_respects_owner':('func get(ref x:i64 in O,ref y:i64 in O)->const i64 where {owner O}{return x;}val x=1;{{val y=2;val z=make local typeof(get(x,y));}};',2,'','different actual owners'),
  'body_inference_unavailable':('func f(x:i64){return x;}val x=make local typeof(f(1));',2,'','omitted callable result type'),
  'query_cannot_declare_runtime_storage':('val x=make local typeof({val y=1;y});',2,'','typeof for this expression form'),
- 'outer_query_does_not_capture':('func id(x:i64)->const i64{return x;}proc run()->void{func f=id;func nested()->const i64{val x=make local typeof(f(1)){2};return x;};nested();}run();',2,'','known callable signature'),
+ 'outer_query_does_not_capture':('func id(x:i64)->const i64{return x;}proc run()->void{func f=id;func nested()->const i64{val x=make local typeof(f(1)){2};return x;};nested();}run();',0,'',''),
  'mixed_isnull_view':('val a=1;val b=make local typeof(isnull(if(true){a}else{1}));',2,'','isnull requires one reference view'),
  'mixed_borrowed_view':('func f(ref x:i64 in O)->const i64 where {owner O}{return x;}val a=1;val b=make local typeof(f(if(true){a}else{1}));',2,'','existing view'),
  'callable_arity':(ID+'func f:func(i64)->const i64=id;val x=make local typeof(f(1,2));',2,'','callable argument count'),
