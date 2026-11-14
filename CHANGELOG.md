@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-13 — Loop setup and completion evidence
+
+<a id="k-637"></a>
+**K-637 — Loop completion continuity.** Agent assessment: registry r637→638 and source reference258→259 continue D-17r54/H-356/H-361/H-362/H-365/C-63/P-321–P-324/P-326, D-14 initialization/access, D-18r90 complete values and D-21r11/D-26r9 native coverage under charter §§3.3/6.3/12. Abrupt bounds skip loop initialization and both branches while preserving earlier effects and cleanup. Non-executing evidence propagates known exits without payload/access/owner claims; actual source checking remains authoritative. Acceptance covers ordered failure, skipped copying/registration, invalid-source rejection and both native modes. Missing index/accumulator types and broader proof, numeric, representation and pending design choices remain unqualified. Prior capability reference: `fb128d4f891f3938baa77b7f41a08b943b7dc857:tests/cod/language/README.md`.
+
 ## 2026-11-13 — Storage operand completion
 
 <a id="k-636"></a>

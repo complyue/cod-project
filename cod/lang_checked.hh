@@ -261,9 +261,12 @@ class ScalarChecker {
   }
   using Substitutions = std::vector<std::optional<Type>>;
   using Access = std::vector<std::optional<bool>>;
+  static std::optional<bool> access_of(const CheckedOperation &view) {
+    return view.type == Type::never ? std::nullopt : std::optional<bool>{view.read_only};
+  }
   static Access access_of(const std::vector<CheckedOperation> &views) {
     Access access;
-    for (const auto &view : views) access.push_back(view.read_only);
+    for (const auto &view : views) access.push_back(access_of(view));
     return access;
   }
   static bool admits_access(const CheckedMethod &method, const Access &access) {
@@ -279,7 +282,7 @@ class ScalarChecker {
   }
   using Owners = std::vector<std::optional<size_t>>;
   static std::optional<size_t> one_owner(const CheckedOperation &view) {
-    return view.owners.size() == 1 ? std::optional<size_t>{*view.owners.begin()} : std::nullopt;
+    return view.type != Type::never && view.owners.size() == 1 ? std::optional<size_t>{*view.owners.begin()} : std::nullopt;
   }
   static Owners owners_of(const std::vector<CheckedOperation> &views) {
     Owners owners;
@@ -341,7 +344,7 @@ class ScalarChecker {
     Access access;
     Owners owners;
     for (const auto &item : evidence) { access.push_back(item.read_only); owners.push_back(item.owner); }
-    for (size_t i = 0; i < views.size(); ++i) { access[i] = views[i].read_only; owners[i] = one_owner(views[i]); }
+    for (size_t i = 0; i < views.size(); ++i) { access[i] = access_of(views[i]); owners[i] = one_owner(views[i]); }
     bool complete = true;
     for (size_t i = prefix.size(); i < evidence.size(); ++i)
       complete = complete && evidence[i].type.has_value() && evidence[i].type != Type::never;
@@ -1409,7 +1412,7 @@ class ScalarChecker {
   std::optional<Type> type_evidence(const Expression &expr, TypeEvidenceState &state, bool contextual = false) const {
     ViewEvidence view{false, false, {}};
     const auto type = query_evidence(expr, state, view, contextual);
-    state.value = type ? view : ViewEvidence{};
+    state.value = type && type != Type::never ? view : ViewEvidence{};
     return type;
   }
   std::optional<Type> query_evidence(const Expression &expr, TypeEvidenceState &state, ViewEvidence &view, bool contextual) const {
@@ -1494,11 +1497,12 @@ class ScalarChecker {
       return type;
     }
     case K::conditional: {
-      child(0);
+      const auto condition = child(0);
       auto yes_state = state, no_state = state;
       const auto yes = type_evidence(*expr.children[1], yes_state, contextual), no = type_evidence(*expr.children[2], no_state, contextual);
       state = merge_evidence(std::move(yes_state), no_state);
       view = yes == Type::never ? no_state.value : no == Type::never ? yes_state.value : join_views(yes_state.value, no_state.value);
+      if (condition == Type::never) return Type::never;
       if (yes == Type::never) return no;
       if (no == Type::never || yes == no) return yes;
       return {};
@@ -1533,7 +1537,8 @@ class ScalarChecker {
     }
     case K::range_for: case K::fold: {
       const bool fold = expr.kind == K::fold;
-      const auto index = child(0); child(1);
+      const auto first = child(0), last = child(1);
+      const auto index = first == Type::never ? last : first;
       const auto accumulator = fold ? child(2) : std::optional<Type>{Type::void_type};
       auto iteration = state;
       iteration.bindings[expr.text] = index; iteration.views[expr.text] = {true, true, true};
@@ -1543,13 +1548,14 @@ class ScalarChecker {
         auto empty = state; type_evidence(*expr.children[3], empty);
         state = merge_evidence(std::move(state), empty);
       }
+      if (first == Type::never || last == Type::never || accumulator == Type::never) return Type::never;
       return accumulator;
     }
     case K::binary:
       if (expr.text == "&&" || expr.text == "||") {
-        child(0); auto skipped = state; child(1);
+        const auto left = child(0); auto skipped = state; child(1);
         state = merge_evidence(std::move(skipped), state);
-        return Type::boolean;
+        return left == Type::never ? Type{Type::never} : Type{Type::boolean};
       }
       [[fallthrough]];
     case K::unary: case K::call: case K::value_call: {
@@ -1565,10 +1571,13 @@ class ScalarChecker {
       Access access;
       Owners owners;
       bool complete = true;
+      bool exits = target == Type::never;
       for (size_t i = expr.kind == K::value_call ? 1 : 0; i < expr.children.size(); ++i) {
         const auto type = child(i, true); complete = complete && type.has_value();
+        exits = exits || type == Type::never;
         arguments.push_back(type.value_or(Type::never)); access.push_back(state.value.read_only); owners.push_back(state.value.owner);
       }
+      if (exits) return Type::never;
       if (local) {
         if (!target || target->kind != Type::procedure || !target->target || target->parameters.size() != arguments.size()) return {};
         const bool borrowed = !target->owners.empty() && target->owners.back();
@@ -1609,13 +1618,17 @@ class ScalarChecker {
     }
     case K::field: {
       const auto type = child(0);
+      if (type == Type::never) return Type::never;
       return type && type->kind == Type::exception ? std::optional<Type>{Type::uint64} : std::nullopt;
     }
-    case K::behave: case K::perform:
-      for (const auto &item : expr.children) type_evidence(*item, state);
+    case K::behave: case K::perform: {
+      bool exits = false;
+      for (const auto &item : expr.children) if (type_evidence(*item, state) == Type::never) exits = true;
+      if (exits) return Type::never;
       return print_symbols_.contains(expr.text) ? std::optional<Type>{Type::void_type} : std::nullopt;
+    }
     case K::deferred:
-      if (expr.children.front()->kind != K::block) child(0);
+      if (expr.children.front()->kind != K::block && child(0) == Type::never) return Type::never;
       return Type::void_type;
     case K::return_value: case K::raise:
       for (const auto &item : expr.children) type_evidence(*item, state);
@@ -2298,14 +2311,18 @@ class ScalarChecker {
     case K::range_for: case K::fold: {
       const bool fold = expr.kind == K::fold;
       const auto first = child(0), last = child(1);
-      if (!integral(first) || !integral(last)) fail(expr.at, "a range requires integer endpoints");
-      if (first != last) implementation_gap(expr.at, "range endpoints with different integer types");
+      if ((first != Type::never && !integral(first)) || (last != Type::never && !integral(last)))
+        fail(expr.at, "a range requires integer endpoints");
+      const auto index = first == Type::never ? last : first;
+      if (index == Type::never) implementation_gap(expr.at, "range index type is not established by an endpoint");
+      const bool completes = first != Type::never && last != Type::never;
+      if (completes && first != last) implementation_gap(expr.at, "range endpoints with different integer types");
       Type accumulator;
       if (fold) { accumulator = child(2); require_value(accumulator); if (accumulator.kind == Type::procedure) note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)}); }
       const auto before = lexical_;
-      bool body_possible = true, empty_possible = true, repeat_possible = true;
+      bool body_possible = completes, empty_possible = completes, repeat_possible = completes;
       const auto start = constant_integer(*expr.children[0], operations), end = constant_integer(*expr.children[1], operations);
-      if (start && end) {
+      if (completes && start && end) {
         body_possible = first == Type::integer ? std::bit_cast<std::int64_t>(*start) < std::bit_cast<std::int64_t>(*end) : *start < *end;
         empty_possible = !body_possible;
         repeat_possible = body_possible && *end - *start > 1;
@@ -2321,7 +2338,7 @@ class ScalarChecker {
       for (auto &[id, categories] : lexical_.exceptions)
         if (!(*storage_)[id].read_only) categories = exception_possibilities((*storage_)[id].type);
       lexical_.scopes.push_back({next_scope_++, {}});
-      operation.place = declare(expr.text, first, true, true, expr.at);
+      operation.place = declare(expr.text, index, true, true, expr.at);
       initialize(*operation.place);
       loop_controls_.insert(*operation.place);
       if (fold) {
@@ -2349,7 +2366,7 @@ class ScalarChecker {
       const bool empty_exits = !empty_possible || otherwise == Type::never;
       join(body_state, body_exits, empty_state, empty_exits, expr.at);
       operation.type = body_exits && empty_exits ? Type{Type::never} : fold ? accumulator : Type{Type::void_type};
-      operation.operand_type = first;
+      operation.operand_type = index;
       operation.exceptions = exception_possibilities(operation.type);
       break;
     }
