@@ -54,6 +54,7 @@ struct CheckedOperation {
   Type operand_type;
   std::optional<size_t> callee;
   std::optional<size_t> callable, callable_binding, callable_place;
+  std::vector<CheckedOperation> callable_captures;
   bool callable_call = false;
   std::optional<size_t> place;
   std::optional<size_t> binding;
@@ -85,6 +86,7 @@ struct CheckedStorage {
   size_t scope;
   bool read_only;
   bool borrowed = false;
+  bool captured = false;
 };
 
 struct CheckedBinding {
@@ -94,6 +96,7 @@ struct CheckedBinding {
   bool fixed;
   bool requires_initialized = false;
   bool owner_binding = false;
+  bool callable_value = false;
 };
 
 struct LexicalState {
@@ -136,6 +139,7 @@ struct CheckedInstance {
   std::vector<CheckedStorage> storage;
   std::vector<CheckedBinding> bindings;
   CallEffects effects;
+  std::vector<Type> environment, context;
 };
 struct CheckedMethod {
   const Form *source;
@@ -143,6 +147,8 @@ struct CheckedMethod {
   std::vector<Type> parameters;
   Type result;
   std::set<size_t> throws_categories;
+  std::vector<Capture> captures;
+  bool captures_resolved = false;
 };
 struct CheckedCallable { Type type; size_t instance; };
 struct CheckedProgram {
@@ -162,6 +168,8 @@ class ScalarChecker {
   std::map<std::string, std::vector<size_t>> families_;
   std::set<std::string> print_symbols_;
   std::map<const Form *, size_t> lexical_methods_;
+  std::map<const Form *, std::vector<Capture>> free_captures_;
+  std::set<const Form *> warned_captures_;
   std::set<std::string> module_values_;
   std::map<std::string, Type> exception_types_;
   std::set<size_t> warned_missing_return_;
@@ -187,6 +195,7 @@ class ScalarChecker {
   std::set<size_t> catch_bindings_;
   std::map<size_t, std::map<size_t, std::uint64_t>> caught_inputs_;
   const CheckedMethod *checking_method_ = nullptr;
+  const CheckedInstance *checking_instance_ = nullptr;
   std::set<size_t> loop_controls_, delayed_controls_;
   struct CatchCapture {
     CatchCapture *parent;
@@ -636,6 +645,77 @@ class ScalarChecker {
     return resolved;
   }
 
+  const std::vector<Capture> &free_captures(const Form &method) {
+    if (const auto found = free_captures_.find(&method); found != free_captures_.end()) return found->second;
+    std::vector<Capture> required;
+    std::set<std::string> names;
+    for (const auto &p : method.parameters) names.insert(p.name);
+    for (const auto &p : method.owner_parameters) names.insert(p.name);
+    if (!method.name.empty()) names.insert(method.name);
+    const auto use = [&](const std::string &name, const Location &at, const std::set<std::string> &bound) {
+      if (!bound.contains(name) && std::none_of(required.begin(), required.end(), [&](const auto &c) { return c.name == name; }))
+        required.push_back({name, at});
+    };
+    const std::function<void(const Expression &, std::set<std::string> &)> visit = [&](const Expression &expr, auto &bound) {
+      using K = Expression::Kind;
+      if (expr.definition) {
+        const auto &nested = *expr.definition;
+        for (const auto &capture : free_captures(nested)) use(capture.name, capture.at, bound);
+        for (const auto &capture : nested.captures) use(capture.name, capture.at, bound);
+        if (!nested.name.empty()) bound.insert(nested.name);
+        return;
+      }
+      if (expr.kind == K::pointer_group) {
+        for (const auto &declaration : expr.children) {
+          if (declaration->kind == K::block) { visit(*declaration, bound); continue; }
+          for (const auto &child : declaration->children) visit(*child, bound);
+          bound.insert(declaration->text);
+        }
+        return;
+      }
+      if (expr.kind == K::range_for || expr.kind == K::fold) {
+        const bool fold = expr.kind == K::fold;
+        for (size_t i = 0; i < (fold ? 3 : 2); ++i) visit(*expr.children[i], bound);
+        auto iteration = bound; iteration.insert(expr.text);
+        if (fold) iteration.insert(expr.binding);
+        visit(*expr.children[fold ? 3 : 2], iteration);
+        if (!fold && expr.children.size() == 4) visit(*expr.children[3], bound);
+        return;
+      }
+      if (expr.kind == K::handler) {
+        auto caught = bound; caught.insert(expr.text);
+        for (const auto &child : expr.children) visit(*child, caught);
+        return;
+      }
+      if (expr.kind == K::name || expr.kind == K::call) use(expr.text, expr.at, bound);
+      auto local = bound;
+      auto &scope = expr.kind == K::block && expr.scoped ? local : bound;
+      for (const auto &child : expr.children) visit(*child, scope);
+    };
+    visit(*method.body, names);
+    return free_captures_.emplace(&method, std::move(required)).first->second;
+  }
+
+  void resolve_captures(CheckedMethod &method) {
+    if (method.captures_resolved) return;
+    const auto &source = *method.source;
+    const auto &free = free_captures(source);
+    const auto required = [&](const Capture &capture) {
+      return lexical_.lookup(capture.name).has_value() ||
+          (!families_.contains(capture.name) && capture.name != "isnull" && capture.name != "cause_at");
+    };
+    if (source.explicit_captures) {
+      std::set<std::string> listed;
+      for (const auto &capture : source.captures) {
+        if (!listed.insert(capture.name).second) fail(capture.at, "duplicate callable capture '" + capture.name + "'");
+        method.captures.push_back(capture);
+      }
+      for (const auto &capture : free) if (required(capture) && !listed.contains(capture.name))
+        fail(capture.at, "explicit capture list omits '" + capture.name + "'");
+    } else for (const auto &capture : free) if (required(capture)) method.captures.push_back(capture);
+    method.captures_resolved = true;
+  }
+
   static std::optional<size_t> binder(const Form &method, const Type &type) {
     if (type.kind != Type::named) return {};
     for (size_t i = 0; i < method.type_parameters.size(); ++i)
@@ -711,12 +791,12 @@ class ScalarChecker {
     }
     return true;
   }
-  size_t demand(size_t method, std::vector<Type> arguments, const Location &at) {
+  size_t demand(size_t method, std::vector<Type> arguments, const Location &at, const std::vector<Type> &environment = {}) {
     auto &definition = program_.methods[method];
     for (size_t i = 0; i < arguments.size(); ++i)
       if (accepts_exception(arguments[i], definition.parameters[i])) arguments[i] = definition.parameters[i];
     for (const auto id : definition.instances)
-      if (program_.instances[id].arguments == arguments) return id;
+      if (program_.instances[id].arguments == arguments && program_.instances[id].environment == environment) return id;
     if (program_.instances.size() == instance_limit)
       fail(at, "compiler resource limit: 4096 scalar checking obligations while preparing '" + definition.source->name + "'");
     const auto substitutions = match(definition, arguments);
@@ -725,7 +805,8 @@ class ScalarChecker {
     if (definition.result != Type::void_type && result == Type::void_type)
       implementation_gap(at, "result type parameter is not determined by the scalar arguments");
     const auto id = program_.instances.size();
-    program_.instances.push_back({method, arguments, result, {}, false, {}, {}, {}});
+    auto context = arguments; context.insert(context.end(), environment.begin(), environment.end());
+    program_.instances.push_back({method, arguments, result, {}, false, {}, {}, {}, environment, std::move(context)});
     std::set<size_t> borrowed;
     for (size_t p = 0; p < definition.source->parameters.size(); ++p)
       if (!definition.source->parameters[p].owner.empty()) borrowed.insert(p);
@@ -733,7 +814,8 @@ class ScalarChecker {
     definition.instances.push_back(id);
     return id;
   }
-  size_t select_family(const std::vector<size_t> &family, const std::vector<Type> &arguments, const Location &at, const std::string &name) {
+  size_t select_family(const std::vector<size_t> &family, const std::vector<Type> &arguments, const Location &at, const std::string &name,
+                       const std::vector<Type> &environment = {}) {
     std::vector<size_t> applicable;
     for (const auto method : family)
       if (match(program_.methods[method], arguments)) applicable.push_back(method);
@@ -748,21 +830,39 @@ class ScalarChecker {
     }
     if (best.empty()) fail(at, "no applicable method for '" + name + "' (argument types or same-T relation do not match)");
     if (best.size() != 1) fail(at, "ambiguous methods for '" + name + "'");
-    return demand(best.front(), arguments, at);
+    return demand(best.front(), arguments, at, environment);
   }
   size_t select(const Expression &expr, const std::vector<Type> &arguments) {
-    if (checking_method_ && lexical_methods_.contains(checking_method_->source) && expr.text == checking_method_->source->name)
-      return select_family({lexical_methods_.at(checking_method_->source)}, arguments, expr.at, expr.text);
+    if (checking_method_ && lexical_methods_.contains(checking_method_->source) && expr.text == checking_method_->source->name) {
+      return select_family({lexical_methods_.at(checking_method_->source)}, arguments, expr.at, expr.text, checking_instance_->environment);
+    }
     const auto family = families_.find(expr.text);
     if (family == families_.end()) fail(expr.at, "unknown callable '" + expr.text + "'");
     return select_family(family->second, arguments, expr.at, expr.text);
   }
   CheckedOperation materialize(const std::vector<size_t> &family, const Type *expected, const Location &at) {
+    auto &definition = program_.methods[family.front()];
+    if (lexical_methods_.contains(definition.source)) resolve_captures(definition);
     if (expected) signature_type(Form{}, *expected, at);
     if (!expected && (family.size() != 1 || !program_.methods[family.front()].source->type_parameters.empty()))
       implementation_gap(at, "overloaded or generic callable values require an explicit concrete view type");
     const auto arguments = expected ? expected->parameters : program_.methods[family.front()].parameters;
-    const auto selected = select_family(family, arguments, at, "callable value");
+    std::vector<Type> environment;
+    std::vector<CheckedOperation> captures;
+    for (const auto &capture : definition.captures) {
+      Expression name{}; name.kind = Expression::Kind::name; name.at = capture.at; name.text = capture.name;
+      const auto value = !lexical_.lookup(capture.name) && families_.contains(capture.name)
+          ? materialize(families_.at(capture.name), nullptr, capture.at) : read_binding(name);
+      if (value.type.kind != Type::procedure || (value.binding && !bindings_->at(*value.binding).callable_value))
+        implementation_gap(capture.at, "capture of ordinary lexical cells or non-callable values");
+      environment.push_back(value.type); captures.push_back(value);
+    }
+    if (validating_ && definition.source->explicit_captures && warned_captures_.insert(definition.source).second)
+      for (const auto &capture : definition.captures)
+        if (std::none_of(free_captures(*definition.source).begin(), free_captures(*definition.source).end(),
+                         [&](const auto &used) { return used.name == capture.name; }))
+          program_.warnings.push_back({Warning::unused_capture, capture.at, "unused callable capture '" + capture.name + "' remains retained"});
+    const auto selected = select_family(family, arguments, at, "callable value", environment);
     const auto &instance = program_.instances[selected];
     const auto &method = *program_.methods[instance.method].source;
     if (borrowed_result(method) || std::any_of(method.parameters.begin(), method.parameters.end(), [](const auto &p) { return !p.owner.empty(); }))
@@ -789,7 +889,9 @@ class ScalarChecker {
     });
     const auto id = std::distance(program_.callables.begin(), found);
     if (found == program_.callables.end()) program_.callables.push_back({type, selected});
-    CheckedOperation value; value.type = type; value.callable = id; return value;
+    CheckedOperation value; value.type = type; value.callable = id; value.callable_captures = std::move(captures);
+    if (!environment.empty()) note_abrupt(at, {exception_id(ExceptionCategory::out_of_memory)});
+    return value;
   }
   CheckedOperation check_guarded(const Expression &expr, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, bool read = true, bool discard = false, const Type *expected = nullptr) {
@@ -808,6 +910,7 @@ class ScalarChecker {
     }
     abrupt_ = &incoming;
     const auto body = check(*expr.children[0], instance, operations, read, discard, expected);
+    if (read && !discard && body.kind == Type::procedure) note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
     const auto body_state = lexical_;
     std::vector<AbruptPath> control_inputs;
     for (const auto &path : incoming.paths) if (path.exceptions.empty()) control_inputs.push_back(path);
@@ -857,6 +960,7 @@ class ScalarChecker {
       AbruptFlow handler_exits{before.scopes.size(), {}};
       abrupt_ = &handler_exits;
       const auto handled_type = check(*handler.children.front(), instance, operations, read, discard, expected);
+      if (read && !discard && handled_type.kind == Type::procedure) note_abrupt(handler.at, {exception_id(ExceptionCategory::out_of_memory)});
       caught_ = active; catch_bindings_.erase(id);
       caught_inputs_.erase(id);
       leave_scope();
@@ -1076,6 +1180,7 @@ class ScalarChecker {
         const auto id = declare(expr.definition->name, operation.type, false, true, expr.at);
         initialize(id); operation.place = id;
         operation.binding = lexical_.lookup(expr.definition->name);
+        bindings_->at(*operation.binding).callable_value = true;
         operation.operand_type = operation.type; operation.type = Type::void_type;
       }
       break;
@@ -1140,6 +1245,7 @@ class ScalarChecker {
         else target = read_binding(expr);
         if (target.type.kind != Type::procedure || !target.type.target)
           fail(expr.at, "nearest binding '" + expr.text + "' is not callable");
+        note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
         const auto &contract = target.type;
         if (method && method->kind == Form::Kind::function && !contract.pure_callable)
           fail(expr.at, "a function cannot invoke a procedure");
@@ -1154,6 +1260,7 @@ class ScalarChecker {
           const auto &parameter = contract.parameters[i - offset];
           const auto argument = check(*expr.children[i], instance, operations, true, false,
                                       parameter.kind == Type::procedure ? &parameter : nullptr);
+          if (argument.kind == Type::procedure) note_abrupt(expr.children[i]->at, {exception_id(ExceptionCategory::out_of_memory)});
           if (argument != parameter) {
             if (transfers_value(argument, parameter)) implementation_gap(expr.children[i]->at, "callable view argument adaptation");
             fail(expr.children[i]->at, "argument does not satisfy the callable view type");
@@ -1207,6 +1314,8 @@ class ScalarChecker {
         }
         arguments.push_back(check(*expr.children[i], instance, operations, mode == ArgumentMode::value, false, argument_view ? &*argument_view : nullptr));
         require_value(arguments.back());
+        if (mode == ArgumentMode::value && arguments.back().kind == Type::procedure)
+          note_abrupt(expr.children[i]->at, {exception_id(ExceptionCategory::out_of_memory)});
         views.push_back(operations.at(expr.children[i].get()));
         if (mode == ArgumentMode::value) continue;
         const auto &view = views.back();
@@ -1244,6 +1353,8 @@ class ScalarChecker {
         if (const auto [found, inserted] = owners.emplace(parameter.owner, owner); !inserted && found->second != owner)
           fail(expr.at, "arguments for owner '" + parameter.owner + "' have different actual owners");
         if (!parameter.read_only && view.read_only) fail(expr.children[i]->at, "readonly argument cannot supply a writable borrowed parameter");
+        if (!parameter.read_only) for (const auto place : view.targets) if (place != null_target && storage(place).captured)
+          implementation_gap(expr.children[i]->at, "writable borrowing of a captured callable payload");
         if (arguments[i] != target.arguments[i]) implementation_gap(expr.children[i]->at, "borrowed exception upcasts");
         if (!parameter.read_only) for (const auto place : view.targets) if (place != null_target && storage(place).type.kind == Type::exception)
           lexical_.exceptions[place] = exception_possibilities(storage(place).type);
@@ -1358,6 +1469,7 @@ class ScalarChecker {
       if (!expr.children.empty()) operation.exceptions = operations.at(expr.children.back().get()).exceptions;
       if (exits) operation.type = Type::never;
       if (expr.scoped) {
+        if (read && !discard && operation.type.kind == Type::procedure) note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
         operation = finish_scope(operation, flow, outer, cleanup_scope_, expr.at);
         leave_scope();
         cleanup_scope_ = parent_scope;
@@ -1370,7 +1482,7 @@ class ScalarChecker {
       if (!integral(first) || !integral(last)) fail(expr.at, "a range requires integer endpoints");
       if (first != last) implementation_gap(expr.at, "range endpoints with different integer types");
       Type accumulator;
-      if (fold) { accumulator = child(2); require_value(accumulator); }
+      if (fold) { accumulator = child(2); require_value(accumulator); if (accumulator.kind == Type::procedure) note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)}); }
       const auto before = lexical_;
       bool body_possible = true, empty_possible = true, repeat_possible = true;
       const auto start = constant_integer(*expr.children[0], operations), end = constant_integer(*expr.children[1], operations);
@@ -1400,6 +1512,7 @@ class ScalarChecker {
         loop_controls_.insert(*operation.accumulator);
       }
       const auto body = child(fold ? 3 : 2, true, !fold);
+      if (fold && body.kind == Type::procedure) note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
       if (fold && body != Type::never && body != accumulator) {
         if (widens(body, accumulator)) implementation_gap(expr.at, "fold accumulator conversion");
         fail(expr.at, "fold body does not satisfy the accumulator type");
@@ -1471,6 +1584,7 @@ class ScalarChecker {
         const auto type = declaration->annotation ? resolve_local_type(*declaration->annotation, instance, declaration->at) : initial_type;
         const auto &source = operations.at(&initializer);
         const bool borrowed = !copy && source.view;
+        if (!borrowed && type.kind == Type::procedure) note_abrupt(declaration->at, {exception_id(ExceptionCategory::out_of_memory)});
         if (type == Type::null_ref) fail(declaration->at, "a null initializer requires an explicit target type");
         require_value(type);
         if (callable_value && (type.kind != Type::procedure || type.pure_callable != (expr.declaration_kind == "func")))
@@ -1510,6 +1624,7 @@ class ScalarChecker {
           if (type.kind == Type::exception) lexical_.exceptions[*place] = initialized ? source.exceptions : exception_possibilities(type);
         }
         bindings_->back().requires_initialized = expr.declaration_kind == "ref";
+        bindings_->back().callable_value = callable_value;
         CheckedOperation binding;
         binding.binding = *lexical_.lookup(declaration->text);
         binding.place = place;
@@ -1566,9 +1681,12 @@ class ScalarChecker {
         break;
       }
       if (target.read_only) fail(expr.at, "cannot write through a readonly destination");
+      for (const auto place : target.targets) if (place != null_target && storage(place).captured)
+        implementation_gap(expr.at, "replacement of a captured callable payload");
       dereference(target, expr.at);
       const auto source = check(*expr.children[1], instance, operations, true, false, destination.kind == Type::procedure ? &destination : nullptr);
       if (!transfers_value(source, destination)) fail(expr.at, "bits transfer source does not satisfy destination type");
+      if (destination.kind == Type::procedure) note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
       auto written = target.targets; written.erase(null_target);
       if (written.size() == 1) initialize(*written.begin());
       if (binding_live && lexical_.target_versions.contains(*target.binding) && lexical_.target_versions.at(*target.binding) == versions)
@@ -1590,6 +1708,7 @@ class ScalarChecker {
       if (!instance) fail(expr.at, "return requires an enclosing callable");
       const bool borrowed = borrowed_result(*method);
       const auto value = expr.children.empty() ? Type{Type::void_type} : check(*expr.children[0], instance, operations, !borrowed, false, instance->result.kind == Type::procedure ? &instance->result : nullptr);
+      if (!borrowed && value.kind == Type::procedure) note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
       if (borrowed && value != Type::never) {
         if (expr.children.empty()) fail(expr.at, "borrowed result requires an explicit target view");
         const auto &selected = operations.at(expr.children.front().get());
@@ -1738,6 +1857,7 @@ class ScalarChecker {
 
   void check_entry() {
     checking_method_ = nullptr;
+    checking_instance_ = nullptr;
     for (const bool proving : {false, true}) {
       begin_check(program_.entry_storage, program_.entry_bindings, program_.entry, proving);
       AbruptFlow entry_flow{1, {}};
@@ -1765,6 +1885,7 @@ class ScalarChecker {
   }
   CallEffects check_instance(size_t i) {
     auto &instance = program_.instances[i];
+    checking_instance_ = &instance;
     const auto &method = *program_.methods[instance.method].source;
     checking_method_ = &program_.methods[instance.method];
     for (const bool proving : {false, true}) {
@@ -1777,6 +1898,7 @@ class ScalarChecker {
         const auto id = declare(parameter.name, instance.arguments[p], parameter.read_only || (value && parameter.fixed_binding), value, parameter.at);
         bindings_->back().fixed = parameter.fixed_binding;
         bindings_->back().requires_initialized = parameter.declaration_kind == "ref";
+        bindings_->back().callable_value = instance.arguments[p].kind == Type::procedure && parameter.owner.empty();
         if (!parameter.owner.empty()) {
           const auto owner = external_owners_.at(parameter.owner);
           storage_->at(id).scope = owner; storage_->at(id).borrowed = true;
@@ -1789,6 +1911,13 @@ class ScalarChecker {
         }
         if (argument_mode(parameter) != ArgumentMode::borrowed_ptr) initialize(id);
         lexical_.exceptions[id] = exception_possibilities(instance.arguments[p]);
+      }
+      for (size_t c = 0; c < instance.environment.size(); ++c) {
+        const auto &capture = checking_method_->captures[c];
+        const auto id = declare(capture.name, instance.environment[c], false, true, capture.at);
+        storage_->at(id).captured = true;
+        bindings_->back().callable_value = true;
+        initialize(id);
       }
       for (const auto &owner : method.owner_parameters) {
         const auto id = bind(owner.name, Type::void_type, {}, true, true, true, owner.at);
@@ -1849,7 +1978,7 @@ public:
     };
     for (const auto &form : forms) if (form->body) collect(*form->body);
     for (const auto *form : definitions) {
-      if (form->symbolic || form->operation || form->conversion || !form->captures.empty() || !form->body)
+      if (form->symbolic || form->operation || form->conversion || (!lexical_methods_.contains(form) && !form->captures.empty()) || !form->body)
         implementation_gap(form->at, "callable captures, effects, declarations, operators, owners or throws contracts");
       std::set<std::string> owners;
       for (const auto &owner : form->owner_parameters) {
@@ -1863,7 +1992,7 @@ public:
       if (*form->result_type != Type::void_type && form->result_type->kind != Type::procedure && !borrowed_result(*form) && (!form->result_const || !form->result_kind.empty()))
         implementation_gap(form->at, "non-const scalar result contract");
       const auto resolve_signature = [&](const Type &type) { return binder(*form, type) ? type : resolve_type(type); };
-      CheckedMethod prepared{form, {}, {}, resolve_signature(*form->result_type), {}};
+      CheckedMethod prepared{form, {}, {}, resolve_signature(*form->result_type), {}, {}, false};
       signature_type(*form, prepared.result, form->at, true);
       for (const auto &type : form->throws_types) {
         const auto resolved = resolve_type(type);
@@ -1912,7 +2041,7 @@ public:
       if (families_.contains(symbol)) fail(program_.methods[families_[symbol].front()].source->at, "callable conflicts with symbol '" + symbol + "'");
     for (size_t i = 0; i < program_.methods.size(); ++i) {
       const auto &method = *program_.methods[i].source;
-      if (!method.type_parameters.empty()) continue;
+      if (!method.type_parameters.empty() || lexical_methods_.contains(&method)) continue;
       demand(i, program_.methods[i].parameters, method.at);
     }
     check_entry();

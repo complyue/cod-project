@@ -46,7 +46,12 @@ extern "C" {
 void *cod_lang_callable_create(std::uint64_t fixed, std::uint64_t count, void *const *children,
                                const std::uint64_t *offsets, std::uint64_t *status) {
   auto bytes = fixed;
+  if (bytes > std::numeric_limits<std::size_t>::max()) {
+    status[0] = static_cast<std::uint64_t>(CoDException::OutOfMemory);
+    return nullptr;
+  }
   for (std::uint64_t i = 0; i < count; ++i) {
+    if (!children[i]) continue;
     const auto child_bytes = *static_cast<const std::uint64_t *>(children[i]);
     if (child_bytes > std::numeric_limits<std::size_t>::max() - bytes) {
       status[0] = static_cast<std::uint64_t>(CoDException::OutOfMemory);
@@ -59,6 +64,11 @@ void *cod_lang_callable_create(std::uint64_t fixed, std::uint64_t count, void *c
   std::memcpy(image, &bytes, sizeof(bytes));
   auto position = fixed;
   for (std::uint64_t i = 0; i < count; ++i) {
+    if (!children[i]) {
+      const std::uint64_t absent = 0;
+      std::memcpy(image + offsets[i], &absent, sizeof(absent));
+      continue;
+    }
     const auto child_bytes = *static_cast<const std::uint64_t *>(children[i]);
     std::memcpy(image + offsets[i], &position, sizeof(position));
     std::memcpy(image + position, children[i], static_cast<std::size_t>(child_bytes));
