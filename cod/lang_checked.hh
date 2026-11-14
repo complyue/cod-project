@@ -639,16 +639,23 @@ class ScalarChecker {
     if (!lexical_value_type(resolved)) implementation_gap(at, "non-value local storage type '" + type_name(type) + "'");
     return resolved;
   }
-  Type resolve_type(const Type &type, const CheckedMethod *method = nullptr) const {
-    if (method && binder(*method, type)) return type;
-    if (type.kind == Type::named) if (const auto found = exception_types_.find(type.name); found != exception_types_.end()) return found->second;
-    auto resolved = type;
-    if (type.kind == Type::procedure) {
-      for (auto &parameter : resolved.parameters) parameter = resolve_type(parameter, method);
-      for (auto &failure : resolved.throws_types) failure = resolve_type(failure, method);
-      if (type.target) resolved.target = std::make_shared<Type>(resolve_type(*type.target, method));
+  using Substitutions = std::vector<std::optional<Type>>;
+  Type resolve_type(Type type, const CheckedMethod *method = nullptr, const Substitutions *bindings = nullptr,
+                    bool partial = false) const {
+    if (method) if (const auto index = binder(*method, type)) {
+      if (!bindings) return type;
+      if (const auto &bound = (*bindings)[*index]) return *bound;
+      if (partial) return type;
+      implementation_gap(method->source->at, "type parameter is not determined by the arguments");
     }
-    return resolved;
+    if (type.kind == Type::named) if (const auto found = exception_types_.find(type.name); found != exception_types_.end()) return found->second;
+    if (type.kind == Type::procedure) {
+      for (auto &parameter : type.parameters) parameter = resolve_type(std::move(parameter), method, bindings, partial);
+      // Throws declarations are resolved independently of argument inference.
+      for (auto &failure : type.throws_types) failure = resolve_type(std::move(failure), method);
+      if (type.target) type.target = std::make_shared<Type>(resolve_type(*type.target, method, bindings, partial));
+    }
+    return type;
   }
 
   const std::set<std::string> &free_type_names(const Form &method) {
@@ -754,21 +761,8 @@ class ScalarChecker {
       if (method.type_parameters[i] == type.name) return i;
     return {};
   }
-  using Substitutions = std::vector<std::optional<Type>>;
   Type substitute(const Type &type, const CheckedMethod &method, const Substitutions &bindings, bool partial = false) const {
-    if (const auto index = binder(method, type)) {
-      if (!bindings[*index]) {
-        if (partial) return type;
-        implementation_gap(method.source->at, "type parameter is not determined by the arguments");
-      }
-      return *bindings[*index];
-    }
-    auto result = resolve_type(type, &method);
-    if (result.kind == Type::procedure) {
-      for (auto &parameter : result.parameters) parameter = substitute(parameter, method, bindings, partial);
-      if (result.target) result.target = std::make_shared<Type>(substitute(*result.target, method, bindings, partial));
-    }
-    return result;
+    return resolve_type(type, &method, &bindings, partial);
   }
   static bool nested_binder(const CheckedMethod &method, const Type &type) {
     if (binder(method, type)) return true;
