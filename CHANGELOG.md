@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Checked callable frames
+
+<a id="k-663"></a>
+**K-663 — Checked-frame continuity.** Agent assessment under H-382/H-398–H-410/H-420, D-14r91/D-17r57/D-18/D-21r11/D-26r13 and charter §§5.3/6.3/12: registry r670→671 and source reference284→285 record explicit input storage/passing and capture roles shared by callable propagation and native emission. Owner-name bindings remain distinct from payload storage. Preserve source signatures, owner/access proofs, completion, ordered preparation, cleanup and native reuse. Executable packs, broader proof coverage and permanent representations remain unresolved implementation/design scopes; no new language rule, allocation, ABI or design qualification. Prior capability reference: `942390d17aa8040827c49ba1072e9784ea33a881:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Variadic declaration contracts
 
 <a id="k-662"></a>

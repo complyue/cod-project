@@ -429,10 +429,15 @@ class LLVMEmission {
     const auto &instances = program_->methods[method].instances;
     return std::any_of(instances.begin(), instances.end(), [&](size_t id) { return !program_->instances[id].result.borrowed() && program_->instances[id].result.type->kind == Type::procedure; });
   }
+  const CheckedFrame &input_frame(size_t method) const {
+    return program_->instances.at(program_->methods.at(method).instances.front()).frame;
+  }
   llvm::Value *native_call(llvm::Function *target, size_t method, std::vector<llvm::Value *> prepared,
                            llvm::Value *captured = nullptr, std::optional<size_t> instance = {}) {
+    const auto &inputs = input_frame(method).inputs;
+    if (prepared.size() != inputs.size()) throw std::logic_error("unchecked native call arity");
     for (size_t i = 0; i < prepared.size(); ++i) {
-      if (program_->methods[method].source->parameters[i].owner.empty()) take_value(prepared[i]);
+      if (inputs[i].mode == ArgumentMode::value) take_value(prepared[i]);
     }
     llvm::AllocaInst *destination = nullptr;
     if (!program_->methods[method].captures.empty()) prepared.push_back(captured ? captured : environment_);
@@ -1280,9 +1285,10 @@ class LLVMEmission {
     return llvm::Function::Create(llvm::FunctionType::get(outcome_, parameters, false),
         llvm::GlobalValue::InternalLinkage, name, module_);
   }
-  void begin(llvm::Function *function, const std::vector<CheckedStorage> &storage, const std::vector<CheckedBinding> &bindings, size_t arity = 0) {
+  void begin(llvm::Function *function, const std::vector<CheckedStorage> &storage, const std::vector<CheckedBinding> &bindings,
+             const CheckedFrame &frame = {}) {
     function_ = function; arguments_.clear(); retained_types_.clear(); parameter_values_.clear(); value_owners_.clear(); environment_ = nullptr; query_environment_ = nullptr; temporaries_ = nullptr;
-    for (size_t i = 0; i < arity; ++i) arguments_.push_back(function->getArg(i));
+    for (size_t i = 0; i < frame.inputs.size(); ++i) arguments_.push_back(function->getArg(i));
     b_.SetInsertPoint(block("entry")); finish_ = block("completion"); scope_ = nullptr; control_ = nullptr;
     result_ = slot(scalar_, "return.value"); category_ = slot(b_.getInt64Ty(), "exception.category");
     site_ = slot(b_.getInt64Ty(), "exception.site"); fatal_ = slot(b_.getPtrTy(), "numeric.failure");
@@ -1305,10 +1311,12 @@ class LLVMEmission {
       selections_.push_back(binding.selection.empty() ? nullptr : slot(b_.getPtrTy(), "alias.selection"));
     }
     for (size_t i = 0; i < arguments_.size(); ++i) {
-      if (storage[i].borrowed) { b_.CreateStore(view_address(arguments_[i]), bindings_[i]); continue; }
-      b_.CreateStore(arguments_[i], storage_[i]);
-      if (environments_) parameter_values_.push_back(storage_[i]);
-      if (bindings_[i]) b_.CreateStore(storage_[i], bindings_[i]);
+      const auto &input = frame.inputs[i];
+      const auto place = input.place, binding = storage.at(place).binding;
+      if (input.mode != ArgumentMode::value) { b_.CreateStore(view_address(arguments_[i]), bindings_.at(binding)); continue; }
+      b_.CreateStore(arguments_[i], storage_.at(place));
+      if (environments_) parameter_values_.push_back(storage_.at(place));
+      if (bindings_.at(binding)) b_.CreateStore(storage_.at(place), bindings_[binding]);
     }
   }
   void body(llvm::Function *function, const CheckedMethod &method, std::optional<size_t> instance) {
@@ -1322,9 +1330,15 @@ class LLVMEmission {
     // borrows an existing target and another constructs local payload storage.
     for (const auto id : instances) for (const auto &place : program_->instances[id].storage)
       if (places.emplace(place.binding, storage.size()).second) storage.push_back(place);
+    std::optional<CheckedFrame> frame;
     for (const auto id : instances) {
       const auto &checked = program_->instances[id];
       const auto remap = [&](size_t place) { return place == null_target ? place : places.at(checked.storage.at(place).binding); };
+      auto inputs = checked.frame;
+      for (auto &input : inputs.inputs) input.place = remap(input.place);
+      for (auto &capture : inputs.captures) capture = remap(capture);
+      if (frame && *frame != inputs) throw std::logic_error("incompatible checked native input roles");
+      frame = std::move(inputs);
       bool unchanged = true;
       for (size_t i = 0; i < checked.storage.size(); ++i) unchanged = unchanged && remap(i) == i;
       if (unchanged) { lowered.push_back(&checked.operations); continue; }
@@ -1343,12 +1357,13 @@ class LLVMEmission {
       for (auto &[expr, operation] : operations.back()) lower(lower, operation);
       lowered.push_back(&operations.back());
     }
-    begin(function, storage, layout.bindings, method.parameters.size()); facts_ = std::move(lowered); frame_contexts_.clear();
+    const auto arity = frame->inputs.size();
+    begin(function, storage, layout.bindings, *frame); facts_ = std::move(lowered); frame_contexts_.clear();
     for (size_t i = 0; i < instances.size(); ++i) {
       frame_contexts_.push_back(&program_->instances[instances[i]]);
     }
     if (!method.captures.empty()) {
-      environment_ = function->getArg(method.parameters.size());
+      environment_ = function->getArg(arity);
       auto fields = std::vector<llvm::Type *>{b_.getInt64Ty()}; fields.insert(fields.end(), method.captures.size(), scalar_);
       auto *image = llvm::StructType::get(context_, fields);
       for (size_t c = 0; c < method.captures.size(); ++c) {
@@ -1357,16 +1372,16 @@ class LLVMEmission {
         auto *nested = b_.CreateGEP(b_.getInt8Ty(), environment_, offset);
         auto *absolute = b_.CreateSelect(b_.CreateICmpEQ(offset, integer(0)), null_pointer(), nested);
         auto *captured = b_.CreateInsertValue(value, absolute, environment_field_);
-        b_.CreateStore(captured, storage_.at(method.parameters.size() + c)); arguments_.push_back(captured);
+        b_.CreateStore(captured, storage_.at(frame->captures.at(c))); arguments_.push_back(captured);
       }
     }
     for (size_t i = 0; i < method.retained_types.size(); ++i) {
-      auto *type = function->getArg(method.parameters.size() + !method.captures.empty() + i);
+      auto *type = function->getArg(arity + !method.captures.empty() + i);
       retained_types_.push_back(type);
       arguments_.push_back(b_.CreateInsertValue(empty_scalar(), type, 1));
     }
     if (method.declaration_context())
-      query_environment_ = function->getArg(method.parameters.size() + !method.captures.empty() + method.retained_types.size());
+      query_environment_ = function->getArg(arity + !method.captures.empty() + method.retained_types.size());
     llvm::Value *returns_value = nullptr;
     if (instance) {
       if (*program_->instances[*instance].result.type != Type::void_type) returns_value = b_.getTrue();
@@ -1397,7 +1412,7 @@ class LLVMEmission {
       b_.CreateCondBr(b_.CreateICmpEQ(load(exit_), b_.getInt8(2)), failed, ready);
       b_.SetInsertPoint(failed); clear_value(result_); b_.CreateBr(ready); b_.SetInsertPoint(ready);
     }
-    const auto result_index = method.parameters.size() + !method.captures.empty() + method.retained_types.size() + method.declaration_context();
+    const auto result_index = arity + !method.captures.empty() + method.retained_types.size() + method.declaration_context();
     if (function->arg_size() > result_index) b_.CreateStore(load(result_), function->getArg(result_index));
     b_.CreateRet(outcome(load(result_), load(category_), load(site_), load(fatal_), load(requested_), load(available_), load(cause_)));
   }
@@ -1435,18 +1450,19 @@ public:
     general_.resize(program.methods.size()); specialized_.resize(program.instances.size());
     for (size_t i = 0; i < program.methods.size(); ++i) {
       const auto &method = program.methods[i]; if (method.instances.empty()) continue;
+      const auto arity = input_frame(i).inputs.size();
       const auto prefix = "cod.method." + std::to_string(i) + "." + method.source->name;
       if (method.source->type_parameters.empty() && method.captures.empty() && method.retained_types.empty() && !method.declaration_context()) {
-        general_[i] = declare(prefix + ".native", method.source->parameters.size(), caller_destination(i), false, 0);
+        general_[i] = declare(prefix + ".native", arity, caller_destination(i), false, 0);
         specialized_[method.instances.front()] = general_[i];
         continue;
       }
-      general_[i] = declare(prefix + ".general", method.source->parameters.size(), caller_destination(i), !method.captures.empty(), method.retained_types.size() + method.declaration_context());
+      general_[i] = declare(prefix + ".general", arity, caller_destination(i), !method.captures.empty(), method.retained_types.size() + method.declaration_context());
       if (specialize) for (const auto id : method.instances) {
         std::string name = prefix + ".specialized";
         for (const auto &type : program.instances[id].context) name += "." + type_name(type);
         if (method.declaration_context()) name += ".query." + std::to_string(program.instances[id].query_environment);
-        specialized_[id] = declare(name, method.source->parameters.size(), caller_destination(i), !method.captures.empty(), method.retained_types.size() + method.declaration_context());
+        specialized_[id] = declare(name, arity, caller_destination(i), !method.captures.empty(), method.retained_types.size() + method.declaration_context());
       }
     }
     for (size_t i = 0; i < program.methods.size(); ++i) {

@@ -187,6 +187,17 @@ struct QueryEnvironment {
   std::optional<ResultContract> result;
   bool operator==(const QueryEnvironment &) const = default;
 };
+// Incoming values name storage roles; lexical bindings also include owner names.
+struct CheckedInput {
+  size_t place;
+  ArgumentMode mode;
+  bool operator==(const CheckedInput &) const = default;
+};
+struct CheckedFrame {
+  std::vector<CheckedInput> inputs;
+  std::vector<size_t> captures;
+  bool operator==(const CheckedFrame &) const = default;
+};
 struct CheckedInstance {
   size_t method;
   std::vector<Type> arguments;
@@ -199,6 +210,7 @@ struct CheckedInstance {
   std::vector<Type> environment, context, retained_types;
   std::vector<std::optional<Type>> substitutions;
   size_t query_environment = 0;
+  CheckedFrame frame;
 };
 struct CheckedMethod {
   const Form *source = nullptr;
@@ -1606,7 +1618,7 @@ class ScalarChecker {
     const auto id = program_.instances.size();
     auto context = arguments; context.insert(context.end(), environment.begin(), environment.end());
     context.insert(context.end(), retained.begin(), retained.end());
-    program_.instances.push_back({method, arguments, result, {}, false, {}, {}, {}, environment, std::move(context), retained, *substitutions, query_environment});
+    program_.instances.push_back({method, arguments, result, {}, false, {}, {}, {}, environment, std::move(context), retained, *substitutions, query_environment, {}});
     program_.instances.back().effects = initial_effects(definition);
     definition.instances.push_back(id);
     return id;
@@ -3694,9 +3706,9 @@ class ScalarChecker {
       if (fact.callable) {
         flow.seed(node, *fact.callable);
         const auto target = program_.callables[*fact.callable].instance + 1;
-        const auto count = program_.instances[target - 1].arguments.size();
+        const auto &frame = program_.instances[target - 1].frame;
         for (size_t i = 0; i < fact.callable_captures.size(); ++i)
-          value(c, fact.callable_captures[i], contexts[target].places.at(count + i));
+          value(c, fact.callable_captures[i], contexts[target].places.at(frame.captures.at(i)));
       }
       if (fact.type.kind == Type::procedure)
         for (const auto place : fact.targets) if (place != null_target)
@@ -3705,22 +3717,22 @@ class ScalarChecker {
     const auto invocation = [&](size_t c, const Expression &expr, const CheckedOperation &fact, size_t target, size_t offset) {
       CallableFlow::Edges edges;
       const auto &instance = program_.instances[target - 1];
-      const auto &definition = *program_.methods[instance.method].source;
       for (size_t i = 0; i < instance.arguments.size(); ++i) {
         if (instance.arguments[i].kind != Type::procedure) continue;
         const auto *argument = expr.children.at(i + offset).get();
-        edges.emplace_back(expression(c, argument), contexts[target].places.at(i));
-        if (!definition.parameters[i].owner.empty()) {
+        const auto &input = instance.frame.inputs.at(i);
+        edges.emplace_back(expression(c, argument), contexts[target].places.at(input.place));
+        if (input.mode != ArgumentMode::value) {
           const auto &view = contexts[c].facts->at(argument);
           for (const auto place : view.targets) if (place != null_target)
-            edges.emplace_back(contexts[target].places.at(i), contexts[c].places.at(place));
+            edges.emplace_back(contexts[target].places.at(input.place), contexts[c].places.at(place));
         }
       }
       if (instance.result.type->kind == Type::procedure) edges.emplace_back(contexts[target].result, expression(c, &expr));
       if (fact.callee && !instance.environment.empty()) {
-        const auto count = program_.instances.at(c - 1).arguments.size();
+        const auto &frame = program_.instances.at(c - 1).frame;
         for (size_t i = 0; i < instance.environment.size(); ++i)
-          edges.emplace_back(contexts[c].places.at(count + i), contexts[target].places.at(instance.arguments.size() + i));
+          edges.emplace_back(contexts[c].places.at(frame.captures.at(i)), contexts[target].places.at(instance.frame.captures.at(i)));
       }
       return edges;
     };
@@ -3840,12 +3852,19 @@ class ScalarChecker {
     checking_method_ = &program_.methods[instance.method];
     for (const bool proving : {false, true}) {
       begin_check(instance.storage, instance.bindings, instance.operations, proving);
+      instance.frame = {};
       for (size_t i = 0; i < method.owner_parameters.size(); ++i)
         external_owners_[method.owner_parameters[i].name] = null_target - 1 - i;
+      for (const auto &owner : method.owner_parameters) {
+        const auto id = bind(owner.name, Type::void_type, {}, true, true, true, owner.at);
+        bindings_->at(id).owner_binding = external_owners_.at(owner.name);
+      }
       for (size_t p = 0; p < method.parameters.size(); ++p) {
         const auto &parameter = method.parameters[p];
         const bool value = parameter.declaration_kind == "val";
         const auto id = declare(parameter.name, instance.arguments[p], parameter.read_only || (value && parameter.fixed_binding), value, parameter.at);
+        const auto binding = storage_->at(id).binding;
+        instance.frame.inputs.push_back({id, argument_mode(parameter)});
         bindings_->back().fixed = parameter.fixed_binding;
         bindings_->back().requires_initialized = parameter.declaration_kind == "ref";
         bindings_->back().callable_value = instance.arguments[p].kind == Type::procedure && parameter.owner.empty();
@@ -3853,12 +3872,12 @@ class ScalarChecker {
           const auto owner = external_owners_.at(parameter.owner);
           storage_->at(id).scope = owner; storage_->at(id).borrowed = true;
           std::erase(scope_storage_[0], id);
-          lexical_.owners[p] = {owner};
+          lexical_.owners[binding] = {owner};
           if (parameter.declaration_kind == "ptr") {
-            lexical_.targets[p].insert(null_target);
-            lexical_.null_sources[p] = {p};
-            assign_selection(lexical_, p, selection_targets(lexical_.targets[p]));
-            if (!proving) { possible_targets_[p].insert(null_target); possible_null_sources_[p] = {p}; }
+            lexical_.targets[binding].insert(null_target);
+            lexical_.null_sources[binding] = {id};
+            assign_selection(lexical_, binding, selection_targets(lexical_.targets[binding]));
+            if (!proving) { possible_targets_[binding].insert(null_target); possible_null_sources_[binding] = {id}; }
           }
         }
         if (argument_mode(parameter) != ArgumentMode::borrowed_ptr) initialize(id);
@@ -3867,13 +3886,10 @@ class ScalarChecker {
       for (size_t c = 0; c < instance.environment.size(); ++c) {
         const auto &capture = checking_method_->captures[c];
         const auto id = declare(capture.name, instance.environment[c], false, true, capture.at);
+        instance.frame.captures.push_back(id);
         storage_->at(id).captured = true;
         bindings_->back().callable_value = true;
         initialize(id);
-      }
-      for (const auto &owner : method.owner_parameters) {
-        const auto id = bind(owner.name, Type::void_type, {}, true, true, true, owner.at);
-        bindings_->at(id).owner_binding = external_owners_.at(owner.name);
       }
       AbruptFlow flow{1, {}}, outcomes{1, {}};
       abrupt_ = &flow;
