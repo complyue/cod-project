@@ -52,6 +52,7 @@ class LLVMEmission {
   llvm::AllocaInst *requested_ = nullptr, *available_ = nullptr, *cause_ = nullptr;
   llvm::AllocaInst *returning_ = nullptr;
   std::vector<Location> sites_;
+  enum class Projection { value, target, slot };
   struct Deferred {
     const Expression *action;
     llvm::StructType *layout;
@@ -629,8 +630,8 @@ class LLVMEmission {
         b_.CreateCall(release, {record});
         auto *pending_failure = b_.CreateICmpEQ(load(exit_), b_.getInt8(2));
         complete_cleanup([&] {
-          if (descriptor.action->children.size() == 1) emit_expression(body, true, true);
-          else emit_finally(*descriptor.action, true, true, pending_failure);
+          if (descriptor.action->children.size() == 1) emit_expression(body, Projection::value, true);
+          else emit_finally(*descriptor.action, Projection::value, true, pending_failure);
         }, descriptor.action->children.size() > 1);
         for (const auto &[id, place] : bindings) storage_[id] = place;
         facts_ = all_facts; frame_types_ = all_contexts;
@@ -656,16 +657,17 @@ class LLVMEmission {
     b_.CreateBr(scope.cleanup);
     b_.SetInsertPoint(done);
   }
-  llvm::Value *sequence(const std::vector<const Expression *> &expressions, bool read_last = true, bool discard_last = false) {
+  llvm::Value *sequence(const std::vector<const Expression *> &expressions, Projection projection = Projection::value, bool discard_last = false) {
     llvm::Value *value = empty_scalar();
     for (size_t i = 0; i < expressions.size(); ++i) {
       if (!reachable()) break;
-      value = emit_expression(*expressions[i], i + 1 == expressions.size() ? read_last : true, i + 1 == expressions.size() ? discard_last : true);
+      value = emit_expression(*expressions[i], i + 1 == expressions.size() ? projection : Projection::value, i + 1 == expressions.size() ? discard_last : true);
     }
     return value;
   }
   llvm::Value *full_scope(const std::vector<const Expression *> &expressions, bool callable,
-                          const Location &at, llvm::Value *returns_value = nullptr, bool read_last = true, bool discard_last = false) {
+                          const Location &at, llvm::Value *returns_value = nullptr, Projection projection = Projection::value, bool discard_last = false) {
+    const bool read_last = projection == Projection::value;
     auto *outer_temporaries = temporaries_;
     auto *saved = !callable && read_last && environments_ ? owned_slot(*outer_temporaries, "scope.value")
         : slot(read_last ? scalar_ : static_cast<llvm::Type *>(b_.getPtrTy()), "scope.value");
@@ -678,7 +680,7 @@ class LLVMEmission {
     b_.CreateStore(null_pointer(), scope.head);
     for (const auto *expr : expressions) collect_deferred(*expr, scope);
     if (!environments_ || !read_last || callable) b_.CreateStore(read_last ? empty_scalar() : null_pointer(), saved);
-    auto *value = sequence(expressions, read_last, discard_last);
+    auto *value = sequence(expressions, projection, discard_last);
     if (reachable()) {
       if (!callable && read_last && environments_) assign_value(saved, discard_last ? empty_scalar() : value, at);
       else b_.CreateStore(value, saved);
@@ -703,7 +705,8 @@ class LLVMEmission {
     if (environments_ && read_last) value_owners_[result] = saved;
     return result;
   }
-  llvm::Value *emit_finally(const Expression &expr, bool read, bool discard = false, llvm::Value *skip_body = nullptr) {
+  llvm::Value *emit_finally(const Expression &expr, Projection projection, bool discard = false, llvm::Value *skip_body = nullptr) {
+    const bool read = projection == Projection::value;
     Control guarded{control_, block("try.completed")};
     control_ = &guarded;
     auto *saved = read && environments_ ? owned_slot(*temporaries_, "try.value")
@@ -713,7 +716,7 @@ class LLVMEmission {
       b_.CreateCondBr(skip_body, guarded.exit, body);
       b_.SetInsertPoint(body);
     }
-    auto *value = emit_expression(*expr.children[0], read, discard);
+    auto *value = emit_expression(*expr.children[0], projection, discard);
     if (reachable()) { if (read) assign_value(saved, discard ? empty_scalar() : value, expr.at); else b_.CreateStore(value, saved); b_.CreateBr(guarded.exit); }
     b_.SetInsertPoint(guarded.exit);
     control_ = guarded.parent;
@@ -740,7 +743,7 @@ class LLVMEmission {
       clear_value(result_);
       Control catching{control_, handled};
       control_ = &catching;
-      auto *result = emit_expression(*handler.children.front(), read, discard);
+      auto *result = emit_expression(*handler.children.front(), projection, discard);
       if (reachable()) { if (read) assign_value(saved, discard ? empty_scalar() : result, handler.at); else b_.CreateStore(result, saved); b_.CreateBr(handled); }
       control_ = catching.parent;
       b_.SetInsertPoint(next);
@@ -826,7 +829,7 @@ class LLVMEmission {
   llvm::Value *prepare_argument(const Expression &expr, size_t index, bool copy) {
     const auto &child = *expr.children[index];
     const auto prepare = [&](ArgumentMode mode) -> llvm::Value * {
-      auto *value = emit_expression(child, mode == ArgumentMode::value);
+      auto *value = emit_expression(child, mode == ArgumentMode::value ? Projection::value : Projection::target);
       if (!reachable()) return nullptr;
       if (mode != ArgumentMode::value) {
         if (mode == ArgumentMode::borrowed_read) value = checked_address(value, child, child.at);
@@ -903,7 +906,7 @@ class LLVMEmission {
       llvm::Value *address = binding.place ? static_cast<llvm::Value *>(storage_.at(*binding.place)) : null_pointer();
       if (environments_ && binding.place && !borrowed) scope_->values.values.push_back(storage_.at(*binding.place));
       if (borrowed) {
-        address = emit_expression(*declaration.children.front(), false);
+        address = emit_expression(*declaration.children.front(), Projection::target);
         if (!reachable()) return static_cast<llvm::Value *>(nullptr);
       } else if (binding.initializes) {
         const auto *initializer = declaration.children.front().get();
@@ -918,15 +921,16 @@ class LLVMEmission {
       return empty_scalar();
     });
   }
-  llvm::Value *emit_expression(const Expression &expr, bool read = true, bool discard = false) {
-    auto *value = emit_checked_expression(expr, read, discard);
+  llvm::Value *emit_expression(const Expression &expr, Projection projection = Projection::value, bool discard = false) {
+    auto *value = emit_checked_expression(expr, projection, discard);
     if (std::all_of(facts_.begin(), facts_.end(), [&](const auto *facts) { return facts->at(&expr).type == Type::never; })) {
       if (reachable()) b_.CreateUnreachable();
       return nullptr;
     }
     return value;
   }
-  llvm::Value *emit_checked_expression(const Expression &expr, bool read, bool discard) {
+  llvm::Value *emit_checked_expression(const Expression &expr, Projection projection, bool discard) {
+    const bool read = projection == Projection::value;
     using K = Expression::Kind;
     const auto &fact = facts_.front()->at(&expr);
     if (std::any_of(facts_.begin(), facts_.end(), [&](const auto *facts) {
@@ -935,7 +939,7 @@ class LLVMEmission {
       if (!read) implementation_gap(expr.at, "context-dependent value/view results without a common value-consuming boundary");
       std::map<bool, std::vector<size_t>> alternatives;
       for (size_t i = 0; i < facts_.size(); ++i) alternatives[facts_[i]->at(&expr).borrowed_result].push_back(i);
-      return contextual_value(expr, alternatives, "result", [&](bool) { return emit_expression(expr, read, discard); });
+      return contextual_value(expr, alternatives, "result", [&](bool) { return emit_expression(expr, projection, discard); });
     }
     if (std::all_of(facts_.begin(), facts_.end(), [&](const auto *facts) {
           const auto builtin = facts->at(&expr).builtin;
@@ -978,6 +982,7 @@ class LLVMEmission {
       return pack(llvm::ConstantFP::get(native_type(fact.type), text), fact.type);
     }
     case K::name: {
+      if (projection == Projection::slot) return bindings_.at(*fact.binding);
       std::map<std::optional<size_t>, std::vector<size_t>> alternatives;
       for (size_t i = 0; i < facts_.size(); ++i) alternatives[facts_[i]->at(&expr).captured_place].push_back(i);
       auto *address = contextual_value(expr, alternatives, "storage.address", [&](std::optional<size_t> captured) {
@@ -1013,14 +1018,12 @@ class LLVMEmission {
     }
     case K::value_call: case K::call: case K::behave: case K::perform: {
       if (fact.builtin == BuiltinOperation::reference_swap || fact.builtin == BuiltinOperation::bits_swap) {
-        auto *left = emit_expression(*expr.children[0], false);
+        const auto selected = fact.builtin == BuiltinOperation::reference_swap ? Projection::slot : Projection::target;
+        auto *left = emit_expression(*expr.children[0], selected);
         if (!reachable()) return nullptr;
-        auto *right = emit_expression(*expr.children[1], false);
+        auto *right = emit_expression(*expr.children[1], selected);
         if (!reachable()) return nullptr;
-        if (fact.builtin == BuiltinOperation::reference_swap) {
-          left = bindings_.at(*facts_.front()->at(expr.children[0].get()).binding);
-          right = bindings_.at(*facts_.front()->at(expr.children[1].get()).binding);
-        } else {
+        if (fact.builtin == BuiltinOperation::bits_swap) {
           left = checked_address(left, *expr.children[0], expr.at);
           right = checked_address(right, *expr.children[1], expr.at);
         }
@@ -1030,7 +1033,7 @@ class LLVMEmission {
         return empty_scalar();
       }
       if (fact.builtin == BuiltinOperation::is_null) {
-        auto *address = emit_expression(*expr.children.front(), false);
+        auto *address = emit_expression(*expr.children.front(), Projection::target);
         if (!reachable()) return nullptr;
         return pack(b_.CreateICmpEQ(address, null_pointer()), Type::boolean);
       }
@@ -1051,7 +1054,7 @@ class LLVMEmission {
       std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> incoming;
       for (size_t i = 1; i < 3; ++i) {
         b_.SetInsertPoint(i == 1 ? yes : no);
-        auto *value = emit_expression(*expr.children[i], read, discard);
+        auto *value = emit_expression(*expr.children[i], projection, discard);
         if (reachable()) { incoming.emplace_back(value, b_.GetInsertBlock()); b_.CreateBr(join); }
       }
       b_.SetInsertPoint(join);
@@ -1063,7 +1066,7 @@ class LLVMEmission {
     case K::block: {
       std::vector<const Expression *> expressions;
       for (const auto &child : expr.children) expressions.push_back(child.get());
-      auto *value = expr.scoped ? full_scope(expressions, false, expr.at, nullptr, read, discard) : sequence(expressions, read, discard);
+      auto *value = expr.scoped ? full_scope(expressions, false, expr.at, nullptr, projection, discard) : sequence(expressions, projection, discard);
       return value;
     }
     case K::range_for: case K::fold: {
@@ -1093,7 +1096,7 @@ class LLVMEmission {
       auto *body = block("range.body"), *empty = block("range.empty"), *done = block("range.done");
       b_.CreateCondBr(test(), body, empty);
       b_.SetInsertPoint(body);
-      auto *next = emit_expression(*expr.children[fold ? 3 : 2], true, !fold);
+      auto *next = emit_expression(*expr.children[fold ? 3 : 2], Projection::value, !fold);
       if (reachable()) {
         if (fold) assign_value(accumulator, next, expr.at);
         auto *current = load(index);
@@ -1107,19 +1110,19 @@ class LLVMEmission {
         b_.CreateCondBr(test(), body, done);
       }
       b_.SetInsertPoint(empty);
-      if (!fold && expr.children.size() == 4) emit_expression(*expr.children[3], true, true);
+      if (!fold && expr.children.size() == 4) emit_expression(*expr.children[3], Projection::value, true);
       if (reachable()) b_.CreateBr(done);
       b_.SetInsertPoint(done);
       if (fact.type == Type::never) { b_.CreateUnreachable(); return nullptr; }
       return fold ? load(accumulator) : empty_scalar();
     }
     case K::alias:
-      emit_expression(*expr.children.front(), false, true);
+      emit_expression(*expr.children.front(), Projection::target, true);
       return reachable() ? empty_scalar() : nullptr;
     case K::pointer_group: {
       for (const auto &declaration : expr.children) {
         if (declaration->kind == K::block) {
-          emit_expression(*declaration, true, true);
+          emit_expression(*declaration, Projection::value, true);
           if (!reachable()) return nullptr;
           continue;
         }
@@ -1129,7 +1132,7 @@ class LLVMEmission {
       return empty_scalar();
     }
     case K::transfer: {
-      auto *address = emit_expression(*expr.children[0], false);
+      auto *address = emit_expression(*expr.children[0], Projection::target);
       if (!reachable()) return nullptr;
       address = checked_address(address, *expr.children[0], expr.at);
       auto *value = emit_expression(*expr.children[1]);
@@ -1139,17 +1142,18 @@ class LLVMEmission {
       return read ? b_.CreateLoad(scalar_, address) : address;
     }
     case K::rebind: {
-      emit_expression(*expr.children[0], false);
+      auto *selected = emit_expression(*expr.children[0], Projection::slot);
       if (!reachable()) return nullptr;
-      auto *address = emit_expression(*expr.children[1], false);
+      auto *address = emit_expression(*expr.children[1], Projection::target);
       if (!reachable()) return nullptr;
-      b_.CreateStore(address, bindings_.at(*fact.binding));
+      b_.CreateStore(address, selected);
+      if (projection == Projection::slot) return selected;
       return !read ? address : discard ? empty_scalar() : b_.CreateLoad(scalar_, checked_address(address, expr, expr.at));
     }
     case K::return_value: {
       llvm::Value *value = empty_scalar();
       if (!expr.children.empty()) {
-        value = emit_expression(*expr.children.front(), !fact.borrowed_result);
+        value = emit_expression(*expr.children.front(), fact.borrowed_result ? Projection::target : Projection::value);
         if (!reachable()) return nullptr;
         if (fact.borrowed_result) value = pack_view(value, expr, true);
         else value = convert_result(expr, *expr.children.front(), value);
@@ -1193,12 +1197,12 @@ class LLVMEmission {
       raise_exception(value);
       return nullptr;
     }
-    case K::try_scope: return emit_finally(expr, read, discard);
+    case K::try_scope: return emit_finally(expr, projection, discard);
     case K::deferred: {
       std::map<std::set<size_t>, std::vector<size_t>> alternatives;
       for (size_t i = 0; i < facts_.size(); ++i) alternatives[facts_[i]->at(&expr).captures].push_back(i);
       if (alternatives.size() > 1)
-        return contextual_value(expr, alternatives, "defer", [&](const auto &) { return emit_expression(expr, read, discard); });
+        return contextual_value(expr, alternatives, "defer", [&](const auto &) { return emit_expression(expr, projection, discard); });
       return temporary_scope(expr.at, scalar_, [&]() -> llvm::Value * {
       const auto &body = *expr.children.front();
       std::vector<llvm::Value *> arguments;
@@ -1343,7 +1347,7 @@ class LLVMEmission {
           integer(site(method.source->at)), null_pointer()));
       b_.SetInsertPoint(valid);
     }
-    full_scope({method.source->body.get()}, true, method.source->at, returns_value, true, true);
+    full_scope({method.source->body.get()}, true, method.source->at, returns_value, Projection::value, true);
     b_.SetInsertPoint(finish_);
     if (environments_) {
       auto *failed = block("return.discard"), *ready = block("return.ready");
@@ -1411,7 +1415,7 @@ public:
       if (specialize) for (const auto id : method.instances) body(specialized_[id], method, id);
     }
     auto *main = llvm::Function::Create(llvm::FunctionType::get(b_.getInt32Ty(), false), llvm::GlobalValue::ExternalLinkage, "main", module_);
-    begin(main, program.entry_storage, program.entry_bindings); facts_ = {&program.entry}; full_scope(program.initializers, true, Location{}, nullptr, true, true);
+    begin(main, program.entry_storage, program.entry_bindings); facts_ = {&program.entry}; full_scope(program.initializers, true, Location{}, nullptr, Projection::value, true);
     b_.SetInsertPoint(finish_);
     auto *fatal = block("fatal"), *exception = block("exception"), *normal = block("normal");
     b_.CreateCondBr(b_.CreateICmpNE(load(fatal_), null_pointer()), fatal, exception);

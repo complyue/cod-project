@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Selected lexical reference slots
+
+<a id="k-639"></a>
+**K-639 — Reference slot continuity.** Agent assessment: registry r639→640 and source reference260→261 continue D-14r82/H-297/H-299/H-302/H-305/H-306/C-65/C-69/P-258/P-259/P-266/P-269/P-327, D-17r54 completion, D-18r90 native values/recursion and D-21r11/D-26r9 shared native coverage under charter §§3.3/6.3/12. Runtime-selected lexical slots preserve once-only selection, ordered rebinding/swap and conservative initialization/owner facts through cleanup. Acceptance includes failure after mutation, null slots, callable images and both native modes. Borrowed results expose no binding slot. Runtime slot aliases, broader relational proofs, regional mechanisms and pending designs remain outside coverage. Prior capability reference: `d84f3eb1785bcea938d0f000f0a034cfab99e44f:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Contextual deferred capture storage
 
 <a id="k-638"></a>
