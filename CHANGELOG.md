@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Call-summary input roles
+
+<a id="k-664"></a>
+**K-664 — Call-effect continuity.** Agent assessment under C-65/P-258, H-382/H-398–H-410/H-420, D-14r91/D-17r57/D-18/D-21r11/D-26r13 and charter §§5.3/6.3/12: registry r671→672 and source reference285→286 record argument-indexed read/write/return/null-provenance summaries derived from checked frame roles. Captured environment storage and parameter storage remain independent; native layout preserves the checked correspondence. Preserve alias-sensitive initialization, exact return selection, owners/access, completion, preparation, cleanup and native reuse. No new language permission, allocation, public ABI or design qualification; executable packs and broader proof coverage remain work. Prior capability reference: `7ef3e6cba11e016ea50948e4a8ee1bdaa28e9eca:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Checked callable frames
 
 <a id="k-663"></a>

@@ -1328,8 +1328,15 @@ class LLVMEmission {
     std::vector<const std::map<const Expression *, CheckedOperation> *> lowered;
     // A lexical declaration has one frame role even when a checked context
     // borrows an existing target and another constructs local payload storage.
-    for (const auto id : instances) for (const auto &place : program_->instances[id].storage)
-      if (places.emplace(place.binding, storage.size()).second) storage.push_back(place);
+    for (const auto id : instances) {
+      const auto &checked = program_->instances[id];
+      const auto retain = [&](const CheckedStorage &place) {
+        if (places.emplace(place.binding, storage.size()).second) storage.push_back(place);
+      };
+      for (const auto &input : checked.frame.inputs) retain(checked.storage.at(input.place));
+      for (const auto capture : checked.frame.captures) retain(checked.storage.at(capture));
+      for (const auto &place : checked.storage) retain(place);
+    }
     std::optional<CheckedFrame> frame;
     for (const auto id : instances) {
       const auto &checked = program_->instances[id];

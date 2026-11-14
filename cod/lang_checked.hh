@@ -153,6 +153,7 @@ struct LexicalState {
 
 // Substitutions are checking obligations, not semantic methods or activation records.
 struct CallEffects {
+  // Every index is an incoming operand ordinal, independent of callee storage.
   std::set<std::pair<size_t, std::set<size_t>>> reads;
   std::map<size_t, std::set<size_t>> initialized;
   CleanupEquations::Returned returned;
@@ -772,11 +773,23 @@ class ScalarChecker {
       found->second.before.merge(before);
     }
   }
+  size_t input_ordinal(size_t place) const {
+    if (place == null_target) return null_target;
+    const auto &inputs = checking_instance_->frame.inputs;
+    for (size_t i = 0; i < inputs.size(); ++i)
+      if (inputs[i].place == place && inputs[i].mode != ArgumentMode::value) return i;
+    throw std::logic_error("call summary refers to non-input storage");
+  }
+  std::set<size_t> input_ordinals(const std::set<size_t> &places) const {
+    std::set<size_t> result;
+    for (const auto place : places) result.insert(input_ordinal(place));
+    return result;
+  }
   void observe_read(size_t place, const std::set<size_t> &known) {
     if (delayed_ || !storage(place).borrowed) return;
     std::set<size_t> external;
-    for (const auto id : known) if (storage(id).borrowed) external.insert(id);
-    observed_.reads.emplace(place, std::move(external));
+    for (const auto id : known) if (storage(id).borrowed) external.insert(input_ordinal(id));
+    observed_.reads.emplace(input_ordinal(place), std::move(external));
   }
   void apply_effects(LexicalState &state, const CleanupEquations::Effects &effects) {
     for (const auto input : inputs(state.inputs)) state.input_selections[input].constrain(effects.selections);
@@ -3833,12 +3846,15 @@ class ScalarChecker {
   }
   void observe_outcome(size_t reason, const LexicalState &state) {
     std::set<size_t> known;
-    for (const auto id : state.initialized) if (storage(id).borrowed) known.insert(id);
+    for (const auto id : state.initialized) if (storage(id).borrowed) known.insert(input_ordinal(id));
     const auto [found, inserted] = observed_.initialized.emplace(reason, known);
     if (!inserted) found->second = intersect(found->second, known);
     if (!reason && checking_instance_->result.borrowed()) {
       auto returned = state.returned;
       returned.initialize(state.initialized);
+      returned.targets = input_ordinals(returned.targets);
+      returned.uninitialized = input_ordinals(returned.uninitialized);
+      returned.null_sources = input_ordinals(returned.null_sources);
       observed_.returned.merge(returned);
     }
     for (const auto &[read, requirement] : state.requirements)
@@ -3858,6 +3874,14 @@ class ScalarChecker {
       for (const auto &owner : method.owner_parameters) {
         const auto id = bind(owner.name, Type::void_type, {}, true, true, true, owner.at);
         bindings_->at(id).owner_binding = external_owners_.at(owner.name);
+      }
+      for (size_t c = 0; c < instance.environment.size(); ++c) {
+        const auto &capture = checking_method_->captures[c];
+        const auto id = declare(capture.name, instance.environment[c], false, true, capture.at);
+        instance.frame.captures.push_back(id);
+        storage_->at(id).captured = true;
+        bindings_->back().callable_value = true;
+        initialize(id);
       }
       for (size_t p = 0; p < method.parameters.size(); ++p) {
         const auto &parameter = method.parameters[p];
@@ -3882,14 +3906,6 @@ class ScalarChecker {
         }
         if (argument_mode(parameter) != ArgumentMode::borrowed_ptr) initialize(id);
         lexical_.exceptions[id] = exception_possibilities(instance.arguments[p]);
-      }
-      for (size_t c = 0; c < instance.environment.size(); ++c) {
-        const auto &capture = checking_method_->captures[c];
-        const auto id = declare(capture.name, instance.environment[c], false, true, capture.at);
-        instance.frame.captures.push_back(id);
-        storage_->at(id).captured = true;
-        bindings_->back().callable_value = true;
-        initialize(id);
       }
       AbruptFlow flow{1, {}}, outcomes{1, {}};
       abrupt_ = &flow;
