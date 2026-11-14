@@ -1,6 +1,6 @@
 # Generic and recursive closure for AOT micro-dispatch
 
-Design revision: 11 · Recorded: 2026-11-14 America/Los_Angeles · Status: whole-file behavioral/native-coverage contract and value path confirmed; concrete mechanisms retain the separate review scopes below.
+Design revision: 12 · Recorded: 2026-11-14 America/Los_Angeles · Status: whole-file behavioral/native-coverage contract and value path confirmed; concrete mechanisms retain the separate review scopes below.
 
 ## Design authority
 
@@ -8,7 +8,7 @@ Design revision: 11 · Recorded: 2026-11-14 America/Los_Angeles · Status: whole
 - **Value path:** The registry’s named value relationships explain the charter benefit and retain their individual confirmation states; dependency relationships confer no additional authority.
 - **Contract boundary:** Permit multiple prepared implementations per semantic method and proven AOT direct calls. Preserve identities, same-T and valid uninterpreted passage; unavailable required interpretation is checked, breached typing unchecked. Generic bodies alone add no unknown-type throws; voluntary declarations retain obligations. Stop on detected resource exhaustion, without a universal analysis-nontermination detector. Concrete checking, failing-path analysis, carrier/ABI, input validation and result inference remain separate review scopes.
 - **Acceptance:** The required acceptance section covers known and unknown concrete types, same-T, uninterpreted passage, recursive native coverage and failure at required interpretation. Concrete mechanisms remain separately scoped. Current compiler availability is recorded in the [source capability reference](../tests/cod/language/README.md).
-- **Evidence / continuity:** human baselines are the H records identified by the registry; [K-CALLABLE-RESULT-20261114](../CHANGELOG.md#k-callable-result-20261114) covers r10→11 dependency alignment with H-421/H-422/D-24 callable-wide result inference. The qualified native coverage/value contract and independently pending concrete mechanisms remain unchanged.
+- **Evidence / continuity:** human baselines are the H records identified by the registry; [K-INFERENCE-CLEANUP-20261114](../CHANGELOG.md#k-inference-cleanup-20261114) covers r11→12 dependency alignment with D-24/H-421–H-423 result contracts. The qualified native coverage/value contract and independently pending concrete mechanisms remain unchanged.
 
 ## The question this contract answers
 
@@ -95,7 +95,7 @@ For recursion, make declared interfaces or independently established inferred in
 
 Checking may retain distinct substitutions and relational facts without emitting a body for each one. The compiler must not identify types solely because layouts match or both select through `<any>`. Units, nominal conformance and selected interpretations remain meaningful; D-16's planned numeric representations cannot be collapsed into one type by this mechanism. The concrete analysis domain and checked representation remain unselected mechanisms. Representing the general implementation as a specialization with no extra narrowing assumptions is an engineering proposal only; the user has not selected that permanent representation.
 
-[D-24](CallableResultInference.md) owns result-type inference. H-421/H-422 permits omitted results on named or anonymous func/proc definitions when independent return-type evidence establishes the contract; a recursive-dependent expression cannot supply its own missing result type, and an unanchored cycle requires an explicit annotation. Declared or validly inferred interfaces must be established before accepting native coverage. Separate-declaration/expected-type constraints, no-value-return bodies and abstract result joins remain D-24 review scopes. Callable kind retains its effect/compatibility rules without introducing a separate result-inference policy. This dependency does not select a concrete inference/closure algorithm or validate existing compiler behavior.
+[D-24](CallableResultInference.md) owns the common callable result policy. H-421–H-423 permits explicit, independently supplied declaration/context contracts and independent body anchors; unresolved recursive result cycles require an explicit contract. Checked interfaces must be established before accepting native coverage. D-24 distinguishes normal no-value completion from missing/unknown value results and keeps automatic common-result synthesis open. Callable effects and complete native coverage remain unchanged; this dependency selects no concrete inference/closure algorithm or permanent representation.
 
 ## Analysis limits and concrete diagnostics
 
