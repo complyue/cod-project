@@ -188,7 +188,7 @@ struct CheckedInstance {
 };
 enum class ResultMode { value, borrowed_ref, borrowed_ptr };
 struct ResultContract {
-  Type type;
+  std::optional<Type> type;
   ResultMode mode = ResultMode::value;
   std::string owner;
   bool read_only = false;
@@ -231,7 +231,7 @@ class ScalarChecker {
   std::set<std::string> print_symbols_;
   std::map<const Form *, size_t> lexical_methods_;
   struct FreeBindings { std::vector<Capture> captures, queries; };
-  std::map<const Form *, FreeBindings> free_bindings_;
+  mutable std::map<const Form *, FreeBindings> free_bindings_;
   std::map<const Form *, std::set<std::string>> free_types_;
   std::set<const Form *> warned_captures_;
   std::set<std::string> module_values_;
@@ -297,6 +297,26 @@ class ScalarChecker {
   }
   using Substitutions = std::vector<std::optional<Type>>;
   using Access = std::vector<std::optional<bool>>;
+  struct TypeEvidenceState {
+    std::map<std::string, std::optional<Type>> bindings;
+    std::map<std::string, ViewEvidence> views;
+    std::map<std::string, size_t> owner_bindings;
+    std::set<size_t> external_owners;
+    std::map<std::pair<size_t, size_t>, OwnerMatch> owner_relations;
+    ViewEvidence value;
+    std::optional<size_t> current_owner;
+    bool complete = true;
+    bool required = false;
+    std::optional<size_t> method;
+    Substitutions substitutions;
+    std::vector<Type> retained;
+    struct Returns {
+      std::vector<Type> types;
+      bool value_obligation = false;
+      bool unresolved = false;
+    } *returns = nullptr;
+  };
+
   static std::optional<bool> access_of(const CheckedOperation &view) {
     return view.type == Type::never ? std::nullopt : std::optional<bool>{view.read_only};
   }
@@ -342,9 +362,13 @@ class ScalarChecker {
   const QueryEnvironment &query_environment() const {
     return program_.query_environments[checking_instance_ ? checking_instance_->query_environment : 0];
   }
-  OwnerMatch compare_owners(std::optional<size_t> a, std::optional<size_t> b) const {
+  OwnerMatch compare_owners(std::optional<size_t> a, std::optional<size_t> b, const TypeEvidenceState *state = nullptr) const {
     if (!a || !b) return OwnerMatch::unknown;
     if (a == b) return OwnerMatch::satisfied;
+    if (state) {
+      if (const auto found = state->owner_relations.find({*a, *b}); found != state->owner_relations.end()) return found->second;
+      return state->external_owners.contains(*a) && state->external_owners.contains(*b) ? OwnerMatch::unknown : OwnerMatch::mismatch;
+    }
     const auto &relations = query_environment().owners;
     const auto retained = [&](size_t owner) { return owner >= query_owner_base && owner - query_owner_base < relations.size(); };
     if (retained(*a) && retained(*b)) return relations[*a - query_owner_base][*b - query_owner_base];
@@ -353,11 +377,11 @@ class ScalarChecker {
     // Distinct formal names admit equal actual owners; local scopes do not.
     return external_owner(*a) && external_owner(*b) ? OwnerMatch::unknown : OwnerMatch::mismatch;
   }
-  OwnerMatch match_owners(const CheckedMethod &method, const Owners &owners) const {
+  OwnerMatch match_owners(const CheckedMethod &method, const Owners &owners, const TypeEvidenceState *state = nullptr) const {
     auto result = OwnerMatch::satisfied;
     for (size_t i = 0; i < method.parameters.size(); ++i) for (size_t j = 0; j < i; ++j) {
       if (!same_owner(method, i, j)) continue;
-      const auto compared = i < owners.size() ? compare_owners(owners[i], owners[j]) : OwnerMatch::unknown;
+      const auto compared = i < owners.size() ? compare_owners(owners[i], owners[j], state) : OwnerMatch::unknown;
       if (compared == OwnerMatch::mismatch) return compared;
       if (compared == OwnerMatch::unknown) result = compared;
     }
@@ -371,19 +395,28 @@ class ScalarChecker {
   struct NamedFamily {
     std::vector<size_t> methods;
     const CheckedInstance *context = nullptr;
+    std::vector<Type> evidence_retained = {};
     const std::vector<Type> &retained_types() const {
-      static const std::vector<Type> empty;
-      return context ? context->retained_types : empty;
+      return context ? context->retained_types : evidence_retained;
     }
   };
-  NamedFamily named_family(const std::string &name) const {
+  NamedFamily named_family(const std::string &name, const TypeEvidenceState *state = nullptr) const {
+    if (state) {
+      if (state->method) {
+        const auto &method = program_.methods[*state->method];
+        if (lexical_methods_.contains(method.source) && name == method.source->name)
+          return {{*state->method}, nullptr, state->retained};
+      }
+      const auto found = families_.find(name);
+      return found == families_.end() ? NamedFamily{} : NamedFamily{found->second};
+    }
     if (checking_method_ && lexical_methods_.contains(checking_method_->source) && name == checking_method_->source->name)
       return {{checking_instance_->method}, checking_instance_};
     const auto found = families_.find(name);
     return found == families_.end() ? NamedFamily{} : NamedFamily{found->second};
   }
   ArgumentPreparation argument_preparation(const Expression &expr, const std::vector<Type> &prefix,
-                                            const std::vector<ArgumentEvidence> &evidence, const Access &prefix_access, const Owners &prefix_owners, bool required = true) const {
+                                            const std::vector<ArgumentEvidence> &evidence, const Access &prefix_access, const Owners &prefix_owners, bool required = true, const TypeEvidenceState *state = nullptr) const {
     if (expr.text == "cause_at" && (expr.intrinsic || !families_.contains(expr.text)) && expr.children.size() == 2)
       return {ArgumentMode::value, prefix.empty() ? exception_type(0) : Type{Type::uint64}};
     if (expr.intrinsic) return {};
@@ -397,11 +430,11 @@ class ScalarChecker {
     bool complete = true;
     for (size_t i = prefix.size(); i < evidence.size(); ++i)
       complete = complete && evidence[i].type.has_value() && evidence[i].type != Type::never;
-    const auto family = named_family(expr.text);
+    const auto family = named_family(expr.text, state);
     for (const auto id : family.methods) {
       const auto &candidate = program_.methods[id];
       if (candidate.parameters.size() != expr.children.size() || !admits_access(candidate, access) ||
-          match_owners(candidate, owners) == OwnerMatch::mismatch) continue;
+          match_owners(candidate, owners, state) == OwnerMatch::mismatch) continue;
       auto bindings = match_prefix(candidate, prefix, family.retained_types());
       if (!bindings) continue;
       bool matches = true;
@@ -411,7 +444,7 @@ class ScalarChecker {
       if (matches) { applicable.push_back(id); substitutions.emplace(id, std::move(*bindings)); }
     }
     if (complete) {
-      applicable = most_specific(applicable, access, owners);
+      applicable = most_specific(applicable, access, owners, state);
       if (required && applicable.size() > 1 && std::all_of(applicable.begin() + 1, applicable.end(), [&](size_t id) {
             const auto &first = program_.methods[applicable.front()], &other = program_.methods[id];
             return same_access(first, other) && implies_owners(first, other) && implies_owners(other, first);
@@ -1209,7 +1242,7 @@ class ScalarChecker {
     return free_types_.emplace(&method, std::move(required)).first->second;
   }
 
-  const FreeBindings &free_bindings(const Form &method) {
+  const FreeBindings &free_bindings(const Form &method) const {
     if (const auto found = free_bindings_.find(&method); found != free_bindings_.end()) return found->second;
     FreeBindings required;
     std::set<std::string> names;
@@ -1403,7 +1436,7 @@ class ScalarChecker {
       fail(at, "compiler resource limit: 4096 scalar checking obligations while preparing '" + definition.source->name + "'");
     const auto substitutions = match(definition, arguments, retained);
     if (!substitutions) throw std::logic_error("unchecked method demand");
-    auto result = substitute(definition.result.type, definition, *substitutions);
+    auto result = require_result(method, arguments, retained, at);
     const auto id = program_.instances.size();
     auto context = arguments; context.insert(context.end(), environment.begin(), environment.end());
     context.insert(context.end(), retained.begin(), retained.end());
@@ -1412,7 +1445,8 @@ class ScalarChecker {
     definition.instances.push_back(id);
     return id;
   }
-  std::vector<size_t> most_specific(const std::vector<size_t> &applicable, const Access &access = {}, const Owners &owners = {}) const {
+  std::vector<size_t> most_specific(const std::vector<size_t> &applicable, const Access &access = {}, const Owners &owners = {},
+                                    const TypeEvidenceState *state = nullptr) const {
     std::vector<size_t> best;
     for (const auto candidate : applicable) {
       const auto &definition = program_.methods[candidate];
@@ -1420,7 +1454,7 @@ class ScalarChecker {
         const auto &alternative = program_.methods[other];
         if (!implies(alternative, definition) || !implies_owners(alternative, definition)) return false;
         const bool stricter_owners = !implies_owners(definition, alternative);
-        if (stricter_owners && match_owners(alternative, owners) != OwnerMatch::satisfied) return false;
+        if (stricter_owners && match_owners(alternative, owners, state) != OwnerMatch::satisfied) return false;
         bool strict = !implies(definition, alternative) || stricter_owners;
         for (size_t i = 0; i < alternative.parameters.size(); ++i) {
           const auto exact = alternative.source->parameters[i].read_only;
@@ -1435,7 +1469,8 @@ class ScalarChecker {
     return best;
   }
   size_t select_method(const std::vector<size_t> &family, const std::vector<Type> &arguments, const Location &at, const std::string &name,
-                       const std::vector<Type> &retained = {}, const Access &access = {}, const Owners &owners = {}) const {
+                       const std::vector<Type> &retained = {}, const Access &access = {}, const Owners &owners = {},
+                       const TypeEvidenceState *state = nullptr) const {
     std::vector<size_t> applicable;
     bool type_match = false, access_match = false;
     for (const auto method : family) {
@@ -1444,16 +1479,16 @@ class ScalarChecker {
       type_match = true;
       if (!admits_access(candidate, access)) continue;
       access_match = true;
-      if (match_owners(candidate, owners) != OwnerMatch::mismatch) applicable.push_back(method);
+      if (match_owners(candidate, owners, state) != OwnerMatch::mismatch) applicable.push_back(method);
     }
-    const auto best = most_specific(applicable, access, owners);
+    const auto best = most_specific(applicable, access, owners, state);
     if (best.empty()) {
       if (access_match) fail(at, "arguments for one owner role have different actual owners");
       if (type_match) fail(at, "readonly argument cannot supply a writable borrowed parameter");
       fail(at, "no applicable method for '" + name + "' (argument types or same-T relation do not match)");
     }
     if (!owners.empty() && std::any_of(best.begin(), best.end(), [&](size_t id) {
-          return match_owners(program_.methods[id], owners) == OwnerMatch::unknown;
+          return match_owners(program_.methods[id], owners, state) == OwnerMatch::unknown;
         })) implementation_gap(at, "method selection requires an unproved owner equality");
     if (best.size() != 1) fail(at, "ambiguous methods for '" + name + "'");
     return best.front();
@@ -1575,14 +1610,189 @@ class ScalarChecker {
     for (const auto &failure : method.throws_types) type.throws_types.push_back(resolve_type(failure));
     return resolve_type(std::move(type));
   }
-  std::optional<Type> callable_evidence(size_t id) const {
+  struct ResultObligation {
+    size_t method;
+    std::vector<Type> arguments, retained;
+    TypeEvidenceState context;
+    std::set<size_t> dependencies;
+    std::optional<Type> result;
+  };
+  mutable std::deque<ResultObligation> result_obligations_;
+  mutable std::optional<size_t> result_probe_;
+  mutable bool result_graph_changed_ = false;
+  mutable bool results_solved_ = false;
+
+  static std::optional<Type> common_result(const std::vector<Type> &returns, const Location &at) {
+    if (returns.empty()) return {};
+    auto candidates = returns;
+    for (const auto kind : {Type::uint8, Type::uint32, Type::uint64, Type::integer, Type::float32, Type::float64})
+      candidates.push_back(Type{kind});
+    candidates.push_back(exception_type(0));
+    std::vector<Type> common;
+    for (const auto &candidate : candidates)
+      if (std::find(common.begin(), common.end(), candidate) == common.end() &&
+          std::all_of(returns.begin(), returns.end(), [&](const auto &type) { return transfers_value(type, candidate); }))
+        common.push_back(candidate);
+    std::optional<Type> least;
+    for (const auto &candidate : common)
+      if (std::all_of(common.begin(), common.end(), [&](const auto &other) { return transfers_value(candidate, other); })) {
+        if (least && *least != candidate) fail(at, "return alternatives have no unique least common result; provide an explicit result contract");
+        least = candidate;
+      }
+    if (!least) fail(at, "return alternatives have no unique least common result; provide an explicit result contract and valid conversions");
+    return least;
+  }
+  TypeEvidenceState result_context(size_t id, const TypeEvidenceState *supplied) const {
+    TypeEvidenceState context;
+    const auto &method = *program_.methods[id].source;
+    if (!lexical_methods_.contains(&method)) return context;
+    const auto available = supplied ? *supplied : bindings_ && !lexical_.scopes.empty() ? evidence_state() : TypeEvidenceState{};
+    const auto retain = [&](const Capture &capture) {
+      if (const auto found = available.bindings.find(capture.name); found != available.bindings.end()) {
+        context.bindings.emplace(*found);
+        context.views.emplace(capture.name, available.views.at(capture.name));
+      }
+      if (const auto found = available.owner_bindings.find(capture.name); found != available.owner_bindings.end())
+        context.owner_bindings.emplace(*found);
+    };
+    const auto &free = free_bindings(method);
+    for (const auto &capture : free.captures) retain(capture);
+    for (const auto &query : free.queries) retain(query);
+    std::map<size_t, size_t> owners;
+    const auto owner = [&](size_t original) {
+      return owners.try_emplace(original, owners.size() + 1).first->second;
+    };
+    for (auto &[name, view] : context.views) if (view.owner) view.owner = owner(*view.owner);
+    for (auto &[name, id] : context.owner_bindings) id = owner(id);
+    for (const auto &[original, id] : owners) {
+      context.external_owners.insert(id);
+      for (const auto &[other, target] : owners)
+        context.owner_relations[{id, target}] = compare_owners(original, other, &available);
+    }
+    return context;
+  }
+  std::optional<Type> sample_result(size_t id, bool complete = false) const {
+    auto &obligation = result_obligations_[id];
+    const auto &method = program_.methods[obligation.method];
+    auto state = obligation.context;
+    state.method = obligation.method;
+    state.substitutions = *match(method, obligation.arguments, obligation.retained);
+    state.retained = obligation.retained;
+    state.current_owner = 0;
+    TypeEvidenceState::Returns returns;
+    state.returns = &returns;
+    for (size_t i = 0; i < method.source->owner_parameters.size(); ++i) {
+      const auto owner = null_target - 1 - i;
+      state.owner_bindings[method.source->owner_parameters[i].name] = owner;
+      state.external_owners.insert(owner);
+    }
+    for (size_t i = 0; i < method.parameters.size(); ++i) {
+      const auto &parameter = method.source->parameters[i];
+      const bool value = parameter.owner.empty();
+      state.bindings[parameter.name] = obligation.arguments[i];
+      state.views[parameter.name] = {parameter.read_only || (value && parameter.fixed_binding), true, value,
+                                    value ? 0 : state.owner_bindings.at(parameter.owner)};
+    }
+    const auto previous = result_probe_;
+    result_probe_ = id;
+    const auto completion = type_evidence(*method.source->body, state);
+    result_probe_ = previous;
+    if (!returns.value_obligation && completion != Type::never && state.complete)
+      returns.types.push_back(Type::void_type);
+    if (complete && returns.unresolved) return {};
+    return common_result(returns.types, method.source->at);
+  }
+  void solve_results() const {
+    // Discover finite type obligations without creating executable instances. Each
+    // recursive component first withholds its own results to expose independent anchors.
+    do {
+      result_graph_changed_ = false;
+      for (auto &node : result_obligations_) node.result.reset();
+      for (size_t i = 0; i < result_obligations_.size(); ++i) sample_result(i);
+      std::vector<std::optional<size_t>> index(result_obligations_.size());
+      std::vector<size_t> low(index.size()), stack;
+      std::set<size_t> active;
+      std::vector<std::vector<size_t>> components;
+      size_t next = 0;
+      const std::function<void(size_t)> visit = [&](size_t id) {
+        index[id] = low[id] = next++;
+        stack.push_back(id); active.insert(id);
+        for (const auto dependency : result_obligations_[id].dependencies) {
+          if (!index[dependency]) { visit(dependency); low[id] = std::min(low[id], low[dependency]); }
+          else if (active.contains(dependency)) low[id] = std::min(low[id], *index[dependency]);
+        }
+        if (low[id] != *index[id]) return;
+        auto &component = components.emplace_back();
+        for (;;) {
+          const auto member = stack.back(); stack.pop_back(); active.erase(member); component.push_back(member);
+          if (member == id) break;
+        }
+      };
+      for (size_t i = 0; i < index.size(); ++i) if (!index[i]) visit(i);
+      for (const auto &component : components) {
+        std::vector<std::optional<Type>> anchors;
+        for (const auto id : component) anchors.push_back(sample_result(id));
+        for (size_t i = 0; i < component.size(); ++i) result_obligations_[component[i]].result = anchors[i];
+        bool changed;
+        do {
+          changed = false;
+          std::vector<std::pair<size_t, Type>> established;
+          for (const auto id : component) if (!result_obligations_[id].result)
+            if (const auto result = sample_result(id, true)) established.emplace_back(id, *result);
+          for (const auto &[id, result] : established) { result_obligations_[id].result = result; changed = true; }
+        } while (changed);
+      }
+    } while (result_graph_changed_);
+    results_solved_ = true;
+  }
+  std::optional<Type> infer_result(size_t method, std::vector<Type> arguments, const std::vector<Type> &retained,
+                                   const TypeEvidenceState *state = nullptr) const {
+    const auto &definition = program_.methods[method];
+    for (size_t i = 0; i < arguments.size(); ++i)
+      if (accepts_exception(arguments[i], definition.parameters[i])) arguments[i] = definition.parameters[i];
+    if (definition.result.type) return substitute(*definition.result.type, definition, *match(definition, arguments, retained), true);
+    const auto context = result_context(method, state);
+    const auto found = std::find_if(result_obligations_.begin(), result_obligations_.end(), [&](const auto &node) {
+      return node.method == method && node.arguments == arguments && node.retained == retained &&
+             node.context.bindings == context.bindings && node.context.views == context.views && node.context.owner_bindings == context.owner_bindings && node.context.owner_relations == context.owner_relations;
+    });
+    const auto id = static_cast<size_t>(std::distance(result_obligations_.begin(), found));
+    if (found == result_obligations_.end()) {
+      if (id == instance_limit) fail(definition.source->at, "compiler resource limit: 4096 callable result obligations; result remains unproved");
+      result_obligations_.push_back({method, arguments, retained, context, {}, {}});
+      result_graph_changed_ = true; results_solved_ = false;
+    }
+    if (result_probe_) {
+      if (result_obligations_[*result_probe_].dependencies.insert(id).second) result_graph_changed_ = true;
+    } else if (!results_solved_) solve_results();
+    const auto result = result_obligations_[id].result;
+    if (result && !result_probe_) {
+      if (*result != Type::void_type && result->kind != Type::procedure && !scalar_type(*result))
+        implementation_gap(definition.source->at, "inferred result mode for a non-scalar type; provide an explicit result contract");
+      if (definition.source->operation && swap_operation(definition.source->name) && *result != Type::void_type)
+        fail(definition.source->at, "swap method must return void");
+    }
+    return result;
+  }
+  Type require_result(size_t method, const std::vector<Type> &arguments, const std::vector<Type> &retained, const Location &at) const {
+    if (const auto result = infer_result(method, arguments, retained)) {
+      if (nested_binder(program_.methods[method], *result))
+        implementation_gap(at, "type parameter is not determined by the arguments");
+      return *result;
+    }
+    implementation_gap(at, "unproved callable result; provide an independent result contract");
+  }
+
+  std::optional<Type> callable_evidence(size_t id, const TypeEvidenceState *state = nullptr) const {
     const auto &method = program_.methods[id];
     if (!method.source->type_parameters.empty()) return {};
     std::vector<Type> retained;
     if (!method.retained_types.empty()) {
-      if (!checking_instance_ || method.parent != checking_instance_->method) return {};
+      const auto parent = state ? state->method : checking_instance_ ? std::optional<size_t>{checking_instance_->method} : std::nullopt;
+      if (method.parent != parent || !parent) return {};
+      const auto &substitutions = state ? state->substitutions : checking_instance_->substitutions;
       for (const auto index : method.retained_types) {
-        const auto &type = checking_instance_->substitutions.at(index);
+        const auto &type = substitutions.at(index);
         if (!type) return {};
         retained.push_back(*type);
       }
@@ -1590,9 +1800,10 @@ class ScalarChecker {
     const auto bindings = type_context(method, retained);
     auto arguments = method.parameters;
     for (auto &argument : arguments) argument = substitute(argument, method, bindings, true);
-    const auto result = substitute(method.result.type, method, bindings, true);
-    if (nested_binder(method, result) || std::any_of(arguments.begin(), arguments.end(), [&](const auto &type) { return nested_binder(method, type); })) return {};
-    return callable_type(method, arguments, result);
+    if (std::any_of(arguments.begin(), arguments.end(), [&](const auto &type) { return nested_binder(method, type); })) return {};
+    const auto result = infer_result(id, arguments, retained, state);
+    if (!result || nested_binder(method, *result)) return {};
+    return callable_type(method, arguments, *result);
   }
   static CheckedOperation literal(const Expression &expr) {
     using K = Expression::Kind;
@@ -1656,15 +1867,6 @@ class ScalarChecker {
     return {either(a.read_only, b.read_only), either(a.view, b.view), a.value_binding == b.value_binding ? a.value_binding : std::nullopt,
             a.owner == b.owner ? a.owner : std::nullopt, a.mixed_view || b.mixed_view || a.view != b.view};
   }
-  struct TypeEvidenceState {
-    std::map<std::string, std::optional<Type>> bindings;
-    std::map<std::string, ViewEvidence> views;
-    std::map<std::string, size_t> owner_bindings;
-    ViewEvidence value;
-    std::optional<size_t> current_owner;
-    bool complete = true;
-    bool required = false;
-  };
   static std::optional<size_t> owner_evidence(const std::string &name, const TypeEvidenceState &state, const Location &at) {
     if (const auto found = state.owner_bindings.find(name); found != state.owner_bindings.end()) return found->second;
     if (state.required) fail(at, state.bindings.contains(name) ? "nearest binding '" + name + "' is not an owner" : "unknown owner '" + name + "'");
@@ -1695,7 +1897,7 @@ class ScalarChecker {
   std::optional<Type> type_evidence(const Expression &expr, TypeEvidenceState &state, bool contextual = false, const Type *expected = nullptr) const {
     ViewEvidence view{false, false, {}};
     const auto type = query_evidence(expr, state, view, contextual, expected);
-    if (state.required && !type) implementation_gap(expr.at, "typeof requires a known declaration or operand type without body inference");
+    if (state.required && !type) implementation_gap(expr.at, "typeof requires a known declaration or operand type with a proved result contract");
     state.value = type && type != Type::never ? view : ViewEvidence{};
     return type;
   }
@@ -1703,7 +1905,7 @@ class ScalarChecker {
     using K = Expression::Kind;
     const auto child = [&](size_t i, bool context = false) { return type_evidence(*expr.children.at(i), state, context); };
     const auto annotation = [&](const Type &type) {
-      return checking_instance_ ? substitute(type, *checking_method_, checking_instance_->substitutions, true) : resolve_type(type);
+      return state.method ? substitute(type, program_.methods[*state.method], state.substitutions, true) : resolve_type(type);
     };
     if (state.required) {
       if (expr.spread) implementation_gap(expr.at, "spread operands in typeof");
@@ -1739,9 +1941,9 @@ class ScalarChecker {
         if (state.required) check_query_binding(expr.text, expr.at);
         view = state.views.at(expr.text); return found->second;
       }
-      if (const auto family = named_family(expr.text); !family.methods.empty()) {
-        if (expected && expected->kind == Type::procedure) return select_callable(family.methods, expected, expr.at).type;
-        if ((!contextual || state.required) && family.methods.size() == 1) return callable_evidence(family.methods.front());
+      if (const auto family = named_family(expr.text, &state); !family.methods.empty()) {
+        if (expected && expected->kind == Type::procedure) return callable_query(family.methods, expected, expr.at, state);
+        if ((!contextual || state.required) && family.methods.size() == 1) return callable_evidence(family.methods.front(), &state);
       }
       return {};
     case K::block: {
@@ -1753,6 +1955,7 @@ class ScalarChecker {
       for (size_t i = 0; i < expr.children.size(); ++i) {
         result = type_evidence(*expr.children[i], active, contextual && i + 1 == expr.children.size(), i + 1 == expr.children.size() ? expected : nullptr);
         exits = exits || result == Type::never;
+        if (active.returns && exits) break;
       }
       if (!expr.children.empty()) view = active.value;
       return exits ? std::optional<Type>{Type::never} : result;
@@ -1795,7 +1998,7 @@ class ScalarChecker {
       std::optional<Type> type;
       if (expr.annotation) type = annotation(*expr.annotation);
       else {
-        auto query = state;
+        auto query = state; query.returns = nullptr;
         type = type_evidence(*expr.children.front(), query);
       }
       bool completes = true;
@@ -1813,6 +2016,7 @@ class ScalarChecker {
     }
     case K::conditional: {
       const auto condition = child(0);
+      if (state.returns && condition == Type::never) return Type::never;
       if (state.required && condition != Type::boolean) fail(expr.at, "condition requires bool");
       auto yes_state = state, no_state = state;
       const auto yes = type_evidence(*expr.children[1], yes_state, contextual, expected), no = type_evidence(*expr.children[2], no_state, contextual, expected);
@@ -1823,6 +2027,12 @@ class ScalarChecker {
       if (no == Type::never || yes == no) return yes;
       return {};
     }
+    case K::deferred:
+      if (!state.returns || expr.children.front()->kind != K::block) {
+        if (expr.children.front()->kind != K::block && child(0) == Type::never) return Type::never;
+        return Type::void_type;
+      }
+      [[fallthrough]];
     case K::try_scope: {
       const auto before = state;
       auto result = child(0, contextual); view = state.value;
@@ -1852,6 +2062,7 @@ class ScalarChecker {
         if (result == Type::never) result = type;
         else if (type != Type::never && type != result) result.reset();
       }
+      if (expr.kind == K::deferred) { state = before; return Type::void_type; }
       return result;
     }
     case K::range_for: case K::fold: {
@@ -1879,6 +2090,7 @@ class ScalarChecker {
         const auto left = child(0); auto skipped = state; const auto right = child(1);
         if (state.required && (left != Type::boolean || right != Type::boolean)) fail(expr.at, "logical operation requires bool operands");
         state = merge_evidence(std::move(skipped), state);
+        if (state.returns && !left) return {};
         return left == Type::never ? Type{Type::never} : Type{Type::boolean};
       }
       [[fallthrough]];
@@ -1901,6 +2113,7 @@ class ScalarChecker {
       for (size_t i = offset; i < expr.children.size(); ++i) {
         auto before = probe;
         evidence[i].type = type_evidence(*expr.children[i], probe, true);
+        if (state.returns && evidence[i].type == Type::never) return Type::never;
         evidence[i].read_only = probe.value.read_only; evidence[i].owner = probe.value.owner;
         hinted_views[i] = probe.value;
         if (!evidence[i].type) unresolved.emplace(i, std::move(before));
@@ -1917,7 +2130,7 @@ class ScalarChecker {
         if (local && target && target->kind == Type::procedure && target->parameters.size() == expr.children.size() - offset)
           parameter = target->parameters[i - offset];
         else if (!local && complete && !exits)
-          parameter = argument_preparation(expr, arguments, evidence, access, owners, state.required).type;
+          parameter = argument_preparation(expr, arguments, evidence, access, owners, state.required, &state).type;
         const auto *expected_argument = parameter && parameter->kind == Type::procedure ? &*parameter : nullptr;
         auto type = evidence[i].type;
         auto selected = hinted_views[i];
@@ -1949,7 +2162,7 @@ class ScalarChecker {
           if (mode != ArgumentMode::value && access[i].value_or(false) && (target->const_views.empty() || !target->const_views[i]))
             fail(expr.at, "readonly argument cannot supply a writable borrowed parameter");
           for (size_t j = 0; j < i; ++j) if (!target->owners.empty() && target->owners[i] && target->owners[i] == target->owners[j]) {
-            const auto relation = compare_owners(owners[i], owners[j]);
+            const auto relation = compare_owners(owners[i], owners[j], &state);
             if (relation == OwnerMatch::mismatch) fail(expr.at, "arguments for one owner role have different actual owners");
             if (relation == OwnerMatch::unknown) implementation_gap(expr.at, "typeof callable view requires an unproved owner equality");
           }
@@ -1977,28 +2190,28 @@ class ScalarChecker {
       }
       if (!complete) return {};
       std::vector<size_t> applicable;
-      const auto family = expr.intrinsic ? NamedFamily{} : named_family(expr.text);
+      const auto family = expr.intrinsic ? NamedFamily{} : named_family(expr.text, &state);
       const auto &retained = family.retained_types();
       if (state.required && family.methods.empty() && !eager_operation(expr.text))
         implementation_gap(expr.at, "typeof requires a known callable signature without outer value capture");
       for (const auto id : family.methods)
         if (match(program_.methods[id], arguments, retained) && admits_access(program_.methods[id], access) &&
-            match_owners(program_.methods[id], owners) != OwnerMatch::mismatch) applicable.push_back(id);
+            match_owners(program_.methods[id], owners, &state) != OwnerMatch::mismatch) applicable.push_back(id);
       if (applicable.empty() && eager_operation(expr.text)) {
         const auto types = eager_types(expr, arguments);
         if (state.required && !types.error.empty()) fail(expr.at, types.error);
         return types.error.empty() ? std::optional<Type>{types.result} : std::nullopt;
       }
-      const auto best = state.required ? std::vector<size_t>{select_method(family.methods, arguments, expr.at, expr.text, retained, access, owners)}
-                                       : most_specific(applicable, access, owners);
+      const auto best = state.required ? std::vector<size_t>{select_method(family.methods, arguments, expr.at, expr.text, retained, access, owners, &state)}
+                                       : most_specific(applicable, access, owners, &state);
       std::optional<Type> result;
       for (const auto id : best) {
         const auto &method = program_.methods[id];
         if (state.required) for (size_t i = 0; i < arguments.size(); ++i)
           if (argument_mode(method.source->parameters[i]) != ArgumentMode::value && (views[i].view != true || views[i].mixed_view))
             implementation_gap(expr.at, "borrowed parameter requires an existing view");
-        const auto type = substitute(method.result.type, method, *match(method, arguments, retained), true);
-        if (nested_binder(method, type) || (result && *result != type)) return {};
+        const auto type = infer_result(id, arguments, retained, &state);
+        if (!type || nested_binder(method, *type) || (result && *result != *type)) return {};
         const bool borrowed = method.result.borrowed();
         ViewEvidence next{method.result.read_only, borrowed, {}};
         if (borrowed) for (size_t i = 0; i < owners.size(); ++i)
@@ -2020,22 +2233,28 @@ class ScalarChecker {
       if (exits) return Type::never;
       return print_symbols_.contains(expr.text) ? std::optional<Type>{Type::void_type} : std::nullopt;
     }
-    case K::deferred:
-      if (expr.children.front()->kind != K::block && child(0) == Type::never) return Type::never;
-      return Type::void_type;
-    case K::return_value: case K::raise:
+    case K::return_value: {
+      const auto result = expr.children.empty() ? std::optional<Type>{Type::void_type} : child(0);
+      if (state.returns) {
+        state.returns->value_obligation |= !expr.children.empty() && result != Type::void_type;
+        state.returns->unresolved |= !result;
+        if (result && result != Type::never) state.returns->types.push_back(*result);
+      }
+      return Type::never;
+    }
+    case K::raise:
       for (const auto &item : expr.children) type_evidence(*item, state);
       return Type::never;
     case K::callable:
       if (!expr.definition->name.empty()) {
-        state.bindings[expr.definition->name] = callable_evidence(lexical_methods_.at(expr.definition.get()));
+        state.bindings[expr.definition->name] = callable_evidence(lexical_methods_.at(expr.definition.get()), &state);
         state.owner_bindings.erase(expr.definition->name);
         state.views[expr.definition->name] = {false, true, true, state.current_owner};
         return Type::void_type;
       }
       if (expected && expected->kind == Type::procedure)
-        return select_callable({lexical_methods_.at(expr.definition.get())}, expected, expr.at).type;
-      return contextual && !state.required ? std::nullopt : callable_evidence(lexical_methods_.at(expr.definition.get()));
+        return callable_query({lexical_methods_.at(expr.definition.get())}, expected, expr.at, state);
+      return contextual && !state.required ? std::nullopt : callable_evidence(lexical_methods_.at(expr.definition.get()), &state);
     default:
       state.complete = false;
       return {};
@@ -2043,6 +2262,10 @@ class ScalarChecker {
   }
   TypeEvidenceState evidence_state() const {
     TypeEvidenceState state;
+    if (checking_instance_) {
+      state.method = checking_instance_->method; state.substitutions = checking_instance_->substitutions;
+      state.retained = checking_instance_->retained_types;
+    }
     state.current_owner = std::find_if(lexical_.scopes.rbegin(), lexical_.scopes.rend(), [](const auto &scope) { return scope.declarations; })->id;
     for (const auto &binding : query_environment().bindings) {
       state.bindings[binding.name] = binding.type;
@@ -2059,6 +2282,12 @@ class ScalarChecker {
       const auto owner = found != lexical_.owners.end() && found->second.size() == 1 ? std::optional<size_t>{*found->second.begin()} : std::nullopt;
       state.views[name] = {binding.read_only, true, binding.value_binding, owner};
     }
+    for (const auto &[name, owner] : external_owners_) state.external_owners.insert(owner);
+    std::set<size_t> owners;
+    for (const auto &[name, view] : state.views) if (view.owner) owners.insert(*view.owner);
+    for (const auto &[name, owner] : state.owner_bindings) owners.insert(owner);
+    for (const auto owner : owners) for (const auto other : owners)
+      state.owner_relations[{owner, other}] = compare_owners(owner, other);
     return state;
   }
   size_t retain_query_environment(const CheckedMethod &method) {
@@ -2070,7 +2299,7 @@ class ScalarChecker {
       check_query_binding(query.name, query.at);
       const auto found = state.bindings.find(query.name);
       if (found == state.bindings.end() || !found->second)
-        implementation_gap(query.at, "typeof requires a known lexical declaration without body inference");
+        implementation_gap(query.at, "typeof requires a known lexical declaration with a proved result contract");
       auto view = state.views.at(query.name);
       if (view.owner) {
         const auto prior = std::find(owners.begin(), owners.end(), *view.owner);
@@ -2107,18 +2336,20 @@ class ScalarChecker {
     std::vector<Type> arguments, retained;
     Type type;
   };
-  CallableSelection select_callable(const std::vector<size_t> &family, const Type *expected, const Location &at) const {
+  std::optional<CallableSelection> try_select_callable(const std::vector<size_t> &family, const Type *expected, const Location &at,
+                                                        const TypeEvidenceState *state = nullptr) const {
     const auto &definition = program_.methods[family.front()];
     if (expected) signature_type(CheckedMethod{}, *expected, at);
     if (!expected && (family.size() != 1 || !program_.methods[family.front()].source->type_parameters.empty()))
       implementation_gap(at, "overloaded or generic callable values require an explicit concrete view type");
     std::vector<Type> retained;
-    if (checking_instance_ && checking_instance_->method == family.front()) retained = checking_instance_->retained_types;
+    const auto parent = state ? state->method : checking_instance_ ? std::optional<size_t>{checking_instance_->method} : std::nullopt;
+    if (parent == family.front()) retained = state ? state->retained : checking_instance_->retained_types;
     else if (!definition.retained_types.empty()) {
-      if (!checking_instance_ || definition.parent != checking_instance_->method)
-        throw std::logic_error("callable materialized outside its lexical type context");
+      if (!parent || definition.parent != parent) return {};
+      const auto &substitutions = state ? state->substitutions : checking_instance_->substitutions;
       for (const auto index : definition.retained_types) {
-        const auto &type = checking_instance_->substitutions.at(index);
+        const auto &type = substitutions.at(index);
         if (!type) implementation_gap(at, "enclosing type parameter is not determined by the arguments");
         retained.push_back(*type);
       }
@@ -2128,10 +2359,20 @@ class ScalarChecker {
     Access access;
     if (expected) for (size_t i = 0; i < expected->parameters.size(); ++i)
       access.push_back(!expected->const_views.empty() && expected->const_views[i]);
-    const auto selected = select_method(family, arguments, at, "callable value", retained, access);
+    const auto selected = select_method(family, arguments, at, "callable value", retained, access, {}, state);
     const auto &method = program_.methods[selected];
-    const auto result = substitute(method.result.type, method, *match(method, arguments, retained));
-    auto type = callable_type(method, arguments, result);
+    const auto result = infer_result(selected, arguments, retained, state);
+    const bool contextual_result = expected && !method.source->result_type && method.source->name.empty();
+    if (!result) {
+      if (contextual_result && !result_probe_)
+        implementation_gap(at, "result establishment from an independently expected callable contract");
+      return {};
+    }
+    if (nested_binder(method, *result)) {
+      if (result_probe_) return {};
+      implementation_gap(at, "type parameter is not determined by the arguments");
+    }
+    auto type = callable_type(method, arguments, *result);
     signature_type(definition, type, at);
     if (expected) {
       std::set<size_t> allowed;
@@ -2141,9 +2382,23 @@ class ScalarChecker {
       for (const auto category : method.throws_categories)
         if (exception_categories[category].checked && !allowed.contains(category)) fail(at, "callable view omits a required checked exception");
       type.throws_types = expected->throws_types;
-      if (type != *expected) fail(at, "selected method does not satisfy the callable view contract");
+      if (type != *expected) {
+        if (contextual_result && type.pure_callable == expected->pure_callable &&
+            type.parameters == expected->parameters)
+          implementation_gap(at, "result establishment from an independently expected callable contract");
+        fail(at, "selected method does not satisfy the callable view contract");
+      }
     }
-    return {selected, std::move(arguments), std::move(retained), std::move(type)};
+    return CallableSelection{selected, std::move(arguments), std::move(retained), std::move(type)};
+  }
+  CallableSelection select_callable(const std::vector<size_t> &family, const Type *expected, const Location &at) const {
+    if (const auto selected = try_select_callable(family, expected, at)) return *selected;
+    implementation_gap(at, "unproved callable result; provide an independent result contract");
+  }
+  std::optional<Type> callable_query(const std::vector<size_t> &family, const Type *expected, const Location &at,
+                                   const TypeEvidenceState &state) const {
+    if (const auto selected = try_select_callable(family, expected, at, &state)) return selected->type;
+    return {};
   }
   CheckedOperation materialize(const std::vector<size_t> &family, const Type *expected, const Location &at) {
     auto &definition = program_.methods[family.front()];
@@ -3439,14 +3694,13 @@ public:
         owners.insert(owner.name);
       }
       if (!form->result_owner.empty() && !owners.contains(form->result_owner)) fail(form->at, "unknown result owner '" + form->result_owner + "'");
-      if (!form->result_type) implementation_gap(form->at, "omitted callable result type");
       if (form->operation && swap_operation(form->name)) {
-        if (*form->result_type != Type::void_type) fail(form->at, "swap method must return void");
+        if (form->result_type && *form->result_type != Type::void_type) fail(form->at, "swap method must return void");
         for (const auto &parameter : form->parameters)
           if (parameter.owner.empty() || parameter.variadic || parameter.automatic_conversion)
             fail(parameter.at, "swap destinations require explicit external owners without variadic parameters or conversions");
       }
-      if (!form->result_owner.empty() && *form->result_type == Type::void_type) fail(form->at, "void cannot be a borrowed result");
+      if (!form->result_owner.empty() && form->result_type == Type::void_type) fail(form->at, "void cannot be a borrowed result");
       CheckedMethod prepared;
       prepared.source = form;
       for (const auto &p : form->type_parameters) prepared.type_parameters.push_back(p.name);
@@ -3459,18 +3713,18 @@ public:
         }
       }
       const auto resolve_signature = [&](const Type &type) { return resolve_type(type, &prepared); };
-      prepared.result.type = resolve_signature(*form->result_type);
+      if (form->result_type) prepared.result.type = resolve_signature(*form->result_type);
       prepared.result.owner = form->result_owner;
       if (!form->result_owner.empty()) {
         prepared.result.mode = form->result_kind == "ptr" ? ResultMode::borrowed_ptr : ResultMode::borrowed_ref;
         prepared.result.read_only = form->result_const;
       }
-      if (form->result_kind == "val" && !scalar_type(prepared.result.type))
+      if (form->result_kind == "val" && prepared.result.type && !scalar_type(*prepared.result.type))
         implementation_gap(form->at, "explicit val results for non-scalar or generic types");
-      if (!prepared.result.borrowed() && prepared.result.type != Type::void_type && prepared.result.type.kind != Type::procedure && !scalar_type(prepared.result.type)) {
+      if (prepared.result.type && !prepared.result.borrowed() && *prepared.result.type != Type::void_type && prepared.result.type->kind != Type::procedure && !scalar_type(*prepared.result.type)) {
         if (!form->result_const) implementation_gap(form->at, "default result mode for non-scalar or generic types");
       }
-      signature_type(prepared, prepared.result.type, form->at, true);
+      if (prepared.result.type) signature_type(prepared, *prepared.result.type, form->at, true);
       for (const auto &type : form->throws_types) {
         const auto resolved = resolve_type(type);
         if (resolved.kind != Type::exception) implementation_gap(form->at, "throws contracts require selected intrinsic exception types");

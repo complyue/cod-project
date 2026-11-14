@@ -47,7 +47,7 @@ runner.CASES={
  'same_owner_preserved':(query('(func(ref x:i64 in O,ref y:i64 in O)->const i64 where {owner O}{return x;})(a,b)','23','val a<-1;val b<-2;'),0,'23\n',''),
  'declared_borrowed_result':(query('(func(ref x:i64 in O)->ref i64 in O where {owner O}{return x;})(a)','24','val a<-make local i64;'),0,'24\n',''),
  'generic_target_needs_context':(query('('+IDENTITY+')(1)'),2,'','known declaration or operand type'),
- 'default_void_not_inferred_from_body':(query('apply(func(x:i64){return x;},1)'),2,'','callable view contract'),
+ 'inferred_body_result':(query('apply(func(x:i64){return x;},1)'),0,'7\n',''),
  'named_declaration_remains_statement':(query('{func inner(x:i64)->const i64{return x;};inner(1)}'),2,'','typeof for this expression form'),
  'runtime_body_still_checked':(IO+APPLY+'behave @print(apply(func(x:i64)->const i64{return true;},1));',2,'','return type'),
  'runtime_capture_still_checked':(IO+APPLY+'val y<-3;behave @print(apply(func(x:i64)->const i64{return x+y;},1));',2,'','ordinary lexical cells'),

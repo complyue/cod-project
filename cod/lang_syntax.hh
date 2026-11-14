@@ -708,8 +708,7 @@ class Parser {
     const bool declaration = take(";");
     if (declaration && !parameter_list) fail(form.at, "a callable declaration requires a parameter list");
     if (inline_effect && !form.result_type) form.result_type = Type::void_type;
-    if (expression_form && !form.result_type) form.result_type = Type::void_type;
-    if ((!function || declaration) && !form.result_type)
+    if (declaration && !form.result_type)
       fail(form.at, "a callable declaration requires an explicit result type");
     if (declaration && form.conversion)
       fail(form.at, "a conversion requires an implemented function method");

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Independent callable result evidence
+
+<a id="k-655"></a>
+**K-655 — Scoped inference continuity.** Agent assessment under H-420–H-424, C-84/P-356, existing D-14/D-17/D-18/D-26 constraints and charter §§3.3/5.3/6.3/12: registry r658→659 and source reference276→277 record bounded body-result inference across callable forms, independent recursive anchors and existing-conversion numeric joins. Preserve explicit returns, owner/access/initialization, ordered preparation, cleanup and finite native coverage. Separate declaration/expected-contract establishment, broader recursive proofs, non-scalar classification and D-24's whole-document value path remain outside this implementation increment. No new conversion, owner union, capture permission, fraction mechanism or permanent ABI. Prior capability reference: `d18e21c18613142f78fa756738d5148e19ec70d5:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Common-result compiler-reference alignment
 
 <a id="k-654"></a>
