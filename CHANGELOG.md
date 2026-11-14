@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Prepared builtin bits swaps
+
+<a id="k-650"></a>
+**K-650 — Prepared bits-swap continuity.** Agent assessment: registry r650→651 and source reference271→272 continue D-14r82/H-306/C-69/P-268/P-269's checked bits exchange and D-17r54/H-356/H-365/C-63/P-235/P-236/P-321–P-324's prepared borrowing and cleanup, under D-18r90 owner/alias constraints, D-21r11/D-26r9 native coverage and charter §§3.3/6.3/12. Deferred builtin bits swaps retain selected addresses and lifetime/read promises; payloads exchange only at invocation through the shared primitive path. Acceptance preserves operand effects, failed registration, exception categories/causes, LIFO completion and exact release in both native modes. Caller-binding reference-swap methods, prepared reference swaps, broader mutation proofs, regional mechanisms, permanent ABI and pending designs remain excluded. Prior capability reference: `63bbf032b6763aff85bd77645e26b8991ef5507b:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Bits-swap method dispatch
 
 <a id="k-649"></a>

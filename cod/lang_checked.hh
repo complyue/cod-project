@@ -817,6 +817,14 @@ class ScalarChecker {
     for (const auto reason : call_reasons(contract)) effects.initialized.try_emplace(reason);
     return effects;
   }
+  void require_borrow_lifetime(const CheckedOperation &view, const Location &at, bool prepared) const {
+    require_live_view(view, at);
+    if (prepared) for (const auto owner : view.owners) if (!external_owner(owner)) {
+      const auto scope = std::find_if(lexical_.scopes.begin(), lexical_.scopes.end(), [&](const auto &entry) { return entry.id == owner; });
+      const auto cleanup = std::find_if(lexical_.scopes.begin(), lexical_.scopes.end(), [&](const auto &entry) { return entry.id == cleanup_scope_; });
+      if (scope > cleanup) fail(at, "deferred borrowed argument does not outlive its cleanup scope");
+    }
+  }
   void finish_call(const Expression &expr, const Type &contract, const CallEffects &summary,
       const std::set<size_t> &reasons, const std::vector<Type> &arguments,
       const std::vector<CheckedOperation> &views, CheckedOperation &operation, bool read, bool discard, size_t offset = 0) {
@@ -828,12 +836,7 @@ class ScalarChecker {
       const auto &view = views[i];
       if (view.owners.size() != 1) implementation_gap(expr.children[i + offset]->at, "borrowed argument requires one established owner");
       const auto owner = *view.owners.begin();
-      if (!owner_alive(owner)) fail(expr.children[i + offset]->at, "borrowed argument's lexical owner has ended");
-      if (&expr == prepared_call_ && !external_owner(owner)) {
-        const auto scope = std::find_if(lexical_.scopes.begin(), lexical_.scopes.end(), [&](const auto &entry) { return entry.id == owner; });
-        const auto cleanup = std::find_if(lexical_.scopes.begin(), lexical_.scopes.end(), [&](const auto &entry) { return entry.id == cleanup_scope_; });
-        if (scope > cleanup) fail(expr.children[i + offset]->at, "deferred borrowed argument does not outlive its cleanup scope");
-      }
+      require_borrow_lifetime(view, expr.children[i + offset]->at, &expr == prepared_call_);
       if (const auto [found, inserted] = owners.emplace(role, owner); !inserted) {
         const auto equality = compare_owners(found->second, owner);
         if (equality == OwnerMatch::unknown) implementation_gap(expr.at, "borrowed call requires an unproved owner equality");
@@ -2469,7 +2472,7 @@ class ScalarChecker {
           finish_named_call(expr, arguments, views, operation, read, discard);
           break;
         }
-        if (&expr == prepared_call_) implementation_gap(expr.at, "deferred storage intrinsics; use a defer block");
+        if (reference && &expr == prepared_call_) implementation_gap(expr.at, "deferred reference-swap intrinsics; use a defer block");
         operation.builtin = reference ? BuiltinOperation::reference_swap : BuiltinOperation::bits_swap;
         if (reference) {
           left = current_selection(left, expr.at);
@@ -2480,11 +2483,14 @@ class ScalarChecker {
         } else {
           check_bits_destinations();
           if (left.type != right.type) fail(expr.at, "bits swap requires the exact same type");
-          require_live_view(left, expr.at); require_live_view(right, expr.at);
+          require_borrow_lifetime(left, expr.children[0]->at, &expr == prepared_call_);
+          require_borrow_lifetime(right, expr.children[1]->at, &expr == prepared_call_);
           read_view(left, expr.at, "left swap target"); read_view(right, expr.at, "right swap target");
           for (auto &argument : operation.arguments) argument.mode = ArgumentMode::borrowed_read;
-          const auto left_exceptions = stored_exceptions(left), right_exceptions = stored_exceptions(right);
-          write_exceptions(left, right_exceptions); write_exceptions(right, left_exceptions);
+          if (&expr != prepared_call_) {
+            const auto left_exceptions = stored_exceptions(left), right_exceptions = stored_exceptions(right);
+            write_exceptions(left, right_exceptions); write_exceptions(right, left_exceptions);
+          }
         }
         break;
       }

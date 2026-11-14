@@ -78,7 +78,7 @@ runner.CASES = {
     'wrong_arity': ('ptr p=1;intrinsic (<=>)(p);',2,'','swap requires two destinations'),
     'expired_bits_target': ('val y=1;{{val x=2;x}}<->y;',2,'','lexical owner has ended'),
     'expired_reference_slot': ('val x=1,y=2;ptr q=y;{{ptr p=x;p}}<=>q;',2,'','reference binding\'s lexical scope has ended'),
-    'plain_deferred_builtin_boundary': ('ptr p=1,q=2;defer intrinsic (<=>)(p,q);',2,'','deferred storage intrinsics'),
+    'plain_deferred_builtin_boundary': ('ptr p=1,q=2;defer intrinsic (<=>)(p,q);',2,'','deferred reference-swap intrinsics'),
 }
 runner.CASE_ARGUMENTS = {}
 runner.EXTRA_SOURCES = [Path(__file__)]
