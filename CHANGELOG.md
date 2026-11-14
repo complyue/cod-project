@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-13 — Named-call preparation completion
+
+<a id="k-635"></a>
+**K-635 — Preparation completion continuity.** Agent assessment: registry r635→636 and source reference256→257 continue D-17r54/H-356/H-361/H-362/C-63/P-321–P-324, D-18r90's declared callable/borrowing contracts and D-21r11/D-26r9's native coverage under charter §§2–3/6.3/12. An established parameter contract checks an abruptly completing named operand without supplying a runtime payload; preparation preserves prior effects and cleanup while skipping invocation and registration. Acceptance covers explicit returns/failures, borrowed preparation, callable images, intrinsic null/cause operands and shared native bodies. Missing type/owner evidence stays unproved; no inference, numeric compatibility, lifetime, representation or pending design choice is selected. Prior capability reference: `b6e9ed8ce812b93f68aee172d51631c9a6356a5e:tests/cod/language/README.md`.
+
 ## 2026-11-13 — Shared callable signature preparation
 
 <a id="k-634"></a>

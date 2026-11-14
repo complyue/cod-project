@@ -315,7 +315,7 @@ class ScalarChecker {
   struct ArgumentEvidence { std::optional<Type> type; std::optional<bool> read_only; std::optional<size_t> owner; };
   struct ArgumentPreparation {
     ArgumentMode mode = ArgumentMode::value;
-    std::optional<Type> view;
+    std::optional<Type> type;
   };
   struct NamedFamily {
     std::vector<size_t> methods;
@@ -333,6 +333,8 @@ class ScalarChecker {
   }
   ArgumentPreparation argument_preparation(const Expression &expr, const std::vector<Type> &prefix,
                                             const std::vector<ArgumentEvidence> &evidence, const std::vector<CheckedOperation> &views) const {
+    if (expr.text == "cause_at" && (expr.intrinsic || !families_.contains(expr.text)) && expr.children.size() == 2)
+      return {ArgumentMode::value, prefix.empty() ? exception_type(0) : Type{Type::uint64}};
     if (expr.intrinsic) return {};
     std::vector<size_t> applicable;
     std::map<size_t, Substitutions> substitutions;
@@ -341,7 +343,8 @@ class ScalarChecker {
     for (const auto &item : evidence) { access.push_back(item.read_only); owners.push_back(item.owner); }
     for (size_t i = 0; i < views.size(); ++i) { access[i] = views[i].read_only; owners[i] = one_owner(views[i]); }
     bool complete = true;
-    for (size_t i = prefix.size(); i < evidence.size(); ++i) complete = complete && evidence[i].type.has_value();
+    for (size_t i = prefix.size(); i < evidence.size(); ++i)
+      complete = complete && evidence[i].type.has_value() && evidence[i].type != Type::never;
     const auto family = named_family(expr.text);
     for (const auto id : family.methods) {
       const auto &candidate = program_.methods[id];
@@ -351,7 +354,8 @@ class ScalarChecker {
       if (!bindings) continue;
       bool matches = true;
       for (size_t i = prefix.size(); i < evidence.size(); ++i)
-        if (evidence[i].type && !bind_type(candidate, candidate.parameters[i], *evidence[i].type, *bindings, true)) matches = false;
+        if (evidence[i].type && evidence[i].type != Type::never &&
+            !bind_type(candidate, candidate.parameters[i], *evidence[i].type, *bindings, true)) matches = false;
       if (matches) { applicable.push_back(id); substitutions.emplace(id, std::move(*bindings)); }
     }
     if (complete) {
@@ -362,8 +366,8 @@ class ScalarChecker {
           })) fail(expr.at, "ambiguous methods for '" + expr.text + "'");
     }
     std::optional<ArgumentMode> mode;
-    std::optional<Type> view;
-    bool consistent_view = true;
+    std::optional<Type> type;
+    bool consistent_type = true;
     // Without complete type evidence, an eager operation may still use its value-taking builtin.
     if (eager_operation(expr.text) && !complete) mode = ArgumentMode::value;
     for (const auto id : applicable) {
@@ -373,11 +377,11 @@ class ScalarChecker {
         implementation_gap(expr.children[prefix.size()]->at, "overloads with different argument preparation contracts without sufficient operand type evidence");
       mode = passing;
       const auto expected = substitute(candidate.parameters[prefix.size()], candidate, substitutions.at(id), true);
-      if (expected.kind != Type::procedure || nested_binder(candidate, expected) || (view && *view != expected))
-        consistent_view = false;
-      else view = expected;
+      if (nested_binder(candidate, expected) || (type && *type != expected))
+        consistent_type = false;
+      else type = expected;
     }
-    return {mode.value_or(ArgumentMode::value), consistent_view ? view : std::nullopt};
+    return {mode.value_or(ArgumentMode::value), consistent_type ? type : std::nullopt};
   }
 
   LexicalState::Scope &declaration_scope(const std::string &name, const Location &at) {
@@ -2108,7 +2112,10 @@ class ScalarChecker {
       if (expr.text == "isnull") {
         if (&expr == prepared_call_) implementation_gap(expr.at, "deferred reference intrinsics; use a defer block");
         if (expr.children.size() != 1) fail(expr.at, "isnull requires one reference view");
-        child(0, false);
+        if (child(0, false) == Type::never) {
+          operation.type = Type::never; operation.builtin = BuiltinOperation::is_null;
+          break;
+        }
         const auto &argument = operations.at(expr.children[0].get());
         if (!argument.view || argument.mixed_view) fail(expr.at, "isnull requires a reference view without loading its target");
         if (lexical_.live) for (const auto owner : argument.owners)
@@ -2122,34 +2129,49 @@ class ScalarChecker {
         implementation_gap(expr.at, "explicit intrinsic has no implemented builtin '" + expr.text + "'");
       std::vector<Type> arguments;
       std::vector<CheckedOperation> views;
+      bool completes = true;
       const auto evidence = argument_evidence(expr);
       for (size_t i = 0; i < expr.children.size(); ++i) {
         const auto preparation = argument_preparation(expr, arguments, evidence, views);
         const auto mode = preparation.mode;
-        arguments.push_back(check(*expr.children[i], instance, operations, mode == ArgumentMode::value, false,
-                                  preparation.view ? &*preparation.view : nullptr));
+        const auto argument = check(*expr.children[i], instance, operations, mode == ArgumentMode::value, false,
+            preparation.type && preparation.type->kind == Type::procedure ? &*preparation.type : nullptr);
+        if (argument == Type::never) {
+          if (!preparation.type) {
+            if (!eager && !expr.intrinsic && expr.text != "cause_at" && named_family(expr.text).methods.empty())
+              fail(expr.at, "unknown callable '" + expr.text + "'");
+            implementation_gap(expr.children[i]->at, "cannot establish a parameter type for an abruptly completing operand");
+          }
+          // The signature supplies a checking type; the operand produces no payload.
+          arguments.push_back(*preparation.type);
+          completes = false;
+        } else {
+          arguments.push_back(argument);
+          require_value(argument);
+        }
         operation.arguments.push_back({mode, arguments.back()});
-        require_value(arguments.back());
-        if (mode == ArgumentMode::value && arguments.back().kind == Type::procedure)
+        if (mode == ArgumentMode::value && argument.kind == Type::procedure)
           note_abrupt(expr.children[i]->at, {exception_id(ExceptionCategory::out_of_memory)});
         views.push_back(operations.at(expr.children[i].get()));
-        prepare_borrow(views.back(), mode, expr.children[i]->at);
+        if (argument != Type::never) prepare_borrow(views.back(), mode, expr.children[i]->at);
       }
       for (size_t i = 0; i < arguments.size(); ++i)
-        if ((evidence[i].type && *evidence[i].type != arguments[i]) ||
+        if (views[i].type != Type::never && ((evidence[i].type && *evidence[i].type != arguments[i]) ||
             (evidence[i].read_only && *evidence[i].read_only != views[i].read_only) ||
-            (evidence[i].owner && evidence[i].owner != one_owner(views[i])))
+            (evidence[i].owner && evidence[i].owner != one_owner(views[i]))))
           implementation_gap(expr.children[i]->at, "operand type/access/owner evidence depends on completion or contextual inference");
       if (expr.text == "cause_at" && (expr.intrinsic || !families_.contains(expr.text))) {
         if (arguments.size() != 2 || arguments[0].kind != Type::exception || arguments[1] != Type::uint64)
           fail(expr.at, "cause_at requires an exception and a u64 index");
-        operation.type = exception_type(0); operation.exceptions = exception_possibilities(operation.type); operation.builtin = BuiltinOperation::cause_at;
+        operation.type = completes ? exception_type(0) : Type{Type::never};
+        operation.exceptions = exception_possibilities(operation.type); operation.builtin = BuiltinOperation::cause_at;
         break;
       }
       if (eager && (expr.intrinsic || !applicable_operation(expr.text, arguments, access_of(views), owners_of(views)))) {
         if (std::any_of(operation.arguments.begin(), operation.arguments.end(), [](const auto &argument) { return argument.mode != ArgumentMode::value; }))
           implementation_gap(expr.at, "builtin fallback requires value preparation before later operand effects");
         check_eager(expr, arguments, views, operation);
+        if (!completes) operation.type = Type::never;
         break;
       }
       operation.callee = select(expr, arguments, access_of(views), owners_of(views));
@@ -2162,6 +2184,7 @@ class ScalarChecker {
       }
       if (method && method->kind == Form::Kind::function && definition.kind == Form::Kind::procedure)
         fail(expr.at, "a function cannot invoke a procedure");
+      if (!completes) { operation.type = Type::never; break; }
       finish_call(expr, callable_type(definition, target.arguments, target.result), target.effects,
           call_reasons(program_.methods[target.method]), arguments, views, operation, read, discard);
       break;
