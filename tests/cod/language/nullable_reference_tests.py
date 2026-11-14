@@ -77,7 +77,7 @@ runner.CASES = {
     'npe_value_roundtrip': (ERROR + 'val e<-error();behave @print(e.category);behave @print(e.cause_count);', 0, '4\n0\n', ''),
     'captured_nullable_exception_alias': (PRE + 'proc f()->void{ptr p:i64=null in here;try{p;{}}catch(e:const NullPointerException){ptr q=e;defer{behave @print(isnull(q));};q=null;{};};}f();', 0, 'true\n', ''),
     'captured_nullable_alias_read': (PRE + 'proc f()->void throws NullPointerException{ptr p:i64=null in here;try{p;{}}catch(e:const NullPointerException){ptr q=e;defer{behave @print(q.category);};q=null;{};};}try{f();}catch(e:const NullPointerException){behave @print(4);};', 0, '4\n', ''),
-    'deferred_intrinsic_gap': ('ptr p:i64=null in here;defer isnull(p);', 2, '', 'deferred reference intrinsics'),
+    'deferred_null_test': ('ptr p:i64=null in here;defer isnull(p);', 0, '', ''),
 }
 runner.EXTRA_SOURCES = [Path(__file__)]
 if __name__ == '__main__':

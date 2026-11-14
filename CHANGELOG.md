@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Shared reference-intrinsic invocation
+
+<a id="k-666"></a>
+**K-666 — Reference-invocation continuity.** Agent assessment under C-65/P-258/P-268/P-269, H-306/H-313/H-315/H-356/H-365/H-420, D-14r91/D-17r57/D-18/D-26r13 and charter §§5.3/6.3/12: registry r673→674 and source reference287→288 record checked target-versus-binding-slot preparation, shared native invocation for null tests/reference swaps and prepared deferred null tests. Preserve evaluation order, non-dereferencing tests, actual owners, initialization, cleanup, complete-image ownership and shared native interpretation. Untyped absence carries no referent identity. The capability reference retains K-665 lossless fold support consistently. Deferred binding swaps, captured-payload mutation and executable packs remain separate gaps; no new language permission, layout, public ABI or fraction mechanism. Prior capability reference: `6fb1f4970153c860a28ad1867030897b463aa06d:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Lossless fold updates
 
 <a id="k-665"></a>

@@ -34,6 +34,7 @@ inline bool eager_operation(std::string_view name) {
 struct CheckedArgument {
   ArgumentMode mode;
   Type type;
+  bool binding_slot = false;
   bool operator==(const CheckedArgument &) const = default;
 };
 inline ArgumentMode argument_mode(const Parameter &parameter) {
@@ -3034,7 +3035,7 @@ class ScalarChecker {
           if (reference) reference_destination(*operand, expr.at);
         }
         operation.destination_arguments = !reference;
-        operation.arguments = {{ArgumentMode::borrowed_ptr, left.type}, {ArgumentMode::borrowed_ptr, right.type}};
+        operation.arguments = {{ArgumentMode::borrowed_ptr, left.type, reference}, {ArgumentMode::borrowed_ptr, right.type, reference}};
         const auto check_bits_destinations = [&] {
           for (const auto *operand : {&left, &right}) if (operand->type != Type::never) {
             if (!bits_type(operand->type)) fail(expr.at, "builtin bits swap requires two bits storage destinations");
@@ -3121,17 +3122,16 @@ class ScalarChecker {
         break;
       }
       if (expr.text == "isnull") {
-        if (&expr == prepared_call_) implementation_gap(expr.at, "deferred reference intrinsics; use a defer block");
         if (expr.children.size() != 1) fail(expr.at, "isnull requires one reference view");
-        if (child(0, false) == Type::never) {
+        const auto type = child(0, false);
+        operation.arguments = {{ArgumentMode::borrowed_ptr, type}};
+        if (type == Type::never) {
           operation.type = Type::never; operation.builtin = BuiltinOperation::is_null;
           break;
         }
         const auto &argument = operations.at(expr.children[0].get());
         if (!argument.view || argument.mixed_view) fail(expr.at, "isnull requires a reference view without loading its target");
-        if (lexical_.live) for (const auto owner : argument.owners)
-          if (!owner_alive(owner))
-            fail(expr.at, "null-test view's lexical owner has ended");
+        require_borrow_lifetime(argument, expr.at, &expr == prepared_call_);
         operation.type = Type::boolean; operation.builtin = BuiltinOperation::is_null;
         if (argument.binding) operation.null_test = CheckedOperation::NullTest{*argument.binding, argument.selection_versions};
         break;

@@ -233,7 +233,9 @@ class LLVMEmission {
   llvm::Value *view_address(llvm::Value *value) { return b_.CreateIntToPtr(b_.CreateExtractValue(value, 0), b_.getPtrTy()); }
   llvm::Value *pack_view(llvm::Value *address, const Expression &expr, bool returned = false) {
     const auto type = [&](size_t i) { const auto &fact = facts_[i]->at(&expr); return returned ? fact.operand_type : fact.type; };
-    llvm::Value *identity = b_.getInt32(tag(type(0)));
+    // An untyped null has no target identity.
+    const auto target_tag = [&](const Type &type) { return type.kind == Type::null_ref ? 0u : tag(type); };
+    llvm::Value *identity = b_.getInt32(target_tag(type(0)));
     if (std::any_of(facts_.begin(), facts_.end(), [&](const auto *facts) {
           const auto &fact = facts->at(&expr); return (returned ? fact.operand_type : fact.type) != type(0);
         })) {
@@ -245,7 +247,7 @@ class LLVMEmission {
       }
       if (parameter) identity = b_.CreateExtractValue(arguments_[*parameter], 1);
       else for (size_t i = 1; i < facts_.size(); ++i)
-        identity = b_.CreateSelect(matches_context(*frame_contexts_[i]), b_.getInt32(tag(type(i))), identity);
+        identity = b_.CreateSelect(matches_context(*frame_contexts_[i]), b_.getInt32(target_tag(type(i))), identity);
     }
     auto *value = b_.CreateInsertValue(empty_scalar(), b_.CreatePtrToInt(address, b_.getInt64Ty()), 0);
     return b_.CreateInsertValue(value, identity, 1);
@@ -514,7 +516,18 @@ class LLVMEmission {
     return binary(expr, zero, arguments.front(), Choice{{type, type}, choice.operation});
   }
   llvm::Value *invoke(const Expression &expr, const std::vector<llvm::Value *> &arguments) {
-    if (facts_.front()->at(&expr).callable_call) return invoke_value(expr, arguments);
+    const auto &fact = facts_.front()->at(&expr);
+    if (fact.callable_call) return invoke_value(expr, arguments);
+    if (fact.builtin == BuiltinOperation::reference_swap) {
+      auto *left = view_address(arguments[0]), *right = view_address(arguments[1]);
+      auto *type = b_.getPtrTy();
+      auto *left_value = b_.CreateLoad(type, left), *right_value = b_.CreateLoad(type, right);
+      b_.CreateStore(right_value, left); b_.CreateStore(left_value, right);
+      return outcome(empty_scalar(), integer(0), integer(0), null_pointer());
+    }
+    if (fact.builtin == BuiltinOperation::is_null)
+      return outcome(pack(b_.CreateICmpEQ(view_address(arguments.front()), null_pointer()), Type::boolean),
+          integer(0), integer(0), null_pointer());
     std::vector<const Expression *> source_inputs;
     for (const auto &argument : expr.children) source_inputs.push_back(argument.get());
     const auto cases = choices(expr, source_inputs, true);
@@ -864,8 +877,9 @@ class LLVMEmission {
   }
   llvm::Value *prepare_argument(const Expression &expr, size_t index, bool copy) {
     const auto &child = *expr.children[index];
-    const auto prepare = [&](ArgumentMode mode) -> llvm::Value * {
-      auto *value = emit_expression(child, mode == ArgumentMode::value ? Projection::value : Projection::target);
+    const auto prepare = [&](const std::pair<ArgumentMode, bool> &plan) -> llvm::Value * {
+      const auto [mode, binding_slot] = plan;
+      auto *value = emit_expression(child, binding_slot ? Projection::slot : mode == ArgumentMode::value ? Projection::value : Projection::target);
       if (!reachable()) return nullptr;
       if (mode != ArgumentMode::value) {
         if (mode == ArgumentMode::borrowed_read && !facts_.front()->at(&expr).destination_arguments)
@@ -875,9 +889,11 @@ class LLVMEmission {
       value = prepare_value(expr, index, value);
       return copy ? copy_temporary(value, child.at) : value;
     };
-    std::map<ArgumentMode, std::vector<size_t>> alternatives;
-    for (size_t i = 0; i < facts_.size(); ++i)
-      alternatives[facts_[i]->at(&expr).arguments.at(index).mode].push_back(i);
+    std::map<std::pair<ArgumentMode, bool>, std::vector<size_t>> alternatives;
+    for (size_t i = 0; i < facts_.size(); ++i) {
+      const auto &argument = facts_[i]->at(&expr).arguments.at(index);
+      alternatives[{argument.mode, argument.binding_slot}].push_back(i);
+    }
     return contextual_value(child, alternatives, "argument", prepare);
   }
   std::vector<llvm::Value *> prepare_arguments(const Expression &expr, bool deferred = false) {
@@ -1063,21 +1079,6 @@ class LLVMEmission {
       [[fallthrough]];
     }
     case K::value_call: case K::call: case K::behave: case K::perform: {
-      if (fact.builtin == BuiltinOperation::reference_swap) {
-        auto *left = emit_expression(*expr.children[0], Projection::slot);
-        if (!reachable()) return nullptr;
-        auto *right = emit_expression(*expr.children[1], Projection::slot);
-        if (!reachable()) return nullptr;
-        auto *type = b_.getPtrTy();
-        auto *left_value = b_.CreateLoad(type, left), *right_value = b_.CreateLoad(type, right);
-        b_.CreateStore(right_value, left); b_.CreateStore(left_value, right);
-        return empty_scalar();
-      }
-      if (fact.builtin == BuiltinOperation::is_null) {
-        auto *address = emit_expression(*expr.children.front(), Projection::target);
-        if (!reachable()) return nullptr;
-        return pack(b_.CreateICmpEQ(address, null_pointer()), Type::boolean);
-      }
       return temporary_scope(expr.at, !fact.borrowed_result || read ? scalar_ : static_cast<llvm::Type *>(b_.getPtrTy()), [&]() -> llvm::Value * {
         const auto arguments = prepare_arguments(expr);
         if (!reachable()) return nullptr;
