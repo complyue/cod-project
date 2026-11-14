@@ -22,7 +22,7 @@ runner.CASES = {
     'common_exception_complete_capture': (ERROR + 'symbol @x:u64,@y:u64,@f:proc(SystemException)->u64;proc @f(e:MissingReturnException)->u64{return @x;}proc @f(e:T)->u64 where T{return @y;}'
         'effect @x<-1u64;effect @y<-7u64;effect @f;effect @x<-2u64;effect @y<-8u64;val e:SystemException<-null_error();behave @print(perform @f(e));e<-error();behave @print(perform @f(e));behave @print(behave @f(e));', 0, '7\n1\n2\n', ''),
     'common_exception_missing_method': (ERROR + 'symbol @f:proc(SystemException)->u64;proc @f(e:MissingReturnException)->u64{return 1u64;}effect @f;', 2, '', 'no applicable method'),
-    'common_exception_borrow_is_unproved': (ERROR + 'proc @f(ref e:const SystemException in O)->u64 where {owner O}{return e.category;}effect @f;', 2, '', 'unproved symbolic family borrowing'),
+    'common_exception_borrow_is_unproved': (ERROR + 'proc @f(ref e:const SystemException in O)->u64 where {owner O}{return e.category;}effect @f;', 2, '', 'unproved callable family borrowing'),
     'borrowed_exception_adaptation_is_unproved': (ERROR + 'proc @narrow(ref e:const MissingReturnException in O)->u64 where {owner O}{return e.category;}proc @broad(ref e:const SystemException in O)->u64 where {owner O}{return e.category;}effect @narrow=broad;', 2, '', 'borrowed target adaptation'),
     'callable_value_parameter': (IO + 'proc @apply(f:func()->u64)->u64{return f();}func one()->u64{return 1u64;}func two()->u64{return 7u64;}'
         'effect @apply;behave @print(behave @apply(one));behave @print(behave @apply(two));', 0, '1\n7\n', ''),
@@ -38,7 +38,7 @@ runner.CASES = {
     'borrowed_readonly_result_rejected': ('proc @id(ref x:const i64 in O)->ref const i64 in O where {owner O}{return x;}effect @id;val x<-1;behave @id(x)<-7;', 2, '', 'readonly destination'),
     'borrowed_owner_mismatch': ('proc @pick(ref x:i64 in O,ref y:i64 in O)->ref i64 in O where {owner O}{return x;}effect @pick;val x<-1;{{val y<-2;behave @pick(x,y);}};', 2, '', 'different actual owners'),
     'independent_owner_roles': (IO + 'proc @pick(ref x:i64 in A,ref y:i64 in B)->ref i64 in B where {owner A,owner B}{return y;}effect @pick;val x<-1;behave @pick(x,x)<-3;{{val y<-2;behave @pick(x,y)<-7;behave @print(y);}};behave @print(x);', 0, '7\n3\n', ''),
-    'owner_dependent_selection_unproved': ('proc @pick(ref x:i64 in A,ref y:i64 in B)->u64 where {owner A,owner B}{return 1u64;}proc @pick(ref x:i64 in O,ref y:i64 in O)->u64 where {owner O}{return 7u64;}effect @pick;', 2, '', 'unproved symbolic family'),
+    'owner_dependent_selection_unproved': ('proc @pick(ref x:i64 in A,ref y:i64 in B)->u64 where {owner A,owner B}{return 1u64;}proc @pick(ref x:i64 in O,ref y:i64 in O)->u64 where {owner O}{return 7u64;}effect @pick;', 2, '', 'unproved callable family'),
     'borrowed_nullable_return': (IO + 'proc @id(ptr x:i64 in O)->ptr i64 in O where {owner O}{return x;}effect @id;ptr p:i64=null in here;behave @print(isnull(behave @id(p)));', 0, 'true\n', ''),
     'borrowed_writer_initializes': (IO + NPE + 'proc @set(ptr x:i64 in O)->void throws NullPointerException where {owner O}{x<-7;}effect @set;val x<-make local i64;try{behave @set(x);behave @print(x);}catch(e:const NullPointerException){};', 0, '7\n', ''),
     'borrowed_reader_requires_initialization': ('proc @read(ref x:i64 in O)->i64 where {owner O}{return x;}effect @read;val x<-make local i64;behave @read(x);', 2, '', 'before definite initialization'),

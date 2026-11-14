@@ -4,7 +4,7 @@ from pathlib import Path
 import foundation_tests as runner
 
 IO = 'using symbol "std:io" @print;'
-GAP = 'unproved symbolic family result/access/view compatibility'
+GAP = 'callable view contract'
 ERROR = '''using "std:exceptions" SystemException;
 using "std:exceptions" MissingReturnException;
 using "std:exceptions" NullPointerException;

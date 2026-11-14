@@ -52,8 +52,12 @@ def main():
             text = ir.read_text() if ir.exists() else ''
             bodies = inventory(text)
             shared = [name for name in bodies if name.endswith('.general')]
-            record(mode+'/shared_methods', len(shared) == 4 and len(bodies) == (4 if general else 12),
+            record(mode+'/shared_methods', len(shared) == 4 and len(bodies) == (4 if general else 16),
                    bodies=list(bodies), ir_bytes=len(text.encode()))
+            record(mode+'/admitted_input_coverage', general or all(
+                f'cod.method.{index}.{name}.specialized.{kind}' in bodies
+                for index, name in ((0, 'id'), (1, 'alternate')) for kind in ('u8', 'u32', 'i64', 'bool')),
+                bodies=list(bodies))
             relays = [name for name in bodies if '.relay.specialized.' in name]
             record(mode+'/identity_independent_instances', len(relays) == (0 if general else 2) and
                    'call %cod.outcome @cod.method.3.relay.general' in text and 'callable.selected' in text,

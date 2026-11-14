@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Ordinary module-family values
+
+<a id="k-678"></a>
+**K-678 — Callable-family continuity.** Agent assessment under H-261/H-269/H-342/H-344/H-375–H-378/H-398/H-407/H-420, D-10r147/D-14r91/D-17r57/D-18r91/D-21r11/D-26r13 and charter §§2/3.2/5.3/6.3/12: registry r685→686 and source reference299→300 unify ordinary and symbolic module-family coverage/materialization. Contextual type-only checking uses the same admitted-domain obligations without runtime construction; concrete methods can collectively cover common views. Preserve actual-input semantic selection, source/import interpretations, independent method results, complete captures, owner/access/throws constraints, cleanup and shared native bodies. Lexical full-domain coverage, wider compatibility/representation and fraction boundaries remain separate; no new conversion, allocation mechanism, ABI or design qualification. Prior capability reference: `62e77edee116abf1132ecae5a8b5118cf671543c:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Family value-result adaptation
 
 <a id="k-677"></a>
