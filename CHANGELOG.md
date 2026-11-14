@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Lexical callable family coverage
+
+<a id="k-679"></a>
+**K-679 — Lexical-family continuity.** Agent assessment under H-261/H-269/H-329/H-331/H-342/H-344/H-375–H-378/H-398/H-407/H-420, D-10r147/D-14r91/D-17r57/D-18r91/D-21r11/D-26r13 and charter §§2/3.2/5.3/6.3/12: registry r686→687 and source reference300→301 extend shared admitted-domain coverage and dispatch to lexical callables. Preserve actual generic inputs, fixed enclosing type bindings, independent results, definition-site contextual contracts, complete captures, owner/access/throws checks, cleanup and shared native bodies. The single-instance callable representation is removed. Acceptance covers unused inputs, nested snapshots, dynamic dependencies, native failure cleanup and runtime-depth independence. Broader family/representation proofs and fraction boundaries remain separate; no new conversion, allocation mechanism, ABI or qualification. Prior capability reference: `bd3fababda74cb60acbf063134d930095e728a01:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Ordinary module-family values
 
 <a id="k-678"></a>

@@ -245,24 +245,20 @@ struct CheckedMethod {
 };
 struct CheckedCallable {
   Type type;
-  std::optional<size_t> instance;
   std::optional<size_t> family = {};
   // Actual input identities select semantic methods before parameter preparation.
   std::vector<std::pair<std::vector<Type>, size_t>> dispatch = {};
   std::set<size_t> implementations() const {
-    if (instance) return {*instance};
     std::set<size_t> result;
     for (const auto &[inputs, target] : dispatch) result.insert(target);
     return result;
   }
   size_t target(const std::vector<Type> &arguments) const {
-    if (instance) return *instance;
     const auto found = std::find_if(dispatch.begin(), dispatch.end(), [&](const auto &entry) { return entry.first == arguments; });
     if (found == dispatch.end()) throw std::logic_error("unchecked callable family invocation");
     return found->second;
   }
   std::vector<std::pair<std::vector<Type>, size_t>> alternatives(const std::vector<Type> &arguments) const {
-    if (instance) return {{arguments, *instance}};
     std::vector<std::pair<std::vector<Type>, size_t>> result;
     for (const auto &entry : dispatch) {
       bool admitted = entry.first.size() == arguments.size();
@@ -2803,8 +2799,7 @@ class ScalarChecker {
     return result;
   }
   struct CallableSelection {
-    size_t method;
-    std::vector<Type> arguments, retained;
+    std::vector<Type> retained;
     Type type;
     std::optional<ResultContract> definition_result;
   };
@@ -2825,7 +2820,8 @@ class ScalarChecker {
     return result;
   }
   template <typename Validate>
-  void cover_family(const std::vector<size_t> &family, const Type &view, const Location &at, const Validate &validate) const {
+  void cover_family(const std::vector<size_t> &family, const Type &view, const Location &at, const Validate &validate,
+                    const std::vector<Type> &retained = {}) const {
     signature_type(CheckedMethod{}, view, at);
     // Cover every admitted input, independently of observed invocations.
     // This finite proof does not define a general family representation.
@@ -2881,7 +2877,7 @@ class ScalarChecker {
           }
           return;
         }
-        const auto method = select_method(family, arguments, at, "callable family", {}, access, owners, &proof);
+        const auto method = select_method(family, arguments, at, "callable family", retained, access, owners, &proof);
         if (selected && *selected != method)
           implementation_gap(at, "unproved callable family selection depending on argument access or owner relations");
         selected = method;
@@ -2902,7 +2898,7 @@ class ScalarChecker {
     };
     cover();
   }
-  static bool satisfies_callable_view(Type contract, const Type &view, const Location &at, bool family) {
+  static bool satisfies_callable_view(Type contract, const Type &view, const Location &at) {
     std::set<size_t> allowed;
     for (const auto &failure : view.throws_types) {
       const auto categories = exception_possibilities(failure); allowed.insert(categories.begin(), categories.end());
@@ -2911,12 +2907,10 @@ class ScalarChecker {
       if (exception_categories[category].checked && !allowed.contains(category))
         fail(at, "callable view omits a required checked exception");
     contract.throws_types = view.throws_types;
-    if (family) {
-      // Semantic selection precedes value preparation; borrowed targets remain exact.
-      contract.parameters = view.parameters;
-      if (contract.value_result && view.value_result && transfers_value(*contract.target, *view.target))
-        contract.target = view.target;
-    }
+    // Semantic selection precedes value preparation; borrowed targets remain exact.
+    contract.parameters = view.parameters;
+    if (contract.value_result && view.value_result && transfers_value(*contract.target, *view.target))
+      contract.target = view.target;
     return contract == view;
   }
   void check_family_contract(const CheckedMethod &method, const std::vector<Type> &actual,
@@ -2924,7 +2918,7 @@ class ScalarChecker {
     for (size_t i = 0; i < actual.size(); ++i)
       if (!view.argument_modes.empty() && view.argument_modes[i] != ArgumentMode::value && prepared[i] != actual[i])
         implementation_gap(at, "unproved callable family borrowed target adaptation");
-    if (!satisfies_callable_view(callable_type(method, prepared, result), view, at, true))
+    if (!satisfies_callable_view(callable_type(method, prepared, result), view, at))
       implementation_gap(at, "selected method does not satisfy the callable view contract");
   }
   bool concrete_callable_result(const CheckedMethod &method, const ResultContract &result, const Location &at) const {
@@ -2956,21 +2950,21 @@ class ScalarChecker {
     Access access;
     if (expected) for (size_t i = 0; i < expected->parameters.size(); ++i)
       access.push_back(!expected->const_views.empty() && expected->const_views[i]);
-    const auto selected = select_method(family, arguments, at, "callable value", retained, access, {}, state, false);
+    const auto selected = select_method(family, arguments, at, "callable value", retained, access, {}, state);
     const auto &method = program_.methods[selected];
     const bool contextual_result = definition_site && expected && !method.result.type && method.source->name.empty();
     const auto supplied = contextual_result ? std::optional<ResultContract>{expected_result(method, *expected, at)} : std::nullopt;
     const auto result = supplied ? supplied : infer_result(selected, arguments, retained, state);
     if (!result) return {};
     if (!concrete_callable_result(method, *result, at)) return {};
-    auto type = callable_type(method, arguments, *result);
+    auto type = callable_type(method, prepared_types(method, arguments, retained), *result);
     signature_type(definition, type, at);
     if (expected) {
-      if (!satisfies_callable_view(type, *expected, at, method.family.has_value()))
+      if (!satisfies_callable_view(type, *expected, at))
         fail(at, "selected method does not satisfy the callable view contract");
       type = *expected;
     }
-    return CallableSelection{selected, std::move(arguments), std::move(retained), std::move(type), supplied};
+    return CallableSelection{std::move(retained), std::move(type), supplied};
   }
   CallableSelection select_callable(const std::vector<size_t> &family, const Type *expected, const Location &at, bool definition_site = false) const {
     if (const auto selected = try_select_callable(family, expected, at, nullptr, definition_site)) return *selected;
@@ -2989,8 +2983,35 @@ class ScalarChecker {
       });
       return resolved ? std::optional<Type>{*expected} : std::nullopt;
     }
-    if (const auto selected = try_select_callable(family, expected, at, &state, definition_site)) return selected->type;
-    return {};
+    const auto selection = try_select_callable(family, expected, at, &state, definition_site);
+    if (!selection) return {};
+    bool resolved = true;
+    cover_family(family, selection->type, at, [&](size_t selected, const std::vector<Type> &arguments) {
+      const auto result = selection->definition_result ? selection->definition_result
+          : infer_result(selected, arguments, selection->retained, &state);
+      if (!result) { resolved = false; return; }
+      const auto &method = program_.methods[selected];
+      if (!concrete_callable_result(method, *result, at)) { resolved = false; return; }
+      check_family_contract(method, arguments, prepared_types(method, arguments, selection->retained), *result, selection->type, at);
+    }, selection->retained);
+    return resolved ? std::optional<Type>{selection->type} : std::nullopt;
+  }
+  size_t intern_callable(CheckedCallable value) {
+    const auto found = std::find_if(program_.callables.begin(), program_.callables.end(), [&](const auto &prior) {
+      return prior.family == value.family && prior.type == value.type && prior.dispatch == value.dispatch;
+    });
+    const auto id = std::distance(program_.callables.begin(), found);
+    if (found == program_.callables.end()) program_.callables.push_back(std::move(value));
+    return id;
+  }
+  CheckedOperation materialized_value(size_t id, std::vector<CheckedOperation> captures, const Location &at) {
+    const auto symbols = program_.captured_symbols(program_.callables[id]);
+    if (!symbols.empty() && checking_method_ && checking_method_->source->kind == Form::Kind::function)
+      fail(at, "a function cannot capture dynamic bindings");
+    for (const auto symbol : symbols) require_symbol(lexical_, symbol, at);
+    if (!captures.empty() || !symbols.empty()) note_abrupt(at, {exception_id(ExceptionCategory::out_of_memory)});
+    CheckedOperation value; value.type = program_.callables[id].type; value.callable = id; value.callable_captures = std::move(captures);
+    return value;
   }
   CheckedOperation materialize(const std::vector<size_t> &family, const Type *expected, const Location &at, bool definition_site = false) {
     if (family.empty()) fail(at, "no applicable implementation for declared callable value");
@@ -3016,20 +3037,15 @@ class ScalarChecker {
         if (std::none_of(free_bindings(*definition.source).captures.begin(), free_bindings(*definition.source).captures.end(),
                          [&](const auto &used) { return used.name == capture.name; }))
           program_.warnings.push_back({Warning::unused_capture, capture.at, "unused callable capture '" + capture.name + "' remains retained"});
-    const auto selected = demand(selection.method, selection.arguments, at, environment, selection.retained, retain_query_environment(definition, selection.definition_result));
-    const auto &symbols = program_.instances[selected].effects.symbols;
-    if (!symbols.empty() && checking_method_ && checking_method_->source->kind == Form::Kind::function)
-      fail(at, "a function cannot capture dynamic bindings");
-    for (const auto symbol : symbols) require_symbol(lexical_, symbol, at);
-    const auto &type = selection.type;
-    const auto found = std::find_if(program_.callables.begin(), program_.callables.end(), [&](const auto &value) {
-      return value.instance == selected && value.type == type;
-    });
-    const auto id = std::distance(program_.callables.begin(), found);
-    if (found == program_.callables.end()) program_.callables.push_back({type, selected});
-    CheckedOperation value; value.type = type; value.callable = id; value.callable_captures = std::move(captures);
-    if (!environment.empty() || !symbols.empty()) note_abrupt(at, {exception_id(ExceptionCategory::out_of_memory)});
-    return value;
+    CheckedCallable value{selection.type};
+    const auto query = retain_query_environment(definition, selection.definition_result);
+    cover_family(family, selection.type, at, [&](size_t selected, const std::vector<Type> &arguments) {
+      const auto target = demand(selected, arguments, at, environment, selection.retained, query);
+      const auto &instance = program_.instances[target];
+      check_family_contract(program_.methods[selected], arguments, instance.arguments, instance.result, selection.type, at);
+      value.dispatch.emplace_back(arguments, target);
+    }, selection.retained);
+    return materialized_value(intern_callable(std::move(value)), std::move(captures), at);
   }
   CheckedOperation materialize_symbol(size_t symbol, const Type &view, const Location &at) {
     if (view.kind != Type::procedure || view.pure_callable)
@@ -3046,7 +3062,7 @@ class ScalarChecker {
     });
     const auto id = std::distance(program_.callables.begin(), found);
     if (found == program_.callables.end()) {
-      CheckedCallable value{view, {}, family_id};
+      CheckedCallable value{view, family_id};
       cover_family(family, view, at, [&](size_t selected, const std::vector<Type> &arguments) {
         const auto target = demand(selected, arguments, at);
         const auto &instance = program_.instances[target];
@@ -3055,13 +3071,7 @@ class ScalarChecker {
       });
       program_.callables.push_back(std::move(value));
     }
-    const auto symbols = program_.captured_symbols(program_.callables[id]);
-    if (!symbols.empty() && checking_method_ && checking_method_->source->kind == Form::Kind::function)
-      fail(at, "a function cannot capture dynamic bindings");
-    for (const auto required : symbols) require_symbol(lexical_, required, at);
-    if (!symbols.empty()) note_abrupt(at, {exception_id(ExceptionCategory::out_of_memory)});
-    CheckedOperation value; value.type = view; value.callable = id;
-    return value;
+    return materialized_value(id, {}, at);
   }
   void check_value_call(const Expression &expr, const Type &contract, size_t offset, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation, bool read, bool discard) {
@@ -4139,11 +4149,10 @@ class ScalarChecker {
     value = [&](size_t c, const CheckedOperation &fact, Node node) {
       if (fact.callable) {
         flow.seed(node, *fact.callable);
-        if (!fact.callable_captures.empty()) {
-          const auto target = *program_.callables[*fact.callable].instance + 1;
-          const auto &frame = program_.instances[target - 1].frame;
+        if (!fact.callable_captures.empty()) for (const auto target : program_.callables[*fact.callable].implementations()) {
+          const auto &frame = program_.instances[target].frame;
           for (size_t i = 0; i < fact.callable_captures.size(); ++i)
-            value(c, fact.callable_captures[i], contexts[target].places.at(frame.captures.at(i)));
+            value(c, fact.callable_captures[i], contexts[target + 1].places.at(frame.captures.at(i)));
         }
       }
       if (fact.type.kind == Type::procedure)
@@ -4174,7 +4183,7 @@ class ScalarChecker {
     };
     // A family view admits every compatible complete callable in this closed
     // artifact, even when no observed call supplies that value to this target.
-    for (const auto &family : program_.callables) if (family.family)
+    for (const auto &family : program_.callables)
       for (const auto target : family.implementations()) {
         const auto &instance = program_.instances[target];
         for (size_t i = 0; i < instance.arguments.size(); ++i) if (instance.arguments[i].kind == Type::procedure)
