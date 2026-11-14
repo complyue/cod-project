@@ -100,7 +100,7 @@ struct CheckedBinding {
   bool value_binding;
   bool fixed;
   bool requires_initialized = false;
-  bool owner_binding = false;
+  std::optional<size_t> owner_binding = {};
   bool callable_value = false;
 };
 
@@ -227,6 +227,15 @@ class ScalarChecker {
   bool owner_alive(size_t owner) const {
     return external_owner(owner) ||
         std::any_of(lexical_.scopes.begin(), lexical_.scopes.end(), [&](const auto &scope) { return scope.id == owner; });
+  }
+  size_t named_owner(const std::string &name, const Location &at) const {
+    const auto binding = lexical_.lookup(name);
+    if (!binding) fail(at, "unknown owner '" + name + "'");
+    if (!lexical_.bindings_available.contains(*binding)) fail(at, "owner binding '" + name + "' is not available on every reaching path");
+    const auto owner = bindings_->at(*binding).owner_binding;
+    if (!owner) fail(at, "nearest binding '" + name + "' is not an owner");
+    if (lexical_.live && !owner_alive(*owner)) fail(at, "owner '" + name + "' has ended");
+    return *owner;
   }
   void read_view(const CheckedOperation &view, const Location &at, const std::string &name) {
     dereference(view, at);
@@ -1620,9 +1629,10 @@ class ScalarChecker {
       const bool value = expr.declaration_kind == "val" || callable_value;
       for (const auto &declaration : expr.children) {
         if (declaration->kind == K::block) { check(*declaration, instance, operations, true, true); continue; }
+        std::optional<size_t> owner;
         if (!declaration->owner_name.empty()) {
           if (value) fail(declaration->at, "val storage belongs to its lexical scope, not an external owner");
-          implementation_gap(declaration->at, "explicit owner annotations on local reference bindings");
+          owner = named_owner(declaration->owner_name, declaration->at);
         }
         const auto &initializer = *declaration->children.front();
         const bool copy = value || declaration->binding == "<-";
@@ -1665,6 +1675,9 @@ class ScalarChecker {
         const auto type = declaration->annotation ? resolve_local_type(*declaration->annotation, instance, declaration->at) : initial_type;
         const auto &source = operations.at(&initializer);
         const bool borrowed = !copy && source.view;
+        if (owner && !borrowed) implementation_gap(declaration->at, "fresh storage with an explicit external owner");
+        if (owner && std::any_of(source.owners.begin(), source.owners.end(), [&](size_t actual) { return actual != *owner; }))
+          fail(declaration->at, "reference initializer does not belong to the declared owner");
         if (!borrowed && type.kind == Type::procedure) note_abrupt(declaration->at, {exception_id(ExceptionCategory::out_of_memory)});
         if (type == Type::null_ref) fail(declaration->at, "a null initializer requires an explicit target type");
         require_value(type);
@@ -1698,6 +1711,7 @@ class ScalarChecker {
         if (borrowed) {
           const auto id = bind(declaration->text, type, source.targets, read_only, false, expr.fixed_binding, declaration->at);
           assign_targets(id, source);
+          if (owner) lexical_.owners[id].insert(*owner);
         } else {
           place = declare(declaration->text, type, read_only, value, declaration->at);
           bindings_->back().fixed = expr.fixed_binding;
@@ -2002,7 +2016,7 @@ class ScalarChecker {
       }
       for (const auto &owner : method.owner_parameters) {
         const auto id = bind(owner.name, Type::void_type, {}, true, true, true, owner.at);
-        bindings_->at(id).owner_binding = true;
+        bindings_->at(id).owner_binding = external_owners_.at(owner.name);
       }
       AbruptFlow flow{1, {}}, outcomes{1, {}};
       abrupt_ = &flow;
