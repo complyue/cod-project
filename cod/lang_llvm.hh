@@ -319,6 +319,7 @@ class LLVMEmission {
         choice.inputs.push_back(prepared ? choice.operation->arguments.at(p).type : facts->at(inputs[p]).type);
       const auto same = [&](const Choice &other) {
         return other.inputs == choice.inputs && other.operation->callee == choice.operation->callee &&
+            other.operation->symbol == choice.operation->symbol &&
             other.operation->type == choice.operation->type && other.operation->operand_type == choice.operation->operand_type &&
             other.operation->arguments == choice.operation->arguments && other.operation->builtin == choice.operation->builtin;
       };

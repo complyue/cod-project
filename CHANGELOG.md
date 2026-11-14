@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Typed symbol declaration evidence
+
+<a id="k-667"></a>
+**K-667 — Symbol-contract continuity.** Agent assessment under H-184/P-160, H-381/P-342, H-382/P-343, H-420, D-10r147/D-14r91/D-18/D-21r11/D-26r13 and charter §§2/5.3/6.3/12: registry r674→675 and source reference288→289 record typed symbol identities, declaration-only type inspection and lexical lookup evidence independent of runtime captures. Preserve alias identity, nearest binding, callable definition context, unevaluated explicit signatures, owners, completion and native execution. Own-family installation syntax retains an explicit runtime gap. General symbol reads/installation, symbolic methods, family composition, unresolved same-scope categories and regional owner contracts remain outside coverage; no runtime symbol ABI, default binding, capture permission or fraction mechanism is selected. Prior capability reference: `51c1c4c96c1850027bca67db5d943c87a055c169:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Shared reference-intrinsic invocation
 
 <a id="k-666"></a>

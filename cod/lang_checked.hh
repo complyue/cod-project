@@ -65,6 +65,7 @@ inline std::set<size_t> exception_possibilities(const Type &type) {
 struct CheckedOperation {
   Type type;
   Type operand_type;
+  std::optional<size_t> symbol;
   std::optional<size_t> callee;
   std::optional<size_t> callable, callable_binding, callable_place;
   std::vector<CheckedOperation> callable_captures;
@@ -185,6 +186,7 @@ struct ResultContract {
 // Declaration evidence has no runtime payload or authority to access retained storage.
 struct QueryEnvironment {
   std::vector<QueryBinding> bindings;
+  std::set<std::string> symbol_shadows;
   std::vector<std::vector<OwnerMatch>> owners;
   std::optional<ResultContract> result;
   bool operator==(const QueryEnvironment &) const = default;
@@ -230,7 +232,13 @@ struct CheckedMethod {
   std::optional<size_t> parent;
 };
 struct CheckedCallable { Type type; size_t instance; };
+struct CheckedSymbol {
+  std::optional<Type> type;
+  bool intrinsic_print = false;
+};
+
 struct CheckedProgram {
+  std::vector<CheckedSymbol> symbols;
   std::vector<QueryEnvironment> query_environments{{}};
   std::vector<CheckedCallable> callables;
   std::vector<CheckedMethod> methods;
@@ -250,9 +258,9 @@ class ScalarChecker {
   size_t checking_context_ = 0;
   std::map<std::string, std::vector<size_t>> families_;
   std::map<std::string, std::vector<CheckedMethod>> declarations_;
-  std::set<std::string> print_symbols_;
+  std::map<std::string, size_t> symbol_names_;
   std::map<const Form *, size_t> lexical_methods_;
-  struct FreeBindings { std::vector<Capture> captures, queries; };
+  struct FreeBindings { std::vector<Capture> captures, queries, symbols; };
   mutable std::map<const Form *, FreeBindings> free_bindings_;
   std::map<const Form *, std::set<std::string>> free_types_;
   std::set<const Form *> warned_captures_;
@@ -321,6 +329,7 @@ class ScalarChecker {
   using Access = std::vector<std::optional<bool>>;
   struct TypeEvidenceState {
     std::map<std::string, std::optional<Type>> bindings;
+    std::set<std::string> symbol_shadows;
     std::map<std::string, ViewEvidence> views;
     std::map<std::string, size_t> owner_bindings;
     std::set<size_t> external_owners;
@@ -451,6 +460,24 @@ class ScalarChecker {
       return context ? context->retained_types : evidence_retained;
     }
   };
+  bool lexical_self(const std::string &name, std::optional<size_t> method) const {
+    if (!method) return false;
+    const auto *source = program_.methods[*method].source;
+    return lexical_methods_.contains(source) && source->name == name;
+  }
+  bool symbol_shadowed(const std::string &name, const TypeEvidenceState &state) const {
+    return state.bindings.contains(name) || state.owner_bindings.contains(name) ||
+        state.symbol_shadows.contains(name) || lexical_self(name, state.method);
+  }
+  size_t resolve_symbol(const std::string &name, const Location &at, bool local,
+                        std::optional<size_t> method = {}) const {
+    if (local || lexical_self(name, method)) fail(at, "nearest binding '" + name + "' is not a symbol");
+    if (method && module_values_.contains(name))
+      implementation_gap(at, "module-local binding lookup and capture in callable bodies");
+    const auto found = symbol_names_.find(name);
+    if (found == symbol_names_.end()) fail(at, "unknown symbol '" + name + "'");
+    return found->second;
+  }
   NamedFamily named_family(const std::string &name, const TypeEvidenceState *state = nullptr) const {
     if (state) {
       if (state->method) {
@@ -519,6 +546,9 @@ class ScalarChecker {
       ++selected;
     }
     auto &scope = *selected;
+    if (!checking_instance_ && !scope.id && symbol_names_.contains(name) &&
+        !program_.symbols[symbol_names_.at(name)].intrinsic_print)
+      implementation_gap(at, "same-scope value and symbol declarations");
     if (scope.bindings.contains(name)) fail(at, "duplicate declaration of '" + name + "' in one lexical scope");
     return scope;
   }
@@ -1302,17 +1332,18 @@ class ScalarChecker {
     for (const auto &p : method.parameters) names.insert(p.name);
     for (const auto &p : method.owner_parameters) names.insert(p.name);
     if (!method.name.empty()) names.insert(method.name);
-    const auto use = [&](const std::string &name, const Location &at, const std::set<std::string> &bound, bool query) {
-      auto &dependencies = query ? required.queries : required.captures;
+    const auto use = [&](const std::string &name, const Location &at, const std::set<std::string> &bound, bool query, bool symbol = false) {
+      auto &dependencies = symbol ? required.symbols : query ? required.queries : required.captures;
       if (!bound.contains(name) && std::none_of(dependencies.begin(), dependencies.end(), [&](const auto &c) { return c.name == name; }))
         dependencies.push_back({name, at});
     };
     const std::function<void(const Expression &, std::set<std::string> &, bool)> visit = [&](const Expression &expr, auto &bound, bool query) {
       using K = Expression::Kind;
       if (expr.definition) {
-        if (query) return;
         const auto &nested = *expr.definition;
         const auto &dependencies = free_bindings(nested);
+        for (const auto &symbol : dependencies.symbols) use(symbol.name, symbol.at, bound, query, true);
+        if (query) return;
         for (const auto &capture : dependencies.captures) use(capture.name, capture.at, bound, false);
         for (const auto &capture : dependencies.queries) use(capture.name, capture.at, bound, true);
         for (const auto &capture : nested.captures) use(capture.name, capture.at, bound, false);
@@ -1354,6 +1385,8 @@ class ScalarChecker {
       }
       if (expr.kind == K::null_ref && !expr.owner_name.empty() && expr.owner_name != "here")
         use(expr.owner_name, expr.at, bound, query);
+      if (expr.kind == K::symbol || expr.kind == K::effect || expr.kind == K::touch || expr.kind == K::perform || expr.kind == K::behave)
+        use(expr.text, expr.at, bound, query, true);
       if (expr.kind == K::name || (expr.kind == K::call && !expr.intrinsic && !swap_operation(expr.text) && !eager_operation(expr.text)))
         use(expr.text, expr.at, bound, query);
       auto local = bound;
@@ -1880,6 +1913,8 @@ class ScalarChecker {
     const auto &free = free_bindings(method);
     for (const auto &capture : free.captures) retain(capture);
     for (const auto &query : free.queries) retain(query);
+    for (const auto &symbol : free.symbols)
+      if (symbol_shadowed(symbol.name, available)) context.symbol_shadows.insert(symbol.name);
     std::map<size_t, size_t> owners;
     const auto owner = [&](size_t original) {
       return owners.try_emplace(original, owners.size() + 1).first->second;
@@ -1989,7 +2024,8 @@ class ScalarChecker {
     const auto context = result_context(method, state);
     const auto found = std::find_if(result_obligations_.begin(), result_obligations_.end(), [&](const auto &node) {
       return node.method == method && node.arguments == arguments && node.retained == retained &&
-             node.context.bindings == context.bindings && node.context.views == context.views && node.context.owner_bindings == context.owner_bindings && node.context.owner_relations == context.owner_relations;
+             node.context.bindings == context.bindings && node.context.symbol_shadows == context.symbol_shadows &&
+             node.context.views == context.views && node.context.owner_bindings == context.owner_bindings && node.context.owner_relations == context.owner_relations;
     });
     const auto id = static_cast<size_t>(std::distance(result_obligations_.begin(), found));
     if (found == result_obligations_.end()) {
@@ -2154,7 +2190,7 @@ class ScalarChecker {
         return Type::integer;
       }
       switch (expr.kind) {
-      case K::integer: case K::real: case K::boolean: case K::null_ref: case K::name:
+      case K::integer: case K::real: case K::boolean: case K::null_ref: case K::name: case K::symbol:
       case K::unary: case K::binary: case K::call: case K::value_call: case K::field:
       case K::conditional: case K::block: break;
       case K::callable:
@@ -2178,6 +2214,11 @@ class ScalarChecker {
       view.view = true;
       if (!expr.owner_name.empty()) view.owner = expr.owner_name == "here" ? state.current_owner : owner_evidence(expr.owner_name, state, expr.at);
       return Type::null_ref;
+    case K::symbol: {
+      if (!state.complete) return {};
+      const auto id = resolve_symbol(expr.text, expr.at, symbol_shadowed(expr.text, state), state.method);
+      return program_.symbols[id].type;
+    }
     case K::name:
       if (!state.complete) return {};
       if (const auto found = state.bindings.find(expr.text); found != state.bindings.end()) {
@@ -2495,10 +2536,12 @@ class ScalarChecker {
       return type && type->kind == Type::exception ? std::optional<Type>{Type::uint64} : std::nullopt;
     }
     case K::behave: case K::perform: {
+      if (!state.complete) return {};
+      const auto id = resolve_symbol(expr.text, expr.at, symbol_shadowed(expr.text, state), state.method);
       bool exits = false;
       for (const auto &item : expr.children) if (type_evidence(*item, state) == Type::never) exits = true;
       if (exits) return Type::never;
-      return print_symbols_.contains(expr.text) ? std::optional<Type>{Type::void_type} : std::nullopt;
+      return program_.symbols[id].intrinsic_print ? std::optional<Type>{Type::void_type} : std::nullopt;
     }
     case K::return_value: {
       const auto result = expr.children.empty() ? std::optional<Type>{Type::void_type} : child(0);
@@ -2529,6 +2572,7 @@ class ScalarChecker {
   }
   TypeEvidenceState evidence_state() const {
     TypeEvidenceState state;
+    state.symbol_shadows = query_environment().symbol_shadows;
     if (checking_instance_) {
       state.method = checking_instance_->method; state.substitutions = checking_instance_->substitutions;
       state.retained = checking_instance_->retained_types;
@@ -2558,10 +2602,14 @@ class ScalarChecker {
     return state;
   }
   size_t retain_query_environment(const CheckedMethod &method, const std::optional<ResultContract> &result = {}) {
-    if (method.queries.empty() && !result) return 0;
+    const auto &symbols = free_bindings(*method.source).symbols;
+    if (method.queries.empty() && symbols.empty() && !result) return 0;
     QueryEnvironment environment;
     environment.result = result;
     const auto state = evidence_state();
+    if (lexical_methods_.contains(method.source))
+      for (const auto &symbol : symbols)
+        if (symbol_shadowed(symbol.name, state)) environment.symbol_shadows.insert(symbol.name);
     std::vector<size_t> owners;
     for (const auto &query : method.queries) {
       check_query_binding(query.name, query.at);
@@ -2978,6 +3026,8 @@ class ScalarChecker {
         operation = materialize(families_.at(expr.text), expected, expr.at);
       else if (!lexical_.lookup(expr.text) && declarations_.contains(expr.text))
         fail(expr.at, "no applicable implementation for declared callable '" + expr.text + "'");
+      else if (!lexical_.lookup(expr.text) && symbol_names_.contains(expr.text))
+        implementation_gap(expr.at, "materialization of a compile-time symbol object");
       else operation = read_binding(expr, read);
       break;
     }
@@ -3188,10 +3238,16 @@ class ScalarChecker {
       finish_named_call(expr, arguments, views, operation, read, discard, completes);
       break;
     }
+    case K::symbol: case K::effect: case K::touch:
+      operation.symbol = resolve_symbol(expr.text, expr.at,
+          lexical_.lookup(expr.text).has_value() || query_environment().symbol_shadows.contains(expr.text),
+          instance ? std::optional<size_t>{instance->method} : std::nullopt);
+      implementation_gap(expr.at, "runtime symbol reads, installation and capture dependencies");
     case K::behave: case K::perform: {
-      if (lexical_.lookup(expr.text))
-        fail(expr.at, "nearest binding '" + expr.text + "' is not a symbol");
-      if (!print_symbols_.contains(expr.text)) implementation_gap(expr.at, "dynamic procedure call other than selected std:io print");
+      operation.symbol = resolve_symbol(expr.text, expr.at,
+          lexical_.lookup(expr.text).has_value() || query_environment().symbol_shadows.contains(expr.text),
+          instance ? std::optional<size_t>{instance->method} : std::nullopt);
+      if (!program_.symbols[*operation.symbol].intrinsic_print) implementation_gap(expr.at, "dynamic procedure call other than selected std:io print");
       if (method && method->kind == Form::Kind::function) fail(expr.at, "a function cannot invoke a dynamic procedure");
       if (expr.children.size() != 1) fail(expr.at, "print requires one scalar argument");
       const auto argument = child(0);
@@ -3940,11 +3996,27 @@ public:
       program_.exception_values = true;
     }
     std::vector<const Form *> definitions;
+    std::optional<size_t> print_symbol;
     for (const auto &form : forms) {
       if (form->kind == Form::Kind::expression) { program_.initializers.push_back(form->body.get()); continue; }
       if ((form->kind == Form::Kind::using_resource || form->kind == Form::Kind::import_resource) && form->path == "std:exceptions" && !form->using_symbol) continue;
       if (form->kind == Form::Kind::using_resource && form->using_symbol && form->path == "std:io" && form->name == "print") {
-        if (!print_symbols_.insert(form->alias).second) fail(form->at, "duplicate print symbol binding");
+        if (!print_symbol) {
+          print_symbol = program_.symbols.size();
+          program_.symbols.push_back({{}, true});
+        }
+        if (!symbol_names_.emplace(form->alias, *print_symbol).second) fail(form->at, "duplicate print symbol binding");
+        continue;
+      }
+      if (form->kind == Form::Kind::symbol) {
+        if (form->symbol_owner) implementation_gap(form->at, "regional symbol ownership contracts");
+        if (exception_types_.contains(form->name)) implementation_gap(form->at, "same-scope type and symbol declarations");
+        const auto type = resolve_type(*form->result_type);
+        CheckedMethod contract; contract.source = form.get();
+        signature_type(contract, type, form->at);
+        if (!symbol_names_.emplace(form->name, program_.symbols.size()).second)
+          fail(form->at, "duplicate symbol binding '" + form->name + "'");
+        program_.symbols.push_back({type, false});
         continue;
       }
       if (form->kind != Form::Kind::function && form->kind != Form::Kind::procedure)
@@ -4052,9 +4124,17 @@ public:
       else families_[form->name].push_back(id);
     }
     for (const auto &[name, contracts] : declarations_)
-      if (print_symbols_.contains(name)) fail(contracts.front().source->at, "callable conflicts with symbol '" + name + "'");
-    for (const auto &symbol : print_symbols_)
-      if (families_.contains(symbol)) fail(program_.methods[families_[symbol].front()].source->at, "callable conflicts with symbol '" + symbol + "'");
+      if (symbol_names_.contains(name)) {
+        if (!program_.symbols[symbol_names_.at(name)].intrinsic_print)
+          implementation_gap(contracts.front().source->at, "same-scope callable and symbol declarations");
+        fail(contracts.front().source->at, "callable conflicts with symbol '" + name + "'");
+      }
+    for (const auto &[name, id] : symbol_names_)
+      if (families_.contains(name)) {
+        if (!program_.symbols[id].intrinsic_print)
+          implementation_gap(program_.methods[families_[name].front()].source->at, "same-scope callable and symbol declarations");
+        fail(program_.methods[families_[name].front()].source->at, "callable conflicts with symbol '" + name + "'");
+      }
     for (size_t i = 0; i < program_.methods.size(); ++i) {
       const auto &method = *program_.methods[i].source;
       if (!method.type_parameters.empty() || lexical_methods_.contains(&method)) continue;

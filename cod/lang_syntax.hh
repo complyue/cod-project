@@ -928,6 +928,7 @@ class Parser {
       auto group = make(Expression::Kind::effect_group, token);
       do {
         auto expr = make(Expression::Kind::effect, name(TokenKind::symbol));
+        if (group->children.empty() && (is(";") || is("}"))) return expr;
         if (take("=")) expr->binding = "=";
         else { expect("<-"); expr->binding = "<-"; }
         expr->children.push_back(expression());
