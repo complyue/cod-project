@@ -3321,8 +3321,7 @@ class ScalarChecker {
       }
       const auto body = child(fold ? 3 : 2, true, !fold);
       if (fold && body.kind == Type::procedure) note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
-      if (fold && body != Type::never && body != accumulator) {
-        if (widens(body, accumulator)) implementation_gap(expr.at, "fold accumulator conversion");
+      if (fold && body != Type::never && body != accumulator && !widens(body, accumulator)) {
         fail(expr.at, "fold body does not satisfy the accumulator type");
       }
       leave_scope();

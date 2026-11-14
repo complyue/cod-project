@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Lossless fold updates
+
+<a id="k-665"></a>
+**K-665 — Fold-conversion continuity.** Agent assessment under H-261/P-231/H-365/H-420, D-10/D-14r91/D-17r57/D-26r13 and charter §§5.3/6.3/12: registry r672→673 and source reference286→287 record whole-type lossless primitive conversion from each completed fold body into its established accumulator type. Reuse the checked/native value-conversion path; preserve readonly loop bindings, once-only bounds, empty results, cleanup/completion, generic identity and shared native coverage. No new widening, mixed-endpoint rule, quantity/fraction support, pack semantics, layout or ABI is selected. D-11/D-27 whole-document qualification and executable-pack design boundaries remain separate. Prior capability reference: `f1b3a63a948ada815f50edb4414b39578f065bf6:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Call-summary input roles
 
 <a id="k-664"></a>

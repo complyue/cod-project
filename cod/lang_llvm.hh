@@ -370,14 +370,16 @@ class LLVMEmission {
     for (const auto &[value, predecessor] : incoming) result->addIncoming(value, predecessor);
     return result;
   }
-  llvm::Value *convert_result(const Expression &expr, const Expression &input, llvm::Value *value) {
-    const auto cases = choices(expr, {&input});
-    if (std::all_of(cases.begin(), cases.end(), [](const Choice &choice) {
-          return choice.inputs.front() == choice.operation->operand_type;
+  llvm::Value *convert_result(const Expression &expr, const Expression &input, llvm::Value *value,
+      Type CheckedOperation::*destination = &CheckedOperation::operand_type) {
+    auto cases = choices(expr, {&input});
+    std::erase_if(cases, [&](const Choice &choice) { return choice.operation->*destination == Type::never; });
+    if (std::all_of(cases.begin(), cases.end(), [&](const Choice &choice) {
+          return choice.inputs.front() == choice.operation->*destination;
         })) return value;
     return choose(expr, {value}, cases, scalar_, [&](const Choice &choice) {
       if (choice.inputs.front() == Type::void_type) return empty_scalar();
-      return convert_value(value, choice.inputs.front(), choice.operation->operand_type);
+      return convert_value(value, choice.inputs.front(), choice.operation->*destination);
     });
   }
   llvm::Value *binary(const Expression &expr, llvm::Value *left, llvm::Value *right, const Choice &choice) {
@@ -1137,7 +1139,10 @@ class LLVMEmission {
       b_.SetInsertPoint(body);
       auto *next = emit_expression(*expr.children[fold ? 3 : 2], Projection::value, !fold);
       if (reachable()) {
-        if (fold) assign_value(accumulator, next, expr.at);
+        if (fold) {
+          next = convert_result(expr, *expr.children[3], next, &CheckedOperation::type);
+          assign_value(accumulator, next, expr.at);
+        }
         auto *current = load(index);
         auto *advanced = choose(expr, {current, last}, cases, scalar_, [&](const Choice &choice) {
           const auto type = choice.operation->operand_type;
