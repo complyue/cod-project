@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-14 — Unique least common callable results
+
+<a id="h-424"></a>
+**H-424 — Infer the unique least common result.** Human/source: current project user in this design-discussion chat, recorded 2026-11-14 America/Los_Angeles; exact timestamp, personal name and durable message URL unavailable. The user replies “同意” to inferring a unique least common result using already-permitted conversions, with an explicit contract required when no unique candidate exists. The preceding question contrasts u32/u64 returns inferring val u64 with requiring `-> u64`, and explains that adding a wider return may change downstream overload selection even for the original branch. This confirms that policy and trade-off, not new conversions, union types, owner alternatives or broader representation choices.
+
+<a id="k-common-result-20261114"></a>
+**K-COMMON-RESULT-20261114 — Common-result integration.** Agent assessment under H-424 and charter §§3.3/5.3/6.3/8/12: registry r656→657 and D-24r6→7 replace the alternatives with unique least common results of independent anchors under existing compatibility. Acceptance covers branch order, numeric/quantity widening, absent/incomparable candidates, explicit contracts, recursive-anchor preservation, return-boundary conversion and downstream dispatch. D-26r12→13/P-373 aligns the dependency without changing qualified native coverage. Owners/access, cleanup, nominal identity and deferred D-16 fraction rules remain; no source/build/test change. Prior text: `93ae4ec60b3a7efeaaedb8aeeeaeb64ed77af5ad` at `design/CallableResultInference.md`, `design/GenericAndRecursiveClosure.md` and `design/DesignAuthorityRegistry.md`.
+
 ## 2026-11-14 — Callable result-contract design integration
 
 <a id="k-653"></a>

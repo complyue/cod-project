@@ -1,13 +1,13 @@
 # Callable result-type inference
 
-Design revision: 6 · Recorded: 2026-11-14 · Status: scoped result-inference contract; common-result synthesis remains open.
+Design revision: 7 · Recorded: 2026-11-14 · Status: scoped result-inference contract with unique least common results.
 
 ## Design authority
 
-- **Scope / baseline:** [D-24](DesignAuthorityRegistry.md#d-24), r6. H-421/H-422 establishes callable-wide omission and independent recursive anchors; [H-423](../CHANGELOG.md#h-423) accepts reuse of explicit declarations and delegates routine consequences. Func/proc and named/anonymous definitions share this policy. The registry retains the precise qualification of each scope.
+- **Scope / baseline:** [D-24](DesignAuthorityRegistry.md#d-24), r7. H-421/H-422 establishes callable-wide omission and independent recursive anchors; [H-423](../CHANGELOG.md#h-423) accepts reuse of explicit declarations and delegates routine consequences. [H-424](../CHANGELOG.md#h-424) confirms unique least common results through existing permitted conversions. Func/proc and named/anonymous definitions share this policy. The registry retains the precise qualification of each scope.
 - **Value path:** C-84/P-356–P-357 relates reduced source repetition and complete inspectable signatures to C-01/C-06 and charter §§3.3/5.3/6.3/8/12. The local rationale is accepted; broader document/value-path qualification remains separate from the settled source requirements.
 - **Dependencies / invariants:** P-358 links D-10/D-14/D-17/D-18/D-21/D-22/D-23 and D-16. Preserve callable effects, explicit value returns, scalar value/view modes, unique owners, access, initialization, cleanup and numerical compatibility. No implicit value return, owner union, new capture permission, regional copy, fraction promotion/implementation or permanent ABI follows.
-- **Acceptance / continuity:** The cases below define observable requirements. [K-INFERENCE-CLEANUP-20261114](../CHANGELOG.md#k-inference-cleanup-20261114) records r5→6 and distinguishes H-423's confirmation from the agent's routine resolutions. Source implementation coverage remains in the [compiler reference](../tests/cod/language/README.md).
+- **Acceptance / continuity:** The cases below define observable requirements. [K-COMMON-RESULT-20261114](../CHANGELOG.md#k-common-result-20261114) records r6→7 under H-424; H-423's routine resolutions retain their recorded scope. Source implementation coverage remains in the [compiler reference](../tests/cod/language/README.md).
 
 ## Establishing a result contract
 
@@ -51,29 +51,39 @@ When no explicit result contract applies, a body with no value-producing return 
 
 If a value result is established, a path that falls through without providing it retains H-361's missing-return behavior and diagnostics. If the body supplies neither a value result nor normal no-value completion evidence, as with a throw-only body or an unanchored recursive cycle, require an explicit result contract. An already declared result remains valid across exceptional/non-returning paths; those paths do not fabricate a payload. H-362's cleanup replacement and void completion rules remain unchanged.
 
-## Open decision: combining different independent result types
+## Unique least common results
 
-An established expected result already determines how each return is checked. Returns with the same independently established result contract also require no new joining rule. The material unresolved case is different independent anchor types with no expected result:
+When no explicit or independently supplied expected result applies, combine the independently established returning contracts using existing permitted result conversions. Infer their unique least common result. This applies uniformly to func/proc and named/anonymous definitions under H-424.
+
+A common result must accept every returning contract through those existing conversions. The least result is a common candidate that is compatible with every other common candidate under the same relation. Choose by semantic type compatibility, not spelling, source order, literal magnitude or shared machine representation. If there is no common candidate or no unique least candidate, require an explicit result contract and valid conversions; an annotation cannot authorize an otherwise invalid conversion.
 
 ```text
 func choose(flag:bool) {
   if (flag) { return 1u32; } else { return 2u64; };
 }
+# Inferred result: val u64; the u32 branch widens at its return boundary.
 ```
 
-Existing numeric compatibility allows u32 to widen to u64 when u64 is required. It does not by itself decide whether an omitted result should choose that common type.
-
-| Policy | Consequence |
+| Independent numeric return types | Inferred result under established compatibility |
 | --- | --- |
-| Require matching independent result types; otherwise require an explicit result | The example needs `-> u64`. Adding a differently typed branch forces the source to state its result boundary. |
-| Infer a unique least common result under existing permitted conversions | The example infers val u64. Adding a wider branch can change the inferred signature; incomparable candidates require an explicit result. |
+| u32 and u64 | val u64 |
+| u32 and f32 | val f64 |
+| i64 and u64 | No whole-type lossless numeric join; require an explicit contract and valid explicit conversions. |
+| u32 and u64 representations of the same named quantity | That same quantity with u64 representation. |
 
-Neither alternative permits first-return wins, declaration-order choice, value-dependent numeric narrowing, a synthesized owner union or a new implicit conversion. The choice also needs a clear boundary for nominal/abstract result joins and future fraction representations. Abstract results must preserve actual concrete-type method selection under D-18/D-21/D-26; physical evidence transport remains their separate question. Generic/aggregate result classification remains in D-22. No option in this table is activated by this cleanup.
+Every admitted return is checked against the completed contract. A known expected result is checked directly rather than replaced by a synthesized one. The recursive-anchor requirement remains: an unresolved recursive result or operator candidate is not an independent input to the join, and common-result inference cannot make an unanchored recursive component valid. Reordering branches must preserve the result and the conversion obligations.
+
+Conversion happens at the return boundary under D-17/D-23 sequencing and cleanup rules. Inferring a wider result does not change the types or overflow behavior of earlier intermediate computations. Adding a wider independent return can change the inferred signature and downstream overload selection, including calls reached through the original branch; this is an accepted consequence of inference. The receiving variable does not choose that signature, and ordinary method lookup still does not use an expected result as a tie-breaker.
+
+The relation preserves complete result contracts: value/view mode, target access, owner and nominal identity remain constraints. Bits widening creates no reference covariance, owner union, mutable access or lifetime extension. Named quantities retain their units; the rule introduces no new numeric conversion, implicit unit conversion, synthetic union/intersection type or allocation. Distinct reference owners cannot acquire a common owner through type inference.
+
+Nominal/abstract results may join only through already admitted compatibility, preserving actual-concrete-type method selection. Multiple incomparable common contracts require an explicit boundary. Physical type-evidence transport remains in D-18/D-21/D-26; generic/aggregate result classification remains in D-22. Future fraction joins depend on their separately established constructor/promotion/result-width rules; this policy neither selects those conversions nor implements fractions.
 
 ## Acceptance
 
 1. Equivalent explicit, separately declared, independently contextual and body-inferred contracts produce the same result behavior across func/proc and named/anonymous definitions. Conflicting declarations reject; ordinary call receiving syntax does not change a signature.
 2. Literal/parameter/nonrecursive anchors work in either source order and through self/mutual recursion. Recursive-expression-only inference rejects without an explicit contract; checking never uses an overload assumption to prove itself.
-3. Normal no-value completion, a missing required value, throw-only bodies and unresolved recursive results remain distinct. Pending/replaced returns and exceptional cleanup preserve D-17's rules.
-4. Scalar values, retained reference targets, unique owners, access, initialization and callable environments retain D-14/D-18/D-23's contracts. Copies cannot repair invalid escapes or grant reference covariance; ordinary numerical compatibility and D-16 fraction constraints remain intact.
-5. Named, copied, selected and deferred calls establish complete checked result contracts before native transport. Validate generic/world substitutions and finite recursive code graphs; do not claim broad support from one example or this documentation review.
+3. Numeric joins match the table in both branch orders; identical anchors preserve their contract. Verify downstream overload selection after widening, conversion at the return boundary and unchanged intermediate arithmetic. Reject absent/incomparable common results and invalid explicit conversions; recursive-only inference still rejects.
+4. Normal no-value completion, a missing required value, throw-only bodies and unresolved recursive results remain distinct. Pending/replaced returns and exceptional cleanup preserve D-17's rules.
+5. Scalar values, retained reference targets, unique owners, access, initialization and callable environments retain D-14/D-18/D-23's contracts. Copies cannot repair invalid escapes or grant reference covariance; ordinary numerical compatibility and D-16 fraction constraints remain intact.
+6. Named, copied, selected and deferred calls establish complete checked result contracts before native transport. Validate generic/world substitutions and finite recursive code graphs; do not claim broad support from one example or this documentation review.
