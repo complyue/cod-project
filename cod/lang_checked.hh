@@ -277,7 +277,42 @@ class ScalarChecker {
       if (a.source->parameters[i].read_only != b.source->parameters[i].read_only) return false;
     return true;
   }
-  struct ArgumentEvidence { std::optional<Type> type; std::optional<bool> read_only; };
+  using Owners = std::vector<std::optional<size_t>>;
+  static std::optional<size_t> one_owner(const CheckedOperation &view) {
+    return view.owners.size() == 1 ? std::optional<size_t>{*view.owners.begin()} : std::nullopt;
+  }
+  static Owners owners_of(const std::vector<CheckedOperation> &views) {
+    Owners owners;
+    for (const auto &view : views) owners.push_back(one_owner(view));
+    return owners;
+  }
+  static bool same_owner(const CheckedMethod &method, size_t a, size_t b) {
+    const auto &parameters = method.source->parameters;
+    return !parameters[a].owner.empty() && parameters[a].owner == parameters[b].owner;
+  }
+  static bool implies_owners(const CheckedMethod &narrow, const CheckedMethod &broad) {
+    for (size_t i = 0; i < broad.parameters.size(); ++i) for (size_t j = 0; j < i; ++j)
+      if (same_owner(broad, i, j) && !same_owner(narrow, i, j)) return false;
+    return true;
+  }
+  enum class OwnerMatch { satisfied, unknown, mismatch };
+  OwnerMatch compare_owners(std::optional<size_t> a, std::optional<size_t> b) const {
+    if (!a || !b) return OwnerMatch::unknown;
+    if (a == b) return OwnerMatch::satisfied;
+    // Distinct formal names admit equal actual owners; local scopes do not.
+    return external_owner(*a) && external_owner(*b) ? OwnerMatch::unknown : OwnerMatch::mismatch;
+  }
+  OwnerMatch match_owners(const CheckedMethod &method, const Owners &owners) const {
+    auto result = OwnerMatch::satisfied;
+    for (size_t i = 0; i < method.parameters.size(); ++i) for (size_t j = 0; j < i; ++j) {
+      if (!same_owner(method, i, j)) continue;
+      const auto compared = i < owners.size() ? compare_owners(owners[i], owners[j]) : OwnerMatch::unknown;
+      if (compared == OwnerMatch::mismatch) return compared;
+      if (compared == OwnerMatch::unknown) result = compared;
+    }
+    return result;
+  }
+  struct ArgumentEvidence { std::optional<Type> type; std::optional<bool> read_only; std::optional<size_t> owner; };
   struct ArgumentPreparation {
     ArgumentMode mode = ArgumentMode::value;
     std::optional<Type> view;
@@ -288,13 +323,15 @@ class ScalarChecker {
     std::vector<size_t> applicable;
     std::map<size_t, Substitutions> substitutions;
     Access access;
-    for (const auto &item : evidence) access.push_back(item.read_only);
-    for (size_t i = 0; i < views.size(); ++i) access[i] = views[i].read_only;
+    Owners owners;
+    for (const auto &item : evidence) { access.push_back(item.read_only); owners.push_back(item.owner); }
+    for (size_t i = 0; i < views.size(); ++i) { access[i] = views[i].read_only; owners[i] = one_owner(views[i]); }
     bool complete = true;
     for (size_t i = prefix.size(); i < evidence.size(); ++i) complete = complete && evidence[i].type.has_value();
     if (const auto family = families_.find(expr.text); family != families_.end()) for (const auto id : family->second) {
       const auto &candidate = program_.methods[id];
-      if (candidate.parameters.size() != expr.children.size() || !admits_access(candidate, access)) continue;
+      if (candidate.parameters.size() != expr.children.size() || !admits_access(candidate, access) ||
+          match_owners(candidate, owners) == OwnerMatch::mismatch) continue;
       auto bindings = match_prefix(candidate, prefix);
       if (!bindings) continue;
       bool matches = true;
@@ -303,9 +340,10 @@ class ScalarChecker {
       if (matches) { applicable.push_back(id); substitutions.emplace(id, std::move(*bindings)); }
     }
     if (complete) {
-      applicable = most_specific(applicable, access);
+      applicable = most_specific(applicable, access, owners);
       if (applicable.size() > 1 && std::all_of(applicable.begin() + 1, applicable.end(), [&](size_t id) {
-            return same_access(program_.methods[applicable.front()], program_.methods[id]);
+            const auto &first = program_.methods[applicable.front()], &other = program_.methods[id];
+            return same_access(first, other) && implies_owners(first, other) && implies_owners(other, first);
           })) fail(expr.at, "ambiguous methods for '" + expr.text + "'");
     }
     std::optional<ArgumentMode> mode;
@@ -636,8 +674,11 @@ class ScalarChecker {
         const auto cleanup = std::find_if(lexical_.scopes.begin(), lexical_.scopes.end(), [&](const auto &entry) { return entry.id == cleanup_scope_; });
         if (scope > cleanup) fail(expr.children[i + offset]->at, "deferred borrowed argument does not outlive its cleanup scope");
       }
-      if (const auto [found, inserted] = owners.emplace(role, owner); !inserted && found->second != owner)
-        fail(expr.at, "arguments for one owner role have different actual owners");
+      if (const auto [found, inserted] = owners.emplace(role, owner); !inserted) {
+        const auto equality = compare_owners(found->second, owner);
+        if (equality == OwnerMatch::unknown) implementation_gap(expr.at, "borrowed call requires an unproved owner equality");
+        if (equality == OwnerMatch::mismatch) fail(expr.at, "arguments for one owner role have different actual owners");
+      }
       if (!readonly && view.read_only) fail(expr.children[i + offset]->at, "readonly argument cannot supply a writable borrowed parameter");
       if (!readonly) for (const auto place : view.targets) if (place != null_target && storage(place).captured)
         implementation_gap(expr.children[i + offset]->at, "writable borrowing of a captured callable payload");
@@ -1155,14 +1196,16 @@ class ScalarChecker {
     definition.instances.push_back(id);
     return id;
   }
-  std::vector<size_t> most_specific(const std::vector<size_t> &applicable, const Access &access = {}) const {
+  std::vector<size_t> most_specific(const std::vector<size_t> &applicable, const Access &access = {}, const Owners &owners = {}) const {
     std::vector<size_t> best;
     for (const auto candidate : applicable) {
       const auto &definition = program_.methods[candidate];
       const bool dominated = std::any_of(applicable.begin(), applicable.end(), [&](size_t other) {
         const auto &alternative = program_.methods[other];
-        if (!implies(alternative, definition)) return false;
-        bool strict = !implies(definition, alternative);
+        if (!implies(alternative, definition) || !implies_owners(alternative, definition)) return false;
+        const bool stricter_owners = !implies_owners(definition, alternative);
+        if (stricter_owners && match_owners(alternative, owners) != OwnerMatch::satisfied) return false;
+        bool strict = !implies(definition, alternative) || stricter_owners;
         for (size_t i = 0; i < alternative.parameters.size(); ++i) {
           const auto exact = alternative.source->parameters[i].read_only;
           if (exact == definition.source->parameters[i].read_only) continue;
@@ -1176,32 +1219,44 @@ class ScalarChecker {
     return best;
   }
   size_t select_family(const std::vector<size_t> &family, const std::vector<Type> &arguments, const Location &at, const std::string &name,
-                       const std::vector<Type> &environment = {}, const std::vector<Type> &retained = {}, const Access &access = {}) {
+                       const std::vector<Type> &environment = {}, const std::vector<Type> &retained = {},
+                       const Access &access = {}, const Owners &owners = {}) {
     std::vector<size_t> applicable;
-    for (const auto method : family)
-      if (match(program_.methods[method], arguments, retained) && admits_access(program_.methods[method], access)) applicable.push_back(method);
-    const auto best = most_specific(applicable, access);
+    bool type_match = false, access_match = false;
+    for (const auto method : family) {
+      const auto &candidate = program_.methods[method];
+      if (!match(candidate, arguments, retained)) continue;
+      type_match = true;
+      if (!admits_access(candidate, access)) continue;
+      access_match = true;
+      if (match_owners(candidate, owners) != OwnerMatch::mismatch) applicable.push_back(method);
+    }
+    const auto best = most_specific(applicable, access, owners);
     if (best.empty()) {
-      if (std::any_of(family.begin(), family.end(), [&](size_t id) { return match(program_.methods[id], arguments, retained).has_value(); }))
-        fail(at, "readonly argument cannot supply a writable borrowed parameter");
+      if (access_match) fail(at, "arguments for one owner role have different actual owners");
+      if (type_match) fail(at, "readonly argument cannot supply a writable borrowed parameter");
       fail(at, "no applicable method for '" + name + "' (argument types or same-T relation do not match)");
     }
+    if (!owners.empty() && std::any_of(best.begin(), best.end(), [&](size_t id) {
+          return match_owners(program_.methods[id], owners) == OwnerMatch::unknown;
+        })) implementation_gap(at, "method selection requires an unproved owner equality");
     if (best.size() != 1) fail(at, "ambiguous methods for '" + name + "'");
     return demand(best.front(), arguments, at, environment, retained);
   }
-  size_t select(const Expression &expr, const std::vector<Type> &arguments, const Access &access) {
+  size_t select(const Expression &expr, const std::vector<Type> &arguments, const Access &access, const Owners &owners) {
     if (checking_method_ && lexical_methods_.contains(checking_method_->source) && expr.text == checking_method_->source->name) {
       return select_family({lexical_methods_.at(checking_method_->source)}, arguments, expr.at, expr.text,
-                           checking_instance_->environment, checking_instance_->retained_types, access);
+                           checking_instance_->environment, checking_instance_->retained_types, access, owners);
     }
     const auto family = families_.find(expr.text);
     if (family == families_.end()) fail(expr.at, "unknown callable '" + expr.text + "'");
-    return select_family(family->second, arguments, expr.at, expr.text, {}, {}, access);
+    return select_family(family->second, arguments, expr.at, expr.text, {}, {}, access, owners);
   }
-  bool applicable_operation(const std::string &name, const std::vector<Type> &arguments, const Access &access = {}) const {
+  bool applicable_operation(const std::string &name, const std::vector<Type> &arguments, const Access &access = {}, const Owners &owners = {}) const {
     const auto family = families_.find(name);
     return family != families_.end() && std::any_of(family->second.begin(), family->second.end(), [&](size_t id) {
-      return match(program_.methods[id], arguments).has_value() && admits_access(program_.methods[id], access);
+      return match(program_.methods[id], arguments).has_value() && admits_access(program_.methods[id], access) &&
+          match_owners(program_.methods[id], owners) != OwnerMatch::mismatch;
     });
   }
   struct EagerTypes {
@@ -1299,6 +1354,7 @@ class ScalarChecker {
   }
   struct ViewEvidence {
     std::optional<bool> read_only, view, value_binding;
+    std::optional<size_t> owner = {};
     bool operator==(const ViewEvidence &) const = default;
   };
   static ViewEvidence join_views(const ViewEvidence &a, const ViewEvidence &b) {
@@ -1306,12 +1362,14 @@ class ScalarChecker {
       if (x.value_or(false) || y.value_or(false)) return true;
       return x && y ? std::optional<bool>{false} : std::nullopt;
     };
-    return {either(a.read_only, b.read_only), either(a.view, b.view), a.value_binding == b.value_binding ? a.value_binding : std::nullopt};
+    return {either(a.read_only, b.read_only), either(a.view, b.view), a.value_binding == b.value_binding ? a.value_binding : std::nullopt,
+            a.owner == b.owner ? a.owner : std::nullopt};
   }
   struct TypeEvidenceState {
     std::map<std::string, std::optional<Type>> bindings;
     std::map<std::string, ViewEvidence> views;
     ViewEvidence value;
+    std::optional<size_t> current_owner;
     bool complete = true;
   };
   static TypeEvidenceState merge_evidence(TypeEvidenceState left, const TypeEvidenceState &right) {
@@ -1364,6 +1422,7 @@ class ScalarChecker {
     case K::block: {
       auto inner = state;
       auto &active = expr.scoped ? inner : state;
+      if (expr.scoped) active.current_owner.reset();
       std::optional<Type> result = Type::void_type;
       bool exits = false;
       for (size_t i = 0; i < expr.children.size(); ++i) {
@@ -1384,7 +1443,9 @@ class ScalarChecker {
           if (state.value.view.value_or(false)) readonly = state.value.read_only;
           else if (!state.value.view && state.value.read_only != false) readonly.reset();
         }
-        state.views[declaration->text] = {readonly, true, value};
+        const auto owner = !declaration->owner_name.empty() ? std::nullopt :
+            value || declaration->binding == "<-" || state.value.view == false ? state.current_owner : state.value.owner;
+        state.views[declaration->text] = {readonly, true, value, owner};
       }
       return Type::void_type;
     case K::alias: {
@@ -1474,15 +1535,18 @@ class ScalarChecker {
       }
       std::vector<Type> arguments;
       Access access;
+      Owners owners;
       bool complete = true;
       for (size_t i = expr.kind == K::value_call ? 1 : 0; i < expr.children.size(); ++i) {
         const auto type = child(i, true); complete = complete && type.has_value();
-        arguments.push_back(type.value_or(Type::never)); access.push_back(state.value.read_only);
+        arguments.push_back(type.value_or(Type::never)); access.push_back(state.value.read_only); owners.push_back(state.value.owner);
       }
       if (local) {
-        if (!target || target->kind != Type::procedure || !target->target) return {};
+        if (!target || target->kind != Type::procedure || !target->target || target->parameters.size() != arguments.size()) return {};
         const bool borrowed = !target->owners.empty() && target->owners.back();
         view = {borrowed && !target->const_views.empty() && target->const_views.back(), borrowed, {}};
+        if (borrowed) for (size_t i = 0; i < owners.size(); ++i)
+          if (target->owners[i] == target->owners.back() && owners[i]) view.owner = owners[i];
         return *target->target;
       }
       if (!state.complete) return {};
@@ -1496,22 +1560,26 @@ class ScalarChecker {
         if (checking_method_ && lexical_methods_.contains(checking_method_->source) && expr.text == checking_method_->source->name) {
           retained = checking_instance_->retained_types;
           const auto id = lexical_methods_.at(checking_method_->source);
-          if (match(program_.methods[id], arguments, retained) && admits_access(program_.methods[id], access)) applicable.push_back(id);
+          if (match(program_.methods[id], arguments, retained) && admits_access(program_.methods[id], access) &&
+              match_owners(program_.methods[id], owners) != OwnerMatch::mismatch) applicable.push_back(id);
         } else if (const auto family = families_.find(expr.text); family != families_.end())
-          for (const auto id : family->second) if (match(program_.methods[id], arguments) && admits_access(program_.methods[id], access)) applicable.push_back(id);
+          for (const auto id : family->second) if (match(program_.methods[id], arguments) && admits_access(program_.methods[id], access) &&
+              match_owners(program_.methods[id], owners) != OwnerMatch::mismatch) applicable.push_back(id);
       }
       if (applicable.empty() && eager_operation(expr.text)) {
         const auto types = eager_types(expr, arguments);
         return types.error.empty() ? std::optional<Type>{types.result} : std::nullopt;
       }
-      const auto best = most_specific(applicable, access);
+      const auto best = most_specific(applicable, access, owners);
       std::optional<Type> result;
       for (const auto id : best) {
         const auto &method = program_.methods[id];
         const auto type = substitute(method.result, method, *match(method, arguments, retained), true);
         if (nested_binder(method, type) || (result && *result != type)) return {};
         const bool borrowed = borrowed_result(*method.source);
-        const ViewEvidence next{borrowed && method.source->result_const, borrowed, {}};
+        ViewEvidence next{borrowed && method.source->result_const, borrowed, {}};
+        if (borrowed) for (size_t i = 0; i < owners.size(); ++i)
+          if (method.source->parameters[i].owner == method.source->result_owner && owners[i]) next.owner = owners[i];
         view = !result || view == next ? next : ViewEvidence{};
         result = type;
       }
@@ -1533,7 +1601,7 @@ class ScalarChecker {
     case K::callable:
       if (!expr.definition->name.empty()) {
         state.bindings[expr.definition->name] = callable_evidence(lexical_methods_.at(expr.definition.get()));
-        state.views[expr.definition->name] = {false, true, true};
+        state.views[expr.definition->name] = {false, true, true, state.current_owner};
         return Type::void_type;
       }
       return contextual ? std::nullopt : callable_evidence(lexical_methods_.at(expr.definition.get()));
@@ -1554,21 +1622,26 @@ class ScalarChecker {
       const auto &parameters = program_.methods[id].source->parameters;
       if (parameters.size() != expr.children.size()) continue;
       if (!baseline) baseline = id;
-      else needed = needed || !same_access(program_.methods[*baseline], program_.methods[id]);
+      else needed = needed || !same_access(program_.methods[*baseline], program_.methods[id]) ||
+          !implies_owners(program_.methods[*baseline], program_.methods[id]) || !implies_owners(program_.methods[id], program_.methods[*baseline]);
       if (modes.empty()) for (const auto &parameter : parameters) modes.push_back(argument_mode(parameter));
       for (size_t i = 0; i < parameters.size(); ++i)
         needed = needed || modes[i] != argument_mode(parameters[i]) || (eager_operation(expr.text) && modes[i] != ArgumentMode::value);
     }
     if (!needed) return result;
     TypeEvidenceState state;
+    state.current_owner = std::find_if(lexical_.scopes.rbegin(), lexical_.scopes.rend(), [](const auto &scope) { return scope.declarations; })->id;
     for (const auto &scope : lexical_.scopes) for (const auto &[name, id] : scope.bindings) {
       const auto &binding = bindings_->at(id);
       state.bindings[name] = binding.type;
-      state.views[name] = {binding.read_only, true, binding.value_binding};
+      const auto found = lexical_.owners.find(binding.alias.value_or(id));
+      const auto owner = found != lexical_.owners.end() && found->second.size() == 1 ? std::optional<size_t>{*found->second.begin()} : std::nullopt;
+      state.views[name] = {binding.read_only, true, binding.value_binding, owner};
     }
     for (size_t i = 0; i < expr.children.size(); ++i) {
       result[i].type = type_evidence(*expr.children[i], state, true);
       result[i].read_only = state.value.read_only;
+      result[i].owner = state.value.owner;
     }
     return result;
   }
@@ -2073,21 +2146,22 @@ class ScalarChecker {
       }
       for (size_t i = 0; i < arguments.size(); ++i)
         if ((evidence[i].type && *evidence[i].type != arguments[i]) ||
-            (evidence[i].read_only && *evidence[i].read_only != views[i].read_only))
-          implementation_gap(expr.children[i]->at, "operand type/access evidence depends on completion or contextual inference");
+            (evidence[i].read_only && *evidence[i].read_only != views[i].read_only) ||
+            (evidence[i].owner && evidence[i].owner != one_owner(views[i])))
+          implementation_gap(expr.children[i]->at, "operand type/access/owner evidence depends on completion or contextual inference");
       if (expr.text == "cause_at" && (expr.intrinsic || !families_.contains(expr.text))) {
         if (arguments.size() != 2 || arguments[0].kind != Type::exception || arguments[1] != Type::uint64)
           fail(expr.at, "cause_at requires an exception and a u64 index");
         operation.type = exception_type(0); operation.exceptions = exception_possibilities(operation.type); operation.builtin = BuiltinOperation::cause_at;
         break;
       }
-      if (eager && (expr.intrinsic || !applicable_operation(expr.text, arguments, access_of(views)))) {
+      if (eager && (expr.intrinsic || !applicable_operation(expr.text, arguments, access_of(views), owners_of(views)))) {
         if (std::any_of(operation.arguments.begin(), operation.arguments.end(), [](const auto &argument) { return argument.mode != ArgumentMode::value; }))
           implementation_gap(expr.at, "builtin fallback requires value preparation before later operand effects");
         check_eager(expr, arguments, views, operation);
         break;
       }
-      operation.callee = select(expr, arguments, access_of(views));
+      operation.callee = select(expr, arguments, access_of(views), owners_of(views));
       const auto &target = program_.instances[*operation.callee];
       const auto &definition = *program_.methods[target.method].source;
       for (size_t i = 0; i < arguments.size(); ++i) {
@@ -2896,12 +2970,9 @@ public:
           for (size_t p = 0; p < form->parameters.size(); ++p) {
             if (form->parameters[p].owner.empty() != definition.source->parameters[p].owner.empty())
               implementation_gap(form->at, "owner-constrained overload selection");
-            for (size_t q = 0; q < p; ++q)
-              if ((form->parameters[p].owner == form->parameters[q].owner) !=
-                  (definition.source->parameters[p].owner == definition.source->parameters[q].owner))
-                implementation_gap(form->at, "owner-constrained overload selection");
           }
-          if (same_access(prepared, definition)) fail(form->at, "duplicate method signature for '" + form->name + "'");
+          if (same_access(prepared, definition) && implies_owners(prepared, definition) && implies_owners(definition, prepared))
+            fail(form->at, "duplicate method signature for '" + form->name + "'");
         }
         if (definition.source->kind != form->kind && !(form->operation && definition.source->operation))
           implementation_gap(form->at, "mixed function/procedure family");
