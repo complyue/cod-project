@@ -55,6 +55,7 @@ class LLVMEmission {
   struct Deferred {
     const Expression *action;
     llvm::StructType *layout;
+    std::set<size_t> captures;
   };
   struct Control {
     Control *parent;
@@ -541,12 +542,13 @@ class LLVMEmission {
     const auto &body = *expr.children.front();
     if (body.kind != Expression::Kind::block && std::all_of(facts_.begin(), facts_.end(),
         [&](const auto *facts) { return facts->at(&body).type == Type::never; })) return;
-    std::vector<llvm::Type *> fields{deferred_header_};
-    const auto &captures = facts_.front()->at(&expr).captures;
-    for (const auto *facts : facts_)
-      if (facts->at(&expr).captures != captures) throw std::logic_error("inconsistent checked catch captures");
-    fields.insert(fields.end(), body.kind == Expression::Kind::block ? captures.size() : prepared_count(body), scalar_);
-    scope.deferred.push_back({&expr, llvm::StructType::get(context_, fields)});
+    std::set<std::set<size_t>> layouts;
+    for (const auto *facts : facts_) layouts.insert(facts->at(&expr).captures);
+    for (const auto &captures : layouts) {
+      std::vector<llvm::Type *> fields{deferred_header_};
+      fields.insert(fields.end(), body.kind == Expression::Kind::block ? captures.size() : prepared_count(body), scalar_);
+      scope.deferred.push_back({&expr, llvm::StructType::get(context_, fields), captures});
+    }
   }
   void complete_cleanup(const std::function<void()> &emit, bool handles_failure = false) {
     // Suspend the pending completion while cleanup executes its own control flow.
@@ -606,10 +608,19 @@ class LLVMEmission {
       auto *run = block("defer.invoke");
       dispatch->addCase(integer(i), run);
       b_.SetInsertPoint(run);
+      const auto all_facts = facts_;
+      const auto all_contexts = frame_types_;
+      facts_.clear(); frame_types_.clear();
+      for (size_t j = 0; j < all_facts.size(); ++j)
+        if (all_facts[j]->at(descriptor.action).captures == descriptor.captures &&
+            (body.kind == Expression::Kind::block || all_facts[j]->at(&body).type != Type::never)) {
+          facts_.push_back(all_facts[j]);
+          if (!all_contexts.empty()) frame_types_.push_back(all_contexts.at(j));
+        }
       if (body.kind == Expression::Kind::block) {
         std::vector<std::pair<size_t, llvm::AllocaInst *>> bindings;
         size_t field = 1;
-        for (const auto id : facts_.front()->at(descriptor.action).captures) {
+        for (const auto id : descriptor.captures) {
           auto *captured = slot(scalar_, "defer.caught");
           b_.CreateStore(b_.CreateLoad(scalar_, b_.CreateStructGEP(descriptor.layout, record, field++)), captured);
           bindings.emplace_back(id, storage_.at(id));
@@ -622,6 +633,7 @@ class LLVMEmission {
           else emit_finally(*descriptor.action, true, true, pending_failure);
         }, descriptor.action->children.size() > 1);
         for (const auto &[id, place] : bindings) storage_[id] = place;
+        facts_ = all_facts; frame_types_ = all_contexts;
         b_.CreateBr(scope.cleanup);
         continue;
       }
@@ -630,13 +642,6 @@ class LLVMEmission {
         arguments.push_back(b_.CreateLoad(scalar_, b_.CreateStructGEP(descriptor.layout, record, j + 1)));
       // Prepared values and checked borrowed addresses do not refer into their record.
       b_.CreateCall(release, {record});
-      const auto all_facts = facts_;
-      const auto all_contexts = frame_types_;
-      facts_.clear(); frame_types_.clear();
-      for (size_t j = 0; j < all_facts.size(); ++j) if (all_facts[j]->at(&body).type != Type::never) {
-        facts_.push_back(all_facts[j]);
-        if (!all_contexts.empty()) frame_types_.push_back(all_contexts.at(j));
-      }
       auto *result = invoke(body, arguments);
       release_value(b_.CreateExtractValue(result, 0));
       if (facts_.front()->at(&body).callable_call) release_value(arguments.front());
@@ -784,12 +789,13 @@ class LLVMEmission {
   }
   template <typename Key, typename Emit>
   llvm::Value *contextual_value(const Expression &expr, const std::map<Key, std::vector<size_t>> &alternatives,
-                                 const std::string &label, const Emit &emit) {
+                                 const std::string &label, const Emit &emit, llvm::Type *result_type = nullptr) {
     if (alternatives.size() == 1) return emit(alternatives.begin()->first);
+    if (!result_type) result_type = scalar_;
     const auto all_facts = facts_;
     const auto all_contexts = frame_types_;
     auto *join = block(label + ".prepared");
-    auto *saved = environments_ ? owned_slot(*temporaries_, label + ".value") : nullptr;
+    auto *saved = environments_ && result_type == scalar_ ? owned_slot(*temporaries_, label + ".value") : nullptr;
     std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> incoming;
     for (const auto &[key, indices] : alternatives) {
       auto *selected = block(label + ".prepare"), *next = block(label + ".next");
@@ -813,7 +819,7 @@ class LLVMEmission {
     b_.SetInsertPoint(join);
     if (incoming.empty()) { b_.CreateUnreachable(); return nullptr; }
     if (saved) { auto *value = load(saved); value_owners_[value] = saved; return value; }
-    auto *value = b_.CreatePHI(scalar_, incoming.size(), label + ".value");
+    auto *value = b_.CreatePHI(result_type, incoming.size(), label + ".value");
     for (const auto &[prepared, from] : incoming) value->addIncoming(prepared, from);
     return value;
   }
@@ -972,9 +978,15 @@ class LLVMEmission {
       return pack(llvm::ConstantFP::get(native_type(fact.type), text), fact.type);
     }
     case K::name: {
-      auto *address = !bindings_.at(*fact.binding) ? static_cast<llvm::Value *>(storage_.at(*fact.place)) : load(bindings_.at(*fact.binding));
-      if (fact.snapshot && bindings_.at(*fact.binding))
-        address = b_.CreateSelect(b_.CreateICmpEQ(address, null_pointer()), null_pointer(), storage_.at(*fact.captured_place));
+      std::map<std::optional<size_t>, std::vector<size_t>> alternatives;
+      for (size_t i = 0; i < facts_.size(); ++i) alternatives[facts_[i]->at(&expr).captured_place].push_back(i);
+      auto *address = contextual_value(expr, alternatives, "storage.address", [&](std::optional<size_t> captured) {
+        const auto &selected = facts_.front()->at(&expr);
+        auto *address = !bindings_.at(*selected.binding) ? static_cast<llvm::Value *>(storage_.at(*selected.place)) : load(bindings_.at(*selected.binding));
+        if (captured && bindings_.at(*selected.binding))
+          address = b_.CreateSelect(b_.CreateICmpEQ(address, null_pointer()), null_pointer(), storage_.at(*captured));
+        return address;
+      }, b_.getPtrTy());
       return read ? b_.CreateLoad(scalar_, checked_address(address, expr, expr.at)) : address;
     }
     case K::unary:
@@ -1183,13 +1195,19 @@ class LLVMEmission {
     }
     case K::try_scope: return emit_finally(expr, read, discard);
     case K::deferred: {
+      std::map<std::set<size_t>, std::vector<size_t>> alternatives;
+      for (size_t i = 0; i < facts_.size(); ++i) alternatives[facts_[i]->at(&expr).captures].push_back(i);
+      if (alternatives.size() > 1)
+        return contextual_value(expr, alternatives, "defer", [&](const auto &) { return emit_expression(expr, read, discard); });
       return temporary_scope(expr.at, scalar_, [&]() -> llvm::Value * {
       const auto &body = *expr.children.front();
       std::vector<llvm::Value *> arguments;
       if (body.kind == K::block) for (const auto id : fact.captures) arguments.push_back(load(storage_.at(id)));
       else arguments = prepare_arguments(body, true);
       if (!reachable()) return nullptr;
-      auto record = std::find_if(scope_->deferred.begin(), scope_->deferred.end(), [&](const Deferred &entry) { return entry.action == &expr; });
+      auto record = std::find_if(scope_->deferred.begin(), scope_->deferred.end(), [&](const Deferred &entry) {
+        return entry.action == &expr && entry.captures == fact.captures;
+      });
       if (record == scope_->deferred.end()) throw std::logic_error("uncollected deferred action");
       auto *status = slot(b_.getInt64Ty(), "defer.status");
       b_.CreateStore(integer(0), status);

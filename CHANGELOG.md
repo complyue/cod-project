@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Contextual deferred capture storage
+
+<a id="k-638"></a>
+**K-638 — Deferred capture continuity.** Agent assessment: registry r638→639 and source reference259→260 continue D-17r54/C-63/P-235/P-236/P-321–P-324, D-14's local storage constraints, D-18r90's native value/recursion scope and D-21r11/D-26r9/H-409's local selection contract under charter §§3.3/6.3/12. Checked generic contexts retain their own caught-bit records and snapshot/local addresses within shared native methods. Acceptance covers nested registration, causes, nullness, completion, exact record/image cleanup and direct versus shared execution. No owner union, lifetime extension, ordinary-cell capture, public ABI, wider proof or pending mechanism is qualified. Prior capability reference: `e829605ff4ee8631885412015a7e3eab6f3b6af8:tests/cod/language/README.md`.
+
 ## 2026-11-13 — Loop setup and completion evidence
 
 <a id="k-637"></a>

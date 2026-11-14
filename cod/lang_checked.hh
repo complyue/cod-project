@@ -83,7 +83,6 @@ struct CheckedOperation {
   bool initializes = false;
   std::set<size_t> exceptions;
   std::set<size_t> captures;
-  bool snapshot = false;
   std::optional<size_t> captured_place;
   bool initialized_target = false;
   bool mixed_view = false;
@@ -1939,7 +1938,6 @@ class ScalarChecker {
       if (place == null_target) continue;
       if (delayed_controls_.contains(place)) fail(expr.at, "a deferred block cannot capture loop-control binding '" + expr.text + "'");
       const bool captured = capture_catch(place);
-      operation.snapshot = operation.snapshot || captured;
       if (captured) operation.captured_place = place;
       if (read && !operation.initialized_target) require_initialized(place, expr.at, expr.text);
       if (operation.type.kind == Type::exception) {
@@ -3093,20 +3091,6 @@ public:
         for (size_t i = 0; i < instance.bindings.size(); ++i)
           if (instance.bindings[i].value_binding != first.bindings[i].value_binding || instance.bindings[i].alias != first.bindings[i].alias)
             implementation_gap(method.source->at, "generic instances with different lexical binding layouts");
-        const auto capture_bindings = [](const CheckedInstance &instance, const std::set<size_t> &places) {
-          std::set<size_t> result;
-          for (const auto place : places) result.insert(instance.storage.at(place).binding);
-          return result;
-        };
-        const auto captured_binding = [](const CheckedInstance &instance, std::optional<size_t> place) -> std::optional<size_t> {
-          return place ? std::optional<size_t>{instance.storage.at(*place).binding} : std::nullopt;
-        };
-        for (const auto &[expr, operation] : instance.operations) {
-          const auto &baseline = first.operations.at(expr);
-          if (capture_bindings(instance, operation.captures) != capture_bindings(first, baseline.captures) ||
-              operation.snapshot != baseline.snapshot || captured_binding(instance, operation.captured_place) != captured_binding(first, baseline.captured_place))
-            implementation_gap(expr->at, "generic instances with different deferred capture layouts");
-        }
       }
     }
     return std::move(program_);
