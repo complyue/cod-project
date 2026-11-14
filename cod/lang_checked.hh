@@ -317,6 +317,20 @@ class ScalarChecker {
     ArgumentMode mode = ArgumentMode::value;
     std::optional<Type> view;
   };
+  struct NamedFamily {
+    std::vector<size_t> methods;
+    const CheckedInstance *context = nullptr;
+    const std::vector<Type> &retained_types() const {
+      static const std::vector<Type> empty;
+      return context ? context->retained_types : empty;
+    }
+  };
+  NamedFamily named_family(const std::string &name) const {
+    if (checking_method_ && lexical_methods_.contains(checking_method_->source) && name == checking_method_->source->name)
+      return {{checking_instance_->method}, checking_instance_};
+    const auto found = families_.find(name);
+    return found == families_.end() ? NamedFamily{} : NamedFamily{found->second};
+  }
   ArgumentPreparation argument_preparation(const Expression &expr, const std::vector<Type> &prefix,
                                             const std::vector<ArgumentEvidence> &evidence, const std::vector<CheckedOperation> &views) const {
     if (expr.intrinsic) return {};
@@ -328,11 +342,12 @@ class ScalarChecker {
     for (size_t i = 0; i < views.size(); ++i) { access[i] = views[i].read_only; owners[i] = one_owner(views[i]); }
     bool complete = true;
     for (size_t i = prefix.size(); i < evidence.size(); ++i) complete = complete && evidence[i].type.has_value();
-    if (const auto family = families_.find(expr.text); family != families_.end()) for (const auto id : family->second) {
+    const auto family = named_family(expr.text);
+    for (const auto id : family.methods) {
       const auto &candidate = program_.methods[id];
       if (candidate.parameters.size() != expr.children.size() || !admits_access(candidate, access) ||
           match_owners(candidate, owners) == OwnerMatch::mismatch) continue;
-      auto bindings = match_prefix(candidate, prefix);
+      auto bindings = match_prefix(candidate, prefix, family.retained_types());
       if (!bindings) continue;
       bool matches = true;
       for (size_t i = prefix.size(); i < evidence.size(); ++i)
@@ -1244,13 +1259,10 @@ class ScalarChecker {
     return demand(best.front(), arguments, at, environment, retained);
   }
   size_t select(const Expression &expr, const std::vector<Type> &arguments, const Access &access, const Owners &owners) {
-    if (checking_method_ && lexical_methods_.contains(checking_method_->source) && expr.text == checking_method_->source->name) {
-      return select_family({lexical_methods_.at(checking_method_->source)}, arguments, expr.at, expr.text,
-                           checking_instance_->environment, checking_instance_->retained_types, access, owners);
-    }
-    const auto family = families_.find(expr.text);
-    if (family == families_.end()) fail(expr.at, "unknown callable '" + expr.text + "'");
-    return select_family(family->second, arguments, expr.at, expr.text, {}, {}, access, owners);
+    const auto family = named_family(expr.text);
+    if (family.methods.empty()) fail(expr.at, "unknown callable '" + expr.text + "'");
+    return select_family(family.methods, arguments, expr.at, expr.text,
+        family.context ? family.context->environment : std::vector<Type>{}, family.retained_types(), access, owners);
   }
   bool applicable_operation(const std::string &name, const std::vector<Type> &arguments, const Access &access = {}, const Owners &owners = {}) const {
     const auto family = families_.find(name);
@@ -1555,17 +1567,11 @@ class ScalarChecker {
       if (expr.text == "cause_at" && (expr.intrinsic || !families_.contains(expr.text))) return exception_type(0);
       if (!complete) return {};
       std::vector<size_t> applicable;
-      std::vector<Type> retained;
-      if (!expr.intrinsic) {
-        if (checking_method_ && lexical_methods_.contains(checking_method_->source) && expr.text == checking_method_->source->name) {
-          retained = checking_instance_->retained_types;
-          const auto id = lexical_methods_.at(checking_method_->source);
-          if (match(program_.methods[id], arguments, retained) && admits_access(program_.methods[id], access) &&
-              match_owners(program_.methods[id], owners) != OwnerMatch::mismatch) applicable.push_back(id);
-        } else if (const auto family = families_.find(expr.text); family != families_.end())
-          for (const auto id : family->second) if (match(program_.methods[id], arguments) && admits_access(program_.methods[id], access) &&
-              match_owners(program_.methods[id], owners) != OwnerMatch::mismatch) applicable.push_back(id);
-      }
+      const auto family = expr.intrinsic ? NamedFamily{} : named_family(expr.text);
+      const auto &retained = family.retained_types();
+      for (const auto id : family.methods)
+        if (match(program_.methods[id], arguments, retained) && admits_access(program_.methods[id], access) &&
+            match_owners(program_.methods[id], owners) != OwnerMatch::mismatch) applicable.push_back(id);
       if (applicable.empty() && eager_operation(expr.text)) {
         const auto types = eager_types(expr, arguments);
         return types.error.empty() ? std::optional<Type>{types.result} : std::nullopt;
@@ -1613,22 +1619,7 @@ class ScalarChecker {
   std::vector<ArgumentEvidence> argument_evidence(const Expression &expr) const {
     std::vector<ArgumentEvidence> result(expr.children.size());
     if (expr.intrinsic) return result;
-    const auto family = families_.find(expr.text);
-    if (family == families_.end()) return result;
-    std::vector<ArgumentMode> modes;
-    std::optional<size_t> baseline;
-    bool needed = false;
-    for (const auto id : family->second) {
-      const auto &parameters = program_.methods[id].source->parameters;
-      if (parameters.size() != expr.children.size()) continue;
-      if (!baseline) baseline = id;
-      else needed = needed || !same_access(program_.methods[*baseline], program_.methods[id]) ||
-          !implies_owners(program_.methods[*baseline], program_.methods[id]) || !implies_owners(program_.methods[id], program_.methods[*baseline]);
-      if (modes.empty()) for (const auto &parameter : parameters) modes.push_back(argument_mode(parameter));
-      for (size_t i = 0; i < parameters.size(); ++i)
-        needed = needed || modes[i] != argument_mode(parameters[i]) || (eager_operation(expr.text) && modes[i] != ArgumentMode::value);
-    }
-    if (!needed) return result;
+    if (named_family(expr.text).methods.empty()) return result;
     TypeEvidenceState state;
     state.current_owner = std::find_if(lexical_.scopes.rbegin(), lexical_.scopes.rend(), [](const auto &scope) { return scope.declarations; })->id;
     for (const auto &scope : lexical_.scopes) for (const auto &[name, id] : scope.bindings) {

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-13 — Shared callable signature preparation
+
+<a id="k-634"></a>
+**K-634 — Signature preparation continuity.** Agent assessment: registry r634→635 and source reference255→256 continue D-18r90/H-337–H-344/P-299/P-301/P-302, D-14's confirmed passing/owner/initialization rules, D-17r54's ordered preparation and D-21r11/D-26r9's native coverage under charter §§2–3/6.3/12. One named-method lookup preserves lexical recursive context across evidence, preparation and selection; existing structural relations use available later operand types for concrete callable views. Acceptance preserves evaluation order, ref/ptr/read borrows, captures, checked failures, exact cleanup and native recursion in both execution modes. No new inference, variance, numeric compatibility, lifetime or ABI contract is selected; pending D-23/D-27 and fraction/pure/TCO boundaries remain. Prior capability reference: `9da20f930607f9772605cba6d488b2f534b94923:tests/cod/language/README.md`.
+
 ## 2026-11-13 — Checked unknown-type exception contracts
 
 <a id="k-633"></a>
