@@ -3277,8 +3277,8 @@ class ScalarChecker {
           lexical_.lookup(expr.text).has_value() || query_environment().symbol_shadows.contains(expr.text),
           instance ? std::optional<size_t>{instance->method} : std::nullopt);
       const auto &symbol = program_.symbols[*operation.symbol];
-      if (!symbol.type || (!scalar_type(*symbol.type) && symbol.type->kind != Type::procedure))
-        implementation_gap(expr.at, "runtime symbol payload outside primitive and complete-callable values");
+      if (!symbol.type || !lexical_value_type(*symbol.type))
+        implementation_gap(expr.at, "runtime symbol payload outside supported bits and complete-callable values");
       if (method && method->kind == Form::Kind::function)
         fail(expr.at, "a function cannot access dynamic bindings");
       if (expr.kind == K::effect) {
@@ -3300,6 +3300,7 @@ class ScalarChecker {
       } else {
         require_symbol(lexical_, *operation.symbol, expr.at);
         operation.type = expr.kind == K::touch ? Type{Type::void_type} : *symbol.type;
+        operation.exceptions = exception_possibilities(operation.type);
       }
       break;
     }

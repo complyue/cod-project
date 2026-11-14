@@ -12,6 +12,7 @@ from regional_runtime_tests import checked
 
 TLS_SLOTS = 1
 EXTRA_SOURCES = []
+ALLOWED_DIAGNOSTICS = ()
 SOURCE = '''
 using symbol "std:io" @print;
 symbol @context:u64;
@@ -65,7 +66,7 @@ def main():
             command = [COD, '--check', entry, '--emit-llvm', ir, '--emit-runtime', runtime]
             if general:
                 command.append('--no-specialize')
-            output, _ = checked(command, ROOT)
+            output, _ = checked(command, ROOT, ALLOWED_DIAGNOSTICS)
             assert not output
             code = ir.read_text()
             assert code.count('define i32 @main()') == 1

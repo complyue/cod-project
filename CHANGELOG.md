@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Exception-valued dynamic bindings
+
+<a id="k-670"></a>
+**K-670 — Exception-binding continuity.** Agent assessment under H-269/H-277–H-281/H-286/H-356/H-365/H-420, P-236/P-248/P-252, D-10r147/D-17r57/D-18r91 and charter §§2/3.2/5.3/6.3/12: registry r677→678 and source reference291→292 record intrinsic-exception TLS values through the existing bits classification, complete captures and scope restoration. Preserve immutable payloads/causes, actual categories, checked throws, current-versus-captured calls, deferred timing and execution-local cause lifetime. Acceptance covers checked native delivery, nested/returned captures, failed chaining/copy/registration, allocation-free reads/replay and thread isolation. No eager cause collection, cross-execution identity, regional storage/copy, new result defaults or fraction mechanism. Prior capability reference: `0de1df90a94e6c58d245499bc0d0c149cab3a538:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Complete dynamic captures and callable replay
 
 <a id="k-669"></a>
