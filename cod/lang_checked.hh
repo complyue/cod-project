@@ -50,6 +50,9 @@ inline bool transfers_bits(const Type &source, const Type &target) { return wide
 inline bool transfers_value(const Type &from, const Type &to) {
   return from.kind == Type::procedure || to.kind == Type::procedure ? from == to : transfers_bits(from, to);
 }
+inline bool accepts_argument(const Type &source, const Type &target, ArgumentMode mode) {
+  return mode == ArgumentMode::value ? transfers_value(source, target) : source == target || accepts_exception(source, target);
+}
 inline std::set<size_t> exception_possibilities(const Type &type) {
   if (type.kind != Type::exception) return {};
   if (type.identity) return {type.identity};
@@ -1424,6 +1427,26 @@ class ScalarChecker {
                                           const std::vector<Type> &retained = {}) {
     return method.parameters.size() == arguments.size() ? match_prefix(method, arguments, retained) : std::nullopt;
   }
+  bool widening_candidate(const std::vector<size_t> &family, const std::vector<Type> &arguments,
+                           const std::vector<Type> &retained = {}, const Access &access = {}, const Owners &owners = {},
+                           const TypeEvidenceState *state = nullptr) const {
+    // Until method-selection widening is proved, it must not permit builtin
+    // fallback. Concrete value parameters may widen; same-T and views may not.
+    return std::any_of(family.begin(), family.end(), [&](size_t id) {
+      const auto &method = program_.methods[id];
+      if (method.parameters.size() != arguments.size() || method.retained_types.size() != retained.size() ||
+          !admits_access(method, access) || match_owners(method, owners, state) == OwnerMatch::mismatch) return false;
+      auto substitutions = type_context(method, retained);
+      bool widened = false;
+      for (size_t i = 0; i < arguments.size(); ++i) {
+        if (bind_type(method, method.parameters[i], arguments[i], substitutions, true)) continue;
+        if (argument_mode(method.source->parameters[i]) != ArgumentMode::value ||
+            !numeric(method.parameters[i]) || !widens(arguments[i], method.parameters[i])) return false;
+        widened = true;
+      }
+      return widened;
+    });
+  }
   static Type rigid_type(const CheckedMethod &method, const Type &type) {
     if (const auto index = binder(method, type)) return {Type::parameter, {}, *index + 1};
     auto rigid = type;
@@ -1575,6 +1598,8 @@ class ScalarChecker {
     }
     const auto best = most_specific(applicable, access, owners, state);
     if (best.empty()) {
+      if (widening_candidate(family, arguments, retained, access, owners, state))
+        implementation_gap(at, "numeric widening during method selection");
       if (access_match) fail(at, "arguments for one owner role have different actual owners");
       if (type_match) fail(at, "readonly argument cannot supply a writable borrowed parameter");
       fail(at, "no applicable method for '" + name + "' (argument types or same-T relation do not match)");
@@ -1633,6 +1658,25 @@ class ScalarChecker {
     bool unary = false, failing = false;
     std::string error;
   };
+  static std::optional<Type> common_value_type(const std::vector<Type> &values) {
+    if (values.empty()) return {};
+    auto candidates = values;
+    for (const auto kind : {Type::uint8, Type::uint32, Type::uint64, Type::integer, Type::float32, Type::float64})
+      candidates.push_back(Type{kind});
+    candidates.push_back(exception_type(0));
+    std::vector<Type> common;
+    for (const auto &candidate : candidates)
+      if (std::find(common.begin(), common.end(), candidate) == common.end() &&
+          std::all_of(values.begin(), values.end(), [&](const auto &type) { return transfers_value(type, candidate); }))
+        common.push_back(candidate);
+    std::optional<Type> least;
+    for (const auto &candidate : common)
+      if (std::all_of(common.begin(), common.end(), [&](const auto &other) { return transfers_value(candidate, other); })) {
+        if (least && *least != candidate) return {};
+        least = candidate;
+      }
+    return least;
+  }
   static EagerTypes eager_types(const Expression &expr, const std::vector<Type> &arguments) {
     EagerTypes types;
     types.unary = arguments.size() == 1 && (expr.text == "+" || expr.text == "-" || expr.text == "!");
@@ -1653,8 +1697,7 @@ class ScalarChecker {
       if (equality && left == Type::boolean && right == Type::boolean) types.operand = Type::boolean;
       else {
         if (!numeric(left) || !numeric(right)) return error("no applicable numeric operation '" + expr.text + "'");
-        if (widens(left, right)) types.operand = right;
-        else if (widens(right, left)) types.operand = left;
+        if (const auto common = common_value_type(arguments)) types.operand = *common;
         else return error("numeric operands have no lossless common type");
         if (expr.text == "%" && floating(types.operand)) return error("remainder requires integer operands");
       }
@@ -1754,21 +1797,7 @@ class ScalarChecker {
 
   static std::optional<Type> common_result(const std::vector<Type> &returns, const Location &at) {
     if (returns.empty()) return {};
-    auto candidates = returns;
-    for (const auto kind : {Type::uint8, Type::uint32, Type::uint64, Type::integer, Type::float32, Type::float64})
-      candidates.push_back(Type{kind});
-    candidates.push_back(exception_type(0));
-    std::vector<Type> common;
-    for (const auto &candidate : candidates)
-      if (std::find(common.begin(), common.end(), candidate) == common.end() &&
-          std::all_of(returns.begin(), returns.end(), [&](const auto &type) { return transfers_value(type, candidate); }))
-        common.push_back(candidate);
-    std::optional<Type> least;
-    for (const auto &candidate : common)
-      if (std::all_of(common.begin(), common.end(), [&](const auto &other) { return transfers_value(candidate, other); })) {
-        if (least && *least != candidate) fail(at, "return alternatives have no unique least common result; provide an explicit result contract");
-        least = candidate;
-      }
+    const auto least = common_value_type(returns);
     if (!least) fail(at, "return alternatives have no unique least common result; provide an explicit result contract and valid conversions");
     return least;
   }
@@ -2298,9 +2327,9 @@ class ScalarChecker {
         if (state.required && target->parameters.size() != arguments.size()) fail(expr.at, "callable argument count does not match its view");
         if (!target || target->kind != Type::procedure || !target->target || target->parameters.size() != arguments.size()) return {};
         if (state.required) for (size_t i = 0; i < arguments.size(); ++i) {
-          if (arguments[i] != target->parameters[i] && !accepts_exception(arguments[i], target->parameters[i]))
-            fail(expr.children[i + (expr.kind == K::value_call)]->at, "argument does not satisfy the callable view type");
           const auto mode = target->argument_modes.empty() ? ArgumentMode::value : target->argument_modes[i];
+          if (!accepts_argument(arguments[i], target->parameters[i], mode))
+            fail(expr.children[i + (expr.kind == K::value_call)]->at, "argument does not satisfy the callable view type");
           if (mode != ArgumentMode::value && (views[i].view != true || views[i].mixed_view))
             implementation_gap(expr.at, "borrowed parameter requires an existing view");
           if (mode != ArgumentMode::value && access[i].value_or(false) && (target->const_views.empty() || !target->const_views[i]))
@@ -2368,6 +2397,10 @@ class ScalarChecker {
       }
       if (state.required && family.methods.empty() && !eager_operation(expr.text))
         implementation_gap(expr.at, "typeof requires a known callable signature without outer value capture");
+      if (applicable.empty() && widening_candidate(family.methods, arguments, retained, access, owners, &state)) {
+        if (state.required) implementation_gap(expr.at, "numeric widening during method selection");
+        return {};
+      }
       if (applicable.empty() && eager_operation(expr.text)) {
         const auto types = eager_types(expr, arguments);
         if (state.required && !types.error.empty()) fail(expr.at, types.error);
@@ -3008,8 +3041,7 @@ class ScalarChecker {
           if (mode == ArgumentMode::value && argument.kind == Type::procedure)
             note_abrupt(expr.children[i]->at, {exception_id(ExceptionCategory::out_of_memory)});
           completes = completes && argument != Type::never;
-          if (argument != Type::never && argument != parameter && !accepts_exception(argument, parameter)) {
-            if (transfers_value(argument, parameter)) implementation_gap(expr.children[i]->at, "callable view argument adaptation");
+          if (argument != Type::never && !accepts_argument(argument, parameter, mode)) {
             fail(expr.children[i]->at, "argument does not satisfy the callable view type");
           }
           arguments.push_back(argument); views.push_back(operations.at(expr.children[i].get()));
@@ -3083,6 +3115,8 @@ class ScalarChecker {
         break;
       }
       if (eager && (expr.intrinsic || !applicable_operation(expr.text, arguments, access_of(views), owners_of(views)))) {
+        if (!expr.intrinsic && widening_candidate(named_family(expr.text).methods, arguments, {}, access_of(views), owners_of(views)))
+          implementation_gap(expr.at, "numeric widening during method selection");
         if (std::any_of(operation.arguments.begin(), operation.arguments.end(), [](const auto &argument) { return argument.mode != ArgumentMode::value; }))
           implementation_gap(expr.at, "builtin fallback requires value preparation before later operand effects");
         check_eager(expr, arguments, views, operation);

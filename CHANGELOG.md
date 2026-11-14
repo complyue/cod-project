@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Lossless numeric value preparation
+
+<a id="k-660"></a>
+**K-660 — Numeric-value continuity.** Agent assessment under H-261/P-231/H-424, D-10/D-14r91/D-17r57/D-18/D-24r7/D-26r13 and charter §§5.3/6.3/12: registry r667→668 and source reference281→282 record lossless primitive arguments through established callable views and one least-common-value calculation for builtin numeric operands and inferred results. Preserve preparation order, exact borrowed targets, semantic identity, exception/cleanup behavior and native sharing. Named-method widening stays unproved and cannot silently permit builtin fallback. D-11/D-27 whole-document qualification, quantities/fractions, D-28 layout/resize mechanisms and permanent ABI remain separate; no new language conversion or design approval. Prior capability reference: `733826b30b9880d930443a6545b249af0c977f48:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Declaration input-domain proofs
 
 <a id="k-659"></a>

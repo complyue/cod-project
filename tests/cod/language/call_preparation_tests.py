@@ -37,7 +37,7 @@ runner.CASES = {
     'cause_payload_preserved': (IO+ERRORS+'func inspect(e:SystemException)->const u64{return cause_at(e,0u64).category;}func f=inspect;val e<-try{throw missing_error() from null_error();}catch(x:const MissingReturnException){x};behave @print(f(e));behave @print(e.cause_count);',0,'4\n1\n',WARN),
     'common_to_exact_rejected': (ERRORS+'func inspect(e:MissingReturnException)->void{}func f=inspect;val e:SystemException<-missing_error();f(e);',2,'','argument does not satisfy the callable view type'),
     'different_exact_category_rejected': (ERRORS+'func inspect(e:MissingReturnException)->void{}func f=inspect;f(null_error());',2,'','argument does not satisfy the callable view type'),
-    'numeric_call_adaptation_remains_gap': ('func wide(x:f64)->const f64{return x;}func f=wide;f(1u8);',2,'','callable view argument adaptation'),
+    'numeric_call_adaptation': (IO+'func wide(x:f64)->const f64{return x;}func f=wide;behave @print(f(1u8));',0,'1\n',''),
     'nested_callable_variance_rejected': (ERRORS+'func inspect(e:MissingReturnException)->void{}func use(f:func(SystemException)->void)->void{}func u=use;u(inspect);',2,'','no applicable method'),
 }
 runner.CASE_ARGUMENTS = {}
