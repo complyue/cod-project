@@ -73,6 +73,7 @@ extern "C" void cod_lang_exception_finish() noexcept {
 }
 '''
 runner.EXPECTED_VALUES = ['41', '41', '1', '43', '44']
+runner.EXPECTED_SHADOWS = []
 runner.EXTRA_SOURCES = [Path(__file__)]
 
 if __name__ == '__main__':

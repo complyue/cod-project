@@ -374,9 +374,10 @@ class ScalarChecker {
   struct FreeBindings { std::vector<Capture> captures, queries, symbols; };
   mutable std::map<const Form *, FreeBindings> free_bindings_;
   std::map<const Form *, std::set<std::string>> free_types_;
+  std::map<const Form *, std::set<std::string>> enclosing_names_;
   std::set<const Form *> warned_captures_;
   std::set<size_t> warned_missing_return_;
-  std::set<const Expression *> warned_shadow_;
+  std::set<std::tuple<std::string, unsigned, unsigned, std::string>> warned_shadow_;
   LexicalState lexical_;
   std::vector<CheckedStorage> *storage_ = nullptr;
   std::vector<CheckedBinding> *bindings_ = nullptr;
@@ -669,9 +670,21 @@ class ScalarChecker {
     if (scope.bindings.contains(name)) fail(at, "duplicate declaration of '" + name + "' in one lexical scope");
     return scope;
   }
+  void warn_shadow(const std::string &name, const Location &at) {
+    if (!validating_) return;
+    const bool outer = lexical_.lookup(name).has_value() ||
+        (checking_method_ && (enclosing_names_[checking_method_->source].contains(name) ||
+         lexical_self(name, checking_instance_->method) || module_names().values.contains(name))) ||
+        module_names().callables.contains(name) || module_names().symbols.contains(name) ||
+        module_names().exception_types.contains(name);
+    if (outer && warned_shadow_.emplace(at.file, at.line, at.column, name).second)
+      program_.warnings.push_back({Warning::shadow, at, "declaration shadows outer binding '" + name + "'"});
+  }
   size_t bind(const std::string &name, const Type &type, const std::set<size_t> &targets,
-              bool read_only, bool value_binding, bool fixed, const Location &at, std::optional<size_t> alias = {}) {
+              bool read_only, bool value_binding, bool fixed, const Location &at, std::optional<size_t> alias = {},
+              bool source_declaration = true) {
     auto &scope = declaration_scope(name, at);
+    if (source_declaration) warn_shadow(name, at);
     const auto id = bindings_->size();
     bindings_->push_back({type, read_only, value_binding, fixed});
     bindings_->back().scope = scope.id;
@@ -692,12 +705,13 @@ class ScalarChecker {
     lexical_.bindings_available.insert(id);
     return id;
   }
-  size_t declare(const std::string &name, const Type &type, bool read_only, bool value_binding, const Location &at) {
+  size_t declare(const std::string &name, const Type &type, bool read_only, bool value_binding, const Location &at,
+                 bool source_declaration = true) {
     const auto scope = declaration_scope(name, at).id;
     const auto id = storage_->size();
     storage_->push_back({name, type, scope, read_only});
     scope_storage_[scope].push_back(id);
-    storage_->back().binding = bind(name, type, {id}, read_only, value_binding, false, at);
+    storage_->back().binding = bind(name, type, {id}, read_only, value_binding, false, at, {}, source_declaration);
     lexical_.available.insert(id);
     return id;
   }
@@ -1533,6 +1547,15 @@ class ScalarChecker {
 
   void resolve_captures(CheckedMethod &method) {
     if (method.captures_resolved) return;
+    // Diagnostic visibility is independent of runtime capture and type evidence.
+    auto &names = enclosing_names_[method.source];
+    if (checking_method_) {
+      const auto &enclosing = enclosing_names_[checking_method_->source];
+      names.insert(enclosing.begin(), enclosing.end());
+      if (!checking_method_->source->name.empty()) names.insert(checking_method_->source->name);
+    }
+    for (const auto &scope : lexical_.scopes) for (const auto &[name, id] : scope.bindings)
+      names.insert(name);
     const ModuleLookup lookup(module_, method.module), context(interpretation_, method.interpretation);
     const auto &source = *method.source;
     const auto &free = free_bindings(source).captures;
@@ -3851,9 +3874,6 @@ class ScalarChecker {
           fail(declaration->at, "readonly source cannot initialize a writable reference target");
         if (!borrowed && !initialized && expr.declaration_kind == "ref")
           fail(declaration->at, "ref requires definitely initialized target storage");
-        if (lexical_.lookup(declaration->text) && !lexical_.scopes.back().bindings.contains(declaration->text) &&
-            validating_ && warned_shadow_.insert(declaration.get()).second)
-          program_.warnings.push_back({Warning::shadow, declaration->at, "declaration shadows outer binding '" + declaration->text + "'"});
         const bool read_only = declaration->read_only || (value && expr.fixed_binding) || (completes && borrowed && source.read_only);
         std::optional<size_t> place;
         if (borrowed) {
@@ -3905,9 +3925,6 @@ class ScalarChecker {
         fail(expr.at, "alias annotation requires the exact selected type");
       if (expr.annotation && !expr.read_only && source.read_only)
         fail(expr.at, "readonly source cannot supply a writable alias target");
-      if (lexical_.lookup(expr.text) && !lexical_.scopes.back().bindings.contains(expr.text) &&
-          validating_ && warned_shadow_.insert(&expr).second)
-        program_.warnings.push_back({Warning::shadow, expr.at, "declaration shadows outer binding '" + expr.text + "'"});
       const auto canonical = source.binding ? source.binding : slots.size() == 1 ? std::optional<size_t>{*slots.begin()} : std::nullopt;
       const auto id = bind(expr.text, type, canonical ? std::set<size_t>{} : source.targets,
           source.read_only || expr.read_only || (selected.value_binding && expr.fixed_binding),
@@ -4343,7 +4360,7 @@ class ScalarChecker {
       }
       for (size_t c = 0; c < instance.environment.size(); ++c) {
         const auto &capture = checking_method_->captures[c];
-        const auto id = declare(capture.name, instance.environment[c], false, true, capture.at);
+        const auto id = declare(capture.name, instance.environment[c], false, true, capture.at, false);
         instance.frame.captures.push_back(id);
         storage_->at(id).captured = true;
         bindings_->back().callable_value = true;

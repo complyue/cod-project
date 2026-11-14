@@ -59,6 +59,38 @@ runner.CASES={
  'expired_owner_rejected':(PRE+ID+'ptr p={{val x<-7;identity(x)}};'+OBS('p'),2,'','owner has ended'),
 }
 runner.CASE_ARGUMENTS={}
+runner.CASE_SHADOWS = {
+    'direct_identity': ['x'],
+    'ref_from_forwarded_nonnull': ['x'],
+    'selected_identity': ['x'],
+    'captured_identity': ['x'],
+    'higher_order_identity': ['x', 'f', 'x'],
+    'nested_results': ['x'],
+    'recursive_identity': ['x'],
+    'mutual_identity': ['x', 'x'],
+    'generic_identity': ['x'],
+    'renamed_local_alias': ['x', 'p'],
+    'conditional_inputs': ['x', 'y'],
+    'unused_nullable_input': ['x'],
+    'forwarded_null_remains_null': ['x'],
+    'forwarded_null_caught': ['x'],
+    'swap_input_forwarding': ['x', 'y'],
+    'swap_uses_second_null_origin': ['x'],
+    'recursive_reordered_inputs': ['x'],
+    'nonnull_refinement': ['x'],
+    'later_rebind_preserves_prepared_argument': ['x'],
+    'finally_preserves_return_selection': ['x'],
+    'deferred_return': ['x'],
+    'loop_forwarding': ['x', 'p'],
+    'null_branch_fallback': ['x'],
+    'deferred_preserved_return': ['x'],
+    'finalizer_replaces_null': ['x'],
+    'refined_nullable_formal': ['x', 'x'],
+    'guarded_return': ['x'],
+    'unrelated_null_implementation': ['x', 'x'],
+    'unrelated_null_ref_target': ['x', 'x'],
+    'unrelated_null_ref_argument': ['x', 'x', 'x'],
+}
 runner.EXTRA_SOURCES=[Path(__file__)]
 if __name__=='__main__':
     raise SystemExit(runner.main())

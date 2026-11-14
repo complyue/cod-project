@@ -32,6 +32,9 @@ runner.CASES = {
     }, 0, '1\n7\n', ''),
 }
 runner.CASE_ARGUMENTS = {}
+runner.CASE_SHADOWS = {
+    'nested_callable_capture': ['f'],
+}
 runner.EXTRA_SOURCES = [Path(__file__)]
 
 if __name__ == '__main__':

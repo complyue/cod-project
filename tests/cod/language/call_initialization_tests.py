@@ -67,5 +67,33 @@ runner.CASES={
     'replacement_return_cannot_erase_read': (PRE+'func f(ptr x:i64 in O)->const i64 throws NullPointerException where {owner O}{try{x;{}}finally{return 1;};}val x<-make local i64;try{f(x);{}}catch(e:const NullPointerException){};',2,'',UNPROVED),
     'finally_guarantee_on_exception': (PRE+MISS+'proc f(ptr x:i64 in O)->void throws NullPointerException where {owner O}{try{missing();{}}finally{x<-69;{}};}val x<-make local i64;try{f(x);}catch(e:const MissingReturnException){behave @print(x);}catch(e:const NullPointerException){};',0,'69\n',WARN),
 }
+runner.CASE_SHADOWS = {
+    'initializes_caller': ['x'],
+    'read_initialized_input': ['x'],
+    'null_test_needs_no_payload': ['x'],
+    'write_covers_later_read': ['x'],
+    'forwarded_writes': ['x', 'x'],
+    'forwarded_alias_order': ['x', 'x'],
+    'later_argument_initializes_before_entry': ['x'],
+    'branch_write_guarantee': ['x'],
+    'specific_failed_exit_keeps_write': ['x'],
+    'return_write': ['x'],
+    'borrowed_ref_return_after_write': ['x'],
+    'uninitialized_ptr_result_forwarding': ['x'],
+    'recursive_write': ['x'],
+    'mutual_recursive_write': ['x', 'x'],
+    'argument_rebind_does_not_redirect_write': ['b'],
+    'deferred_callee_write': ['x'],
+    'deferred_caller_write': ['x'],
+    'delayed_call_read_after_body_write': ['x'],
+    'deferred_read_after_successful_write': ['x'],
+    'finally_write': ['x'],
+    'guarded_body_write_before_deferred_read': ['x'],
+    'deferred_alias_order': ['x'],
+    'initialized_ptr_result': ['x'],
+    'uninitialized_view_can_be_forwarded': ['x'],
+    'missing_return_after_cleanup_write': ['x'],
+    'finally_guarantee_on_exception': ['x'],
+}
 runner.EXTRA_SOURCES=[Path(__file__)]
 if __name__=='__main__':sys.exit(runner.main())

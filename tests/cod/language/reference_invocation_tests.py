@@ -42,6 +42,13 @@ runner.CASES = {
     'deferred_slot_swap_boundary': ('ptr p=1,q=2;defer intrinsic (<=>)(p,q);', 2, '', 'deferred reference-swap intrinsics'),
 }
 runner.CASE_ARGUMENTS = {}
+runner.CASE_SHADOWS = {
+    'late_rebinding': ['x'],
+    'generic_nullable_borrow': ['p'],
+    'recursive_borrow': ['p'],
+    'swap_saved_slots': ['x'],
+    'swap_cleanup_before_invocation': ['x'],
+}
 runner.EXTRA_SOURCES = [Path(__file__)]
 
 if __name__ == '__main__':

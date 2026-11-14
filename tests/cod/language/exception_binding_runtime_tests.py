@@ -68,6 +68,7 @@ runner.HARNESS = runner.HARNESS.replace('if(value==9000)', '''if(value==9070){as
 runner.HARNESS = runner.HARNESS.replace('creation_failures==1', 'creation_failures==0').replace('copy_failures==3', 'copy_failures==1').replace('largest>4000', 'largest>0')
 runner.HARNESS = runner.HARNESS.replace('  cod_finish();', '  assert(!deny_chain && chain_calls==6 && chain_failures==1 && cod_causes->size()==5);\n  cod_finish();assert(!cod_causes);')
 runner.EXPECTED_VALUES = ['1000', '0', '1', '1', '0', '1', '1', '1', '0', '1']
+runner.EXPECTED_SHADOWS = []
 runner.EXTRA_SOURCES += [Path(__file__)]
 
 if __name__ == '__main__':

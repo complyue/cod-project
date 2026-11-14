@@ -51,6 +51,21 @@ for name, (source, status, output, diagnostic) in list(runner.CASES.items()):
     if ERROR in source and status == 0:
         runner.CASES[name] = (source, status, output, '[-Wmissing-return]')
 runner.CASE_ARGUMENTS = {}
+runner.CASE_SHADOWS = {
+    'common_exception_actual_identity': ['e', 'e', 'e', 'e'],
+    'common_method_parameter_preparation': ['e', 'e', 'e'],
+    'common_exception_through_generic_caller': ['e', 'e', 'e', 'e', 'e'],
+    'common_exception_through_holder': ['e', 'p', 'e', 'e', 'e'],
+    'common_exception_joint_identity': ['a', 'b', 'a', 'b'],
+    'common_exception_deferred_snapshot': ['e', 'e', 'e', 'e'],
+    'common_exception_complete_capture': ['e', 'x', 'e', 'e', 'e'],
+    'borrowed_return_alias': ['x'],
+    'borrowed_readonly_return': ['x'],
+    'independent_owner_roles': ['x'],
+    'borrowed_writer_initializes': ['x'],
+    'borrowed_address_before_argument_effect': ['x'],
+    'borrowed_deferred_late_payload': ['x'],
+}
 runner.EXTRA_SOURCES = [Path(__file__)]
 
 if __name__ == '__main__':

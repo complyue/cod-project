@@ -45,6 +45,7 @@ runner.HARNESS=runner.HARNESS.replace('  if(value==9000)', '''  if(value==9090){
   if(value==9091){assert(query_record && query_records==1);query_record=false;return;}
   if(value==9000)''')
 runner.EXPECTED_VALUES+=['36','37','39','2','3','4','38']
+runner.EXPECTED_SHADOWS = []
 runner.EXTRA_SOURCES+=[Path(fixture.__file__),Path(__file__)]
 if __name__=='__main__':
  raise SystemExit(runner.main())

@@ -85,6 +85,11 @@ runner.CASES = {
     'alias_does_not_promote_cell_capture': ('proc run()->void{val x<-1;var a->x;func f=func[a]()->const i64{return a;};}run();',2,'','capture of ordinary lexical cells'),
 }
 runner.CASE_ARGUMENTS = {}
+runner.CASE_SHADOWS = {
+    'alias_result_preserves_owner': ['x'],
+    'default_parameter_is_independent': ['x'],
+    'borrowed_parameter_alias': ['x', 'y'],
+}
 runner.EXTRA_SOURCES = [Path(__file__)]
 if __name__ == '__main__':
     raise SystemExit(runner.main())

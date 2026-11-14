@@ -84,6 +84,19 @@ runner.CASES.update({
  'abrupt_argument_keeps_signature': (IO+'func f(x:f64,y:u64)->f64{return x;}proc run()->u64{f({return 7u64;1u8},2u8);return 0u64;}behave @print(run());',0,'7\n',''),
 })
 runner.CASE_ARGUMENTS = {}
+runner.CASE_SHADOWS = {
+    'readonly_numeric_specificity': ['x', 'x'],
+    'owner_and_numeric_specificity': ['a', 'b', 'a', 'b'],
+    'different_owners_choose_wider_method': ['a', 'a'],
+    'copied_parameter_local_mutation': ['x'],
+    'snapshot_before_later_mutation': ['x'],
+    'borrowed_parameter_keeps_target': ['y'],
+    'read_before_later_effect': ['x'],
+    'borrowed_result_keeps_owner': ['y'],
+    'deferred_snapshot': ['x'],
+    'deferred_borrow_stays_late': ['x', 'y'],
+    'type_query_does_not_read': ['x'],
+}
 runner.EXTRA_SOURCES = [Path(__file__)]
 if __name__ == '__main__':
     raise SystemExit(runner.main())

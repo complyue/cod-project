@@ -54,6 +54,28 @@ runner.CASES = {
  'captured_type_context':(IO+PICK+'func number()->const i64{return 0;}func truth()->const bool{return false;}func factory(f:func()->const T)->func(i64)->const i64 where T{return func[f](x:i64)->const i64{return pick(f(),x);};}behave @print(factory(truth)(1));behave @print(factory(number)(1));',0,'2\n11\n',''),
 }
 runner.CASE_ARGUMENTS = {}
+runner.CASE_SHADOWS = {
+    'direct_borrow_and_copy': ['x', 'x'],
+    'generic_preparation_modes': ['x', 'x', 'x'],
+    'reverse_demand_order': ['x', 'x', 'x'],
+    'borrowed_alias': ['x', 'x', 'x'],
+    'ordered_effectful_prefix': ['tag', 'x', 'tag', 'x'],
+    'generic_effectful_operand': ['x', 'x', 'x'],
+    'scope_cleanup_respects_preparation_mode': ['x', 'x', 'x'],
+    'repeated_binder_prefix': ['x', 'x'],
+    'generic_recursive_modes': ['x', 'x', 'x'],
+    'deferred_late_borrow_and_saved_copy': ['x', 'x', 'x'],
+    'loop_accumulated_preparations': ['x', 'x', 'x'],
+    'borrowed_ptr_initialization': ['x', 'x', 'x'],
+    'null_borrow_before_later_effect': ['x', 'x', 'x'],
+    'null_value_read_before_later_effect': ['x', 'x', 'x'],
+    'both_null_modes_in_shared_body': ['x', 'x', 'x'],
+    'borrowed_read_preserves_early_read': ['x', 'x', 'x'],
+    'copy_retains_independence_from_readonly': ['x', 'x'],
+    'current_argument_selects_mode': ['x', 'x'],
+    'later_argument_selects_mode': ['x', 'x'],
+    'contextual_callable_view': ['f', 'f'],
+}
 runner.EXTRA_SOURCES = [Path(__file__)]
 if __name__ == '__main__':
     raise SystemExit(runner.main())

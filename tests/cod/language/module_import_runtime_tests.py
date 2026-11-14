@@ -10,6 +10,7 @@ runner.SOURCE_FILES = {'library.cod': definitions + ''.join('export ' + name + '
 runner.SOURCE = ('using "std:exceptions" OutOfMemory;using "std:exceptions" MissingReturnException;'
                  + ''.join('import "library.cod" ' + name + ';' for name in exports)
                  + '{{func f=wrap(wrap(base));' + execution)
+runner.EXPECTED_SHADOWS = []
 runner.EXTRA_SOURCES += [Path(__file__)]
 
 if __name__ == '__main__':

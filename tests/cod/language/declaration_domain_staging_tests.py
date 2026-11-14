@@ -4,6 +4,7 @@ from pathlib import Path
 import operator_declaration_staging_tests as runner
 
 IO = runner.IO
+runner.CASE_SHADOWS = {'owners': ['x', 'y'], 'value_access': ['x'], 'borrowed_access': ['x']}
 runner.CASES = (
     ('owners', 'func choose(ref x:i64 in A,ref y:i64 in B)->ref i64 in B where {owner A,owner B};',
      '->ref i64 in O', ' where {owner O}{',

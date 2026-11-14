@@ -48,6 +48,7 @@ observe(9000u64);
 '''
 runner.HARNESS=runner.HARNESS.replace('checkpoints==5','checkpoints==7').replace('copy_failures==3','copy_failures==4').replace('  assert(value!=9999);', '  if(value==9060){assert(deny_record && record_failures==1 && images.size()==live_baseline);deny_record=false;return;}\n  assert(value!=9999);')
 runner.EXPECTED_VALUES += ['21','20','2','23','3','4','3','4','3','8','9','6']
+runner.EXPECTED_SHADOWS = []
 runner.EXTRA_SOURCES += [Path(fixture.__file__),Path(__file__)]
 if __name__=='__main__':
     raise SystemExit(runner.main())

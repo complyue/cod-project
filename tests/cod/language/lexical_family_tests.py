@@ -62,6 +62,11 @@ runner.CASES = {
         'func held:func(SystemException)->u64=func(e:T)->u64 where T{return tag(e);};val e:SystemException<-error();behave @print(held(e));', 0, '7\n', '[-Wmissing-return]'),
 }
 runner.CASE_ARGUMENTS = {}
+runner.CASE_SHADOWS = {
+    'deferred_actual_input_snapshot': ['x', 'x', 'x', 'x', 'x', 'x', 'x'],
+    'borrowed_result_retains_owner': ['x'],
+    'common_exception_actual_identity': ['e', 'e', 'e', 'e'],
+}
 runner.EXTRA_SOURCES = [Path(__file__)]
 
 if __name__ == '__main__':

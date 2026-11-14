@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
-from foundation_tests import ROOT, MODE, COD
+from foundation_tests import ROOT, MODE, COD, shadow_diagnostics
 from callable_value_staging_tests import inventory
 
 IO = 'using symbol "std:io" @print;'
@@ -50,8 +50,9 @@ def main():
                 replacement = ' ' * (len(annotation) - 1) + '{' if name == 'fixed' else ' ' * len('->ref i64 in B ') + 'where'
                 inferred = explicit.replace(annotation, replacement)
                 left, right = run(explicit, general), run(inferred, general)
+                matched, remaining = shadow_diagnostics(left['stderr'], ['x', 'x'] if name == 'borrowed_cleanup' else [])
                 record(mode + '/' + name + '_identical_ir', left == right and left['exit'] == 0
-                       and left['stdout'] == expected and not left['stderr'] and bool(left['ir']),
+                       and left['stdout'] == expected and matched and not remaining and bool(left['ir']),
                        explicit={k:v for k,v in left.items() if k!='ir'}, contextual={k:v for k,v in right.items() if k!='ir'},
                        identical_ir=left['ir'] == right['ir'])
             base = run(SHARED, general)

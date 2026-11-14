@@ -73,6 +73,14 @@ runner.CASES = {
  'executable_pack_boundary': ('func f(rest:u64...)->u64{return 1u64;}',2,'','implementation gap: variadic method bodies'),
 }
 runner.CASE_ARGUMENTS = {}
+runner.CASE_SHADOWS = {
+    'readonly_value_tail_copies': ['x'],
+    'owner_tail_maps_result': ['x', 'y'],
+    'owner_tail_multiple_arguments': ['x', 'y', 'z'],
+    'tail_owner_distinct_from_prefix': ['x'],
+    'empty_tail_has_no_owner_obligation': ['x'],
+    'deferred_fixed_call_snapshot': ['x'],
+}
 runner.EXTRA_SOURCES = [Path(__file__)]
 if __name__ == '__main__':
     raise SystemExit(runner.main())

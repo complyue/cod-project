@@ -130,6 +130,7 @@ def batch_result(n):
 
 runner.EXPECTED_VALUES = batch_result(0) + batch_result(3) + batch_result(10000)
 runner.EXPECTED_VALUES += ['1', '2', '2', '1', '70', '71', '1', '2', '3', '2', '1', '3', '75', '1', '2', '1', '2', '1', '78']
+runner.EXPECTED_SHADOWS = []
 runner.EXTRA_SOURCES = [Path(__file__)]
 if __name__ == '__main__':
     raise SystemExit(runner.main())

@@ -61,6 +61,12 @@ for index, (op, answer) in enumerate((('-', '3'), ('*', '10'), ('/', '2'), ('%',
     kind = 'bool' if op in ('==','!=','<','>','<=','>=') else 'i64'
     runner.CASES['binary_'+str(index)] = (IO+f'func ({op})(x:i64,y:i64)->{kind};behave @print(5{op}2);',0,answer+'\n','')
 runner.CASE_ARGUMENTS = {}
+runner.CASE_SHADOWS = {
+    'borrowed_declared_result': ['x', 'y'],
+    'query_uses_builtin_result': ['x'],
+    'query_checks_method_contract': ['x'],
+    'swap_method': ['x', 'y'],
+}
 runner.EXTRA_SOURCES = [Path(__file__)]
 if __name__ == '__main__':
     raise SystemExit(runner.main())

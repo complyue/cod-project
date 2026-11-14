@@ -42,6 +42,7 @@ runner.HARNESS = runner.HARNESS.replace('assert(bytes==16);',
 runner.HARNESS = runner.HARNESS.replace('created==6 && peak==2 && failures==2',
     'created==6 && peak==2 && failures==1 && borrows==3')
 runner.EXPECTED_VALUES = ['33','33','32','34','1','37','4','39','40']
+runner.EXPECTED_SHADOWS = ['a', 'a', 'a']
 runner.EXTRA_SOURCES = [Path(initialization.__file__), Path(__file__)]
 
 if __name__ == '__main__':

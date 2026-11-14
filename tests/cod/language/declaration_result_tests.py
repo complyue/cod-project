@@ -62,6 +62,15 @@ runner.CASES = {
  'declaration_query_mode_conflict': ('func f(ptr x:i64 in O)->ref i64 in O where {owner O};func f(ptr x:i64 in O)->ptr i64 in O where {owner O};val x<-1;val y<-make local typeof(f(x)){7};',2,'','declarations do not establish one inspected result contract'),
 }
 runner.CASE_ARGUMENTS = {}
+runner.CASE_SHADOWS = {
+    'borrowed_result_owner_renaming': ['x'],
+    'borrowed_result_type_query': ['x'],
+    'borrowed_generic_result': ['x'],
+    'readonly_result': ['x'],
+    'nullable_result': ['x'],
+    'deferred_return_uses_declared_view': ['x'],
+    'instance_specific_value_and_view_modes': ['x'],
+}
 runner.EXTRA_SOURCES = [Path(__file__)]
 if __name__ == '__main__':
  raise SystemExit(runner.main())

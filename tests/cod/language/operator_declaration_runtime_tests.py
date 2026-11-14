@@ -8,6 +8,7 @@ head = 'func (+)(f:func(u64)->const u64)'
 result = '->func(u64)->const u64'
 assert head + result + '{' in runner.SOURCE
 runner.SOURCE = runner.SOURCE.replace(head + result + '{', head + result + ';' + head + '{')
+runner.EXPECTED_SHADOWS = []
 runner.EXTRA_SOURCES += [Path(fixture.__file__), Path(__file__)]
 if __name__ == '__main__':
     raise SystemExit(runner.main())

@@ -80,6 +80,14 @@ runner.CASES = {
     'view_cannot_borrow_method_type_binder': ('func id(x:T)->const T where T{return x;}func f:func(T)->const T=id;',2,'','non-scalar signature type'),
     'nested_result_requires_determined_type': ('func factory(x:U)->func()->const T where {U,T}{}factory(1);',2,'','type parameter is not determined'),
 }
+runner.CASE_SHADOWS = {
+    'default_parameter_copy': ['f'],
+    'parameter_preparation_snapshot': ['f'],
+    'returned_snapshot_before_cleanup': ['f'],
+    'borrowed_callable_parameter': ['f'],
+    'borrowed_callable_result': ['f'],
+    'borrowed_result_copy_is_independent': ['f'],
+}
 runner.EXTRA_SOURCES = [Path(__file__)]
 if __name__ == '__main__':
     sys.exit(runner.main())

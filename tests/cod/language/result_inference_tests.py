@@ -61,6 +61,14 @@ runner.CASES['common_exception_parameter_context'] = (IO+MISSING+'using "std:exc
 runner.CASES['recursive_void_cleanup_completion'] = ('proc f(){defer{f();};}proc g:proc()->void=f;',0,'','')
 runner.CASES['recursive_void_scoped_completion'] = ('func f(){true;{{f();}};}func g:func()->void=f;',0,'','')
 runner.CASE_ARGUMENTS = {}
+runner.CASE_SHADOWS = {
+    'value_snapshot_before_cleanup': ['x'],
+    'generic_callback': ['f'],
+    'captured_callable_result': ['f'],
+    'query_uses_inferred_signature': ['x'],
+    'same_owner_selection': ['x', 'x', 'x', 'x'],
+    'common_exception_parameter_context': ['e', 'e'],
+}
 runner.EXTRA_SOURCES = [Path(__file__)]
 if __name__ == '__main__':
  raise SystemExit(runner.main())

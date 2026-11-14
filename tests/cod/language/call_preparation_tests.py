@@ -18,7 +18,7 @@ runner.CASES = {
     'common_exception_callable': (IO+ERRORS+COMMON+'func f=category;behave @print(f(missing_error()));behave @print(f(null_error()));',0,'5\n4\n',WARN),
     'expression_target': (IO+ERRORS+COMMON+'behave @print((if(true){category}else{category})(missing_error()));',0,'5\n',WARN),
     'generic_callable_context': (IO+ERRORS+COMMON+'func apply(f:F,e:E)->const u64 where {F,E}{return f(e);}behave @print(apply(category,missing_error()));behave @print(apply(category,null_error()));',0,'5\n4\n',WARN),
-    'generic_selected_method': (IO+ERRORS+SELECT+'func inspect(e:T)->const i64 where T{return pick(e);}func f:func(SystemException)->const i64=inspect;behave @print(f(missing_error()));behave @print(f(null_error()));behave @print(inspect(missing_error()));',0,'1\n1\n2\n',WARN),
+    'generic_selected_method': (IO+ERRORS+SELECT+'func inspect(e:T)->const i64 where T{return pick(e);}func f:func(SystemException)->const i64=inspect;behave @print(f(missing_error()));behave @print(f(null_error()));behave @print(inspect(missing_error()));',0,'2\n3\n2\n',WARN),
     'direct_common_parameter': (IO+ERRORS+SELECT+'func inspect(e:SystemException)->const i64{return pick(e);}behave @print(inspect(missing_error()));behave @print(inspect(null_error()));',0,'1\n1\n',WARN),
     'direct_overload_retains_actual_type': (IO+ERRORS+SELECT+'behave @print(pick(missing_error()));behave @print(pick(null_error()));val e:SystemException<-missing_error();behave @print(pick(e));',0,'2\n3\n1\n',WARN),
     'recursive_generic_call': (IO+ERRORS+COMMON+'func relay(f:F,e:E,n:i64)->const u64 where {F,E}{if(n>0){return relay(f,e,n-1);}else{return f(e);};}behave @print(relay(category,missing_error(),30));behave @print(relay(category,null_error(),40));',0,'5\n4\n',WARN),
@@ -30,7 +30,7 @@ runner.CASES = {
     'later_failure_prevents_invocation': (IO+ERRORS+'proc first()->const MissingReturnException{behave @print(1);return missing_error();}proc observe(e:SystemException,n:i64)->void{behave @print(99);}proc f=observe;try{f(first(),missing());}catch(e:const MissingReturnException){behave @print(2);};',0,'1\n2\n',WARN),
     'deferred_value_argument': (IO+ERRORS+'proc observe(e:SystemException)->void{behave @print(e.category);}proc f=observe;{{defer f(missing_error());defer f(null_error());}};',0,'4\n5\n',WARN),
     'deferred_direct_argument': (IO+ERRORS+'proc observe(e:SystemException)->void{behave @print(e.category);}{{defer observe(missing_error());defer observe(null_error());}};',0,'4\n5\n',WARN),
-    'deferred_generic_selected_method': (IO+ERRORS+SELECT+'proc observe(e:T)->void where T{behave @print(pick(e));}proc f:proc(SystemException)->void=observe;{{defer f(missing_error());defer f(null_error());}};',0,'1\n1\n',WARN),
+    'deferred_generic_selected_method': (IO+ERRORS+SELECT+'proc observe(e:T)->void where T{behave @print(pick(e));}proc f:proc(SystemException)->void=observe;{{defer f(missing_error());defer f(null_error());}};',0,'3\n2\n',WARN),
     'deferred_snapshot': (IO+ERRORS+'proc observe(e:SystemException)->void{behave @print(e.category);}proc f=observe;val e:SystemException<-missing_error();{{defer f(e);e<-null_error();}};f(e);',0,'5\n4\n',WARN),
     'deferred_target_snapshot': (IO+ERRORS+'proc first(e:SystemException)->void{behave @print(e.category);}proc second(e:SystemException)->void{behave @print(99);}proc f=first;{{defer f({{f<-second;missing_error()}});}};f(null_error());',0,'5\n99\n',WARN),
     'null_target_prevents_operands': (IO+ERRORS+COMMON+'proc arg()->const MissingReturnException{behave @print(99);return missing_error();}ptr f:func(SystemException)->const u64=null in here;try{f(arg());{}}catch(e:const NullPointerException){behave @print(1);};',0,'1\n',WARN),
@@ -41,6 +41,12 @@ runner.CASES = {
     'nested_callable_variance_rejected': (ERRORS+'func inspect(e:MissingReturnException)->void{}func use(f:func(SystemException)->void)->void{}func u=use;u(inspect);',2,'','no applicable method'),
 }
 runner.CASE_ARGUMENTS = {}
+runner.CASE_SHADOWS = {
+    'direct_overload_retains_actual_type': ['e', 'e', 'e', 'e', 'e'],
+    'captured_callable_argument': ['f'],
+    'deferred_snapshot': ['e', 'e', 'e'],
+    'cause_payload_preserved': ['e', 'e', 'e'],
+}
 runner.EXTRA_SOURCES = [Path(__file__), Path(__file__).with_name('generic_catch_tests.py')]
 if __name__ == '__main__':
     raise SystemExit(runner.main())

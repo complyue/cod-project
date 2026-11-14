@@ -14,6 +14,7 @@ func shared(ref x:u64 in O,ref y:u64 in O) where {owner O}{return x;}
 ''' + runner.SOURCE
 assert 'total<-total+f(i);' in runner.SOURCE
 runner.SOURCE = runner.SOURCE.replace('total<-total+f(i);', 'total<-shared(total,total)+f(i);')
+runner.EXPECTED_SHADOWS = []
 runner.EXTRA_SOURCES += [Path(__file__)]
 if __name__ == '__main__':
     raise SystemExit(runner.main())

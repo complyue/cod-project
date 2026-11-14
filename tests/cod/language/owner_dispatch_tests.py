@@ -45,6 +45,33 @@ runner.CASES={
  'operand_effects_once':(IO+PAIR+'val a<-3,b<-4;'+OBS('choose({'+OBS('7')+'a},{'+OBS('8')+'b})'),0,'7\n8\n1\n',''),
 }
 runner.CASE_ARGUMENTS={}
+runner.CASE_SHADOWS = {
+    'same_and_different': ['a', 'b', 'a', 'b'],
+    'reversed_declarations': ['a', 'b', 'a', 'b'],
+    'same_target': ['a', 'a'],
+    'alias_owner': ['a', 'a'],
+    'scoped_existing_target': ['a', 'b', 'a', 'b'],
+    'scoped_copy_owner': ['a', 'a'],
+    'ordinary_group_declaration': ['a', 'b', 'a', 'b'],
+    'conditional_owner': ['a', 'b', 'a', 'b'],
+    'guarded_owner': ['a', 'b', 'a', 'b'],
+    'named_result_owner': ['a', 'a', 'a', 'a'],
+    'selected_result_owner': ['a', 'a', 'a', 'a'],
+    'owner_and_type_specific': ['a', 'b', 'a', 'b'],
+    'owner_access_specific': ['a', 'b', 'a', 'b'],
+    'transitive_owner_specific': ['a', 'b', 'c', 'a', 'b', 'c', 'a', 'b', 'c'],
+    'proved_formal_equality': ['a', 'b', 'a', 'b', 'a', 'b'],
+    'local_and_external_distinct': ['a', 'a', 'a'],
+    'recursive_same_owner': ['a', 'b', 'a', 'b', 'a', 'b'],
+    'shared_projected_owner': ['a', 'a', 'a', 'a', 'f', 'a'],
+    'nullable_fixed_owner': ['a', 'b', 'a', 'b'],
+    'selected_writes_initialize': ['a', 'b', 'a', 'b'],
+    'deferred_owner_selection': ['a', 'a'],
+    'builtin_owner_fallback_snapshot': ['a'],
+    'later_owner_result_prepares_copy': ['a', 'a', 'a', 'tag', 'a', 'tag'],
+    'selected_owner_contract': ['a', 'b'],
+    'operand_effects_once': ['a', 'b', 'a', 'b'],
+}
 runner.EXTRA_SOURCES=[Path(__file__)]
 if __name__=='__main__':
     raise SystemExit(runner.main())

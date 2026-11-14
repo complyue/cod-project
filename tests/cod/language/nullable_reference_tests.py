@@ -79,6 +79,9 @@ runner.CASES = {
     'captured_nullable_alias_read': (PRE + 'proc f()->void throws NullPointerException{ptr p:i64=null in here;try{p;{}}catch(e:const NullPointerException){ptr q=e;defer{behave @print(q.category);};q=null;{};};}try{f();}catch(e:const NullPointerException){behave @print(4);};', 0, '4\n', ''),
     'deferred_null_test': ('ptr p:i64=null in here;defer isnull(p);', 0, '', ''),
 }
+runner.CASE_SHADOWS = {
+    'npe_value_roundtrip': ['e'],
+}
 runner.EXTRA_SOURCES = [Path(__file__)]
 if __name__ == '__main__':
     sys.exit(runner.main())

@@ -60,6 +60,13 @@ runner.CASES = {
  'intrinsic_overflow_cleanup':(IO+'proc show(x:i64)->void{behave @print(x);}{{defer show(9);intrinsic (+)(9223372036854775807,1);}};',70,'9\n','i64 addition overflow'),
 }
 runner.CASE_ARGUMENTS = {}
+runner.CASE_SHADOWS = {
+    'operand_snapshot_before_later_write': ['x'],
+    'parameter_copies_are_independent': ['x', 'y'],
+    'explicit_cause_builtin': ['e'],
+    'callable_operand_and_result': ['f'],
+    'borrowed_operator_method': ['x', 'y'],
+}
 runner.EXTRA_SOURCES = [Path(__file__)]
 if __name__ == '__main__':
     raise SystemExit(runner.main())

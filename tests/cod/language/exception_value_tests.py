@@ -54,6 +54,20 @@ runner.CASES = {
     "deferred_catch_capture": (ERROR + 'try{missing();{}}catch(e){defer{behave @print(e.category);};};', 0, "5\n", WARN),
 }
 runner.CASE_ARGUMENTS = {}
+runner.CASE_SHADOWS = {
+    'catch_fields': ['e'],
+    'catch_exact': ['e'],
+    'catch_all_rethrow': ['e'],
+    'catch_sibling_exclusion': ['e'],
+    'exception_copy': ['e'],
+    'exception_store': ['e'],
+    'exception_generic': ['e'],
+    'retained_chain': ['e', 'e'],
+    'chain_replace_copy': ['e'],
+    'catch_initialize_finally': ['e'],
+    'catch_narrow_common': ['e'],
+    'catch_declaration': ['e'],
+}
 runner.EXTRA_SOURCES = [Path(__file__)]
 
 if __name__ == "__main__":

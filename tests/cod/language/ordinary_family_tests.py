@@ -62,6 +62,11 @@ runner.CASES = {
     }, 0, '1\n7\n1\n1\n', ''),
 }
 runner.CASE_ARGUMENTS = {}
+runner.CASE_SHADOWS = {
+    'common_exception_identity': ['e', 'e', 'e'],
+    'borrowed_alias_and_write': ['x'],
+    'deferred_snapshot': ['x', 'x'],
+}
 runner.EXTRA_SOURCES = [Path(__file__)]
 
 if __name__ == '__main__':

@@ -67,5 +67,11 @@ runner.CASES={
  'returning_cleanup_keeps_write':(IO+'proc run(flag:bool)->const i64{'+SETUP+ALIASES+'defer{behave @print(p);}finally{};defer{p<-1;return 2;};return 3;}behave @print(run(true));behave @print(run(false));',0,'1\n2\n1\n2\n',''),
 }
 runner.CASE_ARGUMENTS={}
+runner.CASE_SHADOWS = {
+    'failure_after_selected_write': ['e'],
+    'recovery_reader_after_writer_failure': ['e'],
+    'recovering_handler_initializes': ['e'],
+    'category_specific_finally': ['e'],
+}
 runner.EXTRA_SOURCES=[Path(__file__)]
 if __name__=='__main__':raise SystemExit(runner.main())

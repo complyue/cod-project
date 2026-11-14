@@ -48,6 +48,31 @@ runner.CASES = {
     "forwarded_throw_location": (ERROR + 'func f(e:NullPointerException)->void {\n  try{\n    throw e;\n  }finally{};\n}', 2, "", "forwarded_throw_location.cod:14:5: checked exception"),
 }
 runner.CASE_ARGUMENTS = {}
+runner.CASE_SHADOWS = {
+    'caught_after_handler': ['e'],
+    'repeated_catch': ['e'],
+    'repeated_scoped_catch': ['e'],
+    'late_local_and_snapshot': ['e'],
+    'nested_registration': ['e'],
+    'nested_prepared_call': ['e'],
+    'captured_bare_rethrow': ['e'],
+    'nested_bare_rethrow': ['e'],
+    'bare_rethrow_each_record': ['e'],
+    'named_rethrow_each_record': ['e'],
+    'two_captured_catches': ['e'],
+    'shadowed_catch': ['e', 'e'],
+    'catch_inside_delayed_action': ['e'],
+    'active_bare_throw_binding': ['e'],
+    'finally_snapshot': ['e'],
+    'bodyless_finally_snapshot': ['e'],
+    'captured_replacement_return': ['e'],
+    'recursive_frame_snapshots': ['e'],
+    'generic_capture': ['e'],
+    'captured_chain_survives_handler': ['e'],
+    'captured_checked_declared': ['e'],
+    'captured_checked_local_catch': ['e'],
+    'deferred_empty_handler': ['e'],
+}
 runner.EXTRA_SOURCES = [Path(__file__)]
 
 if __name__ == "__main__":

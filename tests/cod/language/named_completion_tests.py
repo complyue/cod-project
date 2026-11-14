@@ -52,6 +52,7 @@ cases.update({
 })
 runner.CASES=cases
 runner.CASE_ARGUMENTS={}
+runner.CASE_SHADOWS = {}
 runner.EXTRA_SOURCES=[Path(fixture.__file__),Path(__file__)]
 if __name__=='__main__':
     raise SystemExit(runner.main())

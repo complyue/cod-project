@@ -55,6 +55,31 @@ runner.CASES = {
  'expired_destination_rejected': (IO+METHOD+'val y<-1;{{val x<-2;x}}<->y;',2,'','lexical owner has ended'),
 }
 runner.CASE_ARGUMENTS = {}
+runner.CASE_SHADOWS = {
+    'infix_explicit_and_builtin': ['x', 'y'],
+    'generic_same_t': ['x', 'y'],
+    'concrete_over_generic': ['x', 'y', 'x', 'y'],
+    'builtin_fallback': ['x', 'y'],
+    'self_alias_method': ['x'],
+    'recursive_method': ['x', 'y'],
+    'both_operands_before_reads': ['x', 'y'],
+    'addresses_before_later_rebind': ['x', 'y'],
+    'address_before_scope_cleanup': ['x', 'y'],
+    'operand_effects_once_in_order': ['x', 'y'],
+    'null_read_after_second_operand': ['x'],
+    'pointer_method_can_handle_null': ['x'],
+    'ref_promises_checked_after_operands': ['x', 'y'],
+    'deferred_addresses_and_late_payload': ['x', 'y'],
+    'deferred_pointer_write_initializes': ['x', 'y'],
+    'failure_after_preparation_no_invocation': ['x', 'y'],
+    'same_owner_more_specific': ['x', 'y', 'x', 'y'],
+    'readonly_destinations_match_exactly': ['x', 'y'],
+    'no_numeric_destination_conversion': ['x', 'y'],
+    'no_exception_destination_conversion': ['x', 'y'],
+    'mixed_type_user_destinations': ['x', 'y'],
+    'ordinary_helper_rebind_stays_local': ['x', 'y'],
+    'fixed_bindings_still_writable_targets': ['x', 'y'],
+}
 runner.EXTRA_SOURCES = [Path(__file__)]
 if __name__ == '__main__':
     raise SystemExit(runner.main())

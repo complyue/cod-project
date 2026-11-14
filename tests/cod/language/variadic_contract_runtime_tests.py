@@ -18,6 +18,7 @@ for signature, definition, declaration in (
 ):
     assert signature+'{' in runner.SOURCE
     runner.SOURCE = runner.SOURCE.replace(signature+'{',declaration+';'+definition+'{')
+runner.EXPECTED_SHADOWS = []
 runner.EXTRA_SOURCES += [Path(__file__)]
 if __name__ == '__main__':
     raise SystemExit(runner.main())

@@ -73,6 +73,13 @@ runner.CASES={
  'initializer_still_captures':(IO+'func id(x:i64)->const i64{return x;}proc run()->void{func f=id;func nested[f]()->const i64{val x<-make local typeof(1){f(26)};return x;};behave @print(nested());}run();',0,'26\n',''),
 }
 runner.CASE_ARGUMENTS={}
+runner.CASE_SHADOWS = {
+    'initializer_runs_once': ['x'],
+    'borrowed_result_isnull': ['x'],
+    'checked_failure_not_raised': ['x'],
+    'body_inference_without_payload_read': ['x'],
+    'lexical_recursive_query': ['x'],
+}
 runner.EXTRA_SOURCES=[Path(__file__)]
 if __name__=='__main__':
     raise SystemExit(runner.main())

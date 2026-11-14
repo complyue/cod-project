@@ -5,6 +5,7 @@ import operand_completion_runtime_tests as fixture
 runner=fixture.runner
 runner.SOURCE=runner.SOURCE.replace('func invoke=apply;','').replace('invoke(f,','apply(f,')
 runner.SOURCE=runner.SOURCE.replace('proc invoke=observe_application;','').replace('defer invoke(', 'defer observe_application(')
+runner.EXPECTED_SHADOWS = []
 runner.EXTRA_SOURCES += [Path(fixture.__file__),Path(__file__)]
 if __name__=='__main__':
     raise SystemExit(runner.main())

@@ -42,6 +42,28 @@ runner.CASES = {
     'loop_declaration_still_rejected': (ERROR + PICK + 'proc run(tag:T)->void where T{for(i in 0..2){try{throw error();}catch(e:const MissingReturnException){ref y=pick(tag,e);defer{behave @print(y.category);};};};}run(false);run(0);', 2, '', 'per-iteration {{'),
 }
 runner.CASE_ARGUMENTS = {}
+runner.CASE_SHADOWS = {
+    'borrow_or_copy': ['e'],
+    'reverse_demand_order': ['e'],
+    'same_record_different_address': ['e'],
+    'different_captured_binding': ['e'],
+    'same_record_different_captured_binding': ['e'],
+    'nested_registration': ['e'],
+    'nested_with_direct_capture': ['e'],
+    'nested_full_scope': ['e'],
+    'finally_snapshot': ['e'],
+    'bodyless_finally': ['e'],
+    'named_rethrow': ['e'],
+    'pending_failure_skips_body': ['e'],
+    'returned_snapshot': ['e'],
+    'aliased_reference': ['e'],
+    'borrowed_snapshot_address': ['e'],
+    'later_lexical_slots': ['e'],
+    'per_iteration_scopes': ['e'],
+    'recursive_frames': ['e'],
+    'cleared_pointer_stays_absent': ['e'],
+    'registration_order': ['e'],
+}
 runner.EXTRA_SOURCES = [Path(fixture.__file__), Path(__file__)]
 if __name__ == '__main__':
     raise SystemExit(runner.main())

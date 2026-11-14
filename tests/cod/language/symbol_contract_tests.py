@@ -71,6 +71,14 @@ for name, expression in {
     runner.CASES['nearest_'+name] = (SYMBOL + 'proc f(gain:u64)->void{'+expression+'}f(1u64);',
         2, '', "nearest binding 'gain' is not a symbol")
 runner.CASE_ARGUMENTS = {}
+runner.CASE_SHADOWS = {
+    'caller_shadow_does_not_rebind': ['print'],
+    'module_value_keeps_definition_context': ['print'],
+    'lexical_definition_context': ['print'],
+    'recursive_definition_context': ['print'],
+    'explicit_query_avoids_body_lookup': ['gain'],
+    'nested_shadow_ends': ['gain'],
+}
 runner.EXTRA_SOURCES = [Path(__file__)]
 
 if __name__ == '__main__':

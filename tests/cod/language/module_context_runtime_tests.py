@@ -15,6 +15,7 @@ using symbol "library.cod" @f;
 using symbol "library.cod" @bad;
 effect @x<-1u64;
 ''' + execution
+runner.EXPECTED_SHADOWS = ['x']
 runner.EXTRA_SOURCES += [Path(__file__)]
 
 if __name__ == '__main__':

@@ -54,6 +54,10 @@ runner.CASES={
  'runtime_capture_still_checked':(IO+APPLY+'val y<-3;behave @print(apply(func(x:i64)->const i64{return x+y;},1));',2,'','ordinary lexical cells'),
 }
 runner.CASE_ARGUMENTS={}
+runner.CASE_SHADOWS = {
+    'declared_view_context': ['f', 'x'],
+    'explicit_callable_capture_not_constructed': ['x'],
+}
 runner.EXTRA_SOURCES=[Path(__file__)]
 if __name__=='__main__':
  raise SystemExit(runner.main())

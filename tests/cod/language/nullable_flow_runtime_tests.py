@@ -32,6 +32,7 @@ observe(9000u64);
 '''
 runner.HARNESS=runner.HARNESS.replace('checkpoints==7','checkpoints==8').replace('copy_failures==6','copy_failures==7').replace('record_failures==3','record_failures==4')
 runner.EXPECTED_VALUES += ['3','4','14','15','50105000','17','19']
+runner.EXPECTED_SHADOWS = ['other']
 runner.EXTRA_SOURCES += [Path(fixture.__file__),Path(__file__)]
 if __name__=='__main__':
     raise SystemExit(runner.main())

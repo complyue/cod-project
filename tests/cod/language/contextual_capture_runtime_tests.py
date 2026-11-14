@@ -34,6 +34,7 @@ runner.HARNESS = runner.HARNESS.replace('  if(value==9000)', '''  if(value==9070
   if(value==9072){assert(capture_sizes[0]==80 && capture_sizes[1]==16 && !capture_mode);return;}
   if(value==9000)''')
 runner.EXPECTED_VALUES += ['5', '5', '5', '2', '5', '5', '5', '2']
+runner.EXPECTED_SHADOWS = []
 runner.EXTRA_SOURCES += [Path(fixture.__file__), Path(source.__file__), Path(source.fixture.__file__), Path(__file__)]
 if __name__ == '__main__':
     raise SystemExit(runner.main())

@@ -48,6 +48,13 @@ runner.CASES={
  'lexical_self_query_retains_context':(IO+APPLY+'func outer(x:T)->const T where T{func self(x:T)->const T{val y<-make local typeof(apply(self,x)){x};return y;};return self(x);}behave @print(outer(25));behave @print(outer(true));',0,'25\ntrue\n',''),
 }
 runner.CASE_ARGUMENTS={}
+runner.CASE_SHADOWS = {
+    'overloaded_name': ['x', 'x'],
+    'local_callable_contract': ['f', 'x'],
+    'selected_callable_contract': ['f', 'x'],
+    'borrowed_later_operand': ['x'],
+    'lexical_self_query_retains_context': ['x'],
+}
 runner.EXTRA_SOURCES=[Path(__file__)]
 if __name__=='__main__':
  raise SystemExit(runner.main())

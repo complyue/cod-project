@@ -36,6 +36,7 @@ try{observe(initialized(p));}catch(e:const NullPointerException){observe(99u64);
 runner.HARNESS = runner.HARNESS.replace('created==4 && peak==2 && failures==3',
     'created==6 && peak==2 && failures==3')
 runner.EXPECTED_VALUES = ['1', '81', '2', '82', '3', '4', '84']
+runner.EXPECTED_SHADOWS = ['e', 'e', 'e', 'e']
 runner.EXTRA_SOURCES = [Path(recovery.__file__), Path(__file__)]
 
 if __name__ == '__main__':

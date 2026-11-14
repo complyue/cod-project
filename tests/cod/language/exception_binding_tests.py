@@ -71,6 +71,9 @@ for name, (source, status, output, diagnostic) in list(runner.CASES.items()):
     if ERROR in source and status == 0:
         runner.CASES[name] = (source, status, output, '[-Wmissing-return]')
 runner.CASE_ARGUMENTS = {}
+runner.CASE_SHADOWS = {
+    'checked_captured_delivery': ['p'],
+}
 runner.EXTRA_SOURCES = [Path(__file__)]
 
 if __name__ == '__main__':

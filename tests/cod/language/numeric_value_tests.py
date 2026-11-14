@@ -80,6 +80,24 @@ runner.CASES.update({
  'lossy_candidate_does_not_hide_builtin': (IO+'func (+)(x:f32,y:f32)->u64{return 7u64;}behave @print(1u32+2f32);',0,'3\n',''),
 })
 runner.CASE_ARGUMENTS = {}
+runner.CASE_SHADOWS = {
+    'nan_value': ['x'],
+    'callee_local_writes': ['x'],
+    'readonly_source_copy': ['x'],
+    'argument_snapshot_before_later_write': ['x'],
+    'generic_recursion': ['f'],
+    'deferred_argument_snapshot': ['x'],
+    'null_read_before_later_operand': ['x'],
+    'failed_widened_defer_preparation': ['x'],
+    'callable_query_adaptation': ['x'],
+    'callable_query_does_not_read': ['x'],
+    'widening_operator_query_not_builtin': ['x'],
+    'widening_method_query_selected': ['x'],
+    'borrowed_operand_does_not_hide_widened_candidate': ['y'],
+    'intrinsic_ignores_widening_candidate': ['x'],
+    'borrowed_target_not_a_widening_candidate': ['x'],
+    'readonly_disqualifies_writable_borrow': ['y'],
+}
 runner.EXTRA_SOURCES = [Path(__file__)]
 if __name__ == '__main__':
     raise SystemExit(runner.main())

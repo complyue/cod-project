@@ -50,6 +50,15 @@ runner.CASES = {
         'proc run()->void{func recur=selected;func inner=func[recur](n:u64)->u64{return recur(n);};recur<-func(n:u64)->u64{return 15u64;};behave @print(inner(1u64));}run();', 0, '14\n', ''),
 }
 runner.CASE_ARGUMENTS = {}
+runner.CASE_SHADOWS = {
+    'direct_recursion_retains_local_identity': ['recur'],
+    'query_uses_local_recursive_signature': ['recur'],
+    'contextual_query_does_not_materialize_self': ['recur'],
+    'nested_query_retains_lexical_signature': ['recur'],
+    'parameter_value_shadows_self': ['recur', 'recur'],
+    'local_value_shadows_self': ['recur', 'recur'],
+    'nested_capture_uses_shadowing_parameter': ['recur', 'recur', 'n'],
+}
 runner.EXTRA_SOURCES = [Path(__file__)]
 
 if __name__ == '__main__':

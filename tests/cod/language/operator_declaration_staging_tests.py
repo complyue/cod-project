@@ -7,11 +7,12 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
-from foundation_tests import ROOT, MODE, COD
+from foundation_tests import ROOT, MODE, COD, shadow_diagnostics
 from callable_value_staging_tests import inventory
 
 IO = 'using symbol "std:io" @print;'
 EXTRA_SOURCES = []
+CASE_SHADOWS = {'borrowed': ['x', 'y'], 'complete': ['f']}
 CASES = (
     ('builtin', 'func (+)(x:i64,y:i64)->i64;', '', '', IO+'behave @print(2+3);', '5\n'),
     ('generic', 'func (+)(x:T,y:T)->const T where T;', '->const U', ' where U{',
@@ -54,7 +55,9 @@ def main():
                 inferred = declaration+source.replace(result+suffix, ' '*len(result)+suffix, 1) if result else declaration+source
                 left, left_ir = run(explicit, general)
                 right, right_ir = run(inferred, general)
-                record(mode+'/'+name+'_equivalence', left == right and left == dict(exit=0, stdout=expected, stderr='')
+                matched, remaining = shadow_diagnostics(left['stderr'], CASE_SHADOWS.get(name, []))
+                record(mode+'/'+name+'_equivalence', left == right and left['exit'] == 0 and left['stdout'] == expected
+                       and matched and not remaining
                        and bool(left_ir) and left_ir == right_ir, explicit=left, declared=right, identical_ir=left_ir == right_ir)
             base, base_ir = run(RECURSIVE, general)
             bodies = inventory(base_ir)

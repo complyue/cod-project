@@ -45,6 +45,12 @@ runner.CASES={
  'lexical_recursion_readonly_write':('proc run()->void{const val x<-1;func recur(ref p:i64 in O,n:i64)->const i64 where {owner O}{if(n==0){return p;}else{return recur(p,n-1);};};recur(x,30);}run();',2,'','readonly argument'),
 }
 runner.CASE_ARGUMENTS={}
+runner.CASE_SHADOWS = {
+    'structural_later_view': ['g'],
+    'lexical_recursive_retained_type': ['x'],
+    'lexical_recursive_capture': ['x', 'x'],
+    'lexical_recursion_respects_shadow': ['recur'],
+}
 runner.EXTRA_SOURCES=[Path(__file__)]
 if __name__=='__main__':
     raise SystemExit(runner.main())

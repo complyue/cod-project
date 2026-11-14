@@ -56,6 +56,33 @@ runner.CASES={
  'procedure_exclusion_preserved':('proc write(ref x:i64 in O)->void where {owner O}{x<-7;}func invoke(ref x:i64 in O)->void where {owner O}{proc f=write;f(x);}val x<-1;invoke(x);',2,'','function cannot invoke a procedure'),
 }
 runner.CASE_ARGUMENTS={}
+runner.CASE_SHADOWS = {
+    'returned_alias': ['x'],
+    'parenthesized_target': ['x'],
+    'nullable_forwarding': ['x'],
+    'nullable_read_caught': ['x'],
+    'readonly_view': ['x'],
+    'repeated_owner': ['x', 'y'],
+    'owner_renaming': ['x', 'x'],
+    'local_rebind_does_not_rebind_caller': ['x'],
+    'later_argument_write_visible': ['x'],
+    'selected_address_before_rebind': ['x'],
+    'borrow_read_before_later_effect': ['x'],
+    'writer_initializes': ['x'],
+    'all_selected_writers_initialize': ['x', 'x'],
+    'aliased_inputs_preserve_write_order': ['x'],
+    'returned_target_specific': ['x', 'y'],
+    'deferred_writer_initializes': ['x', 'x'],
+    'generic_higher_order_borrow': ['x', 'f', 'x'],
+    'recursive_higher_order_borrow': ['x', 'f', 'x'],
+    'captured_borrowing_callable': ['x'],
+    'callable_holder_borrow': ['f'],
+    'callable_holder_return': ['f'],
+    'nullable_callee_before_arguments': ['x'],
+    'nullable_callee_and_result_independent': ['x'],
+    'contextual_call_result': ['x', 'x', 'x'],
+    'contextual_local_target': ['x', 'x', 'x'],
+}
 runner.EXTRA_SOURCES=[Path(__file__)]
 if __name__=='__main__':
     raise SystemExit(runner.main())

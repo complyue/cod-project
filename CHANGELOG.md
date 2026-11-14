@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Shared lexical shadow diagnostics
+
+<a id="k-681"></a>
+**K-681 — Shadow-diagnostic continuity.** Agent assessment under H-257/P-229/H-381/H-382/H-398/H-420, D-10r147/D-14r91/D-18r91 and charter §§3.2/5.3/8/12: registry r688→689 and source reference302→303 use one checked source-declaration path for shadow warnings. Preserve nearest-binding lookup, enclosing source visibility, initializer order, duplicate errors and warning promotion before execution. Diagnostic metadata remains checker-local; synthetic captures do not warn, and repeated native contexts do not duplicate source diagnostics. Acceptance covers checked parameters/owners, local definitions/values/aliases, loop/catch bindings, generic/import reuse and both native modes. Type-only or otherwise undemanded bodies retain their existing checking boundary. Existing actual-type family dispatch and the unproved access/owner-dependent family-selection boundary retain their scope. Capture-time semantics, native representations and pending designs remain separate; no new qualification. Prior capability reference: `5f2553e377b65e325e19fd1e4cd3afab6eefa7c9:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Lexical callable name resolution
 
 <a id="k-680"></a>

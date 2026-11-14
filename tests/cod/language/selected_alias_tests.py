@@ -73,6 +73,10 @@ runner.CASES={
  'ordinary_capture_still_rejected':('func run(flag:bool)->void{val x<-1,y<-2;var p->if(flag){x}else{y};func f=func[p]()->const i64{return p;};}',2,'','ordinary lexical cells'),
 }
 runner.CASE_ARGUMENTS={}
+runner.CASE_SHADOWS = {
+    'recursive_borrowed_alias': ['x', 'y'],
+    'query_alias_declaration_evidence': ['x'],
+}
 runner.EXTRA_SOURCES=[Path(__file__)]
 if __name__=='__main__':
  raise SystemExit(runner.main())

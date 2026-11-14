@@ -65,6 +65,17 @@ for kind in ('func','proc'):
  runner.CASES[kind+'_initializer']=(IO+kind+' f:'+kind+'()->u64='+kind+'(){return 29u32;};behave @print(f());',0,'29\n','')
  runner.CASES[kind+'_void']=(kind+' f:'+kind+'()->void='+kind+'(){};f();',0,'','')
 runner.CASE_ARGUMENTS = {}
+runner.CASE_SHADOWS = {
+    'receiving_value_is_not_result_evidence': ['x', 'x'],
+    'borrowed_result_owner_mapping': ['x', 'x'],
+    'readonly_borrowed_result': ['x', 'x'],
+    'nullable_result': ['x', 'x'],
+    'expected_value_result_snapshots_before_cleanup': ['x', 'x'],
+    'expected_borrowed_result_retains_cleanup_write': ['x', 'x'],
+    'captured_callback': ['f'],
+    'generic_expected_value_and_view_modes': ['x', 'x', 'x'],
+    'generic_expected_result_owner_roles': ['x', 'y', 'x', 'y'],
+}
 runner.EXTRA_SOURCES = [Path(__file__)]
 if __name__ == '__main__':
  raise SystemExit(runner.main())

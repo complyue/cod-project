@@ -22,6 +22,7 @@ observe(9000u64);
 '''
 runner.HARNESS = runner.HARNESS.replace('checkpoints==5', 'checkpoints==6')
 runner.EXPECTED_VALUES += ['17', '18']
+runner.EXPECTED_SHADOWS = ['retained']
 runner.EXTRA_SOURCES += [Path(__file__)]
 
 if __name__ == '__main__':

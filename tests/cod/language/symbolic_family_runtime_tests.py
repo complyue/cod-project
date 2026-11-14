@@ -56,6 +56,7 @@ observe(9000u64);
 '''
 runner.HARNESS = runner.HARNESS.replace('checkpoints==5', 'checkpoints==6').replace('creation_failures==1', 'creation_failures==2').replace('copy_failures==3', 'copy_failures==2').replace('largest>4000', 'largest>0')
 runner.EXPECTED_VALUES = ['12000', '3', '4', '7', '1', '7', '1', '7', '1', '9', '7']
+runner.EXPECTED_SHADOWS = ['x']
 runner.EXTRA_SOURCES += [Path(__file__)]
 
 if __name__ == '__main__':

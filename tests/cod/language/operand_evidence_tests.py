@@ -60,6 +60,34 @@ runner.CASES = {
  'function_cannot_invoke_borrowed_procedure':('proc (+)(ref x:i64 in O,y:i64)->const i64 where {owner O}{return x;}func bad(ref x:i64 in O)->const i64 where {owner O}{return x+2;}',2,'','function cannot invoke a procedure'),
 }
 runner.CASE_ARGUMENTS = {}
+runner.CASE_SHADOWS = {
+    'later_type_selects_copy_and_borrow': ['x', 'x'],
+    'generic_later_evidence': ['x', 'x', 'x'],
+    'effectful_later_signature': ['x', 'tag', 'x', 'tag'],
+    'scope_read_boundary': ['x', 'x'],
+    'local_annotation_evidence': ['x', 'x'],
+    'conditional_type_evidence': ['x', 'x'],
+    'later_callable_result_evidence': ['x', 'x'],
+    'recursive_signature_evidence': ['x', 'tag', 'x', 'tag'],
+    'later_generic_result_evidence': ['x', 'x', 'x'],
+    'repeated_binder_later_evidence': ['x', 'x'],
+    'most_specific_establishes_mode': ['x', 'x'],
+    'null_borrow_allows_later_effect': ['x', 'x'],
+    'null_copy_skips_later_effect': ['x', 'x'],
+    'no_runtime_type_probe': ['x', 'tag', 'x', 'tag'],
+    'borrow_operator_and_builtin': ['x'],
+    'operator_preserves_read_order': ['x'],
+    'operator_scope_cleanup': ['x'],
+    'builtin_scope_snapshot': ['x'],
+    'intrinsic_ignores_borrow_candidate': ['x'],
+    'generic_operator_copy_or_borrow': ['x', 'y', 'x', 'y'],
+    'operator_fallback_uses_later_type': ['x'],
+    'operator_fallback_null_skips_later_effect': ['x'],
+    'operator_borrow_read_is_early': ['x'],
+    'borrowed_unary_operator': ['x'],
+    'readonly_operator_uses_builtin': ['x'],
+    'guarded_operand_type': ['x', 'x'],
+}
 runner.EXTRA_SOURCES = [Path(__file__)]
 if __name__ == '__main__':
     raise SystemExit(runner.main())

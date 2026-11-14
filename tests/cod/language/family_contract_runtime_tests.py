@@ -84,6 +84,7 @@ runner.HARNESS = runner.HARNESS.replace('if(value==9000)', '''if(value>=9060 && 
   }
   if(value==9000)''').replace('assert(created+copied==released', 'assert(!deny_cause && breaches==3);\n  assert(created+copied==released')
 runner.EXPECTED_VALUES = ['6500', '9', '1', '8', '7', '1', '7', '6', '9', '6', '9', '6', '9']
+runner.EXPECTED_SHADOWS = []
 runner.EXTRA_SOURCES += [Path(__file__)]
 
 if __name__ == '__main__':

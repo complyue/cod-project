@@ -51,6 +51,9 @@ runner.CASES = {
     'signature_query_has_no_capture': ('symbol @x:u64;proc @f()->u64{return @x;}val result<-make local typeof(perform @f()){1u64};', 0, '', ''),
 }
 runner.CASE_ARGUMENTS = {}
+runner.CASE_SHADOWS = {
+    'deferred_argument_snapshot': ['x'],
+}
 runner.EXTRA_SOURCES = [Path(__file__)]
 
 if __name__ == '__main__':

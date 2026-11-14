@@ -42,6 +42,26 @@ runner.CASES={
  'returned_owner_cannot_escape':('func view(x:i64 in O)->ptr i64 in O where {owner O}{ptr p:i64 in O=x;return p;}ptr p={{val x<-1;view(x)}};p;',2,'','lexical owner has ended'),
 }
 runner.CASE_ARGUMENTS={}
+runner.CASE_SHADOWS = {
+    'existing_pointer_target': ['x'],
+    'existing_reference_target': ['x'],
+    'null_then_target': ['x'],
+    'clear_and_restore': ['x'],
+    'absent_view_has_owner': ['x', 'p'],
+    'nullable_result_does_not_read': ['x', 'p'],
+    'null_access_still_checked': ['x'],
+    'borrowed_uninitialized_destination': ['x'],
+    'external_owner_outlives_alias_scope': ['x'],
+    'same_owner_conditional_target': ['x', 'y'],
+    'generic_owner_and_type': ['x'],
+    'recursive_owner': ['x'],
+    'per_iteration_alias_scope': ['x'],
+    'deferred_annotated_alias': ['x'],
+    'late_deferred_target': ['x'],
+    'readonly_borrow': ['x'],
+    'callable_holder_owner': ['f'],
+    'same_owner_grouped_aliases': ['x'],
+}
 runner.EXTRA_SOURCES=[Path(__file__)]
 if __name__=='__main__':
  raise SystemExit(runner.main())

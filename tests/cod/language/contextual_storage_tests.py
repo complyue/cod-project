@@ -36,6 +36,28 @@ runner.CASES = {
  'local_captured_callable_after_storage':(IO+CALLABLES+PICK+'func read(tag:T,ref x:i64 in O)->const u64 where {T,owner O}{ref y=pick(tag,x);func g=wrap(base);func h=func[g](v:u64)->const u64{return g(v);};return h(1u64);}val x<-1;behave @print(read(false,x));behave @print(read(0,x));',0,'2\n2\n',''),
 }
 runner.CASE_ARGUMENTS = {}
+runner.CASE_SHADOWS = {
+    'borrow_or_construct_local': ['x', 'x', 'x'],
+    'reverse_demand_order': ['x', 'x', 'x'],
+    'later_storage_identity': ['x', 'x', 'x'],
+    'two_contextual_declarations': ['x', 'x', 'x'],
+    'ordinary_group_initializer': ['x', 'x', 'x'],
+    'scoped_guarded_initializer': ['x', 'x', 'x'],
+    'conditional_initializer': ['x', 'x', 'x'],
+    'per_iteration_storage': ['x', 'x', 'x'],
+    'fold_storage': ['x', 'x', 'x'],
+    'recursive_frames': ['x', 'x', 'x'],
+    'deferred_local_reads': ['x', 'x', 'x'],
+    'deferred_prepared_borrows': ['x', 'x', 'x'],
+    'nested_deferred_declarations': ['x', 'x', 'x'],
+    'nullable_storage': ['x', 'x', 'x'],
+    'fixed_binding_alias': ['x', 'x', 'x'],
+    'same_owner_rebinding': ['x', 'x', 'x'],
+    'explicit_copy_keeps_local_storage': ['x', 'x', 'x'],
+    'initializer_effects_once': ['x', 'x', 'x'],
+    'caught_snapshot_after_contextual_storage': ['x', 'x', 'x'],
+    'local_captured_callable_after_storage': ['x', 'x', 'x', 'x', 'x', 'x'],
+}
 runner.EXTRA_SOURCES = [Path(__file__), Path(contracts.__file__)]
 if __name__ == '__main__':
     raise SystemExit(runner.main())

@@ -42,6 +42,29 @@ runner.CASES={
  'declared_throws_remains':(BASE+'selected(x);',2,'','requires a covering catch'),
 }
 runner.CASE_ARGUMENTS={}
+runner.CASE_SHADOWS = {
+    'unrelated_implementation': ['x', 'x', 'x'],
+    'expression_selection': ['x', 'x', 'x'],
+    'slot_alias': ['x', 'x', 'x'],
+    'pointer_holder': ['x', 'x', 'x'],
+    'independent_copy': ['x', 'x', 'x'],
+    'conditional_selection': ['x', 'x', 'x'],
+    'scoped_selection': ['x', 'x', 'x'],
+    'generic_argument': ['x', 'x', 'x', 'x'],
+    'recursive_argument': ['x', 'x', 'x', 'x'],
+    'mutual_argument': ['x', 'x', 'x', 'x', 'x'],
+    'captured_argument': ['x', 'x', 'x'],
+    'capture_from_named_definition': ['x', 'x', 'x'],
+    'returned_argument': ['x', 'x', 'x'],
+    'recursive_return': ['x', 'x', 'x'],
+    'returned_capture': ['x', 'x', 'x'],
+    'nested_captures': ['x', 'x', 'x'],
+    'growing_captures': ['x', 'x', 'x'],
+    'deferred_selection': ['x', 'x', 'x'],
+    'deferred_higher_order': ['x', 'x', 'x', 'x'],
+    'delayed_selection': ['x', 'x', 'x'],
+    'borrowed_holder_replacement': ['x', 'x', 'x'],
+}
 runner.EXTRA_SOURCES=[Path(__file__)]
 if __name__=='__main__':
     raise SystemExit(runner.main())

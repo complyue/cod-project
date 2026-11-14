@@ -62,6 +62,27 @@ runner.CASES = {
  'bare_generic_default_remains_unselected': ('func get(x:T)->T where T{return x;}get(1);',2,'','default result mode for non-scalar or generic types'),
 }
 runner.CASE_ARGUMENTS = {}
+runner.CASE_SHADOWS = {
+    'bare_scalar_snapshot': ['x'],
+    'explicit_val_snapshot': ['x'],
+    'borrowed_owner_shorthand': ['x'],
+    'readonly_owner_shorthand': ['x'],
+    'borrowed_copy_after_cleanup': ['x'],
+    'mixed_value_returns': ['x'],
+    'null_named_owner': ['x'],
+    'null_owners_agree': ['x'],
+    'return_null_uses_declared_owner': ['x'],
+    'named_null_owner_guides_preparation': ['x', 'x', 'x'],
+    'here_owner_guides_preparation': ['x', 'x'],
+    'declaration_owner_guides_preparation': ['x', 'x', 'x'],
+    'qualified_null_type_query_is_not_a_read': ['x'],
+    'borrowed_return_does_not_follow_rebind': ['x', 'y'],
+    'borrowed_return_can_be_replaced': ['x', 'y'],
+    'failed_rhs_retains_destination': ['x'],
+    'captured_scalar_callable_result': ['f'],
+    'nullable_return_retains_owner_after_cleanup': ['x', 'p'],
+    'same_owner_runtime_choice': ['x', 'y'],
+}
 runner.EXTRA_SOURCES = [Path(__file__)]
 if __name__ == '__main__':
     raise SystemExit(runner.main())

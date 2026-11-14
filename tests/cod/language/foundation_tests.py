@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Native and IR checks for the supported scalar source foundation."""
 import datetime
+from collections import Counter
 import hashlib
 import json
 import os
@@ -44,7 +45,14 @@ CASES = {
     "empty": ("", 0, "", ""),
 }
 CASE_ARGUMENTS = {"missing_return_error": ["-Werror=missing-return"]}
+CASE_SHADOWS = {}
 EXTRA_SOURCES = []
+
+
+def shadow_diagnostics(stderr, expected):
+    pattern = r"^.+:\d+:\d+: warning: declaration shadows outer binding '([^']+)' \[-Wshadow\]\n"
+    names = re.findall(pattern, stderr, re.M)
+    return Counter(names) == Counter(expected), re.sub(pattern, '', stderr, flags=re.M)
 
 
 def main():
@@ -81,9 +89,10 @@ def main():
                     command.append("--no-specialize")
                 command.extend(CASE_ARGUMENTS.get(name, []))
                 run = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, timeout=60)
-                passed = run.returncode == code and run.stdout == stdout and diagnostic in run.stderr
+                matched, remaining = shadow_diagnostics(run.stderr, CASE_SHADOWS[name]) if name in CASE_SHADOWS else (True, run.stderr)
+                passed = matched and run.returncode == code and run.stdout == stdout and diagnostic in remaining
                 if not diagnostic:
-                    passed = passed and run.stderr == ""
+                    passed = passed and remaining == ""
                 record(label, passed, command=command, exit=run.returncode, stdout=run.stdout, stderr=run.stderr)
                 if name == "scalars" and ir.exists():
                     scalar_ir[general] = ir.read_text()

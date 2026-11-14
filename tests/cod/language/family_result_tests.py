@@ -70,6 +70,9 @@ for source, target, literal in [('u64', 'f64', '1u64'), ('i64', 'f64', '1'), ('u
                                 ('f64', 'f32', '1.0f64'), ('u64', 'u8', '1u64'), ('bool', 'u64', 'true')]:
     runner.CASES[f'reject_{source}_to_{target}'] = (f'symbol @f:proc()->{target};proc @f()->{source}{{return {literal};}}effect @f;', 2, '', GAP)
 runner.CASE_ARGUMENTS = {}
+runner.CASE_SHADOWS = {
+    'exception_cause_and_caller_binding': ['x'],
+}
 runner.EXTRA_SOURCES = [Path(__file__)]
 
 if __name__ == '__main__':

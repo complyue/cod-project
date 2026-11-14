@@ -26,5 +26,6 @@ cleanup_selected(true);cleanup_selected(false);observe(9000u64);
 '''
 runner.HARNESS=runner.HARNESS.replace('checkpoints==16','checkpoints==17').replace('copy_failures==11 && record_failures==3','copy_failures==13 && record_failures==5')
 runner.EXPECTED_VALUES+=['41','42','43','44','44','45']*2
+runner.EXPECTED_SHADOWS = []
 runner.EXTRA_SOURCES+=[Path(fixture.__file__),Path(__file__)]
 if __name__=='__main__':raise SystemExit(runner.main())

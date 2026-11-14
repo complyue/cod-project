@@ -23,6 +23,7 @@ selected_aliases(true);selected_aliases(false);observe(9000u64);
 '''
 runner.HARNESS=runner.HARNESS.replace('checkpoints==15','checkpoints==16').replace('copy_failures==9 && record_failures','copy_failures==11 && record_failures')
 runner.EXPECTED_VALUES+=['12','2','12','12','2','2','2','2','2','2']
+runner.EXPECTED_SHADOWS = []
 runner.EXTRA_SOURCES+=[Path(fixture.__file__),Path(__file__)]
 if __name__=='__main__':
  raise SystemExit(runner.main())

@@ -22,6 +22,7 @@ for original, widened in (
 ):
     assert original in runner.SOURCE
     runner.SOURCE = runner.SOURCE.replace(original, widened)
+runner.EXPECTED_SHADOWS = []
 runner.EXTRA_SOURCES += [Path(__file__)]
 if __name__ == '__main__':
     raise SystemExit(runner.main())

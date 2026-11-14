@@ -52,6 +52,24 @@ runner.CASES.update({
     'bool_stays_distinct': ('fold(i in 0..2,a=0u8){true};', 2, '', 'fold body does not satisfy'),
 })
 runner.CASE_ARGUMENTS = {}
+runner.CASE_SHADOWS = {
+    'u8_to_u8': ['x', 'x', 'x', 'x', 'x', 'x'],
+    'u8_to_u32': ['x', 'x', 'x', 'x', 'x', 'x'],
+    'u8_to_u64': ['x', 'x', 'x', 'x', 'x', 'x'],
+    'u8_to_i64': ['x', 'x', 'x', 'x', 'x', 'x'],
+    'u8_to_f32': ['x', 'x', 'x', 'x', 'x', 'x'],
+    'u8_to_f64': ['x', 'x', 'x', 'x', 'x', 'x'],
+    'u32_to_u32': ['x', 'x', 'x', 'x', 'x', 'x'],
+    'u32_to_u64': ['x', 'x', 'x', 'x', 'x', 'x'],
+    'u32_to_i64': ['x', 'x', 'x', 'x', 'x', 'x'],
+    'u32_to_f64': ['x', 'x', 'x', 'x', 'x', 'x'],
+    'u64_to_u64': ['x', 'x', 'x', 'x', 'x', 'x'],
+    'i64_to_i64': ['x', 'x', 'x', 'x', 'x', 'x'],
+    'f32_to_f32': ['x', 'x', 'x', 'x', 'x', 'x'],
+    'f32_to_f64': ['x', 'x', 'x', 'x', 'x', 'x'],
+    'f64_to_f64': ['x', 'x', 'x', 'x', 'x', 'x'],
+    'captured_accumulator_types': ['a'],
+}
 runner.EXTRA_SOURCES = [Path(__file__)]
 
 if __name__ == '__main__':

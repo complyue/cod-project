@@ -88,6 +88,7 @@ extern "C" void cod_lang_exception_finish() noexcept{
 }
 '''
 runner.EXPECTED_VALUES = ['5','41','1','4','2','5','41','3']
+runner.EXPECTED_SHADOWS = []
 runner.EXTRA_SOURCES = [Path(__file__),Path(__file__).with_name('generic_catch_tests.py'),Path(__file__).with_name('generic_callable_runtime_tests.py')]
 if __name__ == '__main__':
     raise SystemExit(runner.main())

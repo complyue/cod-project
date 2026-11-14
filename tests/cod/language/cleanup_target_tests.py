@@ -83,5 +83,9 @@ runner.CASES = {
     'inner_target_owner_mismatch': bad('{{val t<-make local i64;p=t;defer{t<-1;};}};behave @print(p);', 'initializer-fixed owner'),
 }
 runner.CASE_ARGUMENTS = {}
+runner.CASE_SHADOWS = {
+    'generic_null_entry_throws': ['p'],
+    'known_target_failure_after_write': ['e'],
+}
 runner.EXTRA_SOURCES = [Path(fixture.__file__), Path(__file__)]
 if __name__ == '__main__': raise SystemExit(runner.main())

@@ -9,6 +9,7 @@ runner.SOURCE = runner.SOURCE.replace('proc[p](x:u64)->void{', 'proc[p](x:T)->vo
 for before, after in [('g(1u64)', 'g(1u8)'), ('f(1u64)', 'f(1u32)'), ('f(2u64)', 'f(2u8)'),
                       ('f(3u64)', 'f(3u32)'), ('f(5u64)', 'f(5u8)'), ('()(7u64)', '()(7u8)')]:
     runner.SOURCE = runner.SOURCE.replace(before, after)
+runner.EXPECTED_SHADOWS = []
 runner.EXTRA_SOURCES += [Path(__file__)]
 
 if __name__ == '__main__':

@@ -132,6 +132,7 @@ extern "C" void cod_lang_exception_finish() noexcept{
 }
 '''
 runner.EXPECTED_VALUES = ['3','12','50795000','3','4','5','17','8','9']
+runner.EXPECTED_SHADOWS = []
 runner.EXTRA_SOURCES = [Path(__file__)]
 if __name__ == '__main__':
     raise SystemExit(runner.main())

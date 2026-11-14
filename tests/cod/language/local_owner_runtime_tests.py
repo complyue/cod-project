@@ -23,6 +23,7 @@ func absent(ptr x:T in O)->ptr T in O where {T,owner O}{ptr p:T in O=null;return
 ptr p=absent(a);behave @print(isnull(p));p=a;p<-41u64;observe(a);
 '''
 runner.EXPECTED_VALUES += ['true','41']
+runner.EXPECTED_SHADOWS = ['p', 'p', 'p', 'a', 'p', 'a', 'a', 'p', 'p', 'p', 'p']
 runner.EXTRA_SOURCES += [Path(__file__)]
 if __name__=='__main__':
  raise SystemExit(runner.main())

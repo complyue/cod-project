@@ -61,6 +61,31 @@ runner.CASES = {
 
 }
 runner.CASE_ARGUMENTS = {}
+runner.CASE_SHADOWS = {
+    'guarded_later_type': ['x', 'x'],
+    'guarded_first_operand': ['x', 'x'],
+    'handler_and_finalizer_effect_order': ['x', 'x'],
+    'handler_return_cancels_invocation': ['x', 'x', 'x'],
+    'null_copy_precedes_later_guard': ['x', 'x'],
+    'null_borrow_allows_later_guard': ['x', 'x'],
+    'guarded_snapshot_boundary': ['x', 'x'],
+    'catch_parameter_is_local': ['tag', 'x', 'tag', 'x', 'tag'],
+    'finally_declaration_supplies_later_type': ['x', 'tag', 'x', 'tag'],
+    'loop_before_operand_result': ['x', 'x'],
+    'fold_bool_selects_borrow': ['x', 'x'],
+    'empty_fold_selects_copy': ['x', 'x'],
+    'loop_controls_do_not_escape': ['tag', 'x', 'tag', 'x', 'tag'],
+    'null_copy_precedes_fold_effects': ['x', 'x'],
+    'inferred_callable_local_signature': ['x', 'x'],
+    'anonymous_callable_local_signature': ['x', 'x'],
+    'named_lexical_callable_signature': ['x', 'x'],
+    'anonymous_callable_invocation_signature': ['x', 'x'],
+    'callable_capture_construction_is_not_evaluated_early': ['x', 'x', 'p'],
+    'inherited_callable_type_context': ['x', 'x', 'x'],
+    'annotation_keeps_callable_view_type': ['x', 'x'],
+    'captured_exception_view_adapter': ['f'],
+    'exception_adapter_preserves_payload': ['e', 'e', 'e'],
+}
 runner.EXTRA_SOURCES = [Path(__file__)]
 if __name__ == '__main__':
     raise SystemExit(runner.main())

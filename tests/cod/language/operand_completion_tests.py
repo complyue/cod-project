@@ -48,6 +48,15 @@ runner.CASES={
  'recursive_logical_completion':(IO+'func f(n:i64)->const i64{(n==0)&&{{return 7;}};return f(n-1);}behave @print(f(40));',0,'7\n',''),
 }
 runner.CASE_ARGUMENTS={}
+runner.CASE_SHADOWS = {
+    'logical_null_refinement': ['p'],
+    'contextual_deferred_preparation': ['x', 'x', 'x', 'x'],
+    'contextual_ordinary_preparation': ['x', 'x', 'x', 'x'],
+    'contextual_print_operand': ['x', 'x', 'x', 'x'],
+    'contextual_transfer_rhs': ['x', 'x', 'x', 'x'],
+    'assignment_rhs_return': ['x', 'x'],
+    'assignment_null_precedes_return': ['x', 'p'],
+}
 runner.EXTRA_SOURCES=[Path(__file__)]
 if __name__=='__main__':
     raise SystemExit(runner.main())

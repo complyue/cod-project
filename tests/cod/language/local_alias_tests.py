@@ -64,6 +64,10 @@ runner.CASES = {
     'mutable_exception_alias': (ERRORS + 'val e<-error();const ptr p=e;{{defer{behave @print(p.category);};p<-error();}};', 0, '5\n', WARN),
     'rethrow_alias': (ERRORS + 'try{try{missing();{}}catch(e:const MissingReturnException){const ptr p=e;throw p;};}catch(e:const MissingReturnException){behave @print(e.category);};', 0, '5\n', WARN),
 }
+runner.CASE_SHADOWS = {
+    'const_ref_parameter_target': ['x'],
+    'mutable_exception_alias': ['e'],
+}
 runner.EXTRA_SOURCES = [Path(__file__)]
 if __name__ == '__main__':
     sys.exit(runner.main())

@@ -55,6 +55,26 @@ runner.CASES = {
  'query_value_access': (IO+'func f(x:const u64)->u64;func f(x:u64){return x;}val x<-make local typeof(f(1u64)){7u64};behave @print(x);',0,'7\n',''),
 }
 runner.CASE_ARGUMENTS = {}
+runner.CASE_SHADOWS = {
+    'stronger_owner_relation': ['x', 'y'],
+    'declared_owner_roles_collapse': ['x', 'y'],
+    'explicit_result_satisfies_broader_owners': ['x', 'y'],
+    'declaration_after_narrow_method': ['x', 'y'],
+    'generic_owner_containment': ['x', 'y'],
+    'value_input_const_declaration': ['x'],
+    'copied_readonly_input': ['x'],
+    'narrow_borrow_access': ['x'],
+    'borrowed_result_keeps_declared_access': ['x'],
+    'combined_owner_access_containment': ['x', 'y'],
+    'borrowed_callable_keeps_method_contract': ['x'],
+    'retained_owner_return_after_cleanup': ['x', 'y'],
+    'deferred_narrow_contract': ['x', 'y'],
+    'operator_owner_containment': ['x', 'y'],
+    'disjoint_swap_method': ['x', 'y'],
+    'swap_owner_containment': ['x', 'y'],
+    'query_retains_declared_owner': ['x', 'y'],
+    'query_value_access': ['x'],
+}
 runner.EXTRA_SOURCES = [Path(__file__)]
 if __name__ == '__main__':
     raise SystemExit(runner.main())

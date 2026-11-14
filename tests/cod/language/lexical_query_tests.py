@@ -18,7 +18,7 @@ runner.CASES={
  'transitive_query_dependencies':(IO+CLASSIFY+'func factory(x:T)->func()->const i64 where T{return func()->const i64{func inner()->const i64{val y<-make local typeof(x);return classify(y);};return inner();};}func a=factory(1);func b=factory(true);behave @print(a());behave @print(b());',0,'1\n2\n',''),
  'transitive_returned_callable':(IO+CLASSIFY+'func factory(x:T)->func()->func()->const i64 where T{return func()->func()->const i64{return func()->const i64{val y<-make local typeof(x);return classify(y);};};}func a=factory(1)();func b=factory(true)();behave @print(a());behave @print(b());',0,'1\n2\n',''),
  'shadowing_outer_parameter':(IO+CLASSIFY+'func outer(x:bool)->const i64{func inner(x:i64)->const i64{val y<-make local typeof(x);return classify(y);};return inner(1);}behave @print(outer(true));',0,'1\n',''),
- 'shadowing_enclosing_scope':(IO+CLASSIFY+'func outer()->const i64{val x<-true;return {{val x<-1;func inner()->const i64{val y<-make local typeof(x);return classify(y);};inner()}};}behave @print(outer());',0,'1\n','shadow'),
+ 'shadowing_enclosing_scope':(IO+CLASSIFY+'func outer()->const i64{val x<-true;return {{val x<-1;func inner()->const i64{val y<-make local typeof(x);return classify(y);};inner()}};}behave @print(outer());',0,'1\n',''),
  'initializer_sees_outer_name':(IO+'func outer()->const i64{val x<-1;func inner()->const i64{val x<-make local typeof(x){9};return x;};return inner();}behave @print(outer());',0,'9\n',''),
  'query_only_explicit_empty_captures':(IO+'func outer()->const i64{val x<-1;func inner []()->const i64{val y<-make local typeof(x){10};return y;};return inner();}behave @print(outer());',0,'10\n',''),
  'query_local_callable_signature':(IO+'func id(x:i64)->const i64{return x;}func outer()->const i64{func f=id;func inner()->const i64{val y<-make local typeof(f(1)){11};return y;};return inner();}behave @print(outer());',0,'11\n',''),
@@ -44,6 +44,12 @@ runner.CASES={
  'initializer_keeps_runtime_capture':(IO+'func id(x:i64)->const i64{return x;}func outer()->const i64{func f=id;val x<-1;func inner()->const i64{val y<-make local typeof(x){f(17)};return y;};return inner();}behave @print(outer());',0,'17\n',''),
 }
 runner.CASE_ARGUMENTS={}
+runner.CASE_SHADOWS = {
+    'shadowing_outer_parameter': ['x'],
+    'shadowing_enclosing_scope': ['x'],
+    'initializer_sees_outer_name': ['x'],
+    'owner_relation_selects_evidence_context': ['x', 'x', 'x', 'x', 'a', 'b', 'a', 'b', 'b', 'a'],
+}
 runner.EXTRA_SOURCES=[Path(__file__)]
 if __name__=='__main__':
  raise SystemExit(runner.main())

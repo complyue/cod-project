@@ -57,6 +57,32 @@ runner.CASES = {
 
 }
 runner.CASE_ARGUMENTS = {}
+runner.CASE_SHADOWS = {
+    'cleanup_view_vs_snapshot': ['x', 'x', 'x'],
+    'reverse_demand_order': ['x', 'x', 'x'],
+    'direct_contracts_are_preserved': ['x', 'x'],
+    'independent_local_value': ['x', 'x', 'x'],
+    'conditional_value_consumption': ['x', 'x', 'x'],
+    'full_scope_value_consumption': ['x', 'x', 'x'],
+    'guarded_value_consumption': ['x', 'x', 'x'],
+    'once_only_operands': ['x', 'x', 'x'],
+    'value_before_later_operand_effect': ['x', 'x', 'x', 'x'],
+    'ordinary_recursion_reuses_result_choice': ['x', 'x', 'x'],
+    'mutual_recursion_reuses_result_choice': ['x', 'x', 'x', 'x'],
+    'loop_value_consumption': ['x', 'x', 'x'],
+    'fold_value_consumption': ['x', 'x', 'x'],
+    'deferred_value_snapshot': ['x', 'x', 'x', 'x'],
+    'deferred_block_value_read': ['x', 'x', 'x'],
+    'deferred_replacement_return': ['x', 'x', 'x'],
+    'finally_replacement_return': ['x', 'x', 'x'],
+    'borrowed_null_checks_before_later_operand': ['x', 'x', 'x', 'x'],
+    'discarded_null_result_is_not_read': ['x', 'x', 'x'],
+    'deferred_discarded_result_is_not_read': ['x', 'x', 'x'],
+    'reference_storage_layout_composes': ['x', 'x', 'x'],
+    'read_for_argument_preparation_modes': ['x', 'x', 'x', 'x', 'x'],
+    'borrowed_operator_or_builtin_result': ['x', 'y', 'x', 'y'],
+    'exception_payload_result_context': ['e', 'e', 'e', 'e'],
+}
 runner.EXTRA_SOURCES = [Path(__file__)]
 if __name__ == '__main__':
     raise SystemExit(runner.main())

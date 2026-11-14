@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 import tempfile
 
-from foundation_tests import ROOT, MODE, COD
+from foundation_tests import ROOT, MODE, COD, shadow_diagnostics
 from regional_runtime_tests import checked
 
 SOURCE = '''
@@ -89,6 +89,7 @@ extern "C" void cod_lang_exception_finish() noexcept {
 EXPECTED_VALUES = ['1', '1', '0', '1', '1', '0', '0', '1', '5']
 EXTRA_SOURCES = []
 SOURCE_FILES = {}
+EXPECTED_SHADOWS = []
 
 
 def main():
@@ -107,7 +108,10 @@ def main():
             command = [COD, "--check", entry, "--emit-llvm", ir, "--emit-bc", bc, "--emit-runtime", runtime]
             if general:
                 command.append("--no-specialize")
-            output, frontend_seconds = checked(command, ROOT, ('[-Wmissing-return]',))
+            diagnostics = []
+            output, frontend_seconds = checked(command, ROOT, ('[-Wmissing-return]', '[-Wshadow]'), diagnostics)
+            if not shadow_diagnostics(''.join(diagnostics), EXPECTED_SHADOWS)[0]:
+                raise RuntimeError(f"Unexpected shadow diagnostics: {diagnostics}")
             if output:
                 raise RuntimeError("Checking executed runtime effects")
             checked([toolchain / "bin/llvm-as", ir, "-o", scratch / "roundtrip.bc"], ROOT)
@@ -124,7 +128,7 @@ def main():
             if values != EXPECTED_VALUES:
                 raise RuntimeError(f"Unexpected exception trace: {values}")
             results.append({"name": "general" if general else "default", "passed": True, "metrics": json.loads(metrics),
-                            "stdout": values, "frontend_seconds": frontend_seconds, "compile_seconds": compile_seconds,
+                            "stdout": values, "diagnostics": diagnostics, "frontend_seconds": frontend_seconds, "compile_seconds": compile_seconds,
                             "execution_seconds": execution_seconds, "check_command": list(map(str, command)),
                             "compile_command": list(map(str, compile_command))})
             print(f"PASS {results[-1]['name']}: {metrics}", flush=True)

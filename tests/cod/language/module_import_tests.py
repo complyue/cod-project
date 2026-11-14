@@ -156,6 +156,9 @@ runner.CASES = {
 }
 runner.CASES['multiple_extension_aliases_error'] = (*runner.CASES['multiple_extension_aliases_warn'][:1], 2, '', 'treated as error')
 runner.CASE_ARGUMENTS = {'multiple_extension_aliases_error': ['-Werror=multi-alias-extension']}
+runner.CASE_SHADOWS = {
+    'shadowed_dependency_does_not_demand_an_interpretation': ['dangerous'],
+}
 runner.EXTRA_SOURCES = [Path(__file__)]
 
 if __name__ == '__main__':

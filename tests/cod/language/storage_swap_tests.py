@@ -81,6 +81,11 @@ runner.CASES = {
     'plain_deferred_builtin_boundary': ('ptr p=1,q=2;defer intrinsic (<=>)(p,q);',2,'','deferred reference-swap intrinsics'),
 }
 runner.CASE_ARGUMENTS = {}
+runner.CASE_SHADOWS = {
+    'borrowed_bits_setters': ['x'],
+    'callee_slot_exchange_is_local': ['x', 'y'],
+    'borrowed_result_after_exchange': ['x', 'y'],
+}
 runner.EXTRA_SOURCES = [Path(__file__)]
 if __name__ == '__main__':
     raise SystemExit(runner.main())

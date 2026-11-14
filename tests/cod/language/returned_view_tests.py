@@ -58,6 +58,13 @@ runner.CASES = {
     'ref_result_retains_initialized_promise': (PRE+'func f(ptr x:i64 in O,ptr y:i64 in O)->ref i64 in O throws NullPointerException where {owner O}{x<-116;if(isnull(y)){return x;}else{return y;};}'+LOCALS+'try{behave @print(f(p,p));}catch(e:const NullPointerException){};',0,'116\n',''),
     'ref_result_still_checks_input_requirement': (PRE+'func f(ptr x:i64 in O,ptr y:i64 in O)->ref i64 in O throws NullPointerException where {owner O}{x<-116;if(isnull(y)){return x;}else{return y;};}val a<-make local i64,b<-make local i64;try{behave @print(f(a,b));}catch(e:const NullPointerException){};',2,'','cannot prove initialization'),
 }
+runner.CASE_SHADOWS = {
+    'branch_selected_initialization': ['b'],
+    'recovery_replaces_saved_result': ['e'],
+    'ordinary_catch_discards_interrupted_selection': ['e'],
+    'attached_catch_discards_own_interrupted_selection': ['e'],
+    'finalizer_catch_preserves_suspended_outer_return': ['e', 'e'],
+}
 runner.EXTRA_SOURCES = [Path(__file__)]
 if __name__ == '__main__':
     sys.exit(runner.main())

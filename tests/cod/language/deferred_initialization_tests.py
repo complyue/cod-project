@@ -62,6 +62,15 @@ runner.CASES = {
     'finally_body_skipped_on_failure': (PRELUDE + 'val e<-error();{{val x<-make local i64;defer{x<-1;}finally{observe(x);};throw e;}};', 2, '', UNPROVED),
 }
 runner.CASE_ARGUMENTS = {}
+runner.CASE_SHADOWS = {
+    'post_scope': ['x'],
+    'loop_one_setter': ['x'],
+    'handler_failed_entry_initialization': ['e', 'e'],
+    'unmatched_handler_read': ['e', 'e', 'e'],
+    'handler_write_continuation': ['e', 'e', 'x'],
+    'failure_continuation': ['e', 'e', 'x'],
+    'category_specific_finally': ['e', 'e', 'e'],
+}
 runner.EXTRA_SOURCES = [Path(__file__)]
 
 if __name__ == '__main__':

@@ -55,6 +55,13 @@ runner.CASES = {
  'post_cleanup_checked_category_remains_possible': (EXCEPTIONS+'val a:SystemException<-error(),b:SystemException<-absent();{{defer (<->)(a,b);}};throw a;',2,'','requires a covering catch'),
 }
 runner.CASE_ARGUMENTS = {}
+runner.CASE_SHADOWS = {
+    'explicit_builtin_bypasses_method': ['x', 'y'],
+    'borrowed_targets_outlive_call': ['x', 'y'],
+    'borrowed_read_promises_propagate': ['x', 'y'],
+    'borrowed_return_observes_swapped_payload': ['x', 'y'],
+    'generic_recursive_mixed_dispatch': ['x', 'y', 'x', 'y'],
+}
 runner.EXTRA_SOURCES = [Path(__file__)]
 if __name__ == '__main__':
     raise SystemExit(runner.main())

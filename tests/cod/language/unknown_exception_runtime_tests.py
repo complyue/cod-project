@@ -8,7 +8,7 @@ from pathlib import Path
 import re
 import tempfile
 import owner_dispatch_runtime_tests as fixture
-from foundation_tests import ROOT, MODE, COD
+from foundation_tests import ROOT, MODE, COD, shadow_diagnostics
 from regional_runtime_tests import checked
 
 runner=fixture.runner
@@ -68,6 +68,7 @@ observe(9000u64);
 WRAPPERS=runner.WRAPPERS
 HARNESS=runner.HARNESS.replace('checkpoints==10','checkpoints==11').replace('copy_failures==9','copy_failures==10').replace('record_failures==6','record_failures==7')
 EXPECTED_VALUES=runner.EXPECTED_VALUES+['7','5','7','1','321','123','1','7','321','7','310','7','302','300','2','12','6','10000','7']
+EXPECTED_SHADOWS=['other']
 EXTRA_SOURCES=[*runner.EXTRA_SOURCES,Path(fixture.__file__),Path(runner.__file__),Path(__file__)]
 
 
@@ -92,7 +93,10 @@ def main():
             ir=scratch/'main.ll';bc=scratch/'injected.bc';runtime=scratch/'runtime.cc'
             command=[COD,'--check',source,'--emit-llvm',ir,'--emit-runtime',runtime]
             if general:command.append('--no-specialize')
-            output,frontend_seconds=checked(command,ROOT,('[-Wmissing-return]',))
+            diagnostics=[]
+            output,frontend_seconds=checked(command,ROOT,('[-Wmissing-return]','[-Wshadow]'),diagnostics)
+            if not shadow_diagnostics(''.join(diagnostics),EXPECTED_SHADOWS)[0]:
+                raise RuntimeError(f'Unexpected shadow diagnostics: {diagnostics}')
             if output:raise RuntimeError('Checking executed runtime effects')
             original=ir.read_text();modified,injected=inject_failures(original,runtime.read_text())
             ir.write_text(modified)
@@ -106,7 +110,7 @@ def main():
             output,execution_seconds=checked([executable],ROOT)
             *values,metrics=output.splitlines()
             if values!=EXPECTED_VALUES:raise RuntimeError(f'Unexpected exception trace: {values}')
-            results.append(dict(name='general' if general else 'default',passed=True,metrics=json.loads(metrics),stdout=values,injected=injected,
+            results.append(dict(name='general' if general else 'default',passed=True,metrics=json.loads(metrics),stdout=values,injected=injected,diagnostics=diagnostics,
                                 frontend_seconds=frontend_seconds,compile_seconds=compile_seconds,execution_seconds=execution_seconds,
                                 check_command=list(map(str,command)),compile_command=list(map(str,compile_command)),
                                 original_ir_sha256=hashlib.sha256(original.encode()).hexdigest(),injected_ir_sha256=hashlib.sha256(modified.encode()).hexdigest()))

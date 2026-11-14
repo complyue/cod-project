@@ -13,6 +13,7 @@ runner.SOURCE = runner.SOURCE.replace(
 runner.SOURCE = runner.SOURCE.replace(
     'proc f=wrapped(one);', 'proc holder=wrapped(one);var f->holder;')
 runner.SOURCE = runner.SOURCE.replace('return f;\n}', 'var a->f;return a;\n}')
+runner.EXPECTED_SHADOWS = []
 runner.EXTRA_SOURCES += [Path(fixture.__file__), Path(__file__)]
 if __name__ == '__main__':
     raise SystemExit(runner.main())

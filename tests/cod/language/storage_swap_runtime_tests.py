@@ -20,6 +20,7 @@ proc bits_order()->void{
 bits_order();
 '''
 runner.EXPECTED_VALUES += ['72','71','71','72','73','75','76','73']
+runner.EXPECTED_SHADOWS = []
 runner.EXTRA_SOURCES += [Path(fixture.__file__), Path(__file__)]
 if __name__ == '__main__':
     raise SystemExit(runner.main())

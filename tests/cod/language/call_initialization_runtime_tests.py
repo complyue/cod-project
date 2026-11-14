@@ -41,6 +41,7 @@ runner.HARNESS=runner.HARNESS.replace('if(value==9001)',
 runner.HARNESS=runner.HARNESS.replace('created==6 && peak==2 && failures==2',
     'created==5 && peak==1 && failures==1 && borrows==2 && setters==2')
 runner.EXPECTED_VALUES=['71','71','1','73','74','75','75','76']
+runner.EXPECTED_SHADOWS = []
 runner.EXTRA_SOURCES=[Path(initialization.__file__),Path(__file__)]
 
 if __name__=='__main__':raise SystemExit(runner.main())

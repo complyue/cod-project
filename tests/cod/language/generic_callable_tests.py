@@ -53,6 +53,12 @@ runner.CASES.update({
  'deferred_generic_result':(IO+'func empty()->const void{}func number()->const i64{return 20;}func finish(f:func()->const T)->const T where T{defer{return f();};}finish(empty);behave @print(finish(number));',0,'20\n',''),
  'captured_value_missing_return':(IO+EX+'func number()->const i64{return 1;}func wrap(f:func()->const i64)->func()->const i64{return func[f]()->const i64{return f();};}func empty()->const void{}func finish(f:func()->const T)->const T where T{f();}finish(empty);try{finish(wrap(number));{}}catch(e:const MissingReturnException){behave @print(21);};',0,'21\n','callable may finish without an explicit return'),
 })
+runner.CASE_SHADOWS = {
+    'checked_throws_contract': ['f'],
+    'captured_argument': ['f', 'f'],
+    'captured_generic_factory_argument': ['f', 'f'],
+    'nested_common_exception_generic': ['f'],
+}
 runner.EXTRA_SOURCES=[Path(__file__)]
 if __name__=='__main__':
  raise SystemExit(runner.main())

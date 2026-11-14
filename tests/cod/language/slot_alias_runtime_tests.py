@@ -7,6 +7,7 @@ runner = fixture.runner
 runner.SOURCE = runner.SOURCE.replace('ptr p=a;', 'ptr original=a;ptr var p->original;')
 runner.SOURCE = runner.SOURCE.replace('defer{observe(p);', 'defer{observe(original);')
 runner.SOURCE = runner.SOURCE.replace('p=b;', 'original=b;')
+runner.EXPECTED_SHADOWS = []
 runner.EXTRA_SOURCES += [Path(fixture.__file__), Path(__file__)]
 if __name__ == '__main__':
     raise SystemExit(runner.main())

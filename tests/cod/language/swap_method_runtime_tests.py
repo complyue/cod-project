@@ -47,6 +47,7 @@ runner.HARNESS = runner.HARNESS.replace('static void track', 'static std::uint64
 runner.EXPECTED_VALUES += ['81', '81', '81', '1', '0', '1', '2',
                           '81', '1', '0', '0', '0', '1',
                           '12', '2', '13', '3', '13', '3', '3', '3', '4', '5', '81', '81', '0']
+runner.EXPECTED_SHADOWS = []
 runner.EXTRA_SOURCES += [Path(fixture.__file__), Path(__file__)]
 if __name__ == '__main__':
     raise SystemExit(runner.main())

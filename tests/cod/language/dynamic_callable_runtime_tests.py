@@ -76,6 +76,7 @@ runner.HARNESS = runner.HARNESS.replace('if(value==9000)', '''if(value==9060){cr
   if(value==9000)''')
 runner.HARNESS = runner.HARNESS.replace('checkpoints==5', 'checkpoints==9').replace('creation_failures==1', 'creation_failures==3').replace('copy_failures==3', 'copy_failures==2').replace('largest>4000', 'largest>0')
 runner.EXPECTED_VALUES = ['3000', '2', '1', '1', '1', '1', '1', '1', '2', '1', '1']
+runner.EXPECTED_SHADOWS = ['x']
 runner.EXTRA_SOURCES += [Path(__file__)]
 
 if __name__ == '__main__':

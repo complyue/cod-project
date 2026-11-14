@@ -10,6 +10,7 @@ runner.SOURCE = runner.SOURCE.replace(
 runner.SOURCE = runner.SOURCE.replace('finish(empty);', '{{func v=wrap(empty);finish(v);}};\nfinish(empty);')
 runner.HARNESS = runner.HARNESS.replace('registered==5', 'registered==6')
 runner.EXPECTED_VALUES = ['1', *runner.EXPECTED_VALUES]
+runner.EXPECTED_SHADOWS = []
 runner.EXTRA_SOURCES += [Path(__file__)]
 if __name__ == '__main__':
     raise SystemExit(runner.main())

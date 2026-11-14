@@ -49,6 +49,9 @@ runner.CASES={
  'alias_duplicate_handler':(UNKNOWN+'using "std:exceptions" StaticallyUnknownType as Unknown;try{}catch(e:const StaticallyUnknownType){}catch(e:const Unknown){};',2,'','duplicate exception category'),
 }
 runner.CASE_ARGUMENTS={}
+runner.CASE_SHADOWS = {
+    'captured_callable': ['f'],
+}
 runner.EXTRA_SOURCES=[Path(__file__)]
 if __name__=='__main__':
     raise SystemExit(runner.main())

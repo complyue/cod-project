@@ -25,6 +25,7 @@ runner.SOURCE = runner.SOURCE.replace(
  '  observe(9011u64);observe(total);',
  '  if(real_total==10000f64){}else{observe(9999u64);};observe(9011u64);observe(total);')
 runner.EXPECTED_VALUES = [value.replace('50795000', '50805000') for value in runner.EXPECTED_VALUES]
+runner.EXPECTED_SHADOWS = []
 runner.EXTRA_SOURCES += [Path(__file__)]
 if __name__ == '__main__':
  raise SystemExit(runner.main())

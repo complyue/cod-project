@@ -26,6 +26,7 @@ runner.HARNESS=runner.HARNESS.replace('static bool deny_create','static bool que
 runner.HARNESS=runner.HARNESS.replace('  if(deny_record){++record_failures;','  if(query_record){assert(size==16);++query_records;}\n  if(deny_record){++record_failures;')
 runner.HARNESS=runner.HARNESS.replace('  if(value==9000)','  if(value==9080){assert(!query_record && !query_records);query_record=true;return;}\n  if(value==9081){assert(query_record && query_records==1);query_record=false;return;}\n  if(value==9000)')
 runner.EXPECTED_VALUES+=['29','30','31']
+runner.EXPECTED_SHADOWS = []
 runner.EXTRA_SOURCES+=[Path(fixture.__file__),Path(__file__)]
 if __name__=='__main__':
     raise SystemExit(runner.main())
