@@ -29,7 +29,7 @@ class LLVMEmission {
   llvm::Module module_{"cod.program", context_};
   llvm::IRBuilder<> b_{context_};
   // Private execution-local value transport. Callable environments are complete
-  // lexical images; they are not regional-storable bits.
+  // scope-owned images; they are not regional-storable bits.
   llvm::StructType *exception_ = llvm::StructType::get(context_, std::vector<llvm::Type *>(5, b_.getInt64Ty()));
   llvm::StructType *scalar_ = llvm::StructType::create(context_, {b_.getInt64Ty(), b_.getInt32Ty()}, "cod.scalar");
   llvm::StructType *outcome_ = llvm::StructType::create(context_,
@@ -42,6 +42,7 @@ class LLVMEmission {
   std::vector<Type> callable_types_;
   std::vector<llvm::Function *> general_, specialized_;
   std::vector<llvm::GlobalVariable *> symbols_;
+  std::map<size_t, llvm::AllocaInst *> effect_values_;
   std::vector<const std::map<const Expression *, CheckedOperation> *> facts_;
   std::vector<llvm::Value *> arguments_, retained_types_;
   std::vector<llvm::AllocaInst *> storage_, bindings_;
@@ -496,7 +497,18 @@ class LLVMEmission {
           arguments[i] = convert_value(original, value.type.parameters[i], instance.arguments[i]);
           if (const auto owned = value_owners_.find(original); owned != value_owners_.end()) value_owners_[arguments[i]] = owned->second;
         }
-        auto *result = native_call(target, method, std::move(arguments), environment(prepared.front()), value.instance);
+        std::vector<std::pair<size_t, llvm::Value *>> saved;
+        auto *image = environment(prepared.front());
+        if (expr.kind == Expression::Kind::perform && !instance.effects.symbols.empty()) {
+          size_t index = program_->methods[method].captures.size();
+          auto *layout = image_layout(index + instance.effects.symbols.size());
+          for (const auto symbol : instance.effects.symbols) {
+            saved.emplace_back(symbol, b_.CreateLoad(scalar_, symbols_.at(symbol), "replay.previous"));
+            b_.CreateStore(image_capture(layout, image, index++), symbols_.at(symbol));
+          }
+        }
+        auto *result = native_call(target, method, std::move(arguments), image, value.instance);
+        for (const auto &[symbol, previous] : saved) b_.CreateStore(previous, symbols_.at(symbol));
         incoming.emplace_back(result, b_.GetInsertBlock()); b_.CreateBr(join);
       }
       b_.SetInsertPoint(invalid);
@@ -723,16 +735,36 @@ class LLVMEmission {
     const size_t children = expr.kind == K::range_for ? 2 : expr.kind == K::fold ? 3 : expr.children.size();
     for (size_t i = 0; i < children; ++i) collect_effects(*expr.children[i], symbols);
   }
-  using SavedEffects = std::vector<std::pair<size_t, llvm::Value *>>;
+  struct SavedEffect {
+    size_t symbol;
+    llvm::Value *value;
+    llvm::AllocaInst *owned = nullptr, *parent = nullptr;
+  };
+  using SavedEffects = std::vector<SavedEffect>;
   SavedEffects save_effects(const std::vector<const Expression *> &expressions) {
     std::set<size_t> symbols;
     for (const auto *expr : expressions) collect_effects(*expr, symbols);
     SavedEffects saved;
-    for (const auto id : symbols) saved.emplace_back(id, b_.CreateLoad(scalar_, symbols_.at(id), "effect.previous"));
+    for (const auto id : symbols) {
+      SavedEffect effect{id, b_.CreateLoad(scalar_, symbols_.at(id), "effect.previous")};
+      if (program_->symbols[id].type->kind == Type::procedure) {
+        effect.owned = slot(scalar_, "effect.owned"); b_.CreateStore(empty_scalar(), effect.owned);
+        if (const auto outer = effect_values_.find(id); outer != effect_values_.end()) effect.parent = outer->second;
+        effect_values_[id] = effect.owned;
+      }
+      saved.push_back(effect);
+    }
     return saved;
   }
   void restore_effects(const SavedEffects &saved) {
-    for (const auto &[id, value] : saved) b_.CreateStore(value, symbols_.at(id));
+    for (const auto &effect : saved) {
+      if (effect.owned) {
+        clear_value(effect.owned);
+        if (effect.parent) effect_values_[effect.symbol] = effect.parent;
+        else effect_values_.erase(effect.symbol);
+      }
+      b_.CreateStore(effect.value, symbols_.at(effect.symbol));
+    }
   }
   llvm::Value *iteration(const Expression &expr, bool discard) {
     const auto saved = save_effects({&expr});
@@ -860,7 +892,7 @@ class LLVMEmission {
     return address;
   }
   size_t prepared_count(const Expression &expr) const {
-    return expr.children.size() + (expr.kind == Expression::Kind::call && facts_.front()->at(&expr).callable_call ? 1 : 0);
+    return expr.children.size() + (expr.kind != Expression::Kind::value_call && facts_.front()->at(&expr).callable_call ? 1 : 0);
   }
   static bool inert_argument(const Expression &expr) {
     using K = Expression::Kind;
@@ -942,9 +974,10 @@ class LLVMEmission {
     const size_t offset = expr.kind == Expression::Kind::value_call ? 1 : 0;
     const bool protect = deferred || std::any_of(expr.children.begin() + offset, expr.children.end(),
                                                [](const auto &child) { return !inert_argument(*child); });
-    if (expr.kind == Expression::Kind::call && fact.callable_call) {
-      auto *address = binding_address(*fact.callable_binding, fact.callable_place);
-      auto *value = b_.CreateLoad(scalar_, checked_address(address, expr, expr.at, true));
+    if (expr.kind != Expression::Kind::value_call && fact.callable_call) {
+      auto *address = fact.symbol ? static_cast<llvm::Value *>(symbols_.at(*fact.symbol))
+          : checked_address(binding_address(*fact.callable_binding, fact.callable_place), expr, expr.at, true);
+      auto *value = b_.CreateLoad(scalar_, address);
       arguments.push_back(protect ? copy_temporary(value, expr.at) : value);
     }
 
@@ -964,23 +997,42 @@ class LLVMEmission {
     }
     return arguments;
   }
-  llvm::Value *captured_value(const CheckedOperation &fact) {
-    if (fact.callable) return pack(integer(*fact.callable + 1), fact.type);
+  llvm::Value *captured_value(const CheckedOperation &fact, const Location &at) {
+    if (fact.callable) return own_value(materialize(fact, fact.type, at));
     auto *address = binding_address(*fact.binding, fact.place);
     return b_.CreateLoad(scalar_, address);
   }
+  llvm::StructType *image_layout(size_t captures) {
+    auto fields = std::vector<llvm::Type *>{b_.getInt64Ty()}; fields.insert(fields.end(), captures, scalar_);
+    return llvm::StructType::get(context_, fields);
+  }
+  llvm::Value *image_capture(llvm::StructType *layout, llvm::Value *image, size_t index) {
+    auto *value = b_.CreateLoad(scalar_, b_.CreateStructGEP(layout, image, index + 1));
+    auto *offset = b_.CreatePtrToInt(environment(value), b_.getInt64Ty());
+    auto *nested = b_.CreateGEP(b_.getInt8Ty(), image, offset);
+    auto *absolute = b_.CreateSelect(b_.CreateICmpEQ(offset, integer(0)), null_pointer(), nested);
+    return b_.CreateInsertValue(value, absolute, environment_field_);
+  }
   llvm::Value *materialize(const CheckedOperation &fact, const Type &type, const Location &at) {
+    auto *value = temporary_scope(at, scalar_, [&] { return own_value(create_callable_image(fact, type, at)); });
+    // Return a fresh image after releasing every temporary child image.
+    take_value(value);
+    return value;
+  }
+  llvm::Value *create_callable_image(const CheckedOperation &fact, const Type &type, const Location &at) {
     auto *value = pack(integer(*fact.callable + 1), type);
-    if (fact.callable_captures.empty()) return value;
-    const auto count = fact.callable_captures.size();
-    auto fields = std::vector<llvm::Type *>{b_.getInt64Ty()}; fields.insert(fields.end(), count, scalar_);
-    auto *layout = llvm::StructType::get(context_, fields);
+    const auto &symbols = program_->instances[program_->callables[*fact.callable].instance].effects.symbols;
+    const auto count = fact.callable_captures.size() + symbols.size();
+    if (!count) return value;
+    auto *layout = image_layout(count);
     auto *children = slot(llvm::ArrayType::get(b_.getPtrTy(), count), "image.children");
     auto *offsets = slot(llvm::ArrayType::get(b_.getInt64Ty(), count), "image.offsets");
     std::vector<llvm::Value *> captures;
+    for (const auto &capture : fact.callable_captures) captures.push_back(captured_value(capture, at));
+    for (const auto symbol : symbols) captures.push_back(b_.CreateLoad(scalar_, symbols_.at(symbol), "effect.capture"));
     const auto &data = module_.getDataLayout();
     for (size_t i = 0; i < count; ++i) {
-      auto *captured = captured_value(fact.callable_captures[i]); captures.push_back(captured);
+      auto *captured = captures[i];
       b_.CreateStore(environment(captured), b_.CreateConstGEP2_64(children->getAllocatedType(), children, 0, i));
       const auto offset = data.getStructLayout(layout)->getElementOffset(i + 1) + data.getStructLayout(scalar_)->getElementOffset(environment_field_);
       b_.CreateStore(integer(offset), b_.CreateConstGEP2_64(offsets->getAllocatedType(), offsets, 0, i));
@@ -1081,6 +1133,10 @@ class LLVMEmission {
       auto *value = emit_expression(*expr.children.front());
       if (!reachable()) return nullptr;
       value = convert_result(expr, *expr.children.front(), value);
+      if (fact.operand_type.kind == Type::procedure) {
+        auto *owned = effect_values_.at(*fact.symbol);
+        assign_value(owned, value, expr.at); value = load(owned);
+      }
       b_.CreateStore(value, symbols_.at(*fact.symbol));
       return empty_scalar();
     }
@@ -1426,14 +1482,9 @@ class LLVMEmission {
     }
     if (!method.captures.empty()) {
       environment_ = function->getArg(arity);
-      auto fields = std::vector<llvm::Type *>{b_.getInt64Ty()}; fields.insert(fields.end(), method.captures.size(), scalar_);
-      auto *image = llvm::StructType::get(context_, fields);
+      auto *image = image_layout(method.captures.size());
       for (size_t c = 0; c < method.captures.size(); ++c) {
-        auto *value = b_.CreateLoad(scalar_, b_.CreateStructGEP(image, environment_, c + 1));
-        auto *offset = b_.CreatePtrToInt(environment(value), b_.getInt64Ty());
-        auto *nested = b_.CreateGEP(b_.getInt8Ty(), environment_, offset);
-        auto *absolute = b_.CreateSelect(b_.CreateICmpEQ(offset, integer(0)), null_pointer(), nested);
-        auto *captured = b_.CreateInsertValue(value, absolute, environment_field_);
+        auto *captured = image_capture(image, environment_, c);
         b_.CreateStore(captured, storage_.at(frame->captures.at(c))); arguments_.push_back(captured);
       }
     }
@@ -1494,7 +1545,8 @@ class LLVMEmission {
 public:
   std::pair<std::string, std::string> emit(const CheckedProgram &program, bool emit_text, bool emit_bitcode, bool specialize = true) {
     program_ = &program; specialize_ = specialize;
-    environments_ = std::any_of(program.methods.begin(), program.methods.end(), [](const auto &method) { return !method.captures.empty(); });
+    environments_ = std::any_of(program.methods.begin(), program.methods.end(), [](const auto &method) { return !method.captures.empty(); }) ||
+        std::any_of(program.callables.begin(), program.callables.end(), [&](const auto &value) { return !program.instances[value.instance].effects.symbols.empty(); });
     std::vector<llvm::Type *> fields{b_.getInt64Ty(), b_.getInt32Ty()};
     if (program.exception_values) fields.push_back(exception_);
     if (environments_) { environment_field_ = fields.size(); fields.push_back(b_.getPtrTy()); }
@@ -1502,15 +1554,19 @@ public:
     std::set<size_t> used_symbols;
     const auto collect_symbols = [&](const auto &operations) {
       for (const auto &[expr, operation] : operations)
-        if (operation.symbol && (expr->kind == Expression::Kind::symbol || expr->kind == Expression::Kind::effect))
+        if (operation.symbol && (expr->kind == Expression::Kind::symbol || expr->kind == Expression::Kind::effect || operation.callable_call))
           used_symbols.insert(*operation.symbol);
     };
     collect_symbols(program.entry);
     for (const auto &instance : program.instances) collect_symbols(instance.operations);
+    for (const auto &value : program.callables) {
+      const auto &symbols = program.instances[value.instance].effects.symbols;
+      used_symbols.insert(symbols.begin(), symbols.end());
+    }
     for (size_t i = 0; i < program.symbols.size(); ++i) {
       const auto &symbol = program.symbols[i];
       llvm::GlobalVariable *slot = nullptr;
-      if (used_symbols.contains(i) && symbol.type && scalar_type(*symbol.type)) {
+      if (used_symbols.contains(i) && symbol.type) {
         slot = new llvm::GlobalVariable(module_, scalar_, false, llvm::GlobalValue::InternalLinkage,
             llvm::Constant::getNullValue(scalar_), "cod.symbol." + std::to_string(i));
         slot->setThreadLocalMode(llvm::GlobalVariable::GeneralDynamicTLSModel);

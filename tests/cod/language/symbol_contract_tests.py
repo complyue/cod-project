@@ -53,7 +53,7 @@ runner.CASES = {
     'unbound_read_requires_installation': (SYMBOL + '@gain;', 2, '', 'cannot prove an installed binding'),
     'installation_boundary': ('symbol p:proc(u64)->const u64;effect @p;', 2, '', 'installation'),
     'inline_installation_boundary': ('symbol p:proc(u64)->const u64;{{effect @p}};', 2, '', 'installation'),
-    'source_dynamic_call_boundary': ('symbol p:proc(u64)->const u64;behave @p(1u64);', 2, '', 'dynamic procedure call other than'),
+    'unbound_dynamic_call': ('symbol p:proc(u64)->const u64;behave @p(1u64);', 2, '', 'cannot prove an installed binding'),
     'polymorphic_intrinsic_query_boundary': (IO + 'val x<-make local typeof(@print);', 2, '', 'typeof requires a known declaration'),
     'same_scope_callable_boundary': ('symbol p:proc(u64)->const u64;proc p(x:u64)->const u64{return x;}', 2, '', 'same-scope callable and symbol'),
     'bodyless_callable_boundary': ('symbol p:proc(u64)->const u64;proc p(x:u64)->const u64;', 2, '', 'same-scope callable and symbol'),

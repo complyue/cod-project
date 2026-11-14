@@ -10,6 +10,8 @@ import tempfile
 from foundation_tests import ROOT, MODE, COD
 from regional_runtime_tests import checked
 
+TLS_SLOTS = 1
+EXTRA_SOURCES = []
 SOURCE = '''
 using symbol "std:io" @print;
 symbol @context:u64;
@@ -67,7 +69,7 @@ def main():
             assert not output
             code = ir.read_text()
             assert code.count('define i32 @main()') == 1
-            assert code.count('thread_local global %cod.scalar') == 1
+            assert code.count('thread_local global %cod.scalar') == TLS_SLOTS
             code = code.replace('define i32 @main()', 'define i32 @cod_test_entry()')
             source = scratch / 'instrumented.cc'
             source.write_text(WRAPPERS + runtime.read_text() + HARNESS)
@@ -89,7 +91,7 @@ def main():
     count = sum(result['passed'] for result in results)
     if report := os.environ.get('COD_LANGUAGE_REPORT'):
         sources = [ROOT/'cod/main.cc', *sorted((ROOT/'cod').glob('lang_*.hh')), Path(__file__),
-                   Path(__file__).with_name('foundation_tests.py'), Path(__file__).with_name('regional_runtime_tests.py')]
+                   Path(__file__).with_name('foundation_tests.py'), Path(__file__).with_name('regional_runtime_tests.py'), *EXTRA_SOURCES]
         Path(report).write_text(json.dumps(dict(recorded_utc=datetime.datetime.now(datetime.timezone.utc).isoformat(),
             toolchain=MODE, passed=count, total=len(results), results=results,
             executable_sha256=hashlib.sha256(COD.read_bytes()).hexdigest(),

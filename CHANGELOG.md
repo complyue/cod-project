@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Complete dynamic captures and callable replay
+
+<a id="k-669"></a>
+**K-669 — Dynamic-callable continuity.** Agent assessment under H-98/H-185/P-89, H-286/P-252, H-288–H-291/P-254, H-342/H-344/P-301–P-303, H-356/H-365/H-373/H-420, D-10r147/D-17r57/D-18r91/D-26r13 and charter §§2/3.2/5.3/6.3/12: registry r676→677 and source reference290→291 record complete primitive/callable dynamic captures, compatible concrete procedure-value installation, current-binding invocation and captured replay. Preserve definition/materialization separation, existing concrete-view preparation, lexical frame roles, independent nested images, function exclusion, deferred timing and caller restoration on every completion. Acceptance covers native/shared execution, missing-binding rejection, zero-allocation replay, injected preparation failures and thread isolation. Whole symbolic families, actual-type family dispatch, regional/exception bindings, persistent ABI and fractions remain outside coverage; no new source policy, owner extension or whole-design qualification. Prior capability reference: `6d119dd20f2a9e6a67f59a16a4c7bc80c92f4416:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Primitive dynamic binding and restoration
 
 <a id="k-668"></a>

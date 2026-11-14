@@ -2212,7 +2212,7 @@ class ScalarChecker {
       }
       switch (expr.kind) {
       case K::integer: case K::real: case K::boolean: case K::null_ref: case K::name: case K::symbol:
-      case K::unary: case K::binary: case K::call: case K::value_call: case K::field:
+      case K::unary: case K::binary: case K::call: case K::value_call: case K::behave: case K::perform: case K::field:
       case K::conditional: case K::block: break;
       case K::callable:
         if (expr.definition->name.empty()) break;
@@ -2404,10 +2404,19 @@ class ScalarChecker {
         return left == Type::never ? Type{Type::never} : Type{Type::boolean};
       }
       [[fallthrough]];
-    case K::unary: case K::call: case K::value_call: {
+    case K::unary: case K::call: case K::value_call: case K::behave: case K::perform: {
       std::optional<Type> target;
       bool local = false;
-      if (expr.kind == K::value_call) { target = child(0); local = true; }
+      if (expr.kind == K::behave || expr.kind == K::perform) {
+        if (!state.complete) return {};
+        const auto id = resolve_symbol(expr.text, expr.at, symbol_shadowed(expr.text, state), state.method);
+        if (program_.symbols[id].intrinsic_print) {
+          bool exits = false;
+          for (const auto &item : expr.children) if (type_evidence(*item, state) == Type::never) exits = true;
+          return exits ? Type::never : Type::void_type;
+        }
+        target = program_.symbols[id].type; local = true;
+      } else if (expr.kind == K::value_call) { target = child(0); local = true; }
       else if (!expr.intrinsic && state.complete) {
         if (const auto found = state.bindings.find(expr.text); found != state.bindings.end()) {
           if (state.required) check_query_binding(expr.text, expr.at);
@@ -2558,14 +2567,6 @@ class ScalarChecker {
       if (type == Type::never) return Type::never;
       if (state.required && type && type->kind == Type::exception) check_exception_field(expr);
       return type && type->kind == Type::exception ? std::optional<Type>{Type::uint64} : std::nullopt;
-    }
-    case K::behave: case K::perform: {
-      if (!state.complete) return {};
-      const auto id = resolve_symbol(expr.text, expr.at, symbol_shadowed(expr.text, state), state.method);
-      bool exits = false;
-      for (const auto &item : expr.children) if (type_evidence(*item, state) == Type::never) exits = true;
-      if (exits) return Type::never;
-      return program_.symbols[id].intrinsic_print ? std::optional<Type>{Type::void_type} : std::nullopt;
     }
     case K::return_value: {
       const auto result = expr.children.empty() ? std::optional<Type>{Type::void_type} : child(0);
@@ -2769,8 +2770,10 @@ class ScalarChecker {
                          [&](const auto &used) { return used.name == capture.name; }))
           program_.warnings.push_back({Warning::unused_capture, capture.at, "unused callable capture '" + capture.name + "' remains retained"});
     const auto selected = demand(selection.method, selection.arguments, at, environment, selection.retained, retain_query_environment(definition, selection.definition_result));
-    if (validating_ && !program_.instances[selected].effects.symbols.empty())
-      implementation_gap(at, "procedure value construction with dynamic binding captures");
+    const auto &symbols = program_.instances[selected].effects.symbols;
+    if (!symbols.empty() && checking_method_ && checking_method_->source->kind == Form::Kind::function)
+      fail(at, "a function cannot capture dynamic bindings");
+    for (const auto symbol : symbols) require_symbol(lexical_, symbol, at);
     const auto &type = selection.type;
     const auto found = std::find_if(program_.callables.begin(), program_.callables.end(), [&](const auto &value) {
       return value.instance == selected && value.type == type;
@@ -2778,8 +2781,43 @@ class ScalarChecker {
     const auto id = std::distance(program_.callables.begin(), found);
     if (found == program_.callables.end()) program_.callables.push_back({type, selected});
     CheckedOperation value; value.type = type; value.callable = id; value.callable_captures = std::move(captures);
-    if (!environment.empty()) note_abrupt(at, {exception_id(ExceptionCategory::out_of_memory)});
+    if (!environment.empty() || !symbols.empty()) note_abrupt(at, {exception_id(ExceptionCategory::out_of_memory)});
     return value;
+  }
+  void check_value_call(const Expression &expr, const Type &contract, size_t offset, CheckedInstance *instance,
+      std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation, bool read, bool discard) {
+    note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
+    if (checking_method_ && checking_method_->source->kind == Form::Kind::function && !contract.pure_callable)
+      fail(expr.at, "a function cannot invoke a procedure");
+    if (expr.children.size() - offset != contract.parameters.size()) fail(expr.at, "callable argument count does not match its view");
+    operation.callable_call = true; operation.operand_type = contract;
+    if (offset) operation.arguments.push_back({ArgumentMode::value, contract});
+    bool completes = true;
+    std::vector<Type> arguments;
+    std::vector<CheckedOperation> views;
+    for (size_t i = offset; i < expr.children.size(); ++i) {
+      const auto &parameter = contract.parameters[i - offset];
+      const auto mode = contract.argument_modes.empty() ? ArgumentMode::value : contract.argument_modes.at(i - offset);
+      const auto argument = check(*expr.children[i], instance, operations, mode == ArgumentMode::value, false,
+                                  parameter.kind == Type::procedure ? &parameter : nullptr);
+      if (mode == ArgumentMode::value && argument.kind == Type::procedure)
+        note_abrupt(expr.children[i]->at, {exception_id(ExceptionCategory::out_of_memory)});
+      completes = completes && argument != Type::never;
+      if (argument != Type::never && !accepts_argument(argument, parameter, mode)) {
+        fail(expr.children[i]->at, "argument does not satisfy the callable view type");
+      }
+      arguments.push_back(argument); views.push_back(operations.at(expr.children[i].get()));
+      if (argument != Type::never) prepare_borrow(views.back(), mode, expr.children[i]->at);
+      operation.arguments.push_back({mode, parameter});
+    }
+    if (!completes) { operation.type = Type::never; return; }
+    if (checking_context_ < callable_choices_.size())
+      if (const auto found = callable_choices_[checking_context_].find(&expr); found != callable_choices_[checking_context_].end())
+        operation.callable_choices = found->second;
+    auto effects = callable_effects(contract, operation.callable_choices);
+    if (expr.kind == Expression::Kind::perform) effects.symbols.clear();
+    finish_call(expr, contract, effects, call_reasons(contract), arguments, views,
+                operation, read, discard, offset);
   }
   CheckedOperation check_guarded(const Expression &expr, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, bool read = true, bool discard = false, const Type *expected = nullptr) {
@@ -3159,42 +3197,12 @@ class ScalarChecker {
         else target = read_binding(expr);
         if (target.type.kind != Type::procedure || !target.type.target)
           fail(expr.at, "nearest binding '" + expr.text + "' is not callable");
-        note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
-        const auto &contract = target.type;
-        if (method && method->kind == Form::Kind::function && !contract.pure_callable)
-          fail(expr.at, "a function cannot invoke a procedure");
-        if (expr.children.size() - offset != contract.parameters.size()) fail(expr.at, "callable argument count does not match its view");
-        operation.callable_call = true; operation.operand_type = contract;
         if (!offset) {
           operation.callable_binding = target.binding; operation.callable_place = target.place;
           operation.callable_nullable = target.targets.contains(null_target);
           operation.callable_targets = target.targets;
         }
-        if (offset) operation.arguments.push_back({ArgumentMode::value, contract});
-        bool completes = true;
-        std::vector<Type> arguments;
-        std::vector<CheckedOperation> views;
-        for (size_t i = offset; i < expr.children.size(); ++i) {
-          const auto &parameter = contract.parameters[i - offset];
-          const auto mode = contract.argument_modes.empty() ? ArgumentMode::value : contract.argument_modes.at(i - offset);
-          const auto argument = check(*expr.children[i], instance, operations, mode == ArgumentMode::value, false,
-                                      parameter.kind == Type::procedure ? &parameter : nullptr);
-          if (mode == ArgumentMode::value && argument.kind == Type::procedure)
-            note_abrupt(expr.children[i]->at, {exception_id(ExceptionCategory::out_of_memory)});
-          completes = completes && argument != Type::never;
-          if (argument != Type::never && !accepts_argument(argument, parameter, mode)) {
-            fail(expr.children[i]->at, "argument does not satisfy the callable view type");
-          }
-          arguments.push_back(argument); views.push_back(operations.at(expr.children[i].get()));
-          if (argument != Type::never) prepare_borrow(views.back(), mode, expr.children[i]->at);
-          operation.arguments.push_back({mode, parameter});
-        }
-        if (!completes) { operation.type = Type::never; break; }
-        if (checking_context_ < callable_choices_.size())
-          if (const auto found = callable_choices_[checking_context_].find(&expr); found != callable_choices_[checking_context_].end())
-            operation.callable_choices = found->second;
-        finish_call(expr, contract, callable_effects(contract, operation.callable_choices), call_reasons(contract), arguments, views,
-                    operation, read, discard, offset);
+        check_value_call(expr, target.type, offset, instance, operations, operation, read, discard);
         break;
       }
       if (expr.text == "isnull") {
@@ -3269,18 +3277,25 @@ class ScalarChecker {
           lexical_.lookup(expr.text).has_value() || query_environment().symbol_shadows.contains(expr.text),
           instance ? std::optional<size_t>{instance->method} : std::nullopt);
       const auto &symbol = program_.symbols[*operation.symbol];
-      if (!symbol.type || !scalar_type(*symbol.type))
-        implementation_gap(expr.at, "runtime non-scalar symbol reads, installation and capture dependencies");
+      if (!symbol.type || (!scalar_type(*symbol.type) && symbol.type->kind != Type::procedure))
+        implementation_gap(expr.at, "runtime symbol payload outside primitive and complete-callable values");
       if (method && method->kind == Form::Kind::function)
         fail(expr.at, "a function cannot access dynamic bindings");
       if (expr.kind == K::effect) {
-        if (expr.children.empty()) fail(expr.at, "a scalar symbol installation requires an explicit value");
-        if (expr.binding != "<-") fail(expr.at, "bits symbols require effect '<-' transfer");
-        const auto source = child(0);
+        if (expr.children.empty()) {
+          if (symbol.type->kind == Type::procedure) implementation_gap(expr.at, "whole callable family materialization");
+          fail(expr.at, "a scalar symbol installation requires an explicit value");
+        }
+        if (symbol.type->kind == Type::procedure) {
+          if (expr.binding != "=") fail(expr.at, "procedure symbols require effect '=' installation");
+        } else if (expr.binding != "<-") fail(expr.at, "bits symbols require effect '<-' transfer");
+        const auto source = check(*expr.children[0], instance, operations, true, false,
+                                  symbol.type->kind == Type::procedure ? &*symbol.type : nullptr);
         if (source != Type::never && !transfers_value(source, *symbol.type))
           fail(expr.at, "effect value does not satisfy the declared symbol type");
         operation.operand_type = *symbol.type;
         operation.type = source == Type::never ? Type{Type::never} : Type{Type::void_type};
+        if (source.kind == Type::procedure) note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
         if (source != Type::never && lexical_.live) lexical_.bound_symbols.insert(*operation.symbol);
       } else {
         require_symbol(lexical_, *operation.symbol, expr.at);
@@ -3292,8 +3307,15 @@ class ScalarChecker {
       operation.symbol = resolve_symbol(expr.text, expr.at,
           lexical_.lookup(expr.text).has_value() || query_environment().symbol_shadows.contains(expr.text),
           instance ? std::optional<size_t>{instance->method} : std::nullopt);
-      if (!program_.symbols[*operation.symbol].intrinsic_print) implementation_gap(expr.at, "dynamic procedure call other than selected std:io print");
       if (method && method->kind == Form::Kind::function) fail(expr.at, "a function cannot invoke a dynamic procedure");
+      const auto &symbol = program_.symbols[*operation.symbol];
+      if (!symbol.intrinsic_print) {
+        if (!symbol.type || symbol.type->kind != Type::procedure || symbol.type->pure_callable)
+          fail(expr.at, "dynamic invocation requires a procedure symbol");
+        require_symbol(lexical_, *operation.symbol, expr.at);
+        check_value_call(expr, *symbol.type, 0, instance, operations, operation, read, discard);
+        break;
+      }
       if (expr.children.size() != 1) fail(expr.at, "print requires one scalar argument");
       const auto argument = child(0);
       operation.arguments.push_back({ArgumentMode::value, argument});
@@ -3798,6 +3820,8 @@ class ScalarChecker {
   CallableChoices reaching_callables() const {
     CallableFlow flow;
     using Node = CallableFlow::Node;
+    std::vector<Node> symbols;
+    for (size_t i = 0; i < program_.symbols.size(); ++i) symbols.push_back(flow.node());
     using Facts = std::map<const Expression *, CheckedOperation>;
     struct Context {
       const Facts *facts;
@@ -3859,6 +3883,10 @@ class ScalarChecker {
       for (const auto &[expr, fact] : *contexts[c].facts) {
         const auto node = expression(c, expr);
         value(c, fact, node);
+        if (expr->kind == K::effect && fact.operand_type.kind == Type::procedure && !expr->children.empty())
+          flow.link(expression(c, expr->children.front().get()), symbols.at(*fact.symbol));
+        if (expr->kind == K::symbol && fact.type.kind == Type::procedure)
+          flow.link(symbols.at(*fact.symbol), node);
         if ((expr->kind == K::pointer || expr->kind == K::callable) && fact.place &&
             contexts[c].storage->at(*fact.place).type.kind == Type::procedure) {
           flow.link(expr->kind == K::callable ? node : expression(c, expr->children.front().get()), contexts[c].places.at(*fact.place));
@@ -3874,6 +3902,7 @@ class ScalarChecker {
           const auto callee = flow.node(); contexts[c].calls.emplace(expr, callee);
           const size_t offset = expr->kind == K::value_call ? 1 : 0;
           if (offset) flow.link(expression(c, expr->children.front().get()), callee);
+          else if (fact.symbol) flow.link(symbols.at(*fact.symbol), callee);
           else for (const auto place : fact.callable_targets) if (place != null_target)
             flow.link(contexts[c].places.at(place), callee);
           for (size_t id = 0; id < program_.callables.size(); ++id) {
@@ -3902,7 +3931,7 @@ class ScalarChecker {
             flow.link(accumulator, node);
           }
           break;
-        case K::name: case K::transfer: case K::rebind: break;
+        case K::name: case K::symbol: case K::transfer: case K::rebind: break;
         default:
           // An uncovered value source must not narrow a call's implementation set.
           for (size_t id = 0; id < program_.callables.size(); ++id)

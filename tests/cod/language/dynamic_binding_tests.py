@@ -79,7 +79,7 @@ runner.CASES = {
     'bits_rebind_rejects': (X+'effect @x=1u64;', 2, '', "bits symbols require effect '<-'"),
     'wrong_type': (X+'effect @x<-true;', 2, '', 'effect value does not satisfy'),
     'bare_write_rejects': (X+'effect @x<-1u64;@x<-2u64;', 2, '', 'assignment requires a storage destination'),
-    'dynamic_capture_boundary': (X+READ+'effect @x<-1u64;proc p=read;p();', 2, '', 'procedure value construction with dynamic binding captures'),
+    'dynamic_capture_current_call': (IO+X+READ+'effect @x<-1u64;proc p=read;effect @x<-2u64;behave @print(p());', 0, '2\n', ''),
 }
 for name, (source, status, output, diagnostic) in list(runner.CASES.items()):
     if MISSING in source and status == 0:
