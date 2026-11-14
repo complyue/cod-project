@@ -594,7 +594,7 @@ class LLVMEmission {
     return value;
   }
   llvm::Value *full_scope(const std::vector<const Expression *> &expressions, bool callable,
-                          const Location &at, bool returns_value = false, bool read_last = true, bool discard_last = false) {
+                          const Location &at, llvm::Value *returns_value = nullptr, bool read_last = true, bool discard_last = false) {
     auto *outer_temporaries = temporaries_;
     auto *saved = !callable && read_last && environments_ ? owned_slot(*outer_temporaries, "scope.value")
         : slot(read_last ? scalar_ : static_cast<llvm::Type *>(b_.getPtrTy()), "scope.value");
@@ -618,7 +618,7 @@ class LLVMEmission {
     if (callable) {
       if (returns_value) {
         auto *missing = block("return.missing");
-        b_.CreateCondBr(b_.CreateICmpEQ(load(exit_), b_.getInt8(0)), missing, finish_);
+        b_.CreateCondBr(b_.CreateAnd(returns_value, b_.CreateICmpEQ(load(exit_), b_.getInt8(0))), missing, finish_);
         b_.SetInsertPoint(missing);
         save_failure(outcome(empty_scalar(), integer(exception_id(ExceptionCategory::missing_return)), integer(site(at)), null_pointer()));
       }
@@ -866,7 +866,7 @@ class LLVMEmission {
     case K::block: {
       std::vector<const Expression *> expressions;
       for (const auto &child : expr.children) expressions.push_back(child.get());
-      auto *value = expr.scoped ? full_scope(expressions, false, expr.at, false, read, discard) : sequence(expressions, read, discard);
+      auto *value = expr.scoped ? full_scope(expressions, false, expr.at, nullptr, read, discard) : sequence(expressions, read, discard);
       if (fact.type == Type::never && reachable()) { b_.CreateUnreachable(); return nullptr; }
       return value;
     }
@@ -1100,16 +1100,24 @@ class LLVMEmission {
         b_.CreateStore(captured, storage_.at(method.parameters.size() + c)); arguments_.push_back(captured);
       }
     }
+    llvm::Value *returns_value = nullptr;
     if (instance) {
       facts_.push_back(&program_->instances[*instance].operations);
       frame_types_.push_back(&program_->instances[*instance].context);
+      if (program_->instances[*instance].result != Type::void_type) returns_value = b_.getTrue();
     }
     else {
+      const bool all_return = std::all_of(method.instances.begin(), method.instances.end(),
+          [&](size_t id) { return program_->instances[id].result != Type::void_type; });
+      if (all_return) returns_value = b_.getTrue();
       llvm::Value *admitted = b_.getFalse();
       for (const auto id : method.instances) {
         facts_.push_back(&program_->instances[id].operations);
         frame_types_.push_back(&program_->instances[id].context);
-        admitted = b_.CreateOr(admitted, matches(arguments_, program_->instances[id].context));
+        auto *context = matches(arguments_, program_->instances[id].context);
+        admitted = b_.CreateOr(admitted, context);
+        if (!all_return && program_->instances[id].result != Type::void_type)
+          returns_value = returns_value ? b_.CreateOr(returns_value, context) : context;
       }
       auto *valid = block("arguments.valid"), *invalid = block("arguments.invalid");
       b_.CreateCondBr(admitted, valid, invalid);
@@ -1119,7 +1127,7 @@ class LLVMEmission {
           integer(site(method.source->at)), null_pointer()));
       b_.SetInsertPoint(valid);
     }
-    full_scope({method.source->body.get()}, true, method.source->at, *method.source->result_type != Type::void_type, true, true);
+    full_scope({method.source->body.get()}, true, method.source->at, returns_value, true, true);
     b_.SetInsertPoint(finish_);
     if (environments_) {
       auto *failed = block("return.discard"), *ready = block("return.ready");
@@ -1187,7 +1195,7 @@ public:
       if (specialize) for (const auto id : method.instances) body(specialized_[id], method, id);
     }
     auto *main = llvm::Function::Create(llvm::FunctionType::get(b_.getInt32Ty(), false), llvm::GlobalValue::ExternalLinkage, "main", module_);
-    begin(main, program.entry_storage, program.entry_bindings); facts_ = {&program.entry}; full_scope(program.initializers, true, Location{}, false, true, true);
+    begin(main, program.entry_storage, program.entry_bindings); facts_ = {&program.entry}; full_scope(program.initializers, true, Location{}, nullptr, true, true);
     b_.SetInsertPoint(finish_);
     auto *fatal = block("fatal"), *exception = block("exception"), *normal = block("normal");
     b_.CreateCondBr(b_.CreateICmpNE(load(fatal_), null_pointer()), fatal, exception);

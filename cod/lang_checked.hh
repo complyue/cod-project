@@ -722,15 +722,19 @@ class ScalarChecker {
       if (method.type_parameters[i].name == type.name) return i;
     return {};
   }
-  Type substitute(const Type &type, const Form &method, const std::vector<Type> &bindings) const {
+  using Substitutions = std::vector<std::optional<Type>>;
+  Type substitute(const Type &type, const Form &method, const Substitutions &bindings, bool partial = false) const {
     if (const auto index = binder(method, type)) {
-      if (bindings[*index] == Type::void_type) implementation_gap(method.at, "type parameter is not determined by the scalar arguments");
-      return bindings[*index];
+      if (!bindings[*index]) {
+        if (partial) return type;
+        implementation_gap(method.at, "type parameter is not determined by the arguments");
+      }
+      return *bindings[*index];
     }
     auto result = resolve_type(type);
     if (result.kind == Type::procedure) {
-      for (auto &parameter : result.parameters) parameter = substitute(parameter, method, bindings);
-      if (result.target) result.target = std::make_shared<Type>(substitute(*result.target, method, bindings));
+      for (auto &parameter : result.parameters) parameter = substitute(parameter, method, bindings, partial);
+      if (result.target) result.target = std::make_shared<Type>(substitute(*result.target, method, bindings, partial));
     }
     return result;
   }
@@ -757,39 +761,55 @@ class ScalarChecker {
     }
     implementation_gap(at, "non-scalar signature type '" + type_name(type) + "'");
   }
-  static std::optional<std::vector<Type>> match(const CheckedMethod &method, const std::vector<Type> &arguments) {
-    if (method.parameters.size() != arguments.size()) return {};
-    std::vector<Type> substitutions(method.source->type_parameters.size());
+  static bool bind_type(const Form &method, const Type &pattern, const Type &actual, Substitutions &substitutions, bool parameter = false) {
+    if (const auto index = binder(method, pattern)) {
+      auto &bound = substitutions[*index];
+      if (bound && *bound != actual) return false;
+      bound = actual; return true;
+    }
+    if (pattern.kind == Type::procedure && actual.kind == Type::procedure) {
+      if (pattern.parameters.size() != actual.parameters.size() || !pattern.target || !actual.target) return false;
+      auto constructor = pattern, other = actual;
+      constructor.parameters.clear(); constructor.target.reset();
+      other.parameters.clear(); other.target.reset();
+      if (constructor != other) return false;
+      for (size_t i = 0; i < pattern.parameters.size(); ++i)
+        if (!bind_type(method, pattern.parameters[i], actual.parameters[i], substitutions)) return false;
+      return bind_type(method, *pattern.target, *actual.target, substitutions);
+    }
+    return pattern == actual || (parameter && accepts_exception(actual, pattern));
+  }
+  static std::optional<Substitutions> match_prefix(const CheckedMethod &method, const std::vector<Type> &arguments) {
+    if (method.parameters.size() < arguments.size()) return {};
+    Substitutions substitutions(method.source->type_parameters.size());
     for (size_t i = 0; i < arguments.size(); ++i) {
-      const auto &parameter = method.parameters[i];
-      if (const auto index = binder(*method.source, parameter)) {
-        auto &bound = substitutions[*index];
-        if (bound != Type::void_type && bound != arguments[i]) return {};
-        bound = arguments[i];
-      } else if (parameter != arguments[i] && !accepts_exception(arguments[i], parameter)) return {};
+      if (!bind_type(*method.source, method.parameters[i], arguments[i], substitutions, true)) return {};
     }
     return substitutions;
+  }
+  static std::optional<Substitutions> match(const CheckedMethod &method, const std::vector<Type> &arguments) {
+    return method.parameters.size() == arguments.size() ? match_prefix(method, arguments) : std::nullopt;
+  }
+  static Type rigid_type(const Form &method, const Type &type) {
+    if (const auto index = binder(method, type)) return {Type::parameter, {}, *index + 1};
+    auto rigid = type;
+    if (type.kind == Type::procedure) {
+      for (auto &parameter : rigid.parameters) parameter = rigid_type(method, parameter);
+      if (type.target) rigid.target = std::make_shared<Type>(rigid_type(method, *type.target));
+    }
+    return rigid;
   }
   // Signature containment includes repeated binders; layout equality is irrelevant.
   static bool implies(const CheckedMethod &narrow, const CheckedMethod &broad) {
     if (narrow.parameters.size() != broad.parameters.size()) return false;
-    const auto same_narrow = [&](size_t a, size_t b) {
-      const auto x = binder(*narrow.source, narrow.parameters[a]);
-      const auto y = binder(*narrow.source, narrow.parameters[b]);
-      return x && y ? x == y : !x && !y && narrow.parameters[a] == narrow.parameters[b] &&
-          !(narrow.parameters[a].kind == Type::exception && !narrow.parameters[a].identity);
-    };
-    for (size_t i = 0; i < broad.parameters.size(); ++i) {
-      const auto broad_binder = binder(*broad.source, broad.parameters[i]);
-      if (!broad_binder) {
-        if (binder(*narrow.source, narrow.parameters[i]) || (narrow.parameters[i] != broad.parameters[i] && !accepts_exception(narrow.parameters[i], broad.parameters[i])))
-          return false;
-      } else {
-        for (size_t j = 0; j < i; ++j)
-          if (binder(*broad.source, broad.parameters[j]) == broad_binder && !same_narrow(i, j)) return false;
-      }
+    std::vector<Type> arguments;
+    for (size_t i = 0; i < narrow.parameters.size(); ++i) {
+      auto type = rigid_type(*narrow.source, narrow.parameters[i]);
+      // Each broad exception parameter admits an independent concrete category.
+      if (type.kind == Type::exception && !type.identity) type.name += ".alternative." + std::to_string(i);
+      arguments.push_back(std::move(type));
     }
-    return true;
+    return match(broad, arguments).has_value();
   }
   size_t demand(size_t method, std::vector<Type> arguments, const Location &at, const std::vector<Type> &environment = {}) {
     auto &definition = program_.methods[method];
@@ -802,8 +822,6 @@ class ScalarChecker {
     const auto substitutions = match(definition, arguments);
     if (!substitutions) throw std::logic_error("unchecked method demand");
     auto result = substitute(definition.result, *definition.source, *substitutions);
-    if (definition.result != Type::void_type && result == Type::void_type)
-      implementation_gap(at, "result type parameter is not determined by the scalar arguments");
     const auto id = program_.instances.size();
     auto context = arguments; context.insert(context.end(), environment.begin(), environment.end());
     program_.instances.push_back({method, arguments, result, {}, false, {}, {}, {}, environment, std::move(context)});
@@ -1305,10 +1323,15 @@ class ScalarChecker {
         if (const auto family = families_.find(expr.text); family != families_.end()) {
           bool consistent = true;
           for (const auto id : family->second) {
-            const auto &parameters = program_.methods[id].parameters;
-            if (parameters.size() != expr.children.size()) continue;
-            if (parameters[i].kind != Type::procedure || (argument_view && *argument_view != parameters[i])) { consistent = false; break; }
-            argument_view = parameters[i];
+            const auto &candidate = program_.methods[id];
+            if (candidate.parameters.size() != expr.children.size()) continue;
+            const auto bindings = match_prefix(candidate, arguments);
+            if (!bindings) continue;
+            const auto view = substitute(candidate.parameters[i], *candidate.source, *bindings, true);
+            if (view.kind != Type::procedure || nested_binder(*candidate.source, view) || (argument_view && *argument_view != view)) {
+              consistent = false; break;
+            }
+            argument_view = view;
           }
           if (!consistent) argument_view.reset();
         }
@@ -2007,8 +2030,6 @@ public:
         if (parameter.variadic || parameter.automatic_conversion)
           implementation_gap(parameter.at, "variadic, conversion or borrowed parameter contract");
         prepared.parameters.push_back(resolve_signature(parameter.type));
-        if (prepared.parameters.back().kind == Type::procedure && nested_binder(*form, prepared.parameters.back()))
-          implementation_gap(parameter.at, "callable parameter signatures with nested type binders");
         signature_type(*form, prepared.parameters.back(), parameter.at);
       }
       for (const auto &parameter : form->type_parameters)
