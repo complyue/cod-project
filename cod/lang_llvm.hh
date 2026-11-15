@@ -326,7 +326,8 @@ class LLVMEmission {
         return other.inputs == choice.inputs && other.operation->callee == choice.operation->callee &&
             other.operation->symbol == choice.operation->symbol &&
             other.operation->type == choice.operation->type && other.operation->operand_type == choice.operation->operand_type &&
-            other.operation->arguments == choice.operation->arguments && other.operation->builtin == choice.operation->builtin;
+            other.operation->arguments == choice.operation->arguments && other.operation->builtin == choice.operation->builtin &&
+            other.operation->builtin_name == choice.operation->builtin_name;
       };
       auto found = std::find_if(result.begin(), result.end(), same);
       if (found == result.end()) { result.push_back(std::move(choice)); found = std::prev(result.end()); }
@@ -393,7 +394,7 @@ class LLVMEmission {
   llvm::Value *binary(const Expression &expr, llvm::Value *left, llvm::Value *right, const Choice &choice) {
     const auto type = choice.operation->operand_type;
     left = convert(left, choice.inputs[0], type); right = convert(right, choice.inputs[1], type);
-    const auto &op = expr.text;
+    const auto &op = choice.operation->builtin_name;
     const bool signed_value = type == Type::integer;
     llvm::Value *result = nullptr;
     if (floating(type)) {
@@ -588,8 +589,8 @@ class LLVMEmission {
     if (choice.operation->builtin == BuiltinOperation::binary) return binary(expr, arguments[0], arguments[1], choice);
     const auto type = choice.operation->operand_type;
     auto *argument = unpack(arguments.front(), type);
-    if (expr.text == "!") return pack(b_.CreateNot(argument), type);
-    if (expr.text == "+") return arguments.front();
+    if (choice.operation->builtin_name == "!") return pack(b_.CreateNot(argument), type);
+    if (choice.operation->builtin_name == "+") return arguments.front();
     if (floating(type)) return pack(b_.CreateFNeg(argument), type);
     auto *zero = pack(llvm::ConstantInt::get(llvm::cast<llvm::IntegerType>(native_type(type)), 0), type);
     return binary(expr, zero, arguments.front(), Choice{{type, type}, choice.operation});

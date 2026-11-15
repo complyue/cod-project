@@ -94,6 +94,7 @@ struct CheckedOperation {
   bool mixed_view = false;
   bool borrowed_result = false;
   BuiltinOperation builtin = BuiltinOperation::none;
+  std::string builtin_name; // Selected eager operation, independent of source spelling.
   // Destination calls select every address before checking entry-read promises.
   bool destination_arguments = false;
   std::vector<CheckedArgument> arguments;
@@ -682,7 +683,7 @@ class ScalarChecker {
     for (const auto method : methods) message += " " + location_text(program_.methods[method].source->at);
     fail(at, message);
   }
-  ArgumentPreparation argument_preparation(const Expression &expr, const std::vector<Type> &prefix,
+  ArgumentPreparation argument_preparation(const Expression &expr, std::string_view operation, const std::vector<Type> &prefix,
                                             const std::vector<ArgumentEvidence> &evidence, const Access &prefix_access, const Owners &prefix_owners, bool required = true, const TypeEvidenceState *state = nullptr) const {
     if (expr.text == "cause_at" && (expr.intrinsic || (!module_names().callables.contains(expr.text) && !has_declarations(expr.text))) && expr.children.size() == 2)
       return {ArgumentMode::value, prefix.empty() ? exception_type(0) : Type{Type::uint64}};
@@ -711,7 +712,7 @@ class ScalarChecker {
     std::optional<Type> type;
     bool consistent_type = true;
     // Without complete type evidence, an eager operation may still use its value-taking builtin.
-    if (eager_operation(expr.text) && !complete) mode = ArgumentMode::value;
+    if (eager_operation(operation) && !complete) mode = ArgumentMode::value;
     const auto accumulate = [&](const CheckedMethod &candidate, const Substitutions &substitutions) {
       const auto passing = argument_mode(parameter_at(candidate, prefix.size()));
       if (mode && *mode != passing) {
@@ -1683,9 +1684,9 @@ class ScalarChecker {
     const auto &fact = operations.at(&expr);
     if (expr.kind == Expression::Kind::integer) return fact.integer;
     if (fact.minimum_literal) return std::uint64_t{1} << 63;
-    if (fact.builtin == BuiltinOperation::unary && (expr.text == "+" || expr.text == "-"))
+    if (fact.builtin == BuiltinOperation::unary && (fact.builtin_name == "+" || fact.builtin_name == "-"))
       if (const auto value = constant_integer(*expr.children.front(), operations))
-        return expr.text == "-" ? std::uint64_t{0} - *value : *value;
+        return fact.builtin_name == "-" ? std::uint64_t{0} - *value : *value;
     return {};
   }
   Type resolve_local_type(const Type &type, const CheckedInstance *instance, const Location &at) const {
@@ -2306,33 +2307,33 @@ class ScalarChecker {
       }
     return least;
   }
-  static EagerTypes eager_types(const Expression &expr, const std::vector<Type> &arguments) {
+  static EagerTypes eager_types(std::string_view name, const std::vector<Type> &arguments) {
     EagerTypes types;
-    types.unary = arguments.size() == 1 && (expr.text == "+" || expr.text == "-" || expr.text == "!");
+    types.unary = arguments.size() == 1 && (name == "+" || name == "-" || name == "!");
     const auto error = [&](const std::string &message) { types.error = message; return types; };
-    if (!types.unary && (arguments.size() != 2 || expr.text == "!")) return error("builtin operator argument count does not match");
+    if (!types.unary && (arguments.size() != 2 || name == "!")) return error("builtin operator argument count does not match");
     const bool completes = std::none_of(arguments.begin(), arguments.end(), [](const Type &type) { return type == Type::never; });
     if (types.unary) {
       const auto &argument = arguments.front();
       if (!completes) { types.result = types.operand = Type::never; return types; }
-      if (expr.text == "!") {
+      if (name == "!") {
         if (argument != Type::boolean) return error("logical negation requires bool");
-      } else if (argument != Type::integer && !(expr.text == "-" && floating(argument)))
+      } else if (argument != Type::integer && !(name == "-" && floating(argument)))
         return error("numeric unary operation requires i64, or floating point for negation");
       types.result = types.operand = argument;
-      types.failing = expr.text == "-" && argument == Type::integer;
+      types.failing = name == "-" && argument == Type::integer;
     } else {
-      const bool equality = expr.text == "==" || expr.text == "!=";
-      const bool comparison = equality || expr.text == "<" || expr.text == ">" || expr.text == "<=" || expr.text == ">=";
+      const bool equality = name == "==" || name == "!=";
+      const bool comparison = equality || name == "<" || name == ">" || name == "<=" || name == ">=";
       std::vector<Type> values;
       for (const auto &type : arguments) if (type != Type::never) values.push_back(type);
       if (values.empty()) { types.result = types.operand = Type::never; return types; }
       if (equality && std::all_of(values.begin(), values.end(), [](const Type &type) { return type == Type::boolean; })) types.operand = Type::boolean;
       else {
-        if (!std::all_of(values.begin(), values.end(), numeric)) return error("no applicable numeric operation '" + expr.text + "'");
+        if (!std::all_of(values.begin(), values.end(), numeric)) return error("no applicable numeric operation '" + std::string(name) + "'");
         if (const auto common = common_value_type(values)) types.operand = *common;
         else return error("numeric operands have no lossless common type");
-        if (expr.text == "%" && floating(types.operand)) return error("remainder requires integer operands");
+        if (name == "%" && floating(types.operand)) return error("remainder requires integer operands");
       }
       types.result = !completes ? Type{Type::never} : comparison ? Type{Type::boolean} : types.operand;
       types.failing = completes && !comparison && integral(types.operand);
@@ -2378,14 +2379,15 @@ class ScalarChecker {
     for (const auto category : failures) operation.invocation.try_emplace(3 + category);
     if (&expr != prepared_call_) note_abrupt(expr.at, failures);
   }
-  void check_eager(const Expression &expr, const std::vector<Type> &arguments,
+  void check_eager(const Expression &expr, std::string_view name, const std::vector<Type> &arguments,
                    const std::vector<CheckedOperation> &views, CheckedOperation &operation) {
-    const auto types = eager_types(expr, arguments);
+    const auto types = eager_types(name, arguments);
     if (!types.error.empty()) fail(expr.at, types.error);
     operation.builtin = types.unary ? BuiltinOperation::unary : BuiltinOperation::binary;
+    operation.builtin_name = name;
     operation.type = types.result; operation.operand_type = types.operand;
     if (types.result == Type::never) return;
-    if (types.unary && expr.text == "!") {
+    if (types.unary && name == "!") {
       operation.null_test = views.front().null_test;
       if (operation.null_test) operation.null_test->null_when_true = !operation.null_test->null_when_true;
     }
@@ -2676,11 +2678,11 @@ class ScalarChecker {
     }
     return operation;
   }
-  bool signed_minimum(const Expression &expr) const {
+  bool signed_minimum(const Expression &expr, const TypeEvidenceState *state = nullptr) const {
     if (expr.kind != Expression::Kind::unary || expr.text != "-" || expr.children.front()->kind != Expression::Kind::integer) return false;
     auto magnitude = std::string_view(expr.children.front()->text);
     while (magnitude.starts_with('0')) magnitude.remove_prefix(1);
-    if (magnitude != "9223372036854775808") return false;
+    if (magnitude != "9223372036854775808" || operation_name(expr, state) != "-") return false;
     if (applicable_operation(expr.text, {Type::integer}))
       implementation_gap(expr.at, "signed minimum literal with overloaded unary negation");
     return true;
@@ -2768,7 +2770,7 @@ class ScalarChecker {
     }
     if (state.required) {
       if (expr.spread) implementation_gap(expr.at, "spread operands in typeof");
-      if (signed_minimum(expr)) {
+      if (signed_minimum(expr, &state)) {
         builtin_declarations(expr, {Type::integer}, Type::integer);
         return Type::integer;
       }
@@ -2999,6 +3001,7 @@ class ScalarChecker {
           target = found->second; local = true;
         }
       }
+      const auto name = local ? std::string_view{} : operation_name(expr, &state);
       const size_t offset = expr.kind == K::value_call ? 1 : 0;
       auto probe = state;
       probe.required = false;
@@ -3025,7 +3028,7 @@ class ScalarChecker {
         if (local && target && target->kind == Type::procedure && target->parameters.size() == expr.children.size() - offset)
           parameter = target->parameters[i - offset];
         else if (!local && complete && !exits)
-          parameter = argument_preparation(expr, arguments, evidence, access, owners, state.required, &state).type;
+          parameter = argument_preparation(expr, name, arguments, evidence, access, owners, state.required, &state).type;
         const auto *expected_argument = parameter && parameter->kind == Type::procedure ? &*parameter : nullptr;
         auto type = evidence[i].type;
         auto selected = hinted_views[i];
@@ -3069,7 +3072,7 @@ class ScalarChecker {
         return *target->target;
       }
       if (!state.complete) return {};
-      if (swap_operation(operation_name(expr, &state))) {
+      if (swap_operation(name)) {
         if (state.required) implementation_gap(expr.at, "storage exchange in typeof");
         return Type::void_type;
       }
@@ -3083,7 +3086,7 @@ class ScalarChecker {
       const auto &retained = family.retained_types();
       const auto candidates = method_candidates(family.methods, arguments, retained, access, owners, &state);
       if (candidates.methods.empty() && !expr.intrinsic && has_declarations(expr.text) &&
-          (!eager_operation(expr.text) || !eager_types(expr, arguments).error.empty())) {
+          (!eager_operation(name) || !eager_types(name, arguments).error.empty())) {
         const auto result = inspect_declarations(expr.text, arguments, access, owners, expr.at, state,
             [&](const CheckedMethod &declaration, const Substitutions &, const ResultContract &) {
           if (state.required) for (size_t i = 0; i < arguments.size(); ++i)
@@ -3093,10 +3096,10 @@ class ScalarChecker {
         if (result) view = result->view;
         return result ? std::optional<Type>{result->type} : std::nullopt;
       }
-      if (state.required && family.methods.empty() && !eager_operation(expr.text))
+      if (state.required && family.methods.empty() && !eager_operation(name))
         implementation_gap(expr.at, "typeof requires a known callable signature without outer value capture");
-      if (candidates.methods.empty() && eager_operation(expr.text)) {
-        const auto types = eager_types(expr, arguments);
+      if (candidates.methods.empty() && eager_operation(name)) {
+        const auto types = eager_types(name, arguments);
         if (state.required && !types.error.empty()) fail(expr.at, types.error);
         if (types.error.empty()) builtin_declarations(expr, arguments, types.result, false, access, owners, &state);
         return types.error.empty() ? std::optional<Type>{types.result} : std::nullopt;
@@ -3951,10 +3954,11 @@ class ScalarChecker {
       [[fallthrough]];
     }
     case K::value_call: case K::call: {
-      const bool eager = expr.kind != K::value_call && eager_operation(expr.text);
-      if (expr.kind == K::call && swap_operation(operation_name(expr))) {
+      const auto name = expr.kind != K::value_call ? operation_name(expr) : std::string_view{};
+      const bool eager = eager_operation(name);
+      if (expr.kind == K::call && swap_operation(name)) {
         if (expr.children.size() != 2) fail(expr.at, "swap requires two destinations");
-        const bool reference = operation_name(expr) == "<=>";
+        const bool reference = name == "<=>";
         child(0, false);
         auto left = operations.at(expr.children[0].get());
         child(1, false);
@@ -4034,7 +4038,7 @@ class ScalarChecker {
           (named_family(expr.text).methods.empty() && !has_declarations(expr.text)));
       const auto evidence = argument_evidence(expr);
       for (size_t i = 0; i < expr.children.size(); ++i) {
-        const auto preparation = argument_preparation(expr, arguments, evidence, access_of(views), owners_of(views));
+        const auto preparation = argument_preparation(expr, name, arguments, evidence, access_of(views), owners_of(views));
         const auto mode = preparation.mode;
         const auto argument = check(*expr.children[i], instance, operations, mode == ArgumentMode::value, false,
             preparation.type && preparation.type->kind == Type::procedure ? &*preparation.type : nullptr);
@@ -4073,7 +4077,7 @@ class ScalarChecker {
       if (eager && (expr.intrinsic || !applicable_operation(expr.text, arguments, access_of(views), owners_of(views)))) {
         if (std::any_of(operation.arguments.begin(), operation.arguments.end(), [](const auto &argument) { return argument.mode != ArgumentMode::value; }))
           implementation_gap(expr.at, "builtin fallback requires value preparation before later operand effects");
-        check_eager(expr, arguments, views, operation);
+        check_eager(expr, name, arguments, views, operation);
         if (!completes) operation.type = Type::never;
         break;
       }

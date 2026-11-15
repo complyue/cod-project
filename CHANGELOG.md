@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-15 — Checked eager operation identity
+
+<a id="k-707"></a>
+**K-707 — Eager aliases through one checked operation path.** Agent implementation/continuity under H-148/H-154/H-155/H-226/H-230/H-232/H-261/H-356/H-407/H-420/H-423 and charter §§2/6.3/8/12: source reference325→326, registry714→715 and D-26r17→18 preserve selected meaning through ordered preparation, type evidence, null/constant proofs and native emission. Baseline: `0ca04137856a593c6a87f9f92eac13c1dd18f395` at affected paths. C-89/C-90/P-371–P-372/P-374–P-375 retains the qualified native-coverage/value contract; D-10/D-11/D-17 local operation/numeric/cleanup decisions remain scoped dependencies. Aliases do not create a hidden builtin for an ordinary family or change an eager family's operation. The registry governance row follows its current revision. No new language choice, conversion, failure policy, runtime ABI, regional protocol, fraction implementation or document qualification. Other descendants and open mechanisms retain their status. Current acceptance is in the source reference; process and validation records remain outside the repository.
+
 ## 2026-11-15 — Bounds design checkpoint integration
 
 <a id="k-706"></a>
