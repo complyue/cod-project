@@ -1,6 +1,6 @@
 # Ahead-of-time execution preparation and runtime micro-dispatch
 
-Design revision: 11 · Recorded: 2026-11-13 America/Los_Angeles · Status: AOT execution-preparation behavior and native-coverage contract; bounded experimental evidence; permanent mechanisms retain their separate review scopes.
+Design revision: 12 · Recorded: 2026-11-14 America/Los_Angeles · Status: AOT execution-preparation behavior and native-coverage contract; bounded experimental evidence; permanent mechanisms retain their separate review scopes.
 
 During AOT compilation, CoD checks the required behavior and prepares native implementations, semantic method selectors and local micro-dispatch paths. Proven call-site facts can resolve selections, demand or reuse specializations and permit direct-call emission. Preparing selection code does not execute that selection or the source program’s runtime effects. At runtime, execution follows the prepared code and performs remaining selections using actual runtime evidence.
 
@@ -12,7 +12,7 @@ Semantic method selection uses actual argument types, declared conformance and t
 - **Value path:** The registry’s named value relationships explain the charter benefit and retain their individual confirmation states; dependency relationships confer no additional authority.
 - **Contract boundary:** H-409/K-594 separates one semantic method from its general/specialized implementations and local dispatch points; unique-most-specific selection by actual concrete identity/conformance; local operations and proven call-site facts. Preserve installation/operand effects, captures, owners and completion. D-26 supplies the qualified coverage responsibility; concrete analysis, permanent ABI, module composition and compatibility protocol remain open. ORC future-only.
 - **Acceptance:** The completion and validation section defines composed family/context, installation, capture, native coverage and cleanup acceptance; prepared implementations preserve actual owners and effects. Current compiler availability is recorded in the [source capability reference](../tests/cod/language/README.md).
-- **Evidence / continuity:** human baselines are the H records identified by the registry; [K-632](../CHANGELOG.md#k-632) covers this editorial consolidation without changing qualification or semantic scope.
+- **Evidence / continuity:** human baselines are the H records identified by the registry; [K-682](../CHANGELOG.md#k-682) covers r11→12’s callable-view access clarification under H-366–H-369/P-327 with H-375/H-378, preserving actual type selection and the existing coverage responsibility. [K-632](../CHANGELOG.md#k-632) covers this editorial consolidation without changing qualification or semantic scope.
 
 ## Responsibilities and native path
 
@@ -54,6 +54,8 @@ callable family
 ```
 
 The family’s applicability and specificity rules first establish the semantic method; implementation selection then chooses a valid prepared implementation of that method. This is a semantic dependency order, not a requirement that both decisions execute at runtime: compilation may resolve either decision when the relevant facts are proven and prepares code for any remaining runtime choice. A specialization of `f(T)` for `u64` cannot compete with or override the user-defined `f(u64)`. Complete callable values preserve the selected family/interpretation and captures independently of this compiler implementation inventory. Runtime owner instances and capture values are not automatically specialization keys.
+
+The callable view constrains parameter target access as specified by [the runtime callable contract](RegionalClosures.md#runtime-callable-contract). Coverage checks admitted actual types and owner relations under that access contract. Readonly views preserve readonly borrowing; independent value parameters receive their declared local access. Actual type identity, selected interpretation, complete captures and ordered operand preparation remain distinct from those access permissions. Coverage and native selection must agree on that same view contract.
 
 ## Phase and initiator
 

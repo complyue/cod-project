@@ -2887,6 +2887,10 @@ class ScalarChecker {
         return;
       }
       Access access;
+      // The callable view supplies target access; actual type identity survives
+      // that boundary independently of value copying or borrowed permissions.
+      for (size_t i = 0; i < arguments.size(); ++i)
+        access.push_back(!view.const_views.empty() && view.const_views[i]);
       Owners owners(arguments.size());
       std::map<size_t, size_t> roles;
       std::optional<size_t> selected;
@@ -2909,21 +2913,10 @@ class ScalarChecker {
         }
         const auto method = select_method(family, arguments, at, "callable family", retained, access, owners, &proof);
         if (selected && *selected != method)
-          implementation_gap(at, "unproved callable family selection depending on argument access or owner relations");
+          implementation_gap(at, "unproved callable family selection depending on owner relations");
         selected = method;
       };
-      const std::function<void()> prove_access = [&] {
-        account();
-        if (access.size() == arguments.size()) { prove_owners(0, 0); return; }
-        const auto i = access.size();
-        const auto mode = view.argument_modes.empty() ? ArgumentMode::value : view.argument_modes[i];
-        const bool readonly = !view.const_views.empty() && view.const_views[i];
-        access.push_back(false); prove_access(); access.pop_back();
-        if (mode == ArgumentMode::value || readonly) {
-          access.push_back(true); prove_access(); access.pop_back();
-        }
-      };
-      prove_access();
+      prove_owners(0, 0);
       validate(*selected, arguments);
     };
     cover();

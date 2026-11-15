@@ -1,6 +1,6 @@
 # Regional variables and callable captures
 
-Design revision: 91 · Recorded: 2026-11-14 · Status: current bounded prototype contract.
+Design revision: 92 · Recorded: 2026-11-14 · Status: current bounded prototype contract.
 
 ## Design authority
 
@@ -9,7 +9,7 @@ Design revision: 91 · Recorded: 2026-11-14 · Status: current bounded prototype
 - **Contract boundary:** Preserve actual borrowed owners, complete nested values, recursion, caller destinations, access and cleanup; measure allocation/compilation. No regional callable payload, lexical-cell promotion, independent user heap lifetime or captured-region retention. H-417 rejects ref/ptr results without one statically provable owner; D18-Q-result-discrimination representation remains pending; native fixtures do not establish D-21’s wider stage/family contract.
 - **Invariants / non-goals:** D-14 owns storage/access/lifetimes, D-10 distinguishes lexical and dynamic calls, and D-17 owns checked exceptions. D-01 relocation, D-15 module/TLS separation and D-16 numeric/fraction constraints remain unchanged. No lexical-cell promotion, independently managed user heap objects, regional object copy/move, ownership extension or RTTI. Lexical lifetime ownership does not require stack backing.
 - **Acceptance:** Exercise both selection paths, captured-slot writes, owner adaptation, complete nested values, nullable invocation and deep recursion; reject invalid kind, owner, access and lifetime. Preserve caller-owned results, independent copies, cleanup and relocation, and measure construction/invocation cost and compilation scale. Current compiler availability is recorded in the [source capability reference](../tests/cod/language/README.md).
-- **Evidence / continuity:** human baselines are the H records identified by the registry; [K-UNIQUE-OWNER-20261114](../CHANGELOG.md#k-unique-owner-20261114) covers r90→91: H-417 closes only reference-owner alternatives, preserving independently qualified complete values, capture/access, recursion, native coverage and cleanup. Abstract concrete-type evidence representation retains its own review scope.
+- **Evidence / continuity:** human baselines are the H records identified by the registry; [K-682](../CHANGELOG.md#k-682) covers r91→92’s runtime-callable parameter-access clarification under H-366–H-369/P-327 and H-375/H-378: a view preserves its declared access contract alongside actual type identity. [K-UNIQUE-OWNER-20261114](../CHANGELOG.md#k-unique-owner-20261114) covers r90→91: H-417 closes only reference-owner alternatives, preserving independently qualified complete values, capture/access, recursion, native coverage and cleanup. Abstract concrete-type evidence representation retains its own review scope.
 
 ## Structural regions
 
@@ -70,6 +70,8 @@ Projection permits ordinary region helpers and root-field access. It cannot cons
 ## Runtime callable contract
 
 A callable view preserves its selected family dispatcher, module interpretation, view contract and required runtime environment. Several methods are permitted; actual argument types choose the applicable method. Existing native body-selection adapters are implementation infrastructure, not proof of family dispatch across abstract argument/result types. Direct method selection is valid when equivalent for all admitted alternatives. The family architecture and WPO coverage are tracked in [D-21](AheadOfTimeExecutionPreparation.md).
+
+Family selection uses the callable view's declared parameter target-access qualifiers together with actual argument type evidence. A readonly borrowed parameter remains readonly when supplied from writable storage; a writable borrowed parameter requires writable caller access. Value inputs receive independent local storage with the view's declared access. Actual type identity remains available for method selection before value conversion. The selected method must satisfy the view's passing, access, result, owner and exception contracts. Owner equalities retain their ordinary proof requirements.
 
 Module method registration constructs semantic information and does not capture runtime TLS. Runtime callable materialization creates the complete environment; reinstallation retains the existing value/captures. Lexical slots, named retained owners, nullable views, copies/replacement and captured/current invocation retain their qualified constraints. Per-family capture construction and abstract evidence must satisfy those constraints rather than introducing implicit owner extension or regional callable storage.
 

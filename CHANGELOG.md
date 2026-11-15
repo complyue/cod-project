@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Callable-view target access
+
+<a id="k-682"></a>
+**K-682 — Callable-access continuity.** Agent assessment under H-272/H-366–H-369/P-327/H-375/H-378/H-398/H-407/H-420 and charter §§3.2/5.3/6.3/8/12: registry r689→690, D-18r91→92 runtime-callable contract, D-21r11→12 callable hierarchy and source reference303→304 preserve the view's declared target access alongside actual argument type identity. H-369 delegates direct qualifier consequences; this clarification applies existing readonly propagation and independent local-value storage to family coverage. Preserve complete captures, ordered preparation, owner/throws/result checks and native reuse. Acceptance covers direct-versus-view access, actual input types, higher-order/borrowed/deferred/symbolic calls, selected dependencies and cleanup in both native modes. Owner-dependent family selection, recursive self-value capture policy, broader representations and pending designs retain their separate status; no ABI, owner representation or new qualification. Prior contracts: `2326246352eb6377ae996f9f42ac556ae442156f:design/RegionalClosures.md`, `2326246352eb6377ae996f9f42ac556ae442156f:design/AheadOfTimeExecutionPreparation.md` and `2326246352eb6377ae996f9f42ac556ae442156f:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Shared lexical shadow diagnostics
 
 <a id="k-681"></a>
