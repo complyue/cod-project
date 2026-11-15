@@ -2873,6 +2873,17 @@ class ScalarChecker {
       else implementation_gap(at, "unproved callable family input domain");
       domains.push_back(std::move(domain));
     }
+    Access access;
+    Owners owners;
+    TypeEvidenceState proof;
+    for (size_t i = 0; i < view.parameters.size(); ++i) {
+      // The view fixes target access. Distinct formal owner roles remain
+      // symbolic: they can denote equal or different actual owners.
+      access.push_back(!view.const_views.empty() && view.const_views[i]);
+      const auto role = view.owners.empty() ? 0 : view.owners[i];
+      owners.push_back(role ? std::optional<size_t>{role} : std::nullopt);
+      if (role) proof.external_owners.insert(role);
+    }
     std::vector<Type> arguments;
     size_t obligations = 0;
     const auto account = [&] {
@@ -2886,38 +2897,7 @@ class ScalarChecker {
         }
         return;
       }
-      Access access;
-      // The callable view supplies target access; actual type identity survives
-      // that boundary independently of value copying or borrowed permissions.
-      for (size_t i = 0; i < arguments.size(); ++i)
-        access.push_back(!view.const_views.empty() && view.const_views[i]);
-      Owners owners(arguments.size());
-      std::map<size_t, size_t> roles;
-      std::optional<size_t> selected;
-      TypeEvidenceState proof;
-      const std::function<void(size_t, size_t)> prove_owners = [&](size_t i, size_t classes) {
-        account();
-        if (i != arguments.size()) {
-          const auto role = view.owners.empty() ? 0 : view.owners[i];
-          if (!role) { prove_owners(i + 1, classes); return; }
-          if (const auto found = roles.find(role); found != roles.end()) {
-            owners[i] = found->second; prove_owners(i + 1, classes); return;
-          }
-          // Distinct formal owners admit both equal and different actual owners.
-          for (size_t group = 0; group <= classes; ++group) {
-            roles.emplace(role, group); owners[i] = group;
-            prove_owners(i + 1, std::max(classes, group + 1));
-            roles.erase(role);
-          }
-          return;
-        }
-        const auto method = select_method(family, arguments, at, "callable family", retained, access, owners, &proof);
-        if (selected && *selected != method)
-          implementation_gap(at, "unproved callable family selection depending on owner relations");
-        selected = method;
-      };
-      prove_owners(0, 0);
-      validate(*selected, arguments);
+      validate(select_method(family, arguments, at, "callable family", retained, access, owners, &proof), arguments);
     };
     cover();
   }

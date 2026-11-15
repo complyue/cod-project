@@ -20,6 +20,7 @@ behave @print(behave @f(1u8));behave @print(behave @f(1u64));
 for(i in 0u64..10u64){effect @f;behave @f(1u8);};
 '''
 EXTRA_SOURCES = []
+UNUSED_INPUT_TYPES = ('u32',)
 
 def main():
     results = []
@@ -44,7 +45,8 @@ def main():
             record(mode + '/native', output == expected, output=output)
             record(mode + '/shared_semantic_methods', len(bodies) == (2 if general else 4) and
                    sum(name.endswith('.general') for name in bodies) == 1, methods=list(bodies))
-            record(mode + '/unused_admitted_input', general or any(name.endswith('.specialized.u32') for name in bodies), methods=list(bodies))
+            unused_suffix = '.specialized.' + '.'.join(UNUSED_INPUT_TYPES)
+            record(mode + '/unused_admitted_input', general or any(name.endswith(unused_suffix) for name in bodies), methods=list(bodies))
             repeated, repeated_ir = run(SOURCE.replace('10u64', '1000u64'), general)
             record(mode + '/installations_do_not_register_methods', repeated == expected and set(inventory(repeated_ir)) == set(bodies), output=repeated)
             checked, _ = run(SOURCE, general, False)

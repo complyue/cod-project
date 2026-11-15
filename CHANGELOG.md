@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Shared symbolic owner proof
+
+<a id="k-683"></a>
+**K-683 — Callable-owner continuity.** Agent assessment under H-273/H-302/H-342/H-344/H-375–H-378/H-398/H-407/H-417/H-420, D-14r91/D-18r92/D-21r12/D-26r13 and charter §§2/3.2/5.3/6.3/12: registry r690→691 and source reference304→305 record callable coverage through the ordinary selector’s symbolic owner proof. Repeated formal roles establish equality; distinct roles retain both equal and different possibilities. Preserve full admitted-type obligations, exact method/view contracts, declared access, unique result owners, complete captures, initialization and cleanup. Acceptance covers independent/repeated roles, recursive forwarding, query/capture/deferred paths, native failures and shared method inventory. Unresolved owner-dependent selection remains unproved; no runtime owner carrier, permanent proof interface, ABI or new qualification. Prior capability reference: `2a2fa2a874f3851eba75ce7887a315ddcee18829:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Callable-view target access
 
 <a id="k-682"></a>

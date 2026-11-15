@@ -96,7 +96,7 @@ runner.CASES = {
         'func choose(ref x:const i64 in A,ref y:const i64 in B)->i64 where {owner A,owner B}{return 1;}'
         'func choose(ref x:const i64 in O,ref y:const i64 in O)->i64 where {owner O}{return 2;}'
         'func prototype(ref x:const i64 in A,ref y:const i64 in B)->i64 where {owner A,owner B}{return 0;}'
-        'func selected=prototype;selected<-choose;', 2, '', 'unproved callable family selection depending on owner relations'),
+        'func selected=prototype;selected<-choose;', 2, '', 'unproved owner equality'),
 }
 parameters = ','.join(f'a{i}:const bool' for i in range(16))
 view = ','.join(['const bool'] * 16)
