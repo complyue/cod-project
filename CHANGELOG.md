@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Explicit assignment forms
+
+<a id="k-696"></a>
+**K-696 — Assignment normalization continuity.** Agent assessment under H-270/H-272/H-293/H-302/H-304/H-342/H-344/H-398/H-407/H-417/H-420, D-10r147/D-14r92/D-17r57/D-18r92/D-21r12/D-26r13 and charter §§2/3.3/5.3/6.3/12: registry r703→704 and source reference317→318 normalize explicit/intrinsic `=` and `<-` calls into the infix assignment nodes, retaining their builtin marker. Acceptance preserves exact owners/access, initialization, ordered preparation, destination-view results, completion, complete callable cleanup, identical emitted code and shared recursive bodies. Standalone deferred invocations, assignment methods and required assignment queries remain explicit gaps. No new operator semantics, construction, ownership, ABI, fraction rule or design qualification. Prior capability reference: `06fabc24f03aca4df75bb389ea04cbe7a6e47e85:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Symbolic query signature validation
 
 <a id="k-695"></a>

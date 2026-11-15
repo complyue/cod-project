@@ -4145,6 +4145,7 @@ class ScalarChecker {
       break;
     }
     case K::transfer: case K::rebind: {
+      if (&expr == prepared_call_) implementation_gap(expr.at, "deferred assignment invocations; use a defer block");
       const auto destination = child(0, false);
       if (destination == Type::never) {
         child(1, expr.kind == K::transfer);

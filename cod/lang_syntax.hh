@@ -1087,6 +1087,15 @@ class Parser {
     return result;
   }
 
+  static void normalize_assignment_calls(Expression &expr) {
+    using K = Expression::Kind;
+    if (expr.kind == K::call && (expr.text == "=" || expr.text == "<-")) {
+      if (expr.children.size() != 2) fail(expr.at, "assignment requires a destination and a source");
+      expr.kind = expr.text == "=" ? K::rebind : K::transfer;
+    }
+    for (const auto &child : expr.children) normalize_assignment_calls(*child);
+    if (expr.definition && expr.definition->body) normalize_assignment_calls(*expr.definition->body);
+  }
   static void validate_explicit_scopes(const Expression &expr, bool iteration = false, bool deferred = false) {
     using K = Expression::Kind;
     if (expr.kind == K::block && expr.scoped) iteration = deferred = false;
@@ -1292,8 +1301,10 @@ public:
       }
       forms.push_back(std::move(form));
     }
-    for (const auto &form : forms)
-      if (form->body) validate_explicit_scopes(*form->body);
+    for (const auto &form : forms) if (form->body) {
+      validate_explicit_scopes(*form->body);
+      normalize_assignment_calls(*form->body);
+    }
     return forms;
   }
 };
