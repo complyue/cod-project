@@ -622,6 +622,17 @@ class ScalarChecker {
     if (found == module_names().symbols.end()) fail(at, "unknown symbol '" + name + "'");
     return found->second;
   }
+  static const Type &dynamic_procedure_type(const CheckedSymbol &symbol, const Location &at) {
+    if (!symbol.type || symbol.type->kind != Type::procedure || symbol.type->pure_callable)
+      fail(at, "dynamic invocation requires a procedure symbol");
+    return *symbol.type;
+  }
+  static Type print_result(const Expression &expr, const std::optional<Type> &argument = {}) {
+    if (expr.children.size() != 1) fail(expr.at, "print requires one scalar argument");
+    if (argument == Type::never) return Type::never;
+    if (argument && !scalar_type(*argument)) fail(expr.at, "print requires one primitive scalar argument");
+    return Type::void_type;
+  }
   NamedFamily named_family(const std::string &name, const TypeEvidenceState *state = nullptr) const {
     const ModuleLookup lookup(module_, state && state->method ? program_.methods[*state->method].module : module_);
     const ModuleLookup context(interpretation_, state && state->method ? program_.methods[*state->method].interpretation : interpretation_);
@@ -2705,10 +2716,16 @@ class ScalarChecker {
         if (!state.complete) return {};
         const auto id = resolve_symbol(expr.text, expr.at, symbol_shadowed(expr.text, state), state.method);
         if (program_.symbols[id].intrinsic_print) {
+          if (state.required) print_result(expr);
           bool exits = false;
-          for (const auto &item : expr.children) if (type_evidence(*item, state) == Type::never) exits = true;
+          for (const auto &item : expr.children) {
+            const auto argument = type_evidence(*item, state);
+            exits = exits || argument == Type::never;
+            if (state.required) print_result(expr, argument);
+          }
           return exits ? Type::never : Type::void_type;
         }
+        if (state.required) dynamic_procedure_type(program_.symbols[id], expr.at);
         target = program_.symbols[id].type; local = true;
       } else if (expr.kind == K::value_call) { target = child(0); local = true; }
       else if (!expr.intrinsic && state.complete) {
@@ -3831,19 +3848,17 @@ class ScalarChecker {
       if (method && method->kind == Form::Kind::function) fail(expr.at, "a function cannot invoke a dynamic procedure");
       const auto &symbol = program_.symbols[*operation.symbol];
       if (!symbol.intrinsic_print) {
-        if (!symbol.type || symbol.type->kind != Type::procedure || symbol.type->pure_callable)
-          fail(expr.at, "dynamic invocation requires a procedure symbol");
+        const auto &type = dynamic_procedure_type(symbol, expr.at);
         require_symbol(lexical_, *operation.symbol, expr.at);
-        check_value_call(expr, *symbol.type, 0, instance, operations, operation, read, discard);
+        check_value_call(expr, type, 0, instance, operations, operation, read, discard);
         break;
       }
-      if (expr.children.size() != 1) fail(expr.at, "print requires one scalar argument");
+      print_result(expr);
       const auto argument = child(0);
       operation.arguments.push_back({ArgumentMode::value, argument});
-      if (argument == Type::never) { operation.type = Type::never; break; }
-      if (!scalar_type(argument)) fail(expr.at, "print requires one primitive scalar argument");
+      operation.type = print_result(expr, argument);
+      if (argument == Type::never) break;
       operation.builtin = BuiltinOperation::print;
-      operation.type = Type::void_type;
       break;
     }
     case K::conditional: {

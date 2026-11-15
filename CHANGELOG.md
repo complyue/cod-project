@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Symbolic query signature validation
+
+<a id="k-695"></a>
+**K-695 — Shared invocation-contract continuity.** Agent assessment under H-184/H-185/H-295/H-381/H-382/H-398/H-407/H-420–H-424, D-10r147/D-14r92/D-18r92/D-24r7/D-26r13 and charter §§2/5.3/6.3/12: registry r702→703 and source reference316→317 share procedure-symbol and print-signature validation between required queries and executable checking. Acceptance rejects invalid kind/arity/argument types while preserving unevaluated operands, uninstalled symbols, lexical/source identity, independent body evidence and identical native code for valid queries. The governance row follows the current registry revision. No new construction form, effect permission, lifetime, ABI, fraction rule or design qualification. Prior capability reference: `bc6971fe6518842a9fb59db9a97f3793e0c30012:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Partially implemented family queries
 
 <a id="k-694"></a>
