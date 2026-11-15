@@ -1,8 +1,10 @@
 # CoD execution architecture: AOT micro-dispatch assessment
 
-Design revision: 15 · Recorded: 2026-11-13 America/Los_Angeles · Status: bounded experimental evidence and removal-first source migration; concrete full-language mechanisms remain separately scoped.
+Design revision: 16 · Recorded: 2026-11-15 America/Los_Angeles · Status: bounded experimental evidence and removal-first source migration; concrete full-language mechanisms remain separately scoped.
 
 ## Design authority
+
+- **Built-in failure naming:** [H-472/H-473](../CHANGELOG.md#h-472)/[K-FAILURE-NAMES-20261115](../CHANGELOG.md#k-failure-names-20261115) covers D-25r15→16 and [D-17-NAMES](DesignAuthorityRegistry.md#d-17-names), P-414/P-415. Canonical concrete unchecked names end in Error, checked names in Exception; the common root Exception covers both. Existing classification, owner/access, preparation and cleanup contracts and their qualified scopes continue unchanged. Acceptance requires consistent names without changing handling obligations; compiler spelling migration is outstanding, as recorded in D-17. This grants no new runtime representation or broader design qualification.
 
 - **Registry / current scope:** [D-25](DesignAuthorityRegistry.md#d-25); the semantic revision stated above and the independently qualified scopes in the current registry. **Isolated delivery authorized** H-396/H-397; **source migration authorized** H-398/H-399; K-586/K-587/K-593/K-594/K-596. C-85/P-359–P-362 and C-86/C-87/C-88/P-363–P-370 detailed production paths remain pending-human.
 - **Value path:** The registry’s named value relationships explain the charter benefit and retain their individual confirmation states; dependency relationships confer no additional authority.
@@ -16,7 +18,7 @@ The execution design separates **AOT execution preparation from runtime executio
 
 The finite native evidence supports this baseline for explicitly selected nominal definitions, field choices and operation contracts. It exposes no major correctness or compilation-termination obstacle within that scope. It does not establish an arbitrary generic/type-inference solver, full source language, complete owner checker or production runtime ABI. Those are implementation/design obligations to carry forward, not capabilities supplied by the older compiler.
 
-The source contract also admits valid runtime values whose actual types are outside the static catalog. Such values select through CoD `<any>` while preserving actual identity and owner evidence. Uninterpreted passage is permitted; unavailable required interpretation raises checked `StaticallyUnknownType`, and a breach of established typing raises unchecked `UnsoundRuntimeTyping`. The prepared executable methods and selected interpretations remain fixed. This boundary comes from D-26 and is not established by the finite experiment's decoder or reports. New method loading, runtime compilation and unvalidated opaque payload access remain excluded.
+The source contract also admits valid runtime values whose actual types are outside the static catalog. Such values select through CoD `<any>` while preserving actual identity and owner evidence. Uninterpreted passage is permitted; unavailable required interpretation raises checked `StaticallyUnknownTypeException`, and a breach of established typing raises unchecked `UnsoundRuntimeTypingError`. The prepared executable methods and selected interpretations remain fixed. This boundary comes from D-26 and is not established by the finite experiment's decoder or reports. New method loading, runtime compilation and unvalidated opaque payload access remain excluded.
 
 The experiment is self-contained within its stated finite contract; its workload planning and utilities supply no prerequisite compiler architecture or production ABI.
 

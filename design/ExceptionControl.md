@@ -1,12 +1,16 @@
 # CoD exception control and regional cleanup
 
-Design revision: 64 · Recorded: 2026-11-15 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; current implementation availability is recorded in the source capability reference.
+Design revision: 67 · Recorded: 2026-11-15 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; current implementation availability is recorded in the source capability reference.
 
 ## Design authority
 
+- **Built-in failure naming:** [H-472/H-473](../CHANGELOG.md#h-472)/[K-FAILURE-NAMES-20261115](../CHANGELOG.md#k-failure-names-20261115) covers D-17r66→67 and [D-17-NAMES](DesignAuthorityRegistry.md#d-17-names), P-414/P-415. Canonical concrete unchecked names end in Error, checked names in Exception; the common root Exception covers both. Existing classification, owner/access, preparation and cleanup contracts and their qualified scopes continue unchanged. Acceptance requires consistent names without changing handling obligations; compiler spelling migration is outstanding, as recorded in D-17. This grants no new runtime representation or broader design qualification.
+
+- **Type and predicate assertion failures:** [H-467–H-471](../CHANGELOG.md#h-468)/[K-ASSERT-SPECIALIZATION-20261115](../CHANGELOG.md#k-assert-specialization-20261115), [D-10-TYPED-EXPR](DesignAuthorityRegistry.md#d-10-typed-expr)/[D-10-ASSERT](DesignAuthorityRegistry.md#d-10-assert), P-411/P-413, integrates unchecked runtime mismatch and predicate failure with static resolution and explicit non-null refinement. Existing C-63/P-235/P-236 and charter §§3.3/4.3/6.3/12 preserve effects, ordinary recovery and cleanup. TypeAssertionFailedError/AssertionFailedError follow H-472 and select no ABI. Static failure rejects; unresolved failures need no throws/catch. Concrete-type operation selection preserves D-26 coverage and unknown-interpretation distinctions. Acceptance includes proof success/failure, runtime cleanup, checked operand failures and path-sensitive facts; broader syntax/evidence mechanisms and source implementation remain separate.
+
 - **Default preparation and initialization:** [H-458](../CHANGELOG.md#h-458)/[K-DEFAULT-PHASE-20261115](../CHANGELOG.md#k-default-phase-20261115) continues r63→64's entry, prepared-call and cleanup contract while integrating [D-10-ARGUMENTS](SymbolicDynamicScope.md#named-arguments-defaults-and-complete-binding). Caller-context defaults prepare before entry; definition-environment defaults initialize in the entered callee. C-63/P-235/P-236 and charter §§3.3/6.3/12 preserve observable effect order and exact cleanup responsibility. Acceptance must cover both failure phases and deferred registration/invocation; this adds no rollback, ownership restoration or implementation claim.
 
-- **Bounds policy:** [D-17-BOUNDS](DesignAuthorityRegistry.md#d-17-bounds), r63 section below, records [H-448](../CHANGELOG.md#h-448)/[K-BOUNDS-POLICY-20261115](../CHANGELOG.md#k-bounds-policy-20261115). C-63/C-65/P-401–P-402 serves charter §§4.3/6.3/8/12: recoverable default bounds failures without mandatory throws annotations, with an explicit user-selected check opt-out. IndexOutOfBoundsException is unchecked; builtin indexing checks bounds by default. The opt-out transfers the range obligation to the program; invalid unchecked execution has no defined-result/exception/cleanup guarantee. Other type, owner/access, initialization, null and numeric contracts remain. Acceptance covers default recovery/cleanup, empty and boundary indices, read/write/view selection, proved check elimination and explicit opt-out isolation. Flag spelling/scope propagation, exception payload and mixed-compilation transport remain engineering work; no implementation or broader varargs qualification is claimed.
+- **Bounds policy:** [D-17-BOUNDS](DesignAuthorityRegistry.md#d-17-bounds), r67 scoped section below, records [H-448](../CHANGELOG.md#h-448)/[K-BOUNDS-POLICY-20261115](../CHANGELOG.md#k-bounds-policy-20261115). C-63/C-65/P-401–P-402 serves charter §§4.3/6.3/8/12: recoverable default bounds failures without mandatory throws annotations, with an explicit user-selected check opt-out. IndexOutOfBoundsError is unchecked; builtin indexing checks bounds by default. The opt-out transfers the range obligation to the program; invalid unchecked execution has no defined-result/exception/cleanup guarantee. Other type, owner/access, initialization, null and numeric contracts remain. Acceptance covers default recovery/cleanup, empty and boundary indices, read/write/view selection, proved check elimination and explicit opt-out isolation. Flag spelling/scope propagation, exception payload and mixed-compilation transport remain engineering work; no implementation or broader varargs qualification is claimed.
 
 - **Registry / current scope:** [D-17](DesignAuthorityRegistry.md#d-17); the semantic revision stated above and the independently qualified scopes in the current registry. **Confirmed/continued bounded exception, lifetime, scope, defer and return contract.** C-63/P-235/P-236; H-267/H-269/H-313–H-315/H-319/H-356–H-362/H-365/H-370/H-371; P-321–P-324/P-326/P-328/P-329. D-26r9/H-400/H-401/H-404/H-405/H-407 through C-90/P-374/P-375 governs the unknown-type failure categories and explicit declaration obligations.
 - **Value path:** C-63/P-235 → C-10 and D-17/P-236 → C-63: recoverable business failure must preserve explicit regional responsibility, effects and inspectable lifetimes. H-267 confirms this bounded path and scope under charter §§2–4, 6.2–6.3 and 12; it does not qualify unrelated ownership proposals.
@@ -16,13 +20,39 @@ Design revision: 64 · Recorded: 2026-11-15 · Status: confirmed bounded excepti
 - **Evidence / continuity:** human baselines remain the H records identified by the registry. [K-RESIZE-20261114](../CHANGELOG.md#k-resize-20261114) continues r56→57: H-431 retains E4 ordinary consuming-call cleanup for the H-432 resize proposal, with pre-entry preparation and post-cleanup result delivery kept distinct. H-428 allowed allocation effects and the qualified completion contract remain unchanged; no language allocation checkpoint or ownership recovery is added. [K-REFERENCE-IDENTITY-20261114](../CHANGELOG.md#k-reference-identity-20261114) integrates H-439/H-440 owner-plus-locator identity and is null, preserving established access, result and lifetime behavior. Current source/native coverage and proof boundaries are recorded in the [source capability reference](../tests/cod/language/README.md). [K-IS-NOT-20261114](../CHANGELOG.md#k-is-not-20261114) adds H-441 is not as exact identity negation, preserving evaluation, contextual null ownership, access and lifetime rules; implementation coverage remains bounded by the [source capability reference](../tests/cod/language/README.md).
 - **Current implementation alignment:** [K-703](../CHANGELOG.md#k-703) continues the confirmed caller-binding and prepared-defer contracts and points to source reference324 for scalar/intrinsic-exception reference methods. Saved slots retain invocation-time read, initialization, owner, permission and cleanup obligations. Callable payload transport, wider preservation proofs, allocation qualifiers and physical storage mechanisms retain their separate boundaries.
 
+## Built-in failure names and assertion responsibility
+
+H-472 selects **AssertionFailedError** as the unchecked predicate-assertion failure and a canonical naming convention for concrete built-in failures: **unchecked names end in Error; checked names end in Exception**. H-473 selects **Exception** as the most general exception-handling abstraction. The root covers both categories and is not itself a concrete checked failure; its name is the deliberate root-level exception to the concrete naming convention. This does not require a separate Error superclass or introduce a new hierarchy/ABI.
+
+Checkedness belongs to the resolved failure type's semantic contract, not identifier spelling. An alias cannot remove or introduce a handling obligation. Canonical built-ins follow the convention; no restriction on arbitrary user type names is selected. The suffix communicates handling obligations, not fatality, recoverability or responsibility: unchecked errors remain catchable, and environmental failures such as OutOfMemoryError need not be author mistakes. General catch matching continues to use type relations, so a catch for the root Exception covers admitted checked and unchecked failures.
+
+**Assertion responsibility.** A program reaching a false assertion has violated its author's assertion; raising AssertionFailedError is the correct CoD behavior, not evidence of a CoD soundness defect. A failed explicit type assertion likewise raises TypeAssertionFailedError. Both differ from the established-typing backstop UnsoundRuntimeTypingError. Soundness would instead be at issue if a required check were omitted or a false/invalidated assertion fact were used to permit unsafe work. Successful-continuation facts, static rejection under H-470, once-only effects and ordinary cleanup retain their contracts. Diagnostic message/payload layout remains engineering work.
+
+The table separates the selected source contract from vocabulary currently present in [the compiler descriptors](../cod/lang_exceptions.hh). Source, services, tests and capability evidence have not been renamed by this documentation-only change. Existing compiled spellings below describe current implementation, not compatibility aliases promised by the new contract.
+
+| Canonical design name | Classification | Current compiler spelling/support |
+| --- | --- | --- |
+| Exception | Common root; covers both | SystemException |
+| AssertionFailedError | Unchecked predicate failure | Predicate assert construct not implemented |
+| TypeAssertionFailedError | Unchecked type-assertion mismatch | Expression type assertion not implemented |
+| OutOfMemoryError | Unchecked | OutOfMemory |
+| RegionCapacityExceededError | Unchecked | RegionCapacityExceeded |
+| InvalidCapacityError | Unchecked | InvalidCapacity |
+| IndexOutOfBoundsError | Unchecked | No dedicated category in the descriptor table |
+| MissingReturnError | Unchecked | MissingReturnException |
+| UnsoundRuntimeTypingError | Unchecked | UnsoundRuntimeTyping |
+| NullPointerException | Checked | NullPointerException |
+| StaticallyUnknownTypeException | Checked | StaticallyUnknownType |
+
+**Acceptance:** every concrete canonical built-in name agrees with its existing checkedness; root Exception accepts both categories; aliases retain obligations; assertion failure is attributed to the author's assertion without weakening checks/refinement; existing catches, declared failures, causes and cleanup preserve their semantics. Compiler migration must coordinate vocabulary, diagnostics and services before new spellings are advertised as supported. It does not by itself implement missing assertion/bounds operations or qualify broader user exception graphs. No backward-compatibility aliases are selected here.
+
 ## Selected direction
 
 CoD provides `try`, `catch` and `finally` control in the accepted contract. Ultimate out-of-memory failure is an **unchecked exception**: calling allocation does not require a checked-error result, a `throws` declaration or an enclosing catch merely to compile. A caller may catch the failure; otherwise it propagates toward the execution boundary. Unchecked does not mean ignoring ownership validity or turning invalid references into runtime exceptions.
 
 `make` continues to produce its normal `owned region :Root` result when construction succeeds. OOM is an exceptional exit, not an implicit null owner or a mandatory optional/result wrapper. H-265 does not select automatic allocation retries, region growth, compaction or a process recovery policy. “Ultimate” failure describes exhaustion after any separately defined policy has failed; no such policy is introduced here.
 
-The initial error taxonomy distinguishes `OutOfMemory` (the memory provider cannot supply storage), `RegionCapacityExceeded` (placement exceeds an existing region's fixed budget), and `InvalidCapacity` (an invalid or unrepresentable capacity request). All three are unchecked; none implies automatic growth or retry.
+The initial error taxonomy distinguishes `OutOfMemoryError` (the memory provider cannot supply storage), `RegionCapacityExceededError` (placement exceeds an existing region's fixed budget), and `InvalidCapacityError` (an invalid or unrepresentable capacity request). All three are unchecked; none implies automatic growth or retry.
 
 H-428 confirms allocation as an allowed initialization side effect. A failing initialization group does not rewind an existing region or undo earlier valid publication/effects. Its incomplete bindings are not successful results, while an already initialized target published into surviving same-owner state remains live with its region. Failed acquisition of a new whole region still releases its acquired resources exactly once. Application/library undo frameworks require their own contracts; the language supplies no allocation checkpoint or automatic rollback.
 
@@ -30,16 +60,16 @@ Compile-time type, moved-name, escape and binding errors remain compile errors. 
 
 ## Unchecked bounds exceptions and optional checks
 
-H-448 selects IndexOutOfBoundsException as an unchecked exception for builtin indexed access, including admitted array indexing and executable variadic-pack indexing. A callee or caller need not declare throws or provide a catch merely to compile; a program may catch the exception, and ordinary exception propagation, defer/finally and cleanup apply when it is thrown. Empty sequences have no valid element index. Index-type admission/conversion remains a separate contract; this decision admits no fractional index or new numeric conversion.
+H-448 selects IndexOutOfBoundsError as an unchecked exception for builtin indexed access, including admitted array indexing and executable variadic-pack indexing. A callee or caller need not declare throws or provide a catch merely to compile; a program may catch the exception, and ordinary exception propagation, defer/finally and cleanup apply when it is thrown. Empty sequences have no valid element index. Index-type admission/conversion remains a separate contract; this decision admits no fractional index or new numeric conversion.
 
-Runtime bounds checking is enabled by default, including optimized builds unless the user explicitly opts out. A failing bounds check prevents the invalid element access or view construction and raises IndexOutOfBoundsException. Reads, writes and reference-producing builtin selection use the same policy. Preserve each operation's established operand preparation, conversion and evaluation order; adding a check must not reevaluate operands or silently change unrelated effects. User-defined indexing retains its selected method's own failure contract; any builtin indexing that method performs follows this policy.
+Runtime bounds checking is enabled by default, including optimized builds unless the user explicitly opts out. A failing bounds check prevents the invalid element access or view construction and raises IndexOutOfBoundsError. Reads, writes and reference-producing builtin selection use the same policy. Preserve each operation's established operand preparation, conversion and evaluation order; adding a check must not reevaluate operands or silently change unrelated effects. User-defined indexing retains its selected method's own failure contract; any builtin indexing that method performs follows this policy.
 
 ```text
 # Design example; executable varargs integration remains separate.
 proc pick(i:u64, rest:u64...) -> u64 {
     return rest[i];           # No throws declaration required for bounds failure.
 }
-# With default checking, pick(0u64) raises IndexOutOfBoundsException.
+# With default checking, pick(0u64) raises IndexOutOfBoundsError.
 ```
 
 An explicit compiler option may disable generated bounds checks. The programmer then assumes the range precondition for affected builtin accesses. Executing an out-of-range access with checking disabled is outside the defined safe execution contract: no result, exception delivery or cleanup behavior is guaranteed. In particular, a catch cannot be relied on to intercept that access. This is the interpretation of H-448's explicit at-own-risk opt-out, not a claim that unchecked exceptions themselves bypass cleanup. In-range execution retains its ordinary semantics.
@@ -65,17 +95,25 @@ The exception name is selected and aliased through the normal type-identity rule
 
 Only a dereference creates the null-access obligation. `null` is a reserved literal, never a binding. H-440/H-441’s `p is null` and `p is not null` evaluate the reference operand once and examine its selected owner/locator without loading the target; merely rebinding a pointer with `=` does not dereference it. Ordinary payload argument evaluation, including copying bits into val, must account for null access in the caller. A valid non-null ref needs no NPE obligation. Stable pointer tests may establish a non-null view on the corresponding branch; mutations invalidate the fact, and checking a mutable field does not prove a later reload unchanged.
 
-A handler's NPE or rethrow and NPE from finally must satisfy the enclosing callable's own contract. A cause containing NPE does not alter the primary exception's matching category. Existing E1–E5 cleanup, explicit causes and replacement semantics remain. OutOfMemory, RegionCapacityExceeded and InvalidCapacity remain unchecked; type, expired-owner and definite-initialization errors remain compile errors. Checked metadata introduces no payload RTTI, allocation on throw, general exception-effect polymorphism or runtime initialization registry.
+A handler's NPE or rethrow and NPE from finally must satisfy the enclosing callable's own contract. A cause containing NPE does not alter the primary exception's matching category. Existing E1–E5 cleanup, explicit causes and replacement semantics remain. OutOfMemoryError, RegionCapacityExceededError and InvalidCapacityError remain unchecked; type, expired-owner and definite-initialization errors remain compile errors. Checked metadata introduces no payload RTTI, allocation on throw, general exception-effect polymorphism or runtime initialization registry.
 
 Acceptance covers direct/module and callee-boundary rejection, explicit propagation, local handling and finally cleanup, bodyless and symbolic signatures, literal/test/rebind operations without target access, val argument evaluation, branch refinement and nullable loop paths. D-14 retains the reference initialization, same-owner, fixed-owner and current relative-encoding constraints. General exception payload graphs and unrelated deferred exception mechanisms remain outside this increment.
 
 ## Unknown-type and typing-contract failures
 
-[D-26](GenericAndRecursiveClosure.md) classifies unavailable required type interpretation as checked `StaticallyUnknownType` and a detected violation of an established typing contract as unchecked `UnsoundRuntimeTyping`. Both use the ordinary exception control, explicit causes and cleanup rules. Static type errors remain compile errors; incomplete compiler reasoning cannot be substituted with an arbitrary runtime exception and claimed as successful native coverage.
+[D-26](GenericAndRecursiveClosure.md) classifies unavailable required type interpretation as checked `StaticallyUnknownTypeException` and a detected violation of an established typing contract as unchecked `UnsoundRuntimeTypingError`. Both use the ordinary exception control, explicit causes and cleanup rules. Static type errors remain compile errors; incomplete compiler reasoning cannot be substituted with an arbitrary runtime exception and claimed as successful native coverage.
 
-Generic syntax or valid uninterpreted passage alone creates no unknown-type obligation. A voluntary `throws StaticallyUnknownType` declaration retains the fixed caller obligation, including known-type calls whose bodies succeed. Selected exception types, callable views, handlers and deferred invocations preserve this contract. Acceptance includes declaration coverage, retained categories and causes, ordered failure routing and exact release in specialized and shared native execution.
+Generic syntax or valid uninterpreted passage alone creates no unknown-type obligation. A voluntary `throws StaticallyUnknownTypeException` declaration retains the fixed caller obligation, including known-type calls whose bodies succeed. Selected exception types, callable views, handlers and deferred invocations preserve this contract. Acceptance includes declaration coverage, retained categories and causes, ordered failure routing and exact release in specialized and shared native execution.
 
 The source capability reference distinguishes category/declaration support from outside-catalog input and required-interpretation detection. This integration selects no new input validation protocol, carrier, permanent ABI, dynamic cast or runtime compilation mechanism; those D-26 boundaries remain separately scoped.
+
+## Nonnumeric type assertion failures
+
+H-467/H-468 selects an **unchecked assertion failure** for an admitted nonnumeric type assertion whose runtime check finds a mismatch. H-470 resolves provable assertions first: success needs no runtime validation, and failure rejects compilation. [D-10](SymbolicDynamicScope.md#nonnumeric-assertion-contract) owns the operation; TypeAssertionFailedError is its runtime category under H-472. H-469 separately adds [predicate assertions](SymbolicDynamicScope.md#predicate-assertions-and-flow-refinement), with unchecked category AssertionFailedError under H-472. Both preserve normal propagation, explicit causes, defer/finally, replacement and cleanup, without mandatory throws/catch. Neither unchecked classification nor numeric/bounds settings removes an unresolved assertion check.
+
+A valid Entity holding an Edge can fail a request for a Node view without breaching Entity's established typing contract. Such mismatch is not UnsoundRuntimeTypingError. Lack of required outside-catalog interpretation follows D-26's StaticallyUnknownTypeException boundary rather than pretending that an unknown relationship is false. Operand evaluation keeps its own failure categories and obligations. No failed assertion undoes prior effects, restores consumed ownership or rewinds allocation.
+
+Caller argument and caller-default failures precede entry; definition-default/body failures after entry use ordinary callee cleanup under H-458. H-469 requires an established non-null fact before requesting a ref view from a ptr: `assert p is not null` may supply it, and `:` itself adds no null-to-ref runtime check. Failed predicate assertions do not create facts on a handled-failure path. Operand dereferences retain checked NPE obligations; ordinary null-access rules are unchanged. H-470 compile-time rejection cannot be caught. H-471 concrete-type specialization preserves covered runtime failure paths when the actual input is unresolved; compiling a possible failing branch is not proof that the call necessarily fails. No parser/native implementation, object-header RTTI or broad source admission follows.
 
 ## Deferred work and explicit scopes
 
@@ -122,7 +160,7 @@ The fallback is registered for its owning scope, with the same reverse-order and
 
 ### Explicit callable returns
 
-H-361 requires proc/func brace bodies to provide returned values with `return`. A value supplied from finally likewise requires explicit return syntax. A callable that finishes without a required explicit return raises an unchecked exception at runtime; the compiler should diagnose statically detectable missing-return paths through errors or warnings. The intrinsic vocabulary names this failure `MissingReturnException`; it carries the existing bounded system-exception details. Reachable required-value fallthrough produces `-Wmissing-return`, which `-Werror=missing-return` or `--warnings-as-errors` can reject. Static diagnosis does not turn this failure into a checked throws obligation.
+H-361 requires proc/func brace bodies to provide returned values with `return`. A value supplied from finally likewise requires explicit return syntax. A callable that finishes without a required explicit return raises an unchecked exception at runtime; the compiler should diagnose statically detectable missing-return paths through errors or warnings. The intrinsic vocabulary names this failure `MissingReturnError`; it carries the existing bounded system-exception details. Reachable required-value fallthrough produces `-Wmissing-return`, which `-Werror=missing-return` or `--warnings-as-errors` can reject. Static diagnosis does not turn this failure into a checked throws obligation.
 
 H-362 confirms that `return value` inside a deferred catch or finally returns from the enclosing func/proc. It replaces a pending return or exception, while the remaining deferred actions still run. A handler without return preserves an existing pending normal result. If no required result is supplied before the callable completes, the missing-return rule applies. Void callables may complete normally without `return;`.
 
@@ -208,7 +246,7 @@ try {
   owned region packet:Packet <-
     make Packet(capacity = bytes) { sequence <- initial };
   process_packet(packet)
-} catch (error : const OutOfMemory) {
+} catch (error : const OutOfMemoryError) {
   handle_allocation_failure(error)
 } finally {
   finish_attempt()
@@ -253,7 +291,7 @@ H-267 accepts E1–E5 together. Their value is a complete construction/edit/tran
 
 ### E1 — Intrinsic exception categories and payload
 
-The initial unchecked system failures are: `OutOfMemory`, `RegionCapacityExceeded` and `InvalidCapacity`. The first means the memory provider cannot satisfy allocation; the second means an existing region's fixed budget cannot satisfy placement; the third means an invalid/unrepresentable capacity request. No automatic growth or retry is implied.
+The initial unchecked system failures are: `OutOfMemoryError`, `RegionCapacityExceededError` and `InvalidCapacityError`. The first means the memory provider cannot satisfy allocation; the second means an existing region's fixed budget cannot satisfy placement; the third means an invalid/unrepresentable capacity request. No automatic growth or retry is implied.
 
 Expose their type identities through an ordinary standard vocabulary module, with normal explicit selection and local aliases. Their intrinsic payload is bounded bits: category, a source-site identifier and relevant scalar size information. The source-site identifier is resolved against immutable metadata for the executing program; it contains no native address and does not promise meaning under a different program image. Error formatting must not turn it into a stored cross-owner pointer. Catch selection uses a small runtime category discriminator. General type reflection, arbitrary user exception payloads and native C++ type matching remain outside this increment. H-267 accepts this bounded discrimination under H-251; it does not approve general RTTI. Matching needs a type identity at the throw/handler boundary, not a runtime type descriptor embedded in each payload.
 
@@ -264,7 +302,7 @@ Use this source family, with exception identities already selected into the curr
 ```text
 try {
   operation()
-} catch (error : const OutOfMemory) {
+} catch (error : const OutOfMemoryError) {
   recover(error)
 } catch (error) {
   report_or_rethrow(error)
@@ -326,7 +364,7 @@ Native exception handling must preserve checked obligations, explicit causes, sc
 
 ### Retained explicit-cause lifetime
 
-H-269 requires the explicit cause chain to survive returning or storing a caught exception beyond the catch. Intrinsic runtime-managed storage retains the relationship; creating a chain may itself raise OutOfMemory. Basic OOM propagation does not allocate. A failed chain construction propagates the new OOM without automatically attaching either operand. Exception values and cause records are immutable: `throw x from e` supplies e as the explicit cause of the thrown value without mutating saved x or e values. It replaces the thrown copy's preceding direct cause; that preceding relationship remains in any unchanged copy of x.
+H-269 requires the explicit cause chain to survive returning or storing a caught exception beyond the catch. Intrinsic runtime-managed storage retains the relationship; creating a chain may itself raise OutOfMemoryError. Basic OOM propagation does not allocate. A failed chain construction propagates the new OOM without automatically attaching either operand. Exception values and cause records are immutable: `throw x from e` supplies e as the explicit cause of the thrown value without mutating saved x or e values. It replaces the thrown copy's preceding direct cause; that preceding relationship remains in any unchanged copy of x.
 
 The bounded runtime uses execution-local numeric handles for immutable cause records. Regional fields contain bits and handles rather than host addresses; copying a regional image within the same execution does not require pointer patching. Generic exception storage also preserves its bounded failure-category discriminator. These handles, like source-site IDs, are not a cross-process persistence or delivery format. General user exception graphs and general RTTI remain excluded.
 
