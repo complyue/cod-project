@@ -10,6 +10,7 @@ import tempfile
 from foundation_tests import ROOT, MODE, COD
 from declaration_query_tests import IO, ID, DECL
 
+EXTRA_SOURCES = []
 CASES = (
     ('generic', ID+DECL, 'absent(identity,1)', 'i64', '7', '7\n'),
     ('nested', ID+DECL, 'absent(identity,absent(identity,1))', 'i64', '8', '8\n'),
@@ -54,7 +55,7 @@ def main():
     print(f'Declaration query staging: {count}/{len(results)} passed')
     if report := os.environ.get('COD_LANGUAGE_REPORT'):
         sources = [ROOT/'cod/main.cc', *sorted((ROOT/'cod').glob('lang_*.hh')), Path(__file__),
-                   Path(__file__).with_name('foundation_tests.py'), Path(__file__).with_name('declaration_query_tests.py')]
+                   Path(__file__).with_name('foundation_tests.py'), Path(__file__).with_name('declaration_query_tests.py'), *EXTRA_SOURCES]
         digest = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
         Path(report).write_text(json.dumps(dict(recorded_utc=datetime.datetime.now(datetime.timezone.utc).isoformat(),
             toolchain=MODE, passed=count, total=len(results), results=results, executable_sha256=digest(COD),

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Callable signature inspection
+
+<a id="k-693"></a>
+**K-693 — Declared-signature continuity.** Agent assessment under H-258/H-295/H-398/H-407/H-420–H-424, D-10r147/D-14r92/D-18r92/D-24r7/D-26r13 and charter §§2/3.2/5.3/6.3/12: registry r700→701 and source reference314→315 share signature construction, result agreement and symbolic owner evidence between declared-call inspection and callable type-only operands. Unique concrete or independently contextual signatures retain all admitted-input, same-type, owner/access, result and checked-failure obligations. Acceptance covers generic/variadic/overloaded declarations, selected value calls, imports, retained contexts, permitted value-result conversions, identical native code and allocation-free queries. Inspection proves no executable coverage and creates no runtime value. Open signature inference, borrowed target adaptation and raw callable construction remain unproved. No new source inference policy, lifetime, carrier, ABI, fraction mechanism or design qualification. Prior capability reference: `95cc87e97cc08beb9c86c263ed29922019a6e988:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Contextual declaration queries
 
 <a id="k-692"></a>

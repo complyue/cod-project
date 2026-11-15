@@ -2138,9 +2138,7 @@ class ScalarChecker {
           type.throws_types.push_back(failure);
     }
   }
-  Type callable_type(const CheckedMethod &checked, const std::vector<Type> &arguments, const ResultContract &contract,
-                     const Access &access = {}, const Owners &owners = {}, const std::vector<Type> *original = nullptr) const {
-    const ModuleLookup lookup(module_, checked.module);
+  static Type callable_signature(const CheckedMethod &checked, const std::vector<Type> &arguments, const ResultContract &contract) {
     const auto &method = *checked.source;
     Type type{Type::procedure}; type.pure_callable = method.kind == Form::Kind::function;
     type.value_result = !contract.borrowed();
@@ -2150,7 +2148,8 @@ class ScalarChecker {
       if (owner.empty()) return size_t{0};
       return roles.try_emplace(owner, roles.size() + 1).first->second;
     };
-    for (const auto &parameter : method.parameters) {
+    for (size_t i = 0; i < arguments.size(); ++i) {
+      const auto &parameter = parameter_at(checked, i);
       type.const_views.push_back(parameter.read_only);
       type.owners.push_back(role(parameter.owner));
       type.argument_modes.push_back(argument_mode(parameter));
@@ -2163,6 +2162,12 @@ class ScalarChecker {
     if (std::none_of(type.const_views.begin(), type.const_views.end(), [](bool v) { return v; })) type.const_views.clear();
     if (std::none_of(type.nullable_views.begin(), type.nullable_views.end(), [](bool v) { return v; })) type.nullable_views.clear();
     type.throws_types = checked.throws_types;
+    return type;
+  }
+  Type callable_type(const CheckedMethod &checked, const std::vector<Type> &arguments, const ResultContract &contract,
+                     const Access &access = {}, const Owners &owners = {}, const std::vector<Type> *original = nullptr) const {
+    const ModuleLookup lookup(module_, checked.module);
+    auto type = callable_signature(checked, arguments, contract);
     add_declared_failures(type, checked, arguments, access, owners, original && *original != arguments);
     if (original && *original != arguments) add_declared_failures(type, checked, *original, access, owners);
     return resolve_type(std::move(type));
@@ -2529,7 +2534,8 @@ class ScalarChecker {
       if (const auto family = named_family(expr.text, &state); !family.methods.empty()) {
         if (expected && expected->kind == Type::procedure) return callable_query(family.methods, expected, expr.at, state);
         if ((!contextual || state.required) && family.methods.size() == 1) return callable_evidence(family.methods.front(), &state);
-      }
+      } else if (has_declarations(expr.text) && (expected || !contextual || state.required))
+        return declared_callable_query(expr.text, expected, expr.at, state);
       return {};
     case K::block: {
       auto inner = state;
@@ -2793,30 +2799,14 @@ class ScalarChecker {
       const auto candidates = method_candidates(family.methods, arguments, retained, access, owners, &state);
       if (family.methods.empty() && !expr.intrinsic && has_declarations(expr.text) &&
           (!eager_operation(expr.text) || !eager_types(expr, arguments).error.empty())) {
-        std::optional<Type> result;
-        std::optional<ResultMode> mode;
-        for (const auto &declaration : declarations(expr.text)) {
-          const auto substitutions = declaration_match(declaration, arguments);
-          if (!substitutions || !admits_access(declaration, access)) continue;
-          const auto equality = match_owners(declaration, owners, &state);
-          if (equality == OwnerMatch::mismatch) continue;
-          if (equality == OwnerMatch::unknown) {
-            if (state.required) implementation_gap(expr.at, "declared signature requires an unproved owner equality");
-            return {};
-          }
+        const auto result = inspect_declarations(expr.text, arguments, access, owners, expr.at, state,
+            [&](const CheckedMethod &declaration, const Substitutions &, const ResultContract &) {
           if (state.required) for (size_t i = 0; i < arguments.size(); ++i)
             if (argument_mode(parameter_at(declaration, i)) != ArgumentMode::value && (views[i].view != true || views[i].mixed_view))
               implementation_gap(expr.at, "borrowed parameter requires an existing view");
-          const auto type = substitute(*declaration.result.type, declaration, *substitutions, true);
-          const auto next = result_view(declaration, declaration.result, owners);
-          if (nested_binder(declaration, type) || (result && (*result != type || view != next || mode != declaration.result.mode))) {
-            if (state.required) implementation_gap(expr.at, "declarations do not establish one inspected result contract");
-            return {};
-          }
-          result = type; view = next; mode = declaration.result.mode;
-        }
-        if (state.required && !result) fail(expr.at, "no applicable declared signature for '" + expr.text + "'");
-        return result;
+        });
+        if (result) view = result->view;
+        return result ? std::optional<Type>{result->type} : std::nullopt;
       }
       if (state.required && family.methods.empty() && !eager_operation(expr.text))
         implementation_gap(expr.at, "typeof requires a known callable signature without outer value capture");
@@ -3016,22 +3006,29 @@ class ScalarChecker {
     };
     cover();
   }
-  template <typename Validate>
-  void cover_family(const std::vector<size_t> &family, const Type &view, const Location &at, const Validate &validate,
-                    const std::vector<Type> &retained = {}) const {
+  struct CallableInputEvidence {
     Access access;
     Owners owners;
     TypeEvidenceState proof;
+  };
+  static CallableInputEvidence callable_input_evidence(const Type &view) {
+    CallableInputEvidence evidence;
     for (size_t i = 0; i < view.parameters.size(); ++i) {
       // The view fixes target access. Distinct formal owner roles remain
       // symbolic: they can denote equal or different actual owners.
-      access.push_back(!view.const_views.empty() && view.const_views[i]);
+      evidence.access.push_back(!view.const_views.empty() && view.const_views[i]);
       const auto role = view.owners.empty() ? 0 : view.owners[i];
-      owners.push_back(role ? std::optional<size_t>{role} : std::nullopt);
-      if (role) proof.external_owners.insert(role);
+      evidence.owners.push_back(role ? std::optional<size_t>{role} : std::nullopt);
+      if (role) evidence.proof.external_owners.insert(role);
     }
+    return evidence;
+  }
+  template <typename Validate>
+  void cover_family(const std::vector<size_t> &family, const Type &view, const Location &at, const Validate &validate,
+                    const std::vector<Type> &retained = {}) const {
+    const auto evidence = callable_input_evidence(view);
     cover_inputs(view, at, [&](const std::vector<Type> &arguments) {
-      validate(select_method(family, arguments, at, "callable family", retained, access, owners, &proof), arguments);
+      validate(select_method(family, arguments, at, "callable family", retained, evidence.access, evidence.owners, &evidence.proof), arguments);
     });
   }
   Type complete_callable_type(const CheckedMethod &method, const std::vector<Type> &arguments, const ResultContract &result) const {
@@ -3112,6 +3109,69 @@ class ScalarChecker {
   CallableSelection select_callable(const std::vector<size_t> &family, const Type *expected, const Location &at, bool definition_site = false) const {
     if (const auto selected = try_select_callable(family, expected, at, nullptr, definition_site)) return *selected;
     implementation_gap(at, "unproved callable result; provide an independent result contract");
+  }
+  struct InspectedDeclaration {
+    Type type;
+    ResultMode mode;
+    ViewEvidence view;
+  };
+  template <typename Validate>
+  std::optional<InspectedDeclaration> inspect_declarations(const std::string &name, const std::vector<Type> &arguments,
+      const Access &access, const Owners &owners, const Location &at, const TypeEvidenceState &state, const Validate &validate) const {
+    std::optional<InspectedDeclaration> result;
+    for (const auto &declaration : declarations(name)) {
+      const auto substitutions = declaration_match(declaration, arguments);
+      if (!substitutions || !admits_access(declaration, access)) continue;
+      const auto equality = match_owners(declaration, owners, &state);
+      if (equality == OwnerMatch::mismatch) continue;
+      if (equality == OwnerMatch::unknown) {
+        if (state.required) implementation_gap(at, "declared signature requires an unproved owner equality");
+        return {};
+      }
+      auto contract = declaration.result;
+      contract.type = substitute(*contract.type, declaration, *substitutions, true);
+      const auto view = result_view(declaration, contract, owners);
+      if (nested_binder(declaration, *contract.type) ||
+          (result && (result->type != contract.type || result->view != view || result->mode != contract.mode))) {
+        if (state.required) implementation_gap(at, "declarations do not establish one inspected result contract");
+        return {};
+      }
+      validate(declaration, *substitutions, contract);
+      result = InspectedDeclaration{*contract.type, contract.mode, view};
+    }
+    if (state.required && !result) fail(at, "no applicable declared signature for '" + name + "'");
+    return result;
+  }
+  std::optional<Type> declared_callable_query(const std::string &name, const Type *expected, const Location &at,
+                                             const TypeEvidenceState &state) const {
+    std::optional<Type> view;
+    if (expected) view = *expected;
+    else for (const auto &declaration : declarations(name)) {
+      if (variadic(declaration) || !declaration.type_parameters.empty()) return {};
+      const auto signature = resolve_type(callable_signature(declaration, declaration.parameters, declaration.result));
+      if (view && *view != signature) return {};
+      view = signature;
+    }
+    if (!view || view->kind != Type::procedure) return {};
+    auto evidence = callable_input_evidence(*view);
+    evidence.proof.required = state.required;
+    bool resolved = true;
+    cover_inputs(*view, at, [&](const std::vector<Type> &arguments) {
+      const auto result = inspect_declarations(name, arguments, evidence.access, evidence.owners, at, evidence.proof,
+          [&](const CheckedMethod &declaration, const Substitutions &substitutions, const ResultContract &contract) {
+        std::vector<Type> prepared;
+        for (size_t i = 0; i < arguments.size(); ++i) {
+          const auto type = substitute(declaration.parameters[parameter_index(declaration, i)], declaration, substitutions);
+          if (argument_mode(parameter_at(declaration, i)) != ArgumentMode::value && type != arguments[i])
+            implementation_gap(at, "unproved callable family borrowed target adaptation");
+          prepared.push_back(type);
+        }
+        if (!satisfies_callable_view(resolve_type(callable_signature(declaration, prepared, contract)), *view, at))
+          implementation_gap(at, "declared signature does not satisfy the callable view contract");
+      });
+      resolved = resolved && result.has_value();
+    });
+    return resolved ? view : std::nullopt;
   }
   std::optional<Type> callable_query(const std::vector<size_t> &family, const Type *expected, const Location &at,
                                    const TypeEvidenceState &state, bool definition_site = false) const {
