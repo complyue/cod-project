@@ -205,6 +205,7 @@ struct ViewEvidence {
   std::optional<bool> read_only, view, value_binding;
   std::optional<EvidenceOwner> owner = {};
   bool mixed_view = false;
+  std::optional<bool> fixed_binding = {}, slot_read_only = {};
   bool operator==(const ViewEvidence &) const = default;
 };
 struct QueryBinding {
@@ -864,13 +865,26 @@ class ScalarChecker {
     for (const auto id : physical_slots(slots))
       if (!lexical_.bindings_available.contains(id)) fail(at, message);
   }
+  static void reference_slot(bool value_binding, bool fixed, const Location &at) {
+    if (value_binding) fail(at, "val storage has no reference binding; use '<-' for bits transfer");
+    if (fixed) fail(at, "cannot rebind a const reference binding");
+  }
+  static void rebind_type(const Type &target, const Type &source, const Location &at) {
+    if (source != Type::null_ref && source != target) fail(at, "reference rebinding requires the exact target type");
+  }
+  static void rebind_access(bool target_read_only, bool source_read_only, const Location &at) {
+    if (!target_read_only && source_read_only) fail(at, "readonly source cannot rebind a writable reference target");
+  }
+  static void bits_swap_target(const Type &type, bool read_only, const Location &at) {
+    if (!bits_type(type)) fail(at, "builtin bits swap requires two bits storage destinations");
+    if (read_only) fail(at, "cannot swap bits through a readonly destination");
+  }
   void reference_destination(const CheckedOperation &view, const Location &at) const {
     if (view.slots.empty()) fail(at, "reference operation requires a binding slot");
     require_slots_live(view.slots, at, "reference binding's lexical scope has ended");
     for (const auto id : physical_slots(view.slots)) {
       const auto &binding = bindings_->at(id);
-      if (binding.value_binding) fail(at, "val storage has no reference binding; use '<-' for bits transfer");
-      if (view.fixed_binding || binding.fixed) fail(at, "cannot rebind a const reference binding");
+      reference_slot(binding.value_binding, view.fixed_binding || binding.fixed, at);
     }
   }
   void require_deferred_slots(const CheckedOperation &view, const Location &at) const {
@@ -887,12 +901,12 @@ class ScalarChecker {
   void check_rebind(const CheckedOperation &target, const CheckedOperation &source, const Location &at) {
     reference_destination(target, at);
     if (!source.view || source.mixed_view) implementation_gap(at, "rebinding from a fresh value without an existing target");
-    if (source.type != Type::null_ref && source.type != target.type) fail(at, "reference rebinding requires the exact target type");
+    rebind_type(target.type, source.type, at);
     require_live_view(source, at);
     const auto physical = physical_slots(target.slots);
     for (const auto id : overlapping_slots(target.slots)) {
       const auto &binding = bindings_->at(id);
-      if (!binding.read_only && source.read_only) fail(at, "readonly source cannot rebind a writable reference target");
+      rebind_access(binding.read_only, source.read_only, at);
       auto owners = lexical_.owners.at(id);
       owners.insert(source.owners.begin(), source.owners.end());
       if (physical.contains(id) && owners.size() > 1) fail(at, "reference rebinding cannot change the initializer-fixed owner");
@@ -2510,7 +2524,8 @@ class ScalarChecker {
       const bool value = parameter.owner.empty();
       state.bindings[parameter.name] = obligation.arguments[i];
       state.views[parameter.name] = {parameter.read_only || (value && parameter.fixed_binding), true, value,
-                                    value ? EvidenceOwner{} : state.owner_bindings.at(parameter.owner)};
+                                    value ? EvidenceOwner{} : state.owner_bindings.at(parameter.owner), false,
+                                    parameter.fixed_binding, parameter.read_only};
     }
     const auto previous = result_probe_;
     result_probe_ = id;
@@ -2704,7 +2719,8 @@ class ScalarChecker {
       return x && y ? std::optional<bool>{false} : std::nullopt;
     };
     return {either(a.read_only, b.read_only), either(a.view, b.view), a.value_binding == b.value_binding ? a.value_binding : std::nullopt,
-            a.owner == b.owner ? a.owner : std::nullopt, a.mixed_view || b.mixed_view || a.view != b.view};
+            a.owner == b.owner ? a.owner : std::nullopt, a.mixed_view || b.mixed_view || a.view != b.view,
+            either(a.fixed_binding, b.fixed_binding), a.slot_read_only == b.slot_read_only ? a.slot_read_only : std::nullopt};
   }
   static std::optional<EvidenceOwner> owner_evidence(const std::string &name, const TypeEvidenceState &state, const Location &at) {
     if (const auto found = state.owner_bindings.find(name); found != state.owner_bindings.end()) return found->second;
@@ -2860,7 +2876,7 @@ class ScalarChecker {
         }
         const auto owner = !declaration->owner_name.empty() ? declared_owner :
             value || declaration->binding == "<-" || state.value.view == false ? state.full_scope_owner : state.value.owner;
-        state.views[declaration->text] = {readonly, true, value, owner};
+        state.views[declaration->text] = {readonly, true, value, owner, false, expr.fixed_binding, readonly};
       }
       return completes ? Type{Type::void_type} : Type{Type::never};
     }
@@ -2871,6 +2887,7 @@ class ScalarChecker {
       auto selected = state.value;
       if (expr.read_only || (expr.fixed_binding && selected.value_binding.value_or(false))) selected.read_only = true;
       else if (expr.fixed_binding && !selected.value_binding) selected.read_only.reset();
+      if (expr.fixed_binding) selected.fixed_binding = true;
       state.views[expr.text] = selected;
       return Type::void_type;
     }
@@ -3073,7 +3090,46 @@ class ScalarChecker {
       }
       if (!state.complete) return {};
       if (swap_operation(name)) {
-        if (state.required) implementation_gap(expr.at, "storage exchange in typeof");
+        if (!state.required) return Type::void_type;
+        if (arguments.size() != 2) fail(expr.at, "swap requires two destinations");
+        const bool reference = name == "<=>";
+        for (const auto &operand : views) {
+          if (operand.view != true) fail(expr.at, "swap requires two storage destinations");
+          if (operand.mixed_view) implementation_gap(expr.at, "swap through a mixed value/storage view");
+          if (reference) {
+            if (!operand.value_binding) fail(expr.at, "reference operation requires a binding slot");
+            if (!operand.fixed_binding) implementation_gap(expr.at, "reference binding mutability is not established");
+            reference_slot(*operand.value_binding, *operand.fixed_binding, expr.at);
+          }
+        }
+        const auto family = expr.intrinsic ? NamedFamily{} : named_family(expr.text, &state);
+        if (!method_candidates(family.methods, arguments, family.retained_types(), access, owners, &state).methods.empty()) {
+          const auto selected = select_method(family.methods, arguments, expr.at, expr.text, family.retained_types(), access, owners, &state);
+          const auto &method = program_.methods[selected];
+          if (reference) for (size_t i = 0; i < views.size(); ++i)
+            if (views[i].slot_read_only != method.source->parameters[i].read_only)
+              implementation_gap(expr.at, "caller-binding target permission preservation remains unproved");
+          return Type::void_type;
+        }
+        if (reference) {
+          for (size_t i = 0; i < views.size(); ++i) {
+            const auto other = 1 - i;
+            rebind_type(arguments[i], arguments[other], expr.at);
+            if (!views[other].read_only || (!views[i].slot_read_only && *views[other].read_only))
+              implementation_gap(expr.at, "reference target access is not established");
+            rebind_access(views[i].slot_read_only.value_or(false), *views[other].read_only, expr.at);
+          }
+          const auto relation = compare_owners(owners[0], owners[1], &state);
+          if (relation == OwnerMatch::mismatch) fail(expr.at, "reference rebinding cannot change the initializer-fixed owner");
+          if (relation == OwnerMatch::unknown) implementation_gap(expr.at, "reference swap requires an established owner equality");
+        } else {
+          for (size_t i = 0; i < views.size(); ++i) {
+            if (!access[i]) implementation_gap(expr.at, "bits destination access is not established");
+            bits_swap_target(arguments[i], *access[i], expr.at);
+          }
+          if (arguments[0] != arguments[1]) fail(expr.at, "bits swap requires the exact same type");
+        }
+        builtin_declarations(expr, arguments, Type::void_type, true, access, owners, &state);
         return Type::void_type;
       }
       if (expr.text == "cause_at" && (expr.intrinsic || (!module_names().callables.contains(expr.text) && !has_declarations(expr.text)))) {
@@ -3173,7 +3229,16 @@ class ScalarChecker {
       else state.owner_bindings.erase(name);
       const auto found = lexical_.owners.find(binding.alias.value_or(id));
       const auto owner = found != lexical_.owners.end() && found->second.size() == 1 ? std::optional<size_t>{*found->second.begin()} : std::nullopt;
-      state.views[name] = {binding.read_only, true, binding.value_binding, owner};
+      std::optional<bool> slot_read_only;
+      bool fixed = binding.fixed, first = true;
+      for (const auto slot : physical_slots({binding.alias.value_or(id)})) {
+        const auto &physical = bindings_->at(slot);
+        fixed = fixed || physical.fixed;
+        if (first) slot_read_only = physical.read_only;
+        else if (slot_read_only != physical.read_only) slot_read_only.reset();
+        first = false;
+      }
+      state.views[name] = {binding.read_only, true, binding.value_binding, owner, false, fixed, slot_read_only};
     }
     for (const auto &[name, owner] : external_owners_) state.external_owners.insert(owner);
     std::set<EvidenceOwner> owners;
@@ -3972,8 +4037,7 @@ class ScalarChecker {
         operation.arguments = {{ArgumentMode::borrowed_ptr, left.type, reference}, {ArgumentMode::borrowed_ptr, right.type, reference}};
         const auto check_bits_destinations = [&] {
           for (const auto *operand : {&left, &right}) if (operand->type != Type::never) {
-            if (!bits_type(operand->type)) fail(expr.at, "builtin bits swap requires two bits storage destinations");
-            if (operand->read_only) fail(expr.at, "cannot swap bits through a readonly destination");
+            bits_swap_target(operand->type, operand->read_only, expr.at);
           }
         };
         if (reference) operation.builtin = BuiltinOperation::reference_swap;

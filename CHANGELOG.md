@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-15 — Storage-exchange type inspection
+
+<a id="k-711"></a>
+**K-711 — Share destination contracts with non-executing queries.** Agent continuity under H-295/H-306/H-407/H-420/H-423 and charter §§3.3/4.3/6.3/8/12: source reference328→329, registry718→719 and D-14r104→105 preserve C-69/P-268–P-269 and bounded type inspection. Baseline: `04c58e4594f5e8afd00e6d8ff1d2b9c52b53a3f1` at affected paths. Declaration evidence retains fixed-slot and physical-access facts through aliases and nested contexts; selected swap signatures reuse destination/type/access and owner checks. Queries add no payload reads, effects, initialization guarantees, executable-body demands or runtime transport. Existing invocation/cleanup obligations and D-16 exact-bits constraints remain. No new language choice, ABI or document qualification; all pending design scopes retain their status. Current acceptance belongs to the source reference; process evidence stays outside the repository.
+
 ## 2026-11-15 — Argument design checkpoint integration
 
 <a id="k-710"></a>
