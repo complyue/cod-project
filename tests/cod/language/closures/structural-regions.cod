@@ -15,8 +15,8 @@ second.current = node;
 behave @print(owner_ticks(node));
 region cursor:Cursor = second;
 behave @print(cursor.ticks);
-behave @print(isnull(first.current));
-behave @print(isnull(cursor.current));
+behave @print(((first.current) is null));
+behave @print(((cursor.current) is null));
 val copied <- second.ticks;
 behave @print(copied);
 function select(region state:Counter) -> const u64 { return 1u64 }

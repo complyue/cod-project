@@ -10,7 +10,7 @@ func pick(x:i64,tag:i64)->const i64{x<-x+10;return x;}
 '''
 RELAY = '''func relay(ref x:i64 in O,tag:T)->const i64 where {T,owner O}{return pick(x,tag);}
 '''
-READ = '''proc read(ptr x:i64 in O,tag:bool)->void where {owner O}{behave @print(isnull(x));}
+READ = '''proc read(ptr x:i64 in O,tag:bool)->void where {owner O}{behave @print((x is null));}
 proc read(x:i64,tag:i64)->void{behave @print(x);}
 proc flag()->const bool{behave @print(7);return false;}
 proc number()->const i64{behave @print(8);return 0;}
@@ -43,8 +43,8 @@ runner.CASES = {
  'builtin_scope_snapshot':(IO+OP+'val x<-1u64;behave @print({{defer{x<-5u64;};x}}+2u64);behave @print(x);',0,'3\n5\n',''),
  'intrinsic_ignores_borrow_candidate':(IO+OP+'val x<-1;behave @print(intrinsic (+)(x,2));behave @print(x);',0,'3\n1\n',''),
  'generic_operator_copy_or_borrow':(IO+OP+'func sum(ref x:T in O,y:T)->const T where {T,owner O}{return x+y;}val x<-1,y<-1u64;behave @print(sum(x,2));behave @print(sum(y,2u64));behave @print(x);behave @print(y);',0,'3\n3\n3\n1\n',''),
- 'operator_fallback_uses_later_type':(IO+'func (+)(ptr x:u8 in O,y:u8)->const bool where {owner O}{return isnull(x);}val x<-1u8;ptr p=x;p=null;behave @print(p+2u8);',0,'true\n',''),
- 'operator_fallback_null_skips_later_effect':(IO+NPE+'func (+)(ptr x:u8 in O,y:u8)->const bool where {owner O}{return isnull(x);}proc later()->const u64{behave @print(99);return 2u64;}val x<-1u8;ptr p=x;p=null;try{p+later();{}}catch(e:const NullPointerException){behave @print(7);};',0,'7\n',''),
+ 'operator_fallback_uses_later_type':(IO+'func (+)(ptr x:u8 in O,y:u8)->const bool where {owner O}{return (x is null);}val x<-1u8;ptr p=x;p=null;behave @print(p+2u8);',0,'true\n',''),
+ 'operator_fallback_null_skips_later_effect':(IO+NPE+'func (+)(ptr x:u8 in O,y:u8)->const bool where {owner O}{return (x is null);}proc later()->const u64{behave @print(99);return 2u64;}val x<-1u8;ptr p=x;p=null;try{p+later();{}}catch(e:const NullPointerException){behave @print(7);};',0,'7\n',''),
  'operator_borrow_read_is_early':(IO+NPE+'func (+)(x:i64 in O,y:i64)->const i64 where {owner O}{return x;}proc later()->const i64{behave @print(99);return 2;}val x<-1;ptr p=x;p=null;try{p+later();{}}catch(e:const NullPointerException){behave @print(7);};',0,'7\n',''),
  'deferred_borrowed_operator':(IO+'proc (+)(ref x:i64 in O,y:i64)->void where {owner O}{behave @print(intrinsic (+)(x,y));}{{val x<-1;defer (+)(x,2);x<-9;}};',0,'11\n',''),
  'borrowed_unary_operator':(IO+'func (!)(ref x:i64 in O)->const bool where {owner O}{x<-9;return true;}val x<-1;behave @print(!x);behave @print(x);behave @print(!false);',0,'true\n9\ntrue\n',''),

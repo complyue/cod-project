@@ -20,7 +20,7 @@ runner.CASES = {
  'later_operand_rebinds_source': (IO+'val x<-1,y<-2,z<-3;ptr p=x,q=y;{{defer (<->)(p,{p=z;q});}};behave @print(x);behave @print(y);behave @print(p);',0,'2\n1\n3\n',''),
  'later_operand_initializes_first': (IO+'val x<-make local i64,y<-2;{{defer (<->)(x,{x<-3;y});}};behave @print(x);behave @print(y);',0,'2\n3\n',''),
  'operand_cleanup_retains_address': (IO+'val x<-1,y<-2,z<-3;ptr p=x,q=y;{{defer (<->)({{defer{p=z;};p}},q);}};behave @print(x);behave @print(y);behave @print(p);',0,'2\n1\n3\n',''),
- 'source_rebound_to_null_after_registration': (IO+'val x<-1,y<-2;ptr p=x;{{defer (<->)(p,y);p=null;}};behave @print(x);behave @print(y);behave @print(isnull(p));',0,'2\n1\ntrue\n',''),
+ 'source_rebound_to_null_after_registration': (IO+'val x<-1,y<-2;ptr p=x;{{defer (<->)(p,y);p=null;}};behave @print(x);behave @print(y);behave @print((p is null));',0,'2\n1\ntrue\n',''),
  'self_exchange': (IO+'val x<-1;ptr p=x,q=x;{{defer (<->)(p,q);x<-4;}};behave @print(x);',0,'4\n',''),
  'overlapping_lifo': (IO+'val x<-1,y<-2,z<-3;{{defer (<->)(x,y);defer (<->)(y,z);}};behave @print(x);behave @print(y);behave @print(z);',0,'3\n1\n2\n',''),
  'selected_alias_retains_its_target': (IO+'proc run(flag:bool)->void{val x<-1,y<-2,z<-3;ptr p=x,q=y;var a->if(flag){p}else{q};{{defer (<->)(a,z);a=z;}};behave @print(x);behave @print(y);behave @print(z);}run(true);run(false);',0,'3\n2\n1\n1\n3\n2\n',''),

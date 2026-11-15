@@ -8,7 +8,7 @@ NPE = 'using "std:exceptions" NullPointerException;\n'
 PICK = '''func pick(ref x:i64 in O,tag:bool)->const i64 where {owner O}{x<-x+1;return x;}
 func pick(x:i64,tag:i64)->const i64{x<-x+10;return x;}
 '''
-READ = '''proc read(ptr x:i64 in O,tag:bool)->void where {owner O}{behave @print(isnull(x));}
+READ = '''proc read(ptr x:i64 in O,tag:bool)->void where {owner O}{behave @print((x is null));}
 proc read(x:i64,tag:i64)->void{behave @print(x);}
 '''
 EXPLODE = '''proc explode()->const bool throws NullPointerException{behave @print(8);ptr p:bool=null in here;return p;}

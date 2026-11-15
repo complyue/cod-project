@@ -1,6 +1,6 @@
 # Generic and recursive closure for AOT micro-dispatch
 
-Design revision: 16 · Recorded: 2026-11-14 America/Los_Angeles · Status: whole-file behavioral/native-coverage contract and value path confirmed; concrete mechanisms retain the separate review scopes below.
+Design revision: 17 · Recorded: 2026-11-15 America/Los_Angeles · Status: whole-file behavioral/native-coverage contract and value path confirmed; concrete mechanisms retain the separate review scopes below.
 
 ## Design authority
 
@@ -8,7 +8,8 @@ Design revision: 16 · Recorded: 2026-11-14 America/Los_Angeles · Status: whole
 - **Value path:** The registry’s named value relationships explain the charter benefit and retain their individual confirmation states; dependency relationships confer no additional authority.
 - **Contract boundary:** Permit multiple prepared implementations per semantic method and proven AOT direct calls. Preserve identities, same-T and valid uninterpreted passage; unavailable required interpretation is checked, breached typing unchecked. Generic bodies alone add no unknown-type throws; voluntary declarations retain obligations. Stop on detected resource exhaustion, without a universal analysis-nontermination detector. Concrete checking, failing-path analysis, carrier/ABI, input validation and result inference remain separate review scopes.
 - **Acceptance:** The required acceptance section covers known and unknown concrete types, same-T, uninterpreted passage, recursive native coverage and failure at required interpretation. Concrete mechanisms remain separately scoped. Current compiler availability is recorded in the [source capability reference](../tests/cod/language/README.md).
-- **Evidence / continuity:** human baselines are the H records identified by the registry; [K-COMMON-RESULT-20261114](../CHANGELOG.md#k-common-result-20261114) covers r12→13 dependency alignment with D-24/H-424 unique least common results. The qualified native coverage/value contract and independently pending concrete mechanisms remain unchanged. [K-REFERENCE-IDENTITY-20261114](../CHANGELOG.md#k-reference-identity-20261114) integrates H-439/H-440 owner-plus-locator identity and is null, preserving established access, result and lifetime behavior. Source/native integration remains outstanding; no implementation claim follows.
+- **Evidence / continuity:** human baselines are the H records identified by the registry; [K-COMMON-RESULT-20261114](../CHANGELOG.md#k-common-result-20261114) covers r12→13 dependency alignment with D-24/H-424 unique least common results. The qualified native coverage/value contract and independently pending concrete mechanisms remain unchanged. [K-REFERENCE-IDENTITY-20261114](../CHANGELOG.md#k-reference-identity-20261114) integrates H-439/H-440 owner-plus-locator identity and is null, preserving established access, result and lifetime behavior. Current source/native coverage and proof boundaries are recorded in the [source capability reference](../tests/cod/language/README.md).
+- **Current implementation alignment:** [K-702](../CHANGELOG.md#k-702) continues the confirmed contract and points to source reference323 for stable lexical identity/null observation and unary spelling support. Broader storage, key, allocation and native-interface obligations remain separate.
 
 ## The question this contract answers
 

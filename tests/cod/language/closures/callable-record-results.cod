@@ -30,7 +30,7 @@ function maybe(node:Node in r,present:bool)->ptr Node in r where {region r:Arena
 }
 func optional=maybe;
 ptr absent=optional(head,false);
-behave @print(isnull(absent));
+behave @print((absent is null));
 try {behave @print(absent.value);}
 catch(e:const NullPointerException){behave @print(99u64);};
 ptr retained=optional(head,true);

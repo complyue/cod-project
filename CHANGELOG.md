@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-15 — Reference identity and shared owner inputs
+
+<a id="k-702"></a>
+**K-702 — Bounded reference observation and source migration.** Agent implementation/continuity under H-437/H-439–H-442/H-420/H-423 and charter §§2/4.3/6.3/8/12: source reference323/registry710 implements stable lexical is/is not, contextual null testing and canonical not/! through shared argument, cleanup and native-call paths. D-10r150→151/D-14r99→100/D-17r60→61/D-18r94→95/D-23r13→14/D-26r16→17/D-28r13→14 align implementation pointers without changing their confirmed scope. Baseline: `d4b4e4493a9a3ca54147b9e137f6c71138308a9b` at the affected paths. Actual-owner inputs are shared per input-bound role; no permanent ABI, per-reference owner record, moving backing, graph key, regional/subobject layout, allocation-qualifier implementation or fraction change follows. Current acceptance and limits are in `tests/cod/language/README.md`; process and reports remain outside the repository.
+
 ## 2026-11-15 — Confirmed reference-design integration
 
 <a id="k-701"></a>

@@ -13,7 +13,7 @@ runner.CASES = (
      IO+TYPES+'func f(ref input:SystemException in O)->ref SystemException in O where {owner O}{return input;}'+ERROR+'func held=f;val common:SystemException<-error();behave @print(held(common).category);','4\n'),
     ('nullable', 'func f(ptr input:T in A)->ptr T in A where {T,owner A};',
      '->ptr SystemException in O', ' where {owner O}{',
-     IO+TYPES+'func f(ptr input:SystemException in O)->ptr SystemException in O where {owner O}{return input;}func held=f;ptr absent:SystemException=null in here;behave @print(isnull(held(absent)));','true\n'),
+     IO+TYPES+'func f(ptr input:SystemException in O)->ptr SystemException in O where {owner O}{return input;}func held=f;ptr absent:SystemException=null in here;behave @print(((held(absent)) is null));','true\n'),
     ('copied_result', 'func f(ref input:const T in A)->const T where {T,owner A};',
      '->const SystemException', ' where {owner O}{',
      IO+TYPES+'func f(ref input:const SystemException in O)->const SystemException where {owner O}{return input;}'+ERROR+'func held=f;val common:SystemException<-error();behave @print(held(common).category);','4\n'),

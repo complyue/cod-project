@@ -47,6 +47,7 @@ class LLVMEmission {
   std::vector<llvm::Value *> arguments_, retained_types_;
   std::vector<llvm::AllocaInst *> storage_;
   std::vector<llvm::Value *> bindings_;
+  std::map<size_t, llvm::Value *> owner_identities_;
   std::vector<llvm::AllocaInst *> selections_;
   const std::vector<CheckedBinding> *binding_layout_ = nullptr;
   std::vector<llvm::AllocaInst *> parameter_values_;
@@ -441,14 +442,43 @@ class LLVMEmission {
   const CheckedFrame &input_frame(size_t method) const {
     return program_->instances.at(program_->methods.at(method).instances.front()).frame;
   }
-  llvm::Value *native_call(llvm::Function *target, size_t method, std::vector<llvm::Value *> prepared,
-                           llvm::Value *captured = nullptr, std::optional<size_t> instance = {}) {
+  llvm::Value *owner_identity(size_t owner, const Location &at) {
+    if (const auto found = owner_identities_.find(owner); found != owner_identities_.end()) return found->second;
+    if (owner > null_target / 2) implementation_gap(at, "runtime identity for an owner without an input-bound actual context");
+    // Admitted lexical cells have stable native storage. One activation-local
+    // address names their owner; it is shared across all views and forwarded calls.
+    auto *identity = slot(b_.getInt8Ty(), "owner.identity");
+    owner_identities_.emplace(owner, identity);
+    return identity;
+  }
+  llvm::Value *selected_owner(const Expression &expr, const Expression *call = nullptr,
+                              std::optional<size_t> method = {}, const Type *callable_view = nullptr) {
+    std::map<size_t, std::vector<size_t>> alternatives;
+    for (size_t i = 0; i < facts_.size(); ++i) {
+      if (call) {
+        const auto &invocation = facts_[i]->at(call);
+        if (callable_view) {
+          if (!invocation.callable_call || invocation.operand_type != *callable_view) continue;
+        } else if (!invocation.callee || program_->instances[*invocation.callee].method != *method) continue;
+      }
+      const auto &fact = facts_[i]->at(&expr);
+      if (fact.type == Type::never) continue;
+      if (fact.owners.size() != 1) throw std::logic_error("unchecked reference owner reached native transport");
+      alternatives[*fact.owners.begin()].push_back(i);
+    }
+    return contextual_value(expr, alternatives, "owner", [&](size_t owner) { return owner_identity(owner, expr.at); }, b_.getPtrTy());
+  }
+  llvm::Value *native_call(const Expression &expr, llvm::Function *target, size_t method, std::vector<llvm::Value *> prepared,
+                           llvm::Value *captured = nullptr, std::optional<size_t> instance = {}, const Type *callable_view = nullptr) {
     const auto &inputs = input_frame(method).inputs;
     if (prepared.size() != inputs.size()) throw std::logic_error("unchecked native call arity");
     for (size_t i = 0; i < prepared.size(); ++i) {
       if (inputs[i].mode == ArgumentMode::value) take_value(prepared[i]);
     }
     llvm::AllocaInst *destination = nullptr;
+    const size_t offset = expr.kind == Expression::Kind::value_call ? 1 : 0;
+    for (const auto &[owner, input] : input_frame(method).owners)
+      prepared.push_back(selected_owner(*expr.children.at(input + offset), &expr, method, callable_view));
     if (!program_->methods[method].captures.empty()) prepared.push_back(captured ? captured : environment_);
     if (instance) {
       for (const auto &type : program_->instances[*instance].retained_types) prepared.push_back(b_.getInt32(tag(type)));
@@ -488,7 +518,7 @@ class LLVMEmission {
         b_.CreateStore(image_capture(layout, image, index++), symbols_.at(symbol));
       }
     }
-    auto *result = native_call(target, method, std::move(arguments), image, instance_id);
+    auto *result = native_call(expr, target, method, std::move(arguments), image, instance_id, &value.type);
     for (const auto &[symbol, previous] : saved) b_.CreateStore(previous, symbols_.at(symbol));
     if (!instance.result.borrowed() && *instance.result.type != *value.type.target) {
       auto *adapt = block("callable.result.prepare"), *join = block("callable.result.prepared");
@@ -578,13 +608,18 @@ class LLVMEmission {
     if (std::all_of(facts_.begin(), facts_.end(), [&](const auto *facts) {
           return facts->at(&expr).builtin == BuiltinOperation::reference_swap;
         })) return swap_builtin(arguments, BuiltinOperation::reference_swap);
-    if (fact.builtin == BuiltinOperation::is_null)
-      return outcome(pack(b_.CreateICmpEQ(view_address(arguments.front()), null_pointer()), Type::boolean),
-          integer(0), integer(0), null_pointer());
+    if (fact.builtin == BuiltinOperation::identity) {
+      auto *left_owner = selected_owner(*expr.children[0]);
+      auto *right_owner = selected_owner(*expr.children[1]);
+      auto *equal = b_.CreateAnd(b_.CreateICmpEQ(left_owner, right_owner),
+          b_.CreateICmpEQ(view_address(arguments[0]), view_address(arguments[1])));
+      if (expr.text == "is not") equal = b_.CreateNot(equal);
+      return outcome(pack(equal, Type::boolean), integer(0), integer(0), null_pointer());
+    }
     std::vector<const Expression *> source_inputs;
     for (const auto &argument : expr.children) source_inputs.push_back(argument.get());
     const auto cases = choices(expr, source_inputs, true);
-    const auto call = [&](llvm::Function *target, size_t method) { return native_call(target, method, arguments); };
+    const auto call = [&](llvm::Function *target, size_t method) { return native_call(expr, target, method, arguments); };
     if (cases.front().operation->callee && (cases.size() > 1 || !specialize_)) {
       const auto method = program_->instances[*cases.front().operation->callee].method;
       if (std::all_of(cases.begin(), cases.end(), [&](const Choice &choice) {
@@ -1446,8 +1481,9 @@ class LLVMEmission {
     default: throw std::logic_error("unchecked expression reached LLVM emission");
     }
   }
-  llvm::Function *declare(const std::string &name, size_t arity, bool destination, bool environment, size_t retained) {
+  llvm::Function *declare(const std::string &name, size_t arity, bool destination, bool environment, size_t retained, size_t owners) {
     std::vector<llvm::Type *> parameters(arity, scalar_);
+    parameters.insert(parameters.end(), owners, b_.getPtrTy());
     if (environment) parameters.push_back(b_.getPtrTy());
     parameters.insert(parameters.end(), retained, b_.getInt32Ty());
     if (destination) parameters.push_back(b_.getPtrTy());
@@ -1459,6 +1495,9 @@ class LLVMEmission {
     function_ = function; arguments_.clear(); retained_types_.clear(); parameter_values_.clear(); value_owners_.clear(); environment_ = nullptr; query_environment_ = nullptr; temporaries_ = nullptr;
     for (size_t i = 0; i < frame.inputs.size(); ++i) arguments_.push_back(function->getArg(i));
     b_.SetInsertPoint(block("entry")); finish_ = block("completion"); scope_ = nullptr; control_ = nullptr;
+    owner_identities_.clear();
+    size_t owner_index = frame.inputs.size();
+    for (const auto &[owner, input] : frame.owners) owner_identities_[owner] = function->getArg(owner_index++);
     result_ = slot(scalar_, "return.value"); category_ = slot(b_.getInt64Ty(), "exception.category");
     site_ = slot(b_.getInt64Ty(), "exception.site"); fatal_ = slot(b_.getPtrTy(), "numeric.failure");
     requested_ = slot(b_.getInt64Ty(), "exception.requested"); available_ = slot(b_.getInt64Ty(), "exception.available"); cause_ = slot(b_.getInt64Ty(), "exception.cause");
@@ -1538,7 +1577,7 @@ class LLVMEmission {
       for (auto &[expr, operation] : operations.back()) lower(lower, operation);
       lowered.push_back(&operations.back());
     }
-    const auto arity = frame->inputs.size();
+    const auto arity = frame->inputs.size() + frame->owners.size();
     begin(function, storage, layout.bindings, *frame); facts_ = std::move(lowered); frame_contexts_.clear();
     for (size_t i = 0; i < instances.size(); ++i) {
       frame_contexts_.push_back(&program_->instances[instances[i]]);
@@ -1650,19 +1689,20 @@ public:
     for (size_t i = 0; i < program.methods.size(); ++i) {
       const auto &method = program.methods[i]; if (method.instances.empty()) continue;
       const auto arity = input_frame(i).inputs.size();
+      const auto owners = input_frame(i).owners.size();
       const auto prefix = "cod.method." + std::to_string(method.definition) + "." + method.source->name +
           (i == method.definition ? std::string{} : ".interpretation." + std::to_string(i));
       if (method.source->type_parameters.empty() && method.captures.empty() && method.retained_types.empty() && !method.declaration_context()) {
-        general_[i] = declare(prefix + ".native", arity, caller_destination(i), false, 0);
+        general_[i] = declare(prefix + ".native", arity, caller_destination(i), false, 0, owners);
         specialized_[method.instances.front()] = general_[i];
         continue;
       }
-      general_[i] = declare(prefix + ".general", arity, caller_destination(i), !method.captures.empty(), method.retained_types.size() + method.declaration_context());
+      general_[i] = declare(prefix + ".general", arity, caller_destination(i), !method.captures.empty(), method.retained_types.size() + method.declaration_context(), owners);
       if (specialize) for (const auto id : method.instances) {
         std::string name = prefix + ".specialized";
         for (const auto &type : program.instances[id].context) name += "." + type_name(type);
         if (method.declaration_context()) name += ".query." + std::to_string(program.instances[id].query_environment);
-        specialized_[id] = declare(name, arity, caller_destination(i), !method.captures.empty(), method.retained_types.size() + method.declaration_context());
+        specialized_[id] = declare(name, arity, caller_destination(i), !method.captures.empty(), method.retained_types.size() + method.declaration_context(), owners);
       }
     }
     for (size_t i = 0; i < program.methods.size(); ++i) {

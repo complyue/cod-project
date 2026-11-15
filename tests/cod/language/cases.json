@@ -2247,7 +2247,7 @@
     "file": "closures/callable-region-result-nullability.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "isnull requires a ptr"
+    "stderr_contains": "reference identity requires"
   },
   {
     "file": "closures/callable-owned-results.cod",

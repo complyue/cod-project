@@ -16,7 +16,7 @@ runner.CASES={
  'condition_returns':(OBS+'proc f()->const i64{defer observe(1);if({{return 7;}}){observe(98);}else{observe(99);};return 8;}behave @print(f());',0,'1\n7\n',''),
  'conditional_initialization_after_return':(IO+'func f(flag:bool)->const i64{val x<-make local i64;if(flag&&{{return 7;}}){}else{x<-8;{}};return x;}behave @print(f(true));behave @print(f(false));',0,'7\n8\n',''),
  'live_logical_read_still_rejects':('func f(flag:bool)->const i64{val x<-make local i64;flag&&{{x;return 7;}};return 8;}f(true);',2,'','before definite initialization'),
- 'logical_null_refinement':(IO+'using "std:exceptions" NullPointerException;func f(ptr p:i64 in O)->const i64 where {owner O}{isnull(p)&&{{return 7;}};return p;}val x<-8;ptr p=x;behave @print(f(p));p=null;behave @print(f(p));',0,'8\n7\n',''),
+ 'logical_null_refinement':(IO+'using "std:exceptions" NullPointerException;func f(ptr p:i64 in O)->const i64 where {owner O}{(p is null)&&{{return 7;}};return p;}val x<-8;ptr p=x;behave @print(f(p));p=null;behave @print(f(p));',0,'8\n7\n',''),
  'logical_void_operand_rejects':('func f(flag:bool)->const i64{flag&&{};return 8;}f(true);',2,'','logical operation requires bool operands'),
  'logical_wrong_normal_type_rejects':('func f(flag:bool)->const i64{flag||1;return 8;}f(true);',2,'','logical operation requires bool operands'),
  'logical_failure_cleanup':(OBS+EX+'proc f(flag:bool)->void{defer observe(1);flag&&{{throw error();}};observe(2);}try{f(true);}catch(e:const MissingReturnException){observe(3);};f(false);',0,'1\n3\n2\n1\n','[-Wmissing-return]'),

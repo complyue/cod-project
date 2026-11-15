@@ -20,7 +20,7 @@ proc cleanup_targets(flag:bool)->void{
  try{{defer{p=w;};}}catch(e:const OutOfMemory){observe(9051u64);observe(p);};
  {{for(i in 0u64..100u64){defer{t<-49u64;};defer{p=t;};};}};observe(p);
  ptr n=if(flag){t}else{null};{{defer{t<-50u64;};}};
- if(isnull(n)){observe(51u64);}else{observe(n);};
+ if((n is null)){observe(51u64);}else{observe(n);};
  p=if(flag){x}else{y};
  {{defer{p=s;};defer{p<-52u64;};defer{p=s;};}};observe(p);
  {{defer{observe(r);}finally{};defer{p<-53u64;};defer{p=r;};}};
@@ -30,7 +30,7 @@ proc cleanup_targets(flag:bool)->void{
          catch(e:const OutOfMemory){observe(9031u64);observe(last);};};}};
  p=null;{{defer{p=s;};}};ref ready=p;observe(ready);
  {{defer{p=null;};}};try{observe(p);}catch(e:const NullPointerException){observe(57u64);};
- p=if(flag){gated}else{null};{{defer{if(isnull(p)){}else{p<-58u64;{}};};}};
+ p=if(flag){gated}else{null};{{defer{if((p is null)){}else{p<-58u64;{}};};}};
  try{observe(p);}catch(e:const NullPointerException){observe(59u64);};
 }
 cleanup_targets(true);cleanup_targets(false);observe(9000u64);

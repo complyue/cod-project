@@ -46,7 +46,7 @@ function maybe(values:Values in r,present:bool)->ptr Values in r where {region r
 }
 func optional=maybe;
 ptr absent=optional(a,false);
-behave @print(isnull(absent));
+behave @print((absent is null));
 try {behave @print(absent[0u64]);}
 catch(e:const NullPointerException){behave @print(99u64);};
 ptr retained=optional(a,true);

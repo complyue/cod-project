@@ -37,7 +37,7 @@ for spelling in ('call', 'intrinsic'):
         'ref_source_uninitialized': ('val a<-1,b<-make local i64;ref p=a;'+defer('=','p','b'),2,'','before definite initialization'),
         'widening': (IO+'val a<-1u64;{{'+defer('<-','a','7u8')+'}};'+OUT('a'),0,'7\n',''),
         'exception_category': (IO+ERRORS+'val dst:SystemException<-first(),src:SystemException<-second();{{'+defer('<-','dst','src')+'}};try{throw dst;}catch(e:const MissingReturnException){'+OUT('1')+'}catch(e:const NullPointerException){'+OUT('7')+'}catch(e){'+OUT('99')+'};',0,'7\n','[-Wmissing-return]'),
-        'clear': (IO+'val a<-1;ptr p=a;{{'+defer('=','p','null')+'}};'+OUT('isnull(p)'),0,'true\n',''),
+        'clear': (IO+'val a<-1;ptr p=a;{{'+defer('=','p','null')+'}};'+OUT('(p is null)'),0,'true\n',''),
         'restore': (IO+'val a<-7;ptr p:i64=null in here;{{'+defer('=','p','a')+'}};'+OUT('p'),0,'7\n',''),
         'skipped': (IO+'val a<-1;{{if(false){'+defer('<-','a','7')+'}else{};}};'+OUT('a'),0,'1\n',''),
         'loop_records': (IO+'val a<-9;{{for(i in 0..3){'+defer('<-','a','i')+'};'+OUT('a')+'}};'+OUT('a'),0,'9\n0\n',''),

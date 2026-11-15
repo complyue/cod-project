@@ -5,7 +5,7 @@ array Values[u32]:i64;
 data Node {value:i64;}
 data Holder {ptr items:Values; ptr node:Node;}
 owned region r:Holder <- make Holder(capacity=256u64){items = null;node = null};
-behave @assert(isnull(root(r).items) && isnull(root(r).node));
+behave @assert(((root(r).items) is null) && ((root(r).node) is null));
 try {len(root(r).items); {}}
 catch(e:const NullPointerException){behave @print(1)};
 try {setfield(root(r).node, value, 9); {}}

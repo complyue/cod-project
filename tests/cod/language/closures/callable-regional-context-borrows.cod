@@ -81,7 +81,7 @@ proc run()->void {
  ptr absent=value;
  absent=null;
  ptr missing=nullable(absent,20u64);
- behave @print(isnull(missing));
+ behave @print((missing is null));
  try {val ignored<-missing;}catch(e:const NullPointerException){behave @print(82u64);};
  try {ref failed_record=failure(state,20u64);}catch(e:const InvalidCapacity){behave @print(result.value);};
  behave @print(@arena.value);

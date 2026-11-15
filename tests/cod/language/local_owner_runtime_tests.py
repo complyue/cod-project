@@ -20,7 +20,7 @@ runner.SOURCE=runner.SOURCE.replace(
  'ref p:T in O=x;if(n==0u64){return p;}else{return recursive(p,n-1u64);};')
 runner.SOURCE+='''
 func absent(ptr x:T in O)->ptr T in O where {T,owner O}{ptr p:T in O=null;return p;}
-ptr p=absent(a);behave @print(isnull(p));p=a;p<-41u64;observe(a);
+ptr p=absent(a);behave @print((p is null));p=a;p<-41u64;observe(a);
 '''
 runner.EXPECTED_VALUES += ['true','41']
 runner.EXPECTED_SHADOWS = ['p', 'p', 'p', 'a', 'p', 'a', 'a', 'p', 'p', 'p', 'p']

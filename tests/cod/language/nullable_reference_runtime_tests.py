@@ -27,14 +27,14 @@ func recover()->const u64 {
 }
 proc registration()->void throws NullPointerException {
   ptr p:u64=null in here;
-  defer{if(isnull(p)){observe(36u64);}else{observe(99u64);};observe(9002u64);};
+  defer{if((p is null)){observe(36u64);}else{observe(99u64);};observe(9002u64);};
   observe(9001u64);defer{observe(p);};
 }
 proc captured()->void {
   ptr p:u64=null in here;
   try{observe(p);}catch(e:const NullPointerException){
     ptr q=e;
-    defer{if(isnull(q)){observe(37u64);}else{observe(q.category);};};
+    defer{if((q is null)){observe(37u64);}else{observe(q.category);};};
     q=null;{};
   };
 }

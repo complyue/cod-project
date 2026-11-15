@@ -27,7 +27,7 @@ inline bool scalar_type(const Type &type) { return numeric(type) || type == Type
 inline bool bits_type(const Type &type) { return scalar_type(type) || type.kind == Type::exception; }
 inline bool lexical_value_type(const Type &type) { return bits_type(type) || type.kind == Type::procedure; }
 inline constexpr size_t null_target = std::numeric_limits<size_t>::max();
-enum class BuiltinOperation { none, unary, binary, is_null, cause_at, reference_swap, bits_swap, print };
+enum class BuiltinOperation { none, unary, binary, identity, cause_at, reference_swap, bits_swap, print };
 inline bool eager_operation(std::string_view name) {
   return name == "+" || name == "-" || name == "*" || name == "/" || name == "%" || name == "!" ||
       name == "==" || name == "!=" || name == "<" || name == ">" || name == "<=" || name == ">=";
@@ -240,6 +240,8 @@ struct CheckedInput {
 struct CheckedFrame {
   std::vector<CheckedInput> inputs;
   std::vector<size_t> captures;
+  // One incoming identity per input-bound owner, independent of target carriers.
+  std::map<size_t, size_t> owners;
   bool operator==(const CheckedFrame &) const = default;
 };
 struct CheckedInstance {
@@ -1734,7 +1736,8 @@ class ScalarChecker {
         use(expr.owner_name, expr.at, bound, query);
       if (expr.kind == K::symbol || expr.kind == K::effect || expr.kind == K::touch || expr.kind == K::perform || expr.kind == K::behave)
         use(expr.text, expr.at, bound, query, true);
-      if (expr.kind == K::name || (expr.kind == K::call && !expr.intrinsic && !swap_operation(expr.text) && !eager_operation(expr.text)))
+      if (expr.kind == K::name || (expr.kind == K::call && !expr.intrinsic && !swap_operation(expr.text) &&
+          !identity_operation(expr.text) && !eager_operation(expr.text)))
         use(expr.text, expr.at, bound, query);
       auto local = bound;
       auto &scope = expr.kind == K::block && expr.scoped ? local : bound;
@@ -1763,7 +1766,7 @@ class ScalarChecker {
           lexical_self(capture.name, checking_instance_ ? std::optional<size_t>{checking_instance_->method} : std::nullopt) ||
           std::any_of(query_environment().bindings.begin(), query_environment().bindings.end(), [&](const auto &binding) { return binding.name == capture.name; }) ||
           (!module_names().callables.contains(capture.name) && !has_declarations(capture.name) && !module_names().symbols.contains(capture.name) &&
-           capture.name != "isnull" && capture.name != "cause_at");
+           capture.name != "cause_at");
     };
     if (source.explicit_captures) {
       std::set<std::string> listed;
@@ -2675,6 +2678,19 @@ class ScalarChecker {
     const auto annotation = [&](const Type &type) {
       return state.method ? substitute(type, program_.methods[*state.method], state.substitutions, true) : resolve_type(type);
     };
+    if ((expr.kind == K::binary || expr.kind == K::call) && identity_operation(expr.text)) {
+      if (expr.children.size() != 2) fail(expr.at, "reference identity requires two reference views");
+      const auto left = child(0); const auto first = state.value;
+      const auto right = child(1); const auto second = state.value;
+      if (state.required) {
+        for (const auto &operand : {std::pair{left, first}, std::pair{right, second}})
+          if (operand.first != Type::never && (operand.second.view != true || operand.second.mixed_view))
+            fail(expr.at, "reference identity requires existing target views, not independent values");
+        if (left != Type::never && right != Type::never && !first.owner && !second.owner)
+          fail(expr.at, "reference identity requires an owner context; two unqualified nulls have none");
+      }
+      return left == Type::never || right == Type::never ? Type{Type::never} : Type{Type::boolean};
+    }
     if (state.required) {
       if (expr.spread) implementation_gap(expr.at, "spread operands in typeof");
       if (signed_minimum(expr)) {
@@ -2978,11 +2994,6 @@ class ScalarChecker {
         return *target->target;
       }
       if (!state.complete) return {};
-      if (expr.text == "isnull") {
-        if (state.required && (arguments.size() != 1 || views.front().view != true || views.front().mixed_view))
-          fail(expr.at, "isnull requires one reference view");
-        return Type::boolean;
-      }
       if (swap_operation(expr.text)) {
         if (state.required) implementation_gap(expr.at, "storage exchange in typeof");
         return Type::void_type;
@@ -3789,6 +3800,33 @@ class ScalarChecker {
         (expr.kind == K::name || expr.kind == K::call || expr.kind == K::perform || expr.kind == K::behave))
       implementation_gap(expr.at, "module-local binding lookup and capture in callable bodies");
     if (expr.spread) implementation_gap(expr.at, "spread arguments");
+    if ((expr.kind == K::binary || expr.kind == K::call) && identity_operation(expr.text)) {
+      if (expr.children.size() != 2) fail(expr.at, "reference identity requires two reference views");
+      const auto left_type = child(0, false), right_type = child(1, false);
+      auto &left = operations.at(expr.children[0].get());
+      auto &right = operations.at(expr.children[1].get());
+      operation.arguments = {{ArgumentMode::borrowed_ptr, left_type}, {ArgumentMode::borrowed_ptr, right_type}};
+      operation.builtin = BuiltinOperation::identity;
+      for (const auto *operand : {&left, &right}) if (operand->type != Type::never) {
+        if (!operand->view || operand->mixed_view)
+          fail(expr.at, "reference identity requires existing target views, not independent values");
+        require_borrow_lifetime(*operand, expr.at, &expr == prepared_call_);
+      }
+      operation.type = left_type == Type::never || right_type == Type::never ? Type{Type::never} : Type{Type::boolean};
+      if (operation.type != Type::never) {
+        if (left.type == Type::null_ref && left.owners.empty()) left.owners = right.owners;
+        if (right.type == Type::null_ref && right.owners.empty()) right.owners = left.owners;
+        if (left.owners.size() != 1 || right.owners.size() != 1)
+          fail(expr.at, "reference identity requires an owner context; two unqualified nulls have none");
+        if (left.owners == right.owners) {
+          for (const auto &[selected, other] : {std::pair{&left, &right}, std::pair{&right, &left}})
+            if (selected->binding && other->type == Type::null_ref)
+              operation.null_test = CheckedOperation::NullTest{*selected->binding, selected->selection_versions, expr.text == "is"};
+        }
+      } else lexical_.live = false;
+      operations[&expr] = operation;
+      return operation.type;
+    }
     switch (expr.kind) {
     case K::integer: case K::real: operation = literal(expr); break;
     case K::boolean: operation.type = Type::boolean; operation.integer = expr.text == "true"; break;
@@ -3910,21 +3948,6 @@ class ScalarChecker {
           operation.callable_targets = target.targets;
         }
         check_value_call(expr, target.type, offset, instance, operations, operation, read, discard);
-        break;
-      }
-      if (expr.text == "isnull") {
-        if (expr.children.size() != 1) fail(expr.at, "isnull requires one reference view");
-        const auto type = child(0, false);
-        operation.arguments = {{ArgumentMode::borrowed_ptr, type}};
-        if (type == Type::never) {
-          operation.type = Type::never; operation.builtin = BuiltinOperation::is_null;
-          break;
-        }
-        const auto &argument = operations.at(expr.children[0].get());
-        if (!argument.view || argument.mixed_view) fail(expr.at, "isnull requires a reference view without loading its target");
-        require_borrow_lifetime(argument, expr.at, &expr == prepared_call_);
-        operation.type = Type::boolean; operation.builtin = BuiltinOperation::is_null;
-        if (argument.binding) operation.null_test = CheckedOperation::NullTest{*argument.binding, argument.selection_versions};
         break;
       }
       if (expr.intrinsic && !eager && expr.text != "cause_at")
@@ -4822,6 +4845,7 @@ class ScalarChecker {
         bindings_->back().callable_value = instance.arguments[p].kind == Type::procedure && parameter.owner.empty();
         if (!parameter.owner.empty()) {
           const auto owner = external_owners_.at(parameter.owner);
+          instance.frame.owners.try_emplace(owner, p);
           storage_->at(id).scope = owner; storage_->at(id).borrowed = true;
           std::erase(scope_storage_[0], id);
           lexical_.owners[binding] = {owner};
@@ -5131,6 +5155,8 @@ class ScalarChecker {
     for (const auto &form : forms) if (form->body)
       collect(*form->body, form->kind == Form::Kind::expression ? nullptr : form.get());
     for (const auto *form : definitions) {
+      if (form->operation && identity_operation(form->name))
+        fail(form->at, "reference identity is an intrinsic operation and cannot have user methods");
       if ((form->operation && !eager_operation(form->name) && !swap_operation(form->name)) || form->conversion || (!lexical_methods_.contains(form) && !form->captures.empty()) || (!form->body && lexical_methods_.contains(form)))
         implementation_gap(form->at, "callable captures, effects, declarations, operators, owners or throws contracts");
       if (form->operation) {

@@ -27,7 +27,7 @@ func identity = forward;
 ptr missing = a;
 missing = null;
 ptr absent = identity(missing);
-behave @print(isnull(absent));
+behave @print((absent is null));
 ptr present = identity(b);
 try { behave @print(present()); present <- three; behave @print(b()); absent(); {} }
 catch(e:const NullPointerException) {behave @print(17u64);};
@@ -35,7 +35,7 @@ function optional(value:func()->const u64 in O,keep:bool)->ptr (func()->const u6
  return if(keep){value}else{null}
 }
 func maybe = optional;
-behave @print(isnull(maybe(a,false)));
+behave @print(((maybe(a,false)) is null));
 ptr kept = maybe(a,true);
 try { behave @print(kept()); } catch(e:const NullPointerException) {behave @print(999u64);};
 function recursive(a:func()->const u64 in O,b:func()->const u64 in O,n:u64)

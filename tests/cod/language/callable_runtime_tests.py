@@ -888,7 +888,7 @@ try {{ recovered <- 31u64; behave @print(number); }}
 catch(e:const NullPointerException) {{ behave @print(999u64); }};
 behave @print(7001u64);
 behave @print(fold(i in 0u64 .. 10000u64,null_returns=0u64) {{
-  null_returns+if(isnull(identity(empty))) {{1u64}} else {{0u64}}
+  null_returns+if(((identity(empty)) is null)) {{1u64}} else {{0u64}}
 }});
 behave @print(7002u64);
 ''')

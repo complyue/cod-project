@@ -15,7 +15,7 @@ proc regional_target()->void {owned region r <-make Item(capacity=512u64){value 
 regional_target();
 proc field()->void {owned region r <-make Item(capacity=512u64){value <- 6u64};ptr p:u64=null in here;{{defer {p=root(r).value;};}};behave @print(p);}
 field();
-proc loop(count:u64)->void {val value:u64 <-7u64;ptr p:u64=null in here;for(i in 0u64..count) {{if(isnull(p)) {behave @print(0u64);} else {behave @print(p);};defer {p=value;};}};}
+proc loop(count:u64)->void {val value:u64 <-7u64;ptr p:u64=null in here;for(i in 0u64..count) {{if((p is null)) {behave @print(0u64);} else {behave @print(p);};defer {p=value;};}};}
 loop(3u64);
 proc pick(value:u64 in O)->ref u64 in O where {owner O} {behave @print(8u64);return value;}
 proc borrowed_result()->void {val value:u64 <-9u64;ptr p:u64=null in here;{{defer {p=pick(value);};behave @print(10u64);}};behave @print(p);}
@@ -120,8 +120,8 @@ proc ordinary_loop(count:u64)->void {
   val target:u64 <-30u64;
   ptr p:u64 = null in here;
   for(i in 0u64 .. count) {
-    if(isnull(p)) {p = target; {};} else {behave @print(p);};
+    if((p is null)) {p = target; {};} else {behave @print(p);};
   };
-  if(isnull(p)) {behave @print(0u64);} else {behave @print(p);};
+  if((p is null)) {behave @print(0u64);} else {behave @print(p);};
 }
 ordinary_loop(0u64); ordinary_loop(1u64); ordinary_loop(3u64);

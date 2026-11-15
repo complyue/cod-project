@@ -15,7 +15,7 @@ func initialize(tag:i64,x:i64)->void{x;}
 func dispatch(tag:T,ptr x:i64 in O)->void throws NullPointerException where {T,owner O}{initialize(tag,x);}
 '''
 READ = '''proc marker()->const i64{behave @print(7);return 0;}
-proc read(tag:bool,ptr x:i64 in O,last:i64)->void where {owner O}{behave @print(isnull(x));}
+proc read(tag:bool,ptr x:i64 in O,last:i64)->void where {owner O}{behave @print((x is null));}
 proc read(tag:i64,x:i64,last:i64)->void{behave @print(x);}
 proc visit(tag:T,ptr x:i64 in O)->void throws NullPointerException where {T,owner O}{read(tag,x,marker());}
 '''

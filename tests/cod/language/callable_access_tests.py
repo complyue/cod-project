@@ -33,7 +33,7 @@ runner.CASES = {
         'func selected=choose;val slot<-7;selected(slot)<-8;', 2, '', 'readonly destination'),
     'nullable_readonly_argument': (IO + 'using "std:exceptions" NullPointerException;'
         'func choose(ptr x:i64 in O)->i64 where {owner O}{return 1;}'
-        'func choose(ptr x:const i64 in O)->i64 where {owner O}{return if(isnull(x)){2}else{3};}'
+        'func choose(ptr x:const i64 in O)->i64 where {owner O}{return if((x is null)){2}else{3};}'
         'func prototype(ptr x:const i64 in O)->i64 where {owner O}{return 0;}'
         'func selected=prototype;selected<-choose;ptr slot:i64=null in here;' + OUT('selected(slot)'), 0, '2\n', ''),
     'unselected_writer_does_not_initialize': ('using "std:exceptions" NullPointerException;'

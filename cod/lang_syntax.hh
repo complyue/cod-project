@@ -361,11 +361,12 @@ struct Form {
 };
 
 inline bool swap_operation(std::string_view op) { return op == "<=>" || op == "<->"; }
+inline bool identity_operation(std::string_view op) { return op == "is" || op == "is not"; }
 
 inline int binary_precedence(const std::string &op) {
   if (op == "||") return 1;
   if (op == "&&") return 2;
-  if (op == "==" || op == "!=") return 3;
+  if (op == "==" || op == "!=" || identity_operation(op)) return 3;
   if (op == "<" || op == ">" || op == "<=" || op == ">=") return 4;
   if (op == "+" || op == "-") return 5;
   if (op == "*" || op == "/" || op == "%") return 6;
@@ -373,14 +374,14 @@ inline int binary_precedence(const std::string &op) {
 }
 
 inline bool intrinsic_name(std::string_view name) {
-  return name == "isnull" || name == "cause_at" || name == "region" || name == "root" || name == "used_bytes" || name == "capacity_bytes" ||
+  return name == "cause_at" || name == "region" || name == "root" || name == "used_bytes" || name == "capacity_bytes" ||
          name == "deref" || name == "len" || name == "ref_at" || name == "store" ||
          name == "setfield" || name == "scalar" || name == "i64" || name == "u8" ||
          name == "u32" || name == "u64" || name == "f32" || name == "f64";
 }
 
 inline bool expression_keyword(std::string_view name) {
-  return name == "true" || name == "false" || name == "null" || name == "alloc" ||
+  return name == "true" || name == "false" || name == "null" || name == "alloc" || name == "is" || name == "not" ||
          name == "for" || name == "fold" || name == "var" || name == "let" || name == "effect" ||
          name == "perform" || name == "behave" || name == "if" || name == "procedure" ||
          name == "function" || name == "func" || name == "proc" || name == "global" || name == "symbol" ||
@@ -431,7 +432,7 @@ class Parser {
     return ordinary_name();
   }
   static bool operation_token(const Token &token) {
-    return (token.kind == TokenKind::identifier && intrinsic_name(token.text)) ||
+    return (token.kind == TokenKind::identifier && (intrinsic_name(token.text) || token.text == "not" || identity_operation(token.text))) ||
            (token.kind == TokenKind::punctuation &&
             (binary_precedence(token.text) >= 0 || token.text == "!" || token.text == "=" || token.text == "<-" ||
              swap_operation(token.text)));
@@ -441,6 +442,8 @@ class Parser {
     if (operation) *operation = parenthesized;
     if (!parenthesized) return ordinary_name();
     auto op = tokens_[cursor_++];
+    if (op.kind == TokenKind::identifier && op.text == "not") { op.text = "!"; op.kind = TokenKind::punctuation; }
+    if (op.kind == TokenKind::identifier && op.text == "is" && take("not")) op.text = "is not";
     if (op.kind == TokenKind::punctuation && op.text == "[") {
       expect("]");
       if (take("<-")) op.text = "[]<-";
@@ -460,6 +463,8 @@ class Parser {
     form.explicit_alias = take("as");
     form.alias = form.explicit_alias ? (form.symbolic ? name(kind).text : lexical_name(&form.alias_operation).text) : form.name;
     if (!form.explicit_alias) form.alias_operation = form.operation;
+    if (form.alias_operation && identity_operation(form.alias))
+      fail(form.at, "reference identity is an intrinsic operation and cannot be an imported user operation");
   }
   Type parse_type(Parameter *parameter = nullptr) {
     if (take("(")) {
@@ -970,6 +975,7 @@ class Parser {
       return expr;
     }
     if (is("(") && ((is(")", 2) && operation_token(tokens_[cursor_ + 1])) ||
+        (is("is", 1) && is("not", 2) && is(")", 3)) ||
         (is("[", 1) && is("]", 2) && (is("=", 3) || is("<-", 3)) && is(")", 4)))) {
       auto expr = make(Expression::Kind::call, lexical_name());
       arguments(*expr);
@@ -980,8 +986,9 @@ class Parser {
       expect(")");
       return expr;
     }
-    if (take("-") || take("!")) {
+    if (take("-") || take("!") || take("not")) {
       auto expr = make(Expression::Kind::unary, token);
+      if (expr->text == "not") expr->text = "!";
       expr->children.push_back(expression(7));
       return expr;
     }
@@ -1037,8 +1044,9 @@ class Parser {
         left = std::move(index);
       } else break;
     }
-    while (peek().kind == TokenKind::punctuation && binary_precedence(peek().text) >= minimum) {
+    while ((peek().kind == TokenKind::punctuation || is("is")) && binary_precedence(peek().text) >= minimum) {
       auto op = tokens_[cursor_++];
+      if (op.text == "is" && take("not")) op.text = "is not";
       auto binary = make(Expression::Kind::binary, op);
       binary->children.push_back(std::move(left));
       binary->children.push_back(expression(binary_precedence(op.text) + 1));

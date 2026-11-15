@@ -23,6 +23,6 @@ behave @print(measure(deref(@head)));
 effect @selected = child(deref(@head));
 setfield(@selected, effect, 7.0f32);
 behave @print(measure(deref(@head)));
-behave @print(isnull(deref(@tail).next));
+behave @print(((deref(@tail).next) is null));
 
 } catch (unexpected:const NullPointerException) { behave @assert(false); };

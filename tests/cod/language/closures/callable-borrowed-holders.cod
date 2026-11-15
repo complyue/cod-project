@@ -17,7 +17,7 @@ behave @print(original());
 function after(action:func()->const u64 in O,ignored:u64)->const u64 where {owner O} {return action()}
 func observe = after;
 behave @print(observe(original,{ original <- two; 0u64 }));
-function present(ptr action:func()->const u64 in O)->const bool where {owner O} {return !isnull(action)}
+function present(ptr action:func()->const u64 in O)->const bool where {owner O} {return !(action is null)}
 func inspect = present;
 ptr optional = original;
 optional = null;
@@ -57,8 +57,8 @@ behave @print(original());
 behave @install(original);
 behave @print(original());
 function population(ptr first:const func()->const u64 in O,ptr rest:const func()->const u64 in O...)->const u64 where {owner O} {
- return fold(i in 0u64 .. len(rest),total=if(isnull(first)){0u64}else{1u64}) {{
-  total+if(isnull(rest[i])){0u64}else{1u64}
+ return fold(i in 0u64 .. len(rest),total=if((first is null)){0u64}else{1u64}) {{
+  total+if(((rest[i]) is null)){0u64}else{1u64}
  }}
 }
 func populated = population;

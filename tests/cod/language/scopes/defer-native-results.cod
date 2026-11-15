@@ -83,7 +83,7 @@ proc nullable()->void {
   defer {{
     region owner=whole(r,10u64);
     ptr absent=action(owner,false);
-    behave @print(isnull(absent));
+    behave @print((absent is null));
     try {behave @print(absent.value);} catch(e:const NullPointerException){behave @print(51u64);};
     ptr present=action(owner,true);
     try {behave @print(present.value);} catch(e:const NullPointerException){behave @assert(false);};

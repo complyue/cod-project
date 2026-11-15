@@ -22,7 +22,7 @@ runner.CASES = {
  'address_before_scope_cleanup': (IO+METHOD+'val x<-1,y<-2,z<-3;ptr p=x,q=y;{{defer{p=z;};p}}<->q;behave @print(x);behave @print(y);behave @print(p);',0,'9\n2\n1\n3\n',''),
  'operand_effects_once_in_order': (IO+METHOD+'val x<-1,y<-2;{behave @print(3);x}<->{behave @print(4);y};',0,'3\n4\n9\n',''),
  'null_read_after_second_operand': (IO+NPE+METHOD+'val x<-1;ptr p=x;p=null;try{p<->{behave @print(4);x};}catch(e:const NullPointerException){behave @print(5);};behave @print(x);',0,'4\n5\n1\n',''),
- 'pointer_method_can_handle_null': (IO+NPE+'proc (<->)(ptr x:i64 in O,ptr y:i64 in P)->void where {owner O,owner P}{if(isnull(x)||isnull(y)){behave @print(4);}else{intrinsic (<->)(x,y);};}val x<-1;ptr p=x;p=null;p<->x;behave @print(x);',0,'4\n1\n',''),
+ 'pointer_method_can_handle_null': (IO+NPE+'proc (<->)(ptr x:i64 in O,ptr y:i64 in P)->void where {owner O,owner P}{if((x is null)||(y is null)){behave @print(4);}else{intrinsic (<->)(x,y);};}val x<-1;ptr p=x;p=null;p<->x;behave @print(x);',0,'4\n1\n',''),
  'ref_promises_checked_after_operands': (IO+'func (<->)(ref x:i64 in O,ref y:i64 in P)->void where {owner O,owner P}{intrinsic (<->)(x,y);}val x<-make local i64,y<-2;x<->{x<-3;y};behave @print(y);',0,'3\n',''),
  'deferred_addresses_and_late_payload': (IO+METHOD+'val x<-1,y<-2,z<-3;ptr p=x,q=y;{{defer (<->)(p,q);p=z;x<-4;}};behave @print(x);behave @print(y);behave @print(p);',0,'9\n2\n4\n3\n',''),
  'deferred_pointer_write_initializes': (IO+NPE+'proc (<->)(ptr x:i64 in O,ptr y:i64 in P)->void throws NullPointerException where {owner O,owner P}{x<-7;y<-8;}val x<-make local i64,y<-make local i64;try{ {{defer (<->)(x,y);}};behave @print(x);behave @print(y);}catch(e:const NullPointerException){};',0,'7\n8\n',''),

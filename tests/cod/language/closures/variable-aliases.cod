@@ -7,7 +7,7 @@ val var observed:const u64 -> count;
 count <- 7u64;
 behave @print(observed);
 ptr var selected:u64 -> state.selected;
-behave @print(isnull(selected));
+behave @print((selected is null));
 selected = state.count;
 try { selected <- 9u64; {} } catch (e:const NullPointerException) { behave @print(-1); };
 behave @print(count);

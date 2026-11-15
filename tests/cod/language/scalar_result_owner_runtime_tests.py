@@ -28,7 +28,7 @@ func scalar_increment(x:u64)->val u64{return x+1u64;}
  try{y<-failed_snapshot(x);{}}catch(e:const OutOfMemory){observe(9051u64);};
  observe(x);observe(y);
  ptr absent:u64=null in here;ptr forwarded=absent;
- forwarded=x;observe(forwarded);behave @print(isnull(absent));
+ forwarded=x;observe(forwarded);behave @print((absent is null));
  func live=wrap(base);val total<-0u64;
  observe(9010u64);
  for(i in 0u64..10000u64){total<-total+scalar_increment(i);};

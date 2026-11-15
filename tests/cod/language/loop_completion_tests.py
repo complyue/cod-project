@@ -37,7 +37,7 @@ cases={
  'generic_index_contexts':(IO+'func f(x:T)->const i64 where T{for(i in x..{{return 23;}}){};return 0;}behave @print(f(0u8));behave @print(f(0u64));',0,'23\n23\n',''),
  'generic_noninteger_still_rejects':('func f(x:T)->const i64 where T{for(i in x..{{return 23;}}){};return 0;}f(false);',2,'','integer endpoints'),
  'header_returns_complete_callable':(IO+'func base(x:i64)->const i64{return x;}func factory()->const (func(i64)->const i64){func f=base;for(i in 0..{{return func[f](x:i64)->const i64{return f(x)+1;};}}){};return base;}behave @print(factory()(23));',0,'24\n',''),
- 'nested_null_test_evidence':(IO+TARGET+'func f()->const i64{target(isnull({{return 25;}}));return 0;}behave @print(f());',0,'25\n',''),
+ 'nested_null_test_evidence':(IO+TARGET+'func f()->const i64{target((({{return 25;}}) is null));return 0;}behave @print(f());',0,'25\n',''),
  'nested_cause_evidence':(IO+TARGET+'func f()->const i64{target(cause_at({{return 26;}},0u64));return 0;}behave @print(f());',0,'26\n',''),
  'nested_callable_evidence':(IO+TARGET+'func inner(x:i64)->const bool{return true;}func f()->const i64{func invoke=inner;target(invoke({{return 27;}}));return 0;}behave @print(f());',0,'27\n',''),
  'nested_callable_arity_still_checked':(TARGET+'func inner(x:i64)->const bool{return true;}func f()->const i64{func invoke=inner;target(invoke({{return 27;}},1));return 0;}f();',2,'','argument count'),

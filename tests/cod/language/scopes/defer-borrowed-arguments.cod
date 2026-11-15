@@ -30,7 +30,7 @@ proc through_value()->void {
 }
 through_value();
 proc optional(ptr value:const u64 in O)->void where {owner O} {
-  if(isnull(value)) {behave @print(9u64);} else {behave @print(value);};
+  if((value is null)) {behave @print(9u64);} else {behave @print(value);};
 }
 proc nullable()->void {
   val target:u64 <- 10u64;

@@ -59,8 +59,8 @@ runner.CASES = {
     'deferred_inferred_value_snapshot': (BASE + 'func project(){for(i in 0..1){return tag(i,i);};}'
         'proc show(value:bool)->void{behave @print(value);}{{defer show(project());}};', 0, 'true\n', ''),
     'here_remains_full_scope': (IO + 'val outer<-1;ptr p:i64=null in here;'
-        'for(i in 0..2){p=outer;p=null in here;behave @print(isnull(p));};'
-        'for(j in 0..0){}else{p=outer;p=null in here;behave @print(isnull(p));};', 0, 'true\ntrue\ntrue\n', ''),
+        'for(i in 0..2){p=outer;p=null in here;behave @print((p is null));};'
+        'for(j in 0..0){}else{p=outer;p=null in here;behave @print((p is null));};', 0, 'true\ntrue\ntrue\n', ''),
     'control_storage_is_readonly': (TAG + 'for(i in 0..1){i<-2;};', 2, '', 'readonly'),
     'controls_do_not_escape': ('func bad(ref input:const i64 in O)->ref const i64 in O where {owner O}{'
         'for(i in 0..1){return i;};}val slot<-1;bad(slot);', 2, '', 'owner'),

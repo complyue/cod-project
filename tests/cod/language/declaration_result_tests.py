@@ -32,7 +32,7 @@ runner.CASES = {
  'borrowed_owner_rejected': ('func f(ref x:i64 in O,ref y:i64 in P)->ref i64 in O where {owner O,owner P};func f(ref x:i64 in A,ref y:i64 in B) where {owner A,owner B}{return y;}',2,'','does not retain its declared external owner'),
  'readonly_result': (IO+'func f(ref x:const i64 in O)->ref const i64 in O where {owner O};func f(ref x:const i64 in P) where {owner P}{return x;}val x<-1;behave @print(f(x));',0,'1\n',''),
  'readonly_cannot_supply_writable_result': ('func f(ref x:const i64 in O)->ref i64 in O where {owner O};func f(ref x:const i64 in P) where {owner P}{return x;}',2,'','readonly target cannot supply'),
- 'nullable_result': (IO+'func f(ptr x:i64 in O)->ptr i64 in O where {owner O};func f(ptr x:i64 in P) where {owner P}{return x;}val x<-1;ptr p=x;p=null;ptr q=f(p);behave @print(isnull(q));',0,'true\n',''),
+ 'nullable_result': (IO+'func f(ptr x:i64 in O)->ptr i64 in O where {owner O};func f(ptr x:i64 in P) where {owner P}{return x;}val x<-1;ptr p=x;p=null;ptr q=f(p);behave @print((q is null));',0,'true\n',''),
  'declaration_requires_nonnull': ('func f(ptr x:i64 in O)->ref i64 in O where {owner O};func f(ptr x:i64 in P) where {owner P}{return x;}',2,'','requires a proven non-null target'),
  'deferred_return_uses_declared_view': (IO+'func f(ref x:i64 in O)->ref i64 in O where {owner O};func f(ref x:i64 in P) where {owner P}{defer{return x;};}val x<-1;f(x)<-5;behave @print(x);',0,'5\n',''),
  'copied_declared_callable': (IO+'func f(x:u64)->u64;func f(x:u64){return x+1u64;}func g=f;func h=g;behave @print(h(2u64));',0,'3\n',''),

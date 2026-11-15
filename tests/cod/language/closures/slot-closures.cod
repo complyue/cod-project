@@ -88,5 +88,5 @@ ptr var nullable_left -> first_link.selected;
 ptr var nullable_right -> second_link.selected;
 func swap_nullable = func [nullable_left, nullable_right] () -> void { intrinsic (<=>)(nullable_left, nullable_right) };
 swap_nullable();
-behave @print(isnull(first_link.selected));
-behave @print(isnull(second_link.selected));
+behave @print(((first_link.selected) is null));
+behave @print(((second_link.selected) is null));

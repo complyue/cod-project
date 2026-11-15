@@ -25,7 +25,7 @@ for mode in ('infix', 'call', 'intrinsic'):
         'borrowed_callable_holder': (IO+'func base(x:i64)->const i64{return x;}func other(x:i64)->const i64{return x+7;}func identity(ref input:func(i64)->const i64 in O)->ref (func(i64)->const i64) in O where {owner O}{return input;}func a=base;func b=other;func get=identity;ptr p=a;'+r('p','get(b)')+';'+OUT('p(1)')+w('p','a')+';'+OUT('b(1)'),0,'8\n1\n',''),
         'retained_rebind_result': (IO+'val x<-1,y<-7;ptr p=x;ref result='+r('p','y')+';'+r('p','x')+';'+w('result','9')+';'+OUT('y')+OUT('p'),0,'9\n1\n',''),
         'nested_rebind': (IO+'val x<-1,y<-7;ptr p=x,q=x;'+r('p',r('q','y'))+';'+OUT('p')+OUT('q'),0,'7\n7\n',''),
-        'clear_and_restore': (IO+'val x<-7;ptr p=x;'+r('p','null')+';'+OUT('isnull(p)')+r('p','x')+';'+OUT('p'),0,'true\n7\n',''),
+        'clear_and_restore': (IO+'val x<-7;ptr p=x;'+r('p','null')+';'+OUT('(p is null)')+r('p','x')+';'+OUT('p'),0,'true\n7\n',''),
         'uninitialized_borrow': (IO+'val x<-make local i64;ptr p:i64=null in here;'+r('p','x')+';'+w('p','7')+';'+OUT('x'),0,'7\n',''),
         'saved_destination': (IO+'val a<-1,b<-2;ptr p=a;'+w('p','{'+r('p','b')+';7}')+';'+OUT('a')+OUT('b')+OUT('p'),0,'7\n2\n2\n',''),
         'once_in_order': (IO+'val a<-1,b<-2;ptr p=a;'+r('{'+OUT('1')+'p}','{'+OUT('2')+'b}')+';'+w('{'+OUT('3')+'p}','{'+OUT('4')+'7}')+';'+OUT('b'),0,'1\n2\n3\n4\n7\n',''),

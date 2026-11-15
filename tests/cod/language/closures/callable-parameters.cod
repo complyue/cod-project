@@ -13,7 +13,7 @@ function replace_borrowed(action:func()->const u64 in O) -> void where {owner O}
 }
 function copy_result(action:func()->const u64) -> func()->const u64 { return action }
 function forward(actions:func()->const u64...) -> func()->const u64 { return copy_result(actions...) }
-function present(ptr action:func()->const u64 in O) -> const bool where {owner O} { return !isnull(action) }
+function present(ptr action:func()->const u64 in O) -> const bool where {owner O} { return !(action is null) }
 
 func original = func () -> const u64 { return 1u64 };
 replace_local(original);
