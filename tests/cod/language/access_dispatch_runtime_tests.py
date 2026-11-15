@@ -17,9 +17,9 @@ func walk_access(select:F,ref f:func(u64)->const u64 in O,n:u64)->const u64 wher
 {{
  func f=wrap(wrap(other));ptr observed:const (func(u64)->const u64)=f;
  visit(observed);visit(f);visit(observed);
- f<-wrap(other);observe(9020u64);try{visit(f);}catch(e:const OutOfMemory){observe(9021u64);};visit(observed);
- observe(9030u64);try{consume_access(observed);}catch(e:const OutOfMemory){observe(9031u64);};visit(observed);
- observe(9050u64);try{defer visit(observed);}catch(e:const OutOfMemory){observe(9051u64);};
+ f<-wrap(other);observe(9020u64);try{visit(f);}catch(e:const OutOfMemoryError){observe(9021u64);};visit(observed);
+ observe(9030u64);try{consume_access(observed);}catch(e:const OutOfMemoryError){observe(9031u64);};visit(observed);
+ observe(9050u64);try{defer visit(observed);}catch(e:const OutOfMemoryError){observe(9051u64);};
  {{defer visit(observed);f<-wrap(base);}};
  func writable=borrow_holder;func readonly=read_holder;
  observe(walk_access(writable,f,40u64));observe(walk_access(readonly,f,40u64));

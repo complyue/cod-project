@@ -38,7 +38,7 @@ runner.CASES={
  'returned_target_specific':(IO+NPE+'func pick(ptr x:i64 in O,ptr y:i64 in O)->ptr i64 in O where {owner O}{return x;}val x<-7,y<-make local i64;func f=pick;try{behave @print(f(x,y));}catch(e:const NullPointerException){behave @print(99);};',0,'7\n',''),
  'deferred_writer_initializes':(IO+NPE+SET+'proc f(ptr x:i64 in O)->void throws NullPointerException where {owner O}{proc writer=set;defer writer(x);}val x<-make local i64;try{f(x);behave @print(x);}catch(e:const NullPointerException){};',0,'7\n',''),
  'deferred_borrow_observes_later_write':(IO+'proc show(ref x:i64 in O)->void where {owner O}{behave @print(x);}{{val x<-1;proc f=show;defer f(x);x<-7;}};',0,'7\n',''),
- 'deferred_view_expires':('using "std:exceptions" MissingReturnException;proc show(ref x:const MissingReturnException in O)->void where {owner O}{}func bad()->const i64{}proc f=show;try{bad();{}}catch(e:const MissingReturnException){defer f(e);};',2,'','does not outlive'),
+ 'deferred_view_expires':('using "std:exceptions" MissingReturnError;proc show(ref x:const MissingReturnError in O)->void where {owner O}{}func bad()->const i64{}proc f=show;try{bad();{}}catch(e:const MissingReturnError){defer f(e);};',2,'','does not outlive'),
  'returned_view_escape_rejected':(ID+'ptr p={{val x<-1;func f=id;f(x)}};p;',2,'','owner has ended'),
  'generic_higher_order_borrow':(IO+ID+'func apply(f:F,ref x:i64 in O)->ref i64 in O where {F,owner O}{return f(x);}val x<-1;func f=id;apply(f,x)<-7;behave @print(x);',0,'7\n',''),
  'recursive_higher_order_borrow':(IO+ID+'func walk(f:F,ref x:i64 in O,n:i64)->ref i64 in O where {F,owner O}{if(n==0){return f(x);}else{return walk(f,x,n-1);};}val x<-1;func f=id;walk(f,x,40)<-7;behave @print(x);',0,'7\n',''),

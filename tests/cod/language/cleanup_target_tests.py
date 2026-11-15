@@ -6,7 +6,7 @@ runner = fixture.runner
 good, bad, run = fixture.good, fixture.bad, fixture.run
 IO, NPE, ERROR, WARN = fixture.IO, fixture.NPE, fixture.ERROR, fixture.WARN
 GENERIC = NPE + 'func fill(ptr x:T in O,ptr y:T in O,flag:bool,value:T)->const T throws NullPointerException where {T,owner O}{ptr p=if(flag){x}else{y};{{defer{p=x;};defer{p<-value;};defer{p=x;};}};return p;}'
-DECLARED = NPE + 'using "std:exceptions" StaticallyUnknownType;using "std:exceptions" SystemException;proc declared(e:StaticallyUnknownType,ptr p:i64 in O)->void throws SystemException where {owner O}{p<-1;throw e;}'
+DECLARED = NPE + 'using "std:exceptions" StaticallyUnknownTypeException;using "std:exceptions" Exception;proc declared(e:StaticallyUnknownTypeException,ptr p:i64 in O)->void throws Exception where {owner O}{p<-1;throw e;}'
 runner.CASES = {
     'rebind_then_physical_write': good('{{defer{z<-1;};defer{p=z;};}};behave @print(p);'),
     'physical_write_then_rebind': good('{{defer{p=z;};defer{z<-1;};}};behave @print(p);'),
@@ -21,7 +21,7 @@ runner.CASES = {
     'early_read_precedes_target_write': bad('defer{z<-1;};defer{behave @print(p);}finally{};defer{p=z;};', 'cannot prove initialization'),
     'early_read_precedes_target_rebind': bad('defer{p=z;};defer{behave @print(p);}finally{};defer{z<-1;};', 'cannot prove initialization'),
     'registration_failure_keeps_read_obligation': bad('defer{behave @print(p);};defer{z<-1;};defer{p=z;};', 'cannot prove initialization'),
-    'failed_writer_registration_keeps_handler_obligation': (fixture.OOM + run('p=z;{{defer catch(e:const OutOfMemory){behave @print(z);};defer{p<-1;};}};'), 2, '', 'cannot prove initialization'),
+    'failed_writer_registration_keeps_handler_obligation': (fixture.OOM + run('p=z;{{defer catch(e:const OutOfMemoryError){behave @print(z);};defer{p<-1;};}};'), 2, '', 'cannot prove initialization'),
     'write_before_repeated_rebind': good('{{defer{p=z;};defer{p<-1;};defer{p=z;};}};behave @print(p);'),
     'old_target_stays_initialized': good('{{defer{p=y;};defer{p<-1;};defer{p=z;};}};behave @print(z);'),
     'old_target_write_does_not_initialize_new': bad('{{defer{p=y;};defer{p<-1;};defer{p=z;};}};behave @print(p);'),
@@ -51,15 +51,15 @@ runner.CASES = {
     'constant_null_write_preserves_exception': (NPE + run('z<-1;try{ {{defer{p<-1;};defer{p=null;};}};behave @print(z);}catch(e:const NullPointerException){behave @print(2);};'), 0, '2\n2\n', ''),
     'constant_null_cleanup_has_no_fallthrough': (IO + NPE + 'proc stop()->const i64 throws NullPointerException{val x<-make local i64;ptr p=x;defer{p<-1;};defer{p=null;};}try{behave @print(stop());}catch(e:const NullPointerException){behave @print(2);};', 0, '2\n', ''),
     'recovery_after_null_write_still_needs_initialization': (NPE + run('{{defer catch(e:const NullPointerException){};defer{p<-1;};defer{p=null;};}};behave @print(z);'), 2, '', 'before definite initialization'),
-    'failed_registration_retains_nullable_entry': (fixture.OOM + run('p=null;z<-1;try{ {{defer{p=z;};}};}catch(e:const OutOfMemory){};behave @print(p);'), 2, '', "checked exception 'NullPointerException'"),
+    'failed_registration_retains_nullable_entry': (fixture.OOM + run('p=null;z<-1;try{ {{defer{p=z;};}};}catch(e:const OutOfMemoryError){};behave @print(p);'), 2, '', "checked exception 'NullPointerException'"),
     'failed_corrective_registration_keeps_null_failure': bad('p=null;{{defer{p=z;};defer{p<-1;};defer{p=z;};}};behave @print(z);', "checked exception 'NullPointerException'"),
     'conditional_cleanup_retains_null_obligation': bad('z<-1;{{defer{p=if(flag){z}else{null};};}};behave @print(p);', "checked exception 'NullPointerException'"),
     'cleanup_target_drives_null_branch': good('z<-1;{{defer{p=null;};}};if((p is null)){p=z;}else{p=y;};behave @print(p);'),
     'null_guard_does_not_discharge_other_condition': (NPE + run('ptr p=if(flag){z}else{null};{{defer{if(!(p is null)&&!flag){p<-1;{}}else{};};}};try{behave @print(p);}catch(e:const NullPointerException){};', selection=''), 2, '', 'before definite initialization'),
     'guard_after_physical_read_cannot_initialize_it': (NPE + run('ptr p=if(flag){z}else{null};defer{behave @print(z);if((p is null)){}else{p<-1;{}};};', selection=''), 2, '', 'cannot prove initialization'),
-    'nullable_argument_does_not_waive_declared_failure': (DECLARED + 'proc caller(e:StaticallyUnknownType)->void{val x<-make local i64;ptr p=x;p=null;try{declared(e,p);}catch(e:const NullPointerException){};}', 2, '', "checked exception 'StaticallyUnknownType'"),
-    'deferred_nullable_argument_keeps_declaration': (DECLARED + 'proc caller(e:StaticallyUnknownType)->void{val x<-make local i64;ptr p=x;p=null;try{ {{defer{declared(e,p);};}};}catch(e:const NullPointerException){};}', 2, '', "checked exception 'StaticallyUnknownType'"),
-    'later_null_branch_keeps_declared_failure': (DECLARED + 'proc caller(e:StaticallyUnknownType)->void{val x<-make local i64;ptr p=x;p=null;try{ {{defer{if((p is null)){}else{return;};};defer{declared(e,p);};}};}catch(e:const NullPointerException){};}', 2, '', "checked exception 'StaticallyUnknownType'"),
+    'nullable_argument_does_not_waive_declared_failure': (DECLARED + 'proc caller(e:StaticallyUnknownTypeException)->void{val x<-make local i64;ptr p=x;p=null;try{declared(e,p);}catch(e:const NullPointerException){};}', 2, '', "checked exception 'StaticallyUnknownTypeException'"),
+    'deferred_nullable_argument_keeps_declaration': (DECLARED + 'proc caller(e:StaticallyUnknownTypeException)->void{val x<-make local i64;ptr p=x;p=null;try{ {{defer{declared(e,p);};}};}catch(e:const NullPointerException){};}', 2, '', "checked exception 'StaticallyUnknownTypeException'"),
+    'later_null_branch_keeps_declared_failure': (DECLARED + 'proc caller(e:StaticallyUnknownTypeException)->void{val x<-make local i64;ptr p=x;p=null;try{ {{defer{if((p is null)){}else{return;};};defer{declared(e,p);};}};}catch(e:const NullPointerException){};}', 2, '', "checked exception 'StaticallyUnknownTypeException'"),
     'unrelated_physical_write': bad('{{defer{x<-1;};defer{p=z;};}};behave @print(p);'),
     'old_target_not_initialized': bad('{{defer{p<-1;};defer{p=z;};}};behave @print(x);'),
     'all_branch_targets_initialized': good('{{defer{if(flag){p=x;}else{p=y;};};defer{x<-1;y<-1;};}};behave @print(p);'),
@@ -73,9 +73,9 @@ runner.CASES = {
     'borrowed_setter_known_target': (fixture.SETTER + run('{{defer{set(p);};defer{p=z;};}};behave @print(z);', throws='throws NullPointerException'), 0, '21\n21\n', ''),
     'borrowed_reader_resolves_target': (fixture.READER + run('defer{show(p);}finally{};defer{z<-1;};defer{p=z;};', throws='throws NullPointerException'), 0, '1\n1\n', ''),
     'prepared_reader_keeps_saved_target': (fixture.READER + run('defer show(p);p=z;z<-1;', throws='throws NullPointerException'), 2, '', 'cannot prove initialization'),
-    'known_target_failure_after_write': (ERROR + run('val e<-error();p=z;try{{defer{p<-1;throw e;};}}catch(e:const MissingReturnException){behave @print(z);};'), 0, '1\n1\n', WARN),
-    'failed_rebind_registration_keeps_old_target': (ERROR + run('val e<-error();try{{defer{p<-1;throw e;};defer{p=z;};}}catch(e:const MissingReturnException){behave @print(z);};'), 2, '', 'before definite initialization'),
-    'known_target_failure_before_write': (ERROR + run('val e<-error();try{{defer{throw e;p<-1;};defer{p=z;};}}catch(e:const MissingReturnException){behave @print(z);};'), 2, '', 'before definite initialization'),
+    'known_target_failure_after_write': (ERROR + run('val e<-error();p=z;try{{defer{p<-1;throw e;};}}catch(e:const MissingReturnError){behave @print(z);};'), 0, '1\n1\n', WARN),
+    'failed_rebind_registration_keeps_old_target': (ERROR + run('val e<-error();try{{defer{p<-1;throw e;};defer{p=z;};}}catch(e:const MissingReturnError){behave @print(z);};'), 2, '', 'before definite initialization'),
+    'known_target_failure_before_write': (ERROR + run('val e<-error();try{{defer{throw e;p<-1;};defer{p=z;};}}catch(e:const MissingReturnError){behave @print(z);};'), 2, '', 'before definite initialization'),
     'nullable_selection_does_not_initialize_cell': bad('{{defer{if(!(p is null)){p<-1;{}}else{};};defer{p=if(flag){z}else{null};};}};behave @print(z);'),
     'null_branch_does_not_initialize_cell': bad('ptr p=if(flag){z}else{null};if((p is null)){}else{p<-1;{}};behave @print(z);', selection=''),
     'nullable_initialized_target_read': good('ptr p=if(flag){z}else{null};{{defer{z<-1;};}};if((p is null)){behave @print(2);}else{behave @print(p);};', output='1\n2\n', selection=''),

@@ -1,5 +1,5 @@
 using symbol "std:io" @print;
-using "std:exceptions" InvalidCapacity;
+using "std:exceptions" InvalidCapacityError;
 data Item {value:u64;}
 region symbol @arena:Item;
 region symbol @scratch;
@@ -45,7 +45,7 @@ proc failures()->void {
   owned region r:Item <-make Item(capacity=256u64){value<-30u64};
   proc action=proc()->Item {effect @scratch <-region(0u64); return root(r);};
   defer {behave @print(root(r).value);};
-  defer catch(e:const InvalidCapacity) {behave @print(32u64);};
+  defer catch(e:const InvalidCapacityError) {behave @print(32u64);};
   defer action();
 }
 dynamic_results();

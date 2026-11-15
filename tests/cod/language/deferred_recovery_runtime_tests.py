@@ -5,24 +5,24 @@ import exception_value_runtime_tests as runner
 
 runner.SOURCE = '''
 using symbol "std:io" @print;
-using "std:exceptions" OutOfMemory;
-using "std:exceptions" MissingReturnException;
+using "std:exceptions" OutOfMemoryError;
+using "std:exceptions" MissingReturnError;
 proc observe(x:u64)->void{behave @print(x);}
 proc retained()->const u64 {
-  defer catch(e:const OutOfMemory){observe(1u64);observe(9002u64);};
+  defer catch(e:const OutOfMemoryError){observe(1u64);observe(9002u64);};
   defer{observe(9001u64);defer observe(99u64);};
   return 7u64;
 }
 proc replacement()->const u64 {
-  defer catch(e:const OutOfMemory){observe(2u64);observe(9002u64);return 8u64;};
+  defer catch(e:const OutOfMemoryError){observe(2u64);observe(9002u64);return 8u64;};
   observe(9001u64);defer observe(99u64);return 5u64;
 }
 proc absent()->const u64 {
-  defer catch(e:const OutOfMemory){observe(3u64);observe(9002u64);};
+  defer catch(e:const OutOfMemoryError){observe(3u64);observe(9002u64);};
   observe(9001u64);defer observe(99u64);return 5u64;
 }
 observe(retained());observe(replacement());
-try{absent();{}}catch(e:const MissingReturnException){observe(4u64);};
+try{absent();{}}catch(e:const MissingReturnError){observe(4u64);};
 '''
 runner.WRAPPERS = '''
 #define cod_lang_defer_allocate cod_record_allocate

@@ -11,7 +11,7 @@ using "std:exceptions" NullPointerException;
 proc bits_order()->void{
  val x<-71u64,y<-72u64;ptr p=x,q=y;
  p<->{p=q;q};observe(x);observe(y);observe(p);
- try{x<->{y<-73u64;missing();y};}catch(e:const MissingReturnException){};
+ try{x<->{y<-73u64;missing();y};}catch(e:const MissingReturnError){};
  observe(x);observe(y);
  ptr absent:u64=null in here;
  try{absent<->{observe(75u64);q};}catch(e:const NullPointerException){observe(76u64);};

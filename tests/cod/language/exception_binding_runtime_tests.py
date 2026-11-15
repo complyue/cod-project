@@ -6,17 +6,17 @@ import captured_callable_runtime_tests as fixture
 runner = fixture.runner
 runner.SOURCE = '''
 using symbol "std:io" @print;
-using "std:exceptions" OutOfMemory;
-using "std:exceptions" MissingReturnException;
-using "std:exceptions" SystemException;
+using "std:exceptions" OutOfMemoryError;
+using "std:exceptions" MissingReturnError;
+using "std:exceptions" Exception;
 func missing()->u64{}
-func error()->const MissingReturnException{try{missing();}catch(e:const MissingReturnException){return e;};}
-func chain(e:MissingReturnException,c:SystemException)->const MissingReturnException{
- return try{throw e from c;}catch(x:const MissingReturnException){x};
+func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}
+func chain(e:MissingReturnError,c:Exception)->const MissingReturnError{
+ return try{throw e from c;}catch(x:const MissingReturnError){x};
 }
 proc observe(x:u64)->void{behave @print(x);}
-proc show(e:SystemException)->void{observe(e.cause_count);}
-symbol @saved:SystemException;
+proc show(e:Exception)->void{observe(e.cause_count);}
+symbol @saved:Exception;
 symbol @p:proc()->u64;
 proc depth()->u64{return @saved.cause_count;}
 proc build()->proc()->u64{effect @saved<-chain(error(),error());return depth;}
@@ -30,13 +30,13 @@ effect @saved<-error();
 observe(9000u64);
 {{
  effect @saved<-chain(error(),error());effect @p=depth;observe(9030u64);
- try{effect @p=@p;}catch(e:const OutOfMemory){observe(9031u64);};
+ try{effect @p=@p;}catch(e:const OutOfMemoryError){observe(9031u64);};
  observe(perform @p());observe(@saved.cause_count);
 }};
 observe(9000u64);
 {{
  effect @saved<-chain(error(),error());effect @p=depth;observe(9070u64);
- try{effect @saved<-chain(error(),@saved);}catch(e:const OutOfMemory){observe(9071u64);observe(e.cause_count);};
+ try{effect @saved<-chain(error(),@saved);}catch(e:const OutOfMemoryError){observe(9071u64);observe(e.cause_count);};
  observe(@saved.cause_count);observe(perform @p());
 }};
 observe(9000u64);
@@ -44,7 +44,7 @@ observe(9000u64);
 observe(9000u64);
 {{
  effect @saved<-chain(error(),error());observe(9050u64);
- try{defer show(@saved);}catch(e:const OutOfMemory){observe(9051u64);};
+ try{defer show(@saved);}catch(e:const OutOfMemoryError){observe(9051u64);};
  observe(@saved.cause_count);
 }};
 observe(9000u64);

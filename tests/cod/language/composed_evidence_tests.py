@@ -17,10 +17,10 @@ CALLABLE = '''func one()->const i64{return 1;}func truth()->const bool{return fa
 func accept(x:i64,f:func()->const i64)->const i64{return x+f();}
 func accept(ref x:i64 in O,f:func()->const bool)->const i64 where {owner O}{if(f()){x<-x+1;}else{x<-x+2;};return x;}
 '''
-EXCEPTION = '''using "std:exceptions" MissingReturnException;
-using "std:exceptions" SystemException;
+EXCEPTION = '''using "std:exceptions" MissingReturnError;
+using "std:exceptions" Exception;
 func missing()->const i64{}
-func error()->const MissingReturnException{try{missing();}catch(e:const MissingReturnException){return e;};}
+func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}
 func forward(e:T)->const u64 where T{return e.category;}
 '''
 runner.CASES = {
@@ -53,11 +53,11 @@ runner.CASES = {
  'annotation_keeps_callable_view_type':(IO+NPE+'func one()->const i64{return 1;}func take(x:i64,f:func()->const i64 throws NullPointerException)->const i64 throws NullPointerException{return x+f();}func take(ref x:i64 in O,f:func()->const bool)->const i64 where {owner O}{return x;}val x<-1;try{behave @print(take(x,{{func f:func()->const i64 throws NullPointerException=one;f}}));}catch(e:const NullPointerException){};',0,'2\n',''),
  'capture_validity_remains_checked':(PICK+'val x<-1;pick(x,{{func f=func[x]()->const bool{x;return false;};f()}});',2,'','capture of ordinary lexical cells'),
  'shadowed_callable_does_not_supply_outer_signature':(PICK+'val x<-1;pick(x,{{func tag()->const bool{return false;};{{val tag<-0;tag()}}}});',2,'','different argument preparation contracts'),
- 'concrete_exception_view_adapts_to_common_method':(IO+EXCEPTION+'func common(e:SystemException)->const u64{return forward(e);}func f:func(MissingReturnException)->const u64=common;behave @print(f(error()));',0,'5\n','[-Wmissing-return]'),
- 'callable_adapter_retains_common_dispatch':(IO+EXCEPTION+'func select(e:SystemException)->const u64{return 1u64;}func select(e:MissingReturnException)->const u64{return 2u64;}func dispatch(e:T)->const u64 where T{return select(e);}func common(e:SystemException)->const u64{return dispatch(e);}func f:func(MissingReturnException)->const u64=common;behave @print(f(error()));',0,'1\n','[-Wmissing-return]'),
- 'captured_exception_view_adapter':(IO+EXCEPTION+'func common(e:SystemException)->const u64{return forward(e);}func wrap(f:func(MissingReturnException)->const u64)->func(MissingReturnException)->const u64{return func[f](e:MissingReturnException)->const u64{return f(e);};}func f:func(MissingReturnException)->const u64=common;func g=wrap(f);behave @print(g(error()));',0,'5\n','[-Wmissing-return]'),
- 'deferred_exception_view_adapter':(IO+EXCEPTION+'proc common(e:SystemException)->void{behave @print(forward(e));}proc p:proc(MissingReturnException)->void=common;defer p(error());',0,'5\n','[-Wmissing-return]'),
- 'exception_adapter_preserves_payload':(IO+EXCEPTION+'func common(e:SystemException)->const u64{return e.cause_count;}func f:func(MissingReturnException)->const u64=common;val e<-error();val chain<-try{throw e from e;}catch(e:const MissingReturnException){e};behave @print(f(chain));',0,'1\n','[-Wmissing-return]'),
+ 'concrete_exception_view_adapts_to_common_method':(IO+EXCEPTION+'func common(e:Exception)->const u64{return forward(e);}func f:func(MissingReturnError)->const u64=common;behave @print(f(error()));',0,'5\n','[-Wmissing-return]'),
+ 'callable_adapter_retains_common_dispatch':(IO+EXCEPTION+'func select(e:Exception)->const u64{return 1u64;}func select(e:MissingReturnError)->const u64{return 2u64;}func dispatch(e:T)->const u64 where T{return select(e);}func common(e:Exception)->const u64{return dispatch(e);}func f:func(MissingReturnError)->const u64=common;behave @print(f(error()));',0,'1\n','[-Wmissing-return]'),
+ 'captured_exception_view_adapter':(IO+EXCEPTION+'func common(e:Exception)->const u64{return forward(e);}func wrap(f:func(MissingReturnError)->const u64)->func(MissingReturnError)->const u64{return func[f](e:MissingReturnError)->const u64{return f(e);};}func f:func(MissingReturnError)->const u64=common;func g=wrap(f);behave @print(g(error()));',0,'5\n','[-Wmissing-return]'),
+ 'deferred_exception_view_adapter':(IO+EXCEPTION+'proc common(e:Exception)->void{behave @print(forward(e));}proc p:proc(MissingReturnError)->void=common;defer p(error());',0,'5\n','[-Wmissing-return]'),
+ 'exception_adapter_preserves_payload':(IO+EXCEPTION+'func common(e:Exception)->const u64{return e.cause_count;}func f:func(MissingReturnError)->const u64=common;val e<-error();val chain<-try{throw e from e;}catch(e:const MissingReturnError){e};behave @print(f(chain));',0,'1\n','[-Wmissing-return]'),
 
 }
 runner.CASE_ARGUMENTS = {}

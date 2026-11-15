@@ -132,7 +132,7 @@ def main():
                 run = subprocess.run([executable], cwd=ROOT, capture_output=True, text=True, timeout=60)
                 seconds = time.perf_counter() - started
                 expected_exit = 70 if fail_on else 0
-                if run.returncode != expected_exit or ("uncaught OutOfMemory" not in run.stderr if fail_on else run.stderr):
+                if run.returncode != expected_exit or ("uncaught OutOfMemoryError" not in run.stderr if fail_on else run.stderr):
                     raise RuntimeError(f"{label}: exit={run.returncode}\n{run.stdout}\n{run.stderr}")
                 metrics = json.loads(run.stdout)
                 results.append({"name": label, "passed": True, "metrics": metrics, "frontend_seconds": frontend_seconds,

@@ -27,7 +27,7 @@ func logical_image(f:func(u64)->const u64,flag:bool)->func(u64)->const u64{
 {{
  func f=wrap(base);observe(finish_operand(f));observe(defer_operand(f));
  observe(9030u64);
- try{failing_operand(f);{}}catch(e:const OutOfMemory){observe(9031u64);};
+ try{failing_operand(f);{}}catch(e:const OutOfMemoryError){observe(9031u64);};
  observe(9050u64);observe(abort_registration(f));observe(9060u64);
  func g=return_image(f);observe(g(1u64));
  func a=logical_image(f,true);func b=logical_image(f,false);observe(a(2u64));observe(b(2u64));

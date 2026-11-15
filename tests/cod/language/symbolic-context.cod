@@ -1,5 +1,5 @@
 using symbol "std:io" @assert;
-using "std:exceptions" InvalidCapacity;
+using "std:exceptions" InvalidCapacityError;
 using "symbolic-vocabulary.cod" ContextPool;
 using "symbolic-vocabulary.cod" ContextNode;
 symbol from "symbolic-vocabulary.cod" @arena;
@@ -29,7 +29,7 @@ proc fail_next() -> ContextNode {
   try {{
     effect @left = deref(alloc @arena ContextNode(30)), @companion = fail_next();
     behave @assert(false)
-  }} catch (failure:const InvalidCapacity) {{
+  }} catch (failure:const InvalidCapacityError) {{
     behave @assert(@left.value == 10);
     behave @assert(@companion.value == 20)
   }};

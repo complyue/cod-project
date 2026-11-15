@@ -22,14 +22,14 @@ proc show_bool(x:bool)->void{observe(if(x){1u64}else{0u64});}
  a<-false;b<-true;val c<-false;ptr p=a,q=b;
  {{defer (<->)(p,q);p=c;}};show_bool(a);show_bool(b);show_bool(p);
  a<-false;b<-true;observe(9050u64);
- try{ {{defer (<->)(a,b);}};}catch(e:const OutOfMemory){observe(9051u64);};
+ try{ {{defer (<->)(a,b);}};}catch(e:const OutOfMemoryError){observe(9051u64);};
  show_bool(a);show_bool(b);
  func f=wrap(base);func g=wrap(other);f<->g;observe(f(1u64));observe(g(1u64));
- observe(9030u64);try{f<->g;}catch(e:const OutOfMemory){observe(9031u64);};
+ observe(9030u64);try{f<->g;}catch(e:const OutOfMemoryError){observe(9031u64);};
  observe(f(2u64));observe(g(2u64));
- observe(9060u64);try{f<->g;}catch(e:const OutOfMemory){observe(9061u64);};
+ observe(9060u64);try{f<->g;}catch(e:const OutOfMemoryError){observe(9061u64);};
  observe(f(2u64));observe(g(2u64));
- observe(9062u64);try{f<->g;}catch(e:const OutOfMemory){observe(9061u64);};
+ observe(9062u64);try{f<->g;}catch(e:const OutOfMemoryError){observe(9061u64);};
  observe(f(2u64));observe(g(2u64));
  {{defer (<->)(f,g);f<-wrap(wrap(base));}};observe(f(3u64));observe(g(3u64));
  observe(9010u64);dispatch(a,b,2u64);observe(9011u64);show_bool(a);

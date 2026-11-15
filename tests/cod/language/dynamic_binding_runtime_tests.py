@@ -27,7 +27,7 @@ try{{{
  effect @context<-20u64;
  observe(9050u64);
  defer observe(9999u64);
-}}}catch(e:const OutOfMemory){observe(9051u64);observe(@context);};
+}}}catch(e:const OutOfMemoryError){observe(9051u64);observe(@context);};
 observe(9000u64);
 '''
 runner.HARNESS = runner.HARNESS.replace('checkpoints==5', 'checkpoints==7').replace('record_failures==1', 'record_failures==2')

@@ -13,7 +13,7 @@ func choose_storage(tag:i64,ref f:func(u64)->const u64 in O)->func(u64)->const u
 proc replace_local(tag:T,ref f:func(u64)->const u64 in O)->void where {T,owner O}{
  ptr p=choose_storage(tag,f);func saved=wrap(base);p<-wrap(other);observe(p(1u64));observe(f(1u64));
  observe(9030u64);
- try{p<-wrap(saved);{}}catch(e:const OutOfMemory){observe(9031u64);};
+ try{p<-wrap(saved);{}}catch(e:const OutOfMemoryError){observe(9031u64);};
  observe(p(2u64));
 }
 {{func f=wrap(base);replace_local(false,f);}};

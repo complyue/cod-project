@@ -44,7 +44,7 @@ runner.CASES.update({
         '{{behave @print(fold(i in 0..2,a=0f64){defer observe(a);7u8});}};', 0, '7\n7\n0\n', ''),
     'body_failure': (IO + 'proc observe(x:f64)->void {behave @print(x);}'
         'func bad()->u8 {} {{defer observe(9f64);fold(i in 0..2,a=0f64){defer observe(a);bad()};}};',
-        70, '0\n9\n', 'uncaught MissingReturnException'),
+        70, '0\n9\n', 'uncaught MissingReturnError'),
     'body_return': (IO + 'func f()->f64 {return fold(i in 0..2,a=0f64){if(i==0){7u8}else{return a;}};}'
         'behave @print(f());', 0, '7\n', ''),
     'literal_does_not_narrow': ('fold(i in 0..2,a=0u8){1u32};', 2, '', 'fold body does not satisfy'),

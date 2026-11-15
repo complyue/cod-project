@@ -6,7 +6,7 @@ import foundation_tests as runner
 IO = 'using symbol "std:io" @print;'
 X = 'symbol @x:u64;proc read()->u64{return @x;}'
 P = 'symbol @p:proc()->u64;'
-MISSING = 'using "std:exceptions" MissingReturnException;func missing()->u64{}func error()->const MissingReturnException{try{missing();}catch(e:const MissingReturnException){return e;};}'
+MISSING = 'using "std:exceptions" MissingReturnError;func missing()->u64{}func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}'
 runner.CASES = {
     'current_and_replay': (IO+X+P+'effect @x<-1u64;proc local=read;effect @p=local;effect @x<-2u64;'
         'behave @print(local());behave @print(behave @p());behave @print(perform @p());behave @print(@x);', 0, '2\n2\n1\n2\n', ''),
@@ -61,11 +61,11 @@ runner.CASES = {
     'inferred_dynamic_result': (IO+X+P+'proc replay(){return perform @p();}effect @x<-7u64;effect @p=read;behave @print(replay());', 0, '7\n', ''),
     'type_query_needs_no_installation': (IO+P+'val n<-make local typeof(perform @p()){9u64};behave @print(n);', 0, '9\n', ''),
     'replay_failure_restores': (IO+X+P+MISSING+'proc bad()->u64{behave @print(@x);throw error();}'
-        'effect @x<-1u64;effect @p=bad;effect @x<-2u64;try{perform @p();{}}catch(e:const MissingReturnException){behave @print(@x);};', 0, '1\n2\n', ''),
+        'effect @x<-1u64;effect @p=bad;effect @x<-2u64;try{perform @p();{}}catch(e:const MissingReturnError){behave @print(@x);};', 0, '1\n2\n', ''),
     'failed_installation_keeps_old_callee': (IO+X+P+MISSING+'effect @x<-1u64;effect @p=read;effect @x<-2u64;'
-        'try{effect @p={throw error();};}catch(e:const MissingReturnException){behave @print(perform @p());};', 0, '1\n', ''),
+        'try{effect @p={throw error();};}catch(e:const MissingReturnError){behave @print(perform @p());};', 0, '1\n', ''),
     'failed_installation_retains_rhs_effect': (IO+X+P+MISSING+'effect @x<-1u64;effect @p=read;effect @x<-2u64;'
-        'try{effect @p={effect @p=read;throw error();};}catch(e:const MissingReturnException){behave @print(perform @p());};', 0, '2\n', ''),
+        'try{effect @p={effect @p=read;throw error();};}catch(e:const MissingReturnError){behave @print(perform @p());};', 0, '2\n', ''),
     'replay_cleanup_replaces_return': (IO+X+P+'proc final()->u64{defer{return @x+1u64;};return @x;}'
         'effect @x<-3u64;effect @p=final;effect @x<-4u64;behave @print(perform @p());behave @print(@x);', 0, '4\n4\n', ''),
     'recursive_replay_restores': (IO+X+'symbol @p:proc(u64)->u64;proc recurse(n:u64)->u64{'

@@ -109,7 +109,7 @@ extern "C" void cod_lang_exception_finish() {
 '''
 
 EXERCISE = '''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 proc record_failure() -> void {
   proc selected = proc(x:u64)->void { behave @print(x); };
   defer good(81u64);
@@ -123,12 +123,12 @@ proc snapshot_failure() -> void {
   behave @print(9011u64);
   defer selected(later());
 }
-try { record_failure(); } catch(e:const OutOfMemory) { behave @print(9002u64); };
-try { snapshot_failure(); } catch(e:const OutOfMemory) { behave @print(9012u64); };
+try { record_failure(); } catch(e:const OutOfMemoryError) { behave @print(9002u64); };
+try { snapshot_failure(); } catch(e:const OutOfMemoryError) { behave @print(9012u64); };
 try {{
   defer good(83u64);
   defer use(proc(x:u64)->void { bad(x, 0u64); }, 84u64);
-}} catch(e:const InvalidCapacity) { behave @print(85u64); };
+}} catch(e:const InvalidCapacityError) { behave @print(85u64); };
 proc owner_result(mode:u64) -> owned region :Packet {
   defer bad(86u64, if(mode == 1u64) {0u64} else {128u64});
   return make Packet(capacity=128u64){value<-87u64};
@@ -139,9 +139,9 @@ proc callable_result(mode:u64) -> func()->const u64 {
 }
 for(i in 0u64 .. 2u64) {{
   try { owned region result <- owner_result(i); behave @print(result.value); }
-  catch(e:const InvalidCapacity) { behave @print(90u64); };
+  catch(e:const InvalidCapacityError) { behave @print(90u64); };
   try { func callback = callable_result(i); behave @print(callback()); }
-  catch(e:const InvalidCapacity) { behave @print(91u64); };
+  catch(e:const InvalidCapacityError) { behave @print(91u64); };
 }};
 behave @print(9021u64);
 {{ for(i in 0u64 .. 10000u64) { defer good(10000u64 + i); }; }};
@@ -153,27 +153,27 @@ behave @print(9032u64);
 
 
 BLOCK_RETURNS = """
-using "std:exceptions" MissingReturnException;
+using "std:exceptions" MissingReturnError;
 proc recovered_without_result() -> const u64 {
-  defer catch(e:const InvalidCapacity) { behave @print(95u64); };
+  defer catch(e:const InvalidCapacityError) { behave @print(95u64); };
   bad();
 }
 try { behave @print(recovered_without_result()); }
-catch(e:const MissingReturnException) { behave @print(96u64); };
+catch(e:const MissingReturnError) { behave @print(96u64); };
 proc failed_replacement() -> owned region :Packet {
   defer {bad();};
   defer {return make Packet(capacity=128u64){value<-999u64};};
   return make Packet(capacity=128u64){value<-999u64};
 }
 try { owned region failed <- failed_replacement(); }
-catch(e:const InvalidCapacity) { behave @print(97u64); };
+catch(e:const InvalidCapacityError) { behave @print(97u64); };
 proc failed_callback() -> func()->const u64 {
   defer {bad();};
   defer {return func()->const u64 {return 999u64;};};
   return func()->const u64 {return 999u64;};
 }
 try { func callback_failure = failed_callback(); }
-catch(e:const InvalidCapacity) { behave @print(98u64); };
+catch(e:const InvalidCapacityError) { behave @print(98u64); };
 {{
   defer {behave @print(100u64);};
   defer {defer {behave @print(99u64);};};
@@ -221,15 +221,15 @@ def main():
                 source += '\nregion symbol @native_fixture; effect @native_fixture <- region(128u64);\n'
             if name == 'defer-value-scope':
                 source += '''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 behave @print(9001u64);
-try {behave @print(value());} catch(e:const OutOfMemory) {behave @print(9002u64);};
+try {behave @print(value());} catch(e:const OutOfMemoryError) {behave @print(9002u64);};
 '''
             if name == 'defer-completion-flow':
                 source += '''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 behave @print(9001u64);
-try {after_scope();} catch(error:const OutOfMemory) {behave @print(9002u64);};
+try {after_scope();} catch(error:const OutOfMemoryError) {behave @print(9002u64);};
 '''
             if name == 'defer-handler-initialization':
                 source += '''
@@ -238,28 +238,28 @@ behave @print(9002u64);
 '''
             if name == 'defer-queue-initialization':
                 source += '''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 behave @print(9001u64);
-try {choose(true);} catch(error:const OutOfMemory) {behave @print(9002u64);};
+try {choose(true);} catch(error:const OutOfMemoryError) {behave @print(9002u64);};
 '''
             if name == 'defer-borrowed-arguments':
                 source += '''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 proc registration_failure()->void {
   val target:u64 <- 50u64;
   defer show(target);
   behave @print(9001u64);
   defer set(target, 999u64);
 }
-try {registration_failure();} catch(error:const OutOfMemory) {behave @print(9002u64);};
+try {registration_failure();} catch(error:const OutOfMemoryError) {behave @print(9002u64);};
 '''
             if name == 'defer-callable-flow':
                 source += '''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 proc failed_registration()->void {
   func action = one;
   {{
-    defer catch(error:const OutOfMemory) {behave @print(action());};
+    defer catch(error:const OutOfMemoryError) {behave @print(action());};
     behave @print(9001u64);
     defer {action <- two;};
   }};
@@ -272,7 +272,7 @@ proc failed_copy()->void {
   func replacement = two;
   {{
     defer show(action);
-    defer catch(error:const OutOfMemory) {behave @print(action());};
+    defer catch(error:const OutOfMemoryError) {behave @print(action());};
     defer {behave @print(9011u64); action <- replacement;};
   }};
   behave @print(action());
@@ -290,7 +290,7 @@ proc failed_registration()->void {
   behave @print(9001u64);
   defer {selected = second;};
 }
-try {failed_registration();} catch(error:const OutOfMemory) {behave @print(9002u64);};
+try {failed_registration();} catch(error:const OutOfMemoryError) {behave @print(9002u64);};
 swap_repeated(10000u64);
 '''
             if name == 'loop-pointer-flow':
@@ -302,7 +302,7 @@ proc failed_iteration()->void {
   try {for(i in 0u64 .. 3u64) {{
     behave @print(9001u64);
     defer {selected = second;};
-  }};} catch(error:const OutOfMemory) {show(selected);};
+  }};} catch(error:const OutOfMemoryError) {show(selected);};
 }
 failed_iteration();
 behave @print(9002u64);
@@ -324,7 +324,7 @@ behave @print(9042u64);
 proc failed_first_owner()->void {
   val value:u64 <-26u64;
   ptr p:u64=null in here;
-  defer catch(e:const OutOfMemory) {
+  defer catch(e:const OutOfMemoryError) {
     if((p is null)) {behave @print(27u64);} else {behave @print(999u64);};
   };
   behave @print(9001u64);
@@ -345,7 +345,7 @@ behave @print(9042u64);
             if name == 'defer-owner-queue':
                 source += r'''
 proc conditional_failure(yes:bool)->void {
-  defer catch(e:const OutOfMemory) {behave @print(14u64);};
+  defer catch(e:const OutOfMemoryError) {behave @print(14u64);};
   if(yes) {
     owned region r:Item <-make Item(capacity=256u64){value<-99u64};
     behave @print(9001u64);
@@ -373,7 +373,7 @@ behave @print(9042u64);
                 source += r'''
 proc registration_failure()->void {
   owned region r:Item <-make Item(capacity=256u64){value<-23u64};
-  defer catch(e:const OutOfMemory) {consume(r);};
+  defer catch(e:const OutOfMemoryError) {consume(r);};
   behave @print(9001u64);
   defer consume(r);
 }
@@ -394,11 +394,11 @@ behave @print(9042u64);
 '''
             if name == 'defer-body-results':
                 source += r'''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 proc record_failure()->void {
   owned region r:Item <-make Item(capacity=256u64){value<-40u64};
   proc action=proc()->Item {behave @print(999u64); return root(r);};
-  defer catch(e:const OutOfMemory) {behave @print(41u64);};
+  defer catch(e:const OutOfMemoryError) {behave @print(41u64);};
   behave @print(9001u64);
   defer action();
 }
@@ -407,7 +407,7 @@ behave @print(9002u64);
 proc copy_failure()->void {
   owned region r:Item <-make Item(capacity=256u64){value<-40u64};
   proc action=proc()->Item {behave @print(999u64); return root(r);};
-  defer catch(e:const OutOfMemory) {behave @print(42u64);};
+  defer catch(e:const OutOfMemoryError) {behave @print(42u64);};
   behave @print(9011u64);
   defer action();
 }
@@ -429,9 +429,9 @@ behave @print(9042u64);
 '''
             if name == 'defer-context':
                 source += r'''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 proc context_record_failure()->void {
-  defer catch(e:const OutOfMemory) {behave @print(21u64);};
+  defer catch(e:const OutOfMemoryError) {behave @print(21u64);};
   proc current=proc()->const u64 {return 999u64;};
   effect @reader=current;
   effect @arena <-make Item(capacity=256u64){value<-999u64};
@@ -441,7 +441,7 @@ proc context_record_failure()->void {
 context_record_failure();
 behave @print(9002u64);
 proc context_copy_failure()->void {
-  defer catch(e:const OutOfMemory) {behave @print(22u64);};
+  defer catch(e:const OutOfMemoryError) {behave @print(22u64);};
   effect @arena <-make Item(capacity=256u64){value<-999u64};
   effect proc @action()->Item {show_root(); return root(@arena);};
   behave @print(9011u64);
@@ -468,7 +468,7 @@ behave @print(9042u64);
 '''
             if name == 'defer-native-results':
                 source += '''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 proc registration_failure()->void {
   owned region r:Item <-make Item(capacity=256u64){value<-60u64};
   proc view=proc()->Item {return root(r);};
@@ -476,7 +476,7 @@ proc registration_failure()->void {
   behave @print(9001u64);
   defer view();
 }
-try {registration_failure();} catch(e:const OutOfMemory) {behave @print(9002u64);};
+try {registration_failure();} catch(e:const OutOfMemoryError) {behave @print(9002u64);};
 proc copy_failure()->void {
   owned region r:Item <-make Item(capacity=256u64){value<-61u64};
   proc view=proc()->Item {return root(r);};
@@ -484,7 +484,7 @@ proc copy_failure()->void {
   behave @print(9011u64);
   defer view();
 }
-try {copy_failure();} catch(e:const OutOfMemory) {behave @print(9012u64);};
+try {copy_failure();} catch(e:const OutOfMemoryError) {behave @print(9012u64);};
 proc repeated(count:u64)->void {
   owned region r:Item <-make Item(capacity=256u64){value<-0u64};
   proc view=proc()->Item {return root(r);};

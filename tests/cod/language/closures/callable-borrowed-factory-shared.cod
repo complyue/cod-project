@@ -1,5 +1,5 @@
 using symbol "std:io" @print;
-using "std:exceptions" InvalidCapacity;
+using "std:exceptions" InvalidCapacityError;
 data Item{value:u64;}
 region State{value:u64;calls:u64;stop:u64;}
 function stage0(region state:State)->func()->const u64 with {region state} {
@@ -67,7 +67,7 @@ proc run()->void {
   behave @print(copy());
   behave @print(selected());
   state.stop<-state.calls+3u64;
-  try {{func rejected=stage8(state);}}catch(e:const InvalidCapacity){behave @print(777u64);};
+  try {{func rejected=stage8(state);}}catch(e:const InvalidCapacityError){behave @print(777u64);};
   behave @print(state.calls);
   defer behave @print(copy());
 }

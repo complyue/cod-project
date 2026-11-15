@@ -5,7 +5,7 @@ import foundation_tests as runner
 
 IO = 'using symbol "std:io" @print;'
 OBS = IO+'proc observe(x:i64)->void{behave @print(x);}'
-EX = 'using "std:exceptions" MissingReturnException;func missing()->i64{}func error()->const MissingReturnException{try{missing();}catch(e:const MissingReturnException){return e;};}'
+EX = 'using "std:exceptions" MissingReturnError;func missing()->i64{}func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}'
 NPE = 'using "std:exceptions" NullPointerException;'
 runner.CASES = {}
 for spelling in ('operator', 'call', 'intrinsic'):
@@ -30,7 +30,7 @@ for spelling in ('operator', 'call', 'intrinsic'):
         'normal_branch_remains': (IO+'func run(flag:bool)->i64{return '+expression('+','1','if(flag){return 7;}else{8}')+';}behave @print(run(true));behave @print(run(false));',0,'7\n9\n',''),
         'inferred_return': (IO+'func run(){'+expression('+','1','{{return 7;}}')+';}behave @print(run());',0,'7\n',''),
         'cleanup_value_snapshot': (IO+'func run()->i64{val x<-7;'+expression('+','1','{{defer{x<-9;};return x;}}')+';return 0;}behave @print(run());',0,'7\n',''),
-        'throws_before_operation': (OBS+EX+'proc run()->void{defer observe(1);'+expression('/','1','{{throw error();}}')+';observe(99);}try{run();}catch(e:const MissingReturnException){observe(7);};',0,'1\n7\n','[-Wmissing-return]'),
+        'throws_before_operation': (OBS+EX+'proc run()->void{defer observe(1);'+expression('/','1','{{throw error();}}')+';observe(99);}try{run();}catch(e:const MissingReturnError){observe(7);};',0,'1\n7\n','[-Wmissing-return]'),
         'void_return': (OBS+'proc run()->void{defer observe(1);'+expression('+','1','{{return;}}')+';observe(99);}run();',0,'1\n',''),
         'early_null_check': (OBS+NPE+'proc run()->i64 throws NullPointerException{val a<-1;ptr p=a;p=null;'+expression('+','p','{{observe(99);return 7;}}')+';return 0;}try{run();{}}catch(e:const NullPointerException){observe(8);};',0,'8\n',''),
         'later_null_not_dereferenced': (OBS+NPE+'proc run()->i64{val a<-1;ptr p=a;p=null;'+expression('+','{{return 7;}}','p')+';return 0;}behave @print(run());',0,'7\n',''),

@@ -1,6 +1,6 @@
 using symbol "std:io" @print;
-using "std:exceptions" InvalidCapacity;
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" InvalidCapacityError;
+using "std:exceptions" OutOfMemoryError;
 data Item {value:u64;}
 region symbol @arena;
 proc consume(owned region item:Item)->void {behave @print(root(item).value);}
@@ -47,32 +47,32 @@ proc nested()->void {
 nested();
 proc failure()->void {
   owned region r:Item <-make Item(capacity=256u64){value<-8u64};
-  defer catch(e:const InvalidCapacity) {behave @print(9u64);};
+  defer catch(e:const InvalidCapacityError) {behave @print(9u64);};
   defer consume_bad(r);
 }
 failure();
 proc pending()->void {
   owned region r:Item <-make Item(capacity=256u64){value<-10u64};
-  defer catch(e:const InvalidCapacity) {behave @print(11u64);};
+  defer catch(e:const InvalidCapacityError) {behave @print(11u64);};
   defer consume(r);
   defer bad();
 }
 pending();
 proc handler()->void {
   owned region r:Item <-make Item(capacity=256u64){value<-12u64};
-  defer catch(e:const InvalidCapacity) {consume(r);};
+  defer catch(e:const InvalidCapacityError) {consume(r);};
   bad();
 }
 handler();
 proc finalized()->void {
   owned region r:Item <-make Item(capacity=256u64){value<-13u64};
-  defer catch(e:const InvalidCapacity) {behave @print(14u64);} finally {consume(r);};
+  defer catch(e:const InvalidCapacityError) {behave @print(14u64);} finally {consume(r);};
   bad();
 }
 finalized();
 proc preserved()->const u64 {
   owned region r:Item <-make Item(capacity=256u64){value<-15u64};
-  defer catch(e:const InvalidCapacity) {behave @print(16u64);};
+  defer catch(e:const InvalidCapacityError) {behave @print(16u64);};
   defer consume_bad(r);
   return 17u64;
 }

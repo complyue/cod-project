@@ -9,7 +9,7 @@ TYPE = 'func()->const u64'
 VALUES = 'func one()->const u64{return 1u64;}func two()->const u64{return 2u64;}func three()->const u64{return 3u64;}'
 WRAP = 'func wrap(value:'+TYPE+')->'+TYPE+'{return func[value]()->const u64{return value()+10u64;};}'
 NPE = 'using "std:exceptions" NullPointerException;'
-MISSING = 'using "std:exceptions" MissingReturnException;func missing()->'+TYPE+'{}'
+MISSING = 'using "std:exceptions" MissingReturnError;func missing()->'+TYPE+'{}'
 BASE = 'func first=one;func second=two;'
 READERS = NPE+'func write(ptr target:i64 in O)->void throws NullPointerException where {owner O}{target<-7;}func read(ptr target:i64 in O)->void throws NullPointerException where {owner O}{target;}'
 def run(body):
@@ -26,8 +26,8 @@ runner.CASES = {
  'readonly_target': (run('const func first=one;ptr selected=if(flag){first}else{two};'+OUT('selected()')),0,'1\n2\n',''),
  'full_scope': (run(BASE+'ptr selected={{defer{first<-three;};if(flag){first}else{wrap(two)}}};'+OUT('selected()')),0,'3\n12\n',''),
  'finally_retains_selection': (run(BASE+'ptr original=first;ptr selected=try{if(flag){original}else{wrap(two)}}finally{original=second;first<-three;{}};'+OUT('selected()')+OUT('original()')),0,'3\n2\n12\n2\n',''),
- 'catch_fresh': (MISSING+run(BASE+'ptr selected=try{if(flag){first}else{missing()}}catch(e:const MissingReturnException){wrap(two)};first<-three;'+OUT('selected()')),0,'3\n12\n','[-Wmissing-return]'),
- 'catch_target': (MISSING+run(BASE+'ptr selected=try{if(flag){missing()}else{wrap(two)}}catch(e:const MissingReturnException){first};first<-three;'+OUT('selected()')),0,'3\n12\n','[-Wmissing-return]'),
+ 'catch_fresh': (MISSING+run(BASE+'ptr selected=try{if(flag){first}else{missing()}}catch(e:const MissingReturnError){wrap(two)};first<-three;'+OUT('selected()')),0,'3\n12\n','[-Wmissing-return]'),
+ 'catch_target': (MISSING+run(BASE+'ptr selected=try{if(flag){missing()}else{wrap(two)}}catch(e:const MissingReturnError){first};first<-three;'+OUT('selected()')),0,'3\n12\n','[-Wmissing-return]'),
  'null_or_fresh': (NPE+run('ptr absent:'+TYPE+'=null in here;ptr selected=if(flag){absent}else{wrap(two)};'+OUT('selected is null')+'try{'+OUT('selected()')+'}catch(e:const NullPointerException){'+OUT('9')+'};'),0,'true\n9\nfalse\n12\n',''),
  'nested_selection': (run(BASE+'ptr selected=if(flag){try{first}finally{{}}}else{if(flag){first}else{wrap(two)}};first<-three;'+OUT('selected()')),0,'3\n12\n',''),
  'deferred_snapshot': (run(BASE+'ptr selected=if(flag){first}else{wrap(two)};defer ('+'proc(value:'+TYPE+')->void{'+OUT('value()')+'})(selected);selected<-three;'),0,'1\n12\n',''),

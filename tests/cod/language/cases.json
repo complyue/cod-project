@@ -745,7 +745,7 @@
     "stdout": "",
     "stderr_contains": [
       "region-capacity.cod:4:14:",
-      "uncaught RegionCapacityExceeded"
+      "uncaught RegionCapacityExceededError"
     ]
   },
   {
@@ -1271,7 +1271,7 @@
     "stdout": "10\n20\n",
     "stderr_contains": [
       "exception-reraise.cod:8:22:",
-      "uncaught InvalidCapacity",
+      "uncaught InvalidCapacityError",
       "requested=0"
     ]
   },

@@ -56,10 +56,10 @@ runner.CASES = {
         'behave @print(perform @q(1u8));behave @print(perform @q(1u64));behave @print(behave @q(1u8));', 0, '7\n1\n9\n', ''),
     'unused_dynamic_capture_required': ('symbol @a:u64,@b:u64;proc pick(x:u64)->u64{return @a;}proc pick(x:T)->u64 where T{return @b;}'
         'effect @a<-1u64;proc held:proc(u64)->u64=proc(x:T)->u64 where T{return pick(x);};', 2, '', 'cannot prove an installed binding'),
-    'common_exception_actual_identity': (IO + 'using "std:exceptions" SystemException;using "std:exceptions" MissingReturnException;'
-        'func missing()->u64{}func error()->const MissingReturnException{try{missing();}catch(e:const MissingReturnException){return e;};}'
-        'func tag(e:MissingReturnException)->u64{return 7u64;}func tag(e:T)->u64 where T{return e.category;}'
-        'func held:func(SystemException)->u64=func(e:T)->u64 where T{return tag(e);};val e:SystemException<-error();behave @print(held(e));', 0, '7\n', '[-Wmissing-return]'),
+    'common_exception_actual_identity': (IO + 'using "std:exceptions" Exception;using "std:exceptions" MissingReturnError;'
+        'func missing()->u64{}func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}'
+        'func tag(e:MissingReturnError)->u64{return 7u64;}func tag(e:T)->u64 where T{return e.category;}'
+        'func held:func(Exception)->u64=func(e:T)->u64 where T{return tag(e);};val e:Exception<-error();behave @print(held(e));', 0, '7\n', '[-Wmissing-return]'),
 }
 runner.CASE_ARGUMENTS = {}
 runner.CASE_SHADOWS = {

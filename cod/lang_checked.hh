@@ -3761,7 +3761,6 @@ class ScalarChecker {
           ? substitute(*handler.annotation, program_.methods[instance->method], instance->substitutions)
           : resolve_type(*handler.annotation);
       if (type.kind != Type::exception) fail(handler.at, "catch requires a selected intrinsic exception type");
-      if (handler.annotation && !type.identity) fail(handler.at, "use an untyped catch for SystemException");
       if (!handled.insert(type.identity).second) fail(handler.at, "duplicate exception category in catch clauses");
       std::vector<LexicalState> entries;
       std::set<size_t> categories;

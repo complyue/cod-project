@@ -8,7 +8,7 @@ runner = fixture.runner
 runner.SOURCE += source.PICK + '''
 proc contextual_records(tag:T)->void where T {
  func held=wrap(base);
- try{throw bound_error();}catch(e:const MissingReturnException){
+ try{throw bound_error();}catch(e:const MissingReturnError){
    ref y=pick(tag,e);
    defer{observe(held(1u64));};
    observe(9070u64);
@@ -16,7 +16,7 @@ proc contextual_records(tag:T)->void where T {
    observe(9071u64);
    defer{observe(e.category);observe(y.category);};
    observe(9050u64);
-   try{defer{observe(y.category);};}catch(failure:const OutOfMemory){observe(9051u64);};
+   try{defer{observe(y.category);};}catch(failure:const OutOfMemoryError){observe(9051u64);};
  };
 }
 contextual_records(false);contextual_records(0);

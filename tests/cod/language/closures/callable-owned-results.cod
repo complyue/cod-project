@@ -1,6 +1,6 @@
 using symbol "std:io" @print;
 using symbol "std:io" @assert;
-using "std:exceptions" InvalidCapacity;
+using "std:exceptions" InvalidCapacityError;
 region State { value:u64; }
 region Extended { prefix:u64; value:u64; extra:u64; }
 data Link { ref state:Extended; }
@@ -80,7 +80,7 @@ function staged(bytes:u64,n:u64)->owned region:State {
 }
 func failing=staged;
 try {{owned region rejected<-failing(0u64,0u64);}}
-catch(e:const InvalidCapacity) {{behave @print(31u64);}};
+catch(e:const InvalidCapacityError) {{behave @print(31u64);}};
 
 function current_reader(region r:State)->func()->const u64 with {region r} {
   val var value:u64 in r -> r.value;

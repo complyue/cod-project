@@ -64,8 +64,8 @@ runner.CASES.update({
  'body_read_cleanup_initialize': (IO+NPE+'proc (<=>)(ptr a:i64 in O,ptr b:i64 in O)->void throws NullPointerException where {owner O}{'+OUT('b')+'}'+BASE+'val empty<-make local i64;try{ {{'+CALL+'defer (<-)(empty,9);q=empty;}};{}}catch(e:const NullPointerException){};',0,'9\n',''),
 })
 runner.CASES['failed_initializer_registration'] = (IO+READ+BASE+'val empty<-make local i64;{{'+CALL+'q=empty;defer (<-)(empty,9);}};',2,'','cannot prove initialization')
-errors = NPE+'using "std:exceptions" MissingReturnException;using "std:exceptions" SystemException;func missing()->i64{}func missing_error()->const MissingReturnException{try{missing();}catch(e:const MissingReturnException){return e;};}func null_error()->const NullPointerException{ptr p:i64=null in here;try{p;{}}catch(e:const NullPointerException){return e;};}'
-runner.CASES['exception_targets'] = (IO+errors+REF.replace('a:i64','a:SystemException').replace('b:i64','b:SystemException')+'val x:SystemException<-missing_error(),y:SystemException<-null_error();ptr p=x,q=y;{{'+CALL+'}};'+OUT('p.category==y.category')+OUT('q.category==x.category'),0,'true\ntrue\n','[-Wmissing-return]')
+errors = NPE+'using "std:exceptions" MissingReturnError;using "std:exceptions" Exception;func missing()->i64{}func missing_error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}func null_error()->const NullPointerException{ptr p:i64=null in here;try{p;{}}catch(e:const NullPointerException){return e;};}'
+runner.CASES['exception_targets'] = (IO+errors+REF.replace('a:i64','a:Exception').replace('b:i64','b:Exception')+'val x:Exception<-missing_error(),y:Exception<-null_error();ptr p=x,q=y;{{'+CALL+'}};'+OUT('p.category==y.category')+OUT('q.category==x.category'),0,'true\ntrue\n','[-Wmissing-return]')
 runner.CASE_ARGUMENTS = {}
 runner.CASE_SHADOWS = {}
 runner.EXTRA_SOURCES = [Path(__file__)]

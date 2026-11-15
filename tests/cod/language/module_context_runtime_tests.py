@@ -7,7 +7,7 @@ runner = fixture.runner
 definitions, execution = runner.SOURCE.split('effect @x<-1u64;', 1)
 runner.SOURCE_FILES = {'library.cod': definitions + 'export @x;export @y;export @f;export @bad;export observe;'}
 runner.SOURCE = '''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 using "library.cod" observe;
 symbol from "library.cod" @x;
 symbol from "library.cod" @y;

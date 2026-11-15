@@ -25,7 +25,7 @@ func no_storage_copy()->const u64{
  func f=wrap(base);func g=wrap(other);
  observe(stop_storage(f));func result=image_storage(f);observe(result(1u64));
  observe(rebind_storage(f));observe(swap_storage(f,g));
- observe(9030u64);try{stop_storage(f);{}}catch(e:const OutOfMemory){observe(9031u64);};
+ observe(9030u64);try{stop_storage(f);{}}catch(e:const OutOfMemoryError){observe(9031u64);};
  observe(9030u64);observe(no_storage_copy());observe(9061u64);
 }};
 observe(9000u64);

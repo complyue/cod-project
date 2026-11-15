@@ -5,7 +5,7 @@ import foundation_tests as runner
 
 IO='using symbol "std:io" @print;\n'
 OBS=IO+'proc observe(x:i64)->void{behave @print(x);}\n'
-EX='using "std:exceptions" MissingReturnException;func missing()->const i64{}func error()->const MissingReturnException{try{missing();}catch(e:const MissingReturnException){return e;};}\n'
+EX='using "std:exceptions" MissingReturnError;func missing()->const i64{}func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}\n'
 VIEW='func first(x:i64,y:i64)->const i64{return x;}\n'
 CONTEXT=IO+'using "std:exceptions" NullPointerException;func pick(tag:bool,ptr x:i64 in O)->ptr i64 in O where {owner O}{return x;}func pick(tag:i64,ptr x:i64 in O)->const i64 where {owner O}{return 7;}proc show(x:i64)->void{behave @print(x);}\n'
 RUN_CONTEXT='val x<-1;try{run(false,x);}catch(e:const NullPointerException){behave @print(8);};try{run(0,x);}catch(e:const NullPointerException){};'
@@ -19,7 +19,7 @@ runner.CASES={
  'logical_null_refinement':(IO+'using "std:exceptions" NullPointerException;func f(ptr p:i64 in O)->const i64 where {owner O}{(p is null)&&{{return 7;}};return p;}val x<-8;ptr p=x;behave @print(f(p));p=null;behave @print(f(p));',0,'8\n7\n',''),
  'logical_void_operand_rejects':('func f(flag:bool)->const i64{flag&&{};return 8;}f(true);',2,'','logical operation requires bool operands'),
  'logical_wrong_normal_type_rejects':('func f(flag:bool)->const i64{flag||1;return 8;}f(true);',2,'','logical operation requires bool operands'),
- 'logical_failure_cleanup':(OBS+EX+'proc f(flag:bool)->void{defer observe(1);flag&&{{throw error();}};observe(2);}try{f(true);}catch(e:const MissingReturnException){observe(3);};f(false);',0,'1\n3\n2\n1\n','[-Wmissing-return]'),
+ 'logical_failure_cleanup':(OBS+EX+'proc f(flag:bool)->void{defer observe(1);flag&&{{throw error();}};observe(2);}try{f(true);}catch(e:const MissingReturnError){observe(3);};f(false);',0,'1\n3\n2\n1\n','[-Wmissing-return]'),
  'logical_finally_replacement':(OBS+'proc f(flag:bool)->const i64{defer observe(1);flag&&{{try{return 2;}finally{return 3;};}};return 4;}behave @print(f(true));behave @print(f(false));',0,'1\n3\n1\n4\n',''),
  'deferred_logical_return':(OBS+'proc f(flag:bool)->const i64{defer observe(1);defer{flag&&{{return 7;}};{}};return 8;}behave @print(f(true));behave @print(f(false));',0,'1\n7\n1\n8\n',''),
  'callable_view_first_operand_return':(OBS+VIEW+'proc f()->const i64{func invoke=first;defer observe(1);return invoke({{return 7;}},{observe(99);2});}behave @print(f());',0,'1\n7\n',''),
@@ -31,7 +31,7 @@ runner.CASES={
  'aborted_invocation_has_no_throws_obligation':(IO+'using "std:exceptions" NullPointerException;func target(x:i64)->const i64 throws NullPointerException{return x;}func f()->const i64{func invoke=target;return invoke({{return 7;}});}behave @print(f());',0,'7\n',''),
  'surviving_invocation_keeps_throws_obligation':('using "std:exceptions" NullPointerException;func target(x:i64)->const i64 throws NullPointerException{return x;}func f(flag:bool)->const i64{func invoke=target;return invoke(if(flag){return 7;}else{8});}f(true);',2,'','requires a covering catch'),
  'deferred_preparation_returns':(OBS+'proc show(x:i64,y:i64)->void{observe(x+y);}proc f()->const i64{proc invoke=show;defer observe(1);defer invoke({observe(2);0},{{return 7;}});return 8;}behave @print(f());',0,'2\n1\n7\n',''),
- 'deferred_preparation_throws':(OBS+EX+'proc show(x:i64)->void{observe(x);}proc f()->void{proc invoke=show;defer observe(1);defer invoke({{throw error();}});observe(99);}try{f();}catch(e:const MissingReturnException){observe(3);};',0,'1\n3\n','[-Wmissing-return]'),
+ 'deferred_preparation_throws':(OBS+EX+'proc show(x:i64)->void{observe(x);}proc f()->void{proc invoke=show;defer observe(1);defer invoke({{throw error();}});observe(99);}try{f();}catch(e:const MissingReturnError){observe(3);};',0,'1\n3\n','[-Wmissing-return]'),
  'deferred_preparation_prior_registration':(OBS+'proc show(x:i64)->void{observe(x);}proc f()->const i64{proc invoke=show;defer invoke(1);defer invoke({{return 7;}});return 8;}behave @print(f());',0,'1\n7\n',''),
  'contextual_deferred_preparation':(CONTEXT+'proc run(tag:T,ref x:i64 in O)->void throws NullPointerException where {T,owner O}{ptr p=x;p=null;proc invoke=show;defer invoke({{pick(tag,p)}});}' + RUN_CONTEXT,0,'8\n7\n',''),
  'contextual_ordinary_preparation':(CONTEXT+'proc run(tag:T,ref x:i64 in O)->void throws NullPointerException where {T,owner O}{ptr p=x;p=null;proc invoke=show;invoke({{pick(tag,p)}});}' + RUN_CONTEXT,0,'8\n7\n',''),

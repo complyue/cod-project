@@ -8,7 +8,7 @@ ID='func identity(x:T)->const T where T{return x;}'
 APPLY='func apply(f:func(T)->const T,x:T)->const T where T{return f(x);}'
 OBS=lambda x:'behave @print('+x+');'
 NPE='using "std:exceptions" NullPointerException;'
-MISS='using "std:exceptions" MissingReturnException;func missing()->const i64{}'
+MISS='using "std:exceptions" MissingReturnError;func missing()->const i64{}'
 runner.CASES={
  'later_generic_view':(IO+ID+APPLY+OBS('apply(identity,7)'),0,'7\n',''),
  'later_overloaded_view':(IO+'func pick(x:i64)->const i64{return x+1;}func pick(x:bool)->const bool{return !x;}'+APPLY+OBS('apply(pick,7)')+OBS('apply(pick,true)'),0,'8\nfalse\n',''),
@@ -26,7 +26,7 @@ runner.CASES={
  'context_does_not_hide_same_t':(ID+'func apply(f:func(T)->const T,x:T,y:T)->const T where T{return f(x);}apply(identity,1,true);',2,'','require an explicit concrete view type'),
  'context_does_not_waive_throws':(NPE+'func identity(x:T)->const T throws NullPointerException where T{return x;}'+APPLY+'apply(identity,1);',2,'','required checked exception'),
  'context_does_not_change_callable_kind':('proc identity(x:T)->const T where T{return x;}'+APPLY+'apply(identity,1);',2,'','callable view contract'),
- 'late_failure_preserves_order':(IO+ID+APPLY+MISS+'try{apply({'+OBS('1')+'identity},missing());{}}catch(e:const MissingReturnException){'+OBS('2')+'};',0,'1\n2\n','[-Wmissing-return]'),
+ 'late_failure_preserves_order':(IO+ID+APPLY+MISS+'try{apply({'+OBS('1')+'identity},missing());{}}catch(e:const MissingReturnError){'+OBS('2')+'};',0,'1\n2\n','[-Wmissing-return]'),
  'deferred_contextual_value':(IO+ID+'proc show(f:func(T)->const T,x:T)->void where T{'+OBS('f(x)')+'}{{defer show(identity,18);defer show(identity,true);}};',0,'true\n18\n',''),
  'lexical_recursive_ref':(IO+'proc run()->void{val x<-19;func recur(ref p:i64 in O,n:i64)->const i64 where {owner O}{if(n==0){return p;}else{return recur(p,n-1);};};'+OBS('recur(x,30)')+'}run();',0,'19\n',''),
  'lexical_recursive_ptr_write':(IO+NPE+'proc run()->void{val x<-make local i64;func recur(ptr p:i64 in O,n:i64)->void throws NullPointerException where {owner O}{if(n==0){p<-20;{}}else{recur(p,n-1);};};try{recur(x,30);'+OBS('x')+'}catch(e:const NullPointerException){};}run();',0,'20\n',''),

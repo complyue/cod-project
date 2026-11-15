@@ -5,10 +5,10 @@ import foundation_tests as runner
 
 IO = 'using symbol "std:io" @print;'
 NPE = 'using "std:exceptions" NullPointerException;'
-OOM = 'using "std:exceptions" OutOfMemory;'
+OOM = 'using "std:exceptions" OutOfMemoryError;'
 METHOD = 'proc (<->)(x:i64 in O,y:i64 in P)->void where {owner O,owner P}{intrinsic (<->)(x,y);behave @print(9);}'
 GENERIC = 'func (<->)(x:T in O,y:T in P)->void where {T,owner O,owner P}{intrinsic (<->)(x,y);}'
-ERROR = 'using "std:exceptions" MissingReturnException;func missing()->const i64{}'
+ERROR = 'using "std:exceptions" MissingReturnError;func missing()->const i64{}'
 runner.CASES = {
  'infix_explicit_and_builtin': (IO+METHOD+'val x<-1,y<-2;x<->y;(<->)(x,y);intrinsic (<->)(x,y);behave @print(x);behave @print(y);',0,'9\n9\n2\n1\n',''),
  'generic_same_t': (IO+GENERIC+'val x<-1,y<-2,a<-false,b<-true;x<->y;a<->b;behave @print(x);behave @print(a);',0,'2\ntrue\n',''),
@@ -26,12 +26,12 @@ runner.CASES = {
  'ref_promises_checked_after_operands': (IO+'func (<->)(ref x:i64 in O,ref y:i64 in P)->void where {owner O,owner P}{intrinsic (<->)(x,y);}val x<-make local i64,y<-2;x<->{x<-3;y};behave @print(y);',0,'3\n',''),
  'deferred_addresses_and_late_payload': (IO+METHOD+'val x<-1,y<-2,z<-3;ptr p=x,q=y;{{defer (<->)(p,q);p=z;x<-4;}};behave @print(x);behave @print(y);behave @print(p);',0,'9\n2\n4\n3\n',''),
  'deferred_pointer_write_initializes': (IO+NPE+'proc (<->)(ptr x:i64 in O,ptr y:i64 in P)->void throws NullPointerException where {owner O,owner P}{x<-7;y<-8;}val x<-make local i64,y<-make local i64;try{ {{defer (<->)(x,y);}};behave @print(x);behave @print(y);}catch(e:const NullPointerException){};',0,'7\n8\n',''),
- 'failure_after_preparation_no_invocation': (IO+ERROR+METHOD+'val x<-1,y<-2;try{x<->{x<-3;missing();y};}catch(e:const MissingReturnException){behave @print(x);};',0,'3\n','[-Wmissing-return]'),
+ 'failure_after_preparation_no_invocation': (IO+ERROR+METHOD+'val x<-1,y<-2;try{x<->{x<-3;missing();y};}catch(e:const MissingReturnError){behave @print(x);};',0,'3\n','[-Wmissing-return]'),
  'early_return_skips_later_operand': (IO+METHOD+'proc run()->void{val x<-1,y<-2;{return;x}<->{behave @print(7);y};}run();',0,'',''),
  'same_owner_more_specific': (IO+'proc (<->)(x:i64 in O,y:i64 in P)->void where {owner O,owner P}{behave @print(1);}proc (<->)(x:i64 in O,y:i64 in O)->void where {owner O}{behave @print(2);}val x<-1,y<-2;x<->y;{{val z<-3;x<->z;}};',0,'2\n1\n',''),
  'readonly_destinations_match_exactly': (IO+'proc (<->)(x:const i64 in O,y:const i64 in P)->void where {owner O,owner P}{behave @print(x);behave @print(y);}val x<-1,y<-2;x<->y;ptr p:const i64=x,q:const i64=y;p<->q;behave @print(x);',0,'2\n1\n2\n',''),
  'no_numeric_destination_conversion': (IO+'proc (<->)(x:u64 in O,y:u64 in P)->void where {owner O,owner P}{behave @print(9);}val x<-1u8,y<-2u8;x<->y;behave @print(x);',0,'2\n',''),
- 'no_exception_destination_conversion': (IO+ERROR+'using "std:exceptions" SystemException;func error()->const MissingReturnException{try{missing();}catch(e:const MissingReturnException){return e;};}proc (<->)(x:SystemException in O,y:SystemException in P)->void where {owner O,owner P}{behave @print(9);}val x<-error(),y<-error();x<->y;behave @print(x.category);',0,'5\n','[-Wmissing-return]'),
+ 'no_exception_destination_conversion': (IO+ERROR+'using "std:exceptions" Exception;func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}proc (<->)(x:Exception in O,y:Exception in P)->void where {owner O,owner P}{behave @print(9);}val x<-error(),y<-error();x<->y;behave @print(x.category);',0,'5\n','[-Wmissing-return]'),
  'mixed_type_user_destinations': (IO+'func (<->)(x:i64 in O,y:bool in P)->void where {owner O,owner P}{x<-7;y<-true;}val x<-1,y<-false;x<->y;behave @print(x);behave @print(y);',0,'7\ntrue\n',''),
  'callable_holder_method': (IO+'func (<->)(x:func()->const i64 in O,y:func()->const i64 in P)->void where {owner O,owner P}{func saved=x;x<-y;y<-saved;}func one()->const i64{return 1;}func two()->const i64{return 2;}func a=one;func b=two;a<->b;behave @print(a());behave @print(b());',0,'2\n1\n',''),
  'ordinary_helper_rebind_stays_local': (IO+'func (<->)(ptr x:i64 in O,ptr y:i64 in O)->void where {owner O}{intrinsic (<=>)(x,y);}val x<-1,y<-2;ptr p=x,q=y;p<->q;behave @print(p);behave @print(q);',0,'1\n2\n',''),
@@ -51,7 +51,7 @@ runner.CASES = {
  'readonly_not_weakened_for_selection': (IO+METHOD+'val x<-1,y<-2;ptr p:const i64=x;p<->y;',2,'','readonly destination'),
  'checked_declaration_retained': (NPE+'proc (<->)(ptr x:i64 in O,ptr y:i64 in P)->void throws NullPointerException where {owner O,owner P}{}val x<-1,y<-2;x<->y;',2,'','requires a covering catch'),
  'deferred_default_read_at_registration': (IO+METHOD+'val x<-make local i64,y<-2;defer (<->)(x,y);x<-3;',2,'','before definite initialization'),
- 'failed_deferred_setter_gives_no_write': (NPE+OOM+'proc (<->)(ptr x:i64 in O,ptr y:i64 in P)->void throws NullPointerException where {owner O,owner P}{x<-7;y<-8;}val x<-make local i64,y<-make local i64;try{ {{defer (<->)(x,y);}};}catch(e:const OutOfMemory){}catch(e:const NullPointerException){};x;',2,'','before definite initialization'),
+ 'failed_deferred_setter_gives_no_write': (NPE+OOM+'proc (<->)(ptr x:i64 in O,ptr y:i64 in P)->void throws NullPointerException where {owner O,owner P}{x<-7;y<-8;}val x<-make local i64,y<-make local i64;try{ {{defer (<->)(x,y);}};}catch(e:const OutOfMemoryError){}catch(e:const NullPointerException){};x;',2,'','before definite initialization'),
  'expired_destination_rejected': (IO+METHOD+'val y<-1;{{val x<-2;x}}<->y;',2,'','lexical owner has ended'),
 }
 runner.CASE_ARGUMENTS = {}

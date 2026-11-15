@@ -5,7 +5,7 @@ import foundation_tests as runner
 
 IO = 'using symbol "std:io" @print;'
 NPE = 'using "std:exceptions" NullPointerException;'
-MISSING = 'using "std:exceptions" MissingReturnException;'
+MISSING = 'using "std:exceptions" MissingReturnError;'
 runner.CASES = {
  'unused_declaration': ('func absent(x:u64)->u64;',0,'',''),
  'missing_implementation': ('func absent(x:u64)->u64;absent(1u64);',2,'','no applicable implementation'),
@@ -42,12 +42,12 @@ runner.CASES = {
  'checked_throws_inferred_callable': (NPE+'func f()->bool throws NullPointerException;func f(){return true;}func g=f;g();',2,'','requires a covering catch or throws'),
  'implementation_throws_exceed_declaration': (NPE+'func f()->bool;func f()->bool throws NullPointerException{return true;}',2,'','checked exception outside its callable declaration'),
  'kind_mismatch': ('func f()->u64;proc f(){return 1u64;}',2,'','implementation kind'),
- 'declared_missing_return': (IO+MISSING+'func f()->u64;func f(){}try{f();{}}catch(e:const MissingReturnException){behave @print(9u64);};',0,'9\n','[-Wmissing-return]'),
+ 'declared_missing_return': (IO+MISSING+'func f()->u64;func f(){}try{f();{}}catch(e:const MissingReturnError){behave @print(9u64);};',0,'9\n','[-Wmissing-return]'),
  'declaration_does_not_resolve_overload': ('func f(x:u64,y:u64)->u64;func f(x:u64,y:T)->u64 where T{return x;}func f(x:T,y:u64)->u64 where T{return y;}f(1u64,2u64);',2,'','ambiguous methods'),
  'declaration_does_not_select_result': ('func f(x:u64)->u64;func f(x:u64)->u64{return x;}func f(x:u64)->bool{return true;}',2,'','duplicate method signature'),
  'receiving_type_cannot_retarget': ('func f()->u64;func f(){return 1u32;}val x:u32<-f();',2,'','initializer does not satisfy'),
  'partial_owner_uses_independent_body_result': ('func f(ref x:i64 in O,ref y:i64 in O)->i64 where {owner O};func f(ref x:i64 in A,ref y:i64 in B) where {owner A,owner B}{return x;}',0,'',''),
- 'narrow_exception_declaration': (MISSING+'using "std:exceptions" SystemException;func f(x:MissingReturnException)->bool;func f(x:SystemException)->bool{return true;}func g(x:MissingReturnException)->bool{return f(x);}',0,'',''),
+ 'narrow_exception_declaration': (MISSING+'using "std:exceptions" Exception;func f(x:MissingReturnError)->bool;func f(x:Exception)->bool{return true;}func g(x:MissingReturnError)->bool{return f(x);}',0,'',''),
  'instance_specific_value_and_view_modes': (IO+'func f(ref x:i64 in O)->ref i64 in O where {owner O};func f(ref x:bool in O)->bool where {owner O};func f(ref x:T in P) where {T,owner P}{return x;}val x<-1,y<-true;f(x)<-7;ref copy=f(y);copy<-false;behave @print(x);behave @print(y);behave @print(copy);',0,'7\ntrue\nfalse\n',''),
  'returned_complete_callable': (IO+'func inc(x:u64)->u64{return x+1u64;}func f()->func(u64)->u64;func f(){return inc;}func g=f();behave @print(g(3u64));',0,'4\n',''),
  'output_only_declaration_binder_unproved': ('func f()->const T where T;func f(){return 1u64;}',2,'','declared result type parameter is not determined'),

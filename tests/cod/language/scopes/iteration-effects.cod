@@ -1,6 +1,6 @@
 using symbol "std:io" @assert;
 using symbol "std:io" @print;
-using "std:exceptions" InvalidCapacity;
+using "std:exceptions" InvalidCapacityError;
 region symbol @arena;
 symbol @value:u64;
 array Values[u32]:u64;
@@ -34,7 +34,7 @@ try {
     behave @print(2);
     effect @arena <- region(0u64);
   };
-} catch (e:const InvalidCapacity) {
+} catch (e:const InvalidCapacityError) {
   behave @assert(@value == 42u64 && capacity_bytes(@arena) == outer_capacity);
   behave @print(1);
 };
@@ -54,7 +54,7 @@ try {
     behave @print(2);
     effect @arena <- region(0u64);
   };
-} catch (e:const InvalidCapacity) {
+} catch (e:const InvalidCapacityError) {
   behave @assert(@value == 42u64 && capacity_bytes(@arena) == outer_capacity);
   behave @print(1);
 };

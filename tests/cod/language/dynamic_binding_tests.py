@@ -7,7 +7,7 @@ IO = 'using symbol "std:io" @print;'
 X = 'symbol @x:u64;'
 READ = 'proc read()->u64{return @x;}'
 SHOW = 'proc show()->void{behave @print(@x);}'
-MISSING = 'using "std:exceptions" MissingReturnException;func missing()->u64{}func error()->const MissingReturnException{try{missing();}catch(e:const MissingReturnException){return e;};}'
+MISSING = 'using "std:exceptions" MissingReturnError;func missing()->u64{}func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}'
 runner.CASES = {
     'basic': (IO+X+'effect @x<-1u64;behave @print(@x);effect @x<-2u64;behave @print(@x);', 0, '1\n2\n', ''),
     'grouping_and_full_scope': (IO+X+'effect @x<-1u64;{effect @x<-2u64;};behave @print(@x);'
@@ -35,14 +35,14 @@ runner.CASES = {
     'cleanup_replaces_return': (IO+X+SHOW+'proc f()->u64{effect @x<-2u64;defer{return @x+1u64;};return @x;}'
         'effect @x<-1u64;behave @print(f());show();', 0, '3\n1\n', ''),
     'nested_cleanup_effect': (IO+X+SHOW+'effect @x<-1u64;defer show();defer {{{effect @x<-2u64;defer show();}}};', 0, '2\n1\n', ''),
-    'deferred_handler_binding': (IO+X+MISSING+SHOW+'defer catch(e:const MissingReturnException){show();};effect @x<-2u64;throw error();',
+    'deferred_handler_binding': (IO+X+MISSING+SHOW+'defer catch(e:const MissingReturnError){show();};effect @x<-2u64;throw error();',
         0, '2\n', ''),
     'throw_restores': (IO+X+MISSING+SHOW+'proc f()->void{effect @x<-2u64;defer show();throw error();}'
-        'effect @x<-1u64;try{f();}catch(e:const MissingReturnException){show();};', 0, '2\n1\n', ''),
+        'effect @x<-1u64;try{f();}catch(e:const MissingReturnError){show();};', 0, '2\n1\n', ''),
     'failed_rhs_preserves_binding': (IO+X+MISSING+SHOW+'effect @x<-1u64;'
-        'try{effect @x<-{throw error();};}catch(e:const MissingReturnException){show();};', 0, '1\n', ''),
+        'try{effect @x<-{throw error();};}catch(e:const MissingReturnError){show();};', 0, '1\n', ''),
     'failed_rhs_retains_its_effects': (IO+X+MISSING+SHOW+'effect @x<-1u64;'
-        'try{effect @x<-{effect @x<-2u64;throw error();};}catch(e:const MissingReturnException){show();};', 0, '2\n', ''),
+        'try{effect @x<-{effect @x<-2u64;throw error();};}catch(e:const MissingReturnError){show();};', 0, '2\n', ''),
     'finally_uses_current_scope': (IO+X+SHOW+'effect @x<-1u64;{{try{effect @x<-2u64;}finally{show();};}};show();', 0, '2\n1\n', ''),
     'iterations_restore': (IO+X+SHOW+'effect @x<-1u64;for(i in 0u64..3u64){show();effect @x<-i+2u64;show();};show();',
         0, '1\n2\n1\n3\n1\n4\n1\n', ''),
@@ -55,7 +55,7 @@ runner.CASES = {
     'iteration_return_restores_before_outer_defer': (IO+X+SHOW+'proc f()->u64{defer show();for(i in 0u64..3u64){effect @x<-2u64;return @x;};return 0u64;}'
         'effect @x<-1u64;behave @print(f());show();', 0, '1\n2\n1\n', ''),
     'iteration_throw_restores_before_catch': (IO+X+MISSING+SHOW+'effect @x<-1u64;'
-        'try{for(i in 0u64..2u64){effect @x<-2u64;throw error();};}catch(e:const MissingReturnException){show();};', 0, '1\n', ''),
+        'try{for(i in 0u64..2u64){effect @x<-2u64;throw error();};}catch(e:const MissingReturnError){show();};', 0, '1\n', ''),
     'empty_else_restores': (IO+X+SHOW+'effect @x<-1u64;for(i in 0u64..0u64){}else{effect @x<-2u64;show();defer show();};show();', 0, '2\n1\n1\n', ''),
     'fold_restores': (IO+X+SHOW+'effect @x<-1u64;behave @print(fold(i in 0u64..3u64,a=0u64){effect @x<-i+1u64;a+@x});show();', 0, '6\n1\n', ''),
     'branch_establishes_binding': (IO+X+'if(true){effect @x<-2u64;}else{effect @x<-3u64;};behave @print(@x);', 0, '2\n', ''),

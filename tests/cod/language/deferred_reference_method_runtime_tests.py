@@ -17,7 +17,7 @@ proc (<=>)(a:i64 in O,b:i64 in O)->void where {owner O}{behave @print(a);behave 
  {{
   defer (<=>)(p,q);
   observe(9050u64);
-  try{defer (<=>)(p,q);}catch(e:const OutOfMemory){observe(9051u64);};
+  try{defer (<=>)(p,q);}catch(e:const OutOfMemoryError){observe(9051u64);};
  }};observe(p);observe(q);
  val a<-1,b<-7;ptr r=a,s=b;
  {{

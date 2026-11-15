@@ -52,8 +52,8 @@ runner.CASES.update({
  'intrinsic_bypasses_declaration': (NPE+'func (<=>)(ptr a:i64 in O,ptr b:i64 in O)->void throws NullPointerException where {owner O};'+BASE+'intrinsic (<=>)(p,q);',0,'',''),
  'defer_block_calls_method': (IO+REF+BASE+'{{defer{p<=>q;};q=z;}};'+OUT('p')+OUT('q'),0,'9\n1\n',''),
 })
-ERRORS = NPE+'using "std:exceptions" MissingReturnException;using "std:exceptions" SystemException;func missing()->const i64{}func error()->const MissingReturnException{try{missing();}catch(e:const MissingReturnException){return e;};}func absent()->const NullPointerException{ptr p:i64=null in here;try{p;{}}catch(e:const NullPointerException){return e;};}'
-runner.CASES['exception_targets'] = (IO+ERRORS+'func (<=>)(ref a:SystemException in O,ref b:SystemException in O)->void where {owner O}{intrinsic (<=>)(a,b);}val x:SystemException<-error(),y:SystemException<-absent();ptr p=x,q=y;p<=>q;'+OUT('p.category==y.category')+OUT('q.category==x.category'),0,'true\ntrue\n','[-Wmissing-return]')
+ERRORS = NPE+'using "std:exceptions" MissingReturnError;using "std:exceptions" Exception;func missing()->const i64{}func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}func absent()->const NullPointerException{ptr p:i64=null in here;try{p;{}}catch(e:const NullPointerException){return e;};}'
+runner.CASES['exception_targets'] = (IO+ERRORS+'func (<=>)(ref a:Exception in O,ref b:Exception in O)->void where {owner O}{intrinsic (<=>)(a,b);}val x:Exception<-error(),y:Exception<-absent();ptr p=x,q=y;p<=>q;'+OUT('p.category==y.category')+OUT('q.category==x.category'),0,'true\ntrue\n','[-Wmissing-return]')
 runner.CASES.update({
  'inferred_method_value_unproved': ({'ops.cod':PTR+'export (<=>);','main.cod':'using "ops.cod" (<=>) as swap;func f=swap;'},2,'','unproved callable slot contract'),
  'contextual_method_value_unproved': ({'ops.cod':PTR+'export (<=>);','main.cod':'using "ops.cod" (<=>) as swap;func helper(ptr a:i64 in O,ptr b:i64 in O)->void where {owner O}{}func f=helper;f<-swap;'},2,'','unproved callable slot contract'),
@@ -69,7 +69,7 @@ for suffix, body, result, output, diagnostic in (
     ('deferred_rebind', 'defer intrinsic (=)(a,b);a<-3;', 'p;{}', '', 'before definite initialization'),
 ):
     runner.CASES['initialization_'+suffix] = (IO+NPE+'func (<=>)(ptr a:i64 in O,ptr b:i64 in O)->void throws NullPointerException where {owner O}{'+body+'}val x<-make local i64,y<-make local i64;ptr p=x,q=y;try{p<=>q;'+result+'}catch(e:const NullPointerException){};',2 if diagnostic else 0,output,diagnostic)
-runner.CASES['initialization_exception_exit'] = (NPE+'using "std:exceptions" MissingReturnException;func missing()->const i64{}func (<=>)(ptr a:i64 in O,ptr b:i64 in O)->void throws NullPointerException where {owner O}{a<-3;a=b;missing();}val x<-1,y<-make local i64;ptr p=x,q=y;try{p<=>q;}catch(e:const MissingReturnException){p;{}}catch(e:const NullPointerException){};',2,'','before definite initialization')
+runner.CASES['initialization_exception_exit'] = (NPE+'using "std:exceptions" MissingReturnError;func missing()->const i64{}func (<=>)(ptr a:i64 in O,ptr b:i64 in O)->void throws NullPointerException where {owner O}{a<-3;a=b;missing();}val x<-1,y<-make local i64;ptr p=x,q=y;try{p<=>q;}catch(e:const MissingReturnError){p;{}}catch(e:const NullPointerException){};',2,'','before definite initialization')
 runner.CASES['selected_initialization_follows_output'] = (IO+REF+'proc run(flag:bool)->void{val x<-make local i64,y<-make local i64,z<-7;ptr p=if(flag){x}else{y},q=z;p<-1;p<=>q;'+OUT('p')+OUT('q')+'}run(true);run(false);',0,'7\n1\n7\n1\n','')
 for order in ('builtin_first','method_first'):
     calls = 'run(false,true);run(false,1);run(true,1);' if order=='builtin_first' else 'run(false,1);run(true,1);run(false,true);'

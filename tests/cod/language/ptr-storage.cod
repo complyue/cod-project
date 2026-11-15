@@ -1,5 +1,5 @@
 using symbol "std:io" @assert;
-using "std:exceptions" InvalidCapacity;
+using "std:exceptions" InvalidCapacityError;
 data Pool { value:i64; }
 region symbol @pool:Pool;
 effect @pool <- make Pool(capacity = 4096u64) { value <- 20 };
@@ -63,6 +63,6 @@ proc unused() -> i64 { behave @assert(false); return 0 }
   try {
     make Pool(capacity = 0u64) { value <- 1 };
     recovered <- 40;
-  } catch (error:const InvalidCapacity) { recovered <- 41; };
+  } catch (error:const InvalidCapacityError) { recovered <- 41; };
   behave @assert(recovered == 41);
 };

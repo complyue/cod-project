@@ -5,8 +5,8 @@ import foundation_tests as runner
 
 IO='using symbol "std:io" @print;'
 NPE='using "std:exceptions" NullPointerException;'
-OOM='using "std:exceptions" OutOfMemory;'
-ERROR='using "std:exceptions" MissingReturnException;func missing()->const i64{}func error()->const MissingReturnException{try{missing();}catch(e:const MissingReturnException){return e;};}'
+OOM='using "std:exceptions" OutOfMemoryError;'
+ERROR='using "std:exceptions" MissingReturnError;func missing()->const i64{}func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}'
 WARN='[-Wmissing-return]'
 SETUP='val x<-make local i64,y<-make local i64,z<-make local i64;ptr a=x,b=y,c=z;'
 ALIASES='var p->if(flag){a}else{b};var q->p;'
@@ -59,11 +59,11 @@ runner.CASES={
  'prepared_setter_old_target':(SETTER+run('{{defer set(p);p=z;}};behave @print(p);',throws='throws NullPointerException'),2,'','before definite initialization'),
  'prepared_reader_stable_selection':(READER+run('defer show(p);p<-1;',throws='throws NullPointerException'),0,'1\n1\n',''),
  'prepared_reader_cannot_use_new_selection':(READER+run('defer show(p);p=z;p<-1;',throws='throws NullPointerException'),2,'','cannot prove initialization'),
- 'failure_after_selected_write':(ERROR+run('val e<-error();try{{defer{p<-1;throw e;};}}catch(e:const MissingReturnException){behave @print(p);};'),0,'1\n1\n',WARN),
- 'failure_before_selected_write':(ERROR+run('val e<-error();try{{defer{throw e;p<-1;};}}catch(e:const MissingReturnException){behave @print(p);};'),2,'','before definite initialization'),
- 'recovery_reader_after_writer_failure':(ERROR+run('val e<-error();defer catch(e:const MissingReturnException){behave @print(p);};defer{p<-1;throw e;};'),0,'1\n1\n',WARN),
- 'recovering_handler_initializes':(ERROR+run('val e<-error();{{defer catch(e:const MissingReturnException){p<-1;};throw e;}};behave @print(p);'),0,'1\n1\n',WARN),
- 'category_specific_finally':(ERROR+OOM+run('val e<-error();defer{}catch(e:const MissingReturnException){p<-1;}finally{behave @print(p);};throw e;'),0,'1\n1\n',WARN),
+ 'failure_after_selected_write':(ERROR+run('val e<-error();try{{defer{p<-1;throw e;};}}catch(e:const MissingReturnError){behave @print(p);};'),0,'1\n1\n',WARN),
+ 'failure_before_selected_write':(ERROR+run('val e<-error();try{{defer{throw e;p<-1;};}}catch(e:const MissingReturnError){behave @print(p);};'),2,'','before definite initialization'),
+ 'recovery_reader_after_writer_failure':(ERROR+run('val e<-error();defer catch(e:const MissingReturnError){behave @print(p);};defer{p<-1;throw e;};'),0,'1\n1\n',WARN),
+ 'recovering_handler_initializes':(ERROR+run('val e<-error();{{defer catch(e:const MissingReturnError){p<-1;};throw e;}};behave @print(p);'),0,'1\n1\n',WARN),
+ 'category_specific_finally':(ERROR+OOM+run('val e<-error();defer{}catch(e:const MissingReturnError){p<-1;}finally{behave @print(p);};throw e;'),0,'1\n1\n',WARN),
  'returning_cleanup_keeps_write':(IO+'proc run(flag:bool)->const i64{'+SETUP+ALIASES+'defer{behave @print(p);}finally{};defer{p<-1;return 2;};return 3;}behave @print(run(true));behave @print(run(false));',0,'1\n2\n1\n2\n',''),
 }
 runner.CASE_ARGUMENTS={}

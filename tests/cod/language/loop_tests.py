@@ -8,10 +8,10 @@ PRINT = 'using symbol "std:io" @print;\n'
 OBSERVE = PRINT + 'proc observe(x:i64)->void {behave @print(x);}\n'
 runner.CASES = {
     "loops": (None, 0, "-1\n-1\n3\n10\n10\n10\n0\n1\n1\n1\n1\n7.5\n1\n3\n11\n12\n91\n2\n50\n1\n0\n90\n0\n1\n2\n11\n10\n1\n0\n10\n11\n12\n2\n1\n0\n40\n2\n30\n80\n", ""),
-    "loop_body_failure": (OBSERVE + 'func bad()->const i64 {} {{defer observe(9); for(i in 0..3){defer observe(i); if(i==1){bad();{}}else{};} else {observe(99);};}};', 70, "1\n0\n9\n", "uncaught MissingReturnException"),
-    "loop_bound_failure": (OBSERVE + 'func bad()->const i64 {} {{defer observe(9); for(i in 0..bad()){observe(98);}else{observe(99);};}};', 70, "9\n", "uncaught MissingReturnException"),
-    "repeated_defer_failure": (OBSERVE + 'proc bad(x:i64)->const i64 {observe(x); if(x==1){return x;}else{};} {{defer observe(9);for(i in 0..3){defer bad(i);};}};', 70, "2\n1\n0\n9\n", "uncaught MissingReturnException"),
-    "loop_preparation_failure": (OBSERVE + 'proc arg(x:i64)->const i64 {if(x==2){}else{return x;};} {{defer observe(9);for(i in 0..3){defer observe(arg(i));};}};', 70, "1\n0\n9\n", "uncaught MissingReturnException"),
+    "loop_body_failure": (OBSERVE + 'func bad()->const i64 {} {{defer observe(9); for(i in 0..3){defer observe(i); if(i==1){bad();{}}else{};} else {observe(99);};}};', 70, "1\n0\n9\n", "uncaught MissingReturnError"),
+    "loop_bound_failure": (OBSERVE + 'func bad()->const i64 {} {{defer observe(9); for(i in 0..bad()){observe(98);}else{observe(99);};}};', 70, "9\n", "uncaught MissingReturnError"),
+    "repeated_defer_failure": (OBSERVE + 'proc bad(x:i64)->const i64 {observe(x); if(x==1){return x;}else{};} {{defer observe(9);for(i in 0..3){defer bad(i);};}};', 70, "2\n1\n0\n9\n", "uncaught MissingReturnError"),
+    "loop_preparation_failure": (OBSERVE + 'proc arg(x:i64)->const i64 {if(x==2){}else{return x;};} {{defer observe(9);for(i in 0..3){defer observe(arg(i));};}};', 70, "1\n0\n9\n", "uncaught MissingReturnError"),
     "fold_snapshots": (OBSERVE + '{{behave @print(fold(i in 0..3,n=0){defer observe(n);n+i});}};', 0, "3\n1\n0\n0\n", ""),
     "nested_preparation": (OBSERVE + 'proc both(x:i64,y:i64)->void{observe(x);observe(y);} {{defer both({defer observe(7);1},{defer observe(8);2});defer observe(9);}};', 0, "9\n1\n2\n8\n7\n", ""),
     "fold_recursive": (PRINT + 'func f(n:i64)->const i64 {return if(n==0){1}else{fold(i in 0..2,a=0){a+f(n-1)}};} behave @print(f(5));', 0, "32\n", ""),

@@ -115,7 +115,7 @@ runner.CASES = {
     }, 2, '', 'requires a covering catch or throws'),
     'receiver_alias_cannot_replace_source_exception': ({
         'base.cod': 'using "std:exceptions" NullPointerException as SourceError;func operation()->bool throws SourceError;export operation;',
-        'main.cod': 'using "std:exceptions" MissingReturnException as SourceError;import "base.cod" operation as local;'
+        'main.cod': 'using "std:exceptions" MissingReturnError as SourceError;import "base.cod" operation as local;'
             'func local(){return true;}try{local();{}}catch(e:const SourceError){};',
     }, 2, '', 'requires a covering catch or throws'),
     'source_exception_obligation_survives_callable_value': ({

@@ -14,7 +14,7 @@ EXTRA_SOURCES = []
 
 SOURCE = '''
 using symbol "std:io" @print;
-using "std:exceptions" MissingReturnException;
+using "std:exceptions" MissingReturnError;
 func first(x:i64)->const i64{return x+1;}
 func second(x:i64)->const i64{return x+2;}
 func truth(x:bool)->const bool{return x;}
@@ -29,7 +29,7 @@ func number()->const i64{return 1;}
 func finish(f:func()->const T)->const T where T{f();}
 behave @print(relay(first,10,30u64));behave @print(relay(second,10,30u64));
 behave @print(relay(wrap(first),10,30u64));behave @print(relay(truth,true,30u64));
-finish(empty);try{finish(number);{}}catch(e:const MissingReturnException){behave @print(99);};
+finish(empty);try{finish(number);{}}catch(e:const MissingReturnError){behave @print(99);};
 '''
 
 

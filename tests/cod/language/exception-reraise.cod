@@ -1,5 +1,5 @@
 using symbol "std:io" @print;
-using "std:exceptions" InvalidCapacity;
+using "std:exceptions" InvalidCapacityError;
 region symbol arena;
 effect @arena <- region(4096u64);
 try {{

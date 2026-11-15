@@ -5,7 +5,7 @@ import foundation_tests as runner
 
 IO = 'using symbol "std:io" @print;'
 NPE = 'using "std:exceptions" NullPointerException;'
-ERROR = 'using "std:exceptions" MissingReturnException;using "std:exceptions" SystemException;func missing()->const u64{}func error()->const MissingReturnException{try{missing();}catch(e:const MissingReturnException){return e;};}'
+ERROR = 'using "std:exceptions" MissingReturnError;using "std:exceptions" Exception;func missing()->const u64{}func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}'
 OWNERS = 'func pick(x:u32,ref a:const i64 in O,ref b:const i64 in O)->u64 where {owner O}{return 1u64;}func pick(x:u64,ref a:const i64 in A,ref b:const i64 in B)->u64 where {owner A,owner B}{return 2u64;}'
 TYPES = ('u8','u32','u64','i64','f32','f64')
 LITERALS = dict(zip(TYPES,('1u8','1u32','1u64','1','1f32','1f64')))
@@ -75,8 +75,8 @@ runner.CASES.update({
  'declaration_result_retains_original_input': ('func f(x:T)->const T where T;func f(x:u64){return x;}f(1u8);',2,'','does not satisfy callable declaration'),
  'cached_declaration_result_retains_input': ('func f(x:T)->const T where T;func f(x:u64){return x;}f(1u64);f(1u8);',2,'','does not satisfy callable declaration'),
  'query_declaration_result_retains_input': ('func f(x:T)->const T where T;func f(x:u64){return x;}val y<-make local typeof(f(1u8));',2,'','does not satisfy callable declaration'),
- 'exception_preparation_keeps_input_promise': (ERROR+'func f(x:T)->const T where T;func f(x:SystemException)->const SystemException{return x;}f(error());',2,'','declared result type parameter is not determined'),
- 'exception_query_keeps_input_promise': (ERROR+'func f(x:T)->const T where T;func f(x:SystemException)->const SystemException{return x;}val y<-make local typeof(f(error()));',2,'','declared result type parameter is not determined'),
+ 'exception_preparation_keeps_input_promise': (ERROR+'func f(x:T)->const T where T;func f(x:Exception)->const Exception{return x;}f(error());',2,'','declared result type parameter is not determined'),
+ 'exception_query_keeps_input_promise': (ERROR+'func f(x:T)->const T where T;func f(x:Exception)->const Exception{return x;}val y<-make local typeof(f(error()));',2,'','declared result type parameter is not determined'),
  'fixed_result_satisfies_original_declaration': (IO+'func f(x:T)->const T where T;func f(x:u64)->u8{return 7u8;}behave @print(f(1u32));behave @print(f(1u8));',0,'7\n7\n',''),
  'partial_declaration_domain': (IO+'func f(x:u32)->f64;func f(x:f64)->f64{return x;}behave @print(f(16777217u32));',0,'16777217\n',''),
  'bodyless_query_widens_input': (IO+'func f(x:f64)->u64;val y<-make local typeof(f(1u32)){7u64};behave @print(y);',0,'7\n',''),

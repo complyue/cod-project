@@ -6,7 +6,7 @@ import foundation_tests as runner
 IO='using symbol "std:io" @print;\n'
 BASE='func inc(x:i64)->const i64{return x+1;}func yes(x:bool)->const bool{return x;}func positive(x:i64)->const bool{return x>0;}\n'
 ID='func identity(x:T)->const T where T{return x;}\n'
-EX='using "std:exceptions" NullPointerException;using "std:exceptions" MissingReturnException;using "std:exceptions" SystemException;\n'
+EX='using "std:exceptions" NullPointerException;using "std:exceptions" MissingReturnError;using "std:exceptions" Exception;\n'
 APPLY='func apply(f:func(T)->const T,x:T)->const T where T{return f(x);}\n'
 WRAP='func wrap(f:func(i64)->const i64)->func(i64)->const i64{return func[f](x:i64)->const i64{return f(x)+1;};}\n'
 runner.CASES={
@@ -37,7 +37,7 @@ runner.CASES={
  'recursive_higher_order':(IO+BASE+'func recurse(f:func(T)->const T,x:T,n:i64)->const T where T{if(n==0){return f(x);}else{return recurse(f,x,n-1);};}behave @print(recurse(inc,14,60));behave @print(recurse(yes,true,20));',0,'15\ntrue\n',''),
  'void_result_is_determined':(IO+'func empty()->const void{}func read(f:func()->const T)->const T where T{return f();}read(empty);behave @print(16);',0,'16\n',''),
  'void_result_normal_completion':(IO+'func empty()->const void{}func finish(f:func()->const T)->const T where T{f();}finish(empty);behave @print(17);',0,'17\n',''),
- 'mixed_void_and_value_completion':(IO+EX+'func empty()->const void{}func number()->const i64{return 1;}func finish(f:func()->const T)->const T where T{f();}finish(empty);try{finish(number);{}}catch(e:const MissingReturnException){behave @print(18);};',0,'18\n','callable may finish without an explicit return'),
+ 'mixed_void_and_value_completion':(IO+EX+'func empty()->const void{}func number()->const i64{return 1;}func finish(f:func()->const T)->const T where T{f();}finish(empty);try{finish(number);{}}catch(e:const MissingReturnError){behave @print(18);};',0,'18\n','callable may finish without an explicit return'),
  'void_does_not_equal_unbound':('func factory(f:func()->const U)->const T where {T,U}{}func empty()->const void{}factory(empty);',2,'','type parameter is not determined'),
 }
 
@@ -45,13 +45,13 @@ runner.CASES.update({
  'selected_body_is_checked':(BASE+'func use(f:func(T)->const T,x:T)->const T where T{return f(x)+1;}use(yes,true);',2,'','no applicable numeric operation'),
  'prior_overload_filter':(IO+ID+'func use(x:i64,f:func(i64)->const i64)->const i64{return f(x);}func use(x:bool,f:func(bool)->const bool)->const bool{return f(x);}behave @print(use(19,identity));behave @print(use(true,identity));',0,'19\ntrue\n',''),
  'later_argument_context':(IO+ID+APPLY+'behave @print(apply(identity,1));',0,'1\n',''),
- 'independent_common_exceptions':(EX+'func pick(a:SystemException,b:SystemException)->const i64{return 0;}func pick(a:T,b:T)->const i64 where T{return 1;}func probe(e:MissingReturnException)->const i64{return pick(e,e);}',2,'','ambiguous methods'),
- 'concrete_exception_pair':(EX+'func pick(a:SystemException,b:SystemException)->const i64{return 0;}func pick(a:T,b:T)->const i64 where T{return 1;}func pick(a:MissingReturnException,b:MissingReturnException)->const i64{return 2;}func probe(e:MissingReturnException)->const i64{return pick(e,e);}',0,'',''),
- 'nested_common_exception_is_exact':(EX+'func f(e:MissingReturnException)->const u64{return e.category;}func use(f:func(SystemException)->const T)->const i64 where T{return 0;}use(f);',2,'','no applicable method'),
- 'nested_common_exception_generic':(EX+'func f(e:SystemException)->const u64{return e.category;}func use(f:func(T)->const u64)->const i64 where T{return 0;}use(f);',0,'',''),
+ 'independent_common_exceptions':(EX+'func pick(a:Exception,b:Exception)->const i64{return 0;}func pick(a:T,b:T)->const i64 where T{return 1;}func probe(e:MissingReturnError)->const i64{return pick(e,e);}',2,'','ambiguous methods'),
+ 'concrete_exception_pair':(EX+'func pick(a:Exception,b:Exception)->const i64{return 0;}func pick(a:T,b:T)->const i64 where T{return 1;}func pick(a:MissingReturnError,b:MissingReturnError)->const i64{return 2;}func probe(e:MissingReturnError)->const i64{return pick(e,e);}',0,'',''),
+ 'nested_common_exception_is_exact':(EX+'func f(e:MissingReturnError)->const u64{return e.category;}func use(f:func(Exception)->const T)->const i64 where T{return 0;}use(f);',2,'','no applicable method'),
+ 'nested_common_exception_generic':(EX+'func f(e:Exception)->const u64{return e.category;}func use(f:func(T)->const u64)->const i64 where T{return 0;}use(f);',0,'',''),
  'alpha_equivalent_independent_binders':('func pick(f:func(T,U)->const T)->const i64 where {T,U}{return 0;}func pick(f:func(B,A)->const B)->const i64 where {A,B}{return 1;}',2,'','duplicate method signature'),
  'deferred_generic_result':(IO+'func empty()->const void{}func number()->const i64{return 20;}func finish(f:func()->const T)->const T where T{defer{return f();};}finish(empty);behave @print(finish(number));',0,'20\n',''),
- 'captured_value_missing_return':(IO+EX+'func number()->const i64{return 1;}func wrap(f:func()->const i64)->func()->const i64{return func[f]()->const i64{return f();};}func empty()->const void{}func finish(f:func()->const T)->const T where T{f();}finish(empty);try{finish(wrap(number));{}}catch(e:const MissingReturnException){behave @print(21);};',0,'21\n','callable may finish without an explicit return'),
+ 'captured_value_missing_return':(IO+EX+'func number()->const i64{return 1;}func wrap(f:func()->const i64)->func()->const i64{return func[f]()->const i64{return f();};}func empty()->const void{}func finish(f:func()->const T)->const T where T{f();}finish(empty);try{finish(wrap(number));{}}catch(e:const MissingReturnError){behave @print(21);};',0,'21\n','callable may finish without an explicit return'),
 })
 runner.CASE_SHADOWS = {
     'checked_throws_contract': ['f'],

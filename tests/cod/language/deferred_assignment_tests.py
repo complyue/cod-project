@@ -5,11 +5,11 @@ import foundation_tests as runner
 
 IO = 'using symbol "std:io" @print;'
 NPE = 'using "std:exceptions" NullPointerException;'
-ERRORS = NPE + '''using "std:exceptions" SystemException;
-using "std:exceptions" MissingReturnException;
+ERRORS = NPE + '''using "std:exceptions" Exception;
+using "std:exceptions" MissingReturnError;
 func missing()->i64{}
-func first()->const SystemException{try{missing();{}}catch(e:const MissingReturnException){return e;};}
-func second()->const SystemException{ptr p:i64=null in here;try{p;{}}catch(e:const NullPointerException){return e;};}
+func first()->const Exception{try{missing();{}}catch(e:const MissingReturnError){return e;};}
+func second()->const Exception{ptr p:i64=null in here;try{p;{}}catch(e:const NullPointerException){return e;};}
 '''
 OUT = lambda value: 'behave @print('+value+');'
 runner.CASES = {}
@@ -33,10 +33,10 @@ for spelling in ('call', 'intrinsic'):
         'initialize_then_rebind': (IO+'val a<-1,b<-make local i64;ptr p=a;{{'+defer('=','p','b')+defer('<-','b','7')+'}};'+OUT('p'),0,'7\n',''),
         'guarded_late_read': (IO+'val a<-make local i64;{{defer{'+OUT('a')+'}finally{};'+defer('<-','a','7')+'}};',0,'7\n',''),
         'registration_failure_read': (IO+'val a<-make local i64;{{defer{'+OUT('a')+'};'+defer('<-','a','7')+'}};',2,'','cannot prove initialization'),
-        'caught_registration_failure': (IO+'using "std:exceptions" OutOfMemory;val a<-make local i64;try{ {{'+defer('<-','a','7')+'}};{}}catch(e:const OutOfMemory){};'+OUT('a'),2,'','before definite initialization'),
+        'caught_registration_failure': (IO+'using "std:exceptions" OutOfMemoryError;val a<-make local i64;try{ {{'+defer('<-','a','7')+'}};{}}catch(e:const OutOfMemoryError){};'+OUT('a'),2,'','before definite initialization'),
         'ref_source_uninitialized': ('val a<-1,b<-make local i64;ref p=a;'+defer('=','p','b'),2,'','before definite initialization'),
         'widening': (IO+'val a<-1u64;{{'+defer('<-','a','7u8')+'}};'+OUT('a'),0,'7\n',''),
-        'exception_category': (IO+ERRORS+'val dst:SystemException<-first(),src:SystemException<-second();{{'+defer('<-','dst','src')+'}};try{throw dst;}catch(e:const MissingReturnException){'+OUT('1')+'}catch(e:const NullPointerException){'+OUT('7')+'}catch(e){'+OUT('99')+'};',0,'7\n','[-Wmissing-return]'),
+        'exception_category': (IO+ERRORS+'val dst:Exception<-first(),src:Exception<-second();{{'+defer('<-','dst','src')+'}};try{throw dst;}catch(e:const MissingReturnError){'+OUT('1')+'}catch(e:const NullPointerException){'+OUT('7')+'}catch(e){'+OUT('99')+'};',0,'7\n','[-Wmissing-return]'),
         'clear': (IO+'val a<-1;ptr p=a;{{'+defer('=','p','null')+'}};'+OUT('(p is null)'),0,'true\n',''),
         'restore': (IO+'val a<-7;ptr p:i64=null in here;{{'+defer('=','p','a')+'}};'+OUT('p'),0,'7\n',''),
         'skipped': (IO+'val a<-1;{{if(false){'+defer('<-','a','7')+'}else{};}};'+OUT('a'),0,'1\n',''),

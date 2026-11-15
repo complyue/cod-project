@@ -5,7 +5,7 @@ import foundation_tests as runner
 
 IO='using symbol "std:io" @print;'
 NPE='using "std:exceptions" NullPointerException;'
-EX='using "std:exceptions" SystemException;'
+EX='using "std:exceptions" Exception;'
 ID='func id(x:T)->const T where T{return x;}'
 def storage(query, value, prefix=''):
     return IO+prefix+'val result<-make local typeof('+query+'){'+value+'};behave @print(result);'
@@ -34,8 +34,8 @@ runner.CASES={
  'no_initialization_from_query':('func init(ref x:i64 in O)->const i64 where {owner O}{x<-1;return x;}val x<-make local i64;val y<-make local typeof(init(x)){0};x;',2,'','before definite initialization'),
  'known_callable_value':(storage('f(1)','15',ID+'func f:func(i64)->const i64=id;'),0,'15\n',''),
  'known_callable_name_argument':(storage('apply(one,1)','16','func one(x:i64)->const i64{return x;}func apply(f:func(i64)->const i64,x:i64)->const i64{return f(x);}'),0,'16\n',''),
- 'uninitialized_exception_field':(storage('e.category','17u64',EX+'val e<-make local SystemException;'),0,'17\n',''),
- 'cause_field':(storage('cause_at(e,0u64).site','18u64',EX+'val e<-make local SystemException;'),0,'18\n',''),
+ 'uninitialized_exception_field':(storage('e.category','17u64',EX+'val e<-make local Exception;'),0,'17\n',''),
+ 'cause_field':(storage('cause_at(e,0u64).site','18u64',EX+'val e<-make local Exception;'),0,'18\n',''),
  'borrowed_result_identity':(storage('((get(p)) is null)','true','func get(ptr x:i64 in O)->ptr i64 in O where {owner O}{return x;}val x<-1;ptr p=x;'),0,'true\n',''),
  'checked_failure_not_raised':(storage('read(p)','19',NPE+'func read(ptr x:i64 in O)->const i64 throws NullPointerException where {owner O}{return x;}val x<-1;ptr p=x;p=null;'),0,'19\n',''),
  'overload_result':(storage('choose(true)','20u64','func choose(x:i64)->const i64{return x;}func choose(x:bool)->const u64{return 1u64;}'),0,'20\n',''),
@@ -51,9 +51,9 @@ runner.CASES={
  'bad_numeric':('val x<-make local typeof(true+1);',2,'','no applicable numeric operation'),
  'integer_range':('val x<-make local typeof(256u8);',2,'','integer literal is outside u8'),
  'real_range':('val x<-make local typeof(1e99f32);',2,'','floating literal is outside f32'),
- 'unknown_field':(EX+'val e<-make local SystemException;val x<-make local typeof(e.invalid);',2,'','unknown intrinsic exception field'),
+ 'unknown_field':(EX+'val e<-make local Exception;val x<-make local typeof(e.invalid);',2,'','unknown intrinsic exception field'),
  'invalid_identity':('val x<-make local typeof(((1) is null));',2,'','reference identity requires existing target views'),
- 'invalid_cause_index':(EX+'val e<-make local SystemException;val x<-make local typeof(cause_at(e,true));',2,'','cause_at requires an exception and a u64 index'),
+ 'invalid_cause_index':(EX+'val e<-make local Exception;val x<-make local typeof(cause_at(e,true));',2,'','cause_at requires an exception and a u64 index'),
  'shadowed_call':('func f(x:i64)->const i64{return x;}val f<-1;val x<-make local typeof(f(1));',2,'','nearest binding'),
  'callable_argument_type':(ID+'func f:func(i64)->const i64=id;val x<-make local typeof(f(true));',2,'','argument does not satisfy the callable view type'),
  'borrow_needs_view':('func get(ref x:i64 in O)->const i64 where {owner O}{return x;}val x<-make local typeof(get(1));',2,'','existing view'),
@@ -69,7 +69,7 @@ runner.CASES={
  'callable_owner':('func f(ref x:i64 in O,ref y:i64 in O)->const i64 where {owner O}{return x;}func g=f;val a<-1;{{val b<-2;val x<-make local typeof(g(a,b));}};',2,'','different actual owners'),
  'lexical_recursive_query':(IO+'func run(x:T)->const T where T{func recurse(x:T,n:i64)->const T{val y<-make local typeof(recurse(x,n-1)){x};if(n==0){return y;}else{return recurse(y,n-1);};};return recurse(x,4);}behave @print(run(23));behave @print(run(true));',0,'23\ntrue\n',''),
  'delayed_loop_type_only':(IO+'for(i in 0..2){defer{{val x<-make local typeof(i){24};behave @print(x);}};};',0,'24\n24\n',''),
- 'deferred_exception_type_only':(IO+'using "std:exceptions" MissingReturnException;func missing()->const i64{}try{missing();{}}catch(e:const MissingReturnException){defer{{val x<-make local typeof(e.category){25u64};behave @print(x);}};};',0,'25\n','[-Wmissing-return]'),
+ 'deferred_exception_type_only':(IO+'using "std:exceptions" MissingReturnError;func missing()->const i64{}try{missing();{}}catch(e:const MissingReturnError){defer{{val x<-make local typeof(e.category){25u64};behave @print(x);}};};',0,'25\n','[-Wmissing-return]'),
  'initializer_still_captures':(IO+'func id(x:i64)->const i64{return x;}proc run()->void{func f=id;func nested[f]()->const i64{val x<-make local typeof(1){f(26)};return x;};behave @print(nested());}run();',0,'26\n',''),
 }
 runner.CASE_ARGUMENTS={}

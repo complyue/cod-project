@@ -4,6 +4,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <string_view>
 
 namespace cod::language {
 
@@ -32,21 +33,27 @@ struct ExceptionDescriptor {
 // Category zero is the common source type, not a concrete runtime failure.
 // These identities are shared by vocabulary, native dispatch and services.
 inline constexpr std::array exception_categories{
-    ExceptionDescriptor{ExceptionCategory::system, "SystemException", false},
-    ExceptionDescriptor{ExceptionCategory::out_of_memory, "OutOfMemory", false},
-    ExceptionDescriptor{ExceptionCategory::region_capacity_exceeded, "RegionCapacityExceeded", false},
-    ExceptionDescriptor{ExceptionCategory::invalid_capacity, "InvalidCapacity", false},
+    ExceptionDescriptor{ExceptionCategory::system, "Exception", false},
+    ExceptionDescriptor{ExceptionCategory::out_of_memory, "OutOfMemoryError", false},
+    ExceptionDescriptor{ExceptionCategory::region_capacity_exceeded, "RegionCapacityExceededError", false},
+    ExceptionDescriptor{ExceptionCategory::invalid_capacity, "InvalidCapacityError", false},
     ExceptionDescriptor{ExceptionCategory::null_pointer, "NullPointerException", true},
-    ExceptionDescriptor{ExceptionCategory::missing_return, "MissingReturnException", false},
-    ExceptionDescriptor{ExceptionCategory::unsound_runtime_typing, "UnsoundRuntimeTyping", false},
-    ExceptionDescriptor{ExceptionCategory::statically_unknown_type, "StaticallyUnknownType", true},
-    ExceptionDescriptor{ExceptionCategory::index_out_of_bounds, "IndexOutOfBoundsException", false},
+    ExceptionDescriptor{ExceptionCategory::missing_return, "MissingReturnError", false},
+    ExceptionDescriptor{ExceptionCategory::unsound_runtime_typing, "UnsoundRuntimeTypingError", false},
+    ExceptionDescriptor{ExceptionCategory::statically_unknown_type, "StaticallyUnknownTypeException", true},
+    ExceptionDescriptor{ExceptionCategory::index_out_of_bounds, "IndexOutOfBoundsError", false},
 };
 inline constexpr size_t concrete_exception_count = exception_categories.size() - 1;
 
 static_assert([] {
-  for (size_t i = 0; i < exception_categories.size(); ++i)
-    if (exception_id(exception_categories[i].category) != i) return false;
+  for (size_t i = 0; i < exception_categories.size(); ++i) {
+    const auto &descriptor = exception_categories[i];
+    if (exception_id(descriptor.category) != i) return false;
+    const std::string_view name{descriptor.name};
+    if (!i) {
+      if (name != "Exception" || descriptor.checked) return false;
+    } else if (!name.ends_with(descriptor.checked ? "Exception" : "Error")) return false;
+  }
   return true;
 }());
 

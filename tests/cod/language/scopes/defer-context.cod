@@ -1,5 +1,5 @@
 using symbol "std:io" @print;
-using "std:exceptions" InvalidCapacity;
+using "std:exceptions" InvalidCapacityError;
 data Item {value:u64;}
 region symbol @arena:Item;
 region symbol @scratch;
@@ -50,7 +50,7 @@ proc recovery()->const u64 {
   proc source=proc()->const u64 {return 11u64;};
   effect @reader=source;
   effect @arena <-make Item(capacity=256u64){value<-12u64};
-  defer catch(e:const InvalidCapacity) {show(); return 13u64;} finally {show_root();};
+  defer catch(e:const InvalidCapacityError) {show(); return 13u64;} finally {show_root();};
   effect @scratch <-region(0u64);
   return 999u64;
 }
@@ -75,5 +75,5 @@ rebound(true); rebound(false);
 iterations();
 behave @print(recovery());
 finalized(128u64);
-try {finalized(0u64);} catch(e:const InvalidCapacity) {behave @print(16u64);};
+try {finalized(0u64);} catch(e:const InvalidCapacityError) {behave @print(16u64);};
 {{effect @step=descent; behave @step(3u64);}};

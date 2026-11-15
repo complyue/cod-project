@@ -8,7 +8,7 @@ for length in (0,1,2,3,17,64):
     values = list(range(length-1,-1,-1))
     indices = sorted({0,length//2,max(0,length-1),length,length+1,2**64-1})
     source = fixture.PRELUDE+'val e<-seed();val history<-e;for(i in 0u64..'+str(length)+'u64){history<-link(e,history);};'
-    source += 'func read(e:SystemException,i:u64)->u64{try{return cause_at(e,i).cause_count;}catch(x:const IndexOutOfBoundsException){return 100u64+x.available;};}'
+    source += 'func read(e:Exception,i:u64)->u64{try{return cause_at(e,i).cause_count;}catch(x:const IndexOutOfBoundsError){return 100u64+x.available;};}'
     expected = []
     for index in indices:
         source += fixture.OUT('read(history,'+str(index)+'u64)')

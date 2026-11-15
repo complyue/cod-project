@@ -1,5 +1,5 @@
 using symbol "std:io" @print;
-using "std:exceptions" InvalidCapacity;
+using "std:exceptions" InvalidCapacityError;
 data Item{value:u64;}
 region symbol @arena:Item;
 symbol @left:Item in pool,@right:Item in pool where {region pool:Item};
@@ -48,7 +48,7 @@ proc run()->void {
   behave @print(@bias);
   behave @print(@delta);
   effect @fail<-1u64;
-  try {walk(20u64,maker);{}}catch(e:const InvalidCapacity){behave @print(777u64);};
+  try {walk(20u64,maker);{}}catch(e:const InvalidCapacityError){behave @print(777u64);};
   behave @print(@bias);
   behave @print(@delta);
   effect @fail<-0u64;

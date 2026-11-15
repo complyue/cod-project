@@ -11,7 +11,7 @@ runner.SOURCE += '''
  {{defer (is)(p,null);defer intrinsic (is)(q,null);p<=>q;}};
  observe(9011u64);observe(p(1u64));observe(q(1u64));
  observe(9050u64);
- try{defer (is)(p,null);}catch(e:const OutOfMemory){observe(9051u64);};
+ try{defer (is)(p,null);}catch(e:const OutOfMemoryError){observe(9051u64);};
  observe(p(2u64));observe(q(2u64));
  val uninitialized<-make local u64;
  {{defer (is)(uninitialized,null);defer (is)(p,null);defer (is)(q,null);}};

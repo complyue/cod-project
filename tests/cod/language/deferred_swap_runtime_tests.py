@@ -5,9 +5,9 @@ import exception_value_runtime_tests as runner
 
 runner.SOURCE = '''
 using symbol "std:io" @print;
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 using "std:exceptions" NullPointerException;
-using "std:exceptions" MissingReturnException;
+using "std:exceptions" MissingReturnError;
 proc observe(x:u64)->void{behave @print(x);}
 func missing()->const u64{}
 proc batch(n:u64)->void{
@@ -35,7 +35,7 @@ proc denied_registration()->void{
   defer (<->)(x,y);
   observe(9050u64);
   try{defer (<->)({observe(70u64);p},{p=z;observe(71u64);q});}
-  catch(e:const OutOfMemory){observe(9051u64);};
+  catch(e:const OutOfMemoryError){observe(9051u64);};
   observe(x);observe(y);observe(p);
  }};
  observe(x);observe(y);observe(p);
@@ -55,11 +55,11 @@ proc partial_batch(n:u64)->void{
  observe(9060u64);
  for(i in 0u64..n){defer (<->)(x,y);};
 }
-try{partial_batch(1000u64);}catch(e:const OutOfMemory){observe(9061u64);};
+try{partial_batch(1000u64);}catch(e:const OutOfMemoryError){observe(9061u64);};
 observe(9000u64);
 {{
  val x<-1u64,y<-2u64;
- defer catch(e:const MissingReturnException){observe(x);observe(y);}finally{observe(78u64);};
+ defer catch(e:const MissingReturnError){observe(x);observe(y);}finally{observe(78u64);};
  defer (<->)(x,y);
  missing();{}
 }};

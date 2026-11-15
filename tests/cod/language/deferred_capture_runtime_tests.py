@@ -5,14 +5,14 @@ import exception_value_runtime_tests as runner
 
 runner.SOURCE = '''
 using symbol "std:io" @print;
-using "std:exceptions" MissingReturnException;
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" MissingReturnError;
+using "std:exceptions" OutOfMemoryError;
 func missing()->const i64 {}
-func error()->const MissingReturnException {
-  try{missing();}catch(e:const MissingReturnException){return e;};
+func error()->const MissingReturnError {
+  try{missing();}catch(e:const MissingReturnError){return e;};
 }
-func chain(e:MissingReturnException)->const MissingReturnException {
-  return try{throw e from e;}catch(e:const MissingReturnException){e};
+func chain(e:MissingReturnError)->const MissingReturnError {
+  return try{throw e from e;}catch(e:const MissingReturnError){e};
 }
 proc snapshots()->void {
   val saved<-error();
@@ -24,14 +24,14 @@ proc snapshots()->void {
 snapshots();
 {{try{throw error();}catch(e){defer{behave @print(10u64);};};}};
 {{try{throw error();}catch(e){defer{behave @print(e.category);behave @print(e.category);};};}};
-{{try{throw error();}catch(a:const MissingReturnException){try{throw chain(a);}catch(b){defer{behave @print(a.cause_count);behave @print(b.cause_count);};};};}};
+{{try{throw error();}catch(a:const MissingReturnError){try{throw chain(a);}catch(b){defer{behave @print(a.cause_count);behave @print(b.cause_count);};};};}};
 proc failing()->void {
   try{throw chain(error());}catch(e){
     defer{behave @print(e.cause_count);};
     defer{behave @print(9001u64);defer{behave @print(e.cause_count);};};
   };
 }
-try{failing();}catch(e:const OutOfMemory){behave @print(e.cause_count);behave @print(9002u64);};
+try{failing();}catch(e:const OutOfMemoryError){behave @print(e.cause_count);behave @print(9002u64);};
 '''
 runner.WRAPPERS = '''
 #define cod_lang_defer_allocate cod_record_allocate

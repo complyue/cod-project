@@ -5,10 +5,10 @@ import sys
 import foundation_tests as runner
 
 PRELUDE = '''using symbol "std:io" @print;
-using "std:exceptions" MissingReturnException;
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" MissingReturnError;
+using "std:exceptions" OutOfMemoryError;
 func missing()->const i64 {}
-func error()->const MissingReturnException {try{missing();}catch(e:const MissingReturnException){return e;};}
+func error()->const MissingReturnError {try{missing();}catch(e:const MissingReturnError){return e;};}
 proc observe(x:i64)->void{behave @print(x);}
 '''
 WARN = '[-Wmissing-return]'
@@ -22,8 +22,8 @@ runner.CASES = {
     'ordered_guarded_read': (PRELUDE + '{{val x<-make local i64;defer{observe(x);}finally{};defer{x<-4;};}};', 0, '4\n', WARN),
     'setter_registration_can_fail': (PRELUDE + '{{val x<-make local i64;defer{observe(x);};defer{x<-4;};}};', 2, '', UNPROVED),
     'wrong_execution_order': (PRELUDE + '{{val x<-make local i64;defer{x<-4;};defer{observe(x);}finally{};}};', 2, '', UNPROVED),
-    'write_before_failure': (PRELUDE + '{{val x<-make local i64;defer{observe(x);}catch(e:const MissingReturnException){observe(x);};defer{x<-5;missing();};}};', 0, '5\n', WARN),
-    'write_after_failure': (PRELUDE + '{{val x<-make local i64;defer{observe(x);}catch(e:const MissingReturnException){observe(x);};defer{missing();x<-5;};}};', 2, '', UNPROVED),
+    'write_before_failure': (PRELUDE + '{{val x<-make local i64;defer{observe(x);}catch(e:const MissingReturnError){observe(x);};defer{x<-5;missing();};}};', 0, '5\n', WARN),
+    'write_after_failure': (PRELUDE + '{{val x<-make local i64;defer{observe(x);}catch(e:const MissingReturnError){observe(x);};defer{missing();x<-5;};}};', 2, '', UNPROVED),
     'nested_scope_write': (PRELUDE + '{{val x<-make local i64;defer{{{{defer{x<-6;};}};observe(x);}};}};', 0, '6\n', WARN),
     'nested_scope_late_read': (PRELUDE + '{{val x<-make local i64;defer{{defer{observe(x);};x<-7;}};}};', 0, '7\n', WARN),
     'nested_registration': (PRELUDE + '{{val x<-make local i64;defer{defer{observe(x);};x<-8;};}};', 0, '8\n', WARN),
@@ -43,9 +43,9 @@ runner.CASES = {
     'handler_normal_initialization': (PRELUDE + '{{val x<-make local i64;defer{x<-16;}catch(e){x<-17;}finally{observe(x);};}};', 0, '16\n', WARN),
     'handler_failed_entry_initialization': (PRELUDE + 'val e<-error();{{val x<-make local i64;defer{x<-16;}catch(e){x<-17;}finally{observe(x);};throw e;}};', 0, '17\n', WARN),
     'handler_failed_entry_uninitialized': (PRELUDE + 'val e<-error();{{val x<-make local i64;defer{x<-16;}catch(e){}finally{observe(x);};throw e;}};', 2, '', UNPROVED),
-    'unmatched_handler_read': (PRELUDE + 'val e<-error();try{{val x<-make local i64;defer catch(e:const OutOfMemory){observe(x);};throw e;}}catch(e:const MissingReturnException){observe(18);};', 0, '18\n', WARN),
-    'handler_write_continuation': (PRELUDE + 'val e<-error(),x<-make local i64;{{defer catch(e:const MissingReturnException){x<-19;};throw e;}};observe(x);', 0, '19\n', WARN),
-    'failure_continuation': (PRELUDE + 'val e<-error(),x<-make local i64;try{{defer{x<-20;};throw e;}}catch(e:const MissingReturnException){observe(x);};', 0, '20\n', WARN),
+    'unmatched_handler_read': (PRELUDE + 'val e<-error();try{{val x<-make local i64;defer catch(e:const OutOfMemoryError){observe(x);};throw e;}}catch(e:const MissingReturnError){observe(18);};', 0, '18\n', WARN),
+    'handler_write_continuation': (PRELUDE + 'val e<-error(),x<-make local i64;{{defer catch(e:const MissingReturnError){x<-19;};throw e;}};observe(x);', 0, '19\n', WARN),
+    'failure_continuation': (PRELUDE + 'val e<-error(),x<-make local i64;try{{defer{x<-20;};throw e;}}catch(e:const MissingReturnError){observe(x);};', 0, '20\n', WARN),
     'registration_failure_continuation': (PRELUDE + 'val e<-error(),x<-make local i64;try{{defer{x<-20;};throw e;}}catch(e){observe(x);};', 2, '', 'before definite initialization'),
     'replacement_return': (PRELUDE + 'func f()->const i64{val x<-make local i64;defer{return x;};x<-21;return 1;}observe(f());', 0, '21\n', WARN),
     'generic_setter': (PRELUDE + 'proc f(value:T)->const T where T{val x<-make local T;{{defer{x<-value;};}};return x;}behave @print(f(22u64));behave @print(f(true));', 0, '22\ntrue\n', WARN),
@@ -58,7 +58,7 @@ runner.CASES = {
     'cycle_cannot_supply_own_read': (PRELUDE + 'proc f(count:i64)->void{val x<-make local i64;for(i in 0..count){defer{observe(x);x<-1;}finally{};};}', 2, '', UNPROVED),
     'nested_read_precedes_write': (PRELUDE + '{{val x<-make local i64;defer{{{{defer{observe(x);};}};x<-1;}};}};', 2, '', UNPROVED),
     'read_requirement_survives_finally': (PRELUDE + '{{val x<-make local i64;defer{try{x;}finally{x<-1;{}};};}};', 2, '', UNPROVED),
-    'category_specific_finally': (PRELUDE + 'val e<-error();{{val x<-make local i64;defer{}catch(e:const OutOfMemory){observe(x);}catch(e:const MissingReturnException){x<-26;}finally{observe(x);};throw e;}};', 0, '26\n', WARN),
+    'category_specific_finally': (PRELUDE + 'val e<-error();{{val x<-make local i64;defer{}catch(e:const OutOfMemoryError){observe(x);}catch(e:const MissingReturnError){x<-26;}finally{observe(x);};throw e;}};', 0, '26\n', WARN),
     'finally_body_skipped_on_failure': (PRELUDE + 'val e<-error();{{val x<-make local i64;defer{x<-1;}finally{observe(x);};throw e;}};', 2, '', UNPROVED),
 }
 runner.CASE_ARGUMENTS = {}

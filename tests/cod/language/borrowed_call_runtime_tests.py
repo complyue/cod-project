@@ -7,7 +7,7 @@ runner = initialization.runner
 runner.SOURCE = '''
 using symbol "std:io" @print;
 using "std:exceptions" NullPointerException;
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 proc observe(x:u64)->void{behave @print(x);}
 proc show(x:u64 in O)->void where {owner O}{observe(x);}
 proc set(x:u64 in O)->void where {owner O}{x<-33u64;}
@@ -31,7 +31,7 @@ func recursive(ref x:T in O,n:u64)->ref T in O where {T,owner O}{
   if(n==0u64){return x;}else{return recursive(x,n-1u64);};
 }
 prepared();
-try{failed();}catch(e:const OutOfMemory){observe(1u64);};
+try{failed();}catch(e:const OutOfMemoryError){observe(1u64);};
 try{null_deferred();}catch(e:const NullPointerException){observe(4u64);};
 val a<-38u64;observe(cleanup(a));recursive(a,40u64)<-40u64;observe(a);
 '''

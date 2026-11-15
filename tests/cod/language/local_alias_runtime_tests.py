@@ -9,7 +9,7 @@ runner.SOURCE = runner.SOURCE.replace('val alias<-make local u64;',
     'val x<-make local u64;const ptr alias=x;const ptr reader=alias;')
 runner.SOURCE += """
 proc captured()->void {
-  try{missing();{}}catch(e:const MissingReturnException){
+  try{missing();{}}catch(e:const MissingReturnError){
     const ptr alias=e,other=e;
     defer{observe(alias.category);observe(other.category);};
   };

@@ -14,10 +14,10 @@ proc cleanup_targets(flag:bool)->void{
  func f=wrap(base);func g=wrap(other);p=v;
  {{
   defer{try{p=v;p<-48u64;observe(9030u64);f<-g;{}}
-        catch(e:const OutOfMemory){observe(9031u64);observe(v);};};
+        catch(e:const OutOfMemoryError){observe(9031u64);observe(v);};};
  }};
  p=z;observe(9050u64);
- try{{defer{p=w;};}}catch(e:const OutOfMemory){observe(9051u64);observe(p);};
+ try{{defer{p=w;};}}catch(e:const OutOfMemoryError){observe(9051u64);observe(p);};
  {{for(i in 0u64..100u64){defer{t<-49u64;};defer{p=t;};};}};observe(p);
  ptr n=if(flag){t}else{null};{{defer{t<-50u64;};}};
  if((n is null)){observe(51u64);}else{observe(n);};
@@ -27,7 +27,7 @@ proc cleanup_targets(flag:bool)->void{
  p=u;{{defer{a=k;};defer{p<-54u64;};defer{k<-55u64;};}};observe(p);
  p=last;
  {{defer{try{p<-56u64;p=s;observe(9030u64);f<-g;{}}
-         catch(e:const OutOfMemory){observe(9031u64);observe(last);};};}};
+         catch(e:const OutOfMemoryError){observe(9031u64);observe(last);};};}};
  p=null;{{defer{p=s;};}};ref ready=p;observe(ready);
  {{defer{p=null;};}};try{observe(p);}catch(e:const NullPointerException){observe(57u64);};
  p=if(flag){gated}else{null};{{defer{if((p is null)){}else{p<-58u64;{}};};}};

@@ -32,7 +32,7 @@ runner.CASES.update({
  'outer_query_without_capture': (IO+'func outer()->i64{'+BASE+'func inner()->i64{'+QUERY('x<-y')+'return result;};return inner();}'+OUT('outer()'),0,'9\n',''),
  'recursive_query': (IO+'func query(value:T,n:u64)->const T where T{val x<-value;val result<-make local typeof(x<-value){value};if(n==0u64){return result;}else{return query(result,n-1u64);};}'+OUT('query(7,30u64)'),0,'7\n',''),
  'generic_body_not_demanded': ('func invalid(value:T)->const T where T{return value+value;}val x<-true;'+QUERY('x<-invalid(true)','false'),0,'',''),
- 'exception_copy_not_allocated': ('using "std:exceptions" SystemException;val x<-make local SystemException,y<-make local SystemException;val result<-make local typeof(x<-y);',0,'',''),
+ 'exception_copy_not_allocated': ('using "std:exceptions" Exception;val x<-make local Exception,y<-make local Exception;val result<-make local typeof(x<-y);',0,'',''),
  'callable_name_context': (IO+ID+'func known(value:i64)->i64{return value+1;}func target=known;'+QUERY('(target<-identity)(7)')+OUT('result')+OUT('target(7)'),0,'9\n8\n',''),
  'callable_anonymous_context': (IO+'func known(value:i64)->i64{return value+1;}func target=known;'+QUERY('(target<-func(value:i64){return value;})(7)')+OUT('result')+OUT('target(7)'),0,'9\n8\n',''),
  'callable_result_invocation': (IO+'func known(value:i64)->i64{return value+1;}func target=known;func other=known;'+QUERY('(target<-other)(1)')+OUT('result'),0,'9\n',''),

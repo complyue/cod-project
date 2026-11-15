@@ -1,5 +1,5 @@
 using symbol "std:io" @print;
-using "std:exceptions" InvalidCapacity;
+using "std:exceptions" InvalidCapacityError;
 data Item{value:u64;}
 region symbol @arena:Item;
 symbol @bias:u64;
@@ -30,7 +30,7 @@ proc run()->void {
   behave @print(perform @step(20u64));
   behave @print(@arena.value);
   behave @print(@bias);
-  try {failure(20u64); {}}catch(e:const InvalidCapacity){behave @print(@arena.value);};
+  try {failure(20u64); {}}catch(e:const InvalidCapacityError){behave @print(@arena.value);};
   defer {behave @print(@arena.value);};
   defer perform @step(4u64);
 }

@@ -128,16 +128,16 @@ def main():
         scratch = Path(temporary)
         entry = scratch / "entry.cod"
         entry.write_text(fixture.read_text() + '''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 behave @print(6001u64);
 try {{ func transient = reader(state); current <- copied; {} }}
-catch (e:const OutOfMemory) {{ behave @print(6002u64); }};
+catch (e:const OutOfMemoryError) {{ behave @print(6002u64); }};
 behave @print(current());
 current <- copied;
 behave @print(current());
 behave @print(6201u64);
 try {{ current <- wrap(current); {} }}
-catch (e:const OutOfMemory) {{ behave @print(6202u64); }};
+catch (e:const OutOfMemoryError) {{ behave @print(6202u64); }};
 behave @print(current());
 behave @print(7001u64);
 behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) {{
@@ -176,8 +176,8 @@ behave @print(7002u64);
                         script_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest())
         parameters = directory / "closures/callable-parameters.cod"
         entry.write_text(parameters.read_text() + '''
-using "std:exceptions" OutOfMemory;
-using "std:exceptions" InvalidCapacity;
+using "std:exceptions" OutOfMemoryError;
+using "std:exceptions" InvalidCapacityError;
 data Packet { value:u64; }
 function later_argument(capacity:u64) -> const u64 {
   owned region packet:Packet <- make Packet(capacity = capacity) { value <- 0u64 };
@@ -186,15 +186,15 @@ function later_argument(capacity:u64) -> const u64 {
 function read_borrowed(action:func()->const u64 in O) -> const u64 where {owner O} { return action() }
 behave @print(6001u64);
 try {{ read_mode(original, { behave @print(9999u64); 0u64 }); {} }}
-catch (e:const OutOfMemory) {{ behave @print(6002u64); }};
+catch (e:const OutOfMemoryError) {{ behave @print(6002u64); }};
 behave @print(original());
 behave @print(6101u64);
 try {{ read_mode(original, later_argument(0u64)); {} }}
-catch (e:const InvalidCapacity) {{
+catch (e:const InvalidCapacityError) {{
   behave @print(6102u64);
   behave @print(6101u64);
   try {{ read_after(original, throw e); {} }}
-  catch (again:const InvalidCapacity) {{ behave @print(6102u64); }};
+  catch (again:const InvalidCapacityError) {{ behave @print(6102u64); }};
 }};
 behave @print(original());
 behave @print(7001u64);
@@ -209,8 +209,8 @@ behave @print(7002u64);
         evidence['parameters'] = parameter_evidence
         arguments = directory / "closures/callable-arguments.cod"
         entry.write_text(arguments.read_text() + '''
-using "std:exceptions" OutOfMemory;
-using "std:exceptions" InvalidCapacity;
+using "std:exceptions" OutOfMemoryError;
+using "std:exceptions" InvalidCapacityError;
 function later_argument(capacity:u64) -> const u64 {
   owned region temporary:State <- make State(capacity = capacity) { value <- 0u64 };
   return root(temporary).value
@@ -218,13 +218,13 @@ function later_argument(capacity:u64) -> const u64 {
 func nested = func (x:u64) -> const u64 { return saved(x) + 1u64 };
 behave @print(6001u64);
 try {{ current({{ current <- reader(state); 99u64 }}); {} }}
-catch (e:const OutOfMemory) {{ behave @print(6002u64); }};
+catch (e:const OutOfMemoryError) {{ behave @print(6002u64); }};
 behave @print(current(0u64));
 # Keep the persistent replacement's size equal across the cleanup interval.
 current <- reader(state);
 behave @print(6101u64);
 try {{ current({{ current <- reader(state); later_argument(0u64) }}); {} }}
-catch (e:const InvalidCapacity) {{ behave @print(6102u64); }};
+catch (e:const InvalidCapacityError) {{ behave @print(6102u64); }};
 behave @print(current(0u64));
 behave @print(7001u64);
 behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) {{
@@ -241,8 +241,8 @@ behave @print(7002u64);
         evidence['arguments'] = argument_evidence
         procedures = directory / "closures/callable-procedures.cod"
         entry.write_text(procedures.read_text() + '''
-using "std:exceptions" OutOfMemory;
-using "std:exceptions" InvalidCapacity;
+using "std:exceptions" OutOfMemoryError;
+using "std:exceptions" InvalidCapacityError;
 symbol @meter:proc(u64)->const u64;
 symbol @copying:proc(u64)->const u64;
 proc recursive_meter = proc(depth:u64)->const u64 {
@@ -263,15 +263,15 @@ function later_argument(capacity:u64) -> const u64 {
 }
 behave @print(6001u64);
 try {{ selected({{ selected <- first; 99u64 }}); {} }}
-catch (e:const OutOfMemory) {{ behave @print(6002u64); }};
+catch (e:const OutOfMemoryError) {{ behave @print(6002u64); }};
 behave @print(selected(2u64));
 behave @print(6101u64);
 try {{ selected({{ selected <- first; later_argument(0u64) }}); {} }}
-catch (e:const InvalidCapacity) {{ behave @print(6102u64); }};
+catch (e:const InvalidCapacityError) {{ behave @print(6102u64); }};
 behave @print(selected(2u64));
 behave @print(6301u64);
 try {{ copying_meter(8u64); {} }}
-catch (e:const OutOfMemory) {{ behave @print(6302u64); }};
+catch (e:const OutOfMemoryError) {{ behave @print(6302u64); }};
 behave @print(copying_meter(8u64));
 behave @print(7001u64);
 behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) {{
@@ -298,17 +298,17 @@ behave @print(7002u64);
         evidence['procedures'] = procedure_evidence
         captures = directory / "closures/callable-captures.cod"
         entry.write_text(captures.read_text() + '''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 behave @print(6001u64);
 try {{ proc failed = snapshot; {} }}
-catch (e:const OutOfMemory) {{ behave @print(6002u64); }};
+catch (e:const OutOfMemoryError) {{ behave @print(6002u64); }};
 behave @print(6201u64);
 try {{
   proc fresh = proc(n:u64)->const u64 { return relay(n) };
   effect @saved = fresh;
   perform @saved(2u64);
   {}
-}} catch (e:const OutOfMemory) {{ behave @print(6202u64); }};
+}} catch (e:const OutOfMemoryError) {{ behave @print(6202u64); }};
 effect @saved = snapshot;
 behave @print(perform @saved(2u64));
 behave @print(7001u64);
@@ -325,11 +325,11 @@ behave @print(7002u64);
         evidence['captures'] = capture_evidence
         invocation = directory / "closures/callable-invocation.cod"
         entry.write_text(invocation.read_text() + '''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 current <- active;
 behave @print(6001u64);
 try {{ current({{ behave @print(9999u64); 2u64 }}); {} }}
-catch (e:const OutOfMemory) {{ behave @print(6002u64); }};
+catch (e:const OutOfMemoryError) {{ behave @print(6002u64); }};
 behave @print(current(2u64));
 proc stable = proc(n:u64)->const u64 { return n + 1u64 };
 behave @print(7001u64);
@@ -345,11 +345,11 @@ behave @print(7002u64);
         evidence['invocation'] = invocation_evidence
         expression_targets = directory / "closures/callable-expression-targets.cod"
         entry.write_text(expression_targets.read_text() + '''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 current <- wrapped;
 behave @print(6001u64);
 try {{ borrow(current)({{ behave @print(999u64); current <- second; 2u64 }}); {} }}
-catch(e:const OutOfMemory) {{ behave @print(6002u64); }};
+catch(e:const OutOfMemoryError) {{ behave @print(6002u64); }};
 behave @print(borrow(current)(2u64));
 behave @print(fold(i in 0u64 .. 128u64, total = 0u64) {{ total + factory()(i) }});
 behave @print(7001u64);
@@ -366,19 +366,19 @@ behave @print(7002u64);
         evidence['expression_targets'] = expression_evidence
         short_circuit = directory / "closures/callable-short-circuit.cod"
         entry.write_text(short_circuit.read_text() + '''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 behave @print(6001u64);
 try {{
   false && evaluate(stable);
   true && evaluate(stable);
   {}
-}} catch(e:const OutOfMemory) {{ behave @print(6002u64); }};
+}} catch(e:const OutOfMemoryError) {{ behave @print(6002u64); }};
 behave @print(6201u64);
 try {{
   true || build(state)();
   false || build(state)();
   {}
-}} catch(e:const OutOfMemory) {{ behave @print(6202u64); }};
+}} catch(e:const OutOfMemoryError) {{ behave @print(6202u64); }};
 behave @print(state.created);
 behave @print(state.called);
 behave @print(7001u64);
@@ -396,23 +396,23 @@ behave @print(7002u64);
         evidence['short_circuit'] = short_evidence
         recursive_arguments = directory / "closures/callable-recursive-factory-argument.cod"
         entry.write_text(recursive_arguments.read_text() + '''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 owned region retained <- make State(capacity=256u64){value<-17u64};
 func saved=maker(retained);
 func copied=saved;
 behave @print(6001u64);
 try {{ copied <- saved; {} }}
-catch(e:const OutOfMemory) {{ behave @print(6002u64); }};
+catch(e:const OutOfMemoryError) {{ behave @print(6002u64); }};
 behave @print(6301u64);
 try {{
   owned region failed <- make State(capacity=256u64){value<-1u64};
   step(failed,maker(failed),16u64); {}
-}} catch(e:const OutOfMemory) {{ behave @print(6302u64); }};
+}} catch(e:const OutOfMemoryError) {{ behave @print(6302u64); }};
 behave @print(6401u64);
 try {{
   owned region failed <- make State(capacity=256u64){value<-1u64};
   step(failed,maker(failed),16u64); {}
-}} catch(e:const OutOfMemory) {{ behave @print(6402u64); }};
+}} catch(e:const OutOfMemoryError) {{ behave @print(6402u64); }};
 func stable=copied();
 behave @print(7001u64);
 behave @print(fold(i in 0u64..10000u64,total=0u64) {{ total+stable() }});
@@ -430,12 +430,12 @@ behave @print(7002u64);
         evidence['recursive_arguments'] = recursive_evidence
         effects = directory / "closures/callable-effects.cod"
         entry.write_text(effects.read_text() + '''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 current <- first;
 behave @print(6001u64);
 try {{ relay(false); }}
 catch (e:const NullPointerException) {}
-catch (e:const OutOfMemory) {{ behave @print(6002u64); }};
+catch (e:const OutOfMemoryError) {{ behave @print(6002u64); }};
 behave @print(current(2u64));
 behave @print(7001u64);
 behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) {{ total + current(i) }});
@@ -449,10 +449,10 @@ behave @print(7002u64);
         evidence['effects'] = effects_evidence
         regional = directory / "closures/callable-regions.cod"
         entry.write_text(regional.read_text() + '''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 behave @print(6001u64);
 try {{ proc failed = snapshot; {} }}
-catch (e:const OutOfMemory) {{ behave @print(6002u64); }};
+catch (e:const OutOfMemoryError) {{ behave @print(6002u64); }};
 behave @print(perform @saved(2u64));
 behave @print(7001u64);
 behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) {{ total + perform @saved(i) }});
@@ -466,18 +466,18 @@ behave @print(7002u64);
         evidence['regional_captures'] = regional_evidence
         factories = directory / "closures/callable-factories.cod"
         entry.write_text(factories.read_text() + '''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 behave @print(6001u64);
 try {{ chained <- saved; {} }}
-catch (e:const OutOfMemory) {{ behave @print(6002u64); }};
+catch (e:const OutOfMemoryError) {{ behave @print(6002u64); }};
 behave @print(chained());
 behave @print(6201u64);
 try {{ chained <- compose(8u64); {} }}
-catch (e:const OutOfMemory) {{ behave @print(6202u64); }};
+catch (e:const OutOfMemoryError) {{ behave @print(6202u64); }};
 behave @print(chained());
 behave @print(6401u64);
 try {{ chained <- compose(8u64); {} }}
-catch (e:const OutOfMemory) {{ behave @print(6402u64); }};
+catch (e:const OutOfMemoryError) {{ behave @print(6402u64); }};
 behave @print(chained());
 behave @print(7001u64);
 behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) {{ total + chained() }});
@@ -492,13 +492,13 @@ behave @print(7002u64);
         factory_evidence['fixture_sha256'] = hashlib.sha256(factories.read_bytes()).hexdigest()
         evidence['recursive_factories'] = factory_evidence
         lexical = directory / "closures/callable-lexical-factory.cod"
-        entry.write_text(lexical.read_text().replace('effect @selected = first;', '''using "std:exceptions" OutOfMemory;
+        entry.write_text(lexical.read_text().replace('effect @selected = first;', '''using "std:exceptions" OutOfMemoryError;
 behave @print(6001u64);
 try {{ proc transient = first; {} }}
-catch (e:const OutOfMemory) {{ behave @print(6002u64); }};
+catch (e:const OutOfMemoryError) {{ behave @print(6002u64); }};
 behave @print(6201u64);
 try {{ proc transient = factory(8u64); {} }}
-catch (e:const OutOfMemory) {{ behave @print(6202u64); behave @print(@bias); }};
+catch (e:const OutOfMemoryError) {{ behave @print(6202u64); behave @print(@bias); }};
 effect @selected = first;''') + '''
 behave @print(7001u64);
 behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) {{ total + first() }});
@@ -513,8 +513,8 @@ behave @print(7002u64);
         evidence['lexical_factory'] = lexical_evidence
         higher = directory / "closures/callable-higher-order.cod"
         entry.write_text(higher.read_text() + '''
-using "std:exceptions" OutOfMemory;
-using "std:exceptions" InvalidCapacity;
+using "std:exceptions" OutOfMemoryError;
+using "std:exceptions" InvalidCapacityError;
 data Packet { value:u64; }
 function later_argument(capacity:u64) -> const u64 {
   owned region packet:Packet <- make Packet(capacity = capacity) { value <- 0u64 };
@@ -522,14 +522,14 @@ function later_argument(capacity:u64) -> const u64 {
 }
 behave @print(6001u64);
 try {{ plain(selected, { behave @print(9999u64); 1u64 }); {} }}
-catch (e:const OutOfMemory) {{ behave @print(6002u64); }};
+catch (e:const OutOfMemoryError) {{ behave @print(6002u64); }};
 behave @print(selected(3u64));
 behave @print(6101u64);
 try {{ plain(selected, later_argument(0u64)); {} }}
-catch (e:const InvalidCapacity) {{ behave @print(6102u64); }};
+catch (e:const InvalidCapacityError) {{ behave @print(6102u64); }};
 behave @print(6301u64);
 try {{ walk(original,8u64); {} }}
-catch (e:const OutOfMemory) {{ behave @print(6302u64); }};
+catch (e:const OutOfMemoryError) {{ behave @print(6302u64); }};
 behave @print(original(2u64));
 behave @print(7001u64);
 behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) {{ total + saved(2u64) }});
@@ -545,14 +545,14 @@ behave @print(7002u64);
         evidence['higher_order'] = higher_evidence
         generic = directory / "closures/callable-generic.cod"
         entry.write_text(generic.read_text() + '''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 behave @print(6001u64);
 try {{ func failed = selected; {} }}
-catch(e:const OutOfMemory) {{ behave @print(6002u64); }};
+catch(e:const OutOfMemoryError) {{ behave @print(6002u64); }};
 behave @print(selected(3u64));
 behave @print(6301u64);
 try {{ iterate(originals,8u64,1u64); {} }}
-catch(e:const OutOfMemory) {{ behave @print(6302u64); }};
+catch(e:const OutOfMemoryError) {{ behave @print(6302u64); }};
 behave @print(originals(3u64));
 behave @print(7001u64);
 behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) {{ total + selected(i) }});
@@ -568,10 +568,10 @@ behave @print(7002u64);
         evidence['generic'] = generic_evidence
         regional_parameters = directory / "closures/callable-region-parameters.cod"
         entry.write_text(regional_parameters.read_text() + '''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 behave @print(6001u64);
 try {{ higher(selected, first, { behave @print(999u64); 0u64 }); {} }}
-catch(e:const OutOfMemory) {{ behave @print(6002u64); }};
+catch(e:const OutOfMemoryError) {{ behave @print(6002u64); }};
 behave @print(selected(first,0u64));
 behave @print(7001u64);
 behave @print(fold(i in 0u64 .. 10000u64, total=0u64) {{ total + readonly(second) }});
@@ -586,10 +586,10 @@ behave @print(7002u64);
         evidence['regional_parameters'] = regional_evidence
         owner_parameters = directory / "closures/callable-owner-parameters.cod"
         entry.write_text(owner_parameters.read_text() + '''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 behave @print(6001u64);
 try {{ func failed = integrate_view; {} }}
-catch(e:const OutOfMemory) {{ behave @print(6002u64); }};
+catch(e:const OutOfMemoryError) {{ behave @print(6002u64); }};
 behave @print(integrate_view(values,0.0f32));
 behave @print(7001u64);
 behave @print(fold(i in 0u64 .. 10000u64,integrated=0.0f32) {{ integrated+integrate_view(values,0.0f32) }});
@@ -604,10 +604,10 @@ behave @print(7002u64);
         evidence['owner_parameters'] = owner_evidence
         borrowed_results = directory / "closures/callable-borrowed-results.cod"
         entry.write_text(borrowed_results.read_text() + '''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 behave @print(6001u64);
 try {{ func failed = selected; {} }}
-catch(e:const OutOfMemory) {{ behave @print(6002u64); }};
+catch(e:const OutOfMemoryError) {{ behave @print(6002u64); }};
 ref after_failure = selected(a,b,true);
 after_failure <- 43u64;
 behave @print(b);
@@ -626,13 +626,13 @@ behave @print(7002u64);
         evidence['borrowed_results'] = borrowed_evidence
         pointer_results = directory / "closures/callable-pointer-results.cod"
         entry.write_text(pointer_results.read_text() + '''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 proc stress()->void {
   val a:u64<-1u64;
   val b:u64<-2u64;
   proc copy_source=first;
   behave @print(6001u64);
-  try {{proc failed=copy_source;}} catch(e:const OutOfMemory) {behave @print(6002u64);};
+  try {{proc failed=copy_source;}} catch(e:const OutOfMemoryError) {behave @print(6002u64);};
   behave @print(7001u64);
   for(i in 0u64 .. 10000u64) {first(a,b)<-i;};
   behave @print(7002u64);
@@ -648,7 +648,7 @@ stress();
         evidence['pointer_results'] = pointer_evidence
         scalar_results = directory / "closures/callable-native-scalar-results.cod"
         entry.write_text(scalar_results.read_text() + '''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 func keep(owned region r:Item)->owned region :Item {return r;}
 proc installed()->void {
   owned region r:Item<-make Item(capacity=256u64){value<-50u64;other<-0u64};
@@ -663,7 +663,7 @@ proc stress()->void {
   val target:u64<-1u64;
   proc source=borrowed;
   behave @print(6001u64);
-  try {{proc failed=source;}} catch(e:const OutOfMemory) {behave @print(6002u64);};
+  try {{proc failed=source;}} catch(e:const OutOfMemoryError) {behave @print(6002u64);};
   behave @print(7001u64);
   for(i in 0u64 .. 10000u64) {{ref output=source(target); output<-i;}};
   behave @print(7002u64);
@@ -683,7 +683,7 @@ stress();
         evidence['scalar_results'] = scalar_evidence
         regional_context = directory / "closures/callable-regional-context.cod"
         entry.write_text(regional_context.read_text() + '''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 proc allocation_failure(n:u64)->void {
   defer {@arena.value <- @arena.value+1u64;};
   {{
@@ -695,8 +695,8 @@ proc stress()->void {
   effect @arena <- make Item(capacity=256u64){value<-50u64};
   proc selected=walk;
   behave @print(6001u64);
-  try {{proc failed=selected;}} catch(e:const OutOfMemory){behave @print(6002u64);};
-  try {allocation_failure(20u64);} catch(e:const OutOfMemory){behave @print(@arena.value);};
+  try {{proc failed=selected;}} catch(e:const OutOfMemoryError){behave @print(6002u64);};
+  try {allocation_failure(20u64);} catch(e:const OutOfMemoryError){behave @print(@arena.value);};
   behave @print(7001u64);
   for(i in 0u64..10000u64) {{selected(4u64);}};
   behave @print(7002u64);
@@ -716,7 +716,7 @@ stress();
         evidence['regional_context'] = context_evidence
         context_results = directory / "closures/callable-regional-context-results.cod"
         entry.write_text(context_results.read_text() + '''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 proc allocation_failure(region state:Item,n:u64)->func()->const u64 with {region state} {
   defer {state.value<-state.value+1u64;};
   if(n==0u64){return leaf(state);}else{};
@@ -730,8 +730,8 @@ proc stress()->void {
   effect @arena<-make Item(capacity=256u64){value<-99u64};
   func result=walk(state,8u64);
   behave @print(6001u64);
-  try {{func failed=result;}} catch(e:const OutOfMemory){behave @print(6002u64);};
-  try {func failed=allocation_failure(state,8u64);}catch(e:const OutOfMemory){behave @print(result());};
+  try {{func failed=result;}} catch(e:const OutOfMemoryError){behave @print(6002u64);};
+  try {func failed=allocation_failure(state,8u64);}catch(e:const OutOfMemoryError){behave @print(result());};
   behave @print(@arena.value);
   behave @print(7001u64);
   for(i in 0u64..10000u64) {{state.value<-result()+1u64;}};
@@ -752,7 +752,7 @@ stress();
         evidence['regional_context_results'] = result_evidence
         context_borrows = directory / "closures/callable-regional-context-borrows.cod"
         entry.write_text(context_borrows.read_text() + '''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 proc allocation_failure(region state:Item,n:u64)->Item {
   defer {state.value<-state.value+1u64;};
   if(n==0u64){return root(state);}else{};
@@ -767,8 +767,8 @@ proc stress()->void {
   ref result=record(state,8u64);
   proc selected=reverse;
   behave @print(6001u64);
-  try {{proc failed=selected;}} catch(e:const OutOfMemory){behave @print(6002u64);};
-  try {ref failed=allocation_failure(state,8u64);}catch(e:const OutOfMemory){behave @print(result.value);};
+  try {{proc failed=selected;}} catch(e:const OutOfMemoryError){behave @print(6002u64);};
+  try {ref failed=allocation_failure(state,8u64);}catch(e:const OutOfMemoryError){behave @print(result.value);};
   behave @print(@arena.value);
   behave @print(7001u64);
   for(i in 0u64..10000u64) {{ref returned=selected(state,4u64);returned.value<-returned.value+1u64;}};
@@ -789,7 +789,7 @@ stress();
         evidence['regional_context_borrows'] = borrow_evidence
         snapshot_demand = directory / "closures/callable-regional-snapshot-demand.cod"
         entry.write_text(snapshot_demand.read_text() + '''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 proc allocation_failure(n:u64)->proc()->const u64 {
   if(n==0u64){return proc()->const u64 {return @arena.value;};}else{};
   {{effect @arena<-make Item(capacity=if(n==3u64){31337u64}else{256u64}){value<-n};
@@ -800,9 +800,9 @@ proc stress()->void {
   effect @arena<-make Item(capacity=256u64){value<-50u64};
   proc result=walk(8u64);
   behave @print(6001u64);
-  try {{proc failed=result;}}catch(e:const OutOfMemory){behave @print(6002u64);};
+  try {{proc failed=result;}}catch(e:const OutOfMemoryError){behave @print(6002u64);};
   behave @print(result());
-  try {proc failed=allocation_failure(8u64);}catch(e:const OutOfMemory){behave @print(@arena.value);};
+  try {proc failed=allocation_failure(8u64);}catch(e:const OutOfMemoryError){behave @print(@arena.value);};
   behave @print(7001u64);
   for(i in 0u64..10000u64) {{@arena.value<-@arena.value+1u64;result();}};
   behave @print(7002u64);
@@ -845,10 +845,10 @@ stress();
             captured = directory / f"closures/callable-{name.replace('_', '-')}.cod"
             source = captured.read_text()
             if region_failures:
-                source = source.replace('InvalidCapacity', 'OutOfMemory').replace(
+                source = source.replace('InvalidCapacityError', 'OutOfMemoryError').replace(
                     'if(n==3u64){0u64}', 'if(n==3u64){31337u64}').replace('capacity=0u64', 'capacity=31337u64')
             else:
-                source += '\nusing "std:exceptions" OutOfMemory;\n'
+                source += '\nusing "std:exceptions" OutOfMemoryError;\n'
             entry.write_text(source + '''
 region symbol @stress_arena:Item;
 symbol @stress_step:proc(u64)->const u64;
@@ -857,7 +857,7 @@ proc stress()->void {
   proc stable=proc(n:u64)->const u64{return @stress_arena.value;};
   effect @stress_step=stable;
   behave @print(6001u64);
-  try {{proc failed=stable;}}catch(e:const OutOfMemory){behave @print(6002u64);};
+  try {{proc failed=stable;}}catch(e:const OutOfMemoryError){behave @print(6002u64);};
   behave @print(perform @stress_step(0u64));
   behave @print(7001u64);
   for(i in 0u64..10000u64) {{@stress_arena.value<-@stress_arena.value+1u64;perform @stress_step(0u64);}};
@@ -879,10 +879,10 @@ stress();
             evidence[name] = captured_evidence
         nullable_views = directory / "closures/callable-nullable-views.cod"
         entry.write_text(nullable_views.read_text() + '''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 behave @print(6001u64);
 try {{ func failed = identity; {} }}
-catch(e:const OutOfMemory) {{ behave @print(6002u64); }};
+catch(e:const OutOfMemoryError) {{ behave @print(6002u64); }};
 ptr recovered = identity(maybe);
 try {{ recovered <- 31u64; behave @print(number); }}
 catch(e:const NullPointerException) {{ behave @print(999u64); }};
@@ -901,9 +901,9 @@ behave @print(7002u64);
         evidence['nullable_views'] = nullable_evidence
         borrowed_holders = directory / "closures/callable-borrowed-holders.cod"
         entry.write_text(borrowed_holders.read_text() + '''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 behave @print(6001u64);
-try {{ generic(plain,decorated); }} catch(e:const OutOfMemory) {{ behave @print(6002u64); }};
+try {{ generic(plain,decorated); }} catch(e:const OutOfMemoryError) {{ behave @print(6002u64); }};
 behave @print(plain());
 generic(plain,decorated);
 behave @print(plain());
@@ -920,9 +920,9 @@ behave @print(7002u64);
         evidence['borrowed_holders'] = holder_evidence
         holder_results = directory / "closures/callable-holder-results.cod"
         entry.write_text(holder_results.read_text() + '''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 behave @print(6001u64);
-try {{ func failed = captured; {} }} catch(e:const OutOfMemory) {{ behave @print(6002u64); }};
+try {{ func failed = captured; {} }} catch(e:const OutOfMemoryError) {{ behave @print(6002u64); }};
 behave @print(captured());
 behave @print(7001u64);
 behave @print(fold(i in 0u64 .. 10000u64,total=0u64) {{
@@ -946,9 +946,9 @@ behave @print(7002u64);
 function access(region state:State)->const u64 {return state.ticks}
 function access(region state:const State)->const u64 {return state.ticks+100u64}
 function inspect(region state:const State)->const u64 {return state.ticks}
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 behave @print(6001u64);
-try {{ func failed = current; {} }} catch(e:const OutOfMemory) {{ behave @print(6002u64); }};
+try {{ func failed = current; {} }} catch(e:const OutOfMemoryError) {{ behave @print(6002u64); }};
 behave @print(current());
 behave @print(7001u64);
 behave @print(fold(i in 0u64 .. 10000u64,total=0u64) {{
@@ -966,14 +966,14 @@ behave @print(7002u64);
         evidence['owner_flows'] = owner_evidence
         owner_factories = directory / "closures/callable-owner-factories.cod"
         entry.write_text(owner_factories.read_text() + '''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 func primary_factory=reader;
 behave @print(6001u64);
-try {{ stored_factory <- primary_factory; {} }} catch(e:const OutOfMemory) {{ behave @print(6002u64); }};
+try {{ stored_factory <- primary_factory; {} }} catch(e:const OutOfMemoryError) {{ behave @print(6002u64); }};
 func after_failed_copy=stored_factory(item,0u64);
 behave @print(after_failed_copy());
 behave @print(6201u64);
-try {{ func failed = stored_factory(item,8u64); {} }} catch(e:const OutOfMemory) {{ behave @print(6202u64); }};
+try {{ func failed = stored_factory(item,8u64); {} }} catch(e:const OutOfMemoryError) {{ behave @print(6202u64); }};
 behave @print(result());
 behave @print(7001u64);
 behave @print(fold(i in 0u64 .. 10000u64,total=0u64) {{
@@ -997,9 +997,9 @@ behave @print(7002u64);
         evidence['owner_factories'] = factory_evidence
         array_results = directory / "closures/callable-array-results.cod"
         entry.write_text(array_results.read_text() + '''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 behave @print(6001u64);
-try {{ func failed=selected; {} }} catch(e:const OutOfMemory){{behave @print(6002u64);}};
+try {{ func failed=selected; {} }} catch(e:const OutOfMemoryError){{behave @print(6002u64);}};
 ref preserved=selected(a,b);
 behave @print(preserved[0u64]);
 behave @print(7001u64);
@@ -1018,10 +1018,10 @@ behave @print(7002u64);
         evidence['array_results'] = array_evidence
         conversions = directory / "closures/callable-conversions.cod"
         entry.write_text(conversions.read_text() + '''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 func original=first;
 behave @print(6001u64);
-try {{ selected <- original; {} }} catch(e:const OutOfMemory){{behave @print(6002u64);}};
+try {{ selected <- original; {} }} catch(e:const OutOfMemoryError){{behave @print(6002u64);}};
 behave @print(selected(start(1.0)));
 behave @print(7001u64);
 behave @print(fold(i in 0u64..10000u64,total=0.0){{total+selected(start(f64(i%97u64)))}});
@@ -1036,9 +1036,9 @@ behave @print(7002u64);
         evidence['conversions'] = conversion_evidence
         record_results = directory / "closures/callable-record-results.cod"
         entry.write_text(record_results.read_text() + '''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 behave @print(6001u64);
-try {{ func failed=selected; {} }} catch(e:const OutOfMemory){{behave @print(6002u64);}};
+try {{ func failed=selected; {} }} catch(e:const OutOfMemoryError){{behave @print(6002u64);}};
 ref preserved=selected(head,tail);
 behave @print(preserved.value);
 behave @print(7001u64);
@@ -1058,9 +1058,9 @@ behave @print(7002u64);
         evidence['record_results'] = record_evidence
         initialization = directory / "closures/callable-initialization.cod"
         entry.write_text(initialization.read_text() + '''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 behave @print(6001u64);
-try {{ func failed=selected; {} }} catch(e:const OutOfMemory){{behave @print(6002u64);}};
+try {{ func failed=selected; {} }} catch(e:const OutOfMemoryError){{behave @print(6002u64);}};
 ref initialized=make local u64;
 selected(initialized);
 behave @print(initialized);
@@ -1082,9 +1082,9 @@ behave @print(7002u64);
         for name in ('record-vocabulary.cod', 'region-result-adapter.cod'):
             (scratch / name).write_text((directory / 'closures' / name).read_text())
         entry.write_text(region_results.read_text() + '''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 behave @print(6001u64);
-try {{func failed=selected;{}}} catch(e:const OutOfMemory){{behave @print(6002u64);}};
+try {{func failed=selected;{}}} catch(e:const OutOfMemoryError){{behave @print(6002u64);}};
 region preserved=selected(state);
 behave @print(preserved.value);
 behave @print(7001u64);
@@ -1104,27 +1104,27 @@ behave @print(7002u64);
         evidence['region_results'] = region_evidence
         owned_results = directory / "closures/callable-owned-results.cod"
         entry.write_text(owned_results.read_text() + '''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 behave @print(6001u64);
-try {{func failed=selected;{}}} catch(e:const OutOfMemory){{behave @print(6002u64);}};
+try {{func failed=selected;{}}} catch(e:const OutOfMemoryError){{behave @print(6002u64);}};
 try {{owned region rejected<-failing(31337u64,0u64);}}
-catch(e:const OutOfMemory){{behave @print(41u64);}};
+catch(e:const OutOfMemoryError){{behave @print(41u64);}};
 try {{
   owned region seed<-make State(capacity=256u64){value<-7u64};
   ref fixed=root(seed);
   owned region unused<-rotate(fixed,fixed,seed,current_reader(seed),3u64,31337u64);
   behave @assert(false);
-}} catch(e:const OutOfMemory) {};
+}} catch(e:const OutOfMemoryError) {};
 try {{
   owned region seed<-make State(capacity=256u64){value<-7u64};
   staged_step(seed,staged_reader(seed),3u64,31337u64,true);
   behave @assert(false);
-}} catch(e:const OutOfMemory) {};
+}} catch(e:const OutOfMemoryError) {};
 try {{
   owned region seed<-make State(capacity=256u64){value<-7u64};
   proc unused=staged_factory(seed,stable,staged_reader(seed),3u64,31337u64);
   behave @assert(false);
-}} catch(e:const OutOfMemory) {};
+}} catch(e:const OutOfMemoryError) {};
 behave @print(7001u64);
 behave @print(fold(i in 0u64..10000u64,total=0u64){{
   owned region result<-selected(256u64,i%97u64);
@@ -1144,9 +1144,9 @@ behave @print(7002u64);
         evidence['owned_results'] = owned_evidence
         qualifiers = directory / "qualifiers/const-fields-captures.cod"
         entry.write_text(qualifiers.read_text() + '''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 behave @print(6001u64);
-try {{ const func failed=read; }} catch(e:const OutOfMemory) { behave @print(6002u64); };
+try {{ const func failed=read; }} catch(e:const OutOfMemoryError) { behave @print(6002u64); };
 func independent=borrowed_read;
 behave @print(independent());
 behave @print(7001u64);

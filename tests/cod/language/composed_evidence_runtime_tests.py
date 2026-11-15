@@ -12,16 +12,16 @@ runner.SOURCE = runner.SOURCE.replace('choose_mode(f,{observe(9101u64);tag},', '
 runner.SOURCE = runner.SOURCE.replace('defer report_mode(f,tag,23u64);', 'defer report_mode(f,try{tag}finally{},23u64);')
 runner.EXPECTED_VALUES.insert(runner.EXPECTED_VALUES.index('9100'), '9102')
 runner.SOURCE += '''
-using "std:exceptions" SystemException;
-func error()->const MissingReturnException{try{missing();}catch(e:const MissingReturnException){return e;};}
+using "std:exceptions" Exception;
+func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}
 func exception_forward(e:T)->const u64 where T{return e.category;}
-func common(e:SystemException)->const u64{return exception_forward(e);}
-proc common_proc(e:SystemException)->void{observe(exception_forward(e));}
+func common(e:Exception)->const u64{return exception_forward(e);}
+proc common_proc(e:Exception)->void{observe(exception_forward(e));}
 {{
- func view:func(MissingReturnException)->const u64=common;
+ func view:func(MissingReturnError)->const u64=common;
  observe(view(error()));
- proc selected:proc(MissingReturnException)->void=common_proc;
- proc retained=proc[selected](e:MissingReturnException)->void{selected(e);};
+ proc selected:proc(MissingReturnError)->void=common_proc;
+ proc retained=proc[selected](e:MissingReturnError)->void{selected(e);};
  defer retained(error());
 }};
 observe(9000u64);

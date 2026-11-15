@@ -1,5 +1,5 @@
 using symbol "std:io" @print;
-using "std:exceptions" InvalidCapacity;
+using "std:exceptions" InvalidCapacityError;
 region symbol @arena;
 proc bad()->void {effect @arena <- region(0u64);}
 func one()->const u64 {return 1u64;}
@@ -66,7 +66,7 @@ proc through_helper()->void {
 through_helper();
 proc failure()->void {
   func action = one;
-  try {{defer {action <- two; bad();};}} catch(error:const InvalidCapacity) {
+  try {{defer {action <- two; bad();};}} catch(error:const InvalidCapacityError) {
     behave @print(action());
   };
 }
@@ -74,7 +74,7 @@ failure();
 proc recovery()->void {
   func action = one;
   {{
-    defer catch(error:const InvalidCapacity) {action <- three;} finally {behave @print(action());};
+    defer catch(error:const InvalidCapacityError) {action <- three;} finally {behave @print(action());};
     defer {action <- two; bad();};
   }};
   behave @print(action());
@@ -83,7 +83,7 @@ recovery();
 proc original_error()->void {
   func action = one;
   {{
-    defer catch(error:const InvalidCapacity) {action <- two;};
+    defer catch(error:const InvalidCapacityError) {action <- two;};
     bad();
   }};
   behave @print(action());
@@ -124,6 +124,6 @@ proc categories()->void {
     defer passthrough(action);
     defer {action <- proc()->void {behave @print(9u64);};};
     bad();
-  }} catch(error:const InvalidCapacity) {action();};
+  }} catch(error:const InvalidCapacityError) {action();};
 }
 categories();

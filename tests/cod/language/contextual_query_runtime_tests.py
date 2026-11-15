@@ -15,7 +15,7 @@ proc query_later()->const u64{observe(33u64);return 1u64;}
 {{
  func f=wrap(base);contextual_queries(f);
  observe(9030u64);
- try{query_apply(f,query_later());{}}catch(e:const OutOfMemory){observe(9031u64);};
+ try{query_apply(f,query_later());{}}catch(e:const OutOfMemoryError){observe(9031u64);};
  observe(f(1u64));
 }};
 observe(query_apply(wrap(base),query_apply(wrap(other),1u64)));

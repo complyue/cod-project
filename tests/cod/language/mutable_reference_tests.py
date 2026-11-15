@@ -5,9 +5,9 @@ import sys
 import foundation_tests as runner
 
 IO = 'using symbol "std:io" @print;\n'
-ERRORS = IO + '''using "std:exceptions" MissingReturnException;
+ERRORS = IO + '''using "std:exceptions" MissingReturnError;
 func missing()->const i64{}
-func error()->const MissingReturnException{try{missing();}catch(e:const MissingReturnException){return e;};}
+func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}
 '''
 WARN = '[-Wmissing-return]'
 runner.CASES = {
@@ -69,12 +69,12 @@ runner.CASES = {
     'conditional_alias_effect_once': (IO + 'val a<-1,b<-2;ptr p=if({behave @print(10);true}){{behave @print(11);a}}else{{behave @print(12);b}};p<-8;behave @print(a);', 0, '10\n11\n8\n', ''),
     'generic_rebind': (IO + 'func pick(a:T,b:T)->const T where T{ptr p=a;p=b;return p;}behave @print(pick(1u64,2u64));behave @print(pick(false,true));', 0, '2\ntrue\n', ''),
     'parameter_copy_owner': (IO + 'func f(a:i64,b:i64)->const i64{ptr p=a;p=b;p<-9;return b;}val x<-1,y<-2;behave @print(f(x,y));behave @print(x);behave @print(y);', 0, '9\n1\n2\n', ''),
-    'catch_after_rebinding': (ERRORS + 'val a<-1,b<-2;ptr p=a;try{p=b;missing();{}}catch(e:const MissingReturnException){behave @print(p);};', 0, '2\n', WARN),
+    'catch_after_rebinding': (ERRORS + 'val a<-1,b<-2;ptr p=a;try{p=b;missing();{}}catch(e:const MissingReturnError){behave @print(p);};', 0, '2\n', WARN),
     'finally_rebind': (IO + 'val a<-1,b<-2;ptr p=a;try{}finally{p=b;{}};behave @print(p);', 0, '2\n', ''),
     'ended_binding_live_target_write': (IO + 'val a<-1;({{ptr p=a;p}})<-12;behave @print(a);', 0, '12\n', ''),
     'ended_binding_rebind': ('val a<-1,b<-2;({{ptr p=a;p}})=b;', 2, '', "reference binding's lexical scope has ended"),
-    'selected_target_before_failure': (ERRORS + 'proc f(flag:bool)->void{val a<-make local i64,b<-make local i64;ptr p=if(flag){a}else{b};try{p<-13;missing();{}}catch(e:const MissingReturnException){behave @print(p);};}f(true);f(false);', 0, '13\n13\n', WARN),
-    'selected_target_after_failure': (ERRORS + 'proc f(flag:bool)->void{val a<-make local i64,b<-make local i64;ptr p=if(flag){a}else{b};try{missing();p<-13;{}}catch(e:const MissingReturnException){behave @print(p);};}', 2, '', 'before definite initialization'),
+    'selected_target_before_failure': (ERRORS + 'proc f(flag:bool)->void{val a<-make local i64,b<-make local i64;ptr p=if(flag){a}else{b};try{p<-13;missing();{}}catch(e:const MissingReturnError){behave @print(p);};}f(true);f(false);', 0, '13\n13\n', WARN),
+    'selected_target_after_failure': (ERRORS + 'proc f(flag:bool)->void{val a<-make local i64,b<-make local i64;ptr p=if(flag){a}else{b};try{missing();p<-13;{}}catch(e:const MissingReturnError){behave @print(p);};}', 2, '', 'before definite initialization'),
     'destination_selected_before_own_cleanup': (IO + 'val a<-make local i64,b<-make local i64;ptr p=a;({{defer{p=b;};p}})<-14;behave @print(a);', 0, '14\n', ''),
     'cleanup_rebind_does_not_initialize_current_target': ('val a<-make local i64,b<-make local i64;ptr p=a;({{defer{p=b;};p}})<-14;p;', 2, '', 'before definite initialization'),
     'finally_rebind_does_not_initialize_current_target': ('val a<-make local i64,b<-make local i64;ptr p=a;(try{p}finally{p=b;{}})<-14;p;', 2, '', 'before definite initialization'),

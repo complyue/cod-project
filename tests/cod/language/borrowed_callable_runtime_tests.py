@@ -13,11 +13,11 @@ func walk_borrow(select:F,ref f:func(u64)->const u64 in O,n:u64)->ref (func(u64)
  func f=wrap(base);func g=wrap(other);func select=borrow_holder;
  ptr p=select(f);observe(p(1u64));
  proc writer=replace_borrowed;writer(f,g);observe(p(1u64));f<-wrap(base);
- observe(9030u64);try{writer(f,g);}catch(e:const OutOfMemory){observe(9031u64);};observe(p(2u64));
+ observe(9030u64);try{writer(f,g);}catch(e:const OutOfMemoryError){observe(9031u64);};observe(p(2u64));
  func captured=func[select](ref h:func(u64)->const u64 in O)->ref (func(u64)->const u64) in O where {owner O}{return select(h);};
  ptr q=captured(f);q<-g;observe(f(3u64));
- observe(9030u64);try{captured({observe(9999u64);f});{}}catch(e:const OutOfMemory){observe(9031u64);};
- observe(9050u64);try{defer writer(f,g);}catch(e:const OutOfMemory){observe(9051u64);};
+ observe(9030u64);try{captured({observe(9999u64);f});{}}catch(e:const OutOfMemoryError){observe(9031u64);};
+ observe(9050u64);try{defer writer(f,g);}catch(e:const OutOfMemoryError){observe(9051u64);};
  f<-wrap(base);{{defer writer(f,g);f<-wrap(wrap(base));}};observe(f(4u64));
  observe(9010u64);val total<-0u64;for(i in 0u64..10000u64){{ptr live=select(f);total<-total+live(i);}};observe(9011u64);observe(total);
  observe(walk_borrow(select,f,40u64)(5u64));

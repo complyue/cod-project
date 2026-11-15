@@ -5,9 +5,9 @@ import sys
 import foundation_tests as runner
 
 IO = 'using symbol "std:io" @print;\n'
-ERRORS = IO + '''using "std:exceptions" MissingReturnException;
+ERRORS = IO + '''using "std:exceptions" MissingReturnError;
 func missing()->const i64{}
-func error()->const MissingReturnException{try{missing();}catch(e:const MissingReturnException){return e;};}
+func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}
 '''
 WARN = '[-Wmissing-return]'
 runner.CASES = {
@@ -58,11 +58,11 @@ runner.CASES = {
     'transfer_view_readonly': ('val x<-1;ptr p=(x<-2);p<-3;', 2, '', 'readonly destination'),
     'late_ref_requirement': (IO + '{{val x<-make local i64;defer{{const ref p=x;behave @print(p);}};}};', 2, '', 'cannot prove initialization'),
     'alias_and_parameter_copy': (IO + 'func f(x:T)->const T where T{const ptr p=x;val copy<-p;return copy;}behave @print(f(11u64));behave @print(f(true));', 0, '11\ntrue\n', ''),
-    'alias_then_catch_storage': (ERRORS + 'val x<-1;const ptr p=x;try{missing();{}}catch(e:const MissingReturnException){behave @print(e.category);};', 0, '5\n', WARN),
-    'caught_alias_snapshot': (ERRORS + '{{for(i in 0..2){try{missing();{}}catch(e:const MissingReturnException){{{const ptr p=e;defer{behave @print(p.category);};}}};};}};', 0, '5\n5\n', WARN),
-    'caught_alias_expired': (ERRORS + 'try{throw error();}catch(e:const MissingReturnException){const ptr p=e;{};};p;', 2, '', "lexical owner has ended"),
+    'alias_then_catch_storage': (ERRORS + 'val x<-1;const ptr p=x;try{missing();{}}catch(e:const MissingReturnError){behave @print(e.category);};', 0, '5\n', WARN),
+    'caught_alias_snapshot': (ERRORS + '{{for(i in 0..2){try{missing();{}}catch(e:const MissingReturnError){{{const ptr p=e;defer{behave @print(p.category);};}}};};}};', 0, '5\n5\n', WARN),
+    'caught_alias_expired': (ERRORS + 'try{throw error();}catch(e:const MissingReturnError){const ptr p=e;{};};p;', 2, '', "lexical owner has ended"),
     'mutable_exception_alias': (ERRORS + 'val e<-error();const ptr p=e;{{defer{behave @print(p.category);};p<-error();}};', 0, '5\n', WARN),
-    'rethrow_alias': (ERRORS + 'try{try{missing();{}}catch(e:const MissingReturnException){const ptr p=e;throw p;};}catch(e:const MissingReturnException){behave @print(e.category);};', 0, '5\n', WARN),
+    'rethrow_alias': (ERRORS + 'try{try{missing();{}}catch(e:const MissingReturnError){const ptr p=e;throw p;};}catch(e:const MissingReturnError){behave @print(e.category);};', 0, '5\n', WARN),
 }
 runner.CASE_SHADOWS = {
     'const_ref_parameter_target': ['x'],

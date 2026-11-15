@@ -9,14 +9,14 @@ func walk_nullable(f:F,ptr value:T in O,n:u64)->ptr T in O where {F,T,owner O}{
  if(n==0u64){return f(value);}else{return walk_nullable(f,value,n-1u64);};
 }
 proc null_recovery(ptr x:u64 in O,ptr y:u64 in O)->ptr u64 in O where {owner O}{
- defer catch(e:const OutOfMemory){observe(9051u64);return y;};
+ defer catch(e:const OutOfMemoryError){observe(9051u64);return y;};
  defer{observe(9050u64);defer observe(9999u64);};
  return x;
 }
 {{
  func f=wrap(wrap(base));func g=wrap(other);
  ptr p=nullable_holder(f);observe(p(1u64));
- observe(9030u64);try{p<-g;{}}catch(e:const OutOfMemory){observe(9031u64);};observe(p(2u64));
+ observe(9030u64);try{p<-g;{}}catch(e:const OutOfMemoryError){observe(9031u64);};observe(p(2u64));
  nullable_holder(f)<-g;observe(f(3u64));
  func select=func(ptr h:func(u64)->const u64 in O)->ptr (func(u64)->const u64) in O where {owner O}{return h;};
  func captured=func[select](ptr h:func(u64)->const u64 in O)->ptr (func(u64)->const u64) in O where {owner O}{return select(h);};

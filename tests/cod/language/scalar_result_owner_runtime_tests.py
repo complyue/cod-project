@@ -25,7 +25,7 @@ func scalar_increment(x:u64)->val u64{return x+1u64;}
  x<-1u64;ref copied_call=value_call(x);observe(copied_call);observe(x);
  x<-1u64;ref borrowed_call=view_call(x);observe(borrowed_call);
  observe(9050u64);
- try{y<-failed_snapshot(x);{}}catch(e:const OutOfMemory){observe(9051u64);};
+ try{y<-failed_snapshot(x);{}}catch(e:const OutOfMemoryError){observe(9051u64);};
  observe(x);observe(y);
  ptr absent:u64=null in here;ptr forwarded=absent;
  forwarded=x;observe(forwarded);behave @print((absent is null));

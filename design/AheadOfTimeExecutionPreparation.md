@@ -1,6 +1,6 @@
 # Ahead-of-time execution preparation and runtime micro-dispatch
 
-Design revision: 14 · Recorded: 2026-11-15 America/Los_Angeles · Status: AOT execution-preparation behavior and native-coverage contract; bounded experimental evidence; permanent mechanisms retain their separate review scopes.
+Design revision: 15 · Recorded: 2026-11-15 America/Los_Angeles · Status: AOT execution-preparation behavior and native-coverage contract; bounded experimental evidence; permanent mechanisms retain their separate review scopes.
 
 During AOT compilation, CoD checks the required behavior and prepares native implementations, semantic method selectors and local micro-dispatch paths. Proven call-site facts can resolve selections, demand or reuse specializations and permit direct-call emission. Preparing selection code does not execute that selection or the source program’s runtime effects. At runtime, execution follows the prepared code and performs remaining selections using actual runtime evidence.
 
@@ -8,7 +8,7 @@ Semantic method selection uses actual argument types, declared conformance and t
 
 ## Design authority
 
-- **Built-in failure naming:** [H-472/H-473](../CHANGELOG.md#h-472)/[K-FAILURE-NAMES-20261115](../CHANGELOG.md#k-failure-names-20261115) covers D-21r13→14 and [D-17-NAMES](DesignAuthorityRegistry.md#d-17-names), P-414/P-415. Canonical concrete unchecked names end in Error, checked names in Exception; the common root Exception covers both. Existing classification, owner/access, preparation and cleanup contracts and their qualified scopes continue unchanged. Acceptance requires consistent names without changing handling obligations; compiler spelling migration is outstanding, as recorded in D-17. This grants no new runtime representation or broader design qualification.
+- **Built-in failure naming:** [H-472/H-473](../CHANGELOG.md#h-472), [D-17-NAMES](DesignAuthorityRegistry.md#d-17-names) and P-414/P-415 preserve canonical Error/Exception names and the common root Exception. [K-720](../CHANGELOG.md#k-720) continues D-21r14→15 with the implemented vocabulary and typed-root catches recorded in [source coverage](../tests/cod/language/README.md). Type identity governs checkedness regardless of aliases. Existing propagation, owner/access, initialization and cleanup contracts remain; assertion implementation, physical representation and broader qualification are separate.
 
 - **Whole callable-contract compatibility:** [H-462](../CHANGELOG.md#h-462)/[K-CALLABLE-FAMILY-CONTRACT-20261115](../CHANGELOG.md#k-callable-family-contract-20261115), P-409, integrates [D-10-ARGUMENTS](SymbolicDynamicScope.md#named-arguments-defaults-and-complete-binding) without changing the method/native hierarchy. A typeof-family parameter requires every origin signature, independently of current call reachability. C-57/C-89 and the existing D-21/D-26 paths preserve checked semantic coverage and code sharing under charter §§3.1/6.3/12. Acceptance distinguishes full source compatibility from demanded native emission and rejects missing/ambiguous/incompatible required cases. Concrete proof algorithms, local family grammar and default transport remain separate; no new ABI or implementation claim.
 

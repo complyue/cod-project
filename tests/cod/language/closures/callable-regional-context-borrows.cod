@@ -1,5 +1,5 @@
 using symbol "std:io" @print;
-using "std:exceptions" InvalidCapacity;
+using "std:exceptions" InvalidCapacityError;
 using "std:exceptions" NullPointerException;
 data Item{value:u64;other:u64;}
 array Values[u64]:u64;
@@ -83,7 +83,7 @@ proc run()->void {
  ptr missing=nullable(absent,20u64);
  behave @print((missing is null));
  try {val ignored<-missing;}catch(e:const NullPointerException){behave @print(82u64);};
- try {ref failed_record=failure(state,20u64);}catch(e:const InvalidCapacity){behave @print(result.value);};
+ try {ref failed_record=failure(state,20u64);}catch(e:const InvalidCapacityError){behave @print(result.value);};
  behave @print(@arena.value);
  owned region delivered:Item<-fresh_owner(20u64);
  behave @print(delivered.value);

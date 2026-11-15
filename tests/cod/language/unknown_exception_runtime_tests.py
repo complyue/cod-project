@@ -13,54 +13,54 @@ from regional_runtime_tests import checked
 
 runner=fixture.runner
 SOURCE=runner.SOURCE+'''
-using "std:exceptions" StaticallyUnknownType;
-using "std:exceptions" UnsoundRuntimeTyping;
-using "std:exceptions" SystemException;
-func unknown_boundary()->const u64 throws StaticallyUnknownType{return 0u64;}
+using "std:exceptions" StaticallyUnknownTypeException;
+using "std:exceptions" UnsoundRuntimeTypingError;
+using "std:exceptions" Exception;
+func unknown_boundary()->const u64 throws StaticallyUnknownTypeException{return 0u64;}
 func typing_boundary()->const u64{return 0u64;}
-func unknown_value()->const StaticallyUnknownType{
- try{unknown_boundary();}catch(e:const StaticallyUnknownType){return e;};
+func unknown_value()->const StaticallyUnknownTypeException{
+ try{unknown_boundary();}catch(e:const StaticallyUnknownTypeException){return e;};
 }
-func missing_value()->const MissingReturnException{
- try{missing();}catch(e:const MissingReturnException){return e;};
+func missing_value()->const MissingReturnError{
+ try{missing();}catch(e:const MissingReturnError){return e;};
 }
 func bounce(e:T)->const T where T{try{throw e;}catch(x:const T){return x;};}
-func relay_exception(e:SystemException)->void throws SystemException{throw e;}
-func unknown_wrap(f:func()->const u64 throws StaticallyUnknownType)->const (func()->const u64 throws StaticallyUnknownType){
- return func[f]()->const u64 throws StaticallyUnknownType{return f();};
+func relay_exception(e:Exception)->void throws Exception{throw e;}
+func unknown_wrap(f:func()->const u64 throws StaticallyUnknownTypeException)->const (func()->const u64 throws StaticallyUnknownTypeException){
+ return func[f]()->const u64 throws StaticallyUnknownTypeException{return f();};
 }
-func walk_unknown(f:F,n:u64)->const u64 throws StaticallyUnknownType where F{
+func walk_unknown(f:F,n:u64)->const u64 throws StaticallyUnknownTypeException where F{
  if(n==0u64){return f();}else{return walk_unknown(f,n-1u64);};
 }
 proc consume_unknown(f:func(u64)->const u64,n:u64)->void{observe(9999u64);}
 func saved_unknown()->func(u64)->const u64{
- defer catch(e:const StaticallyUnknownType){}finally{};
+ defer catch(e:const StaticallyUnknownTypeException){}finally{};
  defer{unknown_boundary();};return wrap(base);
 }
 func replaced_unknown()->func(u64)->const u64{
- defer catch(e:const StaticallyUnknownType){return wrap(other);}finally{};
+ defer catch(e:const StaticallyUnknownTypeException){return wrap(other);}finally{};
  defer{unknown_boundary();};return wrap(base);
 }
 proc delayed_unknown()->void{
  defer observe(300u64);
- defer catch(e:const StaticallyUnknownType){observe(e.category);}finally{observe(302u64);};
+ defer catch(e:const StaticallyUnknownTypeException){observe(e.category);}finally{observe(302u64);};
  defer{unknown_boundary();};
 }
 {{
  val original<-unknown_value();observe(bounce(original).category);observe(bounce(missing_value()).category);
- val linked<-try{throw original from original;}catch(e:const StaticallyUnknownType){e};
+ val linked<-try{throw original from original;}catch(e:const StaticallyUnknownTypeException){e};
  observe(linked.category);observe(linked.site);observe(linked.requested);observe(linked.available);observe(linked.cause_count);
  observe(cause_at(linked,0u64).category);observe(cause_at(linked,0u64).requested);
- try{relay_exception(linked);}catch(e:const StaticallyUnknownType){defer{observe(e.category);};}catch(e){observe(9999u64);};
+ try{relay_exception(linked);}catch(e:const StaticallyUnknownTypeException){defer{observe(e.category);};}catch(e){observe(9999u64);};
  func f=unknown_wrap(unknown_boundary);func ordinary=wrap(base);
- try{walk_unknown(f,40u64);{}}catch(e:const StaticallyUnknownType){observe(e.category);};
- observe(9040u64);try{consume_unknown(ordinary,unknown_boundary());}catch(e:const StaticallyUnknownType){observe(9041u64);observe(310u64);};
- observe(9030u64);try{consume_unknown(ordinary,unknown_boundary());}catch(e:const OutOfMemory){observe(9031u64);}catch(e:const StaticallyUnknownType){observe(9999u64);};
- observe(9050u64);try{0;{{defer f();}};}catch(e:const OutOfMemory){observe(9051u64);}catch(e:const StaticallyUnknownType){observe(9999u64);};
+ try{walk_unknown(f,40u64);{}}catch(e:const StaticallyUnknownTypeException){observe(e.category);};
+ observe(9040u64);try{consume_unknown(ordinary,unknown_boundary());}catch(e:const StaticallyUnknownTypeException){observe(9041u64);observe(310u64);};
+ observe(9030u64);try{consume_unknown(ordinary,unknown_boundary());}catch(e:const OutOfMemoryError){observe(9031u64);}catch(e:const StaticallyUnknownTypeException){observe(9999u64);};
+ observe(9050u64);try{0;{{defer f();}};}catch(e:const OutOfMemoryError){observe(9051u64);}catch(e:const StaticallyUnknownTypeException){observe(9999u64);};
  delayed_unknown();observe(saved_unknown()(1u64));observe(replaced_unknown()(1u64));
- try{typing_boundary();{}}catch(e:const UnsoundRuntimeTyping){observe(e.category);};
+ try{typing_boundary();{}}catch(e:const UnsoundRuntimeTypingError){observe(e.category);};
  observe(9010u64);val total<-0u64;
- for(i in 0u64..10000u64){try{f();}catch(e:const StaticallyUnknownType){total<-total+1u64;};};
+ for(i in 0u64..10000u64){try{f();}catch(e:const StaticallyUnknownTypeException){total<-total+1u64;};};
  observe(9011u64);observe(total);
 }};
 observe(9000u64);
@@ -75,7 +75,7 @@ EXTRA_SOURCES=[*runner.EXTRA_SOURCES,Path(fixture.__file__),Path(runner.__file__
 def inject_failures(ir, runtime):
     """Replace only declared native providers, retaining all compiled consumers."""
     injected=[]
-    for method,category in [('unknown_boundary','StaticallyUnknownType'),('typing_boundary','UnsoundRuntimeTyping')]:
+    for method,category in [('unknown_boundary','StaticallyUnknownTypeException'),('typing_boundary','UnsoundRuntimeTypingError')]:
         identity=int(re.search(r'\b'+category+r' = (\d+),',runtime)[1])
         pattern=r'(?ms)^(define internal %cod.outcome @cod\.method\.\d+\.'+method+r'\.native\(\) \{)\n.*?^}'
         body='\nentry:\n  ret %cod.outcome { %cod.scalar zeroinitializer, i64 '+str(identity)+', i64 1, ptr null, i64 321, i64 123, i64 0 }\n}'

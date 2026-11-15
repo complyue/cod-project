@@ -45,7 +45,7 @@ for spelling in ('call', 'intrinsic'):
         'ref_ptr_cleanup_initialize': (IO+'val a<-1,b<-7,c<-make local i64;ref p=a;ptr q=b;{{'+swap()+'defer (<-)(c,9);q=c;}};'+OUT('p')+OUT('q'),0,'9\n1\n',''),
         'ref_ptr_late_null': ('val a<-1,b<-7;ref p=a;ptr q=b;{{'+swap()+'q=null;}};',2,'','cannot prove a non-null target'),
         'ref_ptr_late_uninitialized': ('val a<-1,b<-7,c<-make local i64;ref p=a;ptr q=b;{{'+swap()+'q=c;}};',2,'','cannot prove initialization'),
-        'ref_ptr_failed_restore': ('using "std:exceptions" OutOfMemory;val a<-1,b<-7,c<-9;ref p=a;ptr q=b;{{'+swap()+'q=null;try{defer (=)(q,c);}catch(e:const OutOfMemory){};}};',2,'','cannot prove a non-null target'),
+        'ref_ptr_failed_restore': ('using "std:exceptions" OutOfMemoryError;val a<-1,b<-7,c<-9;ref p=a;ptr q=b;{{'+swap()+'q=null;try{defer (=)(q,c);}catch(e:const OutOfMemoryError){};}};',2,'','cannot prove a non-null target'),
         'before_return': (IO+'proc run()->i64{'+BASE+'defer{'+OUT('p')+OUT('q')+'};'+swap()+'return p;}'+OUT('run()'),0,'7\n1\n1\n',''),
         'pending_failure': (IO+NPE+BASE+'ptr absent:i64=null in here;try{ {{'+swap()+'absent;}};{}}catch(e:const NullPointerException){'+OUT('p')+OUT('q')+'};',0,'7\n1\n',''),
         'failed_operand': (IO+NPE+BASE+'ptr absent:i64=null in here;try{ {{'+swap('p','{absent;q}')+'}};{}}catch(e:const NullPointerException){'+OUT('p')+OUT('q')+'};',0,'1\n7\n',''),

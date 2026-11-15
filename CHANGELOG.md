@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-15 — Canonical failures and common-root catches
+
+<a id="k-720"></a>
+**K-720 — Keep names, identity and handling coherent.** Under H-472/H-473/H-423, D-10r167→168/D-14r111→112/D-15r23→24/D-17r68→69/D-18r103→104/D-21r14→15/D-25r16→17/D-26r20→21/D-28r21→22/source336→337/registry729→730 continues the existing qualified failure/native contracts through C-63/P-235–P-236 and P-414–P-415’s scoped naming direction. Compiler vocabulary, generated services and current fixtures use canonical Error/Exception names and common root Exception without compatibility aliases; category IDs, checkedness and payloads remain. Explicit root handlers, including aliases and generic substitutions, share ordinary catch-all matching and cleanup. Descriptor invariants prevent naming/classification drift. Charter §§3.1/3.3/4.3/6.3/8/12 and D-16 remain intact. No predicate/type assertion execution, new hierarchy, ABI, regional support or pending value-path qualification follows. Baseline: `46ca9635dceafac7bbcdbd9c634962e276a66e1a` at affected paths; current acceptance covers aliases, obligations, causes, handler ordering and native failure cleanup.
+
 ## 2026-11-15 — Assertion and failure-name contract integration
 
 <a id="k-719"></a>

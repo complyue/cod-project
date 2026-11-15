@@ -6,7 +6,7 @@ import captured_callable_runtime_tests as fixture
 runner = fixture.runner
 runner.SOURCE = '''
 using symbol "std:io" @print;
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 proc observe(x:u64)->void{behave @print(x);}
 symbol @x:u64,@y:u64,@f:proc(u64)->u64;
 proc @f(n:u64)->u64{return @x;}
@@ -23,28 +23,28 @@ effect @x<-1u64;effect @y<-7u64;
 observe(9000u64);
 {{
  effect @f;observe(9020u64);
- try{effect @f;}catch(e:const OutOfMemory){observe(9021u64);};
+ try{effect @f;}catch(e:const OutOfMemoryError){observe(9021u64);};
  observe(perform @f(1u8));observe(perform @f(1u64));
 }};
 observe(9000u64);
 {{
  effect @f;observe(9030u64);
- try{effect @f=@f;}catch(e:const OutOfMemory){observe(9031u64);};
+ try{effect @f=@f;}catch(e:const OutOfMemoryError){observe(9031u64);};
  observe(perform @f(1u8));
  observe(9030u64);
- try{defer perform @f(1u8);}catch(e:const OutOfMemory){observe(9031u64);};
+ try{defer perform @f(1u8);}catch(e:const OutOfMemoryError){observe(9031u64);};
  observe(perform @f(1u64));
 }};
 observe(9000u64);
 {{
  effect @f;observe(9050u64);
- try{defer perform @f(1u8);}catch(e:const OutOfMemory){observe(9051u64);};
+ try{defer perform @f(1u8);}catch(e:const OutOfMemoryError){observe(9051u64);};
  observe(perform @f(1u8));
 }};
 observe(9000u64);
 {{
  effect @bad;effect @x<-9u64;observe(9020u64);
- try{perform @bad(1u8);{}}catch(e:const OutOfMemory){observe(9021u64);observe(@x);};
+ try{perform @bad(1u8);{}}catch(e:const OutOfMemoryError){observe(9021u64);observe(@x);};
 }};
 observe(9000u64);
 {{

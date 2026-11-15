@@ -6,10 +6,10 @@ import foundation_tests as runner
 IO = 'using symbol "std:io" @print;\n'
 BOOL = 'func (+)(x:bool,y:bool)->const bool{return x||y;}'
 ADD = 'func (+)(x:i64,y:i64)->const i64{return intrinsic (+)(x,y)*2;}'
-ERROR = '''using "std:exceptions" MissingReturnException;
-using "std:exceptions" SystemException;
+ERROR = '''using "std:exceptions" MissingReturnError;
+using "std:exceptions" Exception;
 func missing()->const i64{}
-func error()->const MissingReturnException{try{missing();}catch(e:const MissingReturnException){return e;};}
+func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}
 '''
 runner.CASES = {
  'infix_parenthesized_and_intrinsic':(IO+ADD+'behave @print(2+3);behave @print((+)(2,3));behave @print(intrinsic (+)(2,3));',0,'10\n10\n5\n',''),
@@ -41,9 +41,9 @@ runner.CASES = {
  'deferred_builtin_failure_runs_cleanup':(IO+'proc show(x:i64)->void{behave @print(x);}{{defer show(7);defer intrinsic (/)(1,0);behave @print(6);}};',70,'6\n7\n','division by zero'),
  'builtin_negation_preserves_null_test':(IO+'proc show(ptr p:i64 in O)->void where {owner O}{if(intrinsic (!)((p is null))){behave @print(p);}else{};}val x<-8;show(x);',0,'8\n',''),
  'overloaded_negation_is_not_null_refinement':('func (!)(x:bool)->const bool{return x;}proc show(ptr p:i64 in O)->void where {owner O}{if(!(p is null)){p;}else{0};}',2,'','requires a covering catch'),
- 'common_exception_argument_preparation':(IO+ERROR+'func (+)(e:SystemException,n:u64)->const u64{return intrinsic (+)(e.category,n);}behave @print(error()+2u64);',0,'7\n','[-Wmissing-return]'),
- 'explicit_cause_builtin':(IO+ERROR+'val e<-error();val chain<-try{throw e from e;}catch(x:const MissingReturnException){x};behave @print(intrinsic (cause_at)(chain,0u64).category);',0,'5\n','[-Wmissing-return]'),
- 'later_operand_failure_skips_method':(IO+ERROR+'proc (+)(x:i64,y:i64)->void{behave @print(99);}try{1+missing();}catch(e:const MissingReturnException){behave @print(1);};',0,'1\n','[-Wmissing-return]'),
+ 'common_exception_argument_preparation':(IO+ERROR+'func (+)(e:Exception,n:u64)->const u64{return intrinsic (+)(e.category,n);}behave @print(error()+2u64);',0,'7\n','[-Wmissing-return]'),
+ 'explicit_cause_builtin':(IO+ERROR+'val e<-error();val chain<-try{throw e from e;}catch(x:const MissingReturnError){x};behave @print(intrinsic (cause_at)(chain,0u64).category);',0,'5\n','[-Wmissing-return]'),
+ 'later_operand_failure_skips_method':(IO+ERROR+'proc (+)(x:i64,y:i64)->void{behave @print(99);}try{1+missing();}catch(e:const MissingReturnError){behave @print(1);};',0,'1\n','[-Wmissing-return]'),
  'checked_method_failure':(IO+'using "std:exceptions" NullPointerException;func (+)(x:bool,y:bool)->const bool throws NullPointerException{ptr p:bool=null in here;return p;}try{behave @print(false+true);}catch(e:const NullPointerException){behave @print(1);};',0,'1\n',''),
  'callable_operand_and_result':(IO+'func one()->const i64{return 1;}func two()->const i64{return 2;}func (+)(f:func()->const i64,g:func()->const i64)->const func()->const i64{return func[f,g]()->const i64{return f()+g();};}func f=one+two;behave @print(f());',0,'3\n',''),
  'function_cannot_select_procedure':('proc (+)(x:i64,y:i64)->const i64{return x;}func f()->const i64{return 1+2;}',2,'','function cannot invoke a procedure'),

@@ -18,10 +18,10 @@ proc walk_writer(f:F,ptr x:u64 in O,n:u64)->void throws NullPointerException whe
  for(i in 0u64..80u64){{selected<-wrap_writer(selected);}};
  val x<-make local u64;
  try{walk_writer(selected,x,40u64);observe(x);}catch(e:const NullPointerException){observe(9999u64);};
- observe(9020u64);try{selected<-wrap_writer(selected);{}}catch(e:const OutOfMemory){observe(9021u64);};
+ observe(9020u64);try{selected<-wrap_writer(selected);{}}catch(e:const OutOfMemoryError){observe(9021u64);};
  proc other=wrap_writer(set_target);
- observe(9030u64);try{selected<-other;{}}catch(e:const OutOfMemory){observe(9031u64);};
- observe(9050u64);try{0;{{defer selected(x);}};}catch(e:const OutOfMemory){observe(9051u64);}catch(e:const NullPointerException){observe(9999u64);};
+ observe(9030u64);try{selected<-other;{}}catch(e:const OutOfMemoryError){observe(9031u64);};
+ observe(9050u64);try{0;{{defer selected(x);}};}catch(e:const OutOfMemoryError){observe(9051u64);}catch(e:const NullPointerException){observe(9999u64);};
  try{0;{{defer selected(x);}};observe(x);}catch(e:const NullPointerException){observe(9999u64);};
  observe(9010u64);
  try{for(i in 0u64..10000u64){selected(x);};observe(x);}catch(e:const NullPointerException){observe(9999u64);};

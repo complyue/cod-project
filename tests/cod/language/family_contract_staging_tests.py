@@ -12,10 +12,10 @@ from callable_value_staging_tests import inventory
 from family_contract_tests import ERROR
 
 SOURCE = ERROR + '''
-symbol @pick:proc(SystemException)->u64;
-proc @pick(e:MissingReturnException)->u64{return 7u64;}
+symbol @pick:proc(Exception)->u64;
+proc @pick(e:MissingReturnError)->u64{return 7u64;}
 proc @pick(e:T)->u64 where T{return e.category;}
-effect @pick;val e:SystemException<-error();
+effect @pick;val e:Exception<-error();
 behave @print(behave @pick(e));e<-null_error();behave @print(behave @pick(e));
 for(i in 0u64..10u64){effect @pick;behave @pick(e);};
 '''
@@ -43,13 +43,13 @@ def main():
             record(mode + '/actual_categories', output.returncode == 0 and output.stdout == '7\n4\n' and '[-Wmissing-return]' in output.stderr,
                    exit=output.returncode, stdout=output.stdout, stderr=output.stderr)
             expected = set() if general else {
-                'OutOfMemory', 'RegionCapacityExceeded', 'InvalidCapacity', 'NullPointerException',
-                'UnsoundRuntimeTyping', 'StaticallyUnknownType', 'IndexOutOfBoundsException'}
+                'OutOfMemoryError', 'RegionCapacityExceededError', 'InvalidCapacityError', 'NullPointerException',
+                'UnsoundRuntimeTypingError', 'StaticallyUnknownTypeException', 'IndexOutOfBoundsError'}
             specialized = {name.split('.specialized.', 1)[1] for name in family if '.specialized.' in name}
             record(mode + '/shared_family_methods', len(family) == 2 + len(expected) and specialized == expected and
                    sum(name.endswith('.general') for name in family) == 1 and
                    sum(name.endswith('.native') for name in family) == 1, methods=family)
-            record(mode + '/unobserved_concrete_category', general or any('OutOfMemory' in name for name in family), methods=family)
+            record(mode + '/unobserved_concrete_category', general or any('OutOfMemoryError' in name for name in family), methods=family)
             repeated, repeated_ir = run(SOURCE.replace('10u64', '1000u64'), general)
             record(mode + '/runtime_count_preserves_inventory', repeated.returncode == 0 and repeated.stdout == '7\n4\n' and set(inventory(repeated_ir)) == set(bodies))
             checked, _ = run(SOURCE, general, False)

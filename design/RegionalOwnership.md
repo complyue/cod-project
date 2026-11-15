@@ -1,14 +1,14 @@
 # CoD regional ownership: syntax, semantics and use
 
-Design revision: 111 · Recorded: 2026-11-15 · Status: design draft with scoped confirmed requirements.
+Design revision: 112 · Recorded: 2026-11-15 · Status: design draft with scoped confirmed requirements.
 
 ## Design authority
 
-- **Mainline continuity:** [K-719](../CHANGELOG.md#k-719) continues r110→111 while integrating the scoped assertion/naming decisions below. Current source/native capabilities, qualified value paths and unresolved mechanisms retain their separate boundaries; the naming contract does not itself migrate the compiler.
+- **Mainline continuity:** [K-719](../CHANGELOG.md#k-719) continues r110→111 while integrating the scoped assertion/naming decisions below. Current source/native capabilities, qualified value paths and unresolved mechanisms retain their separate boundaries; current compiler support is tracked in the source capability reference.
 
 - **Assignment-result capability:** [H-ASSIGNMENT-RESULT-20261115](../CHANGELOG.md#h-assignment-result-20261115) resolves the K-712 review at r107: builtin `=` returns only its destination target view, never the lhs binding slot. H-270/H-302/P-241/P-260 continue to qualify target identity/access and right-associative composition under charter §§3.3/4.3/8. Acceptance preserves target writes and rejects result-based rebinding, reference swaps and slot aliases. Other qualified requirements and query contracts remain unchanged.
 
-- **Built-in failure naming:** [H-472/H-473](../CHANGELOG.md#h-472)/[K-FAILURE-NAMES-20261115](../CHANGELOG.md#k-failure-names-20261115) covers D-14r104→105 and [D-17-NAMES](DesignAuthorityRegistry.md#d-17-names), P-414/P-415. Canonical concrete unchecked names end in Error, checked names in Exception; the common root Exception covers both. Existing classification, owner/access, preparation and cleanup contracts and their qualified scopes continue unchanged. Acceptance requires consistent names without changing handling obligations; compiler spelling migration is outstanding, as recorded in D-17. This grants no new runtime representation or broader design qualification.
+- **Built-in failure naming:** [H-472/H-473](../CHANGELOG.md#h-472), [D-17-NAMES](DesignAuthorityRegistry.md#d-17-names) and P-414/P-415 preserve canonical Error/Exception names and the common root Exception. [K-720](../CHANGELOG.md#k-720) continues D-14r111→112 with the implemented vocabulary and typed-root catches recorded in [source coverage](../tests/cod/language/README.md). Type identity governs checkedness regardless of aliases. Existing propagation, owner/access, initialization and cleanup contracts remain; assertion implementation, physical representation and broader qualification are separate.
 
 - **Explicit assertion refinement:** [H-469/H-470](../CHANGELOG.md#h-469)/[K-ASSERT-SPECIALIZATION-20261115](../CHANGELOG.md#k-assert-specialization-20261115), [D-10-ASSERT](DesignAuthorityRegistry.md#d-10-assert)/P-412–P-413, extends the existing stable non-null flow facts with `assert p is not null`. The candidate C-10/C-65 path serves charter §§3.3/4.3/6.3/8 while preserving fixed owners, access and initialization. Type assertions require a prior non-null fact to produce ref; they do not add a nullability check. Acceptance covers successful continuation, rebinding/alias invalidation, caught-failure joins and preserved checked operand NPE. This local requirement does not qualify the whole file or claim implementation.
 

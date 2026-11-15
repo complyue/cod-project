@@ -5,7 +5,7 @@ import foundation_tests as runner
 
 IO = 'using symbol "std:io" @print;\n'
 NPE = 'using "std:exceptions" NullPointerException;\n'
-ERROR = 'using "std:exceptions" MissingReturnException;func missing()->const i64{}\n'
+ERROR = 'using "std:exceptions" MissingReturnError;func missing()->const i64{}\n'
 SETUP = 'val x<-1,y<-2,z<-3;ptr a=x,b=y,c=z;'
 SHOW = 'behave @print(a);behave @print(b);behave @print(c);'
 def run(body, setup=SETUP, show=SHOW):
@@ -28,9 +28,9 @@ runner.CASES = {
     'assignment_result_value': (run('behave @print((if(flag){a}else{b})=z);'), 0, '3\n3\n2\n3\n3\n1\n3\n3\n', ''),
     'nullable_slot_has_no_payload_read': (run('(if(flag){a}else{b})=x;', 'val x<-1;ptr a:i64=null in here,b:i64=null in here;', 'behave @print((a is null));behave @print((b is null));'), 0, 'false\ntrue\ntrue\nfalse\n', ''),
     'nullable_swap_has_no_payload_read': (run('(if(flag){a}else{b})<=>c;', 'val x<-1;ptr a:i64=null in here,b:i64=null in here,c=x;', 'behave @print((a is null));behave @print((b is null));behave @print((c is null));'), 0, 'false\ntrue\ntrue\ntrue\nfalse\ntrue\n', ''),
-    'guarded_selection': (IO + ERROR + 'proc run(flag:bool)->void{' + SETUP + '(try{if(flag){a}else{missing();a}}catch(e:const MissingReturnException){b})=z;' + SHOW + '}run(true);run(false);', 0, '3\n2\n3\n1\n3\n3\n', '[-Wmissing-return]'),
-    'rhs_failure_preserves_slots': (IO + ERROR + 'proc run(flag:bool)->void{' + SETUP + 'try{(if(flag){a}else{b})={missing();z};{}}catch(e:const MissingReturnException){};' + SHOW + '}run(true);run(false);', 0, '1\n2\n3\n1\n2\n3\n', '[-Wmissing-return]'),
-    'swap_failure_preserves_prior_effect': (IO + ERROR + 'proc run(flag:bool)->void{' + SETUP + 'try{({a=z;if(flag){a}else{b}})<=>{missing();c};}catch(e:const MissingReturnException){};' + SHOW + '}run(true);run(false);', 0, '3\n2\n3\n3\n2\n3\n', '[-Wmissing-return]'),
+    'guarded_selection': (IO + ERROR + 'proc run(flag:bool)->void{' + SETUP + '(try{if(flag){a}else{missing();a}}catch(e:const MissingReturnError){b})=z;' + SHOW + '}run(true);run(false);', 0, '3\n2\n3\n1\n3\n3\n', '[-Wmissing-return]'),
+    'rhs_failure_preserves_slots': (IO + ERROR + 'proc run(flag:bool)->void{' + SETUP + 'try{(if(flag){a}else{b})={missing();z};{}}catch(e:const MissingReturnError){};' + SHOW + '}run(true);run(false);', 0, '1\n2\n3\n1\n2\n3\n', '[-Wmissing-return]'),
+    'swap_failure_preserves_prior_effect': (IO + ERROR + 'proc run(flag:bool)->void{' + SETUP + 'try{({a=z;if(flag){a}else{b}})<=>{missing();c};}catch(e:const MissingReturnError){};' + SHOW + '}run(true);run(false);', 0, '3\n2\n3\n3\n2\n3\n', '[-Wmissing-return]'),
     'destination_return_skips_rhs': (IO + 'proc run(flag:bool)->const i64{' + SETUP + '(if(flag){return 8;}else{b})={behave @print(4);z};return b;}behave @print(run(true));behave @print(run(false));', 0, '8\n4\n3\n', ''),
     'deferred_slot_selection': (run('defer{(if(flag){a}else{b})=z;behave @print(a);behave @print(b);};flag<-!flag;', show=''), 0, '1\n3\n3\n2\n', ''),
     'loop_slot_selection': (run('for(i in 0..3){(if(flag){a}else{b})=z;flag<-!flag;};'), 0, '3\n3\n3\n3\n3\n3\n', ''),

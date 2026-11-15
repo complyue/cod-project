@@ -69,15 +69,15 @@ runner.CASES = {
         'main.cod': IO + 'using "base.cod" f;defer {behave @print(1u64);};behave @print(99u64);',
     }, 70, '2\n', 'division by zero'),
     'source_exception_alias_and_body_inference': ({
-        'base.cod': 'using "std:exceptions" MissingReturnException as Problem;'
+        'base.cod': 'using "std:exceptions" MissingReturnError as Problem;'
             'func missing()->u64{}func make_error(){try{missing();}catch(e:const Problem){return e;};}func accept(e:Problem)->u64{return 4u64;}export make_error;export accept;export Problem;',
-        'main.cod': IO + 'using "std:exceptions" OutOfMemory as Problem;using "base.cod" make_error;using "base.cod" accept;'
+        'main.cod': IO + 'using "std:exceptions" OutOfMemoryError as Problem;using "base.cod" make_error;using "base.cod" accept;'
             'using "base.cod" Problem as SourceProblem;behave @print(accept(make_error()));',
     }, 2, '', 'inferred result mode for a non-scalar type'),
     'source_exception_signature': ({
-        'base.cod': 'using "std:exceptions" MissingReturnException as Problem;'
+        'base.cod': 'using "std:exceptions" MissingReturnError as Problem;'
             'func missing()->u64{}func make_error()->const Problem{try{missing();}catch(e:const Problem){return e;};}func accept(e:Problem)->u64{return 4u64;}export make_error;export accept;export Problem;',
-        'main.cod': IO + 'using "std:exceptions" OutOfMemory as Problem;using "base.cod" make_error;using "base.cod" accept;'
+        'main.cod': IO + 'using "std:exceptions" OutOfMemoryError as Problem;using "base.cod" make_error;using "base.cod" accept;'
             'using "base.cod" Problem as SourceProblem;behave @print(accept(make_error()));',
     }, 0, '4\n', '[-Wmissing-return]'),
     'no_implicit_tls_installation': ({'base.cod': FAMILY, 'main.cod': 'using symbol "base.cod" @score;behave @score(1u64);'}, 2, '', 'cannot prove an installed binding'),
@@ -124,7 +124,7 @@ runner.CASES = {
         'main.cod': IO + 'using "base.cod" get;val x<-9u64;behave @print(get());',
     }, 2, '', 'retained dependency initialization scope remains unproved'),
     'selected_type_and_symbol_collision': ({
-        'base.cod': 'using "std:exceptions" MissingReturnException as Name;export Name;',
+        'base.cod': 'using "std:exceptions" MissingReturnError as Name;export Name;',
         'vocab.cod': 'symbol @Name:u64;export @Name;',
         'main.cod': 'using "base.cod" Name;symbol from "vocab.cod" @Name;',
     }, 2, '', 'same-scope type and callable/symbol'),
@@ -161,8 +161,8 @@ runner.CASES = {
         'main.cod': IO + 'behave @print(1u64);using "base.cod" relay;',
     }, 2, '', 'first-reference incorporation analysis'),
     'export_import_is_not_silently_ignored': ({
-        'base.cod': 'export import "std:exceptions" MissingReturnException;',
-        'main.cod': 'using "base.cod" MissingReturnException;',
+        'base.cod': 'export import "std:exceptions" MissingReturnError;',
+        'main.cod': 'using "base.cod" MissingReturnError;',
     }, 0, '', ''),
 }
 runner.CASE_ARGUMENTS = {}

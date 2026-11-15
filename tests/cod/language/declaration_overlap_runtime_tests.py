@@ -17,7 +17,7 @@ func snapshot(ref input:const (func(u64)->const u64) in A,ref marker:const u64 i
  func original=wrap(base);val outer<-7u64;
  {{val inner<-9u64;observe(shared(outer,inner));
   observe(9030u64);
-  try{func copied=snapshot(original,inner);}catch(e:const OutOfMemory){observe(9031u64);};
+  try{func copied=snapshot(original,inner);}catch(e:const OutOfMemoryError){observe(9031u64);};
   observe(original(3u64));
  }};
 }};

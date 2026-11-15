@@ -4,7 +4,7 @@ using symbol "std:io" @print;
 using units "reusable-pool.cod" {Slot};
 using "reusable-pool.cod" (==);
 using "pool-adapter.cod" Pool;
-using "std:exceptions" RegionCapacityExceeded;
+using "std:exceptions" RegionCapacityExceededError;
 try {
 # Fail at the root, first array header, second header and second payload.
 for (stage in 0u64 .. 4u64) {{
@@ -12,7 +12,7 @@ for (stage in 0u64 .. 4u64) {{
     if(stage == 1u64) {24u64} else {if(stage == 2u64) {72u64} else {88u64}}
   };
   try {create(bytes, 4u32); behave @assert(false)}
-  catch(error:const RegionCapacityExceeded) {}
+  catch(error:const RegionCapacityExceededError) {}
 }};
 {
   owned region arena:Pool <- create(8192u64, 4u32);

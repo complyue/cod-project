@@ -15,10 +15,10 @@ func selected_image(ref input:func(u64)->const u64 in O)->ref (func(u64)->const 
  }};
  observe(9011u64);observe(f(1u64));
  observe(9030u64);
- try{defer (<-)(f,g);}catch(e:const OutOfMemory){observe(9031u64);};
+ try{defer (<-)(f,g);}catch(e:const OutOfMemoryError){observe(9031u64);};
  observe(f(1u64));
  observe(9050u64);
- try{defer intrinsic (<-)(f,g);}catch(e:const OutOfMemory){observe(9051u64);};
+ try{defer intrinsic (<-)(f,g);}catch(e:const OutOfMemoryError){observe(9051u64);};
  observe(f(1u64));
  ptr p=f,q=g;
  func select_image=selected_image;

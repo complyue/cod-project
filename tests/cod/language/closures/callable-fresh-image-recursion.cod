@@ -1,5 +1,5 @@
 using symbol "std:io" @print;
-using "std:exceptions" InvalidCapacity;
+using "std:exceptions" InvalidCapacityError;
 data Item{value:u64;}
 symbol @bias:u64;
 symbol @fail:u64;
@@ -30,7 +30,7 @@ proc run()->void {
   behave @print(perform @leaf(0u64));
   behave @print(behave @leaf(0u64));
   effect @fail<-1u64;
-  try {walk(20u64); {}}catch(e:const InvalidCapacity){behave @print(@bias);};
+  try {walk(20u64); {}}catch(e:const InvalidCapacityError){behave @print(@bias);};
   defer {behave @print(@bias);};
   defer perform @step(4u64);
 }

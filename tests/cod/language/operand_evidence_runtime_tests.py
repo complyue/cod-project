@@ -20,7 +20,7 @@ func add(ref f:T in O,x:u64)->const u64 where {T,owner O}{return f+x;}
   for(i in 0u64..10000u64){sum<-sum+add(f,i);};
   observe(9011u64);observe(sum);
   observe(9050u64);
-  try{later(0,f);}catch(e:const OutOfMemory){observe(9051u64);};
+  try{later(0,f);}catch(e:const OutOfMemoryError){observe(9051u64);};
 }};
 observe(9000u64);
 '''

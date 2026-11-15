@@ -14,7 +14,7 @@ proc selected_aliases(flag:bool)->void{
  observe(9011u64);
  var v->try{if(flag){f}else{g}}finally{};
  observe(9030u64);
- try{v<-h;{}}catch(e:const OutOfMemory){observe(9031u64);};
+ try{v<-h;{}}catch(e:const OutOfMemoryError){observe(9031u64);};
  observe(v(1u64));
  func saved=func [v](x:u64)->const u64{return v(x);};
  v<-h;observe(saved(1u64));observe(v(1u64));

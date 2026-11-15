@@ -57,7 +57,7 @@ runner.CASES = {
     'polymorphic_intrinsic_query_boundary': (IO + 'val x<-make local typeof(@print);', 2, '', 'typeof requires a known declaration'),
     'same_scope_callable_boundary': ('symbol p:proc(u64)->const u64;proc p(x:u64)->const u64{return x;}', 2, '', 'same-scope callable and symbol'),
     'bodyless_callable_boundary': ('symbol p:proc(u64)->const u64;proc p(x:u64)->const u64;', 2, '', 'same-scope callable and symbol'),
-    'type_namespace_boundary': ('using "std:exceptions" MissingReturnException;symbol MissingReturnException:u64;', 2, '', 'same-scope type and symbol'),
+    'type_namespace_boundary': ('using "std:exceptions" MissingReturnError;symbol MissingReturnError:u64;', 2, '', 'same-scope type and symbol'),
     'value_namespace_boundary': (SYMBOL + 'val gain<-0u64;', 2, '', 'same-scope value and symbol'),
     'nested_shadow_ends': (IO + SYMBOL + '{{val gain<-0u64;}};val x<-make local typeof(@gain){19u64};behave @print(x);', 0, '19\n', ''),
     'deferred_outer_shadow': (IO + 'proc outer(print:u64)->void{proc inner=proc()->void{defer behave @print(1u64);};inner();}outer(1u64);',

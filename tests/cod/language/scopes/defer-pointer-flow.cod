@@ -1,6 +1,6 @@
 using symbol "std:io" @print;
 using "std:exceptions" NullPointerException;
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 proc show(value:u64 in O)->void where {owner O} {behave @print(value);}
 proc set(value:u64 in O)->void where {owner O} {value <- 7u64;}
 proc run()->void {
@@ -19,7 +19,7 @@ proc init()->void {
   ptr second = make local u64;
   ptr selected = first;
   {{
-    defer {behave @print(selected);} catch(error:const OutOfMemory) {throw error;};
+    defer {behave @print(selected);} catch(error:const OutOfMemoryError) {throw error;};
     defer {selected <- 6u64;};
     defer {selected = second;};
   }};
@@ -41,7 +41,7 @@ proc native()->void {
   ptr second = make local u64;
   ptr selected = first;
   {{
-    defer {show(selected);} catch(error:const OutOfMemory) {throw error;};
+    defer {show(selected);} catch(error:const OutOfMemoryError) {throw error;};
     defer {set(selected);};
     defer {selected = second;};
   }};
@@ -94,7 +94,7 @@ proc branch(yes:bool)->void {
   show(selected);
 }
 branch(true); branch(false);
-using "std:exceptions" InvalidCapacity;
+using "std:exceptions" InvalidCapacityError;
 region symbol @arena;
 proc bad()->void {effect @arena <- region(0u64);}
 proc recovery()->void {
@@ -102,7 +102,7 @@ proc recovery()->void {
   val second:u64 <- 19u64;
   ptr selected = first;
   {{
-    defer catch(error:const InvalidCapacity) {selected = first;} finally {show(selected);};
+    defer catch(error:const InvalidCapacityError) {selected = first;} finally {show(selected);};
     defer {selected = second; bad();};
   }};
   show(selected);
@@ -112,7 +112,7 @@ proc failure()->void {
   val first:u64 <- 20u64;
   val second:u64 <- 21u64;
   ptr selected = first;
-  try {{defer {selected = second; bad();};}} catch(error:const InvalidCapacity) {show(selected);};
+  try {{defer {selected = second; bad();};}} catch(error:const InvalidCapacityError) {show(selected);};
 }
 failure();
 proc returning()->const u64 {
@@ -160,7 +160,7 @@ proc separate_targets()->void {
   ptr right = first;
   {{
     defer {show(left); show(right);}
-      catch(error:const OutOfMemory) {throw error;};
+      catch(error:const OutOfMemoryError) {throw error;};
     defer {set(left); recursive_set(right,3u64);};
     defer {left = second; right = third;};
   }};
@@ -172,7 +172,7 @@ proc branch_initialization(yes:bool)->void {
   ptr second = make local u64;
   ptr selected = first;
   {{
-    defer {show(selected);} catch(error:const OutOfMemory) {throw error;};
+    defer {show(selected);} catch(error:const OutOfMemoryError) {throw error;};
     defer {
       if(yes) {second <- 37u64; selected = second; {}}
       else {first <- 36u64; selected = first; {}};

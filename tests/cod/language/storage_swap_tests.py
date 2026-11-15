@@ -5,12 +5,12 @@ import foundation_tests as runner
 
 IO = 'using symbol "std:io" @print;\n'
 NPE = 'using "std:exceptions" NullPointerException;\n'
-ERROR = '''using "std:exceptions" MissingReturnException;
+ERROR = '''using "std:exceptions" MissingReturnError;
 func missing()->const i64{}
-func error()->const MissingReturnException{try{missing();}catch(e:const MissingReturnException){return e;};}
+func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}
 '''
 WARN = '[-Wmissing-return]'
-EXCEPTIONS = NPE+ERROR+'''using "std:exceptions" SystemException;
+EXCEPTIONS = NPE+ERROR+'''using "std:exceptions" Exception;
 func absent()->const NullPointerException{ptr p:i64=null in here;try{p;{}}catch(e:const NullPointerException){return e;};}
 '''
 runner.CASES = {
@@ -27,8 +27,8 @@ runner.CASES = {
     'bits_values_after_operand_effects': (IO+'val x<-1,y<-2;x<->{x<-3;y};behave @print(x);behave @print(y);',0,'2\n3\n',''),
     'reference_reload_after_cleanup': (IO+'val x<-1,y<-2,z<-3;ptr p=x,q=y;{{defer{p=z;};p}}<=>q;behave @print(p);behave @print(q);',0,'2\n3\n',''),
     'bits_address_survives_cleanup': (IO+'val x<-1,y<-2,z<-3;ptr p=x,q=y;{{defer{p=z;};p}}<->q;behave @print(x);behave @print(y);behave @print(p);',0,'2\n1\n3\n',''),
-    'reference_operand_failure': (IO+ERROR+'val x<-1,y<-2,z<-3;ptr p=x,q=y;try{p<=>{p=z;missing();q};}catch(e:const MissingReturnException){};behave @print(p);behave @print(q);',0,'3\n2\n',WARN),
-    'bits_operand_failure': (IO+ERROR+'val x<-1,y<-2;try{x<->{x<-3;missing();y};}catch(e:const MissingReturnException){};behave @print(x);behave @print(y);',0,'3\n2\n',WARN),
+    'reference_operand_failure': (IO+ERROR+'val x<-1,y<-2,z<-3;ptr p=x,q=y;try{p<=>{p=z;missing();q};}catch(e:const MissingReturnError){};behave @print(p);behave @print(q);',0,'3\n2\n',WARN),
+    'bits_operand_failure': (IO+ERROR+'val x<-1,y<-2;try{x<->{x<-3;missing();y};}catch(e:const MissingReturnError){};behave @print(x);behave @print(y);',0,'3\n2\n',WARN),
     'null_pointer_exchange': (IO+'val x<-1;ptr p=x,q:i64=null in here;p<=>q;behave @print((p is null));behave @print(q);p<=>q;behave @print(p);behave @print((q is null));',0,'true\n1\n1\ntrue\n',''),
     'null_self_exchange': (IO+'ptr p:i64=null in here;p<=>p;behave @print((p is null));',0,'true\n',''),
     'bits_null_failure_after_operands': (IO+NPE+'val x<-1;ptr p:i64=null in here;try{p<->{behave @print(2);x};}catch(e:const NullPointerException){behave @print(3);};behave @print(x);',0,'2\n3\n1\n',''),
@@ -50,10 +50,10 @@ runner.CASES = {
     'deferred_exchange': (IO+'val x<-1,y<-2;ptr p=x,q=y;{{defer{p<=>q;};}};behave @print(p);behave @print(q);{{defer{p<->q;};}};behave @print(x);behave @print(y);',0,'2\n1\n2\n1\n',''),
     'deferred_observation_order': (IO+'{{val x<-1,y<-2;ptr p=x,q=y;defer{behave @print(p);};defer{p<=>q;};}};',0,'2\n',''),
     'callable_holder_reference_exchange': (IO+'func one()->const i64{return 1;}func two()->const i64{return 2;}func a=one;func b=two;ptr p=a,q=b;p<=>q;behave @print(p());behave @print(q());',0,'2\n1\n',''),
-    'exception_bits_and_causes': (IO+ERROR+'val first<-error();val second<-try{throw first from first;}catch(e:const MissingReturnException){e};first<->second;behave @print(first.cause_count);behave @print(second.cause_count);',0,'1\n0\n',WARN),
-    'exception_categories_exchange': (IO+EXCEPTIONS+'val a:SystemException<-error(),b:SystemException<-absent();a<->b;try{throw a;}catch(e:const NullPointerException){behave @print(1);};try{throw b;}catch(e:const MissingReturnException){behave @print(2);};',0,'1\n2\n',WARN),
-    'exception_payload_after_operand_effects': (IO+EXCEPTIONS+'val a:SystemException<-error(),b:SystemException<-error();a<->{a<-absent();b};try{throw a;}catch(e:const MissingReturnException){behave @print(1);};try{throw b;}catch(e:const NullPointerException){behave @print(2);};',0,'1\n2\n',WARN),
-    'exception_swap_keeps_checked_obligation': (EXCEPTIONS+'val a:SystemException<-error(),b:SystemException<-error();a<->{a<-absent();b};throw b;',2,'','requires a covering catch'),
+    'exception_bits_and_causes': (IO+ERROR+'val first<-error();val second<-try{throw first from first;}catch(e:const MissingReturnError){e};first<->second;behave @print(first.cause_count);behave @print(second.cause_count);',0,'1\n0\n',WARN),
+    'exception_categories_exchange': (IO+EXCEPTIONS+'val a:Exception<-error(),b:Exception<-absent();a<->b;try{throw a;}catch(e:const NullPointerException){behave @print(1);};try{throw b;}catch(e:const MissingReturnError){behave @print(2);};',0,'1\n2\n',WARN),
+    'exception_payload_after_operand_effects': (IO+EXCEPTIONS+'val a:Exception<-error(),b:Exception<-error();a<->{a<-absent();b};try{throw a;}catch(e:const MissingReturnError){behave @print(1);};try{throw b;}catch(e:const NullPointerException){behave @print(2);};',0,'1\n2\n',WARN),
+    'exception_swap_keeps_checked_obligation': (EXCEPTIONS+'val a:Exception<-error(),b:Exception<-error();a<->{a<-absent();b};throw b;',2,'','requires a covering catch'),
     'later_operand_initializes_first': (IO+'val x<-make local i64,y<-2;x<->{x<-14;y};behave @print(x);behave @print(y);',0,'2\n14\n',''),
     'selected_initialization_exchanges': (IO+'proc run(flag:bool)->void{val x<-make local i64,y<-make local i64,z<-15;ptr p=if(flag){x}else{y},q=z;p<-16;p<=>q;behave @print(p);behave @print(q);}run(true);run(false);',0,'15\n16\n15\n16\n',''),
     'reference_swap_invalidates_nonnull': ('val x<-1;ptr p=x,q:i64=null in here;p<=>q;p;',2,'','requires a covering catch'),

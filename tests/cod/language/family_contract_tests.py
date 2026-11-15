@@ -5,25 +5,25 @@ import foundation_tests as runner
 
 IO = 'using symbol "std:io" @print;'
 NPE = 'using "std:exceptions" NullPointerException;'
-ERROR = IO + NPE + 'using "std:exceptions" SystemException;using "std:exceptions" MissingReturnException;'
-ERROR += 'func missing()->u64{}func error()->const MissingReturnException{try{missing();}catch(e:const MissingReturnException){return e;};}'
+ERROR = IO + NPE + 'using "std:exceptions" Exception;using "std:exceptions" MissingReturnError;'
+ERROR += 'func missing()->u64{}func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}'
 ERROR += 'func null_error()->const NullPointerException{val x<-1;ptr p=x;p=null;try{p;{}}catch(e:const NullPointerException){return e;};}'
-F = 'symbol @f:proc(SystemException)->u64;proc @f(e:MissingReturnException)->u64{return 7u64;}proc @f(e:T)->u64 where T{return e.category;}'
+F = 'symbol @f:proc(Exception)->u64;proc @f(e:MissingReturnError)->u64{return 7u64;}proc @f(e:T)->u64 where T{return e.category;}'
 runner.CASES = {
-    'common_exception_actual_identity': (ERROR + F + 'effect @f;val e:SystemException<-error();behave @print(behave @f(e));e<-null_error();behave @print(behave @f(e));', 0, '7\n4\n', ''),
-    'exact_exception_input': (ERROR + 'proc @f(e:MissingReturnException)->u64{return e.category;}effect @f;behave @print(behave @f(error()));', 0, '5\n', ''),
-    'common_method_parameter_preparation': (ERROR + 'proc @f(e:SystemException)->u64{return e.category;}effect @f;val e:SystemException<-error();behave @print(behave @f(e));behave @print(behave @f(null_error()));', 0, '5\n4\n', ''),
-    'common_exception_through_generic_caller': (ERROR + F + 'proc relay(e:T)->u64 where T{return behave @f(e);}effect @f;val e:SystemException<-error();behave @print(relay(e));behave @print(relay(null_error()));', 0, '7\n4\n', ''),
-    'common_exception_through_holder': (ERROR + F + 'effect @f;proc p=@f;val e:SystemException<-error();behave @print(p(e));e<-null_error();behave @print(p(e));', 0, '7\n4\n', ''),
-    'common_exception_joint_identity': (ERROR + 'symbol @f:proc(SystemException,SystemException)->u64;proc @f(a:T,b:T)->u64 where T{return 1u64;}proc @f(a:A,b:B)->u64 where {A,B}{return 7u64;}'
-        'effect @f;val a:SystemException<-error(),b:SystemException<-null_error();behave @print(behave @f(a,b));b<-a;behave @print(behave @f(a,b));', 0, '7\n1\n', ''),
-    'common_exception_deferred_snapshot': (ERROR + 'symbol @f:proc(SystemException)->void;proc @f(e:MissingReturnException)->void{behave @print(7u64);}proc @f(e:T)->void where T{behave @print(e.category);}'
-        'effect @f;val e:SystemException<-error();defer behave @f(e);e<-null_error();defer{behave @f(e);};', 0, '4\n7\n', ''),
-    'common_exception_complete_capture': (ERROR + 'symbol @x:u64,@y:u64,@f:proc(SystemException)->u64;proc @f(e:MissingReturnException)->u64{return @x;}proc @f(e:T)->u64 where T{return @y;}'
-        'effect @x<-1u64;effect @y<-7u64;effect @f;effect @x<-2u64;effect @y<-8u64;val e:SystemException<-null_error();behave @print(perform @f(e));e<-error();behave @print(perform @f(e));behave @print(behave @f(e));', 0, '7\n1\n2\n', ''),
-    'common_exception_missing_method': (ERROR + 'symbol @f:proc(SystemException)->u64;proc @f(e:MissingReturnException)->u64{return 1u64;}effect @f;', 2, '', 'no applicable method'),
-    'common_exception_borrow': (ERROR + 'proc @f(ref e:const SystemException in O)->u64 where {owner O}{return e.category;}effect @f;', 0, '', ''),
-    'borrowed_exception_adaptation_is_unproved': (ERROR + 'proc @narrow(ref e:const MissingReturnException in O)->u64 where {owner O}{return e.category;}proc @broad(ref e:const SystemException in O)->u64 where {owner O}{return e.category;}effect @narrow=broad;', 2, '', 'borrowed target adaptation'),
+    'common_exception_actual_identity': (ERROR + F + 'effect @f;val e:Exception<-error();behave @print(behave @f(e));e<-null_error();behave @print(behave @f(e));', 0, '7\n4\n', ''),
+    'exact_exception_input': (ERROR + 'proc @f(e:MissingReturnError)->u64{return e.category;}effect @f;behave @print(behave @f(error()));', 0, '5\n', ''),
+    'common_method_parameter_preparation': (ERROR + 'proc @f(e:Exception)->u64{return e.category;}effect @f;val e:Exception<-error();behave @print(behave @f(e));behave @print(behave @f(null_error()));', 0, '5\n4\n', ''),
+    'common_exception_through_generic_caller': (ERROR + F + 'proc relay(e:T)->u64 where T{return behave @f(e);}effect @f;val e:Exception<-error();behave @print(relay(e));behave @print(relay(null_error()));', 0, '7\n4\n', ''),
+    'common_exception_through_holder': (ERROR + F + 'effect @f;proc p=@f;val e:Exception<-error();behave @print(p(e));e<-null_error();behave @print(p(e));', 0, '7\n4\n', ''),
+    'common_exception_joint_identity': (ERROR + 'symbol @f:proc(Exception,Exception)->u64;proc @f(a:T,b:T)->u64 where T{return 1u64;}proc @f(a:A,b:B)->u64 where {A,B}{return 7u64;}'
+        'effect @f;val a:Exception<-error(),b:Exception<-null_error();behave @print(behave @f(a,b));b<-a;behave @print(behave @f(a,b));', 0, '7\n1\n', ''),
+    'common_exception_deferred_snapshot': (ERROR + 'symbol @f:proc(Exception)->void;proc @f(e:MissingReturnError)->void{behave @print(7u64);}proc @f(e:T)->void where T{behave @print(e.category);}'
+        'effect @f;val e:Exception<-error();defer behave @f(e);e<-null_error();defer{behave @f(e);};', 0, '4\n7\n', ''),
+    'common_exception_complete_capture': (ERROR + 'symbol @x:u64,@y:u64,@f:proc(Exception)->u64;proc @f(e:MissingReturnError)->u64{return @x;}proc @f(e:T)->u64 where T{return @y;}'
+        'effect @x<-1u64;effect @y<-7u64;effect @f;effect @x<-2u64;effect @y<-8u64;val e:Exception<-null_error();behave @print(perform @f(e));e<-error();behave @print(perform @f(e));behave @print(behave @f(e));', 0, '7\n1\n2\n', ''),
+    'common_exception_missing_method': (ERROR + 'symbol @f:proc(Exception)->u64;proc @f(e:MissingReturnError)->u64{return 1u64;}effect @f;', 2, '', 'no applicable method'),
+    'common_exception_borrow': (ERROR + 'proc @f(ref e:const Exception in O)->u64 where {owner O}{return e.category;}effect @f;', 0, '', ''),
+    'borrowed_exception_adaptation_is_unproved': (ERROR + 'proc @narrow(ref e:const MissingReturnError in O)->u64 where {owner O}{return e.category;}proc @broad(ref e:const Exception in O)->u64 where {owner O}{return e.category;}effect @narrow=broad;', 2, '', 'borrowed target adaptation'),
     'callable_value_parameter': (IO + 'proc @apply(f:func()->u64)->u64{return f();}func one()->u64{return 1u64;}func two()->u64{return 7u64;}'
         'effect @apply;behave @print(behave @apply(one));behave @print(behave @apply(two));', 0, '1\n7\n', ''),
     'captured_callable_parameter': (IO + 'proc @apply(f:func()->u64)->u64{return f();}func one()->u64{return 7u64;}func wrapped(f:func()->u64)->func()->u64{return func[f]()->u64{return f()+1u64;};}'

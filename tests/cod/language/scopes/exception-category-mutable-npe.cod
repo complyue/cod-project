@@ -1,9 +1,9 @@
 using symbol "std:io" @print;
-using "std:exceptions" SystemException;
+using "std:exceptions" Exception;
 region symbol @arena;
 proc run()->void {
   try {effect @arena <- region(0u64);} catch(first) {
-    val saved:SystemException <- first;
+    val saved:Exception <- first;
     try {ptr absent:u64 = null in here; behave @print(absent);} catch(second) {saved <- second;};
     throw saved;
   }

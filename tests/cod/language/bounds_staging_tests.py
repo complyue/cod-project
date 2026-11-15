@@ -13,7 +13,7 @@ from callable_value_staging_tests import inventory
 from bounds_tests import TYPES, SEED, LINK
 
 LIBRARY = TYPES+SEED+LINK+'''
-func at(e:T,i:u64,n:u64)->const SystemException where T{
+func at(e:T,i:u64,n:u64)->const Exception where T{
  if(n==0u64){return cause_at(e,i);}else{return at(e,i,n-1u64);};
 }
 export at;export seed;export link;
@@ -21,7 +21,7 @@ export at;export seed;export link;
 SOURCE = TYPES+'''
 using symbol "std:io" @print;
 using "lib.cod" at;using "lib.cod" seed;using "lib.cod" link;
-val e<-seed();val history<-link(e,e);val common:SystemException<-history;
+val e<-seed();val history<-link(e,e);val common:Exception<-history;
 behave @print(at(history,0u64,DEPTHu64).category);
 behave @print(at(common,0u64,DEPTHu64).category);
 '''

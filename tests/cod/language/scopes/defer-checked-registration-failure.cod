@@ -1,9 +1,9 @@
 using symbol "std:io" @print;
 using "std:exceptions" NullPointerException;
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 proc run()->void {
   try {defer catch(e:const NullPointerException) {};}
-  catch(e:const OutOfMemory) {};
+  catch(e:const OutOfMemoryError) {};
   ptr absent:i64 = null in here;
   behave @print(absent);
 }

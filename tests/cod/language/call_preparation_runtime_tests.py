@@ -6,36 +6,36 @@ from generic_catch_tests import IO, ERRORS
 
 runner = fixture.runner
 runner.SOURCE = IO + ERRORS + '''
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 proc observe(x:u64)->void{behave @print(x);}
 func number()->const u64{return 41u64;}
 func wrap(f:func()->const u64)->func()->const u64{return func[f]()->const u64{return f();};}
 func make_callback()->const func()->const u64{return wrap(number);}
 func read_callback(f:func()->const u64)->const u64{return f();}
-func read_error(e:SystemException)->const u64{return e.category;}
+func read_error(e:Exception)->const u64{return e.category;}
 func apply(make_value:func()->const U,read:func(T)->const u64)->const u64 where {T,U}{return read(make_value());}
-func wrap_error(f:func(SystemException)->const u64)->func(SystemException)->const u64{
- return func[f](e:SystemException)->const u64{return f(e);};
+func wrap_error(f:func(Exception)->const u64)->func(Exception)->const u64{
+ return func[f](e:Exception)->const u64{return f(e);};
 }
-proc sink(e:SystemException,f:func()->const u64)->void{observe(e.category);observe(f());}
-proc late(e:SystemException,f:func()->const u64,n:i64)->void{observe(99u64);}
+proc sink(e:Exception,f:func()->const u64)->void{observe(e.category);observe(f());}
+proc late(e:Exception,f:func()->const u64,n:i64)->void{observe(99u64);}
 observe(9300u64);
 observe(apply(missing_error,read_error));observe(apply(make_callback,read_callback));
 observe(9301u64);
 {{
  func f=wrap_error(read_error);observe(9000u64);
- try{observe(f(missing_error()));}catch(e:const OutOfMemory){observe(9001u64);observe(1u64);};
+ try{observe(f(missing_error()));}catch(e:const OutOfMemoryError){observe(9001u64);observe(1u64);};
  observe(f(null_error()));
 }};
 observe(9002u64);
 proc value=late;
-try{value(missing_error(),wrap(number),missing());}catch(e:const MissingReturnException){observe(2u64);};
+try{value(missing_error(),wrap(number),missing());}catch(e:const MissingReturnError){observe(2u64);};
 observe(9002u64);
 proc deferred=sink;
 {{defer deferred(missing_error(),wrap(number));}};
 observe(9002u64);
 observe(9004u64);
-try{{defer deferred(missing_error(),wrap(number));}}catch(e:const OutOfMemory){observe(9005u64);observe(3u64);};
+try{{defer deferred(missing_error(),wrap(number));}}catch(e:const OutOfMemoryError){observe(9005u64);observe(3u64);};
 observe(9002u64);
 '''
 runner.HARNESS = r'''

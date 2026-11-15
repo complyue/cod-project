@@ -8,7 +8,7 @@ IO = 'using symbol "std:io" @print;\n'
 PRE = IO + 'using "std:exceptions" NullPointerException;\n'
 INC = 'func inc(x:i64)->const i64{return x+1;}func dec(x:i64)->const i64{return x-1;}\n'
 PROC = 'proc one(x:i64)->void{behave @print(x+1);}proc two(x:i64)->void{behave @print(x+2);}\n'
-MISS = 'using "std:exceptions" MissingReturnException;func missing()->const i64{}\n'
+MISS = 'using "std:exceptions" MissingReturnError;func missing()->const i64{}\n'
 WARN = 'callable may finish without an explicit return'
 runner.CASES = {
     'module_function_value': (IO+INC+'func f=inc;behave @print(f(1));',0,'2\n',''),
@@ -60,7 +60,7 @@ runner.CASES = {
     'checked_view_cannot_hide_throw': (PRE+'func f(x:i64)->const i64 throws NullPointerException{return x;}func g:func(i64)->const i64=f;',2,'','omits a required checked exception'),
     'voluntary_checked_view_contract': (PRE+INC+'func f:func(i64)->const i64 throws NullPointerException=inc;f(1);',2,'','requires a covering catch'),
     'deferred_checked_view': (PRE+'proc f(x:i64)->void throws NullPointerException{behave @print(x);}proc g=f;try{{defer g(48);}}catch(e:const NullPointerException){};',0,'48\n',''),
-    'failure_retains_previous_holder': (IO+INC+MISS+'func failed()->func(i64)->const i64{missing();return dec;}func f=inc;try{f<-failed();{}}catch(e:const MissingReturnException){behave @print(f(48));};',0,'49\n',WARN),
+    'failure_retains_previous_holder': (IO+INC+MISS+'func failed()->func(i64)->const i64{missing();return dec;}func f=inc;try{f<-failed();{}}catch(e:const MissingReturnError){behave @print(f(48));};',0,'49\n',WARN),
     'generic_body_constructs_distinct_views': (IO+'func id(x:T)->const T where T{return x;}func adapt(sample:F)->const F where F{return id;}func a:func(i64)->const i64=id;func b:func(bool)->const bool=id;func fa=adapt(a);func fb=adapt(b);behave @print(fa(50));behave @print(fb(true));',0,'50\ntrue\n',''),
     'generic_factory_result_contract': (IO+'func id(x:T)->const T where T{return x;}func factory(x:T)->func(T)->const T where T{return id;}func a=factory(1);func b=factory(false);behave @print(a(51));behave @print(b(true));',0,'51\ntrue\n',''),
     'generic_local_view_annotation': (IO+'func id(x:T)->const T where T{return x;}func apply(x:T)->const T where T{func f:func(T)->const T=id;return f(x);}behave @print(apply(52));behave @print(apply(true));',0,'52\ntrue\n',''),

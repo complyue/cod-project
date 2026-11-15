@@ -4,13 +4,13 @@ from pathlib import Path
 import dynamic_binding_thread_tests as runner
 
 runner.SOURCE = runner.SOURCE.replace('symbol @context:u64;', '''symbol @context:u64;
-using "std:exceptions" SystemException;
-using "std:exceptions" MissingReturnException;
+using "std:exceptions" Exception;
+using "std:exceptions" MissingReturnError;
 func missing()->u64{}
-func error()->const MissingReturnException{try{missing();}catch(e:const MissingReturnException){return e;};}
-val argument:SystemException<-error();
-symbol @selected:proc(SystemException)->u64;
-proc @selected(v:MissingReturnException)->u64{return @context;}
+func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}
+val argument:Exception<-error();
+symbol @selected:proc(Exception)->u64;
+proc @selected(v:MissingReturnError)->u64{return @context;}
 proc @selected(v:T)->u64 where T{return 99u64;}''')
 runner.SOURCE = runner.SOURCE.replace('effect @context<-1u64;', 'effect @context<-1u64;effect @selected;')
 runner.SOURCE = runner.SOURCE.replace('effect @context<-2u64;', 'effect @context<-2u64;effect @selected;')

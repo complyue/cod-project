@@ -1,6 +1,6 @@
 using symbol "std:io" @print;
-using "std:exceptions" InvalidCapacity;
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" InvalidCapacityError;
+using "std:exceptions" OutOfMemoryError;
 data Packet {value:u64;}
 region symbol @arena;
 func owner(mode:u64) -> owned region :Packet {
@@ -48,13 +48,13 @@ for (i in 0u64 .. 3u64) {{
   try {
     owned region result <- owner(i);
     behave @print(result.value);
-  } catch(e:const InvalidCapacity) { behave @print(70u64); };
+  } catch(e:const InvalidCapacityError) { behave @print(70u64); };
   try {
     func action=callable(i);
     behave @print(action());
-  } catch(e:const InvalidCapacity) { behave @print(80u64); };
+  } catch(e:const InvalidCapacityError) { behave @print(80u64); };
 }};
 try { func result=pending_failure(); behave @print(result()); }
-catch(e:const OutOfMemory) { behave @print(90u64); };
+catch(e:const OutOfMemoryError) { behave @print(90u64); };
 behave @print(argument_return());
 behave @print(owner_argument_return());

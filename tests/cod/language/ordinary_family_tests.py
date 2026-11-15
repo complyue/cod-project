@@ -6,16 +6,16 @@ import foundation_tests as runner
 IO = 'using symbol "std:io" @print;'
 F = 'func select(x:u64)->u64{return 1u64;}func select(x:T)->u64 where T{return 7u64;}'
 VIEW = 'func held:func(u64)->u64=select;'
-ERROR = '''using "std:exceptions" SystemException;
-using "std:exceptions" MissingReturnException;
+ERROR = '''using "std:exceptions" Exception;
+using "std:exceptions" MissingReturnError;
 func missing()->u64{}
-func error()->const MissingReturnException{try{missing();}catch(e:const MissingReturnException){return e;};}
+func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}
 '''
 EXHAUSTIVE = ERROR + ''.join(
     f'using "std:exceptions" {name};func select(e:{name})->u64{{return e.category;}}'
-    for name in ('OutOfMemory', 'RegionCapacityExceeded', 'InvalidCapacity', 'NullPointerException',
-                 'UnsoundRuntimeTyping', 'StaticallyUnknownType'))
-EXHAUSTIVE += 'func select(e:MissingReturnException)->u64{return 7u64;}'
+    for name in ('OutOfMemoryError', 'RegionCapacityExceededError', 'InvalidCapacityError', 'NullPointerException',
+                 'UnsoundRuntimeTypingError', 'StaticallyUnknownTypeException', 'IndexOutOfBoundsError'))
+EXHAUSTIVE += 'func select(e:MissingReturnError)->u64{return 7u64;}'
 runner.CASES = {
     'actual_type_selects_method': (IO + F + VIEW + 'behave @print(held(1u8));behave @print(held(1u32));behave @print(held(1u64));', 0, '7\n7\n1\n', ''),
     'common_result_adaptation': (IO + 'func select(x:u64)->u32{return 7u32;}func select(x:T)->f32 where T{return 1.5f32;}'
@@ -27,13 +27,15 @@ runner.CASES = {
         + VIEW + 'func copy=held;func wrapped=wrap(copy);behave @print(copy(1u8));behave @print(wrapped(1u8));', 0, '7\n1\n', ''),
     'joint_actual_types': (IO + 'func select(x:T,y:T)->u64 where T{return 1u64;}func select(x:A,y:B)->u64 where {A,B}{return 7u64;}'
         'func held:func(u64,u64)->u64=select;behave @print(held(1u8,2u32));behave @print(held(1u8,2u8));', 0, '7\n1\n', ''),
-    'common_exception_identity': (IO + ERROR + 'func select(e:MissingReturnException)->u64{return 7u64;}func select(e:T)->u64 where T{return e.category;}'
-        'func held:func(SystemException)->u64=select;val e:SystemException<-error();behave @print(held(e));', 0, '7\n', '[-Wmissing-return]'),
-    'exhaustive_concrete_methods_supply_view': (IO + EXHAUSTIVE + 'func held:func(SystemException)->u64=select;behave @print(held(error()));', 0, '7\n', '[-Wmissing-return]'),
-    'type_query_uses_complete_family': (IO + EXHAUSTIVE + 'func apply(f:func(SystemException)->u64,e:SystemException)->u64{return f(e);}'
+    'common_exception_identity': (IO + ERROR + 'func select(e:MissingReturnError)->u64{return 7u64;}func select(e:T)->u64 where T{return e.category;}'
+        'func held:func(Exception)->u64=select;val e:Exception<-error();behave @print(held(e));', 0, '7\n', '[-Wmissing-return]'),
+    'exhaustive_concrete_methods_supply_view': (IO + EXHAUSTIVE + 'func held:func(Exception)->u64=select;behave @print(held(error()));', 0, '7\n', '[-Wmissing-return]'),
+    'missing_unobserved_category_rejects_view': (IO + EXHAUSTIVE.replace('func select(e:IndexOutOfBoundsError)->u64{return e.category;}', '')
+        + 'func held:func(Exception)->u64=select;behave @print(held(error()));', 2, '', 'no applicable method'),
+    'type_query_uses_complete_family': (IO + EXHAUSTIVE + 'func apply(f:func(Exception)->u64,e:Exception)->u64{return f(e);}'
         'val x<-make local typeof(apply(select,error())){9u64};behave @print(x);behave @print(apply(select,error()));', 0, '9\n7\n', '[-Wmissing-return]'),
-    'type_query_rejects_incomplete_view': (ERROR + 'func select(e:MissingReturnException)->u64{return 7u64;}'
-        'func apply(f:func(SystemException)->u64,e:SystemException)->u64{return f(e);}'
+    'type_query_rejects_incomplete_view': (ERROR + 'func select(e:MissingReturnError)->u64{return 7u64;}'
+        'func apply(f:func(Exception)->u64,e:Exception)->u64{return f(e);}'
         'val x<-make local typeof(apply(select,error())){9u64};', 2, '', 'no applicable method'),
     'borrowed_alias_and_write': (IO + 'func identity(ref x:i64 in O)->ref i64 in O where {owner O}{return x;}func held=identity;'
         'val x<-1;held(x)<-7;behave @print(x);', 0, '7\n', ''),
@@ -51,8 +53,8 @@ runner.CASES = {
         'func select(x:T,y:u8)->u64 where T{return 4u64;}func held:func(u64,u64)->u64=select;', 2, '', 'ambiguous methods'),
     'unused_result_rejects': ('func select(x:u64)->u64{return 1u64;}func select(x:T)->bool where T{return true;}'
         + VIEW, 2, '', 'callable view contract'),
-    'unused_checked_failure_rejects': ('using "std:exceptions" StaticallyUnknownType;func select(x:u64)->u64{return 1u64;}'
-        'func select(x:T)->u64 throws StaticallyUnknownType where T{return 7u64;}' + VIEW, 2, '', 'required checked exception'),
+    'unused_checked_failure_rejects': ('using "std:exceptions" StaticallyUnknownTypeException;func select(x:u64)->u64{return 1u64;}'
+        'func select(x:T)->u64 throws StaticallyUnknownTypeException where T{return 7u64;}' + VIEW, 2, '', 'required checked exception'),
     'unused_body_is_checked': ('func select(x:u64)->u64{return 1u64;}func select(x:T)->u64 where T{return true;}' + VIEW, 2, '', 'return type'),
     'source_and_imported_interpretations': ({
         'base.cod': 'func choose(x:u64)->u64{return helper(x);}func choose(x:T)->u64 where T{return helper(x);}func helper(x:T)->u64 where T{return 1u64;}export choose;export helper;',

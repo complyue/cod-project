@@ -19,13 +19,13 @@ proc later(tag:T,ref f:func(u64)->const u64 in O)->void where {T,owner O}{defer 
   for(i in 0u64..10000u64){sum<-sum+inspect(false,f,i);};
   observe(9011u64);observe(sum);
   observe(9030u64);
-  try{probe(0,f);{}}catch(e:const OutOfMemory){observe(9031u64);};
+  try{probe(0,f);{}}catch(e:const OutOfMemoryError){observe(9031u64);};
 }};
 observe(9000u64);
 {{
   func f=wrap(base);later(false,f);f<-wrap(base);later(0,f);
   observe(9050u64);
-  try{later(false,f);}catch(e:const OutOfMemory){observe(9051u64);};
+  try{later(false,f);}catch(e:const OutOfMemoryError){observe(9051u64);};
 }};
 observe(9000u64);
 '''

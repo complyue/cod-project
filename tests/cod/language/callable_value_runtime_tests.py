@@ -5,8 +5,8 @@ import exception_value_runtime_tests as runner
 
 runner.SOURCE = '''
 using symbol "std:io" @print;
-using "std:exceptions" OutOfMemory;
-using "std:exceptions" MissingReturnException;
+using "std:exceptions" OutOfMemoryError;
+using "std:exceptions" MissingReturnError;
 proc observe(x:u64)->void{behave @print(x);}
 proc one(x:u64)->void{observe(x+1u64);}
 proc two(x:u64)->void{observe(x+2u64);}
@@ -24,8 +24,8 @@ proc preparation()->void{proc f=one;defer{observe(4u64);};defer f(missing());}
 proc f=one;
 {{defer f(10u64);defer f(11u64);f<-two;}};f(10u64);
 {{defer f({{f<-one;20u64}});}};f(20u64);
-try{failed();}catch(e:const OutOfMemory){observe(1u64);};
-try{preparation();}catch(e:const MissingReturnException){observe(3u64);};
+try{failed();}catch(e:const OutOfMemoryError){observe(1u64);};
+try{preparation();}catch(e:const MissingReturnError){observe(3u64);};
 observe(replaced()(40u64));{{defer (maker())(40u64);}};
 observe(9003u64);
 val total<-0u64;

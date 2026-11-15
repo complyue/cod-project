@@ -1,5 +1,5 @@
 using symbol "std:io" @print;
-using "std:exceptions" InvalidCapacity;
+using "std:exceptions" InvalidCapacityError;
 region State {value:u64;}
 function first(region r:State)->region :State in r {r.value <- r.value+1u64;return r}
 function second(region r:State)->region :State in r {r.value <- r.value+2u64;return r}
@@ -61,7 +61,7 @@ function fail_after(region r:State)->region :State in r {
  return r
 }
 func failing=fail_after;
-try {region discarded=failing(state);} catch(e:const InvalidCapacity){behave @print(state.value);};
+try {region discarded=failing(state);} catch(e:const InvalidCapacityError){behave @print(state.value);};
 
 # The result retains an interface established only in the selected adapter.
 using "record-vocabulary.cod" Arena;

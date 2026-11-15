@@ -5,8 +5,8 @@ import foundation_tests as runner
 
 IO = 'using symbol "std:io" @print;'
 NPE = 'using "std:exceptions" NullPointerException;'
-SYSTEM = 'using "std:exceptions" SystemException;'
-MISSING = 'using "std:exceptions" MissingReturnException;'
+SYSTEM = 'using "std:exceptions" Exception;'
+MISSING = 'using "std:exceptions" MissingReturnError;'
 BROAD = 'func choose(ref x:i64 in A,ref y:i64 in B)->ref i64 in B where {owner A,owner B};'
 METHOD = 'func choose(ref x:i64 in O,ref y:i64 in O) where {owner O}{return y;}'
 runner.CASES = {
@@ -45,11 +45,11 @@ runner.CASES = {
  'disjoint_swap_method': (IO+'func (<->)(x:i64 in A,y:i64 in B)->void where {owner A,owner B};proc (<->)(x:const i64 in O,y:const i64 in P)->void where {owner O,owner P}{behave @print(x);}const val x<-1,y<-2;x<->y;',0,'1\n',''),
  'disjoint_swap_throws_not_required': (IO+NPE+'func (<->)(x:const i64 in A,y:const i64 in B)->void throws NullPointerException where {owner A,owner B};val x<-1,y<-2;{{defer (<->)(x,y);}};behave @print(x);',0,'2\n',''),
  'swap_owner_containment': (IO+'func (<->)(x:i64 in A,y:i64 in B)->void where {owner A,owner B};func (<->)(x:i64 in O,y:i64 in O) where {owner O}{intrinsic (<->)(x,y);}val x<-1,y<-2;x<->y;behave @print(x);',0,'2\n',''),
- 'independent_exception_categories': (SYSTEM+'func f(x:T,y:T)->const T where T;func f(x:SystemException,y:SystemException){return x;}',2,'','declared result type parameter is not determined'),
- 'fixed_result_needs_no_category_equality': (SYSTEM+'func f(x:T,y:T)->bool where T;func f(x:SystemException,y:SystemException)->bool{return true;}',0,'',''),
- 'broad_exception_declaration': (SYSTEM+'func f(x:SystemException,y:SystemException)->bool;func f(x:SystemException,y:SystemException){return true;}',0,'',''),
- 'independent_generic_exception_inputs': (SYSTEM+'func f(x:T,y:U)->bool where {T,U};func f(x:SystemException,y:SystemException){return true;}',0,'',''),
- 'concrete_exception_same_type': (MISSING+'func f(x:T,y:T)->bool where T;func f(x:MissingReturnException,y:MissingReturnException){return true;}',0,'',''),
+ 'independent_exception_categories': (SYSTEM+'func f(x:T,y:T)->const T where T;func f(x:Exception,y:Exception){return x;}',2,'','declared result type parameter is not determined'),
+ 'fixed_result_needs_no_category_equality': (SYSTEM+'func f(x:T,y:T)->bool where T;func f(x:Exception,y:Exception)->bool{return true;}',0,'',''),
+ 'broad_exception_declaration': (SYSTEM+'func f(x:Exception,y:Exception)->bool;func f(x:Exception,y:Exception){return true;}',0,'',''),
+ 'independent_generic_exception_inputs': (SYSTEM+'func f(x:T,y:U)->bool where {T,U};func f(x:Exception,y:Exception){return true;}',0,'',''),
+ 'concrete_exception_same_type': (MISSING+'func f(x:T,y:T)->bool where T;func f(x:MissingReturnError,y:MissingReturnError){return true;}',0,'',''),
  'generic_same_type_relation_preserved': (IO+'func f(x:T,y:T)->const T where T;func f(x:U,y:U) where U{return y;}behave @print(f(1u64,2u64));behave @print(f(false,true));',0,'2\ntrue\n',''),
  'query_retains_declared_owner': (IO+BROAD+METHOD+'val x<-1,y<-2,z<-make local typeof(choose(x,y)){7};behave @print(z);',0,'7\n',''),
  'query_value_access': (IO+'func f(x:const u64)->u64;func f(x:u64){return x;}val x<-make local typeof(f(1u64)){7u64};behave @print(x);',0,'7\n',''),

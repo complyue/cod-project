@@ -5,8 +5,8 @@ import exception_value_runtime_tests as runner
 
 runner.SOURCE = '''
 using symbol "std:io" @print;
-using "std:exceptions" OutOfMemory;
-using "std:exceptions" MissingReturnException;
+using "std:exceptions" OutOfMemoryError;
+using "std:exceptions" MissingReturnError;
 func missing()->const i64 {}
 proc observe(x:u64)->void{behave @print(x);}
 proc normal()->void {
@@ -22,18 +22,18 @@ proc failed_registration()->void {
 }
 proc failed_action()->void {
   val x<-make local u64;
-  defer{observe(x);}catch(e:const MissingReturnException){observe(x);};
+  defer{observe(x);}catch(e:const MissingReturnError){observe(x);};
   defer{x<-43u64;missing();};
 }
 proc nested()->void {
   val x<-make local u64;
   defer{
     x<-44u64;observe(9001u64);
-    try{defer{observe(x);};}catch(e:const OutOfMemory){observe(x);observe(9002u64);};
+    try{defer{observe(x);};}catch(e:const OutOfMemoryError){observe(x);observe(9002u64);};
   };
 }
 normal();
-try{failed_registration();}catch(e:const OutOfMemory){observe(1u64);};
+try{failed_registration();}catch(e:const OutOfMemoryError){observe(1u64);};
 failed_action();nested();
 '''
 runner.WRAPPERS = '''

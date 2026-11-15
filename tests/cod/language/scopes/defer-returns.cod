@@ -1,5 +1,5 @@
 using symbol "std:io" @print;
-using "std:exceptions" InvalidCapacity;
+using "std:exceptions" InvalidCapacityError;
 data Packet { value:u64; }
 region symbol @arena;
 proc bad() -> void { effect @arena <- region(0u64); }

@@ -111,7 +111,7 @@ extern "C" void cod_lang_exception_finish() noexcept {
 CHAIN_FAILURE_SOURCE = '''
 using symbol "std:io" @assert;
 using symbol "std:io" @print;
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 using "std:exceptions" NullPointerException;
 data Packet {value:u64;}
 try {{
@@ -119,7 +119,7 @@ try {{owned region invalid:Packet <- make Packet(capacity=0u64){value<-0u64}; {}
 catch(seed) {{
   owned region keep:Packet <- make Packet(capacity=16u64){value<-7u64};
   for(i in 0 .. 2) {{
-    try {{throw seed from seed}} catch(error:const OutOfMemory) {{
+    try {{throw seed from seed}} catch(error:const OutOfMemoryError) {{
       behave @assert(error.cause_count == 0u64)
     }}
   }};
@@ -127,7 +127,7 @@ catch(seed) {{
   try {{
     owned region inner:Packet <- make Packet(capacity=16u64){value<-0u64};
     throw first from seed
-  }} catch(error:const OutOfMemory) {{
+  }} catch(error:const OutOfMemoryError) {{
     behave @assert(error.cause_count == 0u64);
     behave @assert(error.requested == 40u64);
     behave @assert(first.cause_count == 1u64 && cause_at(first, 0u64).category == 3u64);
@@ -308,17 +308,17 @@ extern "C" void cod_lang_region_free(void *owner) {
         checked([toolchain / "bin/clang++", "-std=c++20", "-I" + str(root / "include"),
                  ir, source, "-o", executable], root)
         uncaught = subprocess.run([str(executable)], text=True, capture_output=True, timeout=30)
-        assert uncaught.returncode == 70 and "uncaught InvalidCapacity" in uncaught.stderr, uncaught
+        assert uncaught.returncode == 70 and "uncaught InvalidCapacityError" in uncaught.stderr, uncaught
         assert uncaught.stdout.splitlines() == ["release 64", "10", "20", "release 4096"], uncaught.stdout
         evidence["uncaught"] = {"exit": uncaught.returncode, "trace": uncaught.stdout.splitlines(),
                                 "stderr": uncaught.stderr, "callable_cleanup_before_module_region": True}
         print("PASS: uncaught rethrow runs local cleanup, finally blocks, callable release and module cleanup")
         loop = scratch / "uncaught-chain.cod"
-        loop.write_text('''using "std:exceptions" SystemException;
+        loop.write_text('''using "std:exceptions" Exception;
 using "std:exceptions" NullPointerException;
 using symbol "std:io" @assert;
 data Packet {value:u64;}
-data Saved {error:SystemException;}
+data Saved {error:Exception;}
 try {owned region invalid:Packet <- make Packet(capacity=0u64){value<-0u64}; {}}
 catch(seed) {
   owned region saved:Saved <- make Saved(capacity=64u64){error<-seed};
@@ -357,8 +357,8 @@ static const int audit = [] {
         uncaught_chain = subprocess.run([str(executable)], text=True, capture_output=True, timeout=30)
         diagnostic = uncaught_chain.stderr.splitlines()
         assert uncaught_chain.returncode == 70 and len(diagnostic) == 2, uncaught_chain
-        assert "uncaught InvalidCapacity" in diagnostic[0] and "uncaught-chain.cod:6:" in diagnostic[0], diagnostic
-        assert "caused by RegionCapacityExceeded" in diagnostic[1] and "uncaught-chain.cod:15:" in diagnostic[1], diagnostic
+        assert "uncaught InvalidCapacityError" in diagnostic[0] and "uncaught-chain.cod:6:" in diagnostic[0], diagnostic
+        assert "caused by RegionCapacityExceededError" in diagnostic[1] and "uncaught-chain.cod:15:" in diagnostic[1], diagnostic
         assert uncaught_chain.stdout == "uncaught chain cleanup passed\n", uncaught_chain
         evidence["uncaught_chain"] = {"exit": 70, "diagnostics": diagnostic, "released_owners": 2,
                                       "later_emitted_cause_site_resolved": True, "chain_storage_released": True}
@@ -373,8 +373,8 @@ static const int audit = [] {
             "non-exception-cause": ('region symbol arena; try {effect @arena <- region(0u64); {}} '
                                     'catch(error) {throw error from 42;};',
                                     "an explicit cause requires an intrinsic exception value"),
-            "duplicate-category": ('using "std:exceptions" InvalidCapacity; using "std:exceptions" InvalidCapacity as Bad; '
-                                   'try {} catch(e:const InvalidCapacity){} catch(e:const Bad){};',
+            "duplicate-category": ('using "std:exceptions" InvalidCapacityError; using "std:exceptions" InvalidCapacityError as Bad; '
+                                   'try {} catch(e:const InvalidCapacityError){} catch(e:const Bad){};',
                                    "duplicate exception category"),
             "catch-order": ('try {} catch(e){} catch(f){};', "catch-all must be the final catch clause"),
             "finally-value": ('try {1} finally {2};', "expected void, got i64"),

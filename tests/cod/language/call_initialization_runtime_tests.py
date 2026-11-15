@@ -7,8 +7,8 @@ runner=initialization.runner
 runner.SOURCE='''
 using symbol "std:io" @print;
 using "std:exceptions" NullPointerException;
-using "std:exceptions" OutOfMemory;
-using "std:exceptions" MissingReturnException;
+using "std:exceptions" OutOfMemoryError;
+using "std:exceptions" MissingReturnError;
 proc observe(x:u64)->void{behave @print(x);}
 func missing()->const u64{}
 proc set(ptr x:u64 in O)->void throws NullPointerException where {owner O}{observe(9003u64);x<-71u64;}
@@ -22,9 +22,9 @@ proc fail_after(ptr x:u64 in O)->void throws NullPointerException where {owner O
 proc cleanup(ptr x:u64 in O)->void throws NullPointerException where {owner O}{defer{x<-74u64;};}
 proc alias(ptr x:u64 in O,ptr y:u64 in O)->void throws NullPointerException where {owner O}{defer{x<-75u64;observe(y);};}
 try{direct();prepared();}catch(e:const NullPointerException){observe(99u64);};
-try{denied();}catch(e:const OutOfMemory){observe(1u64);}catch(e:const NullPointerException){observe(99u64);};
+try{denied();}catch(e:const OutOfMemoryError){observe(1u64);}catch(e:const NullPointerException){observe(99u64);};
 val a<-make local u64;
-try{fail_after(a);}catch(e:const MissingReturnException){observe(a);}catch(e:const NullPointerException){observe(99u64);};
+try{fail_after(a);}catch(e:const MissingReturnError){observe(a);}catch(e:const NullPointerException){observe(99u64);};
 val b<-make local u64;
 try{cleanup(b);observe(b);}catch(e:const NullPointerException){observe(99u64);};
 val c<-make local u64;

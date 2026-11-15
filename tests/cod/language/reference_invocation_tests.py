@@ -5,7 +5,7 @@ import foundation_tests as runner
 
 IO = 'using symbol "std:io" @print;'
 OBS = IO + 'proc observe(x:i64)->void {behave @print(x);}'
-EX = 'using "std:exceptions" MissingReturnException;func missing()->const i64 {}'
+EX = 'using "std:exceptions" MissingReturnError;func missing()->const i64 {}'
 runner.CASES = {
     'deferred_uninitialized': ('val x<-make local i64;ptr p=x;defer (is)(p,null);', 0, '', ''),
     'deferred_readonly': ('val x<-make local i64;const ptr p:const i64=x;defer intrinsic (is)(p,null);', 0, '', ''),
@@ -14,7 +14,7 @@ runner.CASES = {
     'late_rebinding': (OBS + 'val x<-make local i64;ptr p:i64=null in here;{{defer (is)(p,null);defer {p=x;};}};'
         'behave @print((p is null));', 0, 'false\n', ''),
     'preparation_failure': (OBS + EX + '{{defer observe(3);ptr p:i64=null in here;'
-        'try{defer (is)({observe(1);missing();p},null);}catch(e:const MissingReturnException){observe(2);};}};',
+        'try{defer (is)({observe(1);missing();p},null);}catch(e:const MissingReturnError){observe(2);};}};',
         0, '1\n2\n3\n', '[-Wmissing-return]'),
     'preparation_return': (OBS + 'proc f()->const i64 {ptr p:i64=null in here;defer observe(3);'
         'defer (is)({observe(1);return 7;p},null);observe(99);return 0;}observe(f());', 0, '1\n3\n7\n', ''),

@@ -97,10 +97,10 @@ REJECTS = {
                       "repeating loop cannot consume an owner"),
     "mode-overload": ('function take(region p:Packet) -> void{} function take(owned region p:Packet) -> void{} '
                       'take(fresh());', "overloads differing only in owning versus borrowed mode"),
-    "exceptional-join": ('using "std:exceptions" InvalidCapacity; proc test()->void {owned region p:Packet <- fresh(); '
+    "exceptional-join": ('using "std:exceptions" InvalidCapacityError; proc test()->void {owned region p:Packet <- fresh(); '
                          'try {make Packet(capacity=0u64){sequence<-1u64}; drop(p); '
                          'make Packet(capacity=0u64){sequence<-1u64}; {}} '
-                         'catch(e:const InvalidCapacity){read(p);{}}} test();', "owner has been consumed"),
+                         'catch(e:const InvalidCapacityError){read(p);{}}} test();', "owner has been consumed"),
     "owner-field": ('data Bad {owned region owner:Packet;} '
                     'make Bad(capacity=64u64){owner<-fresh()};', "region handles cannot be stored in user data fields"),
     "missing-field": ('make Packet(capacity=8u64){};', "initialize every root field exactly once"),

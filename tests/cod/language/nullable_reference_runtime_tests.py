@@ -7,7 +7,7 @@ runner = initialization.runner
 runner.SOURCE = '''
 using symbol "std:io" @print;
 using "std:exceptions" NullPointerException;
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 proc observe(x:u64)->void{behave @print(x);}
 proc body_null()->void {
   ptr p:u64=null in here;
@@ -41,7 +41,7 @@ proc captured()->void {
 body_null();
 try{deferred_null();}catch(e:const NullPointerException){observe(4u64);};
 observe(recover());
-try{registration();}catch(e:const OutOfMemory){observe(1u64);}catch(e:const NullPointerException){observe(99u64);};
+try{registration();}catch(e:const OutOfMemoryError){observe(1u64);}catch(e:const NullPointerException){observe(99u64);};
 captured();
 '''
 runner.HARNESS = runner.HARNESS.replace('static bool deny_record=false;',

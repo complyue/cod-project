@@ -19,14 +19,14 @@ try{ {{
   func holder=wrap(base);
   ptr picked=if(false){holder}else{try{wrap(other)}finally{observe(9061u64);{}}};
   observe(9999u64);
-}}; }catch(e:const OutOfMemory){observe(9062u64);};
+}}; }catch(e:const OutOfMemoryError){observe(9062u64);};
 observe(9000u64);
 {{
   func holder=wrap(base);observe(9020u64);
   try{
     ptr picked=if(false){holder}else{wrap(other)};
     observe(9999u64);
-  }catch(e:const OutOfMemory){observe(9021u64);};
+  }catch(e:const OutOfMemoryError){observe(9021u64);};
   observe(holder(1u64));
 }};
 observe(9000u64);

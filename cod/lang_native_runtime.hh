@@ -47,20 +47,20 @@ void *cod_lang_callable_create(std::uint64_t fixed, std::uint64_t count, void *c
                                const std::uint64_t *offsets, std::uint64_t *status) {
   auto bytes = fixed;
   if (bytes > std::numeric_limits<std::size_t>::max()) {
-    status[0] = static_cast<std::uint64_t>(CoDException::OutOfMemory);
+    status[0] = static_cast<std::uint64_t>(CoDException::OutOfMemoryError);
     return nullptr;
   }
   for (std::uint64_t i = 0; i < count; ++i) {
     if (!children[i]) continue;
     const auto child_bytes = *static_cast<const std::uint64_t *>(children[i]);
     if (child_bytes > std::numeric_limits<std::size_t>::max() - bytes) {
-      status[0] = static_cast<std::uint64_t>(CoDException::OutOfMemory);
+      status[0] = static_cast<std::uint64_t>(CoDException::OutOfMemoryError);
       return nullptr;
     }
     bytes += child_bytes;
   }
   auto *image = static_cast<unsigned char *>(std::malloc(static_cast<std::size_t>(bytes)));
-  if (!image) { status[0] = static_cast<std::uint64_t>(CoDException::OutOfMemory); return nullptr; }
+  if (!image) { status[0] = static_cast<std::uint64_t>(CoDException::OutOfMemoryError); return nullptr; }
   std::memcpy(image, &bytes, sizeof(bytes));
   auto position = fixed;
   for (std::uint64_t i = 0; i < count; ++i) {
@@ -79,18 +79,18 @@ void *cod_lang_callable_create(std::uint64_t fixed, std::uint64_t count, void *c
 void *cod_lang_callable_copy(const void *source, std::uint64_t *status) {
   const auto bytes = *static_cast<const std::uint64_t *>(source);
   auto *image = std::malloc(static_cast<std::size_t>(bytes));
-  if (!image) { status[0] = static_cast<std::uint64_t>(CoDException::OutOfMemory); return nullptr; }
+  if (!image) { status[0] = static_cast<std::uint64_t>(CoDException::OutOfMemoryError); return nullptr; }
   std::memcpy(image, source, static_cast<std::size_t>(bytes));
   return image;
 }
 void cod_lang_callable_free(void *image) { std::free(image); }
 void *cod_lang_defer_allocate(std::uint64_t bytes, std::uint64_t *status) {
   if (bytes > std::numeric_limits<std::size_t>::max()) {
-    status[0] = static_cast<std::uint64_t>(CoDException::OutOfMemory);
+    status[0] = static_cast<std::uint64_t>(CoDException::OutOfMemoryError);
     return nullptr;
   }
   auto *record = std::malloc(static_cast<std::size_t>(bytes));
-  if (!record) status[0] = static_cast<std::uint64_t>(CoDException::OutOfMemory);
+  if (!record) status[0] = static_cast<std::uint64_t>(CoDException::OutOfMemoryError);
   return record;
 }
 void cod_lang_defer_free(void *record) { std::free(record); }
@@ -106,7 +106,7 @@ std::uint64_t cod_lang_exception_chain(std::uint64_t category, std::uint64_t sit
     if (initial) cod_causes = initial.release();
     return static_cast<std::uint64_t>(records.size());
   } catch (const std::bad_alloc &) {
-    status[0] = static_cast<std::uint64_t>(CoDException::OutOfMemory);
+    status[0] = static_cast<std::uint64_t>(CoDException::OutOfMemoryError);
     return 0;
   }
 }
@@ -187,11 +187,11 @@ using CoDRegionOwner = shilos::auto_region<CoDRegionRoot>;
 extern "C" {
 void *cod_lang_region_new(std::uint64_t capacity, std::uint64_t *status) {
   if (capacity < sizeof(CoDRegionRoot) || capacity > std::numeric_limits<std::size_t>::max() - sizeof(CoDRegion)) {
-    status[0] = static_cast<std::uint64_t>(CoDException::InvalidCapacity);
+    status[0] = static_cast<std::uint64_t>(CoDException::InvalidCapacityError);
     return nullptr;
   }
   try { return CoDRegion::alloc_region(static_cast<std::size_t>(capacity)); }
-  catch (const std::bad_alloc &) { status[0] = static_cast<std::uint64_t>(CoDException::OutOfMemory); return nullptr; }
+  catch (const std::bad_alloc &) { status[0] = static_cast<std::uint64_t>(CoDException::OutOfMemoryError); return nullptr; }
 }
 void cod_lang_region_free(void *region) { CoDRegion::free_region(static_cast<CoDRegion *>(region)); }
 std::uint64_t cod_lang_region_root(void *owner) {
@@ -213,7 +213,7 @@ std::uint64_t cod_lang_region_reserve_root(void *owner, std::uint64_t bytes, std
     region.allocate(static_cast<std::size_t>(bytes - sizeof(CoDRegionRoot)), 1);
     return offset;
   } catch (const std::bad_alloc &) {
-    status[0] = static_cast<std::uint64_t>(CoDException::RegionCapacityExceeded);
+    status[0] = static_cast<std::uint64_t>(CoDException::RegionCapacityExceededError);
     status[1] = region.free_capacity() + sizeof(CoDRegionRoot);
     return 0;
   }
@@ -225,7 +225,7 @@ std::uint64_t cod_lang_region_alloc(void *owner, std::uint64_t bytes, std::uint6
     auto *storage = region.allocate(static_cast<std::size_t>(bytes), static_cast<std::size_t>(alignment));
     return static_cast<std::uint64_t>(static_cast<std::byte *>(storage) - reinterpret_cast<std::byte *>(&region));
   } catch (const std::bad_alloc &) {
-    status[0] = static_cast<std::uint64_t>(CoDException::RegionCapacityExceeded);
+    status[0] = static_cast<std::uint64_t>(CoDException::RegionCapacityExceededError);
     status[1] = region.capacity() - region.occupation();
     return 0;
   }

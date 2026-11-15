@@ -8,7 +8,7 @@ IO='using symbol "std:io" @print;\n'
 PRE=IO+'using "std:exceptions" NullPointerException;\n'
 SET='proc set(ptr x:i64 in O)->void throws NullPointerException where {owner O}{x<-41;}\n'
 GET='proc get(ptr x:i64 in O)->void throws NullPointerException where {owner O}{behave @print(x);}\n'
-MISS='using "std:exceptions" MissingReturnException;func missing()->const i64{}\n'
+MISS='using "std:exceptions" MissingReturnError;func missing()->const i64{}\n'
 WARN='callable may finish without an explicit return'
 UNPROVED='cannot prove initialization'
 runner.CASES={
@@ -32,8 +32,8 @@ runner.CASES={
     'branch_write_guarantee': (PRE+'proc f(ptr x:i64 in O,b:bool)->void throws NullPointerException where {owner O}{if(b){x<-48;}else{x<-49;};}val x<-make local i64;try{f(x,false);behave @print(x);}catch(e:const NullPointerException){};',0,'49\n',''),
     'partial_branch_write': (PRE+'proc f(ptr x:i64 in O,b:bool)->void throws NullPointerException where {owner O}{if(b){x<-48;{}}else{};}val x<-make local i64;try{f(x,true);behave @print(x);}catch(e:const NullPointerException){};',2,'','before definite initialization'),
     'failed_write_no_guarantee': (PRE+SET+'val x<-make local i64;try{set(x);}catch(e:const NullPointerException){};behave @print(x);',2,'','before definite initialization'),
-    'specific_failed_exit_keeps_write': (PRE+MISS+'proc f(ptr x:i64 in O)->void throws NullPointerException where {owner O}{x<-50;missing();}val x<-make local i64;try{f(x);}catch(e:const MissingReturnException){behave @print(x);}catch(e:const NullPointerException){};',0,'50\n',WARN),
-    'partial_failed_exit': (PRE+MISS+'proc f(ptr x:i64 in O,b:bool)->void throws NullPointerException where {owner O}{if(b){x<-50;{}}else{};missing();}val x<-make local i64;try{f(x,true);}catch(e:const MissingReturnException){behave @print(x);}catch(e:const NullPointerException){};',2,'','before definite initialization'),
+    'specific_failed_exit_keeps_write': (PRE+MISS+'proc f(ptr x:i64 in O)->void throws NullPointerException where {owner O}{x<-50;missing();}val x<-make local i64;try{f(x);}catch(e:const MissingReturnError){behave @print(x);}catch(e:const NullPointerException){};',0,'50\n',WARN),
+    'partial_failed_exit': (PRE+MISS+'proc f(ptr x:i64 in O,b:bool)->void throws NullPointerException where {owner O}{if(b){x<-50;{}}else{};missing();}val x<-make local i64;try{f(x,true);}catch(e:const MissingReturnError){behave @print(x);}catch(e:const NullPointerException){};',2,'','before definite initialization'),
     'return_write': (PRE+'func f(ptr x:i64 in O)->const i64 throws NullPointerException where {owner O}{x<-51;return x;}val x<-make local i64;try{behave @print(f(x));behave @print(x);}catch(e:const NullPointerException){};',0,'51\n51\n',''),
     'borrowed_ref_return_after_write': (PRE+'func f(ptr x:i64 in O)->ref i64 in O throws NullPointerException where {owner O}{x<-52;return x;}val x<-make local i64;try{behave @print(f(x));}catch(e:const NullPointerException){};',0,'52\n',''),
     'uninitialized_ptr_result_forwarding': (IO+'func f(ptr x:i64 in O)->ptr i64 in O where {owner O}{return x;}val x<-make local i64;ptr p=f(x);behave @print((p is null));p<-53;behave @print(x);',0,'false\n53\n',''),
@@ -63,9 +63,9 @@ runner.CASES={
     'initialized_ptr_result': (PRE+'func f(ptr x:i64 in O)->ptr i64 in O throws NullPointerException where {owner O}{x<-66;return x;}val x<-make local i64;try{behave @print(f(x));}catch(e:const NullPointerException){};',0,'66\n',''),
     'uninitialized_view_can_be_forwarded': (PRE+'func f(ptr x:i64 in O)->ptr i64 in O where {owner O}{return x;}val x<-make local i64;ptr p=f(x);behave @print((p is null));try{p<-67;behave @print(x);}catch(e:const NullPointerException){};',0,'false\n67\n',''),
     'local_call_initialization': (PRE+SET+'proc f()->const i64 throws NullPointerException{val x<-make local i64;set(x);return x;}try{behave @print(f());}catch(e:const NullPointerException){};',0,'41\n',''),
-    'missing_return_after_cleanup_write': (PRE+MISS+'func f(ptr x:i64 in O)->const i64 throws NullPointerException where {owner O}{defer{x<-68;};}val x<-make local i64;try{f(x);{}}catch(e:const MissingReturnException){behave @print(x);}catch(e:const NullPointerException){};',0,'68\n',WARN),
+    'missing_return_after_cleanup_write': (PRE+MISS+'func f(ptr x:i64 in O)->const i64 throws NullPointerException where {owner O}{defer{x<-68;};}val x<-make local i64;try{f(x);{}}catch(e:const MissingReturnError){behave @print(x);}catch(e:const NullPointerException){};',0,'68\n',WARN),
     'replacement_return_cannot_erase_read': (PRE+'func f(ptr x:i64 in O)->const i64 throws NullPointerException where {owner O}{try{x;{}}finally{return 1;};}val x<-make local i64;try{f(x);{}}catch(e:const NullPointerException){};',2,'',UNPROVED),
-    'finally_guarantee_on_exception': (PRE+MISS+'proc f(ptr x:i64 in O)->void throws NullPointerException where {owner O}{try{missing();{}}finally{x<-69;{}};}val x<-make local i64;try{f(x);}catch(e:const MissingReturnException){behave @print(x);}catch(e:const NullPointerException){};',0,'69\n',WARN),
+    'finally_guarantee_on_exception': (PRE+MISS+'proc f(ptr x:i64 in O)->void throws NullPointerException where {owner O}{try{missing();{}}finally{x<-69;{}};}val x<-make local i64;try{f(x);}catch(e:const MissingReturnError){behave @print(x);}catch(e:const NullPointerException){};',0,'69\n',WARN),
 }
 runner.CASE_SHADOWS = {
     'initializes_caller': ['x'],

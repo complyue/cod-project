@@ -5,8 +5,8 @@ import exception_value_runtime_tests as runner
 
 runner.SOURCE = '''
 using symbol "std:io" @print;
-using "std:exceptions" OutOfMemory;
-using "std:exceptions" MissingReturnException;
+using "std:exceptions" OutOfMemoryError;
+using "std:exceptions" MissingReturnError;
 proc observe(x:u64)->void{behave @print(x);}
 func empty()->const void{}
 func number()->const u64{return 41u64;}
@@ -16,11 +16,11 @@ func wrap(f:func()->const u64)->func()->const u64{
 proc finish(f:func()->const T)->const T where T{defer observe(1u64);f();}
 func recover(f:func()->const T)->const T where T{defer{return f();};}
 finish(empty);
-try{finish(wrap(number));{}}catch(e:const MissingReturnException){observe(2u64);};
+try{finish(wrap(number));{}}catch(e:const MissingReturnError){observe(2u64);};
 observe(recover(wrap(number)));recover(empty);
 {{
   func f=wrap(number);observe(recover(f));observe(9000u64);
-  try{finish(f);{}}catch(e:const OutOfMemory){observe(9001u64);observe(3u64);};
+  try{finish(f);{}}catch(e:const OutOfMemoryError){observe(9001u64);observe(3u64);};
   observe(f());
 }};
 observe(9002u64);

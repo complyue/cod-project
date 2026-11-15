@@ -5,7 +5,7 @@ import foundation_tests as runner
 
 IO = 'using symbol "std:io" @print;'
 NPE = 'using "std:exceptions" NullPointerException;'
-ERROR = 'using "std:exceptions" MissingReturnException;func missing()->const i64{}'
+ERROR = 'using "std:exceptions" MissingReturnError;func missing()->const i64{}'
 OWNER_PICK = '''proc pick(ptr x:i64 in O,ptr y:i64 in O)->void where {owner O}{behave @print(1);}
 proc pick(x:i64 in O,y:i64 in P)->void where {owner O,owner P}{behave @print(2);}'''
 runner.CASES = {
@@ -49,7 +49,7 @@ runner.CASES = {
  'bare_value_cleanup_replacement': (IO+'func get()->i64{defer{return 8;};return 1;}behave @print(get());',0,'8\n',''),
  'borrowed_return_does_not_follow_rebind': (IO+'func get(x:i64 in O,y:i64 in O)->i64 in O where {owner O}{ptr p=x;defer{p=y;x<-9;};return p;}val x<-1,y<-2;ref r=get(x,y);behave @print(r);r<-8;behave @print(x);behave @print(y);',0,'9\n8\n2\n',''),
  'borrowed_return_can_be_replaced': (IO+'func get(x:i64 in O,y:i64 in O)->i64 in O where {owner O}{defer{return y;};return x;}val x<-1,y<-2;ref r=get(x,y);r<-3;behave @print(x);behave @print(y);',0,'1\n3\n',''),
- 'failed_rhs_retains_destination': (IO+ERROR+'func get(x:i64 in O)->i64 where {owner O}{x<-3;missing();return 9;}val x<-1,y<-2;try{y<-get(x);{}}catch(e:const MissingReturnException){};behave @print(x);behave @print(y);',0,'3\n2\n','[-Wmissing-return]'),
+ 'failed_rhs_retains_destination': (IO+ERROR+'func get(x:i64 in O)->i64 where {owner O}{x<-3;missing();return 9;}val x<-1,y<-2;try{y<-get(x);{}}catch(e:const MissingReturnError){};behave @print(x);behave @print(y);',0,'3\n2\n','[-Wmissing-return]'),
  'copy_then_alias_is_independent': (IO+'val x<-1;val copy<-x;ref r=copy;x<-2;r<-3;behave @print(x);behave @print(copy);',0,'2\n3\n',''),
  'ptr_transfer_shorthand_preserved': (IO+'val x<-1;ptr p<-x;x<-2;behave @print(p);',0,'1\n',''),
  'captured_scalar_callable_result': (IO+'func wrap(f:func(i64)->i64)->func(i64)->i64{return func[f](x:i64)->i64{return f(x)+1;};}func inc(x:i64)->val i64{return x+1;}func f=wrap(inc);behave @print(f(3));',0,'5\n',''),

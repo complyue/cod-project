@@ -5,11 +5,11 @@ import foundation_tests as runner
 
 IO = 'using symbol "std:io" @print;'
 GAP = 'callable view contract'
-ERROR = '''using "std:exceptions" SystemException;
-using "std:exceptions" MissingReturnException;
+ERROR = '''using "std:exceptions" Exception;
+using "std:exceptions" MissingReturnError;
 using "std:exceptions" NullPointerException;
 func missing()->u64{}
-func error()->const MissingReturnException{try{missing();}catch(e:const MissingReturnException){return e;};}
+func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}
 func null_error()->const NullPointerException{val x<-1;ptr p=x;p=null;try{p;{}}catch(e:const NullPointerException){return e;};}
 '''
 runner.CASES = {
@@ -34,27 +34,27 @@ runner.CASES = {
     'deferred_invocation_discards_value': (IO + 'symbol @f:proc(u64)->f64;proc @f(x:T)->u32 where T{behave @print(x);return 7u32;}'
         'effect @f;defer perform @f(3u8);behave @print(1u64);', 0, '1\n3\n', ''),
     'missing_return_propagates': (IO + ERROR + 'symbol @f:proc()->f64;proc @f()->u32{}effect @f;'
-        'try{behave @f();{}}catch(e:const MissingReturnException){behave @print(e.category);};', 0, '5\n', '[-Wmissing-return]'),
+        'try{behave @f();{}}catch(e:const MissingReturnError){behave @print(e.category);};', 0, '5\n', '[-Wmissing-return]'),
     'finally_exception_propagates': (IO + ERROR + 'symbol @f:proc()->f64;proc @f()->u32{try{return 7u32;}finally{missing();{}};}effect @f;'
-        'try{perform @f();{}}catch(e:const MissingReturnException){behave @print(e.category);};', 0, '5\n', '[-Wmissing-return]'),
+        'try{perform @f();{}}catch(e:const MissingReturnError){behave @print(e.category);};', 0, '5\n', '[-Wmissing-return]'),
     'fatal_result_keeps_cleanup': (IO + 'symbol @f:proc()->u64;proc @f()->u8{defer{behave @print(7u64);};return 255u8+1u8;}'
         'effect @f;behave @f();', 70, '7\n', 'u8 addition overflow'),
     'exception_cause_and_caller_binding': (IO + ERROR + 'symbol @x:u32,@f:proc()->u64;proc @f()->u32{'
         'behave @print(@x);throw error() from error();}effect @x<-1u32;effect @f;effect @x<-7u32;'
-        'try{perform @f();{}}catch(e:const MissingReturnException){behave @print(e.cause_count);behave @print(cause_at(e,0u64).category);'
+        'try{perform @f();{}}catch(e:const MissingReturnError){behave @print(e.cause_count);behave @print(cause_at(e,0u64).category);'
         'behave @print(e.site>0u64);behave @print(@x);};', 0, '1\n1\n5\ntrue\n7\n', '[-Wmissing-return]'),
-    'checked_failure_obligation': ('using "std:exceptions" StaticallyUnknownType;symbol @f:proc()->u64;'
-        'proc @f()->u32 throws StaticallyUnknownType{return 7u32;}effect @f;', 2, '', 'callable view omits a required checked exception'),
+    'checked_failure_obligation': ('using "std:exceptions" StaticallyUnknownTypeException;symbol @f:proc()->u64;'
+        'proc @f()->u32 throws StaticallyUnknownTypeException{return 7u32;}effect @f;', 2, '', 'callable view omits a required checked exception'),
     'unobserved_incompatible_result': ('symbol @f:proc(u64)->f64;proc @f(x:u64)->u32{return 7u32;}proc @f(x:T)->u64 where T{return 1u64;}'
         'effect @f;behave @f(1u64);', 2, '', GAP),
     'borrowed_target_not_widened': ('proc @narrow(ref x:u32 in O)->ref u32 in O where {owner O}{return x;}'
         'proc @wide(ref x:u32 in O)->ref u64 in O where {owner O};effect @wide=narrow;', 2, '', GAP),
     'result_mode_not_changed': ('proc @expected(ref x:u32 in O)->u64 where {owner O};'
         'proc @actual(ref x:u32 in O)->ref u32 in O where {owner O}{return x;}effect @expected=actual;', 2, '', GAP),
-    'common_exception_result_preserves_identity': (IO + ERROR + 'symbol @f:proc(u64)->const SystemException;'
-        'proc @f(x:u64)->const MissingReturnException{return error();}proc @f(x:T)->const NullPointerException where T{return null_error();}'
-        'proc @classify(e:MissingReturnException)->u64{return 7u64;}proc @classify(e:T)->u64 where T{return e.category;}'
-        'symbol @classify:proc(SystemException)->u64;effect @f;effect @classify;'
+    'common_exception_result_preserves_identity': (IO + ERROR + 'symbol @f:proc(u64)->const Exception;'
+        'proc @f(x:u64)->const MissingReturnError{return error();}proc @f(x:T)->const NullPointerException where T{return null_error();}'
+        'proc @classify(e:MissingReturnError)->u64{return 7u64;}proc @classify(e:T)->u64 where T{return e.category;}'
+        'symbol @classify:proc(Exception)->u64;effect @f;effect @classify;'
         'behave @print(behave @classify(behave @f(1u64)));behave @print(behave @classify(behave @f(1u8)));', 0, '7\n4\n', '[-Wmissing-return]'),
 }
 for source, target, literal, output in [

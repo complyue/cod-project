@@ -5,8 +5,8 @@ import exception_value_runtime_tests as runner
 
 runner.SOURCE = '''
 using symbol "std:io" @print;
-using "std:exceptions" OutOfMemory;
-using "std:exceptions" MissingReturnException;
+using "std:exceptions" OutOfMemoryError;
+using "std:exceptions" MissingReturnError;
 proc observe(x:u64)->void{behave @print(x);}
 func base(x:u64)->const u64{return x;}
 func other(x:u64)->const u64{return x+10u64;}
@@ -21,12 +21,12 @@ proc wrapped(p:proc(u64)->void)->proc(u64)->void{return proc[p](x:u64)->void{p(x
 func replaced()->func(u64)->const u64{defer{return wrap(other);};return wrap(base);}
 proc copy_recovery()->func(u64)->const u64{
   func f=wrap(base);func g=wrap(other);
-  defer catch(e:const OutOfMemory){observe(9031u64);};
+  defer catch(e:const OutOfMemoryError){observe(9031u64);};
   defer{observe(9030u64);return g;};
   return f;
 }
 func retained()->func(u64)->const u64{
-  defer catch(e:const MissingReturnException){};
+  defer catch(e:const MissingReturnError){};
   defer{missing();{}};
   return wrap(base);
 }
@@ -41,20 +41,20 @@ observe(9000u64);
 observe(9000u64);
 {{
   func f=wrap(base);observe(9020u64);
-  try{f<-wrap(f);{}}catch(e:const OutOfMemory){observe(9021u64);};
+  try{f<-wrap(f);{}}catch(e:const OutOfMemoryError){observe(9021u64);};
   observe(f(2u64));
   func g=wrap(other);observe(9030u64);
-  try{f<-g;{}}catch(e:const OutOfMemory){observe(9031u64);};
+  try{f<-g;{}}catch(e:const OutOfMemoryError){observe(9031u64);};
   observe(f(3u64));
   observe(9030u64);
-  try{f({{observe(9999u64);4u64}});{}}catch(e:const OutOfMemory){observe(9031u64);};
+  try{f({{observe(9999u64);4u64}});{}}catch(e:const OutOfMemoryError){observe(9031u64);};
   observe(9040u64);
-  try{apply(f,missing());{}}catch(e:const MissingReturnException){observe(9041u64);};
+  try{apply(f,missing());{}}catch(e:const MissingReturnError){observe(9041u64);};
 }};
 observe(9000u64);
 {{
   proc f=wrapped(one);
-  {{defer f(5u64);observe(9050u64);try{defer f(99u64);}catch(e:const OutOfMemory){observe(9051u64);};f<-two;}};
+  {{defer f(5u64);observe(9050u64);try{defer f(99u64);}catch(e:const OutOfMemoryError){observe(9051u64);};f<-two;}};
 }};
 observe(9000u64);
 {{observe(replaced()(6u64));observe(retained()(7u64));observe(copy_recovery()(8u64));}};

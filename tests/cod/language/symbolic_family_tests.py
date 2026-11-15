@@ -43,8 +43,8 @@ runner.CASES = {
     'missing_domain_method': ('symbol @f:proc(u64)->u64;proc @f(x:u8)->u64{return 1u64;}effect @f;', 2, '', 'no applicable method'),
     'lossless_result_adapter': (IO + 'symbol @f:proc(u64)->u64;proc @f(x:u64)->u32{return 1u32;}effect @f;behave @print(behave @f(2u8));', 0, '1\n', ''),
     'ambiguous_unused_domain': ('symbol @f:proc(u64,u64)->u64;proc @f(x:u64,y:T)->u64 where T{return 1u64;}proc @f(x:T,y:u64)->u64 where T{return 2u64;}effect @f;', 2, '', 'ambiguous methods'),
-    'checked_failure_unused_domain': ('using "std:exceptions" StaticallyUnknownType;symbol @f:proc(u64)->u64;proc @f(x:u64)->u64{return 1u64;}'
-        'proc @f(x:T)->u64 throws StaticallyUnknownType where T{return 7u64;}effect @f;', 2, '', 'callable view omits a required checked exception'),
+    'checked_failure_unused_domain': ('using "std:exceptions" StaticallyUnknownTypeException;symbol @f:proc(u64)->u64;proc @f(x:u64)->u64{return 1u64;}'
+        'proc @f(x:T)->u64 throws StaticallyUnknownTypeException where T{return 7u64;}effect @f;', 2, '', 'callable view omits a required checked exception'),
     'unused_generic_body_checked': ('symbol @f:proc(u64)->u64;proc @f(x:u64)->u64{return 1u64;}proc @f(x:T)->u64 where T{return true;}effect @f;behave @f(1u64);', 2, '', 'return type'),
     'method_outside_slot_signature': (IO + F + 'proc @f(x:bool)->u64{return 8u64;}symbol @q:proc(bool)->u64;effect @q=f;behave @print(behave @q(true));', 0, '8\n', ''),
     'nearest_source_binding': ('proc @f()->u64{return 1u64;}symbol @q:proc()->u64;proc go(f:u64)->void{effect @q=f;}go(1u64);', 2, '', 'effect value does not satisfy'),

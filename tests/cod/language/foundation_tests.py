@@ -22,8 +22,8 @@ OBSERVER = PRELUDE + 'proc observe(x:u64)->void { behave @print(x); }\n'
 CASES = {
     "scalars": (None, 0, "6\n3\n4\ntrue\n100\n1\n1\n2\n720\ntrue\nfalse\n7\nfalse\n4\n3\n3\n4\n4\n4\n3\n3\n5\n4\n-4\n-1\n100\n1\n", ""),
     "cleanup": (None, 0, "1\n2\n5\n4\n2\n1\n9\n1\n3\n5\n4\n3\n1\n9\n0\n1\n2\n3\n3\n7\n8\n6\n11\n10\nfalse\ntrue\n", ""),
-    "failure": (None, 70, "2\n3\n1\n0\n", "uncaught MissingReturnException"),
-    "preparation_failure": (OBSERVER + 'proc missing()->const u64 { defer observe(3u64); {} }\nproc go()->void { defer observe(1u64); defer observe(missing()); observe(99u64); }\ngo();', 70, "3\n1\n", "uncaught MissingReturnException"),
+    "failure": (None, 70, "2\n3\n1\n0\n", "uncaught MissingReturnError"),
+    "preparation_failure": (OBSERVER + 'proc missing()->const u64 { defer observe(3u64); {} }\nproc go()->void { defer observe(1u64); defer observe(missing()); observe(99u64); }\ngo();', 70, "3\n1\n", "uncaught MissingReturnError"),
     "overflow_cleanup": (OBSERVER + 'proc go()->const u64 { defer observe(9u64); return 18446744073709551615u64 + 1u64; }\ngo();', 70, "9\n", "u64 addition overflow"),
     "division_cleanup": (OBSERVER + 'proc go()->const i64 { defer observe(8u64); return 3 / 0; }\ngo();', 70, "8\n", "division by zero"),
     "signed_boundaries": (PRELUDE + 'behave @print(-9223372036854775808); behave @print(-9223372036854775808 % -1); behave @print(1f32);', 0, "-9223372036854775808\n0\n1\n", ""),
@@ -40,7 +40,7 @@ CASES = {
     "nearest_symbol": (PRELUDE + 'proc wrong(print:u64)->void { behave @print(1u64); } wrong(3u64);', 2, "", "nearest binding 'print' is not a symbol"),
     "nearest_callable": ('func f()->const u64 {return 1u64;} func g(f:u64)->const u64 {return f();} g(1u64);', 2, "", "nearest binding 'f' is not callable"),
     "local_storage": ('proc go()->void { val x<-1u64; } go();', 0, "", ""),
-    "unselected_throws_type": ('func f(x:T)->const T throws StaticallyUnknownType where T { return x; } f(1u64);', 2, "", "throws contracts"),
+    "unselected_throws_type": ('func f(x:T)->const T throws StaticallyUnknownTypeException where T { return x; } f(1u64);', 2, "", "throws contracts"),
     "missing_return_error": ('func f()->const u64 { 3u64 } f();', 2, "", "treated as error"),
     "empty": ("", 0, "", ""),
 }

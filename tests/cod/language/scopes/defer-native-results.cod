@@ -1,6 +1,6 @@
 using symbol "std:io" @print;
 using symbol "std:io" @assert;
-using "std:exceptions" InvalidCapacity;
+using "std:exceptions" InvalidCapacityError;
 using "std:exceptions" NullPointerException;
 data Item {value:u64;}
 array Values[u64]:u64;
@@ -62,12 +62,12 @@ proc dynamic()->void {
 }
 dynamic();
 
-proc throwing(e:const InvalidCapacity)->Item {throw e;}
+proc throwing(e:const InvalidCapacityError)->Item {throw e;}
 proc recover()->void {
   try {effect @scratch <-region(0u64);}
-  catch(original:const InvalidCapacity) {{
+  catch(original:const InvalidCapacityError) {{
     proc action=throwing;
-    defer catch(failure:const InvalidCapacity) {behave @print(40u64);} finally {behave @print(41u64);};
+    defer catch(failure:const InvalidCapacityError) {behave @print(40u64);} finally {behave @print(41u64);};
     defer action(original);
   }};
 }

@@ -6,8 +6,8 @@ import deferred_initialization_runtime_tests as initialization
 runner = initialization.runner
 runner.SOURCE = '''
 using symbol "std:io" @print;
-using "std:exceptions" OutOfMemory;
-using "std:exceptions" MissingReturnException;
+using "std:exceptions" OutOfMemoryError;
+using "std:exceptions" MissingReturnError;
 func missing()->const u64{}
 proc observe(x:u64)->void{behave @print(x);}
 proc normal()->void {
@@ -22,7 +22,7 @@ proc failed_registration()->void {
 proc failed_rhs()->void {
   val a<-41u64,b<-42u64;ptr p=a;
   defer{observe(p);observe(a);observe(b);};
-  try{p={p=b;missing();a};{}}catch(e:const MissingReturnException){observe(p);};
+  try{p={p=b;missing();a};{}}catch(e:const MissingReturnError){observe(p);};
 }
 proc destination()->void {
   val a<-51u64,b<-52u64;ptr p=a;
@@ -34,7 +34,7 @@ proc queued(n:u64)->void {
   for(i in 0u64..n){defer{observe(p);};p=b;};
 }
 normal();
-try{failed_registration();}catch(e:const OutOfMemory){observe(1u64);};
+try{failed_registration();}catch(e:const OutOfMemoryError){observe(1u64);};
 failed_rhs();destination();queued(3u64);
 '''
 runner.HARNESS = runner.HARNESS.replace('created==6 && peak==2 && failures==2',

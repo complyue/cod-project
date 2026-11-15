@@ -36,9 +36,9 @@ runner.CASES = {
         'fold(j in 0..1,total=0){return tag(sum,total);};sum};}' + OUT('code(project())'), 0, '2\n', ''),
     'generic_index_types': (BASE + 'func project(start:T,end:T) where T{for(i in start..end){return tag(i,i);};}'
         + OUT('code(project(0,1))') + OUT('code(project(0u64,1u64))'), 0, '1\n1\n', '[-Wmissing-return]'),
-    'empty_range_keeps_missing_return': (BASE + 'using "std:exceptions" MissingReturnException;'
+    'empty_range_keeps_missing_return': (BASE + 'using "std:exceptions" MissingReturnError;'
         'func project(end:i64){for(i in 0..end){return tag(i,i);};}'
-        'try{project(0);{}}catch(e:const MissingReturnException){behave @print(7);};', 0, '7\n', '[-Wmissing-return]'),
+        'try{project(0);{}}catch(e:const MissingReturnError){behave @print(7);};', 0, '7\n', '[-Wmissing-return]'),
     'recursive_control_anchor': (BASE + 'func project(n:u64){if(n==0u64){for(i in 0..1){return tag(i,i);};}'
         'else{return project(n-1u64);};}' + OUT('code(project(40u64))'), 0, '1\n', ''),
     'mutual_control_anchor': (BASE + 'func left(n:u64){return right(n);}func right(n:u64){'

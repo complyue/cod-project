@@ -5,7 +5,7 @@ import foundation_tests as runner
 
 IO = 'using symbol "std:io" @print;\n'
 NPE = 'using "std:exceptions" NullPointerException;\n'
-ERROR = '''using "std:exceptions" MissingReturnException;
+ERROR = '''using "std:exceptions" MissingReturnError;
 func missing()->const i64{}
 '''
 CALLABLES = 'func one()->const i64{return 1;}func two()->const i64{return 2;}'
@@ -50,7 +50,7 @@ runner.CASES = {
     'same_slot_branch_permissions': (IO+'val x<-1,y<-2;ptr p=x;var a->p;var b->if(true){a}else{p};b=y;behave @print(p);',0,'2\n',''),
     'selection_cleanup_retains_slot': (IO+'val x<-1,y<-2;ptr p=x;var a->{{defer{p=y;};p}};behave @print(a);p=x;behave @print(a);',0,'2\n1\n',''),
     'ending_alias_name_retains_original_slot': (IO+'val x<-1,y<-2;ptr p=x;var a->{{var local->p;local}};a=y;behave @print(p);',0,'2\n',''),
-    'caught_snapshot_alias': (IO+ERROR+'{{for(i in 0..2){try{missing();{}}catch(e:const MissingReturnException){{var a->e;defer{behave @print(a.category);};}};};}};',0,'5\n5\n','[-Wmissing-return]'),
+    'caught_snapshot_alias': (IO+ERROR+'{{for(i in 0..2){try{missing();{}}catch(e:const MissingReturnError){{var a->e;defer{behave @print(a.category);};}};};}};',0,'5\n5\n','[-Wmissing-return]'),
     'temporary_is_not_slot': ('var a->1;',2,'','alias requires an existing storage place'),
     'null_is_not_slot': ('var a->null;',2,'','alias requires an existing storage place'),
     'kind_mismatch_val': ('val x<-1;ptr var a->x;',2,'','must match the selected val storage'),

@@ -8,7 +8,7 @@ ID = 'func declared(input:T)->const T where T;'
 APPLY = 'func inspect(callback:func(T)->const T,input:T)->const T where T;'
 MODEL = 'func inspect(callback:F,model:F)->i64 where F;'
 NPE = 'using "std:exceptions" NullPointerException;'
-ERRORS = 'using "std:exceptions" SystemException;using "std:exceptions" MissingReturnException;'
+ERRORS = 'using "std:exceptions" Exception;using "std:exceptions" MissingReturnError;'
 
 def query(expression='inspect(declared,1)', value='7', prefix=ID+APPLY):
     return IO+prefix+'val result<-make local typeof('+expression+'){'+value+'};behave @print(result);'
@@ -45,10 +45,10 @@ runner.CASES = {
     'no_overload_signature_guess': (query('inspect(declared)',prefix='func declared(input:u64)->u64;func declared(input:bool)->bool;func inspect(callback:F)->i64 where F;'),2,'','known declaration or operand type'),
     'borrowed_signature': (query('inspect(declared,model)',prefix='func declared(ref input:const i64 in O)->ref const i64 in O where {owner O};func model(ref input:const i64 in P)->ref const i64 in P where {owner P}{return input;}'+MODEL),0,'7\n',''),
     'nullable_signature': (query('inspect(declared,model)',prefix='func declared(ptr input:i64 in O)->ptr i64 in O where {owner O};func model(ptr input:i64 in P)->ptr i64 in P where {owner P}{return input;}'+MODEL),0,'7\n',''),
-    'common_exception_borrow': (query('inspect(declared,model)',prefix=ERRORS+'func declared(ref input:SystemException in O)->ref SystemException in O where {owner O};func model(ref input:SystemException in P)->ref SystemException in P where {owner P}{return input;}'+MODEL),0,'7\n',''),
-    'dependent_exception_signature_only': (query('inspect(declared,held)',prefix=ERRORS+ID+'func model(input:SystemException)->const SystemException{return input;}func held=model;'+MODEL),0,'7\n',''),
-    'exception_domain_incomplete': (query('inspect(declared,held)',prefix=ERRORS+'func declared(input:MissingReturnException)->const SystemException;func model(input:SystemException)->const SystemException{return input;}func held=model;'+MODEL),2,'','no applicable declared signature'),
-    'borrowed_upcast_not_invented': (query('inspect(declared,held)',prefix=ERRORS+'func declared(ref input:SystemException in O)->ref SystemException in O where {owner O};func model(ref input:MissingReturnException in P)->ref MissingReturnException in P where {owner P}{return input;}func held=model;'+MODEL),2,'','borrowed target adaptation'),
+    'common_exception_borrow': (query('inspect(declared,model)',prefix=ERRORS+'func declared(ref input:Exception in O)->ref Exception in O where {owner O};func model(ref input:Exception in P)->ref Exception in P where {owner P}{return input;}'+MODEL),0,'7\n',''),
+    'dependent_exception_signature_only': (query('inspect(declared,held)',prefix=ERRORS+ID+'func model(input:Exception)->const Exception{return input;}func held=model;'+MODEL),0,'7\n',''),
+    'exception_domain_incomplete': (query('inspect(declared,held)',prefix=ERRORS+'func declared(input:MissingReturnError)->const Exception;func model(input:Exception)->const Exception{return input;}func held=model;'+MODEL),2,'','no applicable declared signature'),
+    'borrowed_upcast_not_invented': (query('inspect(declared,held)',prefix=ERRORS+'func declared(ref input:Exception in O)->ref Exception in O where {owner O};func model(ref input:MissingReturnError in P)->ref MissingReturnError in P where {owner P}{return input;}func held=model;'+MODEL),2,'','borrowed target adaptation'),
     'owner_contract_mismatch': (query('inspect(declared,held)',prefix='func declared(ref a:i64 in A,ref b:i64 in B)->ref i64 in A where {owner A,owner B};func model(ref a:i64 in A,ref b:i64 in B)->ref i64 in B where {owner A,owner B}{return b;}func held=model;'+MODEL),2,'','callable view contract'),
     'unknown_owner_relation': (query('inspect(declared,held)',prefix='func declared(ref a:T in O,ref b:T in O)->const T where {T,owner O};func model(ref a:i64 in A,ref b:i64 in B)->i64 where {owner A,owner B}{return a;}func held=model;'+MODEL),2,'','unproved owner equality'),
     'missing_body_at_execution': (ID+'func inspect(callback:func(i64)->const i64,input:i64)->i64{return callback(input);}inspect(declared,1);',2,'','no applicable implementation'),

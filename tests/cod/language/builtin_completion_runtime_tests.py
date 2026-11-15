@@ -21,7 +21,7 @@ func return_builtin_image(f:func(u64)->const u64)->func(u64)->const u64{
 {{
  func f=wrap(base);observe(finish_builtin(f));
  observe(9030u64);
- try{failing_builtin(f);{}}catch(e:const OutOfMemory){observe(9031u64);};
+ try{failing_builtin(f);{}}catch(e:const OutOfMemoryError){observe(9031u64);};
  observe(9050u64);observe(abort_builtin_registration(f));observe(9060u64);
  func g=return_builtin_image(f);observe(g(1u64));
 }};

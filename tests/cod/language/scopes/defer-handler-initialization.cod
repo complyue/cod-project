@@ -1,12 +1,12 @@
 using symbol "std:io" @print;
-using "std:exceptions" InvalidCapacity;
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" InvalidCapacityError;
+using "std:exceptions" OutOfMemoryError;
 region symbol @arena;
 proc bad()->void {effect @arena <- region(0u64);}
 proc guarded(arm:bool)->void {
   ptr value = make local u64;
   defer {behave @print(value);}
-    catch(error:const OutOfMemory) {behave @print(70u64);}
+    catch(error:const OutOfMemoryError) {behave @print(70u64);}
     finally {behave @print(71u64);};
   if(arm) {behave @print(9001u64);} else {};
   defer {value <- 1u64;};
@@ -15,8 +15,8 @@ guarded(false);
 proc category_recovery()->void {
   ptr value = make local u64;
   defer {behave @print(value);}
-    catch(error:const InvalidCapacity) {behave @print(value);}
-    catch(error:const OutOfMemory) {}
+    catch(error:const InvalidCapacityError) {behave @print(value);}
+    catch(error:const OutOfMemoryError) {}
     finally {behave @print(72u64);};
   defer {value <- 2u64; bad();};
 }
@@ -24,13 +24,13 @@ category_recovery();
 proc own_throw()->void {
   ptr value = make local u64;
   defer {value <- 3u64; bad();}
-    catch(error:const InvalidCapacity) {behave @print(value);}
+    catch(error:const InvalidCapacityError) {behave @print(value);}
     finally {behave @print(73u64);};
 }
 own_throw();
 proc fallback()->void {
   ptr value = make local u64;
-  defer catch(error:const InvalidCapacity) {behave @print(value);}
+  defer catch(error:const InvalidCapacityError) {behave @print(value);}
     finally {behave @print(74u64);};
   defer {value <- 4u64; bad();};
 }
@@ -46,7 +46,7 @@ registered(true);
 registered(false);
 proc body_error()->void {
   ptr value = make local u64;
-  defer {} catch(error:const InvalidCapacity) {behave @print(value);};
+  defer {} catch(error:const InvalidCapacityError) {behave @print(value);};
   value <- 6u64;
   bad();
 }

@@ -12,11 +12,11 @@ from regional_runtime_tests import checked
 
 SOURCE = '''
 using symbol "std:io" @print;
-using "std:exceptions" OutOfMemory;
-using "std:exceptions" MissingReturnException;
+using "std:exceptions" OutOfMemoryError;
+using "std:exceptions" MissingReturnError;
 func missing()->const i64 {}
-func error()->const MissingReturnException {
-  try{missing();}catch(e:const MissingReturnException){return e;};
+func error()->const MissingReturnError {
+  try{missing();}catch(e:const MissingReturnError){return e;};
 }
 proc observe(x:u64)->void{behave @print(x);}
 proc records()->void {
@@ -24,16 +24,16 @@ proc records()->void {
   behave @print(9001u64);
   defer observe(99u64);
 }
-try{records();}catch(e:const OutOfMemory){
+try{records();}catch(e:const OutOfMemoryError){
   behave @print(e.category);
   behave @print(e.cause_count);
   behave @print(9002u64);
 };
 val original<-error();
-val saved<-try{throw original from original;}catch(e:const MissingReturnException){e};
+val saved<-try{throw original from original;}catch(e:const MissingReturnError){e};
 behave @print(saved.cause_count);
 behave @print(9011u64);
-try{throw saved from saved;}catch(e:const OutOfMemory){
+try{throw saved from saved;}catch(e:const OutOfMemoryError){
   behave @print(e.category);
   behave @print(e.cause_count);
   behave @print(9012u64);

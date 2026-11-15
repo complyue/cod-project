@@ -1,6 +1,6 @@
 using symbol "std:io" @print;
 using "std:exceptions" NullPointerException;
-using "std:exceptions" OutOfMemory;
+using "std:exceptions" OutOfMemoryError;
 proc show(value:u64 in O)->void where {owner O} {behave @print(value);}
 proc set(value:u64 in O)->void where {owner O} {value <- 7u64;}
 proc iteration(count:u64)->void {
@@ -32,7 +32,7 @@ proc initialize(count:u64)->void {
   ptr selected = first;
   for(i in 0u64 .. count) {{
     selected = second;
-    defer {show(selected);} catch(error:const OutOfMemory) {throw error;};
+    defer {show(selected);} catch(error:const OutOfMemoryError) {throw error;};
     defer set(selected);
   }};
 }

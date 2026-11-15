@@ -1,5 +1,5 @@
 using symbol "std:io" @print;
-using "std:exceptions" InvalidCapacity;
+using "std:exceptions" InvalidCapacityError;
 region symbol @arena;
 proc bad()->void {effect @arena <- region(0u64);}
 proc nested()->void {
@@ -50,7 +50,7 @@ proc failure()->void {
     bad();
   };
 }
-try {failure();} catch(error:const InvalidCapacity) {behave @print(18u64);};
+try {failure();} catch(error:const InvalidCapacityError) {behave @print(18u64);};
 proc handled()->void {
   ptr value = make local u64;
   defer {value <- 19u64;} catch(error) {value <- 20u64;} finally {behave @print(value);};
@@ -68,4 +68,4 @@ proc continuation(yes:bool)->void {
   behave @print(value);
 }
 continuation(false);
-try {continuation(true);} catch(error:const InvalidCapacity) {behave @print(23u64);};
+try {continuation(true);} catch(error:const InvalidCapacityError) {behave @print(23u64);};

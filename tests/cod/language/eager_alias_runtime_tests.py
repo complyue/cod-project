@@ -16,10 +16,10 @@ runner.SOURCE += '''
  {{
   defer divide(1u64,1u64);
   observe(9050u64);
-  try{defer add(x,2u64);}catch(e:const OutOfMemory){observe(9051u64);};
+  try{defer add(x,2u64);}catch(e:const OutOfMemoryError){observe(9051u64);};
  }};
  try{ {{defer{observe(9u64);};defer divide(false,true);}};{}}
- catch(e:const MissingReturnException){observe(8u64);};
+ catch(e:const MissingReturnError){observe(8u64);};
  observe(add(x,2u64));
 }};
 observe(9000u64);
