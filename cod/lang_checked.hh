@@ -869,6 +869,11 @@ class ScalarChecker {
     if (value_binding) fail(at, "val storage has no reference binding; use '<-' for bits transfer");
     if (fixed) fail(at, "cannot rebind a const reference binding");
   }
+  static void reference_destination(const ViewEvidence &view, const Location &at) {
+    if (!view.value_binding) fail(at, "reference operation requires a binding slot");
+    reference_slot(*view.value_binding, view.fixed_binding.value_or(false), at);
+    if (!view.fixed_binding) implementation_gap(at, "reference binding mutability is not established");
+  }
   static void rebind_type(const Type &target, const Type &source, const Location &at) {
     if (source != Type::null_ref && source != target) fail(at, "reference rebinding requires the exact target type");
   }
@@ -878,6 +883,16 @@ class ScalarChecker {
   static void bits_swap_target(const Type &type, bool read_only, const Location &at) {
     if (!bits_type(type)) fail(at, "builtin bits swap requires two bits storage destinations");
     if (read_only) fail(at, "cannot swap bits through a readonly destination");
+  }
+  static void assignment_destination(bool view, bool mixed, const Location &at) {
+    if (!view) fail(at, "assignment requires a storage destination");
+    if (mixed) implementation_gap(at, "assignment through a mixed value/storage view");
+  }
+  static void transfer_access(bool read_only, const Location &at) {
+    if (read_only) fail(at, "cannot write through a readonly destination");
+  }
+  static void transfer_type(const Type &source, const Type &destination, const Location &at) {
+    if (!transfers_value(source, destination)) fail(at, "bits transfer source does not satisfy destination type");
   }
   void reference_destination(const CheckedOperation &view, const Location &at) const {
     if (view.slots.empty()) fail(at, "reference operation requires a binding slot");
@@ -2793,7 +2808,7 @@ class ScalarChecker {
       switch (expr.kind) {
       case K::integer: case K::real: case K::boolean: case K::null_ref: case K::name: case K::symbol:
       case K::unary: case K::binary: case K::call: case K::value_call: case K::behave: case K::perform: case K::field:
-      case K::conditional: case K::block: break;
+      case K::conditional: case K::block: case K::transfer: case K::rebind: break;
       case K::callable:
         if (expr.definition->name.empty()) break;
         [[fallthrough]];
@@ -2906,9 +2921,33 @@ class ScalarChecker {
     }
     case K::transfer: case K::rebind: {
       const auto type = child(0); view = state.value;
-      const auto source = child(1);
+      const auto *context = expr.kind == K::transfer && type && type->kind == Type::procedure ? &*type : nullptr;
+      const auto source = type_evidence(*expr.children[1], state, context != nullptr, context);
       if (type == Type::never || source == Type::never) return Type::never;
-      if (expr.kind == K::transfer) view.read_only = true;
+      if (state.required) assignment_destination(view.view == true, view.mixed_view, expr.at);
+      if (expr.kind == K::transfer) {
+        if (state.required) {
+          if (!view.read_only) implementation_gap(expr.at, "assignment destination access is not established");
+          transfer_access(*view.read_only, expr.at);
+          transfer_type(*source, *type, expr.at);
+        }
+        view.read_only = true;
+      } else if (state.required) {
+        reference_destination(view, expr.at);
+        const auto &selected = state.value;
+        if (selected.view != true || selected.mixed_view)
+          implementation_gap(expr.at, "rebinding from a fresh value without an existing target");
+        rebind_type(*type, *source, expr.at);
+        if (!selected.read_only || (!view.slot_read_only && *selected.read_only))
+          implementation_gap(expr.at, "reference target access is not established");
+        rebind_access(view.slot_read_only.value_or(false), *selected.read_only, expr.at);
+        if (*source != Type::null_ref || selected.owner) {
+          const auto relation = compare_owners(view.owner, selected.owner, &state);
+          if (relation == OwnerMatch::mismatch) fail(expr.at, "reference rebinding cannot change the initializer-fixed owner");
+          if (relation == OwnerMatch::unknown) implementation_gap(expr.at, "reference assignment requires an established owner equality");
+        }
+      }
+      view.value_binding.reset(); view.fixed_binding.reset(); view.slot_read_only.reset();
       return type;
     }
     case K::conditional: {
@@ -3096,11 +3135,7 @@ class ScalarChecker {
         for (const auto &operand : views) {
           if (operand.view != true) fail(expr.at, "swap requires two storage destinations");
           if (operand.mixed_view) implementation_gap(expr.at, "swap through a mixed value/storage view");
-          if (reference) {
-            if (!operand.value_binding) fail(expr.at, "reference operation requires a binding slot");
-            if (!operand.fixed_binding) implementation_gap(expr.at, "reference binding mutability is not established");
-            reference_slot(*operand.value_binding, *operand.fixed_binding, expr.at);
-          }
+          if (reference) reference_destination(operand, expr.at);
         }
         const auto family = expr.intrinsic ? NamedFamily{} : named_family(expr.text, &state);
         if (!method_candidates(family.methods, arguments, family.retained_types(), access, owners, &state).methods.empty()) {
@@ -4513,8 +4548,7 @@ class ScalarChecker {
         break;
       }
       const auto target = operations.at(expr.children[0].get());
-      if (!target.view) fail(expr.at, "assignment requires a storage destination");
-      if (target.mixed_view) implementation_gap(expr.at, "assignment through a mixed value/storage view");
+      assignment_destination(target.view, target.mixed_view, expr.at);
       for (const auto owner : target.owners) if (lexical_.live)
         if (!owner_alive(owner))
           fail(expr.at, "assignment destination's lexical owner has ended");
@@ -4549,7 +4583,6 @@ class ScalarChecker {
         operation.exceptions = selected.exceptions;
         operation.view = true;
         operation.binding = target.binding;
-        operation.slots = target.slots;
         operation.owners.clear(); operation.selection_versions.clear();
         for (const auto id : target.slots) {
           const auto &owners = lexical_.owners.at(id), &versions = lexical_.target_versions.at(id);
@@ -4562,13 +4595,13 @@ class ScalarChecker {
         if (read && !discard) dereference(operation, expr.at);
         break;
       }
-      if (target.read_only) fail(expr.at, "cannot write through a readonly destination");
+      transfer_access(target.read_only, expr.at);
       for (const auto place : target.targets) if (place != null_target && storage(place).captured)
         implementation_gap(expr.at, "replacement of a captured callable payload");
       dereference(target, expr.at);
       const auto source = check(*expr.children[1], instance, operations, true, false, destination.kind == Type::procedure ? &destination : nullptr);
       if (source == Type::never) { operation.type = Type::never; break; }
-      if (!transfers_value(source, destination)) fail(expr.at, "bits transfer source does not satisfy destination type");
+      transfer_type(source, destination, expr.at);
       operation.arguments[1].type = destination;
       if (prepared) {
         require_borrow_lifetime(target, expr.children[0]->at, true);

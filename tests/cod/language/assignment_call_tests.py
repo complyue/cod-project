@@ -52,7 +52,7 @@ for mode in ('infix', 'call', 'intrinsic'):
         'owner_change': ('val a<-1;ptr p=a;{{val b<-2;'+r('p','b')+';}};',2,'','initializer-fixed owner'),
         'readonly_source': ('val a<-1;val b:const i64<-2;ptr p=a;'+r('p','b')+';',2,'','readonly source cannot rebind'),
         'reference_type_exact': ('val a<-1,b<-2u64;ptr p=a;'+r('p','b')+';',2,'','exact target type'),
-        'query_boundary': ('val a<-1;val result<-make local typeof('+w('a','7')+');',2,'','typeof for this expression form'),
+        'query_without_write': (IO+'val a<-1;val result<-make local typeof('+w('a','7')+'){9};'+OUT('a')+OUT('result'),0,'1\n9\n',''),
     }
     for name, case in cases.items(): runner.CASES[mode+'_'+name] = case
 for prefix in ('', 'intrinsic '):

@@ -1433,11 +1433,11 @@ class LLVMEmission {
       return empty_scalar();
     }
     case K::transfer: case K::rebind: {
+      if (projection == Projection::slot) throw std::logic_error("assignment result has no binding slot");
       const auto arguments = prepare_arguments(expr);
       if (!reachable()) return nullptr;
       auto *address = assign_prepared(expr, arguments);
       if (expr.kind == K::transfer) return read ? b_.CreateLoad(scalar_, address) : address;
-      if (projection == Projection::slot) return view_address(arguments[0]);
       return !read ? address : discard ? empty_scalar() : b_.CreateLoad(scalar_, checked_address(address, expr, expr.at));
     }
     case K::return_value: {

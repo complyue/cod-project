@@ -22,7 +22,7 @@ runner.CASES = {
     'scope_retains_slot_before_cleanup': (run('({{defer{a=z;b=x;};if(flag){a}else{b}}})=y;'), 0, '2\n1\n3\n3\n2\n3\n', ''),
     'scope_swap_reloads_after_cleanup': (run('({{defer{a=z;b=x;};if(flag){a}else{b}}})<=>c;'), 0, '3\n1\n3\n3\n3\n1\n', ''),
     'finally_keeps_selected_slot': (run('(try{if(flag){a}else{b}}finally{flag<-!flag;a=z;b=x;{}})=y;'), 0, '2\n1\n3\n3\n2\n3\n', ''),
-    'chained_rebind_result_slot': (run('((if(flag){a}else{b})=z)=y;'), 0, '2\n2\n3\n1\n2\n3\n', ''),
+    'chained_rebind_result_slot': (run('((if(flag){a}else{b})=z)=y;'), 2, '', 'requires a binding slot'),
     'chained_rhs_selected_target': (run('c=(if(flag){a}else{b})=x;'), 0, '1\n2\n1\n1\n1\n1\n', ''),
     'assignment_result_target': (run('((if(flag){a}else{b})=z)<-9;'), 0, '9\n2\n9\n1\n9\n9\n', ''),
     'assignment_result_value': (run('behave @print((if(flag){a}else{b})=z);'), 0, '3\n3\n2\n3\n3\n1\n3\n3\n', ''),

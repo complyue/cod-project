@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-11-15 — Assignment queries and target-only results
+
+<a id="k-713"></a>
+**K-713 — Preserve target capabilities through non-executing inspection.** Agent continuity under H-295/H-ASSIGNMENT-RESULT-20261115/H-407/H-420/H-423 and charter §§3.3/4.3/6.3/8/12: D-14r107→108, source reference329→330 and registry721→722 align builtin assignment results and bounded queries with C-64/C-69/P-241/P-260/P-268–P-269. Baseline: `c59bb9eee13302431f54f47cb578f495c8992749` at affected paths, plus the scoped human resolution below. Shared destination/type/access checking preserves owner, initialization and cleanup contracts; results expose targets without slots. Queries execute no operands, copy no values and create no initialization facts. Acceptance includes right-associative chaining, target writes, rejected result-based slot operations, equivalent query/explicit-type native code and unchanged resource behavior. D-16 numeric boundaries and all pending mechanisms/whole-file qualifications remain. Process evidence stays outside the repository.
+
+## 2026-11-15 — Assignment results retain only target views
+
+<a id="h-assignment-result-20261115"></a>
+**H-ASSIGNMENT-RESULT-20261115 — Target-only assignment results.** Human/source: current project user in [the compiler mainline chat](codex://threads/01a1cefe-fe25-7251-b25b-b3908d803ff6), recorded 2026-11-15 America/Los_Angeles; exact timestamp/personal name unavailable. In response to `call_0447e4a289f34da9ac07d1eec4304b71`, chooses “Target view only (Recommended)” after reviewing the assignment-result topic in `design/RegionalOwnership.md`. The question explicitly preserves `p = q = r` and `(p = q) <- value`, rejects `(p = q) = r`, and contrasts that rule with exposing p's slot for further swaps/aliases. This confirms the target-only option and rejects the builtin-slot alternative, resolving K-712 for D-14r106→107/P-241/P-260. Destination type/owner/access, ordinary slot aliases and non-executing queries continue unchanged; no new owner, copy, broader assignment-method ABI or whole-file qualification follows.
+
+## 2026-11-15 — Assignment-result capability review
+
+<a id="k-712"></a>
+**K-712 — Separate target-view authority from binding-slot implementation.** Agent review under AGENTS and charter §§3.3/4.3/8: D-14r105→106 and registry719→720 identify a contract ambiguity against baseline `c59bb9eee13302431f54f47cb578f495c8992749` at `cod/lang_checked.hh`, `tests/cod/language/selected_slot_tests.py` and `design/RegionalOwnership.md`. H-270/H-302/P-241/P-260 confirms destination target identity/access and chaining; it does not clearly qualify the builtin result's retained lhs slot. The current design now exposes target-only versus builtin-slot alternatives and their consequences. This specific capability is pending-human, not qualified by existing code/tests or earlier agent continuity. Other assignment, alias, swap, query, owner/access and cleanup contracts continue; no human decision or compiler change is claimed.
+
 ## 2026-11-15 — Storage-exchange type inspection
 
 <a id="k-711"></a>
