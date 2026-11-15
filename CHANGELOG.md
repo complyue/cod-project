@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-15 — Argument design checkpoint integration
+
+<a id="k-710"></a>
+**K-710 — Preserve bounds coverage and integrate argument-design decisions.** Agent reconciliation under H-420/H-423/H-451–H-457 and charter §§3.1/3.3/4.3/6.3/8/12: merge design checkpoint `bfcd95cd76c59fdf446959b08b752f96bbe0bba5` with compiler checkpoint `40854b4157739c85d5c1681017c02a703bcaf671`. Registry r718 and source reference328 retain D-17r65/D-26r19 bounds capability while integrating D-10r156/D-18r96. Named arrows, default environments and expression-colon direction retain their recorded scope; default phase order, complete grammar, declaration/view integration, conversion/assertion semantics and candidate value paths remain pending. Both histories, owner/access/cleanup constraints and D-16 deferral remain intact. This merge changes documentation only; it adds no source capability or qualification.
+
 ## 2026-11-15 — Catchable source bounds failures
 
 <a id="k-709"></a>
@@ -24,6 +29,37 @@
 
 <a id="k-705"></a>
 **K-705 — Operation identity through shared destination preparation.** Agent implementation/continuity under H-155/H-226/H-230/H-232/H-306/H-356/H-420/H-423 and charter §§2/6.3/8/12: source reference325/registry713 admits selected swap aliases and imported extensions through the existing caller-slot/target-storage and cleanup paths. D-14r102→103/D-17r62→63 align current capability pointers; C-69/P-268–P-269 and C-63/P-321–P-324 retain their scoped contracts. Baseline: `57d108f116e54ce5b673452cb0aa646cc74396a6` at affected paths. Renaming preserves operation identity and selected interpretation; extension signatures retain exact destinations, explicit owners and void results. This changes no confirmed value, failure policy or parent relationship. Callable-value slot ABI, independent-family composition, eager-arithmetic fallback, regional allocation, fractions and purity remain outside this slice. Other document qualifications and exclusions remain unchanged. Acceptance and current bounds are in `tests/cod/language/README.md`; process and validation reports remain outside the repository.
+
+## 2026-11-15 — Argument arrows and default environments
+
+<a id="h-453"></a>
+**H-453 — Reserve expression colon for explicit typing.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-15 America/Los_Angeles; exact timestamp/personal name unavailable. Says “`:` 语法给默认值不妥，CoD应支持 "explicit type conversion"/"type assertion"，使用 `:` 语法。 named arg用 `=` 或者 `<-` 你看下有没有quirks”. Selects colon's conversion/assertion direction and excludes it as a named separator; asks for comparison of assignment-like alternatives, not their adoption. Detailed conversion/assertion behavior remains open.
+
+<a id="h-454"></a>
+**H-454 — Distinct definition-site and caller-context default blocks.** Same human/source/date as H-453. After proposing caller-context default blocks, refines the proposal: “哦， `{ ... }` 是在 callee 定义位置 eval，`{{ ... }}` 是在 caller context 开个scope eval吧。” Selects the two environment forms and an explicit caller scope. H-452's parameter-initialization preamble remains; the earlier agent inference that all defaults necessarily execute after callee entry does not settle the new caller form's phase boundary.
+
+<a id="h-455"></a>
+**H-455 — Per-omission evaluation and caller-local lookup.** Same human/source/date; asynchronous answers to `call_69f4afef10db4689b51593c49adcfa4a`, items 0/1. Chooses “Per omitted call, in the definition environment (Recommended)” for `{ tick() }`, and “Caller’s local x, yielding 2” when `{{ x }}` sees definition-site x=1 and caller-local x=2. No definition-time default cache is selected. These answers fix frequency and lookup; mixed default sequencing, entry/cleanup placement and other name categories remain separate.
+
+<a id="h-456"></a>
+**H-456 — Prefer fixed symbolic identity with caller-current values.** Same human/source/date. Says “但是推荐定义时在 {{ ... }} 内部只引用symbolic vars，symbol 身份在 callee definition site 解析”. Recommends symbolic-variable dependencies in caller-context defaults; resolves symbol identity at definition and reads that identity's caller-current binding. This is guidance rather than a ban on H-455's caller-local references; caller homonyms do not retarget an established symbol identity.
+
+<a id="h-457"></a>
+**H-457 — Expression-first named arrows with grouped owner values.** Same human/source/date. Proposes “那 named arg passing 考虑 `<expr> -> <arg-name>` 语法看看” and, after the existing owner-projection collision is identified, supplies “可以 `(<callable-var> -> <owner-name>)` 形式显式写参数值”. Selects that local argument direction with explicit grouping for the projected owner value. D-10/D-18 integrates outer named-arrow syntax without overload-dependent reinterpretation; borrowed region identity/access/lifetime remain. This does not authorize new scalar grouping behavior, ownership transfer or complete parser support.
+
+<a id="k-argument-contexts-20261115"></a>
+**K-ARGUMENT-CONTEXTS-20261115 — Integrate syntax and environment decisions without assuming phase order.** Agent integration of H-453–H-457: D-10r155→156/D-18r95→96 and registry r716→717 update D-10-ARGUMENTS/P-405–P-406, add D-10-TYPED-EXPR/P-407–P-408, and preserve confirmed owner projection through grouped argument values. Charter §§3.1/3.3/4.3/6.3/8/12 motivates readable binding, stable identity and preserved effects. Current docs replace colon-label illustrations and the blanket post-entry-default inference in K-NAMED-ARGUMENTS-20261115; the current mixed/default/deferred phase proposal remains pending. H-451/H-452's completeness and preamble, H-449/H-450, and D-16 remain unchanged. Candidate value paths and full grammar/operational scope are not self-qualified. The publication review distinguishes conversion from assertion and preserves once-only evaluation without selecting fallback, narrowing, failure or value/view mechanisms. Published baseline: `8e999e58f72d1801f75ae0af621f0f48de12c84a` at affected paths. Documentation only; no compiler/build/tests or native support claim.
+
+## 2026-11-15 — Named arguments and callable parameter preamble
+
+<a id="h-451"></a>
+**H-451 — Complete declaration-directed named/default argument binding.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-15 America/Los_Angeles; exact timestamp/personal name unavailable. After requesting the H-450 checkpoint, the user says: “然后继续讨论 arg default，named arg passing，omitting for default。当前好像还没有吧，加这个设计： 第一个命名传递的参数之前可以有位置参数，之后不允许；以声明签名为匹配结果，不全的reject，只要能给全，调用方可以乱序给参数。” Selects the named/default feature direction, positional prefix only, declaration-directed labels, arbitrary named order and complete required binding. Missing default-bearing slots use their declared defaults; missing required slots reject. Exact punctuation, default-count overload ranking and declaration/view integration are not selected by this statement.
+
+<a id="h-452"></a>
+**H-452 — Parameter initialization belongs to a callable preamble.** Same human/source/date as H-451. The user adds: “参考 initialization，心智模型是一个 callable 在 preamble block 中初始化所有参数”. Selects ordinary initialization in a callable preamble as the semantic model. D-10-ARGUMENTS integrates existing source-ordered argument preparation, initializer lookup, entry ownership transfer, callee effect context and exceptional cleanup; this is not approval of a new ABI, source block keyword or all remaining default/overload mechanisms.
+
+<a id="k-named-arguments-20261115"></a>
+**K-NAMED-ARGUMENTS-20261115 — Reuse initialization and preserve the call boundary.** Agent integration under H-451/H-452 and H-423's routine-decision delegation: D-10r154→155 and registry r715→716 add D-10-ARGUMENTS, candidate value edge P-405 and dependency P-406. Charter §§3.1/3.3/6.3/8/12 motivates readable typed slot binding with observable order preserved. Defaults run during parameter initialization after entry; explicit supplied expressions/conversions retain source order before entry. All supplied owned inputs transfer at entry and remain subject to exactly-once callee cleanup even if an earlier default fails before their named binding initializes. Ordinary initializer lookup, earlier-parameter visibility, function/procedure effects, nontransactional allocation and init obligations continue; plain saved-call defaults run on invocation. Duplicate/unknown/missing required bindings reject; no trailing-default restriction is added when named binding can complete the signature. Illustrative punctuation and remaining integration are pending, and the value path is not self-qualified. H-449/H-450 and D-16 remain unchanged. Baseline: `8e999e58f72d1801f75ae0af621f0f48de12c84a` at the affected design paths. Documentation only; no compiler/build/tests or implementation claim.
 
 ## 2026-11-15 — Fixed and variadic overload ranking
 
