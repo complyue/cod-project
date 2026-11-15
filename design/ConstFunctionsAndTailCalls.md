@@ -1,8 +1,10 @@
-# Const functions and tail calls: deferred research plan
+# Pure functions, knot-tying and tail calls: deferred research plan
 
-Design revision: 3 · Recorded: 2026-11-12 · Status: deferred pre-research; no implementation scheduled.
+Design revision: 4 · Recorded: 2026-11-15 · Status: deferred pre-research; no implementation scheduled.
 
 ## Design authority
+
+- **Knot-tying research scope:** [D-19-KNOT](DesignAuthorityRegistry.md#d-19-knot), r4 section below, records [H-444](../CHANGELOG.md#h-444)'s explicit goal of supporting Haskell-like knot-tying in future pure/const functions. C-76/P-395 derives this research direction from functional computation with checked storage/lifetimes, serving charter §§3.3/6.3/8: express recursive sharing without exposing invalid objects. P-396 records construction/cleanup/storage dependencies; P-397 prevents today's ordinary-construction deferral becoming a permanent ban. [K-KNOT-COST-20261115](../CHANGELOG.md#k-knot-cost-20261115) continues the prior purity/TCO contract and adds this separately confirmed goal; concrete syntax, evaluation, checking and publication mechanisms remain pending-human. Acceptance is the scoped research evidence below, not current implementation. The human baseline is the current project user's message recorded 2026-11-15; exact message timestamp/name unavailable.
 
 - **Qualifier separation:** [H-366–H-369](../CHANGELOG.md#h-366)/[K-527](../CHANGELOG.md#k-527) continues this deferred plan at revision3 with D-14's independent binding and propagated target-access qualifiers. Const storage/access and const results do not imply a pure invocation. H-368 resolves propagation through referenced objects as readonly access, not permanent freezing. C-65/C-48/C-76 and P-173/P-327 preserve readable permissions and the distinct external-state purity boundary; H-363's pure syntax and deferred implementation/TCO status remain unchanged. Acceptance for ordinary qualifiers belongs to D-14/D-18, not this deferred research scope.
 
@@ -62,6 +64,26 @@ Two construction cases remain distinct:
 
 The immediate non-callable result discussion does not settle whole-region result syntax, freezing, publication or ownership transfer. Existing valid borrow/transfer rules continue to apply; no new escape channel is inferred.
 
+## Knot-tying as a pure design goal
+
+H-444 requires serious evaluation aimed at supporting Haskell-like knot-tying in future pure functions. The cost-based deferral of required-ref cycles in ordinary proc/func does not dismiss this goal. It also does not select a general lazy language or schedule purity implementation now.
+
+Distinguish two research cases:
+
+- **Finite cyclic construction:** a known set of objects whose required references close a cycle. Private allocation followed by checked edge initialization and publication may suffice without delayed evaluation. For example, two nodes with `a.next is b` and `b.next is a` need identities before their fields are complete, but need not read incomplete payloads.
+- **Recursive computation tied to its result:** construction may depend on information produced by the same recursive computation. A representative goal is rebuilding a tree so every output leaf receives the minimum computed by that traversal. Fixed edge patching alone does not specify how such a dependency evaluates. Compare explicit construction/fixpoint forms, static scheduling or multiple passes, and bounded delayed evaluation; establish expressiveness, sharing and costs before choosing a mechanism. Productive unbounded structures and demand cycles are separate scope questions, not promised merely by supporting finite rings.
+
+Haskell's recursive let bindings and non-strict semantics provide the reference behavior ([Haskell 2010 Report §§3.1/3.12](https://www.haskell.org/onlinereport/haskell2010/haskellch3.html)). CoD purity alone supplies neither property. A reserved target identity is not a readable value, and accepting an edge cycle is not permission to evaluate an uninitialized field.
+
+The research must reconcile:
+
+1. Recursive name scope, allowed demands, sharing/identity, and the boundary between productive construction and premature recursive reads. If evaluation is delayed, specify repeated demand, recursive demand, failures and retained storage; no thunk representation or runtime cycle detector is selected.
+2. Whole-call external-state preservation and private mutation. A const owner cannot allocate; internal construction needs an admitted private owner. Caller-owned allocator mutation is not automatically private, and a result still needs a legal surviving owner. No implicit capture promotion, owner extension or region copy/move follows.
+3. Completion and cleanup. An eagerly completed result must satisfy required-field guarantees before publication. A delayed result would need its own explicit contract for later computation, owner lifetime, failure and observations; the current immediate-return boundary cannot silently cover those later actions. Effects are not rolled back by grouping.
+4. Relocatable regional edges, lexical owner/locator resolution and observable reference identity. Supporting knots must not force per-edge relocation work or a process-address-based persisted graph. Numeric fields, including planned fractions, retain their ordinary validity before being read.
+
+Future evidence should include finite cycles with shared subgraphs, a recursive computation such as the tree-minimum example, invalid premature reads, a failure before publication, and a result whose owner survives legally. Compare allocation, retained memory and compilation/checking complexity against ordinary explicit construction. This is a proposed research checklist; exact guarantees, surface syntax, support for infinite structures and implementation remain pending-human. Any later decision that makes the goal materially impossible needs the conflict review already required by H-348; an eager ordinary-call path today is not such a conflict.
+
 ## TCO and the callable ABI
 
 TCO concerns growth of execution frames, not growth of result data or captured environments. Repeatedly wrapping a previous callable by value can grow its environment even if the calls use bounded stack space.
@@ -86,6 +108,7 @@ A material conflict must be explained to a human before the incompatible choice 
 - Make readonly external access impossible to preserve through aliases, callback calls, imported methods or native services.
 - Commit to observable writes to pre-existing state as an unavoidable part of every supposedly boundary-pure call.
 - Require broad semantic changes merely to distinguish callable-body constness from const storage/access or a const result.
+- Permanently prevent recursive data construction or required-ref cycles in pure, without assessing H-444's knot-tying goal and explaining the conflict. Current eager proc/func construction and its bounded support remain valid.
 
 An adapter without TCO today, a conservative rejected optimization, or remaining implementation work is not itself a material conflict. No current ABI is required to satisfy LLVM musttail universally. No concrete irreconcilable conflict was established during this planning review; this is not a proof of compatibility for unfinished implementation choices.
 
@@ -98,6 +121,7 @@ Before implementation, settle only what the selected increment needs:
 - Callable-type syntax and its distinction from const bindings, access views and result qualifiers; the declaration keyword is pure.
 - Checking of private state, helper calls, callbacks, overload dispatch and native services, including input stability assumptions.
 - Supported output construction/escape forms and exception/resource-failure behavior; no implicit rollback or ignored cleanup.
+- Knot-tying scope and evaluation/publication strategy, including finite graph identity, recursive demands and any delayed-result lifetime/observation boundary.
 - TCO eligibility, guarantee and diagnostics, including generic/mutual/indirect recursion and ABI restrictions.
 
 Focused acceptance should demonstrate external-state preservation, allowed private mutation, immediate-result semantics and rejected dangling output. Tail recursion should execute far beyond ordinary call-stack capacity with measured bounded frame use, while preserving failures, cleanup and results. Add mutual/indirect cases only when they exercise supported mechanisms. Persistent-data experiments should assess version preservation and allocation cost separately from call-stack use.
