@@ -169,9 +169,29 @@ struct CallEffects {
   std::set<size_t> symbols; // Required current symbol identities, not operand positions.
 };
 enum class OwnerMatch { satisfied, unknown, mismatch };
+// Proof identities are separate from executable owner handles. Scoped identities
+// describe fresh storage within one evidence pass and are normalized when retained.
+struct EvidenceOwner {
+  enum class Kind { checked, retained, parameter, scoped };
+  Kind kind = Kind::checked;
+  size_t id;
+  const Expression *scope = nullptr;
+  EvidenceOwner(size_t id = 0) : id(id) {}
+  static EvidenceOwner retained(size_t id) { EvidenceOwner owner{id}; owner.kind = Kind::retained; return owner; }
+  static EvidenceOwner parameter(size_t id) { EvidenceOwner owner{id}; owner.kind = Kind::parameter; return owner; }
+  static EvidenceOwner for_scope(const Expression &expr) {
+    EvidenceOwner owner; owner.kind = Kind::scoped; owner.scope = &expr; return owner;
+  }
+  bool operator==(const EvidenceOwner &) const = default;
+  bool operator<(const EvidenceOwner &other) const {
+    if (kind != other.kind) return kind < other.kind;
+    if (kind == Kind::scoped) return std::less<const Expression *>{}(scope, other.scope);
+    return id < other.id;
+  }
+};
 struct ViewEvidence {
   std::optional<bool> read_only, view, value_binding;
-  std::optional<size_t> owner = {};
+  std::optional<EvidenceOwner> owner = {};
   bool mixed_view = false;
   bool operator==(const ViewEvidence &) const = default;
 };
@@ -382,6 +402,7 @@ class ScalarChecker {
   std::vector<CheckedStorage> *storage_ = nullptr;
   std::vector<CheckedBinding> *bindings_ = nullptr;
   std::map<size_t, std::vector<size_t>> scope_storage_;
+  std::map<const Expression *, size_t> checked_scope_owners_;
   bool proving_ = false;
   bool validating_ = false;
   CallEffects observed_;
@@ -441,11 +462,11 @@ class ScalarChecker {
     std::map<std::string, std::optional<Type>> bindings;
     std::set<std::string> symbol_shadows;
     std::map<std::string, ViewEvidence> views;
-    std::map<std::string, size_t> owner_bindings;
-    std::set<size_t> external_owners;
-    std::map<std::pair<size_t, size_t>, OwnerMatch> owner_relations;
+    std::map<std::string, EvidenceOwner> owner_bindings;
+    std::set<EvidenceOwner> external_owners;
+    std::map<std::pair<EvidenceOwner, EvidenceOwner>, OwnerMatch> owner_relations;
     ViewEvidence value;
-    std::optional<size_t> current_owner;
+    std::optional<EvidenceOwner> current_owner;
     bool complete = true;
     bool required = false;
     std::optional<size_t> method;
@@ -509,9 +530,13 @@ class ScalarChecker {
       if (a.source->parameters[i].read_only != b.source->parameters[i].read_only) return false;
     return true;
   }
-  using Owners = std::vector<std::optional<size_t>>;
+  using Owners = std::vector<std::optional<EvidenceOwner>>;
   static std::optional<size_t> one_owner(const CheckedOperation &view) {
     return view.type != Type::never && view.owners.size() == 1 ? std::optional<size_t>{*view.owners.begin()} : std::nullopt;
+  }
+  EvidenceOwner checked_owner(EvidenceOwner owner) const {
+    if (owner.kind == EvidenceOwner::Kind::scoped) return checked_scope_owners_.at(owner.scope);
+    return owner;
   }
   static Owners owners_of(const std::vector<CheckedOperation> &views) {
     Owners owners;
@@ -527,11 +552,10 @@ class ScalarChecker {
       if (same_owner(broad, i, j) && !same_owner(narrow, i, j)) return false;
     return true;
   }
-  static constexpr size_t query_owner_base = null_target / 2;
   const QueryEnvironment &query_environment() const {
     return program_.query_environments[checking_instance_ ? checking_instance_->query_environment : 0];
   }
-  OwnerMatch compare_owners(std::optional<size_t> a, std::optional<size_t> b, const TypeEvidenceState *state = nullptr) const {
+  OwnerMatch compare_owners(std::optional<EvidenceOwner> a, std::optional<EvidenceOwner> b, const TypeEvidenceState *state = nullptr) const {
     if (!a || !b) return OwnerMatch::unknown;
     if (a == b) return OwnerMatch::satisfied;
     if (state) {
@@ -539,12 +563,15 @@ class ScalarChecker {
       return state->external_owners.contains(*a) && state->external_owners.contains(*b) ? OwnerMatch::unknown : OwnerMatch::mismatch;
     }
     const auto &relations = query_environment().owners;
-    const auto retained = [&](size_t owner) { return owner >= query_owner_base && owner - query_owner_base < relations.size(); };
-    if (retained(*a) && retained(*b)) return relations[*a - query_owner_base][*b - query_owner_base];
+    const auto retained = [](const EvidenceOwner &owner) { return owner.kind == EvidenceOwner::Kind::retained; };
+    const auto external = [&](const EvidenceOwner &owner) {
+      return owner.kind == EvidenceOwner::Kind::checked && external_owner(owner.id);
+    };
+    if (retained(*a) && retained(*b)) return relations.at(a->id).at(b->id);
     if (retained(*a) || retained(*b))
-      return external_owner(retained(*a) ? *b : *a) ? OwnerMatch::unknown : OwnerMatch::mismatch;
+      return external(retained(*a) ? *b : *a) ? OwnerMatch::unknown : OwnerMatch::mismatch;
     // Distinct formal names admit equal actual owners; local scopes do not.
-    return external_owner(*a) && external_owner(*b) ? OwnerMatch::unknown : OwnerMatch::mismatch;
+    return external(*a) && external(*b) ? OwnerMatch::unknown : OwnerMatch::mismatch;
   }
   OwnerMatch match_owners(const CheckedMethod &method, const Owners &owners, const TypeEvidenceState *state = nullptr) const {
     auto result = OwnerMatch::satisfied;
@@ -557,7 +584,7 @@ class ScalarChecker {
     }
     return result;
   }
-  struct ArgumentEvidence { std::optional<Type> type; std::optional<bool> read_only; std::optional<size_t> owner; };
+  struct ArgumentEvidence { std::optional<Type> type; std::optional<bool> read_only; std::optional<EvidenceOwner> owner; };
   struct ArgumentPreparation {
     ArgumentMode mode = ArgumentMode::value;
     std::optional<Type> type;
@@ -2074,16 +2101,16 @@ class ScalarChecker {
     for (const auto &query : free.queries) retain(query);
     for (const auto &symbol : free.symbols)
       if (symbol_shadowed(symbol.name, available)) context.symbol_shadows.insert(symbol.name);
-    std::map<size_t, size_t> owners;
-    const auto owner = [&](size_t original) {
-      return owners.try_emplace(original, owners.size() + 1).first->second;
+    std::map<EvidenceOwner, size_t> owners;
+    const auto owner = [&](const EvidenceOwner &original) {
+      return EvidenceOwner::retained(owners.try_emplace(original, owners.size()).first->second);
     };
     for (auto &[name, view] : context.views) if (view.owner) view.owner = owner(*view.owner);
     for (auto &[name, id] : context.owner_bindings) id = owner(id);
     for (const auto &[original, id] : owners) {
-      context.external_owners.insert(id);
+      context.external_owners.insert(EvidenceOwner::retained(id));
       for (const auto &[other, target] : owners)
-        context.owner_relations[{id, target}] = compare_owners(original, other, &available);
+        context.owner_relations[{EvidenceOwner::retained(id), EvidenceOwner::retained(target)}] = compare_owners(original, other, &available);
     }
     return context;
   }
@@ -2098,7 +2125,7 @@ class ScalarChecker {
     TypeEvidenceState::Returns returns;
     state.returns = &returns;
     for (size_t i = 0; i < method.source->owner_parameters.size(); ++i) {
-      const auto owner = null_target - 1 - i;
+      const auto owner = EvidenceOwner::parameter(i);
       state.owner_bindings[method.source->owner_parameters[i].name] = owner;
       state.external_owners.insert(owner);
     }
@@ -2107,7 +2134,7 @@ class ScalarChecker {
       const bool value = parameter.owner.empty();
       state.bindings[parameter.name] = obligation.arguments[i];
       state.views[parameter.name] = {parameter.read_only || (value && parameter.fixed_binding), true, value,
-                                    value ? 0 : state.owner_bindings.at(parameter.owner)};
+                                    value ? EvidenceOwner{} : state.owner_bindings.at(parameter.owner)};
     }
     const auto previous = result_probe_;
     result_probe_ = id;
@@ -2302,7 +2329,7 @@ class ScalarChecker {
     return {either(a.read_only, b.read_only), either(a.view, b.view), a.value_binding == b.value_binding ? a.value_binding : std::nullopt,
             a.owner == b.owner ? a.owner : std::nullopt, a.mixed_view || b.mixed_view || a.view != b.view};
   }
-  static std::optional<size_t> owner_evidence(const std::string &name, const TypeEvidenceState &state, const Location &at) {
+  static std::optional<EvidenceOwner> owner_evidence(const std::string &name, const TypeEvidenceState &state, const Location &at) {
     if (const auto found = state.owner_bindings.find(name); found != state.owner_bindings.end()) return found->second;
     if (state.required) fail(at, state.bindings.contains(name) ? "nearest binding '" + name + "' is not an owner" : "unknown owner '" + name + "'");
     return {};
@@ -2404,7 +2431,7 @@ class ScalarChecker {
     case K::block: {
       auto inner = state;
       auto &active = expr.scoped ? inner : state;
-      if (expr.scoped) active.current_owner.reset();
+      if (expr.scoped) active.current_owner = EvidenceOwner::for_scope(expr);
       std::optional<Type> result = Type::void_type;
       bool exits = false;
       for (size_t i = 0; i < expr.children.size(); ++i) {
@@ -2423,7 +2450,7 @@ class ScalarChecker {
           if (type_evidence(*declaration, state) == Type::never) completes = false;
           continue;
         }
-        const auto declared_owner = declaration->owner_name.empty() ? std::optional<size_t>{} : owner_evidence(declaration->owner_name, state, declaration->at);
+        const auto declared_owner = declaration->owner_name.empty() ? std::optional<EvidenceOwner>{} : owner_evidence(declaration->owner_name, state, declaration->at);
         const auto declared = declaration->annotation ? std::optional<Type>{annotation(*declaration->annotation)} : std::nullopt;
         const auto initial = type_evidence(*declaration->children.front(), state, declared.has_value(),
             declared && declared->kind == Type::procedure ? &*declared : nullptr);
@@ -2755,9 +2782,7 @@ class ScalarChecker {
     state.current_owner = std::find_if(lexical_.scopes.rbegin(), lexical_.scopes.rend(), [](const auto &scope) { return scope.declarations; })->id;
     for (const auto &binding : query_environment().bindings) {
       state.bindings[binding.name] = binding.type;
-      auto view = binding.view;
-      if (view.owner) *view.owner += query_owner_base;
-      state.views[binding.name] = view;
+      state.views[binding.name] = binding.view;
     }
     for (const auto &scope : lexical_.scopes) for (const auto &[name, id] : scope.bindings) {
       const auto &binding = bindings_->at(id);
@@ -2769,7 +2794,7 @@ class ScalarChecker {
       state.views[name] = {binding.read_only, true, binding.value_binding, owner};
     }
     for (const auto &[name, owner] : external_owners_) state.external_owners.insert(owner);
-    std::set<size_t> owners;
+    std::set<EvidenceOwner> owners;
     for (const auto &[name, view] : state.views) if (view.owner) owners.insert(*view.owner);
     for (const auto &[name, owner] : state.owner_bindings) owners.insert(owner);
     for (const auto owner : owners) for (const auto other : owners)
@@ -2785,7 +2810,7 @@ class ScalarChecker {
     if (lexical_methods_.contains(method.source))
       for (const auto &symbol : symbols)
         if (symbol_shadowed(symbol.name, state)) environment.symbol_shadows.insert(symbol.name);
-    std::vector<size_t> owners;
+    std::vector<EvidenceOwner> owners;
     for (const auto &query : method.queries) {
       check_query_binding(query.name, query.at);
       const auto found = state.bindings.find(query.name);
@@ -2802,7 +2827,7 @@ class ScalarChecker {
         const auto prior = std::find(owners.begin(), owners.end(), *view.owner);
         const auto id = std::distance(owners.begin(), prior);
         if (prior == owners.end()) owners.push_back(*view.owner);
-        view.owner = id;
+        view.owner = EvidenceOwner::retained(id);
       }
       environment.bindings.push_back({query.name, *found->second, view});
     }
@@ -3546,7 +3571,7 @@ class ScalarChecker {
       for (size_t i = 0; i < arguments.size(); ++i)
         if (views[i].type != Type::never && ((evidence[i].type && *evidence[i].type != arguments[i]) ||
             (evidence[i].read_only && *evidence[i].read_only != views[i].read_only) ||
-            (evidence[i].owner && evidence[i].owner != one_owner(views[i]))))
+            (evidence[i].owner && checked_owner(*evidence[i].owner) != one_owner(views[i]))))
           implementation_gap(expr.children[i]->at, "operand type/access/owner evidence depends on completion or contextual inference");
       if (expr.text == "cause_at" && (expr.intrinsic || (!module_names().callables.contains(expr.text) && !has_declarations(expr.text)))) {
         if (arguments.size() != 2 || arguments[0].kind != Type::exception || arguments[1] != Type::uint64)
@@ -3686,6 +3711,7 @@ class ScalarChecker {
       const auto parent_scope = cleanup_scope_;
       if (expr.scoped) {
         cleanup_scope_ = next_scope_++;
+        checked_scope_owners_[&expr] = cleanup_scope_;
         lexical_.scopes.push_back({cleanup_scope_, {}, true, lexical_.bound_symbols});
         lexical_.queues[cleanup_scope_] = 0;
       }
@@ -4269,7 +4295,7 @@ class ScalarChecker {
     storage_ = &storage; bindings_ = &bindings;
     storage.clear(); bindings.clear(); operations.clear();
     if (!proving) { possible_targets_.clear(); possible_null_sources_.clear(); target_dependencies_.clear(); catalog_storage_.clear(); rebound_.clear(); loop_owners_.clear(); }
-    lexical_ = {}; cleanup_ = {}; scope_storage_.clear(); read_sites_.clear(); external_owners_.clear();
+    lexical_ = {}; cleanup_ = {}; scope_storage_.clear(); checked_scope_owners_.clear(); read_sites_.clear(); external_owners_.clear();
     loop_controls_.clear(); delayed_controls_.clear(); deferred_inputs_.clear();
     caught_.reset(); catch_bindings_.clear(); caught_inputs_.clear();
     captures_ = nullptr; delayed_ = false; prepared_call_ = nullptr;

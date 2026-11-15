@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Scoped owner evidence
+
+<a id="k-684"></a>
+**K-684 — Scoped-evidence continuity.** Agent assessment under H-273/H-295/H-342/H-344/H-398/H-407/H-417/H-420–H-424 and charter §§2/3.2/5.3/6.3/12: registry r691→692 and source reference305→306 preserve fresh full-scope owner identity through ordered operand evidence, retained declaration contexts and independent recursive result inference. Ordinary groups and existing aliases keep their owners. Checker identities distinguish checked, retained, formal and fresh-scope facts; native storage, access/lifetime/initialization, complete captures and cleanup remain unchanged. D-14r91→92’s bounded typeof paragraph aligns omitted-result evidence with D-24r7/H-421–H-424 while preserving H-295’s no-runtime-evaluation rule. Acceptance covers snapshots versus borrows, nested scopes, inferred results, captured/query contexts, native failures and shared recursive code. Broader query forms, owner-dependent family dispatch, permanent proof/ABI choices and pending designs remain separate; no new qualification. Prior contracts: `2d8b1e00675899b6aeef4a5f46957aea0fe37660:design/RegionalOwnership.md` and `2d8b1e00675899b6aeef4a5f46957aea0fe37660:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Shared symbolic owner proof
 
 <a id="k-683"></a>
