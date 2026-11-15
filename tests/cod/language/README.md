@@ -20,6 +20,8 @@ H-261/P-231 governs whole-type lossless numeric value transfers, exact-before-wi
 
 D-10/H-257/P-229 and H-381 preserve nearest-binding lookup and source-visible shadow diagnostics. Shared declaration checks keep enclosing-name visibility separate from runtime captures; this diagnostic scope changes neither lookup precedence nor native environments.
 
+H-449/H-450/D-10-VARARGS records ordinary runtime-array expansion as one logical variadic input, with element count independent of overload selection. Ordinary type matching precedes the fixed-form preference for otherwise equal implicit-pack matches. [K-708](../../../CHANGELOG.md#k-708) integrates those scoped decisions; value-path and complete operational qualification remain pending, and executable packs/expansion are not implemented.
+
 H-258 supplies mandatory bodyless signatures with generic and variadic parameters. The supported declaration scope below constrains fixed-arity implementations and type-only inspection; executable argument packs and variadic callable views remain implementation work. D-10 whole-document qualification and unrelated mechanisms retain their separate status.
 
 D-21r12/H-375–H-378/P-333/P-337 preserves a callable’s selected interpretation. D-10/H-106/H-109/H-166/H-212/H-231/H-233/H-372–H-373 and D-15/H-245/H-247–H-249 constrain source-preserving selection, explicit publication, source isolation and once-only initialization. K-674 records bounded source-module selection and ordinary import under those scopes, H-230/H-232/H-252/H-253 and H-398. Identity-centered construction preserves source intent and explicit receiver interpretation through P-216–P-220; D-15’s full operational/value-path qualification, general composition and persistent representations remain separate.

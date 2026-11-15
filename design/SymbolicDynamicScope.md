@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 152 · Recorded: 2026-11-15 · Phase: language/application co-design.
+Design revision: 154 · Recorded: 2026-11-15 · Phase: language/application co-design.
 
 ## Design authority
+
+- **Variadic call direction:** [D-10-VARARGS](DesignAuthorityRegistry.md#d-10-varargs), [H-449](../CHANGELOG.md#h-449)/[K-VARIADIC-PACK-20261115](../CHANGELOG.md#k-variadic-pack-20261115), covers the runtime-array expansion and single logical pack parameter section below. H-258 supplies typed variadic declarations; H-449 selects ordinary-array expansion and treats the variadic tail as one overload input whose length is runtime data. [H-450](../CHANGELOG.md#h-450)/[K-VARIADIC-RANKING-20261115](../CHANGELOG.md#k-variadic-ranking-20261115) selects ordinary type matching first, with a fixed-over-implicit-pack preference only for otherwise equal matches. Candidate value path P-403 through C-57/C-89 serves charter §§3.1/6.3/8/12 by keeping typed call structure inspectable and independent of runtime count; this is a local semantic decision, not whole-file/value-path qualification. P-404 retains owner/access/initialization, exception, numeric and native-coverage dependencies. Acceptance and unresolved overload/representation boundaries are stated in that section; no compiler support is claimed.
 
 - **Builtin bounds policy:** [H-448](../CHANGELOG.md#h-448)/[K-BOUNDS-POLICY-20261115](../CHANGELOG.md#k-bounds-policy-20261115) continues r151→152 with [D-17-BOUNDS](ExceptionControl.md#unchecked-bounds-exceptions-and-optional-checks), C-63/C-65/P-401–P-402 and charter §§4.3/6.3/8/12. Builtin indexing raises unchecked IndexOutOfBoundsException with runtime checks on by default; explicit opt-out affects bounds only. Evaluation, owner/access, initialization and checked NPE remain unchanged. Acceptance and unsafe-range consequences belong to D-17; broader executable pack contracts and implementation remain separate, and whole-file qualification is unchanged.
 
@@ -428,11 +430,34 @@ proc dispatch(first:T, rest:T...) -> void where T;
 function pair(x:T, y:U) -> i64 where {T, U};
 ```
 
-Type parameters are inferred from concrete argument types at a demanded call. Repeated occurrences constrain those types to agree; bounds use the caller's selected conformance information. A type parameter that cannot be inferred from inputs is diagnosed. Unique-most-specific dispatch compares signature constraints, including concrete types, bounds, repeated-variable relationships and fixed versus variadic arity, independently of declaration order. Equally specific candidates remain ambiguous. This bounded prototype does not supply generic ADT constructors, explicit type-argument calls or a complete higher-rank type system.
+Type parameters are inferred from argument type evidence at a demanded call. Repeated occurrences constrain those types to agree; bounds use the caller's selected conformance information. A type parameter that cannot be inferred from inputs is diagnosed. Unique-most-specific dispatch compares signature constraints, including concrete types, bounds and repeated-variable relationships, independently of declaration order. Equally specific candidates remain ambiguous. The variadic pack contract below distinguishes signature shape from runtime element count; H-450 ranks fixed-versus-variadic competition for implicitly collected arguments by type matching first and fixed form only on an otherwise equal match. This bounded prototype does not supply generic ADT constructors, explicit type-argument calls or a complete higher-rank type system.
 
-Within a method, `len(rest)` gives the tail count, `rest[i]` reads an element and `other(first, rest...)` forwards it. The finite argument pack is compiler metadata with each argument's existing provenance; it is not a user heap object. A dynamic index into regional arguments requires a common live owner. A pack cannot escape its call scope or become a TLS value. Empty tails are valid when their element type can be inferred from another argument or is explicitly concrete. Automatic conversion still completes for each argument before the next argument's effects.
+### Runtime-array expansion and one variadic parameter
 
-H-448 separately settles the builtin bounds policy through [D-17](ExceptionControl.md#unchecked-bounds-exceptions-and-optional-checks): out-of-range indexing raises unchecked IndexOutOfBoundsException under default runtime checks, with an explicit compiler opt-out at the programmer's risk. No throws annotation is required for this exception. This scoped decision does not qualify the preceding broader pack indexing, mutation, forwarding or callable-view proposals; their operational contracts and implementation remain under review. The opt-out does not change argument evaluation, owners, initialization or the selected user-defined indexing method's contract.
+H-449 selects `values...` for an ordinary runtime-sized array as well as forwarding an existing variadic pack. A final `rest:T...` is **one logical parameter** after any fixed prefix. Its element type and declared passing/access/owner constraints participate in matching; its element count is runtime data. Treating the tail as one input does not erase per-element constraints or repeated-type relationships.
+
+```text
+# Design examples; executable variadic bodies and array expansion remain implementation work.
+func choose(x:u64) -> u64 { return 1u64; }
+func choose(rest:u64...) -> u64 { return 2u64; }
+# values is an ordinary runtime-sized u64 array.
+choose(values...); # supplies one pack, including when values has zero or one element
+choose(7u64);      # both match u64 exactly; fixed form wins and returns 1u64
+```
+
+Explicit expansion supplies the variadic pack; it does not flatten its elements into a variable number of fixed parameters. Changing the array length cannot select `choose(x:u64)`, a zero-argument method or a different fixed-arity method. Knowing the length during optimization does not change that source meaning. A typed empty array still provides element-type evidence while supplying zero elements; an untyped empty tail cannot invent missing type or owner evidence. Multiple variadic overloads still need ordinary type/constraint selection and native coverage under [D-26](GenericAndRecursiveClosure.md).
+
+H-450 settles fixed-versus-implicit-pack competition for an ordinary unspread call. Compare the existing type/constraint matches first, preserving exact-before-lossless conversion selection. Only when those matches are otherwise equally specific does the fixed form win over implicit tail collection. This preference cannot resolve incomparable type constraints or make an inapplicable method applicable. For example, with `select(x:u64)` and `select(rest:u32...)`, `select(7u32)` selects the exact u32 variadic match over widening to the fixed u64 parameter. Explicit `select(values...)` remains a pack input, independent of count.
+
+The selected parameter mode governs element passage. Supported value elements are independent values, so writes to callee value elements cannot modify the source array. Borrowed elements retain their actual targets, owners, access and initialization obligations. Expansion introduces no regional copy/move, lifetime extension or permission upgrade. Any dynamically selected borrowed element must retain a statically unique owner; treating the tail as one parameter does not make unrelated owners interchangeable. Ordinary source-order argument preparation and failures remain observable; the precise interleaving of element preparation within an expansion remains part of the operational review.
+
+No public pack type, heap allocation, permanent ABI or native specialization per length is selected. Arbitrary iterator expansion is outside this initial scope. Initial implementation may accept a conservative, sound subset and diagnose unsupported cases; it must not choose a different overload or discard owner/access/initialization constraints to make an unsupported call run. Existing typed bodyless variadic declarations can constrain fixed-arity method implementations; that declaration-contract checking is distinct from executing a method with a pack parameter.
+
+**Acceptance:** cover empty, singleton and longer arrays with the same element contract selecting the same variadic signature; inferred element types from typed empty arrays; independent scalar values versus preserved borrowed targets; rejected owner/access/init mismatches; repeated-type constraints; equivalent selection with or without constant-length optimization; a fixed u64 parameter winning an otherwise tied singleton u64 pack match; and an exact u32 pack match winning over fixed u64 widening. H-448's bounds policy applies whenever builtin element indexing is admitted. No existing prototype evidence establishes this complete acceptance scope.
+
+**Still under review:** grouping and specificity when variadic candidates have different fixed prefixes; multiple expansions and precise preparation order; indexed element result/mutation modes; escaping/storage and callable-view contracts; physical pack transport. The proposed body operations are `len(rest)`, `rest[i]` and forwarding through `other(first, rest...)`; their remaining details need the operational contract before implementation delegation.
+
+H-448 separately settles the builtin bounds policy through [D-17](ExceptionControl.md#unchecked-bounds-exceptions-and-optional-checks): out-of-range indexing raises unchecked IndexOutOfBoundsException under default runtime checks, with an explicit compiler opt-out at the programmer's risk. No throws annotation is required for this exception. It does not qualify broader pack operations or change argument evaluation, owners, initialization or the selected user-defined indexing method's contract.
 
 ### Evaluated bits and storage places
 
