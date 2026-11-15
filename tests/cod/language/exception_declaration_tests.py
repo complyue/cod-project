@@ -26,7 +26,7 @@ runner.CASES = {
  'independent_method_binders': (IO+ERROR+PAIR+'func f(a:A,b:B)->bool where {A,B}{return true;}func relay(a:SystemException,b:SystemException)->bool{return f(a,b);}'+OUT('relay(missing_value(),null_value())'),0,'true\n',''),
  'independent_binders_cannot_anchor_cycle': (TYPES+PAIR+'func f(a:A,b:B) where {A,B}{return f(a,b);}func relay(a:SystemException,b:SystemException)->bool{return f(a,b);}',2,'','unproved callable result'),
  'repeated_binder_anchors_cycle': (TYPES+PAIR+'func f(a:U,b:U) where U{return f(a,b);}func relay(input:SystemException)->bool{return f(input,input);}',0,'',''),
- 'repeated_method_binder': (IO+ERROR+'func f(a:T,b:T)->const T where T;func f(a:U,b:U)->const U where U{return b;}func relay(input:SystemException)->const SystemException{return f(input,input);}'+OUT('relay(missing_value()).category'),0,'5\n',''),
+ 'repeated_method_binder_result_unproved': (TYPES+'func f(a:T,b:T)->const T where T;func f(a:U,b:U)->const U where U{return b;}func relay(input:SystemException)->const SystemException{return f(input,input);}',2,'','declared result type parameter is not determined'),
  'checked_failure': (ERROR+FAILURE+'f(missing_value());',2,'','requires a covering catch or throws'),
  'disjoint_checked_failure': (IO+ERROR+FAILURE+OUT('f(null_value())'),0,'true\n',''),
  'unknown_category_retains_failure': (ERROR+FAILURE+'val common:SystemException<-null_value();f(common);',2,'','requires a covering catch or throws'),

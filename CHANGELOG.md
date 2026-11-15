@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Dependent exception result obligations
+
+<a id="k-690"></a>
+**K-690 — Dependent-result proof continuity.** Agent assessment under H-258/H-269/H-398/H-399/H-407/H-420–H-424, D-14r92/D-17r57/D-18r92/D-24r7/D-26r13 and charter §§2/5.3/6.3/12: registry r697→698 and source reference311→312 separate input coverage from dependent-result category evidence. A covering declaration cannot replace an unknown concrete result category with SystemException, including through an instantiated method binder. Such unproved promises receive an implementation-gap diagnostic; concrete categories, fixed results and exact borrowed target types retain their contracts. Acceptance covers broad/generic/recursive/nested/deferred/imported obligations and both native modes. No language prohibition, new inference mechanism, runtime guard, carrier, conversion, ABI, fraction rule or qualification is selected. Prior capability reference: `03a1402c890035a8d0af570a9e9916dea5b9bf41:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Exception declaration overlap
 
 <a id="k-689"></a>

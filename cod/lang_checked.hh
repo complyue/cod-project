@@ -1832,7 +1832,10 @@ class ScalarChecker {
       for (size_t i = 0; i < domain.size(); ++i)
         if (numeric(method.parameters[i]) && widens(domain[i], method.parameters[i])) domain[i] = method.parameters[i];
       const bool covers_types = match(declaration, domain, {}, true).has_value();
-      if (!covers_types) for (const auto index : overlap->unknown_categories) overlap->substitutions[index].reset();
+      // Input coverage does not establish the category of a dependent result.
+      // A common view, even in a repeated method binder, cannot replace that
+      // unknown category in the declaration's result promise.
+      for (const auto index : overlap->unknown_categories) overlap->substitutions[index].reset();
       if (method.source->kind != declaration.source->kind)
         fail(method.source->at, "implementation kind does not satisfy callable declaration");
       for (const auto category : method.throws_categories)
