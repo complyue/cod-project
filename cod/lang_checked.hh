@@ -912,6 +912,34 @@ class ScalarChecker {
     reference_destination(view, at);
     return selection_state(std::move(view), at);
   }
+  CleanupEquations::Reads prepared_binding_reads(const CheckedOperation &view, const Location &at,
+      bool nonnull = false, const std::set<size_t> &initialized = {}) {
+    CleanupEquations::Reads reads;
+    if (!proving_) return reads;
+    const auto incoming = physical_slots(view.slots);
+    if (nonnull) {
+      const auto read = cleanup_.read(null_target); read_sites_.push_back(at);
+      auto &requirement = reads[read];
+      requirement.nonnull = incoming;
+      std::erase_if(*requirement.nonnull, [&](size_t id) { return !possible_targets_.at(id).contains(null_target); });
+      // A registration guard cannot identify a different runtime iteration.
+      if (std::none_of(loop_controls_.begin(), loop_controls_.end(),
+          [&](size_t control) { return storage(control).scope > cleanup_scope_; }))
+        for (const auto &[id, versions] : lexical_.target_versions)
+          if (!lexical_.targets.at(id).contains(null_target)) requirement.nonnull_versions.emplace(id, versions);
+    }
+    for (const auto id : incoming) {
+      if (initialized.contains(id)) continue;
+      for (const auto place : possible_targets_.at(id)) if (place != null_target) {
+        const auto read = cleanup_.read(place); read_sites_.push_back(at);
+        auto &requirement = reads[read];
+        requirement.selection = view.binding ? view.binding : std::optional<size_t>{id};
+        requirement.entry_initialized = initialized;
+        requirement.entry_nonnull = initialized;
+      }
+    }
+    return reads;
+  }
   void prepare_reference_swap(const CheckedOperation &left, const CheckedOperation &right,
                               CheckedOperation &operation, const Location &at) {
     require_deferred_slots(left, at); require_deferred_slots(right, at);
@@ -934,20 +962,8 @@ class ScalarChecker {
         }
       }
       if (!proving_ || std::none_of(written.begin(), written.end(), [&](size_t id) { return bindings_->at(id).requires_initialized; })) return;
-      const auto read = cleanup_.read(null_target); read_sites_.push_back(at);
-      effects.reads[read].nonnull = incoming;
-      // Source versions cannot identify an earlier runtime iteration's binding.
-      const bool iteration_local = std::none_of(loop_controls_.begin(), loop_controls_.end(),
-          [&](size_t control) { return storage(control).scope > cleanup_scope_; });
-      if (iteration_local) for (const auto &[id, versions] : lexical_.target_versions)
-        if (!lexical_.targets.at(id).contains(null_target)) effects.reads[read].nonnull_versions.emplace(id, versions);
-      std::set<size_t> places;
-      for (const auto id : incoming) places.insert(possible_targets_.at(id).begin(), possible_targets_.at(id).end());
-      places.erase(null_target);
-      for (const auto place : places) {
-        const auto read = cleanup_.read(place); read_sites_.push_back(at);
-        effects.reads.emplace(read, CleanupEquations::ReadRequirement{{}, source.binding});
-      }
+      const auto reads = prepared_binding_reads(source, at, true);
+      effects.reads.insert(reads.begin(), reads.end());
     };
     exchange(left, right); exchange(right, left);
   }
@@ -1165,7 +1181,7 @@ class ScalarChecker {
     return written;
   }
   std::map<size_t, CleanupEquations::Effects> invocation_effects(const CallEffects &target, const std::set<size_t> &reasons,
-      const std::vector<CheckedOperation> &views, const Location &at, bool prepared) {
+      const std::vector<CheckedOperation> &views, const Location &at, bool prepared, bool slots = false) {
     const auto selection = [&](const CheckedOperation &view) {
       auto binding = current_binding(view);
       // Prepared arguments retain their target even if the source slot is rebound.
@@ -1175,6 +1191,16 @@ class ScalarChecker {
     CleanupEquations::Reads reads;
     if (proving_) for (const auto &[parameter, before] : target.reads) {
       const auto &view = views.at(parameter);
+      if (slots) {
+        std::set<size_t> initialized;
+        for (const auto other : before) {
+          const auto selected = physical_slots(views.at(other).slots);
+          if (selected.size() == 1) initialized.insert(*selected.begin());
+        }
+        const auto required = prepared_binding_reads(view, at, false, initialized);
+        reads.insert(required.begin(), required.end());
+        continue;
+      }
       if (view.initialized_target) continue;
       const bool same_selection = view.binding && std::any_of(before.begin(), before.end(), [&](size_t other) {
         return view.binding == views.at(other).binding && view.selection_versions == views.at(other).selection_versions;
@@ -1190,18 +1216,22 @@ class ScalarChecker {
     for (const auto reason : reasons) {
       const auto found = target.initialized.find(reason);
       auto &effect = effects.emplace(reason, CleanupEquations::Effects{reads,
-          found == target.initialized.end() ? std::set<size_t>{} : written_targets(found->second, views)}).first->second;
+          found == target.initialized.end() || slots ? std::set<size_t>{} : written_targets(found->second, views)}).first->second;
       effect.symbols = target.symbols;
-      if (found != target.initialized.end()) for (const auto parameter : found->second)
-        if (const auto binding = selection(views.at(parameter))) {
+      if (found != target.initialized.end()) for (const auto parameter : found->second) {
+        const auto selected = physical_slots(views.at(parameter).slots);
+        const auto binding = slots ? (selected.size() == 1 ? std::optional<size_t>{*selected.begin()} : std::nullopt)
+                                   : selection(views.at(parameter));
+        if (binding) {
           effect.selections.initialize(*binding);
           effect.selections.refine(*binding, false);
         }
+      }
     }
     return effects;
   }
   void invocation_bindings(const CallEffects &summary, const std::vector<CheckedOperation> &views,
-                           CheckedOperation &operation) {
+                           CheckedOperation &operation, bool prepared = false) {
     for (auto &[reason, effects] : operation.invocation) {
       const auto outcome = summary.bindings.find(reason);
       if (outcome == summary.bindings.end()) continue;
@@ -1213,13 +1243,22 @@ class ScalarChecker {
         if (targets.initialized && destination.binding) effects.selections.initialized.insert(*destination.binding);
         CleanupEquations::Targets selected{{}, targets.null_sources.contains(null_target), {}};
         for (const auto input : targets.targets) {
-          auto incoming = views.at(input).targets;
-          incoming.erase(null_target);
-          selected.places.insert(incoming.begin(), incoming.end());
+          if (prepared) {
+            const auto incoming = physical_slots(views.at(input).slots);
+            selected.entries.insert(incoming.begin(), incoming.end());
+          } else {
+            auto incoming = views.at(input).targets;
+            incoming.erase(null_target);
+            selected.places.insert(incoming.begin(), incoming.end());
+          }
         }
         // Nullable input provenance is distinct from an independently absent target.
-        for (const auto input : targets.null_sources) if (input != null_target)
-          selected.nullable = selected.nullable || views.at(input).targets.contains(null_target);
+        for (const auto input : targets.null_sources) if (input != null_target) {
+          if (prepared) {
+            const auto incoming = physical_slots(views.at(input).slots);
+            selected.entries.insert(incoming.begin(), incoming.end());
+          } else selected.nullable = selected.nullable || views.at(input).targets.contains(null_target);
+        }
         const auto written = overlapping_slots(destination.slots);
         for (const auto &[binding, current] : lexical_.targets) {
           if (intersect(written, physical_slots({binding})).empty()) continue;
@@ -1317,8 +1356,30 @@ class ScalarChecker {
     }
     operation.type = *contract.target;
     operation.exceptions = exception_possibilities(operation.type);
-    operation.invocation = invocation_effects(summary, reasons, views, expr.at, &expr == prepared_call_);
-    if (!summary.bindings.empty()) invocation_bindings(summary, views, operation);
+    const bool prepared_slots = &expr == prepared_call_ && !summary.bindings.empty();
+    operation.invocation = invocation_effects(summary, reasons, views, expr.at, &expr == prepared_call_, prepared_slots);
+    if (!summary.bindings.empty()) invocation_bindings(summary, views, operation, prepared_slots);
+    if (prepared_slots) {
+      CleanupEquations::Reads reads;
+      bool checked_entry = false;
+      for (size_t i = 0; i < views.size(); ++i) {
+        const auto mode = operation.arguments.at(i).mode;
+        if (mode == ArgumentMode::borrowed_ptr) continue;
+        const auto required = prepared_binding_reads(views[i], expr.at, mode == ArgumentMode::borrowed_ref);
+        reads.insert(required.begin(), required.end());
+        const auto selected = physical_slots(views[i].slots);
+        checked_entry = checked_entry || (mode == ArgumentMode::borrowed_read &&
+            std::any_of(selected.begin(), selected.end(),
+                [&](size_t id) { return possible_targets_.at(id).contains(null_target); }));
+      }
+      if (checked_entry) {
+        // An entry check can fail before the selected method mutates any slot.
+        auto &failed = operation.invocation[3 + exception_id(ExceptionCategory::null_pointer)];
+        failed.initialized.clear();
+        failed.selections.merge({});
+      }
+      for (auto &[reason, effect] : operation.invocation) effect.reads.insert(reads.begin(), reads.end());
+    }
     if (&expr != prepared_call_) {
       const auto before = lexical_;
       for (const auto &[reason, effects] : operation.invocation) if (reason) {
@@ -2177,9 +2238,8 @@ class ScalarChecker {
           return argument.binding_slot != caller_bindings(method);
         })) implementation_gap(expr.at, "selected method requires unproved slot preparation adaptation");
     if (caller_bindings(method)) {
-      if (&expr == prepared_call_)
-        implementation_gap(expr.at, "prepared caller-binding method invocation remains unproved");
       for (size_t i = 0; i < views.size(); ++i) {
+        if (&expr == prepared_call_) require_deferred_slots(views[i], expr.at);
         if (arguments[i].kind == Type::procedure)
           implementation_gap(expr.at, "callable payload flow through caller-binding methods remains unproved");
         for (const auto slot : physical_slots(views[i].slots)) {
@@ -4888,9 +4948,20 @@ class ScalarChecker {
     instance.complete = validating_;
     for (const auto reason : call_reasons(*checking_method_)) observed_.initialized.try_emplace(reason);
     if (caller_bindings(*checking_method_)) {
-      // Absent outcomes retain a conservative bound during recursive closure.
-      const auto initial = initial_effects(*checking_method_, instance.arguments);
-      for (const auto &[reason, targets] : initial.bindings) observed_.bindings.try_emplace(reason, targets);
+      // Recursive closure retains conservative absent outcomes, while a slot
+      // with no possible mutation preserves its entry selection on every exit.
+      auto initial = initial_effects(*checking_method_, instance.arguments);
+      for (auto &[reason, targets] : initial.bindings) {
+        for (auto &[parameter, result] : targets) {
+          const auto &input = instance.frame.inputs.at(parameter);
+          if (!rebound_.contains(storage(input.place).binding)) {
+            result.targets = {parameter};
+            result.null_sources = input.mode == ArgumentMode::borrowed_ptr ? std::set<size_t>{parameter} : std::set<size_t>{};
+            result.initialized = input.mode != ArgumentMode::borrowed_ptr;
+          }
+        }
+        observed_.bindings.try_emplace(reason, std::move(targets));
+      }
     }
     return observed_;
   }

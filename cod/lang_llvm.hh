@@ -783,6 +783,24 @@ class LLVMEmission {
         b_.CreateBr(scope.cleanup);
         continue;
       }
+      if (std::any_of(facts_.begin(), facts_.end(), [&](const auto *facts) {
+            const auto &call = facts->at(&body);
+            return call.destination_arguments && std::any_of(call.arguments.begin(), call.arguments.end(),
+                [](const auto &argument) { return argument.binding_slot && argument.mode == ArgumentMode::borrowed_read; });
+          })) {
+        complete_cleanup([&] {
+          check_destination_arguments(body, arguments, true);
+          auto *result = invoke(body, arguments);
+          release_value(b_.CreateExtractValue(result, 0));
+          auto *replace = block("defer.failed"), *done = block("defer.completed");
+          b_.CreateCondBr(failed(result), replace, done);
+          b_.SetInsertPoint(replace); save_failure(result); b_.CreateBr(done);
+          b_.SetInsertPoint(done);
+        });
+        facts_ = all_facts; frame_contexts_ = all_contexts;
+        b_.CreateBr(scope.cleanup);
+        continue;
+      }
       auto *result = invoke(body, arguments);
       release_value(b_.CreateExtractValue(result, 0));
       if (facts_.front()->at(&body).callable_call) release_value(arguments.front());
@@ -1067,16 +1085,21 @@ class LLVMEmission {
       if (!reachable()) return {};
       arguments.push_back(value);
     }
-    if (fact.destination_arguments) for (size_t i = 0; i < arguments.size(); ++i) {
+    check_destination_arguments(expr, arguments);
+    return arguments;
+  }
+  void check_destination_arguments(const Expression &expr, const std::vector<llvm::Value *> &arguments,
+                                   bool deferred = false) {
+    if (facts_.front()->at(&expr).destination_arguments) for (size_t i = 0; i < arguments.size(); ++i) {
       std::map<bool, std::vector<size_t>> alternatives;
       for (size_t j = 0; j < facts_.size(); ++j)
         alternatives[facts_[j]->at(&expr).arguments.at(i).mode == ArgumentMode::borrowed_read].push_back(j);
       contextual_value(*expr.children[i], alternatives, "destination.check", [&](bool read) {
         if (read) {
           auto *address = view_address(arguments[i]);
-          if (fact.arguments[i].binding_slot) {
+          if (facts_.front()->at(&expr).arguments[i].binding_slot) {
             address = b_.CreateLoad(b_.getPtrTy(), address);
-            checked_address(address, std::any_of(facts_.begin(), facts_.end(), [&](const auto *facts) {
+            checked_address(address, deferred || std::any_of(facts_.begin(), facts_.end(), [&](const auto *facts) {
               return facts->at(&expr).nullable_arguments.contains(i);
             }), expr.at);
           } else checked_address(address, *expr.children[i], expr.at);
@@ -1084,7 +1107,6 @@ class LLVMEmission {
         return b_.getTrue();
       }, b_.getInt1Ty());
     }
-    return arguments;
   }
   llvm::Value *assign_prepared(const Expression &expr, const std::vector<llvm::Value *> &arguments) {
     auto *destination = view_address(arguments[0]);

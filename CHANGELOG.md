@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-15 — Prepared caller-binding methods
+
+<a id="k-703"></a>
+**K-703 — Shared deferred method and binding proofs.** Agent implementation/continuity under H-306/H-356–H-362/H-407/H-420/H-423 and charter §§2–3/6/8/12: source reference324/registry711 admits prepared reference-swap methods for scalar and intrinsic exception targets. D-14r100→101/D-17r61→62 update implementation alignment; D-17's confirmed value path through C-63/P-235–P-236/P-321–P-324 governs prepared cleanup, with D-14's independently confirmed C-69/P-268–P-269 requirements supplying ordered destination selection, actual caller bindings and owner/access constraints. This does not qualify D-14 as a whole. Baseline: `8914d0f3914d4586789f0461f187bb428fa54446` at affected paths. Invocation substitutes current targets into shared cleanup equations; entry checks, per-exit writes and pending completion preserve the existing contracts. No callable slot ABI, broader permission proof, regional allocator, moving backing, fraction or purity implementation follows. The registry authority summary links to retained historical evidence instead of repeating implementation history; no human record or document-scope qualification is removed. Other design scopes and descendants retain their qualification. Current acceptance and limits are in `tests/cod/language/README.md`; progress and validation reports remain outside the repository.
+
 ## 2026-11-15 — Reference identity and shared owner inputs
 
 <a id="k-702"></a>

@@ -25,7 +25,6 @@ runner.CASES = {
  'invariant_ref_not_weakened': (PTR+'val x<-1,y<-2;ref p=x,q=y;p<=>q;',2,'','caller ref preservation'),
  'const_binding_rejected': (REF+'val x<-1,y<-2;const ptr p=x;ptr q=y;p<=>q;',2,'','const reference binding'),
  'val_rejected': (REF+'val x<-1,y<-2;x<=>y;',2,'','val storage has no reference binding'),
- 'prepared_method_unproved': (REF+BASE+'defer (<=>)(p,q);',2,'','prepared caller-binding method invocation remains unproved'),
  'ref_alias_cannot_be_cleared': ('func (<=>)(ref a:i64 in O,ptr b:i64 in O)->void where {owner O}{b=null;}'+BASE+'p<=>q;',2,'','ref requires a proven non-null target'),
 }
 runner.CASES.update({
