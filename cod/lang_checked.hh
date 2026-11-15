@@ -98,6 +98,8 @@ struct CheckedOperation {
   // Destination calls select every address before checking entry-read promises.
   bool destination_arguments = false;
   std::vector<CheckedArgument> arguments;
+  // Possible borrowed callable targets at invocation, after slot selection.
+  std::vector<std::set<size_t>> callable_argument_targets;
   std::set<size_t> nullable_arguments;
   std::map<size_t, CleanupEquations::Effects> invocation;
   struct NullTest { size_t binding; std::set<size_t> versions; bool null_when_true = true; };
@@ -1400,6 +1402,18 @@ class ScalarChecker {
     operation.type = *contract.target;
     operation.exceptions = exception_possibilities(operation.type);
     const bool prepared_slots = &expr == prepared_call_ && !summary.bindings.empty();
+    for (size_t i = 0; i < arguments.size(); ++i) {
+      if (arguments[i].kind != Type::procedure || contract.owners.empty() || !contract.owners[i]) continue;
+      if (operation.callable_argument_targets.empty()) operation.callable_argument_targets.resize(arguments.size());
+      auto &targets = operation.callable_argument_targets[i];
+      if (prepared_slots) {
+        // Registration retains the slot; its later valid targets can reach the call.
+        for (const auto slot : physical_slots(views[i].slots)) {
+          const auto &possible = possible_targets_.at(slot);
+          targets.insert(possible.begin(), possible.end());
+        }
+      } else targets = views[i].targets;
+    }
     operation.invocation = invocation_effects(summary, reasons, views, expr.at, &expr == prepared_call_, prepared_slots);
     if (!summary.bindings.empty()) invocation_bindings(summary, views, operation, prepared_slots);
     if (prepared_slots) {
@@ -2283,8 +2297,6 @@ class ScalarChecker {
     if (caller_bindings(method)) {
       for (size_t i = 0; i < views.size(); ++i) {
         if (&expr == prepared_call_) require_deferred_slots(views[i], expr.at);
-        if (arguments[i].kind == Type::procedure)
-          implementation_gap(expr.at, "callable payload flow through caller-binding methods remains unproved");
         for (const auto slot : physical_slots(views[i].slots)) {
           const auto &binding = bindings_->at(slot);
           if (binding.read_only != definition.parameters[i].read_only)
@@ -4836,11 +4848,13 @@ class ScalarChecker {
         if (instance.arguments[i].kind != Type::procedure) continue;
         const auto *argument = expr.children.at(i + offset).get();
         const auto &input = instance.frame.inputs.at(i);
-        edges.emplace_back(expression(c, argument), contexts[target].places.at(input.place));
-        if (input.mode != ArgumentMode::value) {
-          const auto &view = contexts[c].facts->at(argument);
-          for (const auto place : view.targets) if (place != null_target)
+        if (input.mode == ArgumentMode::value)
+          edges.emplace_back(expression(c, argument), contexts[target].places.at(input.place));
+        else {
+          for (const auto place : fact.callable_argument_targets.at(i)) if (place != null_target) {
+            edges.emplace_back(contexts[c].places.at(place), contexts[target].places.at(input.place));
             edges.emplace_back(contexts[target].places.at(input.place), contexts[c].places.at(place));
+          }
         }
       }
       if (instance.result.type->kind == Type::procedure) edges.emplace_back(contexts[target].result, expression(c, &expr));

@@ -42,8 +42,13 @@ def main():
             family = [name for name in bodies if '.pick.' in name]
             record(mode + '/actual_categories', output.returncode == 0 and output.stdout == '7\n4\n' and '[-Wmissing-return]' in output.stderr,
                    exit=output.returncode, stdout=output.stdout, stderr=output.stderr)
-            record(mode + '/shared_family_methods', len(family) == (2 if general else 8) and
-                   sum(name.endswith('.general') for name in family) == 1, methods=family)
+            expected = set() if general else {
+                'OutOfMemory', 'RegionCapacityExceeded', 'InvalidCapacity', 'NullPointerException',
+                'UnsoundRuntimeTyping', 'StaticallyUnknownType', 'IndexOutOfBoundsException'}
+            specialized = {name.split('.specialized.', 1)[1] for name in family if '.specialized.' in name}
+            record(mode + '/shared_family_methods', len(family) == 2 + len(expected) and specialized == expected and
+                   sum(name.endswith('.general') for name in family) == 1 and
+                   sum(name.endswith('.native') for name in family) == 1, methods=family)
             record(mode + '/unobserved_concrete_category', general or any('OutOfMemory' in name for name in family), methods=family)
             repeated, repeated_ir = run(SOURCE.replace('10u64', '1000u64'), general)
             record(mode + '/runtime_count_preserves_inventory', repeated.returncode == 0 and repeated.stdout == '7\n4\n' and set(inventory(repeated_ir)) == set(bodies))

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-15 — Callable payloads through caller slots
+
+<a id="k-716"></a>
+**K-716 — Share callable invocation evidence across target and binding arguments.** Agent continuity under H-306/H-342/H-344/H-356/H-407/H-423 and charter §§3.3/4.3/6.3/8/12: source332→333, registry724→725, D-14r109→110/D-17r66→67/D-18r100→101 retain C-65/C-69/P-268–P-269/P-301–P-303 and C-63/P-235–P-236/P-321–P-324. Baseline: `893bf526ca61be55327adfc47d48eaf61b5231a6` at affected paths. Direct/prepared reference-swap methods admit complete callable holders through shared borrowed-target evidence and finite callable flow. Acceptance preserves post-operand/invocation-time targets, selected captures, independent copies, recursive code sharing, owner/access/init checks and exact failure cleanup. The D-18 index retains the integrated H-459–H-462 scope at its current revision. Caller-binding method values, wider permission/alias proofs, default/context mechanisms, regional representation and fractions retain their separate boundaries; no new ABI or whole-file qualification follows. Process evidence remains outside the repository.
+
 ## 2026-11-15 — Callable contract integration
 
 <a id="k-715"></a>
