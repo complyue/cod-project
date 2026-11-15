@@ -57,11 +57,11 @@ runner.CASES['exception_targets'] = (IO+ERRORS+'func (<=>)(ref a:SystemException
 runner.CASES.update({
  'inferred_method_value_unproved': ({'ops.cod':PTR+'export (<=>);','main.cod':'using "ops.cod" (<=>) as swap;func f=swap;'},2,'','unproved callable slot contract'),
  'contextual_method_value_unproved': ({'ops.cod':PTR+'export (<=>);','main.cod':'using "ops.cod" (<=>) as swap;func helper(ptr a:i64 in O,ptr b:i64 in O)->void where {owner O}{}func f=helper;f<-swap;'},2,'','unproved callable slot contract'),
- 'imported_named_alias_unproved': ({'ops.cod':PTR+'export (<=>);','main.cod':'using "ops.cod" (<=>) as swap;'+BASE+'swap(p,q);'},2,'','unproved slot preparation'),
+ 'imported_named_alias': ({'ops.cod':PTR+'export (<=>);','main.cod':IO+'using "ops.cod" (<=>) as swap;'+BASE+'swap(p,q);'+OUT('p')+OUT('q')},0,'7\n1\n',''),
  'imported_operation_slots': ({'ops.cod':REF+'export (<=>);','main.cod':IO+'using "ops.cod" (<=>);'+BASE+'p<=>q;'+OUT('p')+OUT('q')},0,'7\n1\n',''),
 })
-runner.CASES['ordinary_family_as_slot_operation_unproved'] = ({'ops.cod':'func swap(ref a:i64 in O,ref b:i64 in O)->void where {owner O}{intrinsic (<=>)(a,b);}export swap;','main.cod':'using "ops.cod" swap as (<=>);'+BASE+'p<=>q;'},2,'','unproved slot preparation adaptation')
-runner.CASES['bits_family_as_slot_operation_unproved'] = ({'ops.cod':'func (<->)(ref a:i64 in O,ref b:i64 in O)->void where {owner O}{intrinsic (<->)(a,b);}export (<->);','main.cod':'using "ops.cod" (<->) as (<=>);'+BASE+'p<=>q;'},2,'','unproved slot preparation adaptation')
+runner.CASES['ordinary_family_as_slot_operation'] = ({'ops.cod':'func swap(ref a:i64 in O,ref b:i64 in O)->void where {owner O}{intrinsic (<=>)(a,b);}export swap;','main.cod':IO+'using "ops.cod" swap as (<=>);'+BASE+'p<=>q;'+OUT('p')+OUT('q')},0,'1\n7\n','')
+runner.CASES['bits_family_as_slot_operation'] = ({'ops.cod':'func (<->)(ref a:i64 in O,ref b:i64 in O)->void where {owner O}{intrinsic (<->)(a,b);}export (<->);','main.cod':IO+'using "ops.cod" (<->) as (<=>);'+BASE+'p<=>q;'+OUT('x')+OUT('y')+OUT('(p is x)')},0,'7\n1\ntrue\n','')
 for suffix, body, result, output, diagnostic in (
     ('write_then_rebind', 'a<-3;a=b;', 'p;{}', '', 'before definite initialization'),
     ('write_entry_target', 'a<-3;a=b;', OUT('x'), '3\n', ''),

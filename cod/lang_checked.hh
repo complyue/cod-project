@@ -260,6 +260,7 @@ struct CheckedInstance {
 };
 struct CheckedMethod {
   const Form *source = nullptr;
+  std::string operation; // Semantic operation identity, independent of the local alias.
   size_t module = 0, interpretation = 0, definition = null_target;
   std::optional<size_t> family;
   std::vector<size_t> nested;
@@ -318,6 +319,7 @@ struct CheckedFamily {
   std::optional<size_t> imported_from;
   std::vector<size_t> methods;
   std::vector<CheckedMethod> declarations;
+  std::string operation;
 };
 
 struct CheckedProgram {
@@ -521,7 +523,7 @@ class ScalarChecker {
   }
   static bool admits_parameter_access(const CheckedMethod &method, size_t i, bool readonly) {
     const auto &parameter = parameter_at(method, i);
-    if (method.source->operation && swap_operation(method.source->name)) return readonly == parameter.read_only;
+    if (swap_operation(method.operation)) return readonly == parameter.read_only;
     return !readonly || parameter.owner.empty() || parameter.read_only;
   }
   static bool admits_access(const CheckedMethod &method, const Access &access) {
@@ -663,6 +665,17 @@ class ScalarChecker {
       return {{checking_instance_->method}, checking_instance_};
     const auto found = module_names().callables.find(name);
     return found == module_names().callables.end() ? NamedFamily{} : NamedFamily{family_methods(found->second)};
+  }
+  std::string_view operation_name(const Expression &expr, const TypeEvidenceState *state = nullptr) const {
+    if (expr.intrinsic) return expr.text;
+    if (state ? (state->bindings.contains(expr.text) || state->owner_bindings.contains(expr.text) ||
+                 state->symbol_shadows.contains(expr.text)) : lexical_.lookup(expr.text).has_value()) return {};
+    const auto method = state ? state->method : checking_instance_ ? std::optional<size_t>{checking_instance_->method} : std::nullopt;
+    if (lexical_self(expr.text, method)) return program_.methods[*method].operation;
+    const ModuleLookup lookup(module_, method ? program_.methods[*method].module : module_);
+    const auto family = module_names().callables.find(expr.text);
+    return family == module_names().callables.end() ? std::string_view{expr.text}
+        : std::string_view{program_.families[family->second].operation};
   }
   [[noreturn]] void ambiguous_methods(const Location &at, const std::string &name, const std::vector<size_t> &methods) const {
     std::string message = "ambiguous methods for '" + name + "':";
@@ -1154,7 +1167,7 @@ class ScalarChecker {
     return reasons;
   }
   static bool caller_bindings(const CheckedMethod &method) {
-    return method.source->operation && method.source->name == "<=>";
+    return method.operation == "<=>";
   }
   static CallEffects initial_effects(const CheckedMethod &method, const std::vector<Type> &arguments) {
     CallEffects effects;
@@ -1891,7 +1904,7 @@ class ScalarChecker {
         if (!bind_type(method, pattern.parameters[i], actual.parameters[i], substitutions)) return false;
       return bind_type(method, *pattern.target, *actual.target, substitutions);
     }
-    return pattern == actual || (parameter && !(method.source->operation && swap_operation(method.source->name)) &&
+    return pattern == actual || (parameter && !swap_operation(method.operation) &&
                                   accepts_exception(actual, pattern));
   }
   static Substitutions type_context(const CheckedMethod &method, const std::vector<Type> &retained) {
@@ -2332,14 +2345,16 @@ class ScalarChecker {
     if (expr.intrinsic || !has_declarations(expr.text)) return {};
     // Builtins have established signatures. Declarations constrain these just
     // as they constrain explicit methods; they cannot retarget a builtin result.
+    const auto family = module_names().callables.at(expr.text);
+    const auto &identity = program_.families[family].operation;
     Form source;
     source.kind = Form::Kind::function; source.name = expr.text; source.at = expr.at; source.operation = true;
     for (size_t i = 0; i < arguments.size(); ++i) {
       Parameter parameter;
       parameter.name = "argument" + std::to_string(i); parameter.type = arguments[i]; parameter.at = expr.at;
       if (destinations) {
-        parameter.owner = expr.text == "<=>" ? "owner" : "owner" + std::to_string(i);
-        if (expr.text == "<=>") {
+        parameter.owner = identity == "<=>" ? "owner" : "owner" + std::to_string(i);
+        if (identity == "<=>") {
           parameter.declaration_kind = "ptr";
           parameter.read_only = i < access.size() && access[i].value_or(false);
         }
@@ -2347,7 +2362,7 @@ class ScalarChecker {
       source.parameters.push_back(std::move(parameter));
     }
     CheckedMethod method;
-    method.source = &source; method.module = module_; method.family = module_names().callables.at(expr.text); method.parameters = arguments; method.result.type = result;
+    method.source = &source; method.operation = identity; method.module = module_; method.family = family; method.parameters = arguments; method.result.type = result;
     check_declared_results(method, method.result, declared_results(method, arguments, access, owners, state));
     std::set<size_t> failures;
     for (const auto &[declaration, substitutions, covers_types, covers_method] : declaration_obligations(method, arguments, access, owners, state))
@@ -2586,7 +2601,7 @@ class ScalarChecker {
     if (result && !result_probe_) {
       if (*result != Type::void_type && result->kind != Type::procedure && !scalar_type(*result))
         implementation_gap(definition.source->at, "inferred result mode for a non-scalar type; provide an explicit result contract");
-      if (definition.source->operation && swap_operation(definition.source->name) && *result != Type::void_type)
+      if (swap_operation(definition.operation) && *result != Type::void_type)
         fail(definition.source->at, "swap method must return void");
     }
     if (result) {
@@ -3054,7 +3069,7 @@ class ScalarChecker {
         return *target->target;
       }
       if (!state.complete) return {};
-      if (swap_operation(expr.text)) {
+      if (swap_operation(operation_name(expr, &state))) {
         if (state.required) implementation_gap(expr.at, "storage exchange in typeof");
         return Type::void_type;
       }
@@ -3937,9 +3952,9 @@ class ScalarChecker {
     }
     case K::value_call: case K::call: {
       const bool eager = expr.kind != K::value_call && eager_operation(expr.text);
-      if (expr.kind == K::call && swap_operation(expr.text)) {
+      if (expr.kind == K::call && swap_operation(operation_name(expr))) {
         if (expr.children.size() != 2) fail(expr.at, "swap requires two destinations");
-        const bool reference = expr.text == "<=>";
+        const bool reference = operation_name(expr) == "<=>";
         child(0, false);
         auto left = operations.at(expr.children[0].get());
         child(1, false);
@@ -5002,7 +5017,7 @@ class ScalarChecker {
     if (const auto found = module_names().imports.find(source); found != module_names().imports.end()) return found->second;
     const auto &original = program_.families[source];
     const auto id = program_.families.size();
-    program_.families.push_back({{}, module_, original.origin, at, source, {}, original.declarations});
+    program_.families.push_back({{}, module_, original.origin, at, source, {}, original.declarations, original.operation});
     module_names().imports.emplace(source, id);
     for (auto &declaration : program_.families[id].declarations) declaration.family = id;
     for (const auto method : original.methods) program_.families[id].methods.push_back(adapt_method(method, module_, id));
@@ -5226,14 +5241,18 @@ class ScalarChecker {
     for (const auto &form : forms) if (form->body)
       collect(*form->body, form->kind == Form::Kind::expression ? nullptr : form.get());
     for (const auto *form : definitions) {
-      if (form->operation && identity_operation(form->name))
+      std::string operation = form->operation ? form->name : "";
+      if (!form->symbolic && !lexical_methods_.contains(form))
+        if (const auto family = module_names().callables.find(form->name); family != module_names().callables.end())
+          operation = program_.families[family->second].operation;
+      if (identity_operation(operation))
         fail(form->at, "reference identity is an intrinsic operation and cannot have user methods");
-      if ((form->operation && !eager_operation(form->name) && !swap_operation(form->name)) || form->conversion || (!lexical_methods_.contains(form) && !form->captures.empty()) || (!form->body && lexical_methods_.contains(form)))
+      if ((!operation.empty() && !eager_operation(operation) && !swap_operation(operation)) || form->conversion || (!lexical_methods_.contains(form) && !form->captures.empty()) || (!form->body && lexical_methods_.contains(form)))
         implementation_gap(form->at, "callable captures, effects, declarations, operators, owners or throws contracts");
-      if (form->operation) {
+      if (!operation.empty()) {
         const auto arity = form->parameters.size();
-        if (!arity || arity > 2 || (form->name == "!" && arity != 1) ||
-            (form->name != "+" && form->name != "-" && form->name != "!" && arity != 2))
+        if (!arity || arity > 2 || (operation == "!" && arity != 1) ||
+            (operation != "+" && operation != "-" && operation != "!" && arity != 2))
           implementation_gap(form->at, "eager operator method arity");
       }
       std::set<std::string> owners;
@@ -5242,7 +5261,7 @@ class ScalarChecker {
         owners.insert(owner.name);
       }
       if (!form->result_owner.empty() && !owners.contains(form->result_owner)) fail(form->at, "unknown result owner '" + form->result_owner + "'");
-      if (form->operation && swap_operation(form->name)) {
+      if (swap_operation(operation)) {
         if (form->result_type && *form->result_type != Type::void_type) fail(form->at, "swap method must return void");
         for (const auto &parameter : form->parameters)
           if (parameter.owner.empty() || parameter.variadic || parameter.automatic_conversion)
@@ -5251,6 +5270,7 @@ class ScalarChecker {
       if (!form->result_owner.empty() && form->result_type == Type::void_type) fail(form->at, "void cannot be a borrowed result");
       CheckedMethod prepared;
       prepared.source = form;
+      prepared.operation = operation;
       prepared.module = module_;
       for (const auto &p : form->type_parameters) prepared.type_parameters.push_back(p.name);
       if (const auto parent = parents.find(form); parent != parents.end()) {
@@ -5315,7 +5335,7 @@ class ScalarChecker {
         fail(form->at, "using does not grant callable extension permission");
       const auto new_family = [&] {
         const auto family = program_.families.size();
-        program_.families.push_back({symbol, module_, family, form->at, {}, {}, {}});
+        program_.families.push_back({symbol, module_, family, form->at, {}, {}, {}, operation});
         return family;
       };
       if (symbol) {
@@ -5345,7 +5365,7 @@ class ScalarChecker {
           if (same_access(prepared, definition) && implies_owners(prepared, definition) && implies_owners(definition, prepared))
             fail(form->at, "duplicate method signature for '" + form->name + "'");
         }
-        if (definition.source->kind != form->kind && !(form->operation && definition.source->operation))
+        if (definition.source->kind != form->kind && (prepared.operation.empty() || definition.operation.empty()))
           implementation_gap(form->at, "mixed function/procedure family");
       }
       program_.methods.push_back(std::move(prepared));

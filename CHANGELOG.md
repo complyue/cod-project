@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-15 — Selected operation aliases
+
+<a id="k-705"></a>
+**K-705 — Operation identity through shared destination preparation.** Agent implementation/continuity under H-155/H-226/H-230/H-232/H-306/H-356/H-420/H-423 and charter §§2/6.3/8/12: source reference325/registry713 admits selected swap aliases and imported extensions through the existing caller-slot/target-storage and cleanup paths. D-14r102→103/D-17r62→63 align current capability pointers; C-69/P-268–P-269 and C-63/P-321–P-324 retain their scoped contracts. Baseline: `57d108f116e54ce5b673452cb0aa646cc74396a6` at affected paths. Renaming preserves operation identity and selected interpretation; extension signatures retain exact destinations, explicit owners and void results. This changes no confirmed value, failure policy or parent relationship. Callable-value slot ABI, independent-family composition, eager-arithmetic fallback, regional allocation, fractions and purity remain outside this slice. Other document qualifications and exclusions remain unchanged. Acceptance and current bounds are in `tests/cod/language/README.md`; process and validation reports remain outside the repository.
+
 ## 2026-11-15 — Initialization design checkpoint integration
 
 <a id="k-704"></a>
