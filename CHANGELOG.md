@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-11-15 — Default-ranking contract integration
+
+<a id="k-721"></a>
+**K-721 — Preserve overload intent and current implementation boundaries.** Integrate H-474/P-405–P-406 from `6553709a47380c5bb657d738570d6011543dc253` at this file and the D-10/registry paths. D-10r168→169/source337→338/registry730→731 preserves C-10/C-57's candidate value path through inspectable binding and observable effect order under charter §§3.1/3.3/6.3/8/12. Ordinary type ranking precedes fewer omitted default slots; equal remaining candidates are ambiguous, selection precedes default evaluation, and callable views use the origin contract. The crossing preference with implicit variadic collection, physical context transport and full operational/value-path qualification remain pending. Current canonical failures, root handlers and all qualified compiler scopes continue unchanged; this merge claims no default-argument implementation. Mainline baseline: `aa7633b055c95966dbe1b961916ae48f7fc6707c` at affected paths. Acceptance preserves both human histories, current capability coverage, scoped qualifications and explicit open boundaries; D-16 is unchanged.
+
+## 2026-11-15 — Default-count overload priority
+
+<a id="h-474"></a>
+**H-474 — Type matching first, fewer defaults on a tie, then ambiguity.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-15 America/Los_Angeles; exact timestamp/personal name unavailable. Says “同意，类型匹配优先，平局时优先选择使用更少默认值的候选，仍然平局就报歧义。落文档，提交推送。 然后看看剩余议题，是不是适合先跟开发主线同步一次？”. Confirms the proposed default-ranking rule and requests publication and a synchronization assessment. It does not separately decide the crossing case with H-450's fixed-versus-implicit-pack preference.
+
+<a id="k-default-ranking-20261115"></a>
+**K-DEFAULT-RANKING-20261115 — Count omitted defaults after ordinary type ranking.** Agent integration under H-474: D-10r167→168 and registry r728→729 update D-10-ARGUMENTS/P-405–P-406 and the bounded variadic interaction. Candidate C-10/C-57 path serves charter §§3.1/3.3/6.3/8 through declaration-directed choice and preserved effect order. Count used formal defaults after binding, equally across definition/caller forms; keep exact-before-widening, reject residual ambiguity and never evaluate defaults to choose candidates. Callable views use origin defaults, not target-local defaults. Acceptance includes zero/one-default ties, an exact match with a default beating widening without one, equal-count ambiguity and losing-default nonexecution. Preserve H-450 and mark its crossing preference with default count pending instead of silently ordering them. D-16, ownership/cleanup and qualification boundaries remain unchanged. Published baseline: `019a71071ff8d1b0325872ad0a512b82bb3727d7` at affected paths. Documentation only; no compiler/build/tests.
+
 ## 2026-11-15 — Canonical failures and common-root catches
 
 <a id="k-720"></a>
