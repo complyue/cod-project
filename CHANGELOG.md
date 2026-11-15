@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-15 — Scalar target/value receiving
+
+<a id="k-714"></a>
+**K-714 — Preserve receiving identity through runtime alternatives.** Agent continuity under H-416/H-417/H-420/H-423 and charter §§3.3/4.3/5.3/6.3/8/12: source reference330→331, registry722→723, D-14r108→109 and D-23r14→15 retain C-65/P-255/P-257/P-258 and the scoped receiving matrix. Baseline: `782b0a94e52118dffed9f16adc211446f893a99f` at affected paths. Scalar initializer alternatives retain either an existing target or evaluated bits through cleanup, with materialization in the receiving full scope and one provable owner. Shared initialization/completion preserves snapshots, access, identity, nullability and failure behavior, including abruptly completing initializers. Acceptance covers branch order, cleanup/deferred paths, owner/access/init rejection, shared recursive native code and unchanged resource behavior. No callable-mixture transport, general fresh borrow, external allocation, conditional widening, regional representation, fraction rule or whole-file qualification follows. Process evidence remains outside the repository.
+
 ## 2026-11-15 — Assignment queries and target-only results
 
 <a id="k-713"></a>

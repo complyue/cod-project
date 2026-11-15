@@ -43,7 +43,7 @@ runner.CASES = {
     'selected_write_not_all_targets': ('proc f(flag:bool)->void{val a<-make local i64,b<-make local i64;ptr p=if(flag){a}else{b};p<-1;a;}', 2, '', 'before definite initialization'),
     'selected_owner_conflict': ('val a<-1;{{val b<-2;ptr p=if(true){a}else{b};}};', 2, '', 'joins different owners'),
     'selected_readonly': ('val a<-1;const val b<-2;ptr p=if(true){a}else{b};p<-3;', 2, '', 'readonly destination'),
-    'mixed_value_view_gap': ('val a<-1;ptr p=if(true){a}else{2};', 2, '', 'mixing fresh values and storage views'),
+    'mixed_value_view_receiver': (IO + 'proc work(flag:bool)->void{val a<-1;ptr p=if(flag){a}else{2};a<-3;behave @print(p);p<-4;behave @print(a);}work(true);work(false);', 0, '3\n4\n2\n3\n', ''),
     'loop_alternates': (IO + 'proc f(n:i64)->void{val a<-0,b<-0;ptr p=a;for(i in 0..n){p<-p+1;p=if(i%2==0){b}else{a};};behave @print(a);behave @print(b);behave @print(p);}f(5);f(0);', 0, '3\n2\n2\n0\n0\n0\n', ''),
     'loop_alias_snapshot': (IO + 'val a<-1,b<-2;ptr p=a;const ptr q=p;for(i in 0..3){p=b;q<-q+1;};behave @print(a);behave @print(p);', 0, '4\n2\n', ''),
     'loop_invalid_later_target': ('val a<-1,b<-make local i64;ptr p=a;for(i in 0..2){p;p=b;};', 2, '', 'before definite initialization'),

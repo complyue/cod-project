@@ -2733,8 +2733,9 @@ class ScalarChecker {
       if (x.value_or(false) || y.value_or(false)) return true;
       return x && y ? std::optional<bool>{false} : std::nullopt;
     };
+    const auto owner = a.view == false ? b.owner : b.view == false ? a.owner : a.owner == b.owner ? a.owner : std::nullopt;
     return {either(a.read_only, b.read_only), either(a.view, b.view), a.value_binding == b.value_binding ? a.value_binding : std::nullopt,
-            a.owner == b.owner ? a.owner : std::nullopt, a.mixed_view || b.mixed_view || a.view != b.view,
+            owner, a.mixed_view || b.mixed_view || a.view != b.view,
             either(a.fixed_binding, b.fixed_binding), a.slot_read_only == b.slot_read_only ? a.slot_read_only : std::nullopt};
   }
   static std::optional<EvidenceOwner> owner_evidence(const std::string &name, const TypeEvidenceState &state, const Location &at) {
@@ -2889,8 +2890,9 @@ class ScalarChecker {
           if (state.value.view.value_or(false)) readonly = state.value.read_only;
           else if (!state.value.view && state.value.read_only != false) readonly.reset();
         }
-        const auto owner = !declaration->owner_name.empty() ? declared_owner :
+        auto owner = !declaration->owner_name.empty() ? declared_owner :
             value || declaration->binding == "<-" || state.value.view == false ? state.full_scope_owner : state.value.owner;
+        if (!value && declaration->binding != "<-" && state.value.mixed_view && owner != state.full_scope_owner) owner.reset();
         state.views[declaration->text] = {readonly, true, value, owner, false, expr.fixed_binding, readonly};
       }
       return completes ? Type{Type::void_type} : Type{Type::never};
@@ -3887,10 +3889,9 @@ class ScalarChecker {
         result.owners.insert(view->owners.begin(), view->owners.end());
         result.origins.insert(view->origins.begin(), view->origins.end());
         result.selection_versions.insert(view->selection_versions.begin(), view->selection_versions.end());
-        result.initialized_target = result.initialized_target && view->initialized_target;
+        result.initialized_target = result.initialized_target && (!view->view || view->initialized_target);
       }
       result.mixed_view = std::any_of(views.begin(), views.end(), [](const auto *view) { return !view->view || view->mixed_view; });
-      if (result.mixed_view) result.targets.clear();
       select_targets(result, result.targets);
     }
     result.exceptions = std::move(result_exceptions);
@@ -4280,7 +4281,7 @@ class ScalarChecker {
         operation.mixed_view = yes_fact.mixed_view || no_fact.mixed_view || yes_fact.view != no_fact.view;
         operation.read_only = yes_fact.read_only || no_fact.read_only;
         operation.fixed_binding = yes_fact.fixed_binding || no_fact.fixed_binding;
-        if (yes_fact.view && no_fact.view) {
+        if (yes_fact.view || no_fact.view) {
           auto targets = yes_fact.targets;
           targets.insert(no_fact.targets.begin(), no_fact.targets.end());
           operation.null_sources = yes_fact.null_sources;
@@ -4291,7 +4292,7 @@ class ScalarChecker {
         operation.origins.insert(no_fact.origins.begin(), no_fact.origins.end());
         operation.owners = yes_fact.owners;
         operation.owners.insert(no_fact.owners.begin(), no_fact.owners.end());
-        operation.initialized_target = yes_fact.initialized_target && no_fact.initialized_target;
+        operation.initialized_target = (!yes_fact.view || yes_fact.initialized_target) && (!no_fact.view || no_fact.initialized_target);
         if (yes_fact.binding == no_fact.binding) operation.binding = yes_fact.binding;
         if (!yes_fact.slots.empty() && !no_fact.slots.empty()) {
           operation.slots = yes_fact.slots;
@@ -4441,22 +4442,24 @@ class ScalarChecker {
         }
         const auto type = declaration->annotation ? resolve_local_type(*declaration->annotation, instance, declaration->at) : initial_type;
         const auto &source = operations.at(&initializer);
-        const bool borrowed = !copy && (source.view || (!completes && initializer.kind != K::make_local));
-        if (owner && !borrowed) implementation_gap(declaration->at, "fresh storage with an explicit external owner");
+        const bool borrowed = !copy && source.view;
+        const bool mixed = borrowed && source.mixed_view;
+        if (completes && owner && (!borrowed || mixed)) implementation_gap(declaration->at, "fresh storage with an explicit external owner");
         if (completes && owner && std::any_of(source.owners.begin(), source.owners.end(), [&](size_t actual) { return actual != *owner; }))
           fail(declaration->at, "reference initializer does not belong to the declared owner");
         if (!borrowed && type.kind == Type::procedure) note_abrupt(declaration->at, {exception_id(ExceptionCategory::out_of_memory)});
         if (type == Type::null_ref) fail(declaration->at, "a null initializer requires an explicit target type");
         require_value(type);
+        if (mixed && !bits_type(type)) implementation_gap(initializer.at, "mixed callable initializer completion transport");
         if (callable_value && (type.kind != Type::procedure || type.pure_callable != (expr.declaration_kind == "func")))
           fail(declaration->at, "callable declaration requires a matching func/proc value");
         if (type.kind == Type::procedure && !callable_value && expr.declaration_kind != "ptr")
           implementation_gap(declaration->at, "callable storage uses func/proc values or ptr views");
-        if (completes && borrowed && source.mixed_view) implementation_gap(initializer.at, "reference join mixing fresh values and storage views");
         if (completes && (borrowed ? initial_type != Type::null_ref && initial_type != type : !transfers_value(initial_type, type)))
           fail(declaration->at, "initializer does not satisfy declared " + expr.declaration_kind + " type");
         if (borrowed && completes) {
-          const auto &owners = source.owners;
+          auto owners = source.owners;
+          if (mixed) owners.insert(declaration_scope(declaration->text, declaration->at).id);
           if (owners.size() > 1) fail(initializer.at, "reference initializer joins different owners");
           if (owners.empty() && !owner) fail(initializer.at, "reference initializer requires one statically provable owner; qualify null with 'in here' or 'in O'");
           if (lexical_.live) for (const auto owner : owners)
@@ -4474,8 +4477,18 @@ class ScalarChecker {
         const bool read_only = declaration->read_only || (value && expr.fixed_binding) || (completes && borrowed && source.read_only);
         std::optional<size_t> place;
         if (borrowed) {
-          const auto selected = completes ? source : CheckedOperation{};
-          const auto id = bind(declaration->text, type, selected.targets, read_only, false, expr.fixed_binding, declaration->at);
+          auto selected = completes ? source : CheckedOperation{};
+          size_t id;
+          if (mixed) {
+            place = declare(declaration->text, type, read_only, false, declaration->at);
+            id = storage(*place).binding;
+            bindings_->at(id).fixed = expr.fixed_binding;
+            // The hidden place is reachable only after its value arm initializes it.
+            initialize(*place);
+            if (type.kind == Type::exception) lexical_.exceptions[*place] = source.exceptions;
+            selected.targets.insert(*place);
+            selected.owners.insert(storage(*place).scope);
+          } else id = bind(declaration->text, type, selected.targets, read_only, false, expr.fixed_binding, declaration->at);
           assign_targets(id, selected);
           if (owner) lexical_.owners[id].insert(*owner);
         } else {
@@ -4491,6 +4504,7 @@ class ScalarChecker {
         binding.place = place;
         binding.operand_type = type;
         binding.view = borrowed;
+        binding.mixed_view = mixed;
         binding.initializes = !borrowed && initialized;
         if (!completes) binding.type = operation.type = Type::never;
         operations[declaration.get()] = binding;

@@ -60,7 +60,8 @@ class LLVMEmission {
   llvm::AllocaInst *requested_ = nullptr, *available_ = nullptr, *cause_ = nullptr;
   llvm::AllocaInst *returning_ = nullptr;
   std::vector<Location> sites_;
-  enum class Projection { value, target, slot };
+  enum class Projection { value, target, slot, receiver };
+  static bool carries_value(Projection projection) { return projection == Projection::value || projection == Projection::receiver; }
   struct Deferred {
     const Expression *action;
     llvm::StructType *layout;
@@ -903,7 +904,7 @@ class LLVMEmission {
   }
   llvm::Value *full_scope(const std::vector<const Expression *> &expressions, bool callable,
                           const Location &at, llvm::Value *returns_value = nullptr, Projection projection = Projection::value, bool discard_last = false) {
-    const bool read_last = projection == Projection::value;
+    const bool read_last = carries_value(projection);
     auto *outer_temporaries = temporaries_;
     auto *saved = !callable && read_last && environments_ ? owned_slot(*outer_temporaries, "scope.value")
         : slot(read_last ? scalar_ : static_cast<llvm::Type *>(b_.getPtrTy()), "scope.value");
@@ -943,7 +944,7 @@ class LLVMEmission {
     return result;
   }
   llvm::Value *emit_finally(const Expression &expr, Projection projection, bool discard = false, llvm::Value *skip_body = nullptr) {
-    const bool read = projection == Projection::value;
+    const bool read = carries_value(projection);
     Control guarded{control_, block("try.completed")};
     control_ = &guarded;
     auto *saved = read && environments_ ? owned_slot(*temporaries_, "try.value")
@@ -1195,13 +1196,30 @@ class LLVMEmission {
     return b_.CreateInsertValue(value, image, environment_field_);
   }
   llvm::Value *declare_local(const Expression &declaration) {
-    std::map<bool, std::vector<size_t>> alternatives;
-    for (size_t i = 0; i < facts_.size(); ++i) alternatives[facts_[i]->at(&declaration).view].push_back(i);
-    return contextual_value(declaration, alternatives, "storage", [&](bool borrowed) {
+    std::map<std::pair<bool, bool>, std::vector<size_t>> alternatives;
+    for (size_t i = 0; i < facts_.size(); ++i) {
+      const auto &binding = facts_[i]->at(&declaration);
+      alternatives[{binding.view, binding.mixed_view}].push_back(i);
+    }
+    return contextual_value(declaration, alternatives, "storage", [&](auto mode) {
+      const auto [borrowed, mixed] = mode;
       const auto &binding = facts_.front()->at(&declaration);
       llvm::Value *address = binding.place ? static_cast<llvm::Value *>(storage_.at(*binding.place)) : null_pointer();
-      if (environments_ && binding.place && !borrowed) scope_->values.values.push_back(storage_.at(*binding.place));
-      if (borrowed) {
+      if (environments_ && binding.place) scope_->values.values.push_back(storage_.at(*binding.place));
+      if (mixed) {
+        auto *value = emit_expression(*declaration.children.front(), Projection::receiver);
+        if (!reachable()) return static_cast<llvm::Value *>(nullptr);
+        auto *existing = b_.GetInsertBlock(), *construct = block("storage.construct"), *ready = block("storage.ready");
+        auto *target = view_address(value);
+        b_.CreateCondBr(b_.CreateICmpEQ(b_.CreateExtractValue(value, 1), b_.getInt32(0)), ready, construct);
+        b_.SetInsertPoint(construct);
+        assign_value(address, value, declaration.at);
+        auto *constructed = b_.GetInsertBlock(); b_.CreateBr(ready);
+        b_.SetInsertPoint(ready);
+        auto *selected = b_.CreatePHI(b_.getPtrTy(), 2, "storage.target");
+        selected->addIncoming(target, existing); selected->addIncoming(address, constructed);
+        address = selected;
+      } else if (borrowed) {
         address = emit_expression(*declaration.children.front(), Projection::target);
         if (!reachable()) return static_cast<llvm::Value *>(nullptr);
       } else if (binding.initializes) {
@@ -1218,15 +1236,37 @@ class LLVMEmission {
     });
   }
   llvm::Value *emit_expression(const Expression &expr, Projection projection = Projection::value, bool discard = false) {
-    auto *value = emit_checked_expression(expr, projection, discard);
-    if (std::all_of(facts_.begin(), facts_.end(), [&](const auto *facts) { return facts->at(&expr).type == Type::never; })) {
+    const bool abrupt = std::all_of(facts_.begin(), facts_.end(), [&](const auto *facts) { return facts->at(&expr).type == Type::never; });
+    // An abrupt mixed branch has no target/slot result. Retain its intermediate
+    // value or view through cleanup without forcing the parent's result shape.
+    if (!carries_value(projection) && abrupt &&
+        std::any_of(facts_.begin(), facts_.end(), [&](const auto *facts) { return facts->at(&expr).mixed_view; }))
+      projection = Projection::receiver;
+    llvm::Value *value;
+    if (projection == Projection::receiver) {
+      std::map<unsigned, std::vector<size_t>> alternatives;
+      for (size_t i = 0; i < facts_.size(); ++i) {
+        const auto &fact = facts_[i]->at(&expr);
+        alternatives[fact.mixed_view ? 2u : fact.view ? 1u : 0u].push_back(i);
+      }
+      value = contextual_value(expr, alternatives, "receiver", [&](unsigned kind) -> llvm::Value * {
+        if (!kind) return emit_expression(expr, Projection::value, discard);
+        if (kind == 2) return emit_checked_expression(expr, projection, discard);
+        auto *target = emit_expression(expr, Projection::target, discard);
+        if (!reachable()) return nullptr;
+        // Receiver-only target encoding: no value type or owned payload. Valid
+        // materialized scalar values have nonzero tags and keep normal cleanup.
+        return b_.CreateInsertValue(empty_scalar(), b_.CreatePtrToInt(target, b_.getInt64Ty()), 0);
+      });
+    } else value = emit_checked_expression(expr, projection, discard);
+    if (abrupt) {
       if (reachable()) b_.CreateUnreachable();
       return nullptr;
     }
     return value;
   }
   llvm::Value *emit_checked_expression(const Expression &expr, Projection projection, bool discard) {
-    const bool read = projection == Projection::value;
+    const bool read = carries_value(projection);
     using K = Expression::Kind;
     const auto &fact = facts_.front()->at(&expr);
     if (std::any_of(facts_.begin(), facts_.end(), [&](const auto *facts) {
