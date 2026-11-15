@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Exact common-exception borrowing
+
+<a id="k-691"></a>
+**K-691 — Borrowed-target continuity.** Agent assessment under H-258/H-269/H-342/H-344/H-375/H-378/H-398/H-407/H-420–H-424, D-14r92/D-17r57/D-18r92/D-21r12/D-24r7/D-26r13 and charter §§2/3.2/5.3/6.3/12: registry r698→699 and source reference312→313 preserve exact common-exception storage types across declaration coverage, specificity, callable arguments and native invocation. Copied value categories retain their distinct selection path. Acceptance covers mutable/readonly/nullable targets, independent owners, declared/copied results, mixed dispatch, captured/deferred calls, identical native code, shared recursion and exact failure cleanup. Borrowed target adaptation and unresolved value-category relationships remain unproved. No new covariance, owner representation, lifetime, region protocol, ABI, fraction mechanism or qualification. Prior capability reference: `37bddc8e5bcf4a1569f2e5505ccaa3a529872b3b:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Dependent exception result obligations
 
 <a id="k-690"></a>

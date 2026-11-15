@@ -531,7 +531,8 @@ class LLVMEmission {
         for (const auto &[inputs, target] : value.alternatives(admitted)) selections.push_back({inputs, choice.operation});
         std::vector<llvm::Value *> arguments{prepared.begin() + 1, prepared.end()};
         for (size_t i = 0; i < admitted.size(); ++i)
-          if (admitted[i].kind == Type::exception && !admitted[i].identity) {
+          if ((value.type.argument_modes.empty() || value.type.argument_modes[i] == ArgumentMode::value) &&
+              admitted[i].kind == Type::exception && !admitted[i].identity) {
             auto *category = b_.CreateExtractValue(unpack(arguments[i], admitted[i]), 0);
             auto *valid = b_.CreateAnd(b_.CreateICmpUGT(category, integer(0)),
                                       b_.CreateICmpULT(category, integer(exception_categories.size())));

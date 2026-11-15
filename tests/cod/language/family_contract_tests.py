@@ -22,7 +22,7 @@ runner.CASES = {
     'common_exception_complete_capture': (ERROR + 'symbol @x:u64,@y:u64,@f:proc(SystemException)->u64;proc @f(e:MissingReturnException)->u64{return @x;}proc @f(e:T)->u64 where T{return @y;}'
         'effect @x<-1u64;effect @y<-7u64;effect @f;effect @x<-2u64;effect @y<-8u64;val e:SystemException<-null_error();behave @print(perform @f(e));e<-error();behave @print(perform @f(e));behave @print(behave @f(e));', 0, '7\n1\n2\n', ''),
     'common_exception_missing_method': (ERROR + 'symbol @f:proc(SystemException)->u64;proc @f(e:MissingReturnException)->u64{return 1u64;}effect @f;', 2, '', 'no applicable method'),
-    'common_exception_borrow_is_unproved': (ERROR + 'proc @f(ref e:const SystemException in O)->u64 where {owner O}{return e.category;}effect @f;', 2, '', 'unproved callable family borrowing'),
+    'common_exception_borrow': (ERROR + 'proc @f(ref e:const SystemException in O)->u64 where {owner O}{return e.category;}effect @f;', 0, '', ''),
     'borrowed_exception_adaptation_is_unproved': (ERROR + 'proc @narrow(ref e:const MissingReturnException in O)->u64 where {owner O}{return e.category;}proc @broad(ref e:const SystemException in O)->u64 where {owner O}{return e.category;}effect @narrow=broad;', 2, '', 'borrowed target adaptation'),
     'callable_value_parameter': (IO + 'proc @apply(f:func()->u64)->u64{return f();}func one()->u64{return 1u64;}func two()->u64{return 7u64;}'
         'effect @apply;behave @print(behave @apply(one));behave @print(behave @apply(two));', 0, '1\n7\n', ''),

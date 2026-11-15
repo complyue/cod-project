@@ -53,7 +53,7 @@ inline bool transfers_value(const Type &from, const Type &to) {
   return from.kind == Type::procedure || to.kind == Type::procedure ? from == to : transfers_bits(from, to);
 }
 inline bool accepts_argument(const Type &source, const Type &target, ArgumentMode mode) {
-  return mode == ArgumentMode::value ? transfers_value(source, target) : source == target || accepts_exception(source, target);
+  return mode == ArgumentMode::value ? transfers_value(source, target) : source == target;
 }
 inline std::set<size_t> exception_possibilities(const Type &type) {
   if (type.kind != Type::exception) return {};
@@ -283,7 +283,9 @@ struct CheckedCallable {
     for (const auto &entry : dispatch) {
       bool admitted = entry.first.size() == arguments.size();
       for (size_t i = 0; admitted && i < arguments.size(); ++i)
-        admitted = entry.first[i] == arguments[i] || accepts_exception(entry.first[i], arguments[i]);
+        admitted = entry.first[i] == arguments[i] ||
+            ((type.argument_modes.empty() || type.argument_modes[i] == ArgumentMode::value) &&
+             accepts_exception(entry.first[i], arguments[i]));
       if (admitted) result.push_back(entry);
     }
     if (result.empty()) throw std::logic_error("unchecked callable family invocation");
@@ -1779,9 +1781,11 @@ class ScalarChecker {
     }
     return rigid;
   }
-  static Type independent_input(Type type, size_t parameter) {
-    // A broad exception parameter admits an independent concrete category.
-    if (type.kind == Type::exception && !type.identity) type.name += ".alternative." + std::to_string(parameter);
+  static Type independent_input(Type type, size_t parameter, ArgumentMode mode) {
+    // A broad value input admits an independent concrete category; a borrow
+    // retains the declared type of its storage target.
+    if (mode == ArgumentMode::value && type.kind == Type::exception && !type.identity)
+      type.name += ".alternative." + std::to_string(parameter);
     return type;
   }
   // Signature containment includes repeated binders; layout equality is irrelevant.
@@ -1789,7 +1793,7 @@ class ScalarChecker {
     if (narrow.parameters.size() != broad.parameters.size()) return false;
     std::vector<Type> arguments;
     for (size_t i = 0; i < narrow.parameters.size(); ++i) {
-      arguments.push_back(independent_input(rigid_type(narrow, narrow.parameters[i]), i));
+      arguments.push_back(independent_input(rigid_type(narrow, narrow.parameters[i]), i, argument_mode(parameter_at(narrow, i))));
     }
     return match(broad, arguments, {}, widening).has_value();
   }
@@ -1815,20 +1819,19 @@ class ScalarChecker {
       // equalities from repeated method binders, separately from overlap.
       auto domain = arguments;
       std::map<size_t, size_t> category_roles;
-      bool borrowed_common = false;
       for (size_t i = 0; i < domain.size(); ++i) {
-        if (accepts_exception(domain[i], method.parameters[i])) domain[i] = method.parameters[i];
-        if (domain[i].kind == Type::exception && !domain[i].identity) {
+        const auto mode = argument_mode(parameter_at(method, i));
+        if (mode == ArgumentMode::value && accepts_exception(domain[i], method.parameters[i])) domain[i] = method.parameters[i];
+        // Borrowed inputs retain their exact storage target type. Payload
+        // categories vary independently only for copied value inputs.
+        if (mode == ArgumentMode::value && domain[i].kind == Type::exception && !domain[i].identity) {
           const auto parameter = binder(method, method.parameters[i]);
           const auto role = parameter ? category_roles.try_emplace(*parameter, i).first->second : i;
-          domain[i] = independent_input(domain[i], role);
-          borrowed_common = borrowed_common || argument_mode(parameter_at(method, i)) != ArgumentMode::value;
+          domain[i] = independent_input(domain[i], role, mode);
         }
-        if (argument_mode(parameter_at(method, i)) != argument_mode(parameter_at(declaration, i)))
+        if (mode != argument_mode(parameter_at(declaration, i)))
           implementation_gap(method.source->at, "declaration applicability across different parameter passing modes");
       }
-      if (borrowed_common && !match(declaration, domain, {}, true))
-        implementation_gap(method.source->at, "declaration applicability requires an independent borrowed input-domain proof");
       for (size_t i = 0; i < domain.size(); ++i)
         if (numeric(method.parameters[i]) && widens(domain[i], method.parameters[i])) domain[i] = method.parameters[i];
       const bool covers_types = match(declaration, domain, {}, true).has_value();
@@ -2968,8 +2971,6 @@ class ScalarChecker {
       const auto mode = view.argument_modes.empty() ? ArgumentMode::value : view.argument_modes[i];
       std::vector<Type> domain;
       if (mode != ArgumentMode::value) {
-        if (parameter.kind == Type::exception && !parameter.identity)
-          implementation_gap(at, "unproved callable family borrowing through a common exception view");
         domain.push_back(parameter);
       } else if (scalar_type(parameter)) {
         for (const auto kind : {Type::boolean, Type::uint8, Type::uint32, Type::uint64, Type::integer, Type::float32, Type::float64})
