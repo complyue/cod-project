@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-15 — Default-count overload priority
+
+<a id="h-474"></a>
+**H-474 — Type matching first, fewer defaults on a tie, then ambiguity.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-15 America/Los_Angeles; exact timestamp/personal name unavailable. Says “同意，类型匹配优先，平局时优先选择使用更少默认值的候选，仍然平局就报歧义。落文档，提交推送。 然后看看剩余议题，是不是适合先跟开发主线同步一次？”. Confirms the proposed default-ranking rule and requests publication and a synchronization assessment. It does not separately decide the crossing case with H-450's fixed-versus-implicit-pack preference.
+
+<a id="k-default-ranking-20261115"></a>
+**K-DEFAULT-RANKING-20261115 — Count omitted defaults after ordinary type ranking.** Agent integration under H-474: D-10r167→168 and registry r728→729 update D-10-ARGUMENTS/P-405–P-406 and the bounded variadic interaction. Candidate C-10/C-57 path serves charter §§3.1/3.3/6.3/8 through declaration-directed choice and preserved effect order. Count used formal defaults after binding, equally across definition/caller forms; keep exact-before-widening, reject residual ambiguity and never evaluate defaults to choose candidates. Callable views use origin defaults, not target-local defaults. Acceptance includes zero/one-default ties, an exact match with a default beating widening without one, equal-count ambiguity and losing-default nonexecution. Preserve H-450 and mark its crossing preference with default count pending instead of silently ordering them. D-16, ownership/cleanup and qualification boundaries remain unchanged. Published baseline: `019a71071ff8d1b0325872ad0a512b82bb3727d7` at affected paths. Documentation only; no compiler/build/tests.
+
 ## 2026-11-15 — Built-in failure names and assertion responsibility
 
 <a id="h-472"></a>
