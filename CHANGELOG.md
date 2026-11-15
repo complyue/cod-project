@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Numeric declaration overlap
+
+<a id="k-688"></a>
+**K-688 — Numeric declaration continuity.** Agent assessment under H-258/H-261/H-398/H-407/H-417/H-420–H-424, D-14r92/D-18r92/D-24r7/D-26r13 and charter §§2/3.3/5.3/6.3/12: registry r695→696 and source reference309→310 preserve narrower numeric declaration obligations alongside independently established method results. Original and prepared inputs retain result and checked-failure promises; complete callable signatures reuse admitted-input coverage. Acceptance covers recursive anchors, generic relations, retained queries, owner/variadic/operator/import paths, direct/deferred failures, equivalent native code and exact capture cleanup. Common-exception type-domain proofs and differing preparation modes remain unproved. No new conversion, inference policy, owner union, lifetime, exception category, ABI, fraction mechanism or design qualification. Prior capability reference: `b1261421dfda8b77962daeb998ec0202e65a2318:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Overlapping declaration contracts
 
 <a id="k-687"></a>

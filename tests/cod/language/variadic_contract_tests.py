@@ -26,7 +26,7 @@ runner.CASES = {
  'original_input_result_promise': ('func f(rest:T...)->const T where T;func f(x:u64,y:u64){return y;}f(1u8,2u8);',2,'','does not satisfy callable declaration'),
  'cached_original_input_result_promise': ('func f(rest:T...)->const T where T;func f(x:u64,y:u64){return y;}f(1u64,2u64);f(1u8,2u8);',2,'','does not satisfy callable declaration'),
  'original_input_compatible_narrow_result': (IO+'func f(rest:T...)->const T where T;func f(x:u64,y:u64)->u8{return 7u8;}behave @print(f(1u32,2u32));',0,'7\n',''),
- 'partial_numeric_domain_unproved': ('func f(rest:u32...)->u64;func f(x:u64,y:u64)->u64{return x;}f(1u32,2u32);',2,'','declaration applicability requires'),
+ 'partial_numeric_domain': (IO+'func f(rest:u32...)->u64;func f(x:u64,y:u64)->u64{return x;}behave @print(f(1u32,2u32));',0,'1\n',''),
  'all_overlapping_contracts_apply': ('func f(rest:u64...)->u64;func f(x:u64,y:u64)->bool;func f(x:u64,y:u64){return true;}',2,'','declarations do not establish one result contract'),
  'explicit_result_checked_against_all': ('func f(rest:u64...)->bool;func f(x:u64,y:u64)->u64{return x;}',2,'','does not satisfy callable declaration'),
  'independent_exception_tail_categories': (SYSTEM+'func f(rest:T...)->bool where T;func f(x:SystemException,y:SystemException)->bool{return true;}',2,'','declaration applicability requires'),

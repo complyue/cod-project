@@ -78,7 +78,7 @@ runner.CASES.update({
  'exception_preparation_keeps_input_promise': (ERROR+'func f(x:T)->const T where T;func f(x:SystemException)->const SystemException{return x;}f(error());',2,'','does not satisfy callable declaration'),
  'exception_query_keeps_input_promise': (ERROR+'func f(x:T)->const T where T;func f(x:SystemException)->const SystemException{return x;}val y<-make local typeof(f(error()));',2,'','does not satisfy callable declaration'),
  'fixed_result_satisfies_original_declaration': (IO+'func f(x:T)->const T where T;func f(x:u64)->u8{return 7u8;}behave @print(f(1u32));behave @print(f(1u8));',0,'7\n7\n',''),
- 'partial_declaration_domain_unproved': ('func f(x:u32)->f64;func f(x:f64)->f64{return x;}f(1u32);',2,'','declaration applicability requires'),
+ 'partial_declaration_domain': (IO+'func f(x:u32)->f64;func f(x:f64)->f64{return x;}behave @print(f(16777217u32));',0,'16777217\n',''),
  'bodyless_query_widens_input': (IO+'func f(x:f64)->u64;val y<-make local typeof(f(1u32)){7u64};behave @print(y);',0,'7\n',''),
  'bodyless_call_still_needs_body': ('func f(x:f64)->u64;f(1u32);',2,'','no applicable implementation'),
  'abrupt_argument_keeps_signature': (IO+'func f(x:f64,y:u64)->f64{return x;}proc run()->u64{f({return 7u64;1u8},2u8);return 0u64;}behave @print(run());',0,'7\n',''),

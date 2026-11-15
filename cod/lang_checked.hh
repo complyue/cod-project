@@ -1762,9 +1762,13 @@ class ScalarChecker {
     }
     return match(broad, arguments, {}, widening).has_value();
   }
-  std::vector<const CheckedMethod *> declaration_obligations(const CheckedMethod &method, const std::vector<Type> &arguments,
+  struct DeclarationObligation {
+    const CheckedMethod *declaration;
+    bool covers_method;
+  };
+  std::vector<DeclarationObligation> declaration_obligations(const CheckedMethod &method, const std::vector<Type> &arguments,
       const Access &input_access = {}, const Owners &input_owners = {}, const TypeEvidenceState *state = nullptr) const {
-    std::vector<const CheckedMethod *> obligations;
+    std::vector<DeclarationObligation> obligations;
     const ModuleLookup lookup(module_, method.module);
     if (lexical_methods_.contains(method.source)) return obligations;
     if (!method.family) return obligations;
@@ -1773,24 +1777,26 @@ class ScalarChecker {
       if (!admits_access(declaration, input_access) || match_owners(declaration, input_owners, state) == OwnerMatch::mismatch) continue;
       const auto access = access_coverage(method, declaration);
       if (access == AccessCoverage::disjoint) continue;
-      // Type coverage is independent of a caller's narrower numeric type or
-      // exception category. Owner/access overlap constrains an established
-      // result without necessarily supplying the method's result contract.
+      // A common exception view cannot prove independent concrete identities
+      // equal. Numeric preparation preserves the original input promise but
+      // can leave a declaration covering only part of the method's domain.
       auto domain = arguments;
       for (size_t i = 0; i < domain.size(); ++i) {
         if (accepts_exception(domain[i], method.parameters[i])) domain[i] = independent_input(method.parameters[i], i);
-        else if (numeric(method.parameters[i]) && widens(domain[i], method.parameters[i])) domain[i] = method.parameters[i];
         if (argument_mode(parameter_at(method, i)) != argument_mode(parameter_at(declaration, i)))
           implementation_gap(method.source->at, "declaration applicability across different parameter passing modes");
       }
       if (!match(declaration, domain, {}, true))
         implementation_gap(method.source->at, "declaration applicability requires an independent input-domain proof");
+      for (size_t i = 0; i < domain.size(); ++i)
+        if (numeric(method.parameters[i]) && widens(domain[i], method.parameters[i])) domain[i] = method.parameters[i];
       if (method.source->kind != declaration.source->kind)
         fail(method.source->at, "implementation kind does not satisfy callable declaration");
       for (const auto category : method.throws_categories)
         if (exception_categories[category].checked && !declaration.throws_categories.contains(category))
           fail(method.source->at, "implementation exposes a checked exception outside its callable declaration");
-      obligations.push_back(&declaration);
+      obligations.push_back({&declaration, match(declaration, domain, {}, true).has_value() &&
+          access == AccessCoverage::contained && implies_owners(method, declaration)});
     }
     return obligations;
   }
@@ -1802,7 +1808,7 @@ class ScalarChecker {
   std::vector<DeclaredResult> declared_results(const CheckedMethod &method, const std::vector<Type> &arguments,
       const Access &input_access = {}, const Owners &input_owners = {}, const TypeEvidenceState *state = nullptr) const {
     std::vector<DeclaredResult> results;
-    for (const auto *declaration : declaration_obligations(method, arguments, input_access, input_owners, state)) {
+    for (const auto &[declaration, covers_method] : declaration_obligations(method, arguments, input_access, input_owners, state)) {
       auto result = declaration->result;
       std::set<std::string> owner_roles;
       result.type = substitute(*result.type, *declaration, *match(*declaration, arguments, {}, true), true);
@@ -1825,8 +1831,7 @@ class ScalarChecker {
         } while (owner_roles.size() != previous);
         result.owner = *owner_roles.begin();
       }
-      results.push_back({std::move(result), std::move(owner_roles),
-          access_coverage(method, *declaration) == AccessCoverage::contained && implies_owners(method, *declaration)});
+      results.push_back({std::move(result), std::move(owner_roles), covers_method});
     }
     return results;
   }
@@ -1952,7 +1957,8 @@ class ScalarChecker {
     if (checking_method_ && checking_method_->source->kind == Form::Kind::function && definition.kind == Form::Kind::procedure)
       fail(expr.at, "a function cannot invoke a procedure");
     if (!completes) { operation.type = Type::never; return; }
-    const auto contract = callable_type(program_.methods[target.method], target.arguments, target.result, access_of(views), owners_of(views));
+    const auto contract = callable_type(program_.methods[target.method], target.arguments, target.result,
+        access_of(views), owners_of(views), &arguments);
     finish_call(expr, contract, target.effects, call_reasons(contract), arguments, views, operation, read, discard);
   }
   struct EagerTypes {
@@ -2026,7 +2032,7 @@ class ScalarChecker {
     method.source = &source; method.module = module_; method.family = module_names().callables.at(expr.text); method.parameters = arguments; method.result.type = result;
     check_declared_results(method, method.result, declared_results(method, arguments, access, owners, state));
     std::set<size_t> failures;
-    for (const auto *declaration : declaration_obligations(method, arguments, access, owners, state))
+    for (const auto &[declaration, covers_method] : declaration_obligations(method, arguments, access, owners, state))
       failures.insert(declaration->throws_categories.begin(), declaration->throws_categories.end());
     return failures;
   }
@@ -2056,8 +2062,15 @@ class ScalarChecker {
       if (&expr != prepared_call_) note_abrupt(expr.at);
     }
   }
+  void add_declared_failures(Type &type, const CheckedMethod &method, const std::vector<Type> &arguments,
+                             const Access &access = {}, const Owners &owners = {}) const {
+    for (const auto &[declaration, covers_method] : declaration_obligations(method, arguments, access, owners))
+      for (const auto &failure : declaration->throws_types)
+        if (std::find(type.throws_types.begin(), type.throws_types.end(), failure) == type.throws_types.end())
+          type.throws_types.push_back(failure);
+  }
   Type callable_type(const CheckedMethod &checked, const std::vector<Type> &arguments, const ResultContract &contract,
-                     const Access &access = {}, const Owners &owners = {}) const {
+                     const Access &access = {}, const Owners &owners = {}, const std::vector<Type> *original = nullptr) const {
     const ModuleLookup lookup(module_, checked.module);
     const auto &method = *checked.source;
     Type type{Type::procedure}; type.pure_callable = method.kind == Form::Kind::function;
@@ -2081,11 +2094,8 @@ class ScalarChecker {
     if (std::none_of(type.const_views.begin(), type.const_views.end(), [](bool v) { return v; })) type.const_views.clear();
     if (std::none_of(type.nullable_views.begin(), type.nullable_views.end(), [](bool v) { return v; })) type.nullable_views.clear();
     type.throws_types = checked.throws_types;
-    for (const auto *declaration : declaration_obligations(checked, arguments, access, owners)) {
-      for (const auto &failure : declaration->throws_types)
-        if (std::find(type.throws_types.begin(), type.throws_types.end(), failure) == type.throws_types.end())
-          type.throws_types.push_back(failure);
-    }
+    add_declared_failures(type, checked, arguments, access, owners);
+    if (original && *original != arguments) add_declared_failures(type, checked, *original, access, owners);
     return resolve_type(std::move(type));
   }
   struct ResultObligation {
@@ -2289,7 +2299,7 @@ class ScalarChecker {
     if (std::any_of(arguments.begin(), arguments.end(), [&](const auto &type) { return nested_binder(method, type); })) return {};
     const auto result = infer_result(id, arguments, retained, state);
     if (!result || nested_binder(method, *result->type)) return {};
-    return callable_type(method, arguments, *result);
+    return complete_callable_type(method, arguments, *result);
   }
   static CheckedOperation literal(const Expression &expr) {
     using K = Expression::Kind;
@@ -2900,8 +2910,7 @@ class ScalarChecker {
     return result;
   }
   template <typename Validate>
-  void cover_family(const std::vector<size_t> &family, const Type &view, const Location &at, const Validate &validate,
-                    const std::vector<Type> &retained = {}) const {
+  static void cover_inputs(const Type &view, const Location &at, const Validate &validate) {
     signature_type(CheckedMethod{}, view, at);
     // Cover every admitted input, independently of observed invocations.
     // This finite proof does not define a general family representation.
@@ -2923,17 +2932,6 @@ class ScalarChecker {
       else implementation_gap(at, "unproved callable family input domain");
       domains.push_back(std::move(domain));
     }
-    Access access;
-    Owners owners;
-    TypeEvidenceState proof;
-    for (size_t i = 0; i < view.parameters.size(); ++i) {
-      // The view fixes target access. Distinct formal owner roles remain
-      // symbolic: they can denote equal or different actual owners.
-      access.push_back(!view.const_views.empty() && view.const_views[i]);
-      const auto role = view.owners.empty() ? 0 : view.owners[i];
-      owners.push_back(role ? std::optional<size_t>{role} : std::nullopt);
-      if (role) proof.external_owners.insert(role);
-    }
     std::vector<Type> arguments;
     size_t obligations = 0;
     const auto account = [&] {
@@ -2947,9 +2945,33 @@ class ScalarChecker {
         }
         return;
       }
-      validate(select_method(family, arguments, at, "callable family", retained, access, owners, &proof), arguments);
+      validate(arguments);
     };
     cover();
+  }
+  template <typename Validate>
+  void cover_family(const std::vector<size_t> &family, const Type &view, const Location &at, const Validate &validate,
+                    const std::vector<Type> &retained = {}) const {
+    Access access;
+    Owners owners;
+    TypeEvidenceState proof;
+    for (size_t i = 0; i < view.parameters.size(); ++i) {
+      // The view fixes target access. Distinct formal owner roles remain
+      // symbolic: they can denote equal or different actual owners.
+      access.push_back(!view.const_views.empty() && view.const_views[i]);
+      const auto role = view.owners.empty() ? 0 : view.owners[i];
+      owners.push_back(role ? std::optional<size_t>{role} : std::nullopt);
+      if (role) proof.external_owners.insert(role);
+    }
+    cover_inputs(view, at, [&](const std::vector<Type> &arguments) {
+      validate(select_method(family, arguments, at, "callable family", retained, access, owners, &proof), arguments);
+    });
+  }
+  Type complete_callable_type(const CheckedMethod &method, const std::vector<Type> &arguments, const ResultContract &result) const {
+    auto type = callable_type(method, arguments, result);
+    if (method.family && !program_.families[*method.family].declarations.empty())
+      cover_inputs(type, method.source->at, [&](const std::vector<Type> &inputs) { add_declared_failures(type, method, inputs); });
+    return resolve_type(std::move(type));
   }
   static bool satisfies_callable_view(Type contract, const Type &view, const Location &at) {
     std::set<size_t> allowed;
@@ -2971,7 +2993,7 @@ class ScalarChecker {
     for (size_t i = 0; i < actual.size(); ++i)
       if (!view.argument_modes.empty() && view.argument_modes[i] != ArgumentMode::value && prepared[i] != actual[i])
         implementation_gap(at, "unproved callable family borrowed target adaptation");
-    if (!satisfies_callable_view(callable_type(method, prepared, result), view, at))
+    if (!satisfies_callable_view(callable_type(method, prepared, result, {}, {}, &actual), view, at))
       implementation_gap(at, "selected method does not satisfy the callable view contract");
   }
   bool concrete_callable_result(const CheckedMethod &method, const ResultContract &result, const Location &at) const {
@@ -3010,7 +3032,8 @@ class ScalarChecker {
     const auto result = supplied ? supplied : infer_result(selected, arguments, retained, state);
     if (!result) return {};
     if (!concrete_callable_result(method, *result, at)) return {};
-    auto type = callable_type(method, prepared_types(method, arguments, retained), *result);
+    auto type = expected ? callable_type(method, prepared_types(method, arguments, retained), *result, {}, {}, &arguments)
+                         : complete_callable_type(method, arguments, *result);
     signature_type(definition, type, at);
     if (expected) {
       if (!satisfies_callable_view(type, *expected, at))
