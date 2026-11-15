@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Overlapping declaration contracts
+
+<a id="k-687"></a>
+**K-687 — Declaration-obligation continuity.** Agent assessment under H-258/H-398/H-407/H-417/H-420–H-424, D-14r92/D-18r92/D-24r7/D-26r13 and charter §§2/3.3/5.3/6.3/12: registry r694→695 and source reference308→309 distinguish covering result contracts from overlapping owner/access obligations. Validate independent results using the declaration’s owner equalities without changing method roles or permissions. Direct calls preserve actual applicability; complete callable views retain all admitted checked failures. Acceptance covers recursive anchors, transitive/variadic owners, readonly/nullable results, deferred/operator/import paths, identical native forms and failed-copy cleanup. No new conversion, owner union, lifetime, exception, ABI, fraction mechanism or design qualification. Prior capability reference: `8fe09dc853f5536c6311c74513a0179f1985694e:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Caught-value owner evidence
 
 <a id="k-686"></a>
