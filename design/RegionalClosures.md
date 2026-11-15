@@ -1,8 +1,10 @@
 # Regional variables and callable captures
 
-Design revision: 95 · Recorded: 2026-11-15 · Status: current bounded prototype contract.
+Design revision: 96 · Recorded: 2026-11-15 · Status: current bounded prototype contract.
 
 ## Design authority
+
+- **Named-argument boundary:** [H-457](../CHANGELOG.md#h-457)/[K-ARGUMENT-CONTEXTS-20261115](../CHANGELOG.md#k-argument-contexts-20261115) continues r95→96's borrowed-owner contract while integrating [D-10-ARGUMENTS](SymbolicDynamicScope.md#named-arguments-defaults-and-complete-binding): group an owner projection used as an argument value to distinguish it from the new expression-first named arrow. C-65/C-73/C-75 and P-294/P-295/P-297/P-298 retain actual-owner identity, access and lifetime under charter §§3.3/4.3/8. Acceptance must distinguish positional/grouped and named projection without copying, consuming or extending an owner. Named-argument parser migration remains unimplemented; no callable ABI or broader qualification follows.
 
 - **Registry / current scope:** [D-18](DesignAuthorityRegistry.md#d-18); the semantic revision stated above and the independently qualified scopes in the current registry. **Confirmed/continued only for recorded capture/value/native-boundary scope.** H-327–H-335/H-337–H-344/H-349/H-350; C-65/C-73/C-75/P-293–P-303. H-342 replaces callable alias initialization; H-344 permits runtime-sized scope-owned backing. H-417 requires statically unique ref/ptr owners through selected calls and captures; K-UNIQUE-OWNER-20261114 integrates that scoped constraint while preserving the established complete-value/native contract.
 - **Value path:** C-65/C-73/C-75 and P-294/P-295/P-297/P-298 make storage selection, access and lifetime visible in source, serving charter §§1–3/§8. P-299/P-300/P-301/P-302/P-303 connects the runtime callable boundary and caller placement to explicit storage lifetimes and relocatable regional data. C-65/P-258 requires payload reads to have definite prior initialization, independently of storage naming or invocation form. P-293 covers the bounded structural-region work; it does not approve every possible region or closure representation.
@@ -65,6 +67,8 @@ Parentheses group callable types. `-> func()->T with {...} throws E` declares th
 ## Owner projection
 
 `cb -> state` borrows the region named state in cb's visible with-type, retaining the captured permissions. A helper accepting `func()->const u64 with {region r}` projects `cb -> r`; the factory's former name state is not exposed through that parameter. Multiple names map explicitly to actual regions, independently of declaration or allocation order.
+
+In the H-457 named-argument design, write `use((cb -> state))` for a positional projected owner, and `use((cb -> state) -> arena)` to pass that owner to named parameter arena. A bare `use(cb -> state)` instead names parameter state and supplies cb; a missing matching name rejects rather than reverting to projection. The parentheses preserve this borrowed region's category, identity and permissions; scalar grouping-to-val rules do not apply to a region. This is the selected argument-syntax direction, with compiler migration still outstanding.
 
 Projection permits ordinary region helpers and root-field access. It cannot consume ownership, obtain writable access from a readonly association or outlive the region. Each owner association is a logical environment slot; WPO may eliminate its physical storage when the actual region is statically fixed. No separate lookup service or RTTI is required.
 

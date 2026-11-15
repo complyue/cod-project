@@ -1,8 +1,12 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 154 · Recorded: 2026-11-15 · Phase: language/application co-design.
+Design revision: 156 · Recorded: 2026-11-15 · Phase: language/application co-design.
 
 ## Design authority
+
+- **Named arguments and defaults:** [D-10-ARGUMENTS](DesignAuthorityRegistry.md#d-10-arguments), H-451/H-452, covers complete declaration-directed binding and a callable initialization preamble. [H-453–H-457](../CHANGELOG.md#h-453)/[K-ARGUMENT-CONTEXTS-20261115](../CHANGELOG.md#k-argument-contexts-20261115) selects expression-first arrow labels with grouped owner projection, default definition/caller environments, per-omitted-call evaluation, and definition-resolved symbolic identities with caller binding lookup. Candidate P-405 through C-10/C-57 serves charter §§3.1/3.3/6.3/8/12; P-406 preserves parameter, scope, effect, exception and native-coverage dependencies. Default phase ordering, declaration/view integration and full qualification remain under review. H-449/H-450 continues unchanged; no source implementation is claimed.
+
+- **Expression type syntax:** [D-10-TYPED-EXPR](DesignAuthorityRegistry.md#d-10-typed-expr), [H-453](../CHANGELOG.md#h-453), reserves expression `:` for explicit conversion/type assertion rather than named-argument binding. Candidate P-407 through C-10 serves charter §§3.1/4.3/8; P-408 retains D-11/D-14/D-16/D-17/D-26 constraints. Only that syntax/feature direction is selected; conversion-versus-assertion behavior, categories, failures and full grammar remain pending.
 
 - **Variadic call direction:** [D-10-VARARGS](DesignAuthorityRegistry.md#d-10-varargs), [H-449](../CHANGELOG.md#h-449)/[K-VARIADIC-PACK-20261115](../CHANGELOG.md#k-variadic-pack-20261115), covers the runtime-array expansion and single logical pack parameter section below. H-258 supplies typed variadic declarations; H-449 selects ordinary-array expansion and treats the variadic tail as one overload input whose length is runtime data. [H-450](../CHANGELOG.md#h-450)/[K-VARIADIC-RANKING-20261115](../CHANGELOG.md#k-variadic-ranking-20261115) selects ordinary type matching first, with a fixed-over-implicit-pack preference only for otherwise equal matches. Candidate value path P-403 through C-57/C-89 serves charter §§3.1/6.3/8/12 by keeping typed call structure inspectable and independent of runtime count; this is a local semantic decision, not whole-file/value-path qualification. P-404 retains owner/access/initialization, exception, numeric and native-coverage dependencies. Acceptance and unresolved overload/representation boundaries are stated in that section; no compiler support is claimed.
 
@@ -458,6 +462,81 @@ No public pack type, heap allocation, permanent ABI or native specialization per
 **Still under review:** grouping and specificity when variadic candidates have different fixed prefixes; multiple expansions and precise preparation order; indexed element result/mutation modes; escaping/storage and callable-view contracts; physical pack transport. The proposed body operations are `len(rest)`, `rest[i]` and forwarding through `other(first, rest...)`; their remaining details need the operational contract before implementation delegation.
 
 H-448 separately settles the builtin bounds policy through [D-17](ExceptionControl.md#unchecked-bounds-exceptions-and-optional-checks): out-of-range indexing raises unchecked IndexOutOfBoundsException under default runtime checks, with an explicit compiler opt-out at the programmer's risk. No throws annotation is required for this exception. It does not qualify broader pack operations or change argument evaluation, owners, initialization or the selected user-defined indexing method's contract.
+
+### Expression type conversion and assertion
+
+H-453 selects `:` for explicit expression type conversion/type assertion, schematically `expression : Type`. It is not a named-argument separator. Existing declaration/type annotations retain their grammar. The conversion-versus-assertion distinction, numeric/UoM routes and narrowing, static versus runtime checks and failures, precedence/type parsing and preservation or production of value/reference categories need a dedicated contract. No unchecked reinterpretation, owner substitution, access upgrade or implicit regional copy follows from the spelling. D-16's fraction syntax, fixed bits representation, conversion constraints and implementation deferral remain unchanged.
+
+The mechanism review distinguishes **conversion**, which produces a T result through an admitted conversion, from **assertion**, which establishes that the existing value/view satisfies T without using a payload-conversion operation. For example, `7u32 : u64` illustrates a value-conversion request compatible with the existing lossless numeric rule; `value : T` for an abstractly typed input raises the separate question of proving or checking its actual type. A type assertion cannot manufacture owner identity, writable access or a longer lifetime. These are the operations to specify, not a selected convert-then-assert fallback algorithm. When both readings could apply, their selection remains an explicit open decision.
+
+An executed typed expression must evaluate its operand once and preserve observable preparation/failure order. Static proof may remove a runtime assertion check without changing the operand's effects. Existing unevaluated type-query contexts remain unevaluated. These constraints do not select narrowing behavior, a failure category, new implicit conversions, assertion-result value/view categories or unknown-type runtime representation.
+
+Acceptance for this bounded direction must distinguish `f(value : T)` as a typed positional expression from `f(value : T -> parameter)` as a named argument whose expression has that type operation. Parsing the type must respect its own structure, including callable result arrows. This is source design, not current parser support or qualification of conversion/assertion mechanisms.
+
+### Named arguments, defaults and complete binding
+
+H-451 selects a positional prefix followed by named arguments in any order. **No positional argument may follow the first named argument.** Names bind against the declaration signature. Every required parameter must be supplied; a missing parameter with a declared default is completed by that default. Omission does not mean partial application.
+
+H-457 selects the expression-first named form `expression -> parameter`. The destination is a parameter name in the declaration, not an expression or caller variable; the arrow does not copy, rebind or transfer ownership. The declared parameter mode still controls initialization. A top-level argument-label arrow binds the complete preceding argument expression (and any explicit spread), independently of overload lookup. `=` and `<-` inside that expression retain their ordinary operations. `:` retains expression typing. Exact interaction with all compound expressions/types still needs parser acceptance; do not recognize labels by scanning raw text without respecting nested grammar.
+
+```text
+# Default-block placement follows the selected direction; full signature grammar is pending.
+func adjust(value:u64, scale:u64 { 2u64 }, bias:u64 { 0u64 }) -> u64 {
+    return value * scale + bias;
+}
+adjust(5u64, 3u64 -> bias);                  # value=5, scale defaults to 2, bias=3
+adjust(3u64 -> bias, 5u64 -> value);          # same bindings, named order unrestricted
+adjust(4u64 -> scale, 3u64 -> bias, 5u64 -> value);
+adjust(3u64 -> bias);                       # reject: required value is missing
+adjust(5u64 -> value, 3u64);                 # reject: positional after named
+adjust(5u64, 6u64 -> value);                 # reject: value supplied twice
+adjust(5u64, 3u64 -> unknown);               # reject: unknown parameter
+```
+
+Positional arguments fill leading declaration slots in order without skipping optional parameters. Named arguments fill matching unfilled slots. Duplicate names, supplying a slot positionally and by name, unknown names and missing required slots reject that candidate binding. A call needs an applicable unambiguous declaration/method; do not run operands or defaults speculatively to try candidates. An explicit argument suppresses its default; explicit null is still an argument with ordinary owner/nullability checks. A required parameter may follow a default-bearing one because named binding can complete it. No explicit hole marker is needed to omit that earlier default. These rules apply to both functions and procedures.
+
+**Captured-owner projection.** [D-18](RegionalClosures.md#owner-projection) uses `cb -> state` to borrow an associated owner. H-457 supplies the explicit grouped form when this is an argument value:
+
+```text
+use((cb -> state));          # positional borrowed region
+use((cb -> state) -> arena); # same borrowed region, named parameter arena
+use(cb -> state);            # named parameter state receives cb
+```
+
+The final line cannot fall back to owner projection when no parameter named state matches; it is a failed named binding. This is a deliberate call-argument grammar distinction, not a change to owner projection outside that position. Parentheses around the borrowed region do not apply the scalar grouping-to-val proposal: region identity, permissions, owner and lifetime remain intact; no owning result or retention is created. Scalar grouping elsewhere keeps its own category consequences. An explicit `values... -> rest` names the one variadic pack; it does not flatten elements into fixed slots or make runtime count a dispatch dimension. Broader pack composition stays under its existing review boundary.
+
+**Default environments.** H-454/H-455 distinguishes two parameter-default forms. Each used default runs once per omitted call, not once when the callable is defined. Supplying that argument skips the default entirely.
+
+| Default form | Environment and scope |
+| --- | --- |
+| `{ expression }` | Use the callee's definition environment. It is not an extra full lexical scope merely because it is grouped. |
+| `{{ expression }}` | Evaluate in a fresh explicit scope in the caller context. An ordinary free local name can denote the caller's local, rather than a same-spelled definition-site local. |
+
+H-456 recommends that caller-context defaults depend on **symbolic variables rather than ordinary caller-local names**. This is guidance, not a prohibition of H-455's caller-local lookup. Resolve a symbolic reference's identity at the callee definition site; read that identity's current binding in the caller context. A caller's unrelated same-spelled symbol or local cannot retarget that symbolic reference. Ordinary symbol availability, owner/access/readiness and effect permissions still apply; there is no fallback to another identity or captured value.
+
+```text
+symbol @step:u64;
+proc next(n:u64 {{ @step }}) -> u64 { return n + 1u64; }
+# The default retains this definition's @step identity.
+# If its active caller binding holds 4u64, next() receives n=4u64.
+# Another symbol also spelled @step is a different identity.
+```
+
+This environment distinction belongs to **parameter-default syntax**. An ordinary `{{ ... }}` elsewhere remains an ordinary explicit scope; it does not acquire a general caller-evaluation feature. Locals made inside a caller-default scope keep that scope's lifetime. Independent bits may be read into the prepared argument before exit; a reference to an ended local cannot escape into the callee. Owner-bearing results, effects and cleanup retain their existing contracts. Defaults must be included in applicable capture/effect/native-coverage checks; recommending symbolic variables does not relax function/procedure effect restrictions.
+
+**Parameter initialization and phase proposal.** H-452's callable preamble initializes parameter bindings in declaration order in the callable's inherent lifetime. Each explicit expression/conversion runs once in call-site written order before entry, irrespective of its named destination. Value/ref/ptr/owned parameter modes and ordinary initializer-before-binding lookup remain; initializing an init-reference binding does not discharge its referent's write obligation. The environment decisions above do not alone settle the default's position relative to callee entry. The current proposal is:
+
+1. Prepare explicit arguments in written order, then omitted caller-context defaults in declaration order within that subset.
+2. Enter the selected callable, transferring all supplied owning inputs under D-17. Initialize parameters in declaration order; use prepared inputs or evaluate a missing definition-environment default in that parameter's preamble initializer.
+3. Start the body only when parameter binding initialization succeeds. Apply ordinary effects, readiness and cleanup rules throughout.
+
+This proposal preserves earlier-parameter visibility for definition-environment initializers and gives caller-defaults a pre-entry preparation boundary. It also gives mixed forms an observable phase order: in `proc f(a:u64 { mark(1u64) }, b:u64 {{ mark(2u64) }})`, `f()` would evaluate b's caller-default before a's callee-default. This interleaving remains **pending confirmation**. An alternative is to prepare all defaults before entry in declaration order with their respective lookup environments; its earlier-parameter and ownership semantics would need a distinct contract. Do not silently infer either alternative merely from name resolution.
+
+Under the phase proposal, caller-default failure precedes input ownership transfer; callee-default failure follows entry and cleans all transferred owned inputs, even those not yet installed in their named bindings. No rollback of earlier valid effects/allocation or ownership restoration is implied. Plain deferred calls would prepare caller-defaults at registration and run callee-defaults at invocation. These timing/cleanup/deferred consequences remain tied to the pending phase decision; existing D-17 entry and prepared-call rules are unchanged.
+
+**Further review:** default phase order and complete block grammar; helper/type-name hygiene and dependency checks in caller-defaults; public declaration versus implementing-method parameter names; conflicting defaults across declarations; callable values that erase name/default metadata; overload ranking and generic inference when defaults complete different signatures; broader named pack composition. H-450's fixed-versus-implicit-pack preference does not select a fewest-defaults rule. The declaration is the public naming/default contract; implementation-local names cannot accidentally change named binding. Default effects and checked failures must remain visible through the chosen contract. D-16 remains unchanged.
+
+**Acceptance:** complete reordered bindings and default omission; reject positional-after-named, duplicate, unknown and missing-required cases; preserve written explicit evaluation/conversion order and mode/owner/access/init checks; distinguish named arrows from grouped borrowed-owner projection; evaluate defaults once per omission; observe definition-versus-caller locals and fixed symbolic identity with caller-current values; reject escaping default-local views and invalid effect use. Confirm phase, cleanup, deferred and declaration/view integration examples before their implementation delegation. Current source does not implement named arguments, parameter-default blocks or expression-colon typing.
 
 ### Evaluated bits and storage places
 
