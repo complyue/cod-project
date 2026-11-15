@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Loop-control owner evidence
+
+<a id="k-685"></a>
+**K-685 — Loop-evidence continuity.** Agent assessment under H-365/H-398/H-407/H-417–H-424, D-14r92/D-17r57/D-18r92/D-24r7/D-26r13 and charter §§2/3.2/5.3/6.3/12: registry r692→693 and source reference306→307 extend shared owner evidence to readonly loop indices and fold accumulators, enabling independent recursive results and retained type-only contexts. Full-scope ownership for here remains separate from loop-control storage. Preserve ordered checking, actual owners, declaration/capture restrictions, initialization, lifetime, effects, deferred queues and shared native bodies. Acceptance covers nested controls/locals, aliases/copies, returned query contexts, invalid escapes and native resource accounting. No new loop abstraction, representation, ABI, query form, fraction rule or design qualification. Prior capability reference: `27acacf7873756aee75ad886db3965e78508c22f:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Scoped owner evidence
 
 <a id="k-684"></a>
