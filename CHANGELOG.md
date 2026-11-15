@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-11-15 — Fixed and variadic overload ranking
+
+<a id="h-450"></a>
+**H-450 — Type matching precedes the fixed-form tie-breaker.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-15 America/Los_Angeles; exact timestamp/personal name unavailable. The user replies “同意。提交一版” to the concrete proposal: fixed u64 beats an otherwise equally specific singleton u64 pack, while an exact u32 pack beats widening into fixed u64. Confirms type matching first and fixed-over-implicit-pack preference only on an otherwise equal match, within D-10-VARARGS; explicit expansion remains one pack. Does not choose differing-prefix variadic ranking or broader pack operations. The same message's new named/default-argument request is a separate design scope.
+
+<a id="k-variadic-ranking-20261115"></a>
+**K-VARIADIC-RANKING-20261115 — Integrate the confirmed overload tie-breaker.** Agent integration under H-450: D-10r153→154 and registry r714→715 update D-10-VARARGS/P-403 and acceptance while retaining H-449's element/owner/access/init, count-independent selection and D-16 boundaries. Candidate value path through C-57/C-89 and charter §§3.1/6.3/8/12 remains pending; no whole-file or operational qualification is inferred. Incomparable constraints remain ambiguous. Published baseline: `3965f1815cde29350959ba6dfa8d2c9275fe3772` at the affected design paths; H-449's decision is included in this checkpoint. Documentation only; no compiler/build/test changes.
+
+## 2026-11-15 — Array expansion and one variadic parameter
+
+<a id="h-449"></a>
+**H-449 — Ordinary-array expansion with one logical overload input.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-15 America/Los_Angeles; exact message timestamp/personal name unavailable. In response to support for runtime-array expansion with ordinary value/borrow semantics and conservative sound implementation coverage, the user says: “同意。 不过 overload selection 应该把 vararg 当一个参数看待吧？” Selects that expansion direction and proposes the single-parameter model, adopted in D-10-VARARGS: element contracts participate in matching, while count is runtime data and does not select fixed arities. Fixed-versus-implicit-pack priority, differing prefixes, full element/preparation/escape contracts and physical representation are not settled by this statement.
+
+<a id="k-variadic-pack-20261115"></a>
+**K-VARIADIC-PACK-20261115 — Scoped variadic direction and contract boundaries.** Agent integration of H-449 with H-258/P-229: D-10r152→153 and registry r713→714 add the scoped section, candidate value path P-403 and dependency edge P-404. Charter §§3.1/6.3/8/12 motivates inspectable typed calls and count-independent native semantics; the candidate path remains pending, without borrowing qualification from C-89/D-26 or qualifying all of D-10. Preserve exact-before-lossless numeric selection, actual owners/access/init, value independence, exception cleanup, regional no-copy/move and D-16 constraints. Distinguish bodyless variadic signature checking from executable pack calls; no existing prototype coverage proves array expansion. Baseline: `3965f1815cde29350959ba6dfa8d2c9275fe3772:design/SymbolicDynamicScope.md` and `design/DesignAuthorityRegistry.md`. Documentation only; no implementation, build or tests.
+
 ## 2026-11-15 — Unchecked bounds exceptions and explicit check opt-out
 
 <a id="h-448"></a>
