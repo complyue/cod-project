@@ -498,6 +498,8 @@ class ScalarChecker {
     std::optional<size_t> method;
     Substitutions substitutions;
     std::vector<Type> retained;
+    // Immutable definition evidence lives in result_obligations_; body scopes may shadow it.
+    const TypeEvidenceState *declaration = nullptr;
     struct Returns {
       std::vector<Type> types;
       bool value_obligation = false;
@@ -2504,7 +2506,8 @@ class ScalarChecker {
     TypeEvidenceState context;
     const auto &method = *program_.methods[id].source;
     if (!lexical_methods_.contains(&method)) return context;
-    const auto available = supplied ? *supplied : bindings_ && !lexical_.scopes.empty() ? evidence_state() : TypeEvidenceState{};
+    const auto available = supplied && supplied->method == id && supplied->declaration ? *supplied->declaration
+        : supplied ? *supplied : bindings_ && !lexical_.scopes.empty() ? evidence_state() : TypeEvidenceState{};
     const auto retain = [&](const Capture &capture) {
       if (const auto found = available.bindings.find(capture.name); found != available.bindings.end()) {
         context.bindings.emplace(*found);
@@ -2535,6 +2538,7 @@ class ScalarChecker {
     auto &obligation = result_obligations_[id];
     const auto &method = program_.methods[obligation.method];
     auto state = obligation.context;
+    state.declaration = &obligation.context;
     state.method = obligation.method;
     state.substitutions = *match(method, obligation.arguments, obligation.retained);
     state.retained = obligation.retained;

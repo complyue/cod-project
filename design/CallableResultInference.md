@@ -1,13 +1,13 @@
 # Callable result-type inference
 
-Design revision: 7 · Recorded: 2026-11-14 · Status: scoped result-inference contract with unique least common results.
+Design revision: 8 · Recorded: 2026-11-15 · Status: scoped result-inference contract with unique least common results.
 
 ## Design authority
 
-- **Scope / baseline:** [D-24](DesignAuthorityRegistry.md#d-24), r7. H-421/H-422 establishes callable-wide omission and independent recursive anchors; [H-423](../CHANGELOG.md#h-423) accepts reuse of explicit declarations and delegates routine consequences. [H-424](../CHANGELOG.md#h-424) confirms unique least common results through existing permitted conversions. Func/proc and named/anonymous definitions share this policy. The registry retains the precise qualification of each scope.
+- **Scope / baseline:** [D-24](DesignAuthorityRegistry.md#d-24), r8. H-421/H-422 establishes callable-wide omission and independent recursive anchors; [H-423](../CHANGELOG.md#h-423) accepts reuse of explicit declarations and delegates routine consequences. [H-424](../CHANGELOG.md#h-424) confirms unique least common results through existing permitted conversions. Func/proc and named/anonymous definitions share this policy. The registry retains the precise qualification of each scope.
 - **Value path:** C-84/P-356–P-357 relates reduced source repetition and complete inspectable signatures to C-01/C-06 and charter §§3.3/5.3/6.3/8/12. The local rationale is accepted; broader document/value-path qualification remains separate from the settled source requirements.
 - **Dependencies / invariants:** P-358 links D-10/D-14/D-17/D-18/D-21/D-22/D-23 and D-16. Preserve callable effects, explicit value returns, scalar value/view modes, unique owners, access, initialization, cleanup and numerical compatibility. No implicit value return, owner union, new capture permission, regional copy, fraction promotion/implementation or permanent ABI follows.
-- **Acceptance / continuity:** The cases below define observable requirements. [K-COMMON-RESULT-20261114](../CHANGELOG.md#k-common-result-20261114) records r6→7 under H-424; H-423's routine resolutions retain their recorded scope. Source implementation coverage remains in the [compiler reference](../tests/cod/language/README.md).
+- **Acceptance / continuity:** The cases below define observable requirements. [K-COMMON-RESULT-20261114](../CHANGELOG.md#k-common-result-20261114) records r6→7 under H-424; H-423's routine resolutions retain their recorded scope. [K-723](../CHANGELOG.md#k-723) continues the confirmed declaration-context requirement from r7→8 under H-421–H-424; body-local shadows cannot redefine a recursive callable’s retained evidence. Whole-document/value-path qualification remains pending. Source implementation coverage remains in the [compiler reference](../tests/cod/language/README.md).
 
 ## Establishing a result contract
 
@@ -43,7 +43,7 @@ func sum_to(n:u64) {
 
 Mutual recursion follows the same rule: establish contracts from independent evidence, then check every dependent return. A component whose result constraints only refer back to its unresolved results requires an explicit contract. Repeated body expansion, inferred void and an invented non-returning type cannot repair that cycle.
 
-Evidence belongs to the selected lexical/module context and instantiated type/owner parameters. It does not transfer silently to another world or instantiation. Every returning alternative must satisfy the established result, including permitted conversions and owner/access/initialization checks. These are dependency obligations, not a prescribed compiler pass order.
+Evidence belongs to the selected lexical/module context and instantiated type/owner parameters. Recursive references retain the callable’s definition-site evidence even inside a body scope that shadows an enclosing name. A new nested definition uses its own declaration context, including the enclosing body’s visible shadows. Retained type-only evidence does not capture or read runtime payloads, initialize storage or extend an owner lifetime. It does not transfer silently to another world or instantiation. Every returning alternative must satisfy the established result, including permitted conversions and owner/access/initialization checks. These are dependency obligations, not a prescribed compiler pass order.
 
 ## Completion without a value
 

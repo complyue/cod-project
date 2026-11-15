@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-15 — Recursive declaration evidence
+
+<a id="k-723"></a>
+**K-723 — Preserve definition context during recursive result inference.** Agent continuity assessment under H-421–H-424/H-423 and charter §§3.3/5.3/6.3/8/12: D-24r7→8’s independently confirmed result/context scope, source339→340 and registry733→734 preserve a callable’s definition-site evidence across body-local shadows. C-84/P-356–P-358 retains its existing source-policy scope and pending broader value path. New nested definitions retain their own visible context; query-only evidence creates no runtime capture, initialization or lifetime extension. Acceptance covers branch order, kind, captures, symbols, generic/nested contexts, independent anchors and stable shared native recursion. D-16 and other design revisions remain unchanged. Whole-document qualification, recursive self-value capture-time semantics, defaults and broader representations remain separate; no new capture, ABI or inference policy is selected. Baseline: `595a061f0b636d4a539175a0abaa5f517166d8b3` at the affected document paths.
+
 ## 2026-11-15 — Default selection and inference integration
 
 <a id="k-722"></a>
