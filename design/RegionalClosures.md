@@ -1,8 +1,12 @@
 # Regional variables and callable captures
 
-Design revision: 102 · Recorded: 2026-11-15 · Status: current bounded prototype contract.
+Design revision: 103 · Recorded: 2026-11-15 · Status: current bounded prototype contract.
 
 ## Design authority
+
+- **Mainline continuity:** [K-719](../CHANGELOG.md#k-719) continues r102→103 while integrating the scoped assertion/naming decisions below. Current source/native capabilities, qualified value paths and unresolved mechanisms retain their separate boundaries; the naming contract does not itself migrate the compiler.
+
+- **Built-in failure naming:** [H-472/H-473](../CHANGELOG.md#h-472)/[K-FAILURE-NAMES-20261115](../CHANGELOG.md#k-failure-names-20261115) covers D-18r100→101 and [D-17-NAMES](DesignAuthorityRegistry.md#d-17-names), P-414/P-415. Canonical concrete unchecked names end in Error, checked names in Exception; the common root Exception covers both. Existing classification, owner/access, preparation and cleanup contracts and their qualified scopes continue unchanged. Acceptance requires consistent names without changing handling obligations; compiler spelling migration is outstanding, as recorded in D-17. This grants no new runtime representation or broader design qualification.
 
 - **Named default origin:** [H-459](../CHANGELOG.md#h-459)/[K-NAMED-DEFAULT-ORIGIN-20261115](../CHANGELOG.md#k-named-default-origin-20261115) integrates [D-10-ARGUMENTS](SymbolicDynamicScope.md#named-arguments-defaults-and-complete-binding): callable parameter types may inherit defaults through typeof a named declaration, but cannot author new default expressions. C-65/C-73/C-75 and P-294/P-295/P-297/P-298 retain declaration/capture origin, owner validity and checked complete values under charter §§3.1/3.3/4.3/8. [H-460](../CHANGELOG.md#h-460)/[K-COMPATIBLE-DEFAULT-TARGETS-20261115](../CHANGELOG.md#k-compatible-default-targets-20261115) admits ordinary compatible target identities when the inherited default environment is established. [H-461](../CHANGELOG.md#h-461)/[K-TYPE-DEFAULT-EXPRESSION-20261115](../CHANGELOG.md#k-type-default-expression-20261115) places the inherited default expression/context association in the callable type contract, not an additional capture of the adapted value. [H-462](../CHANGELOG.md#h-462)/[K-CALLABLE-FAMILY-CONTRACT-20261115](../CHANGELOG.md#k-callable-family-contract-20261115) requires complete multi-method origin coverage and permits caller-local named adapters. Existing callable contracts continue; physical type-context evidence, detailed overload/default selection and full default integration remain separate review scope. No implementation or ABI claim follows.
 
@@ -92,7 +96,7 @@ Target access remains separate from holder binding permissions and pure behavior
 
 The ABI belongs to one statically linked CoD binary image. Compiler-generated typed adapters connect a callable view to its implementation and captured environment while preserving that implementation's module world. Native dependencies retain the system CRT contract. Cross-process code references, persisted callable views, dynamic code loading and general RTTI are outside this increment.
 
-Callable view payloads and their environments have lexical lifetime owners. Their physical backing may be stack or heap; runtime-sized environments are supported. The owning scope must release its allocations on normal and exceptional exit. Allocation failure follows the existing unchecked OutOfMemory contract. They cannot appear in regional fields or arrays and are not bits payloads eligible for arbitrary transfer. Regions remain relocatable; a regional ADT and its methods provide the business-level equivalent of a functor without storing a native code address in regional data.
+Callable view payloads and their environments have lexical lifetime owners. Their physical backing may be stack or heap; runtime-sized environments are supported. The owning scope must release its allocations on normal and exceptional exit. Allocation failure follows the existing unchecked OutOfMemoryError contract. They cannot appear in regional fields or arrays and are not bits payloads eligible for arbitrary transfer. Regions remain relocatable; a regional ADT and its methods provide the business-level equivalent of a functor without storing a native code address in regional data.
 
 Non-null variables use func/proc and have val semantics; nullable references to callable payloads use ptr. Definitions establish callable identities/methods; callable variable declarations construct lexical values:
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-15 — Assertion and failure-name contract integration
+
+<a id="k-719"></a>
+**K-719 — Preserve scoped decisions and mainline capabilities.** Integrate H-467–H-473/P-411–P-415 from `019a71071ff8d1b0325872ad0a512b82bb3727d7` at this file and its design paths. D-10r167/D-14r111/D-15r23/D-17r68/D-18r103/D-21r14/D-25r16/D-26r20/D-28r21/source335→336/registry727→729 combines assertion/naming decisions with mainline target-only assignment, bounds, selected calls and complete-value receiving. Charter §§3.1/3.3/4.3/5.3/6.3/8/12 retains semantic identities, effect order, owner/access/init and native coverage; D-16 remains unchanged. Canonical names preserve existing checkedness, and assertion failures retain author responsibility. Complete assertion/value-path qualification and physical mechanisms remain pending; compiler spelling migration is not claimed. Correct D-17's source-status table to include the existing cause_at bounds category. Both histories remain intact; no build/tests or wider design qualification.
+
 ## 2026-11-15 — Callable target/value receiving
 
 <a id="k-718"></a>
@@ -19,6 +24,42 @@
 
 <a id="k-715"></a>
 **K-715 — Preserve selected contracts and current compiler boundaries.** Agent continuity integrates `452b5a8dceec08d10f5cabac55d5c4743732afb6` at CHANGELOG.md and design/{SymbolicDynamicScope,RegionalClosures,AheadOfTimeExecutionPreparation,ExceptionControl,DesignAuthorityRegistry}.md with main `12847ad8260bec6ddc7295416e65a62ec2ede34e` at those paths and tests/cod/language/README.md. H-458–H-462/P-405–P-406/P-409 retains caller-before-callee defaults, named origin, type-bound default context and complete family compatibility under charter §§3.1/3.3/4.3/5/6.3/8/12. Source331→332/registry723→724/D-17r65→66 preserves bounds, assignment/receiving and current native coverage alongside D-10r161/D-18r100/D-21r13. Full argument/value-path qualification, default/context transport, local-family grammar and other open mechanisms remain pending. Acceptance requires coherent current scopes, recoverable human evidence and accurate implementation boundaries; no new compiler capability, regional representation or fraction rule follows.
+## 2026-11-15 — Built-in failure names and assertion responsibility
+
+<a id="h-472"></a>
+**H-472 — AssertionFailedError and concrete checkedness suffixes.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-15 America/Los_Angeles; exact timestamp/personal name unavailable. Says “对，assert 失败导致运行时出错，是程序作者的责任，不归为 CoD soundness 缺陷。 然后 `AssertionFailedError` 作为 unchecked exception 吧，然后CoD约定内置错误 unchecked 都以 `Error` 结尾，checked 都以 `Exception` 结尾，看看怎么样”. Selects author responsibility for failed assertions, the unchecked predicate-failure name and the built-in suffix direction; requests assessment. Does not reclassify existing categories, mandate user-defined/alias spellings or select a representation.
+
+<a id="h-473"></a>
+**H-473 — Exception is the general exception-handling root.** Same human/source/date; asynchronous answer to `call_34650142f59546258c57328e45861979`, item 0, asking about the existing common SystemException type: “改为 `Exception` 如何？ 最general的对应exception handling概念”. Selects Exception for the common root rather than the suggested SystemFailure. Its scope is the general handling abstraction over admitted checked/unchecked categories, not a new concrete checked failure or broader user-exception implementation.
+
+<a id="k-failure-names-20261115"></a>
+**K-FAILURE-NAMES-20261115 — Align canonical names without changing failure contracts.** Agent integration under H-472/H-473: D-10r166→167/D-14r104→105/D-15r22→23/D-17r66→67/D-18r100→101/D-21r13→14/D-25r15→16/D-26r17→18/D-28r20→21 and registry r727→728 add D-17-NAMES/P-414/P-415. Candidate C-63/C-10 value path serves charter §§3.1/6.3/8; naming-only continuations preserve already qualified C-63/C-90 and dependent contracts, while pending scopes remain pending. Checkedness follows semantic type identity; the general root Exception spans both classes. Align concrete names, distinguish author assertions from UnsoundRuntimeTypingError, and retain static resolution, checks, causes, cleanup, native coverage and D-16. D-17 separately records currently implemented spellings; compiler/source/tests are unchanged, new spellings are not advertised as supported, and no compatibility alias is selected. Acceptance covers name/class agreement, alias obligations, common-root matching and unchanged semantics. Published baseline: `34aff090d5a92ab28346dd63a9189776bfd9770d` at affected paths; pending H-467–H-471 records remain intact. Documentation only; no build/tests.
+
+## 2026-11-15 — Concrete-type specialization and explicit predicate assertions
+
+<a id="h-468"></a>
+**H-468 — Reserve warning-only conversion for purely numeric types.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-15 America/Los_Angeles; exact timestamp/personal name unavailable. Asynchronous answer to `call_43d2a24e3cdd413baee977d6ea18d492`, item 0: “只有纯numeric类型适用仅编译warning规则，只要涉及了其它类型，全都runtime抛错”. Retains H-466 only for pure numeric conversion; other admitted assertion mismatches retain runtime checking, subject to H-470 static resolution. H-471 clarifies generic/concrete selection.
+
+<a id="h-469"></a>
+**H-469 — Establish non-nullness through an explicit predicate assertion.** Same human/source/date, item 1: “配合 `assert p is not null` 额外赋予 non-null 性质。 `assert <predict> [, "err txt"]` 语法如果还没有要规划上”. Selects separate non-null refinement and requests predicate assertion syntax with optional quoted error text. Does not select hidden ptr-to-ref checking inside `:`, arbitrary message expressions or a physical diagnostic representation.
+
+<a id="h-470"></a>
+**H-470 — Resolve provable assertions statically.** Same human/source/date, item 2, concerning a provably false nonnumeric type assertion: “能静态证明的就不留到运行时，这个原则不学Julia”. Chooses compile-time rejection for proved failure and elimination of redundant validation for proved success. Observable operand effects remain governed by the charter; the separately selected pure numeric warning/UB policy remains.
+
+<a id="h-471"></a>
+**H-471 — Choose using concrete types at specialization.** Same human/source/date; answer to follow-up `call_b02343772a7b451ca941a832832f2dda`, item 0: “这个在 specialization 口径上处理，根据concrete type是否是umeric，有没有技术困难？”. Directs generic operation selection through concrete types and requests a feasibility assessment. A numeric concrete pair uses numeric conversion even through a generic wrapper. This does not request per-type native bodies, a new JIT or an implementation in this documentation task.
+
+<a id="k-assert-specialization-20261115"></a>
+**K-ASSERT-SPECIALIZATION-20261115 — Integrate static resolution, refinement and prepared selection.** Agent integration under H-468–H-471: D-10r165→166/D-14r103→104/D-17r65→66 and registry r726→727 update D-10-TYPED-EXPR/P-407–P-411 and add D-10-ASSERT/P-412–P-413. Candidate C-10/C-65 paths and qualified C-63/C-90 contracts preserve charter §§3.1/3.3/4.3/6.3/8/12: bool assertions establish sound success-path facts without removing effects or granting owner/access/init privileges. Static failure rejects; runtime checks remain enforced when unresolved, with ordinary unchecked failure/cleanup and no facts on handled-failure paths. Concrete numeric selection fits D-26 local dispatch/native sharing; preparing a possible failure branch does not prove a call fails. Source inspection finds numeric classification and native widening, but no assert construct or explicit colon execution; new lossy paths, parsing, diagnostics and proof integration remain. Optional text is initially a diagnostic literal; AssertionFailed is a working category. Preserve H-466, D-16, ordinary NPE and all qualification boundaries. Published baseline: `34aff090d5a92ab28346dd63a9189776bfd9770d` at affected paths; H-467 review evidence remains intact. Documentation only; no build/tests.
+
+## 2026-11-15 — Unchecked nonnumeric type assertions
+
+<a id="h-467"></a>
+**H-467 — Throw an unchecked error for nonnumeric runtime assertion mismatch; review Julia as reference.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-15 America/Los_Angeles; exact timestamp/personal name unavailable. Says “数值以外的 type assertion 运行时不匹配都抛错，unchecked吧。 跟 julia 语义核对一下细节，作为参考把edge cases尽量想周全些。 CoD语义上有疑义的地方跟我讨论”. Confirms unchecked runtime mismatch outside numeric conversion and requests comparative review, not wholesale adoption of Julia typing/conversion rules. Generic numeric selection, nullable-to-nonnull assertions and admission of statically false assertions are not yet settled.
+
+<a id="k-type-assertion-review-20261115"></a>
+**K-TYPE-ASSERTION-REVIEW-20261115 — Integrate mismatch and preserve separate typing obligations.** Agent integration: D-10r164→165/D-17r64→65 and registry r725→726 update D-10-TYPED-EXPR/P-407–P-408 and add P-411 under H-467. Candidate C-10 value path and existing C-63/C-90 contracts serve charter §§3.1/3.3/4.3/6.3/8/12 through inspectable membership and ordinary recovery without fabricated identity or permission. Preserve the tested target, actual dispatch evidence, owners, initialization, operand effects, H-458 phases and D-26 unknown-interpretation/soundness categories; runtime mismatch is neither UB nor a conversion probe. TypeAssertionFailed is a working name, not an implemented ABI. Official Julia documentation and v1.12.0 `src/builtins.c:588–596` support the comparison; no Julia interpreter was available. Three substantive choices and broader grammar/evidence mechanisms remain pending. H-466 numeric policy and D-16 stay unchanged; no new qualification, source changes, build or tests. Published baseline: `34aff090d5a92ab28346dd63a9189776bfd9770d` at affected paths.
+
 ## 2026-11-15 — Undefined behavior for invalid explicit numeric conversion
 
 <a id="h-466"></a>
