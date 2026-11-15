@@ -39,7 +39,7 @@ runner.CASES = {
     'null_test_operand_cleanup': (IO + 'ptr p:i64=null in here;val x<-1;'
         'behave @print(isnull({{defer{p=x;};p}}));behave @print(isnull(p));', 0, 'true\nfalse\n', ''),
     'fixed_reference_swap': ('ptr p=1;const ptr q=2;intrinsic (<=>)(p,q);', 2, '', 'fixed'),
-    'deferred_slot_swap_boundary': ('ptr p=1,q=2;defer intrinsic (<=>)(p,q);', 2, '', 'deferred reference-swap intrinsics'),
+    'deferred_slot_swap': (OBS + 'ptr p=1,q=2;{{defer intrinsic (<=>)(p,q);}};observe(p);observe(q);', 0, '2\n1\n', ''),
 }
 runner.CASE_ARGUMENTS = {}
 runner.CASE_SHADOWS = {

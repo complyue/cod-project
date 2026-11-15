@@ -791,8 +791,9 @@ class ScalarChecker {
     else if (operation.null_sources.empty()) operation.null_sources.insert(null_target);
     operation.place = targets.size() == 1 && !targets.contains(null_target) ? std::optional<size_t>{*targets.begin()} : std::nullopt;
   }
-  static CleanupEquations::Targets selection_targets(const std::set<size_t> &places, bool preserves = false) {
-    CleanupEquations::Targets result{places, places.contains(null_target), preserves};
+  static CleanupEquations::Targets selection_targets(const std::set<size_t> &places, std::optional<size_t> preserved = {}) {
+    CleanupEquations::Targets result{places, places.contains(null_target), {}};
+    if (preserved) result.entries.insert(*preserved);
     result.places.erase(null_target);
     return result;
   }
@@ -835,6 +836,17 @@ class ScalarChecker {
       if (view.fixed_binding || binding.fixed) fail(at, "cannot rebind a const reference binding");
     }
   }
+  void require_deferred_slots(const CheckedOperation &view, const Location &at) const {
+    for (const auto id : physical_slots(view.slots)) {
+      const auto scope = std::find_if(lexical_.scopes.begin(), lexical_.scopes.end(), [&](const auto &entry) {
+        return entry.id == bindings_->at(id).scope;
+      });
+      const auto cleanup = std::find_if(lexical_.scopes.begin(), lexical_.scopes.end(), [&](const auto &entry) {
+        return entry.id == cleanup_scope_;
+      });
+      if (scope > cleanup) fail(at, "deferred reference binding does not outlive its cleanup scope");
+    }
+  }
   void check_rebind(const CheckedOperation &target, const CheckedOperation &source, const Location &at) {
     reference_destination(target, at);
     if (!source.view || source.mixed_view) implementation_gap(at, "rebinding from a fresh value without an existing target");
@@ -868,13 +880,52 @@ class ScalarChecker {
         selected.initialized_target = selected.initialized_target && (lexical_.selections.initialized.contains(id) ||
             std::all_of(previous.begin(), previous.end(), [&](size_t place) { return lexical_.initialized.contains(place); }));
       }
-      assign_targets(id, selected, selection_targets(source.targets, weak));
+      assign_targets(id, selected, selection_targets(source.targets, weak ? std::optional<size_t>{id} : std::nullopt));
       if (!proving_) rebound_.insert(id);
     }
   }
   CheckedOperation current_selection(CheckedOperation view, const Location &at) const {
     reference_destination(view, at);
     return selection_state(std::move(view), at);
+  }
+  void prepare_reference_swap(const CheckedOperation &left, const CheckedOperation &right,
+                              CheckedOperation &operation, const Location &at) {
+    require_deferred_slots(left, at); require_deferred_slots(right, at);
+    auto &effects = operation.invocation[0];
+    if (left.slots.size() == 1 && left.slots == right.slots) return;
+    const auto exchange = [&](const CheckedOperation &target, const CheckedOperation &source) {
+      const auto written = physical_slots(target.slots);
+      const auto incoming = physical_slots(source.slots);
+      for (const auto &[id, current] : lexical_.targets) {
+        if (intersect(written, physical_slots({id})).empty()) continue;
+        CleanupEquations::Targets update{{}, false, incoming};
+        if (target.slots.size() != 1 || !target.slots.contains(id)) update.entries.insert(id);
+        effects.selections.targets[id].merge(update);
+        effects.selections.invalidated.insert(id);
+        if (!proving_) {
+          possible_targets_.at(id).insert(source.targets.begin(), source.targets.end());
+          possible_null_sources_.at(id).insert(source.null_sources.begin(), source.null_sources.end());
+          target_dependencies_.at(id).insert(incoming.begin(), incoming.end());
+          rebound_.insert(id);
+        }
+      }
+      if (!proving_ || std::none_of(written.begin(), written.end(), [&](size_t id) { return bindings_->at(id).requires_initialized; })) return;
+      const auto read = cleanup_.read(null_target); read_sites_.push_back(at);
+      effects.reads[read].nonnull = incoming;
+      // Source versions cannot identify an earlier runtime iteration's binding.
+      const bool iteration_local = std::none_of(loop_controls_.begin(), loop_controls_.end(),
+          [&](size_t control) { return storage(control).scope > cleanup_scope_; });
+      if (iteration_local) for (const auto &[id, versions] : lexical_.target_versions)
+        if (!lexical_.targets.at(id).contains(null_target)) effects.reads[read].nonnull_versions.emplace(id, versions);
+      std::set<size_t> places;
+      for (const auto id : incoming) places.insert(possible_targets_.at(id).begin(), possible_targets_.at(id).end());
+      places.erase(null_target);
+      for (const auto place : places) {
+        const auto read = cleanup_.read(place); read_sites_.push_back(at);
+        effects.reads.emplace(read, CleanupEquations::ReadRequirement{{}, source.binding});
+      }
+    };
+    exchange(left, right); exchange(right, left);
   }
   CheckedOperation selection_state(CheckedOperation view, const Location &at) const {
     require_slots_live(view.slots, at, "aliased binding's lexical scope has ended");
@@ -921,11 +972,13 @@ class ScalarChecker {
       if (!invalidate) {
         // Completed cleanup can supply tighter bounds than whole-method discovery.
         if (const auto known = state.selections.targets.find(binding);
-            known != state.selections.targets.end() && !known->second.preserves) {
+            known != state.selections.targets.end() && known->second.entries.empty()) {
           targets = known->second.places;
           if (known->second.nullable) targets.insert(null_target);
         }
       }
+      // Every mutation of a ref must preserve its checked non-null target.
+      if (bindings_->at(binding).requires_initialized) targets.erase(null_target);
       if (!targets.contains(null_target)) state.null_sources[binding].clear();
       if (targets.contains(null_target) && state.null_sources[binding].empty()) state.null_sources[binding].insert(null_target);
       const auto owners = target_owners(targets);
@@ -1027,9 +1080,19 @@ class ScalarChecker {
       const auto place = cleanup_.binding(read);
       if (before.satisfied(place, state.initialized, state.selections)) continue;
       auto known = before;
+      if (known.nonnull) std::erase_if(*known.nonnull, [&](size_t id) {
+        const auto guard = known.nonnull_versions.find(id), current = state.target_versions.find(id);
+        return guard != known.nonnull_versions.end() && current != state.target_versions.end() && guard->second == current->second;
+      });
+      if (known.satisfied(place, state.initialized, state.selections)) continue;
       known.initialized.insert(state.initialized.begin(), state.initialized.end());
       known.substitute(state.selections);
       if (known.satisfied(place, state.initialized, {})) continue;
+      if (before.nonnull) {
+        if (!delayed_ && validating_) fail(read_sites_.at(read), "cannot prove a non-null target for deferred reference swap");
+        add_requirement(state, read, state.inputs, known);
+        continue;
+      }
       if (!storage(place).borrowed && (!delayed_ || !deferred_inputs_.contains(place)) && validating_)
         fail(read_sites_.at(read), "cannot prove initialization of '" + storage(place).name + "' for deferred or borrowed read");
       add_requirement(state, read, state.inputs, known);
@@ -3692,14 +3755,14 @@ class ScalarChecker {
           finish_named_call(expr, arguments, views, operation, read, discard);
           break;
         }
-        if (reference && &expr == prepared_call_) implementation_gap(expr.at, "deferred reference-swap intrinsics; use a defer block");
         operation.builtin = reference ? BuiltinOperation::reference_swap : BuiltinOperation::bits_swap;
         if (reference) {
           left = current_selection(left, expr.at);
           right = current_selection(right, expr.at);
           check_rebind(left, right, expr.at);
           check_rebind(right, left, expr.at);
-          if (!left.binding || left.binding != right.binding) { rebind(left, right); rebind(right, left); }
+          if (&expr == prepared_call_) prepare_reference_swap(left, right, operation, expr.at);
+          else if (!left.binding || left.binding != right.binding) { rebind(left, right); rebind(right, left); }
         } else {
           check_bits_destinations();
           if (left.type != right.type) fail(expr.at, "bits swap requires the exact same type");
@@ -4165,15 +4228,7 @@ class ScalarChecker {
       const auto versions = target.selection_versions;
       if (expr.kind == K::rebind) {
         reference_destination(target, expr.at);
-        if (prepared) for (const auto id : physical_slots(target.slots)) {
-          const auto scope = std::find_if(lexical_.scopes.begin(), lexical_.scopes.end(), [&](const auto &entry) {
-            return entry.id == bindings_->at(id).scope;
-          });
-          const auto cleanup = std::find_if(lexical_.scopes.begin(), lexical_.scopes.end(), [&](const auto &entry) {
-            return entry.id == cleanup_scope_;
-          });
-          if (scope > cleanup) fail(expr.at, "deferred reference binding does not outlive its cleanup scope");
-        }
+        if (prepared) require_deferred_slots(target, expr.at);
         if (child(1, false) == Type::never) { operation.type = Type::never; break; }
         const auto &selected = operations.at(expr.children[1].get());
         check_rebind(target, selected, expr.at);
@@ -4182,6 +4237,7 @@ class ScalarChecker {
           require_borrow_lifetime(selected, expr.children[1]->at, true);
           const auto before = lexical_;
           lexical_.selections = {};
+          for (auto &[input, selections] : lexical_.input_selections) selections = {};
           rebind(target, selected);
           operation.invocation[0].selections = lexical_.selections;
           lexical_ = before;
@@ -4587,7 +4643,8 @@ class ScalarChecker {
       observed_.returned.merge(returned);
     }
     for (const auto &[read, requirement] : state.requirements)
-      if (requirement.inputs & state.inputs) observe_read(cleanup_.binding(read), requirement.before.initialized);
+      if ((requirement.inputs & state.inputs) && !requirement.before.nonnull)
+        observe_read(cleanup_.binding(read), requirement.before.initialized);
   }
   CallEffects check_instance(size_t i) {
     checking_context_ = i + 1;

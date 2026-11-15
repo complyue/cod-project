@@ -19,6 +19,8 @@ for spelling in ('call', 'intrinsic'):
     cases = {
         'value_snapshot': (IO+'val a<-1,b<-7;{{'+defer('<-','a','b')+'b<-9;'+OUT('a')+'}};'+OUT('a'),0,'1\n7\n',''),
         'source_target_snapshot': (IO+'val a<-1,b<-7,c<-9;ptr p=a,q=b;{{'+defer('=','p','q')+'q=c;b<-8;'+OUT('p')+'}};'+OUT('p'),0,'1\n8\n',''),
+        'unrelated_binding_facts': (IO+NPE+'val a<-1,b<-7;ptr p=a,q=b;{{'+defer('=','p','q')+'q=null;}};'+OUT('p')+'try{'+OUT('q')+'}catch(e:const NullPointerException){'+OUT('-1')+'};',0,'7\n-1\n',''),
+        'unrelated_initialization': ('val a<-1,b<-7,c<-make local i64;ptr p=a,q=b;{{'+defer('=','p','q')+'q=c;}};q;',2,'','before definite initialization'),
         'borrowed_callable_result': (IO+'func identity(ref input:i64 in O)->ref i64 in O where {owner O}{return input;}val a<-1,b<-7;ptr p=a;func get=identity;{{'+defer('=','p','get(b)')+'b<-9;'+OUT('p')+'}};'+OUT('p'),0,'1\n9\n',''),
         'destination_snapshot': (IO+'val a<-1,b<-2;ptr p=a;{{'+defer('<-','p','7')+'p=b;}};'+OUT('a')+OUT('b')+OUT('p'),0,'7\n2\n2\n',''),
         'selected_slot': (IO+'val a<-1,b<-2,c<-7;ptr p=a,q=b;{{'+defer('=','(if(true){p}else{q})','c')+'}};'+OUT('p')+OUT('q'),0,'7\n2\n',''),

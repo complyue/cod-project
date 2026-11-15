@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Deferred reference exchange
+
+<a id="k-698"></a>
+**K-698 — Deferred binding-exchange continuity.** Agent assessment under H-305/H-306/H-342/H-344/H-356/H-398/H-407/H-420, D-14r92/D-17r57/D-18r92/D-21r12/D-26r13 and charter §§2/3.3/6.3/12: registry r705→706 and source reference319→320 support prepared reference swaps through shared slot selection and native invocation. Acceptance preserves invocation-time targets, exact type/owner/access, ref initialization and non-null validity, conditional registration, composed queues, failed preparation, pending completion and exact image release. Prepared rebind summaries cannot restore unrelated selection facts. Reference-swap methods, broader target correlations, regional storage and fractions retain their boundaries. No semantic revision or new qualification. Prior capability: `5a000c50e527e50dc39605d0e4e4cea4012713f3:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Prepared assignment cleanup
 
 <a id="k-697"></a>

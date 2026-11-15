@@ -30,13 +30,13 @@ public:
     // Physical cells only; absence cannot justify initializing a cell.
     std::set<size_t> places;
     bool nullable = false;
-    // A weak update can also retain the selection present on entry.
-    bool preserves = false;
+    // Targets selected by these bindings on entry to the summarized sequence.
+    std::set<size_t> entries;
     bool operator==(const Targets &) const = default;
     void merge(const Targets &other) {
       places.insert(other.places.begin(), other.places.end());
       nullable = nullable || other.nullable;
-      preserves = preserves || other.preserves;
+      entries.insert(other.entries.begin(), other.entries.end());
     }
   };
   // A selection fact describes the current target, so rebinding can invalidate it.
@@ -49,6 +49,12 @@ public:
     bool possible = true;
     std::map<size_t, Targets> targets;
     bool operator==(const Selections &) const = default;
+    bool nonnull(size_t id) const {
+      if (const auto target = targets.find(id); target != targets.end())
+        return !target->second.nullable && (!target->second.places.empty() || !target->second.entries.empty()) &&
+            std::all_of(target->second.entries.begin(), target->second.entries.end(), [&](size_t entry) { return entry_nonnull.contains(entry); });
+      return !invalidated.contains(id) && entry_nonnull.contains(id);
+    }
     void initialize(size_t id) {
       initialized.insert(id);
       if (!invalidated.contains(id)) entry_initialized.insert(id);
@@ -58,8 +64,10 @@ public:
       if (null) initialize(id);
       if (!null && !invalidated.contains(id)) entry_nonnull.insert(id);
       if (auto target = targets.find(id); target != targets.end()) {
-        if (null || !target->second.places.empty() || target->second.preserves) target->second.nullable = null;
-        if (null) target->second.places.clear();
+        if (!null && target->second.places.empty() && target->second.entries.size() == 1)
+          entry_nonnull.insert(*target->second.entries.begin());
+        if (null || !target->second.places.empty() || !target->second.entries.empty()) target->second.nullable = null;
+        if (null) { target->second.places.clear(); target->second.entries.clear(); }
       }
     }
     void test(size_t id, bool null) {
@@ -67,8 +75,14 @@ public:
         (null ? null_inputs : nonnull_inputs).insert(id);
         if ((null ? nonnull_inputs : null_inputs).contains(id)) possible = false;
       }
-      if (const auto target = targets.find(id); target != targets.end() && !target->second.preserves)
-        if (null ? !target->second.nullable : target->second.places.empty()) possible = false;
+      if (const auto target = targets.find(id); target != targets.end()) {
+        if (target->second.entries.empty() && (null ? !target->second.nullable : target->second.places.empty())) possible = false;
+        if (target->second.places.empty() && target->second.entries.size() == 1 && (!null || !target->second.nullable)) {
+          const auto entry = *target->second.entries.begin();
+          (null ? null_inputs : nonnull_inputs).insert(entry);
+          if ((null ? nonnull_inputs : null_inputs).contains(entry)) possible = false;
+        }
+      }
       refine(id, null);
     }
     void constrain(const Selections &next) {
@@ -77,25 +91,29 @@ public:
       for (const auto id : next.nonnull_inputs) test(id, false);
     }
     void invalidate(size_t id) { initialized.erase(id); invalidated.insert(id); targets.erase(id); }
-    void assign(size_t id, Targets next) {
-      if (next.preserves) {
-        if (const auto previous = targets.find(id); previous != targets.end()) {
-          next.preserves = false;
-          next.merge(previous->second);
-        } else if (invalidated.contains(id)) { invalidate(id); return; }
+    std::optional<Targets> substitute(const Targets &next) const {
+      Targets result{next.places, next.nullable, {}};
+      for (const auto entry : next.entries) {
+        if (const auto previous = targets.find(entry); previous != targets.end()) result.merge(previous->second);
+        else if (invalidated.contains(entry)) return {};
+        else result.entries.insert(entry);
       }
+      return result;
+    }
+    void assign(size_t id, Targets next) {
+      const auto selected = substitute(next);
       invalidate(id);
-      targets.emplace(id, std::move(next));
+      if (selected) targets.emplace(id, *selected);
     }
     void resolve(std::set<size_t> &known) {
       bool changed;
       do {
         changed = false;
         for (const auto &[id, target] : targets) {
-          if ((!target.preserves || entry_initialized.contains(id)) &&
+          if (std::all_of(target.entries.begin(), target.entries.end(), [&](size_t entry) { return entry_initialized.contains(entry); }) &&
               std::all_of(target.places.begin(), target.places.end(), [&](size_t place) { return known.contains(place); }))
             changed = initialized.insert(id).second || changed;
-          if (!target.preserves && !target.nullable && target.places.size() == 1 && initialized.contains(id))
+          if (target.entries.empty() && !target.nullable && target.places.size() == 1 && initialized.contains(id))
             changed = known.insert(*target.places.begin()).second || changed;
         }
       } while (changed);
@@ -104,10 +122,14 @@ public:
                                         std::set<size_t> &known) const {
       std::set<size_t> preserved;
       for (const auto id : entries) {
-        if (const auto target = targets.find(id); target != targets.end() && !target->second.preserves &&
-            (!target->second.nullable || nonnull.contains(id)) && target->second.places.size() == 1)
-          known.insert(*target->second.places.begin());
-        if (!invalidated.contains(id)) preserved.insert(id);
+        if (const auto target = targets.find(id); target != targets.end()) {
+          if (!target->second.nullable || nonnull.contains(id)) {
+            if (target->second.entries.empty() && target->second.places.size() == 1)
+              known.insert(*target->second.places.begin());
+            if (target->second.places.empty() && target->second.entries.size() == 1)
+              preserved.insert(*target->second.entries.begin());
+          }
+        } else if (!invalidated.contains(id)) preserved.insert(id);
       }
       return preserved;
     }
@@ -119,16 +141,11 @@ public:
       entry_initialized.insert(entries.begin(), entries.end());
       for (const auto id : next.invalidated) invalidate(id);
       for (const auto &[id, update] : next.targets) {
-        auto target = update;
-        if (target.preserves) {
-          if ((before.initialized.contains(id) || next.entry_initialized.contains(id)) && std::all_of(target.places.begin(), target.places.end(),
-              [&](size_t place) { return known.contains(place); })) initialized.insert(id);
-          if (const auto previous = before.targets.find(id); previous != before.targets.end()) {
-            target.preserves = false;
-            target.merge(previous->second);
-          } else if (before.invalidated.contains(id)) continue;
-        }
-        targets[id] = std::move(target);
+        if (std::all_of(update.entries.begin(), update.entries.end(), [&](size_t entry) {
+              return before.initialized.contains(entry) || next.entry_initialized.contains(entry);
+            }) && std::all_of(update.places.begin(), update.places.end(), [&](size_t place) { return known.contains(place); }))
+          initialized.insert(id);
+        if (const auto target = before.substitute(update)) targets[id] = *target;
       }
       initialized.insert(next.initialized.begin(), next.initialized.end());
       resolve(known);
@@ -147,10 +164,10 @@ public:
         if (const auto next = other.targets.find(it->first); next != other.targets.end()) {
           it->second.merge(next->second); ++it;
         } else if (other.invalidated.contains(it->first)) it = targets.erase(it);
-        else { it->second.preserves = true; ++it; }
+        else { it->second.entries.insert(it->first); ++it; }
       }
       for (const auto &[id, target] : other.targets) if (!before.targets.contains(id) && !before.invalidated.contains(id)) {
-        auto merged = target; merged.preserves = true;
+        auto merged = target; merged.entries.insert(id);
         targets.emplace(id, std::move(merged));
       }
     }
@@ -162,25 +179,58 @@ public:
     std::optional<std::set<size_t>> targets = {};
     std::set<size_t> entry_initialized = {};
     std::set<size_t> entry_nonnull = {};
+    std::optional<std::set<size_t>> nonnull = {};
+    bool nonnull_unproved = false;
+    // Registration-path guards apply only while the original binding versions remain current.
+    std::map<size_t, std::set<size_t>> nonnull_versions = {};
     bool operator==(const ReadRequirement &) const = default;
     bool satisfied(size_t place, const std::set<size_t> &known, const Selections &selections) const {
+      if (nonnull) return !nonnull_unproved && std::all_of(nonnull->begin(), nonnull->end(),
+          [&](size_t id) { return selections.nonnull(id); });
       const auto ready = [&](size_t id) { return initialized.contains(id) || known.contains(id); };
       return ready(place) || (selection && selections.initialized.contains(*selection)) ||
           (targets && std::all_of(targets->begin(), targets->end(), ready));
     }
     void substitute(const Selections &before) {
+      if (nonnull) {
+        std::set<size_t> entries;
+        for (const auto id : *nonnull) {
+          if (before.nonnull(id)) continue;
+          if (const auto target = before.targets.find(id); target != before.targets.end()) {
+            nonnull_unproved = nonnull_unproved || target->second.nullable;
+            entries.insert(target->second.entries.begin(), target->second.entries.end());
+          } else if (before.invalidated.contains(id)) nonnull_unproved = true;
+          else entries.insert(id);
+        }
+        nonnull = std::move(entries);
+        return;
+      }
       entry_initialized = before.substitute_entries(entry_initialized, entry_nonnull, initialized);
       entry_initialized.insert(before.entry_initialized.begin(), before.entry_initialized.end());
       std::erase_if(entry_nonnull, [&](size_t id) { return before.invalidated.contains(id); });
       entry_nonnull.insert(before.entry_nonnull.begin(), before.entry_nonnull.end());
       if (!selection) return;
-      if (const auto target = before.targets.find(*selection); target != before.targets.end() && !target->second.preserves) {
-        if (!targets) targets = target->second.places;
-        else std::erase_if(*targets, [&](size_t id) { return !target->second.places.contains(id); });
+      if (const auto target = before.targets.find(*selection); target != before.targets.end()) {
+        if (target->second.entries.empty()) {
+          if (!targets) targets = target->second.places;
+          else std::erase_if(*targets, [&](size_t id) { return !target->second.places.contains(id); });
+        } else if (target->second.entries.size() == 1 && target->second.places.empty() && !target->second.nullable) {
+          selection = *target->second.entries.begin();
+          return;
+        }
       }
       if (before.invalidated.contains(*selection)) selection.reset();
     }
     void merge(const ReadRequirement &other) {
+      if (nonnull && other.nonnull) {
+        nonnull->insert(other.nonnull->begin(), other.nonnull->end());
+        nonnull_unproved = nonnull_unproved || other.nonnull_unproved;
+        std::erase_if(nonnull_versions, [&](const auto &guard) {
+          const auto found = other.nonnull_versions.find(guard.first);
+          return found == other.nonnull_versions.end() || found->second != guard.second;
+        });
+        return;
+      }
       std::erase_if(initialized, [&](size_t id) { return !other.initialized.contains(id); });
       std::erase_if(entry_initialized, [&](size_t id) { return !other.entry_initialized.contains(id); });
       std::erase_if(entry_nonnull, [&](size_t id) { return !other.entry_nonnull.contains(id); });
