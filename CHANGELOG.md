@@ -1,5 +1,32 @@
 # Changelog
 
+## 2026-11-15 — Undefined behavior for invalid explicit numeric conversion
+
+<a id="h-466"></a>
+**H-466 — State undefined behavior explicitly; omit runtime enforcement.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-15 America/Los_Angeles; exact timestamp/personal name unavailable. Says “warning明确是 undefined behavior，后果自负，运行时就不要抛错了”. Confirms undefined behavior rather than a pending numeric output, while retaining the compile-time warning/opt-in-error direction. Replaces H-464's lossy output promises and the H-465/K-UNCHECKED-CONVERSION-20261115 interpretation excluding undefined behavior. This concerns explicit numeric conversion, not fraction arithmetic, ordinary arithmetic overflow or general type assertions.
+
+<a id="k-numeric-conversion-ub-20261115"></a>
+**K-NUMERIC-CONVERSION-UB-20261115 — Make the exactness precondition and undefined boundary consistent.** Agent integration under H-466: D-10r163→164/D-11r33→34 and registry r724→725 update D-10-TYPED-EXPR/P-407–P-408/P-410. Candidate C-10 value path under charter §§3.1/6.3/8 exposes programmer responsibility without mandatory runtime conversion checks. A warning about an unproved input is distinct from actual undefined execution; exactly representable actual inputs retain their value and ordinary evaluation rules. Remove specified lossy outputs, pending output-mapping questions and no-crash/nonthrowing guarantees from current contracts; undefined behavior is not confined to a numeric result. Preserve H-261, owner/access and D-16; D-17 gains no new exception. Acceptance covers diagnostics, defined-path results/effects and absence of inserted conversion enforcement, with no output/crash assertion for undefined cases. Published baseline: `452b5a8dceec08d10f5cabac55d5c4743732afb6` at affected paths; H-463–H-465 pending-checkpoint evidence remains intact. Documentation only; no compiler/build/tests or broader qualification.
+
+## 2026-11-15 — No runtime error after numeric conversion warnings
+
+<a id="h-465"></a>
+**H-465 — Warn about programmer responsibility; do not reject the conversion at runtime.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-15 America/Los_Angeles; exact timestamp/personal name unavailable. In response to whether `300.0f64 : u8` should wrap or fail, with NaN/infinity also raised, says “warning明确了后果自负以后，运行时就不要抛错了”. Selects no conversion-generated runtime error after warning-and-continue; the warning communicates the numerical risk. Does not choose exact outputs for remaining floating cases, blanket whole-program undefined behavior, assertion semantics or a fraction policy.
+
+<a id="k-unchecked-conversion-20261115"></a>
+**K-UNCHECKED-CONVERSION-20261115 — Close the runtime rejection alternative.** Agent integration under H-465: D-10r162→163/D-11r32→33 and registry r723→724 update D-10-TYPED-EXPR/P-407–P-408/P-410. Candidate C-10 value path and charter §§3.1/6.3/8 preserve visible responsibility and selected execution. No numeric-loss/range/non-finite conversion error is added in runtime or constant evaluation; opt-in warnings-as-errors remains compile-time policy. Preserve H-464's specified results, once-only operand effects and unrelated failures. Exact remaining outputs stay pending under the nonthrowing constraint, without importing backend traps or whole-program undefined behavior. H-261, owner/access, D-17 and D-16 remain unchanged; no new qualification or exception category. Published baseline: `452b5a8dceec08d10f5cabac55d5c4743732afb6` at affected paths; H-463/H-464's pending checkpoint records remain intact. Documentation only; no compiler/build/tests.
+
+## 2026-11-15 — Explicit lossy numeric conversion
+
+<a id="h-463"></a>
+**H-463 — Warn at compile time, with opt-in errors.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-15 America/Los_Angeles; exact timestamp/personal name unavailable. In response to explicit `:` numeric narrowing and fractional-loss examples, says “编译时抛警告，可以opt-in视为错误”. Selects warning severity and configurable error promotion; the initial statement alone does not determine proof coverage or numeric results.
+
+<a id="h-464"></a>
+**H-464 — Warn unless proven lossless; perform the lossy conversion.** Same human/source/date; asynchronous answers to `call_5285e998dde44db49682173619855a35`, items 0/1: “Warn unless proven lossless (Recommended)” for unknown `x:u64` converted to u8, and “Produce 44 and 3” for `300u64 : u8` and `3.5f64 : u64`, rather than failing a runtime exactness check. Does not select out-of-range floating conversion, NaN/infinity behavior, all signed/rounding cases, fraction conversion or assertion semantics.
+
+<a id="k-lossy-conversion-20261115"></a>
+**K-LOSSY-CONVERSION-20261115 — Separate explicit loss from implicit compatibility.** Agent integration under H-463/H-464: D-10r161→162/D-11r31→32 and registry r722→723 update D-10-TYPED-EXPR/P-407–P-408 and add P-410. The candidate C-10 value path serves charter §§3.1/6.3/8 through visible numerical intent and deterministic results; its broader qualification remains pending. Generalize the accepted examples to unsigned narrowing modulo destination width and finite float-to-int truncation toward zero when the truncated integer fits; keep other numeric domains/failures explicit as pending. Preserve H-261's whole-type implicit losslessness, units, once-only ordered evaluation, owner/access and D-16 constraints. Acceptance covers proof-sensitive warnings, opt-in errors and constant/runtime agreement; D-17 gains no new exception category. Published baseline: `452b5a8dceec08d10f5cabac55d5c4743732afb6` at affected paths. Documentation only; no compiler/build/tests.
+
 ## 2026-11-15 — Complete multi-method callable contracts
 
 <a id="h-462"></a>
