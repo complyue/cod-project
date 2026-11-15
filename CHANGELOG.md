@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Caught-value owner evidence
+
+<a id="k-686"></a>
+**K-686 — Handler-evidence continuity.** Agent assessment under H-267/H-269/H-356–H-362/H-398/H-407/H-417/H-420–H-424, D-14r92/D-17r57/D-18r92/D-24r7/D-26r13 and charter §§2/3.2/5.3/6.3/12: registry r693→694 and source reference307→308 preserve caught-value owners in shared operand/result evidence. Independent handler returns, retained query contexts and inferred deferred recovery preserve storage permissions, actual owners, capture/borrow boundaries, ordered preparation and cleanup. Acceptance covers nested/shadowed catches, snapshots versus borrows, recursive native reuse, missing returns and allocation-failure release. No new exception category, lifetime rule, query form, runtime representation, fraction rule, ABI or design qualification. Prior capability reference: `69d5451647536b15349e1e035a8c1f7342cc8c08:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Loop-control owner evidence
 
 <a id="k-685"></a>

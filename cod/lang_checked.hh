@@ -2533,7 +2533,7 @@ class ScalarChecker {
         auto caught = catch_entry;
         caught.bindings[handler.text] = handler.annotation ? annotation(*handler.annotation) : exception_type(0);
         caught.owner_bindings.erase(handler.text);
-        caught.views[handler.text] = {true, true, true};
+        caught.views[handler.text] = {true, true, true, EvidenceOwner::for_scope(handler)};
         const auto type = type_evidence(*handler.children.front(), caught, contextual, nullptr, alternatives);
         if (const auto outer = catch_entry.bindings.find(handler.text); outer != catch_entry.bindings.end())
           caught.bindings[handler.text] = outer->second;
@@ -3195,6 +3195,7 @@ class ScalarChecker {
         for (size_t p = 1; p < entries.size(); ++p) { const auto joined = lexical_; join(joined, false, entries[p], false, handler.at); }
       }
       lexical_.returned = {};
+      checked_scope_owners_[&handler] = next_scope_;
       lexical_.scopes.push_back({next_scope_++, {}});
       const auto id = declare(handler.text, type, true, true, handler.at);
       lexical_.scopes.back().declarations = false;
