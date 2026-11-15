@@ -1255,7 +1255,7 @@ class LLVMEmission {
         auto *target = emit_expression(expr, Projection::target, discard);
         if (!reachable()) return nullptr;
         // Receiver-only target encoding: no value type or owned payload. Valid
-        // materialized scalar values have nonzero tags and keep normal cleanup.
+        // materialized values have nonzero tags and keep normal payload cleanup.
         return b_.CreateInsertValue(empty_scalar(), b_.CreatePtrToInt(target, b_.getInt64Ty()), 0);
       });
     } else value = emit_checked_expression(expr, projection, discard);

@@ -54,7 +54,7 @@ runner.CASES = {
  'deferred_outer_owner_rejected': (run(BASE+'defer{{ref y=if(flag){x}else{7};}};'),2,'','reference initializer joins different owners'),
  'scalar_representations': (IO+'func independent(value:T)->const T where T{return value;}func work(value:T,flag:bool)->const T where T{val local<-value;ref y=if(flag){local}else{independent(value)};return y;}'+OUT('work(false,false)')+OUT('work(true,true)')+OUT('work(7u8,false)')+OUT('work(8u32,true)')+OUT('work(1f32,false)')+OUT('work(2f64,true)'),0,'false\ntrue\n7\n8\n1\n2\n',''),
  'exception_payload': (IO+MISSING+'using "std:exceptions" SystemException;func error()->const MissingReturnException{try{missing();}catch(e:const MissingReturnException){return e;};}func independent(value:SystemException)->const SystemException{return value;}proc work(flag:bool)->void{val original:SystemException<-error();ref y=if(flag){original}else{independent(original)};'+OUT('y is original')+OUT('y.category')+'}work(true);work(false);',0,'true\n5\nfalse\n5\n','[-Wmissing-return]'),
- 'callable_mixture_boundary': ('func base()->u64{return 1u64;}func value=base;ptr p=if(true){value}else{base};',2,'','mixed callable initializer completion transport'),
+ 'callable_mixture': (IO+'func base()->u64{return 1u64;}func value=base;ptr p=if(true){value}else{base};'+OUT('p()')+OUT('p is value'),0,'1\ntrue\n',''),
  'different_owners': ('val x<-1;{{ref y=if(true){x}else{7};}};',2,'','reference initializer joins different owners'),
  'external_owner': ('func work(ref x:i64 in O,flag:bool)->void where {owner O}{ref y=if(flag){x}else{7};}',2,'','reference initializer joins different owners'),
  'readonly_write': ('const val x<-1;ref y=if(true){x}else{7};y<-9;',2,'','readonly destination'),

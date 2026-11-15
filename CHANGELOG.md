@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-15 — Callable target/value receiving
+
+<a id="k-718"></a>
+**K-718 — Share complete callable reception and cleanup.** D-18r101→102/D-23r15→16/source334→335/registry726→727 continues H-342/H-344/H-417/H-423 through P-300–P-303 and the established receiving dependencies. Runtime callable ptr alternatives retain an existing target or construct a complete independent lexical value under one proven owner; fresh-image failure participates in ordinary completion. Charter §§3.3/4.3/5.3/6.3/8/12 preserves identity, captures, checked initialization and exact release through shared lowering. D-14r110/D-17r67/D-21r13/D-26r19 and D-16 remain unchanged; no new result classification, regional storage, lifetime extension, ABI or broader qualification. Current source/native acceptance covers both modes, recursive sharing and failed construction/copy cleanup. Baseline: `86bacdf826be4d73603b83d55cdbcf139dc55864` at affected paths.
+
 ## 2026-11-15 — Numeric conversion contract integration
 
 <a id="k-717"></a>

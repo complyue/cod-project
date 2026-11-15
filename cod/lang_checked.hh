@@ -4459,10 +4459,9 @@ class ScalarChecker {
         if (completes && owner && (!borrowed || mixed)) implementation_gap(declaration->at, "fresh storage with an explicit external owner");
         if (completes && owner && std::any_of(source.owners.begin(), source.owners.end(), [&](size_t actual) { return actual != *owner; }))
           fail(declaration->at, "reference initializer does not belong to the declared owner");
-        if (!borrowed && type.kind == Type::procedure) note_abrupt(declaration->at, {exception_id(ExceptionCategory::out_of_memory)});
+        if ((!borrowed || mixed) && type.kind == Type::procedure) note_abrupt(declaration->at, {exception_id(ExceptionCategory::out_of_memory)});
         if (type == Type::null_ref) fail(declaration->at, "a null initializer requires an explicit target type");
         require_value(type);
-        if (mixed && !bits_type(type)) implementation_gap(initializer.at, "mixed callable initializer completion transport");
         if (callable_value && (type.kind != Type::procedure || type.pure_callable != (expr.declaration_kind == "func")))
           fail(declaration->at, "callable declaration requires a matching func/proc value");
         if (type.kind == Type::procedure && !callable_value && expr.declaration_kind != "ptr")
