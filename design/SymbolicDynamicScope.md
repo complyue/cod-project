@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 151 · Recorded: 2026-11-15 · Phase: language/application co-design.
+Design revision: 152 · Recorded: 2026-11-15 · Phase: language/application co-design.
 
 ## Design authority
+
+- **Builtin bounds policy:** [H-448](../CHANGELOG.md#h-448)/[K-BOUNDS-POLICY-20261115](../CHANGELOG.md#k-bounds-policy-20261115) continues r151→152 with [D-17-BOUNDS](ExceptionControl.md#unchecked-bounds-exceptions-and-optional-checks), C-63/C-65/P-401–P-402 and charter §§4.3/6.3/8/12. Builtin indexing raises unchecked IndexOutOfBoundsException with runtime checks on by default; explicit opt-out affects bounds only. Evaluation, owner/access, initialization and checked NPE remain unchanged. Acceptance and unsafe-range consequences belong to D-17; broader executable pack contracts and implementation remain separate, and whole-file qualification is unchanged.
 
 - **Registry / current scope:** [D-10](DesignAuthorityRegistry.md#d-10); the semantic revision stated above and the independently qualified scopes in the current registry. **Whole file/value paths pending-human; recorded local decisions remain confirmed.** C-35–C-46/P-84–P-111 and later operation/owner/publication edges; P-248–P-254/P-330–P-343 governs current effects/families. K-572 bounds latest prototype evidence.
 - **Value path:** C-10's inspectable typed execution motivates C-35/C-43/C-45/C-46 identity/composition through P-84/P-100/P-102/P-109–P-111; C-56/C-57/P-182–P-197 covers abstractions, dispatch and adapter visibility. C-39/C-54/P-94/P-143/P-155 retains regional lifetime boundaries; C-58/P-199–P-203 covers publication and selected contexts. These candidate paths serve charter §§2–4 without borrowing authority from technical dependencies.
@@ -429,6 +431,8 @@ function pair(x:T, y:U) -> i64 where {T, U};
 Type parameters are inferred from concrete argument types at a demanded call. Repeated occurrences constrain those types to agree; bounds use the caller's selected conformance information. A type parameter that cannot be inferred from inputs is diagnosed. Unique-most-specific dispatch compares signature constraints, including concrete types, bounds, repeated-variable relationships and fixed versus variadic arity, independently of declaration order. Equally specific candidates remain ambiguous. This bounded prototype does not supply generic ADT constructors, explicit type-argument calls or a complete higher-rank type system.
 
 Within a method, `len(rest)` gives the tail count, `rest[i]` reads an element and `other(first, rest...)` forwards it. The finite argument pack is compiler metadata with each argument's existing provenance; it is not a user heap object. A dynamic index into regional arguments requires a common live owner. A pack cannot escape its call scope or become a TLS value. Empty tails are valid when their element type can be inferred from another argument or is explicitly concrete. Automatic conversion still completes for each argument before the next argument's effects.
+
+H-448 separately settles the builtin bounds policy through [D-17](ExceptionControl.md#unchecked-bounds-exceptions-and-optional-checks): out-of-range indexing raises unchecked IndexOutOfBoundsException under default runtime checks, with an explicit compiler opt-out at the programmer's risk. No throws annotation is required for this exception. This scoped decision does not qualify the preceding broader pack indexing, mutation, forwarding or callable-view proposals; their operational contracts and implementation remain under review. The opt-out does not change argument evaluation, owners, initialization or the selected user-defined indexing method's contract.
 
 ### Evaluated bits and storage places
 

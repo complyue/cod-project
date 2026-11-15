@@ -1,9 +1,22 @@
 # Changelog
 
+## 2026-11-15 — Bounds design checkpoint integration
+
+<a id="k-706"></a>
+**K-706 — Preserve alias coverage and integrate the bounds policy.** Agent reconciliation under H-420/H-423/H-448 and charter §§2/4.3/6.3/8/12: merge design checkpoint `3965f1815cde29350959ba6dfa8d2c9275fe3772` with compiler checkpoint `e14cd85a953dcf79a432054a11922280ecadda09`. Registry r714 retains source reference325 and its verified alias capability. Concurrent D-14r103/D-17r63 revisions become D-14r104/D-17r64; D-10r152 retains the side checkpoint. H-448/P-401–P-402 qualifies only default bounds checking, unchecked failure and explicit opt-out, preserving other checks and existing cleanup when an exception is delivered. Both decision histories, qualified scopes and pending mechanisms remain intact. Current compiler bounds paths are not migrated, and broader executable packs remain under review. This merge changes documentation only; compiler evidence remains the alias checkpoint's evidence.
+
 ## 2026-11-15 — Selected operation aliases
 
 <a id="k-705"></a>
 **K-705 — Operation identity through shared destination preparation.** Agent implementation/continuity under H-155/H-226/H-230/H-232/H-306/H-356/H-420/H-423 and charter §§2/6.3/8/12: source reference325/registry713 admits selected swap aliases and imported extensions through the existing caller-slot/target-storage and cleanup paths. D-14r102→103/D-17r62→63 align current capability pointers; C-69/P-268–P-269 and C-63/P-321–P-324 retain their scoped contracts. Baseline: `57d108f116e54ce5b673452cb0aa646cc74396a6` at affected paths. Renaming preserves operation identity and selected interpretation; extension signatures retain exact destinations, explicit owners and void results. This changes no confirmed value, failure policy or parent relationship. Callable-value slot ABI, independent-family composition, eager-arithmetic fallback, regional allocation, fractions and purity remain outside this slice. Other document qualifications and exclusions remain unchanged. Acceptance and current bounds are in `tests/cod/language/README.md`; process and validation reports remain outside the repository.
+
+## 2026-11-15 — Unchecked bounds exceptions and explicit check opt-out
+
+<a id="h-448"></a>
+**H-448 — Default runtime checking without a checked-exception obligation.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-15 America/Los_Angeles; exact message timestamp/personal name unavailable. In response to the proposed common builtin array/varargs bounds policy, the user says: “感觉 IndexOutOfBoundsException 还是 unchecked 比较好吧；运行时默认检测，但允许编译开关 opt-out，后果自负”. Selects unchecked IndexOutOfBoundsException, default runtime detection, and explicit compiler opt-out at the program's risk. D-17-BOUNDS/P-401–P-402 records this scope; no checked throws requirement, implicit disablement in optimized builds, general safety-check opt-out or broader pack semantics are selected.
+
+<a id="k-bounds-policy-20261115"></a>
+**K-BOUNDS-POLICY-20261115 — Failure-policy integration and continuity.** Agent integration under H-448, existing C-63/C-65 and charter §§4.3/6.3/8/12: D-17r62→63/D-10r151→152/D-14r102→103 and registry r712→713 distinguish unchecked exception classification from disabled detection. Enabled checks preserve ordinary exception cleanup and operation preparation; opt-out transfers the bounds precondition to the program, interpreted as no defined-result/exception/cleanup guarantee on invalid unchecked execution. Preserve all owner/access/initialization, checked NPE and D-16 requirements; P-400's no-unsound-fallback rule remains because opt-out is an explicit separate bounds policy, not an initialization-proof escape. Add scoped default/read/write/view acceptance and retain CLI/mixed-compilation/payload engineering work; broader pack contracts remain under review. Published baseline: `57d108f116e54ce5b673452cb0aa646cc74396a6` at affected paths. Documentation only; existing native bounds paths are not claimed migrated, and no code/build/tests or compiler configuration changed.
 
 ## 2026-11-15 — Initialization design checkpoint integration
 
