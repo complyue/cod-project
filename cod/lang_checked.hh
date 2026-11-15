@@ -4145,8 +4145,11 @@ class ScalarChecker {
       break;
     }
     case K::transfer: case K::rebind: {
-      if (&expr == prepared_call_) implementation_gap(expr.at, "deferred assignment invocations; use a defer block");
+      const bool prepared = &expr == prepared_call_;
+      operation.arguments = {{ArgumentMode::borrowed_ptr, Type::never, expr.kind == K::rebind},
+                             {expr.kind == K::transfer ? ArgumentMode::value : ArgumentMode::borrowed_ptr, Type::never}};
       const auto destination = child(0, false);
+      operation.arguments[0].type = destination;
       if (destination == Type::never) {
         child(1, expr.kind == K::transfer);
         operation.type = Type::never;
@@ -4162,13 +4165,39 @@ class ScalarChecker {
       const auto versions = target.selection_versions;
       if (expr.kind == K::rebind) {
         reference_destination(target, expr.at);
+        if (prepared) for (const auto id : physical_slots(target.slots)) {
+          const auto scope = std::find_if(lexical_.scopes.begin(), lexical_.scopes.end(), [&](const auto &entry) {
+            return entry.id == bindings_->at(id).scope;
+          });
+          const auto cleanup = std::find_if(lexical_.scopes.begin(), lexical_.scopes.end(), [&](const auto &entry) {
+            return entry.id == cleanup_scope_;
+          });
+          if (scope > cleanup) fail(expr.at, "deferred reference binding does not outlive its cleanup scope");
+        }
         if (child(1, false) == Type::never) { operation.type = Type::never; break; }
         const auto &selected = operations.at(expr.children[1].get());
         check_rebind(target, selected, expr.at);
+        operation.arguments[1].type = selected.type;
+        if (prepared) {
+          require_borrow_lifetime(selected, expr.children[1]->at, true);
+          const auto before = lexical_;
+          lexical_.selections = {};
+          rebind(target, selected);
+          operation.invocation[0].selections = lexical_.selections;
+          lexical_ = before;
+          operation.type = destination;
+          break;
+        }
         if (read && !discard) require_initialized(selected, expr.at, expr.children[0]->text);
         rebind(target, selected);
-        operation = selected;
         operation.type = destination;
+        operation.targets = selected.targets;
+        operation.place = selected.place;
+        operation.null_sources = selected.null_sources;
+        operation.initialized_target = selected.initialized_target;
+        operation.captured_place = selected.captured_place;
+        operation.exceptions = selected.exceptions;
+        operation.view = true;
         operation.binding = target.binding;
         operation.slots = target.slots;
         operation.owners.clear(); operation.selection_versions.clear();
@@ -4190,6 +4219,19 @@ class ScalarChecker {
       const auto source = check(*expr.children[1], instance, operations, true, false, destination.kind == Type::procedure ? &destination : nullptr);
       if (source == Type::never) { operation.type = Type::never; break; }
       if (!transfers_value(source, destination)) fail(expr.at, "bits transfer source does not satisfy destination type");
+      operation.arguments[1].type = destination;
+      if (prepared) {
+        require_borrow_lifetime(target, expr.children[0]->at, true);
+        CallEffects effects;
+        effects.initialized[0] = {0};
+        operation.invocation = invocation_effects(effects, {0}, {target}, expr.at, true);
+        operation.type = operation.operand_type = destination;
+        operation.targets = target.targets;
+        operation.targets.erase(null_target);
+        if (destination.kind == Type::exception) for (const auto place : operation.targets)
+          lexical_.exceptions[place] = exception_possibilities(destination);
+        break;
+      }
       if (destination.kind == Type::procedure) note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
       auto written = target.targets; written.erase(null_target);
       if (written.size() == 1) initialize(*written.begin());

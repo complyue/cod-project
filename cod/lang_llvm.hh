@@ -739,6 +739,13 @@ class LLVMEmission {
         arguments.push_back(b_.CreateLoad(scalar_, b_.CreateStructGEP(descriptor.layout, record, j + 1)));
       // Prepared values and checked borrowed addresses do not refer into their record.
       b_.CreateCall(release, {record});
+      if (body.kind == Expression::Kind::transfer || body.kind == Expression::Kind::rebind) {
+        if (body.kind == Expression::Kind::transfer) arguments[1] = own_value(arguments[1]);
+        assign_prepared(body, arguments);
+        facts_ = all_facts; frame_contexts_ = all_contexts;
+        b_.CreateBr(scope.cleanup);
+        continue;
+      }
       auto *result = invoke(body, arguments);
       release_value(b_.CreateExtractValue(result, 0));
       if (facts_.front()->at(&body).callable_call) release_value(arguments.front());
@@ -987,7 +994,8 @@ class LLVMEmission {
       auto *value = emit_expression(child, binding_slot ? Projection::slot : mode == ArgumentMode::value ? Projection::value : Projection::target);
       if (!reachable()) return nullptr;
       if (mode != ArgumentMode::value) {
-        if (mode == ArgumentMode::borrowed_read && !facts_.front()->at(&expr).destination_arguments)
+        if ((mode == ArgumentMode::borrowed_read && !facts_.front()->at(&expr).destination_arguments) ||
+            (expr.kind == Expression::Kind::transfer && index == 0))
           value = checked_address(value, child, child.at);
         return pack_view(value, child);
       }
@@ -1029,6 +1037,16 @@ class LLVMEmission {
       }, b_.getInt1Ty());
     }
     return arguments;
+  }
+  llvm::Value *assign_prepared(const Expression &expr, const std::vector<llvm::Value *> &arguments) {
+    auto *destination = view_address(arguments[0]);
+    if (expr.kind == Expression::Kind::transfer) {
+      assign_value(destination, arguments[1], expr.at);
+      return destination;
+    }
+    auto *target = view_address(arguments[1]);
+    b_.CreateStore(target, destination);
+    return target;
   }
   llvm::Value *captured_value(const CheckedOperation &fact, const Location &at) {
     if (fact.callable) return own_value(materialize(fact, fact.type, at));
@@ -1323,23 +1341,12 @@ class LLVMEmission {
       }
       return empty_scalar();
     }
-    case K::transfer: {
-      auto *address = emit_expression(*expr.children[0], Projection::target);
+    case K::transfer: case K::rebind: {
+      const auto arguments = prepare_arguments(expr);
       if (!reachable()) return nullptr;
-      address = checked_address(address, *expr.children[0], expr.at);
-      auto *value = emit_expression(*expr.children[1]);
-      if (!reachable()) return nullptr;
-      value = convert_result(expr, *expr.children[1], value);
-      assign_value(address, value, expr.at);
-      return read ? b_.CreateLoad(scalar_, address) : address;
-    }
-    case K::rebind: {
-      auto *selected = emit_expression(*expr.children[0], Projection::slot);
-      if (!reachable()) return nullptr;
-      auto *address = emit_expression(*expr.children[1], Projection::target);
-      if (!reachable()) return nullptr;
-      b_.CreateStore(address, selected);
-      if (projection == Projection::slot) return selected;
+      auto *address = assign_prepared(expr, arguments);
+      if (expr.kind == K::transfer) return read ? b_.CreateLoad(scalar_, address) : address;
+      if (projection == Projection::slot) return view_address(arguments[0]);
       return !read ? address : discard ? empty_scalar() : b_.CreateLoad(scalar_, checked_address(address, expr, expr.at));
     }
     case K::return_value: {

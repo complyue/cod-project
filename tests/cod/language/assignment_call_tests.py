@@ -21,6 +21,8 @@ for mode in ('infix', 'call', 'intrinsic'):
         'retained_transfer_result': (IO+'val x<-1;ref result='+w('x','7')+';'+w('x','9')+';'+OUT('result'),0,'9\n',''),
         'nested_transfer': (IO+'val x<-1u64,y<-2u32;'+w('x',w('y','7u8'))+';'+OUT('x')+OUT('y'),0,'7\n7\n',''),
         'rebind': (IO+'val x<-1,y<-7;ptr p=x;'+r('p','y')+';'+OUT('p')+w('y','9')+';'+OUT('p'),0,'7\n9\n',''),
+        'borrowed_callable_result': (IO+'func identity(ref input:i64 in O)->ref i64 in O where {owner O}{return input;}val a<-1,b<-7;ptr p=a;func get=identity;'+r('p','get(b)')+';'+OUT('p')+w('p','9')+';'+OUT('b'),0,'7\n9\n',''),
+        'borrowed_callable_holder': (IO+'func base(x:i64)->const i64{return x;}func other(x:i64)->const i64{return x+7;}func identity(ref input:func(i64)->const i64 in O)->ref (func(i64)->const i64) in O where {owner O}{return input;}func a=base;func b=other;func get=identity;ptr p=a;'+r('p','get(b)')+';'+OUT('p(1)')+w('p','a')+';'+OUT('b(1)'),0,'8\n1\n',''),
         'retained_rebind_result': (IO+'val x<-1,y<-7;ptr p=x;ref result='+r('p','y')+';'+r('p','x')+';'+w('result','9')+';'+OUT('y')+OUT('p'),0,'9\n1\n',''),
         'nested_rebind': (IO+'val x<-1,y<-7;ptr p=x,q=x;'+r('p',r('q','y'))+';'+OUT('p')+OUT('q'),0,'7\n7\n',''),
         'clear_and_restore': (IO+'val x<-7;ptr p=x;'+r('p','null')+';'+OUT('isnull(p)')+r('p','x')+';'+OUT('p'),0,'true\n7\n',''),
@@ -57,7 +59,7 @@ for prefix in ('', 'intrinsic '):
     for op in ('=', '<-'):
         for arguments in ('', 'a', 'a,a,a'):
             runner.CASES[prefix+op+'_arity_'+arguments] = ('val a<-1;'+prefix+'('+op+')('+arguments+');',2,'','assignment requires a destination and a source')
-        runner.CASES[prefix+op+'_deferred'] = ('val a<-1,b<-2;ptr p=a;defer '+prefix+'('+op+')(p,b);',2,'','deferred assignment invocations')
+        runner.CASES[prefix+op+'_deferred'] = ('val a<-1,b<-2;ptr p=a;defer '+prefix+'('+op+')(p,b);',0,'','')
 runner.CASES['imported_body'] = ({'helper.cod':'func update(ref x:i64 in O)->i64 where {owner O}{return intrinsic (<-)(x,7);}export update;', 'main.cod':IO+'using "helper.cod" update;val a<-1;'+OUT('update(a)')},0,'7\n','')
 runner.CASE_ARGUMENTS = {}
 runner.CASE_SHADOWS = {}

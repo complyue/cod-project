@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Prepared assignment cleanup
+
+<a id="k-697"></a>
+**K-697 — Prepared assignment continuity.** Agent assessment under H-270/H-272/H-293/H-302/H-304/H-342/H-344/H-356/H-398/H-407/H-417/H-420, D-10r147/D-14r92/D-17r57/D-18r92/D-21r12/D-26r13 and charter §§2/3.3/6.3/12: registry r704→705 and source reference318→319 share assignment preparation and mutation with deferred cleanup. Acceptance preserves selected targets/slots, source snapshots, once-only preparation, fixed owners/access, successful-registration initialization, pending completion and exact image release. Borrowed result views retain no source-call invocation metadata. Assignment methods, required assignment queries, regional storage and fraction implementation retain their boundaries. No semantic revision or new qualification. Prior capability: `8ee5156192a524350ea4dff60dde4963fb8fac68:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Explicit assignment forms
 
 <a id="k-696"></a>
