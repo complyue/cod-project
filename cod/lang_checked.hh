@@ -4072,6 +4072,12 @@ class ScalarChecker {
           fail(expr.at, "cause_at requires an exception and a u64 index");
         operation.type = completes ? exception_type(0) : Type{Type::never};
         operation.exceptions = exception_possibilities(operation.type); operation.builtin = BuiltinOperation::cause_at;
+        if (completes) {
+          const auto bounds = exception_id(ExceptionCategory::index_out_of_bounds);
+          operation.invocation.try_emplace(0);
+          operation.invocation.try_emplace(3 + bounds);
+          if (&expr != prepared_call_) note_abrupt(expr.at, {bounds});
+        }
         break;
       }
       if (eager && (expr.intrinsic || !applicable_operation(expr.text, arguments, access_of(views), owners_of(views)))) {

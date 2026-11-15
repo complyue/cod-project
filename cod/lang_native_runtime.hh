@@ -119,14 +119,21 @@ std::uint64_t cod_lang_exception_count(std::uint64_t cause) {
   }
   return count;
 }
-void cod_lang_exception_cause(std::uint64_t cause, std::uint64_t index, std::uint64_t *result) {
+std::uint64_t cod_lang_exception_cause(std::uint64_t cause, std::uint64_t index, std::uint64_t *result,
+                                      std::uint64_t check_bounds) {
+  const auto requested = index;
   for (;;) {
-    if (!cause || !cod_causes || cause > cod_causes->size()) runtime_failure("exception cause index out of bounds");
+    if (check_bounds && !cause) {
+      result[0] = requested - index;
+      return 0;
+    }
+    // Physical history integrity remains checked independently of source bounds policy.
+    if (!cause || !cod_causes || cause > cod_causes->size()) runtime_failure("invalid execution-local exception cause");
     const auto value = (*cod_causes)[cause - 1];
     if (!index) {
       result[0] = value.site; result[1] = value.requested; result[2] = value.available;
       result[3] = value.cause; result[4] = value.category;
-      return;
+      return 1;
     }
     cause = value.cause;
     --index;

@@ -91,9 +91,9 @@ extern "C" void cod_lang_region_free(void *owner) {
   assert(fields[4] == 3 && fields[1] == 0 && fields[8] == 0);
   assert(cod_lang_exception_count(fields[3]) == 2);
   std::uint64_t cause[5]{};
-  cod_lang_exception_cause(fields[3], 0, cause);
+  assert(cod_lang_exception_cause(fields[3], 0, cause, 1));
   assert(cause[1] == 8 && cause[2] == 1 && cause[4] == 2);
-  cod_lang_exception_cause(fields[3], 1, cause);
+  assert(cod_lang_exception_cause(fields[3], 1, cause, 1));
   assert(cause[1] == 0 && cause[3] == 0 && cause[4] == 3);
   assert(cause[0] == fields[5]);
   ++relocated_images;

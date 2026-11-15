@@ -60,9 +60,9 @@ observe(9000u64);
 observe(9000u64);
 {{
  effect @select;effect @bias<-9u64;
- for(i in 9060u64..9063u64){
+ for(i in 9060u64..9064u64){
   observe(i);
-  try{perform @select(cause_at(first,0u64));{}}
+  try{observe(perform @select(cause_at(first,0u64)));{}}
   catch(e:const UnsoundRuntimeTyping){observe(e.category);observe(@bias);};
  };
 }};
@@ -70,20 +70,21 @@ observe(9000u64);
 '''
 runner.WRAPPERS += '#define cod_lang_exception_cause cod_original_cause\n'
 runner.HARNESS = runner.HARNESS.replace('copy_failures==3', 'copy_failures==2').replace('largest>4000', 'largest>0')
+runner.HARNESS = '#include <iterator>\n'+runner.HARNESS
 runner.HARNESS = runner.HARNESS.replace('static bool deny_create=', '''static std::uint64_t invalid_category=0, breaches=0;
 static bool deny_cause=false;
 #undef cod_lang_exception_cause
-extern "C" void cod_lang_exception_cause(std::uint64_t cause,std::uint64_t index,std::uint64_t *result){
-  assert(deny_cause);deny_cause=false;++breaches;
+extern "C" std::uint64_t cod_lang_exception_cause(std::uint64_t cause,std::uint64_t index,std::uint64_t *result,std::uint64_t check_bounds){
+  assert(deny_cause && check_bounds);deny_cause=false;++breaches;
   for(unsigned i=0;i<4;++i)result[i]=0;
-  result[4]=invalid_category;
+  result[4]=invalid_category;return 1;
 }
 static bool deny_create=''')
-runner.HARNESS = runner.HARNESS.replace('if(value==9000)', '''if(value>=9060 && value<9063){
-    deny_cause=true;invalid_category=value==9060?0:value==9061?8:(std::uint64_t{1}<<32)+5;return;
+runner.HARNESS = runner.HARNESS.replace('if(value==9000)', '''if(value>=9060 && value<9064){
+    deny_cause=true;invalid_category=value==9060?0:value==9061?std::size(cod_exception_names):value==9062?(std::uint64_t{1}<<32)+5:static_cast<std::uint64_t>(CoDException::IndexOutOfBoundsException);return;
   }
-  if(value==9000)''').replace('assert(created+copied==released', 'assert(!deny_cause && breaches==3);\n  assert(created+copied==released')
-runner.EXPECTED_VALUES = ['6500', '9', '1', '8', '7', '1', '7', '6', '9', '6', '9', '6', '9']
+  if(value==9000)''').replace('assert(created+copied==released', 'assert(!deny_cause && breaches==4);\n  assert(created+copied==released')
+runner.EXPECTED_VALUES = ['6500', '9', '1', '8', '7', '1', '7', '6', '9', '6', '9', '6', '9', '9']
 runner.EXPECTED_SHADOWS = []
 runner.EXTRA_SOURCES += [Path(__file__)]
 

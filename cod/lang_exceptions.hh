@@ -16,6 +16,7 @@ enum class ExceptionCategory : std::uint64_t {
   missing_return = 5,
   unsound_runtime_typing = 6,
   statically_unknown_type = 7,
+  index_out_of_bounds = 8,
 };
 
 constexpr size_t exception_id(ExceptionCategory category) {
@@ -39,6 +40,7 @@ inline constexpr std::array exception_categories{
     ExceptionDescriptor{ExceptionCategory::missing_return, "MissingReturnException", false},
     ExceptionDescriptor{ExceptionCategory::unsound_runtime_typing, "UnsoundRuntimeTyping", false},
     ExceptionDescriptor{ExceptionCategory::statically_unknown_type, "StaticallyUnknownType", true},
+    ExceptionDescriptor{ExceptionCategory::index_out_of_bounds, "IndexOutOfBoundsException", false},
 };
 inline constexpr size_t concrete_exception_count = exception_categories.size() - 1;
 

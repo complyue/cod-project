@@ -36,6 +36,7 @@ class LLVMEmission {
       {scalar_, b_.getInt64Ty(), b_.getInt64Ty(), b_.getPtrTy(), b_.getInt64Ty(), b_.getInt64Ty(), b_.getInt64Ty()}, "cod.outcome");
   const CheckedProgram *program_ = nullptr;
   bool specialize_ = true;
+  bool bounds_checks_ = true;
   bool environments_ = false;
   unsigned environment_field_ = 0;
   llvm::Value *environment_ = nullptr;
@@ -641,13 +642,32 @@ class LLVMEmission {
       if (choice.operation->builtin == BuiltinOperation::cause_at) {
         auto *payload = unpack(arguments[0], choice.inputs[0]);
         auto *buffer = slot(exception_, "exception.cause");
-        b_.CreateCall(runtime("cod_lang_exception_cause", b_.getVoidTy(), {b_.getInt64Ty(), b_.getInt64Ty(), b_.getPtrTy()}),
-            {b_.CreateExtractValue(payload, 4), unpack(arguments[1], Type::uint64), buffer});
-        auto *loaded = load(buffer);
-        llvm::Value *result = llvm::UndefValue::get(exception_);
-        result = b_.CreateInsertValue(result, b_.CreateExtractValue(loaded, 4), 0);
-        for (unsigned i = 0; i < 4; ++i) result = b_.CreateInsertValue(result, b_.CreateExtractValue(loaded, i), i + 1);
-        return outcome(pack(result, exception_type(0)), integer(0), integer(0), null_pointer());
+        auto *index = unpack(arguments[1], Type::uint64);
+        auto *found = b_.CreateCall(runtime("cod_lang_exception_cause", b_.getInt64Ty(),
+            {b_.getInt64Ty(), b_.getInt64Ty(), b_.getPtrTy(), b_.getInt64Ty()}),
+            {b_.CreateExtractValue(payload, 4), index, buffer, integer(bounds_checks_)});
+        const auto selected = [&] {
+          auto *loaded = load(buffer);
+          llvm::Value *result = llvm::UndefValue::get(exception_);
+          result = b_.CreateInsertValue(result, b_.CreateExtractValue(loaded, 4), 0);
+          for (unsigned i = 0; i < 4; ++i) result = b_.CreateInsertValue(result, b_.CreateExtractValue(loaded, i), i + 1);
+          return outcome(pack(result, exception_type(0)), integer(0), integer(0), null_pointer());
+        };
+        if (!bounds_checks_) return selected();
+        auto *valid = block("bounds.valid"), *invalid = block("bounds.failure"), *done = block("bounds.done");
+        b_.CreateCondBr(b_.CreateICmpNE(found, integer(0)), valid, invalid);
+        b_.SetInsertPoint(invalid);
+        auto *available = b_.CreateLoad(b_.getInt64Ty(), b_.CreateStructGEP(exception_, buffer, 0));
+        auto *error = outcome(empty_scalar(), integer(exception_id(ExceptionCategory::index_out_of_bounds)),
+            integer(site(expr.at)), null_pointer(), index, available);
+        b_.CreateBr(done);
+        b_.SetInsertPoint(valid);
+        auto *value = selected();
+        b_.CreateBr(done);
+        b_.SetInsertPoint(done);
+        auto *result = b_.CreatePHI(outcome_, 2);
+        result->addIncoming(error, invalid); result->addIncoming(value, valid);
+        return result;
       }
       if (choice.operation->builtin != BuiltinOperation::print) throw std::logic_error("unchecked call reached native invocation");
       const auto type = choice.inputs.front();
@@ -1668,8 +1688,8 @@ class LLVMEmission {
   }
 
 public:
-  std::pair<std::string, std::string> emit(const CheckedProgram &program, bool emit_text, bool emit_bitcode, bool specialize = true) {
-    program_ = &program; specialize_ = specialize;
+  std::pair<std::string, std::string> emit(const CheckedProgram &program, bool emit_text, bool emit_bitcode, bool specialize = true, bool bounds_checks = true) {
+    program_ = &program; specialize_ = specialize; bounds_checks_ = bounds_checks;
     environments_ = std::any_of(program.methods.begin(), program.methods.end(), [](const auto &method) { return !method.captures.empty(); }) ||
         std::any_of(program.callables.begin(), program.callables.end(), [&](const auto &value) { return !program.captured_symbols(value).empty(); });
     std::vector<llvm::Type *> fields{b_.getInt64Ty(), b_.getInt32Ty()};

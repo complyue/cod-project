@@ -22,9 +22,10 @@ struct Compilation {
 class Compiler {
   WarningOptions warnings_;
   bool specialize_;
+  bool bounds_checks_;
 public:
-  explicit Compiler(WarningOptions warnings = {}, bool specialize = true)
-      : warnings_(std::move(warnings)), specialize_(specialize) {}
+  explicit Compiler(WarningOptions warnings = {}, bool specialize = true, bool bounds_checks = true)
+      : warnings_(std::move(warnings)), specialize_(specialize), bounds_checks_(bounds_checks) {}
 
   Compilation compile(const std::filesystem::path &entry, bool emit_text, bool emit_bitcode) {
     const auto source = ModuleLoader{}.load(entry);
@@ -35,7 +36,7 @@ public:
         throw std::runtime_error(warning.text() + " (treated as error)");
       warnings.push_back(warning.text());
     }
-    auto [text, bitcode] = LLVMEmission{}.emit(checked, emit_text, emit_bitcode, specialize_);
+    auto [text, bitcode] = LLVMEmission{}.emit(checked, emit_text, emit_bitcode, specialize_, bounds_checks_);
     Compilation result;
     for (const auto &module : source.modules) result.scanned_modules.push_back(module.path.string());
     for (const auto module : checked.execution_order) result.execution_order.push_back(source.modules[module].path.string());

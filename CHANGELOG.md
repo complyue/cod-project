@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-15 — Catchable source bounds failures
+
+<a id="k-709"></a>
+**K-709 — Bounds policy through shared native completion.** Agent implementation/continuity under H-448/H-267/H-356/H-407/H-420/H-423 and charter §§2/4.3/6.3/8/12: source reference326→327, registry716→717, D-17r64→65 and D-26r18→19 preserve C-63/C-65/P-401–P-402 and the qualified native-coverage contract. Baseline: `973b381bc00e3b5cef6d087d59d7464a77c01da5` at affected paths. cause_at reports logical bounds failure as unchecked IndexOutOfBoundsException, preserving ordered preparation, shared cleanup and exception fields. --no-bounds-checks is scoped to the current whole-source artifact; generated calls retain the policy while internal integrity and unrelated checks remain. Requested index/available count preserve the existing exception payload layout without adding allocation. These bounded engineering choices continue H-448; broader indexing, mixed-artifact transport, packs, regional protocols and D-16 remain separate. No new qualification or pending language choice is inferred. Acceptance and current limitations are in the source reference; process evidence remains outside the repository.
+
 ## 2026-11-15 — Variadic design checkpoint integration
 
 <a id="k-708"></a>
