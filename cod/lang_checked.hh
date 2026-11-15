@@ -375,16 +375,20 @@ class ScalarChecker {
   std::map<std::pair<size_t, size_t>, FamilyView> family_views_;
   std::map<std::tuple<size_t, size_t, size_t, size_t>, size_t> adapted_methods_;
   std::map<std::pair<const Form *, size_t>, size_t> lexical_variants_;
-  const std::vector<size_t> &family_methods(size_t family) const {
-    if (!interpretation_) return program_.families.at(family).methods;
+  const FamilyView &interpreted_family(size_t family) const {
     const auto &view = family_views_.at({family, interpretation_});
     if (!view.unproved.empty()) implementation_gap(program_.families[family].at, view.unproved);
-    return view.methods;
+    return view;
+  }
+  const std::vector<size_t> &family_methods(size_t family) const {
+    return interpretation_ ? interpreted_family(family).methods : program_.families.at(family).methods;
   }
   const std::vector<CheckedMethod> &declarations(const std::string &name) const {
     static const std::vector<CheckedMethod> empty;
     const auto found = module_names().callables.find(name);
-    return found == module_names().callables.end() ? empty : program_.families[found->second].declarations;
+    if (found == module_names().callables.end()) return empty;
+    const auto family = interpretation_ ? interpreted_family(found->second).identity : found->second;
+    return program_.families[family].declarations;
   }
   bool has_declarations(const std::string &name) const { return !declarations(name).empty(); }
   size_t lexical_method(const Form *form, std::optional<size_t> parent = {}) const {
@@ -687,7 +691,7 @@ class ScalarChecker {
       if (!accumulate(program_.methods[id], candidates.substitutions.at(id))) return {};
     // Signature-only queries can use declarations without demanding a body.
     // Every applicable declaration remains an obligation, not an overload choice.
-    if (state && family.methods.empty()) {
+    if (state && applicable.empty()) {
       const ModuleLookup lookup(module_, state->method ? program_.methods[*state->method].module : module_);
       for (const auto &declaration : declarations(expr.text)) {
         const auto substitutions = match_evidence(declaration, arguments, {}, true);
@@ -2532,7 +2536,11 @@ class ScalarChecker {
         view = state.views.at(expr.text); return found->second;
       }
       if (const auto family = named_family(expr.text, &state); !family.methods.empty()) {
-        if (expected && expected->kind == Type::procedure) return callable_query(family.methods, expected, expr.at, state);
+        if (expected && expected->kind == Type::procedure) {
+          if (program_.methods[family.methods.front()].family && has_declarations(expr.text))
+            return declared_callable_query(expr.text, expected, expr.at, state, family.methods);
+          return callable_query(family.methods, expected, expr.at, state);
+        }
         if ((!contextual || state.required) && family.methods.size() == 1) return callable_evidence(family.methods.front(), &state);
       } else if (has_declarations(expr.text) && (expected || !contextual || state.required))
         return declared_callable_query(expr.text, expected, expr.at, state);
@@ -2797,7 +2805,7 @@ class ScalarChecker {
       const auto family = expr.intrinsic ? NamedFamily{} : named_family(expr.text, &state);
       const auto &retained = family.retained_types();
       const auto candidates = method_candidates(family.methods, arguments, retained, access, owners, &state);
-      if (family.methods.empty() && !expr.intrinsic && has_declarations(expr.text) &&
+      if (candidates.methods.empty() && !expr.intrinsic && has_declarations(expr.text) &&
           (!eager_operation(expr.text) || !eager_types(expr, arguments).error.empty())) {
         const auto result = inspect_declarations(expr.text, arguments, access, owners, expr.at, state,
             [&](const CheckedMethod &declaration, const Substitutions &, const ResultContract &) {
@@ -3143,7 +3151,7 @@ class ScalarChecker {
     return result;
   }
   std::optional<Type> declared_callable_query(const std::string &name, const Type *expected, const Location &at,
-                                             const TypeEvidenceState &state) const {
+                                             const TypeEvidenceState &state, const std::vector<size_t> &methods = {}) const {
     std::optional<Type> view;
     if (expected) view = *expected;
     else for (const auto &declaration : declarations(name)) {
@@ -3157,6 +3165,12 @@ class ScalarChecker {
     evidence.proof.required = state.required;
     bool resolved = true;
     cover_inputs(*view, at, [&](const std::vector<Type> &arguments) {
+      const auto candidates = method_candidates(methods, arguments, {}, evidence.access, evidence.owners, &evidence.proof);
+      if (!candidates.methods.empty()) {
+        const auto selected = select_method(methods, arguments, at, name, {}, evidence.access, evidence.owners, &evidence.proof);
+        if (!inspect_method_contract(selected, arguments, {}, *view, at, state)) resolved = false;
+        return;
+      }
       const auto result = inspect_declarations(name, arguments, evidence.access, evidence.owners, at, evidence.proof,
           [&](const CheckedMethod &declaration, const Substitutions &substitutions, const ResultContract &contract) {
         std::vector<Type> prepared;
@@ -3173,16 +3187,21 @@ class ScalarChecker {
     });
     return resolved ? view : std::nullopt;
   }
+  bool inspect_method_contract(size_t selected, const std::vector<Type> &arguments, const std::vector<Type> &retained,
+      const Type &view, const Location &at, const TypeEvidenceState &state, const std::optional<ResultContract> &supplied = {}) const {
+    const auto result = supplied ? supplied : infer_result(selected, arguments, retained, &state);
+    if (!result) return false;
+    const auto &method = program_.methods[selected];
+    if (!concrete_callable_result(method, *result, at)) return false;
+    check_family_contract(method, arguments, prepared_types(method, arguments, retained), *result, view, at);
+    return true;
+  }
   std::optional<Type> callable_query(const std::vector<size_t> &family, const Type *expected, const Location &at,
                                    const TypeEvidenceState &state, bool definition_site = false) const {
     if (expected && !family.empty() && program_.methods[family.front()].family) {
       bool resolved = true;
       cover_family(family, *expected, at, [&](size_t selected, const std::vector<Type> &arguments) {
-        const auto result = infer_result(selected, arguments, {}, &state);
-        if (!result) { resolved = false; return; }
-        const auto &method = program_.methods[selected];
-        if (!concrete_callable_result(method, *result, at)) { resolved = false; return; }
-        check_family_contract(method, arguments, prepared_types(method, arguments, {}), *result, *expected, at);
+        if (!inspect_method_contract(selected, arguments, {}, *expected, at, state)) resolved = false;
       });
       return resolved ? std::optional<Type>{*expected} : std::nullopt;
     }
@@ -3190,12 +3209,7 @@ class ScalarChecker {
     if (!selection) return {};
     bool resolved = true;
     cover_family(family, selection->type, at, [&](size_t selected, const std::vector<Type> &arguments) {
-      const auto result = selection->definition_result ? selection->definition_result
-          : infer_result(selected, arguments, selection->retained, &state);
-      if (!result) { resolved = false; return; }
-      const auto &method = program_.methods[selected];
-      if (!concrete_callable_result(method, *result, at)) { resolved = false; return; }
-      check_family_contract(method, arguments, prepared_types(method, arguments, selection->retained), *result, selection->type, at);
+      if (!inspect_method_contract(selected, arguments, selection->retained, selection->type, at, state, selection->definition_result)) resolved = false;
     }, selection->retained);
     return resolved ? std::optional<Type>{selection->type} : std::nullopt;
   }

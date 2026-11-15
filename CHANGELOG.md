@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Partially implemented family queries
+
+<a id="k-694"></a>
+**K-694 — Combined query-evidence continuity.** Agent assessment under H-230/H-232/H-245/H-247–H-249/H-258/H-295/H-398/H-407/H-420–H-424, D-10r147/D-14r92/D-15r22/D-18r92/D-21r12/D-24r7/D-26r13 and charter §§2/3.2/5.3/6.3/12: registry r701→702 and source reference315→316 use declared contracts for inspected inputs with no applicable method, preserving selection and validation where a method applies. Methods and declarations share the selected family identity, including receiver contracts in imported helper queries. Acceptance covers contextual preparation, partial admitted domains, independent results, ambiguity, owners/access/throws, source isolation, identical native code and exact cleanup. Real calls/materialization still require executable coverage; declarations cannot discharge unresolved method proofs. No new dispatch priority, result inference policy, world-composition mechanism, lifetime, ABI, fraction rule or design qualification. Prior capability reference: `360d5cc1192932b73ce88013875226e6ad616c7b:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Callable signature inspection
 
 <a id="k-693"></a>
