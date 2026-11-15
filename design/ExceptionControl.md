@@ -1,8 +1,10 @@
 # CoD exception control and regional cleanup
 
-Design revision: 62 · Recorded: 2026-11-15 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; current implementation availability is recorded in the source capability reference.
+Design revision: 63 · Recorded: 2026-11-15 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; current implementation availability is recorded in the source capability reference.
 
 ## Design authority
+
+- **Bounds policy:** [D-17-BOUNDS](DesignAuthorityRegistry.md#d-17-bounds), r63 section below, records [H-448](../CHANGELOG.md#h-448)/[K-BOUNDS-POLICY-20261115](../CHANGELOG.md#k-bounds-policy-20261115). C-63/C-65/P-401–P-402 serves charter §§4.3/6.3/8/12: recoverable default bounds failures without mandatory throws annotations, with an explicit user-selected check opt-out. IndexOutOfBoundsException is unchecked; builtin indexing checks bounds by default. The opt-out transfers the range obligation to the program; invalid unchecked execution has no defined-result/exception/cleanup guarantee. Other type, owner/access, initialization, null and numeric contracts remain. Acceptance covers default recovery/cleanup, empty and boundary indices, read/write/view selection, proved check elimination and explicit opt-out isolation. Flag spelling/scope propagation, exception payload and mixed-compilation transport remain engineering work; no implementation or broader varargs qualification is claimed.
 
 - **Registry / current scope:** [D-17](DesignAuthorityRegistry.md#d-17); the semantic revision stated above and the independently qualified scopes in the current registry. **Confirmed/continued bounded exception, lifetime, scope, defer and return contract.** C-63/P-235/P-236; H-267/H-269/H-313–H-315/H-319/H-356–H-362/H-365/H-370/H-371; P-321–P-324/P-326/P-328/P-329. D-26r9/H-400/H-401/H-404/H-405/H-407 through C-90/P-374/P-375 governs the unknown-type failure categories and explicit declaration obligations.
 - **Value path:** C-63/P-235 → C-10 and D-17/P-236 → C-63: recoverable business failure must preserve explicit regional responsibility, effects and inspectable lifetimes. H-267 confirms this bounded path and scope under charter §§2–4, 6.2–6.3 and 12; it does not qualify unrelated ownership proposals.
@@ -23,6 +25,28 @@ The initial error taxonomy distinguishes `OutOfMemory` (the memory provider cann
 H-428 confirms allocation as an allowed initialization side effect. A failing initialization group does not rewind an existing region or undo earlier valid publication/effects. Its incomplete bindings are not successful results, while an already initialized target published into surviving same-owner state remains live with its region. Failed acquisition of a new whole region still releases its acquired resources exactly once. Application/library undo frameworks require their own contracts; the language supplies no allocation checkpoint or automatic rollback.
 
 Compile-time type, moved-name, escape and binding errors remain compile errors. Other runtime checks are not all reclassified as catchable exceptions merely because OOM becomes catchable.
+
+## Unchecked bounds exceptions and optional checks
+
+H-448 selects IndexOutOfBoundsException as an unchecked exception for builtin indexed access, including admitted array indexing and executable variadic-pack indexing. A callee or caller need not declare throws or provide a catch merely to compile; a program may catch the exception, and ordinary exception propagation, defer/finally and cleanup apply when it is thrown. Empty sequences have no valid element index. Index-type admission/conversion remains a separate contract; this decision admits no fractional index or new numeric conversion.
+
+Runtime bounds checking is enabled by default, including optimized builds unless the user explicitly opts out. A failing bounds check prevents the invalid element access or view construction and raises IndexOutOfBoundsException. Reads, writes and reference-producing builtin selection use the same policy. Preserve each operation's established operand preparation, conversion and evaluation order; adding a check must not reevaluate operands or silently change unrelated effects. User-defined indexing retains its selected method's own failure contract; any builtin indexing that method performs follows this policy.
+
+```text
+# Design example; executable varargs integration remains separate.
+proc pick(i:u64, rest:u64...) -> u64 {
+    return rest[i];           # No throws declaration required for bounds failure.
+}
+# With default checking, pick(0u64) raises IndexOutOfBoundsException.
+```
+
+An explicit compiler option may disable generated bounds checks. The programmer then assumes the range precondition for affected builtin accesses. Executing an out-of-range access with checking disabled is outside the defined safe execution contract: no result, exception delivery or cleanup behavior is guaranteed. In particular, a catch cannot be relied on to intercept that access. This is the interpretation of H-448's explicit at-own-risk opt-out, not a claim that unchecked exceptions themselves bypass cleanup. In-range execution retains its ordinary semantics.
+
+The option controls source-level builtin bounds checking only; compiler/runtime internal consistency checks are not its target. It does not disable type/owner/lifetime/access/definite-initialization checking, checked NPE obligations, numeric validity or other runtime checks. It is not a compiler fallback for an unproved initialization or aliasing case under D-28-INIT/P-400. Static proof that an access is in range permits ordinary elimination of its redundant bounds check with no opt-out; lack of a range proof in the default mode requires the runtime check rather than unsafe acceptance.
+
+The exact option spelling and compilation-unit/mixed-build integration are not selected here. Generated/shared/cached code must preserve the requested checking policy: an unchecked variant cannot silently satisfy a request for default-checked execution. Retain that distinction across native sharing, optimization and imported code under the eventual option-scope contract. Exception detail fields and any treatment of statically diagnosed out-of-range expressions remain separate implementation decisions; this policy does not mandate a new ABI, runtime registry or exception allocation mechanism.
+
+Acceptance requires default no-throws invocation, optional catch with normal cleanup, empty/boundary accesses, preserved operand effects, consistent read/write/view behavior, proven check elision, and an explicit opt-out affecting only its chosen bounds checks. Opt-out acceptance must not assert a particular result from invalid unchecked execution. Legacy fatal bounds paths for affected source indexing are implementation limitations rather than the selected failure policy; update current capability evidence only when the corresponding source/native paths are implemented.
 
 ## Checked NullPointerException
 
@@ -302,7 +326,7 @@ H-269 requires the explicit cause chain to survive returning or storing a caught
 
 The bounded runtime uses execution-local numeric handles for immutable cause records. Regional fields contain bits and handles rather than host addresses; copying a regional image within the same execution does not require pointer patching. Generic exception storage also preserves its bounded failure-category discriminator. These handles, like source-site IDs, are not a cross-process persistence or delivery format. General user exception graphs and general RTTI remain excluded.
 
-Retained backing storage is released at execution end, including uncaught failure. The initial implementation retains discarded records until that boundary; repeated explicit chaining consumes that storage and may raise OOM. It does not add per-value destructors, graph ownership or eager collection. Public inspection uses a bounded cause count and checked indexed access; inspection and propagation allocate no cause records. Exact reclamation optimizations can preserve this source lifetime contract later.
+Retained backing storage is released at execution end, including uncaught failure. The initial implementation retains discarded records until that boundary; repeated explicit chaining consumes that storage and may raise OOM. It does not add per-value destructors, graph ownership or eager collection. Public inspection uses a bounded cause count and bounds-checked indexed access; inspection and propagation allocate no cause records. Exact reclamation optimizations can preserve this source lifetime contract later.
 
 The native cause table is created only by explicit chaining. Its TLS slot is a trivial pointer, with no lazy destructor registration on basic OOM propagation or cleanup. Failed table creation, first-record allocation or later growth leaves existing histories intact. The native fault harness fails the actual allocation at each of these three boundaries, verifies a fresh unchained OOM, retries successfully and accounts for all backing allocations/releases.
 

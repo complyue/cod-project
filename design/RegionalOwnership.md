@@ -1,8 +1,10 @@
 # CoD regional ownership: syntax, semantics and use
 
-Design revision: 102 · Recorded: 2026-11-15 · Status: design draft with scoped confirmed requirements.
+Design revision: 103 · Recorded: 2026-11-15 · Status: design draft with scoped confirmed requirements.
 
 ## Design authority
+
+- **Builtin bounds continuity:** [H-448](../CHANGELOG.md#h-448)/[K-BOUNDS-POLICY-20261115](../CHANGELOG.md#k-bounds-policy-20261115) covers r102→103 through C-63/C-65/P-401–P-402 and charter §§4.3/6.3/8/12. [D-17-BOUNDS](ExceptionControl.md#unchecked-bounds-exceptions-and-optional-checks) selects unchecked IndexOutOfBoundsException with default runtime bounds checks and an explicit opt-out. Indexed reads/writes/views preserve dispatch, ordered preparation, access, owner and initialization requirements; opt-out supplies no exception/cleanup guarantee for invalid unchecked access. The bounds-policy acceptance belongs to D-17; no broader indexing, init or whole-file qualification follows.
 
 - **Cyclic-construction scope:** [K-KNOT-COST-20261115](../CHANGELOG.md#k-knot-cost-20261115) continues r99→100 under H-317/P-284 and H-444's cost-based assessment request. C-65/C-72 and charter §§3.3/6.3/8 preserve initialized-reference guarantees and explicit construction. Ordinary proc/func retain nullable cycle edges; D-19-KNOT separately records the future pure goal. No staged publication, changed owner/access/failure rule or implementation qualification follows. Acceptance remains complete-field publication and existing invalid-access rejection; D-28 records the cost assessment. H-447/[K-INIT-CONFIRM-20261115](../CHANGELOG.md#k-init-confirm-20261115) continues r100→101 with the confirmed two-stage planning scope: bounded common cycles follow aggregate prerequisites; the ordinary readable-ref boundary remains until the detailed contract is admitted.
 
@@ -1213,6 +1215,8 @@ The expected everyday use of `a <- b <- c` is bits transfer. Under H-308, a thir
 ### Logical indexed transfer
 
 `container[index] <- source` selects `([]<-)(container, index, source)` before assuming any addressable element. The container and index retain their types for dispatch. A packed representation can implement the write and return void without exposing an element reference or getter. The native array fallback writes the actual element and returns its readonly view; `intrinsic ([]<-)(...)` explicitly selects that checked fallback.
+
+Builtin indexed reads, writes and view selection follow [D-17-BOUNDS](ExceptionControl.md#unchecked-bounds-exceptions-and-optional-checks): runtime bounds checks are enabled by default and failure raises unchecked IndexOutOfBoundsException. An explicit compiler option may disable those checks at the programmer's risk; it does not disable owner/access/initialization checks or grant writable storage. User-defined indexing keeps its selected method contract, including any builtin operations it invokes. Operand preparation and conversion order remain unchanged.
 
 A nonvoid indexed method declares a const view in the destination container's owner. The method supplies the logical destination view; the compiler checks its lifetime, owner and access without inventing a physical element for an arbitrary container. The ordinary `(<-)` safeguard continues to require its original destination. Function and procedure methods use the existing pure/current-dynamic-context rules. Operands are evaluated once, left-to-right, and selected input conversions finish before the next operand. Destination conversions cannot replace writable storage with a numeric temporary. A void write used as a chain's intermediate value fails ordinary type checking.
 
