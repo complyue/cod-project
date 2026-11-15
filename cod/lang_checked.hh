@@ -2507,18 +2507,22 @@ class ScalarChecker {
     const auto &method = *program_.methods[id].source;
     if (!lexical_methods_.contains(&method)) return context;
     const auto available = supplied && supplied->method == id && supplied->declaration ? *supplied->declaration
+        : checking_instance_ && checking_instance_->method == id && (!supplied || supplied->method == id) ? evidence_state(true)
         : supplied ? *supplied : bindings_ && !lexical_.scopes.empty() ? evidence_state() : TypeEvidenceState{};
-    const auto retain = [&](const Capture &capture) {
+    const auto retain = [&](const Capture &capture, bool query = false) {
       if (const auto found = available.bindings.find(capture.name); found != available.bindings.end()) {
         context.bindings.emplace(*found);
         context.views.emplace(capture.name, available.views.at(capture.name));
+      } else if (query && lexical_self(capture.name, available.method)) {
+        context.bindings.emplace(capture.name, callable_query({*available.method}, nullptr, capture.at, available));
+        context.views.emplace(capture.name, ViewEvidence{false, false, {}});
       }
       if (const auto found = available.owner_bindings.find(capture.name); found != available.owner_bindings.end())
         context.owner_bindings.emplace(*found);
     };
     const auto &free = free_bindings(method);
     for (const auto &capture : free.captures) retain(capture);
-    for (const auto &query : free.queries) retain(query);
+    for (const auto &query : free.queries) retain(query, true);
     for (const auto &symbol : free.symbols)
       if (symbol_shadowed(symbol.name, available)) context.symbol_shadows.insert(symbol.name);
     std::map<EvidenceOwner, size_t> owners;
@@ -3263,7 +3267,7 @@ class ScalarChecker {
       return {};
     }
   }
-  TypeEvidenceState evidence_state() const {
+  TypeEvidenceState evidence_state(bool retained_only = false) const {
     TypeEvidenceState state;
     state.symbol_shadows = query_environment().symbol_shadows;
     if (checking_instance_) {
@@ -3276,6 +3280,8 @@ class ScalarChecker {
       state.views[binding.name] = binding.view;
     }
     for (const auto &scope : lexical_.scopes) for (const auto &[name, id] : scope.bindings) {
+      if (retained_only && (!checking_instance_ || std::none_of(checking_instance_->frame.captures.begin(), checking_instance_->frame.captures.end(),
+          [&](size_t place) { return storage(place).binding == id; }))) continue;
       const auto &binding = bindings_->at(id);
       state.bindings[name] = binding.type;
       if (binding.owner_binding) state.owner_bindings[name] = *binding.owner_binding;

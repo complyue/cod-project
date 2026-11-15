@@ -11,7 +11,12 @@ from callable_value_staging_tests import inventory
 from foundation_tests import ROOT, MODE, COD, shadow_diagnostics
 from recursive_context_tests import runner
 
-CASES = ('func_anchor_first','generic_declaration_contexts','capture_and_query_shadow','required_query_does_not_execute')
+CASES = ('func_anchor_first','generic_declaration_contexts','capture_and_query_shadow','required_query_does_not_execute',
+         'recursive_required_query','nested_inferred_query','nested_query_retains_parent_types','required_query_retains_owners')
+DEEP_RESULTS = {
+    'recursive_required_query':'809\n', 'nested_inferred_query':'809\n',
+    'nested_query_retains_parent_types':'407\n409\n', 'required_query_retains_owners':'407\n',
+}
 
 def main():
     results = []
@@ -37,15 +42,17 @@ def main():
                 success = dict(exit=0,stdout=expected,stderr='',shadows=True)
                 bodies = inventory(text)
                 record(key+'/native',output==success,output=output)
-                deeper,deep_ir = run(program.replace('20u64','400u64'),name,general)
-                record(key+'/depth_reuses_bodies',deeper==success and inventory(deep_ir)==bodies,output=deeper,methods=list(bodies))
+                depth = '3u64' if name in DEEP_RESULTS else '20u64'
+                deeper,deep_ir = run(program.replace(depth,'400u64'),name,general)
+                deep_success = dict(success,stdout=DEEP_RESULTS.get(name,expected))
+                record(key+'/depth_reuses_bodies',deeper==deep_success and inventory(deep_ir)==bodies,output=deeper,methods=list(bodies))
                 checked,checked_ir = run(program,name,general,False)
                 record(key+'/checking_has_no_effects',checked==dict(exit=0,stdout='',stderr='',shadows=True) and inventory(checked_ir)==bodies,output=checked)
                 if name != 'capture_and_query_shadow':
                     record(key+'/no_query_environment_allocation','@cod_lang_callable_create' not in text and '@cod_lang_callable_copy' not in text)
                 else:
                     record(key+'/complete_runtime_captures','@cod_lang_callable_create' in text and '@cod_lang_callable_copy' in text)
-                if name == 'generic_declaration_contexts':
+                if name in ('generic_declaration_contexts','nested_query_retains_parent_types'):
                     record(key+'/shared_recursive_body',sum('.recur.' in n and n.endswith('.general') for n in bodies)==1,methods=list(bodies))
     passed = sum(result['passed'] for result in results)
     if report := os.environ.get('COD_LANGUAGE_REPORT'):

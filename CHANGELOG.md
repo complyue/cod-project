@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-15 — Recursive type-only signatures
+
+<a id="k-724"></a>
+**K-724 — Retain declaration evidence in required and nested queries.** Agent continuity assessment under H-421–H-424/H-423, H-331/H-342/H-381/K-680 and charter §§3.3/5.3/6.3/8/12: source340→341 and registry734→735 preserve D-24r8’s independent result/context contract and D-18r104’s established query-only lexical signatures. C-84/P-356–P-358 retains its scoped source policy and pending broader value path; C-65/C-73/C-75/P-297–P-298 retains definition identity and valid owner/access evidence. Required recursive queries use retained declaration context rather than body-local shadows; nested query-only definitions can infer results from independently established enclosing signatures. Acceptance covers captured types, nearest-name/module identity, generic context, access/owner relationships, both branch orders, unanchored-cycle rejection and shared native recursion with no query-time effects or environment allocation. Existing runtime capture restrictions and the unresolved recursive self-value capture-time decision remain. D-24/D-18/D-26 revisions, D-16 and other qualification boundaries are unchanged; no new ABI, capture policy, owner representation or inference rule. Baseline: `8f73bd07f38c55f31f7d6bd3f4d97d29f512032a` at affected paths.
+
 ## 2026-11-15 — Recursive declaration evidence
 
 <a id="k-723"></a>
