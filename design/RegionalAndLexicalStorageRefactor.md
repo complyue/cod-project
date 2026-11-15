@@ -1,14 +1,14 @@
 # Regional and lexical storage: reference-model refactoring
 
-Design revision: 3 · Recorded: 2026-11-14 · Status: refactoring direction and dedicated tracking authorized; detailed contracts, naming and implementation plan pending-human.
+Design revision: 13 · Recorded: 2026-11-14 · Status: refactoring direction and dedicated tracking authorized; detailed contracts, naming and implementation plan pending-human.
 
 ## Design authority
 
-- **Registry / scope:** [D-28](DesignAuthorityRegistry.md#d-28), r3, all sections. [H-429](../CHANGELOG.md#h-429) withdraws region-backed lexical storage and directs regional references toward relative/local representation and lexical references toward direct/global representation. It requests this dedicated refactoring document and proposes considering the C++ `global_ptr` → `external_ptr` rename. H-430/P-385 selects explicit consuming replacement instead of automatic/in-place language growth; H-431 selects ordinary owned-parameter failure cleanup. H-432 proposes a single resize(r, new_cap) for lossless growth/shrink, with exceptions when it cannot succeed. These scoped directions do not approve every layout, source form, ABI or migration choice below.
+- **Registry / scope:** [D-28](DesignAuthorityRegistry.md#d-28), r13, all sections. [H-429](../CHANGELOG.md#h-429) separates regional and lexical storage, requests this dedicated refactoring document and proposes considering the C++ `global_ptr` → `external_ptr` rename. H-430/P-385 selects explicit consuming replacement instead of automatic/in-place language growth; H-431 selects ordinary owned-parameter failure cleanup. H-432 proposes a single resize(r, new_cap) for lossless growth/shrink, with exceptions when it cannot succeed. H-433 requests automatic addressing adaptation across storage domains and sets lexical pointer-bearing ADTs as the design target, with bits-only lexical allocation as the conservative fallback. H-434/H-435 selects dynamically allocated lexical capacity with owner-base-relative lexical pointers and replaceable heap-fragment backing. H-436 distinguishes a lexical slot locator from its contents: same-scope ref/ptr payloads use that scope's offset semantics, while other-owner references retain their own interpretation. Register/stack optimizations remain permitted. H-437 requires compiler tracking of all owner relations and shared runtime actual-owner identity/address information sufficient for dereferencing, avoiding redundant per-pointer owner storage. H-438 selects owner-qualified construction: a writable target parameter permits owner O, all-readonly inputs permit only const owner O, and explicit const owner remains allowed with writable targets. Independently selected requirements are recorded as D-28-SCOPE/C-92/P-386, D-28-OWNERS/C-93/P-387–P-388, D-28-ALLOC/C-94/P-389–P-390 and D-28-IDENTITY/C-95/P-391–P-392. H-439 makes actual owner plus target locator the reference correctness criterion and selects is; H-440 selects identity-based null testing; H-441 adds is not, including is not null; H-442 makes unary not and ! synonymous. Exact physical protocols remain open. These scoped directions do not approve every layout, source form, ABI, allocator policy or migration choice below.
 - **Candidate value path:** C-91/P-381 derives from C-39/C-65 and C-01/C-06: distinguish relocatable regional graphs from lexical execution storage while keeping target identity, access and lifetime explicit. Charter §§2/3.3/4.3/6.3/7.1/8/12 supports that rationale. P-383 organizes this document; both paths remain pending-human beyond H-429's stated direction.
 - **Dependencies:** P-384 links D-01 physical storage, D-07 nominal types, D-10/D-15 TLS/worlds, D-14 owner/access/initialization, D-16 numeric validity, D-17 completion, D-18 callable values/captures, D-21/D-26 native transport and D-22/D-23/D-24 construction/result contracts. These dependencies confer no new authority.
 - **Invariants / non-goals:** statically unique target owners; no lifetime extension, access escalation, owner unions, CoD move semantics, implicit graph copy or allocation rollback. Regional storage preserves relative edges and zero per-edge relocation work. Intrinsic region cleanup and assignment/value semantics retain their separate rules. No general heap allocation, lexical non-bits layout, new capture permission or permanent ABI is selected.
-- **Acceptance / baseline:** H-429's current project-user messages are the human baseline; exact timestamp/personal identity are unavailable. [K-RESIZE-20261114](../CHANGELOG.md#k-resize-20261114) records the resize/capacity review, preserving the existing charter/dependency boundaries. Acceptance requires the composed cases below, a reconciled source/design inventory and measured native costs. No implementation, build or test evidence is claimed here.
+- **Acceptance / baseline:** H-429's current project-user messages are the human baseline; exact timestamp/personal identity are unavailable. [K-UNARY-NOT-20261114](../CHANGELOG.md#k-unary-not-20261114) integrates H-442 not/! as one unary operation with identical precedence, typing, evaluation and method selection; is not retains identity-negation parsing. Implementation remains pending. Owner-qualified allocation and shared owner information continue unchanged. Remaining key transport, layout and native exposure work does not reopen the selected reference semantics. H-435/H-436 storage/content and optimization requirements, and K-RESIZE-20261114 capacity/cleanup boundaries, remain unchanged. Acceptance requires the composed cases below, a reconciled source/design inventory and measured native costs. No implementation, build or test evidence is claimed here.
 
 ## Problem and current direction
 
@@ -23,21 +23,140 @@ This refactoring separates terminology, semantic facts, physical representation 
 | Concept | Proposed precise meaning | Independent obligations |
 | --- | --- | --- |
 | Regional relative/local reference | An edge stored in a region's object representation; the current encoding is relative to the edge slot. | Target shares the regional owner; null/non-null, initialization and access remain checked. |
-| Lexical direct/global view | An execution-time reference binding whose representation is independent of a regional edge slot's address. It may denote lexical storage or a live regional target. | Retain one statically provable target owner and valid access/lifetime. Global does not mean global lifetime or ownership. |
+| Lexical storage locator | Locate a materialized variable/binding slot using its storage scope and offset; native optimization may replace or eliminate that physical location. | Slot owner and target owner are distinct; locating a ref/ptr slot is not dereferencing its contents. |
+| Lexical ref/ptr contents | Use same-scope offsets only when the target owner equals the slot's lexical owner; otherwise interpret the payload under its actual target-owner contract. | Retain one statically provable target owner and valid access/lifetime, without global lifetime or ownership. |
 | External regional handle | A host/runtime handle used outside a target region to access an object within it. | Carries the information needed to resolve that region's target; it is not a persistable regional edge or a general lexical pointer. |
 | Target owner | The lifetime authority for the referenced payload. | Separate from the storage/lifetime of the reference binding itself and from intrinsic cleanup responsibility. |
 
-The first interpretation to review is that **the storage containing a reference selects its stored representation; the target selects provenance and lifetime**. A regional object's edge remains relative when accessed through a lexical variable. A lexical borrow of that object does not become a stored relative edge merely because its target is regional. “All lexical pointers are direct/global” does not turn inline val bits into pointer objects or force every reference to have a new runtime owner tag.
+Stored representation and target provenance remain separate. A regional object's edge stays relative to its field slot when accessed through a lexical variable. Under H-435/H-436, a lexical variable's storage is located independently of how its contents are interpreted. Same-scope reference contents use the same scope-base offset convention; other-owner contents cannot be decoded using the slot owner's base. Val bits do not become pointer objects. Physical encoding now depends on the selected slot/view contract and the target storage domain, not just where the variable name is declared.
 
-The label direct/global currently leaves physical width and metadata transport open. A raw address, a native address plus separately retained owner/type evidence, and an external regional handle are not automatically interchangeable ABIs. Static evidence may erase some runtime metadata without erasing the language obligations.
+H-437 fixes sharing of actual-owner identity/address information; physical width and transport layout remain open. Resolved native addresses remain temporary implementation values. A raw address, a native address plus separately retained owner/type evidence, and an external regional handle are not automatically interchangeable ABIs. Static evidence may erase some runtime metadata without erasing the language obligations.
+
+## Shared owner information from checked declarations
+
+H-437 requires the compiler to track every `in o` declaration and arrange shared runtime information about the actual owner's identity and address, sufficient for every admitted dereference without redundant per-pointer owner tracking/storage. This includes owner relations established by inference under H-417, formal/actual substitutions, inherited field owners, aliases, borrowed results and permitted captures; omission of surface `in` spelling cannot drop provenance. The rule applies to lexical and regional owners, with their respective addressing and lifetime contracts.
+
+A logical owner context denotes the actual owner and supplies the address-resolution information required by admitted representations. References proven to share that owner reuse this information; each still supplies its own target/place information and access/initialization facts. This is a sharing requirement, not a mandatory heap descriptor, global registry, numeric owner-ID format, fat pointer or exact ABI. Static facts may erase owner data or pass it once for a group of parameters/captures. Metadata may be split across a frame/environment and direct hidden arguments when that preserves the same obligations. Same-owner ADT fields reuse their containing owner association; regional relative edges gain no per-edge owner record. The compiler need not emit a runtime owner check on every access when static evidence already establishes the required facts.
+
+```text
+proc add_into(dst:u64 in O, src:const u64 in O) where {owner O} {
+    ref again:const u64 in O = src;
+    dst <- dst + again;
+}
+```
+
+All three bindings retain the same actual O. The runtime need not store O's identity and base separately beside each target locator. The callee must nevertheless interpret its local slots separately from the external-owner contents under H-436. A later permitted allocation in O must make all subsequent resolutions use current backing; grouping metadata is not permission to cache a stale base at entry.
+
+The following consequences are settled by the existing owner rules plus H-437:
+
+- Group by proven actual-owner relationships, not textual owner names. Recursive invocations may instantiate the same formal name with distinct actual owners; a forwarded owner may instead be the very same instance across many calls.
+- Merge owner information only where the sharing is sound. Two formal owner roles may reuse one runtime context when supplied the same proved actual owner; distinct/unknown owners do not acquire static equality because their base addresses happen to match or memory was reused.
+- Preserve owner identity independently of current backing address. Lexical backing growth changes resolution state while retaining owner/target identity; consuming region replacement ends the old owner and cannot retarget its borrowed views.
+- Every dereference must have sufficient live owner/resolution, selected target, type/layout, access and initialization evidence, either retained at runtime or established statically. An owner context alone does not identify every object's concrete type or grant access.
+- Null remains associated with its fixed owner. Null testing does not read a target and does not permit an ambiguous owner or expired reference.
+- Passing, returning or storing an admitted view adapts its payload and shares/retains the corresponding owner information. Prepared references, aliases, deferred work and complete callable values must preserve the relevant relationship without adding capture permission or extending owner lifetime.
+- Register/stack optimization may remove physical slots, offsets or owner metadata when all observable semantics remain. Conversely, a shared context must remain valid wherever the generated code still needs it; copying raw addresses cannot replace that obligation.
+
+An `in O` relation tracks provenance and lifetime. H-438 separately makes allocation permission explicit in the owner qualifier described below. Sharing identity/resolution information does not merge differently qualified access paths, grant ownership or retain O after scope exit. H-439 separately provides language reference identity; native raw-address exposure and persistent layouts retain their own contracts.
+
+Acceptance compares many references to one owner with references to several owners, explicit versus inferred relations, same-named recursive owner instances, forwarding, null, prepared calls/returns/defer and backing growth. Inspection must establish that repeated pointer fields/variables do not each retain redundant owner identity/base state where a shared or statically erased representation suffices, while all dereferences remain correct. No measured overhead or implementation claim is made here.
 
 ### C++ naming proposal
 
-H-429 proposes considering `external_ptr<T, RT>` as the replacement name for today's `global_ptr<T, RT>`. **Recommendation: adopt that name during the coordinated refactoring**, because it describes a handle accessing a regional target from outside the region and avoids collision with the lexical direct/global concept.
+H-429 proposes considering `external_ptr<T, RT>` as the replacement name for today's `global_ptr<T, RT>`. **Recommendation: adopt that name during the coordinated refactoring**, because it describes a handle accessing a regional target from outside the region and avoids conflating an external regional handle with the lexical reference model.
 
 The current [implementation](../include/shilos/region.hh) stores a C++ reference to `memory_region<RT>` plus a target offset; `get()` derives an address from that referenced header. It is neither an arbitrary raw address nor a stable relocation descriptor. Renaming it does not make existing handles survive a moved region header. The `regional_ptr` name can remain for the existing relative edge; this draft introduces no second rename or public CoD pointer-type keyword.
 
 The rename inventory includes declarations in [prelude.hh](../include/shilos/prelude.hh), conversions/accessors in [region.hh](../include/shilos/region.hh), [string helpers](../include/shilos/str.hh), colocated vector/list/dictionary YAML helpers, shilos tests, experiments, documentation and repository instructions. External downstream API/ABI consumers need an inventory too. Current code keeps its existing name until the refactoring is qualified and implemented; the proposed rename is not a completed source change or a permanent compatibility-alias commitment.
+
+## Owner-qualified construction
+
+H-438 selects a common allocation-access rule for lexical and regional owners. In a callable signature, at least one parameter referencing a writable target in O permits `where {owner O}`. If all parameters referring into O have readonly target access, only `where {const owner O}` is admissible. A callable may deliberately use `const owner O` even with writable target parameters: target writes and allocation permission are independent. Both owner bindings have a fixed actual identity; const here restricts owner operations, not rebinding of that identity.
+
+| Inputs associated with O | Admissible owner declaration | Construction through O |
+| --- | --- | --- |
+| At least one writable-target reference | `owner O` or deliberately weaker `const owner O` | Permitted only through `owner O`. |
+| Only readonly-target references | `const owner O` | Forbidden, including construction of readonly results. |
+| No input establishing O | Neither declaration invents an actual owner | Require an independently admitted owner input; a result annotation alone is insufficient. |
+
+Target constness is decisive. `ref x:const T in O` is readonly; `const ref x:T in O` only forbids rebinding x and still supplies writable target access. The rule applies to ref/ptr and implicit external-borrow parameter forms. Independent val expressions and default by-value parameter copies do not establish an external owner. Borrowing an existing val variable instead refers to that storage and retains its owner under D-23. A nullable ptr retains its owner and access even when null, so an admissible writable-target ptr can carry the required association without a dereference. Creating an owner-qualified null cannot upgrade a const owner capability.
+
+For example, this constructor helper has the required owner access; lexical Node placement still depends on the separately reviewed ADT layout contract:
+
+```text
+data Node { value:u64; ptr next:Node; }
+proc prepend(ptr head:Node in O, n:u64)
+    -> ref Node in O where {owner O} {
+    return make Node in O { value <- n; next = head; };
+}
+
+proc update_only(x:u64 in O) where {const owner O} {
+    x <- 9u64;                  # Allowed: existing target is writable.
+    # make u64 in O             # Rejected: O has no allocation access.
+}
+
+proc inspect(x:const u64 in O) -> val u64 where {const owner O} {
+    return x;
+}
+# Replacing inspect's const owner O with owner O rejects its signature.
+```
+
+The call boundary checks both target access and the selected owner requirement. A non-const owner can satisfy a const-owner requirement; const-owner access cannot satisfy a non-const-owner requirement. Thus update_only can forward x to another const-owner helper but cannot obtain allocation indirectly by calling a helper requiring owner O. Aliases, null values, returns and permitted captures cannot strengthen a retained owner capability. Where another independently available non-const owner path exists, it may allocate under its own contract; const owner does not globally freeze that actual owner or prevent backing growth.
+
+Mixed inputs to one O permit allocation when the declared owner is non-const, but readonly parameters stay readonly. Distinct formal roles can have different permissions even when their actual owner is equal: `owner D` and `const owner S` may share runtime identity/resolution information without granting S allocation or making source views writable. The compiler tracks these role permissions independently of any shared runtime record; no per-pointer permission tag or owner registry is mandated.
+
+`make T in O` uses the actual owner's construction path. The caller supplies the checked association through H-437 shared owner information, without an additional user-visible builder argument solely for allocation permission. A generic owner need not expose a regional root value or root-policy methods; region-specific root constraints remain necessary when the body directly uses those operations. The native allocator dispatch/state is still an engineering contract to establish. Allocation remains subject to admitted T placement, initialization, policy, capacity and failure behavior. This permission grants no release/resize responsibility, region growth, graph copy, allocation rollback or lifetime extension. Implicit target materialization into O, when otherwise admitted, has the same allocation-access check.
+
+Acceptance covers mixed/all-readonly inputs, leading versus target const, deliberate const-owner restriction with writable targets, null forwarding without dereference, indirect capability escalation, equal actual owners with distinct qualified roles, omitted-owner construction and unchanged region capacity/cleanup. Explicit region-resource inputs keep their separately admitted contracts; a signature with no supporting input cannot infer an owner from its desired result.
+
+## Reference identity and the is operator
+
+H-439 establishes one correctness criterion for references: each interpretation uses the selected actual owner and target locator at that observation. The owner supplies the current resolution context. The locator denotes the selected target within that owner, independently of the reference binding's own slot. A stored regional displacement must be decoded relative to its edge slot; it is not itself a canonical target identity. Lexical backing growth preserves existing owner/locator pairs while changing their resolved native addresses. Optimizations may share/eliminate metadata, cache a proved-stable address or use registers/stack storage only when they preserve this criterion and observable evaluation.
+
+CoD provides the intrinsic binary operators `is` and `is not`, returning independent val bool results. H-441 defines `a is not b` as the exact negation of `a is b`, equivalent to `!(a is b)` with the same once-only reference-preserving operand evaluation. Both are fixed reference operations; user payload-equality overloads do not redefine them. They use equality-operator precedence, above boolean conjunction/disjunction; chained identity expressions do not implicitly become pairwise comparisons. The two-word is not form is one comparison operation, not is applied to a negated payload. H-442 also admits unary not as the exact spelling synonym of !, with the same tight unary precedence and operation identity; [the unary contract](SymbolicDynamicScope.md#unary-logical-negation) governs. Thus not (a is b), !(a is b) and a is not b agree, while not a is b groups as (not a) is b. Ordinary value equality retains its own contract.
+
+For non-null references, `a is b` is true exactly when their selected actual owners and normalized target locators are equal. Access qualifiers, alternative views of that same target and the slot/representation carrying the reference do not change this result. Distinct targets do not become identical because their payloads, types, layouts or transient addresses match. A target locator preserves semantic subobject selection: an enclosing object and a distinct field/subobject cannot collapse merely because their native starting addresses coincide. Identity comparison grants no cast, type equivalence or stronger target/owner access.
+
+```text
+val a:u64 <- 7u64;
+val b:u64 <- 7u64;
+ref p:u64 = a;
+ref alias_of_a:u64 = a;
+ptr q:u64 in here = b;
+
+p is alias_of_a;       # true: same selected owner and target.
+p is q;                # false: distinct storage, despite equal bits.
+p is not q;            # true: exact identity negation.
+q = p;
+p is q;                # true: q now selects a.
+q = null;
+q is null;             # true; no target read.
+p is not null;         # true for the valid non-null ref.
+not (p is null);       # Same result as !(p is null).
+# 7u64 is 7u64          # Reject: independent values supply no targets.
+```
+
+A storage-denoting expression retains its selected target, including a named val variable or direct bits field with real storage. An independent arithmetic/value-call result has no such identity, and is does not allocate temporaries to invent one. Existing explicit materialization can establish storage before comparison. The pending grouping/value-normalization rules determine operand categories normally; is does not silently reinterpret an already independent value as a reference. Callable-storage identity, where admitted, is identity of that storage, not equality of code, captured contents or semantic method identity.
+
+Evaluate operands once, left to right, retaining each selected owner/locator when its operand completes. A later operand may rebind the source variable or grow backing without changing the earlier selection. There is no short circuit merely because owner inequality could determine the boolean result. The selected reference carriers must be initialized and their owners remain valid. Evaluating a compound operand can dereference intermediate targets or call throwing code; comparing the final references itself does not read their payloads or dereference a nullable target. Growth requires current resolution where an address is needed; ending an owner cannot be repaired by comparing a stale address or identity token.
+
+### Null uses the same identity relation
+
+H-440/H-441 uses `p is null` and `p is not null` for null/non-null testing. A bare null in an identity comparison obtains the expected owner and reference context from the other operand, so the test is well formed even for a null pointer and does not acquire an owner from a future target. `null is p` follows the same symmetric relation. Two unqualified null operands without an established owner context reject; identity comparison does not weaken H-418.
+
+Qualified null retains the pair of its actual owner and the null locator. Same-owner null references compare true; references belonging to distinct owners compare false even when both are null. Thus an explicit `p is null in Other` tests that particular owner/null pair, whereas `p is null` tests absence under p's own fixed owner. A non-null reference never equals the null locator. Comparisons may inspect separately proven owners without creating a mixed-owner reference or permitting cross-owner rebinding.
+
+Null testing preserves checked-NPE rules: only an actual target access creates that obligation. `p is not null` (equivalently `not (p is null)` or `!(p is null)`) can establish non-nullness for a stable selected reference; later rebinding or mutation invalidates the corresponding fact. Comparing a mutable field once does not make a later reload stable. `typeof(p is null)` and `typeof(p is not null)` determine bool without executing p or reading a target. There is no separate null-test intrinsic in the selected source design.
+
+### Identity keys for graph libraries
+
+The language supplies identity/key support matching is, so graph libraries need not add an application ID field to every ADT. Equal identities must produce equal keys/hashes; hash collisions must not be mistaken for identity. Keys remain stable through backing growth and payload writes for the same target. A key extracted from p denotes that selected target, not future rebindings of p. Runtime owner information may be shared with a group of keys; no repeated owner record or globally allocated numeric owner ID is mandated.
+
+Key storage must support traversal memoization across source/destination owners without bypassing same-owner pointer-field rules. A non-dereferenceable key is not a reference capability, does not retain an owner, and cannot restore a target after its lifetime ends. Ordinary val bits still have no owner annotation. The exact library key surface, checked context/lifetime transport and native representation are implementation-contract work; this requirement does not select a universal persistent identity token, raw-address conversion or new cross-owner graph field. Escalate only a material source/lifetime trade-off, rather than asking again whether CoD should provide identity.
+
+Identity denotes selected storage, not an application's enduring entity identity. Whole-fragment growth and cleanup-holder transfer preserve a continuing owner/target; consuming region replacement does not. Pool reuse, container compaction and object movement retain their own validity contracts. No generation table or automatic object-following reference is implied; an invalidated reference cannot be compared to establish continuity. Library graph transfer still controls topology, allocation and failure and receives no default compiler copier.
+
+Acceptance covers aliases versus equal payloads, named val storage versus independent results, readonly views, different owners with equal offsets, regional-edge decoding, slot aliases versus targets, null contextual ownership, selected operands across rebinding/growth, distinct subobjects and optimized storage, key/hash stability and invalid lifetimes. Numeric/fraction value equality, validity, `#` comments and reserved fraction syntax remain unchanged.
 
 ## Operations across the boundary
 
@@ -48,7 +167,7 @@ data Node { ptr next:Node; }
 
 ptr cursor:Node in r = root.next;
 # root.next is a relative edge in r.
-# cursor is an independent lexical binding with a direct/global view into r.
+# cursor is an independent lexical binding retaining a view into r.
 
 cursor = null;          # Clear only the lexical binding; retain owner r.
 root.next = cursor;     # Store null using the regional edge representation.
@@ -67,7 +186,72 @@ The following semantic dimensions remain separate throughout checking and loweri
 - target initialization and actual concrete-type evidence;
 - intrinsic resource cleanup responsibility.
 
-No representation choice weakens H-417 unique-owner inference. A lexical direct view still cannot choose between different target owners at runtime without an independently admitted value operation; a regional edge still cannot point outside its owner. H-428 allows allocation effects on initialization failure, with no automatic rewind. H-426/H-427 RHS normalization remains in D-22; selecting a carrier neither approves that pending copy policy nor introduces move semantics.
+No representation choice weakens H-417 unique-owner inference. A lexical view still cannot choose between different target owners at runtime without an independently admitted value operation; a regional edge still cannot point outside its owner. H-428 allows allocation effects on initialization failure, with no automatic rewind. H-426/H-427 RHS normalization remains in D-22; selecting a carrier neither approves that pending copy policy nor introduces move semantics.
+
+## Owner-base-relative lexical storage
+
+H-435 confirms dynamic lexical capacity and owner-base offsets independently of the wider ADT/ABI refactoring. H-436 clarifies that locating a lexical variable's storage and interpreting its contents are separate operations. A lexical scope remains the semantic lifetime owner; it does not become a CoD owned region, and regional resize retains its consuming contract.
+
+### Locating storage and interpreting contents
+
+Let S be the lexical owner of a variable's storage slot, and O the statically established target owner if its contents are an ordinary ref/ptr. For storage materialized in S's growable fragment:
+
+| Operation / contents | Required interpretation |
+| --- | --- |
+| Locate the variable/binding slot | Resolve the slot offset against S's current base. This establishes where the contents are stored, not what they mean. |
+| Read bits/val contents | Read the typed payload at that location; no second pointer dereference is implied. |
+| Dereference ref/ptr contents with O = S | Interpret the reference payload with S's same-scope offset convention and resolve the target using S's current base. Slot offset and target offset are distinct. |
+| Dereference ref/ptr contents with O != S | Apply the actual target owner's reference interpretation. Never add S's base merely because the reference variable lives in S. |
+
+For nullable ptr, null handling belongs to the selected reference representation and does not resolve a target. The slot location itself is not a nullable pointer payload. Owner equality is static under H-417; this distinction does not require a runtime owner tag on every pointer.
+
+Another lexical scope is also an other-owner case. Its representation may refer to that owner's resolution context, but H-436 does not select the same-scope single-offset representation for it. A regional target retains its regional lifetime/access contract; an external regional handle or temporary resolved address is not automatically the chosen CoD ABI. Exact inter-owner carriers remain open. This concerns admitted ordinary reference bindings and does not relax same-owner stored fields inside ADTs.
+
+Schematic CoD shows why a reference's contents may need different transport even though the referent is unchanged:
+
+```text
+proc use_outer(x:u64 in O) where {owner O} {
+    ref q:u64 in O = x;
+    q <- 2u64;
+}
+val n:u64 <- 1u64;
+ref p:u64 = n;
+use_outer(p);
+```
+
+In the caller, p's slot and n have the same lexical owner. The callee's x/q slots belong to its own scope, while their target owner remains the caller's O. Argument preparation and reference initialization must preserve that target and adapt representation where required; copying offset bytes and using the callee's base would be incorrect. Aliasing a slot preserves the original slot and its encoding. Creating a new binding to its referent is a different operation. Neither operation copies the target payload or extends its lifetime.
+
+### Physical allocation and optimization
+
+Register allocation, scalar replacement, fixed stack storage and elimination of unused storage/owner metadata remain permitted under H-436 and charter §§6.2–6.3. Dynamic lexical capacity is a language capability, not a mandatory heap allocation for every scope or variable. The compiler may eliminate an offset calculation or the slot itself when it preserves all observable owner, alias, access, initialization, evaluation and cleanup behavior.
+
+Taking a reference does not by itself mandate heap allocation. All surviving aliases and calls must still share the correct target. If a chosen register/stack representation cannot satisfy those access paths, lowering must materialize compatible addressable storage or use another proved-correct representation. It must not encode a fixed stack address as an ordinary offset into a movable fragment and then assume fragment growth preserves that target. Exact materialization/ABI strategies remain open; no optimization grants new source placement or escape permission.
+
+The fragment organization under review uses one active contiguous payload for the portion of an actual full-scope instance that needs growable backing. The owner context supplies its current base and allocation state. Same-scope payload offsets and variable-slot offsets can use that context; external references retain their independently required representation. H-437 requires sharing that owner information across the references that use it. No permanent fat-pointer ABI, mandatory all-variable heap frame or one global context per source scope is selected. Recursion has distinct owners. Plain grouping blocks do not create owners under D-17. Multiple concurrent fragments would require additional fragment identity or a different mapping contract.
+
+The owner anchor/resolution metadata cannot depend on an untracked raw address into the fragment being replaced. Its exact storage/cleanup arrangement is open. Relocation must preserve object offsets, alignment, initialized bits and all admitted embedded representations. Callable environments, selected places, cleanup records and native interop cannot be assumed relocatable merely because ordinary data pointer fields use offsets. Ordinary CoD objects acquire no user-visible copy/move operation.
+
+### Selected addresses across allocation
+
+Changing pointer fields is insufficient if generated code retains stale native addresses. Consider this schematic body, where the RHS has independently admitted capability to allocate in p's owner:
+
+```text
+p <- value_that_allocates_in_the_same_scope();
+```
+
+The lhs is selected before the RHS. For a target in growable lexical backing, lowering retains its target-owner context and location information, evaluates the RHS once, then resolves that same target against the current backing before storing. An external target keeps its own target-owner representation; growth of the pointer variable's slot owner alone does not relocate that external target. It must not rerun an indexed/field selection or reload a rebound pointer variable and accidentally choose a different target. Reference assignment analogously retains the selected destination slot's locator and encodes its new contents under the fixed target-owner contract. Selected aliases, calls/returns, recursion, deferred work and all allowed captures need the same treatment. A generic helper cannot keep a raw pointer alive across an operation that may relocate its owner.
+
+The compiler can retain a resolved address across operations proven unable to relocate that owner. Otherwise it must resolve again after possible growth. Foreign/native code that retains a raw address needs a pinned/no-growth access interval or a separately admitted handle interface; silently refreshing arbitrary native pointers is impossible. Exact exposure and pinning policy is a material open decision, not a new FFI feature.
+
+### Growth, transfer and failure
+
+A feasible growth sequence allocates a sufficiently aligned replacement, preserves the retained payload and offsets, updates the stable anchor, then releases the old block with the matching allocator. It avoids per-edge fixups, but copying a live payload may still cost linear time in its extent. Growth policy, capacity hints and multi-fragment alternatives are not selected. Scope identity and target identity remain unchanged across successful backing replacement, unlike consuming region resize.
+
+Replacement allocation must not invalidate existing targets before replacement storage is ready. On allocation failure the previous fragment remains valid for as long as its scope survives; propagating cleanup may of course end that scope. Earlier allowed initialization effects are not undone. This is an internal lexical-storage operation, not an owned-region parameter transfer, so H-431's input-consumption rule does not apply to it. Detailed allocator/cleanup protocols remain part of scoped allocation integration; there is no language checkpoint or graph rollback.
+
+Bits transfer still reads and writes typed payloads after resolving each side. A graph-transfer library still constructs destination targets and maps topology according to its contract. Encoding a mapped destination target as a scope-base offset or regional slot displacement can be automatic; copying a source offset into a different owner cannot stand in for graph transformation. A single nominal ADT remains the UX candidate, with distinct native layout/access evidence. The external_ptr rename does not implement a stable lexical owner anchor by itself.
+
+Acceptance must compare optimized register/stack forms with materialized fragment storage. Force growth between operand selection and access, independently in the slot and target owners, through nested calls and caller-scope allocation, with same-scope versus other-owner references, aliased slots, null, recursive scope instances, sharing/cycles, abrupt completion and allocation failure. Verify no stale raw address or relocated-anchor dependency survives; also cover interval/range/alignment/null encoding. The selected model supports dynamic lexical capacity while retaining target identity; base resolution and the relocation-aware native-call boundary are implementation costs to measure. No benchmark or implementation support is claimed.
 
 ## Explicit resize consumes and replaces the region
 
@@ -131,46 +315,182 @@ A catch does not undo the transfer or make the consumed input name usable. Choos
 
 The contract is semantic. The current [source capability reference](../tests/cod/language/README.md) excludes regional values from implemented coverage; existing historical fixtures do not establish current resize support. Implementation acceptance must exercise the complete entry/result/cleanup boundaries with exact resource accounting.
 
+## Integrated operations and lifetimes
+
+The compiler must distinguish semantic type, selected storage location, stored-reference encoding, target owner, target layout/access and intrinsic cleanup responsibility. The following obligations derive from the existing operation contracts; they do not select an intermediate representation, descriptor layout or new source syntax.
+
+| Operation / boundary | Information that must survive | Required behavior |
+| --- | --- | --- |
+| Declaration and `make` initialization | Destination owner/capability, selected storage, ordered initializer state | Growth during a later initializer cannot invalidate earlier selected locations. Establish completed bindings under existing initialization rules; preserve earlier permitted effects on failure. |
+| Ordinary `=` | Selected destination reference slot; source target identity/owner/access | Resolve the source and encode it for the actual destination slot. Fixed-owner checks remain; copying encoded words between unlike slots is not the operation. |
+| Bits `<-` | Selected destination payload target and converted source value | Preserve the original target across RHS growth or rebinding; store only after successful RHS completion. |
+| Reference `<=>` | Both selected binding slots and their permitted target owners | After ordered operand preparation, decode both current references and encode each for its destination. A regional field and an external lexical binding may need different encodings even when both target the same region. |
+| Bits `<->` | Both selected payload targets and both original bits values | Resolve live locations after operand preparation, read both payloads before writing either, preserving overlap and checked-null behavior. |
+| Slot alias | Original selected slot and its representation/access | A lexical alias name does not create a new pointer cell or change a regional field into a lexical offset field. |
+| Argument preparation and invocation | Prepared value or selected referent/place according to passing mode | Later arguments may grow an owner or rebind a source variable. Refresh locations without changing the already prepared referent or reevaluating arguments. Revalidate owner lifetime at entry. |
+| Borrowed return | Selected target, target owner/access and concrete/layout evidence | Cleanup may grow backing or update payloads. Deliver the same selected live target, adapting transport to its receiver. Callee-local storage still cannot escape. |
+| Scalar val return | Independent converted bits from the return expression | Cleanup growth or source mutation cannot reread/change saved bits. No observable pointer or owner association is added to val results. |
+| Assignment-method result | Original destination role and resulting referent | Retain D-14's result safeguard and readonly/writable rules; representation adaptation does not substitute another destination. |
+| Complete callable result | Selected caller destination and complete environment | A raw hidden destination address cannot remain stale across growth of its backing. Use a qualified stable-placement or relocation-aware construction protocol while preserving the complete-value result. |
+| Deferred invocation and scope exit | Prepared callable/arguments, selected places and remaining cleanup | Relocation does not change registration order, prepared snapshots, capture permissions or completion replacement. Keep necessary owner metadata valid through its last admitted use. |
+
+For an existing `p <- f()` destination, p's slot owner and its target owner can differ. Growth of the slot owner may move the reference cell without moving the selected target. Growth of the target owner may move the selected target without changing the cell. Neither event permits reloading a rebound p and selecting a different target. Conversely, `p = f()` retains the binding slot and writes a new admitted reference into it. This distinction must survive infix, explicit operator-call and aliased-method forms.
+
+Readonly target access, function/procedure kind and register promotion are not by themselves proofs that an owner cannot grow during a call: another admitted capability may allocate there. A possible compiler organization tracks which owners an operation may relocate, or conservatively refreshes the needed contexts after uncertain calls. Such internal facts do not add a user-visible effect system or make physical addresses specialization keys.
+
+### Backing growth, object movement and owner replacement
+
+| Event | Semantic owner / object identity | What references require |
+| --- | --- | --- |
+| Lexical fragment growth preserving offsets | Same owner and existing targets | Resolve retained locations through current owner metadata; no per-edge target rewrite. |
+| Ordinary region cleanup-holder transfer | Same region while its actual lifetime continues | Preserve existing admitted views under H-263, independent of the consumed holder name. |
+| Consuming region `resize` | Replacement owner and retired input | Reject subsequent old-owner views; obtain fresh views from the owning result. |
+| Container expansion, compaction or pool reuse that changes object locations inside an owner | Not established by lexical fragment growth | A separate container/identity/borrow contract must preserve or invalidate references appropriately. Offsets alone do not grant address-stable vector growth or arbitrary object relocation. |
+
+[Reference identity](#reference-identity-and-the-is-operator) supplies the actual-owner/target-locator criterion and language key support for memoization. Domain entity IDs remain a library concern. Keys follow the same selected target across backing growth, without promising continuity across incompatible object reuse, compaction or owner replacement. No generation table, exposed raw-offset API or runtime borrow registry follows.
+
+## Lexical ADTs as part of the complete model
+
+The lexical pointer-bearing ADT goal is technically compatible with same-scope offsets: when an admitted lexical object's stored references have that object's owner, its fields can use offsets in that owner's coordinate system. Regional instances retain slot-relative edges. This supports a bounded lexical graph model without first allowing arbitrary cross-owner fields.
+
+The recommended candidate is one nominal ADT with storage-specific layout/access evidence. It avoids requiring users to duplicate business types merely to place them differently. It remains a design proposal: nominal identity, layout selection and source placement applicability need a composed contract before this extends the current non-bits placement boundary. Layout equality is neither required nor sufficient for nominal equality; pointers encoded as integers remain non-bits.
+
+Schematic CoD illustrates a source method that could serve either placement under the candidate:
+
+```text
+data Node { value:u64; ptr next:Node; }
+proc next_of(n:Node in O) -> ptr Node in O where {owner O} {
+    return n.next;
+}
+```
+
+The parameter binding may live in the callee while its Node lives in a different owner. Resolve that object through the admitted inter-owner view, then interpret its field using the object's layout and owner. A regional next field is slot-relative; a lexical same-owner next field uses its scope's offsets. The returned view preserves O and nullability without reading its target, and is adapted to the caller's receiving storage. One implementation strategy specializes known layouts; another shares code with retained layout evidence. Neither requires a semantic type or native body per owner instance.
+
+| Construction / field form | Integrated requirement |
+| --- | --- |
+| Direct bits/val field | Initialize its typed payload in the containing owner's storage. Preserve numeric validity, including D-16 nonzero denominators; no blanket zero initialization. |
+| Nullable ptr field | Establish its fixed owner even when null; later rebinding may connect initialized same-owner nodes. Define null and valid-offset encodings without conflating a slot locator with a null reference. |
+| Required ref field | Prove an initialized non-null same-owner target before a readable completed object is published. A cycle of required refs does not become constructible merely because offsets support cycles. |
+| Same nominal ADT in lexical or regional storage | Choose layout/access from actual placement evidence, retaining method/type identity and owner rules. Do not infer placement from the scope of the temporary variable holding a view. |
+| Nested inline payload / product / sum / array | Direct bits constituents retain their category. Admit additional reference-bearing inline layouts only with explicit field, alignment, active-alternative and array policies; ordinary lexical ADTs do not imply arbitrary recursive by-value graphs. |
+| Pointer to an outer scope or region | Ordinary lexical bindings retain their existing permission and inter-owner interpretation. A pointer field inside a new lexical ADT remains subject to H-203 same-owner rules; this proposal does not turn it into a cross-owner view record. |
+
+The physical null/self-reference encoding is still a real obligation: the current regional zero displacement denotes null, so a target coinciding with its edge slot cannot use that same encoding as a non-null self-edge. A lexical target at offset zero likewise needs an unambiguous null convention. Offset range, alignment and object layout must be reviewed together; no biased encoding, extra tag or padding policy is selected here.
+
+[Owner-qualified construction](#owner-qualified-construction) supplies the common `make T in O` permission for caller-owned as well as current-scope storage. A helper with owner O may allocate there; const owner O cannot, even when the helper may edit existing writable targets. Callee-local allocation cannot stand in for caller-owned graph nodes. The underlying allocation/representation dispatch still needs to satisfy the actual owner's policy and admitted placement.
+
+Storage without an observable address can remain in registers; bounded addressable storage can remain on the stack when all alias/call paths are implemented consistently. A generic operation that lacks those proofs needs a compatible materialized representation. One source ADT therefore need not imply one native allocation strategy.
+
+### Graph transfer with growing source or destination
+
+H-206/H-208/H-351 continues to put graph policy in selected user/library `(<-)` methods. Automatic addressing means the algorithm's field operations, bits transfers and edge assignments use the correct representations; it does not provide a default graph copier.
+
+For a topology-preserving library transfer, the conceptual work is to select source/destination policies and capabilities, establish a destination node for each admitted source identity, transfer typed bits, then connect destination references to the corresponding destination nodes. Memoization and publication order must handle sharing, cycles and required-ref initialization. An algorithm may use a different order or intentionally change topology when its contract says so. Source and destination overlap, reuse, callbacks and partial writes remain part of that contract.
+
+A growing source invalidates address-based memo keys; a growing destination invalidates cached construction addresses. Both must retain the selected logical identities/locations across allocation. Source refs cannot be stored directly as destination edges merely because an offset is numerically representable. Existing valid allocations/publications need not roll back on later failure under H-428. A transfer to a fresh region and consuming region replacement retain their distinct cleanup rules.
+
+The minimum coherent acceptance for lexical pointer-bearing ADTs is therefore more than a local struct containing offsets: it includes construction capability, required initialization, field access, inter-owner call transport, graph transfer and final scope cleanup. The conservative bits-only fallback remains usable while these contracts are incomplete.
+
+## Captures, TLS, native interfaces and persistence
+
+Offset-backed lexical storage does not broaden capture permission. An alias of a regional field remains a capture of that regional slot where admitted; an ordinary lexical binding cell remains ineligible under D-18. A lexical ADT's fields do not become capturable merely because their storage can grow or because a complete callable environment is itself scope-owned. Captured regions remain borrowed and are not kept alive by an owner-resolution context.
+
+Complete callable values require representation-safe relocation/copying of their whole intrinsic environment, including nested values. Their internal environment offsets and a lexical owner's storage offsets are different coordinate systems. Lowering must compose them correctly. The existing complete-value contract does not establish that current cleanup-list links, hidden output pointers or native environment addresses already survive scope-fragment growth.
+
+TLS payload categories and effect restoration remain D-10/D-15 contracts. Bits and admitted callable values retain their value behavior; non-bits symbolic object bindings retain their region-symbol backing requirement. Automatic reference transport must preserve actual owner and current/captured binding semantics without turning TLS into a lexical graph arena. Restoring an effect binding does not restore a consumed owner or a freed scope.
+
+Scope exit must keep the state needed by remaining deferred work, prepared results and intrinsic releases valid until their last specified use. Leaving a full scope ends its owner even if backing happens to be retained or reused by an allocator. No new per-object destructor, persistent activation, detached heap lifetime or continuation-capture facility follows. Declaring storage relocatable does not by itself make a suspended execution serializable.
+
+At a native interface, a raw address is valid only over an interval in which its target cannot move or end. Ordinary code may use resolved addresses within proved intervals. A callback able to grow the same owner breaks that proof. A handle-based adapter or a selected no-growth/pinning protocol is needed before admitting longer-lived raw pointers. The choice remains open; neither the C++ external_ptr rename nor const access supplies it automatically.
+
+Regional images and DBMR preserve their physical graph/storage contracts. A lexical slot locator, scope anchor or runtime callable address is not a persistent reference. A library may transfer graph data into a region using its selected schema, topology and failure rules. Optional YAML serialization, file publication, mapping permissions and durability remain separate. This review neither changes the region file layout nor introduces an automatic lexical-memory snapshot.
+
+## Global contract and source impact
+
+The table identifies required design integration and current source audit surfaces. It is an impact plan, not permission to activate pending mechanisms. Existing qualified behavior remains the acceptance baseline; only the named extensions remain under review.
+
+| Contract / surface | Required integration | Boundary retained |
+| --- | --- | --- |
+| [D-01 / regional storage](MemoryRegionAndRegionalTypes.md), `include/shilos/region.hh` | Keep slot-relative edges distinct from lexical slot locators and inter-owner handles. Resolve null/self-edge range and alignment obligations before a physical encoding change. | Region-only C++ objects, no per-object copy/move, allocator symmetry and zero per-edge relocation work. |
+| [D-07 / data and layouts](DomainLanguageDesign.md) | Add a qualified placement/layout rule for lexical pointer-bearing ADTs; preserve concrete field/sum/array evidence. | Current bits eligibility and non-bits fallback, nominal type/conformance identity and SoA-related constraints. |
+| [D-14 / owners and assignment](RegionalOwnership.md) | Retain slot owner versus target owner through rebind, swaps, aliases, initializers and borrowed results. | Fixed owner, access, nullability, initialization and destination-result identity. |
+| [D-22 / construction](ConstructionAndAcquisition.md) | Implement owner-qualified construction, graph publication and representation-aware initialization. | Explicit actual owner; H-438 allocation access; allowed effects and no checkpoint/rewind. |
+| [D-17 / completion](ExceptionControl.md) | Keep deferred selections/results and necessary owner contexts valid across growth and cleanup. | Existing order, replacement, exact release and consuming-call boundaries. |
+| [D-18 / callable values](RegionalClosures.md) | Adapt complete environments, prepared arguments and hidden caller destinations to selected storage; audit nested coordinate systems. | Complete values, borrowed captures, existing capture permissions and caller lifetime. |
+| [D-23 / scalar reception](ScalarCallResults.md), [D-24 / inferred results](CallableResultInference.md) | Transport inferred or explicit borrowed results with target/layout evidence; retain value snapshots and receiver materialization. | Result mode and inference anchors do not depend on native pointer width or allocation strategy. |
+| [D-21 / native preparation](AheadOfTimeExecutionPreparation.md), [D-26 / coverage](GenericAndRecursiveClosure.md) | Cover each admitted layout/access path, allowing shared code or prepared specialization. Keep layout facts separate from same-T evidence. | No semantic type per layout, implementation per owner instance, runtime method registration or loss of outside-catalog behavior. |
+| [D-10 / symbols](SymbolicDynamicScope.md), [D-15 / worlds](ModuleWorlds.md) | Preserve current/captured symbolic reference interpretation and owner dependencies during adaptation/restoration. | No TLS category or backing expansion, foreign-world access or retained-owner authority. |
+| [D-16 / fractions](FixedWidthFractions.md), numeric preparation | Apply typed payload transfer after resolving locations; preserve validity and representation-independent units. | No fraction implementation, promotion, zero-validity or pointer-as-bits classification. |
+| Checked representation: `cod/lang_checked.hh`, `cod/lang_callable_flow.hh`, `cod/lang_completion.hh` | Review selected slots/targets, actual owners, alias selections, available/initialized state and completion effects. Add sufficient representation facts only after the corresponding contract is qualified. | Existing proofs must not be replaced by a raw address or a runtime tag that excuses ambiguous ownership. |
+| Native path: `cod/lang_llvm.hh`, `cod/lang_native_runtime.hh` | Audit `binding_slot`, `binding_address`, local construction, rebind/transfer/swap, argument/result projection, deferred records and cleanup. Their current address-based paths are not evidence of moving-frame support. | Once-only selection, ordered evaluation and correct native behavior for the current admitted subset. |
+| C++ naming, YAML and fixtures | Inventory `prelude.hh`, `region.hh`, `str.hh`, vector/list/dict YAML helpers, shilos fixtures, architecture/micro-dispatch experiments and current documentation/instructions for a coherent external_ptr migration. | A rename changes neither regional representation nor CoD lexical transport; optional serialization remains separate. |
+| Native exposure, diagnostics and tooling | Report storage-owner versus target-owner mismatches and unsupported layout/capability explicitly; display semantic owner/target identity across relocation. | No exposed process address as durable identity, implicit raw-pointer cast, foreign ABI or persistent stack snapshot. |
+
+The C++ handle rename and lexical representation are separate migration surfaces: today's global_ptr retains a region-header reference plus an offset, not a refreshable lexical owner anchor. Shilos regional C++ objects must not be made stack-constructible or movable to implement CoD lexical ADTs. Any lexical native representation needs its own qualified lowering while preserving existing regional APIs until a coordinated migration is selected.
+
 ## Material decisions still required
 
-| Decision | Alternatives / consequence | Current boundary |
+| Decision | Recommended direction / alternatives | What is already fixed |
 | --- | --- | --- |
-| Lexical ADTs with reference fields | Permit a distinct direct-reference layout, provide representation-dependent layouts for one nominal ADT, or retain regional-only placement for such ADTs. Layout-polymorphic access would affect field offsets, generic calls and actual-type evidence. | H-429 withdraws scope-region backing; it does not by itself choose a lexical non-bits layout or graph-copy semantics. |
-| Direct/global carrier | Define when a plain address is sufficient and where owner/base/type evidence must be retained. | No universal fat pointer, raw-pointer ABI or new intrinsic type is selected. |
-| Nominal type and placement | A logical field shape may need separate representation facts. Decide whether placement is a type constraint, a view/layout property or an explicit distinct type. | Physical similarity is not nominal identity; existing bits and regional graph contracts remain. |
-| Resize capacity/backing protocol | Review exact payload budget, retained-extent shrink bounds, equal-capacity handling and existing-error mapping above; specify backend and shared-mapping behavior. | H-430–H-432 retains consuming replacement, lossless success and ordinary failure cleanup. Old views never follow the replacement; no automatic growth or implicit compaction. |
-| Cross-owner references in a future lexical aggregate | Direct representation can encode such addresses, but field-wise owner/lifetime relationships must be specified before admitting them. | Do not apply an owner union or lift regional same-owner edges by implication. |
-| Naming and migration | `external_ptr` is the recommended C++ handle name; lexical direct/global terminology must not promise global lifetime or persistence. | Source/API migration remains planned; no blanket rename changes semantics. |
+| ADT placement and native layout evidence | Evaluate one nominal ADT with storage-specific layouts; compare shared access code with prepared layout specializations. Distinct nominal types are an alternative with greater user-facing duplication. | Lexical pointer-bearing ADTs are the target; bits-only lexical placement is the fallback. Field owners are not broadened. |
+| Identity-key and allocation transport | Provide usable memo keys and the actual owner construction path while preserving target identity, field-owner constraints and key lifetime. | H-439 selects owner-plus-locator identity and is; H-440 selects is null. H-438 permits non-const owner construction without a separate builder. Library graph policy and allowed effects remain. |
+| Remaining physical transport and encoding | Implement shared owner contexts with suitable locator transport, null/self-reference encoding, width/range/alignment and metadata lifetime. Escalate user-visible layout/compatibility trade-offs; routine lowering choices need not reopen the source rule. | H-437 owner-information sharing and sufficient dereference evidence are selected; H-436 slot/payload distinctions and optimization remain. |
+| Native-address exposure across growth | Choose handles/adapters, proved no-growth intervals or an explicit pinning policy for admitted native interactions. | Never silently retain stale addresses, extend owner lifetime or make readonly access a stability guarantee. |
+| Regional resize backend and API migration | Complete exact capacity/error/backing-file review and coordinate the proposed C++ rename independently. | No automatic/in-place CoD region growth; consuming cleanup and fresh result ownership remain. |
 
-The first substantive choice is lexical reference-bearing ADTs: pointer representation alone does not settle where such an object may be created, how its layout is selected, or which owners its fields can borrow. Until that scope is qualified, the current regional-only non-bits placement remains the implementation boundary.
+The selected lexical-capacity/slot-content requirements stand independently. Owner-qualified construction is settled; these remaining interfaces should be reviewed in coherent groups, without asking again whether every lexical variable must allocate on the heap or whether offset integers make pointer-bearing objects bits.
 
-## Impact and work packages
+## Remaining integration and source boundary
 
-| Area | Required review/change | Preserve / acceptance |
-| --- | --- | --- |
-| D-01 and shilos APIs | Reconcile relative edges, external handles, temporary native addresses and contradictory global-pointer storage examples; perform the qualified external_ptr rename coherently. | Region-only C++ objects, allocator symmetry, self-relative encoding and no per-object copy/move. |
-| D-07/D-14/D-22 | Separate nominal type, representation eligibility, storage domain, actual owner, construction access and ref/ptr slot behavior. | Inline bits, readonly/const independence, definite initialization, unique owners and no automatic graph copying. |
-| Checked compiler | Audit [CheckedBinding/ViewEvidence and owner flow](../cod/lang_checked.hh) for accidental coupling of carrier, slot storage and target owner. | Retain current initialized-target, alias, null, owner and cleanup proofs; unsupported representations diagnose explicitly. |
-| Native lowering | Audit [lexical slots, selected places and calls](../cod/lang_llvm.hh) plus regional access paths for resolve/store boundaries and retained metadata. | Once-only address selection, correct relative encoding and native behavior across recursion/defer/failure. Existing LLVM alloca usage alone proves no complete model. |
-| D-18/D-21/D-26 | Distinguish captured regional slots, borrowed targets, lexical binding cells and intrinsic complete callable environments. | No automatic lexical-cell capture, self-address-dependent environment or expired borrowed view; preserve concrete-type dispatch. |
-| D-10/D-15 | Review TLS reference transport independently of TLS payload categories and symbol-backed owners. | Bits payloads/callable values retain their contracts; symbolic references retain explicit owner relations and restoration. No inline non-bits TLS arena. |
-| D-23/D-24 | Carry result mode, target owner/access and any layout evidence through calls and inferred signatures. | Value snapshots, retained targets, independent recursive anchors and existing conversion limits. |
-| D-16 / serialization / DBMR | Keep numeric bits validity independent of pointer representation; distinguish persisted graphs from native lexical views in YAML/snapshots. | Fixed valid fraction payloads, optional colocated YAML, no direct process address persisted as a regional edge or new file-layout promise. |
+Owner-information sharing, qualified construction, reference identity and null testing are selected under H-437–H-440. Their direct consequences are resolved under the user’s explicit delegation; no further vote is needed on these mechanisms. The following source-level questions remain distinct from routine choices about how to store a context or pass a hidden argument. Examples are CoD design sketches, not claims of current compiler support. Complete routine integration directly and discuss only material unresolved source/lifetime choices; recommendations are not approvals.
 
-Proceed in reviewable packages: settle terminology and the lexical-ADT boundary; qualify the corresponding storage/view contract; refactor checked representation facts and native boundary operations; coordinate C++ API migration and downstream users; then update composed fixtures and current capability documentation. H-386's coordinated source migration remains the direction where applicable; internal work packages do not establish a permanent dual language or compatibility API.
+### ADT layout integration to complete
 
-This is planning authorization, not an implementation/build/test request. No bootstrap/configuration work is needed for this document. Implementation must follow repository source/build/test restrictions and identify any separately required toolchain authorization.
+```text
+# Candidate ordinary construction forms; exact aggregate support remains pending.
+ref local = make Node in here { value <- 1u64; next = null; };
+ref regional = make Node in r { value <- 2u64; next = null; };
+```
 
-## Acceptance and completion criteria
+The recommended target is one nominal Node with storage-specific field interpretation supplied by placement/owner evidence. Same-owner fields give local.next owner here and regional.next owner r; cross-owner rebinding remains invalid. Settle the admitted placement/interface scope under the selected owner-qualified construction rule before treating these forms as an implementation contract. No separate public pointer type is needed merely to reflect the encoding.
 
-1. A lexical view into a regional graph preserves target identity, owner and access while local rebinding leaves the original regional slot unchanged; an alias of that slot observes its actual mutations.
-2. Loads/stores round-trip between relative edges and direct/external views, including null, readonly targets, self/cycle encoding limits and same-owner rejection. Raw offset copying is never used as slot-independent rebinding.
-3. Same-owner runtime target selection succeeds; ambiguous owner joins, expired scopes, invalid source cleanup, cross-owner stored edges and readonly escalation reject.
-4. Calls, returns, generic/abstract dispatch, closure captures, TLS shadow restoration and deferred argument preparation preserve the selected target/slot and required concrete/layout evidence.
-5. Failure after a valid publication into an existing region leaves that target live; failed whole-region acquisition releases exactly once. No allocation checkpoint, CoD move or implicit graph copy appears.
-6. Resize grows or trims an unused tail without changing retained payload/offsets/sharing/cycles; test E-1, E, C and C+1 capacity boundaries, alignment/header accounting, overflow and allocation failure. Equal-capacity requests retain consuming/result-owner semantics. Reject lossy truncation, implicit compaction and old-view use; fresh output views succeed. Cover pre-entry failure, post-entry rejection/failure and abandoned owning results with exact release and no implicit ownership restoration or automatic/in-place growth.
-7. Any selected lexical non-bits support has explicit layout, construction, lifetime, cross-owner-field and native-call acceptance; no support claim follows merely from renaming a C++ handle.
-8. Qualified source/API migration updates declarations, helpers, YAML, fixtures, instructions and current docs together. Old spellings remain only where they describe still-current external interfaces or immutable changelog evidence.
-9. Measure reference representation, emitted native code, allocation and access costs for representative lexical/region paths. A new name or more explicit type model is not itself a performance result.
+### Open source boundary — Native code retaining a resolved address
 
-The document is complete as a refactoring contract only when the material decisions, accepted value path and selected acceptance scope are recorded. Implementation completion additionally requires current source capability evidence; this draft supplies neither blanket qualification nor test results.
+```text
+# Schematic library calls; not selected intrinsic names or foreign syntax.
+with_native_access(p, callback);
+# callback may invoke CoD helpers that request more storage in p's owner.
+```
+
+A native address cannot be refreshed inside arbitrary foreign code. A handle-aware adapter avoids exposing a lasting raw address; a borrowed-address API instead needs a checked no-growth interval or explicit pinning/growth-failure behavior. Decide that observable access protocol when native exposure is admitted. Owner-context sharing alone does not choose it.
+
+Region resize's backing-file/capacity details and the coordinated C++ naming migration remain separately scoped work. They do not block recording the owner-sharing rule or require another vote on per-pointer owner overhead.
+
+## Review sequence and acceptance
+
+This task authorizes documentation only. The following are contract-review units and future acceptance requirements, not implementation or test execution instructions.
+
+1. Keep the selected owner, slot/content and optimization baseline coherent across D-14/D-22/D-28. Specify inter-owner views and address invalidation without fixing an unnecessary universal pointer ABI.
+2. Complete lexical ADT placement and integrate the selected owner-qualified construction and reference-identity contracts, including concrete key transport. Reconcile the exact affected D-01/D-07/D-14/D-22 scopes; do not infer qualification from the ancestor diagram or a compiler prototype.
+3. Compose calls, results, complete callable environments and cleanup with D-17/D-18/D-21/D-23/D-24/D-26. Preserve TLS/capture and persistence exclusions.
+4. Qualify physical encoding, native exposure and migration acceptance. A later separately authorized source task can then implement the relevant scoped contract and update current capability evidence.
+
+| Acceptance case | Required observation |
+| --- | --- |
+| D28-A01: slot versus contents | Same-owner, other-lexical-owner and regional-target references resolve correctly; null is distinct from slot location. Moving only the slot owner never changes an external target. |
+| D28-A02: optimization equivalence | Register/stack/scalar-replaced and materialized forms preserve alias identity, reads/writes, initialization, call behavior and scope cleanup. No mandatory heap frame appears. |
+| D28-A03: assignment and swaps | Growth and rebinding between operand evaluations preserve original selections; reference swaps re-encode each destination and bits swaps preserve both old payloads. |
+| D28-A04: prepared calls and results | Later-argument allocation, recursion and cleanup growth retain selected targets/places and value snapshots. Invalid owner escape still rejects. |
+| D28-A05: construction and failure | Earlier valid initialized nodes survive later allocation failure while their owner lives; incomplete required refs do not become readable; no implicit allocation rollback occurs. |
+| D28-A06: graph transfer | Exercise all four lexical/regional source/destination pairs with null, sharing and cycles, overlapping inputs where admitted, growing owners and exact library failure expectations. Stable identity keys survive permitted growth. |
+| D28-A07: callable and deferred state | Nested complete callable values and prepared destination/target references survive permitted movement; deferred ordering and completion replacement remain exact. Reject newly inferred lexical-cell captures. |
+| D28-A08: layout and type evidence | Generic/shared paths distinguish layout access from nominal identity and same-T; code sharing cannot erase required concrete evidence or owner proofs. |
+| D28-A09: lifetime distinctions | Lexical backing replacement preserves its owner; consuming region resize ends old views; container movement/reuse receives no automatic exemption. |
+| D28-A10: native and persisted boundaries | Native addresses do not survive an unproved growth interval; lexical anchors/addresses do not enter regional persistent images by implication. |
+| D28-A11: numeric and source compatibility | Preserve val/ref initialization operators, RHS pending boundaries, `#` comments, reserved fraction syntax, typed numeric conversion and nonzero-denominator validity. |
+| D28-A12: physical and resource bounds | Cover null/self-reference offsets, range/overflow/alignment, allocator symmetry, OOM and cleanup paths; measure code size, access cost, allocation count, copied extent and peak backing. No performance claim follows from representation choice alone. |
+| D28-A13: shared owner evidence | Many same-owner declarations reuse live identity/address information; inferred owners, recursive instances and forwarded owners remain distinct where required. Every dereference has sufficient owner, target and layout evidence, with no redundant per-pointer owner copy where sharing/elision suffices. |
+| D28-A14: qualified owner allocation | Writable input permits owner or const owner; all-readonly input permits only const owner. Const owner allows declared target writes but rejects direct/indirect allocation; null and shared runtime contexts cannot upgrade permission. Preserve admitted placement, policy, capacity, initialization and cleanup. |
+| D28-A15: identity and null | is follows the selected owner/locator pair; is not gives its exact boolean complement with identical operand evaluation, without payload equality or final-target dereference; is null uses contextual ownership. Preserve operand order, aliases, readonly views, distinct subobjects, named val storage, null/owner distinctions and key/hash stability through backing growth. |
+
+Completion of the design requires recorded decisions for the remaining interfaces and an accepted value path for each delegated scope. Implementation completion additionally requires current source capability evidence. This integrated review supplies neither source changes nor execution/benchmark results.
