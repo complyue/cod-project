@@ -29,7 +29,7 @@ runner.CASES = {
  'partial_numeric_domain': (IO+'func f(rest:u32...)->u64;func f(x:u64,y:u64)->u64{return x;}behave @print(f(1u32,2u32));',0,'1\n',''),
  'all_overlapping_contracts_apply': ('func f(rest:u64...)->u64;func f(x:u64,y:u64)->bool;func f(x:u64,y:u64){return true;}',2,'','declarations do not establish one result contract'),
  'explicit_result_checked_against_all': ('func f(rest:u64...)->bool;func f(x:u64,y:u64)->u64{return x;}',2,'','does not satisfy callable declaration'),
- 'independent_exception_tail_categories': (SYSTEM+'func f(rest:T...)->bool where T;func f(x:SystemException,y:SystemException)->bool{return true;}',2,'','declaration applicability requires'),
+ 'independent_exception_tail_categories': (SYSTEM+'func f(rest:T...)->bool where T;func f(x:SystemException,y:SystemException)->bool{return true;}',0,'',''),
  'common_exception_tail_contract': (SYSTEM+'func f(rest:SystemException...)->bool;func f(x:SystemException,y:SystemException){return true;}',0,'',''),
  'concrete_exception_tail_same_type': (MISSING+'func f(rest:T...)->bool where T;func f(x:MissingReturnException,y:MissingReturnException){return true;}',0,'',''),
  'readonly_value_tail_copies': (IO+'func f(rest:const u64...)->u64;func f(x:u64,y:u64){x<-9u64;return x+y;}const val x<-1u64;behave @print(f(x,x));behave @print(x);',0,'10\n1\n',''),

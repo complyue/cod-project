@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Exception declaration overlap
+
+<a id="k-689"></a>
+**K-689 — Exception-domain continuity.** Agent assessment under H-258/H-269/H-398/H-407/H-417/H-420–H-424, D-14r92/D-17r57/D-18r92/D-24r7/D-26r13 and charter §§2/3.3/5.3/6.3/12: registry r696→697 and source reference310→311 distinguish possible exception-value overlap from whole-method coverage. Symbolic category intersections retain repeated method binders, independent results and original-input failure applicability through preparation. Partial dependent results and borrowed/nested common-type relationships retain explicit proof boundaries. Acceptance covers known/distinct/unknown categories, queries, complete values, deferred/import/operator paths, equivalent native code, shared recursion and retained-cause cleanup. No finite catalog defines the overlap proof; no new source policy, runtime carrier, ingress, lifetime, ABI, fraction mechanism or design qualification. Prior capability reference: `7a977eacca0db44040284473dc5544b0f53a47ac:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Numeric declaration overlap
 
 <a id="k-688"></a>

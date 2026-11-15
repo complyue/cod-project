@@ -1692,6 +1692,37 @@ class ScalarChecker {
       implementation_gap(method.source->at, "variadic element type is not determined by the inputs");
     return substitutions;
   }
+  struct DeclarationOverlap {
+    Substitutions substitutions;
+    std::set<size_t> unknown_categories;
+  };
+  std::optional<DeclarationOverlap> declaration_overlap(const CheckedMethod &method, const std::vector<Type> &arguments) const {
+    if (!accepts_arity(method, arguments.size()) || !method.retained_types.empty()) return {};
+    DeclarationOverlap overlap{type_context(method, {}), {}};
+    std::set<size_t> category_parameters;
+    for (size_t i = 0; i < arguments.size(); ++i) {
+      const auto &actual = arguments[i];
+      const auto &pattern = method.parameters[parameter_index(method, i)];
+      if (argument_mode(parameter_at(method, i)) == ArgumentMode::value && actual.kind == Type::exception && !actual.identity) {
+        if (const auto index = binder(method, pattern)) category_parameters.insert(*index);
+        else if (pattern.kind != Type::exception) return {};
+      } else if (!bind_parameter(method, i, actual, overlap.substitutions, true)) return {};
+    }
+    // Intersect repeated binders with concrete inputs before admitting an
+    // unknown category. Equality holds only on this overlapping domain.
+    bool unproved = false;
+    for (const auto index : category_parameters) {
+      auto &bound = overlap.substitutions[index];
+      if (!bound) {
+        bound = exception_type(0); overlap.unknown_categories.insert(index);
+      } else if (bound->kind != Type::exception) return {};
+      else if (!bound->identity) unproved = true;
+    }
+    if (unproved) implementation_gap(method.source->at, "declaration overlap between concrete category evidence and a borrowed or nested common type");
+    if (variadic(method) && nested_binder(method, substitute(method.parameters.back(), method, overlap.substitutions, true)))
+      implementation_gap(method.source->at, "variadic element type is not determined by the inputs");
+    return overlap;
+  }
   std::vector<Type> prepared_types(const CheckedMethod &method, const std::vector<Type> &arguments,
                                    const std::vector<Type> &retained) const {
     const auto substitutions = match(method, arguments, retained, true);
@@ -1764,6 +1795,8 @@ class ScalarChecker {
   }
   struct DeclarationObligation {
     const CheckedMethod *declaration;
+    Substitutions result_substitutions;
+    bool covers_types;
     bool covers_method;
   };
   std::vector<DeclarationObligation> declaration_obligations(const CheckedMethod &method, const std::vector<Type> &arguments,
@@ -1773,29 +1806,39 @@ class ScalarChecker {
     if (lexical_methods_.contains(method.source)) return obligations;
     if (!method.family) return obligations;
     for (const auto &declaration : program_.families[*method.family].declarations) {
-      if (!declaration_match(declaration, arguments)) continue;
+      auto overlap = declaration_overlap(declaration, arguments);
+      if (!overlap) continue;
       if (!admits_access(declaration, input_access) || match_owners(declaration, input_owners, state) == OwnerMatch::mismatch) continue;
       const auto access = access_coverage(method, declaration);
       if (access == AccessCoverage::disjoint) continue;
-      // A common exception view cannot prove independent concrete identities
-      // equal. Numeric preparation preserves the original input promise but
-      // can leave a declaration covering only part of the method's domain.
+      // Method-wide coverage retains independent concrete categories and
+      // equalities from repeated method binders, separately from overlap.
       auto domain = arguments;
+      std::map<size_t, size_t> category_roles;
+      bool borrowed_common = false;
       for (size_t i = 0; i < domain.size(); ++i) {
-        if (accepts_exception(domain[i], method.parameters[i])) domain[i] = independent_input(method.parameters[i], i);
+        if (accepts_exception(domain[i], method.parameters[i])) domain[i] = method.parameters[i];
+        if (domain[i].kind == Type::exception && !domain[i].identity) {
+          const auto parameter = binder(method, method.parameters[i]);
+          const auto role = parameter ? category_roles.try_emplace(*parameter, i).first->second : i;
+          domain[i] = independent_input(domain[i], role);
+          borrowed_common = borrowed_common || argument_mode(parameter_at(method, i)) != ArgumentMode::value;
+        }
         if (argument_mode(parameter_at(method, i)) != argument_mode(parameter_at(declaration, i)))
           implementation_gap(method.source->at, "declaration applicability across different parameter passing modes");
       }
-      if (!match(declaration, domain, {}, true))
-        implementation_gap(method.source->at, "declaration applicability requires an independent input-domain proof");
+      if (borrowed_common && !match(declaration, domain, {}, true))
+        implementation_gap(method.source->at, "declaration applicability requires an independent borrowed input-domain proof");
       for (size_t i = 0; i < domain.size(); ++i)
         if (numeric(method.parameters[i]) && widens(domain[i], method.parameters[i])) domain[i] = method.parameters[i];
+      const bool covers_types = match(declaration, domain, {}, true).has_value();
+      if (!covers_types) for (const auto index : overlap->unknown_categories) overlap->substitutions[index].reset();
       if (method.source->kind != declaration.source->kind)
         fail(method.source->at, "implementation kind does not satisfy callable declaration");
       for (const auto category : method.throws_categories)
         if (exception_categories[category].checked && !declaration.throws_categories.contains(category))
           fail(method.source->at, "implementation exposes a checked exception outside its callable declaration");
-      obligations.push_back({&declaration, match(declaration, domain, {}, true).has_value() &&
+      obligations.push_back({&declaration, std::move(overlap->substitutions), covers_types, covers_types &&
           access == AccessCoverage::contained && implies_owners(method, declaration)});
     }
     return obligations;
@@ -1808,10 +1851,10 @@ class ScalarChecker {
   std::vector<DeclaredResult> declared_results(const CheckedMethod &method, const std::vector<Type> &arguments,
       const Access &input_access = {}, const Owners &input_owners = {}, const TypeEvidenceState *state = nullptr) const {
     std::vector<DeclaredResult> results;
-    for (const auto &[declaration, covers_method] : declaration_obligations(method, arguments, input_access, input_owners, state)) {
+    for (const auto &[declaration, substitutions, covers_types, covers_method] : declaration_obligations(method, arguments, input_access, input_owners, state)) {
       auto result = declaration->result;
       std::set<std::string> owner_roles;
-      result.type = substitute(*result.type, *declaration, *match(*declaration, arguments, {}, true), true);
+      result.type = substitute(*result.type, *declaration, substitutions, true);
       if (nested_binder(*declaration, *result.type))
         implementation_gap(method.source->at, "declared result type parameter is not determined by the arguments");
       if (result.borrowed()) {
@@ -2032,7 +2075,7 @@ class ScalarChecker {
     method.source = &source; method.module = module_; method.family = module_names().callables.at(expr.text); method.parameters = arguments; method.result.type = result;
     check_declared_results(method, method.result, declared_results(method, arguments, access, owners, state));
     std::set<size_t> failures;
-    for (const auto &[declaration, covers_method] : declaration_obligations(method, arguments, access, owners, state))
+    for (const auto &[declaration, substitutions, covers_types, covers_method] : declaration_obligations(method, arguments, access, owners, state))
       failures.insert(declaration->throws_categories.begin(), declaration->throws_categories.end());
     return failures;
   }
@@ -2063,11 +2106,13 @@ class ScalarChecker {
     }
   }
   void add_declared_failures(Type &type, const CheckedMethod &method, const std::vector<Type> &arguments,
-                             const Access &access = {}, const Owners &owners = {}) const {
-    for (const auto &[declaration, covers_method] : declaration_obligations(method, arguments, access, owners))
+                             const Access &access = {}, const Owners &owners = {}, bool covering_types_only = false) const {
+    for (const auto &[declaration, substitutions, covers_types, covers_method] : declaration_obligations(method, arguments, access, owners)) {
+      if (covering_types_only && !covers_types) continue;
       for (const auto &failure : declaration->throws_types)
         if (std::find(type.throws_types.begin(), type.throws_types.end(), failure) == type.throws_types.end())
           type.throws_types.push_back(failure);
+    }
   }
   Type callable_type(const CheckedMethod &checked, const std::vector<Type> &arguments, const ResultContract &contract,
                      const Access &access = {}, const Owners &owners = {}, const std::vector<Type> *original = nullptr) const {
@@ -2094,7 +2139,7 @@ class ScalarChecker {
     if (std::none_of(type.const_views.begin(), type.const_views.end(), [](bool v) { return v; })) type.const_views.clear();
     if (std::none_of(type.nullable_views.begin(), type.nullable_views.end(), [](bool v) { return v; })) type.nullable_views.clear();
     type.throws_types = checked.throws_types;
-    add_declared_failures(type, checked, arguments, access, owners);
+    add_declared_failures(type, checked, arguments, access, owners, original && *original != arguments);
     if (original && *original != arguments) add_declared_failures(type, checked, *original, access, owners);
     return resolve_type(std::move(type));
   }
