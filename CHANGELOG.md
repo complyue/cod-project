@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Builtin operand completion
+
+<a id="k-699"></a>
+**K-699 — Builtin completion continuity.** Agent assessment under H-261/H-272/H-304/H-356/H-361/H-362/H-398/H-407/H-420/H-423, D-14r92/D-17r57/D-18r92/D-21r12/D-26r13 and charter §§2/3.3/6.3/12: registry r706→707 and source reference320→321 propagate non-producing operands through definitely builtin eager operations. Acceptance preserves arity, known-input validity, source-order preparation, earlier failures, return/throw replacement, no aborted invocation/registration, complete-image cleanup and shared recursive native bodies. Missing input evidence for user-method/declaration selection stays unproved. No new payload type, numeric conversion, lifetime, ABI, fraction implementation or design qualification. Prior capability: `913fd456d3c692a08e195a2bf01351f1780eb283:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Deferred reference exchange
 
 <a id="k-698"></a>

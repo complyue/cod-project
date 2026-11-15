@@ -2135,8 +2135,10 @@ class ScalarChecker {
     types.unary = arguments.size() == 1 && (expr.text == "+" || expr.text == "-" || expr.text == "!");
     const auto error = [&](const std::string &message) { types.error = message; return types; };
     if (!types.unary && (arguments.size() != 2 || expr.text == "!")) return error("builtin operator argument count does not match");
+    const bool completes = std::none_of(arguments.begin(), arguments.end(), [](const Type &type) { return type == Type::never; });
     if (types.unary) {
       const auto &argument = arguments.front();
+      if (!completes) { types.result = types.operand = Type::never; return types; }
       if (expr.text == "!") {
         if (argument != Type::boolean) return error("logical negation requires bool");
       } else if (argument != Type::integer && !(expr.text == "-" && floating(argument)))
@@ -2144,18 +2146,20 @@ class ScalarChecker {
       types.result = types.operand = argument;
       types.failing = expr.text == "-" && argument == Type::integer;
     } else {
-      const auto &left = arguments[0], &right = arguments[1];
       const bool equality = expr.text == "==" || expr.text == "!=";
       const bool comparison = equality || expr.text == "<" || expr.text == ">" || expr.text == "<=" || expr.text == ">=";
-      if (equality && left == Type::boolean && right == Type::boolean) types.operand = Type::boolean;
+      std::vector<Type> values;
+      for (const auto &type : arguments) if (type != Type::never) values.push_back(type);
+      if (values.empty()) { types.result = types.operand = Type::never; return types; }
+      if (equality && std::all_of(values.begin(), values.end(), [](const Type &type) { return type == Type::boolean; })) types.operand = Type::boolean;
       else {
-        if (!numeric(left) || !numeric(right)) return error("no applicable numeric operation '" + expr.text + "'");
-        if (const auto common = common_value_type(arguments)) types.operand = *common;
+        if (!std::all_of(values.begin(), values.end(), numeric)) return error("no applicable numeric operation '" + expr.text + "'");
+        if (const auto common = common_value_type(values)) types.operand = *common;
         else return error("numeric operands have no lossless common type");
         if (expr.text == "%" && floating(types.operand)) return error("remainder requires integer operands");
       }
-      types.result = comparison ? Type{Type::boolean} : types.operand;
-      types.failing = !comparison && integral(types.operand);
+      types.result = !completes ? Type{Type::never} : comparison ? Type{Type::boolean} : types.operand;
+      types.failing = completes && !comparison && integral(types.operand);
     }
     return types;
   }
@@ -2196,6 +2200,7 @@ class ScalarChecker {
     if (!types.error.empty()) fail(expr.at, types.error);
     operation.builtin = types.unary ? BuiltinOperation::unary : BuiltinOperation::binary;
     operation.type = types.result; operation.operand_type = types.operand;
+    if (types.result == Type::never) return;
     if (types.unary && expr.text == "!") {
       operation.null_test = views.front().null_test;
       if (operation.null_test) operation.null_test->null_when_true = !operation.null_test->null_when_true;
@@ -3813,6 +3818,8 @@ class ScalarChecker {
       std::vector<Type> arguments;
       std::vector<CheckedOperation> views;
       bool completes = true;
+      const bool builtin_signature = eager && (expr.intrinsic ||
+          (named_family(expr.text).methods.empty() && !has_declarations(expr.text)));
       const auto evidence = argument_evidence(expr);
       for (size_t i = 0; i < expr.children.size(); ++i) {
         const auto preparation = argument_preparation(expr, arguments, evidence, access_of(views), owners_of(views));
@@ -3820,13 +3827,14 @@ class ScalarChecker {
         const auto argument = check(*expr.children[i], instance, operations, mode == ArgumentMode::value, false,
             preparation.type && preparation.type->kind == Type::procedure ? &*preparation.type : nullptr);
         if (argument == Type::never) {
-          if (!preparation.type) {
+          if (!preparation.type && !builtin_signature) {
             if (!eager && !expr.intrinsic && expr.text != "cause_at" && named_family(expr.text).methods.empty())
               fail(expr.at, "unknown callable '" + expr.text + "'");
             implementation_gap(expr.children[i]->at, "cannot establish a parameter type for an abruptly completing operand");
           }
-          // The signature supplies a checking type; the operand produces no payload.
-          arguments.push_back(*preparation.type);
+          // A known method signature supplies a checking type; a builtin needs no
+          // invented payload type for an operand that cannot produce a value.
+          arguments.push_back(preparation.type.value_or(Type{Type::never}));
           completes = false;
         } else {
           arguments.push_back(argument);
