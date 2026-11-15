@@ -670,18 +670,31 @@ class ScalarChecker {
     bool consistent_type = true;
     // Without complete type evidence, an eager operation may still use its value-taking builtin.
     if (eager_operation(expr.text) && !complete) mode = ArgumentMode::value;
-    for (const auto id : applicable) {
-      const auto &candidate = program_.methods[id];
-      const auto passing = argument_mode(candidate.source->parameters[prefix.size()]);
+    const auto accumulate = [&](const CheckedMethod &candidate, const Substitutions &substitutions) {
+      const auto passing = argument_mode(parameter_at(candidate, prefix.size()));
       if (mode && *mode != passing) {
-        if (!required) return {};
+        if (!required) return false;
         implementation_gap(expr.children[prefix.size()]->at, "overloads with different argument preparation contracts without sufficient operand type evidence");
       }
       mode = passing;
-      const auto expected = substitute(candidate.parameters[prefix.size()], candidate, candidates.substitutions.at(id), true);
+      const auto expected = substitute(candidate.parameters[parameter_index(candidate, prefix.size())], candidate, substitutions, true);
       if (nested_binder(candidate, expected) || (type && *type != expected))
         consistent_type = false;
       else type = expected;
+      return true;
+    };
+    for (const auto id : applicable)
+      if (!accumulate(program_.methods[id], candidates.substitutions.at(id))) return {};
+    // Signature-only queries can use declarations without demanding a body.
+    // Every applicable declaration remains an obligation, not an overload choice.
+    if (state && family.methods.empty()) {
+      const ModuleLookup lookup(module_, state->method ? program_.methods[*state->method].module : module_);
+      for (const auto &declaration : declarations(expr.text)) {
+        const auto substitutions = match_evidence(declaration, arguments, {}, true);
+        if (!substitutions || !admits_access(declaration, access) ||
+            match_owners(declaration, owners, state) == OwnerMatch::mismatch) continue;
+        if (!accumulate(declaration, *substitutions)) return {};
+      }
     }
     return {mode.value_or(ArgumentMode::value), consistent_type ? type : std::nullopt};
   }
@@ -1738,6 +1751,14 @@ class ScalarChecker {
     std::map<size_t, Substitutions> substitutions;
     bool widening = false, type_match = false, access_match = false;
   };
+  static std::optional<Substitutions> match_evidence(const CheckedMethod &method,
+      const std::vector<std::optional<Type>> &arguments, const std::vector<Type> &retained, bool widening) {
+    if (!accepts_arity(method, arguments.size()) || method.retained_types.size() != retained.size()) return {};
+    auto substitutions = type_context(method, retained);
+    for (size_t i = 0; i < arguments.size(); ++i)
+      if (arguments[i] && arguments[i] != Type::never && !bind_parameter(method, i, *arguments[i], substitutions, widening)) return {};
+    return substitutions;
+  }
   MethodCandidates method_candidates(const std::vector<size_t> &family, const std::vector<std::optional<Type>> &arguments,
                                      const std::vector<Type> &retained, const Access &access, const Owners &owners,
                                      const TypeEvidenceState *state = nullptr, bool allow_widening = true) const {
@@ -1747,17 +1768,14 @@ class ScalarChecker {
       if (widening && !allow_widening) break;
       for (const auto id : family) {
         const auto &method = program_.methods[id];
-        if (method.parameters.size() != arguments.size() || method.retained_types.size() != retained.size()) continue;
-        auto substitutions = type_context(method, retained);
-        bool matches = true;
-        for (size_t i = 0; i < arguments.size(); ++i)
-          if (arguments[i] && arguments[i] != Type::never && !bind_parameter(method, i, *arguments[i], substitutions, widening)) matches = false;
-        if (!matches) continue;
+        if (method.parameters.size() != arguments.size()) continue;
+        auto substitutions = match_evidence(method, arguments, retained, widening);
+        if (!substitutions) continue;
         result.type_match = true;
         if (!admits_access(method, access)) continue;
         result.access_match = true;
         if (match_owners(method, owners, state) == OwnerMatch::mismatch) continue;
-        if (result.substitutions.emplace(id, std::move(substitutions)).second) result.methods.push_back(id);
+        if (result.substitutions.emplace(id, std::move(*substitutions)).second) result.methods.push_back(id);
       }
       if (complete && !result.methods.empty()) {
         result.widening = widening;

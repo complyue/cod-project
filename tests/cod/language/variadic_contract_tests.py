@@ -61,7 +61,7 @@ runner.CASES = {
  'fixed_callable_retains_contract': (IO+'func f(rest:u64...)->u64;func f(x:u64,y:u64){return x+y;}func g=f;behave @print(g(1u8,2u8));',0,'3\n',''),
  'complete_callable_result': (IO+'func id(x:u64)->u64{return x;}func f(rest:u64...)->func(u64)->u64;func f(x:u64,y:u64){return id;}func g=f(1u64,2u64);behave @print(g(7u64));',0,'7\n',''),
  'nested_callable_tail_relation': (IO+'func id(x:u64)->u64{return x;}func f(rest:func(T)->const T...)->const T where T;val q<-make local typeof(f(id,id)){7u64};behave @print(q);',0,'7\n',''),
- 'nested_callable_tail_mismatch': ('func id(x:u64)->u64{return x;}func real(x:f64)->f64{return x;}func f(rest:func(T)->const T...)->const T where T;val q<-make local typeof(f(id,real));',2,'','no applicable declared signature'),
+ 'nested_callable_tail_mismatch': ('func id(x:u64)->u64{return x;}func real(x:f64)->f64{return x;}func f(rest:func(T)->const T...)->const T where T;val q<-make local typeof(f(id,real));',2,'','callable view contract'),
  'recursive_declared_result': (IO+'func sum(rest:u64...)->u64;func sum(x:u64){if(x==0u64){return 0u64;}else{return x+sum(x-1u64);};}behave @print(sum(30u64));',0,'465\n',''),
  'operator_builtin_contract': (IO+'func (+)(rest:i64...)->i64;behave @print(2+3);',0,'5\n',''),
  'operator_builtin_bad_contract': ('func (+)(rest:i64...)->bool;2+3;',2,'','does not satisfy callable declaration'),

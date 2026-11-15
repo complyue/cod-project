@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14 — Contextual declaration queries
+
+<a id="k-692"></a>
+**K-692 — Signature-evidence continuity.** Agent assessment under H-258/H-295/H-398/H-407/H-420–H-424, D-10r147/D-14r92/D-18r92/D-24r7/D-26r13 and charter §§2/3.2/5.3/6.3/12: registry r699→700 and source reference313→314 share partial argument matching between executable methods and declaration-only type queries. All applicable declaration contracts remain obligations; established inputs can supply generic callable context without executing, materializing or demanding a body. Acceptance covers variadic tails, conflicting signatures, owner/access/throws, imported and retained contexts, no native query work and exact cleanup. Ordinary execution still requires implementations. No parameter-inference policy, dispatch tiebreaker, conversion, lifetime, ABI, fraction mechanism or design qualification is added. The registry heading is synchronized with its current authority revision. Prior capability reference: `865ae7d9cc8162a53694fcbda58d639a9f38d040:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Exact common-exception borrowing
 
 <a id="k-691"></a>
