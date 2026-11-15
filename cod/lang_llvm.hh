@@ -45,7 +45,8 @@ class LLVMEmission {
   std::map<size_t, llvm::AllocaInst *> effect_values_;
   std::vector<const std::map<const Expression *, CheckedOperation> *> facts_;
   std::vector<llvm::Value *> arguments_, retained_types_;
-  std::vector<llvm::AllocaInst *> storage_, bindings_;
+  std::vector<llvm::AllocaInst *> storage_;
+  std::vector<llvm::Value *> bindings_;
   std::vector<llvm::AllocaInst *> selections_;
   const std::vector<CheckedBinding> *binding_layout_ = nullptr;
   std::vector<llvm::AllocaInst *> parameter_values_;
@@ -104,7 +105,8 @@ class LLVMEmission {
       auto *selected = load(selections_[id]);
       return binding_layout_->at(id).value_binding ? selected : b_.CreateLoad(b_.getPtrTy(), selected);
     }
-    return bindings_.at(id) ? load(bindings_[id]) : storage_.at(*place);
+    if (bindings_.at(id)) return b_.CreateLoad(b_.getPtrTy(), bindings_[id]);
+    return storage_.at(*place);
   }
   llvm::Value *environment(llvm::Value *value) {
     return environments_ ? b_.CreateExtractValue(value, environment_field_) : null_pointer();
@@ -562,16 +564,20 @@ class LLVMEmission {
     auto *zero = pack(llvm::ConstantInt::get(llvm::cast<llvm::IntegerType>(native_type(type)), 0), type);
     return binary(expr, zero, arguments.front(), Choice{{type, type}, choice.operation});
   }
+  llvm::Value *swap_builtin(const std::vector<llvm::Value *> &arguments, BuiltinOperation operation) {
+    auto *left = view_address(arguments[0]), *right = view_address(arguments[1]);
+    llvm::Type *type = scalar_;
+    if (operation == BuiltinOperation::reference_swap) type = b_.getPtrTy();
+    auto *left_value = b_.CreateLoad(type, left), *right_value = b_.CreateLoad(type, right);
+    b_.CreateStore(right_value, left); b_.CreateStore(left_value, right);
+    return outcome(empty_scalar(), integer(0), integer(0), null_pointer());
+  }
   llvm::Value *invoke(const Expression &expr, const std::vector<llvm::Value *> &arguments) {
     const auto &fact = facts_.front()->at(&expr);
     if (fact.callable_call) return invoke_value(expr, arguments);
-    if (fact.builtin == BuiltinOperation::reference_swap) {
-      auto *left = view_address(arguments[0]), *right = view_address(arguments[1]);
-      auto *type = b_.getPtrTy();
-      auto *left_value = b_.CreateLoad(type, left), *right_value = b_.CreateLoad(type, right);
-      b_.CreateStore(right_value, left); b_.CreateStore(left_value, right);
-      return outcome(empty_scalar(), integer(0), integer(0), null_pointer());
-    }
+    if (std::all_of(facts_.begin(), facts_.end(), [&](const auto *facts) {
+          return facts->at(&expr).builtin == BuiltinOperation::reference_swap;
+        })) return swap_builtin(arguments, BuiltinOperation::reference_swap);
     if (fact.builtin == BuiltinOperation::is_null)
       return outcome(pack(b_.CreateICmpEQ(view_address(arguments.front()), null_pointer()), Type::boolean),
           integer(0), integer(0), null_pointer());
@@ -594,12 +600,8 @@ class LLVMEmission {
       }
       if (choice.operation->builtin == BuiltinOperation::unary || choice.operation->builtin == BuiltinOperation::binary)
         return outcome(eager_builtin(expr, arguments, choice), integer(0), integer(0), null_pointer());
-      if (choice.operation->builtin == BuiltinOperation::bits_swap) {
-        auto *left = view_address(arguments[0]), *right = view_address(arguments[1]);
-        auto *left_value = b_.CreateLoad(scalar_, left), *right_value = b_.CreateLoad(scalar_, right);
-        b_.CreateStore(right_value, left); b_.CreateStore(left_value, right);
-        return outcome(empty_scalar(), integer(0), integer(0), null_pointer());
-      }
+      if (choice.operation->builtin == BuiltinOperation::bits_swap || choice.operation->builtin == BuiltinOperation::reference_swap)
+        return swap_builtin(arguments, choice.operation->builtin);
       if (choice.operation->builtin == BuiltinOperation::cause_at) {
         auto *payload = unpack(arguments[0], choice.inputs[0]);
         auto *buffer = slot(exception_, "exception.cause");
@@ -921,15 +923,18 @@ class LLVMEmission {
     if (environments_ && read) value_owners_[result] = saved;
     return result;
   }
-  llvm::Value *checked_address(llvm::Value *address, const Expression &expr, const Location &at, bool callable = false) {
-    if (std::none_of(facts_.begin(), facts_.end(), [&](const auto *facts) {
-          return callable ? facts->at(&expr).callable_nullable : facts->at(&expr).targets.contains(null_target);
-        })) return address;
+  llvm::Value *checked_address(llvm::Value *address, bool nullable, const Location &at) {
+    if (!nullable) return address;
     auto *present = block("reference.present"), *absent = block("reference.absent");
     b_.CreateCondBr(b_.CreateICmpEQ(address, null_pointer()), absent, present);
     b_.SetInsertPoint(absent); fail_path(ExceptionCategory::null_pointer, at);
     b_.SetInsertPoint(present);
     return address;
+  }
+  llvm::Value *checked_address(llvm::Value *address, const Expression &expr, const Location &at, bool callable = false) {
+    return checked_address(address, std::any_of(facts_.begin(), facts_.end(), [&](const auto *facts) {
+      return callable ? facts->at(&expr).callable_nullable : facts->at(&expr).targets.contains(null_target);
+    }), at);
   }
   size_t prepared_count(const Expression &expr) const {
     return expr.children.size() + (expr.kind != Expression::Kind::value_call && facts_.front()->at(&expr).callable_call ? 1 : 0);
@@ -1032,7 +1037,15 @@ class LLVMEmission {
       for (size_t j = 0; j < facts_.size(); ++j)
         alternatives[facts_[j]->at(&expr).arguments.at(i).mode == ArgumentMode::borrowed_read].push_back(j);
       contextual_value(*expr.children[i], alternatives, "destination.check", [&](bool read) {
-        if (read) checked_address(view_address(arguments[i]), *expr.children[i], expr.at);
+        if (read) {
+          auto *address = view_address(arguments[i]);
+          if (fact.arguments[i].binding_slot) {
+            address = b_.CreateLoad(b_.getPtrTy(), address);
+            checked_address(address, std::any_of(facts_.begin(), facts_.end(), [&](const auto *facts) {
+              return facts->at(&expr).nullable_arguments.contains(i);
+            }), expr.at);
+          } else checked_address(address, *expr.children[i], expr.at);
+        }
         return b_.getTrue();
       }, b_.getInt1Ty());
     }
@@ -1461,14 +1474,19 @@ class LLVMEmission {
       storage_.push_back(place);
       if (place && environments_) initialize_value(place);
     }
-    bindings_.clear(); selections_.clear(); binding_layout_ = &bindings;
-    for (const auto &binding : bindings) {
-      bindings_.push_back(binding.value_binding || binding.alias || !binding.selection.empty() ? nullptr : slot(b_.getPtrTy(), "reference.target"));
+    bindings_.assign(bindings.size(), nullptr); selections_.clear(); binding_layout_ = &bindings;
+    for (size_t i = 0; i < frame.inputs.size(); ++i) if (frame.inputs[i].binding_slot)
+      bindings_.at(storage.at(frame.inputs[i].place).binding) = view_address(arguments_[i]);
+    for (size_t i = 0; i < bindings.size(); ++i) {
+      const auto &binding = bindings[i];
+      if (!bindings_[i] && !binding.value_binding && !binding.alias && binding.selection.empty())
+        bindings_[i] = slot(b_.getPtrTy(), "reference.target");
       selections_.push_back(binding.selection.empty() ? nullptr : slot(b_.getPtrTy(), "alias.selection"));
     }
     for (size_t i = 0; i < arguments_.size(); ++i) {
       const auto &input = frame.inputs[i];
       const auto place = input.place, binding = storage.at(place).binding;
+      if (input.binding_slot) continue;
       if (input.mode != ArgumentMode::value) { b_.CreateStore(view_address(arguments_[i]), bindings_.at(binding)); continue; }
       b_.CreateStore(arguments_[i], storage_.at(place));
       if (environments_) parameter_values_.push_back(storage_.at(place));

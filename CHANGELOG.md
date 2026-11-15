@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-15 — Caller-binding methods
+
+<a id="k-700"></a>
+**K-700 — Caller-binding method continuity.** Agent assessment under H-305/H-306/H-327/H-342/H-344/H-356/H-398/H-407/H-420/H-423, D-14r92/D-17r57/D-18r92/D-21r12/D-26r13 and charter §§2/3.3/6.3/12: registry r707→708 and source reference321→322 implement direct reference-swap methods with actual caller slots through ordinary dispatch, native frames and per-completion binding summaries. Acceptance preserves ordered evaluation, current-target entry checks, exact type/owner/access, ref validity, conservative alias mutation, separate entry-payload and output-selection initialization, exception/cleanup effects, ordinary helper isolation and shared generic bodies. Prepared method calls, callable payload flow, callable-value slot contracts and broader permission/ref-preservation proofs remain unproved; builtin coverage remains. No semantic revision, physical regional protocol, persistent ABI, fraction implementation or new design qualification. Prior capability: `f6bb01009d93c46740b063b66fedfa02046143eb:tests/cod/language/README.md`.
+
 ## 2026-11-14 — Builtin operand completion
 
 <a id="k-699"></a>
