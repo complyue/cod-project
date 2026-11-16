@@ -453,8 +453,9 @@ class ScalarChecker {
   size_t next_target_version_ = 0;
   std::set<size_t> rebound_;
   std::map<std::string, size_t> external_owners_;
-  struct LoopOwners { size_t first, last; std::set<size_t> bindings, expired; };
-  std::map<const Expression *, LoopOwners> loop_owners_;
+  struct LoopState { size_t first, last; std::set<size_t> bindings, rebound, expired; };
+  std::map<const Expression *, LoopState> loop_states_;
+  std::vector<const Expression *> active_loops_;
   struct AbruptPath { LexicalState state; ExceptionFacts exceptions; Location at; Completion completion{2, false}; };
   struct AbruptFlow { size_t depth; std::vector<AbruptPath> paths; };
   AbruptFlow *abrupt_ = nullptr;
@@ -952,6 +953,10 @@ class ScalarChecker {
       if (binding.requires_initialized) require_initialized(source, at, "ref target");
     }
   }
+  void record_rebinding(size_t binding) {
+    rebound_.insert(binding);
+    for (const auto *loop : active_loops_) loop_states_.at(loop).rebound.insert(binding);
+  }
   void rebind(const CheckedOperation &target, const CheckedOperation &source) {
     const auto written = overlapping_slots(target.slots);
     std::vector<size_t> affected;
@@ -970,7 +975,7 @@ class ScalarChecker {
             std::all_of(previous.begin(), previous.end(), [&](size_t place) { return lexical_.initialized.contains(place); }));
       }
       assign_targets(id, selected, selection_targets(source.targets, weak ? std::optional<size_t>{id} : std::nullopt));
-      if (!proving_) rebound_.insert(id);
+      if (!proving_) record_rebinding(id);
     }
   }
   CheckedOperation current_selection(CheckedOperation view, const Location &at) const {
@@ -987,11 +992,13 @@ class ScalarChecker {
       auto &requirement = reads[read];
       requirement.nonnull = incoming;
       std::erase_if(*requirement.nonnull, [&](size_t id) { return !possible_targets_.at(id).contains(null_target); });
-      // A registration guard cannot identify a different runtime iteration.
-      if (std::none_of(loop_controls_.begin(), loop_controls_.end(),
-          [&](size_t control) { return storage(control).scope > cleanup_scope_; }))
-        for (const auto &[id, versions] : lexical_.target_versions)
-          if (!lexical_.targets.at(id).contains(null_target)) requirement.nonnull_versions.emplace(id, versions);
+      // A source version distinguishes iterations only for invariant slots.
+      for (const auto &[id, versions] : lexical_.target_versions)
+        if (!lexical_.targets.at(id).contains(null_target) &&
+            std::none_of(active_loops_.begin(), active_loops_.end(), [&](const auto *loop) {
+              const auto &state = loop_states_.at(loop);
+              return state.first > cleanup_scope_ && state.rebound.contains(id);
+            })) requirement.nonnull_versions.emplace(id, versions);
     }
     for (const auto id : incoming) {
       if (initialized.contains(id)) continue;
@@ -1023,7 +1030,7 @@ class ScalarChecker {
           possible_targets_.at(id).insert(source.targets.begin(), source.targets.end());
           possible_null_sources_.at(id).insert(source.null_sources.begin(), source.null_sources.end());
           target_dependencies_.at(id).insert(incoming.begin(), incoming.end());
-          rebound_.insert(id);
+          record_rebinding(id);
         }
       }
       if (!proving_ || std::none_of(written.begin(), written.end(), [&](size_t id) { return bindings_->at(id).requires_initialized; })) return;
@@ -1126,9 +1133,10 @@ class ScalarChecker {
       write_exception_payloads(lexical_.input_facts[input].exceptions, target, categories);
     refresh_input_facts(lexical_);
   }
-  void refresh_targets(LexicalState &state, bool invalidate = true) {
+  void refresh_targets(LexicalState &state, bool invalidate = true, const std::set<size_t> *changed = nullptr) {
     if (!proving_) return;
     for (auto &[binding, targets] : state.targets) {
+      if (changed && !changed->contains(binding)) continue;
       targets = possible_targets_.at(binding);
       state.null_sources[binding] = possible_null_sources_.at(binding);
       if (!invalidate) {
@@ -1165,8 +1173,8 @@ class ScalarChecker {
       }
     } while (changed);
     catalog_storage_ = *storage_;
-    for (auto &[expr, loop] : loop_owners_) for (const auto binding : loop.bindings)
-      for (const auto place : possible_targets_.at(binding)) if (place != null_target) {
+    for (auto &[expr, loop] : loop_states_) for (const auto binding : loop.bindings)
+      if (loop.rebound.contains(binding)) for (const auto place : possible_targets_.at(binding)) if (place != null_target) {
         const auto scope = storage(place).scope;
         if (scope >= loop.first && scope < loop.last) loop.expired.insert(binding);
       }
@@ -1403,7 +1411,7 @@ class ScalarChecker {
               const auto &origins = views.at(input).origins;
               target_dependencies_.at(binding).insert(origins.begin(), origins.end());
             }
-            rebound_.insert(binding);
+            record_rebinding(binding);
           }
         }
       }
@@ -4556,11 +4564,14 @@ class ScalarChecker {
         auto &queue = lexical_.input_facts.at(input).queues.at(cleanup_scope_);
         headers[input] = queue = cleanup_.header(queue);
       }
-      if (repeat_possible) {
-        refresh_targets(lexical_);
-        if (proving_) lexical_.expired_bindings.insert(loop_owners_.at(&expr).expired.begin(), loop_owners_.at(&expr).expired.end());
-      }
       const auto iteration_scope = next_scope_;
+      if (repeat_possible) {
+        if (!proving_) loop_states_[&expr] = {iteration_scope, iteration_scope, before.bindings_available, {}, {}};
+        const auto &loop = loop_states_.at(&expr);
+        refresh_targets(lexical_, true, &loop.rebound);
+        if (proving_) lexical_.expired_bindings.insert(loop.expired.begin(), loop.expired.end());
+        active_loops_.push_back(&expr);
+      }
       checked_scope_owners_[&expr] = iteration_scope;
       lexical_.live = lexical_.live && body_possible;
       for (const auto input : inputs(lexical_.inputs)) for (auto &[id, categories] : lexical_.input_facts[input].exceptions)
@@ -4582,7 +4593,10 @@ class ScalarChecker {
         fail(expr.at, "fold body does not satisfy the accumulator type");
       }
       leave_scope();
-      if (!proving_ && repeat_possible) loop_owners_[&expr] = {iteration_scope, next_scope_, before.bindings_available, {}};
+      if (repeat_possible) {
+        active_loops_.pop_back();
+        if (!proving_) loop_states_.at(&expr).last = next_scope_;
+      }
       const auto body_state = lexical_;
       if (repeat_possible && body != Type::never && lexical_.live) for (const auto input : inputs(lexical_.inputs)) {
         const auto &facts = lexical_.input_facts.at(input);
@@ -5174,9 +5188,9 @@ class ScalarChecker {
     proving_ = proving; observed_ = {};
     storage_ = &storage; bindings_ = &bindings;
     storage.clear(); bindings.clear(); operations.clear();
-    if (!proving) { possible_targets_.clear(); possible_null_sources_.clear(); target_dependencies_.clear(); catalog_storage_.clear(); rebound_.clear(); loop_owners_.clear(); }
+    if (!proving) { possible_targets_.clear(); possible_null_sources_.clear(); target_dependencies_.clear(); catalog_storage_.clear(); rebound_.clear(); loop_states_.clear(); }
     lexical_ = {}; cleanup_ = {}; scope_storage_.clear(); checked_scope_owners_.clear(); read_sites_.clear(); external_owners_.clear();
-    loop_controls_.clear(); delayed_controls_.clear(); deferred_inputs_.clear();
+    loop_controls_.clear(); delayed_controls_.clear(); deferred_inputs_.clear(); active_loops_.clear();
     caught_.reset(); catch_bindings_.clear(); caught_inputs_.clear();
     captures_ = nullptr; delayed_ = false; prepared_call_ = nullptr;
     cleanup_scope_ = 0; next_scope_ = 1;

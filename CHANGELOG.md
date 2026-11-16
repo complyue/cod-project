@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-16 — Preserve invariant loop targets
+
+<a id="k-738"></a>
+**K-738 — Use loop rebinding effects for target proofs.** Agent implementation/continuity under H-272/H-293/H-299/H-302/H-313/H-356–H-362/H-366–H-371/H-420/H-423 and charter §§3.3/4.3/5.3/6.3/12: source354→355 and registry749→750 preserve D-14r115’s target/access/owner invariants and D-17r69’s C-63/P-235/P-236 cleanup contract. Shared physical-slot mutation paths identify loop-carried rebinding; unchanged targets retain established evidence, while modified slots and expired owners retain their checks. Prepared guards preserve the distinction between invariant slots and repeated mutations. Acceptance covers ordinary/generic/alias/callable reads, nested loops, initialization, deferred operations and native cleanup. Wider target/payload/branch correlations remain unproved; no source-policy, runtime, ABI, regional or fraction change. Baseline: `24badd22a62650ad0fa706720cc30b169945ee9f` at affected paths.
+
 ## 2026-11-16 — Explicit source-module traversal
 
 <a id="k-737"></a>
