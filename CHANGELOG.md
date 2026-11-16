@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-15 — Composed null-test evidence
+
+<a id="k-725"></a>
+**K-725 — Preserve boolean result proofs across expression composition.** Agent continuity assessment under H-317/P-284, H-439–H-441/P-391–P-392, H-423 and charter §§3.3/4.3/5.3/6.3/8/12: source341→342 and registry735→736 preserve C-65/C-95's stable null tests and the established D-17/D-18/D-26 completion/native contracts. Checked expression evidence composes builtin negation and short-circuit operations, forwards block results and joins conditional/guarded alternatives; binding versions invalidate stale tests after mutation or cleanup. Acceptance covers both truth paths, abrupt operands, selected builtin identity, nullable/initialized/readonly/lifetime boundaries, loop/defer use and shared generic recursion without runtime evidence allocation. D-14r112, D-17r69, D-18r104, D-26r21, D-16 and other design revisions/qualification boundaries remain unchanged. No assertion surface, stored/callee predicate contract, owner representation, ABI or capture policy is selected. Baseline: `892c2254273d479700ddfbff91af609fb961e068` at affected paths.
+
 ## 2026-11-15 — Recursive type-only signatures
 
 <a id="k-724"></a>

@@ -15,6 +15,7 @@
 #include <functional>
 #include <limits>
 #include <map>
+#include <memory>
 #include <tuple>
 
 namespace cod::language {
@@ -103,7 +104,14 @@ struct CheckedOperation {
   std::set<size_t> nullable_arguments;
   std::map<size_t, CleanupEquations::Effects> invocation;
   struct NullTest { size_t binding; std::set<size_t> versions; bool null_when_true = true; };
-  std::optional<NullTest> null_test;
+  struct Predicate {
+    enum class Kind { null_test, negation, conjunction, disjunction, alternatives, abrupt };
+    Kind kind;
+    NullTest test{};
+    std::shared_ptr<const Predicate> left, right;
+  };
+  // Immutable evidence describes the produced boolean, independently of its source spelling.
+  std::shared_ptr<const Predicate> predicate;
 };
 
 struct CheckedStorage {
@@ -1641,22 +1649,41 @@ class ScalarChecker {
     if (!null) lexical_.null_sources.at(test.binding).clear();
     lexical_.live = lexical_.live && !targets.empty() && lexical_.selections.possible;
   }
-  void refine(const Expression &expr, bool value, const std::map<const Expression *, CheckedOperation> &operations) {
-    if (operations.at(&expr).type == Type::never) { lexical_.live = false; return; }
-    if (const auto &test = operations.at(&expr).null_test) { refine_test(*test, value); return; }
-    if (expr.kind != Expression::Kind::binary || (expr.text != "&&" && expr.text != "||")) return;
-    const bool conjunction = expr.text == "&&";
-    if (value == conjunction) {
-      refine(*expr.children[0], value, operations); refine(*expr.children[1], value, operations);
+  using Predicate = CheckedOperation::Predicate;
+  static std::shared_ptr<const Predicate> predicate_of(const CheckedOperation &operation) {
+    if (operation.type == Type::never) {
+      static const auto abrupt = std::make_shared<const Predicate>(Predicate{Predicate::Kind::abrupt, {}, {}, {}});
+      return abrupt;
+    }
+    return operation.predicate;
+  }
+  static std::shared_ptr<const Predicate> predicate(Predicate::Kind kind,
+      std::shared_ptr<const Predicate> left, std::shared_ptr<const Predicate> right = {}) {
+    if (!left && !right) return {};
+    return std::make_shared<const Predicate>(Predicate{kind, {}, std::move(left), std::move(right)});
+  }
+  void refine_predicate(const std::shared_ptr<const Predicate> &proof, bool value, const Location &at) {
+    if (!proof) return;
+    if (proof->kind == Predicate::Kind::abrupt) { lexical_.live = false; return; }
+    if (proof->kind == Predicate::Kind::null_test) { refine_test(proof->test, value); return; }
+    if (proof->kind == Predicate::Kind::negation) { refine_predicate(proof->left, !value, at); return; }
+    const bool alternatives = proof->kind == Predicate::Kind::alternatives;
+    const bool conjunction = proof->kind == Predicate::Kind::conjunction;
+    if (!alternatives && value == conjunction) {
+      refine_predicate(proof->left, value, at); refine_predicate(proof->right, value, at);
     } else {
       const auto before = lexical_;
-      refine(*expr.children[0], value, operations);
+      refine_predicate(proof->left, value, at);
       const auto first = lexical_;
       lexical_ = before;
-      refine(*expr.children[0], !value, operations); refine(*expr.children[1], value, operations);
+      if (!alternatives) refine_predicate(proof->left, !value, at);
+      refine_predicate(proof->right, value, at);
       const auto second = lexical_;
-      join(first, false, second, false, expr.at);
+      join(first, false, second, false, at);
     }
+  }
+  void refine(const Expression &expr, bool value, const std::map<const Expression *, CheckedOperation> &operations) {
+    refine_predicate(predicate_of(operations.at(&expr)), value, expr.at);
   }
   void dereference(const CheckedOperation &view, const Location &at) {
     if (!view.targets.contains(null_target)) return;
@@ -1720,6 +1747,7 @@ class ScalarChecker {
       if (result.type == Type::void_type) {
         result.place.reset(); result.binding.reset(); result.slots.clear(); result.targets.clear(); result.origins.clear(); result.null_sources.clear();
         result.view = result.read_only = false; result.exceptions.clear();
+        result.predicate.reset();
       }
     }
     return result;
@@ -2430,10 +2458,8 @@ class ScalarChecker {
     operation.builtin_name = name;
     operation.type = types.result; operation.operand_type = types.operand;
     if (types.result == Type::never) return;
-    if (types.unary && name == "!") {
-      operation.null_test = views.front().null_test;
-      if (operation.null_test) operation.null_test->null_when_true = !operation.null_test->null_when_true;
-    }
+    if (types.unary && name == "!")
+      operation.predicate = predicate(Predicate::Kind::negation, predicate_of(views.front()));
     operation.invocation.emplace(0, CleanupEquations::Effects{});
     check_builtin_declarations(expr, arguments, operation, false, views);
     if (types.failing) {
@@ -3893,6 +3919,9 @@ class ScalarChecker {
     result.type = cleanup == Type::never || normals.empty() ? Type{Type::never} :
         expr.kind == Expression::Kind::deferred ? Type{Type::void_type} : result_type;
     if (!views.empty()) {
+      result.predicate = predicate_of(*views.front());
+      for (size_t i = 1; i < views.size(); ++i)
+        result.predicate = predicate(Predicate::Kind::alternatives, result.predicate, predicate_of(*views[i]));
       result.place = views.front()->place;
       result.binding = views.front()->binding;
       result.slots = views.front()->slots;
@@ -3977,6 +4006,7 @@ class ScalarChecker {
     CheckedOperation operation;
     const auto child = [&](size_t i, bool read_value = true, bool discarded = false) { return check(*expr.children.at(i), instance, operations, read_value, discarded); };
     const auto view = [&](const CheckedOperation &source) {
+      operation.predicate = predicate_of(source);
       operation.place = source.place;
       operation.binding = source.binding;
       operation.slots = source.slots;
@@ -4021,7 +4051,8 @@ class ScalarChecker {
         if (left.owners == right.owners) {
           for (const auto &[selected, other] : {std::pair{&left, &right}, std::pair{&right, &left}})
             if (selected->binding && other->type == Type::null_ref)
-              operation.null_test = CheckedOperation::NullTest{*selected->binding, selected->selection_versions, expr.text == "is"};
+              operation.predicate = std::make_shared<const Predicate>(Predicate{Predicate::Kind::null_test,
+                  {*selected->binding, selected->selection_versions, expr.text == "is"}, {}, {}});
         }
       } else lexical_.live = false;
       operations[&expr] = operation;
@@ -4071,6 +4102,8 @@ class ScalarChecker {
           fail(expr.at, "logical operation requires bool operands");
         operation.operand_type = Type::boolean;
         operation.type = left == Type::never ? Type{Type::never} : Type{Type::boolean};
+        operation.predicate = predicate(expr.text == "&&" ? Predicate::Kind::conjunction : Predicate::Kind::disjunction,
+            predicate_of(operations.at(expr.children[0].get())), predicate_of(operations.at(expr.children[1].get())));
         break;
       }
       [[fallthrough]];
@@ -4298,6 +4331,7 @@ class ScalarChecker {
       if (yes == Type::never) view(no_fact);
       else if (no == Type::never) view(yes_fact);
       else {
+        operation.predicate = predicate(Predicate::Kind::alternatives, predicate_of(yes_fact), predicate_of(no_fact));
         operation.view = yes_fact.view || no_fact.view;
         operation.mixed_view = yes_fact.mixed_view || no_fact.mixed_view || yes_fact.view != no_fact.view;
         operation.read_only = yes_fact.read_only || no_fact.read_only;
