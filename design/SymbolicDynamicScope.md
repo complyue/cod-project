@@ -1,10 +1,14 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 185 · Recorded: 2026-11-16 · Phase: language/application co-design.
+Design revision: 186 · Recorded: 2026-11-16 · Phase: language/application co-design.
 
 ## Design authority
 
-- **Wrapper-aware catch dependency:** [H-518–H-522](../CHANGELOG.md#h-518)/[D-17-CATCH-WRAPPERS](DesignAuthorityRegistry.md#d-17-catch-wrappers), [K-WRAPPER-CATCH-20261116](../CHANGELOG.md#k-wrapper-catch-20261116), records source-order wrapper-prefix matching and same-exception-identity selection of the hidden tip within the lexical catch context under candidate P-470–P-472/charter §§2/3.2–3.3/4.3/6.3/8/12. Preserve ordinary payload type evidence, complete incoming exception history for selected exception operations, actual owners and D-16. Inspection, mixed-wrapper matching, canonical-wrapper invariants and transparent checked coverage remain pending in D-17; no copied graph, general value ABI or new source support is inferred.
+- **Disjoint type proposal:** [H-526](../CHANGELOG.md#h-526)/[K-ERROR-ROOTS-20261116](../CHANGELOG.md#k-error-roots-20261116), [D-10-DISJOINT](DesignAuthorityRegistry.md#d-10-disjoint), records a requested general mechanism, with type disjoint A, B as an agent syntax candidate under C-56/C-10/P-476–P-478. The complete syntax, value path and operational scope are pending-human. Preserve nominal identities, explicit conformance permissions, selected module contexts and D-16; the candidate's acceptance/conflict boundaries are below. H-526 separately confirms rejecting checkedness-changing exception adapters, not a generic sealing or disjointness rule.
+
+- **Checked and unchecked roots:** [H-524–H-526](../CHANGELOG.md#h-524)/[K-ERROR-ROOTS-20261116](../CHANGELOG.md#k-error-roots-20261116), [D-17-ERROR-ROOTS](DesignAuthorityRegistry.md#d-17-error-roots), adds Error <: Exception and preserves explicit Exception handling obligations even for values proven unchecked. Checkedness-changing adapter conformance rejects. Candidate P-473–P-475 serves explicit typed failure contracts and user-defined errors under charter §§2/3.1/3.3/4.3/6.3/8/12. Existing actual-type dispatch, concrete failure categories, owner/capture and D-16 contracts continue. New roots/declaration enforcement and arbitrary exception payload support are not established by current source tests; general disjointness and remaining wrapper/throws/inspection scope remain separate.
+
+- **Wrapper-aware catch dependency:** [H-518–H-522](../CHANGELOG.md#h-518)/[D-17-CATCH-WRAPPERS](DesignAuthorityRegistry.md#d-17-catch-wrappers), [K-WRAPPER-CATCH-20261116](../CHANGELOG.md#k-wrapper-catch-20261116), records source-order wrapper-prefix matching and same-exception-identity selection of the hidden tip within the lexical catch context under candidate P-470–P-472/charter §§2/3.2–3.3/4.3/6.3/8/12. Preserve ordinary payload type evidence, complete incoming exception history for selected exception operations, actual owners and D-16. [H-523](../CHANGELOG.md#h-523)/[K-RETHROW-FROM-20261116](../CHANGELOG.md#k-rethrow-from-20261116) requires standard-wrapper cause/checkedness agreement and adds automatic rethrow from cause, with a direct diagnostic suggestion on mismatch. Inspection and transparent checked coverage remain pending in D-17; no copied graph, general value ABI or new source support is inferred.
 
 - **Caught-value construction defaults:** [H-510–H-517](../CHANGELOG.md#h-510)/[K-EXCEPTION-CONSTRUCTION-20261116](../CHANGELOG.md#k-exception-construction-20261116) continues this dependency in r184→185. [D-17-RETHROW](DesignAuthorityRegistry.md#d-17-rethrow)/[D-17-OOM-RESERVE](DesignAuthorityRegistry.md#d-17-oom-reserve), candidate P-464–P-469 under charter §§2/3.2–3.3/4.3/6.3/8/12, separates unchanged throw propagation from constructor-time trace/cause creation, lexically supplied rethrow defaults and the bounded process OOM diagnostic window. Preserve semantic checkedness, module/callable contexts, captures, actual owners, independent deferred-stack obligations and D-16. D-17 owns acceptance and remaining representation/aggregate/ordering questions; no compiler support or whole-scope qualification follows.
 
@@ -427,6 +431,22 @@ H-218 permits `data D <: A;` to add conformance for an existing data identity, i
 Source-preserving functions/procedures retain their source body, non-callable lexical bindings and captured values. The native implementation retains source-family provenance while selecting ordinary methods under distinct module/context identities; it does not accumulate every caller-visible method. H-230 requires distinct extension/union identities; H-232 gives using the preserved selected context and import the receiving implementation context; compound alias/context conflicts remain to be specified. H-229 preserves established conformance of concrete arguments through broad constraints and nested traversal, without publishing unrelated caller type relations. Operator/intrinsic candidate lookup remains lexical. Mixin checks the redefined body in its receiving context: interface use needs the corresponding adapter view, and declaring new conformance needs import permission on the ADT. This is independent of perform/behave's dynamic-value selection. No new effect binding, body capture, region permission or runtime type field follows from conformance.
 
 D-07 illustrates selecting the data type through an adapter with using. Explicit export/re-export and export import have a bounded implementation; H-491 additionally specifies publication-only export from, which is not implemented; broader publication choices remain pending. Neither requires module-qualified calls or a runtime interface registry. A source body may use its own declared relations without exporting those facts through every callable selection. Once-only incorporation and explicit alias availability retain their existing rules.
+
+### Proposed disjoint abstract types
+
+H-526 requests a general way to declare two abstract types incompatible. The current syntax candidate is `type disjoint A, B;`, meaning that no concrete type can conform to both, directly or through admitted transitive relations. It is symmetric; A disjoint B and B disjoint C does not imply A disjoint C. This is a **pending-human proposal**, not accepted source grammar or implemented behavior. Candidate [D-10-DISJOINT](DesignAuthorityRegistry.md#d-10-disjoint)/P-476–P-478 links explicit impossible domain combinations to the existing nominal conformance model and charter §§3.1/6.3/8/12.
+
+```cod
+type LocalOnly;
+type RemoteOnly;
+type disjoint LocalOnly, RemoteOnly;  # Proposed syntax.
+data Endpoint <: LocalOnly { code:u64; }
+data Endpoint <: RemoteOnly;          # Would reject under this constraint.
+```
+
+An initial design would reject self/ancestor pairs rather than introduce implicit empty-type reasoning. In particular, Error and Exception cannot be declared disjoint while Error <: Exception and its concrete failures remain admitted. [D-17's fixed checkedness contract](ExceptionControl.md#classification-is-not-adapter-local) rejects reclassification independently; no new checked-only root or automatic extra conformance is selected.
+
+Before qualification, confirm syntax/value scope, authority to declare a constraint on foreign types, visibility/export and persistence of negative evidence through adapters/generic boundaries, interaction with existing conformances, and where conflicting selected worlds reject. No runtime membership check, retroactive invalidation of unrelated modules, load-order winner or implicit new type family is authorized. Existing H-218/H-220 conformance permissions continue outside explicitly selected exception-classification restrictions.
 
 ### Explicit publication and extension identities
 
