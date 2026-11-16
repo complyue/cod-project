@@ -1,5 +1,33 @@
 # Changelog
 
+## 2026-11-16 — Return-state design and compiler evidence integration
+
+<a id="k-returning-sync-20261116"></a>
+**K-RETURNING-SYNC-20261116 — Preserve scoped completion decisions and copied-reference evidence.** Integrates H-542–H-547/K-RETURNING-20261116 in `907d93ef836db06c723ca00fe0166efede31c0c9` with K-761 in `a4635e7424560cfde087f8040d3e7d71acc8a2e0`, affected design/source-reference paths. Source388→389/registry786→787 preserves D-17r83/D-23r17/D-10r190/D-15r42/D-21r22 and existing qualified compiler contracts. Explicit return recovery and scoped ordinary cancellation remain separate from FIFO failures; return inspection, full value-path qualification and owned/no-value/physical protocols remain pending. Charter §§2/3.1–3.3/4.3/6.3/8/12, H-525/H-536–H-541, owners/access/init and D-16 continue. Both decision histories and compiler validation scope are retained; the merge adds no executable support or new human confirmation.
+
+## 2026-11-16 — Return inspection, explicit recovery and scoped cancellation
+
+<a id="h-542"></a>
+**H-542 — Permit explicit cleanup-return recovery.** Human/source for H-542–H-547: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-16 America/Los_Angeles; exact timestamps/personal name unavailable. After proposing if returning to retain author control over returned results, the user answered the recovery-versus-normal-only question: “允许 `else` 块里的 `return xxx;` 让body throw的情况也正常return”. Confirms that explicit cleanup return can turn an ordinary body failure into normal return; it does not erase unrelated deferred failures or itself recover module startup.
+
+<a id="h-543"></a>
+**H-543 — Inspect an established return.** Same human/chat/date: “心智模型是只要执行到 `return xxx;` 就算数， `if returning (xxx:T) { ... } else { ... }` 可以判断之前是否已经有了 return 指令。” Selects invocation-local established-return inspection and replacement, with the latest completed return supplying the result. The initially discussed persistence across ordinary exceptions is narrowed by H-546/H-547 below; this event is not a permanent-history or physical-retention ABI approval.
+
+<a id="h-544"></a>
+**H-544 — Optional return filters and non-capturing inspection.** Same human/chat/date: “对的，补充一下： `if returning () { ... } else { ... }` 允许匹配任何返回值，且不capture； 或者 `if returning (in o) ...` 要求明确的owner内引用；或者 `if returning (val rtn) ...` 。另外指定了类型也要匹配，否则走下一个分支。 你推演看看”. Accepts the presented successful-preparation/result-slot model and adds unrestricted non-capturing, owner and val filters, with typed mismatch trying the next branch. Complete grammar, owned-result binding and physical transport are not confirmed by this statement.
+
+<a id="h-545"></a>
+**H-545 — Match an existing owner.** Same human/chat/date; explicit choice for whether in o filters a visible owner or binds a fresh owner: “Filter by an existing owner”. Confirms the filter interpretation, not a new existential owner declaration, owner union, ownership transfer or stronger access.
+
+<a id="h-546"></a>
+**H-546 — Review clearing a return on an ordinary body failure.** Same human/chat/date, replying to the interrupted-return/outer-catch/fallthrough example: “body里的异常抛出，我倾向于直接清return，你推演看看”. Requests the ordinary-failure clearing direction; the agent then distinguishes escaping cancellation from a failure handled wholly inside finally. This proposal alone does not select clearing on every locally caught throw.
+
+<a id="h-547"></a>
+**H-547 — Delegate the local-recovery boundary by implementation cost.** Same human/chat/date, answering whether a reporting failure caught entirely inside finally preserves a pending return 7: “以实现成本考量最简单的选项吧”. The human delegates the choice/criterion rather than explicitly naming either outcome. K-RETURNING-20261116 records the agent's selection and rationale; broader new mechanisms and pending ownership/pattern scopes are not blanket-approved.
+
+<a id="k-returning-20261116"></a>
+**K-RETURNING-20261116 — Select scoped cancellation and align return inspection.** Under H-547's delegation, choose preserving return 7 after successful local recovery, and clearing when an escaping ordinary exception cancels the return. Reuse scoped completion suspension/restoration; every-throw invalidation would need extra propagation through suspended outer states. Current evidence: `f8eccfdf4e9f0852f9ef2e9e441e990544bdea11:cod/lang_llvm.hh`, complete_cleanup/emit_finally; this is feasibility evidence, not implementation acceptance. D-17r82→83/D-23r16→17 records H-542–H-547 and D-17-RETURN-STATE/P-482–P-484; D-15r41→42/D-10r189→190/D-21r21→22/source387→388 aligns dependencies and support boundaries, registry785→786. Candidate C-54/C-63/C-65 paths serve author-controlled completion, observable return state and valid storage under charter §§2/3.2–3.3/4.3/6.3/8/12. Preserve H-525/H-536–H-541, unrelated FIFO failures, owner/access/capture constraints, exact release and D-16. Acceptance includes ordinary cancellation versus local recovery, explicit body-error replacement, first/repeated/failed return preparation, typed/owner fallback, null evidence and binding failure. Owned-result capture, no-value pattern details, complete grammar/physical protocols and full value-path qualification remain pending. Baseline: the same immutable commit at affected documentation paths. Documentation only; no source edits, builds or tests.
+
 ## 2026-11-16 — Copied nullable reference evidence
 
 <a id="k-761"></a>
