@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-16 — Callable mention conformance boundary
+
+<a id="k-740"></a>
+**K-740 — Record local-definition construction gaps.** Agent evidence/continuity under H-481/H-420/H-423 and charter §§3.2/3.3/5.3/6.3/8/12: source356→357 and registry751→752 distinguish module-definition freshness from local definitions' current declaration-time snapshots and early symbolic-capture requirement. Recursive materialization remains unsupported. Both native modes reproduce the bounded mismatch; it is not a language policy or a reason to weaken the confirmed fresh-symbolic-view rule. Mutable lexical dependency timing is a separately identified clarification; stored copies, current symbolic captures and all existing qualifications remain unchanged. No source implementation, physical context or ABI is selected. Baseline: `85b7a4e04276442a541f7636a712a129ad623700` at affected paths; semantic design revisions remain D-18r105/D-10r174.
+
 ## 2026-11-16 — Callable mention and compiler-scope integration
 
 <a id="k-739"></a>
