@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-11-16 — Declared checked failures from deferred work
+
+<a id="h-536"></a>
+**H-536 — Keep throws propagation available for checked deferred failures.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-16 America/Los_Angeles; exact timestamp/personal name unavailable. Statement: “不 defer catch 时就声明 `throws FlushException`，defer catch FlushException 时就不需要声明，我没看出有问题呀”. Confirms declaring the deferred operation's unhandled checked failure on the enclosing callable and discharging it with covering deferred handling. Rejects the agent's proposed mandatory local recovery/translation and its claim that a throws declaration cannot suffice. This does not itself choose how an outer typed catch receives a failure retained inside UnhandledDeferError, nor change H-509's preservation requirement.
+
+<a id="h-537"></a>
+**H-537 — Construct the aggregate after the defer-handler pass.** Same human/chat/date as H-536; clarification: “只有走过一遍 defer handlers 才会生成 `UnhandledDeferError` 包装，不存在把 `UnhandledDeferError` 交给 defer catch 去处理的场景；要有也是一个callable 抛出 `UnhandledDeferError`，普通 try catch 捕获”. Confirms the handler-before-packaging boundary and ordinary callable propagation/catching of the completed aggregate. It is not fed back into the completed defer-handler pass. No implicit member-wise ordinary catch dispatch follows. The composition of a deferred invocation with a callee that independently aggregates, and static coverage of the declared member obligation by a container catch, remain review boundaries rather than reasons to reopen H-536.
+
+<a id="k-defer-throws-20261116"></a>
+**K-DEFER-THROWS-20261116 — Separate source obligation from aggregate delivery.** D-17r77→78/registry775→776 records H-536/H-537 in D-17-DEFER-DISPATCH/P-461–P-463. C-63's explicit typed-failure responsibility under charter §§2/3.1/3.3/6.3/12 continues through ordinary throws declarations and actual covering handler registrations; root declarations retain H-525 obligations and recovery failures retain their own contracts. Acceptance includes declared unhandled cleanup, handled cleanup without that declaration, missing coverage/declaration and skipped/misordered handlers. Place residual aggregate creation after the completed handler pass and route it through ordinary catch. Preserve container matching without implicitly dispatching its members; keep caller-side checked coverage and nested deferred-invocation composition explicit review boundaries. Preserve all residual exceptions, body/deferred separation, ordinary owner/return rules and D-16. Full stack/value-path qualification, nested/original-error handling and physical support remain separate. Baseline: `33fd5d208772126df9aa6a0e2030ed9924ad8301`, affected paths. Documentation only; no implementation, builds or tests.
+
 ## 2026-11-16 — Preserve declared exception obligations during proof improvements
 
 <a id="k-checked-declaration-boundary-20261116"></a>
