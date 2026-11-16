@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-16 — Copied nullable reference evidence
+
+<a id="k-761"></a>
+**K-761 — Preserve selected values across reference copies.** Source387→388/registry785→786 continues K-760's qualified D-14r116/P-258, D-17r82/P-235/P-236/P-280, D-18r107 and D-26r21/H-407 scope under H-420/H-423. Shared conditions retain copy observations and guarded predecessor relations independently of mutable slot versions, including saved guards and borrowed read predecessors. Acceptance covers independent choices, weak/loop/alias rebinding, payload mutation, shared native code and exact release. Charter §§2/3.1–3.3/4.3/6.3/8/12, H-525, owners/access/init and D-16 continue. Wider caller-slot/multi-origin proofs and new runtime/ABI/return-inspection/queue contracts remain separate; no new source rule or human confirmation. Baseline: `f8eccfdf4e9f0852f9ef2e9e441e990544bdea11`, affected compiler/source-reference paths.
+
 ## 2026-11-16 — Nullable input predicate evidence
 
 <a id="k-760"></a>

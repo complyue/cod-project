@@ -351,6 +351,7 @@ public:
     }
   };
   using BooleanPayload = std::pair<std::optional<size_t>, size_t>;
+  using BindingSnapshot = std::pair<size_t, std::set<size_t>>;
   // Necessary path facts shared by value summaries and read obligations.
   struct ConditionFacts {
     std::set<size_t> present;
@@ -358,12 +359,14 @@ public:
     std::set<std::pair<size_t, bool>> inputs;
     std::set<std::pair<BooleanPayload, bool>> payloads{};
     // Non-null selections are valid only for these binding versions.
-    std::set<std::pair<size_t, std::set<size_t>>> bindings{};
+    std::set<BindingSnapshot> bindings{};
     SelectionConditions conditions{};
     std::set<ExceptionFacts> exceptions{};
     // Absence of immutable borrowed inputs, independently of later rebinding.
     std::set<size_t> absent{};
-    std::set<std::pair<size_t, std::set<size_t>>> absent_bindings{};
+    std::set<BindingSnapshot> absent_bindings{};
+    // Equal observed reference values do not alias their mutable binding slots.
+    std::set<std::set<BindingSnapshot>> same_bindings{};
     bool operator==(const ConditionFacts &) const = default;
     auto operator<=>(const ConditionFacts &) const = default;
     void append(const ConditionFacts &other) {
@@ -375,12 +378,33 @@ public:
       exceptions.insert(other.exceptions.begin(), other.exceptions.end());
       absent.insert(other.absent.begin(), other.absent.end());
       absent_bindings.insert(other.absent_bindings.begin(), other.absent_bindings.end());
+      same_bindings.insert(other.same_bindings.begin(), other.same_bindings.end());
+    }
+    void resolve_bindings() {
+      std::set<std::set<BindingSnapshot>> groups;
+      for (auto group : same_bindings) {
+        for (auto it = groups.begin(); it != groups.end();) {
+          if (std::none_of(group.begin(), group.end(), [&](const auto &value) { return it->contains(value); })) { ++it; continue; }
+          group.insert(it->begin(), it->end()); it = groups.erase(it);
+        }
+        if (group.size() > 1) groups.insert(std::move(group));
+      }
+      same_bindings = std::move(groups);
+      for (const auto &group : same_bindings) {
+        if (std::any_of(group.begin(), group.end(), [&](const auto &value) { return bindings.contains(value); }))
+          bindings.insert(group.begin(), group.end());
+        if (std::any_of(group.begin(), group.end(), [&](const auto &value) { return absent_bindings.contains(value); }))
+          absent_bindings.insert(group.begin(), group.end());
+      }
     }
     bool implies(const ConditionFacts &other) const {
       const auto includes = [](const auto &a, const auto &b) { return std::includes(a.begin(), a.end(), b.begin(), b.end()); };
       return includes(present, other.present) && includes(inputs, other.inputs) &&
           includes(payloads, other.payloads) && includes(bindings, other.bindings) && conditions.implies(other.conditions) &&
-          includes(exceptions, other.exceptions) && includes(absent, other.absent) && includes(absent_bindings, other.absent_bindings);
+          includes(exceptions, other.exceptions) && includes(absent, other.absent) && includes(absent_bindings, other.absent_bindings) &&
+          std::all_of(other.same_bindings.begin(), other.same_bindings.end(), [&](const auto &group) {
+            return std::any_of(same_bindings.begin(), same_bindings.end(), [&](const auto &known) { return includes(known, group); });
+          });
     }
   };
   // Keep finite alternatives until entry payloads have been substituted.
@@ -395,6 +419,7 @@ public:
       }) != truths.end();
     };
     if (!facts.conditions.possible || contradictory(facts.inputs) || contradictory(facts.payloads)) return;
+    facts.resolve_bindings();
     if (std::any_of(facts.absent.begin(), facts.absent.end(), [&](size_t input) { return facts.present.contains(input); })) return;
     if (std::any_of(facts.absent_bindings.begin(), facts.absent_bindings.end(), [&](const auto &binding) { return facts.bindings.contains(binding); })) return;
     // Filters constrain one immutable origin. Constant alternatives and
