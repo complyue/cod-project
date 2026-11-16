@@ -5,13 +5,13 @@ import exception_borrow_runtime_tests as fixture
 
 runner = fixture.runner
 runner.SOURCE += '''
-proc change_alias(ref x:Exception in O,ref y:Exception in P,a:MissingReturnError,b:NullPointerException)->void throws NullPointerException where {owner O,owner P}{
+proc change_alias(ref x:Exception in O,ref y:Exception in P,a:MissingReturnError,b:NullPointerException)->void throws Exception where {owner O,owner P}{
  x<-a;y<-b;try{throw x;}finally{observe(71u64);};
 }
 {{
  val x:Exception<-missing_value(),y:Exception<-missing_value();
- try{change_alias(x,y,missing_value(),null_value());}catch(e:const MissingReturnError){observe(72u64);}catch(e:const NullPointerException){observe(73u64);};
- try{change_alias(x,x,missing_value(),null_value());}catch(e:const MissingReturnError){observe(72u64);}catch(e:const NullPointerException){observe(73u64);};
+ try{change_alias(x,y,missing_value(),null_value());}catch(e:const MissingReturnError){observe(72u64);}catch(e:const NullPointerException){observe(73u64);}catch(e:const Exception){observe(99u64);};
+ try{change_alias(x,x,missing_value(),null_value());}catch(e:const MissingReturnError){observe(72u64);}catch(e:const NullPointerException){observe(73u64);}catch(e:const Exception){observe(99u64);};
 }};
 '''
 runner.EXPECTED_VALUES += ['71','72','71','73']

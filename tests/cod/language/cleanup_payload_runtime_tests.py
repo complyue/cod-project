@@ -13,18 +13,18 @@ func saved_cleanup_result(ref target:Exception in O)->const Exception where {own
 {{
  val payload:Exception<-null_value(),source:Exception<-null_value();
  {{defer copy_later(payload,source);source<-missing_value();}};
- try{throw payload;}catch(e:const MissingReturnError){observe(e.category);};
+ try{throw payload;}catch(e:const Exception){observe(e.category);};
  {{defer write_payload(payload,source,20u64);source<-null_value();}};
- try{throw payload;}catch(e:const MissingReturnError){observe(e.category);};
+ try{throw payload;}catch(e:const Exception){observe(e.category);};
  {{defer{payload<-missing_value();{}};defer{payload<-null_value();{}};}};
- try{throw payload;}catch(e:const MissingReturnError){observe(e.category);};
+ try{throw payload;}catch(e:const Exception){observe(e.category);};
  {{defer (<->)(payload,source);}};
  observe(payload.category);observe(source.category);
  payload<-missing_value();
- try{throw saved_cleanup_result(payload);}catch(e:const MissingReturnError){observe(e.category);};
+ try{throw saved_cleanup_result(payload);}catch(e:const Exception){observe(e.category);};
  observe(payload.category);
  {{defer{ {{defer (<-)(payload,missing_value());}};};}};
- try{throw payload;}catch(e:const MissingReturnError){observe(e.category);};
+ try{throw payload;}catch(e:const Exception){observe(e.category);};
 }};
 '''
 runner.EXPECTED_VALUES+=['5','5','5','4','5','5','4','5']

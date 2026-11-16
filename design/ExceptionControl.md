@@ -1,8 +1,10 @@
 # CoD exception control and regional cleanup
 
-Design revision: 77 · Recorded: 2026-11-16 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; current implementation availability is recorded in the source capability reference.
+Design revision: 78 · Recorded: 2026-11-16 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; current implementation availability is recorded in the source capability reference.
 
 ## Design authority
+
+- **Compiler enforcement and payload evidence:** [K-755](../CHANGELOG.md#k-755) continues r77→78 under the qualified C-63/P-235/P-236/P-280 contract and H-525 rejection boundary. Declared root obligations are enforced independently of actual category facts; shared finite selection conditions preserve admitted boolean/exception payload proofs. Charter §§3.1/3.3/4.3/6.3/8/12, explicit typed intent, owner/access/initialization and D-16 remain unchanged. Acceptance and current proof limits are recorded in the [source capability reference](../tests/cod/language/README.md). This updates implementation status without qualifying new roots, ABI, narrower-catch coverage or revised deferred-stack policies.
 
 - **Declared-obligation enforcement boundary:** [H-524/H-525](../CHANGELOG.md#h-525) is a binding rejection criterion on the already qualified D-17 checking scope through C-63/P-235/P-236/P-280. [K-CHECKED-DECLARATION-BOUNDARY-20261116](../CHANGELOG.md#k-checked-declaration-boundary-20261116) continues that scope in r77: better actual-value evidence cannot waive a declared Exception obligation. This preserves explicit typed intent under charter §§2/3.1/3.3/6.3/12; it does not qualify D-17-ERROR-ROOTS's pending complete value path, new root implementation, payload ABI, transparent-wrapper coverage or deferred-stack integration. The bounded acceptance and exclusions are under Declared handling obligations below.
 
@@ -48,11 +50,11 @@ Checkedness is a semantic type contract, not a test of the identifier's suffix. 
 
 **Assertion responsibility.** A program reaching a false assertion has violated its author's assertion; raising AssertionFailedError is the correct CoD behavior, not evidence of a CoD soundness defect. A failed explicit type assertion likewise raises TypeAssertionFailedError. Both differ from the established-typing backstop UnsoundRuntimeTypingError. Soundness would instead be at issue if a required check were omitted or a false/invalidated assertion fact were used to permit unsafe work. Successful-continuation facts, static rejection under H-470, once-only effects and ordinary cleanup retain their contracts. Diagnostic message/payload layout remains engineering work.
 
-For currently implemented categories, the [compiler descriptors](../cod/lang_exceptions.hh) supply canonical names to vocabulary selection, native emission and services. Concrete supported categories retain their checkedness. The current common-root descriptor and exact-category machinery do not implement the Error root or establish the new declared-contract behavior. Only canonical imports are admitted; no compatibility aliases for retired names are provided. User-selected aliases retain the resolved type's obligations.
+For currently implemented categories, the [compiler descriptors](../cod/lang_exceptions.hh) supply canonical names to vocabulary selection, native emission and services. Concrete supported categories retain their checkedness. The checker enforces declared Exception obligations separately from exact-category facts. The Error root and arbitrary user exception payloads remain unimplemented. Only canonical imports are admitted; no compatibility aliases for retired names are provided. User-selected aliases retain the resolved type's obligations.
 
 | Canonical name | Classification | Current compiler support |
 | --- | --- | --- |
-| Exception | Checked declaration contract; general root including Error | Common-root values/catches exist; the complete new root/declaration contract is not established by that support |
+| Exception | Checked declaration contract; general root including Error | Common-root values/catches and separate declared-obligation enforcement; new Error-root integration remains separate |
 | Error | Unchecked root; Error <: Exception | Design only; root/conformance integration unimplemented |
 | AssertionFailedError | Unchecked predicate failure | Predicate assert construct not implemented |
 | TypeAssertionFailedError | Unchecked type-assertion mismatch | Expression type assertion not implemented |

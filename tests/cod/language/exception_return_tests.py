@@ -8,7 +8,7 @@ KEEP = 'func keep(item:Exception)->const Exception{return item;}'
 VALUE = 'val payload:Exception<-unchecked();'
 runner.CASES = {}
 def safe(name, declarations, setup, expression, output='5\n'):
-    source = IO+ERROR+declarations+setup+'try{throw '+expression+';}catch(e:const MissingReturnError){behave @print(e.category);};'
+    source = IO+ERROR+declarations+setup+'try{throw '+expression+';}catch(e:const Exception){behave @print(e.category);};'
     runner.CASES[name] = (source,0,output,WARN)
 def checked(name, declarations, setup, expression):
     source = ERROR+declarations+setup+'throw '+expression+';'
@@ -59,8 +59,8 @@ checked('borrowed_return_deferred_write', 'func keep(ref item:Exception in O)->r
 checked('callable_choice_union', KEEP+'func replace(item:Exception)->const Exception{return checked();}', VALUE+'func chosen=if(false){keep}else{replace};', 'chosen(payload)')
 safe('nested_forwarding', KEEP+'func outer(item:Exception)->const Exception{return keep(keep(item));}', VALUE, 'outer(payload)')
 runner.CASES['broad_body_retains_obligation'] = (ERROR+KEEP+'func use(item:Exception)->void{throw keep(item);}',2,'',COVER)
-runner.CASES['provisional_common_catch_value'] = (IO+ERROR+'func produce()->const Exception{return unchecked();}val reply<-try{throw produce();}catch(e:const MissingReturnError){7u64};behave @print(reply);',0,'7\n',WARN)
-runner.CASES['recursive_catch_summary_converges'] = (ERROR+'func cycle()->const Exception throws NullPointerException{try{throw cycle();}catch(e:const MissingReturnError){return checked();};}',0,'',WARN)
+runner.CASES['provisional_common_catch_value'] = (IO+ERROR+'func produce()->const Exception{return unchecked();}val reply<-try{throw produce();}catch(e:const Exception){7u64};behave @print(reply);',0,'7\n',WARN)
+runner.CASES['recursive_catch_summary_converges'] = (ERROR+'func cycle()->const Exception throws Exception{try{throw cycle();}catch(e:const Exception){return checked();};}',0,'',WARN)
 runner.CASE_ARGUMENTS = {}
 runner.CASE_SHADOWS = {name: [] for name in runner.CASES}
 runner.EXTRA_SOURCES = [Path(__file__),Path(__file__).with_name('exception_projection_tests.py')]

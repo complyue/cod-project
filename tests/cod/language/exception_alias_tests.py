@@ -28,19 +28,19 @@ for owners, roles in [('same', ('O', 'O', 'owner O')), ('independent', ('O', 'P'
     }.items():
         runner.CASES[owners+'_'+name] = (ERROR+HELPER+signature+'->void where {'+where+'}{'+body+'}',2,'',COVER)
     body = 'x<-a;y<-b;throw x;'
-    method = signature+'->void throws NullPointerException where {'+where+'}{'+body+'}'
-    invoke = 'val first:Exception<-unchecked(),second:Exception<-unchecked();try{change(first,DEST,unchecked(),checked());}catch(e:const NullPointerException){behave @print(4);}catch(e:const MissingReturnError){behave @print(5);};'
+    method = signature+'->void throws Exception where {'+where+'}{'+body+'}'
+    invoke = 'val first:Exception<-unchecked(),second:Exception<-unchecked();try{change(first,DEST,unchecked(),checked());}catch(e:const NullPointerException){behave @print(4);}catch(e:const MissingReturnError){behave @print(5);}catch(e:const Exception){behave @print(99);};'
     runner.CASES[owners+'_declared_distinct'] = (IO+ERROR+method+invoke.replace('DEST','second'),0,'5\n',WARN)
     runner.CASES[owners+'_declared_same'] = (IO+ERROR+method+invoke.replace('DEST','first'),0,'4\n',WARN)
-    snapshot = signature+'->void where {'+where+'}{x<-a;val saved<-x;y<-b;throw saved;}'
-    runner.CASES[owners+'_copy_before_write'] = (IO+ERROR+snapshot+'val first:Exception<-unchecked();try{change(first,first,unchecked(),checked());}catch(e:const MissingReturnError){behave @print(first.category);};',0,'4\n',WARN)
-    prepared = signature+'->void where {'+where+'}{x<-a;defer (<-)(y,b);throw x;}'
-    runner.CASES[owners+'_throw_before_prepared_write'] = (IO+ERROR+prepared+'val first:Exception<-unchecked();try{change(first,first,unchecked(),checked());}catch(e:const MissingReturnError){behave @print(first.category);};',0,'4\n',WARN)
+    snapshot = signature+'->void throws Exception where {'+where+'}{x<-a;val saved<-x;y<-b;throw saved;}'
+    runner.CASES[owners+'_copy_before_write'] = (IO+ERROR+snapshot+'val first:Exception<-unchecked();try{change(first,first,unchecked(),checked());}catch(e:const Exception){behave @print(e.category);behave @print(first.category);};',0,'5\n4\n',WARN)
+    prepared = signature+'->void throws Exception where {'+where+'}{x<-a;defer (<-)(y,b);throw x;}'
+    runner.CASES[owners+'_throw_before_prepared_write'] = (IO+ERROR+prepared+'val first:Exception<-unchecked();try{change(first,first,unchecked(),checked());}catch(e:const Exception){behave @print(e.category);behave @print(first.category);};',0,'5\n4\n',WARN)
 
 runner.CASES.update({
-    'independent_local_payload': (IO+ERROR+'func change(ref x:Exception in O,a:MissingReturnError,b:NullPointerException)->void where {owner O}{val local:Exception<-a;x<-b;throw local;}val first:Exception<-unchecked();try{change(first,unchecked(),checked());}catch(e:const MissingReturnError){behave @print(first.category);};',0,'4\n',WARN),
-    'independent_value_parameter': (IO+ERROR+'func change(snapshot:Exception,ref target:Exception in O,a:MissingReturnError,b:NullPointerException)->void where {owner O}{snapshot<-a;target<-b;throw snapshot;}val first:Exception<-unchecked();try{change(first,first,unchecked(),checked());}catch(e:const MissingReturnError){behave @print(first.category);};',0,'4\n',WARN),
-    'direct_locals_remain_precise': (IO+ERROR+'val x:Exception<-unchecked(),y:Exception<-checked();x<->y;try{throw x;}catch(e:const NullPointerException){behave @print(4);};try{throw y;}catch(e:const MissingReturnError){behave @print(5);};',0,'4\n5\n',WARN),
+    'independent_local_payload': (IO+ERROR+'func change(ref x:Exception in O,a:MissingReturnError,b:NullPointerException)->void throws Exception where {owner O}{val local:Exception<-a;x<-b;throw local;}val first:Exception<-unchecked();try{change(first,unchecked(),checked());}catch(e:const Exception){behave @print(e.category);behave @print(first.category);};',0,'5\n4\n',WARN),
+    'independent_value_parameter': (IO+ERROR+'func change(snapshot:Exception,ref target:Exception in O,a:MissingReturnError,b:NullPointerException)->void throws Exception where {owner O}{snapshot<-a;target<-b;throw snapshot;}val first:Exception<-unchecked();try{change(first,first,unchecked(),checked());}catch(e:const Exception){behave @print(e.category);behave @print(first.category);};',0,'5\n4\n',WARN),
+    'direct_locals_remain_precise': (IO+ERROR+'val x:Exception<-unchecked(),y:Exception<-checked();x<->y;try{throw x;}catch(e:const Exception){behave @print(e.category);};try{throw y;}catch(e:const Exception){behave @print(e.category);};',0,'4\n5\n',WARN),
     'generic_borrow_alias': (ERROR+'func change(ref x:T in O,ref y:T in P,a:MissingReturnError,b:NullPointerException)->void where {T,owner O,owner P}{x<-a;y<-b;throw x;}val x:Exception<-unchecked();change(x,x,unchecked(),checked());',2,'',COVER),
     'readonly_access_not_escalated': (ERROR+'func change(ref x:const Exception in O,a:MissingReturnError)->void where {owner O}{x<-a;}',2,'','readonly destination'),
     'borrowed_upcast_still_unproved': (ERROR+'func change(ref x:Exception in O)->void where {owner O}{}val x<-unchecked();change(x);',2,'','borrowed exception upcasts'),

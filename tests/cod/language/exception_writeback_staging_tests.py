@@ -18,9 +18,9 @@ func step(marker:T,ref target:Exception in O,item:Exception,n:u64)->void where {
 }
 val value:Exception<-checked();
 step(7,value,unchecked(),DEPTHu64);
-try{throw value;}catch(e:const IndexOutOfBoundsError){behave @print(7);};
+try{throw value;}catch(e:const IndexOutOfBoundsError){behave @print(7);}catch(e:const Exception){behave @print(99);};
 step(8u64,value,unchecked(),DEPTHu64);
-try{throw value;}catch(e:const IndexOutOfBoundsError){behave @print(8u64);};
+try{throw value;}catch(e:const IndexOutOfBoundsError){behave @print(8u64);}catch(e:const Exception){behave @print(99);};
 behave @print(9);
 '''
 runner.SPELLINGS = {

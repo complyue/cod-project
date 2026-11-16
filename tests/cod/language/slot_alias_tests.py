@@ -77,7 +77,7 @@ runner.CASES = {
     'owner_change_via_alias': ('proc run(ref x:i64 in O,ref y:i64 in P)->void where {owner O,owner P}{var a->x;a=y;}',2,'','initializer-fixed owner'),
     'expired_slot_cannot_be_selected': ('val x<-1;var a->{{ptr p=x;p}};',2,'','aliased binding\'s lexical scope has ended'),
     'expired_payload_cannot_be_read': ('var a->{{val x<-1;x}};',2,'','aliased binding\'s lexical scope has ended'),
-    'alias_name_not_available_on_every_path': ('val x<-1;if(true){var a->x;}else{};a;',2,'',"binding 'a' is not available"),
+    'alias_name_not_available_on_every_path': ('func choose(flag:bool)->i64{val x<-1;if(flag){var a->x;}else{};return a;}choose(true);',2,'',"binding 'a' is not available"),
     'duplicate_alias': ('val x<-1;var a->x;var a->x;',2,'','duplicate declaration'),
     'loop_requires_explicit_scope': ('val x<-1;for(i in 0..1){var a->x;};',2,'','requires a nested per-iteration'),
     'defer_requires_explicit_scope': ('val x<-1;defer{var a->x;};',2,'','requires a nested explicit'),

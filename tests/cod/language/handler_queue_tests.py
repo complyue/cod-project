@@ -28,7 +28,7 @@ safe('no_failure_skips_handler',BASE+'payload<-failure;{{defer catch(e){defer se
 safe('handler_return_after_queue',BASE+'recover(payload,failure);','func recover(ref target:Exception in O,value:MissingReturnError)->void where {owner O}{defer catch(e:const MissingReturnError){defer set(target,e);return;};throw value;}')
 safe('borrowed_return_after_queue',BASE+'ptr selected=recover(payload,failure);','func recover(ref target:Exception in O,value:MissingReturnError)->ref Exception in O where {owner O}{defer catch(e:const MissingReturnError){defer set(target,e);return target;};throw value;}',target='selected')
 checked('no_failure_no_write',BASE+'{{defer catch(e){defer set(payload,failure);};}};')
-checked('other_handler_queue',BASE+'{{defer catch(e:const MissingReturnError){defer set(payload,failure);}catch(e){defer set(payload,e);};throw item;}};')
+checked('other_handler_queue',BASE+'try{ {{defer catch(e:const MissingReturnError){defer set(payload,failure);}catch(e){defer set(payload,e);};throw item;}}; }catch(e:const Exception){};')
 checked('body_queue_still_runs',BASE+'{{defer{defer set(payload,item);}catch(e){defer set(payload,failure);};}};')
 checked('registration_order',BASE+'{{defer catch(e:const MissingReturnError){defer set(payload,item);}finally{defer set(payload,failure);};throw failure;}};')
 checked('zero_loop',BASE+'{{defer catch(e:const MissingReturnError){for(i in 0u64..0u64){defer set(payload,e);};};throw failure;}};')

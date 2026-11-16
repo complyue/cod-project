@@ -9,7 +9,7 @@ BORROW='func copy(ref target:Exception in O,ref incoming:const Exception in P)->
 BASE='val payload:Exception<-checked(),item:Exception<-checked();'
 runner.CASES={}
 def safe(name,body,helpers='',target='payload',output='5\n'):
-    runner.CASES[name]=(IO+ERROR+COPY+BORROW+helpers+body+'try{throw '+target+';}catch(e:const MissingReturnError){behave @print(e.category);};',0,output,WARN)
+    runner.CASES[name]=(IO+ERROR+COPY+BORROW+helpers+body+'try{throw '+target+';}catch(e:const Exception){behave @print(e.category);};',0,output,WARN)
 def checked(name,body,helpers='',target='payload',output='4\n'):
     runner.CASES[name]=(ERROR+COPY+BORROW+helpers+body+'throw '+target+';',2,'',COVER)
     runner.CASES[name+'_covered']=(IO+ERROR+COPY+BORROW+helpers+body+'try{throw '+target+';}catch(e:const Exception){behave @print(e.category);};',0,output,WARN)
@@ -44,7 +44,7 @@ safe('loop_queue',BASE+'val failure<-unchecked();{{for(i in 0u64..3u64){defer se
 safe('callable_prepared',BASE+'func writer=set;{{defer writer(payload,unchecked());}};')
 safe('symbolic_prepared',BASE+'{{defer behave @writer(payload,unchecked());}};','proc @writer(ref target:Exception in O,value:Exception)->void where {owner O}{target<-value;}effect @writer;')
 safe('empty_cleanup_preserves',BASE+'payload<-unchecked();{{defer{};}};')
-safe('registration_does_not_write',BASE+'payload<-unchecked();{{defer set(payload,checked());try{throw payload;}catch(e:const MissingReturnError){behave @print(8);};}};payload<-unchecked();',output='8\n5\n')
+safe('registration_does_not_write',BASE+'payload<-unchecked();{{defer set(payload,checked());try{throw payload;}catch(e:const Exception){behave @print(8);};}};payload<-unchecked();',output='8\n5\n')
 safe('prepared_swap',BASE+'item<-unchecked();{{defer (<->)(payload,item);}};')
 safe('block_swap',BASE+'item<-unchecked();{{defer{payload<->item;};}};')
 checked('copied_checked_snapshot',BASE+'{{defer set(payload,item);item<-unchecked();}};')

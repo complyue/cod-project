@@ -40,7 +40,7 @@ for reverse in (False, True):
         caught('selected<-29u64;behave @print(value);'), 0, '29\n', '')
     categories = chain(32, reverse, 'value:Exception', 'const Exception', 'return NEXT(value);', 'return value;')
     runner.CASES['returned_category_'+key] = (IO+MISSING+categories+
-        'try{throw node_0(error());}catch(e:const MissingReturnError){behave @print(e.category);};', 0, '5\n', '[-Wmissing-return]')
+        'try{throw node_0(error());}catch(e:const Exception){behave @print(e.category);};', 0, '5\n', '[-Wmissing-return]')
     captures = chain(32, reverse, '', 'u64', 'return NEXT();', 'return @bias;', kind='proc')
     runner.CASES['captured_symbols_'+key] = (IO+'symbol @bias:u64;symbol @selected:proc()->u64;'+captures+
         'effect @bias<-31u64;proc held=node_0;effect @bias<-37u64;effect @selected=held;'

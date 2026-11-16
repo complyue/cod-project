@@ -9,7 +9,7 @@ SIGNATURE = 'func update(ref target:Exception in O)->void where {owner O}'
 COPY = 'func update(ref target:Exception in O,item:Exception)->void where {owner O}{target<-item;}'
 VALUE = 'val payload:Exception<-checked();'
 def safe(name, declarations, body, target='payload'):
-    runner.CASES[name] = (IO+ERROR+declarations+body+'try{throw '+target+';}catch(e:const MissingReturnError){behave @print(e.category);};',0,'5\n',WARN)
+    runner.CASES[name] = (IO+ERROR+declarations+body+'try{throw '+target+';}catch(e:const Exception){behave @print(e.category);};',0,'5\n',WARN)
 def checked(name, declarations, body, target='payload', output='4\n'):
     runner.CASES[name] = (ERROR+declarations+body+'throw '+target+';',2,'',COVER)
     runner.CASES[name+'_covered'] = (IO+ERROR+declarations+body+'try{throw '+target+';}catch(e:const Exception){behave @print(e.category);};',0,output,WARN)
@@ -29,7 +29,7 @@ safe('copied_operand_before_mutation','func update(ref target:Exception in O,ite
 safe('borrowed_selected_address','func update(ref target:Exception in O,item:Exception,ignored:bool)->void where {owner O}{target<-item;}',VALUE+'val other:Exception<-checked();ptr selected=payload;update(selected,unchecked(),{selected=other;true});')
 safe('read_at_entry','func update(ref target:Exception in O,ref incoming:const Exception in P,ignored:bool)->void where {owner O,owner P}{target<-incoming;}',VALUE+'val source:Exception<-checked();update(payload,source,{source<-unchecked();true});')
 safe('local_parameter_rebind','func update(ptr target:Exception in O,ref destination:Exception in O)->void where {owner O}{target=destination;}','val payload:Exception<-unchecked(),other:Exception<-checked();update(payload,other);')
-runner.CASES['exceptional_write'] = (IO+ERROR+'func update(ref target:Exception in O,item:MissingReturnError)->void where {owner O}{target<-item;throw item;}'+VALUE+'val failure<-unchecked();try{try{update(payload,failure);}catch(e:const MissingReturnError){throw payload;};}catch(e:const MissingReturnError){behave @print(e.category);};',0,'5\n',WARN)
+runner.CASES['exceptional_write'] = (IO+ERROR+'func update(ref target:Exception in O,item:MissingReturnError)->void where {owner O}{target<-item;throw item;}'+VALUE+'val failure<-unchecked();try{try{update(payload,failure);}catch(e:const MissingReturnError){throw payload;};}catch(e:const Exception){behave @print(e.category);};',0,'5\n',WARN)
 safe('checked_exit','func update(ref target:Exception in O,item:MissingReturnError,failure:NullPointerException)->void throws NullPointerException where {owner O}{target<-item;throw failure;}',VALUE+'try{update(payload,unchecked(),checked());}catch(e:const NullPointerException){};')
 safe('finally_write',SIGNATURE+'{try{return;}finally{target<-unchecked();{}};}',VALUE+'update(payload);')
 safe('nested_scope',SIGNATURE+'{ {{target<-unchecked();}};}',VALUE+'update(payload);')

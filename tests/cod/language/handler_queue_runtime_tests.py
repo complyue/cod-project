@@ -20,17 +20,17 @@ proc failed_nested_queue(ref target:Exception in O)->void where {owner O}{
 {{
  val payload:Exception<-null_value(),item:Exception<-null_value(),failure<-missing_value();
  {{defer catch(e:const MissingReturnError){defer (<-)(payload,e);};throw failure;}};
- try{throw payload;}catch(e:const MissingReturnError){observe(e.category);};
+ try{throw payload;}catch(e:const Exception){observe(e.category);};
  payload<-null_value();
  {{defer catch(e:const MissingReturnError){defer write_payload(payload,e,10u64);}finally{defer (<-)(payload,item);};throw failure;}};
- try{throw payload;}catch(e:const MissingReturnError){observe(e.category);};
+ try{throw payload;}catch(e:const Exception){observe(e.category);};
  payload<-null_value();
  {{defer catch(e:const MissingReturnError){for(i in 0u64..3u64){defer (<-)(payload,e);};};throw failure;}};
- try{throw payload;}catch(e:const MissingReturnError){observe(e.category);};
+ try{throw payload;}catch(e:const Exception){observe(e.category);};
  {{defer catch(e:const MissingReturnError){defer (<-)(payload,item);};}};
- try{throw payload;}catch(e:const MissingReturnError){observe(e.category);};
+ try{throw payload;}catch(e:const Exception){observe(e.category);};
  payload<-null_value();recover_queued(payload,failure,20u64);
- try{throw payload;}catch(e:const MissingReturnError){observe(e.category);};
+ try{throw payload;}catch(e:const Exception){observe(e.category);};
  payload<-null_value();
  try{failed_nested_queue(payload);}catch(e:const OutOfMemoryError){observe(9051u64);observe(payload.category);};
  try{throw payload;}catch(e:const Exception){observe(e.category);};

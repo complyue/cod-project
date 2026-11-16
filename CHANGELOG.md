@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-16 — Selected payload proofs and declared failure obligations
+
+<a id="k-755"></a>
+**K-755 — Preserve declared contracts while composing selected values.** Source378→379/D-17r77→78/registry775→776 continues D-14r116/C-65/P-258, D-17r78/C-63/P-235/P-236/P-280, D-18r107 and D-26r21/H-407 under H-420/H-423 and H-525/K-CHECKED-DECLARATION-BOUNDARY-20261116. Shared finite selection conditions retain boolean/exception read/write alternatives through cleanup; complete boolean summaries distinguish impossible outcomes. Declared root obligations remain independent of actual categories and require explicit coverage, with coordinated fixture migration. Charter §§3.2/3.3/4.3/6.3/8/12, owner/access/initialization, concrete unchecked contracts and D-16 continue. Acceptance includes finite write/rebind models, root aliases/substitutions, selected-category initialization, recursive/native sharing and surrounding completion checks. Wider alias proofs, narrower-catch coverage, new roots/ABI and revised deferred-stack policy remain separate. No runtime carrier or new human confirmation. Baseline: `33fd5d208772126df9aa6a0e2030ed9924ad8301`, affected source and reference paths.
+
 ## 2026-11-16 — Preserve declared exception obligations during proof improvements
 
 <a id="k-checked-declaration-boundary-20261116"></a>

@@ -37,7 +37,7 @@ runner.CASES = {
  'per_iteration_scope': (IO+'val x<-1,y<-2;for(i in 0..3){{defer (<->)(x,y);}};behave @print(x);behave @print(y);',0,'2\n1\n',''),
  'generic_recursive_mixed_dispatch': (IO+METHOD+'proc run(ref x:T in O,ref y:T in P,n:i64)->void where {T,owner O,owner P}{if(n>0){defer (<->)(x,y);run(x,y,n-1);}else{};}val x<-1,y<-2,a<-false,b<-true;run(x,y,3);run(a,b,2);behave @print(x);behave @print(a);',0,'9\n9\n2\nfalse\n',''),
  'zero_loop_registers_nothing': (IO+'val x<-1,y<-2;for(i in 0..0){defer (<->)(x,y);};behave @print(x);',0,'1\n',''),
- 'exception_categories_not_exchanged_at_registration': (IO+EXCEPTIONS+'val a:Exception<-error(),b:Exception<-absent();{{defer (<->)(a,b);try{throw a;}catch(e:const MissingReturnError){behave @print(1);};}};behave @print(a.category);behave @print(b.category);',0,'1\n4\n5\n',WARN),
+ 'exception_categories_not_exchanged_at_registration': (IO+EXCEPTIONS+'val a:Exception<-error(),b:Exception<-absent();{{defer (<->)(a,b);try{throw a;}catch(e:const Exception){behave @print(1);};}};behave @print(a.category);behave @print(b.category);',0,'1\n4\n5\n',WARN),
  'exception_causes_read_at_invocation': (IO+EXCEPTIONS+'val a<-error(),b<-error();{{defer (<->)(a,b);b<-try{throw b from b;}catch(e:const MissingReturnError){e};}};behave @print(a.cause_count);behave @print(b.cause_count);',0,'1\n0\n',WARN),
  'first_null_checked_after_both_operands': (IO+NPE+'val x<-1;ptr p:i64=null in here;try{defer (<->)(p,{behave @print(2);x});}catch(e:const NullPointerException){behave @print(3);};behave @print(x);',0,'2\n3\n1\n',''),
  'second_null_preserves_first': (IO+NPE+'val x<-1;ptr p:i64=null in here;try{defer (<->)(x,p);}catch(e:const NullPointerException){behave @print(2);};behave @print(x);',0,'2\n1\n',''),

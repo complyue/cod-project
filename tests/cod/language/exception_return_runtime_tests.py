@@ -25,13 +25,13 @@ func return_target(ref item:Exception in O)->ref Exception in O where {owner O}{
 }
 {{
  val payload:Exception<-missing_value();
- try{throw forward_exception(payload,20u64);}catch(e:const MissingReturnError){observe(e.category);};
- try{throw return_before_cleanup(payload);}catch(e:const MissingReturnError){observe(e.category);};
+ try{throw forward_exception(payload,20u64);}catch(e:const Exception){observe(e.category);};
+ try{throw return_before_cleanup(payload);}catch(e:const Exception){observe(e.category);};
  observe(payload.category);
  payload<-missing_value();
- try{throw recover_return(payload);}catch(e:const MissingReturnError){observe(e.category);};
- try{throw replace_return(payload);}catch(e:const MissingReturnError){observe(e.category);};
- try{throw return_target(payload);}catch(e:const NullPointerException){observe(e.category);};
+ try{throw recover_return(payload);}catch(e:const Exception){observe(e.category);};
+ try{throw replace_return(payload);}catch(e:const Exception){observe(e.category);};
+ try{throw return_target(payload);}catch(e:const Exception){observe(e.category);};
 }};
 '''
 runner.EXPECTED_VALUES += ['5','5','4','5','5','4']

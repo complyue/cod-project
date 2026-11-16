@@ -8,7 +8,7 @@ runner.SOURCE += '''
 {{
  val invariant:Exception<-missing_value(),changing:Exception<-missing_value();
  for(i in 0u64..2u64){
-   try{throw invariant;}catch(e:const MissingReturnError){observe(e.category);};
+   try{throw invariant;}catch(e:const Exception){observe(e.category);};
  };
  try{for(i in 0u64..2u64){
    try{throw changing;}catch(e:const MissingReturnError){observe(e.category);};

@@ -8,16 +8,16 @@ runner.SOURCE += '''
 {{
  val stable_cleanup_value:Exception<-missing_value();
  for(i in 0u64..2u64){ {{
-   defer{try{throw stable_cleanup_value;}catch(e:const MissingReturnError){observe(e.category);};};
+   defer{try{throw stable_cleanup_value;}catch(e:const Exception){observe(e.category);};};
  }};};
  {{for(i in 0u64..2u64){
-   defer{try{throw stable_cleanup_value;}catch(e:const MissingReturnError){observe(e.category);};};
+   defer{try{throw stable_cleanup_value;}catch(e:const Exception){observe(e.category);};};
  };}};
- try{ {{defer{throw stable_cleanup_value;};}}; }catch(e:const MissingReturnError){observe(e.category);};
- {{
+ try{ {{defer{throw stable_cleanup_value;};}}; }catch(e:const Exception){observe(e.category);};
+ try{ {{
    defer catch(e:const MissingReturnError){observe(e.category);}finally{observe(9u64);};
    defer{throw stable_cleanup_value;};
- }};
+ }}; }catch(e:const Exception){observe(99u64);};
 }};
 '''
 runner.EXPECTED_VALUES += ['5','5','5','5','5','5','9']

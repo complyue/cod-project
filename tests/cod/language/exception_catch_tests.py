@@ -5,12 +5,11 @@ import foundation_tests as runner
 from exception_projection_tests import IO, ERROR, WARN, COVER
 
 VALUE = 'val payload:Exception<-unchecked(),replacement:Exception<-checked();'
-SIGNATURE = 'func carry(item:const Exception,other:const Exception)->const Exception'
+SIGNATURE = 'func carry(item:const Exception,other:const Exception)->const Exception throws Exception'
 runner.CASES = {}
 def case(name, body, expected=5, setup=VALUE, expression='carry(payload,replacement)'):
     declaration = SIGNATURE+'{'+body+'}'
-    catch = 'Exception' if expected == 4 else 'MissingReturnError'
-    source = IO+ERROR+declaration+setup+'try{throw '+expression+';}catch(e:const '+catch+'){behave @print(e.category);};'
+    source = IO+ERROR+declaration+setup+'try{throw '+expression+';}catch(e:const Exception){behave @print(e.category);};'
     runner.CASES[name] = (source,0,str(expected)+'\n',WARN)
     if expected == 4:
         runner.CASES[name+'_requires_cover'] = (ERROR+declaration+setup+'throw '+expression+';',2,'',COVER)
@@ -57,13 +56,13 @@ for name, body in {
 case('replacement_can_remove_checked','try{try{throw other;}finally{throw item;};}catch(e){return e;};')
 case('deferred_replacement_can_remove_checked','defer catch(last){return last;};defer catch(first){throw item;};throw other;')
 RECURSIVE = 'func cycle(item:Exception,n:u64)->const Exception{if(n==0u64){try{throw item;}catch(e){return e;};}else{return cycle(item,n-1u64);};}'
-runner.CASES['recursive'] = (IO+ERROR+RECURSIVE+VALUE+'try{throw cycle(payload,20u64);}catch(e:const MissingReturnError){behave @print(e.category);};',0,'5\n',WARN)
+runner.CASES['recursive'] = (IO+ERROR+RECURSIVE+VALUE+'try{throw cycle(payload,20u64);}catch(e:const Exception){behave @print(e.category);};',0,'5\n',WARN)
 BODY = SIGNATURE+'{try{throw item;}catch(e){return e;};}'
-runner.CASES['callable_value'] = (IO+ERROR+BODY+VALUE+'func held=carry;try{throw held(payload,replacement);}catch(e:const MissingReturnError){behave @print(e.category);};',0,'5\n',WARN)
+runner.CASES['callable_value'] = (IO+ERROR+BODY+VALUE+'func held=carry;try{throw held(payload,replacement);}catch(e:const Exception){behave @print(e.category);};',0,'5\n',WARN)
 runner.CASES['broad_body_still_checked'] = (ERROR+BODY+'func use(item:Exception)->void{throw carry(item,item);}',2,'',COVER)
-runner.CASES['declared_failure_still_checked'] = (ERROR+BODY.replace('->const Exception{','->const Exception throws NullPointerException{')+VALUE+'carry(payload,replacement);',2,'',COVER)
-runner.CASES['prepared_failure_replaces_pending'] = (IO+ERROR+'func fail()->void throws NullPointerException{throw checked();}'+SIGNATURE+'{defer catch(e){return e;};defer fail();return item;}'+VALUE+'try{throw carry(payload,replacement);}catch(e:const NullPointerException){behave @print(e.category);};',0,'4\n',WARN)
-runner.CASES['explicit_cause_preserves_primary'] = (IO+ERROR+SIGNATURE+'{try{throw item from other;}catch(e){return e;};}'+VALUE+'try{throw carry(payload,replacement);}catch(e:const MissingReturnError){behave @print(e.category);behave @print(e.cause_count);behave @print(cause_at(e,0u64).category);};',0,'5\n1\n4\n',WARN)
+runner.CASES['declared_failure_still_checked'] = (ERROR+BODY.replace('throws Exception','throws NullPointerException')+VALUE+'carry(payload,replacement);',2,'',COVER)
+runner.CASES['prepared_failure_replaces_pending'] = (IO+ERROR+'func fail()->void throws NullPointerException{throw checked();}'+SIGNATURE+'{defer catch(e){return e;};defer fail();return item;}'+VALUE+'try{throw carry(payload,replacement);}catch(e:const Exception){behave @print(e.category);};',0,'4\n',WARN)
+runner.CASES['explicit_cause_preserves_primary'] = (IO+ERROR+SIGNATURE+'{try{throw item from other;}catch(e){return e;};}'+VALUE+'try{throw carry(payload,replacement);}catch(e:const Exception){behave @print(e.category);behave @print(e.cause_count);behave @print(cause_at(e,0u64).category);};',0,'5\n1\n4\n',WARN)
 runner.CASE_ARGUMENTS = {}
 runner.CASE_SHADOWS = {name: [] for name in runner.CASES}
 runner.EXTRA_SOURCES = [Path(__file__),Path(__file__).with_name('exception_projection_tests.py')]

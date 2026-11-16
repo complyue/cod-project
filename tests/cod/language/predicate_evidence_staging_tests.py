@@ -94,6 +94,10 @@ SOURCES['boolean_output_prepared'] = BOOLEAN_OUTPUT_SOURCE.replace('INVOKE', '{{
 SOURCES['boolean_output_block'] = BOOLEAN_OUTPUT_SOURCE.replace('INVOKE', '{{defer{checked(ok,p,n);};}}')
 SOURCES['boolean_output_alternatives'] = BOOLEAN_OUTPUT_SOURCE.replace('val ok<-false;', 'val ok<-p is not null;').replace(
     'out<-p is not null;{}', 'if(n==0u64){out<-p is not null;{}}else{};').replace('INVOKE', 'checked(ok,p,n)')
+SOURCES['boolean_selected_output'] = BOOLEAN_OUTPUT_SOURCE.replace('val ok<-false;INVOKE;',
+    'val ok<-false,other<-true;ref output=other;{{defer{checked(output,p,n);};output=ok;}};')
+SOURCES['boolean_selected_input'] = BOOLEAN_OUTPUT_SOURCE.replace('val ok<-false;INVOKE;',
+    'val ok<-false,other<-true,source<-false;ref input=other;{{defer{ok<-input;};defer{checked(source,p,n);};input=source;}};')
 
 
 def main():

@@ -18,14 +18,14 @@ func write_finally(ref target:Exception in O)->void where {owner O}{
 {{
  val payload:Exception<-null_value(),failure<-missing_value();
  write_payload(payload,failure,40u64);
- try{throw payload;}catch(e:const MissingReturnError){observe(e.category);};
+ try{throw payload;}catch(e:const Exception){observe(e.category);};
  payload<-null_value();
  try{write_then_fail(payload,failure);}catch(e:const MissingReturnError){observe(payload.category);};
- try{throw payload;}catch(e:const MissingReturnError){observe(e.category);};
+ try{throw payload;}catch(e:const Exception){observe(e.category);};
  write_checked(payload);
- try{throw payload;}catch(e:const NullPointerException){observe(e.category);};
+ try{throw payload;}catch(e:const Exception){observe(e.category);};
  write_finally(payload);
- try{throw payload;}catch(e:const MissingReturnError){observe(e.category);};
+ try{throw payload;}catch(e:const Exception){observe(e.category);};
 }};
 '''
 runner.EXPECTED_VALUES += ['5','5','5','4','5']

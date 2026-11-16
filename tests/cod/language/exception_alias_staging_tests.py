@@ -10,7 +10,7 @@ using "std:exceptions" IndexOutOfBoundsError;
 using "std:exceptions" NullPointerException;
 func unchecked()->const IndexOutOfBoundsError{try{cause_at(checked(),0u64);{}}catch(e:const IndexOutOfBoundsError){return e;};return unchecked();}
 func checked()->const NullPointerException{ptr p:u64=null in here;try{p;{}}catch(e:const NullPointerException){return e;};return checked();}
-func step(marker:T,ref x:Exception in O,ref y:Exception in P,a:IndexOutOfBoundsError,b:NullPointerException,n:u64)->const T throws NullPointerException where {T,owner O,owner P}{
+func step(marker:T,ref x:Exception in O,ref y:Exception in P,a:IndexOutOfBoundsError,b:NullPointerException,n:u64)->const T throws Exception where {T,owner O,owner P}{
  var left->x;var right->y;
  if(n==0u64){
   WRITE;
@@ -18,8 +18,8 @@ func step(marker:T,ref x:Exception in O,ref y:Exception in P,a:IndexOutOfBoundsE
  }else{return step(marker,x,y,a,b,n-1u64);};
 }
 val first:Exception<-unchecked(),second:Exception<-unchecked();
-try{step(7,first,second,unchecked(),checked(),DEPTHu64);{}}catch(e:const IndexOutOfBoundsError){behave @print(7);}catch(e:const NullPointerException){behave @print(0);};
-try{step(8u64,first,first,unchecked(),checked(),DEPTHu64);{}}catch(e:const IndexOutOfBoundsError){behave @print(0);}catch(e:const NullPointerException){behave @print(8u64);};
+try{step(7,first,second,unchecked(),checked(),DEPTHu64);{}}catch(e:const IndexOutOfBoundsError){behave @print(7);}catch(e:const NullPointerException){behave @print(0);}catch(e:const Exception){behave @print(99);};
+try{step(8u64,first,first,unchecked(),checked(),DEPTHu64);{}}catch(e:const IndexOutOfBoundsError){behave @print(0);}catch(e:const NullPointerException){behave @print(8u64);}catch(e:const Exception){behave @print(99);};
 behave @print(9);
 '''
 runner.SPELLINGS = {

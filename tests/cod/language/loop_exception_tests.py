@@ -2,10 +2,12 @@
 """Loop payload invariants distinguish values, target writes and slot changes."""
 from pathlib import Path
 import foundation_tests as runner
-from exception_projection_tests import IO, ERROR, WARN, COVER
+from exception_projection_tests import IO, ERROR, WARN
 
 VALUE = 'val payload:Exception<-unchecked();'
-OBSERVE = 'try{throw payload;}catch(e:const MissingReturnError){behave @print(e.category);};'
+# Root coverage satisfies the declaration; initialization independently requires
+# proof that the concrete handler runs on every normal continuation.
+OBSERVE = ' {{val observed<-make local u64;try{throw payload;}catch(e:const MissingReturnError){observed<-e.category;{}}catch(e:const Exception){};behave @print(observed);}}; '
 WRITE = 'func write(ref target:Exception in O,value:Exception)->void where {owner O}{target<-value;}'
 READ = 'func read(ref target:const Exception in O)->void where {owner O}{}'
 runner.CASES = {}
@@ -16,7 +18,7 @@ def safe(name, source, output='5\n5\n'):
 
 
 def rejected(name, source):
-    runner.CASES[name] = (IO+ERROR+source, 2, '', COVER)
+    runner.CASES[name] = (IO+ERROR+source, 2, '', 'before definite initialization')
 
 
 safe('unchanged_payload', VALUE+'for(i in 0u64..2u64){'+OBSERVE+'};')
@@ -54,7 +56,7 @@ rejected('write_equal_on_first_iteration', VALUE+'val incoming:Exception<-unchec
 rejected('rebound_write_target', VALUE+'val other:Exception<-unchecked();ptr selected=other;for(i in 0u64..3u64){'+OBSERVE+'selected<-checked();selected=payload;};')
 rejected('rebound_call_target', WRITE+VALUE+'val other:Exception<-unchecked();ptr selected=other;for(i in 0u64..3u64){'+OBSERVE+'write(selected,checked());selected=payload;};')
 rejected('borrowed_aliases', 'proc run(ref payload:Exception in O,ref other:Exception in P)->void where {owner O,owner P}{payload<-unchecked();other<-unchecked();for(i in 0u64..2u64){'+OBSERVE+'other<-checked();};}'+VALUE+'run(payload,payload);')
-safe('covered_backedge_write', VALUE+'try{for(i in 0u64..2u64){'+OBSERVE+'payload<-checked();};}catch(e:const Exception){behave @print(e.category);};', '5\n4\n')
+safe('covered_backedge_write', VALUE+'try{for(i in 0u64..2u64){try{throw payload;}catch(e:const MissingReturnError){behave @print(e.category);};payload<-checked();};}catch(e:const Exception){behave @print(e.category);};', '5\n4\n')
 
 runner.CASE_ARGUMENTS = {}
 runner.CASE_SHADOWS = {name: [] for name in runner.CASES}
