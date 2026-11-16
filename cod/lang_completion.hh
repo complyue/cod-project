@@ -82,6 +82,7 @@ struct ExceptionFacts {
   ExceptionFacts(std::set<size_t> categories = {}) { if (!categories.empty()) terms[{}] = std::move(categories); }
   ExceptionFacts(std::initializer_list<size_t> categories) : ExceptionFacts(std::set<size_t>{categories}) {}
   bool operator==(const ExceptionFacts &) const = default;
+  auto operator<=>(const ExceptionFacts &) const = default;
   bool empty() const { return terms.empty(); }
   void clear() { terms.clear(); }
   void add(Origin origin, const std::set<size_t> &categories) {
@@ -145,14 +146,15 @@ struct ExceptionFacts {
     }
     return result;
   }
+  // Empty provisional summaries cannot exclude a conditional read path.
   ExceptionFacts through(const std::map<size_t, ExceptionFacts> &values, const ExceptionFacts &failure,
-                         bool closed = false) const {
+                         bool closed = false, bool conservative = false) const {
     ExceptionFacts result;
     for (const auto &[origin, categories] : terms) {
-      if (origin.kind == Origin::Kind::arrival && !origin.action) result.merge(failure.restricted(categories).guarded(origin.conditions));
+      if (origin.kind == Origin::Kind::arrival && !origin.action) result.merge((conservative && failure.empty() ? ExceptionFacts{categories} : failure).restricted(categories).guarded(origin.conditions));
       else if (origin.kind == Origin::Kind::payload && !origin.action) {
         const auto found = values.find(origin.index);
-        if (found != values.end()) result.merge(found->second.restricted(categories).guarded(origin.conditions));
+        if (found != values.end()) result.merge((conservative && found->second.empty() ? ExceptionFacts{categories} : found->second).restricted(categories).guarded(origin.conditions));
         else if (closed) result.merge(ExceptionFacts{categories}.guarded(origin.conditions));
         else result.add(origin, categories);
       } else result.add(origin, categories);
@@ -345,6 +347,111 @@ public:
       }
     }
   };
+  using BooleanPayload = std::pair<std::optional<size_t>, size_t>;
+  // Necessary path facts shared by value summaries and read obligations.
+  struct ConditionFacts {
+    std::set<size_t> present;
+    // Necessary truths of immutable incoming boolean payloads.
+    std::set<std::pair<size_t, bool>> inputs;
+    std::set<std::pair<BooleanPayload, bool>> payloads{};
+    // Non-null selections are valid only for these binding versions.
+    std::set<std::pair<size_t, std::set<size_t>>> bindings{};
+    SelectionConditions conditions{};
+    std::set<ExceptionFacts> exceptions{};
+    bool operator==(const ConditionFacts &) const = default;
+    auto operator<=>(const ConditionFacts &) const = default;
+    void append(const ConditionFacts &other) {
+      present.insert(other.present.begin(), other.present.end());
+      inputs.insert(other.inputs.begin(), other.inputs.end());
+      payloads.insert(other.payloads.begin(), other.payloads.end());
+      bindings.insert(other.bindings.begin(), other.bindings.end());
+      conditions.append(other.conditions);
+      exceptions.insert(other.exceptions.begin(), other.exceptions.end());
+    }
+    bool implies(const ConditionFacts &other) const {
+      const auto includes = [](const auto &a, const auto &b) { return std::includes(a.begin(), a.end(), b.begin(), b.end()); };
+      return includes(present, other.present) && includes(inputs, other.inputs) &&
+          includes(payloads, other.payloads) && includes(bindings, other.bindings) && conditions.implies(other.conditions) && includes(exceptions, other.exceptions);
+    }
+  };
+  // Keep finite alternatives until entry payloads have been substituted.
+  // Intersecting them sooner loses preserve-or-write relationships in queues.
+  using ConditionClauses = std::set<ConditionFacts>;
+  using BooleanValue = std::map<bool, ConditionClauses>;
+  using BooleanValues = std::map<size_t, BooleanValue>;
+  static void add_condition(ConditionClauses &clauses, ConditionFacts facts) {
+    if (!facts.conditions.possible || std::any_of(facts.exceptions.begin(), facts.exceptions.end(),
+        [](const auto &value) { return value.empty(); })) return;
+    if (std::any_of(clauses.begin(), clauses.end(), [&](const auto &known) { return facts.implies(known); })) return;
+    std::erase_if(clauses, [&](const auto &known) { return known.implies(facts); });
+    clauses.insert(std::move(facts));
+  }
+  static ConditionClauses conjoin_conditions(const ConditionClauses &left, const ConditionClauses &right) {
+    ConditionClauses result;
+    for (const auto &a : left) for (const auto &b : right) {
+      auto facts = a; facts.append(b); add_condition(result, std::move(facts));
+    }
+    return result;
+  }
+  static BooleanValue unknown_boolean() { return {{false, {ConditionFacts{}}}, {true, {ConditionFacts{}}}}; }
+  static BooleanValue boolean_payload(size_t place, std::optional<size_t> action = {}) {
+    BooleanValue result;
+    for (const bool value : {false, true}) {
+      ConditionFacts facts; facts.payloads.emplace(BooleanPayload{action, place}, value);
+      result[value].insert(std::move(facts));
+    }
+    return result;
+  }
+  static void merge_boolean(BooleanValue &known, const BooleanValue &other) {
+    for (const auto &[value, clauses] : other) for (const auto &facts : clauses) add_condition(known[value], facts);
+  }
+  template <typename Transform> static BooleanValue transform_boolean_conditions(const BooleanValue &value, const Transform &transform) {
+    BooleanValue output;
+    for (const auto &[truth, clauses] : value) for (auto facts : clauses) {
+      facts.conditions = transform(facts.conditions); add_condition(output[truth], std::move(facts));
+    }
+    return output;
+  }
+  static BooleanValue guard_boolean(const BooleanValue &value, const SelectionConditions &conditions) {
+    return transform_boolean_conditions(value, [&](auto known) { known.append(conditions); return known; });
+  }
+  static ConditionClauses through_conditions(const ConditionClauses &clauses, const BooleanValues &payloads, bool closed = false) {
+    ConditionClauses output;
+    for (const auto &facts : clauses) {
+      auto retained = facts;
+      std::erase_if(retained.payloads, [&](const auto &condition) {
+        return !condition.first.first && (closed || payloads.contains(condition.first.second));
+      });
+      ConditionClauses substituted{std::move(retained)};
+      for (const auto &[payload, truth] : facts.payloads) if (!payload.first) {
+        const auto found = payloads.find(payload.second);
+        if (found == payloads.end()) continue;
+        if (const auto known = found->second.find(truth); known != found->second.end())
+          substituted = conjoin_conditions(substituted, known->second);
+        else substituted.clear();
+      }
+      for (const auto &known : substituted) add_condition(output, known);
+    }
+    return output;
+  }
+  static BooleanValue through_boolean(const BooleanValue &value, const BooleanValues &payloads, bool closed = false) {
+    BooleanValue output;
+    for (const auto &[truth, clauses] : value) output[truth] = through_conditions(clauses, payloads, closed);
+    return output;
+  }
+  static ConditionClauses enter_conditions(const ConditionClauses &clauses, size_t action) {
+    ConditionClauses output;
+    for (auto facts : clauses) {
+      facts.conditions = facts.conditions.enter(action);
+      const auto before = facts.payloads; facts.payloads.clear();
+      for (auto [payload, truth] : before) {
+        if (payload.first == action) payload.first.reset();
+        facts.payloads.emplace(std::move(payload), truth);
+      }
+      add_condition(output, std::move(facts));
+    }
+    return output;
+  }
   struct ReadRequirement {
     std::set<size_t> initialized;
     std::optional<size_t> selection = {};
@@ -356,8 +463,11 @@ public:
     bool nonnull_unproved = false;
     // Registration-path guards apply only while the original binding versions remain current.
     std::map<size_t, std::set<size_t>> nonnull_versions = {};
+    // Necessary conditions on paths that still require this read to be initialized.
+    ConditionClauses when{ConditionFacts{}};
     bool operator==(const ReadRequirement &) const = default;
     bool satisfied(size_t place, const std::set<size_t> &known, const Selections &selections) const {
+      if (when.empty()) return true;
       if (nonnull) return !nonnull_unproved && std::all_of(nonnull->begin(), nonnull->end(),
           [&](size_t id) { return selections.nonnull(id); });
       const auto ready = [&](size_t id) { return initialized.contains(id) || known.contains(id); };
@@ -395,6 +505,7 @@ public:
       if (before.invalidated.contains(*selection)) selection.reset();
     }
     void merge(const ReadRequirement &other) {
+      for (const auto &facts : other.when) add_condition(when, facts);
       if (nonnull && other.nonnull) {
         nonnull->insert(other.nonnull->begin(), other.nonnull->end());
         nonnull_unproved = nonnull_unproved || other.nonnull_unproved;
@@ -413,102 +524,6 @@ public:
     }
   };
   using Reads = std::map<size_t, ReadRequirement>;
-  using BooleanPayload = std::pair<std::optional<size_t>, size_t>;
-  struct BooleanFacts {
-    std::set<size_t> present;
-    // Necessary truths of immutable incoming boolean payloads.
-    std::set<std::pair<size_t, bool>> inputs;
-    std::set<std::pair<BooleanPayload, bool>> payloads{};
-    // Non-null selections are valid only for these binding versions.
-    std::set<std::pair<size_t, std::set<size_t>>> bindings{};
-    SelectionConditions conditions{};
-    bool operator==(const BooleanFacts &) const = default;
-    auto operator<=>(const BooleanFacts &) const = default;
-    void append(const BooleanFacts &other) {
-      present.insert(other.present.begin(), other.present.end());
-      inputs.insert(other.inputs.begin(), other.inputs.end());
-      payloads.insert(other.payloads.begin(), other.payloads.end());
-      bindings.insert(other.bindings.begin(), other.bindings.end());
-      conditions.append(other.conditions);
-    }
-    bool implies(const BooleanFacts &other) const {
-      const auto includes = [](const auto &a, const auto &b) { return std::includes(a.begin(), a.end(), b.begin(), b.end()); };
-      return includes(present, other.present) && includes(inputs, other.inputs) &&
-          includes(payloads, other.payloads) && includes(bindings, other.bindings) && conditions.implies(other.conditions);
-    }
-  };
-  // Keep finite alternatives until entry payloads have been substituted.
-  // Intersecting them sooner loses preserve-or-write relationships in queues.
-  using BooleanClauses = std::set<BooleanFacts>;
-  using BooleanValue = std::map<bool, BooleanClauses>;
-  using BooleanValues = std::map<size_t, BooleanValue>;
-  static void add_boolean_clause(BooleanClauses &clauses, BooleanFacts facts) {
-    if (!facts.conditions.possible) return;
-    if (std::any_of(clauses.begin(), clauses.end(), [&](const auto &known) { return facts.implies(known); })) return;
-    std::erase_if(clauses, [&](const auto &known) { return known.implies(facts); });
-    clauses.insert(std::move(facts));
-  }
-  static BooleanClauses conjoin_boolean(const BooleanClauses &left, const BooleanClauses &right) {
-    BooleanClauses result;
-    for (const auto &a : left) for (const auto &b : right) {
-      auto facts = a; facts.append(b); add_boolean_clause(result, std::move(facts));
-    }
-    return result;
-  }
-  static BooleanValue unknown_boolean() { return {{false, {BooleanFacts{}}}, {true, {BooleanFacts{}}}}; }
-  static BooleanValue boolean_payload(size_t place, std::optional<size_t> action = {}) {
-    BooleanValue result;
-    for (const bool value : {false, true}) {
-      BooleanFacts facts; facts.payloads.emplace(BooleanPayload{action, place}, value);
-      result[value].insert(std::move(facts));
-    }
-    return result;
-  }
-  static void merge_boolean(BooleanValue &known, const BooleanValue &other) {
-    for (const auto &[value, clauses] : other) for (const auto &facts : clauses) add_boolean_clause(known[value], facts);
-  }
-  template <typename Transform> static BooleanValue transform_boolean_conditions(const BooleanValue &value, const Transform &transform) {
-    BooleanValue output;
-    for (const auto &[truth, clauses] : value) for (auto facts : clauses) {
-      facts.conditions = transform(facts.conditions); add_boolean_clause(output[truth], std::move(facts));
-    }
-    return output;
-  }
-  static BooleanValue guard_boolean(const BooleanValue &value, const SelectionConditions &conditions) {
-    return transform_boolean_conditions(value, [&](auto known) { known.append(conditions); return known; });
-  }
-  static BooleanValue through_boolean(const BooleanValue &value, const BooleanValues &payloads, bool closed = false) {
-    BooleanValue output;
-    for (const auto &[result, clauses] : value) for (const auto &facts : clauses) {
-      auto retained = facts;
-      std::erase_if(retained.payloads, [&](const auto &condition) {
-        return !condition.first.first && (closed || payloads.contains(condition.first.second));
-      });
-      BooleanClauses substituted{std::move(retained)};
-      for (const auto &[payload, truth] : facts.payloads) if (!payload.first) {
-        const auto found = payloads.find(payload.second);
-        if (found == payloads.end()) continue;
-        if (const auto known = found->second.find(truth); known != found->second.end())
-          substituted = conjoin_boolean(substituted, known->second);
-        else substituted.clear();
-      }
-      for (const auto &known : substituted) add_boolean_clause(output[result], known);
-    }
-    return output;
-  }
-  static BooleanValue enter_boolean(const BooleanValue &value, size_t action) {
-    BooleanValue output;
-    for (const auto &[result, clauses] : value) for (auto facts : clauses) {
-      facts.conditions = facts.conditions.enter(action);
-      const auto before = facts.payloads; facts.payloads.clear();
-      for (auto [payload, truth] : before) {
-        if (payload.first == action) payload.first.reset();
-        facts.payloads.emplace(std::move(payload), truth);
-      }
-      add_boolean_clause(output[result], std::move(facts));
-    }
-    return output;
-  }
   // Explicit returns retain selected targets or copied value evidence. Cleanup
   // can preserve that pending result, replace it, or join both possibilities.
   struct Returned {
@@ -553,19 +568,34 @@ public:
     BooleanValues booleans{};
     // Source handling requirements are independent of runtime category paths.
     std::set<size_t> declared_failures{};
-    template <typename Transform> void transform_values(const Transform &transform) {
+    template <typename Transform> void transform_conditions(const Transform &transform) {
+      for (auto &[truth, clauses] : returned.boolean) clauses = transform(clauses);
+      for (auto &[target, value] : booleans) for (auto &[truth, clauses] : value) clauses = transform(clauses);
+      for (auto &[read, requirement] : reads) requirement.when = transform(requirement.when);
+    }
+    template <typename Transform, typename ProofTransform> void transform_values(const Transform &transform, const ProofTransform &proof_transform) {
       returned.value = transform(returned.value);
       thrown = transform(thrown);
       for (auto &[target, value] : payloads) value = transform(value);
+      transform_conditions([&](const auto &clauses) {
+        ConditionClauses result;
+        for (auto facts : clauses) {
+          const auto before = facts.exceptions; facts.exceptions.clear();
+          for (const auto &value : before) facts.exceptions.insert(proof_transform(value));
+          add_condition(result, std::move(facts));
+        }
+        return result;
+      });
     }
-    template <typename Transform> void transform_booleans(const Transform &transform) {
-      returned.boolean = transform(returned.boolean);
-      for (auto &[target, value] : booleans) value = transform(value);
-    }
+    template <typename Transform> void transform_values(const Transform &transform) { transform_values(transform, transform); }
     template <typename Resolve> void resolve_conditions(const Resolve &resolve, std::optional<size_t> action = {}) {
       const auto transform = [&](const auto &conditions) { return conditions.through(resolve, action); };
       transform_values([&](const auto &value) { return value.transform_conditions(transform); });
-      transform_booleans([&](const auto &value) { return transform_boolean_conditions(value, transform); });
+      transform_conditions([&](const auto &clauses) {
+        ConditionClauses result;
+        for (auto facts : clauses) { facts.conditions = transform(facts.conditions); add_condition(result, std::move(facts)); }
+        return result;
+      });
     }
   };
   struct Path { std::uint64_t inputs; Completion completion; size_t queue; Effects effects{}; };
@@ -584,7 +614,12 @@ private:
     result.payload_writes.insert(second.payload_writes.begin(), second.payload_writes.end());
     result.present.insert(second.present.begin(), second.present.end());
     result.declared_failures.insert(second.declared_failures.begin(), second.declared_failures.end());
-    for (const auto &[read, known] : second.reads) if (!known.satisfied(reads_.at(read), first.initialized, first.selections)) {
+    auto next = second;
+    next.resolve_conditions([&](size_t binding) { return first.selections.substitute({{}, false, {binding}}); });
+    next.transform_values([&](const auto &value) { return value.through(first.payloads, first.thrown); },
+        [&](const auto &value) { return value.through(first.payloads, first.thrown, false, true); });
+    next.transform_conditions([&](const auto &clauses) { return through_conditions(clauses, first.booleans); });
+    for (const auto &[read, known] : next.reads) if (!known.satisfied(reads_.at(read), first.initialized, first.selections)) {
       auto before = known;
       before.initialized.insert(first.initialized.begin(), first.initialized.end());
       before.substitute(first.selections);
@@ -593,12 +628,7 @@ private:
     }
     result.initialized.insert(second.initialized.begin(), second.initialized.end());
     result.selections.then(second.selections, result.initialized);
-    auto next = second;
-    next.resolve_conditions([&](size_t binding) { return first.selections.substitute({{}, false, {binding}}); });
-    result.unknown_thrown = first.unknown_thrown || second.unknown_thrown;
-    result.unknown_thrown = result.unknown_thrown || second.thrown.reads_unknown(first.payloads);
-    next.transform_values([&](const auto &value) { return value.through(first.payloads, first.thrown); });
-    next.transform_booleans([&](const auto &value) { return through_boolean(value, first.booleans); });
+    result.unknown_thrown = first.unknown_thrown || second.unknown_thrown || second.thrown.reads_unknown(first.payloads);
     result.returned.then(next.returned);
     result.returned.initialize(result.initialized);
     result.thrown = next.thrown;
@@ -744,7 +774,7 @@ public:
                 const auto arrival = incoming.reason >= 3
                     ? ExceptionFacts::arrival().restricted({incoming.reason - 3}) : ExceptionFacts{};
                 invoked.transform_values([&](const auto &value) { return value.enter(*node.action, arrival); });
-                invoked.transform_booleans([&](const auto &value) { return enter_boolean(value, *node.action); });
+                invoked.transform_conditions([&](const auto &clauses) { return enter_conditions(clauses, *node.action); });
                 for (const auto &[value, previous] : solved_[node.previous.front()][intermediate])
                   changed = merge(result, value, compose(invoked, previous)) || changed;
               }

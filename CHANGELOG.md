@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-16 — Conditional initialization in deferred actions
+
+<a id="k-756"></a>
+**K-756 — Resolve conditional reads through shared cleanup evidence.** Source380→381/registry777→778 continues D-14r116/C-65/P-258/P-280, D-17r79/C-63/P-235/P-236, D-18r107 and D-26r21/H-407 under H-420/H-423. Finite necessary conditions retain the paths on which a deferred local read lacks initialization; the existing cleanup equations substitute boolean values, exception categories and selected targets. Handler/branch snapshots, call/registration failure prefixes and unknown provisional summaries preserve conservative checking. Charter §§3.2/3.3/6.3/12, actual owner/access/initialization, H-525 declared obligations, concrete unchecked contracts and D-16 continue. Acceptance covers positive/negative source paths, independent snapshot models, nested/prepared/loop cleanup and shared recursive native bodies. Wider correlations, cross-action declared coverage, new roots/ABI and revised deferred-stack policies remain separate. No runtime guard, representation change or new human confirmation. Baseline: `ff93fabf77a282a2563e6b7983ad0f7ef7f369c2`, affected compiler/source-reference paths.
+
 ## 2026-11-16 — Integrate declared-defer design with compiler enforcement
 
 <a id="k-declared-defer-sync-20261116"></a>
