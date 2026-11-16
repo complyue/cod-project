@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-16 — Conditional initialization across completion boundaries
+
+<a id="k-757"></a>
+**K-757 — Share conditional initialization through cleanup and calls.** Source382→383/registry779→780 continues D-14r116/C-65/P-258, D-17r80/C-63/P-235/P-236 and C-72/P-280, D-18r107 and D-26r21/H-407 under H-420/H-423. One finite relation retains paths lacking writes and conditional predecessors for each read across lexical flow, cleanup and callable summaries. Sequential composition, alternative joins and actual-argument substitution preserve write-before-read order and immutable input timing. Charter §§2/3.1–3.3/4.3/6.3/12, H-525 declared obligations, ref entry promises, actual owner/access rules and D-16 continue. Acceptance covers source/negative paths, input-snapshot models, aliases, generic/recursive/callable/prepared calls, failure prefixes, shared native bodies and exact cleanup. Unsupported local/slot correlations remain conservative; new roots/ABI and revised deferred-stack behavior retain their separate qualification. No runtime carrier, new source rule or human confirmation. Baseline: `912d2d7a5cc669987a66194386d1cb6b216c17ba`, affected compiler and source-reference paths.
+
 ## 2026-11-16 — Integrate retained body-failure design with conditional-read checking
 
 <a id="k-body-exception-sync-20261116"></a>

@@ -138,10 +138,13 @@ struct ExceptionFacts {
     }
     return result;
   }
-  ExceptionFacts substitute(const std::vector<ExceptionFacts> &arguments) const {
+  ExceptionFacts substitute(const std::vector<ExceptionFacts> &arguments, bool conservative = false) const {
     ExceptionFacts result;
     for (const auto &[origin, categories] : terms) {
-      if (origin.kind == Origin::Kind::input) result.merge(arguments.at(origin.index).restricted(categories).guarded(origin.conditions));
+      if (origin.kind == Origin::Kind::input) {
+        const auto &value = arguments.at(origin.index);
+        result.merge((conservative && value.empty() ? ExceptionFacts{categories} : value).restricted(categories).guarded(origin.conditions));
+      }
       else result.add(origin, categories);
     }
     return result;
@@ -452,6 +455,38 @@ public:
     }
     return output;
   }
+  // Missing paths are necessary conditions: no entry means no write guarantee.
+  using MissingInitialization = std::map<size_t, ConditionClauses>;
+  static ConditionClauses missing_initialization(size_t place, const std::set<size_t> &initialized,
+                                                 const MissingInitialization &missing) {
+    if (initialized.contains(place)) return {};
+    const auto found = missing.find(place);
+    return found == missing.end() ? ConditionClauses{ConditionFacts{}} : found->second;
+  }
+  static void combine_initialization(std::set<size_t> &initialized, MissingInitialization &missing,
+      const std::set<size_t> &next_initialized, const MissingInitialization &next_missing, bool alternatives) {
+    auto places = initialized;
+    places.insert(next_initialized.begin(), next_initialized.end());
+    for (const auto &[place, clauses] : missing) places.insert(place);
+    for (const auto &[place, clauses] : next_missing) places.insert(place);
+    std::set<size_t> ready;
+    MissingInitialization retained;
+    for (const auto place : places) {
+      auto clauses = missing_initialization(place, initialized, missing);
+      const auto next = missing_initialization(place, next_initialized, next_missing);
+      if (alternatives) for (const auto &facts : next) add_condition(clauses, facts);
+      else clauses = conjoin_conditions(clauses, next);
+      if (clauses.empty()) ready.insert(place);
+      else if (clauses != ConditionClauses{ConditionFacts{}}) retained.emplace(place, std::move(clauses));
+    }
+    initialized = std::move(ready); missing = std::move(retained);
+  }
+  static void resolve_initialization(std::set<size_t> &initialized, MissingInitialization &missing) {
+    std::erase_if(missing, [&](const auto &entry) {
+      if (!entry.second.empty()) return false;
+      initialized.insert(entry.first); return true;
+    });
+  }
   struct ReadRequirement {
     std::set<size_t> initialized;
     std::optional<size_t> selection = {};
@@ -465,6 +500,7 @@ public:
     std::map<size_t, std::set<size_t>> nonnull_versions = {};
     // Necessary conditions on paths that still require this read to be initialized.
     ConditionClauses when{ConditionFacts{}};
+    MissingInitialization uninitialized{};
     bool operator==(const ReadRequirement &) const = default;
     bool satisfied(size_t place, const std::set<size_t> &known, const Selections &selections) const {
       if (when.empty()) return true;
@@ -515,7 +551,7 @@ public:
         });
         return;
       }
-      std::erase_if(initialized, [&](size_t id) { return !other.initialized.contains(id); });
+      combine_initialization(initialized, uninitialized, other.initialized, other.uninitialized, true);
       std::erase_if(entry_initialized, [&](size_t id) { return !other.entry_initialized.contains(id); });
       std::erase_if(entry_nonnull, [&](size_t id) { return !other.entry_nonnull.contains(id); });
       if (selection != other.selection) selection.reset();
@@ -568,10 +604,22 @@ public:
     BooleanValues booleans{};
     // Source handling requirements are independent of runtime category paths.
     std::set<size_t> declared_failures{};
+    MissingInitialization uninitialized{};
     template <typename Transform> void transform_conditions(const Transform &transform) {
       for (auto &[truth, clauses] : returned.boolean) clauses = transform(clauses);
       for (auto &[target, value] : booleans) for (auto &[truth, clauses] : value) clauses = transform(clauses);
-      for (auto &[read, requirement] : reads) requirement.when = transform(requirement.when);
+      for (auto &[read, requirement] : reads) {
+        requirement.when = transform(requirement.when);
+        for (auto &[place, clauses] : requirement.uninitialized) clauses = transform(clauses);
+        CleanupEquations::resolve_initialization(requirement.initialized, requirement.uninitialized);
+      }
+      for (auto &[place, clauses] : uninitialized) clauses = transform(clauses);
+      resolve_initialization();
+    }
+    void resolve_initialization() {
+      CleanupEquations::resolve_initialization(initialized, uninitialized);
+      selections.resolve(initialized);
+      returned.initialize(initialized);
     }
     template <typename Transform, typename ProofTransform> void transform_values(const Transform &transform, const ProofTransform &proof_transform) {
       returned.value = transform(returned.value);
@@ -621,13 +669,15 @@ private:
     next.transform_conditions([&](const auto &clauses) { return through_conditions(clauses, first.booleans); });
     for (const auto &[read, known] : next.reads) if (!known.satisfied(reads_.at(read), first.initialized, first.selections)) {
       auto before = known;
-      before.initialized.insert(first.initialized.begin(), first.initialized.end());
+      combine_initialization(before.initialized, before.uninitialized, first.initialized, first.uninitialized, false);
+      before.when = conjoin_conditions(before.when,
+          missing_initialization(reads_.at(read), before.initialized, before.uninitialized));
       before.substitute(first.selections);
       if (before.satisfied(reads_.at(read), first.initialized, {})) continue;
       merge_read(result.reads, read, before);
     }
-    result.initialized.insert(second.initialized.begin(), second.initialized.end());
-    result.selections.then(second.selections, result.initialized);
+    combine_initialization(result.initialized, result.uninitialized, next.initialized, next.uninitialized, false);
+    result.selections.then(next.selections, result.initialized);
     result.unknown_thrown = first.unknown_thrown || second.unknown_thrown || second.thrown.reads_unknown(first.payloads);
     result.returned.then(next.returned);
     result.returned.initialize(result.initialized);
@@ -643,6 +693,7 @@ private:
     auto &known = found->second;
     const auto previous_reads = known.reads;
     const auto previous_initialized = known.initialized;
+    const auto previous_uninitialized = known.uninitialized;
     const auto previous_returned = known.returned;
     const auto previous_thrown = known.thrown;
     const auto previous_unknown_thrown = known.unknown_thrown;
@@ -657,7 +708,7 @@ private:
     known.payload_writes.insert(effects.payload_writes.begin(), effects.payload_writes.end());
     known.declared_failures.insert(effects.declared_failures.begin(), effects.declared_failures.end());
     for (const auto &[read, before] : effects.reads) merge_read(known.reads, read, before);
-    std::erase_if(known.initialized, [&](size_t id) { return !effects.initialized.contains(id); });
+    combine_initialization(known.initialized, known.uninitialized, effects.initialized, effects.uninitialized, true);
     std::erase_if(known.present, [&](size_t id) { return !effects.present.contains(id); });
     known.returned.merge(effects.returned);
     known.thrown.merge(effects.thrown);
@@ -678,7 +729,7 @@ private:
     }
     known.selections.merge(effects.selections);
     known.selections.resolve(known.initialized);
-    return previous_reads != known.reads || previous_initialized != known.initialized ||
+    return previous_reads != known.reads || previous_initialized != known.initialized || previous_uninitialized != known.uninitialized ||
         previous_returned != known.returned || previous_thrown != known.thrown || previous_unknown_thrown != known.unknown_thrown || previous_payloads != known.payloads ||
         previous_selections != known.selections || previous_symbols != known.symbols || previous_payload_writes != known.payload_writes ||
         previous_present != known.present || previous_booleans != known.booleans || previous_declared != known.declared_failures;
