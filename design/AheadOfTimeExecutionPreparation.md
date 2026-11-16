@@ -1,12 +1,14 @@
 # Ahead-of-time execution preparation and runtime micro-dispatch
 
-Design revision: 18 · Recorded: 2026-11-16 America/Los_Angeles · Status: AOT execution-preparation behavior and native-coverage contract; bounded experimental evidence; permanent mechanisms retain their separate review scopes.
+Design revision: 19 · Recorded: 2026-11-16 America/Los_Angeles · Status: AOT execution-preparation behavior and native-coverage contract; bounded experimental evidence; permanent mechanisms retain their separate review scopes.
 
 During AOT compilation, CoD checks the required behavior and prepares native implementations, semantic method selectors and local micro-dispatch paths. Proven call-site facts can resolve selections, demand or reuse specializations and permit direct-call emission. Preparing selection code does not execute that selection or the source program’s runtime effects. At runtime, execution follows the prepared code and performs remaining selections using actual runtime evidence.
 
 Semantic method selection uses actual argument types, declared conformance and the callable’s selected family/interpretation. A method has one semantic definition and may have a general native implementation and several compiler-prepared specializations. Within a generated body, runtime micro-dispatch selects individual operations whose choice remains unresolved after compilation. Selecting a user method and selecting a local operation within its implementation are separate responsibilities. Correct general execution remains available without exhaustive whole-method tuple specialization, BBV, ORC or runtime compilation.
 
 ## Design authority
+
+- **Disjoint declarations and exempt paths:** [H-527–H-531](../CHANGELOG.md#h-527)/[K-DISJOINT-PATHS-20261116](../CHANGELOG.md#k-disjoint-paths-20261116), [D-10-DISJOINT](DesignAuthorityRegistry.md#d-10-disjoint), records n-ary pair constraints, declaration-point exemptions, public/type-carried evidence and a frozen fused-world inheritance graph. Redundant shorter declarations accept with a warning identifying the existing path and the intermediate method contracts they do not bypass. Candidate C-56/C-10/P-476–P-478 under charter §§2/3.1–3.3/4.2–4.3/6.3/8/12 preserves explicit nominal intent, stable interpretation and actionable diagnostics. D-10 owns examples/acceptance and remaining foreign-declaration authority, cyclic evidence and formal path-checking boundaries. Preserve owner/capture, selected contexts, H-525/H-526 checked contracts, demanded method checking and D-16; no new compiler support or full value-path/algorithm qualification is inferred.
 
 - **Checked and unchecked roots:** [H-524–H-526](../CHANGELOG.md#h-524)/[K-ERROR-ROOTS-20261116](../CHANGELOG.md#k-error-roots-20261116), [D-17-ERROR-ROOTS](DesignAuthorityRegistry.md#d-17-error-roots), adds Error <: Exception and preserves explicit Exception handling obligations even for values proven unchecked. Checkedness-changing adapter conformance rejects. Candidate P-473–P-475 serves explicit typed failure contracts and user-defined errors under charter §§2/3.1/3.3/4.3/6.3/8/12. Existing actual-type dispatch, concrete failure categories, owner/capture and D-16 contracts continue. New roots/declaration enforcement and arbitrary exception payload support are not established by current source tests; general disjointness and remaining wrapper/throws/inspection scope remain separate.
 
@@ -195,6 +197,10 @@ CoD must expose correct roots to LLVM so genuinely unused dependency-world code 
 Bare names and `@` follow the same nearest lexical binding. A non-symbol parameter/local named `p` makes `@p` ill-typed; lookup does not bypass it for an outer symbol. This applies to effects, touch, call modes and type inspection. Definition-site lexical bindings retain their meaning under captures/mixins; a caller-local shadow does not reinterpret a separately defined callee.
 
 Each inferred owner binder is an implicit const lexical binding, including generic region-or-scope owners. It participates in the same lookup rule. Its constness grants neither region capability, content immutability, ownership nor lifetime extension. Preserve actual owner provenance; no runtime owner object or owner-union ABI is selected.
+
+## Frozen inheritance constraints
+
+H-528 fixes inheritance relations in the fused world before execution. H-527's disjoint records carry source-declaration exemption evidence and must be validated with the selected positive graph during that preparation. A pair with exempt paths is not an empty-intersection proof. Coverage, method selection and caches must retain the precise applicable constraints, exemptions and dependency identities they actually use; no runtime graph mutation, global unqualified no-overlap assumption or new generic-instance key follows. H-530/H-531 redundant shorter declarations warn without removing intermediate contracts. [D-10](SymbolicDynamicScope.md#disjoint-declarations-and-exempt-inheritance-paths) owns formal acceptance and remaining metadata/permission/cyclic-proof questions; D-26's outside-catalog interpretation contract remains separate.
 
 ## Completion, validation and remaining work
 

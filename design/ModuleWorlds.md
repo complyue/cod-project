@@ -1,8 +1,10 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 37 · Recorded: 2026-11-16 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 38 · Recorded: 2026-11-16 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
+
+- **Disjoint declarations and exempt paths:** [H-527–H-531](../CHANGELOG.md#h-527)/[K-DISJOINT-PATHS-20261116](../CHANGELOG.md#k-disjoint-paths-20261116), [D-10-DISJOINT](DesignAuthorityRegistry.md#d-10-disjoint), records n-ary pair constraints, declaration-point exemptions, public/type-carried evidence and a frozen fused-world inheritance graph. Redundant shorter declarations accept with a warning identifying the existing path and the intermediate method contracts they do not bypass. Candidate C-56/C-10/P-476–P-478 under charter §§2/3.1–3.3/4.2–4.3/6.3/8/12 preserves explicit nominal intent, stable interpretation and actionable diagnostics. D-10 owns examples/acceptance and remaining foreign-declaration authority, cyclic evidence and formal path-checking boundaries. Preserve owner/capture, selected contexts, H-525/H-526 checked contracts, demanded method checking and D-16; no new compiler support or full value-path/algorithm qualification is inferred.
 
 - **Checked and unchecked roots:** [H-524–H-526](../CHANGELOG.md#h-524)/[K-ERROR-ROOTS-20261116](../CHANGELOG.md#k-error-roots-20261116), [D-17-ERROR-ROOTS](DesignAuthorityRegistry.md#d-17-error-roots), adds Error <: Exception and preserves explicit Exception handling obligations even for values proven unchecked. Checkedness-changing adapter conformance rejects. Candidate P-473–P-475 serves explicit typed failure contracts and user-defined errors under charter §§2/3.1/3.3/4.3/6.3/8/12. Existing actual-type dispatch, concrete failure categories, owner/capture and D-16 contracts continue. New roots/declaration enforcement and arbitrary exception payload support are not established by current source tests; general disjointness and remaining wrapper/throws/inspection scope remain separate.
 
@@ -290,6 +292,12 @@ The diagnostic should identify the use site, resolved public name, actual defini
 For the example above, a use of detail_code can report: `information: detail_code resolved implicitly through vocabulary.cod; consider selecting it explicitly with using.` A use already covered by an equivalent explicit selection no longer depends on that fallback. Ambiguous lookup remains a rejection, rather than a successful implicit resolution accompanied only by information. Informational output does not change name priority, overload selection or program validity. Diagnostic category spelling, controls, repeated-use grouping and automatic fixes are deferred; no warning/error escalation policy is selected.
 
 Future acceptance covers the actual mention location, correct source/identity/context provenance, a meaning-preserving explicit-selection suggestion, no implicit-use report after equivalent explicit selection, and unchanged ambiguity/privacy rules. Shared or specialized checking must not manufacture a new source mention for every generated instance. D-16 fraction and UoM identity/dispatch/storage rules are unaffected.
+
+### Type-carried disjoint constraints and exempt paths
+
+[D-10](SymbolicDynamicScope.md#disjoint-declarations-and-exempt-inheritance-paths) owns H-527–H-531's n-ary constraint and path semantics. Export of any participating type publishes the complete constraint record and its originating exemption evidence; using/import carries them automatically. This is semantic type evidence, independent of with methods and distinct from introducing source names or granting extension permission. Preserve the record through aliases/re-export and applicable ancestor relations of selected subtypes. Referenced identities/path facts needed to validate it are public; unrelated private fields/bodies and ordinary private-name lookup stay governed by their own contracts.
+
+An exemption captures paths known at its source declaration, not a fresh receiver snapshot. Multiple selected records constrain together; an import cannot merge their exemptions into a weaker contract. Establish the final interface and validate applicable positive relations/constraints before the fused world freezes. H-528 allows no runtime inheritance modification; this metadata is not initialized by postpon blocks or a runtime scheduler. Source snapshot order and compiler/module traversal order are different concerns. Foreign authoring permission, cyclic proof establishment and general graph validation remain in D-10's pending scope.
 
 ## Vocabulary modules establish shared identities
 
