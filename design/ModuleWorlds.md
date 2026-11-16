@@ -1,8 +1,12 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 28 · Recorded: 2026-11-16 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 30 · Recorded: 2026-11-16 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
+
+- **Declaration cycles and scheduled initialization:** [H-492](../CHANGELOG.md#h-492)/[D-15-CYCLES](DesignAuthorityRegistry.md#d-15-cycles) confirms declaration-only cycles. H-493–H-498/[D-15-POSTPON](DesignAuthorityRegistry.md#d-15-postpon) fixes ordered trailing postpon blocks, dependency prefixes as implicit blocks retaining their module contexts, entry execution last and compile-time ordering emitted as fixed native code. [D-15-STATIC-NS](DesignAuthorityRegistry.md#d-15-static-ns)/H-497 requires static definitions in runtime module namespaces before initialization. Candidate C-10/C-35/C-36/C-44/C-59/C-65 through P-443–P-451 serves charter §§2/3.1–3.3/4.2/6.3/8/12 through explicit dependencies, contexts and checked execution. Preserve publication, method identity, source-owned worlds, scope/owner/capture rules, once-only execution and ordinary failure cleanup. Acceptance and proof/representation exclusions are below. [K-STATIC-MODULE-STARTUP-20261116](../CHANGELOG.md#k-static-module-startup-20261116) integrates r29→30; the source compiler still rejects cyclic discovery and does not implement postpon. Direction confirmation does not qualify the complete value path or physical protocol.
+
+- **Namespaces and entry selection:** [D-15-ENTRY](DesignAuthorityRegistry.md#d-15-entry), H-499/H-500 and P-452–P-454 cover the terminology and entry section below. Package is the dependency/version unit; the CLI selects the containing namespace of a reserved local `__main__` module, allowing several entry namespaces per package. Other modules cannot select/re-export an entry module. Candidate C-35/C-44/C-45/C-59 through charter §§2/3.2/4.2/8 separates identity, source organization and execution roots. Preserve library selection, privacy, module contexts and D-16; no directory-created owner, implicit sibling initialization or qualified expression syntax. Exact CLI grammar/path mapping and physical namespace representation remain open. H-500 confirms the containing-namespace choice, not the entire package-management design; the same continuity record covers this addition and its acceptance targets.
 
 - **Implicit source lookup:** [D-15-TYPE-METHODS](DesignAuthorityRegistry.md#d-15-type-methods)/[D-15-LOOKUP](DesignAuthorityRegistry.md#d-15-lookup), r28's type-selection and fallback sections, records H-483's shadowing and [H-484](../CHANGELOG.md#h-484)'s source-module fallback direction. [H-485](../CHANGELOG.md#h-485)/[D-15-LOOKUP-INFO](DesignAuthorityRegistry.md#d-15-lookup-info) reserves informational diagnostics at implicit-use sites for later implementation. Candidate C-35/C-45/C-57/C-59 via P-425–P-433 serves charter §§3.1/3.2/4.2/6.3/8/9 through reusable public definitions, explicit identity/context and inspectable source provenance. Preserve privacy, source-world isolation, explicit extension/publication, name-before-dispatch, captures and unique interpretations. Acceptance and remaining engineering boundaries are below. Human confirmation covers the stated directions, not full value-path/operational qualification, a general distance algorithm or current compiler support. [K-SOURCE-FALLBACK-20261116](../CHANGELOG.md#k-source-fallback-20261116) records the r26→27 integration; existing identity/helper contracts continue. [H-487](../CHANGELOG.md#h-487)/[D-15-LOOKUP-TRANSITIVE](DesignAuthorityRegistry.md#d-15-lookup-transitive) additionally confirms the intermediate private-binding barrier in the multilevel model requested by H-486; P-434–P-436 records that scope. No runtime module object or qualified-access syntax is introduced.
 
@@ -208,7 +212,7 @@ The following consequences preserve deterministic lookup without a richer arbitr
 - **Diamond paths:** repeated paths to the same selected identity and equivalent interpretation do not duplicate a candidate or initialize a module again. Same definition with observably different using/import contexts is not equivalent merely because the source body is shared. Preserve the selected context sequence; unresolved equivalence or competing contexts reject.
 - **Definitions keep their context:** app-level shadowing controls app's mention. It does not re-resolve a helper body's lexical names at app or turn an independent family into an imported helper dependency. Existing explicit adaptation and H-253 conflict checks continue.
 - **Checking order cannot change names:** implicit lookup results may be cached, and selected information may merge by identity, but neither operation declares a private alias. A source body mentioning a fallback name does not newly block downstream access to it. Visibility comes from declarations/publication and the lookup graph, not which body was checked first.
-- **Graph traversal does not activate modules:** retain existing once-only initialization and owner/capture rules. The current acyclic-module boundary remains; termination/caching of name lookup does not authorize cyclic module construction or initialization. All private barriers and ambiguous winners remain compile-time diagnostics.
+- **Graph traversal does not activate modules:** retain existing once-only initialization and owner/capture rules. H-492 separately admits declaration-only module cycles; lookup traversal must terminate and retain public/private/identity distinctions. This does not itself authorize cyclic runtime initialization; the postpon proposal below remains under review. All private barriers and ambiguous winners remain compile-time diagnostics.
 
 This permits an intermediate dependency change or a new nearer binding to change a downstream implicit resolution. That is a consequence of implicit lookup; H-485's future use-site information can expose the path, and explicit source selection can state the intended dependency. No stability against arbitrary dependency edits is promised. Acceptance includes all four facade cases (absent, private without publication, local public, upstream public alongside local private), private aliases of the same original identity, peer barriers, diamond contexts, declaration-kind shadows, check-order independence and explicit-export/implicit-reachability distinction. Full graph representation, general distance proofs and source implementation remain separate; these rules add no runtime pointer or method-table protocol.
 
@@ -387,6 +391,165 @@ Compilation determines the flattened TLS shape: the admitted symbolic identities
 
 Cross-module module-world editing is impossible at compile time and runtime (H-245). A module constructs only its own world. Reading another module's exports and merging their information locally is receiver construction, not an edit of the source world. TLS binding to a compatible value from another copy does not grant a way to rewrite that copy's semantic information. The runtime use of referenced values retains the established memory-access, capture and ownership contracts.
 
+## Packages, namespaces and entry selection
+
+Use the following vocabulary across module selection, startup and [package management](CodProjectStructureAndPkgMgmt.md#terminology):
+
+| Term | Meaning |
+| --- | --- |
+| Package | The dependency-resolution and version-management unit. Internal source directories do not each become a dependency package. |
+| Namespace / subnamespace | A named grouping of modules and nested namespaces, corresponding to an internal source-directory level. |
+| Namespace segment | One name component in a namespace path. The whole prefix identifies the nested namespace. |
+| Module | A semantic unit with declarations, a module world and any executable initialization. |
+| Directory | The physical source-tree location; concrete source-root and filename mapping are toolchain concerns. |
+
+The module namespace hierarchy locates modules. A module's member lookup resolves its definitions, aliases and source fallbacks. Its module world supplies semantic identities and interpretations. These roles remain distinct even when diagnostics use the general word namespace. Namespace ancestry alone creates no module owner, initialization body, implicit import, publication or member-lookup fallback. It does not merge different package identities/versions into one world or introduce Module.f expressions.
+
+H-499 reserves the canonical local entry-module name `__main__`, with two leading and two trailing underscores. H-500 makes the CLI select its containing namespace, not the dependency package as a single executable unit. One package can contain several independently selectable entry namespaces:
+
+```text
+acme-tools/                         dependency package
+  tools/server/__main__.cod         entry in namespace tools/server
+  tools/client/__main__.cod         entry in namespace tools/client
+  shared/protocol.cod               ordinary reusable module
+```
+
+This is an illustrative source layout, not selected CLI argument syntax. Selecting tools/server resolves that namespace's `__main__` and its actual dependency closure. It does not run `tools/client/__main__` or initialize every module in acme-tools. A library package/namespace need not contain an entry. Selecting a namespace without an entry, or without a unique package/namespace identity, rejects; the compiler must not guess among packages, versions or entries. Concrete package qualification, path separators, source-root mapping and CLI flags remain separate surface work.
+
+An entry module is an execution root and cannot be selected or re-exported by another module. This restriction applies to using/import, symbol-from, mixin, export-from and indirect aliases/fallback; selecting its definitions by another route must not evade the restriction. Entry modules may select ordinary library modules. Put reusable definitions in ordinary modules rather than importing another `__main__`. The rule concerns source-module selection; it does not prohibit an entry from passing an otherwise valid runtime value or callback. Publishing a name inside an entry does not make that entry selectable.
+
+## Module dependency cycles and initialization
+
+### Static namespaces and the startup sequence
+
+H-495–H-498 fixes the following order for the selected entry and its incorporated dependency closure:
+
+1. Static definitions populate the runtime module namespaces before any initialization block executes. Establish declared identities, types, signatures, method definitions and selected public-name relationships in their module contexts.
+2. Execute one compiler-selected linear sequence containing each dependency module's ordinary initialization prefix as one implicit postpon block, together with all explicit postpon blocks, including the entry module's.
+3. Execute the selected entry module's ordinary executable prefix last, after successful completion of that sequence.
+
+Static namespace population is semantic preparation of runtime module worlds, not merely a checker symbol table. It does not evaluate arbitrary global initializers, invoke functions/procedures, install dynamic effects, acquire user-owned regions or materialize callable captures. A definition is available before its dynamically initialized value is ready. H-481's definition/view distinction and H-482's installation-selected owners remain in force. No runtime dictionary ABI, user-visible module value or permission to mutate another world's definitions is selected.
+
+For a dependency module A, the required order is A.prefix → A.postpon1 → A.postpon2. Another module's whole block, including its implicit prefix, can occur between these nodes when readiness permits. There is no requirement to finish every dependency prefix before executing any explicit postpon block. Empty declaration-only prefixes need no runtime instructions.
+
+The entry is the prefix-order exception: its explicit blocks retain their mutual source order and participate in initialization; its ordinary executable prefix follows all initialization blocks. Thus an entry postpon block can use registered entry definitions, but cannot rely on a value produced only by the entry's later executable prefix:
+
+```cod
+# Selected __main__ module; ordinary forms still precede the suffix in source.
+symbol @config:u64, @answer:u64;
+assert @answer == 42u64;             # Ordinary entry prefix: executes last.
+postpon { effect @config <- 41u64; }
+postpon { effect @answer <- @config + 1u64; }
+```
+
+This runs config installation, answer installation, then the assertion. Putting the sole config installation in the ordinary entry prefix instead creates an unavailable prerequisite for the earlier postpon block and rejects. Move that installation to an appropriately ordered entry postpon block; do not hoist it silently.
+
+The compiler completes ordering statically and emits a fixed native instruction/direct-call sequence. It supplies no runtime dependency graph, ready queue, retries or runtime choice among alternative schedules. Ordinary branches and calls inside a block remain ordinary code; they do not dynamically reorder initialization nodes. Optimization must preserve the required observable order, without mandating inlining or a particular physical placement of function bodies. If static proof is insufficient, reject the case; any proposed need for runtime scheduling is a separate design question.
+
+### Declaration-only cycles
+
+H-492 allows a cycle whose participating modules contain declarations, with no executable module initialization. Establish the component's declared identities, public aliases and independently available signatures before checking callable bodies. The bodies may refer to one another:
+
+```cod
+# even.cod
+using "odd.cod" odd;
+func even(n:u64) -> bool {
+    if n == 0u64 { return true; }
+    return odd(n - 1u64);
+}
+export even;
+
+# odd.cod
+using "even.cod" even;
+func odd(n:u64) -> bool {
+    if n == 0u64 { return false; }
+    return even(n - 1u64);
+}
+export odd;
+```
+
+Registering these bodies does not invoke them, install effects or materialize captures. Module dependency cycles, callable recursion and runtime initialization dependencies are distinct graphs. A module cycle alone must not become a permanent source-level rejection of this declaration-only case. The current source compiler's acyclic discovery is an implementation limitation.
+
+Ordinary declaration checks still apply: unique/public name resolution, finite and anchored type/callable identities, valid layouts and owner constraints, independent result evidence and valid selected interpretation. A ring of re-export aliases with no defining object does not invent an identity. Mutually embedded by-value types do not gain a finite layout merely because module cycles are allowed. Recursive type inference without an independent anchor still rejects. General cyclic import-adaptation/extension proofs are not supplied by the even/odd case; unsupported proofs must be diagnosed rather than silently collapsing contexts.
+
+Declaration-only cycles can be reached from the selected entry and otherwise normally initialized ordinary modules. Entry unselectability remains in force. A cycle involving executable initialization is governed separately by the postpon contract: its initialization readiness graph must have a proved legal linear schedule. An actual readiness cycle still rejects. This module permission does not authorize cycles in the package manager's dependency/version-resolution graph.
+
+### Ordered top-level postpon suffixes
+
+H-493 proposes the exact spelling `postpon { ... }` at module top level. H-494 requires these blocks to form the module's trailing suffix: after the first postpon block, only further postpon blocks and non-executable trivia may follow. Ordinary declarations, exports and executable top-level statements belong before that suffix. Nested postpon is not part of this form.
+
+The compiler must preserve each module's explicit block order. Other modules' whole blocks, including implicit dependency prefixes, may occur between them to meet statically established dependencies. Include each dependency's prefix-before-suffix edge and the entry-prefix-last boundary stated above. If no such linear schedule can be established, reject. An out-of-order variant would require separately designed syntax and demonstrated value; no spelling or permission is selected for it.
+
+For example, with source-order constraints A1 → A2 and B1 → B2, and checked data requirements A1 → B1 → A2, a possible schedule is A1, B1, A2, B2. The compiler cannot emit A2 before A1 to make the graph schedulable. Multiple legal global orders need not themselves reject; each accepted order must respect the same per-module and readiness constraints.
+
+```cod
+symbol @x:u64, @y:u64;
+postpon { effect @x <- 1u64; }
+postpon { effect @y <- @x; }
+postpon { effect @x <- 2u64; }
+# Source order is mandatory: @y becomes 1; the final @x is 2.
+```
+
+Repeated writes are not automatically competing providers: in this example their order and the read's binding version are established by the one module's chain. A compiler must not connect every writer to every reader or postpone the middle read until after the final write. Cross-module cases still require the intended target/binding context and predecessor state to be proved.
+
+The registration pass records declarations and fragment bodies without executing them. Build readiness dependencies for the fragments in the admitted module-incorporation closure. H-140's once-only incorporation and scan-versus-execution distinction continue: scanning an otherwise unincorporated module does not create a new execution root. Encounter order identifies incorporation/provenance; it cannot override the required static initialization order. Repeated aliases and diamonds reuse the same module context and nodes. Distinct resolved module/package identities remain distinct.
+
+### Readiness dependencies, rather than textual mentions
+
+A proposed dependency is an obligation that must be established before an operation can execute safely and with its selected meaning. Resolve the name to identity and interpretation first. Keep these cases distinct:
+
+| Use in a fragment | Required evidence |
+| --- | --- |
+| Mention a declared type/callable or inspect an independently known type | Declaration/signature availability; no initializer dependency solely from this mention. |
+| Read a scalar, dereference a target or use a current symbolic binding | The selected value/binding/target must have the necessary initialization, access and owner evidence. |
+| Pass/store a reference identity, or test identity/nullness | The identity/binding must be available; do not invent a payload-read requirement where ordinary init/reference rules permit identity-only use. |
+| Invoke a callable | Include its checked transitive requirements and normal-completion writes in the selected context, not just argument spellings. |
+| Materialize a callable value | Include its actual capture and lifetime requirements at materialization; declaration availability does not supply captured runtime bindings. |
+| Perform a stored procedure value | Preserve its captured bindings and owners; do not substitute the requirements of a direct/current-binding call. |
+
+For example, a fragment calling `proc read_b() -> u64 { return @b; }` depends on the supplying initialization even when its own body never spells @b. Conversely, inspecting an independently declared return type does not invoke read_b. Used default expressions follow their selected origin/context and ordinary preparation phase; unused defaults and unselected methods are not execution dependencies.
+
+Dependencies identify actual module/interpretation context and target/binding identity, not just a symbol's spelling. Reordering cannot make another module's unselected dynamic resource visible, reinterpret an offset under another owner, or grant cross-world edits. Aliases, indirect calls and selected methods must retain conservative dependency evidence. Unknown required relationships reject; a name scan that misses a helper's read is not sound initialization analysis.
+
+A provider must establish the required state on every normal completion that permits consumers to execute. Conditional writes are insufficient unless the required fact is proved on all such paths. A path that exits with an uncaught failure need not initialize a consumer that will never run. Static branch proofs may remove impossible dependencies; runtime guesses do not choose a different schedule. Distinguish an actual dependency cycle, a missing provider and insufficient analysis in diagnostics.
+
+### Scheduling granularity, scope and failure
+
+The scheduling node is a whole implicit dependency prefix or explicit postpon block. Keep source order and ordinary evaluation/cleanup behavior inside it. Do not split a node or interleave its statements with another fragment to rescue a cycle:
+
+```cod
+symbol @a:u64, @b:u64, @c:u64;
+postpon { effect @a <- 1u64; effect @c <- @b; }
+postpon { effect @b <- @a; }
+# Reject: the first block needs @b, but it must precede the second block.
+```
+
+The author can instead split the first block and write three blocks in the intended order: initialize @a, initialize @b, then initialize @c. The compiler cannot invent that statement-level interleaving. Likewise, a first block that reads @b followed by a later block that initially supplies @b rejects even if swapping them would work. Scheduling nodes are not transactions: ordinary effects within a running block can be observable immediately, and no allocation checkpoint or rollback is introduced.
+
+H-495's mental model associates each block with its owning module context as its capture. Blocks of that module share access to the same evolving context, rather than receiving stale value snapshots before initialization. This is an internal execution-context association, not a new ordinary callable capture permission or a requirement to allocate a closure per block. Scheduling another module's block does not make its bindings ambient in this one.
+
+H-319's braces already distinguish grouping from a full scope. Postpon's `{ ... }` is a delayed fragment of its owning module scope, not a fresh callable invocation or an implicit `{{ ... }}` scope. Preserve module lexical resolution, declared exports and its selected dynamic/resource context. Explicit nested full scopes retain their own storage, restoration and cleanup. H-166's process-lifetime module owners remain subject to actual ownership transfer; scheduling does not extend a borrowed owner's lifetime or capture another module's binding automatically. Deferred work registers when the fragment actually runs and belongs to the existing enclosing full scope.
+
+Each scheduled fragment executes once when reached in the emitted initialization plan. An uncaught failure follows ordinary propagation/cleanup and stops the remaining plan on that failing path; the entry executable prefix is not reached. No retry, partial-success readiness, speculative execution or whole-plan rollback is supplied. A failure handled inside the block contributes only the normal-completion state actually proved. Topological schedulability proves an allowed order, not termination of arbitrary called code or freedom from runtime errors.
+
+### Entry installation and remaining analysis boundaries
+
+**Entry callable installations.** [D-21's entry-installation contract](AheadOfTimeExecutionPreparation.md#entry-installation-and-unused-dependency-code) still requires explicit installation when entry extends a dependency callable, and retains operands/effects/failures when affected dependency TLS writes are suppressed. Static definition preparation does not perform that installation. If a dependency initializer requires the entry's installed value, the entry installation belongs in a sufficiently early entry postpon block with valid capture dependencies. A future entry-prefix write cannot justify an earlier read or suppressed-write replacement. If the resulting requirements cycle, reject; neither implicit hoisting nor runtime scheduling repairs them. General identity/cancellation proofs remain D-21 work.
+
+**Binding versions and proof coverage.** H-494 resolves the same-module repeated-write example by mandatory order; there is no blanket single-provider restriction. Checked summaries must identify the entry requirements and normal-completion changes of each ordered fragment, including target/alias and current-versus-captured binding distinctions. A reference to one symbol identity in two retained module contexts is not automatically a shared provider. Unproved cross-module provider/version or alias relationships reject rather than being guessed from names or arbitrary schedule order. More precise recognition can be added without weakening soundness or changing the established order.
+
+**Independent ready fragments.** The compiler can choose a reproducible ready-node order, for example using the existing module encounter order as an implementation tie-break. This is not an extra source-level dependency or permission to change per-module order. Missing dependencies, ambiguous binding versions and invalid resource contexts cannot be repaired by that tie-break. Code needing a cross-module observable effect sequence must establish the corresponding ordering relationship; no inference of external business intent from ordinary mentions is promised.
+
+### Implementation and acceptance boundary
+
+The graph ordering algorithm is straightforward; producing sound context-sensitive readiness summaries is the substantial work. Reuse checked call, owner, capture, initialization and completion evidence rather than adding a separate textual-name analysis. A first implementation can admit directly established providers, simple references and known callable summaries, rejecting unproved alias, binding-version and indirect-call cases. No runtime scheduler, continuation splitting, general transactional state or automatic graph construction is needed for that subset.
+
+Future acceptance must cover declaration-only mutual imports; rejection of ordinary forms after a postponed suffix starts and nested postpon forms; no-defining-object export cycles; unique identity/context through diamonds; successful interleaving of dependency prefixes and ordered suffixes; rejection when a dependency opposes per-module order; hidden helper and used-default dependencies; declaration/type-only mentions; capture versus invocation; conditional outputs; same-module successive binding versions and unproved cross-module providers; an unschedulable cycle with an explanatory dependency path; ordinary-order constraints; preserved module resource visibility/lifetimes; exact once-only execution; failure cleanup with retained prior side effects; and reproducible independent-node ordering. D-16 fraction validity, bits representation, UoM dispatch and the separation of explicit init flow from future pure knot-tying remain unchanged.
+
+Startup/entry acceptance additionally requires static definition availability without premature dynamic-value readiness; shared evolving module contexts; entry postpon before entry prefix; rejection of a dependency on a later entry-prefix installation; correct H-379 installation availability; emitted fixed order with no runtime scheduler; a missing/ambiguous namespace entry diagnostic; two selectable entry namespaces in one package with only the selected closure initialized; rejection of entry reuse through every source-selection/publication route; and no entry execution after uncaught initialization failure.
+
+The existing source compiler still discovers only acyclic modules and has no postpon parser/planner. Its CLI accepts --run FILE / --check FILE; namespace-selected `__main__` entry routing and the new static-namespace/startup contract are not implemented by this documentation change. No executable acceptance evidence is supplied. Full dependency-proof coverage, namespace representation and exact CLI grammar remain separate work; the stated ordering and namespace-selection decisions are settled.
+
 ## Architecture implementation boundaries
 
 H-245's implementation goal covers independent module worlds and flat runtime TLS, including H-242's vocabulary identities. The requirement audit covers construction, composition, isolation, compile-time TLS layout and native binding behavior together. Its evidence is organized by those requirements, including rejection paths and source inspection; successful examples alone cannot establish world isolation.
@@ -403,4 +566,4 @@ Canonical identity-based composition must follow this ownership boundary. Compil
 
 Current supported and missing behavior, implementation entry points and validation commands are maintained in the [source capability reference](../tests/cod/language/README.md). Language requirements in this document remain subject to their recorded qualification; examples specify acceptance targets, not evidence that every target is implemented.
 
-Conflict arbitration, extension of unrelated callable unions, cyclic initialization, general composition and persistent representation retain separate review scope. No cross-module world editor is a pending deliverable.
+Conflict arbitration, extension of unrelated callable unions, general composition and persistent representation retain separate review scope. Declaration-only cycles follow H-492; initialization order and namespace-selected entry follow H-493–H-500, with dependency-proof and representation mechanisms still under review. No cross-module world editor is a pending deliverable.

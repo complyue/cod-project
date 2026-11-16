@@ -1,8 +1,12 @@
 # CoD source compiler validation
 
-Reference revision: 362 · Recorded: 2026-11-16 America/Los_Angeles.
+Reference revision: 363 · Recorded: 2026-11-16 America/Los_Angeles.
 
 ## Design authority
+
+- **Startup synchronization:** [K-DESIGN-STARTUP-SYNC-20261116](../../../CHANGELOG.md#k-design-startup-sync-20261116) preserves the current mainline callable/cleanup/module evidence while integrating D-15r30 startup decisions. This revision changes documentation only; the unimplemented startup/namespace boundaries below remain explicit.
+
+- **Module startup and entry boundary:** [D-15](../../../design/ModuleWorlds.md#module-dependency-cycles-and-initialization), H-492–H-500, permits declaration-only cycles and requires static runtime namespace definitions before one statically emitted initialization sequence of implicit dependency prefixes and ordered explicit postpon blocks; entry execution follows that sequence. The CLI design selects a namespace's reserved `__main__`, allowing several entry namespaces per package and rejecting entry reuse by other modules. [K-STATIC-MODULE-STARTUP-20261116](../../../CHANGELOG.md#k-static-module-startup-20261116) updates documentation only. Source discovery still requires an acyclic graph; postpon parsing/planning, the new startup contract and namespace-selected entry routing remain unimplemented. Current --run FILE / --check FILE and native initialization behavior are unchanged. No runtime scheduler or new executable acceptance is claimed.
 
 - **Integrated design scope:** [K-744](../../../CHANGELOG.md#k-744) reconciles H-482–H-491 with the qualified compiler scopes below. Explicit reference-symbol owners, source fallback, whole-callable selection and publication-only re-export retain their recorded source contracts and separate implementation/qualification boundaries. H-481/K-743 construction semantics, current native validation, D-16 and existing cleanup/owner invariants remain unchanged.
 

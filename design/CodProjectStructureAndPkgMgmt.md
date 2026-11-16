@@ -1,6 +1,13 @@
 # CoD Project Structure & Package Management
 
-_Initial design & implementation notes (stage 1)_
+Design revision: 1 · Recorded: 2026-11-16 · Status: package-management reference with scoped module-entry terminology.
+
+## Design authority
+
+- **Registry / scope:** [D-03](DesignAuthorityRegistry.md#d-03) remains pending-human for the package-management design. This revision changes only Terminology and its entry cross-reference; it does not qualify the remaining mechanisms or implementation claims.
+- **Baseline / value:** [H-500](../CHANGELOG.md#h-500)/[D-15-ENTRY](DesignAuthorityRegistry.md#d-15-entry) distinguishes the dependency/version package from the internal namespace selected to run `__main__`, permitting multiple entry namespaces per package. P-452–P-454 through C-35/C-44/C-45/C-59 is a candidate charter §§2/3.2/4.2/8 path for explicit identity, source organization and execution roots. P-05's broader package value path remains pending.
+- **Invariants / acceptance:** preserve VCS/manifest/local-override requirements and module identity/privacy; directory ancestry creates no owner, implicit import or initialization. Entry selection must distinguish two namespaces in one package and reject absent/ambiguous entries without activating siblings. Exact CLI qualification/path mapping and broader package qualification remain separate; [D-15](ModuleWorlds.md#packages-namespaces-and-entry-selection) owns those boundaries.
+- **Continuity:** [K-STATIC-MODULE-STARTUP-20261116](../CHANGELOG.md#k-static-module-startup-20261116) records the scoped terminology update against the registered baseline blob, without a package-manager or compiler implementation change.
 
 ---
 
@@ -15,11 +22,18 @@ _Initial design & implementation notes (stage 1)_
 
 | Term                    | Meaning                                                                                                                                                                                                                                                                                                |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| _CoD package / project_ | A source tree that contains a `CodProject.yaml` file.                                                                                                                                                                                                                                                  |
+| _CoD package_ | A dependency-resolution and version-management unit whose source tree contains CodProject.yaml. It may contain multiple modules and independently selectable entry namespaces. |
+| _Project_ | The development source tree/configuration for a package; this role is not an internal namespace level. |
+| _Namespace / subnamespace_ | An internal named grouping of modules and nested namespaces, corresponding to a source-directory level. |
+| _Namespace segment_ | One name component of a namespace path. |
+| _Module_ | A semantic unit with declarations, a module world and any executable initialization. |
+| _Directory_ | A physical source-tree location; source-root and filename mapping remain separate tooling rules. |
 | _Canonical repo_        | The authoritative git repository declared by the package author (usually the repo’s _origin_ URL). Users typically depend on it rather than forking it.                                                                                                                                                |
 | _Bare mirror_           | A local mirror of the canonical repo stored under `~/.cod/pkgs/repos/` (read-only; kept up-to-date by `codp`).                                                                                                                                                                                         |
 | _Snapshot_              | A read-only checkout of a specific branch/commit under `~/.cod/pkgs/snapshots/ <url_key>/<branch-or-sha>/`. Users must **not** modify it; `codp` recreates / fast-forwards as needed.                                                                                                                  |
 | _Manifest_              | `CodManifest.yaml` – records the last dependency resolution. It can optionally pin commits (lock) when the caller requests, or just record branch heads for normal floating behaviour. Additionally, it records **local dependencies** that point to developer-supplied paths instead of remote repos. |
+
+The CLI entry design selects the **namespace containing `__main__`**, rather than a dependency package as one executable unit. One package may contain `tools/server/__main__` and `tools/client/__main__`; these are illustrative logical paths, not a selected CLI grammar. [Module entry selection](ModuleWorlds.md#packages-namespaces-and-entry-selection) defines reserved naming, non-reusability and initialization of only the selected dependency closure. Namespace ancestry does not itself publish/import definitions or execute sibling modules. This terminology does not add package dependency-cycle support or settle package-management policies elsewhere in this document.
 
 ## On-disk layout
 

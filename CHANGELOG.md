@@ -1,5 +1,47 @@
 # Changelog
 
+## 2026-11-16 — Rebase startup decisions onto current compiler work
+
+<a id="k-design-startup-sync-20261116"></a>
+**K-DESIGN-STARTUP-SYNC-20261116 — Preserve both source coverage and design decisions.** Agent integration/continuity under H-492–H-500/H-420/H-423 and charter §§2/3.1–3.3/4.2–4.3/6.3/8/12: source362→363/registry757→758 retains D-15r30/D-07r162/D-10r181/D-03r1 and P-443–P-454 while incorporating main's K-737–K-745 source evidence. Preserve H-481/K-743/K-745 fresh local/recursive callable construction, selected module contexts, owner/capture/failure invariants and D-16. Initialization scheduling and namespace entry remain unimplemented; merge resolution grants no new design qualification or executable acceptance. Main baseline: `faeac4f6dac0d4c8a63b92c0752dad3bd4b5bef6` and design checkpoint `6640f498a661108085fc43e78505c5efa5351b91` at affected documentation paths. Both changelog payloads remain intact; code/build/tests unchanged.
+
+## 2026-11-16 — Static startup and namespace-selected entries
+
+<a id="h-495"></a>
+**H-495 — Schedule dependency prefixes as postpon blocks with module contexts.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-16 America/Los_Angeles; exact timestamp/personal name unavailable. Says “除了入口模块特殊，被依赖的所有模块的 init prefix 都看作一个等效的全局 postpon 块去排序就行，排序对象都是 "postpon block"，把所属模块上下文看作它们的capture”. Selects a common scheduling model for dependency prefixes and explicit blocks, with the entry exception separate. D-15 integrates each dependency prefix as one node followed by its ordered suffix, sharing its evolving module context. No ordinary closure-capture expansion or physical context ABI is confirmed.
+
+<a id="h-496"></a>
+**H-496 — Entry executable prefix runs last.** Human/source: same project user/chat/date; asynchronous answer to the entry-role question. Says “我倒觉得 entry modu prefix 需要最后执行，不能提前”. Rejects entry-prefix-first startup. With H-495's explicit exception, D-15 derives that entry postpon blocks participate in initialization before its ordinary executable prefix, and earlier nodes cannot rely on values installed only by that prefix. No implicit statement hoisting is selected.
+
+<a id="h-497"></a>
+**H-497 — Static definitions populate runtime module namespaces before initialization.** Human/source: same project user/chat/date. Says “模块静态定义静态填入运行时模块namespace，在所有 postpon 块之前完成”. Confirms runtime module definition readiness before all initialization nodes, including implicit prefixes. Definition registration remains distinct from dynamic binding/value initialization and callable capture. Does not select a runtime dictionary representation, namespace expression syntax or arbitrary compile-time execution.
+
+<a id="h-498"></a>
+**H-498 — Emit a static native initialization order.** Human/source: same project user/chat/date. Says “顺序排布” should be “静态完成，作为结果程序的物理机器码顺序体现，不做运行时动态排布”, with any difficulty requiring runtime ordering raised as a separate issue. Confirms a compiler-chosen fixed native sequence, excluding runtime scheduling or fallback among schedules. Unproved cases reject pending separate review; ordinary runtime branches/calls inside a block retain their semantics.
+
+<a id="h-499"></a>
+**H-499 — Reserve the local entry name and exclude source reuse.** Human/source: same project user/chat/date. Proposes “所有入口模块都局部命名为 `__main__` 且不允许被其它模块 using/export”; after writing __main___ in a subsequent CLI remark, answers the spelling question “`__main__` — two trailing underscores (Recommended)”. Confirms canonical `__main__` and entry modules as non-reusable source roots. The original CLI phrase “使用 ... 模块的pkg名” has its package-versus-namespace meaning clarified in H-500; it is not evidence for one entry per dependency package.
+
+<a id="h-500"></a>
+**H-500 — Select the entry's containing namespace within a dependency package.** Human/source: same project user/chat/date. Distinguishes package as “依赖解析和版本管理单元” from internal directory/module hierarchy and requests suitable terminology. After the namespace/subnamespace/segment proposal, answers the explicit CLI question “Select the containing namespace, allowing several entry namespaces in one dependency package”. Confirms that selection granularity and multiple independent entries per package. D-15/D-03 use package, namespace, segment, module and directory for their distinct roles. Exact CLI/path grammar, physical namespace representation and general package-management policy are not approved by this answer.
+
+<a id="k-static-module-startup-20261116"></a>
+**K-STATIC-MODULE-STARTUP-20261116 — Integrate startup order and entry identity.** D-15r29→30/D-07r161→162/D-10r180→181/source360→361/registry755→756 and D-03r1 terminology integrate H-495–H-500. D-15-POSTPON/P-446–P-448 and new D-15-STATIC-NS/ENTRY/P-449–P-454 retain candidate C-10/C-35/C-36/C-44/C-45/C-59/C-65 paths to charter §§2/3.1–3.3/4.2/6.3/8/12: explicit identity, shared context, readiness, ownership and observable native order. Update C-44/P-104/P-105's encounter-order boundary while preserving once-only incorporation, H-166 lifetimes and H-379 installation obligations; static namespaces do not install captured values. Entry source-selection restrictions extend consistently through aliases/re-export. D-15 owns acceptance and unresolved proof/representation/CLI mechanisms. D-03's broader design and all candidate value paths remain unqualified; existing qualified owner/capture/failure scopes and D-16 are unchanged. Correct the stale D-GOV revision label; retain prior H/K evidence. Published baseline: `fa92f9cdf76e503ef832dd112885a15f777a02e8` at affected paths; D-03's registered baseline blob is `4146412997de5179146a7010b5b034e32fcebfb9`. Documentation only; no source/build/test changes or new implementation evidence.
+
+## 2026-11-16 — Declaration cycles and ordered postponed initialization
+
+<a id="h-492"></a>
+**H-492 — Allow declaration-only module cycles.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-16 America/Los_Angeles; exact timestamp/personal name unavailable. Replies “同意” to allowing mutually dependent declaration-only modules after identities/signatures are registered, illustrated by even.cod/odd.cod. The proposal kept runtime initialization cycles separate. Confirms that bounded permission; no blanket acceptance of unanchored identities, invalid type recursion or general cyclic interpretation is implied.
+
+<a id="h-493"></a>
+**H-493 — Propose statically scheduled top-level postpon blocks.** Human/source: same project user/chat and recording date. Continues “顺便讨论 initializaion cycles，我考虑增加 `postpon { ... }` 语法，允许出现在模块 toplevel，由编译器根据其内部提及引用的关系，静态排布这些初始化块的执行顺序，排得出来线性初始化执行顺序的就accept，否则reject，你推演细节看看”. Requests design derivation for static initialization scheduling; raw name mentions alone, implicit resource publication, runtime retries and a complete dependency algorithm are not approved. H-494 supplies the subsequent source-order restriction.
+
+<a id="h-494"></a>
+**H-494 — Postpon blocks form ordered module suffixes.** Human/source: same project user/chat and recording date; asynchronous answers to placement among ordinary statements and competing providers. Says “postpone block 只允许出现在模块末尾，但是允许多个这种块；多个 postpone 块之间的顺序最好是不允许打破，只允许其间被编译器隐含插入其它模块的 postpone 块。 但是保留进一步设计语法，允许乱序执行的postpone块这种机制，如果有切实价值的话”, and “普通 `postpon { ... }` 块之间的顺序要保障，乱序的即使允许也要不同语法区分开。” Confirms trailing blocks with mandatory per-module order and whole other-module blocks interleaved. Refines H-493 and rejects arbitrary same-module block reordering; the repeated-write example retains its ordered versions rather than needing a blanket single-provider rule. The exact source spelling remains postpon. A distinct out-of-order form is only a future design option; the global prefix/postpon phase boundary is not selected by these replies.
+
+<a id="k-module-init-review-20261116"></a>
+**K-MODULE-INIT-REVIEW-20261116 — Separate registration, readiness and source order.** D-07r160→161/D-10r179→180/D-15r28→29/source359→360/registry754→755 adds D-15-CYCLES/POSTPON and P-443–P-448 under H-492–H-494. Candidate C-10/C-36/C-59/C-65 paths serve charter §§2/3.1–3.3/4.2/6.3/8/12: finite identity construction, retained interpretations, explicit state dependencies and valid owners. D-15 records confirmed declaration-only cycles/ordered suffixes, readiness and whole-block analysis, same-module binding versions, failure/scope constraints, acceptance and the pending global phase. Preserve lookup/publication, H-481/H-482 captures/owners, D-16 and existing downstream qualification. No compiler support or full operational qualification follows. Original scan/lifetime evidence: `0c0efbfde4dccb3f3397b6f961bd82bd9a12c848:design/DesignAuthorityRegistry.md:2825–2833,3094–3102`; brace-grouping scope remains D-17/H-319. Baseline: `fa92f9cdf76e503ef832dd112885a15f777a02e8` at affected paths. Documentation only; no build/tests.
+
 ## 2026-11-16 — Construct callable views from definition context
 
 <a id="k-745"></a>
