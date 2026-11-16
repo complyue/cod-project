@@ -2947,6 +2947,7 @@ class ScalarChecker {
     }
     case K::alias: {
       const auto type = child(0);
+      if (type == Type::never) return Type::never;
       state.bindings[expr.text] = type;
       state.owner_bindings.erase(expr.text);
       auto selected = state.value;
@@ -4579,6 +4580,12 @@ class ScalarChecker {
     case K::alias: {
       const auto owner = expr.owner_name.empty() ? std::optional<size_t>{} : named_owner(expr.owner_name, expr.at);
       const auto type = child(0, false);
+      const auto declared = expr.annotation ? std::optional{resolve_local_type(*expr.annotation, instance, expr.at)} : std::nullopt;
+      if (type == Type::never) {
+        declaration_scope(expr.text, expr.at);
+        operation.type = Type::never;
+        break;
+      }
       auto source = operations.at(expr.children.front().get());
       if (!source.view || type == Type::null_ref) fail(expr.at, "alias requires an existing storage place");
       if (source.slots.empty() || source.mixed_view) implementation_gap(expr.at, "alias of a non-binding storage place");
@@ -4597,7 +4604,7 @@ class ScalarChecker {
         if (owner && *owner != binding.scope) fail(expr.at, "alias owner must match the selected binding storage, not its target owner");
       }
       if (source.owners.size() != 1) fail(expr.at, "alias selection requires one statically provable target owner");
-      if (expr.annotation && resolve_local_type(*expr.annotation, instance, expr.at) != type)
+      if (declared && *declared != type)
         fail(expr.at, "alias annotation requires the exact selected type");
       if (expr.annotation && !expr.read_only && source.read_only)
         fail(expr.at, "readonly source cannot supply a writable alias target");

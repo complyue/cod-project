@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-15 — Alias selector completion
+
+<a id="k-727"></a>
+**K-727 — Preserve exits before alias selection.** Agent continuity assessment under H-327/H-361/H-362/H-398/H-407/H-420/H-423 and charter §§3.3/4.3/5.3/6.3/8/12: source343→344 and registry737→738 preserve C-65/C-73/C-75/P-295's ordinary-storage alias contract and the established D-17/D-24/D-26 completion, independent-result and native-coverage scopes. Selectors that return or throw before producing storage create no alias, retain cleanup and contribute no unreachable result anchor. Acceptance covers normal-path kind/type/owner/access checks, annotation/owner names, explicit declaration boundaries, complete-image failure cleanup and shared recursion across equivalent alias spellings. D-14r112/D-17r69/D-18r104/D-24r8/D-26r21, D-16 and other qualification boundaries remain unchanged. No new capture, inference, storage, ABI or lifetime policy. Baseline: `ccf75d9b215c16823dda51539bc95e0fc8e871e1` at affected paths.
+
 ## 2026-11-15 — Declared builtin input evidence
 
 <a id="k-726"></a>
