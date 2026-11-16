@@ -1,5 +1,34 @@
 # Changelog
 
+## 2026-11-16 — ADT placement and mainline integration
+
+<a id="k-736"></a>
+**K-736 — Integrate confirmed placement decisions with current compiler scope.** Agent continuity assessment under H-478–H-480/H-420/H-423 and charter §§3.1/3.3/4.3/5.3/6.3/7.1/8/12: source352→353 and registry746/747→748 reconcile the one-nominal-ADT direction and its C-10/C-39/C-65/C-91/P-416–P-418 paths with existing checked scalar/call/cleanup capabilities. Preserve actual owners, bits classification, same-owner fields, construction/access/initialization, regional relocation, capture restrictions and explicit graph transfer. The first-field quirk retains its user workaround without additional analysis or repair. D-07r156/D-10r173/D-14r115/D-22r20/D-28r25 keep their scoped decisions and pending formal value-path/full-layout qualification; D-16/D-17/D-18/D-26 contracts remain. No source, ABI, build or runtime change; current aggregate/native-layout gaps remain explicit. Baselines: `49496546ed7c2c05e8a9bc62fd051c36480a4d1a:design/RegionalAndLexicalStorageRefactor.md` and `5fe41e756f1ca0febdaaa758a138ca8dbd4cdd88:tests/cod/language/README.md`; decision history from both commits is preserved.
+
+## 2026-11-15 — Keep only the quirk note and user workaround
+
+<a id="h-480"></a>
+**H-480 — Leave first-field quirk avoidance to users.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-15 America/Los_Angeles; exact timestamp/personal name unavailable. Says “不要浪费分析复杂度考虑这个quirk，前面放个无用字段就能避免的问题，留给用户注意就行了。” Directs no additional analysis complexity for this quirk; document the preceding-field workaround and leave avoidance to users.
+
+<a id="k-quirk-workaround-20261115"></a>
+**K-QUIRK-WORKAROUND-20261115 — Remove dedicated quirk integration work.** Agent integration under H-480: D-28r24→25/D-14r114→115 and registry r746→747 simplify the current note and P-417/P-418. Supersede K-SELF-REF-QUIRK-20261115's added quirk-specific flow/acceptance requirements; retain a nonzero-sized preceding-field example and unchanged existing implementation guards. Remove proposed repair protocols and special acceptance obligations from the active design. Other owner, initialization, one-ADT, relocation and numeric contracts continue under the existing candidate C-65/C-91 path; no code, encoding, qualification or implementation-support change. Baseline: `19c0aaa5f9ff631301b73fd6e948bc1e05ef0e45` at affected paths; preceding human/agent evidence remains append-only. Documentation only; no build/tests.
+
+## 2026-11-15 — Keep the first-field self-reference quirk nonblocking
+
+<a id="h-479"></a>
+**H-479 — Track the self/null behavior as an implementation quirk.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-15 America/Los_Angeles; exact timestamp/personal name unavailable. Says “首字段 self-ref 赋值相当于 null 赋值，记为已知实现 quirk ，不影响其它设计和实现吧？”. Directs recording the known first-field null behavior and asks whether other work can proceed. Retains H-146's bounded current behavior; no new encoding or universal self-reference rule is selected.
+
+<a id="k-self-ref-quirk-20261115"></a>
+**K-SELF-REF-QUIRK-20261115 — Remove the broad implementation gate.** Agent integration/assessment under H-479 and the original H-146 scope: D-28r23→24/D-14r113→114 and registry r745→746 revise D-28-ADT/P-417/P-418. Correct K-SINGLE-ADT-20261115's broad blocker characterization: the affected regional nullable edge reads back as null, while other design/implementation and acceptance may proceed with that quirk explicitly reported. Preserve owner identity, RHS effects, ordinary null/flow checks and required-ref guarantees; no lexical generalization or claim of topology preservation for the affected self-edge. Candidate C-65/C-91 paths retain charter §§3.3/4.3/6.3/12; unrelated qualifications and D-16 remain. A future encoding fix is separate engineering work. Published baseline: `19c0aaa5f9ff631301b73fd6e948bc1e05ef0e45` at affected paths; H-478 and its integration history remain intact. Documentation only; no code/build/tests.
+
+## 2026-11-15 — One nominal ADT across storage domains
+
+<a id="h-478"></a>
+**H-478 — One ADT is settled; derive unambiguous consequences directly.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-15 America/Los_Angeles; exact timestamp/personal name unavailable. Replying to the same nominal ADT across lexical/regional placement proposal, says “one ADT 是必然选择，类似这种没有疑义的，你直接决定然后继续展开细化推演设计，没有疑义的直接记录，需要讨论的回来找我”. Confirms nominal unity and directs continued design derivation with only material uncertainty returned for discussion. This does not approve every physical format, ABI, capture extension or implementation mechanism; existing same-owner and lifecycle constraints remain.
+
+<a id="k-single-adt-20261115"></a>
+**K-SINGLE-ADT-20261115 — Integrate placement without duplicating semantic types.** Agent integration under H-478/H-423: D-28r22→23/D-22r19→20/D-14r112→113/D-07r155→156/D-10r172→173 and registry r744→745 add D-28-ADT/P-416–P-418. Candidate C-10/C-39/C-65/C-91 value path preserves charter §§3.1/3.3/4.3/6.3/7.1/8/12. Record shared nominal identity/conformance/methods, actual-owner layout evidence, automatic addressing, common construction and all four graph-transfer pairs; retain the bits predicate, same-owner fields, explicit destination when no context exists, initialization, cleanup, capture/TLS restrictions and C++ regional-only rules. Bits-only lexical support is an implementation fallback. H-146's temporary self/null limitation remains a tracked blocker to complete encoding acceptance; original evidence is `0c0efbfde4dccb3f3397b6f961bd82bd9a12c848:design/DesignAuthorityRegistry.md:2886–2895`, not an authorization for a new header/format. Physical protocols and full qualification remain pending; preserve unrelated mainline inference/failure contracts and source350. Composed acceptance and engineering obligations are in D-28. Baseline: `19c0aaa5f9ff631301b73fd6e948bc1e05ef0e45` at affected paths. Documentation only; no compiler, build, tests or performance claim.
+
 ## 2026-11-15 — Handler queues and finally composition
 
 <a id="k-735"></a>
