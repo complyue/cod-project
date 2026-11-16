@@ -347,6 +347,8 @@ public:
     bool preserves = true;
     std::set<size_t> targets, uninitialized, null_sources;
     ExceptionFacts value{};
+    // Incoming targets known present for each possible saved boolean result.
+    std::map<bool, std::set<size_t>> present{};
     bool operator==(const Returned &) const = default;
     void initialize(const std::set<size_t> &known) {
       std::erase_if(uninitialized, [&](size_t target) { return known.contains(target); });
@@ -357,10 +359,14 @@ public:
       targets.insert(other.targets.begin(), other.targets.end());
       uninitialized.insert(other.uninitialized.begin(), other.uninitialized.end());
       null_sources.insert(other.null_sources.begin(), other.null_sources.end());
+      for (const auto &[result, facts] : other.present) {
+        const auto [found, inserted] = present.emplace(result, facts);
+        if (!inserted) std::erase_if(found->second, [&](size_t target) { return !facts.contains(target); });
+      }
     }
     void then(const Returned &next) {
       const bool keep = preserves && next.preserves;
-      if (!next.preserves) { targets.clear(); uninitialized.clear(); null_sources.clear(); value.clear(); }
+      if (!next.preserves) { targets.clear(); uninitialized.clear(); null_sources.clear(); value.clear(); present.clear(); }
       merge(next);
       preserves = keep;
     }

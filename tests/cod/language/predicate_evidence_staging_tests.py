@@ -55,6 +55,26 @@ behave @print(choose(absent,9,DEPTHu64));
 '''
 SOURCES['call_presence'] = CALL_SOURCE.replace('INVOKE', 'checked(p,n);')
 SOURCES['call_presence_prepared'] = CALL_SOURCE.replace('INVOKE', '{{defer checked(p,n);p=null;}};')
+PREDICATE_CALL_SOURCE = '''
+using symbol "std:io" @print;
+func checked(ptr p:T in O,n:u64)->bool where {T,owner O}{
+ if(n!=0u64){return checked(p,n-1u64);}else{return p is not null;};
+}
+func choose(ptr p:T in O,fallback:T,n:u64)->const T where {T,owner O}{
+ ptr saved=p;
+ val ok<-checked(p,n);
+ p=null;
+ if(ok){return saved;}else{return fallback;};
+}
+val x<-7,y<-8u64;
+ptr absent:i64=null in here;
+behave @print(choose(x,9,DEPTHu64));
+behave @print(choose(y,0u64,DEPTHu64));
+behave @print(choose(absent,9,DEPTHu64));
+'''
+SOURCES['call_predicate'] = PREDICATE_CALL_SOURCE
+SOURCES['call_predicate_returns'] = PREDICATE_CALL_SOURCE.replace(
+    'return p is not null;', 'if(p is null){return false;}else{return true;};')
 
 
 def main():
@@ -84,7 +104,7 @@ def main():
                     if baseline is None:
                         baseline = methods
                         record(key+'/shared_body', sum('.choose.' in method and method.endswith('.general') for method in methods) == 1, methods=list(methods))
-                        if name.startswith('call_presence'):
+                        if name.startswith(('call_presence', 'call_predicate')):
                             record(key+'/shared_helper', sum('.checked.' in method and method.endswith('.general') for method in methods) == 1, methods=list(methods))
                         record(key+'/no_runtime_evidence', bool(text) and '@cod_lang_callable_create' not in text and '@cod_lang_callable_copy' not in text)
                     else:

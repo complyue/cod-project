@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-16 — Preserve non-null proofs through boolean helper results
+
+<a id="k-752"></a>
+**K-752 — Saved boolean result evidence.** Agent continuity under H-420/H-423, D-14r116/C-65/P-258, D-17r72/C-63/P-235/P-236, D-18r107’s qualified call/capture scope and D-26r21/H-407: source371→372/registry767→768 retains conditional incoming-target presence through explicit-return preservation/replacement and checked input ordinals. Literal, null-test, stored and call-result proofs share immutable target snapshots and binding versions; recursive/callable alternatives retain common guarantees. Charter §§4.3/6.3/12 supports composable checked intent without runtime predicate state. Independent initialization/access, owner validity, declared checked failures and D-16 remain unchanged. Borrowed boolean results, broader correlations and revised exception/stack policies remain separate. Baseline: `0443fe9fab607b6410ff72b8fcb18db42f68269a` at affected paths. No new source contract or human confirmation.
+
 ## 2026-11-16 — Retain incoming-target presence across calls
 
 <a id="k-751"></a>

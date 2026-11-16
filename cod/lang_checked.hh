@@ -105,10 +105,15 @@ struct CheckedOperation {
   std::map<size_t, CleanupEquations::Effects> invocation;
   struct NullTest { size_t binding; std::set<size_t> versions; bool null_when_true = true; };
   struct Predicate {
-    enum class Kind { null_test, negation, conjunction, disjunction, alternatives, abrupt, constant_true, constant_false };
+    enum class Kind { null_test, negation, conjunction, disjunction, alternatives, abrupt, constant_true, constant_false, presence };
     Kind kind;
     NullTest test{};
     std::shared_ptr<const Predicate> left, right;
+    struct ResultFacts {
+      std::set<size_t> present;
+      std::vector<NullTest> bindings;
+    };
+    std::map<bool, ResultFacts> results{};
   };
   // Immutable evidence describes the produced boolean, independently of its source spelling.
   std::shared_ptr<const Predicate> predicate;
@@ -1354,14 +1359,14 @@ class ScalarChecker {
       // target bounds still describe the previous one. Refine only its bounds.
     }
   }
-  void record_presence(const std::set<size_t> &targets) {
+  void record_present(const std::set<size_t> &present) {
     if (!lexical_.live) return;
-    const auto present = selected_input(targets);
     lexical_.present.insert(present.begin(), present.end());
     for (const auto input : inputs(lexical_.inputs))
       lexical_.input_facts.at(input).present.insert(present.begin(), present.end());
     refine_present(lexical_);
   }
+  void record_presence(const std::set<size_t> &targets) { record_present(selected_input(targets)); }
   void observe_read(size_t place, const std::set<size_t> &known) {
     if (delayed_ || !storage(place).borrowed) return;
     std::set<size_t> external;
@@ -1435,6 +1440,7 @@ class ScalarChecker {
       effects.initialized[reason] = borrowed;
       effects.present[reason] = borrowed;
     }
+    effects.returned.present = {{false, borrowed}, {true, borrowed}};
     for (const auto reason : call_reasons(method)) for (const auto parameter : borrowed)
       if (arguments[parameter].kind == Type::exception)
         effects.payloads[reason].try_emplace(parameter);
@@ -1764,6 +1770,21 @@ class ScalarChecker {
       refine_arguments(0);
     }
     const auto result_owner = contract.owners.empty() ? 0 : contract.owners.back();
+    if (!prepared && !result_owner && operation.type == Type::boolean) {
+      auto proof = std::make_shared<CheckedOperation::Predicate>();
+      proof->kind = CheckedOperation::Predicate::Kind::presence;
+      for (const auto &[result, parameters] : summary.returned.present) {
+        auto &facts = proof->results[result];
+        for (const auto parameter : parameters) {
+          const auto &view = views.at(parameter);
+          const auto present = selected_input(view.targets);
+          facts.present.insert(present.begin(), present.end());
+          if (summary.bindings.empty() && view.binding)
+            facts.bindings.push_back({*view.binding, view.selection_versions});
+        }
+      }
+      operation.predicate = std::move(proof);
+    }
     if (result_owner) {
       operation.targets.clear();
       if (!owners.contains(result_owner)) implementation_gap(expr.at, "result owner is not determined by borrowed arguments");
@@ -2010,13 +2031,15 @@ class ScalarChecker {
     }
     return std::make_shared<const Predicate>(Predicate{kind, {}, std::move(left), std::move(right)});
   }
-  static std::shared_ptr<const Predicate> null_predicate(const CheckedOperation &view) {
+  std::shared_ptr<const Predicate> null_predicate(const CheckedOperation &view) const {
     if (view.targets.empty()) return {};
     if (!view.targets.contains(null_target)) return constant_predicate(false);
     if (view.targets.size() == 1) return constant_predicate(true);
-    if (!view.binding) return {};
-    return std::make_shared<const Predicate>(Predicate{Predicate::Kind::null_test,
-        {*view.binding, view.selection_versions}, {}, {}});
+    auto proof = std::make_shared<Predicate>();
+    proof->kind = view.binding ? Predicate::Kind::null_test : Predicate::Kind::presence;
+    if (view.binding) proof->test = {*view.binding, view.selection_versions};
+    proof->results[false].present = selected_input(view.targets);
+    return proof;
   }
   std::shared_ptr<const Predicate> identity_predicate(const CheckedOperation &left, const CheckedOperation &right) const {
     const auto owners = compare_owners(one_owner(left), one_owner(right));
@@ -2038,6 +2061,11 @@ class ScalarChecker {
     if (proof->kind == Predicate::Kind::constant_true || proof->kind == Predicate::Kind::constant_false) {
       lexical_.live = lexical_.live && value == (proof->kind == Predicate::Kind::constant_true); return;
     }
+    if (const auto found = proof->results.find(value); found != proof->results.end()) {
+      record_present(found->second.present);
+      for (const auto &test : found->second.bindings) refine_test(test, false);
+    }
+    if (proof->kind == Predicate::Kind::presence) return;
     if (proof->kind == Predicate::Kind::null_test) { refine_test(proof->test, value); return; }
     if (proof->kind == Predicate::Kind::negation) { refine_predicate(proof->left, !value, at); return; }
     const bool alternatives = proof->kind == Predicate::Kind::alternatives;
@@ -4667,7 +4695,10 @@ class ScalarChecker {
     }
     switch (expr.kind) {
     case K::integer: case K::real: operation = literal(expr); break;
-    case K::boolean: operation.type = Type::boolean; operation.integer = expr.text == "true"; break;
+    case K::boolean:
+      operation.type = Type::boolean; operation.integer = expr.text == "true";
+      operation.predicate = constant_predicate(operation.integer);
+      break;
     case K::null_ref:
       if (read) implementation_gap(expr.at, "untyped null in a payload expression; bind a typed ptr view first");
       operation.type = Type::null_ref; operation.view = true; select_targets(operation, {null_target});
@@ -5384,6 +5415,17 @@ class ScalarChecker {
           fail(expr.at, "return type '" + type_name(value) + "' does not satisfy '" + type_name(*instance->result.type) + "'");
         lexical_.returned = {false, {}, {}, {}};
         if (value.kind == Type::exception) lexical_.returned.value = operations.at(expr.children.front().get()).exceptions;
+        if (value == Type::boolean) {
+          const auto before = lexical_;
+          std::map<bool, std::set<size_t>> present;
+          for (const bool result : {false, true}) {
+            lexical_ = before;
+            refine(*expr.children.front(), result, operations);
+            if (lexical_.live) present[result] = lexical_.present;
+          }
+          lexical_ = before;
+          lexical_.returned.present = std::move(present);
+        }
       }
       operation.type = Type::never;
       operation.operand_type = *instance->result.type;
@@ -5758,6 +5800,15 @@ class ScalarChecker {
         }
       } else observed_.returned.value.merge(state.returned.value);
     }
+    if (!reason && !checking_instance_->result.borrowed() && *checking_instance_->result.type == Type::boolean) {
+      CleanupEquations::Returned returned;
+      for (const auto &[result, facts] : state.returned.present) {
+        auto present = facts;
+        present.insert(state.present.begin(), state.present.end());
+        returned.present[result] = input_ordinals(present);
+      }
+      observed_.returned.merge(returned);
+    }
     for (const auto &[read, requirement] : state.requirements)
       if ((requirement.inputs & state.inputs) && !requirement.before.nonnull)
         observe_read(cleanup_.binding(read), requirement.before.initialized);
@@ -5848,6 +5899,8 @@ class ScalarChecker {
     instance.complete = validating_;
     for (const auto reason : call_reasons(*checking_method_)) observed_.initialized.try_emplace(reason);
     for (const auto reason : call_reasons(*checking_method_)) observed_.present.try_emplace(reason);
+    if (!instance.result.borrowed() && *instance.result.type == Type::boolean)
+      for (const bool result : {false, true}) observed_.returned.present.try_emplace(result);
     auto initial = initial_effects(*checking_method_, instance.arguments);
     for (const auto &[reason, payloads] : initial.payloads)
       for (const auto &[parameter, value] : payloads) observed_.payloads[reason].try_emplace(parameter, value);
