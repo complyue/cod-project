@@ -38,7 +38,7 @@ runner.CASES = {
         '{{defer{p=z;};p}}<=>{observe(8);q};observe(p);observe(q);', 0, '8\n2\n3\n', ''),
     'null_test_operand_cleanup': (IO + 'ptr p:i64=null in here;val x<-1;'
         'behave @print((({{defer{p=x;};p}}) is null));behave @print((p is null));', 0, 'true\nfalse\n', ''),
-    'fixed_reference_swap': ('ptr p=1;const ptr q=2;intrinsic (<=>)(p,q);', 2, '', 'fixed'),
+    'fixed_reference_swap': ('ptr p=1;const ptr q=2;intrinsic (<=>)(p,q);', 2, '', 'cannot rebind a const reference binding'),
     'deferred_slot_swap': (OBS + 'ptr p=1,q=2;{{defer intrinsic (<=>)(p,q);}};observe(p);observe(q);', 0, '2\n1\n', ''),
 }
 runner.CASE_ARGUMENTS = {}

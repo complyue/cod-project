@@ -43,7 +43,7 @@ checked('aliased_formals','func update(ref left:Exception in O,ref right:Excepti
 checked('caller_alias','func update(ref target:Exception in O)->void where {owner O}{target<-checked();}func wrapper(ref observed:const Exception in O,ref target:Exception in P)->void throws Exception where {owner O,owner P}{update(target);throw observed;}','val payload:Exception<-unchecked();try{wrapper(payload,payload);}catch(e:const Exception){payload<-e;{}};')
 safe('prepared_write',SIGNATURE+'{target<-unchecked();}',VALUE+'{{defer update(payload);}};')
 safe('deferred_block_write',SIGNATURE+'{defer{target<-unchecked();{}};}',VALUE+'update(payload);')
-runner.CASES['initialization_obligation']=(ERROR+'func inspect(ref target:Exception in O)->void where {owner O}{}val payload:Exception;inspect(payload);',2,'','initialization')
+runner.CASES['initialization_obligation']=(ERROR+'func inspect(ref target:Exception in O)->void where {owner O}{}val payload<-make local Exception;inspect(payload);',2,'','initialization')
 runner.CASES['readonly_destination']=(ERROR+SIGNATURE+'{target<-unchecked();}const val payload:Exception<-checked();update(payload);',2,'','readonly argument')
 runner.CASE_ARGUMENTS = {}
 runner.CASE_SHADOWS = {name: [] for name in runner.CASES}

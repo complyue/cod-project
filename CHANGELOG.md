@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-16 — Resolve cleanup failure categories
+
+<a id="k-742"></a>
+**K-742 — Distinguish impossible cleanup failures from unknown values.** Agent continuity under H-267/H-269/H-420/H-423 and charter §§3.3/5.3/6.3/12: source358→359 and registry753→754 continue D-17r69/C-63/P-235/P-236. Resolve explicit failure relations against payload facts before checking an exceptional exit; retain uncertainty through composition and preserve declared throws, partial registration, initialization and cleanup. Source/native coverage includes narrow deferred handlers, nested/loop queues and recursive summaries. Shared source checks match messages without filenames and assert requested locations separately; negative fixtures use current construction syntax and precise failure expectations. Wider outcome correlations and D-16 remain separate. Baseline: `5130789ed831ca3c326f07d084c8b1b086c265e3` at affected paths.
+
 ## 2026-11-16 — Loop exception payload invariants
 
 <a id="k-741"></a>

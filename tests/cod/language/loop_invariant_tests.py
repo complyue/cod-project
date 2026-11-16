@@ -28,7 +28,7 @@ runner.CASES = {
     'invariant_callable_target': (IO + 'func value()->u64{return 7u64;}func held=value;ptr p:func()->u64=null in here;p=held;'
         'for(i in 0u64..2u64){' + OUT('p()') + '};', 0, '7\n7\n', ''),
     'empty_loop_does_not_initialize': ('val x<-make local u64;ptr p=x;for(i in 0u64..0u64){p<-1u64;};x;', 2, '', 'before definite initialization'),
-    'invariant_uninitialized_target': ('val x<-make local u64;ptr p:u64=null in here;p=x;for(i in 0u64..2u64){p;};', 2, '', 'uninitialized'),
+    'invariant_uninitialized_target': ('val x<-make local u64;ptr p:u64=null in here;p=x;for(i in 0u64..2u64){p;};', 2, '', 'before definite initialization of every possible target'),
     'invariant_null_target': ('ptr p:u64=null in here;for(i in 0u64..2u64){p;};', 2, '', 'requires a covering catch'),
     'rebinding_invalidates_read': (SETUP + 'for(i in 0u64..2u64){p;p=null;};', 2, '', 'requires a covering catch'),
     'rebinding_invalidates_ref': (COPY + SETUP + 'for(i in 0u64..2u64){copy(p);p=null;};', 2, '', 'proven non-null target'),

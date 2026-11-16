@@ -1867,9 +1867,21 @@ class ScalarChecker {
         state.selections = path.state.input_facts.at(origin).selections;
         state.exceptions = path.state.input_facts.at(origin).exceptions;
         for (auto &[read, requirement] : state.requirements) requirement.inputs &= state.inputs;
-        const auto pending = input.reason >= 3 ? path.exceptions.restricted({input.reason - 3}) : ExceptionFacts{};
+        auto pending = input.reason >= 3 ? path.exceptions.restricted({input.reason - 3}) : ExceptionFacts{};
+        if (input.reason >= 3 && pending.empty()) pending = {input.reason - 3};
+        auto payloads = state.exceptions;
+        // Empty provisional value summaries do not establish non-returning
+        // behavior. Only a substituted, explicit failure relation can exclude
+        // an exceptional outcome.
+        for (auto &[place, value] : payloads)
+          if (value.empty()) value = exception_possibilities(storage(place).type);
         auto applied = effects;
-        applied.transform_values([&](const auto &value) { return value.through(state.exceptions, pending, true); });
+        applied.transform_values([&](const auto &value) { return value.through(payloads, pending, true); });
+        auto failure = completion.reason >= 3 ? applied.thrown.restricted({completion.reason - 3}) : ExceptionFacts{};
+        if (completion.reason >= 3 && failure.empty()) {
+          if (!effects.unknown_thrown) continue;
+          failure = {completion.reason - 3};
+        }
         apply_effects(state, applied, at);
         state.input_facts = {{origin, state.input_facts.at(origin)}};
         if (cleanup_.has_actions(queue)) {
@@ -1884,8 +1896,6 @@ class ScalarChecker {
           normal_type = type;
           normals.push_back(std::move(state));
         } else {
-          auto failure = completion.reason >= 3 ? applied.thrown.restricted({completion.reason - 3}) : ExceptionFacts{};
-          if (completion.reason >= 3 && failure.empty()) failure = {completion.reason - 3};
           exits.push_back({std::move(state), std::move(failure), path.at, completion});
         }
       }

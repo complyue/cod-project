@@ -373,6 +373,7 @@ public:
     // Cleanup may require current bindings; its own installations restore before it returns.
     std::set<size_t> symbols{};
     ExceptionFacts thrown = ExceptionFacts::arrival();
+    bool unknown_thrown = false;
     // Omitted targets preserve their incoming payloads.
     std::map<size_t, ExceptionFacts> payloads{};
     template <typename Transform> void transform_values(const Transform &transform) {
@@ -404,6 +405,10 @@ private:
     result.initialized.insert(second.initialized.begin(), second.initialized.end());
     result.selections.then(second.selections, result.initialized);
     auto next = second;
+    result.unknown_thrown = first.unknown_thrown || second.unknown_thrown;
+    for (const auto &[target, possible] : second.thrown.payloads)
+      if (!target.first) if (const auto found = first.payloads.find(target.second);
+          found != first.payloads.end() && found->second.empty()) result.unknown_thrown = true;
     next.transform_values([&](const auto &value) { return value.through(first.payloads, first.thrown); });
     result.returned.then(next.returned);
     result.returned.initialize(result.initialized);
@@ -420,6 +425,7 @@ private:
     const auto previous_initialized = known.initialized;
     const auto previous_returned = known.returned;
     const auto previous_thrown = known.thrown;
+    const auto previous_unknown_thrown = known.unknown_thrown;
     const auto previous_payloads = known.payloads;
     const auto previous_selections = known.selections;
     const auto previous_symbols = known.symbols;
@@ -428,6 +434,7 @@ private:
     std::erase_if(known.initialized, [&](size_t id) { return !effects.initialized.contains(id); });
     known.returned.merge(effects.returned);
     known.thrown.merge(effects.thrown);
+    known.unknown_thrown = known.unknown_thrown || effects.unknown_thrown;
     for (auto &[target, value] : known.payloads)
       if (!effects.payloads.contains(target)) value.merge(ExceptionFacts::payload(target));
     for (const auto &[target, value] : effects.payloads) {
@@ -438,7 +445,7 @@ private:
     known.selections.merge(effects.selections);
     known.selections.resolve(known.initialized);
     return previous_reads != known.reads || previous_initialized != known.initialized ||
-        previous_returned != known.returned || previous_thrown != known.thrown || previous_payloads != known.payloads ||
+        previous_returned != known.returned || previous_thrown != known.thrown || previous_unknown_thrown != known.unknown_thrown || previous_payloads != known.payloads ||
         previous_selections != known.selections || previous_symbols != known.symbols;
   }
 public:

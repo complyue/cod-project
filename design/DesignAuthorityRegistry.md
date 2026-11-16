@@ -1,10 +1,12 @@
 # Design authority and value lineage
 
-Registry revision: 753 · Audit date: 2026-11-16 (America/Los_Angeles)
+Registry revision: 754 · Audit date: 2026-11-16 (America/Los_Angeles)
 
 ## Design authority
 
-[D-GOV](#d-gov), registry r753 and its maintenance scope. V-03 → GOV-01 → GOV-02 through E-11/E-12 preserves traceable, human-scoped delegation under H-05/H-388/H-391/H-403/H-411. H-423 permits routine resolution and evidence maintenance without granting new design authority.
+[D-GOV](#d-gov), registry r754 and its maintenance scope. V-03 → GOV-01 → GOV-02 through E-11/E-12 preserves traceable, human-scoped delegation under H-05/H-388/H-391/H-403/H-411. H-423 permits routine resolution and evidence maintenance without granting new design authority.
+
+[K-742](../CHANGELOG.md#k-742) continues source358→359 and D-17r69/C-63/P-235/P-236: explicit cleanup failure relations exclude impossible exceptional outcomes, while unknown provisional values, declared throws and partial-registration cleanup remain conservative. Acceptance includes recursive/borrowed payloads, nested queues, pending completion, native resource release and diagnostics matched against messages rather than source filenames. No semantic revision, fraction scope or pending qualification changes.
 
 [K-741](../CHANGELOG.md#k-741) continues source reference357→358 under D-17r69/C-63/P-235/P-236 and D-14r115’s qualified target/alias/loop scope: loop payload invariants preserve unchanged exception facts while possible writes, borrowed aliases and rebound destinations retain checked obligations. Native acceptance preserves ordered cleanup and exact resource release; general mutation/value/action correlations remain bounded. D-16, pending design choices and all semantic revisions are unchanged.
 

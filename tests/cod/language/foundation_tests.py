@@ -46,6 +46,7 @@ CASES = {
 }
 CASE_ARGUMENTS = {"missing_return_error": ["-Werror=missing-return"]}
 CASE_SHADOWS = {}
+CASE_LOCATIONS = {}
 EXTRA_SOURCES = []
 
 
@@ -53,6 +54,16 @@ def shadow_diagnostics(stderr, expected):
     pattern = r"^.+:\d+:\d+: warning: declaration shadows outer binding '([^']+)' \[-Wshadow\]\n"
     names = re.findall(pattern, stderr, re.M)
     return Counter(names) == Counter(expected), re.sub(pattern, '', stderr, flags=re.M)
+
+
+def diagnostic_matches(stderr, expected, path, location=None):
+    messages = re.sub(r'^.+:\d+:\d+: ', '', stderr, flags=re.M)
+    if expected not in messages:
+        return False
+    if location is None:
+        return True
+    line, column = location
+    return re.search(rf'^{re.escape(str(path))}:{line}:{column}: ', stderr, re.M) is not None
 
 
 def main():
@@ -90,7 +101,8 @@ def main():
                 command.extend(CASE_ARGUMENTS.get(name, []))
                 run = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, timeout=60)
                 matched, remaining = shadow_diagnostics(run.stderr, CASE_SHADOWS[name]) if name in CASE_SHADOWS else (True, run.stderr)
-                passed = matched and run.returncode == code and run.stdout == stdout and diagnostic in remaining
+                passed = matched and run.returncode == code and run.stdout == stdout and diagnostic_matches(
+                    remaining, diagnostic, path, CASE_LOCATIONS.get(name))
                 if not diagnostic:
                     passed = passed and remaining == ""
                 record(label, passed, command=command, exit=run.returncode, stdout=run.stdout, stderr=run.stderr)

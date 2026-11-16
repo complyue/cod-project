@@ -44,9 +44,10 @@ runner.CASES = {
     "captured_checked_declared": (ERROR + 'func f(e:NullPointerException)->void throws NullPointerException{try{throw e;}catch(x){defer{throw;};};}', 0, "", WARN),
     "captured_checked_local_catch": (ERROR + 'func f(e:NullPointerException)->void{try{throw e;}catch(x){defer{try{throw;}catch(y:const NullPointerException){};};};}', 0, "", WARN),
     "deferred_empty_handler": (ERROR + 'defer catch(e){};', 0, "", WARN),
-    "throw_location": (ERROR + 'func f(e:NullPointerException)->void {\n\n  throw e;\n}', 2, "", "throw_location.cod:14:3: checked exception"),
-    "forwarded_throw_location": (ERROR + 'func f(e:NullPointerException)->void {\n  try{\n    throw e;\n  }finally{};\n}', 2, "", "forwarded_throw_location.cod:14:5: checked exception"),
+    "throw_location": (ERROR + 'func f(e:NullPointerException)->void {\n\n  throw e;\n}', 2, "", "checked exception"),
+    "forwarded_throw_location": (ERROR + 'func f(e:NullPointerException)->void {\n  try{\n    throw e;\n  }finally{};\n}', 2, "", "checked exception"),
 }
+runner.CASE_LOCATIONS = {"throw_location": (14, 3), "forwarded_throw_location": (14, 5)}
 runner.CASE_ARGUMENTS = {}
 runner.CASE_SHADOWS = {
     'caught_after_handler': ['e'],
