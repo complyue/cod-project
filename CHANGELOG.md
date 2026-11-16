@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-16 — Returned selection initialization
+
+<a id="k-763"></a>
+**K-763 — Preserve selected-reference identity through copies and results.** Source390→391/registry788→789 continues K-762's qualified D-14r116/P-258, D-17r83/P-235/P-236/P-280, D-18r107, confirmed D-23r17 scalar/ref/ptr results and D-26r21/H-407 under H-420/H-423. Compact immutable selection evidence composes with shared initialization/return summaries and prepared-argument substitution; binding slots, possible-target bounds and nullness remain separate. Acceptance covers copied/returned writes, branch/weak/loop/slot changes, ordered operands, failed work, cleanup replacement, shared native bodies and exact release. Charter §§2/3.1–3.3/4.3/6.3/8/12, H-525, owner/access/init and D-16 continue. Wider caller-slot/multi-origin proofs and new runtime/ABI/return-inspection/queue contracts remain separate; no new source rule or human confirmation. Baseline: `3e5209d3a4825a22f8fb128be8913627600b998f`, affected compiler/source-reference paths.
+
 ## 2026-11-16 — Nullable result conditions
 
 <a id="k-762"></a>

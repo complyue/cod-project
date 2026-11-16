@@ -623,6 +623,9 @@ public:
     ExceptionFacts value{};
     BooleanValue boolean{};
     BooleanValue nullness{};
+    // Formal input selections; null_target denotes an independent/unknown origin.
+    // The caller substitutes its prepared references, never their mutable slots.
+    std::set<size_t> selection_sources{};
     bool operator==(const Returned &) const = default;
     void initialize(const std::set<size_t> &known) {
       std::erase_if(uninitialized, [&](size_t target) { return known.contains(target); });
@@ -635,10 +638,11 @@ public:
       null_sources.insert(other.null_sources.begin(), other.null_sources.end());
       merge_boolean(boolean, other.boolean);
       merge_boolean(nullness, other.nullness);
+      selection_sources.insert(other.selection_sources.begin(), other.selection_sources.end());
     }
     void then(const Returned &next) {
       const bool keep = preserves && next.preserves;
-      if (!next.preserves) { targets.clear(); uninitialized.clear(); null_sources.clear(); value.clear(); boolean.clear(); nullness.clear(); }
+      if (!next.preserves) { targets.clear(); uninitialized.clear(); null_sources.clear(); value.clear(); boolean.clear(); nullness.clear(); selection_sources.clear(); }
       merge(next);
       preserves = keep;
     }
