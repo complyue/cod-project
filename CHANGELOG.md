@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-11-16 — Retained return results with queued deferred handling
+
+<a id="h-539"></a>
+**H-539 — Later returns replace retained results while deferred work continues.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-16 America/Los_Angeles; exact timestamp/personal name unavailable. Reply: “不是继续扫描吧，而是继续处理后续 defer，又抛错，又处理，这个心智模型才对吧？ `return` 可以替代之前运行的 `return` 结果。” Confirms retained return-result replacement and continued deferred work. The wording prompted a separate timing clarification; this event alone does not select immediate exception dispatch or clearing of an ordinary body error.
+
+<a id="h-540"></a>
+**H-540 — Keep the queued B/A/Close/Flush order.** Same human/chat/date; answer to the two explicit execution traces: “保持之前的处理方式，B → A → catch CloseError → catch FlushError”. Reaffirms the earlier stack model for the example whose catch executes return on both invocations. Both ordinary deferred actions run before the handler's list position, and the second queued handler invocation still runs after the first return. Rejects the proposed immediate B/catch-Flush/A/catch-Close interpretation. H-507's once-per-entry finally and remaining deferred execution continue; return/body-error precedence remains separate.
+
+<a id="k-defer-return-order-20261116"></a>
+**K-DEFER-RETURN-ORDER-20261116 — Retain queued order through result replacement.** D-17r80→81/registry779→780 integrates H-539/H-540 under D-17-DEFER-DISPATCH/P-461–P-463 and C-63/P-323/P-324. Charter §§2/3.3/4.3/6.3/12 and existing candidate C-36/C-44/C-63/C-65 paths preserve explicit control, observable handler order and exact result ownership. Acceptance covers the B/A/Close/Flush trace, distinct later return values, a following invocation without return, continued deferred entries, once-only finally, preserved nonmatching errors and failed return preparation. Do not restart retired handlers or erase unrelated queued failures; body-error precedence, outgoing-error placement, caller/nested coverage and physical implementation remain separate. H-525/H-536–H-538 and D-16 continue; no full-stack qualification or source support is inferred. Baseline: `912d2d7a5cc669987a66194386d1cb6b216c17ba`, affected paths; source382 unchanged. Integrated K-756/main without changing its compiler evidence or either history. Documentation only; no source edits, builds or tests.
+
 ## 2026-11-16 — Integrate retained body-failure design with conditional-read checking
 
 <a id="k-body-exception-sync-20261116"></a>
