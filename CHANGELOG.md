@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-15 — Handler queues and finally composition
+
+<a id="k-735"></a>
+**K-735 — Retain registration histories through completion.** Agent continuity assessment under H-267/H-269/H-272/H-313/H-327/H-356–H-362/H-366–H-371/H-398/H-407/H-420/H-423 and charter §§3.3/4.3/5.3/6.3/8/12: source351→352 and registry745→746 preserve C-63/P-235/P-236/P-280's ordered cleanup and C-65/C-75/P-255/P-257/P-295/P-327's target/initialization obligations. Queues belong to each incoming state; finally registration sequences compose with entering histories. Finite graph composition preserves loop backedges and action identity. Acceptance covers nested/conditional registration, loops, ordinary and deferred handlers, finally replacement, failed registration, shared recursive native bodies and exact release. D-14r112/D-17r69/D-18r104/D-26r21 and D-16 remain unchanged. No new language, ABI, allocation or qualification. General branch/state and post-join value correlations remain conservative. Baseline: `f64ca7bbf38c711497c7f9d3bb1dbe4cb806cf1f:cod/lang_checked.hh`, `cod/lang_completion.hh` and `tests/cod/language/README.md` at that commit.
+
 ## 2026-11-15 — Deferred handler payload state
 
 <a id="k-734"></a>

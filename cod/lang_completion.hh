@@ -473,6 +473,27 @@ public:
     if (initialized.empty()) return queue;
     solved_.clear(); queues_.push_back({{queue}, {}, initialized}); return queues_.size() - 1;
   }
+  size_t append(size_t previous, size_t suffix) {
+    if (!previous) return suffix;
+    if (!suffix) return previous;
+    solved_.clear();
+    std::map<size_t, size_t> copied{{0, previous}};
+    std::vector<size_t> pending{suffix};
+    while (!pending.empty()) {
+      const auto id = pending.back(); pending.pop_back();
+      if (copied.contains(id)) continue;
+      copied[id] = queues_.size();
+      queues_.push_back({});
+      for (const auto ancestor : queues_.at(id).previous) pending.push_back(ancestor);
+    }
+    // Copy only the registration graph; each action retains its own nested queue.
+    // Allocate every node before wiring edges so loop backedges remain finite.
+    for (const auto &[source, target] : copied) if (source) {
+      queues_.at(target) = queues_.at(source);
+      for (auto &ancestor : queues_.at(target).previous) ancestor = copied.at(ancestor);
+    }
+    return copied.at(suffix);
+  }
   size_t header(size_t entry) {
     solved_.clear(); queues_.push_back({{entry}, {}}); return queues_.size() - 1;
   }
