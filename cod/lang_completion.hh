@@ -622,6 +622,7 @@ public:
     std::set<size_t> targets, uninitialized, null_sources;
     ExceptionFacts value{};
     BooleanValue boolean{};
+    BooleanValue nullness{};
     bool operator==(const Returned &) const = default;
     void initialize(const std::set<size_t> &known) {
       std::erase_if(uninitialized, [&](size_t target) { return known.contains(target); });
@@ -633,10 +634,11 @@ public:
       uninitialized.insert(other.uninitialized.begin(), other.uninitialized.end());
       null_sources.insert(other.null_sources.begin(), other.null_sources.end());
       merge_boolean(boolean, other.boolean);
+      merge_boolean(nullness, other.nullness);
     }
     void then(const Returned &next) {
       const bool keep = preserves && next.preserves;
-      if (!next.preserves) { targets.clear(); uninitialized.clear(); null_sources.clear(); value.clear(); boolean.clear(); }
+      if (!next.preserves) { targets.clear(); uninitialized.clear(); null_sources.clear(); value.clear(); boolean.clear(); nullness.clear(); }
       merge(next);
       preserves = keep;
     }
@@ -662,6 +664,7 @@ public:
     MissingInitialization uninitialized{};
     template <typename Transform> void transform_conditions(const Transform &transform) {
       for (auto &[truth, clauses] : returned.boolean) clauses = transform(clauses);
+      for (auto &[truth, clauses] : returned.nullness) clauses = transform(clauses);
       for (auto &[target, value] : booleans) for (auto &[truth, clauses] : value) clauses = transform(clauses);
       for (auto &[read, requirement] : reads) {
         requirement.when = transform(requirement.when);

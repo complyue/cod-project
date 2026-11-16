@@ -114,6 +114,7 @@ struct CheckedOperation {
   };
   // Immutable evidence describes the produced boolean, independently of its source spelling.
   std::shared_ptr<const Predicate> predicate;
+  CleanupEquations::BooleanValue nullness{};
 };
 
 struct CheckedStorage {
@@ -934,6 +935,14 @@ class ScalarChecker {
       copies.same_bindings.insert({{binding, lexical_.target_versions.at(binding)}, {*source.binding, source.selection_versions}});
       lexical_.predicate_conditions = CleanupEquations::conjoin_conditions(lexical_.predicate_conditions, {copies});
     }
+    if (!source.nullness.empty() && source.targets.contains(null_target) && source.targets.size() > 1) {
+      CleanupEquations::ConditionClauses alternatives;
+      for (const auto &[null, clauses] : source.nullness) for (auto facts : clauses) {
+        (null ? facts.absent_bindings : facts.bindings).emplace(binding, lexical_.target_versions.at(binding));
+        CleanupEquations::add_condition(alternatives, std::move(facts));
+      }
+      lexical_.predicate_conditions = CleanupEquations::conjoin_conditions(lexical_.predicate_conditions, alternatives);
+    }
     assign_selection(lexical_, binding, update.value_or(selection_targets(source.targets)));
     if (source.initialized_target) initialize_selection(lexical_, binding);
     if (!proving_) {
@@ -1047,6 +1056,7 @@ class ScalarChecker {
       const bool weak = target.slots.size() != 1 || !target.slots.contains(id);
       if (weak) {
         selected.binding.reset();
+        selected.nullness.clear();
         const auto &previous = lexical_.targets.at(id);
         selected.targets.insert(previous.begin(), previous.end());
         const auto &nulls = lexical_.null_sources.at(id);
@@ -1366,6 +1376,13 @@ class ScalarChecker {
       }
       CleanupEquations::ConditionClauses clauses;
       CleanupEquations::add_condition(clauses, std::move(facts));
+      if (!slots) for (const bool null : {false, true})
+        for (const auto parameter : null ? known.absent : known.present) if (!views.at(parameter).nullness.empty()) {
+          const auto &value = views[parameter].nullness;
+          const auto found = value.find(null);
+          clauses = found == value.end() ? CleanupEquations::ConditionClauses{} :
+              CleanupEquations::conjoin_conditions(clauses, found->second);
+        }
       if (!slots) for (const auto parameter : known.absent)
         clauses = CleanupEquations::conjoin_conditions(clauses, absence_conditions(views.at(parameter).null_sources));
       for (const auto &[parameter, input] : known.inputs)
@@ -2073,6 +2090,7 @@ class ScalarChecker {
       if (!operation.null_sources.empty()) operation.targets.insert(null_target);
       if (contract.nullable_views.empty() || !contract.nullable_views.back()) operation.targets.erase(null_target);
       select_targets(operation, operation.targets);
+      if (!prepared) operation.nullness = instantiate_boolean(summary.returned.nullness, boolean_inputs, views, !summary.bindings.empty(), exception_inputs);
       if (read && !discard && &expr != prepared_call_) read_view(operation, expr.at, "borrowed result");
       if (!prepared) operation.predicate = stored_predicate(operation);
     }
@@ -2430,6 +2448,7 @@ class ScalarChecker {
     if (view.targets.empty()) return {};
     if (!view.targets.contains(null_target)) return constant_predicate(false);
     if (view.targets.size() == 1) return constant_predicate(true);
+    if (!view.nullness.empty()) return boolean_predicate(view.nullness);
     auto proof = std::make_shared<Predicate>();
     proof->kind = view.binding ? Predicate::Kind::null_test : Predicate::Kind::presence;
     if (view.binding) proof->test = {*view.binding, view.selection_versions};
@@ -2614,6 +2633,7 @@ class ScalarChecker {
         result.place.reset(); result.binding.reset(); result.slots.clear(); result.targets.clear(); result.origins.clear(); result.null_sources.clear();
         result.view = result.read_only = false; result.exceptions.clear();
         result.predicate.reset();
+        result.nullness.clear();
       }
     }
     return result;
@@ -5014,6 +5034,9 @@ class ScalarChecker {
     result.type = cleanup == Type::never || normals.empty() ? Type{Type::never} :
         expr.kind == Expression::Kind::deferred ? Type{Type::void_type} : result_type;
     if (!views.empty()) {
+      if (std::any_of(views.begin(), views.end(), [](const auto *view) { return !view->nullness.empty(); }))
+        for (size_t i = 0; i < views.size(); ++i)
+          CleanupEquations::merge_boolean(result.nullness, snapshot_boolean(null_predicate(*views[i]), normals[i], expr.at));
       result.predicate = predicate_of(*views.front());
       for (size_t i = 1; i < views.size(); ++i)
         result.predicate = predicate(Predicate::Kind::alternatives, result.predicate, predicate_of(*views[i]));
@@ -5105,6 +5128,7 @@ class ScalarChecker {
     const auto child = [&](size_t i, bool read_value = true, bool discarded = false) { return check(*expr.children.at(i), instance, operations, read_value, discarded); };
     const auto view = [&](const CheckedOperation &source) {
       operation.predicate = predicate_of(source);
+      operation.nullness = source.nullness;
       operation.place = source.place;
       operation.binding = source.binding;
       operation.slots = source.slots;
@@ -5456,6 +5480,10 @@ class ScalarChecker {
       else if (no == Type::never) view(yes_fact);
       else {
         operation.predicate = predicate(Predicate::Kind::alternatives, predicate_of(yes_fact), predicate_of(no_fact));
+        if (!yes_fact.nullness.empty() || !no_fact.nullness.empty()) {
+          operation.nullness = snapshot_boolean(null_predicate(yes_fact), yes_state, expr.at);
+          CleanupEquations::merge_boolean(operation.nullness, snapshot_boolean(null_predicate(no_fact), no_state, expr.at));
+        }
         operation.view = yes_fact.view || no_fact.view;
         operation.mixed_view = yes_fact.mixed_view || no_fact.mixed_view || yes_fact.view != no_fact.view;
         operation.read_only = yes_fact.read_only || no_fact.read_only;
@@ -5883,6 +5911,7 @@ class ScalarChecker {
         if (!contract.nullable()) require_initialized(selected, expr.at, "borrowed result");
         operation.borrowed_result = true;
         lexical_.returned = {false, selected.targets, {}, selected.null_sources};
+        if (contract.nullable()) lexical_.returned.nullness = snapshot_boolean(null_predicate(selected), lexical_, expr.at);
         if (contract.nullable() && !selected.initialized_target) for (const auto place : selected.targets)
           if (place != null_target && !lexical_.initialized.contains(place)) lexical_.returned.uninitialized.insert(place);
       } else if (value != Type::never) {
@@ -6293,6 +6322,9 @@ class ScalarChecker {
       returned.targets = input_ordinals(returned.targets);
       returned.uninitialized = input_ordinals(returned.uninitialized);
       returned.null_sources = input_ordinals(returned.null_sources);
+      for (auto &[null, clauses] : returned.nullness)
+        clauses = CleanupEquations::conjoin_conditions(clauses, path_conditions(state));
+      returned.nullness = external_boolean(returned.nullness);
       observed_.returned.merge(returned);
     }
     if (!reason && checking_instance_->result.type->kind == Type::exception) {
@@ -6414,6 +6446,8 @@ class ScalarChecker {
     for (const auto reason : call_reasons(*checking_method_)) observed_.present.try_emplace(reason);
     if (!instance.result.borrowed() && *instance.result.type == Type::boolean && observed_.returned.boolean.empty())
       observed_.returned.boolean = CleanupEquations::unknown_boolean();
+    if (instance.result.nullable() && observed_.returned.nullness.empty())
+      observed_.returned.nullness = CleanupEquations::unknown_boolean();
     auto initial = initial_effects(*checking_method_, instance.arguments);
     for (const auto &[reason, values] : initial.booleans)
       for (const auto &[parameter, value] : values) observed_.booleans[reason].try_emplace(parameter, CleanupEquations::unknown_boolean());
@@ -6446,6 +6480,7 @@ class ScalarChecker {
         throw std::logic_error("unresolved cleanup boolean origin in callable summary");
     };
     resolved_boolean(observed_.returned.boolean);
+    resolved_boolean(observed_.returned.nullness);
     for (const auto &[reason, values] : observed_.booleans)
       for (const auto &[parameter, value] : values) resolved_boolean(value);
     return observed_;
