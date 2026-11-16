@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-16 — Preserve identity guard evidence
+
+<a id="k-750"></a>
+**K-750 — Nullness relationships from selected reference identity.** Agent continuity under H-439–H-441/H-420/H-423, D-28-IDENTITY/C-95/P-391–P-392, D-14r116 and D-17r71’s unaffected checked-NPE scope: source368→369/registry764→765 retains owner-plus-locator identity, ordered operand snapshots, stable binding versions and independent access/initialization obligations. Existing boolean evidence composes necessary nullness relationships and closes finite target refinements in either condition order. Charter §§4.3/6.3/8/12 supports checked source intent without runtime proof state. No exact locator/alias inference, new layout/key protocol, owner permission, D-16 change or revised handler acceptance follows. Baseline: `317f59fa9c7168397bd60f3cb1c36dd1e7195ff5` at affected paths.
+
 ## 2026-11-16 — Mark the defer handler contract under revision
 
 <a id="k-defer-contract-notice-20261116"></a>

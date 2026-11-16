@@ -31,6 +31,9 @@ PREDICATES = {
     'stored': '{{val saved<-p is not null;saved}}',
     'copied': '{{val original<-p is not null;val saved<-original;original<-true;saved}}',
     'stored_alternatives': '{{val saved<-false;if(q is null){saved<-p is not null;}else{saved<-!(p is null);};saved}}',
+    'identity': '(p is q)&&(q is not null)',
+    'stored_identity': '{{val same<-p is q;same&&q is not null}}',
+    'stored_null_view': '{{ptr empty:T=null in O;p is not empty}}',
 }
 
 

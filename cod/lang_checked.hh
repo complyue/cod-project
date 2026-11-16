@@ -105,7 +105,7 @@ struct CheckedOperation {
   std::map<size_t, CleanupEquations::Effects> invocation;
   struct NullTest { size_t binding; std::set<size_t> versions; bool null_when_true = true; };
   struct Predicate {
-    enum class Kind { null_test, negation, conjunction, disjunction, alternatives, abrupt };
+    enum class Kind { null_test, negation, conjunction, disjunction, alternatives, abrupt, constant_true, constant_false };
     Kind kind;
     NullTest test{};
     std::shared_ptr<const Predicate> left, right;
@@ -1906,6 +1906,11 @@ class ScalarChecker {
     lexical_.live = lexical_.live && !targets.empty() && lexical_.selections.possible;
   }
   using Predicate = CheckedOperation::Predicate;
+  static std::shared_ptr<const Predicate> constant_predicate(bool value) {
+    static const auto yes = std::make_shared<const Predicate>(Predicate{Predicate::Kind::constant_true, {}, {}, {}});
+    static const auto no = std::make_shared<const Predicate>(Predicate{Predicate::Kind::constant_false, {}, {}, {}});
+    return value ? yes : no;
+  }
   static std::shared_ptr<const Predicate> predicate_of(const CheckedOperation &operation) {
     if (operation.type == Type::never) {
       static const auto abrupt = std::make_shared<const Predicate>(Predicate{Predicate::Kind::abrupt, {}, {}, {}});
@@ -1917,11 +1922,50 @@ class ScalarChecker {
       std::shared_ptr<const Predicate> left, std::shared_ptr<const Predicate> right = {}) {
     if (!left && !right) return {};
     if (kind == Predicate::Kind::alternatives && left == right) return left;
+    const auto constant = [](const std::shared_ptr<const Predicate> &proof) -> std::optional<bool> {
+      if (proof && proof->kind == Predicate::Kind::constant_true) return true;
+      if (proof && proof->kind == Predicate::Kind::constant_false) return false;
+      return {};
+    };
+    if (kind == Predicate::Kind::negation) {
+      if (const auto value = constant(left)) return constant_predicate(!*value);
+      if (left->kind == Predicate::Kind::negation) return left->left;
+    }
+    if (kind == Predicate::Kind::conjunction || kind == Predicate::Kind::disjunction) {
+      const bool conjunction = kind == Predicate::Kind::conjunction;
+      if (const auto value = constant(left)) return *value == conjunction ? right : left;
+      if (const auto value = constant(right)) return *value == conjunction ? left : right;
+    }
     return std::make_shared<const Predicate>(Predicate{kind, {}, std::move(left), std::move(right)});
+  }
+  static std::shared_ptr<const Predicate> null_predicate(const CheckedOperation &view) {
+    if (view.targets.empty()) return {};
+    if (!view.targets.contains(null_target)) return constant_predicate(false);
+    if (view.targets.size() == 1) return constant_predicate(true);
+    if (!view.binding) return {};
+    return std::make_shared<const Predicate>(Predicate{Predicate::Kind::null_test,
+        {*view.binding, view.selection_versions}, {}, {}});
+  }
+  std::shared_ptr<const Predicate> identity_predicate(const CheckedOperation &left, const CheckedOperation &right) const {
+    const auto owners = compare_owners(one_owner(left), one_owner(right));
+    if (owners == OwnerMatch::mismatch) return constant_predicate(false);
+    const auto lhs_null = null_predicate(left), rhs_null = null_predicate(right);
+    const auto nulls = predicate(Predicate::Kind::conjunction, lhs_null, rhs_null);
+    const auto nonnulls = predicate(Predicate::Kind::conjunction,
+        predicate(Predicate::Kind::negation, lhs_null), predicate(Predicate::Kind::negation, rhs_null));
+    // Null identity needs equal actual owners. Non-null locator equality stays
+    // unknown; the predicate records only necessary nullness relationships.
+    return predicate(Predicate::Kind::disjunction,
+        predicate(Predicate::Kind::conjunction, nulls,
+            owners == OwnerMatch::satisfied ? constant_predicate(true) : nullptr),
+        predicate(Predicate::Kind::conjunction, nonnulls, {}));
   }
   void refine_predicate(const std::shared_ptr<const Predicate> &proof, bool value, const Location &at) {
     if (!proof) return;
     if (proof->kind == Predicate::Kind::abrupt) { lexical_.live = false; return; }
+    if (proof->kind == Predicate::Kind::constant_true || proof->kind == Predicate::Kind::constant_false) {
+      lexical_.live = lexical_.live && value == (proof->kind == Predicate::Kind::constant_true); return;
+    }
     if (proof->kind == Predicate::Kind::null_test) { refine_test(proof->test, value); return; }
     if (proof->kind == Predicate::Kind::negation) { refine_predicate(proof->left, !value, at); return; }
     const bool alternatives = proof->kind == Predicate::Kind::alternatives;
@@ -1940,7 +1984,15 @@ class ScalarChecker {
     }
   }
   void refine(const Expression &expr, bool value, const std::map<const Expression *, CheckedOperation> &operations) {
-    refine_predicate(predicate_of(operations.at(&expr)), value, expr.at);
+    const auto proof = predicate_of(operations.at(&expr));
+    if (!proof) return;
+    // Related tests can constrain one another in either source order. Each
+    // pass only removes possible targets, so closure is finite.
+    while (lexical_.live) {
+      const auto before = lexical_.targets;
+      refine_predicate(proof, value, expr.at);
+      if (lexical_.targets == before) break;
+    }
   }
   void dereference(const CheckedOperation &view, const Location &at) {
     if (!view.targets.contains(null_target)) return;
@@ -4531,12 +4583,8 @@ class ScalarChecker {
         if (right.type == Type::null_ref && right.owners.empty()) right.owners = left.owners;
         if (left.owners.size() != 1 || right.owners.size() != 1)
           fail(expr.at, "reference identity requires an owner context; two unqualified nulls have none");
-        if (left.owners == right.owners) {
-          for (const auto &[selected, other] : {std::pair{&left, &right}, std::pair{&right, &left}})
-            if (selected->binding && other->type == Type::null_ref)
-              operation.predicate = std::make_shared<const Predicate>(Predicate{Predicate::Kind::null_test,
-                  {*selected->binding, selected->selection_versions, expr.text == "is"}, {}, {}});
-        }
+        operation.predicate = identity_predicate(left, right);
+        if (expr.text == "is not") operation.predicate = predicate(Predicate::Kind::negation, operation.predicate);
       } else lexical_.live = false;
       operations[&expr] = operation;
       return operation.type;
