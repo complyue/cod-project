@@ -447,7 +447,7 @@ class ScalarChecker {
   std::map<std::string, size_t> external_owners_;
   struct LoopOwners { size_t first, last; std::set<size_t> bindings, expired; };
   std::map<const Expression *, LoopOwners> loop_owners_;
-  struct AbruptPath { LexicalState state; std::set<size_t> exceptions; Location at; Completion completion{2, false}; };
+  struct AbruptPath { LexicalState state; ExceptionFacts exceptions; Location at; Completion completion{2, false}; };
   struct AbruptFlow { size_t depth; std::vector<AbruptPath> paths; };
   AbruptFlow *abrupt_ = nullptr;
   std::optional<size_t> caught_;
@@ -1656,12 +1656,13 @@ class ScalarChecker {
       if (frame->bindings.contains(id)) { frame->required.insert(id); captured = true; }
     return captured;
   }
-  void note_abrupt(const Location &at, std::set<size_t> exceptions = {}, Completion completion = {2, false}) {
+  void note_abrupt(const Location &at, ExceptionFacts exceptions = {}, Completion completion = {2, false}) {
     if (!lexical_.live) return;
-    if (!exceptions.empty()) completion.reason = 3 + *exceptions.begin();
+    const auto categories = exceptions.possibilities();
+    if (!categories.empty()) completion.reason = 3 + *categories.begin();
     if (!abrupt_) {
       if (!proving_ || !validating_) return;
-      for (const auto category : exceptions)
+      for (const auto category : categories)
         if (exception_categories.at(category).checked && (!checking_method_ || !checking_method_->throws_categories.contains(category)))
           fail(at, "checked exception '" + std::string(exception_categories[category].name) + "' requires a covering catch or throws declaration");
       return;
@@ -1736,7 +1737,7 @@ class ScalarChecker {
       const auto queue = path.state.queues.at(scope);
       std::vector<Completion> inputs;
       if (path.exceptions.empty()) inputs.push_back(path.completion);
-      else for (const auto category : path.exceptions) inputs.push_back({3 + category, path.completion.returned});
+      else for (const auto category : path.exceptions.possibilities()) inputs.push_back({3 + category, path.completion.returned});
       for (const auto input : inputs) for (const auto &[encoded, effects] : cleanup_.apply(queue, input))
           for (const auto origin : ScalarChecker::inputs(path.state.inputs)) {
         const auto completion = Completion::from(encoded);
@@ -1745,7 +1746,11 @@ class ScalarChecker {
         state.initialized = path.state.input_initialized.at(origin);
         state.selections = path.state.input_selections.at(origin);
         for (auto &[read, requirement] : state.requirements) requirement.inputs &= state.inputs;
-        apply_effects(state, effects, at);
+        const auto pending = input.reason >= 3 ? path.exceptions.restricted({input.reason - 3}) : ExceptionFacts{};
+        auto applied = effects;
+        applied.returned.value = applied.returned.value.replace_arrival({}, pending);
+        applied.thrown = applied.thrown.replace_arrival({}, pending);
+        apply_effects(state, applied, at);
         state.input_initialized = {{origin, state.initialized}};
         state.input_selections = {{origin, state.selections}};
         if (cleanup_.has_actions(queue)) {
@@ -1761,7 +1766,11 @@ class ScalarChecker {
             fail(at, "scope recovery has no original value; use an explicit return in the recovering handler");
           normal_type = type;
           normals.push_back(std::move(state));
-        } else exits.push_back({std::move(state), completion.reason >= 3 ? std::set<size_t>{completion.reason - 3} : std::set<size_t>{}, path.at, completion});
+        } else {
+          auto failure = completion.reason >= 3 ? applied.thrown.restricted({completion.reason - 3}) : ExceptionFacts{};
+          if (completion.reason >= 3 && failure.empty()) failure = {completion.reason - 3};
+          exits.push_back({std::move(state), std::move(failure), path.at, completion});
+        }
       }
     }
     abrupt_ = outer;
@@ -3792,7 +3801,8 @@ class ScalarChecker {
                 operation, read, discard, offset);
   }
   CheckedOperation check_guarded(const Expression &expr, CheckedInstance *instance,
-      std::map<const Expression *, CheckedOperation> &operations, bool read = true, bool discard = false, const Type *expected = nullptr) {
+      std::map<const Expression *, CheckedOperation> &operations, bool read = true, bool discard = false, const Type *expected = nullptr,
+      std::optional<size_t> action = {}) {
     const auto before = lexical_;
     auto *outer = abrupt_;
     AbruptFlow incoming{lexical_.scopes.size(), {}};
@@ -3801,7 +3811,7 @@ class ScalarChecker {
         auto state = lexical_; state.inputs = std::uint64_t{1} << category;
         state.input_initialized = {{category, state.initialized}};
         state.input_selections = {{category, state.selections}};
-        incoming.paths.push_back({std::move(state), {category}, expr.at, Completion::failure(category)});
+        incoming.paths.push_back({std::move(state), ExceptionFacts::arrival(action).restricted({category}), expr.at, Completion::failure(category)});
       }
       auto state = lexical_; state.inputs = std::uint64_t{1} << exception_categories.size();
       state.input_initialized = {{exception_categories.size(), state.initialized}};
@@ -3832,15 +3842,15 @@ class ScalarChecker {
       if (type.kind != Type::exception) fail(handler.at, "catch requires a selected intrinsic exception type");
       if (!handled.insert(type.identity).second) fail(handler.at, "duplicate exception category in catch clauses");
       std::vector<LexicalState> entries;
-      std::set<size_t> categories;
+      ExceptionFacts categories;
       std::map<size_t, std::uint64_t> category_inputs;
       for (auto &path : incoming.paths) {
-        auto selected = type.identity ? intersect(path.exceptions, {type.identity}) : path.exceptions;
+        auto selected = type.identity ? path.exceptions.restricted({type.identity}) : path.exceptions;
         if (selected.empty()) continue;
         entries.push_back(path.state);
-        categories.insert(selected.begin(), selected.end());
-        for (const auto category : selected) category_inputs[category] |= path.state.inputs;
-        for (const auto category : selected) path.exceptions.erase(category);
+        categories.merge(selected);
+        for (const auto category : selected.possibilities()) category_inputs[category] |= path.state.inputs;
+        path.exceptions = path.exceptions.without(selected.possibilities());
       }
       lexical_ = body_state;
       if (entries.empty()) join(body_state, true, before, false, handler.at);
@@ -4800,16 +4810,17 @@ class ScalarChecker {
       }
       const auto binding = expr.children.empty() ? caught_ : expr.children[0]->kind == K::name ? operations.at(expr.children[0].get()).place : std::optional<size_t>{};
       // An empty provisional result summary is not a non-returning contract.
-      auto categories = operation.exceptions.possibilities();
-      if (categories.empty()) categories = exception_possibilities(type);
+      auto thrown = operation.exceptions;
+      if (thrown.empty()) thrown = exception_possibilities(type);
+      const auto categories = thrown.possibilities();
       if (binding && caught_inputs_.contains(*binding)) {
         const auto inputs = lexical_.inputs;
         for (const auto category : categories) {
           lexical_.inputs = inputs & caught_inputs_.at(*binding)[category];
-          if (lexical_.inputs) note_abrupt(expr.at, {category});
+          if (lexical_.inputs) note_abrupt(expr.at, thrown.restricted({category}));
         }
         lexical_.inputs = inputs;
-      } else note_abrupt(expr.at, categories);
+      } else note_abrupt(expr.at, thrown);
       operation.type = Type::never;
       break;
     }
@@ -4847,7 +4858,7 @@ class ScalarChecker {
         AbruptFlow flow{lexical_.scopes.size(), {}};
         abrupt_ = &flow;
         summary.guarded = expr.children.size() > 1;
-        const auto completed = summary.guarded ? check_guarded(expr, instance, operations, true, true).type : child(0, true, true);
+        const auto completed = summary.guarded ? check_guarded(expr, instance, operations, true, true, nullptr, action).type : child(0, true, true);
         if (completed != Type::never && lexical_.live) flow.paths.push_back({lexical_, {}, expr.at, {0, false}});
         for (const auto &path : flow.paths) {
           const auto queue = path.state.queues.at(cleanup_scope_);
@@ -4859,8 +4870,11 @@ class ScalarChecker {
             for (const auto &[read, requirement] : path.state.requirements) if (requirement.inputs & selected)
               effects.reads.emplace(read, requirement.before);
             if (path.exceptions.empty()) summary.paths.push_back({selected, path.completion, queue, effects});
-            else for (const auto category : path.exceptions)
-              summary.paths.push_back({selected, {3 + category, path.completion.returned}, queue, effects});
+            else for (const auto category : path.exceptions.possibilities()) {
+              auto failed = effects;
+              failed.thrown = path.exceptions.restricted({category});
+              summary.paths.push_back({selected, {3 + category, path.completion.returned}, queue, std::move(failed)});
+            }
           }
         }
         lexical_ = before;
@@ -4879,7 +4893,11 @@ class ScalarChecker {
         const auto &call = operations.at(expr.children.front().get());
         if (completed == Type::never) { operation.type = Type::never; break; }
         if (!call.invocation.empty()) {
-          for (const auto &[reason, effects] : call.invocation) summary.paths.push_back({1, {reason, false}, 0, effects});
+          for (const auto &[reason, effects] : call.invocation) {
+            auto invoked = effects;
+            if (reason >= 3) invoked.thrown = {reason - 3};
+            summary.paths.push_back({1, {reason, false}, 0, std::move(invoked)});
+          }
         } else summary.paths.push_back({1, {0, false}, 0});
       }
       cleanup_.define(action, std::move(summary));
@@ -5217,6 +5235,8 @@ class ScalarChecker {
         observed_.bindings.try_emplace(reason, std::move(targets));
       }
     }
+    if (!observed_.returned.value.arrivals.empty())
+      throw std::logic_error("unresolved cleanup exception origin in callable result");
     return observed_;
   }
 

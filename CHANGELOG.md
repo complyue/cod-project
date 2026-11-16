@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-15 — Caught exception-value evidence
+
+<a id="k-731"></a>
+**K-731 — Retain value relationships through handlers and cleanup.** Agent continuity assessment under H-267/H-269/H-272/H-313/H-327/H-356/H-361/H-362/H-366–H-369/H-398/H-407/H-420/H-423 and charter §§3.3/4.3/5.3/6.3/8/12: source347→348 and registry741→742 continue C-63/P-235/P-236/P-280's immutable exception, handler and completion contract with C-65/C-75/P-255/P-257/P-295/P-327's independent values and callable coverage. Abrupt paths and cleanup equations retain the same finite value facts as ordinary results; typed matching filters origins, explicit failure replaces the pending value, and nested deferred arrivals remain distinct from earlier caught snapshots. Acceptance covers rethrows, finally/defer recovery and replacement, pending returns, explicit causes, prepared failures, recursive forwarding, equivalent root-handler spellings and exact native release. D-14r112/D-17r69/D-18r104/D-26r21 and D-16 remain unchanged. No new source capture rule, runtime metadata, ABI, regional representation or qualification; declared checked obligations, interprocedural thrown-value proofs and broader correlations retain their separate boundaries. Baseline: `564dd822f4e20afd80319786fb30718f3fcb0dfd` at affected paths.
+
 ## 2026-11-15 — Callable exception-result evidence
 
 <a id="k-730"></a>

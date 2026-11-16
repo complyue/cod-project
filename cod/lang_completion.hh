@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <initializer_list>
 #include <map>
 #include <optional>
 #include <set>
@@ -19,28 +20,60 @@ namespace cod::language {
 struct ExceptionFacts {
   std::set<size_t> categories;
   std::map<size_t, std::set<size_t>> inputs;
+  // An action identity names its arriving exception; nullopt names the input
+  // of a composed cleanup relation. Lexical identities preserve nested captures.
+  std::map<std::optional<size_t>, std::set<size_t>> arrivals;
   ExceptionFacts(std::set<size_t> categories = {}) : categories(std::move(categories)) {}
+  ExceptionFacts(std::initializer_list<size_t> categories) : categories(categories) {}
   bool operator==(const ExceptionFacts &) const = default;
-  void clear() { categories.clear(); inputs.clear(); }
+  bool empty() const { return categories.empty() && inputs.empty() && arrivals.empty(); }
+  void clear() { categories.clear(); inputs.clear(); arrivals.clear(); }
+  static ExceptionFacts arrival(std::optional<size_t> action = {}) {
+    ExceptionFacts result;
+    for (size_t category = 1; category < exception_categories.size(); ++category)
+      result.arrivals[action].insert(category);
+    return result;
+  }
   void merge(const ExceptionFacts &other) {
     categories.insert(other.categories.begin(), other.categories.end());
     for (const auto &[input, possible] : other.inputs)
       inputs[input].insert(possible.begin(), possible.end());
+    for (const auto &[action, possible] : other.arrivals)
+      arrivals[action].insert(possible.begin(), possible.end());
   }
   std::set<size_t> possibilities() const {
     auto result = categories;
     for (const auto &[input, possible] : inputs) result.insert(possible.begin(), possible.end());
+    for (const auto &[action, possible] : arrivals) result.insert(possible.begin(), possible.end());
     return result;
   }
+  template <typename Keep> ExceptionFacts select(const Keep &keep) const {
+    auto result = *this;
+    std::erase_if(result.categories, [&](size_t category) { return !keep(category); });
+    const auto restrict = [&](auto &sources) {
+      for (auto &[origin, possible] : sources)
+        std::erase_if(possible, [&](size_t category) { return !keep(category); });
+      std::erase_if(sources, [](const auto &source) { return source.second.empty(); });
+    };
+    restrict(result.inputs); restrict(result.arrivals);
+    return result;
+  }
+  ExceptionFacts restricted(const std::set<size_t> &possible) const {
+    return select([&](size_t category) { return possible.contains(category); });
+  }
+  ExceptionFacts without(const std::set<size_t> &possible) const {
+    return select([&](size_t category) { return !possible.contains(category); });
+  }
   ExceptionFacts substitute(const std::vector<ExceptionFacts> &arguments) const {
-    ExceptionFacts result{categories};
-    for (const auto &[input, possible] : inputs) {
-      const auto &argument = arguments.at(input);
-      for (const auto category : argument.categories)
-        if (possible.contains(category)) result.categories.insert(category);
-      for (const auto &[origin, incoming] : argument.inputs)
-        for (const auto category : incoming)
-          if (possible.contains(category)) result.inputs[origin].insert(category);
+    ExceptionFacts result{categories}; result.arrivals = arrivals;
+    for (const auto &[input, possible] : inputs) result.merge(arguments.at(input).restricted(possible));
+    return result;
+  }
+  ExceptionFacts replace_arrival(std::optional<size_t> action, const ExceptionFacts &value) const {
+    auto result = *this;
+    if (const auto found = arrivals.find(action); found != arrivals.end()) {
+      result.arrivals.erase(action);
+      result.merge(value.restricted(found->second));
     }
     return result;
   }
@@ -303,6 +336,7 @@ public:
     Selections selections{};
     // Cleanup may require current bindings; its own installations restore before it returns.
     std::set<size_t> symbols{};
+    ExceptionFacts thrown = ExceptionFacts::arrival();
   };
   struct Path { std::uint64_t inputs; Completion completion; size_t queue; Effects effects{}; };
   struct Action { bool guarded = false; std::vector<Path> paths; };
@@ -326,8 +360,11 @@ private:
     }
     result.initialized.insert(second.initialized.begin(), second.initialized.end());
     result.selections.then(second.selections, result.initialized);
-    result.returned.then(second.returned);
+    auto returned = second.returned;
+    returned.value = returned.value.replace_arrival({}, first.thrown);
+    result.returned.then(returned);
     result.returned.initialize(result.initialized);
+    result.thrown = second.thrown.replace_arrival({}, first.thrown);
     return result;
   }
   static bool merge(std::map<size_t, Effects> &result, size_t completion, const Effects &effects) {
@@ -338,16 +375,18 @@ private:
     const auto previous_reads = known.reads;
     const auto previous_initialized = known.initialized;
     const auto previous_returned = known.returned;
+    const auto previous_thrown = known.thrown;
     const auto previous_selections = known.selections;
     const auto previous_symbols = known.symbols;
     known.symbols.insert(effects.symbols.begin(), effects.symbols.end());
     for (const auto &[read, before] : effects.reads) merge_read(known.reads, read, before);
     std::erase_if(known.initialized, [&](size_t id) { return !effects.initialized.contains(id); });
     known.returned.merge(effects.returned);
+    known.thrown.merge(effects.thrown);
     known.selections.merge(effects.selections);
     known.selections.resolve(known.initialized);
     return previous_reads != known.reads || previous_initialized != known.initialized ||
-        previous_returned != known.returned || previous_selections != known.selections || previous_symbols != known.symbols;
+        previous_returned != known.returned || previous_thrown != known.thrown || previous_selections != known.selections || previous_symbols != known.symbols;
   }
 public:
   static void merge_read(Reads &reads, size_t read, const ReadRequirement &before) {
@@ -412,8 +451,14 @@ public:
                 next = action.guarded && incoming.reason >= 2 ?
                     Completion{incoming.returned ? size_t{1} : size_t{0}, incoming.returned} : incoming;
               } else if (next.reason != 1) next.returned = next.returned || incoming.returned;
+              auto effects = path.effects;
+              if (next.reason < 3) effects.thrown.clear();
               for (const auto &[intermediate, nested] : solved_[path.queue][next.index()]) {
-                const auto invoked = compose(path.effects, nested);
+                auto invoked = compose(effects, nested);
+                const auto arrival = incoming.reason >= 3
+                    ? ExceptionFacts::arrival().restricted({incoming.reason - 3}) : ExceptionFacts{};
+                invoked.returned.value = invoked.returned.value.replace_arrival(*node.action, arrival);
+                invoked.thrown = invoked.thrown.replace_arrival(*node.action, arrival);
                 for (const auto &[value, previous] : solved_[node.previous.front()][intermediate])
                   changed = merge(result, value, compose(invoked, previous)) || changed;
               }
