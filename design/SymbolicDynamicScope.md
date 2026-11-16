@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 173 · Recorded: 2026-11-15 · Phase: language/application co-design.
+Design revision: 174 · Recorded: 2026-11-16 · Phase: language/application co-design.
 
 ## Design authority
+
+- **Definition mentions:** [H-481](../CHANGELOG.md#h-481)/[K-CALLABLE-MENTIONS-20261116](../CHANGELOG.md#k-callable-mentions-20261116) continues r173→174's existing symbol/value distinction and integrates [D-18-MENTION](DesignAuthorityRegistry.md#d-18-mention), D-18r105/P-419–P-421. Definition-bound callable names denote definitions; a required runtime view captures at materialization, including recursive mentions. Stored values preserve their captures. The candidate C-65/C-73/C-75 path serves charter §§3.2/3.3/4.3/6.3/8 through explicit identity, context and storage; acceptance is in D-18. Preserve perform/current invocation, lexical lookup, owner/access/init, function exclusion, type-only queries and default origins. H-481 confirms this bounded source rule; complete value-path/physical qualification and recursive source implementation remain separate. No new source-level executing-callable value, capture permission or mandatory allocation.
 
 - **Nominal ADT placement:** [H-478](../CHANGELOG.md#h-478)/[K-SINGLE-ADT-20261115](../CHANGELOG.md#k-single-adt-20261115) covers r172→173's alignment with [D-28-ADT](DesignAuthorityRegistry.md#d-28-adt), P-416–P-418. One CoD ADT retains nominal identity across lexical/regional placement; actual owners provide layout/access evidence. The candidate C-10/C-39/C-65/C-91 path serves charter §§3.1/4.3/6.3/7.1/8 through shared business types and checked storage. Preserve same-owner edges, bits classification, initialization, lifetimes and explicit graph transfer; no C++ regional-type stack allocation, capture/TLS extension, graph copy or runtime support is implied. Acceptance and unresolved physical protocols belong to D-28's composed cases. This scoped human decision and direct integration do not qualify the whole document or settle H-146's encoding mechanism.
 
@@ -824,6 +826,8 @@ Constructing a description and executing its requested operation remain distinct
 The SNN support layer may use functions for numerical work and explicit array edits, with procedures supplying ambient target/frame resources. This callable boundary selects no neural transition or learning algorithm. H-200/H-201's borrowing, local-bits and const-value contract needs its own source implementation; K-311 validates the existing explicit-reference memory subset only.
 
 ## Captured values and call behavior
+
+[D-18's definition-mention contract](RegionalClosures.md#definition-mentions-and-runtime-view-construction), confirmed by H-481, separates definition-bound names from stored callable values. A definition mention in a value context freshly materializes a view using its established lexical context and the current required symbolic bindings, including within recursion. Copying/adapting/reinstalling an existing view preserves its captures. Direct calls and type-only queries do not construct views merely by naming a definition. Ordinary lexical shadowing, bare symbol identity versus @symbol lookup, function effect exclusion and inherited default-expression contexts remain unchanged. Runtime capture payloads belong to materialized views; this introduces no special source-level executing-callable value.
 
 Let `D` be the caller's current symbolic bindings, and let a procedure value `p` retain its selected family/interpretation, lexical environment `L`, and captured values `C` indexed by its required symbols. These are semantic components, not a prescribed heap object layout.
 
