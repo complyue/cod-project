@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Expression predicates retain shared generic recursion without runtime state."""
+"""Predicate and call-presence proofs retain shared generic native bodies."""
 import datetime
 import hashlib
 import json
@@ -35,6 +35,26 @@ PREDICATES = {
     'stored_identity': '{{val same<-p is q;same&&q is not null}}',
     'stored_null_view': '{{ptr empty:T=null in O;p is not empty}}',
 }
+SOURCES = {name: SOURCE.replace('TEST', predicate) for name, predicate in PREDICATES.items()}
+CALL_SOURCE = '''
+using symbol "std:io" @print;
+using "std:exceptions" NullPointerException;
+func checked(ptr p:T in O,n:u64)->void throws NullPointerException where {T,owner O}{
+ if(n!=0u64){checked(p,n-1u64);}else{p;{}};
+}
+func choose(ptr p:T in O,fallback:T,n:u64)->const T where {T,owner O}{
+ ptr saved=p;
+ try{ INVOKE }catch(e:const NullPointerException){return fallback;};
+ return saved;
+}
+val x<-7,y<-8u64;
+ptr absent:i64=null in here;
+behave @print(choose(x,9,DEPTHu64));
+behave @print(choose(y,0u64,DEPTHu64));
+behave @print(choose(absent,9,DEPTHu64));
+'''
+SOURCES['call_presence'] = CALL_SOURCE.replace('INVOKE', 'checked(p,n);')
+SOURCES['call_presence_prepared'] = CALL_SOURCE.replace('INVOKE', '{{defer checked(p,n);p=null;}};')
 
 
 def main():
@@ -48,10 +68,10 @@ def main():
         source, ir = Path(directory)/'main.cod', Path(directory)/'main.ll'
         for general in (False, True):
             mode = 'general' if general else 'default'
-            for name, predicate in PREDICATES.items():
+            for name, program in SOURCES.items():
                 baseline = None
                 for depth, execute in ((3, True), (300, True), (3, False)):
-                    source.write_text(SOURCE.replace('TEST', predicate).replace('DEPTH', str(depth)))
+                    source.write_text(program.replace('DEPTH', str(depth)))
                     command = [str(COD), '--run' if execute else '--check', str(source), '--emit-llvm', str(ir)]
                     if general:
                         command.append('--no-specialize')
@@ -64,6 +84,8 @@ def main():
                     if baseline is None:
                         baseline = methods
                         record(key+'/shared_body', sum('.choose.' in method and method.endswith('.general') for method in methods) == 1, methods=list(methods))
+                        if name.startswith('call_presence'):
+                            record(key+'/shared_helper', sum('.checked.' in method and method.endswith('.general') for method in methods) == 1, methods=list(methods))
                         record(key+'/no_runtime_evidence', bool(text) and '@cod_lang_callable_create' not in text and '@cod_lang_callable_copy' not in text)
                     else:
                         record(key+'/stable_bodies', bool(methods) and methods == baseline, methods=list(methods))

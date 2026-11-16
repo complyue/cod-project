@@ -1,8 +1,10 @@
 # CoD source compiler validation
 
-Reference revision: 370 · Recorded: 2026-11-16 America/Los_Angeles.
+Reference revision: 371 · Recorded: 2026-11-16 America/Los_Angeles.
 
 ## Design authority
+
+- **Call-outcome presence:** [K-751](../../../CHANGELOG.md#k-751) continues the confirmed D-14r116 owner/null/access/initialization constraints, D-17r72 ordinary completion and checked-failure contract, D-18r107 call/capture scope and D-26r21 finite native coverage. Outcome summaries retain presence of incoming borrowed targets independently of payload initialization and mutable binding selections. Acceptance covers direct/value/recursive calls, preparation failures, saved references and ordinary cleanup in both native modes. Declared checked failures, owner/access constraints and the deferred-stack design boundary remain intact; boolean-result correlations and broader alias proofs remain separate.
 
 - **Identity guards:** [K-750](../../../CHANGELOG.md#k-750) continues D-28-IDENTITY/C-95/P-391–P-392, D-14r116 stable null/owner/access evidence and D-17r72’s unaffected checked-NPE scope under H-439–H-441/H-420/H-423. Selected reference identity supplies nullness relationships through the existing boolean evidence path; each refinement preserves operand snapshots and binding versions. Acceptance covers both native modes, owner distinctions, saved comparisons, mutation and initialization/access rejection. Broader locator/alias inference, key transport, storage layouts and the handler revision remain separate.
 
@@ -610,6 +612,7 @@ COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-reference-invocation-runti
 COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-nullable-reference-runtime-validation.json python3 tests/cod/language/nullable_reference_runtime_tests.py
 COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-borrowed-call-validation.json python3 tests/cod/language/borrowed_call_tests.py
 COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-effect-dependency-validation.json python3 tests/cod/language/effect_dependency_tests.py
+COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-call-presence-validation.json python3 tests/cod/language/call_presence_tests.py
 COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-borrowed-call-runtime-validation.json python3 tests/cod/language/borrowed_call_runtime_tests.py
 COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-call-initialization-validation.json python3 tests/cod/language/call_initialization_tests.py
 COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-call-initialization-runtime-validation.json python3 tests/cod/language/call_initialization_runtime_tests.py
@@ -664,6 +667,8 @@ Nullable-reference checks cover absent targets, raw tests, checked read/write ob
 Predicate-evidence checks cover composed null guards, result alternatives, selected builtin aliases, mutation invalidation, loop/defer execution and independent owner/access/initialization requirements. Generic recursion retains one shared body across scalar types, stable native bodies at greater depth and effect-free checking; expression proofs require no callable images.
 
 Borrowed-call checks cover actual owner equality, independent owners, caller-visible writes, callee-local rebinding, source-ordered preparation, nullable forwarding, readonly access, owner-name lookup and live result views. Recursive/generic cases exercise type evidence, shared-body null checks and explicit staging gaps. Return/finally/defer cases distinguish address retention, replacement and independent snapshots. Native instrumentation verifies prepared-address capture, late payload observation, failed registration, checked NPE, recursive result writes and exact release in both execution modes.
+
+Call-presence checks establish which incoming borrowed targets are non-null on each normal or exceptional helper outcome. Aliases and prepared ordinary arguments retain their selected target after source rebinding; caller-slot updates and prepared slot calls retain their distinct selection timing. Only guarantees common to all admitted callable targets survive. Presence alone cannot initialize a payload, grant writable access, validate a replacement target or waive a declared checked failure. Unchanged reference bindings retain their target snapshots through loop and cleanup analysis. Generic staging verifies shared helper bodies, stable native inventory across runtime depths and no callable images for the proof itself.
 
 Call-initialization checks cover initially unwritten inputs, required reads, writes through aliases, argument order, selected-target guarantees, rebinding, recursive/generic helpers and ptr-result forwarding. Completion cases distinguish normal writes, category-specific failures, finally/defer writes and replaced returns. Native instrumentation verifies actual setter invocation, denied registrations, initialization after cleanup, alias ordering and exact release without runtime initialization flags. Cleanup-selection checks cover selected reads/writes, overlap invalidation, action order, nested registration, conditional/loop queues, category-specific handlers and stable versus rebound prepared arguments. Cleanup-target checks cover post-cleanup target refinement, guarded nullable initialization, separate null-failure paths, declared exception coverage and reads before later writes. Native injection verifies retained writes after copy failure and absence of writes after registration failure; sanitizer execution covers nullable reads and ref construction after cleanup. Staging preserves frame storage and method inventory across deeper recursion and longer queues.
 

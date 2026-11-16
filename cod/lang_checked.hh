@@ -152,12 +152,13 @@ struct LexicalState {
   };
   std::vector<Scope> scopes{{0, {}}};
   std::set<size_t> bound_symbols, required_symbols;
-  std::set<size_t> bindings_available, available, initialized;
+  std::set<size_t> bindings_available, available, initialized, present;
   struct InputFacts {
     std::set<size_t> initialized;
     CleanupEquations::Selections selections;
     std::map<size_t, ExceptionFacts> exceptions;
     std::map<size_t, size_t> queues{{0, 0}};
+    std::set<size_t> present;
   };
   std::map<size_t, InputFacts> input_facts{{0, {}}};
   struct Requirement { std::uint64_t inputs; CleanupEquations::ReadRequirement before; };
@@ -188,6 +189,7 @@ struct CallEffects {
   // Operand summaries use incoming ordinals, independent of callee storage.
   std::set<std::pair<size_t, std::set<size_t>>> reads;
   std::map<size_t, std::set<size_t>> initialized;
+  std::map<size_t, std::set<size_t>> present;
   struct BindingResult {
     // Initial input targets and nullable input provenance; null_target denotes
     // an absent target introduced by the method itself.
@@ -1230,6 +1232,8 @@ class ScalarChecker {
   void refresh_targets(LexicalState &state, bool invalidate = true, const std::set<size_t> *changed = nullptr) {
     if (!proving_) return;
     for (auto &[binding, targets] : state.targets) {
+      // A copied reference keeps its selected target when its source is rebound.
+      if (!rebound_.contains(binding)) continue;
       if (changed && !changed->contains(binding)) continue;
       targets = possible_targets_.at(binding);
       state.null_sources[binding] = possible_null_sources_.at(binding);
@@ -1247,11 +1251,10 @@ class ScalarChecker {
       if (targets.contains(null_target) && state.null_sources[binding].empty()) state.null_sources[binding].insert(null_target);
       const auto owners = target_owners(targets);
       state.owners[binding].insert(owners.begin(), owners.end());
-      if (rebound_.contains(binding)) {
-        if (invalidate) invalidate_selection(state, binding);
-        state.target_versions[binding] = {next_target_version_++};
-      }
+      if (invalidate) invalidate_selection(state, binding);
+      state.target_versions[binding] = {next_target_version_++};
     }
+    refine_present(state);
   }
   void solve_targets() {
     bool changed;
@@ -1334,6 +1337,31 @@ class ScalarChecker {
     for (const auto place : places) result.insert(input_ordinal(place));
     return result;
   }
+  std::set<size_t> selected_input(const std::set<size_t> &targets) const {
+    auto places = targets;
+    places.erase(null_target);
+    if (places.size() != 1 || !storage(*places.begin()).borrowed) return {};
+    return places;
+  }
+  static void refine_present(LexicalState &state) {
+    for (auto &[binding, targets] : state.targets) {
+      const auto &sources = state.null_sources.at(binding);
+      if (!targets.contains(null_target) || targets.size() == 1 || sources.empty() ||
+          !std::all_of(sources.begin(), sources.end(), [&](size_t source) { return state.present.contains(source); })) continue;
+      targets.erase(null_target);
+      state.null_sources[binding].clear();
+      // Binding effects can already describe the next selection while these
+      // target bounds still describe the previous one. Refine only its bounds.
+    }
+  }
+  void record_presence(const std::set<size_t> &targets) {
+    if (!lexical_.live) return;
+    const auto present = selected_input(targets);
+    lexical_.present.insert(present.begin(), present.end());
+    for (const auto input : inputs(lexical_.inputs))
+      lexical_.input_facts.at(input).present.insert(present.begin(), present.end());
+    refine_present(lexical_);
+  }
   void observe_read(size_t place, const std::set<size_t> &known) {
     if (delayed_ || !storage(place).borrowed) return;
     std::set<size_t> external;
@@ -1380,6 +1408,8 @@ class ScalarChecker {
       state.initialized.insert(id);
       for (const auto input : inputs(state.inputs)) state.input_facts[input].initialized.insert(id);
     }
+    for (const auto input : inputs(state.inputs))
+      state.input_facts[input].present.insert(effects.present.begin(), effects.present.end());
     for (const auto input : inputs(state.inputs)) state.input_facts[input].selections.then(effects.selections, state.input_facts[input].initialized);
     for (const auto input : inputs(state.inputs))
       for (const auto &[target, value] : effects.payloads) state.input_facts[input].exceptions[target] = value;
@@ -1401,7 +1431,10 @@ class ScalarChecker {
     std::set<size_t> borrowed;
     for (size_t p = 0; p < method.source->parameters.size(); ++p)
       if (!method.source->parameters[p].owner.empty()) borrowed.insert(p);
-    for (const auto reason : call_reasons(method)) effects.initialized[reason] = borrowed;
+    for (const auto reason : call_reasons(method)) {
+      effects.initialized[reason] = borrowed;
+      effects.present[reason] = borrowed;
+    }
     for (const auto reason : call_reasons(method)) for (const auto parameter : borrowed)
       if (arguments[parameter].kind == Type::exception)
         effects.payloads[reason].try_emplace(parameter);
@@ -1461,6 +1494,11 @@ class ScalarChecker {
       auto &effect = effects.emplace(reason, CleanupEquations::Effects{reads,
           found == target.initialized.end() || slots ? std::set<size_t>{} : written_targets(found->second, views)}).first->second;
       effect.symbols = target.symbols;
+      if (!slots) if (const auto outcome = target.present.find(reason); outcome != target.present.end())
+        for (const auto parameter : outcome->second) {
+          const auto present = selected_input(views.at(parameter).targets);
+          effect.present.insert(present.begin(), present.end());
+        }
       if (found != target.initialized.end()) for (const auto parameter : found->second) {
         const auto selected = physical_slots(views.at(parameter).slots);
         const auto binding = slots ? (selected.size() == 1 ? std::optional<size_t>{*selected.begin()} : std::nullopt)
@@ -1560,12 +1598,17 @@ class ScalarChecker {
           const auto found = next.initialized.find(reason);
           known = found == next.initialized.end() ? std::set<size_t>{} : intersect(known, found->second);
         }
+        for (auto &[reason, known] : effects.present) {
+          const auto found = next.present.find(reason);
+          known = found == next.present.end() ? std::set<size_t>{} : intersect(known, found->second);
+        }
         effects.returned.merge(next.returned);
         for (const auto &[reason, payloads] : next.payloads)
           for (const auto &[parameter, value] : payloads) effects.payloads[reason][parameter].merge(value);
       }
     }
     for (const auto reason : call_reasons(contract)) effects.initialized.try_emplace(reason);
+    for (const auto reason : call_reasons(contract)) effects.present.try_emplace(reason);
     return effects;
   }
   void require_borrow_lifetime(const CheckedOperation &view, const Location &at, bool prepared) const {
@@ -1689,14 +1732,36 @@ class ScalarChecker {
       effects.payloads = payload_changes(entry_payloads, payloads);
     }
     if (!prepared) {
+      const auto refine_arguments = [&](size_t reason) {
+        // Slot methods can replace the incoming selections. Their output
+        // bindings have a separate summary; presence still names entry targets.
+        if (!summary.bindings.empty()) return;
+        if (const auto outcome = summary.present.find(reason); outcome != summary.present.end())
+          for (const auto parameter : outcome->second) {
+            const auto &view = views.at(parameter);
+            const auto binding = current_binding(view);
+            if (!binding) continue;
+            auto &targets = lexical_.targets.at(*binding);
+            // Postconditions refine a possible selection; they cannot remove a
+            // declared completion when its actual argument is definitely null.
+            if (targets.size() == 1 && targets.contains(null_target)) continue;
+            targets.erase(null_target);
+            lexical_.null_sources.at(*binding).clear();
+            lexical_.selections.refine(*binding, false);
+            for (const auto input : inputs(lexical_.inputs))
+              lexical_.input_facts.at(input).selections.refine(*binding, false);
+          }
+      };
       const auto before = lexical_;
       for (const auto &[reason, effects] : operation.invocation) if (reason) {
         lexical_ = before; apply_effects(lexical_, effects, expr.at);
         if (!summary.bindings.empty()) refresh_targets(lexical_, false);
+        refine_arguments(reason);
         note_abrupt(expr.at, reason >= 3 ? std::set<size_t>{reason - 3} : std::set<size_t>{}, {reason, false});
       }
       lexical_ = before; apply_effects(lexical_, operation.invocation.at(0), expr.at);
       if (!summary.bindings.empty()) refresh_targets(lexical_, false);
+      refine_arguments(0);
     }
     const auto result_owner = contract.owners.empty() ? 0 : contract.owners.back();
     if (result_owner) {
@@ -1753,6 +1818,8 @@ class ScalarChecker {
       state.input_facts.at(input).selections.resolve(state.input_facts.at(input).initialized);
       const auto &known = state.input_facts.at(input).initialized;
       state.initialized = first ? known : intersect(state.initialized, known);
+      const auto &present = state.input_facts.at(input).present;
+      state.present = first ? present : intersect(state.present, present);
       if (first) state.selections = state.input_facts.at(input).selections;
       else state.selections.merge(state.input_facts.at(input).selections);
       if (first) state.exceptions = state.input_facts.at(input).exceptions;
@@ -1760,6 +1827,7 @@ class ScalarChecker {
       first = false;
     }
     state.returned.initialize(state.initialized);
+    refine_present(state);
   }
   void join(const LexicalState &a, bool a_exits, const LexicalState &b, bool b_exits, const Location &at) {
     a_exits = a_exits || !a.live;
@@ -1799,6 +1867,7 @@ class ScalarChecker {
               facts.queues[scope] = cleanup_.join(cleanup_.known(facts.queues.at(scope), facts.initialized),
                                                   cleanup_.known(queue, other.initialized));
           facts.initialized = intersect(facts.initialized, other.initialized);
+          facts.present = intersect(facts.present, other.present);
           facts.selections.merge(other.selections);
           for (const auto &[place, value] : other.exceptions) facts.exceptions[place].merge(value);
         } else facts = other;
@@ -1857,11 +1926,13 @@ class ScalarChecker {
     if (const auto owned = scope_storage_.find(scope.id); owned != scope_storage_.end()) for (const auto id : owned->second) {
       state.available.erase(id);
       state.initialized.erase(id);
+      state.present.erase(id);
       std::erase_if(state.selections.targets, [&](const auto &entry) { return entry.second.places.contains(id); });
       state.exceptions.erase(id);
       state.predicates.erase(id);
       for (auto &[input, facts] : state.input_facts) {
         facts.initialized.erase(id);
+        facts.present.erase(id);
         std::erase_if(facts.selections.targets, [&](const auto &entry) { return entry.second.places.contains(id); });
         facts.exceptions.erase(id);
       }
@@ -1904,6 +1975,7 @@ class ScalarChecker {
     for (const auto input : inputs(lexical_.inputs)) lexical_.input_facts.at(input).selections.test(test.binding, null);
     if (!null) lexical_.null_sources.at(test.binding).clear();
     lexical_.live = lexical_.live && !targets.empty() && lexical_.selections.possible;
+    if (!null) record_presence(targets);
   }
   using Predicate = CheckedOperation::Predicate;
   static std::shared_ptr<const Predicate> constant_predicate(bool value) {
@@ -1995,13 +2067,15 @@ class ScalarChecker {
     }
   }
   void dereference(const CheckedOperation &view, const Location &at) {
-    if (!view.targets.contains(null_target)) return;
-    const auto before = lexical_;
-    if (view.binding) refine_test({*view.binding, view.selection_versions}, true);
-    note_abrupt(at, {exception_id(ExceptionCategory::null_pointer)});
-    lexical_ = before;
-    if (view.binding) refine_test({*view.binding, view.selection_versions}, false);
-    else if (view.targets.size() == 1) lexical_.live = false;
+    if (view.targets.contains(null_target)) {
+      const auto before = lexical_;
+      if (view.binding) refine_test({*view.binding, view.selection_versions}, true);
+      note_abrupt(at, {exception_id(ExceptionCategory::null_pointer)});
+      lexical_ = before;
+      if (view.binding) refine_test({*view.binding, view.selection_versions}, false);
+      else if (view.targets.size() == 1) lexical_.live = false;
+    }
+    record_presence(view.targets);
   }
   CheckedOperation finish_scope(CheckedOperation result, AbruptFlow &flow, AbruptFlow *outer,
                                 size_t scope, const Location &at) {
@@ -4440,6 +4514,8 @@ class ScalarChecker {
       for (const auto input : inputs(lexical_.inputs)) {
         const auto &known = normal.input_facts.at(input).initialized;
         lexical_.input_facts[input].initialized.insert(known.begin(), known.end());
+        const auto &present = normal.input_facts.at(input).present;
+        lexical_.input_facts[input].present.insert(present.begin(), present.end());
       }
       refresh_input_facts(lexical_);
     }
@@ -5381,7 +5457,7 @@ class ScalarChecker {
         lexical_.exceptions = incoming;
         lexical_.inputs = 1;
         lexical_.selections = {};
-        lexical_.input_facts = {{0, {lexical_.initialized, {}, incoming, {{cleanup_scope_, 0}}}}};
+        lexical_.input_facts = {{0, {lexical_.initialized, {}, incoming, {{cleanup_scope_, 0}}, lexical_.present}}};
         lexical_.requirements.clear();
         lexical_.returned = {};
         lexical_.live = true;
@@ -5397,6 +5473,7 @@ class ScalarChecker {
             CleanupEquations::Effects effects{{}, path.state.input_facts.at(input).initialized, path.state.returned, path.state.input_facts.at(input).selections};
             effects.symbols = path.state.required_symbols;
             effects.payload_writes = path.state.payload_writes;
+            effects.present = path.state.input_facts.at(input).present;
             effects.returned.initialize(effects.initialized);
             for (const auto &[target, value] : payload_changes(incoming, path.state.input_facts.at(input).exceptions))
               if (incoming.contains(target)) effects.payloads.emplace(target, value);
@@ -5636,6 +5713,9 @@ class ScalarChecker {
     for (const auto id : state.initialized) if (storage(id).borrowed) known.insert(input_ordinal(id));
     const auto [found, inserted] = observed_.initialized.emplace(reason, known);
     if (!inserted) found->second = intersect(found->second, known);
+    const auto present = input_ordinals(state.present);
+    const auto [presence, first_presence] = observed_.present.emplace(reason, present);
+    if (!first_presence) presence->second = intersect(presence->second, present);
     for (size_t p = 0; p < checking_instance_->frame.inputs.size(); ++p) {
       const auto place = checking_instance_->frame.inputs[p].place;
       if (!storage(place).borrowed || storage(place).type.kind != Type::exception) continue;
@@ -5729,7 +5809,10 @@ class ScalarChecker {
             if (!proving) { possible_targets_[binding].insert(null_target); possible_null_sources_[binding] = {id}; }
           }
         }
-        if (argument_mode(parameter) != ArgumentMode::borrowed_ptr) initialize(id);
+        if (argument_mode(parameter) != ArgumentMode::borrowed_ptr) {
+          initialize(id);
+          if (storage_->at(id).borrowed) record_presence({id});
+        }
         if (instance.arguments[p].kind == Type::exception) {
           ExceptionFacts value;
           value.inputs[p] = exception_possibilities(instance.arguments[p]);
@@ -5764,6 +5847,7 @@ class ScalarChecker {
     }
     instance.complete = validating_;
     for (const auto reason : call_reasons(*checking_method_)) observed_.initialized.try_emplace(reason);
+    for (const auto reason : call_reasons(*checking_method_)) observed_.present.try_emplace(reason);
     auto initial = initial_effects(*checking_method_, instance.arguments);
     for (const auto &[reason, payloads] : initial.payloads)
       for (const auto &[parameter, value] : payloads) observed_.payloads[reason].try_emplace(parameter, value);
@@ -5797,6 +5881,7 @@ class ScalarChecker {
       if (known.symbols != effects.symbols) { known.symbols = effects.symbols; changed = true; }
     } else {
       if (known.initialized != effects.initialized) { known.initialized = effects.initialized; changed = true; }
+      if (known.present != effects.present) { known.present = effects.present; changed = true; }
       auto returned = effects.returned;
       returned.value.merge(known.returned.value);
       if (known.returned != returned) { known.returned = std::move(returned); changed = true; }

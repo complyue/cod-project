@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-16 — Retain incoming-target presence across calls
+
+<a id="k-751"></a>
+**K-751 — Outcome-specific borrowed-target presence.** Agent continuity under H-420/H-423, D-14r116/C-65/P-258, D-17r72/C-63/P-235/P-236, D-18r107’s qualified call/capture scope and D-26r21/H-407: source370→371/registry766→767 preserves nullable reference selection, independent payload initialization, actual owners/access, prepared arguments and declared checked obligations. Immutable input presence composes through the existing dependency-directed call/completion summaries; unchanged reference snapshots survive source rebinding. Charter §§4.3/6.3/12 supports one checked source-to-native path without runtime proof state. Boolean-result correlations, broader alias relations, permanent representations and the revised deferred-stack integration remain separate. D-16 and unrelated qualified scopes continue. Baseline: `169901d66150dc7075160a0384fcda2cce92ad5b` at affected paths. No new source rule or human confirmation.
+
 ## 2026-11-16 — Integrate deferred-stack decisions with identity guards
 
 <a id="k-defer-stack-sync-20261116"></a>
