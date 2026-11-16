@@ -163,6 +163,9 @@ struct LexicalState {
   struct Requirement { std::uint64_t inputs; CleanupEquations::ReadRequirement before; };
   std::map<size_t, Requirement> requirements;
   std::map<size_t, ExceptionFacts> exceptions;
+  // Boolean payload snapshots retain the tested binding versions.
+  std::map<size_t, std::shared_ptr<const CheckedOperation::Predicate>> predicates;
+  std::set<size_t> payload_writes;
   std::map<size_t, std::set<size_t>> targets;
   std::map<size_t, std::set<size_t>> null_sources;
   std::map<size_t, std::set<size_t>> owners;
@@ -462,7 +465,7 @@ class ScalarChecker {
   struct LoopState {
     size_t first, last;
     std::set<size_t> bindings, rebound, expired, payloads, payload_origins;
-    bool unknown_payloads = false;
+    bool unknown_exception_payloads = false;
   };
   std::map<const Expression *, LoopState> loop_states_;
   std::vector<const Expression *> active_loops_;
@@ -1102,7 +1105,7 @@ class ScalarChecker {
     require_live_view(view, at);
     return view;
   }
-  bool mutable_exception_target(size_t place) const {
+  bool mutable_payload_target(size_t place) const {
     return storage(place).borrowed || !storage(place).read_only;
   }
   static ExceptionFacts stored_exceptions(size_t place, const Type &type,
@@ -1121,7 +1124,7 @@ class ScalarChecker {
     auto values = lexical_.exceptions;
     const auto seed = [&](size_t place) {
       const auto &target = storage(place);
-      if (target.type.kind == Type::exception && mutable_exception_target(place))
+      if (target.type.kind == Type::exception && mutable_payload_target(place))
         values[place] = ExceptionFacts::payload(place, action).restricted(exception_possibilities(target.type));
     };
     for (const auto place : lexical_.available) seed(place);
@@ -1189,6 +1192,34 @@ class ScalarChecker {
       write_exception_payloads(lexical_.input_facts[input].exceptions, target, categories);
     refresh_input_facts(lexical_);
   }
+  std::set<size_t> payload_targets(const CheckedOperation &target) const {
+    auto written = target.targets;
+    written.erase(null_target);
+    for (const auto place : lexical_.available)
+      if (std::any_of(target.targets.begin(), target.targets.end(), [&](size_t other) {
+            return other != null_target && borrowed_payload_alias(other, place);
+          })) written.insert(place);
+    return written;
+  }
+  static void invalidate_payloads(LexicalState &state, const std::set<size_t> &written) {
+    state.payload_writes.insert(written.begin(), written.end());
+    for (const auto place : written) state.predicates.erase(place);
+  }
+  std::shared_ptr<const CheckedOperation::Predicate> stored_predicate(const CheckedOperation &view) const {
+    if (view.type != Type::boolean) return {};
+    std::shared_ptr<const Predicate> result;
+    for (const auto place : view.targets) if (place != null_target) {
+      const auto found = lexical_.predicates.find(place);
+      if (found == lexical_.predicates.end()) return {};
+      result = result ? predicate(Predicate::Kind::alternatives, result, found->second) : found->second;
+    }
+    return result;
+  }
+  void write_predicate(const CheckedOperation &target, std::shared_ptr<const CheckedOperation::Predicate> proof) {
+    record_payload_write(target);
+    invalidate_payloads(lexical_, payload_targets(target));
+    if (target.type == Type::boolean && target.place && proof) lexical_.predicates[*target.place] = std::move(proof);
+  }
   void refresh_targets(LexicalState &state, bool invalidate = true, const std::set<size_t> *changed = nullptr) {
     if (!proving_) return;
     for (auto &[binding, targets] : state.targets) {
@@ -1241,8 +1272,8 @@ class ScalarChecker {
         for (const auto place : possible_targets_.at(origin)) if (place != null_target) loop.payloads.insert(place);
       const auto written = loop.payloads;
       for (size_t place = 0; place < storage_->size(); ++place) {
-        if (storage(place).type.kind != Type::exception) continue;
-        if ((loop.unknown_payloads && mutable_exception_target(place)) ||
+        if (storage(place).type.kind != Type::exception && storage(place).type != Type::boolean) continue;
+        if ((loop.unknown_exception_payloads && storage(place).type.kind == Type::exception && mutable_payload_target(place)) ||
             std::any_of(written.begin(), written.end(), [&](size_t target) { return borrowed_payload_alias(target, place); }))
           loop.payloads.insert(place);
       }
@@ -1314,6 +1345,7 @@ class ScalarChecker {
     refresh_input_facts(state);
     state.live = state.live && state.selections.possible;
     if (!state.live) return;
+    invalidate_payloads(state, effects.payload_writes);
     for (const auto symbol : effects.symbols) require_symbol(state, symbol, at);
     if (proving_) for (const auto &[read, before] : effects.reads) {
       const auto place = cleanup_.binding(read);
@@ -1609,13 +1641,27 @@ class ScalarChecker {
       for (auto &[reason, effect] : operation.invocation) effect.reads.insert(reads.begin(), reads.end());
     }
     for (auto &[reason, effects] : operation.invocation) {
+      for (size_t i = 0; i < arguments.size(); ++i) {
+        if (contract.owners.empty() || !contract.owners[i] || (!contract.const_views.empty() && contract.const_views[i])) continue;
+        auto target = views[i];
+        if (prepared_slots) {
+          target.targets.clear();
+          for (const auto slot : physical_slots(target.slots)) {
+            const auto &possible = possible_targets_.at(slot);
+            target.targets.insert(possible.begin(), possible.end());
+          }
+        }
+        const auto written = payload_targets(target);
+        effects.payload_writes.insert(written.begin(), written.end());
+        record_payload_write(target);
+      }
       auto payloads = entry_payloads;
       if (prepared_slots) {
         // These calls retain binding slots whose invocation-time selections
         // still need a payload/selection correlation proof.
         for (auto &[place, value] : payloads)
-          if (mutable_exception_target(place)) value = exception_possibilities(storage(place).type);
-        if (!proving_) for (const auto *loop : active_loops_) loop_states_.at(loop).unknown_payloads = true;
+          if (mutable_payload_target(place)) value = exception_possibilities(storage(place).type);
+        if (!proving_) for (const auto *loop : active_loops_) loop_states_.at(loop).unknown_exception_payloads = true;
       } else {
         // Publish simultaneous postconditions after weakening other possible
         // aliases. Sequential strong writes would lose same-target alternatives.
@@ -1723,6 +1769,16 @@ class ScalarChecker {
     lexical_.initialized = a_exits ? b.initialized : b_exits ? a.initialized : intersect(a.initialized, b.initialized);
     lexical_.returned = a_exits ? b.returned : a.returned;
     if (!a_exits && !b_exits) lexical_.returned.merge(b.returned);
+    lexical_.predicates = a_exits ? b.predicates : a.predicates;
+    lexical_.payload_writes = a_exits ? b.payload_writes : a.payload_writes;
+    if (!a_exits && !b_exits) {
+      for (auto it = lexical_.predicates.begin(); it != lexical_.predicates.end();) {
+        const auto other = b.predicates.find(it->first);
+        if (other == b.predicates.end()) it = lexical_.predicates.erase(it);
+        else { it->second = predicate(Predicate::Kind::alternatives, it->second, other->second); ++it; }
+      }
+      lexical_.payload_writes.insert(b.payload_writes.begin(), b.payload_writes.end());
+    }
     lexical_.input_facts = a_exits ? b.input_facts : a.input_facts;
     lexical_.requirements = a_exits ? b.requirements : a.requirements;
     if (!a_exits && !b_exits) {
@@ -1795,6 +1851,7 @@ class ScalarChecker {
       state.initialized.erase(id);
       std::erase_if(state.selections.targets, [&](const auto &entry) { return entry.second.places.contains(id); });
       state.exceptions.erase(id);
+      state.predicates.erase(id);
       for (auto &[input, facts] : state.input_facts) {
         facts.initialized.erase(id);
         std::erase_if(facts.selections.targets, [&](const auto &entry) { return entry.second.places.contains(id); });
@@ -1851,6 +1908,7 @@ class ScalarChecker {
   static std::shared_ptr<const Predicate> predicate(Predicate::Kind kind,
       std::shared_ptr<const Predicate> left, std::shared_ptr<const Predicate> right = {}) {
     if (!left && !right) return {};
+    if (kind == Predicate::Kind::alternatives && left == right) return left;
     return std::make_shared<const Predicate>(Predicate{kind, {}, std::move(left), std::move(right)});
   }
   void refine_predicate(const std::shared_ptr<const Predicate> &proof, bool value, const Location &at) {
@@ -4393,6 +4451,7 @@ class ScalarChecker {
         operation.exceptions.merge(categories);
       }
     }
+    if (read) operation.predicate = stored_predicate(operation);
     return operation;
   }
   CheckedOperation named_binding(const Expression &expr, size_t binding, const Type *expected = nullptr, bool read = true) {
@@ -4570,13 +4629,19 @@ class ScalarChecker {
           check_builtin_declarations(expr, arguments, operation, true, views);
           if (&expr != prepared_call_) {
             const auto left_exceptions = stored_exceptions(left), right_exceptions = stored_exceptions(right);
+            const auto left_predicate = stored_predicate(left), right_predicate = stored_predicate(right);
             write_exceptions(left, right_exceptions); write_exceptions(right, left_exceptions);
+            write_predicate(left, right_predicate); write_predicate(right, left_predicate);
           } else {
             const auto incoming = incoming_payloads();
             auto payloads = incoming;
             const auto left_exceptions = stored_exceptions(left, incoming), right_exceptions = stored_exceptions(right, incoming);
             write_exception_payloads(payloads, left, right_exceptions); write_exception_payloads(payloads, right, left_exceptions);
             operation.invocation[0].payloads = payload_changes(incoming, payloads);
+            const auto left_written = payload_targets(left), right_written = payload_targets(right);
+            auto &written = operation.invocation[0].payload_writes;
+            written.insert(left_written.begin(), left_written.end()); written.insert(right_written.begin(), right_written.end());
+            record_payload_write(left); record_payload_write(right);
           }
         }
         break;
@@ -4846,6 +4911,8 @@ class ScalarChecker {
         if (proving_) lexical_.expired_bindings.insert(loop.expired.begin(), loop.expired.end());
         for (const auto input : inputs(lexical_.inputs)) for (auto &[id, categories] : lexical_.input_facts[input].exceptions)
           if (!proving_ || loop.payloads.contains(id)) categories = exception_possibilities(storage(id).type);
+        if (!proving_) lexical_.predicates.clear();
+        else for (const auto place : loop.payloads) lexical_.predicates.erase(place);
         active_loops_.push_back(&expr);
       }
       checked_scope_owners_[&expr] = iteration_scope;
@@ -4926,7 +4993,10 @@ class ScalarChecker {
           CheckedOperation allocation;
           allocation.type = completes ? initial_type : Type{Type::never};
           allocation.initializes = initialized;
-          if (initialized) allocation.exceptions = operations.at(initializer.children[value_index].get()).exceptions;
+          if (initialized) {
+            const auto &value = operations.at(initializer.children[value_index].get());
+            allocation.exceptions = value.exceptions; allocation.predicate = predicate_of(value);
+          }
           operations[&initializer] = allocation;
         } else {
           const auto annotation = declaration->annotation ? resolve_local_type(*declaration->annotation, instance, declaration->at) : Type{};
@@ -4978,6 +5048,7 @@ class ScalarChecker {
             // The hidden place is reachable only after its value arm initializes it.
             initialize(*place);
             if (type.kind == Type::exception) assign_exceptions(*place, source.exceptions);
+            if (type == Type::boolean && source.predicate) lexical_.predicates[*place] = source.predicate;
             selected.targets.insert(*place);
             selected.owners.insert(storage(*place).scope);
           } else id = bind(declaration->text, type, selected.targets, read_only, false, expr.fixed_binding, declaration->at);
@@ -4988,6 +5059,7 @@ class ScalarChecker {
           bindings_->back().fixed = expr.fixed_binding;
           if (initialized && completes) initialize(*place);
           if (type.kind == Type::exception) assign_exceptions(*place, initialized ? source.exceptions : exception_possibilities(type));
+          if (type == Type::boolean && initialized && completes && source.predicate) lexical_.predicates[*place] = source.predicate;
         }
         bindings_->back().requires_initialized = expr.declaration_kind == "ref";
         bindings_->back().callable_value = callable_value;
@@ -5093,6 +5165,7 @@ class ScalarChecker {
         operation.initialized_target = selected.initialized_target;
         operation.captured_place = selected.captured_place;
         operation.exceptions = stored_exceptions(operation);
+        operation.predicate = stored_predicate(operation);
         operation.view = true;
         operation.binding = target.binding;
         operation.owners.clear(); operation.selection_versions.clear();
@@ -5127,6 +5200,8 @@ class ScalarChecker {
         auto payloads = incoming;
         write_exception_payloads(payloads, target, operations.at(expr.children[1].get()).exceptions);
         operation.invocation[0].payloads = payload_changes(incoming, payloads);
+        operation.invocation[0].payload_writes = payload_targets(target);
+        record_payload_write(target);
         break;
       }
       if (destination.kind == Type::procedure) note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
@@ -5142,6 +5217,8 @@ class ScalarChecker {
       operation.initialized_target = true;
       operation.exceptions = operations.at(expr.children[1].get()).exceptions;
       write_exceptions(target, operation.exceptions);
+      operation.predicate = predicate_of(operations.at(expr.children[1].get()));
+      write_predicate(target, operation.predicate);
       break;
     }
     case K::return_value: {
@@ -5238,6 +5315,8 @@ class ScalarChecker {
           if (std::any_of(before.scopes.begin(), before.scopes.end(), [&](const auto &scope) { return scope.id == catalog_storage_[place].scope; }))
             deferred_inputs_.insert(place);
         refresh_targets(lexical_);
+        lexical_.predicates.clear();
+        lexical_.payload_writes.clear();
         const auto incoming = incoming_payloads(action);
         lexical_.exceptions = incoming;
         lexical_.inputs = 1;
@@ -5257,6 +5336,7 @@ class ScalarChecker {
             const auto selected = std::uint64_t{1} << input;
             CleanupEquations::Effects effects{{}, path.state.input_facts.at(input).initialized, path.state.returned, path.state.input_facts.at(input).selections};
             effects.symbols = path.state.required_symbols;
+            effects.payload_writes = path.state.payload_writes;
             effects.returned.initialize(effects.initialized);
             for (const auto &[target, value] : payload_changes(incoming, path.state.input_facts.at(input).exceptions))
               if (incoming.contains(target)) effects.payloads.emplace(target, value);

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-16 — Retain stored null-test evidence
+
+<a id="k-748"></a>
+**K-748 — Boolean storage and mutation evidence.** Agent continuity under D-17r69/H-313/H-440/H-441/C-63/P-235/P-236 and D-14r116’s confirmed storage/alias scope: source365→366/registry760→761 preserves checked null access, stable tested bindings, independent initialization/owner/access obligations and ordered cleanup. Stored boolean snapshots retain existing expression proofs; shared possible-write footprints invalidate affected aliases across calls, loops and deferred actions even when a write preserves its provisional value. Charter §§3.1/3.3/5.3/6.3/8/12 supports inspectable, sound semantic evidence and native equivalence. Arbitrary helper-result correlations, delayed boolean postconditions, pending broader designs and D-16 remain unchanged. Baseline: `1da8accf933acfcbbace7337b632e54618ed83d5` at affected paths. No new syntax, runtime predicate representation or human confirmation.
+
 ## 2026-11-16 — Reconsider result evidence through its dependencies
 
 <a id="k-747"></a>

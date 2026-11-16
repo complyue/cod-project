@@ -376,6 +376,8 @@ public:
     bool unknown_thrown = false;
     // Omitted targets preserve their incoming payloads.
     std::map<size_t, ExceptionFacts> payloads{};
+    // A write can leave its postcondition unchanged and still invalidate a proof.
+    std::set<size_t> payload_writes{};
     template <typename Transform> void transform_values(const Transform &transform) {
       returned.value = transform(returned.value);
       thrown = transform(thrown);
@@ -395,6 +397,7 @@ private:
   Effects compose(const Effects &first, const Effects &second) const {
     auto result = first;
     result.symbols.insert(second.symbols.begin(), second.symbols.end());
+    result.payload_writes.insert(second.payload_writes.begin(), second.payload_writes.end());
     for (const auto &[read, known] : second.reads) if (!known.satisfied(reads_.at(read), first.initialized, first.selections)) {
       auto before = known;
       before.initialized.insert(first.initialized.begin(), first.initialized.end());
@@ -427,9 +430,11 @@ private:
     const auto previous_thrown = known.thrown;
     const auto previous_unknown_thrown = known.unknown_thrown;
     const auto previous_payloads = known.payloads;
+    const auto previous_payload_writes = known.payload_writes;
     const auto previous_selections = known.selections;
     const auto previous_symbols = known.symbols;
     known.symbols.insert(effects.symbols.begin(), effects.symbols.end());
+    known.payload_writes.insert(effects.payload_writes.begin(), effects.payload_writes.end());
     for (const auto &[read, before] : effects.reads) merge_read(known.reads, read, before);
     std::erase_if(known.initialized, [&](size_t id) { return !effects.initialized.contains(id); });
     known.returned.merge(effects.returned);
@@ -446,7 +451,7 @@ private:
     known.selections.resolve(known.initialized);
     return previous_reads != known.reads || previous_initialized != known.initialized ||
         previous_returned != known.returned || previous_thrown != known.thrown || previous_unknown_thrown != known.unknown_thrown || previous_payloads != known.payloads ||
-        previous_selections != known.selections || previous_symbols != known.symbols;
+        previous_selections != known.selections || previous_symbols != known.symbols || previous_payload_writes != known.payload_writes;
   }
 public:
   static void merge_read(Reads &reads, size_t read, const ReadRequirement &before) {
