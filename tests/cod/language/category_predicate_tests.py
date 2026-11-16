@@ -32,9 +32,7 @@ case('callable', body=LOCAL+'func action=classify;'+FIRST.replace('classify','ac
 case('captured_callable', body=LOCAL+'func action=classify;func relay[action](value:Exception)->bool{return action(value);};'+FIRST.replace('classify','relay')+TAIL+PRINT)
 case('borrowed_input', declarations=CLASSIFY.replace('value:Exception','ref value:const Exception in O').replace('->bool{','->bool where {owner O}{'))
 case('nullable_borrow', declarations=CLASSIFY.replace('value:Exception','ptr value:const Exception in O').replace('->bool{','->bool throws NullPointerException where {owner O}{if(value is null){value;{}}else{};'), body=LOCAL+'try{'+FIRST+TAIL+PRINT+'}catch(e:const NullPointerException){};')
-# Catching a failed input dereference adds a result unrelated to its payload.
-# Correlating that path with the caller's non-null input remains unproved.
-case('nullable_ingress_catch_unproved', declarations=CLASSIFY.replace('value:Exception','ptr value:const Exception in O').replace('->bool{','->bool where {owner O}{'), reject=True)
+case('nullable_ingress_catch', declarations=CLASSIFY.replace('value:Exception','ptr value:const Exception in O').replace('->bool{','->bool where {owner O}{'))
 case('saved_boolean', body=LOCAL+'val ready<-classify(payload),saved<-ready;ready<-false;'+FIRST.replace('classify(payload)','saved')+TAIL+PRINT)
 case('changed_boolean', body=LOCAL+'val ready<-classify(payload);ready<-false;'+FIRST.replace('classify(payload)','ready')+TAIL+PRINT, reject=True)
 case('saved_exception', body=LOCAL+'val saved:Exception<-payload;'+FIRST+'payload<-unchecked();'+TAIL.replace('throw payload','throw saved')+PRINT)

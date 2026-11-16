@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-16 — Nullable input predicate evidence
+
+<a id="k-760"></a>
+**K-760 — Preserve absence and correlated handler paths.** Source386→387/registry784→785 continues K-759's qualified D-14r116/P-258, D-17r82/P-235/P-236/P-280, D-18r107 and D-26r21/H-407 scope under H-420/H-423. Shared conditions carry immutable input absence and versioned null selections; lexical/catch joins retain alternatives and impossible predicate paths remain empty. Acceptance covers presence/category models, changed selections/payloads, recursive/callable/prepared calls, failed work, native sharing and exact release. Charter §§2/3.1–3.3/4.3/6.3/8/12, H-525, owner/access/init contracts and D-16 continue. Wider caller-slot/local-alias/multi-origin proofs and new runtime/ABI/return-history/queue contracts remain separate; no new source rule or human confirmation. Baseline: `31761dc9c8eb9108a066b5cfc8ba3cf7b71133e8`, affected compiler/source-reference paths.
+
 ## 2026-11-16 — Exception-derived predicate evidence
 
 <a id="k-759"></a>

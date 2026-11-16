@@ -361,6 +361,9 @@ public:
     std::set<std::pair<size_t, std::set<size_t>>> bindings{};
     SelectionConditions conditions{};
     std::set<ExceptionFacts> exceptions{};
+    // Absence of immutable borrowed inputs, independently of later rebinding.
+    std::set<size_t> absent{};
+    std::set<std::pair<size_t, std::set<size_t>>> absent_bindings{};
     bool operator==(const ConditionFacts &) const = default;
     auto operator<=>(const ConditionFacts &) const = default;
     void append(const ConditionFacts &other) {
@@ -370,11 +373,14 @@ public:
       bindings.insert(other.bindings.begin(), other.bindings.end());
       conditions.append(other.conditions);
       exceptions.insert(other.exceptions.begin(), other.exceptions.end());
+      absent.insert(other.absent.begin(), other.absent.end());
+      absent_bindings.insert(other.absent_bindings.begin(), other.absent_bindings.end());
     }
     bool implies(const ConditionFacts &other) const {
       const auto includes = [](const auto &a, const auto &b) { return std::includes(a.begin(), a.end(), b.begin(), b.end()); };
       return includes(present, other.present) && includes(inputs, other.inputs) &&
-          includes(payloads, other.payloads) && includes(bindings, other.bindings) && conditions.implies(other.conditions) && includes(exceptions, other.exceptions);
+          includes(payloads, other.payloads) && includes(bindings, other.bindings) && conditions.implies(other.conditions) &&
+          includes(exceptions, other.exceptions) && includes(absent, other.absent) && includes(absent_bindings, other.absent_bindings);
     }
   };
   // Keep finite alternatives until entry payloads have been substituted.
@@ -389,6 +395,8 @@ public:
       }) != truths.end();
     };
     if (!facts.conditions.possible || contradictory(facts.inputs) || contradictory(facts.payloads)) return;
+    if (std::any_of(facts.absent.begin(), facts.absent.end(), [&](size_t input) { return facts.present.contains(input); })) return;
+    if (std::any_of(facts.absent_bindings.begin(), facts.absent_bindings.end(), [&](const auto &binding) { return facts.bindings.contains(binding); })) return;
     // Filters constrain one immutable origin. Constant alternatives and
     // different sources do not establish an identity correlation.
     std::map<ExceptionFacts::Origin, std::set<size_t>> categories;

@@ -1288,8 +1288,10 @@ class ScalarChecker {
       lexical_ = input;
       predicate_paths(proof, result, at, [&] {
         for (auto facts : path_conditions(lexical_)) {
-          for (const auto &[binding, targets] : lexical_.targets)
-            if (!targets.empty() && !targets.contains(null_target)) facts.bindings.emplace(binding, lexical_.target_versions.at(binding));
+          for (const auto &[binding, targets] : lexical_.targets) if (!targets.empty()) {
+            if (!targets.contains(null_target)) facts.bindings.emplace(binding, lexical_.target_versions.at(binding));
+            else if (targets.size() == 1) facts.absent_bindings.emplace(binding, lexical_.target_versions.at(binding));
+          }
           CleanupEquations::add_condition(value[result], std::move(facts));
         }
       });
@@ -1351,8 +1353,15 @@ class ScalarChecker {
         if (!slots && view.binding) facts.bindings.emplace(*view.binding, view.selection_versions);
       }
       for (const auto &value : known.exceptions) facts.exceptions.insert(value.substitute(exceptions, true));
+      // Caller-slot invocations do not provide a stable selection snapshot here.
+      if (!slots) for (const auto parameter : known.absent) {
+        const auto &view = views.at(parameter);
+        if (view.binding) facts.absent_bindings.emplace(*view.binding, view.selection_versions);
+      }
       CleanupEquations::ConditionClauses clauses;
       CleanupEquations::add_condition(clauses, std::move(facts));
+      if (!slots) for (const auto parameter : known.absent)
+        clauses = CleanupEquations::conjoin_conditions(clauses, absence_conditions(views.at(parameter).null_sources));
       for (const auto &[parameter, input] : known.inputs)
         if (const auto found = inputs.at(parameter).find(input); found != inputs.at(parameter).end())
           clauses = CleanupEquations::conjoin_conditions(clauses, found->second);
@@ -1360,6 +1369,15 @@ class ScalarChecker {
       for (const auto &clause : clauses) CleanupEquations::add_condition(result, clause);
     }
     return result;
+  }
+  static CleanupEquations::ConditionClauses absence_conditions(const std::set<size_t> &sources) {
+    CleanupEquations::ConditionClauses clauses;
+    for (const auto source : sources) {
+      CleanupEquations::ConditionFacts facts;
+      if (source != null_target) facts.absent.insert(source);
+      CleanupEquations::add_condition(clauses, std::move(facts));
+    }
+    return clauses;
   }
   CleanupEquations::BooleanValue instantiate_boolean(const CleanupEquations::BooleanValue &value,
       const std::vector<CleanupEquations::BooleanValue> &inputs, const std::vector<CheckedOperation> &views, bool slots,
@@ -2058,6 +2076,7 @@ class ScalarChecker {
     for (const auto &known : clauses) {
       CleanupEquations::ConditionFacts facts; facts.inputs = known.inputs;
       if (presence) facts.present = input_ordinals(known.present);
+      facts.absent = input_ordinals(known.absent);
       for (const auto &value : known.exceptions) {
         ExceptionFacts retained;
         for (const auto &[origin, categories] : value.terms) {
@@ -2162,9 +2181,9 @@ class ScalarChecker {
     lexical_.selection_conditions = a_exits ? b.selection_conditions : a.selection_conditions;
     lexical_.exception_conditions = a_exits ? b.exception_conditions : a.exception_conditions;
     lexical_.uninitialized = a_exits ? b.uninitialized : a.uninitialized;
-    lexical_.predicate_conditions = a_exits ? b.predicate_conditions : b_exits ? a.predicate_conditions
-        : CleanupEquations::ConditionClauses{CleanupEquations::ConditionFacts{}};
+    lexical_.predicate_conditions = a_exits ? path_conditions(b) : path_conditions(a);
     if (!a_exits && !b_exits) {
+      for (const auto &facts : path_conditions(b)) CleanupEquations::add_condition(lexical_.predicate_conditions, facts);
       std::set<size_t> candidates = a.initialized;
       candidates.insert(b.initialized.begin(), b.initialized.end());
       for (const auto &[place, conditions] : a.uninitialized) candidates.insert(place);
@@ -2326,12 +2345,18 @@ class ScalarChecker {
     if (!lexical_.targets.contains(test.binding) || lexical_.target_versions.at(test.binding) != test.versions) return;
     auto &targets = lexical_.targets.at(test.binding);
     const bool null = value == test.null_when_true;
+    CleanupEquations::ConditionFacts tested;
+    (null ? tested.absent_bindings : tested.bindings).emplace(test.binding, test.versions);
+    lexical_.predicate_conditions = CleanupEquations::conjoin_conditions(lexical_.predicate_conditions, {tested});
+    if (null) lexical_.predicate_conditions = CleanupEquations::conjoin_conditions(lexical_.predicate_conditions,
+        absence_conditions(lexical_.null_sources.at(test.binding)));
     std::erase_if(targets, [&](size_t place) { return (place == null_target) != null; });
     lexical_.selections.test(test.binding, null);
     for (const auto input : inputs(lexical_.inputs)) lexical_.input_facts.at(input).selections.test(test.binding, null);
     if (!null) lexical_.null_sources.at(test.binding).clear();
     lexical_.live = lexical_.live && !targets.empty() && lexical_.selections.possible;
     if (!null) record_presence(targets);
+    lexical_.live = lexical_.live && !path_conditions(lexical_).empty();
   }
   using Predicate = CheckedOperation::Predicate;
   static std::shared_ptr<const Predicate> constant_predicate(bool value) {
@@ -2426,8 +2451,12 @@ class ScalarChecker {
       lexical_.boolean_payloads.insert(facts.payloads.begin(), facts.payloads.end());
       lexical_.selection_conditions.append(facts.conditions);
       lexical_.exception_conditions.insert(facts.exceptions.begin(), facts.exceptions.end());
+      CleanupEquations::ConditionFacts absence; absence.absent = facts.absent;
+      lexical_.predicate_conditions = CleanupEquations::conjoin_conditions(lexical_.predicate_conditions, {absence});
       lexical_.live = lexical_.live && lexical_.selection_conditions.possible;
       for (const auto &[binding, versions] : facts.bindings) refine_test({binding, versions}, false);
+      for (const auto &[binding, versions] : facts.absent_bindings) refine_test({binding, versions}, true);
+      lexical_.live = lexical_.live && !path_conditions(lexical_).empty();
       visit();
     }
     lexical_ = before;
@@ -2443,7 +2472,10 @@ class ScalarChecker {
     if (joined) {
       lexical_ = std::move(*joined);
       lexical_.predicate_conditions = std::move(conditions);
-    } else lexical_.live = false;
+    } else {
+      lexical_.live = false;
+      lexical_.predicate_conditions.clear();
+    }
   }
   void refine(const Expression &expr, bool value, const std::map<const Expression *, CheckedOperation> &operations) {
     const auto proof = predicate_of(operations.at(&expr));
@@ -6370,7 +6402,7 @@ class ScalarChecker {
         throw std::logic_error("unresolved cleanup exception origin in borrowed payload");
     const auto resolved_boolean = [](const auto &value) {
       for (const auto &[truth, clauses] : value) for (const auto &facts : clauses)
-        if (!facts.payloads.empty() || !facts.bindings.empty() || !facts.conditions.terms.empty() ||
+        if (!facts.payloads.empty() || !facts.bindings.empty() || !facts.absent_bindings.empty() || !facts.conditions.terms.empty() ||
             std::any_of(facts.exceptions.begin(), facts.exceptions.end(), [](const auto &value) { return value.unresolved(); }))
         throw std::logic_error("unresolved cleanup boolean origin in callable summary");
     };
