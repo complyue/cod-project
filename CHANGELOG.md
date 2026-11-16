@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-16 — Reconcile callable construction with the synchronized decision
+
+<a id="k-743"></a>
+**K-743 — Apply H-481 to lexical construction context.** Agent continuity, source359→360/registry754→755; D-18r105/D-10r174 remain unchanged. The current project user directs the pending question to the design synchronization: “参考设计决策线程即将发来的同步内容，包含相关决策更新”. The relay from chat `01a1e3b0-18b1-7e01-933e-5052a696b59d` identifies committed `6038adc2f9346c3c838195ea3813170dcd1a600e:design/RegionalClosures.md` and excludes uncommitted work. Under H-481 and H-329/H-331/H-342/H-344/P-297/P-301/P-331, fresh construction copies required lexical values through established binding identities; an earlier stored view remains independent, and escaped reconstruction uses retained dependencies. Current required symbolic bindings refresh. C-65/C-73/C-75/P-419–P-421 and charter §§3.2/3.3/4.3/6.3/8 preserve explicit identity, complete values and valid lifetimes. This records application of the synchronized rule, not a new human approval, executing-self value, lexical-cell capture, ABI or compiler-support claim. Local/recursive construction remains implementation work. Baseline: `4d6009db5418286044dd9e91a0bef4817b935376` at affected paths.
+
 ## 2026-11-16 — Resolve cleanup failure categories
 
 <a id="k-742"></a>
