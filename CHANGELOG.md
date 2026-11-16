@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-16 — Selected-reference equality proofs
+
+<a id="k-764"></a>
+**K-764 — Carry observed reference equality through shared proof boundaries.** Source391→392/registry789→790 continues K-763 and D-28-IDENTITY/C-95/P-391–P-392 under H-439–H-441/H-420/H-423. Immutable selection equalities compose with Boolean/call summaries, preceding-write obligations and branch joins without merging binding slots or capabilities. Acceptance covers saved/transitive guards, generic/recursive/callable and borrowed-output paths, ordered snapshots, failed work, cleanup/loops, native sharing and exact release. Preserve qualified D-14r116/P-258, D-17r83/P-235/P-236/P-280/H-525, D-18r107, confirmed D-23r17 results, D-26r21/H-407 and charter §§2/3.1–3.3/4.3/6.3/8/12. Source exclusions for recursive materialization are reconciled with H-481's implemented contract. Wider caller-slot/multi-origin proofs, D-16 and new runtime/ABI/return-inspection/queue scopes remain separate. Baseline: `4122d591914f4f6e5a05c1c92f6a501d7a4d2d48`, affected compiler/source-reference paths. No new semantic decision or human confirmation.
+
 ## 2026-11-16 — Returned selection initialization
 
 <a id="k-763"></a>

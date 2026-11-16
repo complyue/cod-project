@@ -884,6 +884,11 @@ class ScalarChecker {
     const auto other = selection_sources(right); sources.insert(other.begin(), other.end());
     return new_selection_identity(std::move(sources));
   }
+  static bool same_selected_reference(const CheckedOperation &left, const CheckedOperation &right) {
+    return (left.selection_identity && left.selection_identity == right.selection_identity) ||
+        (left.binding && left.binding == right.binding && !left.selection_versions.empty() &&
+         left.selection_versions == right.selection_versions);
+  }
   size_t bind(const std::string &name, const Type &type, const std::set<size_t> &targets,
               bool read_only, bool value_binding, bool fixed, const Location &at, std::optional<size_t> alias = {},
               bool source_declaration = true) {
@@ -1395,6 +1400,12 @@ class ScalarChecker {
         if (!slots && view.binding) facts.bindings.emplace(*view.binding, view.selection_versions);
       }
       for (const auto &value : known.exceptions) facts.exceptions.insert(value.substitute(exceptions, true));
+      if (!slots) for (const auto &group : known.same_inputs) {
+        std::set<size_t> selections;
+        for (const auto parameter : group)
+          if (const auto identity = views.at(parameter).selection_identity) selections.insert(*identity);
+        if (selections.size() > 1) facts.same_selections.insert(std::move(selections));
+      }
       // Caller-slot invocations do not provide a stable selection snapshot here.
       if (!slots) for (const auto parameter : known.absent) {
         const auto &view = views.at(parameter);
@@ -1746,8 +1757,8 @@ class ScalarChecker {
         continue;
       }
       if (view.initialized_target) continue;
-      const bool same_selection = view.binding && std::any_of(before.begin(), before.end(), [&](size_t other) {
-        return view.binding == views.at(other).binding && view.selection_versions == views.at(other).selection_versions;
+      const bool same_selection = std::any_of(before.begin(), before.end(), [&](size_t other) {
+        return same_selected_reference(view, views.at(other));
       });
       if (same_selection) continue;
       const auto known = written_targets(before, views);
@@ -2143,6 +2154,14 @@ class ScalarChecker {
     CleanupEquations::ConditionClauses result;
     for (const auto &known : clauses) {
       CleanupEquations::ConditionFacts facts; facts.inputs = known.inputs;
+      for (const auto &group : known.same_selections) {
+        std::set<size_t> parameters;
+        for (const auto identity : group) {
+          const auto &sources = selection_sources_.at(identity);
+          if (sources.size() == 1 && !sources.contains(null_target)) parameters.insert(*sources.begin());
+        }
+        if (parameters.size() > 1) facts.same_inputs.insert(std::move(parameters));
+      }
       if (presence) facts.present = input_ordinals(known.present);
       facts.absent = input_ordinals(known.absent);
       for (const auto &value : known.exceptions) {
@@ -2336,10 +2355,19 @@ class ScalarChecker {
     lexical_.selection_identities = a_exits ? b.selection_identities : a.selection_identities;
     if (!a_exits && !b_exits) {
       std::map<std::pair<size_t, size_t>, size_t> joined;
+      const auto equivalent = [](size_t left, size_t right, const auto &paths) {
+        return !paths.empty() && std::all_of(paths.begin(), paths.end(), [&](const auto &facts) {
+          return std::any_of(facts.same_selections.begin(), facts.same_selections.end(), [&](const auto &group) {
+            return group.contains(left) && group.contains(right);
+          });
+        });
+      };
       for (const auto &[binding, right] : b.selection_identities) {
         const auto left = a.selection_identities.find(binding);
         if (left == a.selection_identities.end()) { lexical_.selection_identities[binding] = new_selection_identity(); continue; }
         if (left->second == right) continue;
+        if (equivalent(left->second, right, left_paths)) { lexical_.selection_identities[binding] = right; continue; }
+        if (equivalent(left->second, right, right_paths)) continue;
         const auto key = std::pair{left->second, right};
         if (!joined.contains(key)) joined[key] = merge_selection_identities(left->second, right);
         lexical_.selection_identities[binding] = joined.at(key);
@@ -2471,6 +2499,19 @@ class ScalarChecker {
     }
     for (const auto &[binding, versions] : present) refine_test({binding, versions}, false);
     for (const auto &[binding, versions] : absent) refine_test({binding, versions}, true);
+    auto equal = paths.begin()->same_selections;
+    for (const auto &facts : paths) {
+      std::set<std::set<size_t>> shared;
+      for (const auto &group : equal) for (const auto &other : facts.same_selections) {
+        auto common = intersect(group, other);
+        if (common.size() > 1) shared.insert(std::move(common));
+      }
+      equal = std::move(shared);
+    }
+    for (const auto &group : equal)
+      for (auto &[binding, identity] : lexical_.selection_identities)
+        if (group.contains(identity)) identity = *group.begin();
+    if (!equal.empty()) refresh_input_facts(lexical_);
   }
   using Predicate = CheckedOperation::Predicate;
   static std::shared_ptr<const Predicate> constant_predicate(bool value) {
@@ -2523,12 +2564,21 @@ class ScalarChecker {
     const auto nulls = predicate(Predicate::Kind::conjunction, lhs_null, rhs_null);
     const auto nonnulls = predicate(Predicate::Kind::conjunction,
         predicate(Predicate::Kind::negation, lhs_null), predicate(Predicate::Kind::negation, rhs_null));
-    // Null identity needs equal actual owners. Non-null locator equality stays
-    // unknown; the predicate records only necessary nullness relationships.
-    return predicate(Predicate::Kind::disjunction,
+    // The comparison observes immutable selections, including old values whose
+    // source bindings were changed while preparing the other operand.
+    auto relation = predicate(Predicate::Kind::disjunction,
         predicate(Predicate::Kind::conjunction, nulls,
             owners == OwnerMatch::satisfied ? constant_predicate(true) : nullptr),
         predicate(Predicate::Kind::conjunction, nonnulls, {}));
+    if (!left.selection_identity || !right.selection_identity || left.selection_identity == right.selection_identity) return relation;
+    auto result = relation ? std::make_shared<Predicate>(*relation) : std::make_shared<Predicate>();
+    if (!relation) result->kind = Predicate::Kind::presence;
+    CleanupEquations::ConditionFacts equal;
+    equal.same_selections.insert({*left.selection_identity, *right.selection_identity});
+    auto &clauses = result->results[true];
+    if (clauses.empty() && !result->complete_results) clauses.insert(CleanupEquations::ConditionFacts{});
+    clauses = CleanupEquations::conjoin_conditions(clauses, {equal});
+    return result;
   }
   void predicate_paths(const std::shared_ptr<const Predicate> &proof, bool value, const Location &at,
       const std::function<void()> &next) {
@@ -6545,7 +6595,7 @@ class ScalarChecker {
         throw std::logic_error("unresolved cleanup exception origin in borrowed payload");
     const auto resolved_boolean = [](const auto &value) {
       for (const auto &[truth, clauses] : value) for (const auto &facts : clauses)
-        if (!facts.payloads.empty() || !facts.bindings.empty() || !facts.absent_bindings.empty() || !facts.same_bindings.empty() || !facts.conditions.terms.empty() ||
+        if (!facts.payloads.empty() || !facts.bindings.empty() || !facts.absent_bindings.empty() || !facts.same_bindings.empty() || !facts.same_selections.empty() || !facts.conditions.terms.empty() ||
             std::any_of(facts.exceptions.begin(), facts.exceptions.end(), [](const auto &value) { return value.unresolved(); }))
         throw std::logic_error("unresolved cleanup boolean origin in callable summary");
     };

@@ -367,6 +367,8 @@ public:
     std::set<BindingSnapshot> absent_bindings{};
     // Equal observed reference values do not alias their mutable binding slots.
     std::set<std::set<BindingSnapshot>> same_bindings{};
+    // Local immutable selections, normalized to formal inputs across calls.
+    std::set<std::set<size_t>> same_selections{}, same_inputs{};
     bool operator==(const ConditionFacts &) const = default;
     auto operator<=>(const ConditionFacts &) const = default;
     void append(const ConditionFacts &other) {
@@ -379,17 +381,24 @@ public:
       absent.insert(other.absent.begin(), other.absent.end());
       absent_bindings.insert(other.absent_bindings.begin(), other.absent_bindings.end());
       same_bindings.insert(other.same_bindings.begin(), other.same_bindings.end());
+      same_selections.insert(other.same_selections.begin(), other.same_selections.end());
+      same_inputs.insert(other.same_inputs.begin(), other.same_inputs.end());
     }
-    void resolve_bindings() {
-      std::set<std::set<BindingSnapshot>> groups;
-      for (auto group : same_bindings) {
+    template <typename T> static void close_equalities(std::set<std::set<T>> &relations) {
+      std::set<std::set<T>> groups;
+      for (auto group : relations) {
         for (auto it = groups.begin(); it != groups.end();) {
           if (std::none_of(group.begin(), group.end(), [&](const auto &value) { return it->contains(value); })) { ++it; continue; }
           group.insert(it->begin(), it->end()); it = groups.erase(it);
         }
         if (group.size() > 1) groups.insert(std::move(group));
       }
-      same_bindings = std::move(groups);
+      relations = std::move(groups);
+    }
+    void resolve_bindings() {
+      close_equalities(same_bindings);
+      close_equalities(same_selections);
+      close_equalities(same_inputs);
       for (const auto &group : same_bindings) {
         if (std::any_of(group.begin(), group.end(), [&](const auto &value) { return bindings.contains(value); }))
           bindings.insert(group.begin(), group.end());
@@ -399,12 +408,16 @@ public:
     }
     bool implies(const ConditionFacts &other) const {
       const auto includes = [](const auto &a, const auto &b) { return std::includes(a.begin(), a.end(), b.begin(), b.end()); };
+      const auto implies_equalities = [&](const auto &known, const auto &required) {
+        return std::all_of(required.begin(), required.end(), [&](const auto &group) {
+          return std::any_of(known.begin(), known.end(), [&](const auto &facts) { return includes(facts, group); });
+        });
+      };
       return includes(present, other.present) && includes(inputs, other.inputs) &&
           includes(payloads, other.payloads) && includes(bindings, other.bindings) && conditions.implies(other.conditions) &&
           includes(exceptions, other.exceptions) && includes(absent, other.absent) && includes(absent_bindings, other.absent_bindings) &&
-          std::all_of(other.same_bindings.begin(), other.same_bindings.end(), [&](const auto &group) {
-            return std::any_of(same_bindings.begin(), same_bindings.end(), [&](const auto &known) { return includes(known, group); });
-          });
+          implies_equalities(same_bindings, other.same_bindings) &&
+          implies_equalities(same_selections, other.same_selections) && implies_equalities(same_inputs, other.same_inputs);
     }
   };
   // Keep finite alternatives until entry payloads have been substituted.
