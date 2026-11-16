@@ -187,6 +187,10 @@ struct CallEffects {
     bool operator==(const BindingResult &) const = default;
   };
   std::map<size_t, std::map<size_t, BindingResult>> bindings;
+  // Postconditions describe the original borrowed targets, not local parameter
+  // bindings after rebinding. Values refer to argument snapshots at call entry.
+  // Empty provisional facts do not remove declared completion paths.
+  std::map<size_t, std::map<size_t, ExceptionFacts>> payloads;
   CleanupEquations::Returned returned;
   std::set<size_t> symbols; // Required current symbol identities, not operand positions.
 };
@@ -1239,6 +1243,9 @@ class ScalarChecker {
     for (size_t p = 0; p < method.source->parameters.size(); ++p)
       if (!method.source->parameters[p].owner.empty()) borrowed.insert(p);
     for (const auto reason : call_reasons(method)) effects.initialized[reason] = borrowed;
+    for (const auto reason : call_reasons(method)) for (const auto parameter : borrowed)
+      if (arguments[parameter].kind == Type::exception)
+        effects.payloads[reason].try_emplace(parameter);
     if (caller_bindings(method)) for (const auto reason : call_reasons(method))
       for (size_t p = 0; p < arguments.size(); ++p) {
         auto &targets = effects.bindings[reason][p];
@@ -1394,6 +1401,8 @@ class ScalarChecker {
           known = found == next.initialized.end() ? std::set<size_t>{} : intersect(known, found->second);
         }
         effects.returned.merge(next.returned);
+        for (const auto &[reason, payloads] : next.payloads)
+          for (const auto &[parameter, value] : payloads) effects.payloads[reason][parameter].merge(value);
       }
     }
     for (const auto reason : call_reasons(contract)) effects.initialized.try_emplace(reason);
@@ -1411,7 +1420,7 @@ class ScalarChecker {
       const std::set<size_t> &reasons, const std::vector<Type> &arguments,
       const std::vector<CheckedOperation> &views, CheckedOperation &operation, bool read, bool discard, size_t offset = 0) {
     std::vector<ExceptionFacts> exception_inputs;
-    if (contract.target->kind == Type::exception) {
+    if (contract.target->kind == Type::exception || !summary.payloads.empty()) {
       exception_inputs.reserve(arguments.size());
       for (size_t i = 0; i < arguments.size(); ++i) {
         const bool borrowed = !contract.owners.empty() && contract.owners[i];
@@ -1436,7 +1445,7 @@ class ScalarChecker {
       if (!readonly) for (const auto place : view.targets) if (place != null_target && storage(place).captured)
         implementation_gap(expr.children[i + offset]->at, "writable borrowing of a captured callable payload");
       if (arguments[i] != contract.parameters[i]) implementation_gap(expr.children[i + offset]->at, "borrowed exception upcasts");
-      if (!readonly) write_exceptions(view, exception_possibilities(view.type));
+      if (!readonly && &expr == prepared_call_) write_exceptions(view, exception_possibilities(view.type));
     }
     operation.type = *contract.target;
     if (operation.type.kind == Type::exception)
@@ -1479,13 +1488,31 @@ class ScalarChecker {
       for (auto &[reason, effect] : operation.invocation) effect.reads.insert(reads.begin(), reads.end());
     }
     if (&expr != prepared_call_) {
+      const auto payloads = [&](size_t reason) {
+        // Publish simultaneous postconditions after weakening other possible
+        // aliases. Sequential strong writes would lose same-target alternatives.
+        std::map<size_t, ExceptionFacts> definite;
+        for (size_t i = 0; i < arguments.size(); ++i) {
+          if (arguments[i].kind != Type::exception || contract.owners.empty() || !contract.owners[i]) continue;
+          auto value = ExceptionFacts{exception_possibilities(arguments[i])};
+          const auto outcome = summary.payloads.find(reason);
+          if (outcome != summary.payloads.end() && outcome->second.contains(i))
+            value = outcome->second.at(i).substitute(exception_inputs);
+          else if (!contract.const_views.empty() && contract.const_views[i]) continue;
+          write_exceptions(views[i], value);
+          if (views[i].place) definite[*views[i].place].merge(value);
+        }
+        for (auto &[place, value] : definite) lexical_.exceptions[place] = std::move(value);
+      };
       const auto before = lexical_;
       for (const auto &[reason, effects] : operation.invocation) if (reason) {
         lexical_ = before; apply_effects(lexical_, effects, expr.at);
+        payloads(reason);
         if (!summary.bindings.empty()) refresh_targets(lexical_, false);
         note_abrupt(expr.at, reason >= 3 ? std::set<size_t>{reason - 3} : std::set<size_t>{}, {reason, false});
       }
       lexical_ = before; apply_effects(lexical_, operation.invocation.at(0), expr.at);
+      payloads(0);
       if (!summary.bindings.empty()) refresh_targets(lexical_, false);
     }
     const auto result_owner = contract.owners.empty() ? 0 : contract.owners.back();
@@ -5102,6 +5129,13 @@ class ScalarChecker {
     const auto [found, inserted] = observed_.initialized.emplace(reason, known);
     if (!inserted) found->second = intersect(found->second, known);
     for (size_t p = 0; p < checking_instance_->frame.inputs.size(); ++p) {
+      const auto place = checking_instance_->frame.inputs[p].place;
+      if (!storage(place).borrowed || storage(place).type.kind != Type::exception) continue;
+      const auto value = state.exceptions.find(place);
+      observed_.payloads[reason][p].merge(value == state.exceptions.end()
+          ? ExceptionFacts{exception_possibilities(storage(place).type)} : value->second);
+    }
+    for (size_t p = 0; p < checking_instance_->frame.inputs.size(); ++p) {
       const auto &input = checking_instance_->frame.inputs[p];
       if (!input.binding_slot) continue;
       const auto [result, first] = observed_.bindings[reason].try_emplace(p);
@@ -5219,10 +5253,12 @@ class ScalarChecker {
     }
     instance.complete = validating_;
     for (const auto reason : call_reasons(*checking_method_)) observed_.initialized.try_emplace(reason);
+    auto initial = initial_effects(*checking_method_, instance.arguments);
+    for (const auto &[reason, payloads] : initial.payloads)
+      for (const auto &[parameter, value] : payloads) observed_.payloads[reason].try_emplace(parameter, value);
     if (caller_bindings(*checking_method_)) {
       // Recursive closure retains conservative absent outcomes, while a slot
       // with no possible mutation preserves its entry selection on every exit.
-      auto initial = initial_effects(*checking_method_, instance.arguments);
       for (auto &[reason, targets] : initial.bindings) {
         for (auto &[parameter, result] : targets) {
           const auto &input = instance.frame.inputs.at(parameter);
@@ -5237,6 +5273,8 @@ class ScalarChecker {
     }
     if (!observed_.returned.value.arrivals.empty())
       throw std::logic_error("unresolved cleanup exception origin in callable result");
+    for (const auto &[reason, payloads] : observed_.payloads) for (const auto &[parameter, value] : payloads)
+      if (!value.arrivals.empty()) throw std::logic_error("unresolved cleanup exception origin in borrowed payload");
     return observed_;
   }
 
@@ -5689,6 +5727,10 @@ public:
               returned.value.merge(known.returned.value);
               if (known.returned != returned) { known.returned = std::move(returned); changed = true; }
               if (known.bindings != effects.bindings) { known.bindings = effects.bindings; changed = true; }
+              auto payloads = effects.payloads;
+              for (const auto &[reason, values] : known.payloads)
+                for (const auto &[parameter, value] : values) payloads[reason][parameter].merge(value);
+              if (known.payloads != payloads) { known.payloads = std::move(payloads); changed = true; }
             }
           }
           changed = changed || callable_count != program_.callables.size() || instance_count != program_.instances.size();

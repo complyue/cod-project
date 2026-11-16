@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-15 — Borrowed exception call postconditions
+
+<a id="k-732"></a>
+**K-732 — Retain borrowed payload evidence across calls.** Agent continuity assessment under H-267/H-272/H-313/H-327/H-366–H-369/H-398/H-407/H-420/H-423 and charter §§3.3/4.3/5.3/6.3/8/12: source348→349 and registry742→743 preserve C-65/C-75/P-255/P-257/P-295/P-327's independent values and actual borrowed targets with C-63/P-235/P-236/P-280's failure/completion contract. Existing call equations retain per-completion payload facts for original targets, compose entry snapshots and combine alias alternatives; recursive summaries converge without changing declared failure paths or native identity. Acceptance covers normal/exceptional mutation, copied/borrowed operand timing, unchanged targets, local rebinding, direct/indirect/symbolic calls, recursion, negative alias/access/init cases and exact native release. D-14r112/D-17r69/D-18r104/D-26r21 and D-16 remain unchanged. No new semantics, ABI, regional representation or qualification; prepared/deferred mutable-state precision, thrown-value summaries and broader correlations remain separate. Baseline: `a1de69c01da3cd6ee6cacfd2426dadad6273b2a8` at affected paths.
+
 ## 2026-11-15 — Caught exception-value evidence
 
 <a id="k-731"></a>
