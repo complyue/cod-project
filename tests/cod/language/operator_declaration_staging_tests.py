@@ -15,6 +15,12 @@ EXTRA_SOURCES = []
 CASE_SHADOWS = {'borrowed': ['x', 'y'], 'complete': ['f']}
 CASES = (
     ('builtin', 'func (+)(x:i64,y:i64)->i64;', '', '', IO+'behave @print(2+3);', '5\n'),
+    ('aborted', 'func (+)(x:u64,y:u64)->u64 throws NullPointerException;', '', '',
+     IO+'using "std:exceptions" NullPointerException;func f()->u64{1u64+{{return 7u64;}};return 0u64;}behave @print(f());', '7\n'),
+    ('aborted_deferred', 'func (+)(x:u64,y:u64)->u64 throws NullPointerException;', '', '',
+     IO+'using "std:exceptions" NullPointerException;proc f()->u64{defer{behave @print(1u64);};defer (+)(1u64,{{return 7u64;}});return 0u64;}behave @print(f());', '1\n7\n'),
+    ('aborted_generic', 'func (+)(x:T,y:T)->const T where T;', '', '',
+     IO+'func f(x:T)->u64 where T{(+)({{return 7u64;}},x);return 0u64;}behave @print(f(1u64));behave @print(f(2u32));', '7\n7\n'),
     ('generic', 'func (+)(x:T,y:T)->const T where T;', '->const U', ' where U{',
      IO+'func (+)(x:U,y:U)->const U where U{return y;}behave @print(1+2);behave @print(false+true);', '2\ntrue\n'),
     ('borrowed', 'func (+)(ref x:i64 in O,ref y:i64 in P)->ref i64 in O where {owner O,owner P};',

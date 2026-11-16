@@ -741,11 +741,13 @@ class ScalarChecker {
     };
     for (const auto id : applicable)
       if (!accumulate(program_.methods[id], candidates.substitutions.at(id))) return {};
-    // Signature-only queries can use declarations without demanding a body.
+    // Queries and definite builtin calls can use independently declared input types.
     // Every applicable declaration remains an obligation, not an overload choice.
-    if (state && applicable.empty()) {
-      const ModuleLookup lookup(module_, state->method ? program_.methods[*state->method].module : module_);
+    if ((state || (eager_operation(operation) && family.methods.empty())) && applicable.empty()) {
+      const ModuleLookup lookup(module_, state && state->method ? program_.methods[*state->method].module : module_);
       for (const auto &declaration : declarations(expr.text)) {
+        if (!state && std::any_of(declaration.source->parameters.begin(), declaration.source->parameters.end(),
+            [](const auto &parameter) { return argument_mode(parameter) != ArgumentMode::value; })) continue;
         const auto substitutions = match_evidence(declaration, arguments, {}, true);
         if (!substitutions || !admits_access(declaration, access) ||
             match_owners(declaration, owners, state) == OwnerMatch::mismatch) continue;
@@ -3373,17 +3375,18 @@ class ScalarChecker {
     if (found == program_.query_environments.end()) program_.query_environments.push_back(std::move(environment));
     return id;
   }
-  std::vector<ArgumentEvidence> argument_evidence(const Expression &expr) const {
+  std::vector<ArgumentEvidence> argument_evidence(const Expression &expr, TypeEvidenceState state, size_t first = 0) const {
     std::vector<ArgumentEvidence> result(expr.children.size());
-    if (expr.intrinsic) return result;
-    if (named_family(expr.text).methods.empty()) return result;
-    auto state = evidence_state();
-    for (size_t i = 0; i < expr.children.size(); ++i) {
+    for (size_t i = first; i < expr.children.size(); ++i) {
       result[i].type = type_evidence(*expr.children[i], state, true);
       result[i].read_only = state.value.read_only;
       result[i].owner = state.value.owner;
     }
     return result;
+  }
+  std::vector<ArgumentEvidence> argument_evidence(const Expression &expr) const {
+    if (expr.intrinsic || named_family(expr.text).methods.empty()) return std::vector<ArgumentEvidence>(expr.children.size());
+    return argument_evidence(expr, evidence_state());
   }
   struct CallableSelection {
     std::vector<Type> retained;
@@ -4188,15 +4191,23 @@ class ScalarChecker {
       std::vector<Type> arguments;
       std::vector<CheckedOperation> views;
       bool completes = true;
+      const bool declared_builtin = eager && !expr.intrinsic && named_family(expr.text).methods.empty() && has_declarations(expr.text);
       const bool builtin_signature = eager && (expr.intrinsic ||
           (named_family(expr.text).methods.empty() && !has_declarations(expr.text)));
-      const auto evidence = argument_evidence(expr);
+      auto evidence = argument_evidence(expr);
       for (size_t i = 0; i < expr.children.size(); ++i) {
-        const auto preparation = argument_preparation(expr, name, arguments, evidence, access_of(views), owners_of(views));
+        auto preparation = argument_preparation(expr, name, arguments, evidence, access_of(views), owners_of(views));
         const auto mode = preparation.mode;
+        // A builtin's passing mode is established. Retain context for missing
+        // input evidence without pre-analyzing every normally producing operand.
+        auto before = declared_builtin && !preparation.type ? std::optional{evidence_state()} : std::nullopt;
         const auto argument = check(*expr.children[i], instance, operations, mode == ArgumentMode::value, false,
             preparation.type && preparation.type->kind == Type::procedure ? &*preparation.type : nullptr);
         if (argument == Type::never) {
+          if (before) {
+            evidence = argument_evidence(expr, std::move(*before), i);
+            preparation = argument_preparation(expr, name, arguments, evidence, access_of(views), owners_of(views));
+          }
           if (!preparation.type && !builtin_signature) {
             if (!eager && !expr.intrinsic && expr.text != "cause_at" && named_family(expr.text).methods.empty())
               fail(expr.at, "unknown callable '" + expr.text + "'");

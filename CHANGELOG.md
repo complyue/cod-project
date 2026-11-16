@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-15 — Declared builtin input evidence
+
+<a id="k-726"></a>
+**K-726 — Reuse independent signatures during builtin preparation.** Agent continuity assessment under H-258/H-261/H-272/H-304/H-356/H-361/H-362/H-398/H-407/H-420/H-423, K-658/K-699 and charter §§3.3/5.3/6.3/8/12: source342→343 and registry736→737 preserve declared signature obligations and ordered completion. C-10/C-63/C-89/C-90 and existing D-10/D-17/D-18/D-24/D-26 paths support using consistent declared value-input types for definite eager builtins whose operands return or throw. Other independently known operands may determine generic inputs; declarations remain constraints, without selecting methods, retargeting preparation or manufacturing runtime values. Acceptance preserves arity/known-type/result checks, normal-path checked failures, earlier effects and complete-value cleanup; aborted invocation/registration adds no callee failure or action. Declared and undeclared forms retain equivalent native behavior and shared generic coverage. Missing/conflicting inputs, borrowed-only evidence, broader generic/aggregate defaults, D-16 and other design/qualification boundaries remain unchanged. No new source policy, inference authority, ABI or storage representation. Baseline: `97ae90dc9963410e4b710735c5680345c35e9880` at affected paths.
+
 ## 2026-11-15 — Composed null-test evidence
 
 <a id="k-725"></a>
