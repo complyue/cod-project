@@ -1,9 +1,34 @@
 # Changelog
 
+## 2026-11-16 — Integrate disjoint-path design and boolean input proofs
+
+<a id="k-disjoint-path-sync-20261116"></a>
+**K-DISJOINT-PATH-SYNC-20261116 — Preserve scoped design and compiler evidence.** Source376/registry772 integrates `3368e76e0b953738f8cd97d235dbf6d4a0dbeb8e` (D-07r163/D-10r187/D-15r38/D-17r75/D-21r19) with compiler `df1c4b71333a7a2411be9c83dc50199d37335820`/K-753. Preserve both parent decision histories and the qualified boolean-call/owner/initialization/completion contracts under charter §§3.1–3.3/4.2–4.3/6.3/8/12 and D-16. Disjoint records retain source snapshots, prior-route witnesses and frozen-world validation; no generic path algorithm or implementation is qualified. A design-chat message received 2026-11-16 reports H-532's per-pair authoring rule: own or explicitly import at least one endpoint of every pair; consumption of an existing record needs no new grant. This is an attributed agent receipt pending that checkpoint's evidence integration, not another human confirmation or a reopened permission choice. Multiple abstract parents remain deferred; mixed-bridge review examples cannot broaden that scope. Mainline compiler and native evidence are unchanged by this documentation merge.
+
 ## 2026-11-16 — Preserve boolean input evidence across call results
 
 <a id="k-753"></a>
 **K-753 — Continue finite boolean call evidence.** Source374→375/registry770→771 under D-14r116/C-65/P-258, D-17r74’s unaffected checked-NPE/explicit-return/completion scope, D-18r107 and D-26r21/H-407; H-420/H-423. Necessary truths of immutable boolean inputs share saved-result composition with target presence. Instantiate copied preparation snapshots or borrowed entry payloads; retain versioned target facts and conservative alias/write invalidation. Borrowed results read surviving target predicates after cleanup. Charter §§3.2/3.3/4.3/6.3/8/12, D-16 and unchanged owner/access/initialization/declaration constraints continue. Acceptance covers finite truth tables, ordered operand effects, recursion/captures, cleanup and native body sharing. No new source rule, runtime carrier, boolean output-write summary or exception-root/wrapper/deferred-stack qualification. Baseline: `5c9f5620af372228ffb08677c0721995343f13b0`, `cod/lang_checked.hh`, `cod/lang_completion.hh` and source reference.
+
+## 2026-11-16 — N-ary disjoint constraints, exempt paths and method-aware warnings
+
+<a id="h-527"></a>
+**H-527 — Explore n-ary disjoint declarations with public, type-carried exemptions.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-16 America/Los_Angeles; exact timestamp/personal name unavailable. Statement: “我觉得可以朝 `type disjoint A, B, C;` 甚至同时声明更多的语法方向推演，加一个规则是声明这条之前，同模块已知的继承链路确认为豁免链路 —— 子类型经由这些豁免链路产生的继承关系不被拒绝；同时 disjoint 关系和豁免链路随任何一个类型的 export 声明认为是public，且跟随任何类型被其它模块 using/import 。 你继续推演看看”. Selects the n-ary direction, declaration-point known-path exemptions and public carriage; replaces the unqualified empty-intersection proposal. Full path validation, foreign declaration authority and metadata protocol remain under review.
+
+<a id="h-528"></a>
+**H-528 — Inheritance is frozen in the fused world.** Same human/chat/date; correction: “类型继承关系是在 fused world 冻结了的哈，不要假定允许运行时变更”. Confirms static validation/preparation; later-source/import examples concern fusion, not runtime mutation. Exemption snapshots retain their declaration provenance; no runtime graph scheduler or change protocol is selected.
+
+<a id="h-529"></a>
+**H-529 — Reject new independent paths.** Same human/chat/date; asynchronous selection: “Reject new independent paths (Recommended)” for a post-disjoint direct MyError <: Exception path in addition to MyError <: Error through an exempt Error → Exception path. Selects path-preserving enforcement; H-530 immediately refines this example's already-established redundant relationship to acceptance with warning. The genuinely new independent-route rejection remains current.
+
+<a id="h-530"></a>
+**H-530 — Accept redundant shorter declarations with an existing-path warning.** Same human/chat/date; statement: “对于已经间接形成了父子关系的，再次声明更短路径，不拒绝但是要给出警告诊断，提醒用户已经通过某某路径具备继承关系了”. Supersedes H-529's rejection for the already-established indirect relationship only. Warn with the witness; new independent relationships remain constrained. The draft derives noncircular prior evidence, no new capability/exemption and no retroactive deletion of older paths.
+
+<a id="h-531"></a>
+**H-531 — Explain intermediate method contracts in the redundant-path warning.** Same human/chat/date; clarification: “不仅是 redundant declaration 隐患，要防止的是用户心智里确实中间父类的相关方法实现，这一条也许表明用户以为只需要实现高层父类的方法就够了”. The warning should address possible omission of intermediate abstractions in the author's mental model, not merely redundant syntax. Show the existing path and explain that intermediate method requirements/selection remain; do not assert guessed intent or newly require eager completeness. Existing H-216/H-218 demand-based method checking remains intact.
+
+<a id="k-disjoint-paths-20261116"></a>
+**K-DISJOINT-PATHS-20261116 — Integrate frozen constraints, publication and diagnostic purpose.** D-07r162→163/D-10r186→187/D-15r37→38/D-17r74→75/D-21r18→19/source374→375/registry770→771 records H-527–H-531 in D-10-DISJOINT/P-476–P-478. Candidate C-56/C-10 paths preserve charter §§2/3.1–3.3/4.2–4.3/6.3/8/12 through explicit nominal intent, established graph relationships, stable publication and readable method obligations. Agent derivations: unordered pair constraints for n-ary lists; complete original-record carriage with semantic identities rather than implicit source aliases; no receiver resnapshot or weakened exemption union; redundant assertions need prior witnesses; final fusion rejects incompatible applicable records. Error/Exception can retain their exempt ancestor path without an empty-intersection claim or a hidden CheckedException root. Foreign authority, cyclic evidence and full generic/path proofs remain pending; H-525/H-526, demanded implementation checking, owner/capture and D-16 continue. Baseline: `5c9f5620af372228ffb08677c0721995343f13b0`, affected paths. Documentation only; no source edits, builds or test scripts.
 
 ## 2026-11-16 — Unchecked Error root and explicit checked declaration contracts
 

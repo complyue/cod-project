@@ -1,12 +1,14 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 162
+Discussion revision: 163
 
 Recorded: 2026-11-16
 
 Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
+
+- **Disjoint declarations and exempt paths:** [H-527–H-531](../CHANGELOG.md#h-527)/[K-DISJOINT-PATHS-20261116](../CHANGELOG.md#k-disjoint-paths-20261116), [D-10-DISJOINT](DesignAuthorityRegistry.md#d-10-disjoint), records n-ary pair constraints, declaration-point exemptions, public/type-carried evidence and a frozen fused-world inheritance graph. Redundant shorter declarations accept with a warning identifying the existing path and the intermediate method contracts they do not bypass. Candidate C-56/C-10/P-476–P-478 under charter §§2/3.1–3.3/4.2–4.3/6.3/8/12 preserves explicit nominal intent, stable interpretation and actionable diagnostics. D-10 owns examples/acceptance and remaining foreign-declaration authority, cyclic evidence and formal path-checking boundaries. Preserve owner/capture, selected contexts, H-525/H-526 checked contracts, demanded method checking and D-16; no new compiler support or full value-path/algorithm qualification is inferred.
 
 - **Module startup and entry selection:** [H-492](../CHANGELOG.md#h-492)/[D-15-CYCLES](DesignAuthorityRegistry.md#d-15-cycles) permits declaration-only cycles. H-493–H-498/[D-15-POSTPON](DesignAuthorityRegistry.md#d-15-postpon)/[D-15-STATIC-NS](DesignAuthorityRegistry.md#d-15-static-ns) requires static runtime namespace definitions first, one statically emitted sequence of implicit dependency prefixes and ordered explicit postpon blocks, then the entry executable prefix. H-499/H-500/[D-15-ENTRY](DesignAuthorityRegistry.md#d-15-entry) selects the namespace containing reserved `__main__`, allowing multiple entry namespaces per dependency package and prohibiting entry reuse by other modules. Candidate C-10/C-35/C-36/C-44/C-45/C-59/C-65/P-443–P-454 serves charter §§2/3.1–3.3/4.2/6.3/8/12 through explicit identities, contexts, readiness and valid native execution. Preserve publication, world isolation, owners/captures, ordinary failure cleanup, D-16 and once-only incorporation. [D-15](ModuleWorlds.md#module-dependency-cycles-and-initialization) owns acceptance and remaining proof/representation/CLI boundaries; [K-STATIC-MODULE-STARTUP-20261116](../CHANGELOG.md#k-static-module-startup-20261116) integrates this revision. No runtime scheduler, compiler-support claim or whole-contract qualification follows.
 
@@ -152,6 +154,8 @@ import "model.cod" SomeADT;
 import "interfaces.cod" AnotherAbsType;
 data SomeADT <: AnotherAbsType;
 ```
+
+H-527–H-531 adds [disjoint declarations with existing-path exemptions](SymbolicDynamicScope.md#disjoint-declarations-and-exempt-inheritance-paths) as a separately scoped constraint on the fused inheritance graph. A shorter conformance declaration for an already established indirect relation accepts with a warning: show the existing path and explain that intermediate abstractions and their method contracts remain applicable. This does not add a new independent path, erase an old path or eagerly require every method implementation. Publication and foreign constraint-authoring permissions retain the D-10 review boundaries.
 
 Neither adapter defines fields, allocates an object or creates another identity named SomeADT. The declarations add explicit relationships between resolved identities. A relation to a child abstraction can reach its nominal ancestors; satisfying multiple unrelated abstractions does not rank those abstractions against one another. If methods constrained by two unrelated applicable abstractions are equally specific, ordinary unique-best dispatch still reports ambiguity rather than choosing a declaration order.
 
