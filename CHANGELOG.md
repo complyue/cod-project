@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-16 — Preserve declared exception obligations during proof improvements
+
+<a id="k-checked-declaration-boundary-20261116"></a>
+**K-CHECKED-DECLARATION-BOUNDARY-20261116 — Bound enforcement without qualifying the pending root package.** Agent continuity review after the developer identified a potential H-525 regression: D-17r76→77/registry774→775 clarifies the existing C-63/P-235/P-236/P-280 checking path, confirmed by H-267/H-313 and constrained by H-524/H-525. Explicit typed intent and native equivalence under charter §§2/3.1/3.3/6.3/12 require that actual-value proofs not erase declared checked obligations. Aliases and admitted generic substitutions use resolved declared identity; they do not infer a narrower annotation from payloads. Acceptance covers root-typed initializer/catch/borrow/helper cases, explicit throws obligations, ordinary covering root handlers and unchanged concrete unchecked propagation. This records no new human confirmation and does not qualify the pending whole Error-root/value path, ABI, transparent throws, narrower-category coverage of broad obligations or new deferred-stack suppression/aggregation. Unrelated qualified proofs, ordinary completion, owner rules and D-16 continue. Baseline: `de639db7e569dafb61858e1da15de04f10b336c6`, affected paths; source378 remains the implementation reference. Documentation only; no source edits, builds or tests.
+
 ## 2026-11-16 — Integrate endpoint constraints and boolean output evidence
 
 <a id="k-disjoint-endpoint-sync-20261116"></a>
