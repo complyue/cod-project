@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-16 — Consistent initialization conditions
+
+<a id="k-758"></a>
+**K-758 — Exclude inconsistent immutable path facts.** Source384→385/registry782→783 continues the K-757 qualified D-14r116/P-258, D-17r82/P-235/P-236/P-280, D-18r107 and D-26r21/H-407 scope under H-420/H-423. Shared conditions reject conflicting truths and intersect category filters on one immutable origin; branch joins promote the absence of missing-write paths to initialization. Charter §§2/3.1–3.3/4.3/6.3/8/12, H-525, owner/access/ref contracts and D-16 remain unchanged. Acceptance covers independent truth/category models, snapshot/mutation/alias negatives, failure prefixes, recursive native sharing and exact cleanup. Wider correlations and revised queue/aggregate policies retain their separate qualification; no new source rule, runtime representation or human confirmation. Baseline: `4b015ca1bb570dbe152c4cfa0d2da33f1c30d99d`, affected compiler/source-reference paths.
+
 ## 2026-11-16 — Conditional initialization and deferred FIFO integration
 
 <a id="k-defer-fifo-sync-20261116"></a>

@@ -383,8 +383,30 @@ public:
   using BooleanValue = std::map<bool, ConditionClauses>;
   using BooleanValues = std::map<size_t, BooleanValue>;
   static void add_condition(ConditionClauses &clauses, ConditionFacts facts) {
-    if (!facts.conditions.possible || std::any_of(facts.exceptions.begin(), facts.exceptions.end(),
-        [](const auto &value) { return value.empty(); })) return;
+    const auto contradictory = [](const auto &truths) {
+      return std::adjacent_find(truths.begin(), truths.end(), [](const auto &a, const auto &b) {
+        return a.first == b.first && a.second != b.second;
+      }) != truths.end();
+    };
+    if (!facts.conditions.possible || contradictory(facts.inputs) || contradictory(facts.payloads)) return;
+    // Filters constrain one immutable origin. Constant alternatives and
+    // different sources do not establish an identity correlation.
+    std::map<ExceptionFacts::Origin, std::set<size_t>> categories;
+    std::set<ExceptionFacts> retained;
+    for (const auto &value : facts.exceptions) {
+      if (value.empty()) return;
+      const auto &[origin, possible] = *value.terms.begin();
+      if (value.terms.size() != 1 || origin.kind == ExceptionFacts::Origin::Kind::constant) {
+        retained.insert(value); continue;
+      }
+      const auto [found, inserted] = categories.emplace(origin, possible);
+      if (!inserted) std::erase_if(found->second, [&](size_t category) { return !possible.contains(category); });
+      if (found->second.empty()) return;
+    }
+    for (auto &[origin, possible] : categories) {
+      ExceptionFacts value; value.add(origin, possible); retained.insert(std::move(value));
+    }
+    facts.exceptions = std::move(retained);
     if (std::any_of(clauses.begin(), clauses.end(), [&](const auto &known) { return facts.implies(known); })) return;
     std::erase_if(clauses, [&](const auto &known) { return known.implies(facts); });
     clauses.insert(std::move(facts));

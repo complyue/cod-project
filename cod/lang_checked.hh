@@ -2108,6 +2108,10 @@ class ScalarChecker {
     observe_read(place, before);
   }
   static void refresh_input_facts(LexicalState &state) {
+    std::set<size_t> established;
+    CleanupEquations::resolve_initialization(established, state.uninitialized);
+    for (const auto input : inputs(state.inputs))
+      state.input_facts.at(input).initialized.insert(established.begin(), established.end());
     bool first = true;
     for (const auto input : inputs(state.inputs)) {
       state.input_facts.at(input).selections.resolve(state.input_facts.at(input).initialized);
@@ -2156,8 +2160,7 @@ class ScalarChecker {
       for (const auto place : candidates) if (lexical_.available.contains(place)) {
         auto missing = missing_initialization(a, place);
         for (const auto &facts : missing_initialization(b, place)) CleanupEquations::add_condition(missing, facts);
-        if (missing.empty()) lexical_.uninitialized.erase(place);
-        else lexical_.uninitialized[place] = std::move(missing);
+        lexical_.uninitialized[place] = std::move(missing);
       }
     }
     lexical_.payload_writes = a_exits ? b.payload_writes : a.payload_writes;
