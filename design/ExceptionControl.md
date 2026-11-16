@@ -1,8 +1,10 @@
 # CoD exception control and regional cleanup
 
-Design revision: 69 · Recorded: 2026-11-15 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; current implementation availability is recorded in the source capability reference.
+Design revision: 70 · Recorded: 2026-11-16 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; current implementation availability is recorded in the source capability reference.
 
 ## Design authority
+
+- **Module shutdown order:** [H-501](../CHANGELOG.md#h-501)/[D-15-SHUTDOWN](DesignAuthorityRegistry.md#d-15-shutdown) selects application-wide reverse registration for module-level deferred actions after interleaved initialization. [K-MODULE-SHUTDOWN-20261116](../CHANGELOG.md#k-module-shutdown-20261116) records r69→70. Candidate C-36/C-44/C-59/C-63/C-65/P-458–P-460 serves charter §§2/3.3/4.3/6.3/12 through observable cleanup order and live owner obligations. Existing qualified per-action/per-scope preparation, failure, owner and nested-scope contracts continue. D-15 owns the 3/2/1 and partial-startup acceptance targets; cross-module completion/handler visibility and physical realization remain under review. No runtime startup scheduler or new compiler-support claim follows.
 
 - **Mainline continuity:** [K-719](../CHANGELOG.md#k-719) continues r67→68 while integrating the scoped assertion/naming decisions below. Current source/native capabilities, qualified value paths and unresolved mechanisms retain their separate boundaries; current compiler support is tracked in the source capability reference.
 
@@ -139,6 +141,12 @@ Saving an argument follows its declared passing mode. A bits value is prepared n
 Registration succeeds only after the callable and arguments have been prepared. An exception during preparation does not register a partial call; already completed preparations retain their ordinary cleanup responsibilities. Skipped control-flow paths register nothing. Registered work runs in reverse registration order within its owning scope. Borrowed values must remain valid until invocation; saving a view never extends its region or lexical owner's lifetime. H-370 keeps owning arguments under E4: registration identifies and saves the selected owning reference and corresponding actual region without consuming it. The original owner remains available for legal inspection and updates. Ownership transfers only when that registered call actually enters its callee at scope exit. Invocation uses the saved identity instead of resolving the source name again. Later operations must leave that ownership obligation valid; premature transfer/release and duplicate consumption must be identified by existing ownership checks. No owner copy, implicit lifetime extension, reservation protocol or new runtime exception follows. Preparation failure registers nothing and retains the existing preparation cleanup rules.
 
 [Go's specification](https://go.dev/ref/spec#Defer_statements) similarly saves the function value and arguments before deferring the call. CoD retains its own explicit block scopes, checked exceptions, owner checks and delayed-block form. The earlier capture-list proposal is not needed for ordinary deferred calls; additional block-capture syntax is outside this bounded implementation item.
+
+### Module-level deferred actions
+
+[Module shutdown](ModuleWorlds.md#cross-module-shutdown-order) follows H-501: module-level actions across the selected program execute in reverse order of actual successful registration, preserving each action's module context and valid owners. Registration A1 → B1 → A2 therefore drains A2 → B1 → A1, even though A1 and A2 belong to the same module. Entry registrations participate in the same order; ordinary nested full scopes retain their local cleanup boundaries.
+
+Startup failure prevents later initialization/entry work and unwinds only established registrations/resources. Preparation failure registers no partial action; skipped paths register nothing. Ordinary capture/current-binding behavior, ownership transfer and exact cleanup remain. No stale owner is restored and no initialization side effect is rolled back. H-501 fixes action order; the cross-module pending-completion/handler boundary and owner/effect restoration realization remain D-15 integration work, without changing the qualified within-scope failure contract below.
 
 ### Exceptions between deferred actions
 
