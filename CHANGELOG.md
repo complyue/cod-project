@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-16 — Nullable reference joins
+
+<a id="k-765"></a>
+**K-765 — Preserve path evidence through reference results and cleanup entry.** Source392→393/registry790→791 continues K-764 under H-420/H-423 and its qualified D-28-IDENTITY, D-14r116/P-258, D-17r83/P-235/P-236/P-280/H-525, D-18r107, confirmed D-23r17 and D-26r21/H-407 scopes. Nullable conditional/handler results share outcome evidence; recursive closure distinguishes provisional values from unknown outcomes; deferred reads use proven equal incoming selections with retained preceding writes. Acceptance covers mutation/failure controls, generic/mutual recursion, native sharing and exact release. Preserve charter §§2/3.1–3.3/4.3/6.3/8/12, owner/access/init and D-16. Wider proof precision, new runtime/ABI/return-inspection/queue and aggregate initialization protocols remain separate. Baseline: `4ed7f4dadca17ed3becf1cc87a7d13719be48db1`, affected compiler/source-reference paths. No new semantic decision or human confirmation.
+
 ## 2026-11-16 — Selected-reference equality proofs
 
 <a id="k-764"></a>

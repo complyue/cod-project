@@ -116,7 +116,8 @@ struct CheckedOperation {
   };
   // Immutable evidence describes the produced boolean, independently of its source spelling.
   std::shared_ptr<const Predicate> predicate;
-  CleanupEquations::BooleanValue nullness{};
+  // Absence means no relation; a present empty value retains provisional result evidence.
+  std::optional<CleanupEquations::BooleanValue> nullness{};
 };
 
 struct CheckedStorage {
@@ -961,9 +962,9 @@ class ScalarChecker {
       copies.same_bindings.insert({{binding, lexical_.target_versions.at(binding)}, {*source.binding, source.selection_versions}});
       lexical_.predicate_conditions = CleanupEquations::conjoin_conditions(lexical_.predicate_conditions, {copies});
     }
-    if (!source.nullness.empty() && source.targets.contains(null_target) && source.targets.size() > 1) {
+    if (source.nullness && source.targets.contains(null_target) && source.targets.size() > 1) {
       CleanupEquations::ConditionClauses alternatives;
-      for (const auto &[null, clauses] : source.nullness) for (auto facts : clauses) {
+      for (const auto &[null, clauses] : *source.nullness) for (auto facts : clauses) {
         (null ? facts.absent_bindings : facts.bindings).emplace(binding, lexical_.target_versions.at(binding));
         CleanupEquations::add_condition(alternatives, std::move(facts));
       }
@@ -1083,7 +1084,7 @@ class ScalarChecker {
       if (weak) {
         selected.selection_identity = merge_selection_identities(source.selection_identity, lexical_.selection_identities.at(id));
         selected.binding.reset();
-        selected.nullness.clear();
+        selected.nullness.reset();
         const auto &previous = lexical_.targets.at(id);
         selected.targets.insert(previous.begin(), previous.end());
         const auto &nulls = lexical_.null_sources.at(id);
@@ -1346,6 +1347,12 @@ class ScalarChecker {
     lexical_ = before;
     return value;
   }
+  void merge_nullness(CheckedOperation &result, const CheckedOperation &source,
+                      const LexicalState &state, const Location &at) {
+    if (!result.view || result.mixed_view || !result.targets.contains(null_target) || result.targets.size() == 1) return;
+    if (!result.nullness) result.nullness.emplace();
+    CleanupEquations::merge_boolean(*result.nullness, snapshot_boolean(null_predicate(source), state, at));
+  }
   CleanupEquations::BooleanValues current_booleans(const LexicalState &state, const Location &at) {
     const auto input = state;
     CleanupEquations::BooleanValues values;
@@ -1414,8 +1421,8 @@ class ScalarChecker {
       CleanupEquations::ConditionClauses clauses;
       CleanupEquations::add_condition(clauses, std::move(facts));
       if (!slots) for (const bool null : {false, true})
-        for (const auto parameter : null ? known.absent : known.present) if (!views.at(parameter).nullness.empty()) {
-          const auto &value = views[parameter].nullness;
+        for (const auto parameter : null ? known.absent : known.present) if (views.at(parameter).nullness) {
+          const auto &value = *views[parameter].nullness;
           const auto found = value.find(null);
           clauses = found == value.end() ? CleanupEquations::ConditionClauses{} :
               CleanupEquations::conjoin_conditions(clauses, found->second);
@@ -1621,6 +1628,17 @@ class ScalarChecker {
     state.required_symbols.insert(symbol);
     if (!delayed_) observed_.symbols.insert(symbol);
   }
+  static bool initialized_entry_alias(const CleanupEquations::ReadRequirement &read, const LexicalState &state) {
+    if (read.nonnull || !read.selection) return false;
+    const auto selected = state.selection_identities.find(*read.selection);
+    if (selected == state.selection_identities.end()) return false;
+    return std::all_of(read.when.begin(), read.when.end(), [&](const auto &facts) {
+      return std::any_of(read.entry_initialized.begin(), read.entry_initialized.end(), [&](size_t binding) {
+        const auto written = state.selection_identities.find(binding);
+        return written != state.selection_identities.end() && facts.same_selection(selected->second, written->second);
+      });
+    });
+  }
   void apply_effects(LexicalState &state, const CleanupEquations::Effects &incoming, const Location &at) {
     auto effects = incoming;
     const auto entry = path_conditions(state);
@@ -1645,7 +1663,7 @@ class ScalarChecker {
         const auto guard = known.nonnull_versions.find(id), current = state.target_versions.find(id);
         return guard != known.nonnull_versions.end() && current != state.target_versions.end() && guard->second == current->second;
       });
-      if (known.satisfied(place, state.initialized, state.selections)) continue;
+      if (known.satisfied(place, state.initialized, state.selections) || initialized_entry_alias(known, state)) continue;
       known.initialized.insert(state.initialized.begin(), state.initialized.end());
       known.substitute(state.selections);
       if (known.satisfied(place, state.initialized, {})) continue;
@@ -2131,7 +2149,8 @@ class ScalarChecker {
           operation.null_sources.insert(views[source].null_sources.begin(), views[source].null_sources.end());
       }
       if (!operation.null_sources.empty()) operation.targets.insert(null_target);
-      if (contract.nullable_views.empty() || !contract.nullable_views.back()) operation.targets.erase(null_target);
+      const bool nullable_result = !contract.nullable_views.empty() && contract.nullable_views.back();
+      if (!nullable_result) operation.targets.erase(null_target);
       select_targets(operation, operation.targets);
       std::set<size_t> identities, sources;
       bool exact = !summary.returned.selection_sources.empty() && summary.bindings.empty();
@@ -2142,7 +2161,7 @@ class ScalarChecker {
         const auto incoming = selection_sources(identity); sources.insert(incoming.begin(), incoming.end());
       }
       operation.selection_identity = exact && identities.size() == 1 ? *identities.begin() : new_selection_identity(std::move(sources));
-      if (!prepared) operation.nullness = instantiate_boolean(summary.returned.nullness, boolean_inputs, views, !summary.bindings.empty(), exception_inputs);
+      if (!prepared && nullable_result) operation.nullness = instantiate_boolean(summary.returned.nullness, boolean_inputs, views, !summary.bindings.empty(), exception_inputs);
       if (read && !discard && &expr != prepared_call_) read_view(operation, expr.at, "borrowed result");
       if (!prepared) operation.predicate = stored_predicate(operation);
     }
@@ -2357,9 +2376,7 @@ class ScalarChecker {
       std::map<std::pair<size_t, size_t>, size_t> joined;
       const auto equivalent = [](size_t left, size_t right, const auto &paths) {
         return !paths.empty() && std::all_of(paths.begin(), paths.end(), [&](const auto &facts) {
-          return std::any_of(facts.same_selections.begin(), facts.same_selections.end(), [&](const auto &group) {
-            return group.contains(left) && group.contains(right);
-          });
+          return facts.same_selection(left, right);
         });
       };
       for (const auto &[binding, right] : b.selection_identities) {
@@ -2547,10 +2564,10 @@ class ScalarChecker {
     return std::make_shared<const Predicate>(Predicate{kind, {}, std::move(left), std::move(right)});
   }
   std::shared_ptr<const Predicate> null_predicate(const CheckedOperation &view) const {
-    if (view.targets.empty()) return {};
+    if (view.targets.empty()) return view.nullness ? boolean_predicate(*view.nullness) : nullptr;
     if (!view.targets.contains(null_target)) return constant_predicate(false);
     if (view.targets.size() == 1) return constant_predicate(true);
-    if (!view.nullness.empty()) return boolean_predicate(view.nullness);
+    if (view.nullness) return boolean_predicate(*view.nullness);
     auto proof = std::make_shared<Predicate>();
     proof->kind = view.binding ? Predicate::Kind::null_test : Predicate::Kind::presence;
     if (view.binding) proof->test = {*view.binding, view.selection_versions};
@@ -2744,7 +2761,7 @@ class ScalarChecker {
         result.place.reset(); result.binding.reset(); result.slots.clear(); result.targets.clear(); result.origins.clear(); result.null_sources.clear();
         result.view = result.read_only = false; result.exceptions.clear();
         result.predicate.reset();
-        result.nullness.clear();
+        result.nullness.reset();
         result.selection_identity.reset();
       }
     }
@@ -5146,9 +5163,6 @@ class ScalarChecker {
     result.type = cleanup == Type::never || normals.empty() ? Type{Type::never} :
         expr.kind == Expression::Kind::deferred ? Type{Type::void_type} : result_type;
     if (!views.empty()) {
-      if (std::any_of(views.begin(), views.end(), [](const auto *view) { return !view->nullness.empty(); }))
-        for (size_t i = 0; i < views.size(); ++i)
-          CleanupEquations::merge_boolean(result.nullness, snapshot_boolean(null_predicate(*views[i]), normals[i], expr.at));
       result.predicate = predicate_of(*views.front());
       for (size_t i = 1; i < views.size(); ++i)
         result.predicate = predicate(Predicate::Kind::alternatives, result.predicate, predicate_of(*views[i]));
@@ -5175,6 +5189,7 @@ class ScalarChecker {
       }
       result.mixed_view = std::any_of(views.begin(), views.end(), [](const auto *view) { return !view->view || view->mixed_view; });
       select_targets(result, result.targets);
+      for (size_t i = 0; i < views.size(); ++i) merge_nullness(result, *views[i], normals[i], expr.at);
     }
     result.exceptions = std::move(result_exceptions);
     return result;
@@ -5597,10 +5612,6 @@ class ScalarChecker {
       else {
         operation.predicate = predicate(Predicate::Kind::alternatives, predicate_of(yes_fact), predicate_of(no_fact));
         operation.selection_identity = merge_selection_identities(yes_fact.selection_identity, no_fact.selection_identity);
-        if (!yes_fact.nullness.empty() || !no_fact.nullness.empty()) {
-          operation.nullness = snapshot_boolean(null_predicate(yes_fact), yes_state, expr.at);
-          CleanupEquations::merge_boolean(operation.nullness, snapshot_boolean(null_predicate(no_fact), no_state, expr.at));
-        }
         operation.view = yes_fact.view || no_fact.view;
         operation.mixed_view = yes_fact.mixed_view || no_fact.mixed_view || yes_fact.view != no_fact.view;
         operation.read_only = yes_fact.read_only || no_fact.read_only;
@@ -5624,6 +5635,8 @@ class ScalarChecker {
         }
         operation.selection_versions = yes_fact.selection_versions;
         operation.selection_versions.insert(no_fact.selection_versions.begin(), no_fact.selection_versions.end());
+        merge_nullness(operation, yes_fact, yes_state, expr.at);
+        merge_nullness(operation, no_fact, no_state, expr.at);
       }
       if (condition == Type::never) operation.type = Type::never;
       break;

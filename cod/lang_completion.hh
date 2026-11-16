@@ -369,6 +369,11 @@ public:
     std::set<std::set<BindingSnapshot>> same_bindings{};
     // Local immutable selections, normalized to formal inputs across calls.
     std::set<std::set<size_t>> same_selections{}, same_inputs{};
+    bool same_selection(size_t left, size_t right) const {
+      return left == right || std::any_of(same_selections.begin(), same_selections.end(), [&](const auto &group) {
+        return group.contains(left) && group.contains(right);
+      });
+    }
     bool operator==(const ConditionFacts &) const = default;
     auto operator<=>(const ConditionFacts &) const = default;
     void append(const ConditionFacts &other) {
