@@ -1045,11 +1045,17 @@ class ScalarChecker {
     require_live_view(view, at);
     return view;
   }
+  std::set<size_t> stored_exceptions(size_t place, const Type &type) const {
+    const auto found = lexical_.exceptions.find(place);
+    const bool mutable_target = storage(place).borrowed || !storage(place).read_only;
+    return (delayed_ && mutable_target) || found == lexical_.exceptions.end()
+        ? exception_possibilities(type) : found->second;
+  }
   std::set<size_t> stored_exceptions(const CheckedOperation &view) const {
     std::set<size_t> result;
+    if (view.type.kind != Type::exception) return result;
     for (const auto place : view.targets) if (place != null_target) {
-      const auto found = lexical_.exceptions.find(place);
-      const auto categories = delayed_ || found == lexical_.exceptions.end() ? exception_possibilities(view.type) : found->second;
+      const auto categories = stored_exceptions(place, view.type);
       result.insert(categories.begin(), categories.end());
     }
     return result;
@@ -3997,8 +4003,7 @@ class ScalarChecker {
       if (captured) operation.captured_place = place;
       if (read && !operation.initialized_target) require_initialized(place, expr.at, expr.text, selected);
       if (operation.type.kind == Type::exception) {
-        const auto known = lexical_.exceptions.find(place);
-        const auto categories = (delayed_ && !captured) || known == lexical_.exceptions.end() ? exception_possibilities(operation.type) : known->second;
+        const auto categories = stored_exceptions(place, operation.type);
         operation.exceptions.insert(categories.begin(), categories.end());
       }
     }
@@ -4677,7 +4682,7 @@ class ScalarChecker {
         operation.null_sources = selected.null_sources;
         operation.initialized_target = selected.initialized_target;
         operation.captured_place = selected.captured_place;
-        operation.exceptions = selected.exceptions;
+        operation.exceptions = stored_exceptions(operation);
         operation.view = true;
         operation.binding = target.binding;
         operation.owners.clear(); operation.selection_versions.clear();

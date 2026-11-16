@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-15 — Exception result read timing
+
+<a id="k-729"></a>
+**K-729 — Distinguish saved values from selected-target reads.** Agent continuity assessment under H-ASSIGNMENT-RESULT-20261115/H-267/H-272/H-313/H-356/H-361/H-362/H-366–H-369/H-398/H-407/H-420/H-423 and charter §§3.3/4.3/5.3/6.3/8/12: source345→346 and registry739→740 preserve C-63/P-235/P-236/P-280's checked-failure/cleanup contract alongside C-65/P-255/P-257/P-260/P-327's target-only assignment, independent values and access rules. Assignment-result category evidence follows the selected target after RHS cleanup; ordinary value results keep their saved payload. Delayed immutable owned values retain known facts, while readonly borrowed paths do not imply immutability. Acceptance covers cleanup mutation, rebinding/nulling of source slots, saved and caught copies, checked recovery, shared recursion and exact native release. D-14r112/D-17r69/D-18r104/D-26r21, D-16 and other qualification boundaries remain unchanged. No new result-summary policy, storage representation, ABI or lifetime rule. Baseline: `fded4e5a6155296d1978b051db299893e08d3144` at affected paths.
+
 ## 2026-11-15 — Borrowed exception payload evidence
 
 <a id="k-728"></a>
