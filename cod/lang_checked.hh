@@ -132,6 +132,8 @@ struct CheckedBinding {
   bool requires_initialized = false;
   std::optional<size_t> owner_binding = {};
   bool callable_value = false;
+  // A definition has lexical identity but no runtime value slot.
+  std::optional<size_t> definition = {};
   size_t scope = 0;
   // A fixed alias carries access restrictions and uses its selection's proof state.
   std::optional<size_t> alias = {};
@@ -506,7 +508,12 @@ class ScalarChecker {
   using Substitutions = std::vector<std::optional<Type>>;
   using Access = std::vector<std::optional<bool>>;
   struct TypeEvidenceState {
+    struct Definition {
+      size_t method;
+      std::shared_ptr<const TypeEvidenceState> declaration;
+    };
     std::map<std::string, std::optional<Type>> bindings;
+    std::map<std::string, Definition> definitions;
     std::set<std::string> symbol_shadows;
     std::map<std::string, ViewEvidence> views;
     std::map<std::string, EvidenceOwner> owner_bindings;
@@ -527,6 +534,20 @@ class ScalarChecker {
       bool unresolved = false;
     } *returns = nullptr;
   };
+
+  struct DefinitionContext {
+    size_t method;
+    std::shared_ptr<const TypeEvidenceState> declaration;
+    struct CaptureReference {
+      std::optional<size_t> binding;
+      std::vector<size_t> methods;
+      bool enclosing = false;
+    };
+    std::vector<CaptureReference> captures;
+    std::vector<Type> environment, retained;
+    size_t query = 0;
+  };
+  std::map<size_t, DefinitionContext> definitions_;
 
   static std::optional<bool> access_of(const CheckedOperation &view) {
     return view.type == Type::never ? std::nullopt : std::optional<bool>{view.read_only};
@@ -642,8 +663,10 @@ class ScalarChecker {
     std::vector<size_t> methods;
     const CheckedInstance *context = nullptr;
     std::vector<Type> evidence_retained = {};
+    const DefinitionContext *definition = nullptr;
+    const TypeEvidenceState *declaration = nullptr;
     const std::vector<Type> &retained_types() const {
-      return context ? context->retained_types : evidence_retained;
+      return context ? context->retained_types : definition ? definition->retained : evidence_retained;
     }
   };
   bool lexical_self(const std::string &name, std::optional<size_t> method) const {
@@ -680,6 +703,12 @@ class ScalarChecker {
     const ModuleLookup lookup(module_, state && state->method ? program_.methods[*state->method].module : module_);
     const ModuleLookup context(interpretation_, state && state->method ? program_.methods[*state->method].interpretation : interpretation_);
     if (state) {
+      if (const auto found = state->definitions.find(name); found != state->definitions.end()) {
+        const auto &definition = found->second;
+        return {{definition.method}, nullptr, definition_retained(definition.method, *definition.declaration), nullptr,
+                definition.declaration.get()};
+      }
+      if (state->bindings.contains(name)) return {};
       if (state->method) {
         const auto &method = program_.methods[*state->method];
         if (lexical_methods_.contains(method.source) && name == method.source->name)
@@ -687,6 +716,11 @@ class ScalarChecker {
       }
       const auto found = module_names().callables.find(name);
       return found == module_names().callables.end() ? NamedFamily{} : NamedFamily{family_methods(found->second)};
+    }
+    if (const auto binding = lexical_.lookup(name)) {
+      const auto found = definitions_.find(*binding);
+      if (found == definitions_.end()) return {};
+      return {{found->second.method}, nullptr, {}, &found->second, found->second.declaration.get()};
     }
     if (checking_method_ && lexical_methods_.contains(checking_method_->source) && name == checking_method_->source->name)
       return {{checking_instance_->method}, checking_instance_};
@@ -2397,7 +2431,7 @@ class ScalarChecker {
     }
   }
   size_t demand(size_t method, std::vector<Type> arguments, const Location &at, const std::vector<Type> &environment = {},
-                const std::vector<Type> &retained = {}, size_t query_environment = 0) {
+                const std::vector<Type> &retained = {}, size_t query_environment = 0, const TypeEvidenceState *state = nullptr) {
     auto &definition = program_.methods[method];
     const auto declared = declared_results(definition, arguments);
     arguments = prepared_types(definition, arguments, retained);
@@ -2412,7 +2446,7 @@ class ScalarChecker {
     const auto substitutions = match(definition, arguments, retained);
     if (!substitutions) throw std::logic_error("unchecked method demand");
     const auto &supplied = program_.query_environments[query_environment].result;
-    auto result = supplied ? *supplied : require_result(method, arguments, retained, at);
+    auto result = supplied ? *supplied : require_result(method, arguments, retained, at, state);
     check_declared_results(definition, result, declared);
     definition.contextual_result = definition.contextual_result || supplied.has_value();
     const auto id = program_.instances.size();
@@ -2471,11 +2505,14 @@ class ScalarChecker {
   }
   size_t select(const Expression &expr, const std::vector<Type> &arguments, const Access &access, const Owners &owners) {
     const auto family = named_family(expr.text);
+    if (family.definition) check_query_binding(expr.text, expr.at);
     if (family.methods.empty()) fail(expr.at, has_declarations(expr.text)
         ? "no applicable implementation for declared callable '" + expr.text + "'" : "unknown callable '" + expr.text + "'");
-    return select_family(family.methods, arguments, expr.at, expr.text,
-        family.context ? family.context->environment : std::vector<Type>{}, family.retained_types(), access, owners,
-        family.context ? family.context->query_environment : 0);
+    const auto method = select_method(family.methods, arguments, expr.at, expr.text, family.retained_types(), access, owners);
+    return demand(method, arguments, expr.at,
+        family.context ? family.context->environment : family.definition ? family.definition->environment : std::vector<Type>{},
+        family.retained_types(), family.context ? family.context->query_environment : family.definition ? family.definition->query : 0,
+        family.declaration);
   }
   bool applicable_operation(const std::string &name, const std::vector<Type> &arguments, const Access &access = {}, const Owners &owners = {}) const {
     const auto family = module_names().callables.find(name);
@@ -2751,6 +2788,7 @@ class ScalarChecker {
       const auto &parameter = method.source->parameters[i];
       const bool value = parameter.owner.empty();
       state.bindings[parameter.name] = obligation.arguments[i];
+      state.definitions.erase(parameter.name);
       state.views[parameter.name] = {parameter.read_only || (value && parameter.fixed_binding), true, value,
                                     value ? EvidenceOwner{} : state.owner_bindings.at(parameter.owner), false,
                                     parameter.fixed_binding, parameter.read_only};
@@ -2856,8 +2894,9 @@ class ScalarChecker {
     }
     return {};
   }
-  ResultContract require_result(size_t method, const std::vector<Type> &arguments, const std::vector<Type> &retained, const Location &at) const {
-    if (const auto result = infer_result(method, arguments, retained)) {
+  ResultContract require_result(size_t method, const std::vector<Type> &arguments, const std::vector<Type> &retained, const Location &at,
+                                const TypeEvidenceState *state = nullptr) const {
+    if (const auto result = infer_result(method, arguments, retained, state)) {
       if (nested_binder(program_.methods[method], *result->type))
         implementation_gap(at, "type parameter is not determined by the arguments");
       return *result;
@@ -2869,8 +2908,9 @@ class ScalarChecker {
     const auto &method = program_.methods[id];
     if (!method.source->type_parameters.empty()) return {};
     std::vector<Type> retained;
-    if (!method.retained_types.empty()) {
-      const auto parent = state ? state->method : checking_instance_ ? std::optional<size_t>{checking_instance_->method} : std::nullopt;
+    const auto parent = state ? state->method : checking_instance_ ? std::optional<size_t>{checking_instance_->method} : std::nullopt;
+    if (parent == id) retained = state ? state->retained : checking_instance_->retained_types;
+    else if (!method.retained_types.empty()) {
       if (method.parent != parent || !parent) return {};
       const auto &substitutions = state ? state->substitutions : checking_instance_->substitutions;
       for (const auto index : method.retained_types) {
@@ -2957,6 +2997,11 @@ class ScalarChecker {
     return {};
   }
   static TypeEvidenceState merge_evidence(TypeEvidenceState left, const TypeEvidenceState &right) {
+    std::erase_if(left.definitions, [&](const auto &entry) {
+      const auto found = right.definitions.find(entry.first);
+      return found == right.definitions.end() || found->second.method != entry.second.method ||
+          found->second.declaration != entry.second.declaration;
+    });
     std::erase_if(left.owner_bindings, [&](const auto &owner) {
       const auto found = right.owner_bindings.find(owner.first);
       return found == right.owner_bindings.end() || found->second != owner.second;
@@ -3054,17 +3099,18 @@ class ScalarChecker {
     case K::touch: return Type::void_type;
     case K::name:
       if (!state.complete) return {};
-      if (const auto found = state.bindings.find(expr.text); found != state.bindings.end()) {
-        if (state.required) check_query_binding(expr.text, expr.at);
+      if (state.required) check_query_binding(expr.text, expr.at);
+      if (const auto found = state.bindings.find(expr.text); found != state.bindings.end() && !state.definitions.contains(expr.text)) {
         view = state.views.at(expr.text); return found->second;
       }
       if (const auto family = named_family(expr.text, &state); !family.methods.empty()) {
         if (expected && expected->kind == Type::procedure) {
           if (program_.methods[family.methods.front()].family && has_declarations(expr.text))
             return declared_callable_query(expr.text, expected, expr.at, state, family.methods);
-          return callable_query(family.methods, expected, expr.at, state);
+          return callable_query(family.methods, expected, expr.at, family.declaration ? *family.declaration : state);
         }
-        if ((!contextual || state.required) && family.methods.size() == 1) return callable_evidence(family.methods.front(), &state);
+        if ((!contextual || state.required) && family.methods.size() == 1)
+          return callable_evidence(family.methods.front(), family.declaration ? family.declaration : &state);
       } else if (has_declarations(expr.text) && (expected || !contextual || state.required))
         return declared_callable_query(expr.text, expected, expr.at, state);
       return {};
@@ -3096,6 +3142,7 @@ class ScalarChecker {
             declared && declared->kind == Type::procedure ? &*declared : nullptr);
         if (initial == Type::never) completes = false;
         state.bindings[declaration->text] = declared ? declared : initial;
+        state.definitions.erase(declaration->text);
         state.owner_bindings.erase(declaration->text);
         const bool value = expr.declaration_kind == "val" || expr.declaration_kind == "func" || expr.declaration_kind == "proc";
         std::optional<bool> readonly = declaration->read_only || (value && expr.fixed_binding);
@@ -3114,6 +3161,7 @@ class ScalarChecker {
       const auto type = child(0);
       if (type == Type::never) return Type::never;
       state.bindings[expr.text] = type;
+      state.definitions.erase(expr.text);
       state.owner_bindings.erase(expr.text);
       auto selected = state.value;
       if (expr.read_only || (expr.fixed_binding && selected.value_binding.value_or(false))) selected.read_only = true;
@@ -3199,12 +3247,15 @@ class ScalarChecker {
         }
         auto caught = catch_entry;
         caught.bindings[handler.text] = handler.annotation ? annotation(*handler.annotation) : exception_type(0);
+        caught.definitions.erase(handler.text);
         caught.owner_bindings.erase(handler.text);
         caught.views[handler.text] = {true, true, true, EvidenceOwner::for_scope(handler)};
         const auto type = type_evidence(*handler.children.front(), caught, contextual, nullptr, alternatives);
         if (const auto outer = catch_entry.bindings.find(handler.text); outer != catch_entry.bindings.end())
           caught.bindings[handler.text] = outer->second;
         else caught.bindings.erase(handler.text);
+        if (const auto definition = catch_entry.definitions.find(handler.text); definition != catch_entry.definitions.end())
+          caught.definitions.emplace(*definition);
         if (const auto owner = catch_entry.owner_bindings.find(handler.text); owner != catch_entry.owner_bindings.end())
           caught.owner_bindings.emplace(*owner);
         const auto caught_view = caught.value;
@@ -3226,9 +3277,11 @@ class ScalarChecker {
       auto iteration = state;
       const auto control_owner = EvidenceOwner::for_scope(expr);
       iteration.bindings[expr.text] = index; iteration.views[expr.text] = {true, true, true, control_owner};
+      iteration.definitions.erase(expr.text);
       iteration.owner_bindings.erase(expr.text);
       if (fold) {
         iteration.bindings[expr.binding] = accumulator; iteration.views[expr.binding] = {true, true, true, control_owner};
+        iteration.definitions.erase(expr.binding);
         iteration.owner_bindings.erase(expr.binding);
       }
       type_evidence(*expr.children[fold ? 3 : 2], iteration);
@@ -3268,8 +3321,8 @@ class ScalarChecker {
         target = program_.symbols[id].type; local = true;
       } else if (expr.kind == K::value_call) { target = child(0); local = true; }
       else if (!expr.intrinsic && state.complete) {
-        if (const auto found = state.bindings.find(expr.text); found != state.bindings.end()) {
-          if (state.required) check_query_binding(expr.text, expr.at);
+        if (state.required && state.bindings.contains(expr.text)) check_query_binding(expr.text, expr.at);
+        if (const auto found = state.bindings.find(expr.text); found != state.bindings.end() && !state.definitions.contains(expr.text)) {
           target = found->second; local = true;
         }
       }
@@ -3419,7 +3472,7 @@ class ScalarChecker {
         if (state.required) for (size_t i = 0; i < arguments.size(); ++i)
           if (argument_mode(method.source->parameters[i]) != ArgumentMode::value && (views[i].view != true || views[i].mixed_view))
             implementation_gap(expr.at, "borrowed parameter requires an existing view");
-        const auto type = infer_result(id, arguments, retained, &state);
+        const auto type = infer_result(id, arguments, retained, family.declaration ? family.declaration : &state);
         if (!type || nested_binder(method, *type->type) || (result && result != type->type)) return {};
         const auto next = result_view(method, *type, owners);
         view = !result || view == next ? next : ViewEvidence{};
@@ -3448,9 +3501,13 @@ class ScalarChecker {
       return Type::never;
     case K::callable:
       if (!expr.definition->name.empty()) {
-        state.bindings[expr.definition->name] = callable_evidence(lexical_method(expr.definition.get(), state.method), &state);
+        const auto method = lexical_method(expr.definition.get(), state.method);
+        auto declaration = std::make_shared<TypeEvidenceState>(state);
+        declaration->returns = nullptr;
+        state.bindings[expr.definition->name] = callable_evidence(method, &state);
+        state.definitions[expr.definition->name] = {method, std::move(declaration)};
         state.owner_bindings.erase(expr.definition->name);
-        state.views[expr.definition->name] = {false, true, true, state.full_scope_owner};
+        state.views[expr.definition->name] = {false, false, {}};
         return Type::void_type;
       }
       if (expected && expected->kind == Type::procedure)
@@ -3478,6 +3535,15 @@ class ScalarChecker {
           [&](size_t place) { return storage(place).binding == id; }))) continue;
       const auto &binding = bindings_->at(id);
       state.bindings[name] = binding.type;
+      state.definitions.erase(name);
+      if (binding.definition) {
+        const auto &definition = definitions_.at(id);
+        state.definitions[name] = {definition.method, definition.declaration};
+        state.bindings[name] = callable_evidence(definition.method, definition.declaration.get());
+        state.owner_bindings.erase(name);
+        state.views[name] = {false, false, {}};
+        continue;
+      }
       if (binding.owner_binding) state.owner_bindings[name] = *binding.owner_binding;
       else state.owner_bindings.erase(name);
       const auto found = lexical_.owners.find(binding.alias.value_or(id));
@@ -3501,12 +3567,13 @@ class ScalarChecker {
       state.owner_relations[{owner, other}] = compare_owners(owner, other);
     return state;
   }
-  size_t retain_query_environment(const CheckedMethod &method, const std::optional<ResultContract> &result = {}) {
+  size_t retain_query_environment(const CheckedMethod &method, const std::optional<ResultContract> &result = {},
+                                  const TypeEvidenceState *declaration = nullptr) {
     const auto &symbols = free_bindings(*method.source).symbols;
     if (method.queries.empty() && symbols.empty() && !result) return 0;
     QueryEnvironment environment;
     environment.result = result;
-    const auto state = evidence_state();
+    const auto state = declaration ? *declaration : evidence_state();
     if (lexical_methods_.contains(method.source))
       for (const auto &symbol : symbols)
         if (symbol_shadowed(symbol.name, state)) environment.symbol_shadows.insert(symbol.name);
@@ -3674,6 +3741,21 @@ class ScalarChecker {
     if (result_probe_) return false;
     implementation_gap(at, "type parameter is not determined by the arguments");
   }
+  std::vector<Type> definition_retained(size_t id, const TypeEvidenceState &state) const {
+    const auto &definition = program_.methods[id];
+    if (state.method == id) return state.retained;
+    std::vector<Type> retained;
+    if (!definition.retained_types.empty()) {
+      if (definition.parent != state.method)
+        implementation_gap(definition.source->at, "callable definition lacks its enclosing type context");
+      for (const auto index : definition.retained_types) {
+        const auto &type = state.substitutions.at(index);
+        if (!type) implementation_gap(definition.source->at, "enclosing type parameter is not determined by the arguments");
+        retained.push_back(*type);
+      }
+    }
+    return retained;
+  }
   std::optional<CallableSelection> try_select_callable(const std::vector<size_t> &family, const Type *expected, const Location &at,
                                                         const TypeEvidenceState *state = nullptr, bool definition_site = false) const {
     if (family.empty()) fail(at, "no applicable implementation for declared callable value");
@@ -3717,8 +3799,9 @@ class ScalarChecker {
     }
     return CallableSelection{std::move(retained), std::move(type), supplied};
   }
-  CallableSelection select_callable(const std::vector<size_t> &family, const Type *expected, const Location &at, bool definition_site = false) const {
-    if (const auto selected = try_select_callable(family, expected, at, nullptr, definition_site)) return *selected;
+  CallableSelection select_callable(const std::vector<size_t> &family, const Type *expected, const Location &at, bool definition_site = false,
+                                    const TypeEvidenceState *state = nullptr) const {
+    if (const auto selected = try_select_callable(family, expected, at, state, definition_site)) return *selected;
     implementation_gap(at, "unproved callable result; provide an independent result contract");
   }
   struct InspectedDeclaration {
@@ -3833,38 +3916,92 @@ class ScalarChecker {
     CheckedOperation value; value.type = program_.callables[id].type; value.callable = id; value.callable_captures = std::move(captures);
     return value;
   }
-  CheckedOperation materialize(const std::vector<size_t> &family, const Type *expected, const Location &at, bool definition_site = false) {
-    if (family.empty()) fail(at, "no applicable implementation for declared callable value");
-    auto &definition = program_.methods[family.front()];
-    if (lexical_methods_.contains(definition.source)) resolve_captures(definition);
-    if (definition.family) {
-      const auto view = expected ? *expected : select_callable(family, nullptr, at).type;
-      return materialize_family(*definition.family, view, at);
-    }
-    const auto selection = select_callable(family, expected, at, definition_site);
-    std::vector<Type> environment;
-    std::vector<CheckedOperation> captures;
-    for (const auto &capture : definition.captures) {
-      Expression name{}; name.kind = Expression::Kind::name; name.at = capture.at; name.text = capture.name;
-      const auto value = named_value(name);
-      if (value.type.kind != Type::procedure || (value.binding && !bindings_->at(*value.binding).callable_value))
-        implementation_gap(capture.at, "capture of ordinary lexical cells or non-callable values");
-      environment.push_back(value.type); captures.push_back(value);
-    }
+  void warn_captures(const CheckedMethod &definition) {
     if (validating_ && definition.source->explicit_captures && warned_captures_.insert(definition.source).second)
       for (const auto &capture : definition.captures)
         if (std::none_of(free_bindings(*definition.source).captures.begin(), free_bindings(*definition.source).captures.end(),
                          [&](const auto &used) { return used.name == capture.name; }))
           program_.warnings.push_back({Warning::unused_capture, capture.at, "unused callable capture '" + capture.name + "' remains retained"});
+  }
+  void define_callable(size_t method, const Location &at) {
+    auto &definition = program_.methods[method];
+    resolve_captures(definition);
+    auto evidence = std::make_shared<TypeEvidenceState>(evidence_state());
+    evidence->returns = nullptr;
+    DefinitionContext context{method, evidence, {}, {}, definition_retained(method, *evidence)};
+    for (const auto &capture : definition.captures) {
+      const auto binding = lexical_.lookup(capture.name);
+      const auto family = binding ? NamedFamily{} : named_family(capture.name);
+      context.captures.push_back({binding, family.methods, family.context != nullptr});
+      Expression name{}; name.kind = Expression::Kind::name; name.at = capture.at; name.text = capture.name;
+      auto state = *evidence;
+      const auto type = type_evidence(name, state);
+      if (!type) implementation_gap(capture.at, "callable capture requires a proved concrete view type");
+      if (type->kind != Type::procedure || (binding && !bindings_->at(*binding).callable_value && !bindings_->at(*binding).definition))
+        implementation_gap(capture.at, "capture of ordinary lexical cells or non-callable values");
+      context.environment.push_back(*type);
+    }
+    context.query = retain_query_environment(definition, {}, evidence.get());
+    warn_captures(definition);
+    const auto id = bind(definition.source->name, Type::void_type, {}, true, true, true, at);
+    bindings_->at(id).definition = method;
+    const auto &bound = definitions_.emplace(id, std::move(context)).first->second;
+    // Body checking is independent of reading captures or constructing a value.
+    if (definition.source->type_parameters.empty()) {
+      const auto selection = select_callable({method}, nullptr, at, false, evidence.get());
+      cover_family({method}, selection.type, at, [&](size_t selected, const std::vector<Type> &arguments) {
+        demand(selected, arguments, at, bound.environment, bound.retained, bound.query, evidence.get());
+      }, bound.retained);
+    }
+  }
+  std::vector<CheckedOperation> capture_values(const NamedFamily &family, const Location &at) {
+    const auto &definition = program_.methods[family.methods.front()];
+    std::vector<CheckedOperation> captures;
+    for (size_t i = 0; i < definition.captures.size(); ++i) {
+      const auto &capture = definition.captures[i];
+      Expression name{}; name.kind = Expression::Kind::name; name.at = at; name.text = capture.name;
+      CheckedOperation value;
+      if (family.context) {
+        const auto binding = storage(family.context->frame.captures.at(i)).binding;
+        value = read_binding(name, true, binding);
+      } else if (family.definition) {
+        const auto &source = family.definition->captures[i];
+        if (source.binding) value = named_binding(name, *source.binding);
+        else value = materialize_definition(NamedFamily{source.methods, source.enclosing ? checking_instance_ : nullptr}, nullptr, at);
+      } else value = named_value(name);
+      if (value.type.kind != Type::procedure || (value.binding && !bindings_->at(*value.binding).callable_value))
+        implementation_gap(capture.at, "capture of ordinary lexical cells or non-callable values");
+      captures.push_back(std::move(value));
+    }
+    return captures;
+  }
+  CheckedOperation materialize_definition(const NamedFamily &family, const Type *expected, const Location &at, bool definition_site = false) {
+    if (family.methods.empty()) fail(at, "no applicable implementation for declared callable value");
+    auto &definition = program_.methods[family.methods.front()];
+    if (lexical_methods_.contains(definition.source)) resolve_captures(definition);
+    if (definition.family) {
+      const auto view = expected ? *expected : select_callable(family.methods, nullptr, at).type;
+      return materialize_family(*definition.family, view, at);
+    }
+    const auto state = family.context ? evidence_state(true) : family.declaration ? *family.declaration : evidence_state();
+    const auto selection = select_callable(family.methods, expected, at, definition_site, &state);
+    auto captures = capture_values(family, at);
+    std::vector<Type> environment;
+    for (const auto &capture : captures) environment.push_back(capture.type);
+    warn_captures(definition);
     CheckedCallable value{selection.type};
-    const auto query = retain_query_environment(definition, selection.definition_result);
-    cover_family(family, selection.type, at, [&](size_t selected, const std::vector<Type> &arguments) {
-      const auto target = demand(selected, arguments, at, environment, selection.retained, query);
+    const auto query = family.context ? family.context->query_environment : family.definition ? family.definition->query
+        : retain_query_environment(definition, selection.definition_result, &state);
+    cover_family(family.methods, selection.type, at, [&](size_t selected, const std::vector<Type> &arguments) {
+      const auto target = demand(selected, arguments, at, environment, selection.retained, query, &state);
       const auto &instance = program_.instances[target];
       check_family_contract(program_.methods[selected], arguments, instance.arguments, instance.result, selection.type, at);
       value.dispatch.emplace_back(arguments, target);
     }, selection.retained);
     return materialized_value(intern_callable(std::move(value)), std::move(captures), at);
+  }
+  CheckedOperation materialize(const std::vector<size_t> &family, const Type *expected, const Location &at, bool definition_site = false) {
+    return materialize_definition(NamedFamily{family}, expected, at, definition_site);
   }
   CheckedOperation materialize_symbol(size_t symbol, const Type &view, const Location &at) {
     if (view.kind != Type::procedure || view.pure_callable)
@@ -4128,9 +4265,9 @@ class ScalarChecker {
     result.exceptions = std::move(result_exceptions);
     return result;
   }
-  CheckedOperation read_binding(const Expression &expr, bool read = true) {
+  CheckedOperation read_binding(const Expression &expr, bool read = true, std::optional<size_t> selected_binding = {}) {
     CheckedOperation operation;
-    const auto binding = lexical_.lookup(expr.text);
+    const auto binding = selected_binding ? selected_binding : lexical_.lookup(expr.text);
     if (!binding) fail(expr.at, "unknown scalar value '" + expr.text + "'");
     if (!lexical_.bindings_available.contains(*binding)) fail(expr.at, "binding '" + expr.text + "' is not available on every reaching path");
     const auto &slot = (*bindings_)[*binding];
@@ -4169,12 +4306,18 @@ class ScalarChecker {
     }
     return operation;
   }
+  CheckedOperation named_binding(const Expression &expr, size_t binding, const Type *expected = nullptr, bool read = true) {
+    if (!lexical_.bindings_available.contains(binding)) fail(expr.at, "binding '" + expr.text + "' is not available on every reaching path");
+    if (const auto found = definitions_.find(binding); found != definitions_.end()) {
+      const auto &definition = found->second;
+      return materialize_definition(NamedFamily{{definition.method}, nullptr, {}, &definition, definition.declaration.get()}, expected, expr.at);
+    }
+    return read_binding(expr, read, binding);
+  }
   CheckedOperation named_value(const Expression &expr, const Type *expected = nullptr, bool read = true) {
-    if (lexical_.lookup(expr.text)) return read_binding(expr, read);
+    if (const auto binding = lexical_.lookup(expr.text)) return named_binding(expr, *binding, expected, read);
     const auto family = named_family(expr.text);
-    if (family.context)
-      implementation_gap(expr.at, "materialization of the current lexical callable requires its complete retained environment");
-    if (!family.methods.empty()) return materialize(family.methods, expected, expr.at);
+    if (!family.methods.empty()) return materialize_definition(family, expected, expr.at);
     if (has_declarations(expr.text)) fail(expr.at, "no applicable implementation for declared callable '" + expr.text + "'");
     if (module_names().symbols.contains(expr.text))
       implementation_gap(expr.at, "materialization of a compile-time symbol object");
@@ -4248,14 +4391,9 @@ class ScalarChecker {
       break;
     case K::name: operation = named_value(expr, expected, read); break;
     case K::callable: {
-      operation = materialize({lexical_method(expr.definition.get())}, expected, expr.at, true);
-      if (!expr.definition->name.empty()) {
-        const auto id = declare(expr.definition->name, operation.type, false, true, expr.at);
-        initialize(id); operation.place = id;
-        operation.binding = lexical_.lookup(expr.definition->name);
-        bindings_->at(*operation.binding).callable_value = true;
-        operation.operand_type = operation.type; operation.type = Type::void_type;
-      }
+      const auto method = lexical_method(expr.definition.get());
+      if (expr.definition->name.empty()) operation = materialize(std::vector<size_t>{method}, expected, expr.at, true);
+      else { define_callable(method, expr.at); operation.type = Type::void_type; }
       break;
     }
     case K::unary: {
@@ -4354,7 +4492,7 @@ class ScalarChecker {
         }
         break;
       }
-      if (expr.kind == K::value_call || (!expr.intrinsic && lexical_.lookup(expr.text))) {
+      if (expr.kind == K::value_call || (!expr.intrinsic && lexical_.lookup(expr.text) && named_family(expr.text).methods.empty())) {
         const size_t offset = expr.kind == K::value_call ? 1 : 0;
         CheckedOperation target;
         if (offset) { child(0); target = operations.at(expr.children.front().get()); }
@@ -4377,6 +4515,11 @@ class ScalarChecker {
       const bool declared_builtin = eager && !expr.intrinsic && named_family(expr.text).methods.empty() && has_declarations(expr.text);
       const bool builtin_signature = eager && (expr.intrinsic ||
           (named_family(expr.text).methods.empty() && !has_declarations(expr.text)));
+      const auto family = named_family(expr.text);
+      if (!family.methods.empty() && (family.context || family.definition)) {
+        operation.callable_captures = capture_values(family, expr.at);
+        if (!operation.callable_captures.empty()) note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
+      }
       auto evidence = argument_evidence(expr);
       for (size_t i = 0; i < expr.children.size(); ++i) {
         auto preparation = argument_preparation(expr, name, arguments, evidence, access_of(views), owners_of(views));
@@ -5135,9 +5278,8 @@ class ScalarChecker {
       }
       if (instance.result.type->kind == Type::procedure) edges.emplace_back(contexts[target].result, expression(c, &expr));
       if (fact.callee && !instance.environment.empty()) {
-        const auto &frame = program_.instances.at(c - 1).frame;
         for (size_t i = 0; i < instance.environment.size(); ++i)
-          edges.emplace_back(contexts[c].places.at(frame.captures.at(i)), contexts[target].places.at(instance.frame.captures.at(i)));
+          value(c, fact.callable_captures.at(i), contexts[target].places.at(instance.frame.captures.at(i)));
       }
       return edges;
     };
@@ -5229,7 +5371,7 @@ class ScalarChecker {
                    std::map<const Expression *, CheckedOperation> &operations, bool proving) {
     proving_ = proving; observed_ = {};
     storage_ = &storage; bindings_ = &bindings;
-    storage.clear(); bindings.clear(); operations.clear();
+    storage.clear(); bindings.clear(); operations.clear(); definitions_.clear();
     if (!proving) { possible_targets_.clear(); possible_null_sources_.clear(); target_dependencies_.clear(); catalog_storage_.clear(); rebound_.clear(); loop_states_.clear(); }
     lexical_ = {}; cleanup_ = {}; scope_storage_.clear(); checked_scope_owners_.clear(); read_sites_.clear(); external_owners_.clear();
     loop_controls_.clear(); delayed_controls_.clear(); deferred_inputs_.clear(); active_loops_.clear();

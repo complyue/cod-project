@@ -31,7 +31,8 @@ runner.CASES = {
     'named_recursive_fixed_capture': (IO + TAGS + 'func factory(f:func(u64)->u64)->func(u64,u64)->u64{'
         'func recur[f](x:u64,n:u64)->u64{if(n==0u64){return f(x);}else{return recur(x,n-1u64);};};return recur;}'
         'func classifier:func(u64)->u64=tag;func held=factory(classifier);behave @print(held(1u8,20u64));behave @print(held(1u64,30u64));', 0, '64\n64\n', ''),
-    'named_open_view_remains_unproved': ('proc run()->void{func id(x:T)->const T where T{return x;};}run();', 2, '', 'require an explicit concrete view type'),
+    'named_generic_definition_without_view': ('proc run()->void{func id(x:T)->const T where T{return x;};}run();', 0, '', ''),
+    'named_open_view_remains_unproved': ('proc run()->void{func id(x:T)->const T where T{return x;};func value=id;}run();', 2, '', 'require an explicit concrete view type'),
     'retained_and_own_types': (IO + TAGS + 'func factory(sample:T)->func(u64)->u64 where T{'
         'return func[](x:U)->u64 where U{val retained:T<-1u8;return tag(retained)+tag(x);};}'
         'func a=factory(1);func b=factory(1f64);behave @print(a(1u8));behave @print(b(1u8));behave @print(a(1u64));', 0, '73\n172\n129\n', ''),

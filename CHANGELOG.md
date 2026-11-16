@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-16 — Construct callable views from definition context
+
+<a id="k-745"></a>
+**K-745 — Separate callable definitions from stored snapshots.** Agent continuity under H-481/K-743/H-329/H-331/H-342/H-344/H-420/H-423 and charter §§3.2–3.3/4.3/6.3/8/12: source361→362/registry756→757 continues the qualified C-65/C-73/C-75/P-297/P-301/P-303 capture/value scopes. Local and recursive view construction retains lexical identities and current required TLS; stored values preserve complete environments. Direct calls prepare captures without an intermediate callable image, and queries retain nonexecuting evidence and availability checks. Native cleanup includes failed nested construction, copying and deferred registration. D-18r106/D-10r179, candidate P-419–P-421 qualification boundaries, regional capture restrictions and D-16 remain unchanged; no lexical-cell promotion, lifetime extension or permanent ABI is selected. Baseline: `dae1dabf261a664485f831bce5ab3427cc8544e2` at affected paths.
+
 ## 2026-11-16 — Integrate reference-symbol and module-selection decisions
 
 <a id="k-744"></a>

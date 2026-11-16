@@ -39,7 +39,6 @@ class LLVMEmission {
   bool bounds_checks_ = true;
   bool environments_ = false;
   unsigned environment_field_ = 0;
-  llvm::Value *environment_ = nullptr;
   std::vector<Type> callable_types_;
   std::vector<llvm::Function *> general_, specialized_;
   std::vector<llvm::GlobalVariable *> symbols_;
@@ -472,7 +471,7 @@ class LLVMEmission {
     return contextual_value(expr, alternatives, "owner", [&](size_t owner) { return owner_identity(owner, expr.at); }, b_.getPtrTy());
   }
   llvm::Value *native_call(const Expression &expr, llvm::Function *target, size_t method, std::vector<llvm::Value *> prepared,
-                           llvm::Value *captured = nullptr, std::optional<size_t> instance = {}, const Type *callable_view = nullptr) {
+                           const std::vector<llvm::Value *> &captured = {}, std::optional<size_t> instance = {}, const Type *callable_view = nullptr) {
     const auto &inputs = input_frame(method).inputs;
     if (prepared.size() != inputs.size()) throw std::logic_error("unchecked native call arity");
     for (size_t i = 0; i < prepared.size(); ++i) {
@@ -482,7 +481,13 @@ class LLVMEmission {
     const size_t offset = expr.kind == Expression::Kind::value_call ? 1 : 0;
     for (const auto &[owner, input] : input_frame(method).owners)
       prepared.push_back(selected_owner(*expr.children.at(input + offset), &expr, method, callable_view));
-    if (!program_->methods[method].captures.empty()) prepared.push_back(captured ? captured : environment_);
+    if (captured.size() != program_->methods[method].captures.size()) throw std::logic_error("native call lacks its lexical captures");
+    if (!captured.empty()) {
+      auto *values = slot(llvm::ArrayType::get(scalar_, captured.size()), "call.captures");
+      for (size_t i = 0; i < captured.size(); ++i)
+        b_.CreateStore(captured[i], b_.CreateConstGEP2_64(values->getAllocatedType(), values, 0, i));
+      prepared.push_back(values);
+    }
     if (instance) {
       for (const auto &type : program_->instances[*instance].retained_types) prepared.push_back(b_.getInt32(tag(type)));
     } else if (!program_->methods[method].retained_types.empty()) {
@@ -521,7 +526,10 @@ class LLVMEmission {
         b_.CreateStore(image_capture(layout, image, index++), symbols_.at(symbol));
       }
     }
-    auto *result = native_call(expr, target, method, std::move(arguments), image, instance_id, &value.type);
+    std::vector<llvm::Value *> captured;
+    const auto count = program_->methods[method].captures.size();
+    for (size_t i = 0; i < count; ++i) captured.push_back(image_capture(image_layout(count), image, i));
+    auto *result = native_call(expr, target, method, std::move(arguments), captured, instance_id, &value.type);
     for (const auto &[symbol, previous] : saved) b_.CreateStore(previous, symbols_.at(symbol));
     if (!instance.result.borrowed() && *instance.result.type != *value.type.target) {
       auto *adapt = block("callable.result.prepare"), *join = block("callable.result.prepared");
@@ -622,19 +630,24 @@ class LLVMEmission {
     std::vector<const Expression *> source_inputs;
     for (const auto &argument : expr.children) source_inputs.push_back(argument.get());
     const auto cases = choices(expr, source_inputs, true);
-    const auto call = [&](llvm::Function *target, size_t method) { return native_call(expr, target, method, arguments); };
+    const std::vector<llvm::Value *> inputs(arguments.begin(), arguments.begin() + expr.children.size());
+    const std::vector<llvm::Value *> captured(arguments.begin() + expr.children.size(), arguments.end());
     if (cases.front().operation->callee && (cases.size() > 1 || !specialize_)) {
-      const auto method = program_->instances[*cases.front().operation->callee].method;
+      const auto id = *cases.front().operation->callee;
+      const auto &target = program_->instances[id];
+      // Share the call only when its lexical and declaration context also agrees.
       if (std::all_of(cases.begin(), cases.end(), [&](const Choice &choice) {
-            return choice.operation->callee && program_->instances[*choice.operation->callee].method == method;
-          }))
-        return call(general_[method], method);
+            if (!choice.operation->callee) return false;
+            const auto &other = program_->instances[*choice.operation->callee];
+            return other.method == target.method && other.retained_types == target.retained_types &&
+                other.query_environment == target.query_environment;
+          })) return native_call(expr, general_[target.method], target.method, inputs, captured, id);
     }
-    return choose(expr, arguments, cases, outcome_, [&](const Choice &choice) -> llvm::Value * {
+    return choose(expr, inputs, cases, outcome_, [&](const Choice &choice) -> llvm::Value * {
       if (choice.operation->callee) {
         const auto id = *choice.operation->callee;
         auto *target = specialize_ && cases.size() == 1 ? specialized_[id] : general_[program_->instances[id].method];
-        return call(target, program_->instances[id].method);
+        return native_call(expr, target, program_->instances[id].method, inputs, captured, id);
       }
       if (choice.operation->builtin == BuiltinOperation::unary || choice.operation->builtin == BuiltinOperation::binary)
         return outcome(eager_builtin(expr, arguments, choice), integer(0), integer(0), null_pointer());
@@ -826,6 +839,8 @@ class LLVMEmission {
       auto *result = invoke(body, arguments);
       release_value(b_.CreateExtractValue(result, 0));
       if (facts_.front()->at(&body).callable_call) release_value(arguments.front());
+      if (facts_.front()->at(&body).callee)
+        for (size_t i = body.children.size(); i < arguments.size(); ++i) release_value(arguments[i]);
       facts_ = all_facts; frame_contexts_ = all_contexts;
       auto *replace = block("defer.failed");
       b_.CreateCondBr(failed(result), replace, scope.cleanup);
@@ -1012,7 +1027,9 @@ class LLVMEmission {
     }), at);
   }
   size_t prepared_count(const Expression &expr) const {
-    return expr.children.size() + (expr.kind != Expression::Kind::value_call && facts_.front()->at(&expr).callable_call ? 1 : 0);
+    const auto &fact = facts_.front()->at(&expr);
+    return expr.children.size() + (expr.kind != Expression::Kind::value_call && fact.callable_call ? 1 : 0)
+        + (fact.callee ? fact.callable_captures.size() : 0);
   }
   static bool inert_argument(const Expression &expr) {
     using K = Expression::Kind;
@@ -1095,6 +1112,15 @@ class LLVMEmission {
     const size_t offset = expr.kind == Expression::Kind::value_call ? 1 : 0;
     const bool protect = deferred || std::any_of(expr.children.begin() + offset, expr.children.end(),
                                                [](const auto &child) { return !inert_argument(*child); });
+    std::vector<llvm::Value *> captured;
+    if (fact.callee) for (size_t i = 0; i < fact.callable_captures.size(); ++i) {
+      std::vector<Choice> cases;
+      for (size_t j = 0; j < facts_.size(); ++j)
+        cases.push_back({{}, &facts_[j]->at(&expr).callable_captures.at(i), frame_contexts_.empty() ? std::vector<const CheckedInstance *>{}
+            : std::vector<const CheckedInstance *>{frame_contexts_.at(j)}});
+      auto *value = choose(expr, {}, cases, scalar_, [&](const Choice &choice) { return captured_value(*choice.operation, expr.at); });
+      captured.push_back(protect ? copy_temporary(value, expr.at) : value);
+    }
     if (expr.kind != Expression::Kind::value_call && fact.callable_call) {
       auto *address = fact.symbol ? static_cast<llvm::Value *>(symbols_.at(*fact.symbol))
           : checked_address(binding_address(*fact.callable_binding, fact.callable_place), expr, expr.at, true);
@@ -1108,11 +1134,12 @@ class LLVMEmission {
       arguments.push_back(value);
     }
     check_destination_arguments(expr, arguments);
+    arguments.insert(arguments.end(), captured.begin(), captured.end());
     return arguments;
   }
   void check_destination_arguments(const Expression &expr, const std::vector<llvm::Value *> &arguments,
                                    bool deferred = false) {
-    if (facts_.front()->at(&expr).destination_arguments) for (size_t i = 0; i < arguments.size(); ++i) {
+    if (facts_.front()->at(&expr).destination_arguments) for (size_t i = 0; i < expr.children.size(); ++i) {
       std::map<bool, std::vector<size_t>> alternatives;
       for (size_t j = 0; j < facts_.size(); ++j)
         alternatives[facts_[j]->at(&expr).arguments.at(i).mode == ArgumentMode::borrowed_read].push_back(j);
@@ -1290,13 +1317,12 @@ class LLVMEmission {
       return choose(expr, arguments, choices(expr, inputs), scalar_, [&](const Choice &choice) { return eager_builtin(expr, arguments, choice); });
     }
     if (fact.callable) {
-      const bool definition = expr.kind == K::callable && fact.place.has_value();
       const bool installation = expr.kind == K::effect || expr.kind == K::procedure_effect;
       const auto materialize = [&](const CheckedOperation &value) {
-        return this->materialize(value, definition || installation ? value.operand_type : value.type, expr.at);
+        return this->materialize(value, installation ? value.operand_type : value.type, expr.at);
       };
       llvm::Value *value;
-      if (std::any_of(facts_.begin(), facts_.end(), [&](const auto *facts) { return facts->at(&expr).callable != fact.callable; })) {
+      if (std::any_of(facts_.begin(), facts_.end(), [&](const auto *facts) { return facts->at(&expr).callable != fact.callable; }) || (!fact.callable_captures.empty() && facts_.size() > 1)) {
         std::vector<Choice> cases;
         for (size_t i = 0; i < facts_.size(); ++i) cases.push_back({{}, &facts_[i]->at(&expr), {frame_contexts_[i]}});
         value = choose(expr, {}, cases, scalar_, [&](const Choice &choice) { return materialize(*choice.operation); });
@@ -1305,14 +1331,11 @@ class LLVMEmission {
         auto *owned = effect_values_.at(*fact.symbol);
         assign_value(owned, own_value(value), expr.at);
         b_.CreateStore(load(owned), symbols_.at(*fact.symbol));
-      } else if (definition) {
-        auto *place = storage_.at(*fact.place);
-        if (environments_) { scope_->values.values.push_back(place); clear_value(place); }
-        b_.CreateStore(value, place);
       } else value = own_value(value);
-      return definition || installation ? empty_scalar() : value;
+      return installation ? empty_scalar() : value;
     }
     switch (expr.kind) {
+    case K::callable: return empty_scalar();
     case K::null_ref: return null_pointer();
     case K::symbol: return b_.CreateLoad(scalar_, symbols_.at(*fact.symbol), "effect.current");
     case K::touch: return empty_scalar();
@@ -1575,7 +1598,7 @@ class LLVMEmission {
   }
   void begin(llvm::Function *function, const std::vector<CheckedStorage> &storage, const std::vector<CheckedBinding> &bindings,
              const CheckedFrame &frame = {}) {
-    function_ = function; arguments_.clear(); retained_types_.clear(); parameter_values_.clear(); value_owners_.clear(); environment_ = nullptr; query_environment_ = nullptr; temporaries_ = nullptr;
+    function_ = function; arguments_.clear(); retained_types_.clear(); parameter_values_.clear(); value_owners_.clear(); query_environment_ = nullptr; temporaries_ = nullptr;
     for (size_t i = 0; i < frame.inputs.size(); ++i) arguments_.push_back(function->getArg(i));
     b_.SetInsertPoint(block("entry")); finish_ = block("completion"); scope_ = nullptr; control_ = nullptr;
     owner_identities_.clear();
@@ -1666,10 +1689,9 @@ class LLVMEmission {
       frame_contexts_.push_back(&program_->instances[instances[i]]);
     }
     if (!method.captures.empty()) {
-      environment_ = function->getArg(arity);
-      auto *image = image_layout(method.captures.size());
+      auto *values = function->getArg(arity);
       for (size_t c = 0; c < method.captures.size(); ++c) {
-        auto *captured = image_capture(image, environment_, c);
+        auto *captured = b_.CreateLoad(scalar_, b_.CreateGEP(scalar_, values, integer(c)));
         b_.CreateStore(captured, storage_.at(frame->captures.at(c))); arguments_.push_back(captured);
       }
     }

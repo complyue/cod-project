@@ -51,7 +51,7 @@ def main():
                 if name != 'capture_and_query_shadow':
                     record(key+'/no_query_environment_allocation','@cod_lang_callable_create' not in text and '@cod_lang_callable_copy' not in text)
                 else:
-                    record(key+'/complete_runtime_captures','@cod_lang_callable_create' in text and '@cod_lang_callable_copy' in text)
+                    record(key+'/direct_runtime_captures','@cod_lang_callable_create' not in text and '@cod_lang_callable_copy' in text)
                 if name in ('generic_declaration_contexts','nested_query_retains_parent_types'):
                     record(key+'/shared_recursive_body',sum('.recur.' in n and n.endswith('.general') for n in bodies)==1,methods=list(bodies))
     passed = sum(result['passed'] for result in results)

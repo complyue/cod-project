@@ -31,7 +31,7 @@ runner.CASES.update({
  'query_does_not_initialize_source': ('proc run()->void{val sample<-make local u64;func recur(n:u64){if(n==0u64){'+ANCHOR+'}else{'+STEP+'};};recur(20u64);sample;}run();',2,'','before definite initialization'),
  'shadow_cannot_anchor_recursive_cycle': ('proc run()->void{val sample<-7u64;func recur(n:u64){val value<-make local typeof(sample){9u64};{{val sample<-false;return recur(n-1u64);}};};}',2,'','unproved callable result'),
  'dependent_return_still_checked': ('proc run()->void{val sample<-7u64;func recur(n:u64){if(n==0u64){'+ANCHOR+'}else{{{val sample<-false;return recur(n-1u64)&&sample;}}};};}',2,'','logical operation requires bool operands'),
- 'recursive_runtime_value_still_unproved': ('proc run()->void{func recur(n:u64)->u64{func copy=recur;return n;};}',2,'','materialization of the current lexical callable'),
+ 'recursive_runtime_definition_value': ('proc run()->void{func recur(n:u64)->u64{func copy=recur;return n;};}',0,'',''),
  'recursive_required_query': (RUN('val sample<-7u64;func recur(n:u64){if(n==0u64){'+ANCHOR+'}else{{{val sample<-false;val queried<-make local typeof(recur(n-1u64)){2u64};return recur(n-1u64)+queried;}}};};'+OUT('recur(3u64)')),0,'15\n',''),
  'recursive_contextual_query': (IO+'func apply(f:func(u64)->u64,n:u64)->u64{return f(n);}'+RUN('val sample<-7u64;func recur(n:u64){if(n==0u64){'+ANCHOR+'}else{{{val sample<-false;val queried<-make local typeof(apply(recur,n-1u64)){2u64};return recur(n-1u64)+queried;}}};};'+OUT('recur(3u64)')).removeprefix(IO),0,'15\n',''),
  'nested_inferred_query': (RUN('val sample<-7u64;func recur(n:u64){if(n==0u64){'+ANCHOR+'}else{{{val sample<-false;func query(){val value<-make local typeof(recur(0u64)){2u64};return value;};return recur(n-1u64)+query();}}};};'+OUT('recur(3u64)')),0,'15\n',''),
@@ -48,7 +48,7 @@ runner.CASES.update({
      +RUN('val a<-1;ref b=a;func recur(n:u64){if(n==0u64){val value<-make local typeof(classify(a,b)){7u32};return value;}else{{{val b<-2;val queried<-make local typeof(recur(0u64)){1u32};return recur(n-1u64)+queried;}}};};'+OUT('recur(3u64)')).removeprefix(IO),0,'10\n',''),
  'nested_query_cannot_anchor_cycle': ('proc run()->void{func recur(){func query(){val value<-make local typeof(recur()){1u64};return value;};return query();};}',2,'','unproved callable result'),
  'nested_query_obeys_nearest_binding': ('proc run()->void{func recur(n:u64)->u64{val recur<-false;func query()->u64{val value<-make local typeof(recur(0u64)){1u64};return value;};return query();};}',2,'','not callable'),
- 'explicit_runtime_self_capture_still_unproved': ('proc run()->void{func recur(n:u64)->u64{func query[recur]()->u64{val value<-make local typeof(recur(0u64)){1u64};return value;};return query();};}',2,'','materialization of the current lexical callable'),
+ 'explicit_runtime_self_definition_capture': ('proc run()->void{func recur(n:u64)->u64{func query[recur]()->u64{val value<-make local typeof(recur(0u64)){1u64};return value;};return query();};}',0,'','unused callable capture'),
 })
 runner.CASE_SHADOWS.update({
  'captured_callable_shadow':['f'], 'capture_and_query_shadow':['sample','f'],
