@@ -1,10 +1,12 @@
 # Design authority and value lineage
 
-Registry revision: 752 · Audit date: 2026-11-16 (America/Los_Angeles)
+Registry revision: 753 · Audit date: 2026-11-16 (America/Los_Angeles)
 
 ## Design authority
 
-[D-GOV](#d-gov), registry r752 and its maintenance scope. V-03 → GOV-01 → GOV-02 through E-11/E-12 preserves traceable, human-scoped delegation under H-05/H-388/H-391/H-403/H-411. H-423 permits routine resolution and evidence maintenance without granting new design authority.
+[D-GOV](#d-gov), registry r753 and its maintenance scope. V-03 → GOV-01 → GOV-02 through E-11/E-12 preserves traceable, human-scoped delegation under H-05/H-388/H-391/H-403/H-411. H-423 permits routine resolution and evidence maintenance without granting new design authority.
+
+[K-741](../CHANGELOG.md#k-741) continues source reference357→358 under D-17r69/C-63/P-235/P-236 and D-14r115’s qualified target/alias/loop scope: loop payload invariants preserve unchanged exception facts while possible writes, borrowed aliases and rebound destinations retain checked obligations. Native acceptance preserves ordered cleanup and exact resource release; general mutation/value/action correlations remain bounded. D-16, pending design choices and all semantic revisions are unchanged.
 
 [K-739](../CHANGELOG.md#k-739)/[K-740](../CHANGELOG.md#k-740) aligns source reference357 with H-481's confirmed definition-mention behavior in D-18r105/D-10r174. Definition names retain lexical identity; required views capture at construction, while stored values preserve complete captures. C-65/C-73/C-75/P-419–P-421 keeps that source decision distinct from candidate full value-path/physical qualification. Existing owner/access/init, effects, recursion, nonexecuting queries, default origins, complete copies and cleanup retain their scoped contracts. Local-definition construction still uses declaration-time snapshots, and recursive view construction remains unimplemented; source coverage records both gaps. Mutable lexical dependency timing remains a scoped clarification, without reopening H-481’s current-symbolic-capture or stored-copy rule. K-736's ADT placement boundary, K-737's explicit module traversal and K-738's loop rebinding invariants remain current; aggregate layouts, broader context composition and ordinary branch/value correlations retain their separate boundaries. D-16/D-17/D-26 scope is unchanged. Decision history remains in the linked changelog evidence.
 

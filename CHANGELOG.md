@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-16 — Loop exception payload invariants
+
+<a id="k-741"></a>
+**K-741 — Preserve exception facts across non-writing loops.** Agent continuity under H-267/H-269/H-420/H-423 and charter §§3.3/5.3/6.3/12: source357→358 and registry752→753 continue D-17r69/C-63/P-235/P-236 and D-14r115’s qualified loop/target/alias contract. Separate payload-write effects from slot rebinding; include later-selected destinations and possible borrowed aliases. Zero/single iterations retain sequential facts; modified payloads and writable call contracts remain conservative. Source/native checks cover preserved categories, required checked failures and exact cleanup. Broader action/value correlations, source semantics, D-16, regional/runtime protocols and pending design qualification are unchanged. Baseline: `a1a2dead064a44ba46bb6fb71e028a84f2c56935` at affected paths.
+
 ## 2026-11-16 — Callable mention conformance boundary
 
 <a id="k-740"></a>

@@ -453,7 +453,11 @@ class ScalarChecker {
   size_t next_target_version_ = 0;
   std::set<size_t> rebound_;
   std::map<std::string, size_t> external_owners_;
-  struct LoopState { size_t first, last; std::set<size_t> bindings, rebound, expired; };
+  struct LoopState {
+    size_t first, last;
+    std::set<size_t> bindings, rebound, expired, payloads, payload_origins;
+    bool unknown_payloads = false;
+  };
   std::map<const Expression *, LoopState> loop_states_;
   std::vector<const Expression *> active_loops_;
   struct AbruptPath { LexicalState state; ExceptionFacts exceptions; Location at; Completion completion{2, false}; };
@@ -1108,9 +1112,25 @@ class ScalarChecker {
   ExceptionFacts stored_exceptions(const CheckedOperation &view) const {
     return stored_exceptions(view, lexical_.exceptions);
   }
+  bool borrowed_payload_alias(size_t written, size_t other) const {
+    return storage(written).borrowed && storage(other).borrowed &&
+        storage(written).type == storage(other).type &&
+        compare_owners(storage(written).scope, storage(other).scope) != OwnerMatch::mismatch;
+  }
+  void record_payload_write(const CheckedOperation &target) {
+    if (proving_) return;
+    // A write can preserve the first iteration's value yet change a later one.
+    // Record its destination independently of the computed postcondition.
+    for (const auto *expr : active_loops_) {
+      auto &loop = loop_states_.at(expr);
+      for (const auto place : target.targets) if (place != null_target) loop.payloads.insert(place);
+      loop.payload_origins.insert(target.origins.begin(), target.origins.end());
+    }
+  }
   void write_exception_payloads(std::map<size_t, ExceptionFacts> &values,
-                                const CheckedOperation &target, const ExceptionFacts &categories) {
+                                const CheckedOperation &target, const ExceptionFacts &categories, bool written = true) {
     if (target.type.kind != Type::exception) return;
+    if (written) record_payload_write(target);
     for (const auto place : target.targets) if (place != null_target) {
       if (target.place) values[place] = categories;
       else values[place].merge(categories);
@@ -1122,9 +1142,7 @@ class ScalarChecker {
     for (auto &[place, known] : values) {
       if (target.targets.contains(place) || !storage(place).borrowed) continue;
       if (std::any_of(target.targets.begin(), target.targets.end(), [&](size_t written) {
-            return written != null_target && storage(written).borrowed &&
-                storage(written).type == storage(place).type &&
-                compare_owners(storage(written).scope, storage(place).scope) != OwnerMatch::mismatch;
+            return written != null_target && borrowed_payload_alias(written, place);
           })) known.merge(categories);
     }
   }
@@ -1173,11 +1191,24 @@ class ScalarChecker {
       }
     } while (changed);
     catalog_storage_ = *storage_;
-    for (auto &[expr, loop] : loop_states_) for (const auto binding : loop.bindings)
-      if (loop.rebound.contains(binding)) for (const auto place : possible_targets_.at(binding)) if (place != null_target) {
-        const auto scope = storage(place).scope;
-        if (scope >= loop.first && scope < loop.last) loop.expired.insert(binding);
+    for (auto &[expr, loop] : loop_states_) {
+      for (const auto binding : loop.bindings)
+        if (loop.rebound.contains(binding)) for (const auto place : possible_targets_.at(binding)) if (place != null_target) {
+          const auto scope = storage(place).scope;
+          if (scope >= loop.first && scope < loop.last) loop.expired.insert(binding);
+        }
+      // A destination selected on a later iteration need not appear in the
+      // discovery pass's current targets. Resolve its binding dependencies too.
+      for (const auto origin : loop.payload_origins)
+        for (const auto place : possible_targets_.at(origin)) if (place != null_target) loop.payloads.insert(place);
+      const auto written = loop.payloads;
+      for (size_t place = 0; place < storage_->size(); ++place) {
+        if (storage(place).type.kind != Type::exception) continue;
+        if ((loop.unknown_payloads && mutable_exception_target(place)) ||
+            std::any_of(written.begin(), written.end(), [&](size_t target) { return borrowed_payload_alias(target, place); }))
+          loop.payloads.insert(place);
       }
+    }
   }
   static std::vector<size_t> inputs(std::uint64_t mask) {
     std::vector<size_t> result;
@@ -1546,6 +1577,7 @@ class ScalarChecker {
         // still need a payload/selection correlation proof.
         for (auto &[place, value] : payloads)
           if (mutable_exception_target(place)) value = exception_possibilities(storage(place).type);
+        if (!proving_) for (const auto *loop : active_loops_) loop_states_.at(loop).unknown_payloads = true;
       } else {
         // Publish simultaneous postconditions after weakening other possible
         // aliases. Sequential strong writes would lose same-target alternatives.
@@ -1557,7 +1589,7 @@ class ScalarChecker {
           if (outcome != summary.payloads.end() && outcome->second.contains(i))
             value = outcome->second.at(i).substitute(exception_inputs);
           else if (!contract.const_views.empty() && contract.const_views[i]) continue;
-          write_exception_payloads(payloads, views[i], value);
+          write_exception_payloads(payloads, views[i], value, contract.const_views.empty() || !contract.const_views[i]);
           if (views[i].place) definite[*views[i].place].merge(value);
         }
         for (auto &[place, value] : definite) payloads[place] = std::move(value);
@@ -4566,16 +4598,16 @@ class ScalarChecker {
       }
       const auto iteration_scope = next_scope_;
       if (repeat_possible) {
-        if (!proving_) loop_states_[&expr] = {iteration_scope, iteration_scope, before.bindings_available, {}, {}};
+        if (!proving_) loop_states_[&expr] = {iteration_scope, iteration_scope, before.bindings_available, {}, {}, {}, {}, false};
         const auto &loop = loop_states_.at(&expr);
         refresh_targets(lexical_, true, &loop.rebound);
         if (proving_) lexical_.expired_bindings.insert(loop.expired.begin(), loop.expired.end());
+        for (const auto input : inputs(lexical_.inputs)) for (auto &[id, categories] : lexical_.input_facts[input].exceptions)
+          if (!proving_ || loop.payloads.contains(id)) categories = exception_possibilities(storage(id).type);
         active_loops_.push_back(&expr);
       }
       checked_scope_owners_[&expr] = iteration_scope;
       lexical_.live = lexical_.live && body_possible;
-      for (const auto input : inputs(lexical_.inputs)) for (auto &[id, categories] : lexical_.input_facts[input].exceptions)
-        if (mutable_exception_target(id)) categories = exception_possibilities((*storage_)[id].type);
       refresh_input_facts(lexical_);
       lexical_.scopes.push_back({next_scope_++, {}, true, lexical_.bound_symbols});
       operation.place = declare(expr.text, index, true, true, expr.at);
