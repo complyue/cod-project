@@ -341,14 +341,23 @@ public:
     }
   };
   using Reads = std::map<size_t, ReadRequirement>;
+  struct BooleanFacts {
+    std::set<size_t> present;
+    // Necessary truths of immutable incoming boolean payloads.
+    std::set<std::pair<size_t, bool>> inputs;
+    bool operator==(const BooleanFacts &) const = default;
+    void merge(const BooleanFacts &other) {
+      std::erase_if(present, [&](size_t target) { return !other.present.contains(target); });
+      std::erase_if(inputs, [&](const auto &input) { return !other.inputs.contains(input); });
+    }
+  };
   // Explicit returns retain selected targets or copied value evidence. Cleanup
   // can preserve that pending result, replace it, or join both possibilities.
   struct Returned {
     bool preserves = true;
     std::set<size_t> targets, uninitialized, null_sources;
     ExceptionFacts value{};
-    // Incoming targets known present for each possible saved boolean result.
-    std::map<bool, std::set<size_t>> present{};
+    std::map<bool, BooleanFacts> boolean{};
     bool operator==(const Returned &) const = default;
     void initialize(const std::set<size_t> &known) {
       std::erase_if(uninitialized, [&](size_t target) { return known.contains(target); });
@@ -359,14 +368,14 @@ public:
       targets.insert(other.targets.begin(), other.targets.end());
       uninitialized.insert(other.uninitialized.begin(), other.uninitialized.end());
       null_sources.insert(other.null_sources.begin(), other.null_sources.end());
-      for (const auto &[result, facts] : other.present) {
-        const auto [found, inserted] = present.emplace(result, facts);
-        if (!inserted) std::erase_if(found->second, [&](size_t target) { return !facts.contains(target); });
+      for (const auto &[result, facts] : other.boolean) {
+        const auto [found, inserted] = boolean.emplace(result, facts);
+        if (!inserted) found->second.merge(facts);
       }
     }
     void then(const Returned &next) {
       const bool keep = preserves && next.preserves;
-      if (!next.preserves) { targets.clear(); uninitialized.clear(); null_sources.clear(); value.clear(); present.clear(); }
+      if (!next.preserves) { targets.clear(); uninitialized.clear(); null_sources.clear(); value.clear(); boolean.clear(); }
       merge(next);
       preserves = keep;
     }

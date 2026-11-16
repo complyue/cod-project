@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-16 — Preserve boolean input evidence across call results
+
+<a id="k-753"></a>
+**K-753 — Continue finite boolean call evidence.** Source374→375/registry770→771 under D-14r116/C-65/P-258, D-17r74’s unaffected checked-NPE/explicit-return/completion scope, D-18r107 and D-26r21/H-407; H-420/H-423. Necessary truths of immutable boolean inputs share saved-result composition with target presence. Instantiate copied preparation snapshots or borrowed entry payloads; retain versioned target facts and conservative alias/write invalidation. Borrowed results read surviving target predicates after cleanup. Charter §§3.2/3.3/4.3/6.3/8/12, D-16 and unchanged owner/access/initialization/declaration constraints continue. Acceptance covers finite truth tables, ordered operand effects, recursion/captures, cleanup and native body sharing. No new source rule, runtime carrier, boolean output-write summary or exception-root/wrapper/deferred-stack qualification. Baseline: `5c9f5620af372228ffb08677c0721995343f13b0`, `cod/lang_checked.hh`, `cod/lang_completion.hh` and source reference.
+
 ## 2026-11-16 — Unchecked Error root and explicit checked declaration contracts
 
 <a id="h-524"></a>

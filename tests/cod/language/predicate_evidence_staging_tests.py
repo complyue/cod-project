@@ -75,6 +75,16 @@ behave @print(choose(absent,9,DEPTHu64));
 SOURCES['call_predicate'] = PREDICATE_CALL_SOURCE
 SOURCES['call_predicate_returns'] = PREDICATE_CALL_SOURCE.replace(
     'return p is not null;', 'if(p is null){return false;}else{return true;};')
+BOOLEAN_INPUT_SOURCE = PREDICATE_CALL_SOURCE.replace(
+    'func checked(ptr p:T in O,n:u64)->bool where {T,owner O}{\n if(n!=0u64){return checked(p,n-1u64);}else{return p is not null;};\n}',
+    'func checked(flag:T,n:u64)->const T where T{\n if(n!=0u64){return checked(flag,n-1u64);}else{return flag;};\n}')
+SOURCES['boolean_input'] = BOOLEAN_INPUT_SOURCE.replace('checked(p,n)', 'checked(p is not null,n)')
+SOURCES['boolean_borrowed_input'] = BOOLEAN_INPUT_SOURCE.replace(
+    'func checked(flag:T,n:u64)->const T where T',
+    'func checked(ref flag:const T in B,n:u64)->const T where {T,owner B}').replace(
+    'val ok<-checked(p,n);', 'val input<-p is not null;val ok<-checked(input,n);')
+SOURCES['boolean_borrowed_result'] = SOURCES['boolean_borrowed_input'].replace(
+    '->const T where {T,owner B}', '->ref const T in B where {T,owner B}')
 
 
 def main():
@@ -104,7 +114,7 @@ def main():
                     if baseline is None:
                         baseline = methods
                         record(key+'/shared_body', sum('.choose.' in method and method.endswith('.general') for method in methods) == 1, methods=list(methods))
-                        if name.startswith(('call_presence', 'call_predicate')):
+                        if name.startswith(('call_presence', 'call_predicate', 'boolean_')):
                             record(key+'/shared_helper', sum('.checked.' in method and method.endswith('.general') for method in methods) == 1, methods=list(methods))
                         record(key+'/no_runtime_evidence', bool(text) and '@cod_lang_callable_create' not in text and '@cod_lang_callable_copy' not in text)
                     else:
