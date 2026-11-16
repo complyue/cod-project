@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-11-16 — Separate deferred errors and scan them at handler entries
+
+<a id="h-503"></a>
+**H-503 — Distinguish local deferred catches from handlers of other deferred actions.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-16 America/Los_Angeles; exact timestamp/personal name unavailable. Reply: “只有 `defer catch ...` 语法才catch其它defer的异常， `defer {} catch ...` 不理之前执行造成的异常，自己独立执行；模块在全局范围的 defer 倒序执行列表采用相同的规则。 这意味着 靠前的 `defer catch ...` 有可能被执行多次，后抛出的 defer 异常先传递到它先执行。” Confirms the syntax/coverage distinction, multiple catch executions and application to the global module list. The assistant initially interpreted this as immediate look-ahead dispatch; H-506/H-507 supplies the subsequent stack-scan model. The quoted answer alone does not confirm that agent-specific timing mechanism or a physical walker.
+
+<a id="h-504"></a>
+**H-504 — Initially omit finally from a bodyless deferred handler.** Same human/chat/date; asynchronous answer: “`defer catch ...` 不许有 `finally` 吧，按此推演”. This restriction was subsequently replaced by H-507's once-per-list-entry finally in the new execution model; it is not the current contract.
+
+<a id="h-505"></a>
+**H-505 — Deferred catches do not handle ordinary body errors.** Same human/chat/date; asynchronous answer: “`defer catch` 不应该处理非 defer 造成的异常”. Confirms exclusion of non-deferred exceptions, superseding H-360's original-scope-body recovery through deferred handlers. Ordinary try/catch remains available; cleanup failures are distinct from an original body/startup failure. No completion-erasure or process-success policy follows.
+
+<a id="h-506"></a>
+**H-506 — Propose a deferred-error stack scanned at list entries.** Same human/chat/date; asynchronous reply: “这个心智模型怎么样： defer body 发生异常时，是向 pending defer ex stack 压栈并继续下一个 defer 列表项；遇到 `defer catch ...` 项就 FILO 匹配 stack 中所有异常，类型对的就给它handle，类型不匹配的保持留在栈里”. Supplies the stack model for evaluation: proceed through the defer list, queue deferred failures, scan all matching errors newest first at a bodyless entry, and retain nonmatches. H-507 uses this new model to specify finalization. Residual failures across scope boundaries, rethrow order, explicit returns and new registrations are not decided by this proposal.
+
+<a id="h-507"></a>
+**H-507 — Allow bodyless finally once per handler-entry visit.** Same human/chat/date; message: “新的执行模型倒是支持 `defer catch ...` 有 `finally` 块，就是扫过它的时候执行一次，这样 `defer catch (e) {throw e;} finally { ... }` 可以比较有用”. Restores optional finally, superseding H-504, with one execution when the list passes the entry, not once per handled exception. Uses H-506's stack-scan model and identifies pass-through handling as useful. Exact ordering of rethrown/replacement errors and residual completion remains separate.
+
+<a id="h-508"></a>
+**H-508 — Propose checked/unchecked rethrow wrappers.** Same human/chat/date as H-503; asynchronous answer: “rethrow `e:Exception` 的 `throw e;` 解释为 `throw make RethrownException(e -> cause)` 如何？ checked 是 RethrownException，unchecked 是 RethrownError”. Requests evaluation of a cause-bearing wrapper classified by checkedness. This does not independently settle which throw expressions count as rethrow, bare throw, fresh construction, stack order, matching or allocation. D-17-RETHROW/P-464–P-466 records the proposal without qualifying the broader operation.
+
+<a id="h-509"></a>
+**H-509 — Preserve all residual deferred errors in UnhandledDeferError.** Same human/chat/date; asynchronous answer: “合并一个 UnhandledDeferError() 保留所有 exceptions 作为其字段吧”. Selects a single aggregate with all remaining exceptions as its field content, replacing the proposed newest-only/discard-rest boundary. Error follows the established unchecked naming contract. Collection API/layout, original-body-error combination, checked-obligation integration, nested aggregates and owner/allocation realization remain separate; no implicit cause links are selected merely by collection membership.
+
+<a id="k-defer-stack-20261116"></a>
+**K-DEFER-STACK-20261116 — Integrate the current stack direction and correct the agent timing interpretation.** D-17r71→72/D-15r34→35/D-10r183→184/D-21r15→16/source368→369/registry764→765 records H-503/H-505–H-509 in D-17-DEFER-DISPATCH/P-461–P-463 and D-17-RETHROW/P-464–P-466. Candidate C-36/C-44/C-63/C-65 paths preserve charter §§2/3.2–3.3/4.3/6.3/8/12 through explicit contexts, cleanup order and owner validity. Replace K-DEFER-CONTRACT-NOTICE-20261116's agent-reported immediate-dispatch interpretation with queued list-position handling; correct current authority/source summaries without rewriting that historical receipt. Record once-only optional finally, no ordinary-body recovery, handler self-exclusion and repeated-invocation ownership obligations. H-509 selects UnhandledDeferError retaining all residual exceptions; H-508 proposes cause-bearing checked/unchecked rethrow wrappers. Wrapper scope/order, original-body/checkedness integration, explicit returns and cleanup-time registration remain pending; no physical stack or compiler support is approved. Derive that standalone defer finally adds no behavior beyond defer block, while attached finally remains meaningful. Main developer review identifies the affected consumed-once/single-pending-error implementation and owner/registration concerns, not human approval of a replacement. Preserve both merged histories and unrelated qualified contracts, including D-16. Baseline: `317f59fa9c7168397bd60f3cb1c36dd1e7195ff5` at affected paths. Documentation only; no source edits, build or tests.
+
 ## 2026-11-16 — Mark the defer handler contract under revision
 
 <a id="k-defer-contract-notice-20261116"></a>
