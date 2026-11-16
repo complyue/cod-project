@@ -24,7 +24,7 @@ for owners, roles in [('same', ('O', 'O', 'owner O')), ('independent', ('O', 'P'
         'callable_helper': 'func writer=replace;x<-a;writer(y,b);throw x;',
         'conditional_write': 'x<-a;val flag<-true;if(flag){y<-b;{}}else{};throw x;',
         'finally_write': 'x<-a;try{}finally{y<-b;{}};throw x;',
-        'prepared_write': 'x<-a;defer (<-)(y,b);throw x;',
+        'prepared_write': 'x<-a;{{defer (<-)(y,b);}};throw x;',
     }.items():
         runner.CASES[owners+'_'+name] = (ERROR+HELPER+signature+'->void where {'+where+'}{'+body+'}',2,'',COVER)
     body = 'x<-a;y<-b;throw x;'
@@ -34,6 +34,8 @@ for owners, roles in [('same', ('O', 'O', 'owner O')), ('independent', ('O', 'P'
     runner.CASES[owners+'_declared_same'] = (IO+ERROR+method+invoke.replace('DEST','first'),0,'4\n',WARN)
     snapshot = signature+'->void where {'+where+'}{x<-a;val saved<-x;y<-b;throw saved;}'
     runner.CASES[owners+'_copy_before_write'] = (IO+ERROR+snapshot+'val first:Exception<-unchecked();try{change(first,first,unchecked(),checked());}catch(e:const MissingReturnError){behave @print(first.category);};',0,'4\n',WARN)
+    prepared = signature+'->void where {'+where+'}{x<-a;defer (<-)(y,b);throw x;}'
+    runner.CASES[owners+'_throw_before_prepared_write'] = (IO+ERROR+prepared+'val first:Exception<-unchecked();try{change(first,first,unchecked(),checked());}catch(e:const MissingReturnError){behave @print(first.category);};',0,'4\n',WARN)
 
 runner.CASES.update({
     'independent_local_payload': (IO+ERROR+'func change(ref x:Exception in O,a:MissingReturnError,b:NullPointerException)->void where {owner O}{val local:Exception<-a;x<-b;throw local;}val first:Exception<-unchecked();try{change(first,unchecked(),checked());}catch(e:const MissingReturnError){behave @print(first.category);};',0,'4\n',WARN),

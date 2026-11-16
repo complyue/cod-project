@@ -41,8 +41,8 @@ checked('borrow_observes_later_mutation','func update(ref target:Exception in O,
 checked('callable_choice',COPY+'func replacement(ref target:Exception in O,item:Exception)->void where {owner O}{target<-checked();}',VALUE+'func writer=if(false){update}else{replacement};writer(payload,unchecked());')
 checked('aliased_formals','func update(ref left:Exception in O,ref right:Exception in P)->void where {owner O,owner P}{left<-unchecked();right<-checked();}','val payload:Exception<-unchecked();update(payload,payload);')
 checked('caller_alias','func update(ref target:Exception in O)->void where {owner O}{target<-checked();}func wrapper(ref observed:const Exception in O,ref target:Exception in P)->void throws Exception where {owner O,owner P}{update(target);throw observed;}','val payload:Exception<-unchecked();try{wrapper(payload,payload);}catch(e:const Exception){payload<-e;{}};')
-checked('prepared_write_remains_conservative',SIGNATURE+'{target<-unchecked();}',VALUE+'{{defer update(payload);}};',output='5\n')
-checked('deferred_block_write_remains_conservative',SIGNATURE+'{defer{target<-unchecked();{}};}',VALUE+'update(payload);',output='5\n')
+safe('prepared_write',SIGNATURE+'{target<-unchecked();}',VALUE+'{{defer update(payload);}};')
+safe('deferred_block_write',SIGNATURE+'{defer{target<-unchecked();{}};}',VALUE+'update(payload);')
 runner.CASES['initialization_obligation']=(ERROR+'func inspect(ref target:Exception in O)->void where {owner O}{}val payload:Exception;inspect(payload);',2,'','initialization')
 runner.CASES['readonly_destination']=(ERROR+SIGNATURE+'{target<-unchecked();}const val payload:Exception<-checked();update(payload);',2,'','readonly argument')
 runner.CASE_ARGUMENTS = {}

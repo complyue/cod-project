@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-15 — Cleanup payload transformations
+
+<a id="k-733"></a>
+**K-733 — Compose borrowed payload effects through cleanup.** Agent continuity assessment under H-267/H-269/H-272/H-313/H-327/H-356–H-362/H-366–H-371/H-398/H-407/H-420/H-423 and charter §§3.3/4.3/5.3/6.3/8/12: source349→350 and registry743→744 preserve C-63/P-235/P-236/P-280's completion/snapshot contract with C-65/C-75/P-255/P-257/P-295/P-327's independent values and actual borrowed targets. Shared cleanup effects compose sparse payload transformations; prepared values retain registration snapshots, borrowed inputs read at invocation, and nested action-entry origins remain distinct. Simultaneous substitution preserves saved exceptions/returns across writes. Acceptance covers ordered actions, failures, aliases, recursive helpers, loops, nested scopes, native code sharing and exact release. D-14r112/D-17r69/D-18r104/D-26r21 and D-16 remain unchanged; the source reference also distinguishes prohibited lexical-cell capture from unimplemented regional captures. No new language, ABI, allocation or qualification. Target/handler/queue correlations and prepared caller-slot payloads remain conservative. Baseline: `f64fafd5fb64ab7ddd45699e0223f8ceef63415f` at affected paths.
+
 ## 2026-11-15 — Borrowed exception call postconditions
 
 <a id="k-732"></a>

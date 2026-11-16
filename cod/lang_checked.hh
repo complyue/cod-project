@@ -1054,8 +1054,28 @@ class ScalarChecker {
   }
   ExceptionFacts stored_exceptions(size_t place, const Type &type) const {
     const auto found = lexical_.exceptions.find(place);
-    return (delayed_ && mutable_exception_target(place)) || found == lexical_.exceptions.end()
-        ? exception_possibilities(type) : found->second;
+    return found == lexical_.exceptions.end() ? exception_possibilities(type) : found->second;
+  }
+  std::map<size_t, ExceptionFacts> incoming_payloads(std::optional<size_t> action = {}) const {
+    auto values = lexical_.exceptions;
+    const auto seed = [&](size_t place) {
+      const auto &target = storage(place);
+      if (target.type.kind == Type::exception && mutable_exception_target(place))
+        values[place] = ExceptionFacts::payload(place, action).restricted(exception_possibilities(target.type));
+    };
+    for (const auto place : lexical_.available) seed(place);
+    if (proving_) for (size_t place = 0; place < catalog_storage_.size(); ++place)
+      if (std::any_of(lexical_.scopes.begin(), lexical_.scopes.end(), [&](const auto &scope) {
+            return scope.id == catalog_storage_[place].scope;
+          })) seed(place);
+    return values;
+  }
+  static std::map<size_t, ExceptionFacts> payload_changes(const std::map<size_t, ExceptionFacts> &before,
+                                                        const std::map<size_t, ExceptionFacts> &after) {
+    std::map<size_t, ExceptionFacts> changed;
+    for (const auto &[target, value] : after)
+      if (!before.contains(target) || before.at(target) != value) changed.emplace(target, value);
+    return changed;
   }
   ExceptionFacts stored_exceptions(const CheckedOperation &view) const {
     ExceptionFacts result;
@@ -1227,6 +1247,7 @@ class ScalarChecker {
     refresh_initialized(state);
     state.returned.then(effects.returned);
     state.returned.initialize(state.initialized);
+    for (const auto &[target, value] : effects.payloads) state.exceptions[target] = value;
   }
   static std::set<size_t> call_reasons(const CheckedMethod &method) {
     std::set<size_t> reasons{0, 2};
@@ -1420,12 +1441,17 @@ class ScalarChecker {
       const std::set<size_t> &reasons, const std::vector<Type> &arguments,
       const std::vector<CheckedOperation> &views, CheckedOperation &operation, bool read, bool discard, size_t offset = 0) {
     std::vector<ExceptionFacts> exception_inputs;
+    const bool prepared = &expr == prepared_call_;
+    const auto original_payloads = lexical_.exceptions;
+    const auto entry_payloads = prepared ? incoming_payloads() : original_payloads;
     if (contract.target->kind == Type::exception || !summary.payloads.empty()) {
+      lexical_.exceptions = entry_payloads;
       exception_inputs.reserve(arguments.size());
       for (size_t i = 0; i < arguments.size(); ++i) {
         const bool borrowed = !contract.owners.empty() && contract.owners[i];
         exception_inputs.push_back(borrowed ? stored_exceptions(views[i]) : views[i].exceptions);
       }
+      lexical_.exceptions = original_payloads;
     }
     std::map<size_t, size_t> owners;
     for (size_t i = 0; i < arguments.size(); ++i) {
@@ -1445,7 +1471,6 @@ class ScalarChecker {
       if (!readonly) for (const auto place : view.targets) if (place != null_target && storage(place).captured)
         implementation_gap(expr.children[i + offset]->at, "writable borrowing of a captured callable payload");
       if (arguments[i] != contract.parameters[i]) implementation_gap(expr.children[i + offset]->at, "borrowed exception upcasts");
-      if (!readonly && &expr == prepared_call_) write_exceptions(view, exception_possibilities(view.type));
     }
     operation.type = *contract.target;
     if (operation.type.kind == Type::exception)
@@ -1487,8 +1512,14 @@ class ScalarChecker {
       }
       for (auto &[reason, effect] : operation.invocation) effect.reads.insert(reads.begin(), reads.end());
     }
-    if (&expr != prepared_call_) {
-      const auto payloads = [&](size_t reason) {
+    for (auto &[reason, effects] : operation.invocation) {
+      lexical_.exceptions = entry_payloads;
+      if (prepared_slots) {
+        // These calls retain binding slots whose invocation-time selections
+        // still need a payload/selection correlation proof.
+        for (auto &[place, value] : lexical_.exceptions)
+          if (mutable_exception_target(place)) value = exception_possibilities(storage(place).type);
+      } else {
         // Publish simultaneous postconditions after weakening other possible
         // aliases. Sequential strong writes would lose same-target alternatives.
         std::map<size_t, ExceptionFacts> definite;
@@ -1503,16 +1534,18 @@ class ScalarChecker {
           if (views[i].place) definite[*views[i].place].merge(value);
         }
         for (auto &[place, value] : definite) lexical_.exceptions[place] = std::move(value);
-      };
+      }
+      effects.payloads = payload_changes(entry_payloads, lexical_.exceptions);
+    }
+    lexical_.exceptions = original_payloads;
+    if (!prepared) {
       const auto before = lexical_;
       for (const auto &[reason, effects] : operation.invocation) if (reason) {
         lexical_ = before; apply_effects(lexical_, effects, expr.at);
-        payloads(reason);
         if (!summary.bindings.empty()) refresh_targets(lexical_, false);
         note_abrupt(expr.at, reason >= 3 ? std::set<size_t>{reason - 3} : std::set<size_t>{}, {reason, false});
       }
       lexical_ = before; apply_effects(lexical_, operation.invocation.at(0), expr.at);
-      payloads(0);
       if (!summary.bindings.empty()) refresh_targets(lexical_, false);
     }
     const auto result_owner = contract.owners.empty() ? 0 : contract.owners.back();
@@ -1775,16 +1808,13 @@ class ScalarChecker {
         for (auto &[read, requirement] : state.requirements) requirement.inputs &= state.inputs;
         const auto pending = input.reason >= 3 ? path.exceptions.restricted({input.reason - 3}) : ExceptionFacts{};
         auto applied = effects;
-        applied.returned.value = applied.returned.value.replace_arrival({}, pending);
-        applied.thrown = applied.thrown.replace_arrival({}, pending);
+        applied.transform_values([&](const auto &value) { return value.through(path.state.exceptions, pending, true); });
         apply_effects(state, applied, at);
         state.input_initialized = {{origin, state.initialized}};
         state.input_selections = {{origin, state.selections}};
         if (cleanup_.has_actions(queue)) {
           refresh_targets(state, false);
           if (!state.live) continue;
-          for (auto &[id, categories] : state.exceptions)
-            if (mutable_exception_target(id)) categories = exception_possibilities((*storage_)[id].type);
         }
         state.queues[scope] = 0;
         if (!completion.reason) {
@@ -4233,6 +4263,14 @@ class ScalarChecker {
           if (&expr != prepared_call_) {
             const auto left_exceptions = stored_exceptions(left), right_exceptions = stored_exceptions(right);
             write_exceptions(left, right_exceptions); write_exceptions(right, left_exceptions);
+          } else {
+            const auto original = lexical_.exceptions;
+            const auto incoming = incoming_payloads();
+            lexical_.exceptions = incoming;
+            const auto left_exceptions = stored_exceptions(left), right_exceptions = stored_exceptions(right);
+            write_exceptions(left, right_exceptions); write_exceptions(right, left_exceptions);
+            operation.invocation[0].payloads = payload_changes(incoming, lexical_.exceptions);
+            lexical_.exceptions = original;
           }
         }
         break;
@@ -4762,7 +4800,12 @@ class ScalarChecker {
         operation.type = operation.operand_type = destination;
         operation.targets = target.targets;
         operation.targets.erase(null_target);
-        write_exceptions(target, exception_possibilities(destination));
+        const auto original = lexical_.exceptions;
+        const auto incoming = incoming_payloads();
+        lexical_.exceptions = incoming;
+        write_exceptions(target, operations.at(expr.children[1].get()).exceptions);
+        operation.invocation[0].payloads = payload_changes(incoming, lexical_.exceptions);
+        lexical_.exceptions = original;
         break;
       }
       if (destination.kind == Type::procedure) note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
@@ -4874,6 +4917,8 @@ class ScalarChecker {
           if (std::any_of(before.scopes.begin(), before.scopes.end(), [&](const auto &scope) { return scope.id == catalog_storage_[place].scope; }))
             deferred_inputs_.insert(place);
         refresh_targets(lexical_);
+        const auto incoming = incoming_payloads(action);
+        lexical_.exceptions = incoming;
         lexical_.queues[cleanup_scope_] = 0;
         lexical_.inputs = 1;
         lexical_.input_initialized = {{0, lexical_.initialized}};
@@ -4894,6 +4939,8 @@ class ScalarChecker {
             CleanupEquations::Effects effects{{}, path.state.input_initialized.at(input), path.state.returned, path.state.input_selections.at(input)};
             effects.symbols = path.state.required_symbols;
             effects.returned.initialize(effects.initialized);
+            for (const auto &[target, value] : payload_changes(incoming, path.state.exceptions))
+              if (incoming.contains(target)) effects.payloads.emplace(target, value);
             for (const auto &[read, requirement] : path.state.requirements) if (requirement.inputs & selected)
               effects.reads.emplace(read, requirement.before);
             if (path.exceptions.empty()) summary.paths.push_back({selected, path.completion, queue, effects});
@@ -5271,10 +5318,11 @@ class ScalarChecker {
         observed_.bindings.try_emplace(reason, std::move(targets));
       }
     }
-    if (!observed_.returned.value.arrivals.empty())
+    if (!observed_.returned.value.arrivals.empty() || !observed_.returned.value.payloads.empty())
       throw std::logic_error("unresolved cleanup exception origin in callable result");
     for (const auto &[reason, payloads] : observed_.payloads) for (const auto &[parameter, value] : payloads)
-      if (!value.arrivals.empty()) throw std::logic_error("unresolved cleanup exception origin in borrowed payload");
+      if (!value.arrivals.empty() || !value.payloads.empty())
+        throw std::logic_error("unresolved cleanup exception origin in borrowed payload");
     return observed_;
   }
 
