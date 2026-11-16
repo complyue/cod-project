@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-16 — Definition mentions construct callable views
+
+<a id="h-481"></a>
+**H-481 — Definition names and stored callable values have distinct roles.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-16 America/Los_Angeles; exact timestamp/personal name unavailable. Proposes “让 callable mention 总是引用其 definition ，需要 callable view 的地方则新建” to avoid a source-level “currently executing callable value”; after the precise rule and examples, confirms “按此记录，提交推送”. Accepts definition-bound names with fresh view construction from established lexical context/current required symbolic bindings, stored-value/parameter copy semantics preserving captures, direct/type-only mentions without obligatory views, preserved lexical/owner constraints and no mandatory heap allocation. The recursive example returns 20; repeated definition construction captures 10 then 20, while copying the first value retains 10. No new capture eligibility, ownership extension, physical ABI or compiler-support claim is selected.
+
+<a id="k-callable-mentions-20261116"></a>
+**K-CALLABLE-MENTIONS-20261116 — Integrate definition lookup and capture timing.** Under H-481, D-18r104→105/D-10r173→174/source353→354/registry748→749 adds D-18-MENTION/P-419–P-421. The candidate C-65/C-73/C-75 path preserves charter §§3.2/3.3/4.3/6.3/8/12 and established P-297/P-301/P-331 capture/value boundaries: explicit definitions and environments, complete stored copies, valid owners/access/init, function exclusion, cleanup, default origins and nonexecuting queries. H-481 settles K-680/K-682's capture-time choice; recursive view construction remains an implementation gap. Other scopes, D-16, native coverage and pending physical/value-path qualification continue unchanged. Acceptance is in D-18; source-reference edits claim no new runtime support. Baseline: `3ceed5c20050e5ff4fb231288e679f3b8a04ff84` at affected paths. Documentation only; no build/tests.
+
 ## 2026-11-16 — ADT placement and mainline integration
 
 <a id="k-736"></a>

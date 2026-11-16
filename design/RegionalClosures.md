@@ -1,8 +1,10 @@
 # Regional variables and callable captures
 
-Design revision: 104 · Recorded: 2026-11-15 · Status: current bounded prototype contract.
+Design revision: 105 · Recorded: 2026-11-16 · Status: scoped callable contract; implementation boundaries recorded separately.
 
 ## Design authority
+
+- **Definition mentions and materialization:** [D-18-MENTION](DesignAuthorityRegistry.md#d-18-mention), r105's section below, records [H-481](../CHANGELOG.md#h-481)/[K-CALLABLE-MENTIONS-20261116](../CHANGELOG.md#k-callable-mentions-20261116). Definition-bound names always denote their definitions; a required runtime view is freshly materialized, including inside recursion. Stored values preserve captures when copied/adapted. P-419's candidate C-65/C-73/C-75 path serves charter §§3.2/3.3/4.3/6.3/8 by keeping definitions, environments and explicit value storage distinct; P-420/P-421 records dependencies and affected descendants. Preserve lexical identity, required captures, owners/access, initialized reads, function effect exclusion and cleanup; no special executing-callable value, new capture permission, heap mandate or ABI. Acceptance below covers capture timing, stored copies, recursion, queries and rejection boundaries. H-481 confirms this source contract and simpler mental model; complete value-path/physical qualification remains separate. Existing qualified contracts continue; recursive materialization remains an implementation gap.
 
 - **Mainline continuity:** [K-719](../CHANGELOG.md#k-719) continues r102→103 while integrating the scoped assertion/naming decisions below. Current source/native capabilities, qualified value paths and unresolved mechanisms retain their separate boundaries; current compiler support is tracked in the source capability reference.
 
@@ -88,7 +90,7 @@ For `f:typeof origin`, H-462 requires complete implementation of the origin's se
 
 Family selection uses the callable view's declared parameter target-access qualifiers together with actual argument type evidence. A readonly borrowed parameter remains readonly when supplied from writable storage; a writable borrowed parameter requires writable caller access. Value inputs receive independent local storage with the view's declared access. Actual type identity remains available for method selection before value conversion. The selected method must satisfy the view's passing, access, result, owner and exception contracts. Owner equalities retain their ordinary proof requirements.
 
-Module method registration constructs semantic information and does not capture runtime TLS. Runtime callable materialization creates the complete environment; reinstallation retains the existing value/captures. Lexical slots, named retained owners, nullable views, copies/replacement and captured/current invocation retain their qualified constraints. Per-family capture construction and abstract evidence must satisfy those constraints rather than introducing implicit owner extension or regional callable storage.
+Module method registration constructs semantic information and does not capture runtime TLS. Runtime callable materialization creates the complete environment; reinstallation retains the existing value/captures. The definition-mention rule below applies equally inside recursion. Lexical slots, named retained owners, nullable views, copies/replacement and captured/current invocation retain their qualified constraints. Per-family capture construction and abstract evidence must satisfy those constraints rather than introducing implicit owner extension or regional callable storage.
 
 Method calls and callable-value calls separate operand preparation from invocation. Preparation retains the selected code, declared passing modes and ordered conversions. Invocation revalidates the prepared views and supplies the current procedure environment, or the explicitly requested captured environment. Symbolic builtins use the same boundary; their observable action occurs only at invocation. Native callable target protection and prepared-value cleanup retain their existing failure behavior. Scope-owned deferred registration and dispatch remain implementation work.
 
@@ -123,6 +125,59 @@ The complete callable representation must remain valid after bits movement: it c
 Direct/behave procedure calls use current dynamic bindings; perform installs the selected procedure's captured symbolic values for its execution scope. Native representation must not merge bodies, module contexts or captured snapshots merely because signatures match.
 
 Recursive calls are required for both functions and procedures. A blanket recursion rejection is not an acceptable endpoint. Call checking must account for cycles in the demanded program; successful finite source expansion is not a substitute for native recursion. The deferred const-function/TCO plan in [D-19](ConstFunctionsAndTailCalls.md) does not restrict procedure recursion. Material conflicts with that plan require human review.
+
+## Definition mentions and runtime view construction
+
+A name bound to a callable definition denotes that definition under ordinary lexical lookup. When its use requires a runtime callable view, construct a fresh view using the definition's established lexical context and the current required symbolic bindings. This rule applies to named functions and procedures, including mentions within their own bodies and explicit/inferred capture operands. CoD defines no special source-level "currently executing callable value" selected by a recursive name.
+
+Names bound to stored callable values or parameters retain ordinary value semantics. Reading/copying such a value preserves its complete selected environment; adapting its view type or reinstalling it does not recapture from its definition. Borrowed access still selects the existing target. Nearest-binding shadowing remains effective: a parameter named f can denote a stored value even inside a callable definition also named f. Bare registered symbol identities and @symbol TLS reads retain D-10's existing distinction; this rule does not turn symbol objects into ordinary callable aliases.
+
+```cod
+symbol @bias:u64;
+proc read() -> u64 { return @bias; }
+
+effect @bias <- 10u64;
+proc a = read;      # New view: captures 10.
+effect @bias <- 20u64;
+proc b = read;      # New view: captures 20.
+proc c = a;         # Complete value copy: preserves 10.
+```
+
+The same timing applies to a recursive definition mention:
+
+```cod
+symbol @bias:u64;
+symbol @call:proc(u64)->u64;
+
+proc demo() -> u64 {
+    effect @bias <- 10u64;
+    proc recur(n:u64) -> u64 {
+        if (n == 0u64) { return @bias; } else {};
+        effect @bias <- 20u64;
+        proc again = recur;          # New view captures the current 20.
+        effect @call = again;
+        return perform @call(0u64);
+    };
+    effect @call = recur;            # Initial view captures 10.
+    return perform @call(1u64);      # Required result: 20.
+}
+```
+
+These examples specify semantics; the recursive materialization path is not yet implemented. The inner binding does not mutate the initial view's stored snapshot. perform installs the selected view's captures, while ordinary/behave invocation uses current symbolic bindings under D-10.
+
+Direct definition calls do not require an intermediate view merely because they mention the definition. Type-only queries retain their nonexecuting behavior: they establish type/context evidence without evaluating captures or allocating a view. A recursive definition reference is not itself a recursively embedded runtime environment; the enclosing definition body is not executed to construct its view. Required dependencies still follow ordinary capture analysis and complete-value rules.
+
+Lexical captures keep their definition-bound identities and admitted environment. In an escaped callable, the retained lexical environment supplies those dependencies; a fresh view cannot search the caller's local names, retain an expired factory cell, promote ordinary lexical cells or extend a borrowed owner's lifetime. Stored nested callable dependencies are copied as values; regional dependencies retain their established borrowed meaning. The current-symbolic-binding rule does not grant functions dynamic effects, relax explicit capture-list completeness, or bypass owner/access/initialization checks. Inherited default expressions retain their separate type-bound origin and evaluation rules.
+
+Fresh construction specifies an independent complete value when one is required. It does not prescribe a heap allocation for every mention, a physical image layout or a new native body per view. Storage/copy elimination must preserve capture timing, required effects, selected targets, lifetime and cleanup under the existing optimization contract.
+
+Acceptance requires the following composed cases:
+
+- Repeated definition materialization captures 10 then 20; copying/adapting/reinstalling the first value preserves 10, and perform/current invocation retains its established distinction.
+- The recursive example returns 20; forwarding a definition mention as a callable argument and capturing it in a nested callable use the same construction rule.
+- Direct recursion and type-only queries preserve lexical definition identity without manufacturing a runtime self value or capture effects.
+- An escaped callable retains valid lexical dependencies, with no caller-name substitution; a value parameter or local shadow follows ordinary lookup and copy semantics.
+- Missing required captures, invalid owner/access/lifetime, uninitialized payload reads and forbidden function effects reject; construction/copy failure follows ordinary cleanup without extending owners.
 
 ## LLVM compilation scale
 
