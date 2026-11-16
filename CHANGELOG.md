@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-16 — Explicit source-module traversal
+
+<a id="k-737"></a>
+**K-737 — Preserve source graph semantics without recursive host traversal.** Agent implementation/continuity under H-106/H-109/H-166/H-245/H-247–H-249/H-375–H-378/H-398/H-420/H-423 and charter §§2/5.3/6.3/12: source353→354 and registry748→749 preserve D-10/D-15/D-21's scoped source identity, publication, isolation and once-only initialization through explicit discovery/planning continuations. Canonical source reuse, dependency-first construction, initializer order, cycle/unsupported-scope diagnostics and shared native methods remain intact. Acceptance covers deep shared graphs and initialization failure; retained module scopes, conditional first-reference policy, symbolic import/cancellation, broader composition and persistent ABI retain their separate boundaries. D-16 and regional/runtime contracts are unchanged; no new design qualification. Baseline: `3ceed5c20050e5ff4fb231288e679f3b8a04ff84` at affected paths.
+
 ## 2026-11-16 — ADT placement and mainline integration
 
 <a id="k-736"></a>

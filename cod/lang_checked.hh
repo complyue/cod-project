@@ -5541,24 +5541,31 @@ class ScalarChecker {
 
   void plan_initialization(const SourceProgram &source) {
     std::set<size_t> incorporated;
-    const std::function<void(size_t)> incorporate = [&](size_t module) {
+    struct Pending { size_t module, next_form = 0; bool execution_started = false; };
+    std::vector<Pending> pending;
+    const auto incorporate = [&](size_t module) {
       if (!incorporated.insert(module).second) return;
       program_.execution_order.push_back(module);
-      const auto &unit = source.modules[module];
-      bool execution_started = false;
-      for (const auto &form : unit.forms) {
-        if (const auto dependency = unit.dependencies.find(form.get()); dependency != unit.dependencies.end()) {
-          if (execution_started)
-            implementation_gap(form->at, "source selections after execution expressions require first-reference incorporation analysis");
-          incorporate(dependency->second);
-        }
-        if (form->kind != Form::Kind::expression) continue;
-        execution_started = true;
-        if (module) check_dependency_lifetime(*form->body);
-        program_.initializers.push_back({module, form->body.get()});
-      }
+      pending.push_back({module});
     };
     incorporate(0);
+    while (!pending.empty()) {
+      auto &current = pending.back();
+      const auto module = current.module;
+      const auto &unit = source.modules[module];
+      if (current.next_form == unit.forms.size()) { pending.pop_back(); continue; }
+      const auto &form = unit.forms[current.next_form++];
+      if (const auto dependency = unit.dependencies.find(form.get()); dependency != unit.dependencies.end()) {
+        if (current.execution_started)
+          implementation_gap(form->at, "source selections after execution expressions require first-reference incorporation analysis");
+        incorporate(dependency->second);
+        continue;
+      }
+      if (form->kind != Form::Kind::expression) continue;
+      current.execution_started = true;
+      if (module) check_dependency_lifetime(*form->body);
+      program_.initializers.push_back({module, form->body.get()});
+    }
   }
 
   void register_module(const SourceModule &source, std::optional<size_t> &print_symbol) {

@@ -25,8 +25,10 @@ class ModuleLoader {
   SourceProgram program_;
   std::map<std::filesystem::path, size_t> paths_;
   std::set<size_t> scanning_;
+  struct Pending { size_t module, next_form = 0; };
+  std::vector<Pending> pending_;
 
-  size_t scan(const std::filesystem::path &path, const Location &at) {
+  size_t discover(const std::filesystem::path &path, const Location &at) {
     std::error_code error;
     const auto resolved = std::filesystem::weakly_canonical(path, error);
     if (error) fail(at, "cannot resolve CoD source '" + path.string() + "'");
@@ -43,24 +45,28 @@ class ModuleLoader {
     paths_.emplace(resolved, id);
     program_.modules.push_back({resolved, Parser(source, resolved.string()).parse(), {}});
     scanning_.insert(id);
-    // Source forms have stable addresses while recursive scans grow the catalog.
-    std::vector<const Form *> selections;
-    for (const auto &form : program_.modules[id].forms) {
-      if (!form->path.empty() && !form->path.starts_with("std:"))
-        selections.push_back(form.get());
-    }
-    for (const auto *form : selections) {
-      const auto dependency = scan(resolved.parent_path() / form->path, form->at);
-      program_.modules[id].dependencies.emplace(form, dependency);
-    }
-    scanning_.erase(id);
-    program_.construction_order.push_back(id);
+    pending_.push_back({id});
     return id;
   }
 
 public:
   SourceProgram load(const std::filesystem::path &entry) {
-    scan(entry, {entry.string()});
+    discover(entry, {entry.string()});
+    while (!pending_.empty()) {
+      auto &pending = pending_.back();
+      const auto id = pending.module;
+      if (pending.next_form == program_.modules[id].forms.size()) {
+        scanning_.erase(id);
+        program_.construction_order.push_back(id);
+        pending_.pop_back();
+        continue;
+      }
+      const auto *form = program_.modules[id].forms[pending.next_form++].get();
+      if (form->path.empty() || form->path.starts_with("std:")) continue;
+      // Forms retain their addresses when discovery grows either work list.
+      const auto dependency = discover(program_.modules[id].path.parent_path() / form->path, form->at);
+      program_.modules[id].dependencies.emplace(form, dependency);
+    }
     return std::move(program_);
   }
 };
