@@ -2760,13 +2760,14 @@ class ScalarChecker {
     size_t method;
     std::vector<Type> arguments, retained;
     TypeEvidenceState context;
-    std::set<size_t> dependencies;
+    std::set<size_t> dependencies, dependents;
     std::optional<Type> result;
   };
   mutable std::deque<ResultObligation> result_obligations_;
+  mutable std::map<size_t, std::vector<size_t>> method_result_obligations_;
+  mutable std::set<size_t> pending_results_;
   mutable std::optional<size_t> result_probe_;
   mutable bool result_graph_changed_ = false;
-  mutable bool results_solved_ = false;
 
   static std::optional<Type> common_result(const std::vector<Type> &returns, const Location &at) {
     if (returns.empty()) return {};
@@ -2846,33 +2847,63 @@ class ScalarChecker {
     if (complete && returns.unresolved) return {};
     return common_result(returns.types, method.source->at);
   }
+  void invalidate_result(size_t id) const {
+    std::vector<size_t> work{id};
+    while (!work.empty()) {
+      const auto current = work.back(); work.pop_back();
+      if (!pending_results_.insert(current).second) continue;
+      auto &node = result_obligations_[current];
+      node.result.reset();
+      work.insert(work.end(), node.dependents.begin(), node.dependents.end());
+    }
+  }
   void solve_results() const {
     // Discover finite type obligations without creating executable instances. Each
     // recursive component first withholds its own results to expose independent anchors.
     do {
       result_graph_changed_ = false;
-      for (auto &node : result_obligations_) node.result.reset();
-      for (size_t i = 0; i < result_obligations_.size(); ++i) sample_result(i);
-      std::vector<std::optional<size_t>> index(result_obligations_.size());
-      std::vector<size_t> low(index.size()), stack;
-      std::set<size_t> active;
+      for (const auto id : pending_results_) result_obligations_[id].result.reset();
+      for (const auto id : pending_results_) sample_result(id);
+      if (result_graph_changed_) continue;
+      struct Visit { size_t index, low; bool active = true; };
+      struct Frame { size_t id; std::set<size_t>::const_iterator dependency; };
+      std::map<size_t, Visit> visited;
+      std::vector<size_t> stack;
+      std::vector<Frame> work;
       std::vector<std::vector<size_t>> components;
-      size_t next = 0;
-      const std::function<void(size_t)> visit = [&](size_t id) {
-        index[id] = low[id] = next++;
-        stack.push_back(id); active.insert(id);
-        for (const auto dependency : result_obligations_[id].dependencies) {
-          if (!index[dependency]) { visit(dependency); low[id] = std::min(low[id], low[dependency]); }
-          else if (active.contains(dependency)) low[id] = std::min(low[id], *index[dependency]);
-        }
-        if (low[id] != *index[id]) return;
-        auto &component = components.emplace_back();
-        for (;;) {
-          const auto member = stack.back(); stack.pop_back(); active.erase(member); component.push_back(member);
-          if (member == id) break;
-        }
+      const auto enter = [&](size_t id) {
+        visited.emplace(id, Visit{visited.size(), visited.size()});
+        stack.push_back(id);
+        work.push_back({id, result_obligations_[id].dependencies.begin()});
       };
-      for (size_t i = 0; i < index.size(); ++i) if (!index[i]) visit(i);
+      for (const auto root : pending_results_) {
+        if (visited.contains(root)) continue;
+        enter(root);
+        while (!work.empty()) {
+          auto &frame = work.back();
+          auto &node = visited.at(frame.id);
+          if (frame.dependency != result_obligations_[frame.id].dependencies.end()) {
+            const auto dependency = *frame.dependency++;
+            if (!pending_results_.contains(dependency)) continue;
+            if (!visited.contains(dependency)) enter(dependency);
+            else if (const auto &target = visited.at(dependency); target.active) node.low = std::min(node.low, target.index);
+            continue;
+          }
+          const auto id = frame.id;
+          work.pop_back();
+          if (!work.empty()) {
+            auto &parent = visited.at(work.back().id);
+            parent.low = std::min(parent.low, node.low);
+          }
+          if (node.low != node.index) continue;
+          auto &component = components.emplace_back();
+          for (;;) {
+            const auto member = stack.back(); stack.pop_back();
+            visited.at(member).active = false; component.push_back(member);
+            if (member == id) break;
+          }
+        }
+      }
       for (const auto &component : components) {
         std::vector<std::optional<Type>> anchors;
         for (const auto id : component) anchors.push_back(sample_result(id));
@@ -2887,7 +2918,7 @@ class ScalarChecker {
         } while (changed);
       }
     } while (result_graph_changed_);
-    results_solved_ = true;
+    pending_results_.clear();
   }
   std::optional<ResultContract> infer_result(size_t method, std::vector<Type> arguments, const std::vector<Type> &retained,
                                    const TypeEvidenceState *state = nullptr) const {
@@ -2910,20 +2941,28 @@ class ScalarChecker {
       return supplied;
     }
     const auto context = result_context(method, state);
-    const auto found = std::find_if(result_obligations_.begin(), result_obligations_.end(), [&](const auto &node) {
-      return node.method == method && node.arguments == arguments && node.retained == retained &&
+    auto &candidates = method_result_obligations_[method];
+    const auto found = std::find_if(candidates.begin(), candidates.end(), [&](size_t id) {
+      const auto &node = result_obligations_[id];
+      return node.arguments == arguments && node.retained == retained &&
              node.context.bindings == context.bindings && node.context.symbol_shadows == context.symbol_shadows &&
              node.context.views == context.views && node.context.owner_bindings == context.owner_bindings && node.context.owner_relations == context.owner_relations;
     });
-    const auto id = static_cast<size_t>(std::distance(result_obligations_.begin(), found));
-    if (found == result_obligations_.end()) {
+    const auto id = found == candidates.end() ? result_obligations_.size() : *found;
+    if (found == candidates.end()) {
       if (id == instance_limit) fail(definition.source->at, "compiler resource limit: 4096 callable result obligations; result remains unproved");
-      result_obligations_.push_back({method, arguments, retained, context, {}, {}});
-      result_graph_changed_ = true; results_solved_ = false;
+      result_obligations_.push_back({method, arguments, retained, context, {}, {}, {}});
+      candidates.push_back(id);
+      invalidate_result(id);
+      result_graph_changed_ = true;
     }
     if (result_probe_) {
-      if (result_obligations_[*result_probe_].dependencies.insert(id).second) result_graph_changed_ = true;
-    } else if (!results_solved_) solve_results();
+      if (result_obligations_[*result_probe_].dependencies.insert(id).second) {
+        result_obligations_[id].dependents.insert(*result_probe_);
+        invalidate_result(*result_probe_);
+        result_graph_changed_ = true;
+      }
+    } else if (!pending_results_.empty()) solve_results();
     const auto result = result_obligations_[id].result;
     if (result && !result_probe_) {
       if (*result != Type::void_type && result->kind != Type::procedure && !scalar_type(*result))

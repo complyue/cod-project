@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-16 — Reconsider result evidence through its dependencies
+
+<a id="k-747"></a>
+**K-747 — Incremental result obligations.** Agent continuity under D-24r8/H-421–H-424/K-723/K-724 and D-26r21/H-406/H-407: source364→365/registry759→760 preserves independent recursive anchors, selected method/type/context/owner identity, existing conversions and explicit resource-stop behavior. Method indexing, reverse dependencies and an iterative component walk avoid rebuilding unrelated result evidence without using a cycle's provisional result as its anchor. Charter §§3.3/5.3/6.3/8/12 supports checked, reusable semantic dependencies; D-16, D-18 captures, module startup and pending inference/ABI scopes remain unchanged. Baseline: `535e1fef99565ce4e99166fd9a8fa47ad0cd1f43` at the affected paths. No new language rule, performance budget or human confirmation.
+
 ## 2026-11-16 — Retain definition evidence by dependency
 
 <a id="k-746"></a>
