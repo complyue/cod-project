@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-11-16 — Integrate retained body-failure design with conditional-read checking
+
+<a id="k-body-exception-sync-20261116"></a>
+**K-BODY-EXCEPTION-SYNC-20261116 — Preserve compiler proofs and both failure channels.** Source381→382/registry778 branches→779 integrates K-756 with H-538 in D-17r80/D-15r40. Qualified D-14/C-65/P-258/P-280, ordinary D-17/C-63/P-235/P-236, D-18 and D-26 checking continues; candidate P-458–P-463 retains its separate stack scope. Charter §§2/3.1–3.3/4.3/6.3/12 supports explicit initialization, execution order, inspectable failure identity and live owners. H-538's readonly body_exception retains the still-pending body failure independently of residual deferred members, without automatic causes. Preserve all four completion combinations and aborted-startup behavior. Current compiler validation establishes conditional reads and unaffected completion, not the new stack/aggregate runtime. Caller/nested coverage, explicit returns, outgoing-error order, new registrations and physical ownership/absence encoding remain separately scoped. H-525/H-536/H-537, concrete unchecked behavior and D-16 continue. No new human confirmation or source implementation from the merge. Parents: `47829462752dad9faa42b31f1fa16d888b4ee028` (compiler) and `bfe12d4a52bbf0273b97d9531e7910267d336995` (design).
+
+## 2026-11-16 — Preserve the ordinary body exception beside deferred failures
+
+<a id="h-538"></a>
+**H-538 — Retain a separate readonly body_exception without automatic causes.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-16 America/Los_Angeles; exact timestamp/personal name unavailable. Statement: “同意，保留独立只读的 `body_exception` 字段，不自动建立 cause 关系。落文档，然后继续下一个议题。” Accepts the presented combination: UnhandledDeferError retains residual deferred failures in exceptions and the still-pending ordinary body exception separately; if deferred failures are all handled, propagate the original body exception unchanged. No implicit cause relationship or body-error handling by defer catch is selected. Physical absence/owner representation and explicit-return interactions are separate.
+
+<a id="k-defer-body-exception-20261116"></a>
+**K-DEFER-BODY-EXCEPTION-20261116 — Preserve both failure channels at the aggregate boundary.** D-17r79→80/D-15r39→40/registry777→778 integrates H-538 under D-17-DEFER-DISPATCH/P-461–P-463 and D-15-SHUTDOWN/P-458–P-460. Candidate C-36/C-59/C-63/C-65 paths preserve charter §§2/3.1–3.3/4.3/6.3/12 through inspectable failure provenance, unchanged exception identity and valid retained owners. Acceptance covers all four body/deferred-presence combinations, readonly field association, retained trace/wrapper/explicit causes, no automatic cause or member dispatch, and aborted startup with cleanup failures. Keep absence encoding, backing/ABI, caller/nested coverage, outgoing-error order and explicit-return/new-registration policies separately scoped; no whole-stack qualification or runtime support follows. H-525/H-536/H-537, ordinary completion and D-16 remain intact. Baseline: `ff93fabf77a282a2563e6b7983ad0f7ef7f369c2`, affected paths; source380 remains the implementation reference. Documentation only; no source edits, builds or tests.
+
 ## 2026-11-16 — Conditional initialization in deferred actions
 
 <a id="k-756"></a>
