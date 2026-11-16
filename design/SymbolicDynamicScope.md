@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 189 · Recorded: 2026-11-16 · Phase: language/application co-design.
+Design revision: 190 · Recorded: 2026-11-16 · Phase: language/application co-design.
 
 ## Design authority
+
+- **Return-state dependency:** [D-17-RETURN-STATE](DesignAuthorityRegistry.md#d-17-return-state)/[H-542–H-547](../CHANGELOG.md#h-542), [K-RETURNING-20261116](../CHANGELOG.md#k-returning-20261116), aligns this revision’s lexical binding/context under P-484. Candidate C-54/C-63/C-65 and charter §§2/3.2–3.3/4.3/6.3/8/12 preserve author-controlled completion, result/owner validity and observable cleanup. D-17/D-23 own the selected filter, preparation, recovery and scoped cancellation acceptance. Preserve unrelated qualified contracts, FIFO failures and D-16; owned-result capture, no-value patterns, full qualification and source support remain separate. This documentation change implements no return-inspection mechanism.
 
 - **FIFO cleanup dependency:** [H-541](../CHANGELOG.md#h-541)/[K-DEFER-FIFO-20261116](../CHANGELOG.md#k-defer-fifo-20261116) updates this revision’s module lifetime/context section under D-17-DEFER-DISPATCH/P-463. C-36/C-63/C-65 and charter §§2/3.3/4.3/6.3/12 require preserving observable FIFO handling, tail insertion, incoming-only visits and existing owner/context boundaries. D-17 owns acceptance and remaining policies; unchanged lookup, capture and native-coverage contracts continue. No new runtime support, whole-design qualification or D-16 change follows.
 
