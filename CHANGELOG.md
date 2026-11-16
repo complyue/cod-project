@@ -1,5 +1,54 @@
 # Changelog
 
+## 2026-11-16 — Transparent rethrow matching and catch-local exception identity
+
+<a id="h-518"></a>
+**H-518 — Match through standard rethrow wrappers unless explicitly catching the wrapper.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-16 America/Los_Angeles; exact timestamp/personal name unavailable. Statement: “嗯，`catch` 匹配的时候，应该是在cause链上找到第一个非 RethrownException/Error 的进行匹配，除非显式 `catch (e : RethrownException/Error)` 这样才对吧？” Selects transparency of the standard wrapper prefix, not arbitrary business causes or aggregate member search. Mixed-wrapper construction/matching and checked summary representation remain separate.
+
+<a id="h-519"></a>
+**H-519 — Preserve source order across ordinary and explicit wrapper catches.** Same human/chat/date; answer: “我感觉按source order处理上简单直接，所以倾向于这个。 你看如果另一种其实技术上更简单，跟我解释一下”. Selects the first matching clause in source order rather than an explicit-wrapper priority pass. Agent and developer review found no technical simplicity reason to override that preference; no new ABI is inferred.
+
+<a id="h-520"></a>
+**H-520 — Prefer the incoming wrapper for compatible exception operations.** Same human/chat/date; answer: “我倾向于连 `from e` 也隐式使用wrapper，能用wrapper的地方都用wrapper”. Extends preservation beyond bare propagation/implicit causes to explicit from e. It does not approve changing ordinary nominal/generic typing or a universal value envelope; H-521/H-522 bounds the association mechanism.
+
+<a id="h-521"></a>
+**H-521 — Retain a hidden incoming tip instead of copying the wrapper chain.** Same human/chat/date; statement: “应该不需要copy吧？ 多增加一个隐藏的 `tip` wrapper 引用， `from e` 等地方判断是当前 e ，就用当前tip就好了嘛”. Selects a hidden incoming reference alongside the matched exception and existing-chain reuse. H-522 resolves whether recognition means direct binding or same exception identity. Stable handle retention/capture is distinct from graph copying; physical representation remains separate.
+
+<a id="h-522"></a>
+**H-522 — Recognize the same exception identity within the current catch.** Same human/chat/date; asynchronous reply selected “Same exception identity within this catch (Recommended)” to `rethrow DomainError() from echo(e)`, with echo returning e unchanged. Confirms comparing the resulting exception identity with the current catch's matched exception and selecting tip on equality; the check is catch-local and imports no caller catch context into separately defined helpers. Rejects limiting the rule to a direct reference to the catch binding. Ordinary helper typing remains unchanged. Equal-field reconstruction, stable physical identities, nested/captured context derivations and inspection/bypass APIs are bounded in D-17; no general value ABI is selected.
+
+<a id="k-wrapper-catch-20261116"></a>
+**K-WRAPPER-CATCH-20261116 — Integrate transparent matching and same-identity tip selection.** D-17r73/D-15r36/D-10r185/D-21r17/source372/registry768 records H-518–H-522 in D-17-CATCH-WRAPPERS/P-470–P-472, alongside K-EXCEPTION-CONSTRUCTION-20261116. Candidate C-36/C-63/C-65 paths preserve charter §§2/3.2–3.3/4.3/6.3/8/12 through typed recovery, immutable provenance, observable order and valid owners. Agent derivations: once-only operands; construction-distinct identity retained by ordinary transport; nearest lexical catch governs nested same-leaf/different-tip cases; delayed/repeated handlers retain their own matched identity/tip without a mutable ambient cell. Developer review supports bounded lexical association and identifies stable identity, retained backing and correlated checked facts as implementation requirements; it does not qualify the broader identity rule as implemented. Inspection/bypass, canonical wrapper/mixed-prefix and checked-summary choices remain pending, as do deferred-stack residual policies. D-16 and unaffected contracts continue. Baseline: `0443fe9fab607b6410ff72b8fcb18db42f68269a` at affected paths; K-751 history/source evidence preserved. Documentation only; no source edits, builds or test scripts.
+
+## 2026-11-16 — Explicit exception construction and bounded OOM diagnostics
+
+<a id="h-510"></a>
+**H-510 — Separate throw propagation from rethrow construction and capture traces at creation.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-16 America/Los_Angeles; exact timestamp/personal name unavailable. Reply: “或者就明确引入 rethrow 关键词，`throw` 不修改已创建的Exception，也不创建新的Exception，stack tracek 只跟着新建Exception的动作捕获； rethrow 相当于新建Exception捕获stacktrace”. Confirms the explicit operation distinction and creation-time trace capture; no automatic wrapping based on caught-value ancestry. Trace frame/format/storage and constructor failure policy are not independently selected.
+
+<a id="h-511"></a>
+**H-511 — Move the optional cause clause to rethrow.** Same human/chat/date; answer: “make it `rethrow e [from cause]`”. Moves cause-bearing creation out of plain existing-value throw. H-512/H-513 subsequently refines the operand to a named constructor and supplies the omitted-cause rule; this event does not preserve arbitrary existing-value rethrow as current syntax.
+
+<a id="h-512"></a>
+**H-512 — Use an explicit exception constructor in rethrow.** Same human/chat/date; correction: “哦，`rethrow SomeEx(...) from cause` 这样才对吧”. Selects an explicit new exception type/construction rather than rewriting an already created value. H-513 supplies optional-from semantics; H-514 separately adds bare rethrow.
+
+<a id="h-513"></a>
+**H-513 — Omitted rethrow cause uses the caught value.** Same human/chat/date; statement: “`rethrow SomeEx(...) [from cause]` ，省略 `from cause` 时使用当前捕获值”. Confirms that construction form and its default cause. Existing lexical caught-value/capture contracts supply nearest-scope selection and invalid missing-context diagnostics; no new ambient exception binding is selected.
+
+<a id="h-514"></a>
+**H-514 — Bare rethrow creates a wrapper.** Same human/chat/date; statement: “也允许仅仅 `rethrow;` 这时候包装捕获的异常作为cause，抛出新的包装异常对象”. Confirms a fresh wrapper with the caught value as cause, combined with H-510 creation-time trace capture and H-508's RethrownException/RethrownError checkedness distinction. Bare throw remains unchanged propagation. No physical allocation or arbitrary cause graph protocol follows.
+
+<a id="h-515"></a>
+**H-515 — Initialize readonly cause only through exception construction's from clause.** Same human/chat/date; statement: “Exception 的 `cause` 字段是不是最好禁止作为构造参数传？ 只能通过 `throw/rethrow/make` 一个 Exception ctor 时的 `from cause` 子句指定，从此只读”. Records the reserved construction-only cause direction, exclusion from ordinary constructor parameters and readonly lifetime. Constructor-form throw constructs its operand before unchanged propagation; this does not restore throw-from on an existing value. General exception payload/owner/trace representation is not approved by the syntax rule.
+
+<a id="h-516"></a>
+**H-516 — Statically reserve bounded process-level OOM information.** Same human/chat/date; proposal: “关于OOM，我建议进程层面预先静态分配一个 bounded OOM 信息区，专门用于处理OOM时使用。” Selects the bounded emergency-information direction, with H-517 supplying retention under capacity pressure. It does not select an unbounded cause/aggregate allocator, trace format or concurrency ABI.
+
+<a id="h-517"></a>
+**H-517 — Pin earliest OOM information and roll later records.** Same human/chat/date; asynchronous answer to reserve exhaustion: “最早的OOM信息保留不动，其它OOM信息当作滚动窗口，新记录挤出旧记录”. Selects a first-pinned/remaining-rolling retention policy instead of the offered termination or fixed trace-less fallback. The D-17 draft derives stale-record detection/coherent reads and separation from immutable semantic exception fields; no permission to overwrite live cause or aggregate values is inferred.
+
+<a id="k-exception-construction-20261116"></a>
+**K-EXCEPTION-CONSTRUCTION-20261116 — Integrate constructor/rethrow syntax and OOM record retention.** D-17r72→73/D-15r35→36/D-10r184→185/D-21r16→17/source371→372/registry767→768 records H-510–H-517 in D-17-RETHROW/D-17-OOM-RESERVE/P-464–P-469. Candidate C-36/C-63/C-65 paths preserve charter §§2/3.2–3.3/4.3/6.3/8/12 through explicit creation/provenance, readonly cause, checked semantic identity and bounded failure diagnostics. Derive lexical cause defaults, fresh per-catch invocation values, no sibling-finally last error, ordinary copies/throws preserving trace, once-only construction/operand effects, missing-context and cause-parameter rejection, and safe rolling diagnostic expiry. Preserve H-509's full aggregate members and pending stack order/body-error/return/new-registration integration. Main developer feasibility review and local source inspection show current cause-vector allocation and early registration-record release are not evidence of the new lifetime/reserve protocol. Actual cause/aggregate ownership, trace/window details and new source support remain separate; D-16 and unaffected qualified contracts continue. Baseline: `0443fe9fab607b6410ff72b8fcb18db42f68269a` at affected paths. Integrated K-751 mainline presence evidence without changing its qualified scope. Documentation only; no source edits, build or tests.
+
 ## 2026-11-16 — Retain incoming-target presence across calls
 
 <a id="k-751"></a>
