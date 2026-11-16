@@ -1,8 +1,10 @@
 # CoD regional ownership: syntax, semantics and use
 
-Design revision: 115 · Recorded: 2026-11-15 · Status: design draft with scoped confirmed requirements.
+Design revision: 116 · Recorded: 2026-11-16 · Status: design draft with scoped confirmed requirements.
 
 ## Design authority
+
+- **Reference-symbol owners:** [H-482](../CHANGELOG.md#h-482)/[K-REFERENCE-SYMBOLS-20261116](../CHANGELOG.md#k-reference-symbols-20261116) integrates [D-10-REF-SYMBOL](DesignAuthorityRegistry.md#d-10-ref-symbol), P-422–P-424, into r116's dynamic-symbol rule. Explicit ref/ptr symbols admit scalar or object targets and retain the actual region selected at installation through shadowing, capture and restoration. Candidate C-36/C-54/C-65/C-93 and charter §§3.2/3.3/4.3/6.3/8 preserves explicit ownership, identity/address separation and readable bindings. D-10 owns syntax and acceptance; preserve actual-owner lifetime, access/init/null rules, separate shared-owner groups and no region extraction/extension. The source decision is confirmed; no lexical-owner symbol extension, physical protocol, whole-file qualification or compiler-support claim follows.
 
 - **Known self-reference quirk:** [H-479/H-480](../CHANGELOG.md#h-480)/[K-QUIRK-WORKAROUND-20261115](../CHANGELOG.md#k-quirk-workaround-20261115) covers r115's H-146 documentation boundary under [D-28-ADT](DesignAuthorityRegistry.md#d-28-adt), P-417/P-418. Retain the known behavior and preceding-field workaround for users; remove additional analysis/acceptance obligations introduced for this quirk. Existing guards and unrelated contracts continue under the same C-65/C-91 and charter §§3.3/4.3/6.3/12 scope. No code or encoding change is selected.
 
@@ -256,7 +258,9 @@ The two regions may both have the same root type. Type identity does not establi
 
 ### Dynamic symbols have a separate owner rule
 
-H-277–H-281 distinguishes ordinary initialization-fixed `ptr` owners from symbolic bindings. Bits payloads reside directly in TLS and require `effect @bits <- rhs`. A non-bits object symbol uses `effect @object = rhs` to reference an object inside a region supplied by a region symbol; it may rebind across such region owners if its type and lifetime remain valid. The TLS reference does not become a cross-owner edge inside a regional graph, and it does not consume the supporting resource. Shadowing and capture preserve the actual referenced region and hidden owners. A symbol or capture must not outlive that resource. [Symbolic storage](SymbolicDynamicScope.md#symbolic-storage-and-regional-provenance) owns the detailed contract and acceptance cases.
+H-482 adds `ref/ptr symbol @name:T in @region_symbol`, including scalar T. Its effect installs a borrowed target with one actual owner selected from that region symbol at installation. This association survives later owner-symbol shadows and reference capture/restoration while the original owning region effect lives. Each new installation may select a different actual owner; any ordinary alias derived from an installed reference retains its selected owner rather than following future TLS rebinding. Null ptr effects retain owner context, and ref requires established non-nullness. Reads/writes retain target access and initialization obligations. Shared-owner symbol groups impose their separate equality constraint; naming one owner selector does not silently create such a group. Owner-resolution metadata and captures grant neither cleanup authority nor extra lifetime. D-10 specifies publication order, accepted consequences and rejection cases.
+
+H-277–H-281 distinguishes ordinary initialization-fixed `ptr` owners from symbolic bindings. Independent bits payloads reside directly in TLS and require `effect @bits <- rhs`. Explicit ref/ptr symbolic bindings may instead borrow bits targets under H-482. A non-bits object symbol uses `effect @object = rhs` to reference an object inside a region supplied by a region symbol; it may rebind across such region owners if its type and lifetime remain valid. The TLS reference does not become a cross-owner edge inside a regional graph, and it does not consume the supporting resource. Shadowing and capture preserve the actual referenced region and hidden owners. A symbol or capture must not outlive that resource. [Symbolic storage](SymbolicDynamicScope.md#symbolic-storage-and-regional-provenance) owns the detailed contract and acceptance cases.
 
 ### Default parameters target callee-local storage
 
