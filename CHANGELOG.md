@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-15 — Deferred handler payload state
+
+<a id="k-734"></a>
+**K-734 — Preserve payload facts for each deferred input.** Agent continuity assessment under H-267/H-269/H-272/H-313/H-327/H-356–H-362/H-366–H-371/H-398/H-407/H-420/H-423 and charter §§3.3/4.3/5.3/6.3/8/12: source350→351 and registry744→745 preserve C-63/P-235/P-236/P-280's completion contract with C-65/C-75/P-255/P-257/P-295/P-327's actual target and snapshot obligations. Unified per-input facts retain handler writes through completion joins; explicit payload-map simulation removes temporary checker-state substitution. Acceptance covers fallback recovery, skipped bodies, finally replacement, nested scope cleanup, checked rejection, recursive shared native bodies and exact release. D-14r112/D-17r69/D-18r104/D-26r21 and D-16 remain unchanged. No new language, ABI, allocation or qualification. Queue/target correlations, post-join reads and prepared caller-slot payloads remain conservative. Baseline: `19c0aaa5f9ff631301b73fd6e948bc1e05ef0e45:cod/lang_checked.hh` and that commit’s `tests/cod/language/README.md`.
+
 ## 2026-11-15 — Cleanup payload transformations
 
 <a id="k-733"></a>

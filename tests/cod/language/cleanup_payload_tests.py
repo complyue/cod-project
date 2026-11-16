@@ -31,7 +31,7 @@ safe('nested_registration_borrow',BASE+'{{defer{defer copy(payload,item);item<-u
 safe('conditional_register',BASE+'{{if(true){defer set(payload,unchecked());}else{defer{payload<-unchecked();{}};};}};')
 safe('body_exception',BASE+'val failure<-unchecked();try{ {{defer set(payload,failure);throw failure;}}; }catch(e:const MissingReturnError){};')
 safe('deferred_exception',BASE+'val failure<-unchecked();try{ {{defer set(payload,failure);defer{throw failure;};}}; }catch(e:const MissingReturnError){};')
-checked('fallback_recovery_join',BASE+'val failure<-unchecked();{{defer catch(e:const MissingReturnError){payload<-e;{}};defer{throw failure;};}};',output='5\n')
+safe('fallback_recovery',BASE+'val failure<-unchecked();{{defer catch(e:const MissingReturnError){payload<-e;{}};defer{throw failure;};}};',output='5\n')
 safe('deferred_recovery',BASE+'val failure<-unchecked();{{defer{payload<-failure;{}}catch(e:const MissingReturnError){payload<-e;{}};defer{throw failure;};}};')
 safe('prepared_exceptional_write',BASE+'val failure<-unchecked();try{ {{defer fail_after(payload,failure);}}; }catch(e:const MissingReturnError){};','func fail_after(ref target:Exception in O,value:MissingReturnError)->void where {owner O}{target<-value;throw value;}')
 safe('finally_after_defer',BASE+'{{defer{try{}finally{payload<-unchecked();{}};};}};')
