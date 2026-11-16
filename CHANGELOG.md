@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-16 — Exception-derived predicate evidence
+
+<a id="k-759"></a>
+**K-759 — Share Boolean/category facts through results and cleanup.** Source385→386/registry783→784 continues K-758's qualified D-14r116/P-258, D-17r82/P-235/P-236/P-280, D-18r107 and D-26r21/H-407 scope under H-420/H-423. Shared snapshots, guarded joins and call projection/substitution retain exception-derived Boolean evidence; resumed finally paths compose prior initialization and successful nullable-target writes retain the saved destination. Recursive value seeds preserve base evidence while empty observed summaries remain conservative. Charter §§2/3.1–3.3/4.3/6.3/8/12, H-525, owner/access/ref contracts and D-16 continue. Acceptance covers independent category/Boolean models, mutation/alias/failure controls, recursive native sharing and exact release. Wider input-null correlations and queue/aggregate contracts remain separately scoped; no new runtime, ABI, source rule or human confirmation. Baseline: `373156efdb5bace9a4d5dcec8b788ea8d2cf7090`, affected compiler/source-reference paths.
+
 ## 2026-11-16 — Consistent initialization conditions
 
 <a id="k-758"></a>
