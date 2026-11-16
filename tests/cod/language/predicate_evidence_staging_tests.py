@@ -85,6 +85,15 @@ SOURCES['boolean_borrowed_input'] = BOOLEAN_INPUT_SOURCE.replace(
     'val ok<-checked(p,n);', 'val input<-p is not null;val ok<-checked(input,n);')
 SOURCES['boolean_borrowed_result'] = SOURCES['boolean_borrowed_input'].replace(
     '->const T where {T,owner B}', '->ref const T in B where {T,owner B}')
+BOOLEAN_OUTPUT_SOURCE = PREDICATE_CALL_SOURCE.replace(
+    'func checked(ptr p:T in O,n:u64)->bool where {T,owner O}{\n if(n!=0u64){return checked(p,n-1u64);}else{return p is not null;};\n}',
+    'func checked(ref out:bool in B,ptr p:T in O,n:u64)->void where {T,owner B,owner O}{\n if(n!=0u64){checked(out,p,n-1u64);}else{out<-p is not null;{}};\n}').replace(
+    'val ok<-checked(p,n);', 'val ok<-false;INVOKE;')
+SOURCES['boolean_output'] = BOOLEAN_OUTPUT_SOURCE.replace('INVOKE', 'checked(ok,p,n)')
+SOURCES['boolean_output_prepared'] = BOOLEAN_OUTPUT_SOURCE.replace('INVOKE', '{{defer checked(ok,p,n);}}')
+SOURCES['boolean_output_block'] = BOOLEAN_OUTPUT_SOURCE.replace('INVOKE', '{{defer{checked(ok,p,n);};}}')
+SOURCES['boolean_output_alternatives'] = BOOLEAN_OUTPUT_SOURCE.replace('val ok<-false;', 'val ok<-p is not null;').replace(
+    'out<-p is not null;{}', 'if(n==0u64){out<-p is not null;{}}else{};').replace('INVOKE', 'checked(ok,p,n)')
 
 
 def main():

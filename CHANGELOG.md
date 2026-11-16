@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-16 — Boolean output evidence through calls and cleanup
+
+<a id="k-754"></a>
+**K-754 — Continue finite boolean payload and completion proofs.** Source376→377/registry772→773 under D-14r116/C-65/P-258, D-17r75’s unaffected checked-NPE/explicit-return/completion scope, D-18r107 and D-26r21/H-407; H-420/H-423. Branch writes retain predicate facts; weak aliases and outcome summaries preserve every possible target value. Canonical finite alternatives keep preserve-or-write relations until incoming payload substitution across ordinary/prepared calls, transfer/swaps, repeated/nested cleanup and pending/replaced returns. No recursive predicate expansion or runtime carrier; exported call facts use input ordinals. Charter §§3.2/3.3/4.3/6.3/8/12, D-16 and owner/access/initialization/declaration constraints continue. Acceptance includes direct/prepared truth tables, aliases, output/result timing, recursive/captured calls, failures and native sharing. Dynamic binding-selection/payload correlations remain unproved; revised exception/deferred-stack/disjoint contracts gain no implementation qualification. Baseline: `3bcb2998085a3e47010fdc4be88a9bd55da8d9f9`, `cod/lang_checked.hh`, `cod/lang_completion.hh` and source reference.
+
 ## 2026-11-16 — Integrate disjoint-path design and boolean input proofs
 
 <a id="k-disjoint-path-sync-20261116"></a>

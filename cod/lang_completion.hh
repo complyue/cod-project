@@ -4,6 +4,7 @@
 #include "lang_exceptions.hh"
 
 #include <algorithm>
+#include <compare>
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
@@ -341,23 +342,94 @@ public:
     }
   };
   using Reads = std::map<size_t, ReadRequirement>;
+  using BooleanPayload = std::pair<std::optional<size_t>, size_t>;
   struct BooleanFacts {
     std::set<size_t> present;
     // Necessary truths of immutable incoming boolean payloads.
     std::set<std::pair<size_t, bool>> inputs;
+    std::set<std::pair<BooleanPayload, bool>> payloads{};
+    // Non-null selections are valid only for these binding versions.
+    std::set<std::pair<size_t, std::set<size_t>>> bindings{};
     bool operator==(const BooleanFacts &) const = default;
-    void merge(const BooleanFacts &other) {
-      std::erase_if(present, [&](size_t target) { return !other.present.contains(target); });
-      std::erase_if(inputs, [&](const auto &input) { return !other.inputs.contains(input); });
+    auto operator<=>(const BooleanFacts &) const = default;
+    void append(const BooleanFacts &other) {
+      present.insert(other.present.begin(), other.present.end());
+      inputs.insert(other.inputs.begin(), other.inputs.end());
+      payloads.insert(other.payloads.begin(), other.payloads.end());
+      bindings.insert(other.bindings.begin(), other.bindings.end());
+    }
+    bool implies(const BooleanFacts &other) const {
+      const auto includes = [](const auto &a, const auto &b) { return std::includes(a.begin(), a.end(), b.begin(), b.end()); };
+      return includes(present, other.present) && includes(inputs, other.inputs) &&
+          includes(payloads, other.payloads) && includes(bindings, other.bindings);
     }
   };
+  // Keep finite alternatives until entry payloads have been substituted.
+  // Intersecting them sooner loses preserve-or-write relationships in queues.
+  using BooleanClauses = std::set<BooleanFacts>;
+  using BooleanValue = std::map<bool, BooleanClauses>;
+  using BooleanValues = std::map<size_t, BooleanValue>;
+  static void add_boolean_clause(BooleanClauses &clauses, BooleanFacts facts) {
+    if (std::any_of(clauses.begin(), clauses.end(), [&](const auto &known) { return facts.implies(known); })) return;
+    std::erase_if(clauses, [&](const auto &known) { return known.implies(facts); });
+    clauses.insert(std::move(facts));
+  }
+  static BooleanClauses conjoin_boolean(const BooleanClauses &left, const BooleanClauses &right) {
+    BooleanClauses result;
+    for (const auto &a : left) for (const auto &b : right) {
+      auto facts = a; facts.append(b); add_boolean_clause(result, std::move(facts));
+    }
+    return result;
+  }
+  static BooleanValue unknown_boolean() { return {{false, {BooleanFacts{}}}, {true, {BooleanFacts{}}}}; }
+  static BooleanValue boolean_payload(size_t place, std::optional<size_t> action = {}) {
+    BooleanValue result;
+    for (const bool value : {false, true}) {
+      BooleanFacts facts; facts.payloads.emplace(BooleanPayload{action, place}, value);
+      result[value].insert(std::move(facts));
+    }
+    return result;
+  }
+  static void merge_boolean(BooleanValue &known, const BooleanValue &other) {
+    for (const auto &[value, clauses] : other) for (const auto &facts : clauses) add_boolean_clause(known[value], facts);
+  }
+  static BooleanValue through_boolean(const BooleanValue &value, const BooleanValues &payloads, bool closed = false) {
+    BooleanValue output;
+    for (const auto &[result, clauses] : value) for (const auto &facts : clauses) {
+      auto retained = facts;
+      std::erase_if(retained.payloads, [&](const auto &condition) {
+        return !condition.first.first && (closed || payloads.contains(condition.first.second));
+      });
+      BooleanClauses substituted{std::move(retained)};
+      for (const auto &[payload, truth] : facts.payloads) if (!payload.first) {
+        const auto found = payloads.find(payload.second);
+        if (found == payloads.end()) continue;
+        if (const auto known = found->second.find(truth); known != found->second.end() && !known->second.empty())
+          substituted = conjoin_boolean(substituted, known->second);
+      }
+      for (const auto &known : substituted) add_boolean_clause(output[result], known);
+    }
+    return output;
+  }
+  static BooleanValue enter_boolean(const BooleanValue &value, size_t action) {
+    BooleanValue output;
+    for (const auto &[result, clauses] : value) for (auto facts : clauses) {
+      const auto before = facts.payloads; facts.payloads.clear();
+      for (auto [payload, truth] : before) {
+        if (payload.first == action) payload.first.reset();
+        facts.payloads.emplace(std::move(payload), truth);
+      }
+      add_boolean_clause(output[result], std::move(facts));
+    }
+    return output;
+  }
   // Explicit returns retain selected targets or copied value evidence. Cleanup
   // can preserve that pending result, replace it, or join both possibilities.
   struct Returned {
     bool preserves = true;
     std::set<size_t> targets, uninitialized, null_sources;
     ExceptionFacts value{};
-    std::map<bool, BooleanFacts> boolean{};
+    BooleanValue boolean{};
     bool operator==(const Returned &) const = default;
     void initialize(const std::set<size_t> &known) {
       std::erase_if(uninitialized, [&](size_t target) { return known.contains(target); });
@@ -368,10 +440,7 @@ public:
       targets.insert(other.targets.begin(), other.targets.end());
       uninitialized.insert(other.uninitialized.begin(), other.uninitialized.end());
       null_sources.insert(other.null_sources.begin(), other.null_sources.end());
-      for (const auto &[result, facts] : other.boolean) {
-        const auto [found, inserted] = boolean.emplace(result, facts);
-        if (!inserted) found->second.merge(facts);
-      }
+      merge_boolean(boolean, other.boolean);
     }
     void then(const Returned &next) {
       const bool keep = preserves && next.preserves;
@@ -395,10 +464,15 @@ public:
     std::set<size_t> payload_writes{};
     // Actual presence of immutable incoming targets, independently of payload initialization.
     std::set<size_t> present{};
+    BooleanValues booleans{};
     template <typename Transform> void transform_values(const Transform &transform) {
       returned.value = transform(returned.value);
       thrown = transform(thrown);
       for (auto &[target, value] : payloads) value = transform(value);
+    }
+    template <typename Transform> void transform_booleans(const Transform &transform) {
+      returned.boolean = transform(returned.boolean);
+      for (auto &[target, value] : booleans) value = transform(value);
     }
   };
   struct Path { std::uint64_t inputs; Completion completion; size_t queue; Effects effects{}; };
@@ -431,10 +505,12 @@ private:
       if (!target.first) if (const auto found = first.payloads.find(target.second);
           found != first.payloads.end() && found->second.empty()) result.unknown_thrown = true;
     next.transform_values([&](const auto &value) { return value.through(first.payloads, first.thrown); });
+    next.transform_booleans([&](const auto &value) { return through_boolean(value, first.booleans); });
     result.returned.then(next.returned);
     result.returned.initialize(result.initialized);
     result.thrown = next.thrown;
     for (auto &[target, value] : next.payloads) result.payloads[target] = std::move(value);
+    for (auto &[target, value] : next.booleans) result.booleans[target] = std::move(value);
     return result;
   }
   static bool merge(std::map<size_t, Effects> &result, size_t completion, const Effects &effects) {
@@ -450,6 +526,7 @@ private:
     const auto previous_payloads = known.payloads;
     const auto previous_payload_writes = known.payload_writes;
     const auto previous_present = known.present;
+    const auto previous_booleans = known.booleans;
     const auto previous_selections = known.selections;
     const auto previous_symbols = known.symbols;
     known.symbols.insert(effects.symbols.begin(), effects.symbols.end());
@@ -467,12 +544,19 @@ private:
       if (inserted) found->second.merge(ExceptionFacts::payload(target));
       else found->second.merge(value);
     }
+    for (auto &[target, value] : known.booleans)
+      if (!effects.booleans.contains(target)) merge_boolean(value, boolean_payload(target));
+    for (const auto &[target, value] : effects.booleans) {
+      const auto [found, inserted] = known.booleans.try_emplace(target, value);
+      if (inserted) merge_boolean(found->second, boolean_payload(target));
+      else merge_boolean(found->second, value);
+    }
     known.selections.merge(effects.selections);
     known.selections.resolve(known.initialized);
     return previous_reads != known.reads || previous_initialized != known.initialized ||
         previous_returned != known.returned || previous_thrown != known.thrown || previous_unknown_thrown != known.unknown_thrown || previous_payloads != known.payloads ||
         previous_selections != known.selections || previous_symbols != known.symbols || previous_payload_writes != known.payload_writes ||
-        previous_present != known.present;
+        previous_present != known.present || previous_booleans != known.booleans;
   }
 public:
   static void merge_read(Reads &reads, size_t read, const ReadRequirement &before) {
@@ -565,6 +649,7 @@ public:
                 const auto arrival = incoming.reason >= 3
                     ? ExceptionFacts::arrival().restricted({incoming.reason - 3}) : ExceptionFacts{};
                 invoked.transform_values([&](const auto &value) { return value.enter(*node.action, arrival); });
+                invoked.transform_booleans([&](const auto &value) { return enter_boolean(value, *node.action); });
                 for (const auto &[value, previous] : solved_[node.previous.front()][intermediate])
                   changed = merge(result, value, compose(invoked, previous)) || changed;
               }
