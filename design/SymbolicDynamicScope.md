@@ -1,10 +1,12 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 187 · Recorded: 2026-11-16 · Phase: language/application co-design.
+Design revision: 188 · Recorded: 2026-11-16 · Phase: language/application co-design.
 
 ## Design authority
 
-- **Disjoint declarations and exempt paths:** [H-527–H-531](../CHANGELOG.md#h-527)/[K-DISJOINT-PATHS-20261116](../CHANGELOG.md#k-disjoint-paths-20261116), [D-10-DISJOINT](DesignAuthorityRegistry.md#d-10-disjoint), records n-ary pair constraints, declaration-point exemptions, public/type-carried evidence and a frozen fused-world inheritance graph. Redundant shorter declarations accept with a warning identifying the existing path and the intermediate method contracts they do not bypass. Candidate C-56/C-10/P-476–P-478 under charter §§2/3.1–3.3/4.2–4.3/6.3/8/12 preserves explicit nominal intent, stable interpretation and actionable diagnostics. D-10 owns examples/acceptance and remaining foreign-declaration authority, cyclic evidence and formal path-checking boundaries. Preserve owner/capture, selected contexts, H-525/H-526 checked contracts, demanded method checking and D-16; no new compiler support or full value-path/algorithm qualification is inferred.
+- **Disjoint declarations:** [D-10-DISJOINT](DesignAuthorityRegistry.md#d-10-disjoint), [H-527–H-535](../CHANGELOG.md#h-527) and [K-DISJOINT-ENDPOINTS-20261116](../CHANGELOG.md#k-disjoint-endpoints-20261116) cover this revision's constraint-related sections. Existing listed-endpoint ancestry permits inherited overlap; a second independent listed-parent relationship rejects, while prior redundant relationships warn about the path and intermediate methods. Preserve complete public records, per-pair definition/import authority, frozen validation, declared checkedness, demanded checking, owners/captures and D-16. Candidate C-56/C-10/P-476–P-478 serves explicit nominal intent and stable interpretation under charter §§2/3.1–3.3/4.2–4.3/6.3/8/12. [D-10](SymbolicDynamicScope.md#disjoint-declarations-and-exempt-inheritance-paths) owns acceptance; finite generic/cyclic proof procedures, source implementation and full value-path qualification remain separate. No separate exemption-path store or runtime inheritance mutation.
+
+- **Shared-information candidate:** [D-15-DISJOINT-POOL](DesignAuthorityRegistry.md#d-15-disjoint-pool)/P-479–P-481 under C-59/C-56/C-10 records [H-533's](../CHANGELOG.md#h-533) requested feasibility review. [D-15](ModuleWorlds.md#shared-disjoint-information-per-module-world) owns identity, upstream retention, applicable local/source checks, publication filtering and frozen-backing acceptance. Physical representation and the complete value path remain pending-human; no compiler support is inferred.
 
 
 - **Checked and unchecked roots:** [H-524–H-526](../CHANGELOG.md#h-524)/[K-ERROR-ROOTS-20261116](../CHANGELOG.md#k-error-roots-20261116), [D-17-ERROR-ROOTS](DesignAuthorityRegistry.md#d-17-error-roots), adds Error <: Exception and preserves explicit Exception handling obligations even for values proven unchecked. Checkedness-changing adapter conformance rejects. Candidate P-473–P-475 serves explicit typed failure contracts and user-defined errors under charter §§2/3.1/3.3/4.3/6.3/8/12. Existing actual-type dispatch, concrete failure categories, owner/capture and D-16 contracts continue. New roots/declaration enforcement and arbitrary exception payload support are not established by current source tests; general disjointness and remaining wrapper/throws/inspection scope remain separate.
@@ -437,29 +439,43 @@ D-07 illustrates selecting the data type through an adapter with using. Explicit
 
 H-527 selects the direction `type disjoint A, B, C;`, including larger lists. One declaration constrains every unordered pair of distinct resolved endpoints; textual order within the list does not establish priority. Aliases resolve before comparison. At least two distinct endpoints are needed; duplicate identities should diagnose rather than become a self-disjointness claim. Pair constraints are symmetric, but disjointness between A/B and B/C does not imply disjointness between A/C.
 
-This is **disjointness with captured inheritance exemptions**, not an unconditional assertion that the endpoint types have no common values. H-528 fixes the inheritance graph in the fused world before execution. Source declarations and module incorporation supply static evidence; no runtime inheritance mutation, runtime constraint publication or startup scheduling is involved. Detailed foreign-declaration authority and formal validation remain under review below.
+This is **disjointness with existing endpoint-ancestry exemptions**, not an unconditional assertion that the endpoint types have no common values. H-528 fixes the inheritance graph in the fused world before execution. Source declarations and module incorporation supply static evidence; no runtime inheritance mutation, runtime constraint publication or startup scheduling is involved. H-532 fixes declaration authority below; formal validation remains under review.
 
-#### Capture existing paths at the declaration
+#### Exemptions are existing ancestry among listed endpoints
 
-The declaration retains the positive inheritance/conformance paths already known in its module at that source point, including paths supplied by earlier admitted using/import selections. Descendants may inherit through those exempt paths. Record resolved nominal identities and the provenance of the established relations; name spelling, aliasing or compiler visitation order cannot change the snapshot. Source names being available during static namespace preparation does not make a later relationship an earlier established path.
+H-534 defines the exemption narrowly: an inheritance relation already established **between types named in the disjoint list** remains admitted. The disjoint rule prevents adding a previously absent relation between those endpoints later during static preparation/fusion. Existing intermediate nodes may explain that relation; they are ordinary type-graph evidence, not a separately copied exemption graph.
 
 ```cod
 type Exception;
 type Error <: Exception;
-type disjoint Error, Exception;   # Error → Exception is exempt.
-
-data MyError <: Error { code:u64; }    # Accept; Exception follows via the exempt path.
-data Failure <: Exception { code:u64; }
-data Failure <: Error;               # Reject: a new independent route into Error.
+type disjoint Error, Exception;   # Existing Error → Exception remains admitted.
+data MyError <: Error { code:u64; }  # Also an Exception through that ancestry.
 ```
 
-The final rejection preserves H-526's established checkedness contract. An old bridge grants the inherited consequence of entering that branch; it does not authorize adding another independent branch to a type already committed elsewhere. Existing common conformers known before the declaration must also retain their established paths, as required by H-527. Exact formal treatment of composed paths and generic applications remains an acceptance/proof task, not a selected graph representation.
+The retained frozen type graph already represents the admitted endpoint ancestry. There is no requirement to copy every path, snapshot each whole module graph, grandfather arbitrary old common conformers or keep a separate per-constraint exemption-path catalogue. Constraint origin and ordinary declaration/relationship evidence are still needed for authoring, publication and diagnostics; that is distinct from duplicating ancestor paths. A candidate new relation must not be installed and then used as the proof of its own exemption. During module composition, retain the selected source-world meaning rather than treating every relation in a newly combined graph as previously admitted.
 
-The snapshot is attached to the declaration's identity. An importing module does not capture its own larger set of paths as replacement exemptions. Re-export, aliases and repeated selection preserve the originating record. Independently authored declarations constrain together, each with its own snapshot; unioning their exemption sets must not weaken a stricter record. A second declaration cannot retroactively legalize a path forbidden by an earlier applicable contract. These checks take place while preparing the frozen world.
+Consequently an old data type conforming independently to unrelated A and B is not exempt merely because it predates type disjoint A, B. There is no pre-existing A/B ancestry to supply that exemption; such a type is a conflict when validating the constraint. Conversely an existing B <: A relation permits the overlap inherently inherited by B and its descendants. This scopes the negative fact precisely instead of claiming an empty intersection whenever a constraint exists.
+
+H-535 confirms the general rule: a subtype cannot independently declare two types from the disjoint list as parents. Existing ancestry among the listed types permits the relationship inherited through one selected parent; it does not permit adding another independent parent relationship to a subtype that already entered through a different listed type. This is the mechanism that also enforces H-526's checked-to-Error rejection, not an exception-only special case.
+
+```cod
+type A;
+type B <: A;
+type disjoint A, B;
+data X <: A { code:u64; }
+data X <: B;                  # Reject: a second independent listed parent.
+
+data Y <: B { code:u64; }     # Accept: A is inherited through existing B → A.
+data Y <: A;                  # Accept with warning: Y → B → A already exists.
+```
+
+The two declaration orders differ because only the second example's final statement asserts an already established relationship. A rejected new relationship cannot retroactively make an earlier declaration redundant. Check inherited relationships too: an intermediate parent or alias must not hide independent conformance to both endpoints. Reuse the ordinary graph and source/selected-world evidence for these checks; no exemption-path catalogue is required.
+
+Multiple applicable constraints remain conjunctive. Their originating identities, endpoint lists and selected-world meaning survive import/re-export; declaration deduplication does not authorize replacing an older contract or inventing receiver exemptions. The source graph and constraints freeze before execution, and module traversal/cache order does not manufacture an earlier relationship.
 
 #### Redundant shorter paths and intermediate method contracts
 
-H-530 refines H-529's independent-path rejection: when the source and target already have an established indirect subtype relationship, a new shorter declaration is accepted with a warning. It records a redundant assertion of that existing relationship, not a new independent route or an enlarged exemption. The witness must already be established without the new declaration; a later relation cannot justify it retroactively.
+H-530 refines H-529's treatment of redundant paths: when the source and target already have an established indirect subtype relationship, a new shorter declaration is accepted with a warning. It records a redundant assertion of that existing relationship, not a new independent route or an enlarged exemption. The witness must already be established without the new declaration; a later relation cannot justify it retroactively.
 
 ```cod
 type Resource;
@@ -479,24 +495,44 @@ note: declaring File <: Resource does not bypass Reader or its method contracts.
 
 Preserve the effective inheritance/conformance graph and all intermediate obligations. A shorter source path does not make the higher-parent method more specific: existing nominal specificity, not inheritance-path length, still governs dispatch. Retain the source declaration and its diagnostic/proof mapping; acceptance of redundant evidence is not permission to silently edit the author's text. Implementations may already come from visible generic or separately supplied methods; the warning does not demand that File redeclare them. H-216/H-218's demand-based checking remains: an unused missing implementation is not newly rejected just because this warning is emitted. When several witness paths exist, a compact diagnostic can show one established path and provide locations for additional evidence; it must not imply that unshown intermediate contracts disappear.
 
-This is distinct from `Failure <: Error` above: there was no prior Failure → Error path, so the new declaration cannot be dismissed as redundant. Discarding the older Failure → Exception path after adding Error would rewrite the earlier contract and is not an allowed shortcut.
+A checked Failure <: Exception acquiring Failure <: Error is not a redundant declaration: no prior Failure → Error relation exists. H-535's general disjoint rule rejects it, satisfying H-526's required checkedness stability. A new relation cannot retroactively turn the earlier declaration into a redundant assertion.
+
+#### Authority to declare a constraint
+
+H-532 requires the declaring module to have authority over at least one endpoint of **each unordered pair**: the endpoint is defined by that module, or explicitly selected through import with extension permission. Merely using a foreign type supplies no such grant. Resolve nominal identities and the applicable import binding at the declaration point; a local alias for a foreign type does not count as defining that type. Ordinary source-name/selection availability and extension permissions remain in force.
+
+```cod
+using "a.cod" A;
+using "b.cod" B;
+type disjoint A, B;          # Reject: neither endpoint supplies declaration authority.
+
+# Alternative selection in a module that intends to declare the constraint:
+import "a.cod" A;
+using "b.cod" B;
+type disjoint A, B;          # Authoring permission satisfied; paths still need validation.
+```
+
+For an n-ary declaration, the equivalent concise condition is that at most one distinct endpoint lacks declaration authority. Defining local C does not authorize the A/B pair in type disjoint A, B, C when both A and B were merely used. The diagnostic should identify an unauthorized pair and explain which import/definition grant is missing; it must not silently rewrite using to import, because the selections have their own contracts. An import grant permits declaring the constraint, not violating an existing one or enlarging another declaration's exemptions.
+
+This check applies to authoring a **new** record. Consuming a public record through using/import, deduplicating the same originating record or re-exporting that unchanged record does not author it again and needs no new endpoint grant. The original authority/evidence travels with its provenance; consumers must still satisfy the constraint. Automatic type-carried evidence therefore remains compatible with H-527's using path and does not grant consumers new extension permission.
 
 #### Public evidence travels with selected types
 
-H-527 makes the disjoint record and its exempt paths public when any participating type is exported. Using/importing a participating type carries the corresponding constraint evidence automatically, without a with methods clause or separate import of the constraint. Treat an n-ary declaration as one complete contract: selecting A from a declaration covering A/B/C carries its pair constraints and original exemptions, including the B/C constraint. Selecting a subtype also requires the applicable ancestor evidence; erasing it through a broad alias or an intermediate re-export must not bypass validation.
+H-527 makes the disjoint record and its exempt paths public when any participating type is exported. Using/importing a participating type carries the corresponding constraint evidence automatically, without a with methods clause or separate import of the constraint. Treat an n-ary declaration as one complete contract: selecting A from a declaration covering A/B/C carries its pair constraints and established endpoint ancestry, including the B/C constraint. Selecting a subtype also requires the applicable ancestor evidence; erasing it through a broad alias or an intermediate re-export must not bypass validation.
 
-Publication is part of the completed static module interface. An export appearing textually before the disjoint declaration still publishes its applicable record; this does not change which paths were known at the disjoint declaration itself. Evidence must retain referenced type and relation identities, including intermediate path nodes needed for validation and diagnostics. It does not by itself introduce every referenced name into the receiver's explicit namespace, select every associated callable, expose private fields/bodies or grant extension permission. Ordinary source fallback/private-name rules continue for name lookup; the explicitly public relation/path facts themselves cannot be hidden in a way that prevents checking.
+Publication is part of the completed static module interface. An export appearing textually before the disjoint declaration still publishes its applicable record; this does not backdate or newly establish an endpoint ancestry relation. Evidence must retain referenced type and relation identities, including intermediate path nodes needed for validation and diagnostics. It does not by itself introduce every referenced name into the receiver's explicit namespace, select every associated callable, expose private fields/bodies or grant extension permission. Ordinary source fallback/private-name rules continue for name lookup; the explicitly public relation/path facts themselves cannot be hidden in a way that prevents checking.
 
-A receiver combines all applicable selected records and positive relations before freezing its world. Contradictory combinations reject with the disjoint declaration, its snapshot provenance and the conflicting paths. Neither import order nor the last received exemption record chooses a winner. The original snapshot can be source-order-sensitive, but receiver traversal/cache discovery order cannot amend it. Use stable identities/dependency evidence in caches; do not reduce the contract to an unordered pair without its exemptions.
+A receiver validates applicable local and selected-source constraints against the admitted type relations before freezing its world. Contradictory combinations reject with the declaration and relevant relationship evidence. Receiver traversal/cache discovery order cannot establish ancestry or choose a conflict winner. Keep stable record/group identities, selected-world meaning and dependencies; an anonymous pair without its meaning in the existing type graph is insufficient.
 
-#### Validation boundaries and remaining decisions
+#### Shared information and remaining validation boundaries
 
-- **Foreign declaration authority:** H-527 defines publication/carriage, not who may attach a new constraint to foreign types. Compare requiring import for every foreign endpoint, requiring ownership/import of at least one endpoint of each pair, and permitting a local assertion on merely used types. The current recommendation is the per-pair authority rule: one local endpoint in an n-ary list cannot authorize a separate pair of two foreign endpoints. This choice is awaiting the user; it is not current source admission policy. Do not infer new write/extension permission from automatic consumption of a public record.
-- **Cyclic static evidence:** declaration-only module cycles remain allowed under D-15. Exemption snapshots need independently established relation evidence; a mutually dependent snapshot must not treat itself as its own proof or depend on arbitrary compiler visitation. A conservative rejection when the needed evidence cannot be established is the initial candidate; the exact static elaboration boundary needs review. This is not a runtime scheduling issue.
-- **Formal path validation and cost:** distinguish accepted descendants using an old bridge, old common conformers, genuinely new independent routes and H-530 redundant assertions. Preserve snapshot provenance through transitive chains and selected generic evidence. A finite graph/worklist representation may avoid enumerating all paths, but no complexity bound or proof algorithm is yet accepted. Provide conflicting path witnesses and keep resource-limit diagnostics distinct from a semantic contradiction.
-- **Negative proofs:** an exempt overlap means the corresponding intersection is not necessarily empty. Optimizers, coverage and overload analysis may use only the precise validated constraint in the frozen world, including its exemptions and dependency versions. This does not turn every pair into a global no-overlap fact or alter D-26's separate outside-catalog interpretation boundary.
+[H-533's module-world pool candidate](ModuleWorlds.md#shared-disjoint-information-per-module-world) can share constraint records without duplicating them for each type. Defined/imported type information selects the receiving world's pool, while using retains its source-world association. That is a representation candidate under review, not a new nominal type identity, a complete constraint-applicability rule or a permanent pointer ABI. H-534 removes the need for a separate old-path snapshot catalogue; existing type relations supply endpoint ancestry.
 
-**Acceptance:** two and larger endpoint lists; pair symmetry without disjointness transitivity; pre-existing ancestor chains and common conformers; new descendants through exempt chains; independent-path rejection; redundant shorter-path acceptance with path/intermediate-method warnings; no use of future/self-dependent proof; aliases and repeated selections; automatic complete-record carriage through export/using/import/re-export and subtype views; multiple snapshots enforced conjunctively; deterministic frozen-world conflict diagnostics; unchanged checkedness and demanded method checks; and no runtime graph mutation. Detailed publication permissions, cyclic evidence, generic/path proofs and physical metadata remain scoped work. This design has no source implementation evidence.
+- **Static evidence:** declaration-only module cycles remain allowed under D-15. Independently grounded type declarations may be established within an import cycle; self-dependent justification cannot supply an already existing relation. This is ordinary static relation/admission evidence, not a new exemption-history solver or runtime schedule. Future/self-dependent evidence cannot justify H-530's warning-only shorter declaration.
+- **Selected worlds and publication:** a pool reference must preserve inherited public constraints, local constraints involving source-preserved using types and publication filtering. Source type information remains read-only; aliases must not evade applicable local contracts. Precise overlap consequences, not bare pool membership, govern coverage/overload/optimization.
+- **Implementation scope:** reuse the frozen nominal graph and existing conformance evidence. Per-world indexes and shared record references are possible mechanisms; no copied path inventory, complexity guarantee or runtime inheritance update is selected. Generic/cyclic checking stays within D-26's finite evidence and resource-diagnostic boundaries; a missing proof is not a demonstrated contradiction.
+
+**Acceptance:** n-ary pair symmetry without disjointness transitivity; existing ancestry between listed endpoints; descendants inheriting that relation; rejection of newly introduced endpoint ancestry or a subtype's second independent listed-parent relationship; unrelated old common conformers supplying no exemption; the X/Y order distinction above; redundant shorter declarations with prior-path/intermediate-method warnings; per-pair authoring grants; original complete-record publication/using/import/re-export; local/source constraint combination without private-record leakage or alias bypass; grounded static evidence and deterministic frozen-world conflicts; unchanged checkedness/demanded method checking; and no separate exemption-path store or runtime mutation. Physical pool representation and finite generic/cyclic proof procedures remain separately scoped; there is no source implementation evidence.
 
 ### Explicit publication and extension identities
 
