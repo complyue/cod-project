@@ -1060,6 +1060,18 @@ class ScalarChecker {
       if (target.place) lexical_.exceptions[place] = categories;
       else lexical_.exceptions[place].insert(categories.begin(), categories.end());
     }
+    if (std::none_of(target.targets.begin(), target.targets.end(),
+        [&](size_t place) { return place != null_target && storage(place).borrowed; })) return;
+    // Distinct borrowed inputs can name one target, even through different
+    // owner parameters or readonly paths. A write only weakens those facts.
+    for (auto &[place, known] : lexical_.exceptions) {
+      if (target.targets.contains(place) || !storage(place).borrowed) continue;
+      if (std::any_of(target.targets.begin(), target.targets.end(), [&](size_t written) {
+            return written != null_target && storage(written).borrowed &&
+                storage(written).type == storage(place).type &&
+                compare_owners(storage(written).scope, storage(place).scope) != OwnerMatch::mismatch;
+          })) known.insert(categories.begin(), categories.end());
+    }
   }
   void refresh_targets(LexicalState &state, bool invalidate = true) {
     if (!proving_) return;
@@ -1408,8 +1420,7 @@ class ScalarChecker {
       if (!readonly) for (const auto place : view.targets) if (place != null_target && storage(place).captured)
         implementation_gap(expr.children[i + offset]->at, "writable borrowing of a captured callable payload");
       if (arguments[i] != contract.parameters[i]) implementation_gap(expr.children[i + offset]->at, "borrowed exception upcasts");
-      if (!readonly) for (const auto place : view.targets) if (place != null_target && storage(place).type.kind == Type::exception)
-        lexical_.exceptions[place] = exception_possibilities(storage(place).type);
+      if (!readonly) write_exceptions(view, exception_possibilities(view.type));
     }
     operation.type = *contract.target;
     operation.exceptions = exception_possibilities(operation.type);
@@ -4697,8 +4708,7 @@ class ScalarChecker {
         operation.type = operation.operand_type = destination;
         operation.targets = target.targets;
         operation.targets.erase(null_target);
-        if (destination.kind == Type::exception) for (const auto place : operation.targets)
-          lexical_.exceptions[place] = exception_possibilities(destination);
+        write_exceptions(target, exception_possibilities(destination));
         break;
       }
       if (destination.kind == Type::procedure) note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-15 — Borrowed exception payload evidence
+
+<a id="k-728"></a>
+**K-728 — Invalidate category facts across possible target aliases.** Agent continuity assessment under H-267/H-272/H-313/H-327/H-366–H-369/H-398/H-407/H-420/H-423 and charter §§3.3/4.3/5.3/6.3/8/12: source344→345 and registry738→739 preserve C-63/P-235/P-236/P-280's checked-failure boundary alongside C-65/C-75/P-255/P-257/P-295/P-327's borrowed targets, independent values and access rules. A write through one borrowed input cannot leave another potentially aliased input with stale exception-category evidence. Distinct formal owners and readonly paths do not prove separation; definite destinations and independent copies retain their existing facts. Acceptance covers direct/prepared writes, swaps, calls, cleanup, checked recovery, shared recursion and native resource accounting. D-14r112/D-17r69/D-18r104/D-26r21, D-16 and other qualification boundaries remain unchanged. No new exception policy, owner representation, ABI or lifetime rule. Baseline: `03bca3d53135681a28092cc1df09d092354d7b9f` at affected paths.
+
 ## 2026-11-15 — Alias selector completion
 
 <a id="k-727"></a>
