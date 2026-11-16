@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-16 — FIFO pending deferred failures
+
+<a id="h-541"></a>
+**H-541 — FIFO pending errors with outgoing tail insertion.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-16 America/Los_Angeles; exact timestamp/personal name unavailable. After requesting FIFO reevaluation, the user accepted the presented model: “这样更好，就这样决定吧。更新提交推送，下一议题”. Confirms reverse-registration deferred actions with FIFO pending errors, incoming-only handler visits, every escaping handler/finally failure appended at the tail, continued handling after return, and FIFO residual collection. The accepted examples are B → A → catch FlushError → catch CloseError, stable all-matching forwarding, and selective [A, B, C] → [B, A′, C′]. Replaces only the pending-error FILO order of H-506/H-540 and settles outgoing-error placement; preserves list-position dispatch, once-only finally, existing exception identity/trace, H-538 body_exception and H-539 return-result replacement. Earlier order/choice evidence: `f70397944d4a3845edf2a7ab4ab67ec8dd1e4d5b:CHANGELOG.md#h-540` and `design/ExceptionControl.md` at that commit, “Exceptions between deferred actions” / “Remaining deferred-stack decisions”. Does not decide caller/nested aggregate coverage, return/body-error precedence, new registration or physical storage.
+
+<a id="k-defer-fifo-20261116"></a>
+**K-DEFER-FIFO-20261116 — Align cleanup contracts with FIFO propagation.** D-17r81→82/D-15r40→41 integrates H-541 under D-17-DEFER-DISPATCH/P-461–P-463 and module P-458–P-460; D-10r188→189/D-21r20→21/source382→383 aligns dependent terminology and evidence boundaries, registry780→781. Candidate C-36/C-44/C-59/C-63/C-65 paths serve charter §§2/3.2–3.3/4.3/6.3/8/12 through explicit propagation order, stable complete forwarding, context/identity preservation and valid resources. Acceptance covers the confirmed traces, selective/nonmatching entries, replacement/construction failures, repeated identity occurrences, return continuation, once-only finally, module cleanup and FIFO aggregation. H-525/H-536–H-540, qualified owner/initialization/native contracts and D-16 retain their unaffected scope. Remaining queue/aggregate/return/new-registration and allocation-free physical mechanisms stay separately bounded; neither existing compiler evidence nor this local decision qualifies the complete mechanism/value path. Baseline: `f70397944d4a3845edf2a7ab4ab67ec8dd1e4d5b`, affected paths. Documentation only; no source edits, builds or tests.
+
 ## 2026-11-16 — Retained return results with queued deferred handling
 
 <a id="h-539"></a>
