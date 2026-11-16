@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-16 — Retain definition evidence by dependency
+
+<a id="k-746"></a>
+**K-746 — Dependency-limited checking and current coverage.** Agent continuity under H-329/H-331/H-342/H-344/H-481/K-743 and P-297/P-301–P-303: D-18r106→107/source363→364/registry758→759 preserves capture timing, definition identity, type queries, owner/access evidence, nested shadow diagnostics and cleanup, serving charter §§3.2/3.3/4.3/6.3/8/12. The checker projects retained evidence and diagnostic names onto actual dependencies; D-18's stale recursive-support statements now delegate to current source coverage. Wide declared/inferred definition sets and composed semantic/native checks supply acceptance without a numeric performance promise. D-16, D-15 startup and pending broader capture/value/ABI scopes are unchanged. Baseline: `143ad9957c14876a39eec12da0666d3c710324fe` at the affected paths; no new human confirmation.
+
 ## 2026-11-16 — Rebase startup decisions onto current compiler work
 
 <a id="k-design-startup-sync-20261116"></a>

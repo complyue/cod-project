@@ -37,6 +37,19 @@ CASES = {
         'func inner()->u64{val x<-7u64;return x;};return inner();}behave @print(f());', '7\n', ['x']),
     'uncaptured_ancestor': (IO + 'func f(x:u64)->u64{'
         'func middle()->u64{func inner(x:u64)->u64{return x;};return inner(7u64);};return middle();}behave @print(f(1u64));', '7\n', ['x']),
+    'uncaptured_ancestor_alias': (IO + 'func f(x:u64)->u64{'
+        'func middle()->u64{func inner()->u64{val y<-7u64;var x->y;return x;};return inner();};return middle();}behave @print(f(1u64));', '7\n', ['x']),
+    'uncaptured_ancestor_definition': (IO + 'func f(x:u64)->u64{'
+        'func middle()->u64{func inner()->u64{func x()->u64{return 7u64;};return x();};return inner();};return middle();}behave @print(f(1u64));', '7\n', ['x']),
+    'uncaptured_ancestor_loop': (IO + 'proc f(i:u64)->void{'
+        'proc middle()->void{proc inner()->void{for(i in 0u64..2u64){behave @print(i);};};inner();};middle();}f(7u64);', '0\n1\n', ['i']),
+    'uncaptured_ancestor_fold': (IO + 'func f(i:u64,s:u64)->u64{'
+        'func middle()->u64{func inner()->u64{return fold(i in 0u64..3u64,s=0u64){s+i};};return inner();};return middle();}behave @print(f(7u64,9u64));', '3\n', ['i', 's']),
+    'uncaptured_ancestor_catch': (IO + NPE + 'proc f(e:u64)->void{'
+        'proc middle()->void{proc inner()->void{ptr empty:u64=null in here;try{empty;{}}'
+        'catch(e:const NullPointerException){behave @print(7u64);};};inner();};middle();}f(1u64);', '7\n', ['e']),
+    'uncaptured_ancestor_owner': (IO + 'func f(O:u64)->u64{'
+        'func middle()->u64{func inner(ref x:u64 in O)->u64 where {owner O}{return x;};val y<-7u64;return inner(y);};return middle();}behave @print(f(1u64));', '7\n', ['O']),
     'shadow_self': (IO + 'proc run()->void{func recur(recur:u64)->u64{return recur;};behave @print(recur(7u64));}run();', '7\n', ['recur']),
     'shadow_enclosing_callable': (IO + 'proc run()->void{func outer()->u64{'
         'func inner(outer:u64)->u64{return outer;};return inner(7u64);};behave @print(outer());}run();', '7\n', ['outer']),

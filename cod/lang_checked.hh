@@ -435,8 +435,12 @@ class ScalarChecker {
     return lexical_methods_.at(form);
   }
   std::map<const Form *, size_t> lexical_methods_;
-  struct FreeBindings { std::vector<Capture> captures, queries, symbols; };
+  struct FreeBindings {
+    std::vector<Capture> captures, queries, symbols;
+    std::set<std::string> declarations;
+  };
   mutable std::map<const Form *, FreeBindings> free_bindings_;
+  mutable std::map<const Form *, std::set<std::string>> definition_dependencies_;
   std::map<const Form *, std::set<std::string>> free_types_;
   std::map<const Form *, std::set<std::string>> enclosing_names_;
   std::set<const Form *> warned_captures_;
@@ -2029,6 +2033,7 @@ class ScalarChecker {
     std::set<std::string> names;
     for (const auto &p : method.parameters) names.insert(p.name);
     for (const auto &p : method.owner_parameters) names.insert(p.name);
+    required.declarations = names;
     if (!method.name.empty()) names.insert(method.name);
     const auto use = [&](const std::string &name, const Location &at, const std::set<std::string> &bound, bool query, bool symbol = false) {
       auto &dependencies = symbol ? required.symbols : query ? required.queries : required.captures;
@@ -2040,6 +2045,8 @@ class ScalarChecker {
       if (expr.definition) {
         const auto &nested = *expr.definition;
         const auto &dependencies = free_bindings(nested);
+        required.declarations.insert(dependencies.declarations.begin(), dependencies.declarations.end());
+        if (!nested.name.empty()) required.declarations.insert(nested.name);
         for (const auto &symbol : dependencies.symbols) use(symbol.name, symbol.at, bound, query, true);
         if (query) return;
         for (const auto &capture : dependencies.captures) use(capture.name, capture.at, bound, false);
@@ -2053,6 +2060,7 @@ class ScalarChecker {
           if (declaration->kind == K::block) { visit(*declaration, bound, query); continue; }
           for (const auto &child : declaration->children) visit(*child, bound, query);
           bound.insert(declaration->text);
+          required.declarations.insert(declaration->text);
         }
         return;
       }
@@ -2060,6 +2068,7 @@ class ScalarChecker {
         for (const auto &child : expr.children) visit(*child, bound, query);
         if (!expr.owner_name.empty()) use(expr.owner_name, expr.at, bound, query);
         bound.insert(expr.text);
+        required.declarations.insert(expr.text);
         return;
       }
       if (expr.kind == K::make_local && !expr.annotation) {
@@ -2071,13 +2080,15 @@ class ScalarChecker {
         const bool fold = expr.kind == K::fold;
         for (size_t i = 0; i < (fold ? 3 : 2); ++i) visit(*expr.children[i], bound, query);
         auto iteration = bound; iteration.insert(expr.text);
-        if (fold) iteration.insert(expr.binding);
+        required.declarations.insert(expr.text);
+        if (fold) { iteration.insert(expr.binding); required.declarations.insert(expr.binding); }
         visit(*expr.children[fold ? 3 : 2], iteration, query);
         if (!fold && expr.children.size() == 4) visit(*expr.children[3], bound, query);
         return;
       }
       if (expr.kind == K::handler) {
         auto caught = bound; caught.insert(expr.text);
+        required.declarations.insert(expr.text);
         for (const auto &child : expr.children) visit(*child, caught, query);
         return;
       }
@@ -2096,17 +2107,48 @@ class ScalarChecker {
     return free_bindings_.emplace(&method, std::move(required)).first->second;
   }
 
+  const std::set<std::string> &definition_dependencies(const Form &method) const {
+    if (const auto found = definition_dependencies_.find(&method); found != definition_dependencies_.end()) return found->second;
+    const auto &free = free_bindings(method);
+    std::set<std::string> names;
+    for (const auto *dependencies : {&free.captures, &free.queries, &free.symbols, &method.captures})
+      for (const auto &dependency : *dependencies) names.insert(dependency.name);
+    return definition_dependencies_.emplace(&method, std::move(names)).first->second;
+  }
+
+  static TypeEvidenceState project_evidence(const TypeEvidenceState &source, const std::set<std::string> &names) {
+    TypeEvidenceState state;
+    state.complete = source.complete; state.required = source.required;
+    state.method = source.method; state.substitutions = source.substitutions; state.retained = source.retained;
+    state.declaration = source.declaration; state.full_scope_owner = source.full_scope_owner;
+    const auto select = [&](const auto &from, auto &to, const std::string &name) {
+      if (const auto found = from.find(name); found != from.end()) to.emplace(*found);
+    };
+    std::set<EvidenceOwner> owners;
+    for (const auto &name : names) {
+      select(source.bindings, state.bindings, name);
+      select(source.definitions, state.definitions, name);
+      select(source.views, state.views, name);
+      select(source.owner_bindings, state.owner_bindings, name);
+      if (source.symbol_shadows.contains(name)) state.symbol_shadows.insert(name);
+      if (const auto view = state.views.find(name); view != state.views.end() && view->second.owner) owners.insert(*view->second.owner);
+      if (const auto owner = state.owner_bindings.find(name); owner != state.owner_bindings.end()) owners.insert(owner->second);
+    }
+    for (const auto owner : owners) {
+      if (source.external_owners.contains(owner)) state.external_owners.insert(owner);
+      for (const auto other : owners)
+        if (const auto found = source.owner_relations.find({owner, other}); found != source.owner_relations.end()) state.owner_relations.emplace(*found);
+    }
+    return state;
+  }
+
   void resolve_captures(CheckedMethod &method) {
     if (method.captures_resolved) return;
     // Diagnostic visibility is independent of runtime capture and type evidence.
     auto &names = enclosing_names_[method.source];
-    if (checking_method_) {
-      const auto &enclosing = enclosing_names_[checking_method_->source];
-      names.insert(enclosing.begin(), enclosing.end());
-      if (!checking_method_->source->name.empty()) names.insert(checking_method_->source->name);
-    }
-    for (const auto &scope : lexical_.scopes) for (const auto &[name, id] : scope.bindings)
-      names.insert(name);
+    for (const auto &name : free_bindings(*method.source).declarations)
+      if (lexical_.lookup(name) || (checking_method_ && (enclosing_names_[checking_method_->source].contains(name) ||
+          checking_method_->source->name == name))) names.insert(name);
     const ModuleLookup lookup(module_, method.module), context(interpretation_, method.interpretation);
     const auto &source = *method.source;
     const auto &free = free_bindings(source).captures;
@@ -2736,9 +2778,11 @@ class ScalarChecker {
     TypeEvidenceState context;
     const auto &method = *program_.methods[id].source;
     if (!lexical_methods_.contains(&method)) return context;
-    const auto available = supplied && supplied->method == id && supplied->declaration ? *supplied->declaration
-        : checking_instance_ && checking_instance_->method == id && (!supplied || supplied->method == id) ? evidence_state(true)
-        : supplied ? *supplied : bindings_ && !lexical_.scopes.empty() ? evidence_state() : TypeEvidenceState{};
+    const auto &dependencies = definition_dependencies(method);
+    const auto available = supplied && supplied->method == id && supplied->declaration ? project_evidence(*supplied->declaration, dependencies)
+        : checking_instance_ && checking_instance_->method == id && (!supplied || supplied->method == id) ? evidence_state(true, &dependencies)
+        : supplied ? project_evidence(*supplied, dependencies)
+        : bindings_ && !lexical_.scopes.empty() ? evidence_state(false, &dependencies) : TypeEvidenceState{};
     const auto retain = [&](const Capture &capture, bool query = false) {
       if (const auto found = available.bindings.find(capture.name); found != available.bindings.end()) {
         context.bindings.emplace(*found);
@@ -3502,8 +3546,7 @@ class ScalarChecker {
     case K::callable:
       if (!expr.definition->name.empty()) {
         const auto method = lexical_method(expr.definition.get(), state.method);
-        auto declaration = std::make_shared<TypeEvidenceState>(state);
-        declaration->returns = nullptr;
+        auto declaration = std::make_shared<TypeEvidenceState>(project_evidence(state, definition_dependencies(*expr.definition)));
         state.bindings[expr.definition->name] = callable_evidence(method, &state);
         state.definitions[expr.definition->name] = {method, std::move(declaration)};
         state.owner_bindings.erase(expr.definition->name);
@@ -3518,21 +3561,20 @@ class ScalarChecker {
       return {};
     }
   }
-  TypeEvidenceState evidence_state(bool retained_only = false) const {
+  TypeEvidenceState evidence_state(bool retained_only = false, const std::set<std::string> *names = nullptr) const {
     TypeEvidenceState state;
-    state.symbol_shadows = query_environment().symbol_shadows;
+    const auto selected = [&](const std::string &name) { return !names || names->contains(name); };
+    for (const auto &name : query_environment().symbol_shadows) if (selected(name)) state.symbol_shadows.insert(name);
     if (checking_instance_) {
       state.method = checking_instance_->method; state.substitutions = checking_instance_->substitutions;
       state.retained = checking_instance_->retained_types;
     }
     state.full_scope_owner = cleanup_scope_;
-    for (const auto &binding : query_environment().bindings) {
+    for (const auto &binding : query_environment().bindings) if (selected(binding.name)) {
       state.bindings[binding.name] = binding.type;
       state.views[binding.name] = binding.view;
     }
-    for (const auto &scope : lexical_.scopes) for (const auto &[name, id] : scope.bindings) {
-      if (retained_only && (!checking_instance_ || std::none_of(checking_instance_->frame.captures.begin(), checking_instance_->frame.captures.end(),
-          [&](size_t place) { return storage(place).binding == id; }))) continue;
+    const auto retain_binding = [&](const std::string &name, size_t id) {
       const auto &binding = bindings_->at(id);
       state.bindings[name] = binding.type;
       state.definitions.erase(name);
@@ -3542,7 +3584,7 @@ class ScalarChecker {
         state.bindings[name] = callable_evidence(definition.method, definition.declaration.get());
         state.owner_bindings.erase(name);
         state.views[name] = {false, false, {}};
-        continue;
+        return;
       }
       if (binding.owner_binding) state.owner_bindings[name] = *binding.owner_binding;
       else state.owner_bindings.erase(name);
@@ -3558,11 +3600,19 @@ class ScalarChecker {
         first = false;
       }
       state.views[name] = {binding.read_only, true, binding.value_binding, owner, false, fixed, slot_read_only};
-    }
-    for (const auto &[name, owner] : external_owners_) state.external_owners.insert(owner);
+    };
+    if (retained_only) {
+      if (checking_instance_) for (const auto place : checking_instance_->frame.captures) {
+        const auto &capture = storage(place);
+        if (selected(capture.name)) retain_binding(capture.name, capture.binding);
+      }
+    } else if (names) {
+      for (const auto &name : *names) if (const auto binding = lexical_.lookup(name)) retain_binding(name, *binding);
+    } else for (const auto &scope : lexical_.scopes) for (const auto &[name, id] : scope.bindings) retain_binding(name, id);
     std::set<EvidenceOwner> owners;
     for (const auto &[name, view] : state.views) if (view.owner) owners.insert(*view.owner);
     for (const auto &[name, owner] : state.owner_bindings) owners.insert(owner);
+    for (const auto &[name, owner] : external_owners_) if (owners.contains(owner)) state.external_owners.insert(owner);
     for (const auto owner : owners) for (const auto other : owners)
       state.owner_relations[{owner, other}] = compare_owners(owner, other);
     return state;
@@ -3926,8 +3976,7 @@ class ScalarChecker {
   void define_callable(size_t method, const Location &at) {
     auto &definition = program_.methods[method];
     resolve_captures(definition);
-    auto evidence = std::make_shared<TypeEvidenceState>(evidence_state());
-    evidence->returns = nullptr;
+    auto evidence = std::make_shared<TypeEvidenceState>(evidence_state(false, &definition_dependencies(*definition.source)));
     DefinitionContext context{method, evidence, {}, {}, definition_retained(method, *evidence)};
     for (const auto &capture : definition.captures) {
       const auto binding = lexical_.lookup(capture.name);
@@ -3983,7 +4032,8 @@ class ScalarChecker {
       const auto view = expected ? *expected : select_callable(family.methods, nullptr, at).type;
       return materialize_family(*definition.family, view, at);
     }
-    const auto state = family.context ? evidence_state(true) : family.declaration ? *family.declaration : evidence_state();
+    const auto &dependencies = definition_dependencies(*definition.source);
+    const auto state = family.declaration ? *family.declaration : evidence_state(family.context != nullptr, &dependencies);
     const auto selection = select_callable(family.methods, expected, at, definition_site, &state);
     auto captures = capture_values(family, at);
     std::vector<Type> environment;
