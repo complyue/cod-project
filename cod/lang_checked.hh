@@ -377,6 +377,13 @@ class ScalarChecker {
   using CallableChoices = std::vector<std::map<const Expression *, std::set<size_t>>>;
   CallableChoices callable_choices_;
   size_t checking_context_ = 0;
+  // Context zero is module initialization; other contexts are instance IDs + 1.
+  mutable std::map<size_t, std::set<size_t>> effect_dependents_;
+  mutable std::set<size_t> callable_effect_consumers_;
+  const CallEffects &read_effects(size_t instance) const {
+    effect_dependents_[instance].insert(checking_context_);
+    return program_.instances[instance].effects;
+  }
   struct ModuleNames {
     std::map<std::string, size_t> callables;
     std::map<size_t, size_t> imports;
@@ -1538,13 +1545,14 @@ class ScalarChecker {
   }
   CallEffects callable_effects(const Type &contract, const std::vector<Type> &arguments,
                               const std::optional<std::set<size_t>> &choices) const {
+    callable_effect_consumers_.insert(checking_context_);
     CallEffects effects;
     bool first = true;
     for (size_t id = 0; id < program_.callables.size(); ++id) {
       const auto &callable = program_.callables[id];
       if (callable.type != contract || (choices && !choices->contains(id))) continue;
       for (const auto &[inputs, target] : callable.alternatives(arguments)) {
-        const auto &next = program_.instances[target].effects;
+        const auto &next = read_effects(target);
         if (first) { effects = next; first = false; continue; }
         effects.reads.insert(next.reads.begin(), next.reads.end());
         effects.symbols.insert(next.symbols.begin(), next.symbols.end());
@@ -2656,7 +2664,7 @@ class ScalarChecker {
     if (!completes) { operation.type = Type::never; return; }
     const auto contract = callable_type(program_.methods[target.method], target.arguments, target.result,
         access_of(views), owners_of(views), &arguments);
-    finish_call(expr, contract, target.effects, call_reasons(contract), arguments, views, operation, read, discard);
+    finish_call(expr, contract, read_effects(*operation.callee), call_reasons(contract), arguments, views, operation, read, discard);
   }
   struct EagerTypes {
     Type result, operand;
@@ -4055,7 +4063,11 @@ class ScalarChecker {
     return id;
   }
   CheckedOperation materialized_value(size_t id, std::vector<CheckedOperation> captures, const Location &at) {
-    const auto symbols = program_.captured_symbols(program_.callables[id]);
+    std::set<size_t> symbols;
+    for (const auto target : program_.callables[id].implementations()) {
+      const auto &required = read_effects(target).symbols;
+      symbols.insert(required.begin(), required.end());
+    }
     if (!symbols.empty() && checking_method_ && checking_method_->source->kind == Form::Kind::function)
       fail(at, "a function cannot capture dynamic bindings");
     for (const auto symbol : symbols) require_symbol(lexical_, symbol, at);
@@ -5730,6 +5742,57 @@ class ScalarChecker {
     return observed_;
   }
 
+  static bool merge_effects(CallEffects &known, const CallEffects &effects, bool reads) {
+    bool changed = false;
+    if (reads) {
+      if (known.reads != effects.reads) { known.reads = effects.reads; changed = true; }
+      if (known.symbols != effects.symbols) { known.symbols = effects.symbols; changed = true; }
+    } else {
+      if (known.initialized != effects.initialized) { known.initialized = effects.initialized; changed = true; }
+      auto returned = effects.returned;
+      returned.value.merge(known.returned.value);
+      if (known.returned != returned) { known.returned = std::move(returned); changed = true; }
+      if (known.bindings != effects.bindings) { known.bindings = effects.bindings; changed = true; }
+      auto payloads = effects.payloads;
+      for (const auto &[reason, values] : known.payloads)
+        for (const auto &[parameter, value] : values) payloads[reason][parameter].merge(value);
+      if (known.payloads != payloads) { known.payloads = std::move(payloads); changed = true; }
+    }
+    return changed;
+  }
+  bool close_effects(bool reads) {
+    std::deque<size_t> pending;
+    std::set<size_t> queued;
+    const auto enqueue = [&](size_t context) {
+      if (queued.insert(context).second) pending.push_back(context);
+    };
+    enqueue(0);
+    size_t instances = 0, callables = program_.callables.size();
+    const auto discover = [&] {
+      while (instances < program_.instances.size()) enqueue(++instances);
+      if (callables != program_.callables.size()) {
+        callables = program_.callables.size();
+        for (const auto context : callable_effect_consumers_) enqueue(context);
+      }
+    };
+    discover();
+    while (!pending.empty()) {
+      const auto context = pending.front(); pending.pop_front(); queued.erase(context);
+      if (!context) check_entry();
+      else {
+        const auto instance = context - 1;
+        const auto effects = check_instance(instance);
+        if (merge_effects(program_.instances[instance].effects, effects, reads))
+          for (const auto dependent : effect_dependents_[instance]) enqueue(dependent);
+      }
+      // New obligations must establish their write guarantees before any read
+      // closure can rely on them. Callable choices can also change guarantees.
+      if (reads && (instances != program_.instances.size() || callables != program_.callables.size())) return false;
+      discover();
+    }
+    return true;
+  }
+
   size_t adapt_method(size_t method, size_t receiver, std::optional<size_t> family = {}, std::optional<size_t> parent = {}) {
     const auto &original = program_.methods[method];
     if (original.module == receiver) return method;
@@ -6167,41 +6230,22 @@ public:
     // and value categories joining before read requirements close. Narrower
     // callees require fresh assumptions for recursive cycles.
     for (;;) {
+      effect_dependents_.clear(); callable_effect_consumers_.clear();
       for (auto &instance : program_.instances) instance.effects = initial_effects(program_.methods[instance.method], instance.arguments);
-      for (const bool reads : {false, true}) {
-        bool changed;
-        do {
-          changed = false;
-          const auto callable_count = program_.callables.size(), instance_count = program_.instances.size();
-          check_entry();
-          for (size_t i = 0; i < program_.instances.size(); ++i) {
-            const auto effects = check_instance(i);
-            auto &known = program_.instances[i].effects;
-            if (reads) {
-              if (known.reads != effects.reads) { known.reads = effects.reads; changed = true; }
-              if (known.symbols != effects.symbols) { known.symbols = effects.symbols; changed = true; }
-            } else {
-              if (known.initialized != effects.initialized) { known.initialized = effects.initialized; changed = true; }
-              auto returned = effects.returned;
-              returned.value.merge(known.returned.value);
-              if (known.returned != returned) { known.returned = std::move(returned); changed = true; }
-              if (known.bindings != effects.bindings) { known.bindings = effects.bindings; changed = true; }
-              auto payloads = effects.payloads;
-              for (const auto &[reason, values] : known.payloads)
-                for (const auto &[parameter, value] : values) payloads[reason][parameter].merge(value);
-              if (known.payloads != payloads) { known.payloads = std::move(payloads); changed = true; }
-            }
-          }
-          changed = changed || callable_count != program_.callables.size() || instance_count != program_.instances.size();
-        } while (changed);
-      }
+      close_effects(false);
+      if (!close_effects(true)) continue;
       auto choices = reaching_callables();
       if (choices == callable_choices_) break;
       callable_choices_ = std::move(choices);
     }
     validating_ = true;
     check_entry();
-    for (size_t i = 0; i < program_.instances.size(); ++i) check_instance(i);
+    for (size_t i = 0; i < program_.instances.size(); ++i) {
+      const auto effects = check_instance(i);
+      auto known = program_.instances[i].effects;
+      if (merge_effects(known, effects, false) || merge_effects(known, effects, true))
+        throw std::logic_error("call effects changed after validation");
+    }
     if (reaching_callables() != callable_choices_) throw std::logic_error("callable flow changed after validation");
     for (auto &method : program_.methods) if (!method.instances.empty()) {
       // Carry definition-result evidence only when ordinary type context cannot

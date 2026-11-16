@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-16 — Close call effects through their dependencies
+
+<a id="k-749"></a>
+**K-749 — Dependency-directed call summaries.** Agent continuity under D-17r69/C-63/P-235/P-236, D-14r116’s confirmed initialization/alias scope, D-18’s qualified capture/call contracts and D-26r21/H-407: source366→367/registry761→762 retains the existing write-before-read fixed points, returned/payload joins, reaching-callable epochs and recursive obligations. Named/value calls and complete-value captures register their summary dependencies; new coverage rejoins closure and final validation verifies stability. Charter §§3.3/5.3/6.3/12 supports reusable checked dependencies without altering observable effects. D-16, source admission, permanent analysis/ABI choices and pending startup/storage scopes remain unchanged. Baseline: `ff3c790828bbc278596311d01363273a1f8affa0` at affected paths. No new language rule, performance promise or human confirmation.
+
 ## 2026-11-16 — Retain stored null-test evidence
 
 <a id="k-748"></a>
