@@ -88,7 +88,7 @@ struct CheckedOperation {
   std::uint64_t integer = 0;
   bool minimum_literal = false;
   bool initializes = false;
-  std::set<size_t> exceptions;
+  ExceptionFacts exceptions;
   std::set<size_t> captures;
   std::optional<size_t> captured_place;
   bool initialized_target = false;
@@ -154,7 +154,7 @@ struct LexicalState {
   std::map<size_t, std::set<size_t>> input_initialized{{0, {}}};
   struct Requirement { std::uint64_t inputs; CleanupEquations::ReadRequirement before; };
   std::map<size_t, Requirement> requirements;
-  std::map<size_t, std::set<size_t>> exceptions;
+  std::map<size_t, ExceptionFacts> exceptions;
   std::map<size_t, std::set<size_t>> targets;
   std::map<size_t, std::set<size_t>> null_sources;
   std::map<size_t, std::set<size_t>> owners;
@@ -1045,26 +1045,28 @@ class ScalarChecker {
     require_live_view(view, at);
     return view;
   }
-  std::set<size_t> stored_exceptions(size_t place, const Type &type) const {
+  bool mutable_exception_target(size_t place) const {
+    return storage(place).borrowed || !storage(place).read_only;
+  }
+  ExceptionFacts stored_exceptions(size_t place, const Type &type) const {
     const auto found = lexical_.exceptions.find(place);
-    const bool mutable_target = storage(place).borrowed || !storage(place).read_only;
-    return (delayed_ && mutable_target) || found == lexical_.exceptions.end()
+    return (delayed_ && mutable_exception_target(place)) || found == lexical_.exceptions.end()
         ? exception_possibilities(type) : found->second;
   }
-  std::set<size_t> stored_exceptions(const CheckedOperation &view) const {
-    std::set<size_t> result;
+  ExceptionFacts stored_exceptions(const CheckedOperation &view) const {
+    ExceptionFacts result;
     if (view.type.kind != Type::exception) return result;
     for (const auto place : view.targets) if (place != null_target) {
       const auto categories = stored_exceptions(place, view.type);
-      result.insert(categories.begin(), categories.end());
+      result.merge(categories);
     }
     return result;
   }
-  void write_exceptions(const CheckedOperation &target, const std::set<size_t> &categories) {
+  void write_exceptions(const CheckedOperation &target, const ExceptionFacts &categories) {
     if (target.type.kind != Type::exception) return;
     for (const auto place : target.targets) if (place != null_target) {
       if (target.place) lexical_.exceptions[place] = categories;
-      else lexical_.exceptions[place].insert(categories.begin(), categories.end());
+      else lexical_.exceptions[place].merge(categories);
     }
     if (std::none_of(target.targets.begin(), target.targets.end(),
         [&](size_t place) { return place != null_target && storage(place).borrowed; })) return;
@@ -1076,7 +1078,7 @@ class ScalarChecker {
             return written != null_target && storage(written).borrowed &&
                 storage(written).type == storage(place).type &&
                 compare_owners(storage(written).scope, storage(place).scope) != OwnerMatch::mismatch;
-          })) known.insert(categories.begin(), categories.end());
+          })) known.merge(categories);
     }
   }
   void refresh_targets(LexicalState &state, bool invalidate = true) {
@@ -1408,6 +1410,14 @@ class ScalarChecker {
   void finish_call(const Expression &expr, const Type &contract, const CallEffects &summary,
       const std::set<size_t> &reasons, const std::vector<Type> &arguments,
       const std::vector<CheckedOperation> &views, CheckedOperation &operation, bool read, bool discard, size_t offset = 0) {
+    std::vector<ExceptionFacts> exception_inputs;
+    if (contract.target->kind == Type::exception) {
+      exception_inputs.reserve(arguments.size());
+      for (size_t i = 0; i < arguments.size(); ++i) {
+        const bool borrowed = !contract.owners.empty() && contract.owners[i];
+        exception_inputs.push_back(borrowed ? stored_exceptions(views[i]) : views[i].exceptions);
+      }
+    }
     std::map<size_t, size_t> owners;
     for (size_t i = 0; i < arguments.size(); ++i) {
       const auto role = contract.owners.empty() ? 0 : contract.owners.at(i);
@@ -1429,7 +1439,9 @@ class ScalarChecker {
       if (!readonly) write_exceptions(view, exception_possibilities(view.type));
     }
     operation.type = *contract.target;
-    operation.exceptions = exception_possibilities(operation.type);
+    if (operation.type.kind == Type::exception)
+      operation.exceptions = operation.type.identity ? ExceptionFacts{exception_possibilities(operation.type)}
+          : summary.returned.value.substitute(exception_inputs);
     const bool prepared_slots = &expr == prepared_call_ && !summary.bindings.empty();
     for (size_t i = 0; i < arguments.size(); ++i) {
       if (arguments[i].kind != Type::procedure || contract.owners.empty() || !contract.owners[i]) continue;
@@ -1569,7 +1581,7 @@ class ScalarChecker {
     }
     lexical_.exceptions = a_exits ? b.exceptions : a.exceptions;
     if (!a_exits && !b_exits) for (const auto &[id, categories] : b.exceptions)
-      lexical_.exceptions[id].insert(categories.begin(), categories.end());
+      lexical_.exceptions[id].merge(categories);
     lexical_.targets = a_exits ? b.targets : a.targets;
     lexical_.null_sources = a_exits ? b.null_sources : a.null_sources;
     lexical_.owners = a_exits ? b.owners : a.owners;
@@ -1740,7 +1752,7 @@ class ScalarChecker {
           refresh_targets(state, false);
           if (!state.live) continue;
           for (auto &[id, categories] : state.exceptions)
-            if (!(*storage_)[id].read_only) categories = exception_possibilities((*storage_)[id].type);
+            if (mutable_exception_target(id)) categories = exception_possibilities((*storage_)[id].type);
         }
         state.queues[scope] = 0;
         if (!completion.reason) {
@@ -3806,7 +3818,7 @@ class ScalarChecker {
     std::vector<const CheckedOperation *> views;
     if (body != Type::never) { normals.push_back(body_state); views.push_back(&operations.at(expr.children[0].get())); }
     Type result_type = body;
-    auto result_exceptions = body == Type::never ? std::set<size_t>{} : operations.at(expr.children[0].get()).exceptions;
+    auto result_exceptions = body == Type::never ? ExceptionFacts{} : operations.at(expr.children[0].get()).exceptions;
     std::set<size_t> handled;
     AbruptFlow outgoing{before.scopes.size(), {}};
     const Expression *finalizer = nullptr;
@@ -3862,7 +3874,7 @@ class ScalarChecker {
           normals.push_back(lexical_);
           views.push_back(&operations.at(handler.children.front().get()));
           const auto &values = operations.at(handler.children.front().get()).exceptions;
-          result_exceptions.insert(values.begin(), values.end());
+          result_exceptions.merge(values);
         }
       }
       if (!entries.empty()) outgoing.paths.insert(outgoing.paths.end(), handler_exits.paths.begin(), handler_exits.paths.end());
@@ -4004,7 +4016,7 @@ class ScalarChecker {
       if (read && !operation.initialized_target) require_initialized(place, expr.at, expr.text, selected);
       if (operation.type.kind == Type::exception) {
         const auto categories = stored_exceptions(place, operation.type);
-        operation.exceptions.insert(categories.begin(), categories.end());
+        operation.exceptions.merge(categories);
       }
     }
     return operation;
@@ -4355,7 +4367,7 @@ class ScalarChecker {
       else implementation_gap(expr.at, "conditional join with different scalar result types");
       const auto &yes_fact = operations.at(expr.children[1].get()), &no_fact = operations.at(expr.children[2].get());
       operation.exceptions = yes == Type::never ? no_fact.exceptions : yes_fact.exceptions;
-      if (yes != Type::never && no != Type::never) operation.exceptions.insert(no_fact.exceptions.begin(), no_fact.exceptions.end());
+      if (yes != Type::never && no != Type::never) operation.exceptions.merge(no_fact.exceptions);
       if (yes == Type::never) view(no_fact);
       else if (no == Type::never) view(yes_fact);
       else {
@@ -4445,7 +4457,7 @@ class ScalarChecker {
       checked_scope_owners_[&expr] = iteration_scope;
       lexical_.live = lexical_.live && body_possible;
       for (auto &[id, categories] : lexical_.exceptions)
-        if (!(*storage_)[id].read_only) categories = exception_possibilities((*storage_)[id].type);
+        if (mutable_exception_target(id)) categories = exception_possibilities((*storage_)[id].type);
       lexical_.scopes.push_back({next_scope_++, {}, true, lexical_.bound_symbols});
       operation.place = declare(expr.text, index, true, true, expr.at);
       initialize(*operation.place);
@@ -4753,8 +4765,12 @@ class ScalarChecker {
         lexical_.returned = {false, selected.targets, {}, selected.null_sources};
         if (contract.nullable() && !selected.initialized_target) for (const auto place : selected.targets)
           if (place != null_target && !lexical_.initialized.contains(place)) lexical_.returned.uninitialized.insert(place);
-      } else if (value != Type::never && !transfers_value(value, *instance->result.type))
-        fail(expr.at, "return type '" + type_name(value) + "' does not satisfy '" + type_name(*instance->result.type) + "'");
+      } else if (value != Type::never) {
+        if (!transfers_value(value, *instance->result.type))
+          fail(expr.at, "return type '" + type_name(value) + "' does not satisfy '" + type_name(*instance->result.type) + "'");
+        lexical_.returned = {false, {}, {}, {}};
+        if (value.kind == Type::exception) lexical_.returned.value = operations.at(expr.children.front().get()).exceptions;
+      }
       operation.type = Type::never;
       operation.operand_type = *instance->result.type;
       note_abrupt(expr.at, {}, {1, true});
@@ -4783,14 +4799,17 @@ class ScalarChecker {
         note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
       }
       const auto binding = expr.children.empty() ? caught_ : expr.children[0]->kind == K::name ? operations.at(expr.children[0].get()).place : std::optional<size_t>{};
+      // An empty provisional result summary is not a non-returning contract.
+      auto categories = operation.exceptions.possibilities();
+      if (categories.empty()) categories = exception_possibilities(type);
       if (binding && caught_inputs_.contains(*binding)) {
         const auto inputs = lexical_.inputs;
-        for (const auto category : operation.exceptions) {
+        for (const auto category : categories) {
           lexical_.inputs = inputs & caught_inputs_.at(*binding)[category];
           if (lexical_.inputs) note_abrupt(expr.at, {category});
         }
         lexical_.inputs = inputs;
-      } else note_abrupt(expr.at, operation.exceptions);
+      } else note_abrupt(expr.at, categories);
       operation.type = Type::never;
       break;
     }
@@ -5090,6 +5109,15 @@ class ScalarChecker {
       returned.null_sources = input_ordinals(returned.null_sources);
       observed_.returned.merge(returned);
     }
+    if (!reason && checking_instance_->result.type->kind == Type::exception) {
+      if (checking_instance_->result.borrowed()) {
+        for (const auto place : state.returned.targets) if (place != null_target) {
+          const auto found = state.exceptions.find(place);
+          observed_.returned.value.merge(found == state.exceptions.end()
+              ? ExceptionFacts{exception_possibilities(storage(place).type)} : found->second);
+        }
+      } else observed_.returned.value.merge(state.returned.value);
+    }
     for (const auto &[read, requirement] : state.requirements)
       if ((requirement.inputs & state.inputs) && !requirement.before.nonnull)
         observe_read(cleanup_.binding(read), requirement.before.initialized);
@@ -5142,7 +5170,8 @@ class ScalarChecker {
           }
         }
         if (argument_mode(parameter) != ArgumentMode::borrowed_ptr) initialize(id);
-        lexical_.exceptions[id] = exception_possibilities(instance.arguments[p]);
+        if (instance.arguments[p].kind == Type::exception)
+          lexical_.exceptions[id].inputs[p] = exception_possibilities(instance.arguments[p]);
       }
       if (caller_bindings(*checking_method_)) for (const auto &a : instance.frame.inputs)
         for (const auto &b : instance.frame.inputs) {
@@ -5618,8 +5647,8 @@ public:
     }
     check_entry();
     // Write guarantees use a greatest fixed point, with returned selections
-    // joining before read requirements close. Narrower callees require fresh
-    // assumptions for recursive cycles.
+    // and value categories joining before read requirements close. Narrower
+    // callees require fresh assumptions for recursive cycles.
     for (;;) {
       for (auto &instance : program_.instances) instance.effects = initial_effects(program_.methods[instance.method], instance.arguments);
       for (const bool reads : {false, true}) {
@@ -5636,7 +5665,9 @@ public:
               if (known.symbols != effects.symbols) { known.symbols = effects.symbols; changed = true; }
             } else {
               if (known.initialized != effects.initialized) { known.initialized = effects.initialized; changed = true; }
-              if (known.returned != effects.returned) { known.returned = effects.returned; changed = true; }
+              auto returned = effects.returned;
+              returned.value.merge(known.returned.value);
+              if (known.returned != returned) { known.returned = std::move(returned); changed = true; }
               if (known.bindings != effects.bindings) { known.bindings = effects.bindings; changed = true; }
             }
           }

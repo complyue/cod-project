@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-15 — Callable exception-result evidence
+
+<a id="k-730"></a>
+**K-730 — Preserve exception values across callable boundaries.** Agent continuity assessment under H-267/H-269/H-272/H-313/H-327/H-356/H-361/H-362/H-366–H-369/H-398/H-407/H-420/H-423 and charter §§3.3/4.3/5.3/6.3/8/12: source346→347 and registry740→741 continue C-63/P-235/P-236/P-280's checked-failure and cleanup contract with C-65/C-75/P-255/P-257/P-295/P-327's independent values, borrowed targets and callable coverage. Existing return equations retain finite category facts and entry-argument relationships through copies, alias mutation, recursive calls and completion replacement. Borrowed result reads follow final cleanup; value returns keep their saved payloads. Acceptance covers ordered operands, direct/indirect and symbolic calls, recursion, finally/defer replacement and recovery, declared throws, shared code and native resource release. D-14r112/D-17r69/D-18r104/D-26r21 and D-16 remain unchanged. No new source result type, selection rule, capture policy, ABI, regional representation or qualification; full thrown-value provenance and broader correlations remain unproved. Baseline: `7f892609d2ced3334c0d8bfa6f6cf885dc8cf3a6` at affected paths.
+
 ## 2026-11-15 — Exception result read timing
 
 <a id="k-729"></a>

@@ -14,6 +14,38 @@
 
 namespace cod::language {
 
+// Compiler evidence for a copied exception value. Input ordinals denote the
+// categories present at callable entry, independently of subsequent writes.
+struct ExceptionFacts {
+  std::set<size_t> categories;
+  std::map<size_t, std::set<size_t>> inputs;
+  ExceptionFacts(std::set<size_t> categories = {}) : categories(std::move(categories)) {}
+  bool operator==(const ExceptionFacts &) const = default;
+  void clear() { categories.clear(); inputs.clear(); }
+  void merge(const ExceptionFacts &other) {
+    categories.insert(other.categories.begin(), other.categories.end());
+    for (const auto &[input, possible] : other.inputs)
+      inputs[input].insert(possible.begin(), possible.end());
+  }
+  std::set<size_t> possibilities() const {
+    auto result = categories;
+    for (const auto &[input, possible] : inputs) result.insert(possible.begin(), possible.end());
+    return result;
+  }
+  ExceptionFacts substitute(const std::vector<ExceptionFacts> &arguments) const {
+    ExceptionFacts result{categories};
+    for (const auto &[input, possible] : inputs) {
+      const auto &argument = arguments.at(input);
+      for (const auto category : argument.categories)
+        if (possible.contains(category)) result.categories.insert(category);
+      for (const auto &[origin, incoming] : argument.inputs)
+        for (const auto category : incoming)
+          if (possible.contains(category)) result.inputs[origin].insert(category);
+    }
+    return result;
+  }
+};
+
 struct Completion {
   // Normal, enclosing return, terminal numeric failure, or an intrinsic category.
   size_t reason = 0;
@@ -240,24 +272,26 @@ public:
     }
   };
   using Reads = std::map<size_t, ReadRequirement>;
-  // Compiler-only targets selected by explicit returns. A cleanup path may
-  // preserve its incoming selection, replace it, or join both possibilities.
+  // Explicit returns retain selected targets or copied value evidence. Cleanup
+  // can preserve that pending result, replace it, or join both possibilities.
   struct Returned {
     bool preserves = true;
     std::set<size_t> targets, uninitialized, null_sources;
+    ExceptionFacts value{};
     bool operator==(const Returned &) const = default;
     void initialize(const std::set<size_t> &known) {
       std::erase_if(uninitialized, [&](size_t target) { return known.contains(target); });
     }
     void merge(const Returned &other) {
       preserves = preserves || other.preserves;
+      value.merge(other.value);
       targets.insert(other.targets.begin(), other.targets.end());
       uninitialized.insert(other.uninitialized.begin(), other.uninitialized.end());
       null_sources.insert(other.null_sources.begin(), other.null_sources.end());
     }
     void then(const Returned &next) {
       const bool keep = preserves && next.preserves;
-      if (!next.preserves) { targets.clear(); uninitialized.clear(); null_sources.clear(); }
+      if (!next.preserves) { targets.clear(); uninitialized.clear(); null_sources.clear(); value.clear(); }
       merge(next);
       preserves = keep;
     }
