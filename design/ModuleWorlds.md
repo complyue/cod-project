@@ -1,8 +1,12 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 30 · Recorded: 2026-11-16 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 34 · Recorded: 2026-11-16 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
+
+- **Current continuity:** [K-MODULE-DRAIN-SYNC-20261116](../CHANGELOG.md#k-module-drain-sync-20261116) continues r33→34 under H-502: the ready-node rule distinguishes unproved actual context/alias/initialization from different legal intermediate values. H-501 order, all recorded value paths and pending completion/physical scopes are unchanged. Current source coverage incorporates K-749 without claiming startup support.
+
+- **Initialization publication and shutdown:** [H-502](../CHANGELOG.md#h-502)/[D-15-PUBLICATION](DesignAuthorityRegistry.md#d-15-publication) resolves binding visibility through existing whole-block scheduling: reads between separate blocks may see intermediate state; no source-final-binding barrier. [H-501](../CHANGELOG.md#h-501)/[D-15-SHUTDOWN](DesignAuthorityRegistry.md#d-15-shutdown) confirms application-wide reverse registration for module-level deferred actions, with retained module contexts and valid owners, including established work on startup failure. P-455–P-460 retains candidate C-35/C-36/C-44/C-59/C-63/C-65 paths to charter §§2/3.2–3.3/4.3/6.3/8/12 through explicit state, observable ordering and valid cleanup. [K-STARTUP-PEER-REVIEW-20261116](../CHANGELOG.md#k-startup-peer-review-20261116) records feasibility; [K-MODULE-SHUTDOWN-20261116](../CHANGELOG.md#k-module-shutdown-20261116) integrates global cleanup; [K-BLOCK-BINDING-VISIBILITY-20261116](../CHANGELOG.md#k-block-binding-visibility-20261116) records r32→33 and the block-boundary clarification. Preserve ordinary nested-scope cleanup, complete captures, actual owners, fixed startup scheduling and D-16. Acceptance is below. Cross-module pending-completion/handler boundaries and physical representation remain separate; ordering confirmation does not qualify them or claim compiler support.
 
 - **Declaration cycles and scheduled initialization:** [H-492](../CHANGELOG.md#h-492)/[D-15-CYCLES](DesignAuthorityRegistry.md#d-15-cycles) confirms declaration-only cycles. H-493–H-498/[D-15-POSTPON](DesignAuthorityRegistry.md#d-15-postpon) fixes ordered trailing postpon blocks, dependency prefixes as implicit blocks retaining their module contexts, entry execution last and compile-time ordering emitted as fixed native code. [D-15-STATIC-NS](DesignAuthorityRegistry.md#d-15-static-ns)/H-497 requires static definitions in runtime module namespaces before initialization. Candidate C-10/C-35/C-36/C-44/C-59/C-65 through P-443–P-451 serves charter §§2/3.1–3.3/4.2/6.3/8/12 through explicit dependencies, contexts and checked execution. Preserve publication, method identity, source-owned worlds, scope/owner/capture rules, once-only execution and ordinary failure cleanup. Acceptance and proof/representation exclusions are below. [K-STATIC-MODULE-STARTUP-20261116](../CHANGELOG.md#k-static-module-startup-20261116) integrates r29→30; the source compiler still rejects cyclic discovery and does not implement postpon. Direction confirmation does not qualify the complete value path or physical protocol.
 
@@ -536,9 +540,75 @@ Each scheduled fragment executes once when reached in the emitted initialization
 
 **Entry callable installations.** [D-21's entry-installation contract](AheadOfTimeExecutionPreparation.md#entry-installation-and-unused-dependency-code) still requires explicit installation when entry extends a dependency callable, and retains operands/effects/failures when affected dependency TLS writes are suppressed. Static definition preparation does not perform that installation. If a dependency initializer requires the entry's installed value, the entry installation belongs in a sufficiently early entry postpon block with valid capture dependencies. A future entry-prefix write cannot justify an earlier read or suppressed-write replacement. If the resulting requirements cycle, reject; neither implicit hoisting nor runtime scheduling repairs them. General identity/cancellation proofs remain D-21 work.
 
-**Binding versions and proof coverage.** H-494 resolves the same-module repeated-write example by mandatory order; there is no blanket single-provider restriction. Checked summaries must identify the entry requirements and normal-completion changes of each ordered fragment, including target/alias and current-versus-captured binding distinctions. A reference to one symbol identity in two retained module contexts is not automatically a shared provider. Unproved cross-module provider/version or alias relationships reject rather than being guessed from names or arbitrary schedule order. More precise recognition can be added without weakening soundness or changing the established order.
+**Binding versions and proof coverage.** H-494 preserves the same-module repeated-write sequence; H-502 permits another module to observe intermediate state at a legal boundary between separate blocks. For the chosen static schedule, prove each block's incoming state and normal-completion changes using actual contexts, target/binding identities and aliases. Distinct legal schedules yielding different values do not by themselves create an ambiguity error or require every read to follow the last source write. A reference to one symbol identity in two retained module contexts is not automatically a shared provider. Unproved context/alias/initialization facts still reject; more precise recognition can be added without changing the established order.
 
-**Independent ready fragments.** The compiler can choose a reproducible ready-node order, for example using the existing module encounter order as an implementation tie-break. This is not an extra source-level dependency or permission to change per-module order. Missing dependencies, ambiguous binding versions and invalid resource contexts cannot be repaired by that tie-break. Code needing a cross-module observable effect sequence must establish the corresponding ordering relationship; no inference of external business intent from ordinary mentions is promised.
+**Independent ready fragments.** The compiler can choose a reproducible ready-node order, for example using the existing module encounter order as an implementation tie-break. This is not an extra source-level dependency or permission to change per-module order. Missing dependencies, unproved context/alias/initialization evidence and invalid resource contexts cannot be repaired by that tie-break. Different valid block-boundary states alone do not establish such a proof failure. Code needing a cross-module observable effect sequence must establish the corresponding ordering relationship; no inference of external business intent from ordinary mentions is promised.
+
+### Binding visibility at block boundaries
+
+H-502 makes block membership decisive. The scheduler executes each initialization block as a whole; its normal-completion state is available to later scheduled blocks. There is no additional barrier requiring a consumer to wait for all later writes to that binding in its source module.
+
+```cod
+# a.cod: both writes are in one scheduling node.
+symbol @x:u64;
+export @x;
+postpon {
+    effect @x <- 1u64;
+    effect @x <- 2u64;
+}
+# Other scheduled work cannot run between these writes.
+# After normal completion, the source binding holds 2.
+```
+
+Splitting the writes exposes an interleaving boundary:
+
+```cod
+# a.cod
+symbol @x:u64;
+export @x;
+postpon { effect @x <- 1u64; }  # A1
+postpon { effect @x <- 2u64; }  # A2
+
+# b.cod
+using "a.cod" @x;
+symbol @seen:u64;
+postpon { effect @seen <- @x; }
+```
+
+If B's corresponding resource selection/read occurs between A1 and A2, it may observe 1; if it occurs after A2, the source binding supplies 2. Include B's implicit prefix and any executable resource-selection requirements in the actual schedule. A previously selected/copied value is not retroactively refreshed by a later source write. The general rule is to use the binding in the selected context at the operation's ordinary evaluation point, preserving existing selection/capture timing.
+
+Source order A1 → A2 remains mandatory. Other established dependencies can force the consumer before or after A2; when both schedules are valid, the compiler may choose a reproducible permitted order under the ready-node rule above. This decision selects neither an earliest-reader nor a latest-writer priority. No special ambiguity rejection or separately named intermediate symbol is required merely because the writes occupy different blocks. Splitting a block deliberately permits additional interleaving; joining blocks removes those scheduling boundaries.
+
+Whole-block scheduling is not a transaction. Ordinary calls and effects inside the block retain their sequencing and can observe its intermediate state; the compiler simply cannot insert another scheduled block between its statements. Failure retains prior allowed side effects and stops the remaining plan as already specified. No implicit value snapshot, publication buffer or allocation rollback is introduced.
+
+Reuse checked entry requirements and normal-completion summaries by module interpretation/context and binding/target identity. Every read must have valid initialization and owner/access evidence along the chosen static schedule; hidden calls, aliases and cleanup completed inside a block contribute their actual effects. Process-exit defers do not supply startup readiness. Unknown indirect effects may conservatively reject, and D-10's conditional-effect restrictions remain. Summaries describe successive block states rather than imposing a last-write dependency on every external read.
+
+Complete captured values remain independent: if A1 constructs a stored procedure capturing x=1, then A2 installs x=2, selecting that stored procedure does not recapture it; perform still replays 1. Mutable referents and actual owners retain their ordinary semantics, and declaration/type-only queries add no runtime-value edge. Acceptance distinguishes same-block writes from separate-block interleaving, preserved source order, source versus retained receiver/capture values, dependency-forced positions, hidden/aliased writes and block-completion cleanup. The visibility rule is settled; general proof coverage and source implementation remain work.
+
+### Cross-module shutdown order
+
+H-501 extends reverse registration order across the selected program's module-level deferred actions. Module scopes retain their contexts and required owners through the drain. For example:
+
+```cod
+# a.cod
+using symbol "std:io" @print;
+postpon { defer { behave @print(1u64); } }  # A1
+postpon { defer { behave @print(3u64); } }  # A2
+
+# b.cod
+using symbol "std:io" @print;
+postpon { defer { behave @print(2u64); } }  # B1
+```
+
+For the valid emitted startup order A1 → B1 → A2, shutdown runs the deferred actions in order A2 → B1 → A1, producing **3, 2, 1**. Use actual successful registration order, including multiple or dynamically repeated registrations within a block. Do not drain a whole module as one group or substitute source-file order. Each action executes with its retained module context; its current-binding versus captured-value behavior follows the ordinary defer/call rules.
+
+The sequence includes module-level registrations in dependency prefixes, explicit postpon blocks and the selected entry's ordinary prefix. Ordinary nested full scopes keep their own exit behavior and do not contribute their private deferred actions to this module-level sequence. Entry module registrations join at their actual execution points; no separate entry-module cleanup priority overrides registration order.
+
+Preparation must complete before an action is registered. Skipped paths and failed registrations contribute no action. Startup failure stops future initialization and the entry prefix, then unwinds only established work in reverse registration order. Owner transfer is not undone: transferred or already ended owners cannot be resurrected, and each remaining action must have valid owners through its actual invocation. Preserve exact intrinsic cleanup and the existing no-rollback/no-retry boundary.
+
+A shared application registration sequence is a plausible implementation, with each action's module-context association; no physical queue layout is required. This is cleanup bookkeeping and leaves compile-time startup ordering unchanged. H-501 settles cross-module action order, while cross-module pending-completion propagation/handler visibility and the precise owner/effect restoration mechanism still need integration review under D-17. Do not infer new cross-module catch behavior merely from a common physical queue. Ordinary per-action and nested-scope failure semantics continue.
+
+Acceptance must cover 3/2/1, entry registrations, repeated/conditional successful registration, failed preparation, partial startup failure and deferred actions borrowing still-live module resources. An implementation may optimize storage or statically known cleanup sequences only while preserving these observations. Binding visibility follows the separate block-boundary rule above.
 
 ### Implementation and acceptance boundary
 
