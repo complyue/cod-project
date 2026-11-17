@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-11-17 — Settle derived receiving and result rules
+
+<a id="h-592"></a>
+**H-592 — Continue the tracker autonomously until a substantive decision is needed.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-17 America/Los_Angeles; exact timestamp/personal name unavailable. Requests continued work on the external active tracker: “能自主settled的你直接处理，如果还有需要我参与的决策，再停下来讨论”. Authorizes derivation/recording of straightforward consequences and coherent publication; does not approve an unpresented material trade-off, all pending mechanisms or compiler implementation.
+
+<a id="h-593"></a>
+**H-593 — Receiving write/write conflicts are author-responsibility UB.** Human/source: same current design chat/user, recorded 2026-11-17 America/Los_Angeles; exact timestamp unavailable. Answers the val-only pair/fill(n,n) example: “这种和类似的，我觉得都该按UB处理，因为是程序作者有相应reasoning依据可以去推断的，也有充分的变通做法可以去避免的。” Selects UB rather than either complete-write order or source-order delivery. Applies to cross-entry receiving write/write conflicts and analogous overlap, not all ordinary target sharing or sequential assignments. Integration reuses H-576 warning/opt-in-error planning under H-592 delegation; implementation/analysis precision remains separate.
+
+<a id="k-receiving-core-20261117"></a>
+**K-RECEIVING-CORE-20261117 — Normalize receiving and settle overlapping writes.** Agent assessment under H-571–H-575/H-591/H-592: D-22r34→35/registry839→840 derives explicit item grammar, independent lookup/name-collision rejection, empty reception, ordinary temporary full-scope equivalence, componentwise independent inference and one pending result with exact preparation/abandonment cleanup. H-593 additionally selects cross-entry write/write UB; D-23r23→24 and D-29r4→5 align dependency/acceptance summaries. Existing P-509–P-520/P-537–P-539 serves typed readable composition, explicit lifetimes, author responsibility and preserved effects under charter §§2/3.2–3.3/4.3/6.3/8/12. Field inspection and dependent-owner/native proof extensions remain separate. Baseline23a3a70d8e98cbc6d4933afb101775b8b66d8230 at affected paths. Source420, D-16 and D-18r113 unchanged; documentation only, no local code/build/tests or complete mechanism qualification.
+
 ## 2026-11-17 — Allow structural callable-result projection
 
 <a id="h-591"></a>
