@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-17 — Keep native binding roles with their slots
+
+<a id="k-784"></a>
+**K-784 — Consolidate native binding evidence.** Source412→413/registry818→819 continues D-26/H-407, existing D-14/D-18 frame/value/access contracts and unaffected D-17 completion under H-420/H-423. Keep the checked common place mode, reference slot and selected place in one native binding record; context-dependent interpretation facts and physical payload indices remain separate. Acceptance requires equivalent LLVM/diagnostics and established source/staging/native behavior with exact release. Preserve actual owners, qualifiers, initialization, prepared selections, D-16 and charter §§2/3.2–3.3/4.3/5.3/6.3/8/12. No new source policy, ABI, allocation contract or capture qualification; D-18r113’s human review remains pending. Baseline: `d96c4403d98b8b8d67751ef940dcd956afbd3c16:cod/lang_llvm.hh` and that commit’s source reference/registry.
+
 ## 2026-11-17 — Consolidated ordinary value-input review
 
 <a id="k-783"></a>

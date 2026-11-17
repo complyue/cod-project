@@ -63,10 +63,16 @@ class LLVMEmission {
   };
   std::vector<llvm::Value *> arguments_, retained_types_;
   std::vector<llvm::AllocaInst *> storage_;
-  std::vector<llvm::Value *> bindings_;
+  // A checked place role and its native slots describe one lexical binding.
+  // Context-dependent type/access facts stay in EmissionContext; physical
+  // payload storage has its own indices, independently of bindings.
+  struct EmissionBinding {
+    bool value_binding;
+    llvm::Value *reference_slot = nullptr;
+    llvm::AllocaInst *selected_place = nullptr;
+  };
+  std::vector<EmissionBinding> bindings_;
   std::map<size_t, llvm::Value *> owner_identities_;
-  std::vector<llvm::AllocaInst *> selections_;
-  const std::vector<CheckedBinding> *binding_layout_ = nullptr;
   std::vector<llvm::AllocaInst *> parameter_values_;
   llvm::Value *query_environment_ = nullptr;
   llvm::Function *function_ = nullptr;
@@ -116,14 +122,16 @@ class LLVMEmission {
   }
   llvm::Value *load(llvm::AllocaInst *place) { return b_.CreateLoad(place->getAllocatedType(), place); }
   llvm::Value *binding_slot(size_t id) {
-    return selections_.at(id) ? load(selections_[id]) : bindings_.at(id);
+    const auto &binding = bindings_.at(id);
+    return binding.selected_place ? load(binding.selected_place) : binding.reference_slot;
   }
   llvm::Value *binding_address(size_t id, std::optional<size_t> place) {
-    if (selections_.at(id)) {
-      auto *selected = load(selections_[id]);
-      return binding_layout_->at(id).value_binding ? selected : b_.CreateLoad(b_.getPtrTy(), selected);
+    const auto &binding = bindings_.at(id);
+    if (binding.selected_place) {
+      auto *selected = load(binding.selected_place);
+      return binding.value_binding ? selected : b_.CreateLoad(b_.getPtrTy(), selected);
     }
-    if (bindings_.at(id)) return b_.CreateLoad(b_.getPtrTy(), bindings_[id]);
+    if (binding.reference_slot) return b_.CreateLoad(b_.getPtrTy(), binding.reference_slot);
     return storage_.at(*place);
   }
   llvm::Value *environment(llvm::Value *value) {
@@ -1263,7 +1271,7 @@ class LLVMEmission {
         value = convert_result(declaration, *initializer, value);
         assign_value(address, value, declaration.at);
       }
-      if (auto *slot = bindings_.at(*binding.binding)) b_.CreateStore(address, slot);
+      if (auto *slot = bindings_.at(*binding.binding).reference_slot) b_.CreateStore(address, slot);
       return empty_scalar();
     });
   }
@@ -1370,7 +1378,7 @@ class LLVMEmission {
       auto *address = contextual_value(expr, alternatives, "storage.address", [&](std::optional<size_t> captured) {
         const auto &selected = contexts_.front().at(&expr);
         auto *address = binding_address(*selected.binding, selected.place);
-        if (captured && !binding_layout_->at(*selected.binding).value_binding)
+        if (captured && !bindings_.at(*selected.binding).value_binding)
           address = b_.CreateSelect(b_.CreateICmpEQ(address, null_pointer()), null_pointer(), storage_.at(*captured));
         return address;
       }, b_.getPtrTy());
@@ -1483,9 +1491,9 @@ class LLVMEmission {
     }
     case K::alias: {
       const bool selected = fact.binding.has_value();
-      const bool value = !selected || binding_layout_->at(*fact.binding).value_binding;
+      const bool value = !selected || bindings_.at(*fact.binding).value_binding;
       auto *address = emit_expression(*expr.children.front(), value ? Projection::target : Projection::slot, true);
-      if (reachable() && selected) b_.CreateStore(address, selections_.at(*fact.binding));
+      if (reachable() && selected) b_.CreateStore(address, bindings_.at(*fact.binding).selected_place);
       return reachable() ? empty_scalar() : nullptr;
     }
     case K::pointer_group: {
@@ -1624,23 +1632,25 @@ class LLVMEmission {
       storage_.push_back(place);
       if (place && environments_) initialize_value(place);
     }
-    bindings_.assign(bindings.size(), nullptr); selections_.clear(); binding_layout_ = &bindings;
+    bindings_.clear();
+    for (const auto &binding : bindings) bindings_.push_back({binding.value_binding});
     for (size_t i = 0; i < frame.inputs.size(); ++i) if (frame.inputs[i].binding_slot)
-      bindings_.at(storage.at(frame.inputs[i].place).binding) = view_address(arguments_[i]);
+      bindings_.at(storage.at(frame.inputs[i].place).binding).reference_slot = view_address(arguments_[i]);
     for (size_t i = 0; i < bindings.size(); ++i) {
-      const auto &binding = bindings[i];
-      if (!bindings_[i] && !binding.value_binding && !binding.alias && binding.selection.empty())
-        bindings_[i] = slot(b_.getPtrTy(), "reference.target");
-      selections_.push_back(binding.selection.empty() ? nullptr : slot(b_.getPtrTy(), "alias.selection"));
+      auto &binding = bindings_[i];
+      const auto &declaration = bindings[i];
+      if (!binding.reference_slot && !declaration.value_binding && !declaration.alias && declaration.selection.empty())
+        binding.reference_slot = slot(b_.getPtrTy(), "reference.target");
+      binding.selected_place = declaration.selection.empty() ? nullptr : slot(b_.getPtrTy(), "alias.selection");
     }
     for (size_t i = 0; i < arguments_.size(); ++i) {
       const auto &input = frame.inputs[i];
       const auto place = input.place, binding = storage.at(place).binding;
       if (input.binding_slot) continue;
-      if (input.mode != ArgumentMode::value) { b_.CreateStore(view_address(arguments_[i]), bindings_.at(binding)); continue; }
+      if (input.mode != ArgumentMode::value) { b_.CreateStore(view_address(arguments_[i]), bindings_.at(binding).reference_slot); continue; }
       b_.CreateStore(arguments_[i], storage_.at(place));
       if (environments_) parameter_values_.push_back(storage_.at(place));
-      if (bindings_.at(binding)) b_.CreateStore(storage_.at(place), bindings_[binding]);
+      if (auto *slot = bindings_.at(binding).reference_slot) b_.CreateStore(storage_.at(place), slot);
     }
   }
   void body(llvm::Function *function, const CheckedMethod &method, std::optional<size_t> instance) {
