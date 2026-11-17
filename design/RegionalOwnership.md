@@ -1,8 +1,10 @@
 # CoD regional ownership: syntax, semantics and use
 
-Design revision: 121 · Recorded: 2026-11-17 · Status: design draft with scoped confirmed requirements.
+Design revision: 122 · Recorded: 2026-11-17 · Status: design draft with scoped confirmed requirements.
 
 ## Design authority
+
+- **Generator invocation owner:** [H-604](../CHANGELOG.md#h-604)/[K-GENERATOR-HERE-20261117](../CHANGELOG.md#k-generator-here-20261117), [D-29-LENDING](DesignAuthorityRegistry.md#d-29-lending)/P-552–P-554, adds r122's scoped here clarification. In a generator yield contract, here denotes that invocation's lexical owner, fixed across the for; ordinary caller/local here retains its own lexical scope. C-65/C-96 → charter §§2/3.2–3.3/4.3/6.3/8/12 preserves explicit owner identity and bounded borrowing. D-29 owns acceptance and the source confirmation; ordinary return escape, same-owner/access/init rules, D-16 and D-18r113 are unchanged. Complete generator proof/native/value-path qualification remains separate.
 
 - **Named region roots:** [H-595](../CHANGELOG.md#h-595)/[K-NAMED-ROOTS-20261117](../CHANGELOG.md#k-named-roots-20261117), [D-13-ROOT-ACCESS](DesignAuthorityRegistry.md#d-13-root-access)/P-546–P-548, aligns this revision's regional examples with named roots, ordinary `r.name` assignment destinations and receiving specifications; the source root intrinsic is removed. Reuse C-74/C-65/C-72 and charter §§2/3.1–3.3/4.3/6.3/8/12 for explicit storage, access and lifetime responsibility. D-13 owns acceptance; preserve existing qualifications, actual-owner checks, nominal component identity, D-16 and D-18r113. Full structural/receiving proof and compiler migration remain separate; no C++ storage API changes follow.
 
@@ -154,6 +156,8 @@ Independent values have no owner association. Their receiving storage still belo
 H-440 selects `p is null` for null testing under the H-439 reference-identity rule; null remains a reserved literal. H-417 requires a unique statically provable owner even for a nullable ptr. H-418 requires that owner on the receiving declaration or the null literal: `ptr p:T = null` rejects. Accepted forms include `ptr p:T in O = null`, `ptr p:T = null in O` and `ptr p:T = null in here`. If both sides specify owners, the compiler must prove they are the same. Clearing a pointer to bare null uses that pointer's already established owner; it does not forget or change it. The owner must be established when the pointer is initialized. Owner/lifetime checks still reject expired targets; null testing never repairs invalid lifetime.
 
 `here` denotes the current full lexical lifetime scope under D-17: a callable invocation, module scope or explicit `{{ ... }}` scope. Ordinary `{ ... }` does not introduce a new owner. A named qualifier denotes an available region or generic owner already admitted by ordinary owner syntax, with the same static uniqueness/lifetime checks. Owner-qualified null supplies an absence value with an owner constraint; it does not allocate a target, create an owner or grant access to region allocation. The target type still comes from the receiving type contract.
+
+H-604 gives `here` a specific invocation-relative role in `yields ref T in here`: it names the selected generator invocation's lexical owner, bound once at entry and retained throughout that for. [D-29](RangedForAndGenerators.md#generator-invocation-owner) specifies the lifetime, views and cleanup consequences. The caller's own in here still names its own scope. This is neither an owner union nor a permission to return ordinary callee-local references after their owner ends; each recursive activation remains a distinct actual owner.
 
 H-419 excludes `outer` and repeated-outer syntax. To refer to storage owned by an enclosing scope, initialize from a variable declared there. A nullable source retains its owner even when null; `=` forwards that null view without reading a target. It copies the selected reference value into a new binding, not a live alias of the source's pointer slot.
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-17 — Bind yielded here references to the generator invocation
+
+<a id="h-604"></a>
+**H-604 — Here in a yield contract names this generator's lexical owner.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-17 America/Los_Angeles; exact timestamp/personal name unavailable. “同意，`yields ref T in here` 的 `here` 就指本次 generator 调用的 lexical scope owner，整个 for 期间保持不变。落文档，提交推送，然后继续处理追踪文档，没疑义的直接定。” Confirms the proposed source role and fixed invocation lifetime under D-29-LENDING/P-552–P-554, with ordinary liveness and H-600's changing-owner rejection retained. Authorizes publication and continued straightforward design derivation. Does not select a physical owner carrier, new capture/continuation storage, generalized forwarding relationship or complete proof/native/value-path qualification.
+
+<a id="k-generator-here-20261117"></a>
+**K-GENERATOR-HERE-20261117 — Preserve the invocation owner across every handoff.** D-29r12→13/D-14r121→122/registry853→854 under H-604, C-96/C-65 and charter §§2/3.2–3.3/4.3/6.3/8/12. Derives once-at-entry owner binding, caller-versus-generator here, protocol-role preservation through typeof/views, distinct recursion, valid body-local cleanup versus rejected delayed escape, and ordinary feedback/labelled/nullable consequences. Complete mechanism/value-path/native qualification remains separate; ordinary returns, source423, D-16 and byte-identical D-18r113 unchanged. Mainline's source review found no intrinsic fixed-owner conflict, while requiring this public role and actual invocation binding; that is engineering evidence, not human confirmation or implemented support. Baseline: `bafe3c8dde28dfd801a06651f956ae1918c03a49` at affected design paths. Documentation only; no local code/build/tests.
+
 ## 2026-11-17 — Close bounded init cases and review stable generator-local borrowing
 
 <a id="k-init-flow-owner-review-20261117"></a>
