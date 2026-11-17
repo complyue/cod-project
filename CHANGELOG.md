@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-11-17 — Specify generator feedback checking and propose signatures
+
+<a id="h-580"></a>
+**H-580 — Void feedback discards; other feedback requires static branch conformity.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-17 America/Los_Angeles; exact timestamp/personal name unavailable. Requests concrete generator syntax including the yield result declaration: “其中声明为void时loop body的结果类型不限，否则就需要静态检查loop body各种分支的结果要符合generator要求”. Selects that normal-feedback type-checking boundary. H-577’s explicit outer return and H-579’s void final completion remain distinct. This does not confirm the agent’s yields Y [-> F] spelling, omitted-feedback default, callable-type grouping, multi-field feedback syntax, full effects/owner transport or native implementation.
+
+<a id="h-581"></a>
+**H-581 — Explicit feedback through continue.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-17 America/Los_Angeles; exact timestamp/personal name unavailable. States “`continue xxx;` 语法也可以支持了，loop body中用于直接回馈给yield”. Adds explicit body feedback without replacing H-580 normal body-expression results or H-577 enclosing return. Does not select a new break/labelled-control policy, arbitrary cross-call continuation or native transport. H-582 further specifies void feedback.
+
+<a id="h-582"></a>
+**H-582 — Void feedback permits only bare continue.** Human/source: same current design chat/user, recorded 2026-11-17 America/Los_Angeles; exact timestamp/personal name unavailable. Corrects the assistant's proposed discard behavior for an operand-bearing continue: “void feedback 时，还是reject `continue xxx` 吧，只允许 `continue;`”. Confirms a syntax distinction: void permits only bare continue, while H-580 still allows arbitrary independently valid normal fallthrough result types. An expression may be evaluated separately before bare continue. Non-void explicit feedback retains H-580 static conformity; ordinary type/access/effects/cleanup remain required.
+
+<a id="h-583"></a>
+**H-583 — Reuse structural results for yield feedback.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-17 America/Los_Angeles; exact timestamp/personal name unavailable. Requests “yield结果也考虑支持多字段，照搬对字段返回类型声明和receiving spec好像就差不多”. Selects the design direction of labelled yield results with existing structural result declaration and receiving-specification rules. D-29 integrates it with H-581 explicit feedback as contextual `continue { expression -> label, ... };`, retaining H-582 bare-only void continuation. This creates no first-class group or new ordinary ADT field permission and does not qualify pending schema identity, owner/effect proofs or native transport.
+
+<a id="k-generator-feedback-20261117"></a>
+**K-GENERATOR-FEEDBACK-20261117 — Draft a separate yield/feedback clause.** D-29r1→2/registry833→834 adds D-29-FEEDBACK/P-525–P-527 under H-580–H-583 while retaining pending C-96/P-521–P-524. Candidate C-96/C-63/C-65/C-84 → charter §§2/3.3/4.3/6.1–6.3/8/12 relates explicit feedback obligations to typed interaction and preserved control/effects. Proposes yields Y [-> F], default void, expression-first named yield components and grouped callable contracts. Records explicit continue feedback, bare-only continue for void, and H-583 structural feedback/receiving reuse with contextual multi-field continue construction. Preserves pre-yield destination selection for feedback receivers separately from the pending loop-header timing question. Distinguishes discarded fallthrough alternatives, ordinary consumed intermediate typing, tail/continue/caught/exceptional/enclosing-return paths and category-specific preparation/cleanup; no runtime enforcement substitutes for static conformity. Mainline source418/465344562a217f3162be84ca1f606340002ce5aa is fast-forward integrated and supplies the unchanged r1 baseline at design/RangedForAndGenerators.md. Read-only developer review identifies targeted completion, lexical frame/defer access and handoff lifetime/effect proofs as substantive costs, without requiring a coroutine runtime or qualifying a mechanism. Preserve D-16 and byte-identical D-18r113; documentation only, no local code/build/tests. Existing signature/lifetime/cleanup choices remain open.
+
 ## 2026-11-17 — Separate checked programs from source analysis
 
 <a id="k-790"></a>
