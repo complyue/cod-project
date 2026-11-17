@@ -65,6 +65,10 @@
   - Confirm which component(s) to test if not explicit in the request.
 - You may execute test scripts under `tests/` and its subdirectories (e.g., `tests/**/run-all.sh`) or invoke CTest/CMake test targets directly when running tests.
 
+## Compiler Terminology
+- Follow the [alias glossary](design/CallableViewsAndCaptures.md#alias-terminology). Every use of the alias concept must identify **declared place aliasing**, **runtime target aliasing**, or **name/identity aliasing**; do not use unqualified alias/aliasing as an umbrella category. Apply this to design/development discussions, documentation, source comments, diagnostics and new/refactored interface or data names.
+- Compile-time/runtime labels do not prove when a selected place or target equality becomes known. Explicit place declarations may select runtime-indexed storage; independent references may share targets without a pairwise declaration. Preserve these distinctions, ordinary access/owner/lifetime checks and permitted overlap; this rule grants no exclusivity or new capture/lifetime mechanism.
+
 ## Code Changes
 - C++20 only; prefer modern features and avoid legacy patterns unless strictly necessary.
 - Mimic existing style and header layout under `include/`.

@@ -4,6 +4,8 @@ Design revision 31 · 2026-11-12
 
 ## Design authority
 
+- **Callable-reference continuity:** [K-ALIAS-GLOSSARY-20261117](../CHANGELOG.md#k-alias-glossary-20261117) preserves this revision's existing D-18 dependency under the canonical CallableViewsAndCaptures.md path. Only dependency links and this continuity summary change; existing contracts, qualification, acceptance and D-16 remain unchanged.
+
 - **Registry / current scope:** [D-13](DesignAuthorityRegistry.md#d-13); the semantic revision stated above and the independently qualified scopes in the current registry. **Whole file pending-human.** C-39/C-40/C-53–C-55/P-94/P-138–P-143/P-155; H-156/H-157 establishes the local graph boundary.
 - **Value path:** P-138/P-139 relates region-grained storage to inspectable graphs (C-01) and structured semantic units (C-05); P-140 constrains C-40. C-54/P-143 and D-14/P-155 concerns explicit lifetime responsibility through C-10. P-141/P-142 supplies representation/language dependencies, not qualification. These paths serve charter §§2–4 while keeping storage, access and execution distinct.
 - **Contract boundary:** D-14/D-17 owns scoped lifecycle behavior. Same-region stored edges, hidden-owner preservation and explicit transfer remain; D-22 refines only bits-eligible placement. No transport, per-object ownership, borrow table or allocator policy is qualified by tracker/relocation examples.
@@ -19,7 +21,7 @@ A direct pointer is a traversable edge between objects in the same region. The r
 
 ## Structural region definitions and variable storage
 
-[RegionalClosures.md](RegionalClosures.md#structural-regions) specifies the implemented field-subset requirement and its relation to captured regional slots. WPO retains concrete layouts and actual owners; structural compatibility does not authorize layout casts, cross-owner stored edges or nominal data-interface conformance.
+[CallableViewsAndCaptures.md](CallableViewsAndCaptures.md#structural-regions) specifies the implemented field-subset requirement and its relation to captured regional slots. WPO retains concrete layouts and actual owners; structural compatibility does not authorize layout casts, cross-owner stored edges or nominal data-interface conformance.
 
 Region acquisition/release, capacity, typed placement and reference provenance remain intrinsic services. Free lists, typed pools and item reuse remain CoD library policies under H-190. The source contract uses the existing native root shell and shilos allocator without changing D-01's physical representation. Overlapping/retyping storage, compaction with outstanding captures and custom physical allocators require separate design.
 
