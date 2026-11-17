@@ -1,7 +1,9 @@
 # Design authority and value lineage
 
-Registry revision: 825 · Audit date: 2026-11-17 (America/Los_Angeles)
+Registry revision: 826 · Audit date: 2026-11-17 (America/Los_Angeles)
 
+
+[K-788](../CHANGELOG.md#k-788), source416, continues D-26/H-407/C-89/C-90/P-371/P-372/P-374/P-375, D-14/H-295 and existing D-18 family coverage under H-420/H-423. A detected input-coverage work limit reports its unchanged allowance and active callable view as resource exhaustion, leaving the obligation unproved. Acceptance covers ordinary/symbolic construction and declaration-only inspection, no partial output, below-budget native controls and unchanged supported-input LLVM/diagnostics. Charter §§2/3.3/5.3/6.3/8/12 and D-16 continue; no admission, enumeration, source exception, ABI or new qualification changes. H-572's proposal and D-18r113's separate review retain their recorded boundaries.
 
 [H-572](../CHANGELOG.md#h-572)/[K-STRUCTURAL-RESULTS-20261117](../CHANGELOG.md#k-structural-results-20261117) records D-22r29’s preferred return-only structural result proposal, using `-> { ... }` without data: a labelled product of result contracts received as independent lexical variables, with no first-class group object, shared storage owner or structural sum. D-22-ANON-DATA/P-509–P-511 is pending for that new use restriction and detailed typing/transport; H-571’s named return, `:=` receiving, init and logical result-destination decisions remain confirmed. Ordinary nominal ADT same-owner rules and independent callable/value contracts continue; no external-owner ADT field permission is selected. D-07r167/D-12r32/D-28r33 align summaries; source415 and the separate unchanged D-18r113 review remain.
 

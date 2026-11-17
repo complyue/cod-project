@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-17 — Identify callable-family coverage exhaustion
+
+<a id="k-788"></a>
+**K-788 — Report the exhausted work allowance and active callable view.** Source415→416/registry825→826 continues D-26/H-407/C-89/C-90/P-371/P-372/P-374/P-375, D-14/H-295 and existing D-18 family coverage under H-420/H-423. Detected exhaustion stops compilation as a resource limit with coverage unproved; retain the 4096-step threshold, input enumeration, admission and native behavior. Acceptance spans ordinary construction, symbolic installation, declaration-only queries, below-budget native controls and stable supported-input LLVM/diagnostics. Preserve charter §§2/3.3/5.3/6.3/8/12 and D-16; no source policy, new mechanism/ABI qualification or answer to D-18r113's separate review follows. Baseline: `ab40e3fdb2b9dbd76767b8a607233f360daefea6:cod/lang_checked.hh` and that commit's registry/source reference. H-572 remains a separate proposal.
+
 ## 2026-11-17 — Assess return-only structural result signatures
 
 <a id="h-572"></a>

@@ -542,6 +542,7 @@ class ScalarChecker {
   bool delayed_ = false;
   size_t next_scope_ = 1;
   static constexpr size_t instance_limit = 4096;
+  static constexpr size_t family_coverage_limit = 4096;
 
   bool external_owner(size_t owner) const {
     return std::any_of(external_owners_.begin(), external_owners_.end(), [&](const auto &entry) { return entry.second == owner; });
@@ -4739,7 +4740,9 @@ class ScalarChecker {
     std::vector<Type> arguments;
     size_t obligations = 0;
     const auto account = [&] {
-      if (++obligations > 4096) implementation_gap(at, "callable family coverage exceeded the compiler resource limit");
+      if (++obligations > family_coverage_limit)
+        fail(at, "compiler resource limit: " + std::to_string(family_coverage_limit) +
+            " callable family coverage steps while covering '" + type_name(view) + "'; coverage remains unproved");
     };
     const std::function<void()> cover = [&] {
       account();
