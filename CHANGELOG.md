@@ -1,9 +1,33 @@
 # Changelog
 
+## 2026-11-16 — Native-validation and deferred-coverage integration
+
+<a id="k-775"></a>
+**K-775 — Integrate checked defer-pass coverage with native validation.** Source403 on both branches→404/registry801 and802→803 preserves K-774's immutable fixture evidence with H-549–H-551 and D-17r86/D-15r44/D-10r192/D-21r24. H-550/H-551 replaces declared unhandled deferred escape with handling proved at completion of the owning pass; covering deferred catches count, throws alone does not. Current compiler tests do not establish this new boundary, FIFO aggregation or return inspection. Unaffected owner/access/initialization, ordinary declared obligations, native coverage and D-16 continue under charter §§2/3.3/5.3/6.3/8/12. No new source implementation or qualification. Integrated design: `d90b20ab6dd2f72ec7933e19032e0680876436e0`; validation baseline: `f9e394bc590a2f34ac37d8b02be34205fc98d62f:tests/cod/language/README.md`.
+
 ## 2026-11-16 — Independent native validation fixtures
 
 <a id="k-774"></a>
 **K-774 — Isolate native fixtures and centralize validation support.** Source402→403/registry800→801 continues the existing qualified compiler/native acceptance under H-420/H-423 and D-26/H-407. Immutable fixture derivation preserves source, wrapper/assertion and observation inputs across import orders; shared support owns commands, diagnostics, native execution, provider injection and helper provenance. Acceptance compares all 128 fixture inputs with isolated baselines, checks shuffled imports and transitive dependencies, and preserves current source/native results. Charter §§5.3/6.3/8/12, owner/access/completion obligations and D-16 continue. No language, runtime, ABI or qualification change; return inspection remains design-only. Baseline: `d7ba556989aee827d7690dd54cca116a52c7de9b:tests/cod/language/exception_value_runtime_tests.py` and `e7f310b22e5467bb45329a9e6a78b8491e6ae8e0:tests/cod/language/README.md`.
+
+## 2026-11-16 — Require checked handling before defer-pass completion
+
+<a id="h-550"></a>
+**H-550 — Reject unchecked packaging of unhandled checked deferred failures.** Human/source for H-550/H-551: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-16 America/Los_Angeles; exact timestamps/personal name unavailable. Answering the caller-side FlushException/UnhandledDeferError mismatch: “checked exception 不允许从 defer 块抛出吧，要求用户处理，静态守住以后 UnhandledDeferError 就只体现 unchecked exception”. Replaces H-536's permission to declare unhandled checked deferred escape with a static handling requirement. H-551 below fixes the boundary: covering defer catch is valid handling; an individual deferred entry need not itself be nonthrowing.
+
+<a id="h-551"></a>
+**H-551 — Count defer catch as user handling.** Same human/chat/date: “defer catch 认为是用户handle了的呀”. Corrects the agent's too-early individual-entry boundary. Checked failures may enter the pending FIFO and be handled by later-visited covering deferred handlers; none may remain at completion of the owning pass. Enclosing throws alone does not satisfy H-550. Existing local/attached catches also retain their coverage. This preserves H-536's covering-handler direction while replacing its declared-escape permission; original evidence is located by K-DEFER-CHECKED-COVERAGE-20261116.
+
+<a id="k-defer-checked-coverage-20261116"></a>
+**K-DEFER-CHECKED-COVERAGE-20261116 — Apply the completed-pass rejection boundary.** D-17r85→86/D-15r43→44/D-10r191→192/D-21r23→24/source402→403/registry801→802 records H-550/H-551 under D-17-DEFER-DISPATCH/P-461–P-463 and module shutdown P-458–P-460. Candidate C-36/C-44/C-63/C-65 serves explicit recoverability, ordered handling and valid resources under charter §§2/3.1–3.3/4.3/6.3/8/12. Acceptance includes covering local/deferred catches; rejected throws-only, wrong-order and unproved registration paths; handler/finally checked outputs; H-525 declared-root obligations; and unchecked-only residual members. Nested aggregates remain opaque; H-538's independent body_exception and explicit causes may retain ordinary checked failures without making them queue members. Preserve return replacement, FIFO, owner/access/init and D-16. Only the prior declared deferred-escape permission loses authority; unrelated qualified contracts continue. Full queue value-path/proof/physical qualification and runtime support remain separate. Baseline and verified earlier evidence: `a823d12cd35bfcc3ff3b7b33cdc36ccefff3d545:design/ExceptionControl.md` and that commit's `CHANGELOG.md#h-536`/`#h-537`/`#h-538`; affected dependent paths at the same commit. Documentation only; no code/build/tests.
+
+## 2026-11-16 — Return-pattern typing and materialization
+
+<a id="h-549"></a>
+**H-549 — Keep return inference independent of inspection.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-16 America/Los_Angeles; exact timestamp/personal name unavailable. “if returning 只消费已经 inferred 返回类型，不参与 return type inference。” Confirms the bounded profile's one-way type dependency. The accompanying request for binding-failure examples is a clarification request, not confirmation of a new runtime-check mechanism.
+
+<a id="k-returning-binding-20261116"></a>
+**K-RETURNING-BINDING-20261116 — Explain existing complete-value allocation failure.** D-17r84→85/registry800→801 preserves H-548's bounded profile, with H-549 explicitly confirming inference direction. Matching adds no conversion, dereference, allocation or assertion; bits/ref/ptr binding adds no special fallible operation. D-18's ordinary complete-callable environment copy can allocate and raise unchecked OutOfMemoryError before branch entry; no fallback retry. The example distinguishes this from invoking the successfully bound callable. Candidate C-54/C-63/C-65/P-482–P-484 and charter §§2/3.2–3.3/4.3/6.3/8/12 preserve observable completion and valid storage; no new mechanism or value-path qualification. Owners/lifetimes, FIFO, declared obligations and D-16 continue. Baseline: `e7f310b22e5467bb45329a9e6a78b8491e6ae8e0:design/ExceptionControl.md`, return-state section; D-18 dependency at that commit's `design/RegionalClosures.md`, lexical payload/copy contract. Documentation only; no source/build/tests.
 
 ## 2026-11-16 — Bounded return-inspection profile
 
