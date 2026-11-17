@@ -248,6 +248,15 @@ public:
       if (!invalidated.contains(id)) return std::set<size_t>{id};
       return {};
     }
+    std::optional<std::set<size_t>> initialization_requirements(const std::set<size_t> &entries) const {
+      std::set<size_t> required;
+      for (const auto entry : entries) {
+        const auto condition = initialization_requirements(entry);
+        if (!condition) return {};
+        required.insert(condition->begin(), condition->end());
+      }
+      return required;
+    }
     void refine(size_t id, bool null) {
       // Null never reads a payload.
       if (null) initialize(id);
@@ -348,13 +357,9 @@ public:
         if (const auto target = before.substitute(update)) targets[id] = *target;
       }
       for (const auto &[id, required] : next.initialized_if) {
-        std::optional<std::set<size_t>> incoming = std::set<size_t>{};
-        for (const auto entry : required) {
-          if (next.entry_initialized.contains(entry)) continue;
-          const auto condition = before.initialization_requirements(entry);
-          if (!condition) { incoming.reset(); break; }
-          incoming->insert(condition->begin(), condition->end());
-        }
+        auto remaining = required;
+        std::erase_if(remaining, [&](size_t entry) { return next.entry_initialized.contains(entry); });
+        auto incoming = before.initialization_requirements(remaining);
         if (incoming) {
           if (incoming->empty()) initialized.insert(id);
           else initialized_if[id] = std::move(*incoming);
@@ -656,6 +661,8 @@ public:
     // Necessary conditions on paths that still require this read to be initialized.
     ConditionClauses when{ConditionFacts{}};
     MissingInitialization uninitialized{};
+    // Sufficient initialization of the sequence's incoming selected targets.
+    std::optional<std::set<size_t>> initialized_selections = {};
     bool operator==(const ReadRequirement &) const = default;
     bool satisfied(size_t place, const std::set<size_t> &known, const Selections &selections) const {
       if (when.empty()) return true;
@@ -663,6 +670,8 @@ public:
           [&](size_t id) { return selections.nonnull(id); });
       const auto ready = [&](size_t id) { return initialized.contains(id) || known.contains(id); };
       return ready(place) || (selection && selections.initialized.contains(*selection)) ||
+          (initialized_selections && std::all_of(initialized_selections->begin(), initialized_selections->end(),
+              [&](size_t id) { return selections.initialized.contains(id); })) ||
           (targets && std::all_of(targets->begin(), targets->end(), ready));
     }
     void substitute(const Selections &before) {
@@ -679,6 +688,8 @@ public:
         nonnull = std::move(entries);
         return;
       }
+      if (initialized_selections) initialized_selections = before.initialization_requirements(*initialized_selections);
+      else if (selection) initialized_selections = before.initialization_requirements(*selection);
       entry_initialized = before.substitute_entries(entry_initialized, entry_nonnull, initialized);
       entry_initialized.insert(before.entry_initialized.begin(), before.entry_initialized.end());
       std::erase_if(entry_nonnull, [&](size_t id) { return before.invalidated.contains(id); });
@@ -709,6 +720,9 @@ public:
       combine_initialization(initialized, uninitialized, other.initialized, other.uninitialized, true);
       std::erase_if(entry_initialized, [&](size_t id) { return !other.entry_initialized.contains(id); });
       std::erase_if(entry_nonnull, [&](size_t id) { return !other.entry_nonnull.contains(id); });
+      if (initialized_selections && other.initialized_selections)
+        initialized_selections->insert(other.initialized_selections->begin(), other.initialized_selections->end());
+      else initialized_selections.reset();
       if (selection != other.selection) selection.reset();
       if (targets && other.targets) targets->insert(other.targets->begin(), other.targets->end());
       else targets.reset();
