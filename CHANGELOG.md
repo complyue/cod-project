@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-17 — Delimit generator callable types and isolate effect eligibility
+
+<a id="k-generator-type-context-20261117"></a>
+**K-GENERATOR-TYPE-CONTEXT-20261117 — Preserve protocol metadata and review the supplied-body effect boundary.** Agent derivation under H-584/H-592/H-595: D-29r9→10/registry849→850 specifies type-position parentheses for callable yield/feedback contracts, full typeof/view metadata and independent selection without void-result erasure. C-96/C-65/C-84/P-528–P-530 → charter §§2/3.3/4.3/6.3/8/12 preserves readable typed composition; complete view/variance/native/value-path qualification remains pending. New D-29-EFFECTS/P-558–P-560 isolates strict function transitivity versus a special caller-body yield handoff under C-37; no relaxation is selected. Baseline: `708031d8dcb0be60a7f3c7c1259869b5cf4b0350:design/RangedForAndGenerators.md` and registry. Mainline source422/K-794 and H-601/H-602 integration is incorporated with both histories preserved; D-16, D-22r39 and byte-identical D-18r113 unchanged. Documentation only, no local code/build/tests.
+
 ## 2026-11-17 — Integrate init-place clarification with ready-ref proofs
 
 <a id="k-init-source-integration-20261117"></a>
