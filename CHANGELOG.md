@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-17 — Consolidated ordinary value-input review
+
+<a id="k-783"></a>
+**K-783 — Expose the bounded capture implementation contract for whole-file review.** D-18r112→113/registry817→818 preserves H-553’s source model and recorded H-327/H-329/H-342/H-344/H-417 qualifications, while making the new ordinary value-input implementation/value-path proposal explicitly pending-human under P-485–P-487. The profile covers existing scalar/intrinsic-exception and complete callable value contracts, declaration/access evidence, independent locals, ordinary ownership/failure cleanup and native/performance acceptance. C-65/C-73/C-75 serves charter §§2/3.2–3.3/4.3/6.3/8/12; dependency reuse and the supported-source reference experiment do not grant qualification. The compact authority summary preserves current scopes and exclusions; new borrowed/place capture proofs, symbols, aggregates, pure policy and permanent ABI remain separate. Existing source412/compiler9c195ce and D-16 are unchanged; no build/tests or human approval. Baseline: `9c195cecb9a6994edc28cef544674d2de784809c:design/CallableViewsAndCaptures.md` and that commit’s registry/changelog; original H-342/H-344 evidence remains at `0c0efbfde4dccb3f3397b6f961bd82bd9a12c848:design/DesignAuthorityRegistry.md#h-342`/`#h-344`.
+
 ## 2026-11-17 — Preserve declared places at the capture boundary
 
 <a id="k-782"></a>
