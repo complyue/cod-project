@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-11-17 — Preserve lexical returns across generator cleanup
+
+<a id="h-589"></a>
+**H-589 — Treat generator cleanup as part of the whole for operation.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-17 America/Los_Angeles; exact timestamp/personal name unavailable. “认同。 ‘generator cleanup itself throws or returns’ 就作为 for-loop 的整体行为就行吧，感觉没有疑义吧？” Selects reuse of ordinary completion rules at the for boundary; does not select a native carrier or qualify the whole generator mechanism. Baseline: f35469b85b67c64510fd93e80271f6eb4837e880:design/RangedForAndGenerators.md.
+
+<a id="h-590"></a>
+**H-590 — Reject cancellation by a generator-local return.** Human/source: same chat/user, recorded 2026-11-17 America/Los_Angeles. Responds “‘replace a pending body exception or outer return’ 不该允许吧？” to the agent's claim that an explicit generator return in cleanup could do that. Rejects that agent interpretation of H-589: generator return completes its own void invocation and preserves the independently outgoing body exception/enclosing-callable return. The rejected interpretation was never committed as a contract. This correction does not waive cleanup failures, checked obligations, remaining cleanup or exact result release; it selects no implementation mechanism.
+
+<a id="k-generator-cleanup-20261117"></a>
+**K-GENERATOR-CLEANUP-20261117 — Keep cleanup completion targets distinct.** D-29r3→4/registry836→837 records H-589/H-590 in D-29-CONTROL/P-534–P-536. Candidate C-96/C-63/C-65 → charter §§2/3.2–3.3/4.3/6.2–6.3/8/12 preserves lexical control, observable cleanup and valid ownership: local generator return preserves body passthrough; escaping cleanup failures compose at for under D-17. Adds an acceptance example and scoped consequences, removes the superseded open source-priority question, and retains pending target-aware transport/proof qualification. D-17, source419, D-16 and D-18r113 are unchanged. Documentation only; no code/build/tests or broader approval.
+
 ## 2026-11-17 — Accept generator signatures and checked body forwarding
 
 <a id="h-584"></a>
