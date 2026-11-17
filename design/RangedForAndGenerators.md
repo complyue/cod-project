@@ -1,8 +1,10 @@
 # Ranged for-loops and synchronous generators
 
-Design revision: 11 · Recorded: 2026-11-17 · Status: selected generator/feedback syntax and checked forwarding; remaining scope, effect proofs and transport pending.
+Design revision: 12 · Recorded: 2026-11-17 · Status: selected generator/feedback syntax and checked forwarding; remaining scope, effect proofs and transport pending.
 
 ## Design authority
+
+- **Local-owner review:** [K-INIT-FLOW-OWNER-REVIEW-20261117](../CHANGELOG.md#k-init-flow-owner-review-20261117), [D-29-LENDING](DesignAuthorityRegistry.md#d-29-lending)/P-552–P-554, isolates r12's pending generator-activation-owner exposure from H-600's settled fixed-owner rule. Candidate C-96/C-65 → charter §§2/3.2–3.3/4.3/6.3/8/12 weighs reusable temporary storage against an additional public lifetime relationship. The proposed in here result qualifier and acceptance cases below are pending-human; no local-owner permission, proof or ABI is qualified by the proposal. H-603 caller eligibility, D-16, source423 and D-18r113 remain independent.
 
 - **Caller-owned yield handoff:** [H-603](../CHANGELOG.md#h-603)/[K-GENERATOR-CALLER-EFFECTS-20261117](../CHANGELOG.md#k-generator-caller-effects-20261117), [D-29-EFFECTS](DesignAuthorityRegistry.md#d-29-effects)/P-558–P-560, selects r11's source boundary: yield transfers control to the caller's lexical loop body; its procedure operations are not indirect calls by a func generator. The generator's own operations retain D-10's function restrictions. C-96/C-37/C-65/C-84 → charter §§2/3.2–3.3/4.3/6.1–6.3/8/12 preserves reusable traversal and explicit context permissions. Acceptance below covers caller/generator kinds, nested forwarding, operands/feedback, cleanup and existing dynamic binding/restoration. H-603 confirms this source distinction and rationale, not the full value path, checker, view/native mechanism or future pure policy. Preserve H-600 owners, H-601/H-602 init, source422, D-16 and byte-identical D-18r113.
 
@@ -16,7 +18,7 @@ Design revision: 11 · Recorded: 2026-11-17 · Status: selected generator/feedba
 
 - **Receiving-overlap continuity:** [H-593](../CHANGELOG.md#h-593)/[K-RECEIVING-CORE-20261117](../CHANGELOG.md#k-receiving-core-20261117) aligns r4→5 with D-22-RECEIVE-OVERLAP/P-518–P-520: each yielded/feedback receiving spec prohibits cross-entry write/write overlap as UB as well as H-576 borrowed-read overlap. Existing warning/opt-in-error planning and defined single-operation/sequential/target-sharing behavior remain. C-96/C-65/C-72/C-73 and charter §§3.3/4.3/6.3/8/12 preserve receiving optimization and author responsibility without choosing signature variance or transport; the following header scope owns its separate receiving/lifetime derivation. Acceptance below changes only overlap cases; whole generator mechanism/value path remains pending-human.
 
-- **Registry / scope:** [D-29](DesignAuthorityRegistry.md#d-29), r11, all sections. C-96/P-521–P-524 records a candidate value path and dependency constraints; the complete mechanism remains `pending-human`, not a delegated implementation contract.
+- **Registry / scope:** [D-29](DesignAuthorityRegistry.md#d-29), r12, all sections. C-96/P-521–P-524 records a candidate value path and dependency constraints; the complete mechanism remains `pending-human`, not a delegated implementation contract.
 - **Human baseline:** [H-577](../CHANGELOG.md#h-577) proposes a typed single-method loop body using its lexical context and confirms that explicit body return targets the surrounding callable. The later H-580–H-584 feedback decisions below define its normal-result and continue forms. [H-578](../CHANGELOG.md#h-578) requests receiving-spec reuse and the assignment-style headers below. [H-579](../CHANGELOG.md#h-579) prefers void-only generator completion; this draft adopts that bounded recommendation without inferring approval of the remaining signature/proof details. [H-580](../CHANGELOG.md#h-580) requires unrestricted normal body-result types for void feedback and static conformity of all normal branches for non-void feedback; [D-29-FEEDBACK](DesignAuthorityRegistry.md#d-29-feedback)/P-525–P-527 records that source boundary separately. [H-581](../CHANGELOG.md#h-581) adds explicit body feedback with continue; [H-582](../CHANGELOG.md#h-582) restricts void feedback to bare continue and rejects its operand-bearing form. [H-583](../CHANGELOG.md#h-583) selects multi-field yield results through existing structural result declarations and receiving specifications. [H-584](../CHANGELOG.md#h-584) accepts the presented yields Y [-> F] syntax, omitted-feedback void and contextual multi-field feedback/receiving model. [H-585](../CHANGELOG.md#h-585) selects automatic checked-body forwarding; [H-588](../CHANGELOG.md#h-588) refines it to bypass generator catches and resume ordinary exception handling at the lexical for site. Fixed explicit generator throws remains required. [D-29-SIGNATURE](DesignAuthorityRegistry.md#d-29-signature), [D-29-FAILURES](DesignAuthorityRegistry.md#d-29-failures) and [D-29-CONTROL](DesignAuthorityRegistry.md#d-29-control) keep those source decisions separate from complete implementation qualification. [H-586](../CHANGELOG.md#h-586) requests assessment of private/native propagation versus special exception wrappers; no public wrapper hierarchy is selected. [H-587](../CHANGELOG.md#h-587) requires entered try/finally cleanup on every protected exit, regardless of lowering. [H-589](../CHANGELOG.md#h-589) treats generator cleanup as part of the whole for operation; [H-590](../CHANGELOG.md#h-590) rejects using generator-local return to replace a pending body exception or enclosing-callable return. Exact source scope and provenance are in those records.
 - **Value rationale:** candidate C-63/C-65/C-73 → C-96 → D-29 under charter §§2/3.2–3.3/4.3/6.1–6.3/8/12: express traversal, data exchange and lexical control in a checked, readable program, while reusing ordinary receiving operations and natural owner lifetimes. Native outlining must preserve that program rather than define its meaning.
 - **Dependencies / invariants:** D-10 calls/effects, D-14/D-28 owners, D-17 scopes/completion, D-18 callable values, D-22 result/receiving specifications, D-23 operations, D-24 inference and D-16 numerical compatibility. Preserve unique actual owners, access/readiness, exact cleanup and the no-closure-cell/no-lifetime-extension boundary. Callable views remain lexical, never regional. There is no C++ object copying/moving model.
@@ -283,7 +285,36 @@ proc visit_values(a:u64 in A, b:u64 in B)
 
 Each yield snapshots the scalar bits under its established val contract; no source owner travels with that payload. A caller's val receiver does not repair an invalid ref-yield protocol, because receiving cannot redefine the independently established generator contract. Ordinary access/readiness, effects, numerical validity and temporary cleanup remain.
 
-A single generator activation may have a stable local owner while synchronous body execution occurs. Exposing it still needs an independently specified public owner relationship and complete lifetime proof; this document selects no new generator-local owner syntax. Repeated fresh inner scopes or newly acquired regions cannot be treated as one actual owner merely because they use the same source declaration. No implicit lifetime extension or promotion follows from the fixed-owner rule.
+A single generator activation may have a stable local owner while synchronous body execution occurs. Repeated fresh inner scopes or newly acquired regions cannot be treated as that owner merely because they use the same source declaration. No implicit lifetime extension or promotion follows from the fixed-owner rule.
+
+### Generator-activation owner exposure — pending
+
+The remaining source choice is whether to expose that one activation owner in the public yield contract, not whether to relax H-600 for changing owners. Proposed type-position spelling:
+
+```cod
+proc scratch() yields ref u64 in here {
+    val cell:u64 <- 0u64;
+    yield(cell);
+    cell <- 1u64;
+    yield(cell);
+}
+
+proc use_scratch() {
+    for ref item = scratch() {
+        item <- item + 1u64;
+    }
+}
+```
+
+In this proposal, here in the generator's yield contract denotes its current invocation's full lexical owner. Both handoffs select targets in that one owner, independent of runtime addresses and backing growth. The caller's item binding retains this statically established activation-owner relationship; it does not create a fresh owner parameter per iteration. Body helpers can receive the reference under ordinary owner-parameter inference. This would permit reusable local scratch graphs as well as the scalar example, subject to existing placement and readiness rules.
+
+The alternative keeps public borrowed yield owners restricted to already expressible input/capture/result-owner relationships and requires caller-supplied storage or independent val yields for this case. That avoids adding a public invocation-owner relationship but prevents this otherwise bounded use of generator-local storage. The proposed direction is to support the stable invocation owner while preserving ordinary liveness and fixed-owner constraints; the source permission and signature meaning remain pending-human.
+
+If selected, the borrow cannot survive the generator's completion. An outer deferred call retaining item until the caller exits rejects, as does returning/storing it where its owner may already be dead. Same-owner target changes and reuse across handoffs do not imply snapshots or exclusive access. Distinct recursive/nested activations are distinct actual owners; one activation's contract cannot be substituted for another's. A target from a fresh inner scope or independently acquired region does not satisfy in here. There is no retained continuation, hidden closure storage, promoted lifetime or permission to borrow arbitrary callee locals through an ordinary return.
+
+Required checking must carry the selected activation-owner identity through direct/stored/generic generator types and native body entry, preserving it across feedback and cleanup. Synchronous execution establishes a lifetime opportunity but does not by itself provide that public type relationship. Qualifying the complete mechanism and its value path remains separate even if this source direction is selected.
+
+The proposed here relationship is instantiated for each actual generator invocation; typeof/view metadata would retain that relationship rather than capture an owner from the declaration site. It names the selected generator's own scope, not any owner whose lifetime happens to enclose a yield. A forwarding generator cannot relabel an inner generator's target as its own in here target. The caller's separately written in here still denotes the caller's ordinary current scope and would not match this yielded owner merely because the keyword is identical.
 
 ## Void final completion
 
@@ -708,7 +739,7 @@ All yield sites in one selected generator method use the same established protoc
 
 The next substantive boundaries are:
 
-1. Complete fixed-owner/header proof and transport under H-600, including actual destinations, fresh controls and enclosing-full-scope scalar materialization. Any public generator-local-owner relationship remains separately scoped; ordinary liveness does not supply missing owner identity.
+1. Complete fixed-owner/header proof and transport under H-600, including actual destinations, fresh controls and enclosing-full-scope scalar materialization. The proposed generator-activation owner exposure above needs a source decision; ordinary liveness does not supply missing owner identity.
 2. Complete structural-schema compatibility, fixed owner/view checking, additional inference forms and the H-603 lexical effect-boundary proof. H-588 selects catch bypass and direct obligation composition; recursive/stored generator and native proofs remain work. A nonlocal return is not a catchable exception.
 3. Proof and transport of the selected lexical completion targets through generator cleanup, including nested iteration and generator-local `if returning`; the source rule above is settled independently of the mechanism.
 4. Nonescaping body-entry proof and transport, including direct/stored/generic generator invocation if admitted. Ordinary callable values or annotations alone do not prove the body's required lexical permissions.

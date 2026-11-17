@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-17 — Close bounded init cases and review stable generator-local borrowing
+
+<a id="k-init-flow-owner-review-20261117"></a>
+**K-INIT-FLOW-OWNER-REVIEW-20261117 — Separate settled flow consequences from a public owner choice.** Agent derivation under H-445/H-447/H-601/H-602/H-592: D-22r39→40/D-29r11→12/registry852→853, P-555–P-557/P-552–P-554. Bounded init rules distinguish pointer-slot null writes from missing target writes, retain write-before-read despite pre-existing payloads, preserve const/readonly access and account for actual cleanup before successful completion. C-65/C-72/C-95 and charter §§2/3.3/4.3/6.3/8/12 preserve explicit storage/flow responsibility; full modifier/publication/proof/native/value-path qualification remains separate. The proposed generator-activation owner qualifier in here is pending-human under C-96/C-65: one invocation owner differs from H-600's rejected changing per-yield owner; no source permission or lifetime extension is inferred. Correct the stale D-22 local coverage revision and retain current D-29 scope. Baseline: `e28d2c42b7a7a2fc2563d9c970c1f8f3cc0a5aff` at the affected design paths, integrating mainline source423 and both prior histories. D-16, D-18r113 and source423 remain unchanged. Documentation only; no local code/build/tests.
+
 ## 2026-11-17 — Integrate caller-owned generator effect boundaries
 
 <a id="k-generator-effect-integration-20261117"></a>
