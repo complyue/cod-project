@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-17 — Preserve prepared source-target initialization
+
+<a id="k-780"></a>
+**K-780 — Keep saved target readiness separate from live slots.** Source409→410/registry808→809 continues H-297/P-258, existing D-17 prepared operands/cleanup, H-525 and D-26/H-407 under H-420/H-423. Prepared rebind summaries detach registration-time source identity from invocation-time slots; rebinds supply no physical payload writes. Acceptance includes independent slot/payload models, unchanged initialization rejection tests, prepared/returned-view composition and native cleanup. Broad declared-Exception diagnostic expectations retain H-525's rejection contract. Charter §§3.2/3.3/4.3/5.3/6.3/8/12 and D-16 continue; no capture/FIFO/return-state policy, runtime flag or new qualification. Baseline: `7a6847fa1f771bc9acd32a80a13fb8fac0c4083b:cod/lang_checked.hh` and that commit's source reference/authority registry.
+
 ## 2026-11-17 — Explicit captures, aliases and lifetimes
 
 <a id="h-553"></a>

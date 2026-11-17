@@ -1,9 +1,12 @@
 # Design authority and value lineage
 
-Registry revision: 808 · Audit date: 2026-11-17 (America/Los_Angeles)
+Registry revision: 809 · Audit date: 2026-11-17 (America/Los_Angeles)
 
 
 [H-553–H-557](../CHANGELOG.md#h-553)/[K-CAPTURE-LIFETIMES-20261117](../CHANGELOG.md#k-capture-lifetimes-20261117) records D-18r108 ordinary value snapshots/fresh invocation locals and explicit owner-bounded borrows, retaining H-327/H-329 place aliases separately from ordinary reference copies. D-12r27 states the explicit-lifetime vision and compiler rule: no closure abstraction, implicit shared binding cells or source-lifetime extension. D-10r194/D-14r117/D-21r26/D-22r21/D-28r27/source409 align dependencies and implementation gaps. P-485–P-493 records scoped value/dependency links; source principles do not qualify the complete new proof/physical mechanisms. Existing symbol-declaration restrictions, qualified contracts and D-16 continue.
+
+[K-780](../CHANGELOG.md#k-780), source410, continues D-14r117/H-297/P-258, existing D-17 prepared-operand/cleanup semantics, H-525 declared checked obligations and D-26/H-407 under H-420/H-423. Saved target readiness cannot establish readiness of its source slot's later selection; ordinary reference rebinding does not initialize physical payloads. Acceptance preserves exact slots/targets, an independent payload/slot model, existing prepared/returned-view composition and native cleanup in both modes. Charter §§3.2/3.3/4.3/5.3/6.3/8/12 and D-16 continue. D-18r108's new capture/borrow proof and physical/value paths, FIFO, return inspection and nested-defer enforcement retain their separate boundaries; no new source policy or runtime initialized flag is selected.
+
 
 [K-779](../CHANGELOG.md#k-779), source408, continues D-26/H-407, D-18 retained callable interpretations, D-14 owner/access/initialization and unaffected D-17 completion/H-525 under H-420/H-423. Operation facts and their checked instance form one native emission context; scoped subsets restore enclosing evidence through local selections and deferred invocation. Acceptance preserves LLVM/diagnostic equivalence and established source/staging/native observations in both modes; H-481 copy-failure instrumentation uses a stored callable rather than a fresh definition view. Charter §§3.2/4.2/5.3/6.3/12 and D-16 continue; capture mutation, new completion mechanisms, runtime representation and additional qualification remain separate.
 
