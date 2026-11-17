@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-16 — Inductive selected-target initialization
+
+<a id="k-770"></a>
+**K-770 — Preserve initialized selections across loop and cleanup joins.** Source397→398/registry795→796 continues K-769/K-738's qualified D-14r116/P-258, D-17r83/P-235/P-236/P-280/H-525, D-28-IDENTITY, D-18r107, confirmed D-23r17 results and D-26r21/H-407 under H-420/H-423. Finite loop assumptions require initial-entry and reaching-backedge evidence before read validation. Shared selection summaries retain sufficient entry-target initialization through conditional cleanup. Acceptance covers independent direct/deferred binding models, nested loops/folds, snapshots, failed work, aliases/caller slots, native sharing and exact release. Preserve charter §§2/3.3/4.3/5.3/6.3/8/12, actual owners/access/nullness, fresh iteration storage, ordered read/write obligations and D-16. Wider invariants and new runtime/ABI/queue/return-inspection or aggregate protocols remain separate. Baseline: `83e5da3201f18746328e090c5049a47c9a39b03b:tests/cod/language/README.md` and that commit’s `design/DesignAuthorityRegistry.md`. No new semantic decision or human confirmation.
+
 ## 2026-11-16 — Selected identities and concrete targets
 
 <a id="k-769"></a>

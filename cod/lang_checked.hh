@@ -501,8 +501,10 @@ class ScalarChecker {
     size_t first, last;
     std::set<size_t> bindings, rebound, expired, payloads, payload_origins;
     bool unknown_exception_payloads = false;
+    std::set<size_t> initialized = {};
   };
   std::map<const Expression *, LoopState> loop_states_;
+  bool loop_initialization_changed_ = false;
   std::vector<const Expression *> active_loops_;
   struct AbruptPath { LexicalState state; ExceptionFacts exceptions; Location at; Completion completion{2, false}; };
   struct AbruptFlow { size_t depth; std::vector<AbruptPath> paths; std::set<size_t> declared{}; };
@@ -1521,6 +1523,15 @@ class ScalarChecker {
     }
     refine_present(state);
   }
+  void retain_loop_initialization(LoopState &loop, const LexicalState &state) {
+    loop_initialization_changed_ = std::erase_if(loop.initialized, [&](size_t binding) {
+      if (state.selections.initialized.contains(binding)) return false;
+      const auto &targets = state.targets.at(binding);
+      return std::any_of(targets.begin(), targets.end(), [&](size_t place) {
+        return place != null_target && !state.initialized.contains(place);
+      });
+    }) != 0 || loop_initialization_changed_;
+  }
   void solve_targets() {
     bool changed;
     do {
@@ -2470,6 +2481,7 @@ class ScalarChecker {
       state.target_versions.erase(id);
       state.selection_identities.erase(id);
       state.selections.initialized.erase(id);
+      std::erase_if(state.selections.initialized_if, [&](const auto &entry) { return entry.first == id || entry.second.contains(id); });
       state.selections.entry_initialized.erase(id);
       state.selections.entry_nonnull.erase(id);
       state.selections.null_inputs.erase(id);
@@ -2478,6 +2490,7 @@ class ScalarChecker {
       for (auto &[input, facts] : state.input_facts) {
         auto &selections = facts.selections;
         selections.initialized.erase(id); selections.entry_initialized.erase(id);
+        std::erase_if(selections.initialized_if, [&](const auto &entry) { return entry.first == id || entry.second.contains(id); });
         selections.entry_nonnull.erase(id); selections.targets.erase(id);
         selections.null_inputs.erase(id); selections.nonnull_inputs.erase(id);
       }
@@ -5756,9 +5769,13 @@ class ScalarChecker {
       const auto iteration_scope = next_scope_;
       if (repeat_possible) {
         if (!proving_) loop_states_[&expr] = {iteration_scope, iteration_scope, before.bindings_available, {}, {}, {}, {}, false};
-        const auto &loop = loop_states_.at(&expr);
+        auto &loop = loop_states_.at(&expr);
         refresh_targets(lexical_, true, &loop.rebound);
-        if (proving_) lexical_.expired_bindings.insert(loop.expired.begin(), loop.expired.end());
+        if (proving_) {
+          retain_loop_initialization(loop, before);
+          for (const auto binding : loop.initialized) initialize_selection(lexical_, binding);
+          lexical_.expired_bindings.insert(loop.expired.begin(), loop.expired.end());
+        }
         for (const auto input : inputs(lexical_.inputs)) for (auto &[id, categories] : lexical_.input_facts[input].exceptions)
           if (!proving_ || loop.payloads.contains(id)) categories = exception_possibilities(storage(id).type);
         if (!proving_) lexical_.predicates.clear();
@@ -5789,6 +5806,8 @@ class ScalarChecker {
         if (!proving_) loop_states_.at(&expr).last = next_scope_;
       }
       const auto body_state = lexical_;
+      if (proving_ && repeat_possible && body != Type::never && lexical_.live)
+        retain_loop_initialization(loop_states_.at(&expr), body_state);
       if (repeat_possible && body != Type::never && lexical_.live) for (const auto input : inputs(lexical_.inputs)) {
         const auto &facts = lexical_.input_facts.at(input);
         cleanup_.backedge(headers.at(input), cleanup_.known(facts.queues.at(cleanup_scope_), facts.initialized, lexical_.uninitialized));
@@ -6444,11 +6463,34 @@ class ScalarChecker {
     next_selection_identity_ = 0; selection_sources_.clear(); incoming_selections_.clear();
   }
 
+  template <typename Check> void check_flow(const Check &check) {
+    const bool validating = validating_;
+    validating_ = false;
+    check(false);
+    solve_targets();
+    for (auto &[expr, loop] : loop_states_) loop.initialized = intersect(loop.bindings, loop.rebound);
+    if (!loop_states_.empty()) {
+      // A selected target is initialized at the header only if initial entry
+      // and every reaching backedge preserve it. Remove failed assumptions
+      // before validating reads; nested loops share this finite fixed point.
+      do {
+        loop_initialization_changed_ = false;
+        check(true);
+      } while (loop_initialization_changed_);
+    }
+    validating_ = validating;
+    if (validating || loop_states_.empty()) {
+      loop_initialization_changed_ = false;
+      check(true);
+      if (loop_initialization_changed_) throw std::logic_error("loop initialization changed during validation");
+    }
+  }
+
   void check_entry() {
     checking_context_ = 0;
     checking_method_ = nullptr;
     checking_instance_ = nullptr;
-    for (const bool proving : {false, true}) {
+    check_flow([&](bool proving) {
       begin_check(program_.entry_storage, program_.entry_bindings, program_.entry, proving);
       AbruptFlow entry_flow{1, {}};
       abrupt_ = &entry_flow;
@@ -6462,8 +6504,7 @@ class ScalarChecker {
       }
       CheckedOperation entry_result; entry_result.type = lexical_.live ? Type{Type::void_type} : Type{Type::never};
       finish_scope(entry_result, entry_flow, nullptr, 0, program_.initializers.empty() ? Location{} : program_.initializers.front().expression->at);
-      if (!proving) solve_targets();
-    }
+    });
   }
   void observe_outcome(size_t reason, const LexicalState &state) {
     std::set<size_t> known;
@@ -6552,7 +6593,7 @@ class ScalarChecker {
     const ModuleLookup context(interpretation_, program_.methods[instance.method].interpretation);
     const auto &method = *program_.methods[instance.method].source;
     checking_method_ = &program_.methods[instance.method];
-    for (const bool proving : {false, true}) {
+    check_flow([&](bool proving) {
       begin_check(instance.storage, instance.bindings, instance.operations, proving);
       instance.frame = {};
       for (size_t i = 0; i < method.owner_parameters.size(); ++i)
@@ -6637,8 +6678,8 @@ class ScalarChecker {
           note_abrupt(path.at, path.exceptions, path.completion);
         }
         lexical_ = normal;
-      } else solve_targets();
-    }
+      }
+    });
     instance.complete = validating_;
     std::erase_if(observed_.uninitialized, [](const auto &entry) { return entry.second.empty(); });
     for (const auto reason : call_reasons(*checking_method_)) observed_.initialized.try_emplace(reason);

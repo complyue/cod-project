@@ -222,6 +222,8 @@ public:
   // A selection fact describes the current target, so rebinding can invalidate it.
   struct Selections {
     std::set<size_t> initialized, invalidated;
+    // Sufficient entry-target initialization for a current selected target.
+    std::map<size_t, std::set<size_t>> initialized_if;
     // Initialization of entry targets survives changes to the current selection.
     std::set<size_t> entry_initialized, entry_nonnull;
     // Actual branch conditions are separate from conditional callee guarantees.
@@ -237,7 +239,14 @@ public:
     }
     void initialize(size_t id) {
       initialized.insert(id);
+      initialized_if.erase(id);
       if (!invalidated.contains(id)) entry_initialized.insert(id);
+    }
+    std::optional<std::set<size_t>> initialization_requirements(size_t id) const {
+      if (initialized.contains(id)) return std::set<size_t>{};
+      if (const auto found = initialized_if.find(id); found != initialized_if.end()) return found->second;
+      if (!invalidated.contains(id)) return std::set<size_t>{id};
+      return {};
     }
     void refine(size_t id, bool null) {
       // Null never reads a payload.
@@ -270,7 +279,7 @@ public:
       for (const auto id : next.null_inputs) test(id, true);
       for (const auto id : next.nonnull_inputs) test(id, false);
     }
-    void invalidate(size_t id) { initialized.erase(id); invalidated.insert(id); targets.erase(id); }
+    void invalidate(size_t id) { initialized.erase(id); initialized_if.erase(id); invalidated.insert(id); targets.erase(id); }
     std::optional<Targets> substitute(const Targets &next) const {
       Targets result{next.places, next.nullable, {}};
       for (const auto entry : next.entries) {
@@ -290,13 +299,24 @@ public:
       do {
         changed = false;
         for (const auto &[id, target] : targets) {
-          if (std::all_of(target.entries.begin(), target.entries.end(), [&](size_t entry) { return entry_initialized.contains(entry); }) &&
-              std::all_of(target.places.begin(), target.places.end(), [&](size_t place) { return known.contains(place); }))
-            changed = initialized.insert(id).second || changed;
+          if (std::all_of(target.places.begin(), target.places.end(), [&](size_t place) { return known.contains(place); })) {
+            auto required = target.entries;
+            std::erase_if(required, [&](size_t entry) { return entry_initialized.contains(entry); });
+            if (required.empty()) changed = initialized.insert(id).second || changed;
+            else if (!initialized.contains(id)) {
+              const auto found = initialized_if.find(id);
+              if (found == initialized_if.end() || std::includes(found->second.begin(), found->second.end(), required.begin(), required.end()))
+                initialized_if[id] = std::move(required);
+            }
+          }
           if (target.entries.empty() && !target.nullable && target.places.size() == 1 && initialized.contains(id))
             changed = known.insert(*target.places.begin()).second || changed;
         }
+        for (const auto &[id, required] : initialized_if)
+          if (std::all_of(required.begin(), required.end(), [&](size_t entry) { return entry_initialized.contains(entry); }))
+            changed = initialized.insert(id).second || changed;
       } while (changed);
+      for (const auto id : initialized) initialized_if.erase(id);
     }
     std::set<size_t> substitute_entries(const std::set<size_t> &entries, const std::set<size_t> &nonnull,
                                         std::set<size_t> &known) const {
@@ -327,6 +347,19 @@ public:
           initialized.insert(id);
         if (const auto target = before.substitute(update)) targets[id] = *target;
       }
+      for (const auto &[id, required] : next.initialized_if) {
+        std::optional<std::set<size_t>> incoming = std::set<size_t>{};
+        for (const auto entry : required) {
+          if (next.entry_initialized.contains(entry)) continue;
+          const auto condition = before.initialization_requirements(entry);
+          if (!condition) { incoming.reset(); break; }
+          incoming->insert(condition->begin(), condition->end());
+        }
+        if (incoming) {
+          if (incoming->empty()) initialized.insert(id);
+          else initialized_if[id] = std::move(*incoming);
+        }
+      }
       initialized.insert(next.initialized.begin(), next.initialized.end());
       resolve(known);
     }
@@ -334,6 +367,17 @@ public:
       if (!other.possible) return;
       if (!possible) { *this = other; return; }
       const auto before = *this;
+      auto affected = invalidated;
+      affected.insert(other.invalidated.begin(), other.invalidated.end());
+      for (const auto id : affected) {
+        auto left = before.initialization_requirements(id);
+        const auto right = other.initialization_requirements(id);
+        initialized_if.erase(id);
+        if (left && right) {
+          left->insert(right->begin(), right->end());
+          if (!left->empty()) initialized_if[id] = std::move(*left);
+        }
+      }
       std::erase_if(initialized, [&](size_t id) { return !other.initialized.contains(id); });
       std::erase_if(entry_initialized, [&](size_t id) { return !other.entry_initialized.contains(id); });
       std::erase_if(entry_nonnull, [&](size_t id) { return !other.entry_nonnull.contains(id); });
