@@ -1,8 +1,10 @@
 # CoD Regional Memory Vision and Implementation Tracker
 
-Design revision 31 · 2026-11-12
+Design revision 32 · 2026-11-17
 
 ## Design authority
+
+- **Owner-parameter symbol integration:** [H-561](../CHANGELOG.md#h-561)/[K-OWNER-SYMBOL-ACCEPT-20261117](../CHANGELOG.md#k-owner-symbol-accept-20261117), [D-10-OWNER-SYMBOL](DesignAuthorityRegistry.md#d-10-owner-symbol)/P-497–P-499, covers D-13r32's reference-symbol/owner dependency wording. The source form and staged sound acceptance are confirmed: installation selects one actual lexical or ordinary regional owner from the RHS; an `in @arena` declaration retains its additional selector constraint. C-36/C-54/C-65/C-93 and charter §§2/3.2–3.3/4.3/6.3/8 preserve explicit dynamic context and lifetime responsibility. D-10 owns examples and acceptance. Preserve saved/captured owner validity, access/null/init, module symbol identity, no lifetime extension and D-16; full proof/physical/value-path qualification and source implementation remain separate. Other qualified scopes continue.
 
 - **Callable-reference continuity:** [K-ALIAS-GLOSSARY-20261117](../CHANGELOG.md#k-alias-glossary-20261117) preserves this revision's existing D-18 dependency under the canonical CallableViewsAndCaptures.md path. Only dependency links and this continuity summary change; existing contracts, qualification, acceptance and D-16 remain unchanged.
 
@@ -165,9 +167,9 @@ H-277–H-281 permits bits stored directly in TLS and non-bits references into r
 
 ### What makes the reference valid
 
-A whole-region resource determines storage lifetime; an interior symbolic reference identifies an object within that lifetime. The compiler must track the actual region behind the reference through branches, calls, captures and scope restoration. A matching root type or an ambient symbol's current spelling is insufficient. WPO checks required bindings but does not make unknown runtime allocation instances identical.
+The selected lexical owner or whole-region resource determines storage lifetime; an interior symbolic reference identifies a target within that lifetime. The compiler must track its actual owner through branches, calls, captures and scope restoration. A matching root type or an ambient symbol's current spelling is insufficient. WPO checks required bindings but does not make unknown runtime allocation instances identical.
 
-A non-bits binding must be backed by a region-symbol resource; an ordinary owner's liveness alone does not install that resource. Rebinding the TLS reference does not modify a stored edge inside either regional graph, transfer ownership from the supporting symbol or extend lifetime. Region-local sharing and cycles remain intentional. No per-object exclusive ownership or runtime alias table follows from this requirement.
+Region-selector and existing shared-region declarations require their declared resource. H-561's explicit owner-parameter references instead admit a proved lexical or ordinary regional owner, without installing an owning-region symbol. Active, saved and captured bindings must remain within that owner's lifetime. Rebinding the TLS reference does not modify a stored edge inside either regional graph, transfer ownership from the supporting symbol or extend lifetime. Region-local sharing and cycles remain intentional. No per-object exclusive ownership or runtime target-alias table follows from this requirement.
 
 ### Boundaries that still need checking
 

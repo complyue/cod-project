@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-11-17 — Accept owner-parameter reference symbols
+
+<a id="h-561"></a>
+**H-561 — Accept the owner-parameter form and bounded implementation direction.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-17 America/Los_Angeles; exact timestamp/personal name unavailable. “同意。 下个议题” accepts the preceding cost assessment and recommendation: `ref/ptr symbol @x:T in S where {owner S}` obtains one actual owner from each installation RHS, admitting lexical or ordinary regional targets without installing an owner symbol; begin with common proved calls/shadows/restoration and expand captured/returned-view acceptance as lifetime proofs become available. Invalid/unproved relationships reject without extending storage lifetime. This resolves H-560's conditional source direction; it does not approve a complete proof algorithm, runtime representation, combined group grammar or whole-document value path.
+
+<a id="k-owner-symbol-accept-20261117"></a>
+**K-OWNER-SYMBOL-ACCEPT-20261117 — Integrate the selected owner source.** D-10r195→196/D-07r164→165/D-12r29→30/D-13r31→32/D-14r117→118/D-15r45→46/D-18r110→111/D-22r21→22/D-28r27→28/registry811→812 updates D-10-OWNER-SYMBOL/P-497–P-499 and P-249 under H-561. The explicit owner-parameter form relaxes the backing-symbol prerequisite; region-selector/shared-region forms retain their declared constraints. Dependent changes preserve target versus binding-slot identity, actual-owner resolution, saved/captured lifetimes, permissions, no owner extension, natural nesting, prior qualifications and D-16 under charter §§2/3.2–3.3/4.3/6.3/8. D-10 owns source acceptance and remaining algorithms/ABI; no code support or complete value-path qualification is inferred. Baseline and cost evidence: `292c662e6ec65ed254451a5b9492f2674153ad07:design/SymbolicDynamicScope.md`, owner-parameter section, and that commit's affected documentation paths/registry. Documentation checks only; no build/tests.
+
+
 ## 2026-11-17 — Owner-parameter reference-symbol feasibility
 
 <a id="h-560"></a>

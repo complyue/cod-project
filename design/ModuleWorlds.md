@@ -1,8 +1,10 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 45 · Recorded: 2026-11-16 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 46 · Recorded: 2026-11-17 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
+
+- **Owner-parameter symbol integration:** [H-561](../CHANGELOG.md#h-561)/[K-OWNER-SYMBOL-ACCEPT-20261117](../CHANGELOG.md#k-owner-symbol-accept-20261117), [D-10-OWNER-SYMBOL](DesignAuthorityRegistry.md#d-10-owner-symbol)/P-497–P-499, covers D-15r46's reference-symbol/owner dependency wording. The source form and staged sound acceptance are confirmed: installation selects one actual lexical or ordinary regional owner from the RHS; an `in @arena` declaration retains its additional selector constraint. C-36/C-54/C-65/C-93 and charter §§2/3.2–3.3/4.3/6.3/8 preserve explicit dynamic context and lifetime responsibility. D-10 owns examples and acceptance. Preserve saved/captured owner validity, access/null/init, module symbol identity, no lifetime extension and D-16; full proof/physical/value-path qualification and source implementation remain separate. Other qualified scopes continue.
 
 - **Native-coverage reference continuity:** [K-AOT-CONTRACT-CONSOLIDATION-20261117](../CHANGELOG.md#k-aot-contract-consolidation-20261117) preserves this revision's D-26 dependency at its current AOT contract section. Only dependency links and this summary change; existing semantics, authority, acceptance and D-16 remain unchanged.
 
@@ -51,7 +53,7 @@ Design revision: 45 · Recorded: 2026-11-16 · Status: module-world contract; im
 
 A module world is a module's own semantic runtime environment, containing registered symbol objects, types, callable contracts, methods and related semantic information. Runtime values and module initialization state have their own construction events. It is more than a source-name or declaration index. Different modules have independent world copies and explicitly select what to publish and integrate.
 
-A TLS world is the thread's **flattened set of typed symbolic bindings**. Each symbol has its own identity and required type identity. Independent bits payloads are stored directly in TLS; H-482 separately admits explicit ref/ptr symbols borrowing scalar targets from region-symbol-backed storage. Non-bits object bindings reference values in regions supplied by region symbols, with actual region lifetime checks; scoped rebinding may select a different region. Values may originate from different module-world copies without importing those worlds into TLS. Region-resource and procedure-valued bindings retain their distinct ownership/capture contracts.
+A TLS world is the thread's **flattened set of typed symbolic bindings**. Each symbol has its own identity and required type identity. Independent bits payloads are stored directly in TLS; H-482 separately admits explicit ref/ptr symbols borrowing scalar targets from region-symbol-backed storage. H-561's explicit owner-parameter references also borrow lexical or ordinary regional targets without installing an owner symbol. Other region-selector/group forms keep their resource constraints. Scoped rebinding may select another valid target/owner; all forms retain actual-owner lifetime checks. Values may originate from different module-world copies without importing those worlds into TLS. Region-resource and procedure-valued bindings retain their distinct ownership/capture contracts.
 
 These worlds do not model the same set of entities. The relevant connection is **typed reference to a value**, not a pair of matching world records representing that value.
 
@@ -370,10 +372,10 @@ This is explanatory notation, not a public struct, boxed-value ABI or requiremen
 | --- | --- |
 | Symbol identity S | Selects the symbolic binding entry. Different module-local aliases of S refer to the same entry within the thread. Different symbol identities remain different entries even when their spellings match. |
 | Declared type identity T | Constrains which values the entry may reference. T is not the symbol identity and is not replaced by a module-local type name or type-record address. |
-| Current typed binding | Contains bits directly, or a permitted reference. Object-reference rebinding may select another region-symbol-backed region when type and lifetime checks hold. |
+| Current typed binding | Contains bits directly, or a permitted reference. Reference rebinding selects another target/actual owner when its declared selector or owner-parameter contract, type and lifetime checks hold. |
 | Dynamic scope behavior | Effects shadow the current association and restore the preceding association on scope exit, following the binding/capture contracts. The flattened active collection does not require a dictionary or a separate TLS namespace per module. |
 
-The [symbolic contract](SymbolicDynamicScope.md#symbolic-storage-and-regional-provenance) distinguishes inline bits, regional object references, whole-region resources and procedure bindings. Independent bits bindings require `effect @x <- rhs`; regional reference bindings, including explicit scalar ref/ptr symbols under H-482, use `effect @x = rhs`. These storage categories do not put type definitions, method sets or region contents into TLS. No raw symbolic assignment is permitted.
+The [symbolic contract](SymbolicDynamicScope.md#symbolic-storage-and-regional-provenance) distinguishes inline bits, regional object references, whole-region resources and procedure bindings. Independent bits bindings require `effect @x <- rhs`; regional reference bindings, including explicit scalar ref/ptr symbols under H-482/H-561, use `effect @x = rhs`. These storage categories do not put type definitions, method sets or region contents into TLS. No raw symbolic assignment is permitted.
 
 The flat collection describes active entries. Saved values/pointers needed for scope restoration and procedure captures are supporting execution semantics, not a second catalog of module definitions. This does not prescribe a heap-allocated scope frame or runtime closure.
 
@@ -387,7 +389,7 @@ Module world A                      Module world B
   value a : T                        value b : T
             \                         /
              \                       /
-TLS for one thread:  S :: T  -> a   # Object reference; region-symbol backing required.
+TLS for one thread:  S :: T  -> a   # Reference with a declared selector or owner-parameter contract.
                      S :: T  -> b     after a scoped rebinding
 ```
 

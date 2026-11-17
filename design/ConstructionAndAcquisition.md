@@ -1,8 +1,10 @@
 # CoD construction, bits ADTs and region acquisition
 
-Design revision: 21 · Recorded: 2026-11-17 · Status: discussion draft with confirmed requirements; consuming resize direction recorded; RHS normalization and capacity/backend details under review; whole-document approval pending; implementation incomplete.
+Design revision: 22 · Recorded: 2026-11-17 · Status: discussion draft with confirmed requirements; consuming resize direction recorded; RHS normalization and capacity/backend details under review; whole-document approval pending; implementation incomplete.
 
 ## Design authority
+
+- **Owner-parameter symbol integration:** [H-561](../CHANGELOG.md#h-561)/[K-OWNER-SYMBOL-ACCEPT-20261117](../CHANGELOG.md#k-owner-symbol-accept-20261117), [D-10-OWNER-SYMBOL](DesignAuthorityRegistry.md#d-10-owner-symbol)/P-497–P-499, covers D-22r22's reference-symbol/owner dependency wording. The source form and staged sound acceptance are confirmed: installation selects one actual lexical or ordinary regional owner from the RHS; an `in @arena` declaration retains its additional selector constraint. C-36/C-54/C-65/C-93 and charter §§2/3.2–3.3/4.3/6.3/8 preserve explicit dynamic context and lifetime responsibility. D-10 owns examples and acceptance. Preserve saved/captured owner validity, access/null/init, module symbol identity, no lifetime extension and D-16; full proof/physical/value-path qualification and source implementation remain separate. Other qualified scopes continue.
 
 - **Capture/lifetime alignment:** [H-553–H-557](../CHANGELOG.md#h-553)/[K-CAPTURE-LIFETIMES-20261117](../CHANGELOG.md#k-capture-lifetimes-20261117), [D-18-VALUE-CAPTURE](DesignAuthorityRegistry.md#d-18-value-capture)/P-485–P-490 and [D-12-LIFETIME](DesignAuthorityRegistry.md#d-12-lifetime)/P-491–P-493 cover this revision's capture/owner dependency wording. Preserve independent value locals, selected reference targets, explicit var places, unique actual owners and statically bounded borrows; reject implicit slot sharing, closure-cell promotion and lifetime extension. C-36/C-54/C-65/C-73/C-75 and charter §§2/3.2–3.3/4.3/6.3/8 preserve visible storage/lifetime responsibility. D-18 owns acceptance and H-327/H-329 alias continuity. D-16, unrelated qualified scopes and existing symbol-declaration restrictions continue. New proof/physical/value-path qualification and source support remain separate; no allocator or graph-copy mechanism follows.
 
@@ -178,7 +180,7 @@ Acquisition-time file preparation and independently shared mappings retain separ
 
 ### TLS and numeric boundaries
 
-H-426 retains inline TLS payloads for bits ADTs and the separately defined callable-view category. Symbolic reference declarations still require `in <some-owner>` and valid owner/access/lifetime relations; TLS is not an inline non-bits object arena. D-10 currently also requires region-symbol backing for object bindings. The lexical owner-base representation broadens neither that backing permission nor target lifetime. Intrinsic region-resource bindings retain their existing ownership/restoration role; no generic ADT can carry an intrinsic owning resource.
+H-426 retains inline TLS payloads for bits ADTs and the separately defined callable-view category. Explicit symbolic references require an owner contract and valid access/lifetime evidence. D-10/H-561 permits an owner parameter instantiated from a proved lexical or ordinary regional target; the region-selector form keeps its separate constraint. TLS holds a selected reference rather than an inline non-bits object. The lexical owner-base representation supplies no lifetime extension. Intrinsic region-resource bindings retain their ownership/restoration role; no generic ADT can carry an intrinsic owning resource.
 
 D-16 fractions remain fixed valid bits with nonzero denominators. Storage representation, grouping/copying and initialization effects introduce no all-zero default, hidden canonicalization, numeric widening, component-validity relaxation or fraction implementation. General bits-ADT copying and callable transport still need their own representation/ABI integration.
 
