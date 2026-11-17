@@ -213,7 +213,7 @@ struct CallEffects {
     CleanupEquations::MissingInitialization uninitialized{};
     CleanupEquations::ConditionClauses when{CleanupEquations::ConditionFacts{}};
     // Sufficient initialization of the original borrowed input targets.
-    std::optional<std::set<size_t>> initialized_inputs = {};
+    std::optional<CleanupEquations::Initialization> initialized_inputs = {};
     auto operator<=>(const Read &) const = default;
   };
   std::set<Read> reads;
@@ -1699,6 +1699,37 @@ class ScalarChecker {
     refine_present(lexical_);
   }
   void record_presence(const std::set<size_t> &targets) { record_present(selected_input(targets)); }
+  std::optional<CleanupEquations::Initialization> external_initialization(
+      const std::optional<CleanupEquations::Initialization> &conditions) const {
+    std::optional<CleanupEquations::Initialization> initialized_inputs;
+    if (conditions) {
+      initialized_inputs.emplace();
+      for (const auto &condition : *conditions) {
+        if (condition.physical && storage(condition.id).borrowed)
+          initialized_inputs->insert(CleanupEquations::InitializationInput::payload(input_ordinal(condition.id)));
+        else {
+          const auto &inputs = checking_instance_->frame.inputs;
+          const auto found = std::find_if(inputs.begin(), inputs.end(), [&](const auto &input) {
+            return !condition.physical && !condition.frame && storage(input.place).borrowed && storage(input.place).binding == condition.id;
+          });
+          if (found == inputs.end()) { initialized_inputs.reset(); break; }
+          initialized_inputs->insert(CleanupEquations::InitializationInput::payload(std::distance(inputs.begin(), found)));
+        }
+      }
+    }
+    return initialized_inputs;
+  }
+  static std::optional<CleanupEquations::Initialization> instantiate_initialization(
+      const std::optional<CleanupEquations::Initialization> &conditions, const std::vector<CheckedOperation> &views) {
+    if (!conditions) return {};
+    CleanupEquations::Initialization result;
+    for (const auto &input : *conditions) {
+      const auto &source = views.at(input.id).initialization;
+      if (!source) return {};
+      result.insert(source->begin(), source->end());
+    }
+    return result;
+  }
   void observe_read(size_t place, const CleanupEquations::ReadRequirement &before) {
     if (delayed_ || !storage(place).borrowed) return;
     std::set<size_t> external;
@@ -1706,22 +1737,8 @@ class ScalarChecker {
     CleanupEquations::MissingInitialization missing;
     for (const auto &[id, clauses] : before.uninitialized) if (storage(id).borrowed)
       missing.emplace(input_ordinal(id), external_conditions(clauses));
-    std::optional<std::set<size_t>> initialized_inputs;
-    if (before.initialized_selections) {
-      initialized_inputs.emplace();
-      for (const auto &condition : *before.initialized_selections) {
-        if (condition.physical && storage(condition.id).borrowed) initialized_inputs->insert(input_ordinal(condition.id));
-        else {
-          const auto &inputs = checking_instance_->frame.inputs;
-          const auto found = std::find_if(inputs.begin(), inputs.end(), [&](const auto &input) {
-            return !condition.physical && !condition.frame && storage(input.place).borrowed && storage(input.place).binding == condition.id;
-          });
-          if (found == inputs.end()) { initialized_inputs.reset(); break; }
-          initialized_inputs->insert(std::distance(inputs.begin(), found));
-        }
-      }
-    }
-    observed_.reads.insert({input_ordinal(place), std::move(external), std::move(missing), external_conditions(before.when), std::move(initialized_inputs)});
+    observed_.reads.insert({input_ordinal(place), std::move(external), std::move(missing), external_conditions(before.when),
+        external_initialization(before.initialized_selections)});
   }
   void require_symbol(LexicalState &state, size_t symbol, const Location &at) {
     if (!proving_ || !state.live || state.bound_symbols.contains(symbol)) return;
@@ -1750,6 +1767,7 @@ class ScalarChecker {
     refresh_input_facts(state);
     state.live = state.live && state.selections.possible;
     if (!state.live) return;
+    effects.returned.substitute(state.selections);
     invalidate_payloads(state, effects.payload_writes);
     for (const auto &[place, value] : effects.booleans) if (state.available.contains(place))
       state.predicates[place] = boolean_predicate(value);
@@ -1801,7 +1819,8 @@ class ScalarChecker {
       for (const auto &[target, value] : effects.payloads) state.input_facts[input].exceptions[target] = value;
     refresh_input_facts(state);
     state.returned.then(effects.returned);
-    state.returned.initialize(state.initialized);
+    state.returned.enter_initialization(initialization_frame());
+    state.returned.initialize(state.initialized, state.selections);
   }
   static std::set<size_t> call_reasons(const CheckedMethod &method) {
     std::set<size_t> reasons{0, 2};
@@ -1873,15 +1892,9 @@ class ScalarChecker {
         continue;
       }
       if (view.initialized_target()) continue;
-      std::optional<CleanupEquations::Initialization> initialization;
-      if (initialized_inputs) {
-        initialization.emplace();
-        for (const auto input : *initialized_inputs) {
-          const auto &source = views.at(input).initialization;
-          if (!source) { initialization.reset(); break; }
-          const auto captured = CleanupEquations::capture_initialization(*source, initialization_frame());
-          initialization->insert(captured.begin(), captured.end());
-        }
+      auto initialization = instantiate_initialization(initialized_inputs, views);
+      if (initialization) {
+        initialization = CleanupEquations::capture_initialization(*initialization, initialization_frame());
         if (initialization && initialization->empty()) continue;
       }
       const bool same_selection = std::any_of(before.begin(), before.end(), [&](size_t other) {
@@ -2250,6 +2263,16 @@ class ScalarChecker {
               return place == null_target || lexical_.initialized.contains(place);
             })) operation.constrain_initialization(view.initialization);
       }
+      if (!operation.initialized_target() && summary.bindings.empty()) {
+        auto initialization = instantiate_initialization(summary.returned.initialization, views);
+        if (initialization) {
+          std::erase_if(*initialization, [&](const auto &input) {
+            return input.physical ? lexical_.initialized.contains(input.id) :
+                !input.frame && lexical_.selections.entry_initialized.contains(input.id);
+          });
+          operation.initialization = std::move(initialization);
+        }
+      }
       for (const auto source : summary.returned.null_sources) {
         if (source == null_target) operation.null_sources.insert(null_target);
         else if (views.at(source).targets.contains(null_target))
@@ -2393,7 +2416,7 @@ class ScalarChecker {
       else for (const auto &[place, value] : state.input_facts.at(input).exceptions) state.exceptions[place].merge(value);
       first = false;
     }
-    state.returned.initialize(state.initialized);
+    state.returned.initialize(state.initialized, state.selections);
     refine_present(state);
   }
   void join(const LexicalState &a, bool a_exits, const LexicalState &b, bool b_exits, const Location &at) {
@@ -5236,7 +5259,7 @@ class ScalarChecker {
       append_queues(lexical_, final_entry);
       lexical_.returned = final_returned;
       lexical_.returned.then(path.state.returned);
-      lexical_.returned.initialize(lexical_.initialized);
+      lexical_.returned.initialize(lexical_.initialized, lexical_.selections);
       if (path.completion.reason == 1) note_abrupt(path.at, path.exceptions, path.completion);
       else {
         bool pending_return = false, pending_normal = !normals.empty();
@@ -5253,7 +5276,7 @@ class ScalarChecker {
         lexical_ = finalizer ? final_state : path.state;
         lexical_.returned = path.state.returned;
         if (finalizer) lexical_.returned.then(final_state.returned);
-        lexical_.returned.initialize(lexical_.initialized);
+        lexical_.returned.initialize(lexical_.initialized, lexical_.selections);
         lexical_.inputs = finalizer ? path.state.inputs & final_state.inputs : path.state.inputs;
         lexical_.live = lexical_.live && lexical_.inputs;
         if (finalizer) {
@@ -5274,7 +5297,7 @@ class ScalarChecker {
       lexical_ = final_state;
       lexical_.returned = normal.returned;
       lexical_.returned.then(final_state.returned);
-      lexical_.returned.initialize(final_state.initialized);
+      lexical_.returned.initialize(final_state.initialized, final_state.selections);
       lexical_.bindings_available.insert(normal.bindings_available.begin(), normal.bindings_available.end());
       lexical_.available.insert(normal.available.begin(), normal.available.end());
       lexical_.inputs = normal.inputs & final_state.inputs;
@@ -6185,6 +6208,9 @@ class ScalarChecker {
         if (!contract.nullable()) require_initialized(selected, expr.at, "borrowed result");
         operation.borrowed_result = true;
         lexical_.returned = {false, selected.targets, {}, selected.null_sources};
+        lexical_.returned.initialization = selected.initialization;
+        if (lexical_.returned.initialization)
+          lexical_.returned.initialization = CleanupEquations::capture_initialization(*lexical_.returned.initialization, initialization_frame());
         lexical_.returned.selection_sources = selection_sources(selected.selection_identity);
         if (contract.nullable()) lexical_.returned.nullness = snapshot_boolean(null_predicate(selected), lexical_, expr.at);
         if (contract.nullable() && !selected.initialized_target()) for (const auto place : selected.targets)
@@ -6307,7 +6333,7 @@ class ScalarChecker {
               const auto proof = path.state.predicates.find(place);
               effects.booleans[place] = snapshot_boolean(proof == path.state.predicates.end() ? nullptr : proof->second, path.state, expr.at);
             }
-            effects.returned.initialize(effects.initialized);
+            effects.returned.initialize(effects.initialized, effects.selections);
             for (const auto &[target, value] : payload_changes(incoming, path.state.input_facts.at(input).exceptions))
               if (incoming.contains(target)) effects.payloads.emplace(target, value);
             for (const auto &[read, requirement] : path.state.requirements) if (requirement.inputs & selected)
@@ -6619,7 +6645,9 @@ class ScalarChecker {
     }
     if (!reason && checking_instance_->result.borrowed()) {
       auto returned = state.returned;
-      returned.initialize(state.initialized);
+      returned.enter_initialization(initialization_frame());
+      returned.initialize(state.initialized, state.selections);
+      returned.initialization = external_initialization(returned.initialization);
       returned.targets = input_ordinals(returned.targets);
       returned.uninitialized = input_ordinals(returned.uninitialized);
       returned.null_sources = input_ordinals(returned.null_sources);

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-16 — Borrowed-result initialization
+
+<a id="k-773"></a>
+**K-773 — Preserve sufficient initialization of saved borrowed results.** Source400→401/registry798→799 continues K-772's qualified D-14r116/P-258, D-17r83/P-235/P-236/P-280/H-356/H-525, D-28-IDENTITY, D-18r107, confirmed D-23r17 results and D-26r21/H-407 under H-420/H-423. Pending results use the shared initialization relation through cleanup, replacement and alternative returns; read/result summaries share formal projection and actual substitution. Acceptance covers saved targets, late writes versus rebinding, failed-registration prefixes, direct/generic/recursive/callable forwarding, null/access/owner rejection, shared native bodies and exact release. Charter §§2/3.3/4.3/5.3/6.3/8/12, ordered reads, ref return-site validity, declared obligations and D-16 continue. Wider caller-slot relationships and new runtime/ABI/queue/return-inspection or aggregate protocols remain separate. Baseline: `e797d303d314e11b6a850ddd294b7239017426a8:tests/cod/language/README.md` and that commit's `design/DesignAuthorityRegistry.md`. No new source policy, runtime flag or human confirmation.
+
 ## 2026-11-16 — Prepared initialization provenance
 
 <a id="k-772"></a>

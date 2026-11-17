@@ -786,9 +786,21 @@ public:
     // Formal input selections; null_target denotes an independent/unknown origin.
     // The caller substitutes its prepared references, never their mutable slots.
     std::set<size_t> selection_sources{};
+    // Sufficient initialization of the saved result, independent of later slot
+    // changes. Preserving an incoming result contributes no new requirement.
+    std::optional<Initialization> initialization = Initialization{};
     bool operator==(const Returned &) const = default;
-    void initialize(const std::set<size_t> &known) {
+    void initialize(const std::set<size_t> &known, const Selections &selections) {
       std::erase_if(uninitialized, [&](size_t target) { return known.contains(target); });
+      if (initialization) std::erase_if(*initialization, [&](const auto &input) {
+        return input.physical ? known.contains(input.id) : !input.frame && selections.entry_initialized.contains(input.id);
+      });
+    }
+    void substitute(const Selections &before) {
+      if (initialization) initialization = before.initialization_requirements(*initialization);
+    }
+    void enter_initialization(size_t frame) {
+      if (initialization) initialization = CleanupEquations::enter_initialization(*initialization, frame);
     }
     void merge(const Returned &other) {
       preserves = preserves || other.preserves;
@@ -799,10 +811,15 @@ public:
       merge_boolean(boolean, other.boolean);
       merge_boolean(nullness, other.nullness);
       selection_sources.insert(other.selection_sources.begin(), other.selection_sources.end());
+      if (initialization && other.initialization) initialization->insert(other.initialization->begin(), other.initialization->end());
+      else initialization.reset();
     }
     void then(const Returned &next) {
       const bool keep = preserves && next.preserves;
-      if (!next.preserves) { targets.clear(); uninitialized.clear(); null_sources.clear(); value.clear(); boolean.clear(); nullness.clear(); selection_sources.clear(); }
+      if (!next.preserves) {
+        targets.clear(); uninitialized.clear(); null_sources.clear(); value.clear(); boolean.clear(); nullness.clear(); selection_sources.clear();
+        initialization = Initialization{};
+      }
       merge(next);
       preserves = keep;
     }
@@ -828,6 +845,7 @@ public:
     MissingInitialization uninitialized{};
     void enter_initialization(size_t frame) {
       selections.enter_initialization(frame);
+      returned.enter_initialization(frame);
       for (auto &[read, requirement] : reads) requirement.enter_initialization(frame);
     }
     template <typename Transform> void transform_conditions(const Transform &transform) {
@@ -845,7 +863,7 @@ public:
     void resolve_initialization() {
       CleanupEquations::resolve_initialization(initialized, uninitialized);
       selections.resolve(initialized);
-      returned.initialize(initialized);
+      returned.initialize(initialized, selections);
     }
     template <typename Transform, typename ProofTransform> void transform_values(const Transform &transform, const ProofTransform &proof_transform) {
       returned.value = transform(returned.value);
@@ -894,6 +912,7 @@ private:
     result.present.insert(second.present.begin(), second.present.end());
     result.declared_failures.insert(second.declared_failures.begin(), second.declared_failures.end());
     auto next = second;
+    next.returned.substitute(first.selections);
     next.resolve_conditions([&](size_t binding) { return first.selections.substitute({{}, false, {binding}}); });
     next.transform_values([&](const auto &value) { return value.through(first.payloads, first.thrown); },
         [&](const auto &value) { return value.through(first.payloads, first.thrown, false, true); });
@@ -911,7 +930,7 @@ private:
     result.selections.then(next.selections, result.initialized);
     result.unknown_thrown = first.unknown_thrown || second.unknown_thrown || second.thrown.reads_unknown(first.payloads);
     result.returned.then(next.returned);
-    result.returned.initialize(result.initialized);
+    result.returned.initialize(result.initialized, result.selections);
     result.thrown = next.thrown;
     for (auto &[target, value] : next.payloads) result.payloads[target] = std::move(value);
     for (auto &[target, value] : next.booleans) result.booleans[target] = std::move(value);
