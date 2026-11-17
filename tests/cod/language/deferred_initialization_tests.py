@@ -29,7 +29,7 @@ runner.CASES = {
     'nested_registration': (PRELUDE + '{{val x<-make local i64;defer{defer{observe(x);};x<-8;};}};', 0, '8\n', WARN),
     'nested_reads_use_invocation': (PRELUDE + '{{val x<-make local i64;defer{defer{observe(x);};};x<-9;}};', 0, '9\n', WARN),
     'read_before_write': (PRELUDE + '{{val x<-make local i64;defer{observe(x);x<-1;};}};', 2, '', UNPROVED),
-    'local_is_fresh': (PRELUDE + 'for(i in 0..3){{defer{{val x<-make local i64;observe(x);x<-1;}};}};', 2, '', 'before definite initialization'),
+    'local_is_fresh': (PRELUDE + 'for(i in 0..3){{defer{{val x<-make local i64;observe(x);x<-1;}};}};', 2, '', "cannot prove initialization of 'x' for deferred or borrowed read"),
     'local_nested_read': (PRELUDE + '{{defer{{val x<-make local i64;defer{observe(x);};x<-10;}};}};', 0, '10\n', WARN),
     'local_nested_uninitialized': (PRELUDE + '{{defer{{val x<-make local i64;defer{observe(x);};}};}};', 2, '', UNPROVED),
     'loop_late_write': (PRELUDE + 'proc f(count:i64)->void{val x<-make local i64;for(i in 0..count){defer{observe(x);};x<-3;};}f(0);f(3);', 0, '3\n3\n3\n', WARN),

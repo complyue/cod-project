@@ -20,6 +20,8 @@ struct SelectionCondition {
   std::optional<size_t> action;
   size_t binding, target;
   bool equal;
+  // Immutable reference values survive changes to their original binding slots.
+  bool immutable = false;
   auto operator<=>(const SelectionCondition &) const = default;
 };
 struct SelectionConditions {
@@ -27,7 +29,7 @@ struct SelectionConditions {
   bool possible = true;
   auto operator<=>(const SelectionConditions &) const = default;
   void add(SelectionCondition term) {
-    for (const auto &known : terms) if (known.action == term.action && known.binding == term.binding &&
+    for (const auto &known : terms) if (known.immutable == term.immutable && known.action == term.action && known.binding == term.binding &&
         ((known.target == term.target && known.equal != term.equal) ||
          (known.target != term.target && known.equal && term.equal))) possible = false;
     terms.insert(term);
@@ -52,7 +54,7 @@ struct SelectionConditions {
   template <typename Resolve> SelectionConditions through(const Resolve &resolve, std::optional<size_t> action = {}) const {
     SelectionConditions result; result.possible = possible;
     for (auto term : terms) {
-      if (term.action) { result.add(term); continue; }
+      if (term.immutable || term.action) { result.add(term); continue; }
       const auto selected = resolve(term.binding);
       if (!selected) continue;
       if (selected->entries.size() == 1 && selected->places.empty() && !selected->nullable) {
@@ -404,6 +406,14 @@ public:
       close_equalities(same_bindings);
       close_equalities(same_selections);
       close_equalities(same_inputs);
+      SelectionConditions selected;
+      selected.possible = conditions.possible;
+      for (auto term : conditions.terms) {
+        if (term.immutable) for (const auto &group : same_selections)
+          if (group.contains(term.binding)) { term.binding = *group.begin(); break; }
+        selected.add(term);
+      }
+      conditions = std::move(selected);
       for (const auto &group : same_bindings) {
         if (std::any_of(group.begin(), group.end(), [&](const auto &value) { return bindings.contains(value); }))
           bindings.insert(group.begin(), group.end());
@@ -438,6 +448,7 @@ public:
     };
     if (!facts.conditions.possible || contradictory(facts.inputs) || contradictory(facts.payloads)) return;
     facts.resolve_bindings();
+    if (!facts.conditions.possible) return;
     if (std::any_of(facts.absent.begin(), facts.absent.end(), [&](size_t input) { return facts.present.contains(input); })) return;
     if (std::any_of(facts.absent_bindings.begin(), facts.absent_bindings.end(), [&](const auto &binding) { return facts.bindings.contains(binding); })) return;
     // Filters constrain one immutable origin. Constant alternatives and
@@ -729,7 +740,12 @@ public:
   struct Path { std::uint64_t inputs; Completion completion; size_t queue; Effects effects{}; };
   struct Action { bool guarded = false; std::vector<Path> paths; };
 private:
-  struct Queue { std::vector<size_t> previous; std::optional<size_t> action; std::set<size_t> initialized{}; };
+  struct Queue {
+    std::vector<size_t> previous;
+    std::optional<size_t> action;
+    std::set<size_t> initialized{};
+    MissingInitialization uninitialized{};
+  };
   std::vector<Queue> queues_{{}};
   std::vector<Action> actions_;
   static constexpr size_t states = 2 * (3 + exception_categories.size());
@@ -842,9 +858,9 @@ public:
     if (a == b) return a;
     solved_.clear(); queues_.push_back({{a, b}, {}}); return queues_.size() - 1;
   }
-  size_t known(size_t queue, const std::set<size_t> &initialized) {
-    if (initialized.empty()) return queue;
-    solved_.clear(); queues_.push_back({{queue}, {}, initialized}); return queues_.size() - 1;
+  size_t known(size_t queue, const std::set<size_t> &initialized, const MissingInitialization &uninitialized) {
+    if (initialized.empty() && uninitialized.empty()) return queue;
+    solved_.clear(); queues_.push_back({{queue}, {}, initialized, uninitialized}); return queues_.size() - 1;
   }
   size_t append(size_t previous, size_t suffix) {
     if (!previous) return suffix;
@@ -883,8 +899,10 @@ public:
           for (size_t state = 0; state < states; ++state) {
             auto &result = solved_[id][state];
             if (!node.action) {
+              Effects known{{}, node.initialized};
+              known.uninitialized = node.uninitialized;
               for (const auto previous : node.previous) for (const auto &[value, effects] : solved_[previous][state])
-                changed = merge(result, value, compose({{}, node.initialized}, effects)) || changed;
+                changed = merge(result, value, compose(known, effects)) || changed;
               continue;
             }
             const auto &action = actions_.at(*node.action);

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-16 — Conditional selected initialization
+
+<a id="k-766"></a>
+**K-766 — Compose selected writes across cleanup registration alternatives.** Source393→394/registry791→792 continues K-765's qualified D-28-IDENTITY, D-14r116/P-258, D-17r83/P-235/P-236/P-280/H-525, D-18r107, confirmed D-23r17 results and D-26r21/H-407 under H-420/H-423. Immutable target conditions extend the shared initialization relation; cleanup joins retain completed conditional writes. Acceptance covers guarded reads, registration/recovery alternatives, saved/prepared selections, mutation/failure controls, generic/recursive native sharing and injected failures with exact release. Preserve charter §§2/3.1–3.3/4.3/6.3/8/12, owners/access/init, potentially aliasing borrowed inputs, conservative terminal/exceptional call outcomes and D-16. Wider alias proofs and new runtime/ABI/return-inspection/queue or aggregate initialization protocols remain separate. Baseline: `f69732d04bea232e6af00c2930b6e76d55bdd950:tests/cod/language/README.md` and that commit’s `design/DesignAuthorityRegistry.md`. No new semantic decision or human confirmation.
+
 ## 2026-11-16 — Nullable reference joins
 
 <a id="k-765"></a>
