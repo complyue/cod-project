@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-17 — Retire the source root intrinsic
+
+<a id="k-795"></a>
+**K-795 — Use ordinary lookup for root.** Agent continuity source422→423/D-13r34→35/registry849→850 implements H-595/D-13-ROOT-ACCESS/P-546–P-548’s explicit intrinsic removal. User callables, storage and imports can use root; intrinsic forcing rejects, with no compatibility builtin. C-74/C-65/C-72 → charter §§2/3.1–3.3/4.3/6.3/8/12 and D-16 preserve readable named storage, owners/access/init and ordinary dispatch. Acceptance covers those names, normal calls and unrelated intrinsic controls. Baseline: `708031d8dcb0be60a7f3c7c1259869b5cf4b0350:cod/lang_syntax.hh` and the affected design paths. C++ root-address helpers remain; this grants no named-region/receiving/native mechanism or broader qualification. D-18r113 remains unchanged and pending.
+
 ## 2026-11-17 — Integrate init-place clarification with ready-ref proofs
 
 <a id="k-init-source-integration-20261117"></a>

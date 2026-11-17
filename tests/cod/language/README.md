@@ -1,8 +1,10 @@
 # CoD source compiler validation
 
-Reference revision: 422 · Recorded: 2026-11-17 America/Los_Angeles.
+Reference revision: 423 · Recorded: 2026-11-17 America/Los_Angeles.
 
 ## Design authority
+
+- **Ordinary root name:** [K-795](../../../CHANGELOG.md#k-795) implements H-595’s removal of the source root intrinsic under D-13-ROOT-ACCESS/P-546–P-548. Ordinary definition, storage and import lookup applies to root; explicit intrinsic forcing rejects. Preserve C-74/C-65/C-72 and charter §§2/3.1–3.3/4.3/6.3/8/12, unrelated intrinsics, C++ physical helpers, D-16 and existing owner/access/initialization rules. Acceptance covers normal calls and selected imports without builtin fallback. Named-root/receiving/native mechanisms and D-18r113’s unchanged review remain separate.
 
 - **Source-structure resources:** [K-791](../../../CHANGELOG.md#k-791) continues D-26/H-407/C-89/C-90/P-371/P-372/P-374/P-375's detected-resource contract under H-420/H-423, preserving existing D-10/D-14 scalar/type syntax and D-17 completion. Source preparation bounds completed expression/type structure and active recursive parsing, reporting the allowance and active source expression/type/block before unsafe recursive processing. Acceptance covers deep operators, grouping, calls, types and lexical bodies, unchanged boundary/flat/wide controls, no execution or partial output after exhaustion, native behavior and preserved LLVM/diagnostics. Charter §§2/3.3/5.3/6.3/8/12 and D-16 continue. These are operational compiler allowances, not source depth prohibitions, new conversions, owner/capture permission, a permanent analysis domain or ABI; pending capture/receiving/generator contracts remain separate.
 
@@ -120,6 +122,8 @@ H-258 supplies mandatory bodyless signatures with generic and variadic parameter
 D-21r15/H-375–H-378/P-333/P-337 preserves a callable’s selected interpretation. D-10/H-106/H-109/H-166/H-212/H-231/H-233/H-372–H-373 and D-15/H-245/H-247–H-249 constrain source-preserving selection, explicit publication, source isolation and once-only initialization. K-674 records bounded source-module selection and ordinary import under those scopes, H-230/H-232/H-252/H-253 and H-398. [K-737](../../../CHANGELOG.md#k-737) preserves the same source identity, isolation and ordered-incorporation contract through explicit discovery and initialization work lists. Identity-centered construction preserves source intent and explicit receiver interpretation through P-216–P-220; D-15’s full operational/value-path qualification, general composition and persistent representations remain separate.
 
 ## Current implementation boundary
+
+The name root has ordinary lexical/module lookup and can name a user callable or storage. `root(...)` has no implicit region access, and `intrinsic (root)(...)` rejects. Named regional fields and receiving retain their separately documented implementation boundaries.
 
 Source preparation has a 128-level allowance for completed expression/type structure and a separate 1024-entry allowance for recursive parsing. Incremental checking covers operator/postfix trees as well as nested blocks, callable bodies and type annotations; grouping contributes to parser recursion without inventing a semantic expression node. Exhaustion reports a source location, allowance and active parsing obligation before execution or output publication. These implementation limits establish no language depth restriction or invalidity proof. Width and sequential form count are independent: the validation includes wide callable signatures and 5,000 flat expressions. Scope, arithmetic, ownership and completion rules remain in force; `#` comments, quoted delimiters and reserved `//` keep their existing token rules.
 

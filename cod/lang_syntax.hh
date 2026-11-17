@@ -375,7 +375,7 @@ inline int binary_precedence(const std::string &op) {
 }
 
 inline bool intrinsic_name(std::string_view name) {
-  return name == "cause_at" || name == "region" || name == "root" || name == "used_bytes" || name == "capacity_bytes" ||
+  return name == "cause_at" || name == "region" || name == "used_bytes" || name == "capacity_bytes" ||
          name == "deref" || name == "len" || name == "ref_at" || name == "store" ||
          name == "setfield" || name == "scalar" || name == "i64" || name == "u8" ||
          name == "u32" || name == "u64" || name == "f32" || name == "f64";
