@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-17 — Separate source decisions from remaining implementation work
+
+<a id="k-tracker-boundaries-20261117"></a>
+**K-TRACKER-BOUNDARIES-20261117 — Keep the bounded profile and its open work explicit.** Agent continuity under H-604's renewed derivation instruction: D-22r40→41/D-29r13→14/registry854→855 organizes selected result/receiving/init/root/generator obligations into proof/transport matrices. Existing C-65/C-72/C-95/C-96 and scoped relationships retain their charter §§2/3.2–3.3/4.3/6.3/8/12 rationale; no new semantic choice or implementation qualification. Additional variance/inference, internal-owner forwarding and field-level if returning remain optional extensions; bounded sound coverage does not replace an unproved obligation with runtime assumptions. Preserve source423, D-16, unchanged D-18r113 review and the separately recorded H-552 static-enforcement qualification gap. Baseline: `31f5c4e040b865a5e7d883e50bf7651d49bd733d` at the affected design paths. Documentation only; no local code/build/tests.
+
 ## 2026-11-17 — Bind yielded here references to the generator invocation
 
 <a id="h-604"></a>
