@@ -1,7 +1,9 @@
 # Design authority and value lineage
 
-Registry revision: 830 · Audit date: 2026-11-17 (America/Los_Angeles)
+Registry revision: 831 · Audit date: 2026-11-17 (America/Los_Angeles)
 
+
+[K-789](../CHANGELOG.md#k-789), source417, continues D-26/H-407/C-89/C-90/P-371/P-372/P-374/P-375, D-14/H-295 and existing D-18 complete-value coverage under H-420/H-423. One concrete scalar signature with invariant declarations can prove independent input domains against its fixed preparation and retain one checked implementation. Actual identities, selected interpretation, result/throws/body checks, complete captures and cleanup continue through the shared checked/native interface. Nonuniform obligations retain complete bounded enumeration and honest exhaustion diagnostics. Acceptance covers wide/mixed scalar views, inspection, recursive native reuse, replay, prepared callees and exact failure cleanup. Charter §§2/3.3/5.3/6.3/8/12 and D-16 remain; no new numeric/source/capture permission, permanent analysis/carrier/ABI or broader qualification follows. D-18r113 and receiving implementation reviews remain separate.
 
 [H-576](../CHANGELOG.md#h-576)/[K-RECEIVE-OVERLAP-20261117](../CHANGELOG.md#k-receive-overlap-20261117) records D-22r33/D-23r23 and D-22-RECEIVE-OVERLAP/P-518–P-520: cross-entry receiving writes overlapping borrowed payload reads are author-responsibility undefined behavior. The human permits snapshotting/reordered reads and writes, plans warnings with opt-in error escalation, and allows expensive analysis to be deferred. This scoped source/diagnostic boundary does not make ordinary target sharing undefined, remove owner/access/init requirements or qualify the complete receiving/analysis/native mechanism. Other destination-write conflicts and exact grammar/scope remain open. Source416 and D-18r113 are unchanged.
 

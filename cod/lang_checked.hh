@@ -344,17 +344,28 @@ struct CheckedCallable {
   std::optional<size_t> family = {};
   // Actual input identities select semantic methods before parameter preparation.
   std::vector<std::pair<std::vector<Type>, size_t>> dispatch = {};
+  // A whole-domain proof can establish one prepared implementation.
+  std::optional<size_t> uniform_target = {};
   std::set<size_t> implementations() const {
     std::set<size_t> result;
+    if (uniform_target) result.insert(*uniform_target);
     for (const auto &[inputs, target] : dispatch) result.insert(target);
     return result;
   }
   size_t target(const std::vector<Type> &arguments) const {
+    if (uniform_target) {
+      if (arguments.size() != type.parameters.size()) throw std::logic_error("unchecked callable family invocation");
+      for (size_t i = 0; i < arguments.size(); ++i)
+        if (!scalar_type(arguments[i]) || !transfers_value(arguments[i], type.parameters[i]))
+          throw std::logic_error("unchecked callable family invocation");
+      return *uniform_target;
+    }
     const auto found = std::find_if(dispatch.begin(), dispatch.end(), [&](const auto &entry) { return entry.first == arguments; });
     if (found == dispatch.end()) throw std::logic_error("unchecked callable family invocation");
     return found->second;
   }
   std::vector<std::pair<std::vector<Type>, size_t>> alternatives(const std::vector<Type> &arguments) const {
+    if (uniform_target) return {{arguments, target(arguments)}};
     std::vector<std::pair<std::vector<Type>, size_t>> result;
     for (const auto &entry : dispatch) {
       bool admitted = entry.first.size() == arguments.size();
@@ -4716,12 +4727,12 @@ class ScalarChecker {
     result.read_only = !expected.const_views.empty() && expected.const_views.back();
     return result;
   }
-  template <typename Validate>
-  static void cover_inputs(const Type &view, const Location &at, const Validate &validate) {
+  using InputDomains = std::vector<std::vector<Type>>;
+  static InputDomains input_domains(const Type &view, const Location &at) {
     signature_type(CheckedMethod{}, view, at);
     // Cover every admitted input, independently of observed invocations.
     // This finite proof does not define a general family representation.
-    std::vector<std::vector<Type>> domains;
+    InputDomains domains;
     for (size_t i = 0; i < view.parameters.size(); ++i) {
       const auto &parameter = view.parameters[i];
       const auto mode = view.argument_modes.empty() ? ArgumentMode::value : view.argument_modes[i];
@@ -4737,6 +4748,10 @@ class ScalarChecker {
       else implementation_gap(at, "unproved callable family input domain");
       domains.push_back(std::move(domain));
     }
+    return domains;
+  }
+  template <typename Validate>
+  static void cover_domains(const Type &view, const Location &at, const InputDomains &domains, const Validate &validate) {
     std::vector<Type> arguments;
     size_t obligations = 0;
     const auto account = [&] {
@@ -4756,6 +4771,32 @@ class ScalarChecker {
     };
     cover();
   }
+  static bool fixed_preparation(const CheckedMethod &method, const Type &view, const InputDomains &domains) {
+    // Each admitted scalar prepares independently to the same fixed formal.
+    // Joint binders and conditional declarations retain the tuple proof.
+    if (variadic(method) || !method.type_parameters.empty() || !method.retained_types.empty() ||
+        !method.source->owner_parameters.empty() || caller_bindings(method) || method.declaration_context() ||
+        method.parameters.size() != domains.size() || !view.value_result || method.result.mode != ResultMode::value)
+      return false;
+    for (size_t i = 0; i < domains.size(); ++i) {
+      if (argument_mode(parameter_at(method, i)) != ArgumentMode::value ||
+          (!view.argument_modes.empty() && view.argument_modes[i] != ArgumentMode::value) ||
+          (!view.owners.empty() && view.owners[i]) || !scalar_type(method.parameters[i]) || domains[i].empty())
+        return false;
+      for (const auto &actual : domains[i]) {
+        Substitutions substitutions;
+        if (!scalar_type(actual) || !bind_parameter(method, i, actual, substitutions, true)) return false;
+      }
+    }
+    return true;
+  }
+  bool fixed_method_preparation(const CheckedMethod &method, const Type &view, const InputDomains &domains) const {
+    if (!fixed_preparation(method, view, domains)) return false;
+    if (method.family && !lexical_methods_.contains(method.source))
+      for (const auto &declaration : program_.families[*method.family].declarations)
+        if (!fixed_preparation(declaration, view, domains)) return false;
+    return true;
+  }
   struct CallableInputEvidence {
     Access access;
     Owners owners;
@@ -4774,17 +4815,28 @@ class ScalarChecker {
     return evidence;
   }
   template <typename Validate>
-  void cover_family(const std::vector<size_t> &family, const Type &view, const Location &at, const Validate &validate,
+  bool cover_family(const std::vector<size_t> &family, const Type &view, const Location &at, const Validate &validate,
                     const std::vector<Type> &retained = {}) const {
     const auto evidence = callable_input_evidence(view);
-    cover_inputs(view, at, [&](const std::vector<Type> &arguments) {
+    const auto domains = input_domains(view, at);
+    const auto check = [&](const std::vector<Type> &arguments) {
       validate(select_method(family, arguments, at, "callable family", retained, evidence.access, evidence.owners, &evidence.proof), arguments);
-    });
+    };
+    if (family.size() == 1 && fixed_method_preparation(program_.methods[family.front()], view, domains)) {
+      check(view.parameters);
+      return true;
+    }
+    cover_domains(view, at, domains, check);
+    return false;
   }
   Type complete_callable_type(const CheckedMethod &method, const std::vector<Type> &arguments, const ResultContract &result) const {
     auto type = callable_type(method, arguments, result);
-    if (method.family && !program_.families[*method.family].declarations.empty())
-      cover_inputs(type, method.source->at, [&](const std::vector<Type> &inputs) { add_declared_failures(type, method, inputs); });
+    if (method.family && !program_.families[*method.family].declarations.empty()) {
+      const auto domains = input_domains(type, method.source->at);
+      if (fixed_method_preparation(method, type, domains)) add_declared_failures(type, method, type.parameters);
+      else cover_domains(type, method.source->at, domains,
+          [&](const std::vector<Type> &inputs) { add_declared_failures(type, method, inputs); });
+    }
     return resolve_type(std::move(type));
   }
   static bool satisfies_callable_view(Type contract, const Type &view, const Location &at) {
@@ -4926,7 +4978,8 @@ class ScalarChecker {
     auto evidence = callable_input_evidence(*view);
     evidence.proof.required = state.required;
     bool resolved = true;
-    cover_inputs(*view, at, [&](const std::vector<Type> &arguments) {
+    const auto domains = input_domains(*view, at);
+    const auto validate = [&](const std::vector<Type> &arguments) {
       const auto candidates = method_candidates(methods, arguments, {}, evidence.access, evidence.owners, &evidence.proof);
       if (!candidates.methods.empty()) {
         const auto selected = select_method(methods, arguments, at, name, {}, evidence.access, evidence.owners, &evidence.proof);
@@ -4946,7 +4999,13 @@ class ScalarChecker {
           implementation_gap(at, "declared signature does not satisfy the callable view contract");
       });
       resolved = resolved && result.has_value();
-    });
+    };
+    const auto contracts = declarations(name);
+    const bool fixed_contracts = std::all_of(contracts.begin(), contracts.end(),
+        [&](const auto &contract) { return fixed_preparation(contract, *view, domains); });
+    const bool fixed_method = methods.size() == 1 && fixed_method_preparation(program_.methods[methods.front()], *view, domains);
+    if (fixed_contracts && (fixed_method || (methods.empty() && !contracts.empty()))) validate(view->parameters);
+    else cover_domains(*view, at, domains, validate);
     return resolved ? view : std::nullopt;
   }
   bool inspect_method_contract(size_t selected, const std::vector<Type> &arguments, const std::vector<Type> &retained,
@@ -4977,7 +5036,8 @@ class ScalarChecker {
   }
   size_t intern_callable(CheckedCallable value) {
     const auto found = std::find_if(program_.callables.begin(), program_.callables.end(), [&](const auto &prior) {
-      return prior.family == value.family && prior.type == value.type && prior.dispatch == value.dispatch;
+      return prior.family == value.family && prior.type == value.type && prior.dispatch == value.dispatch &&
+          prior.uniform_target == value.uniform_target;
     });
     const auto id = std::distance(program_.callables.begin(), found);
     if (found == program_.callables.end()) program_.callables.push_back(std::move(value));
@@ -5086,12 +5146,13 @@ class ScalarChecker {
     CheckedCallable value{selection.type};
     const auto query = family.context ? family.context->query_environment : family.definition ? family.definition->query
         : retain_query_environment(definition, selection.definition_result, &state);
-    cover_family(family.methods, selection.type, at, [&](size_t selected, const std::vector<Type> &arguments) {
+    const auto uniform = cover_family(family.methods, selection.type, at, [&](size_t selected, const std::vector<Type> &arguments) {
       const auto target = demand(selected, arguments, at, environment, selection.retained, query, &state);
       const auto &instance = program_.instances[target];
       check_family_contract(program_.methods[selected], arguments, instance.arguments, instance.result, selection.type, at);
       value.dispatch.emplace_back(arguments, target);
     }, selection.retained);
+    if (uniform) { value.uniform_target = value.dispatch.front().second; value.dispatch.clear(); }
     return materialized_value(intern_callable(std::move(value)), std::move(captures), at);
   }
   CheckedOperation materialize(const std::vector<size_t> &family, const Type *expected, const Location &at, bool definition_site = false) {
@@ -5113,12 +5174,13 @@ class ScalarChecker {
     const auto id = std::distance(program_.callables.begin(), found);
     if (found == program_.callables.end()) {
       CheckedCallable value{view, family_id};
-      cover_family(family, view, at, [&](size_t selected, const std::vector<Type> &arguments) {
+      const auto uniform = cover_family(family, view, at, [&](size_t selected, const std::vector<Type> &arguments) {
         const auto target = demand(selected, arguments, at);
         const auto &instance = program_.instances[target];
         check_family_contract(program_.methods[selected], arguments, instance.arguments, instance.result, view, at);
         value.dispatch.emplace_back(arguments, target);
       });
+      if (uniform) { value.uniform_target = value.dispatch.front().second; value.dispatch.clear(); }
       program_.callables.push_back(std::move(value));
     }
     return materialized_value(id, {}, at);

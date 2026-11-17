@@ -41,15 +41,32 @@ def symbolic(kind):
 
 
 CASES = {
-    'named_limit': (named('u64', 8), 'limit', ''),
-    'declaration_query_limit': (queried('u64'), 'limit', ''),
-    'symbolic_limit': (symbolic('u64'), 'limit', ''),
+    'named_uniform_coverage': (named('u64', 8), 'success', '1\n'),
+    'declaration_query_uniform_coverage': (queried('u64'), 'success', '7\n'),
+    'symbolic_uniform_coverage': (symbolic('u64'), 'success', '1\n'),
     'same_arity_singleton_domain': (named('u8', 8), 'success', '1\n'),
     'smaller_widening_domain': (named('u64', 7), 'success', '1\n'),
     'declaration_query_without_implementation': (queried('u8'), 'success', '7\n'),
     'symbolic_singleton_domain': (symbolic('u8'), 'success', '1\n'),
-    'incompatible_result_precedes_exhaustion': (named('u64', 8, True), 'contract', ''),
+    'incompatible_result_rejected': (named('u64', 8, True), 'contract', ''),
 }
+
+
+# Independent generic binders retain input-dependent prepared signatures.
+# These cases exercise the bounded enumeration fallback, not an arity rule.
+for name in ('named_uniform_coverage', 'declaration_query_uniform_coverage', 'symbolic_uniform_coverage'):
+    source = CASES[name][0]
+    parameters = ','.join(f'{letter}:T{i}' for i, letter in enumerate('abcdefgh'))
+    binders = ' where {' + ','.join(f'T{i}' for i in range(8)) + '}'
+    old = ','.join(letter + ':u64' for letter in 'abcdefgh')
+    source = source.replace(old, parameters, 1)
+    source = source.replace(')->const u64{', ')->const u64' + binders + '{', 1)
+    source = source.replace(')->const u64;', ')->const u64' + binders + ';', 1) if name == 'declaration_query_uniform_coverage' else source
+    if name != 'declaration_query_uniform_coverage':
+        source = source.replace('return a;', 'return 1u64;', 1)
+    if name == 'symbolic_uniform_coverage':
+        source = source.replace('proc @target(', 'symbol @target:proc(' + ','.join(['u64'] * 8) + ')->const u64;proc @target(', 1)
+    CASES['generic_' + name.replace('_uniform_coverage', '_limit')] = (source, 'limit', '')
 
 
 def main():

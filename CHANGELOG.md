@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-17 — Prove uniform scalar callable coverage
+
+<a id="k-789"></a>
+**K-789 — Share fixed scalar family coverage.** Agent continuity under D-26/H-407/C-89/C-90/P-371/P-372/P-374/P-375, D-14/H-295, existing D-18 complete values and H-420/H-423: source416→417/registry830→831 preserves admitted domains, actual identity/selected context, prepared signatures, declaration/result/throws/body checks and cleanup. One fixed scalar method with invariant declarations uses independent input proofs and a shared checked dispatch target; dependent/overloaded/borrowed obligations retain bounded enumeration. Charter §§2/3.3/5.3/6.3/8/12 and D-16 continue. Source/staging/native acceptance covers wide views, conversions, nonexecuting inspection, complete captures/replay, recursion, prepared callees and exact failure release; supported-input LLVM and diagnostics remain equivalent. Baseline: `33f00bc00dfb7011e889233b1ca824bf886462b6` at compiler/source-reference/registry paths. This private implementation refinement selects no permanent analysis domain, carrier/ABI, new source/capture permission or broader qualification; D-18r113 stays byte-identical and pending, and receiving work remains separate.
+
 ## 2026-11-17 — Define receiving borrowed-read conflicts as undefined behavior
 
 <a id="h-576"></a>

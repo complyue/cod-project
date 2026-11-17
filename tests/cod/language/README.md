@@ -1,8 +1,10 @@
 # CoD source compiler validation
 
-Reference revision: 416 · Recorded: 2026-11-17 America/Los_Angeles.
+Reference revision: 417 · Recorded: 2026-11-17 America/Los_Angeles.
 
 ## Design authority
+
+- **Uniform scalar family coverage:** [K-789](../../../CHANGELOG.md#k-789) continues D-26/H-407/C-89/C-90/P-371/P-372/P-374/P-375, D-14/H-295 and the existing D-18 complete-value contract under H-420/H-423. A single fixed scalar signature can establish one prepared implementation for the whole admitted input domain. Every independently admitted scalar must satisfy the existing parameter matcher; fixed declaration obligations, result/throws/body validation and selected context remain checked. Actual input identities reach ordinary native parameter preparation. Acceptance covers wide views, mixed widening, declared inspection, captures, dynamic replay, recursion and exact failure cleanup; nonuniform obligations retain bounded enumeration. Charter §§2/3.3/5.3/6.3/8/12 and D-16 continue. This private proof/dispatch refinement selects no permanent analysis domain, ABI, numeric conversion, new capture permission or broader design qualification; D-18r113's separate review remains pending.
 
 - **Callable-family work exhaustion:** [K-788](../../../CHANGELOG.md#k-788) continues D-26/H-407/C-89/C-90/P-371/P-372/P-374/P-375's resource/error/implementation-gap distinction under H-420/H-423, with D-14/H-295 nonexecuting inspection and the existing D-18 family contract. Exhausted input coverage reports the unchanged allowance and active callable view, leaves coverage unproved and stops compilation. Admission domains, enumeration, semantic checks and native transport retain their contracts. Acceptance covers ordinary construction, symbolic installation, declaration-only inspection, below-budget native controls and stable LLVM/diagnostics on supported inputs. Charter §§2/3.3/5.3/6.3/8/12 and D-16 continue. This adds no configurable allowance, source exception, coverage algorithm, capture permission or new qualification; D-18r113's separate review remains pending.
 
@@ -114,6 +116,10 @@ H-258 supplies mandatory bodyless signatures with generic and variadic parameter
 D-21r15/H-375–H-378/P-333/P-337 preserves a callable’s selected interpretation. D-10/H-106/H-109/H-166/H-212/H-231/H-233/H-372–H-373 and D-15/H-245/H-247–H-249 constrain source-preserving selection, explicit publication, source isolation and once-only initialization. K-674 records bounded source-module selection and ordinary import under those scopes, H-230/H-232/H-252/H-253 and H-398. [K-737](../../../CHANGELOG.md#k-737) preserves the same source identity, isolation and ordered-incorporation contract through explicit discovery and initialization work lists. Identity-centered construction preserves source intent and explicit receiver interpretation through P-216–P-220; D-15’s full operational/value-path qualification, general composition and persistent representations remain separate.
 
 ## Current implementation boundary
+
+A callable family containing one fixed primitive scalar value-input method can cover its view without enumerating all input tuples. Each existing per-input domain is checked against that method's fixed parameter; all associated declarations must have invariant applicability and preparation across the view. The checked value retains one implementation while invocations retain their actual input identities and ordinary conversions. Named and symbolic construction, declaration-only inspection, inferred signatures, returned complete values and existing callable captures use this shared path. Source fixtures exercise 8, 32 and 64 arguments, including narrower admitted inputs and wider fixed formals; these counts are evidence, not language arity limits.
+
+Generic/retained binders, variadics, owner parameters, borrowed/caller-slot modes, conditional declarations and multiple semantic methods retain the enumerating proof. Its 4096-step allowance reports resource exhaustion with the active callable view and leaves coverage unproved. Neither partial coverage nor an observed call proves a callable view. Native evidence checks finite shared implementations across recursion depths, effect replay/restoration, prepared callees and exact capture/registration failure cleanup. No scalar/reference capture transport, new borrowed-input adaptation, receiving specification, unknown-layout input or permanent representation is supplied by this proof.
 
 The source compiler implements primitive scalar values, bounded intrinsic-exception values and callable values with complete nested callable capture environments. LLVM-independent checking selects semantic methods and completes demanded value/call obligations before native emission. Proven calls select prepared specializations; general bodies retain independent local operation choices. Concrete methods reuse one native implementation. There is no legacy fallback.
 
@@ -627,6 +633,9 @@ COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-family-result-staging-vali
 COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-family-result-runtime-validation.json python3 tests/cod/language/family_result_runtime_tests.py
 COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-family-contract-validation.json python3 tests/cod/language/family_contract_tests.py
 COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-family-coverage-limit-validation.json python3 tests/cod/language/family_coverage_limit_tests.py
+COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-uniform-family-validation.json python3 tests/cod/language/uniform_family_tests.py
+COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-uniform-family-staging-validation.json python3 tests/cod/language/uniform_family_staging_tests.py
+COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-uniform-family-runtime-validation.json python3 tests/cod/language/uniform_family_runtime_tests.py
 COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-family-contract-runtime-validation.json python3 tests/cod/language/family_contract_runtime_tests.py
 COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-family-contract-staging-validation.json python3 tests/cod/language/family_contract_staging_tests.py
 COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-family-contract-thread-validation.json python3 tests/cod/language/family_contract_thread_tests.py
