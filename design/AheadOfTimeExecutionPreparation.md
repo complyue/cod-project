@@ -1,6 +1,6 @@
 # Ahead-of-time execution preparation and runtime micro-dispatch
 
-Design revision: 22 · Recorded: 2026-11-16 America/Los_Angeles · Status: AOT execution-preparation behavior and native-coverage contract; bounded experimental evidence; permanent mechanisms retain their separate review scopes.
+Design revision: 23 · Recorded: 2026-11-16 America/Los_Angeles · Status: AOT execution-preparation behavior and native-coverage contract; bounded experimental evidence; permanent mechanisms retain their separate review scopes.
 
 During AOT compilation, CoD checks the required behavior and prepares native implementations, semantic method selectors and local micro-dispatch paths. Proven call-site facts can resolve selections, demand or reuse specializations and permit direct-call emission. Preparing selection code does not execute that selection or the source program’s runtime effects. At runtime, execution follows the prepared code and performs remaining selections using actual runtime evidence.
 
@@ -8,7 +8,7 @@ Semantic method selection uses actual argument types, declared conformance and t
 
 ## Design authority
 
-- **Return-state dependency:** [D-17-RETURN-STATE](DesignAuthorityRegistry.md#d-17-return-state)/[H-542–H-547](../CHANGELOG.md#h-542), [K-RETURNING-20261116](../CHANGELOG.md#k-returning-20261116), aligns this revision’s native completion under P-484. Candidate C-54/C-63/C-65 and charter §§2/3.2–3.3/4.3/6.3/8/12 preserve author-controlled completion, result/owner validity and observable cleanup. D-17/D-23 own the selected filter, preparation, recovery and scoped cancellation acceptance. Preserve unrelated qualified contracts, FIFO failures and D-16; owned-result capture, no-value patterns, full qualification and source support remain separate. This documentation change implements no return-inspection mechanism.
+- **Return-state dependency:** [D-17-RETURN-STATE](DesignAuthorityRegistry.md#d-17-return-state)/[H-542–H-547](../CHANGELOG.md#h-542), [H-548](../CHANGELOG.md#h-548)/[K-RETURNING-PROFILE-20261116](../CHANGELOG.md#k-returning-profile-20261116), aligns this revision’s prepared return evidence under P-484. Candidate C-54/C-63/C-65 and charter §§2/3.2–3.3/4.3/6.3/8/12 preserve author-controlled completion, result/owner validity and observable cleanup. D-17/D-23 own acceptance: scoped cancellation, explicit-return markers, ordinary binding grammar/copy/borrow lifetimes and owning inspection without capture. Module cleanup has no callable return target. Preserve unrelated qualified contracts, FIFO failures and D-16. The H-548 agent selections do not add implementation support or full value-path/physical qualification; owning capture and future pure-callable rules are excluded.
 
 - **FIFO cleanup dependency:** [H-541](../CHANGELOG.md#h-541)/[K-DEFER-FIFO-20261116](../CHANGELOG.md#k-defer-fifo-20261116) updates this revision’s native completion section under D-17-DEFER-DISPATCH/P-463. C-36/C-63/C-65 and charter §§2/3.3/4.3/6.3/12 require preserving observable FIFO handling, tail insertion, incoming-only visits and existing owner/context boundaries. D-17 owns acceptance and remaining policies; unchanged lookup, capture and native-coverage contracts continue. No new runtime support, whole-design qualification or D-16 change follows.
 

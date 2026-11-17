@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-16 — Bounded return-inspection profile
+
+<a id="h-548"></a>
+**H-548 — Delegate remaining return-inspection choices.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-16 America/Los_Angeles; exact timestamp/personal name unavailable. “`if returning` 还有剩余的设计问题？  按实现简单且语义自洽的原则选方案”. Delegates the remaining if-returning choices using implementation simplicity and semantic coherence. This is confirmation of the decision scope/criterion, not a direct human selection of each outcome or blanket qualification of the full value path, ownership transport or future pure-callable contract.
+
+<a id="k-returning-profile-20261116"></a>
+**K-RETURNING-PROFILE-20261116 — Close the bounded source profile under H-548.** Agent selections: explicit return; establishes a no-payload marker, void fallthrough does not; existing modal/typed declarators supply patterns without new inference seeds; bits/complete-callable copies and borrowed targets reuse ordinary binding lifetimes; binding failure propagates without branch retry; owning results permit non-capturing inspection only. Reuse existing completion/copy/borrow rules and conservatively reject unproved lifetime/evidence instead of adding ownership or hidden-slot aliases. Continues H-542–H-547's recovery, filters and scoped cancellation; preserves FIFO, declared checked obligations, exact release and D-16. D-17r83→84/D-23r17→18 records acceptance, with D-10r190→191/D-15r42→43/D-21r22→23/source401→402 aligning dependencies, registry799→800. Candidate C-54/C-63/C-65/P-482–P-484 serves author-controlled completion, observable state and valid storage under charter §§2/3.2–3.3/4.3/6.3/8/12; full mechanism/value-path and physical qualification remains pending. Owning capture, new pure-callable rules and general regional copying are excluded; caller/nested aggregation and drain registration remain separate. Baseline: `d7ba556989aee827d7690dd54cca116a52c7de9b:design/ExceptionControl.md` and that commit's other affected documentation paths; prior human evidence: `907d93ef836db06c723ca00fe0166efede31c0c9:CHANGELOG.md#h-542` through H-547. Documentation only; compiler support is not implied, no code/build/tests.
+
 ## 2026-11-16 — Borrowed-result initialization
 
 <a id="k-773"></a>
