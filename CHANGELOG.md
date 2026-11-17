@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-16 — Borrowed selected initialization
+
+<a id="k-767"></a>
+**K-767 — Compose selected writes without assuming borrowed inputs are disjoint.** Source394→395/registry792→793 continues K-766's qualified D-28-IDENTITY, D-14r116/P-258, D-17r83/P-235/P-236/P-280/H-525, D-18r107, confirmed D-23r17 results and D-26r21/H-407 under H-420/H-423. Immutable incoming-reference relationships extend the shared condition proof; finite origin alternatives retain necessary missing-write conditions across calls. Acceptance covers alias partitions, guarded reads, registration/recovery alternatives, mutation/failure controls, generic/recursive native sharing and injected failures with exact release. Preserve charter §§2/3.1–3.3/4.3/6.3/8/12, owners/access/init, conservative unknown origins and terminal/exceptional outcomes, and D-16. Wider caller-slot proofs and new runtime/ABI/return-inspection/queue or aggregate initialization protocols remain separate. Baseline: `f7042aaf7a3eb29ca5e5516ee3f8e8b111caf181:tests/cod/language/README.md` and that commit’s `design/DesignAuthorityRegistry.md`. No new semantic decision or human confirmation.
+
 ## 2026-11-16 — Conditional selected initialization
 
 <a id="k-766"></a>

@@ -494,6 +494,7 @@ class ScalarChecker {
   size_t next_target_version_ = 0;
   size_t next_selection_identity_ = 0;
   std::map<size_t, std::set<size_t>> selection_sources_;
+  std::map<size_t, size_t> incoming_selections_;
   std::set<size_t> rebound_;
   std::map<std::string, size_t> external_owners_;
   struct LoopState {
@@ -1413,6 +1414,10 @@ class ScalarChecker {
           if (const auto identity = views.at(parameter).selection_identity) selections.insert(*identity);
         if (selections.size() > 1) facts.same_selections.insert(std::move(selections));
       }
+      if (!slots) for (const auto &[left, right] : known.different_inputs) {
+        const auto lhs = views.at(left).selection_identity, rhs = views.at(right).selection_identity;
+        if (lhs && rhs) facts.different_selections.emplace(*lhs, *rhs);
+      }
       // Caller-slot invocations do not provide a stable selection snapshot here.
       if (!slots) for (const auto parameter : known.absent) {
         const auto &view = views.at(parameter);
@@ -1547,12 +1552,16 @@ class ScalarChecker {
     for (const auto input : inputs(lexical_.inputs)) lexical_.input_facts[input].initialized.insert(id);
     refresh_input_facts(lexical_);
   }
-  std::optional<SelectionCondition> selected_target(const CheckedOperation &view, size_t place, bool equal) const {
-    if (!view.selection_identity || place == null_target || !view.targets.contains(place) ||
-        std::any_of(view.targets.begin(), view.targets.end(), [&](size_t target) {
-          return target != null_target && storage(target).borrowed;
-        })) return {};
-    return SelectionCondition{{}, *view.selection_identity, place, equal, true};
+  std::optional<CleanupEquations::ConditionFacts> selected_target(const CheckedOperation &view, size_t place, bool equal) const {
+    if (!view.selection_identity || place == null_target || !view.targets.contains(place)) return {};
+    CleanupEquations::ConditionFacts facts;
+    if (storage(place).borrowed) {
+      const auto incoming = incoming_selections_.find(place);
+      if (incoming == incoming_selections_.end()) return {};
+      if (equal) facts.same_selections.insert({*view.selection_identity, incoming->second});
+      else facts.different_selections.emplace(*view.selection_identity, incoming->second);
+    } else facts.conditions.add({{}, *view.selection_identity, place, equal, true});
+    return facts;
   }
   void initialize_targets(const CheckedOperation &view, std::set<size_t> &initialized,
       CleanupEquations::MissingInitialization &missing,
@@ -1563,9 +1572,7 @@ class ScalarChecker {
       if (targets.size() != 1) {
         const auto condition = selected_target(view, place, false);
         if (!condition) continue;
-        CleanupEquations::ConditionFacts other_target;
-        other_target.conditions.add(*condition);
-        CleanupEquations::add_condition(absent, std::move(other_target));
+        CleanupEquations::add_condition(absent, *condition);
       }
       missing[place] = CleanupEquations::conjoin_conditions(absent,
           CleanupEquations::missing_initialization(place, initialized, missing));
@@ -1800,8 +1807,7 @@ class ScalarChecker {
         requirement.when = CleanupEquations::conjoin_conditions(when,
             CleanupEquations::missing_initialization(place, known, missing));
         if (const auto condition = selected_target(view, place, true)) {
-          CleanupEquations::ConditionFacts selected; selected.conditions.add(*condition);
-          requirement.when = CleanupEquations::conjoin_conditions(requirement.when, {selected});
+          requirement.when = CleanupEquations::conjoin_conditions(requirement.when, {*condition});
         }
       }
     }
@@ -2204,7 +2210,21 @@ class ScalarChecker {
         }
         if (!retained.terms.contains(ExceptionFacts::Origin{})) facts.exceptions.insert(std::move(retained));
       }
-      CleanupEquations::add_condition(result, std::move(facts));
+      CleanupEquations::ConditionClauses projected;
+      CleanupEquations::add_condition(projected, std::move(facts));
+      for (const auto &[left, right] : known.different_selections) {
+        const auto &lhs = selection_sources_.at(left), &rhs = selection_sources_.at(right);
+        // Unknown or provisional origins cannot exclude a missing-write path.
+        if (lhs.empty() || rhs.empty() || lhs.contains(null_target) || rhs.contains(null_target)) continue;
+        CleanupEquations::ConditionClauses alternatives;
+        for (const auto a : lhs) for (const auto b : rhs) {
+          CleanupEquations::ConditionFacts different;
+          different.different_inputs.emplace(a, b);
+          CleanupEquations::add_condition(alternatives, std::move(different));
+        }
+        projected = CleanupEquations::conjoin_conditions(projected, alternatives);
+      }
+      for (const auto &clause : projected) CleanupEquations::add_condition(result, clause);
     }
     return result;
   }
@@ -2239,7 +2259,7 @@ class ScalarChecker {
       require_initialized(place, at, name, current_binding(view), selected_target(view, place, true));
   }
   void require_initialized(size_t place, const Location &at, const std::string &name, std::optional<size_t> selection = {},
-      std::optional<SelectionCondition> target = {}) {
+      std::optional<CleanupEquations::ConditionFacts> target = {}) {
     if (place == null_target || !proving_ || lexical_.initialized.contains(place)) return;
     std::uint64_t missing = 0;
     for (const auto input : inputs(lexical_.inputs))
@@ -2248,10 +2268,7 @@ class ScalarChecker {
     if (!missing) return;
     CleanupEquations::ReadRequirement before{lexical_.initialized, selection};
     before.when = missing_initialization(lexical_, place);
-    if (target) {
-      CleanupEquations::ConditionFacts selected; selected.conditions.add(*target);
-      before.when = CleanupEquations::conjoin_conditions(before.when, {selected});
-    }
+    if (target) before.when = CleanupEquations::conjoin_conditions(before.when, {*target});
     before.uninitialized = lexical_.uninitialized;
     if (before.when.empty()) return;
     if (!storage(place).borrowed && (!delayed_ || (!deferred_inputs_.contains(place) && !conditional_read(before))) && validating_)
@@ -6401,7 +6418,7 @@ class ScalarChecker {
     captures_ = nullptr; delayed_ = false; deferred_action_.reset(); prepared_call_ = nullptr;
     cleanup_scope_ = 0; next_scope_ = 1;
     next_target_version_ = 0;
-    next_selection_identity_ = 0; selection_sources_.clear();
+    next_selection_identity_ = 0; selection_sources_.clear(); incoming_selections_.clear();
   }
 
   void check_entry() {
@@ -6543,6 +6560,7 @@ class ScalarChecker {
           instance.frame.owners.try_emplace(owner, p);
           storage_->at(id).scope = owner; storage_->at(id).borrowed = true;
           selection_sources_.at(lexical_.selection_identities.at(binding)) = {p};
+          incoming_selections_.emplace(id, lexical_.selection_identities.at(binding));
           std::erase(scope_storage_[0], id);
           lexical_.owners[binding] = {owner};
           if (parameter.declaration_kind == "ptr") {
@@ -6633,7 +6651,7 @@ class ScalarChecker {
         throw std::logic_error("unresolved cleanup exception origin in borrowed payload");
     const auto resolved_boolean = [](const auto &value) {
       for (const auto &[truth, clauses] : value) for (const auto &facts : clauses)
-        if (!facts.payloads.empty() || !facts.bindings.empty() || !facts.absent_bindings.empty() || !facts.same_bindings.empty() || !facts.same_selections.empty() || !facts.conditions.terms.empty() ||
+        if (!facts.payloads.empty() || !facts.bindings.empty() || !facts.absent_bindings.empty() || !facts.same_bindings.empty() || !facts.same_selections.empty() || !facts.different_selections.empty() || !facts.conditions.terms.empty() ||
             std::any_of(facts.exceptions.begin(), facts.exceptions.end(), [](const auto &value) { return value.unresolved(); }))
         throw std::logic_error("unresolved cleanup boolean origin in callable summary");
     };

@@ -371,6 +371,7 @@ public:
     std::set<std::set<BindingSnapshot>> same_bindings{};
     // Local immutable selections, normalized to formal inputs across calls.
     std::set<std::set<size_t>> same_selections{}, same_inputs{};
+    std::set<std::pair<size_t, size_t>> different_selections{}, different_inputs{};
     bool same_selection(size_t left, size_t right) const {
       return left == right || std::any_of(same_selections.begin(), same_selections.end(), [&](const auto &group) {
         return group.contains(left) && group.contains(right);
@@ -390,6 +391,8 @@ public:
       same_bindings.insert(other.same_bindings.begin(), other.same_bindings.end());
       same_selections.insert(other.same_selections.begin(), other.same_selections.end());
       same_inputs.insert(other.same_inputs.begin(), other.same_inputs.end());
+      different_selections.insert(other.different_selections.begin(), other.different_selections.end());
+      different_inputs.insert(other.different_inputs.begin(), other.different_inputs.end());
     }
     template <typename T> static void close_equalities(std::set<std::set<T>> &relations) {
       std::set<std::set<T>> groups;
@@ -406,6 +409,21 @@ public:
       close_equalities(same_bindings);
       close_equalities(same_selections);
       close_equalities(same_inputs);
+      const auto resolve_differences = [&](auto &different, const auto &same) {
+        const auto canonical = [&](size_t identity) {
+          for (const auto &group : same) if (group.contains(identity)) return *group.begin();
+          return identity;
+        };
+        std::set<std::pair<size_t, size_t>> retained;
+        for (const auto &[left, right] : different) {
+          const auto lhs = canonical(left), rhs = canonical(right);
+          if (lhs == rhs) conditions.possible = false;
+          retained.emplace(std::min(lhs, rhs), std::max(lhs, rhs));
+        }
+        different = std::move(retained);
+      };
+      resolve_differences(different_selections, same_selections);
+      resolve_differences(different_inputs, same_inputs);
       SelectionConditions selected;
       selected.possible = conditions.possible;
       for (auto term : conditions.terms) {
@@ -431,7 +449,8 @@ public:
       return includes(present, other.present) && includes(inputs, other.inputs) &&
           includes(payloads, other.payloads) && includes(bindings, other.bindings) && conditions.implies(other.conditions) &&
           includes(exceptions, other.exceptions) && includes(absent, other.absent) && includes(absent_bindings, other.absent_bindings) &&
-          implies_equalities(same_bindings, other.same_bindings) &&
+          implies_equalities(same_bindings, other.same_bindings) && includes(different_selections, other.different_selections) &&
+          includes(different_inputs, other.different_inputs) &&
           implies_equalities(same_selections, other.same_selections) && implies_equalities(same_inputs, other.same_inputs);
     }
   };
