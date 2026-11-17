@@ -12,5 +12,8 @@ FIXTURE = FIXTURE.updated(source=FIXTURE.source.replace('total<-total+f(i);', ''
    val raw<-make local u64;val observed<-make local typeof({raw<->raw;1u64}){0u64};
    total<-total+f(i)+inspected+observed;}};
 '''))
+FIXTURE = FIXTURE.updated(source='func (<=>)(ptr lhs_view:const T in O,ptr rhs_view:const T in O)->void where {T,owner O}{lhs_view<-true;}'+FIXTURE.source.replace(
+    'ptr left=f,right=f;', 'ptr left=f,right=f;ptr var ro:const->left;ptr var query_right:const->right;').replace('left<=>right','ro<=>query_right'))
+
 if __name__ == '__main__':
     raise SystemExit(run_native(FIXTURE))

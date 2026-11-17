@@ -20,6 +20,14 @@ runner.CASES = (
     ('callable_targets', 'func one()->u64{return 1u64;}func f=one;ptr p=f,q=f;',
      '{p<=>q;1}', 'i64', '9', '9\n'),
 )
+READONLY_METHOD='func (<=>)(ptr lhs_view:const T in O,ptr rhs_view:const T in O)->void where {T,owner O}{lhs_view<-true;}'
+ALIASES=BASE+'ptr var ro:const->p;ptr var other:const->q;'
+runner.CASES += (
+    ('readonly_alias',READONLY_METHOD+ALIASES,'{ro<=>other;1}','i64','9','9\n'),
+    ('readonly_alias_explicit',READONLY_METHOD+ALIASES,'{(<=>)(ro,other);1}','i64','9','9\n'),
+    ('readonly_alias_selected',READONLY_METHOD+ALIASES,'{(if(true){ro}else{other})<=>other;1}','i64','9','9\n'),
+)
+
 runner.EXTRA_SOURCES = [Path(__file__)]
 if __name__ == '__main__':
     raise SystemExit(runner.main())

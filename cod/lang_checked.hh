@@ -4476,11 +4476,10 @@ class ScalarChecker {
         }
         const auto family = expr.intrinsic ? NamedFamily{} : named_family(expr.text, &state);
         if (!method_candidates(family.methods, arguments, family.retained_types(), access, owners, &state).methods.empty()) {
-          const auto selected = select_method(family.methods, arguments, expr.at, expr.text, family.retained_types(), access, owners, &state);
-          const auto &method = program_.methods[selected];
-          if (reference) for (size_t i = 0; i < views.size(); ++i)
-            if (views[i].slot_read_only != method.source->parameters[i].read_only)
-              implementation_gap(expr.at, "caller-binding target permission preservation remains unproved");
+          // Signature inspection retains exact expression access and owner
+          // checks. Physical binding preservation requires the invoked body's
+          // source summary; a type query neither invokes nor demands that body.
+          select_method(family.methods, arguments, expr.at, expr.text, family.retained_types(), access, owners, &state);
           return Type::void_type;
         }
         if (reference) {

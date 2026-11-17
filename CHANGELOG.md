@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-17 — Swap-method signature inspection
+
+<a id="k-778"></a>
+**K-778 — Keep physical invocation proofs out of signature-only queries.** Source406→407/registry805→806 continues H-295/P-257, H-306/P-269/H-366–H-369/P-327, D-18's query boundary, D-24 independent result evidence and D-26/H-407 under H-420/H-423. Shared method selection validates expression access and owners for swap queries; actual invocation alone requires the body's physical binding-preservation proof. Acceptance covers readonly aliases, generic/retained/imported contexts, rejected later unsafe calls, equivalent LLVM and unchanged native resource observations. Builtin fallback, fixed slots, owners, initialization and D-16 remain; charter §§3.3/4.3/5.3/6.3/8/12 continues. No new policy, runtime type facility or qualification. Baseline: `bf15155dc8c5b04973460b70a8cba726101cc751:cod/lang_checked.hh` and that commit's source reference/authority registry.
+
 ## 2026-11-16 — Caller-access and defer-nesting integration
 
 <a id="k-777"></a>
