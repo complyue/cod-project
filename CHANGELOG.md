@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-11-17 — Typed reservation uses the existing block distinction
+
+<a id="h-562"></a>
+**H-562 — Bare make versus completed construction needs no new question or keyword.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-17 America/Los_Angeles; exact timestamp/name unavailable. Responding to bare `make T in o` reservation versus an extra init form, states “后面跟不跟一个 `{}` 就是够明显的语法区分了吧？ 这个你不该作为问题提吧”. Selects the existing initializer-block distinction and reiterates delegation of obvious derived choices. The preceding example uses ptr-held identities, field writes and a completed required-reference cycle before ordinary readable-ref use; no new runtime readiness or rollback contract follows.
+
+<a id="k-typed-reservation-20261117"></a>
+**K-TYPED-RESERVATION-20261117 — Integrate allocation identity and construction completion.** D-22r22→23/D-14r118→119/D-28r28→29/registry812→813 adds D-22-RESERVATION/P-500–P-502 under H-562 and existing H-428/H-445–H-447. Preserve eligible placement, owner/access, field/target readiness, empty-block completion checks, finite staged acceptance, failure allocation effects and D-16 under charter §§3.3/4.3/6.3/8. Ordinary constructor calls and intrinsic resource/exception contracts are not reinterpreted. Detailed aggregate algorithms/native support and full value-path qualification remain separate. Baseline: `720f828e73bb70cfe2bc4f19e88ab45a061e92a8:design/ConstructionAndAcquisition.md` and that commit's D-14/D-28/registry. Documentation only; no code/build/tests.
+
+
 ## 2026-11-17 — Accept owner-parameter reference symbols
 
 <a id="h-561"></a>
