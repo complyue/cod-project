@@ -1,8 +1,10 @@
 # Ranged for-loops and synchronous generators
 
-Design revision: 7 · Recorded: 2026-11-17 · Status: selected generator/feedback syntax and checked forwarding; remaining scope, effect proofs and transport pending.
+Design revision: 8 · Recorded: 2026-11-17 · Status: selected generator/feedback syntax and checked forwarding; remaining scope, effect proofs and transport pending.
 
 ## Design authority
+
+- **Borrowed handoff boundary:** [K-GENERATOR-BORROWS-20261117](../CHANGELOG.md#k-generator-borrows-20261117) records r7→8 under H-592/H-595 delegation. Existing D-14/D-28 owner rules determine the lifetime, access and identity constraints below; they do not select a new owner binder. [D-29-LENDING](DesignAuthorityRegistry.md#d-29-lending)/P-552–P-554 isolates the proposed per-handoff owner parameter as **pending-human**. Candidate C-96/C-65 → charter §§2/3.2–3.3/4.3/6.3/8/12 serves reusable synchronous traversal without erasing storage responsibility. Acceptance distinguishes fixed input owners, independent snapshots, delayed escapes and any future fresh-owner contract. No lending syntax, generator-view ABI or complete mechanism is qualified; D-16 and byte-identical D-18r113 remain unchanged.
 
 - **Independent protocol establishment:** [K-GENERATOR-PROTOCOL-20261117](../CHANGELOG.md#k-generator-protocol-20261117) records r6→7 under H-592/H-595 delegation, H-584's explicit yield/default-void shape and D-24 independent evidence. [D-29-SIGNATURE](DesignAuthorityRegistry.md#d-29-signature)/P-528–P-530 retains the candidate C-96/C-65/C-84 value path to charter §§2/3.2–3.3/4.3/6.3/8/12: predictable typed composition and lexical control without body-driven selection or hidden continuation capture. The bounded protocol, labelled production and lexical-yield rules below are agent-derived source consequences; complete inference, grouped view grammar, owner/effect/native proof and mechanism qualification remain separate. Preserve D-16 and D-18r113's independent review.
 
@@ -10,7 +12,7 @@ Design revision: 7 · Recorded: 2026-11-17 · Status: selected generator/feedbac
 
 - **Receiving-overlap continuity:** [H-593](../CHANGELOG.md#h-593)/[K-RECEIVING-CORE-20261117](../CHANGELOG.md#k-receiving-core-20261117) aligns r4→5 with D-22-RECEIVE-OVERLAP/P-518–P-520: each yielded/feedback receiving spec prohibits cross-entry write/write overlap as UB as well as H-576 borrowed-read overlap. Existing warning/opt-in-error planning and defined single-operation/sequential/target-sharing behavior remain. C-96/C-65/C-72/C-73 and charter §§3.3/4.3/6.3/8/12 preserve receiving optimization and author responsibility without choosing signature variance or transport; the following header scope owns its separate receiving/lifetime derivation. Acceptance below changes only overlap cases; whole generator mechanism/value path remains pending-human.
 
-- **Registry / scope:** [D-29](DesignAuthorityRegistry.md#d-29), r6, all sections. C-96/P-521–P-524 records a candidate value path and dependency constraints; the complete mechanism remains `pending-human`, not a delegated implementation contract.
+- **Registry / scope:** [D-29](DesignAuthorityRegistry.md#d-29), r8, all sections. C-96/P-521–P-524 records a candidate value path and dependency constraints; the complete mechanism remains `pending-human`, not a delegated implementation contract.
 - **Human baseline:** [H-577](../CHANGELOG.md#h-577) proposes a typed single-method loop body using its lexical context and confirms that explicit body return targets the surrounding callable. The later H-580–H-584 feedback decisions below define its normal-result and continue forms. [H-578](../CHANGELOG.md#h-578) requests receiving-spec reuse and the assignment-style headers below. [H-579](../CHANGELOG.md#h-579) prefers void-only generator completion; this draft adopts that bounded recommendation without inferring approval of the remaining signature/proof details. [H-580](../CHANGELOG.md#h-580) requires unrestricted normal body-result types for void feedback and static conformity of all normal branches for non-void feedback; [D-29-FEEDBACK](DesignAuthorityRegistry.md#d-29-feedback)/P-525–P-527 records that source boundary separately. [H-581](../CHANGELOG.md#h-581) adds explicit body feedback with continue; [H-582](../CHANGELOG.md#h-582) restricts void feedback to bare continue and rejects its operand-bearing form. [H-583](../CHANGELOG.md#h-583) selects multi-field yield results through existing structural result declarations and receiving specifications. [H-584](../CHANGELOG.md#h-584) accepts the presented yields Y [-> F] syntax, omitted-feedback void and contextual multi-field feedback/receiving model. [H-585](../CHANGELOG.md#h-585) selects automatic checked-body forwarding; [H-588](../CHANGELOG.md#h-588) refines it to bypass generator catches and resume ordinary exception handling at the lexical for site. Fixed explicit generator throws remains required. [D-29-SIGNATURE](DesignAuthorityRegistry.md#d-29-signature), [D-29-FAILURES](DesignAuthorityRegistry.md#d-29-failures) and [D-29-CONTROL](DesignAuthorityRegistry.md#d-29-control) keep those source decisions separate from complete implementation qualification. [H-586](../CHANGELOG.md#h-586) requests assessment of private/native propagation versus special exception wrappers; no public wrapper hierarchy is selected. [H-587](../CHANGELOG.md#h-587) requires entered try/finally cleanup on every protected exit, regardless of lowering. [H-589](../CHANGELOG.md#h-589) treats generator cleanup as part of the whole for operation; [H-590](../CHANGELOG.md#h-590) rejects using generator-local return to replace a pending body exception or enclosing-callable return. Exact source scope and provenance are in those records.
 - **Value rationale:** candidate C-63/C-65/C-73 → C-96 → D-29 under charter §§2/3.2–3.3/4.3/6.1–6.3/8/12: express traversal, data exchange and lexical control in a checked, readable program, while reusing ordinary receiving operations and natural owner lifetimes. Native outlining must preserve that program rather than define its meaning.
 - **Dependencies / invariants:** D-10 calls/effects, D-14/D-28 owners, D-17 scopes/completion, D-18 callable values, D-22 result/receiving specifications, D-23 operations, D-24 inference and D-16 numerical compatibility. Preserve unique actual owners, access/readiness, exact cleanup and the no-closure-cell/no-lifetime-extension boundary. Callable views remain lexical, never regional. There is no C++ object copying/moving model.
@@ -202,6 +204,60 @@ for val item <- two_values() {
 ```
 
 Here consume must not retain a borrow beyond its admitted lifetime. Local and current end with the explicit full scope; no corresponding target is allocated by the val header's ordinary control initialization. A full scope around the whole loop instead bounds all header materializations to that surrounding scope. Explicit owner annotations must still match the actual selected/materialized owner under existing rules. Generator-local borrowed yields and their owner quantification remain a separate lending proof scope.
+
+## Borrowed yields and owner scope
+
+A receiving header does not replace the yielded target's actual owner with the caller's lexical owner. Under an already established input-owner contract, ordinary reference binding, target writes and independent bits reception need no new lending rule:
+
+```cod
+proc twice(x:u64 in O) yields ref u64 in O where {owner O} {
+    yield(x);
+    x <- 9u64;
+    yield(x);
+}
+proc observe(x:u64 in O) where {owner O} {
+    ref saved:u64 in O = x;
+    for ref item = twice(x) { saved = item; }
+    assert saved == 9u64;
+}
+```
+
+The body may retain that reference wherever O's ordinary lifetime permits, including beyond the for operation. It names the live target rather than a snapshot. A val header instead establishes independent bits at each handoff. Yield introduces neither exclusive access nor a prohibition on the generator later editing the same target. Ordinary permissions, initialization and receiving-overlap rules still apply.
+
+A prospective generator-local loan needs a declared owner relationship as well as a lifetime proof. Synchronous execution can keep a generator scope live while its yielded body executes, but does not name that owner in a public protocol or extend it after the scope ends. Retaining such a target in an enclosing result, saved reference, callable view, symbolic binding or later deferred action requires the same actual-owner proof as any other reference. A directly registered body defer belongs to the caller's enclosing full scope and may run after the generator has ended; merely registering it during a yield does not make that delayed borrow valid. An independent bits snapshot or valid explicit graph transfer can outlive its source under its own contract.
+
+Feedback has the same requirement in the reverse direction. A reference to storage whose scope ends during body cleanup cannot become readable feedback after that cleanup. A generator-owned target may remain live on resumption, but only an independently declared feedback owner relationship can justify retaining it. Ordinary receiving slots keep their fixed owners; no feedback operation can retarget an existing slot's owner.
+
+The checker must preserve owner identity through cleanup, nested generators and permitted backing growth; a cached raw address or equality of nominal region types is insufficient. Retaining only identity without reading a payload does not waive lifetime or fixed-owner checks. These are consequences of existing owner contracts, not new runtime tags, per-pointer owner words or permission to implement an incomplete lending protocol.
+
+### Pending decision: a fresh owner parameter per handoff
+
+Ordinary `where {owner O}` is inferred for a callable invocation and remains fixed throughout that invocation. Do not silently reinterpret it as a new owner at each yield. A generator that can successively lend from different actual owners needs a distinct quantification rule.
+
+Proposed spelling, **not accepted syntax**:
+
+```cod
+proc visit_both(a:u64 in A, b:u64 in B)
+    yields ref u64 in Y
+    where {owner A, owner B, yield owner Y}
+{
+    yield(a);
+    yield(b);
+}
+
+# left and right belong to different live owners.
+for ref item = visit_both(left, right) {
+    item <- item + 1u64;
+}
+```
+
+The proposal gives Y one fresh abstract binding for each actual handoff. First Y denotes A's actual owner, then B's; the body must be valid for either under the declared contract. Repeated uses of Y within one handoff require the same actual owner. Each yielded reference still needs a unique statically proved owner; this is not an owner union or permission for a runtime conditional to hide unresolved owner selection. The generic protocol is established before body checking; binding its producer-supplied owner is not inference from receiver/body types.
+
+This would also permit a generator to lend a local target while its owner is live, subject to complete proof and the ordinary no-escape constraints above. It grants no right to retain Y across handoffs, after generator completion or through feedback whose use outlasts that owner. Extra independently established lifetime/equality evidence would still govern any retention; no unconditional body-only lifetime restriction should replace that evidence. Exact binder scope, allocation-access qualification, nested/grouped signatures and callable-view preservation need review if this direction is selected.
+
+The recommended direction is the explicit fresh binder: it can express both input-owned and generator-local synchronous loans without treating one ordinary owner parameter as mutable. A plausible checker reuses owner substitution for each handoff and checks the body against the abstract owner; the new work is preserving that quantifier and its escape constraints through generic/stored protocols. This is an engineering assessment, not measured cost or proof of current support.
+
+The smaller alternative keeps a yielded owner fixed for the whole generator invocation: infer it from explicit inputs, or separately specify a generator-local-owner contract. Traversal spanning unrelated owners would then need independent val results, separate generators or another explicit output contract. It avoids the new per-handoff binder and its generic body proof, but cannot express the example as one borrowed-output protocol. The new binding rule is the pending choice; allowing an already valid borrowed target to be used during its ordinary lifetime is not.
 
 ## Void final completion
 
@@ -541,7 +597,7 @@ All yield sites in one selected generator method use the same established protoc
 
 The next substantive boundaries are:
 
-1. Complete header proof/transport for the selected per-handoff destinations, fresh control initialization and enclosing-full-scope scalar materialization. Generator-local borrowed yields still require their separate owner-quantification/lending contract.
+1. Decide the explicitly scoped per-handoff owner proposal in [Borrowed yields and owner scope](#borrowed-yields-and-owner-scope). Complete header proof/transport for actual destinations, fresh controls and enclosing-full-scope scalar materialization remains separate; ordinary owner/lifetime consequences are already specified.
 2. Remaining grouped-type grammar and structural-schema compatibility, type/owner quantification, additional inference forms and dynamic effect eligibility. H-588 selects catch bypass and direct obligation composition; recursive/stored generator and native proofs remain work. A nonlocal return is not a catchable exception.
 3. Proof and transport of the selected lexical completion targets through generator cleanup, including nested iteration and generator-local `if returning`; the source rule above is settled independently of the mechanism.
 4. Nonescaping body-entry proof and transport, including direct/stored/generic generator invocation if admitted. Ordinary callable values or annotations alone do not prove the body's required lexical permissions.
@@ -554,6 +610,7 @@ The following is a review checklist, not current passing-test evidence:
 
 - Once-only invocation/argument preparation; zero, one and multiple yields; explicit labels/subsets/renaming; all scalar new/existing receiver combinations and invalid operators. No arbitrary spec expressions or forward receiver dependencies.
 - Distinct val snapshots and live borrowed targets; fixed owners/access/init/null rules; destination retention across permitted backing growth; defined nonoverlapping reception and diagnostic-only checks for H-576/H-593 UB examples, including val-only conflicting writes.
+- Input-owner borrowed yields may retain references through the ordinary proved owner lifetime; later generator writes remain observable through those references. Distinguish val snapshots, fixed reference-slot owners and runtime target sharing. Reject generator-local escapes, delayed outer-scope borrows and feedback to expired body storage. The pending fresh-owner binder needs separate admission tests only after selection; no fixed-owner contract is silently rebound between yields.
 - Per-handoff destination selection after yield preparation, zero-yield noninitialization, fresh const/new control initialization and enclosing-full-scope materialized target identity; distinct control-slot versus referent lifetime and omitted-output cleanup; no escaping generator-local, iteration-local or callable-bearing storage; complete cleanup on partial receiving or feedback failure.
 - Void feedback accepts heterogeneous discarded fallthrough branches, preserving effects/failures/cleanup and ordinary intermediate typing; only bare continue is admitted. Reject valued continue even with a void-typed operand, and preserve an explicit separate operand evaluation followed by bare continue. Non-void feedback accepts compatible tail/continue results, rejects bare continue and missing/incompatible normal branches, and checks recovered catches. Escaping throw/enclosing return is not a missing normal value; no runtime check substitutes for the static contract.
 - Distinguish feedback from enclosing return, generator fallthrough/early void return and discarded per-yield responses; reject a generator-owned non-void return. Generator cleanup runs on exit, not at every yield. Check explicit/omitted void, declaration/definition protocol agreement and labelled completeness/effect order; exact nested callable-type grouping remains separately scoped. Multi-field feedback must reuse complete production, partial/renamed/new/existing receiving, pre-yield destination selection, component owners and omitted cleanup; control exits must publish no final feedback writes.

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-17 — Bound borrowed yields by ordinary owners
+
+<a id="k-generator-borrows-20261117"></a>
+**K-GENERATOR-BORROWS-20261117 — Separate existing lifetime rules from fresh yield-owner quantification.** Agent derivation under H-592/H-595: D-29r7→8/registry844→845 records input-owner retention, live-target rather than snapshot behavior, delayed-defer/feedback lifetime constraints and fixed receiver owners. Candidate C-96/C-65 → charter §§2/3.2–3.3/4.3/6.3/8/12 preserves typed traversal and explicit storage responsibility. New D-29-LENDING/P-552–P-554 keeps the per-handoff owner binder and its alternative pending-human; it is not continuity qualification or a human decision. Corrects D-29's stale local revision summary. Baseline: `4d727341c3354d9d1e993f97d0ca049eb0a0c8b9:design/RangedForAndGenerators.md` and that commit's registry. Scope excludes new lending permissions, exact binder/view grammar, complete effect/native proof and ABI. Source421, D-16 and byte-identical D-18r113 unchanged; documentation only, no local code/build/tests.
+
 ## 2026-11-17 — Select named region access and compositional initialization
 
 <a id="h-595"></a>
