@@ -43,7 +43,7 @@ runner.CASES.update({
  'builtin_fallback': (IO+REF+'val x<-false,y<-true;ptr p=x,q=y;p<=>q;'+OUT('p'),0,'true\n',''),
  'different_destination_types': (IO+'func (<=>)(ptr a:i64 in O,ptr b:bool in P)->void where {owner O,owner P}{a=null;b=null;}'+BASE+'val yes<-true;ptr r=yes;p<=>r;'+OUT('(p is null)')+OUT('(r is null)'),0,'true\ntrue\n',''),
  'readonly_slots': (IO+'func (<=>)(ref a:const i64 in O,ref b:const i64 in O)->void where {owner O}{intrinsic (<=>)(a,b);}val x<-1,y<-7;ptr p:const i64=x,q:const i64=y;p<=>q;'+OUT('p'),0,'7\n',''),
- 'physical_permission_adaptation_unproved': ('func (<=>)(ptr a:const i64 in O,ptr b:const i64 in O)->void where {owner O}{}'+BASE+'ptr var ro:const->p;ptr var other:const->q;ro<=>other;',2,'','target permission preservation'),
+ 'physical_permission_adaptation': ('func (<=>)(ptr a:const i64 in O,ptr b:const i64 in O)->void where {owner O}{}'+BASE+'ptr var ro:const->p;ptr var other:const->q;ro<=>other;',0,'',''),
  'uninitialized_pointer_write': (IO+NPE+'func (<=>)(ptr a:i64 in O,ptr b:i64 in O)->void throws NullPointerException where {owner O}{a<-3;b<-4;}val x<-make local i64,y<-make local i64;ptr p=x,q=y;try{p<=>q;'+OUT('p')+OUT('q')+'}catch(e:const NullPointerException){};',0,'3\n4\n',''),
  'reference_method_requires_read': (REF+'val x<-make local i64,y<-2;ptr p=x,q=y;p<=>q;',2,'','before definite initialization'),
  'selected_body_is_authoritative': ('func (<=>)(ptr a:i64 in O,ptr b:i64 in O)->void where {owner O}{a<-true;}'+BASE+'p<=>q;',2,'','transfer'),

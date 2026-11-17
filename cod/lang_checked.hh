@@ -228,6 +228,9 @@ struct CallEffects {
     bool operator==(const BindingResult &) const = default;
   };
   std::map<size_t, std::map<size_t, BindingResult>> bindings;
+  // Every input target that can be written into a caller binding, including
+  // intermediate selections not retained by any completed outcome.
+  std::map<size_t, std::set<size_t>> binding_sources;
   // Postconditions describe the original borrowed targets, not local parameter
   // bindings after rebinding. Values refer to argument snapshots at call entry.
   // Empty provisional facts do not remove declared completion paths.
@@ -1938,6 +1941,17 @@ class ScalarChecker {
   }
   void invocation_bindings(const CallEffects &summary, const std::vector<CheckedOperation> &views,
                            CheckedOperation &operation, bool prepared = false) {
+    if (!proving_) for (const auto &[parameter, sources] : summary.binding_sources) {
+      const auto written = overlapping_slots(views.at(parameter).slots);
+      for (const auto &[binding, current] : lexical_.targets) {
+        if (intersect(written, physical_slots({binding})).empty()) continue;
+        for (const auto input : sources) {
+          const auto &source = views.at(input);
+          for (const auto place : source.targets) if (place != null_target) possible_targets_.at(binding).insert(place);
+          target_dependencies_.at(binding).insert(source.origins.begin(), source.origins.end());
+        }
+      }
+    }
     for (auto &[reason, effects] : operation.invocation) {
       const auto outcome = summary.bindings.find(reason);
       if (outcome == summary.bindings.end()) continue;
@@ -3536,8 +3550,18 @@ class ScalarChecker {
         if (&expr == prepared_call_) require_deferred_slots(views[i], expr.at);
         for (const auto slot : physical_slots(views[i].slots)) {
           const auto &binding = bindings_->at(slot);
-          if (binding.read_only != definition.parameters[i].read_only)
-            implementation_gap(expr.at, "caller-binding target permission preservation remains unproved");
+          if (binding.read_only != definition.parameters[i].read_only && proving_ && validating_) {
+            const auto &sources = read_effects(*operation.callee).binding_sources;
+            const auto found = sources.find(i);
+            const bool preserved = found != sources.end() && !found->second.empty() &&
+                std::all_of(found->second.begin(), found->second.end(), [&](size_t input) {
+                  const auto slots = physical_slots(views.at(input).slots);
+                  return !slots.empty() && std::all_of(slots.begin(), slots.end(), [&](size_t source) {
+                    return !bindings_->at(source).read_only;
+                  });
+                });
+            if (!preserved) implementation_gap(expr.at, "caller-binding target permission preservation remains unproved");
+          }
           if (binding.requires_initialized && argument_mode(definition.parameters[i]) != ArgumentMode::borrowed_ref)
             implementation_gap(expr.at, "caller ref preservation through a non-ref method parameter remains unproved");
         }
@@ -6785,6 +6809,15 @@ class ScalarChecker {
     for (const auto &[reason, payloads] : initial.payloads)
       for (const auto &[parameter, value] : payloads) observed_.payloads[reason].try_emplace(parameter, value);
     if (caller_bindings(*checking_method_)) {
+      for (size_t parameter = 0; parameter < instance.frame.inputs.size(); ++parameter) {
+        const auto &input = instance.frame.inputs[parameter];
+        auto &sources = observed_.binding_sources[parameter];
+        for (const auto place : possible_targets_.at(storage(input.place).binding)) if (place != null_target) {
+          if (!storage(place).borrowed)
+            implementation_gap(method.at, "caller-binding access source without input provenance");
+          sources.insert(input_ordinal(place));
+        }
+      }
       // Recursive closure retains conservative absent outcomes, while a slot
       // with no possible mutation preserves its entry selection on every exit.
       for (auto &[reason, targets] : initial.bindings) {
@@ -6831,6 +6864,7 @@ class ScalarChecker {
       returned.value.merge(known.returned.value);
       if (known.returned != returned) { known.returned = std::move(returned); changed = true; }
       if (known.bindings != effects.bindings) { known.bindings = effects.bindings; changed = true; }
+      if (known.binding_sources != effects.binding_sources) { known.binding_sources = effects.binding_sources; changed = true; }
       auto payloads = effects.payloads;
       for (const auto &[reason, values] : known.payloads)
         for (const auto &[parameter, value] : values) payloads[reason][parameter].merge(value);

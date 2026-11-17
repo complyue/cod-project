@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-16 — Caller-binding target-access preservation
+
+<a id="k-776"></a>
+**K-776 — Prove physical slot access through readonly aliases.** Source404→405/registry803→804 continues D-14r116/P-269/P-327 under H-306/H-366–H-369, D-18r107, unaffected D-17 completion/H-525 and D-26r21/H-407. Finite input-source summaries retain intermediate selections through nested/recursive calls and cleanup; every source must preserve the physical destination's access. Exact expression/formal qualifiers and ref validity remain. Acceptance covers independent write-history models, restoration-negative controls, prepared slots, callable targets, shared native bodies and exact release. Charter §§3.3/4.3/5.3/6.3/8/12 and D-16 continue. Alias-conditioned mixed-access precision, caller ref/non-ref adaptation, method-value and pending runtime/ABI protocols remain separate; no new policy, permission flag or human confirmation. Baseline: `261f0960538fce7caeaa468afebb864e4be2daf4:cod/lang_checked.hh` and that commit's source reference/authority registry.
+
 ## 2026-11-16 — Native-validation and deferred-coverage integration
 
 <a id="k-775"></a>
