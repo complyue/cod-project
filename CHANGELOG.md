@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-17 — Allow structural callable-result projection
+
+<a id="h-591"></a>
+**H-591 — Allow extra-result projection and derive straightforward consequences.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-17 America/Los_Angeles; exact timestamp/personal name unavailable. Responds to the {count, ready} → {count} callable-adaptation example: “好像没有不允许的理由吧？ 感觉这种问题不需要问我确认吧”. Accepts projection under the presented component/effect/cleanup/owner constraints and renews delegation of straightforward consequences instead of repeated confirmation. Does not qualify all structural-result mechanisms, broader variance or native ABI. Baseline: db3bee68093db532f64169909c2c50adb39467f0:design/ConstructionAndAcquisition.md and the preceding chat example.
+
+<a id="k-result-projection-20261117"></a>
+**K-RESULT-PROJECTION-20261117 — Compose existing partial-result rules.** D-22r33→34/registry838→839 adds D-22-RESULT-COMPAT/P-537–P-539 under H-591. Agent-derived order-independent identity, directional projection and declared direct forwarding preserve C-10/C-63/C-65/C-72/C-73 → charter §§2/3.2–3.3/4.3/6.3/8/12: complete result contracts, observable effects/checked failures, exact cleanup and valid owners, with no group object or hidden retention. Records source acceptance and exclusions separately from pending proof/value-path/native qualification. Integrates mainline4c8350108f873435324eed6cfe156446cc63e741/source420/K792 by fast-forward; D-16, D-29r4 and D-18r113 unchanged. Documentation only; no local code/build/tests.
+
 ## 2026-11-17 — Stabilize contextual callable coverage
 
 <a id="k-792"></a>
