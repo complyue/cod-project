@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <optional>
 #include <set>
@@ -397,6 +398,74 @@ inline bool module_keyword(std::string_view name) {
 class Parser {
   std::vector<Token> tokens_;
   size_t cursor_ = 0;
+  static constexpr size_t structure_limit = 128;
+  static constexpr size_t recursion_limit = 1024;
+  size_t recursion_ = 0;
+  std::map<const Expression *, size_t> depths_;
+
+  struct ParseEntry {
+    size_t &depth;
+    ParseEntry(size_t &depth, const Location &at, std::string_view subject) : depth(depth) {
+      if (depth == recursion_limit)
+        fail(at, "compiler resource limit: " + std::to_string(recursion_limit) +
+            " active recursive parsing entries while parsing " + std::string(subject));
+      ++depth;
+    }
+    ParseEntry(const ParseEntry &) = delete;
+    ParseEntry &operator=(const ParseEntry &) = delete;
+    ~ParseEntry() { --depth; }
+  };
+  static void check_depth(size_t depth, const Location &at, std::string_view subject) {
+    if (depth > structure_limit)
+      fail(at, "compiler resource limit: " + std::to_string(structure_limit) +
+          " source structure levels while parsing " + std::string(subject));
+  }
+  static size_t type_depth(const Type &type, const Location &at) {
+    size_t result = 0;
+    std::vector<std::pair<const Type *, size_t>> work{{&type, 1}};
+    while (!work.empty()) {
+      const auto [current, depth] = work.back(); work.pop_back();
+      check_depth(depth, at, "a type");
+      result = std::max(result, depth);
+      if (current->target) work.emplace_back(current->target.get(), depth + 1);
+      for (const auto *types : {&current->parameters, &current->bounds, &current->owner_bounds, &current->throws_types})
+        for (const auto &nested : *types) work.emplace_back(&nested, depth + 1);
+    }
+    return result;
+  }
+  Expr finish(Expr expression) {
+    // Cache only complete nodes. Check incremental left/postfix trees before
+    // recursive consumers or destruction can encounter an excessive depth.
+    std::vector<std::pair<const Expression *, bool>> work{{expression.get(), false}};
+    while (!work.empty()) {
+      const auto [node, ready] = work.back(); work.pop_back();
+      if (depths_.contains(node)) continue;
+      if (!ready) {
+        work.emplace_back(node, true);
+        for (const auto &child : node->children) work.emplace_back(child.get(), false);
+        if (node->definition && node->definition->body) work.emplace_back(node->definition->body.get(), false);
+        continue;
+      }
+      size_t depth = 1;
+      for (const auto &child : node->children) depth = std::max(depth, depths_.at(child.get()) + 1);
+      const auto include_type = [&](const Type &type) { depth = std::max(depth, type_depth(type, node->at) + 1); };
+      if (node->annotation) include_type(*node->annotation);
+      if (node->definition) {
+        const auto &definition = *node->definition;
+        if (definition.body) depth = std::max(depth, depths_.at(definition.body.get()) + 1);
+        for (const auto &parameter : definition.parameters) include_type(parameter.type);
+        for (const auto &parameter : definition.type_parameters) if (parameter.bound) include_type(*parameter.bound);
+        for (const auto &parameter : definition.owner_parameters) if (parameter.root) include_type(*parameter.root);
+        for (const auto &failure : definition.throws_types) include_type(failure);
+        for (const auto *type : {&definition.result_type, &definition.index_type, &definition.parent_type})
+          if (*type) include_type(**type);
+        if (definition.symbol_owner) include_type(definition.symbol_owner->root);
+      }
+      check_depth(depth, node->at, "an expression");
+      depths_.emplace(node, depth);
+    }
+    return expression;
+  }
 
   const Token &peek() const { return tokens_[cursor_]; }
   bool is(const std::string &text, size_t ahead = 0) const {
@@ -467,6 +536,13 @@ class Parser {
       fail(form.at, "reference identity is an intrinsic operation and cannot be an imported user operation");
   }
   Type parse_type(Parameter *parameter = nullptr) {
+    const auto at = peek().at;
+    const ParseEntry entry(recursion_, at, "a type");
+    auto type = parse_type_impl(parameter);
+    type_depth(type, at);
+    return type;
+  }
+  Type parse_type_impl(Parameter *parameter) {
     if (take("(")) {
       auto type = parse_type(parameter);
       expect(")");
@@ -547,7 +623,9 @@ class Parser {
   }
   void type_separator() { expect(":"); }
   Expr make(Expression::Kind kind, const Token &token) {
-    return std::make_unique<Expression>(Expression{kind, token.at, token.text, {}, {}, {}, false, {}});
+    auto expression = std::make_unique<Expression>(Expression{kind, token.at, token.text, {}, {}, {}, false, {}});
+    depths_.erase(expression.get());
+    return expression;
   }
   Token field_name() {
     if (!take("(")) return name(TokenKind::identifier);
@@ -1021,27 +1099,31 @@ class Parser {
     fail(token.at, "expected an expression; symbolic writes require 'effect'");
   }
   Expr expression(int minimum = 0) {
+    const ParseEntry entry(recursion_, peek().at, "an expression");
+    return finish(expression_impl(minimum));
+  }
+  Expr expression_impl(int minimum) {
     auto left = primary();
     while (true) {
       if (is("(")) {
         auto call = make(Expression::Kind::value_call, peek());
         call->children.push_back(std::move(left));
         arguments(*call);
-        left = std::move(call);
+        left = finish(std::move(call));
       } else if (take(".")) {
         auto member = make(Expression::Kind::field, name(TokenKind::identifier));
         member->children.push_back(std::move(left));
-        left = std::move(member);
+        left = finish(std::move(member));
       } else if (take("->")) {
         auto owner = make(Expression::Kind::capture_owner, ordinary_name());
         owner->children.push_back(std::move(left));
-        left = std::move(owner);
+        left = finish(std::move(owner));
       } else if (is("[")) {
         auto index = make(Expression::Kind::index, expect("["));
         index->children.push_back(std::move(left));
         index->children.push_back(expression());
         expect("]");
-        left = std::move(index);
+        left = finish(std::move(index));
       } else break;
     }
     while ((peek().kind == TokenKind::punctuation || is("is")) && binary_precedence(peek().text) >= minimum) {
@@ -1050,7 +1132,7 @@ class Parser {
       auto binary = make(Expression::Kind::binary, op);
       binary->children.push_back(std::move(left));
       binary->children.push_back(expression(binary_precedence(op.text) + 1));
-      left = std::move(binary);
+      left = finish(std::move(binary));
     }
     if (minimum == 0 && swap_operation(peek().text)) {
       auto swap = make(Expression::Kind::call, tokens_[cursor_++]);
@@ -1081,6 +1163,10 @@ class Parser {
     return left;
   }
   Expr block() {
+    const ParseEntry entry(recursion_, peek().at, "a block");
+    return finish(block_impl());
+  }
+  Expr block_impl() {
     auto result = make(Expression::Kind::block, expect("{"));
     result->scoped = is("{") && peek().at.line == result->at.line &&
         peek().at.column == result->at.column + 1;
@@ -1308,6 +1394,7 @@ public:
         expect(";");
       }
       forms.push_back(std::move(form));
+      depths_.clear();
     }
     for (const auto &form : forms) if (form->body) {
       validate_explicit_scopes(*form->body);

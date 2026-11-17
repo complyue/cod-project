@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-17 — Bound source preparation depth
+
+<a id="k-791"></a>
+**K-791 — Diagnose source-depth exhaustion before recursive processing.** Agent continuity under D-26/H-407, existing D-10/D-14/D-17 contracts and H-420/H-423: source418→419/registry834→835 adds private completed-structure and parser-entry allowances with source-located resource diagnostics. Preserves source meaning, token rules, actual owners, completion, no partial execution/output and supported-input native behavior; deep operator/group/call/type/body, boundary and flat-source acceptance applies. Charter §§2/3.3/5.3/6.3/8/12 and D-16 continue. Restores K-790’s standalone registry summary and H-577–H-579 range after a paragraph insertion split, retaining their recorded scopes and append-only evidence. Baselines: `465344562a217f3162be84ca1f606340002ce5aa:cod/lang_syntax.hh` and `fa56eb44bc1092c0e59d4f06ddcd483067d373f3:design/DesignAuthorityRegistry.md`. No semantic depth ban, new source/capture permission, permanent analysis/ABI or broader qualification follows; D-18r113 remains byte-identical and pending, and D-29r2 remains unimplemented.
+
 ## 2026-11-17 — Specify generator feedback checking and propose signatures
 
 <a id="h-580"></a>

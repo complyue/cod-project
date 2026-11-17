@@ -1,8 +1,10 @@
 # CoD source compiler validation
 
-Reference revision: 418 · Recorded: 2026-11-17 America/Los_Angeles.
+Reference revision: 419 · Recorded: 2026-11-17 America/Los_Angeles.
 
 ## Design authority
+
+- **Source-structure resources:** [K-791](../../../CHANGELOG.md#k-791) continues D-26/H-407/C-89/C-90/P-371/P-372/P-374/P-375's detected-resource contract under H-420/H-423, preserving existing D-10/D-14 scalar/type syntax and D-17 completion. Source preparation bounds completed expression/type structure and active recursive parsing, reporting the allowance and active source expression/type/block before unsafe recursive processing. Acceptance covers deep operators, grouping, calls, types and lexical bodies, unchanged boundary/flat/wide controls, no execution or partial output after exhaustion, native behavior and preserved LLVM/diagnostics. Charter §§2/3.3/5.3/6.3/8/12 and D-16 continue. These are operational compiler allowances, not source depth prohibitions, new conversions, owner/capture permission, a permanent analysis domain or ABI; pending capture/receiving/generator contracts remain separate.
 
 - **Checked-program phase boundary:** [K-790](../../../CHANGELOG.md#k-790) continues D-26/H-407's checked/native responsibility, existing D-14 storage/access and D-18 complete-value contracts under H-420/H-423. The native backend consumes the shared checked-program definitions without including module discovery or the mutable source checker; the driver explicitly connects analysis and emission. Existing checked definitions, checker behavior, selected contexts and cleanup evidence retain their contracts. Charter §§2/3.3/5.3/6.3/8/12 and D-16 continue. Acceptance requires an independently closed native-header dependency path, unchanged compiler behavior and complete report input provenance. This source organization selects no checked representation, analysis algorithm, source permission or permanent ABI; pending capture/receiving scopes remain separate.
 
@@ -118,6 +120,8 @@ H-258 supplies mandatory bodyless signatures with generic and variadic parameter
 D-21r15/H-375–H-378/P-333/P-337 preserves a callable’s selected interpretation. D-10/H-106/H-109/H-166/H-212/H-231/H-233/H-372–H-373 and D-15/H-245/H-247–H-249 constrain source-preserving selection, explicit publication, source isolation and once-only initialization. K-674 records bounded source-module selection and ordinary import under those scopes, H-230/H-232/H-252/H-253 and H-398. [K-737](../../../CHANGELOG.md#k-737) preserves the same source identity, isolation and ordered-incorporation contract through explicit discovery and initialization work lists. Identity-centered construction preserves source intent and explicit receiver interpretation through P-216–P-220; D-15’s full operational/value-path qualification, general composition and persistent representations remain separate.
 
 ## Current implementation boundary
+
+Source preparation has a 128-level allowance for completed expression/type structure and a separate 1024-entry allowance for recursive parsing. Incremental checking covers operator/postfix trees as well as nested blocks, callable bodies and type annotations; grouping contributes to parser recursion without inventing a semantic expression node. Exhaustion reports a source location, allowance and active parsing obligation before execution or output publication. These implementation limits establish no language depth restriction or invalidity proof. Width and sequential form count are independent: the validation includes wide callable signatures and 5,000 flat expressions. Scope, arithmetic, ownership and completion rules remain in force; `#` comments, quoted delimiters and reserved `//` keep their existing token rules.
 
 The compiler driver connects source discovery/checking to native emission explicitly. [lang_checked_program.hh](../../../cod/lang_checked_program.hh) supplies the shared checked operations, storage/input roles, method/value identities, retained declaration evidence and call/cleanup summaries. [lang_checked.hh](../../../cod/lang_checked.hh) owns mutable lexical state and source analysis; [lang_llvm.hh](../../../cod/lang_llvm.hh) consumes a const checked program without including that checker, module discovery or callable-flow analysis. These are transient compiler components, not a persistent representation or source-level mechanism. Validation reports fingerprint all language headers, including shared artifact definitions, and native fixtures include their transitive fixture inputs.
 
@@ -637,6 +641,7 @@ COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-family-result-staging-vali
 COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-family-result-runtime-validation.json python3 tests/cod/language/family_result_runtime_tests.py
 COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-family-contract-validation.json python3 tests/cod/language/family_contract_tests.py
 COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-family-coverage-limit-validation.json python3 tests/cod/language/family_coverage_limit_tests.py
+COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-source-depth-validation.json python3 tests/cod/language/source_depth_tests.py
 COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-uniform-family-validation.json python3 tests/cod/language/uniform_family_tests.py
 COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-uniform-family-staging-validation.json python3 tests/cod/language/uniform_family_staging_tests.py
 COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-uniform-family-runtime-validation.json python3 tests/cod/language/uniform_family_runtime_tests.py
