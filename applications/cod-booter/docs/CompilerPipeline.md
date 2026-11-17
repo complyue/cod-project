@@ -1,10 +1,12 @@
 # Compiler artifacts and persistent stage reuse
 
-Revision: 4 · Recorded: 2026-11-12 · Status: planning draft.
+Revision: 5 · Recorded: 2026-11-17 · Status: planning draft.
 
 ## Design authority
 
-- **Registry / coverage:** [D-20](../../../design/DesignAuthorityRegistry.md#d-20), revision 4, all sections; detailed representation, caching and validation contracts are `pending-human`.
+- **Output-contract continuity:** [H-571](../../../CHANGELOG.md#h-571)/[K-OUTPUT-ACCEPT-20261117](../../../CHANGELOG.md#k-output-accept-20261117) covers document-set r4→5. D-22’s selected init declared-place roles replace a separate out spelling; native handle storage, target-initializing helper syntax, ownership and provider proof remain pending. Preserve C-81/C-65, charter §§4.3/6.3/8/12, D-16 and existing D-17 call/block timing. No application implementation, physical ABI or broader qualification follows; pipeline semantics are unchanged.
+
+- **Registry / coverage:** [D-20](../../../design/DesignAuthorityRegistry.md#d-20), revision 5, all sections; detailed representation, caching and validation contracts are `pending-human`.
 - **Baseline / assessment:** [H-353](../../../CHANGELOG.md#h-353) selects a CoD-native compiler pilot and investigation of DBMR stage caches. [K-473](../../../CHANGELOG.md#k-473) records the draft; [K-515](../../../CHANGELOG.md#k-515) preserves this pipeline scope while the set adopts H-356's separately authorized defer prerequisite. C-80/P-314/P-315/P-317 links typed compiler intent and reusable structured results to C-01/C-05 and charter §§2, 5.3–5.4, 7 and 12.
 - **Dependencies / invariants:** P-316/P-318, D-01 regional representation, D-14 owners, D-15 independent module worlds and D-16 numerical/syntax compatibility. Preserve identities, selected interpretations and relocation; no native addresses in persistent artifacts and no cross-module world editing.
 - **Acceptance / exclusions:** future cached and uncached paths must preserve applicable semantic observations and reject stale/incompatible reuse, with actual time/memory measurements. No cache schema, partition algorithm, checksum, file API or implementation is selected here.

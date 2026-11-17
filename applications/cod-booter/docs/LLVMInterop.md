@@ -1,15 +1,17 @@
 # LLVM bindings, handles and scoped cleanup
 
-Revision: 4 · Recorded: 2026-11-12 · Status: planning draft; examples are proposed source notation, not executable fixtures.
+Revision: 5 · Recorded: 2026-11-17 · Status: planning draft; examples are proposed source notation, not executable fixtures.
 
 ## Design authority
 
+- **Output-contract continuity:** [H-571](../../../CHANGELOG.md#h-571)/[K-OUTPUT-ACCEPT-20261117](../../../CHANGELOG.md#k-output-accept-20261117) covers document-set r4→5. D-22’s selected init declared-place roles replace a separate out spelling; native handle storage, target-initializing helper syntax, ownership and provider proof remain pending. Preserve C-81/C-65, charter §§4.3/6.3/8/12, D-16 and existing D-17 call/block timing. No application implementation, physical ABI or broader qualification follows; pipeline semantics are unchanged.
+
 - **Callable-reference continuity:** [K-ALIAS-GLOSSARY-20261117](../../../CHANGELOG.md#k-alias-glossary-20261117) preserves this revision's existing D-18 dependency under the canonical CallableViewsAndCaptures.md path. Only dependency links and this continuity summary change; existing contracts, qualification, acceptance and D-16 remain unchanged.
 
-- **Registry / coverage:** [D-20](../../../design/DesignAuthorityRegistry.md#d-20), revision 4, all sections. Native handle, provider and output-parameter contracts remain `pending-human`. The call/block distinction and registration-time evaluation are confirmed language requirements under [D-17](../../../design/ExceptionControl.md#deferred-work-and-explicit-scopes), not implementation evidence for this application.
-- **Baseline / assessment:** [H-353](../../../CHANGELOG.md#h-353) requests selective LLVM bindings, scoped release and explicit generic-owner ref access. [H-354](../../../CHANGELOG.md#h-354) proposes a write-only `out` modifier and uninitialized local handle storage. [H-355](../../../CHANGELOG.md#h-355) supplies registration-time evaluation terminology; [H-356](../../../CHANGELOG.md#h-356) selects `defer init(...)()` and authorizes immediate language work. [K-515](../../../CHANGELOG.md#k-515) records this plan update. C-80/P-314/P-316–P-318 connects native integration to C-02/C-11/C-79 and charter §6; C-81/P-319/P-320 relates output initialization to C-65's explicit storage/owner contract.
+- **Registry / coverage:** [D-20](../../../design/DesignAuthorityRegistry.md#d-20), revision 5, all sections. Native handle, provider and output-parameter contracts remain `pending-human`. The call/block distinction and registration-time evaluation are confirmed language requirements under [D-17](../../../design/ExceptionControl.md#deferred-work-and-explicit-scopes), not implementation evidence for this application.
+- **Baseline / assessment:** [H-353](../../../CHANGELOG.md#h-353) requests selective LLVM bindings, scoped release and explicit generic-owner ref access. [H-354](../../../CHANGELOG.md#h-354) identifies output-initialization and uninitialized-handle storage requirements; H-571 supplies current init-place roles without selecting a native handle representation. [H-355](../../../CHANGELOG.md#h-355) supplies registration-time evaluation terminology; [H-356](../../../CHANGELOG.md#h-356) selects `defer init(...)()` and authorizes immediate language work. [K-515](../../../CHANGELOG.md#k-515) records this plan update. C-80/P-314/P-316–P-318 connects native integration to C-02/C-11/C-79 and charter §6; C-81/P-319/P-320 relates output initialization to C-65's explicit storage/owner contract.
 - **Dependencies / invariants:** [D-14](../../../design/RegionalOwnership.md) owner/access and initialization, [D-17](../../../design/ExceptionControl.md) exceptions/scopes, and [D-18](../../../design/CallableViewsAndCaptures.md) callable values/captures remain authoritative within their recorded scopes. Preserve relocation and distinguish native-resource lifetime from handle storage. No general lexical-reference capture or implicit lifetime extension follows.
-- **Acceptance / exclusions:** a future binding must demonstrate valid argument access, normal/exceptional release and no use after native invalidation. This document neither selects a C versus C++ shim ABI nor changes parsing, closure representation, provider registration or runtime code loading.
+- **Acceptance / exclusions:** a future binding must demonstrate valid argument access, normal/exceptional release and no use after native invalidation. This document neither selects a C versus C++ shim ABI nor changes parsing, callable-environment representation, provider registration or runtime code loading.
 
 ## Select APIs by application demand
 
@@ -31,28 +33,18 @@ Native pointer values are process-local. They must not be persisted as usable LL
 
 ## Initialization through an output reference
 
-The proposed initializer combines an ordinary reference, its explicit external owner and a write-only output contract. The `out ref` ordering below is illustrative; exact modifier grammar is not selected:
+[D-22’s init contract](../../../design/ConstructionAndAcquisition.md#init-destinations-and-declared-place-aliasing) exposes a caller-selected place and a checked initialization obligation. An init val parameter names bits payload storage; an init ref/ptr parameter names the reference slot being bound. Binding such a slot does not initialize its referent. Selecting the native handle category must precede choosing the applicable parameter and local declaration form; a pointer-sized native handle is not automatically a bits value, regional object or CoD reference.
+
+The binding proposal writes the acquired handle into an eligible caller place and returns a zero-argument cleanup callable. The storage place’s actual owner, the handle’s native-resource lifetime and the cleanup responsibility are distinct. The call must not read an uninitialized input payload. Normal completion establishes the declared initialization obligation; partial native acquisition and exceptional completion require their own release proof. Provider code must uphold the checked contract rather than using the annotation as evidence.
+
+Assuming ctx has been allocated under a separately qualified handle-storage contract, the selected defer timing permits:
 
 ```cod
-proc llvm_context_init(out ref ctx: LLVMContextHandle in o)
-    where { owner o }
-    -> proc()->void {
-    ...
-}
-
-ref ctx: LLVMContextHandle;
+# Application sketch; handle storage and native binding support remain pending.
 defer llvm_context_init(ctx)();
 ```
 
-`owner o` permits caller storage in a lexical scope or a region when the handle's own storage rules permit it. A `region` binder would unnecessarily require the latter. `out` describes access and initialization, while `in o` identifies the actual caller destination; neither substitutes for the other. The call site still passes `ctx` normally, without a separate output argument expression or a read of its payload.
-
-For one-line cleanup, the initializer returns a zero-argument cleanup callable as well as writing `ctx`. Its owner/capture contract needs design together with the native handle category; writing an output and returning cleanup are separate responsibilities.
-
-The proposed `ref ctx: LLVMContextHandle;` allocates target storage but leaves its payload uninitialized. The reference is usable as an output destination immediately; reading the handle before successful initialization rejects. This addresses the local handle case, without authorizing lexical allocation of ordinary non-bits regional graphs. Its extension to other declaration types needs explicit coverage.
-
-An `out` method must establish its output on every normal return; the compiler can then carry that postcondition to the caller. Merely having an `out` annotation is not implementation proof. The CoD body must be checked, and a native provider must uphold its trusted declaration. A write-only output view cannot be used to read the previous payload. Aliasing between arguments and the rules for replacing an already initialized resource remain review items.
-
-Exceptional exit does not grant the normal-return initialization postcondition. Subsequent reads on a catch path still need a valid proof. Partial native acquisition, writes made before failure and release responsibility must agree with the selected initializer contract; this proposal does not imply transactional rollback. These checks are compile-time obligations rather than a new runtime uninitialized-value exception mechanism.
+Public init-place writes can be observed during the call and cleanup. They are not the compiler-private pending return slot: the returned cleanup callable is delivered only when the invocation completes successfully. A failing call supplies no blanket output-initialization postcondition or rollback. Subsequent reads need independently valid evidence, and escaped native resources need explicit cleanup. Runtime target sharing between arguments, replacement of an already initialized native resource and target-initializing helper spelling remain application review items.
 
 ## Registration-time evaluation within defer
 
@@ -68,14 +60,14 @@ This supplies the scope-cleanup role commonly implemented by C++ destructors: in
 
 This follows [D-17](../../../design/ExceptionControl.md#deferred-work-and-explicit-scopes). Registration-time evaluation is runtime work when control reaches `defer`, not compile-time evaluation. Normal argument conversion and passing rules still apply: saving a borrowed reference preserves the reference and its owner obligations; it does not snapshot the referenced memory. Bits and callable values retain their ordinary value semantics. Selecting a procedure now does not turn its eventual direct/current-binding call into `perform`.
 
-The implementation should prepare the call through the existing typed call path and retain its operands in the owning scope. It must not evaluate the outer call during registration, reevaluate its arguments during cleanup, or reread a subsequently replaced callable holder. The language scope/defer work can proceed independently of the proposed LLVM handle and `out` features.
+The implementation should prepare the call through the existing typed call path and retain its operands in the owning scope. It must not evaluate the outer call during registration, reevaluate its arguments during cleanup, or reread a subsequently replaced callable holder. The language scope/defer work can proceed independently of the pending LLVM handle and init-place integration.
 
-For native release, retaining the acquired opaque handle value rather than the lexical `ctx` reference avoids retargeting cleanup if that slot changes. This is a proposed binding-provided cleanup representation, not permission for ordinary closures to capture lexical ref cells. Native-resource ownership, captures, copying and callable allocation failure must be resolved together.
+For native release, retaining the acquired opaque handle value rather than the lexical `ctx` reference avoids retargeting cleanup if that slot changes. This is a proposed binding-provided cleanup representation, not permission for implicit lifetime extension or hidden shared callable binding cells. Native-resource ownership, captures, copying and callable allocation failure must be resolved together.
 
 If acquisition throws, no cleanup for that failed acquisition is registered; partial native acquisition remains the initializer's responsibility. Failure while constructing or registering the returned callable also needs a leak-free protocol. Defer runs a registered action once; that fact alone does not establish a linear, single-release contract for every copy of a callable or handle. Cleanup order must respect native dependencies, and behavior if cleanup throws remains part of the exception design.
 
 ## Review before implementation
 
-The language refactor is authorized as the next implementation item: implement the call/block timing contract together with the explicit scope rules and focused lifetime/exception checks in D-17. Current source has neither a defer AST/lowering path nor the accepted distinction between grouping braces and explicit block scopes; successful callable tests alone do not establish this feature.
+D-17 owns the selected call/block defer timing and scope rules; current supported paths and limitations are recorded in the [source capability reference](../../../tests/cod/language/README.md). Language defer support does not establish this application’s native-handle/provider contract.
 
-Handle storage/invalidation, `out` syntax and initializer/cleanup resource contracts still need selection before the LLVM lifecycle example becomes executable. Validate that binding on one actual native-resource lifecycle, including failure paths and nesting, before expanding the API surface. No independent lifetime framework, native pointer registry or general early-evaluation operator is required by the selected defer syntax.
+Handle storage/invalidation, applicable init-place forms and initializer/cleanup resource contracts still need selection before the LLVM lifecycle example becomes executable. Validate that binding on one actual native-resource lifecycle, including failure paths and nesting, before expanding the API surface. No independent lifetime framework, native pointer registry or general early-evaluation operator is required by the selected defer syntax.

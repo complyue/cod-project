@@ -1,11 +1,13 @@
 # CoD booter: a compiler application written in CoD
 
-Document set: revision 4 · Recorded: 2026-11-12 · Phase: application planning; prerequisite defer implementation authorized separately.
+Document set: revision 5 · Recorded: 2026-11-17 · Phase: application planning; prerequisite defer implementation authorized separately.
 
 ## Design authority
 
-- **Registry / scope:** [D-20](../../design/DesignAuthorityRegistry.md#d-20), revision 4, this README and both linked planning documents. Detailed application designs are `pending-human`; the selected defer call/block rule is governed by D-17, not by a broader implementation qualification of this set.
-- **Human baseline:** [H-353](../../CHANGELOG.md#h-353) requests a parallel compiler application, CoD-native design, regional stage caches and incremental LLVM bindings, with documentation only at this stage. [H-354](../../CHANGELOG.md#h-354) proposes write-only `out` parameters and allocated-but-uninitialized local handle storage. [H-355](../../CHANGELOG.md#h-355) supplies registration-time terminology. [H-356](../../CHANGELOG.md#h-356) selects call/block defer timing and immediate language implementation; [K-515](../../CHANGELOG.md#k-515) records this application-plan update.
+- **Output-contract continuity:** [H-571](../../CHANGELOG.md#h-571)/[K-OUTPUT-ACCEPT-20261117](../../CHANGELOG.md#k-output-accept-20261117) covers document-set r4→5. D-22’s selected init declared-place roles replace a separate out spelling; native handle storage, target-initializing helper syntax, ownership and provider proof remain pending. Preserve C-81/C-65, charter §§4.3/6.3/8/12, D-16 and existing D-17 call/block timing. No application implementation, physical ABI or broader qualification follows; pipeline semantics are unchanged.
+
+- **Registry / scope:** [D-20](../../design/DesignAuthorityRegistry.md#d-20), revision 5, this README and both linked planning documents. Detailed application designs are `pending-human`; the selected defer call/block rule is governed by D-17, not by a broader implementation qualification of this set.
+- **Human baseline:** [H-353](../../CHANGELOG.md#h-353) requests a parallel compiler application, CoD-native design, regional stage caches and incremental LLVM bindings, with documentation only at this stage. [H-354](../../CHANGELOG.md#h-354) identifies output-initialization and uninitialized-handle storage requirements; H-571 supplies the current init language roles, while handle classification remains pending. [H-355](../../CHANGELOG.md#h-355) supplies registration-time terminology. [H-356](../../CHANGELOG.md#h-356) selects call/block defer timing and immediate language implementation; [K-515](../../CHANGELOG.md#k-515) records this application-plan update.
 - **Value:** C-80/P-314–P-318 connects inspectable compiler semantics to C-01, reusable structured artifacts to C-05, and native integration to C-02/C-11/C-79. The charter's §§2, 5.3–5.4, 6–7 and 12 provide the context; detailed derivation and trade-offs remain pending.
 - **Boundaries / acceptance:** preserve regional relocation, owner/access checks, independent module worlds and explicit TLS effects. Keep confirmed direction, proposals and missing evidence distinguishable. D-17 supplies the separately authorized defer work. No compiler-application source port, native ABI, toolchain/bootstrap operation or performance claim is authorized by this plan.
 
@@ -28,7 +30,7 @@ Reusable language decisions belong in the relevant `design/` contracts after dis
 
 ## Proposed progression
 
-The immediate language prerequisite is [D-17's scope/defer implementation](../../design/ExceptionControl.md#immediate-implementation-and-acceptance): `defer init(...)()` evaluates acquisition and saves its returned callable now, then invokes it at scope exit. `defer { ... }` delays the whole block. This work does not need to wait for the application's cache schemas, native-handle representation or `out` parameter proposal.
+The immediate language prerequisite is [D-17's scope/defer implementation](../../design/ExceptionControl.md#immediate-implementation-and-acceptance): `defer init(...)()` evaluates acquisition and saves its returned callable now, then invokes it at scope exit. `defer { ... }` delays the whole block. This work does not need to wait for the application's cache schemas, native-handle representation or native init-place integration.
 
 These are planning checkpoints, not an approved implementation schedule. A checkpoint can advance only when its necessary language/runtime contract is selected and qualified.
 
@@ -49,7 +51,7 @@ Full LLVM coverage, byte-identical compiler binaries, independent module compila
 | Stage caches | Preserve suitable regional results directly as DBMR. | Stage-specific dependency/compatibility rules, publication behavior and measured payoff. |
 | LLVM surface | Bind APIs as compiler operations need them. | First end-to-end operation, provider boundary, typed ownership/error signatures. |
 | Native handles | Investigate pointer-backed opaque CoD handles with scoped release. | Storage admissibility, native dependency lifetimes, release authority and invalidation. |
-| Initialization | Explicit generic-owner reference access, with a proposed write-only `out` modifier; a bare local handle declaration allocates uninitialized storage. | Exact modifier grammar, supported storage categories and proof that every normal return initializes the output. |
+| Initialization | Use D-22’s explicit init-place contract and checked actual owner/access. | Select the handle’s storage category and allocation/declaration form; prove initialization and release obligations on all completion paths. |
 | One-line cleanup | Use `defer init(...)()` under D-17's selected call/block timing. | Native cleanup capture/release contract, leak-free registration failure and actual binding evidence. |
 
-No implementation, cache artifact, LLVM binding or runtime validation is supplied by this initial document set.
+No implementation, cache artifact, LLVM binding or runtime validation is supplied by this planning document set.

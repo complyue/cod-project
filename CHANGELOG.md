@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-17 — Select logical output destinations and named reception
+
+<a id="h-571"></a>
+**H-571 — Accept the output/initialization and named-result recommendations.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-17 America/Los_Angeles; exact timestamp/personal name unavailable. “认同，就按你的建议决定。然后下一议题”. Refers to the preceding recommendation: logical caller-provided result destinations with pending preparation before post-cleanup delivery; init as explicit declared place aliasing plus an initialization obligation, distinguishing bits storage, reference slots and referents; `return { expr -> field, ... };`; new-declaration-only `{ ... } := expression;`; per-field ordinary operations, partial named reception, once-only effects and required cleanup, with existing-variable `=`/`<-` intent explicit. Confirms that bounded source model/rationale. Target-initializing helper spelling, complete modifier combinations, structural shape/field-owner permissions, native handles, general aggregate/init proofs and physical ABI were not resolved by that recommendation. The independent D-18r113 review is not answered by this confirmation. Baseline proposal: `bded2d864ece6640fdfbdfef418817ae3cabf5db:design/ConstructionAndAcquisition.md`, caller-provided/init/named-reception sections; H-570 remains the proposal record.
+
+<a id="k-output-accept-20261117"></a>
+**K-OUTPUT-ACCEPT-20261117 — Integrate the selected output source contract.** D-22r27→28/D-23r18→19/D-28r30→31/D-20 document-set r4→5/registry822→823 records H-571 in P-509–P-514 and reconciles C-81/P-319–P-320. The C-54/C-63/C-65/C-72/C-73 → charter §§2/3.2–3.3/4.3/6.3/8/12 path preserves explicit place/owner responsibility, named composition, result-mode/inference independence, init versus private-return publication, effects and exact cleanup. Replace the separate out proposal in current application text with the selected init roles, leaving handle categories/provider proof pending; pipeline semantics are unchanged. Preserve D-16, existing same-owner ADT fields, no implicit object copy/move/promotion/rollback, source414 and the byte-identical D-18r113 review. D-22 records external-owner lexical fields as the next unconfirmed boundary, not an accepted extension. Baseline: `bded2d864ece6640fdfbdfef418817ae3cabf5db` at affected paths; prior qualifications remain scoped. Documentation only; no code/build/tests or full new mechanism qualification.
+
 ## 2026-11-17 — Reconcile result assessment with declaration completion
 
 <a id="k-786"></a>
