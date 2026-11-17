@@ -372,4 +372,63 @@ struct CheckedProgram {
   }
 };
 
+struct CheckedBody {
+  struct Context {
+    const CheckedInstance *instance;
+    std::optional<std::map<const Expression *, CheckedOperation>> remapped_operations;
+    const std::map<const Expression *, CheckedOperation> &operations() const {
+      return remapped_operations ? *remapped_operations : instance->operations;
+    }
+  };
+  std::vector<CheckedStorage> storage;
+  CheckedFrame frame;
+  std::vector<Context> contexts;
+};
+
+inline CheckedBody checked_body(const CheckedProgram &program, const CheckedMethod &method, std::optional<size_t> instance) {
+  const auto instances = instance ? std::vector<size_t>{*instance} : method.instances;
+  if (instances.empty()) throw std::logic_error("checked body has no implementation context");
+  CheckedBody result;
+  std::map<size_t, size_t> places;
+  // A lexical declaration has one frame role even when a checked context
+  // borrows an existing target and another constructs local payload storage.
+  for (const auto id : instances) {
+    const auto &checked = program.instances[id];
+    const auto retain = [&](const CheckedStorage &place) {
+      if (places.emplace(place.binding, result.storage.size()).second) result.storage.push_back(place);
+    };
+    for (const auto &input : checked.frame.inputs) retain(checked.storage.at(input.place));
+    for (const auto capture : checked.frame.captures) retain(checked.storage.at(capture));
+    for (const auto &place : checked.storage) retain(place);
+  }
+  bool frame_ready = false;
+  for (const auto id : instances) {
+    const auto &checked = program.instances[id];
+    const auto remap = [&](size_t place) { return place == null_target ? place : places.at(checked.storage.at(place).binding); };
+    auto inputs = checked.frame;
+    for (auto &input : inputs.inputs) input.place = remap(input.place);
+    for (auto &capture : inputs.captures) capture = remap(capture);
+    if (frame_ready && result.frame != inputs) throw std::logic_error("incompatible checked native input roles");
+    result.frame = std::move(inputs); frame_ready = true;
+    bool unchanged = true;
+    for (size_t i = 0; i < checked.storage.size(); ++i) unchanged = unchanged && remap(i) == i;
+    auto &context = result.contexts.emplace_back(&checked, std::nullopt);
+    if (unchanged) continue;
+    const auto optional = [&](std::optional<size_t> &place) { if (place) place = remap(*place); };
+    const auto set = [&](std::set<size_t> &source) {
+      std::set<size_t> targets;
+      for (const auto place : source) targets.insert(remap(place));
+      source = std::move(targets);
+    };
+    const auto lower = [&](auto &&self, CheckedOperation &operation) -> void {
+      optional(operation.place); optional(operation.callable_place); optional(operation.accumulator); optional(operation.captured_place);
+      set(operation.targets); set(operation.callable_targets); set(operation.captures);
+      for (auto &capture : operation.callable_captures) self(self, capture);
+    };
+    context.remapped_operations = checked.operations;
+    for (auto &[expr, operation] : *context.remapped_operations) lower(lower, operation);
+  }
+  return result;
+}
+
 } // namespace cod::language

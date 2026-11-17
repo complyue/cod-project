@@ -1665,56 +1665,17 @@ class LLVMEmission {
   }
   void body(llvm::Function *function, const CheckedMethod &method, std::optional<size_t> instance) {
     const auto &layout = program_->instances[instance ? *instance : method.instances.front()];
-    const auto instances = instance ? std::vector<size_t>{*instance} : method.instances;
-    std::vector<CheckedStorage> storage;
-    std::map<size_t, size_t> places;
-    std::deque<std::map<const Expression *, CheckedOperation>> operations;
-    std::vector<EmissionContext> lowered;
-    // A lexical declaration has one frame role even when a checked context
-    // borrows an existing target and another constructs local payload storage.
-    for (const auto id : instances) {
-      const auto &checked = program_->instances[id];
-      const auto retain = [&](const CheckedStorage &place) {
-        if (places.emplace(place.binding, storage.size()).second) storage.push_back(place);
-      };
-      for (const auto &input : checked.frame.inputs) retain(checked.storage.at(input.place));
-      for (const auto capture : checked.frame.captures) retain(checked.storage.at(capture));
-      for (const auto &place : checked.storage) retain(place);
-    }
-    std::optional<CheckedFrame> frame;
-    for (const auto id : instances) {
-      const auto &checked = program_->instances[id];
-      const auto remap = [&](size_t place) { return place == null_target ? place : places.at(checked.storage.at(place).binding); };
-      auto inputs = checked.frame;
-      for (auto &input : inputs.inputs) input.place = remap(input.place);
-      for (auto &capture : inputs.captures) capture = remap(capture);
-      if (frame && *frame != inputs) throw std::logic_error("incompatible checked native input roles");
-      frame = std::move(inputs);
-      bool unchanged = true;
-      for (size_t i = 0; i < checked.storage.size(); ++i) unchanged = unchanged && remap(i) == i;
-      if (unchanged) { lowered.push_back({&checked.operations, &checked}); continue; }
-      const auto optional = [&](std::optional<size_t> &place) { if (place) place = remap(*place); };
-      const auto set = [&](std::set<size_t> &source) {
-        std::set<size_t> result;
-        for (const auto place : source) result.insert(remap(place));
-        source = std::move(result);
-      };
-      const auto lower = [&](auto &&self, CheckedOperation &operation) -> void {
-        optional(operation.place); optional(operation.callable_place); optional(operation.accumulator); optional(operation.captured_place);
-        set(operation.targets); set(operation.callable_targets); set(operation.captures);
-        for (auto &capture : operation.callable_captures) self(self, capture);
-      };
-      operations.push_back(checked.operations);
-      for (auto &[expr, operation] : operations.back()) lower(lower, operation);
-      lowered.push_back({&operations.back(), &checked});
-    }
-    const auto arity = frame->inputs.size() + frame->owners.size();
-    begin(function, storage, layout.bindings, *frame); contexts_ = std::move(lowered);
+    const auto prepared = checked_body(*program_, method, instance);
+    const auto &frame = prepared.frame;
+    const auto arity = frame.inputs.size() + frame.owners.size();
+    begin(function, prepared.storage, layout.bindings, frame);
+    contexts_.clear();
+    for (const auto &context : prepared.contexts) contexts_.push_back({&context.operations(), context.instance});
     if (!method.captures.empty()) {
       auto *values = function->getArg(arity);
       for (size_t c = 0; c < method.captures.size(); ++c) {
         auto *captured = b_.CreateLoad(scalar_, b_.CreateGEP(scalar_, values, integer(c)));
-        b_.CreateStore(captured, storage_.at(frame->captures.at(c))); arguments_.push_back(captured);
+        b_.CreateStore(captured, storage_.at(frame.captures.at(c))); arguments_.push_back(captured);
       }
     }
     for (size_t i = 0; i < method.retained_types.size(); ++i) {

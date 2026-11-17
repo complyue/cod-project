@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-17 — Prepare checked body storage independently of LLVM
+
+<a id="k-793"></a>
+**K-793 — Keep body storage preparation at the checked/native boundary.** Agent continuity source420→421/registry841→842 under K-790’s D-26/H-407, existing D-14/D-18 contracts and H-420/H-423 moves the existing context-storage unification/remapping into LLVM-independent checked-program code. Preserve each general/specialized body’s place order, input/capture/owner roles, instance-associated operation facts, cleanup and LLVM/diagnostic behavior. Charter §§2/3.3/5.3/6.3/8/12 and D-16 continue. Baseline: `a3f6927f642e714a092bf1b936f6fc619074e9f8:cod/lang_llvm.hh` and the same commit’s checked-program/source-reference/registry paths. This transient preparation introduces no source permission, new layout algorithm, persistent representation, ABI or broader qualification; D-18r113 remains byte-identical and its review pending.
+
 ## 2026-11-17 — Derive generator header reception from existing scope rules
 
 <a id="k-generator-headers-20261117"></a>
