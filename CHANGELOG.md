@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-11-17 — Owner-parameter reference-symbol feasibility
+
+<a id="h-560"></a>
+**H-560 — Favor owner-parameter reference symbols subject to bounded incremental cost.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-17 America/Los_Angeles; exact timestamp/personal name unavailable. Responding to the proposed module declaration `ref symbol @current:u64 in S where {owner S};` with RHS-selected lexical or ordinary regional backing, says “我也觉得允许这种是非常好的，最开始想限制在symbolic是怕支持成本攀升，你仔细推演实现成本看看，不是悬殊的成本差异，我非常乐于见到这个形式受到支持”. Favors support conditional on a cost comparison with the region-symbol-backed form, and authorizes that review. Does not independently confirm a complete proof algorithm, native carrier, grouped grammar or implementation schedule.
+
+<a id="k-owner-symbol-cost-20261117"></a>
+**K-OWNER-SYMBOL-COST-20261117 — Separate shared reference support from owner-binding increment.** D-10r194→195/registry810→811 adds D-10-OWNER-SYMBOL/P-497–P-499 and its proposed bounded profile. Design and authorized mainline-developer read-only reviews find no inherent semantic blocker or separate backend, and recommend support under H-560's criterion. Substantial mode/provenance/save/restore/capture work is common with H-482; binder/RHS owner sources and lifetime cases add bounded work, while D-18/D-28's transitive borrow/current-base obligations remain substantial shared prerequisites. Preserve one actual owner, permissions, active/saved/captured validity, no owner extension, H-482 selector semantics, unrelated qualifications and D-16 under charter §§2/3.2–3.3/4.3/6.3/8. Detailed new source/proof/profile and full value-path/physical qualification stay pending-human; no code or native acceptance claim. Baseline/source evidence: `44bc1765be05f255e576cccce0f5ec4a2209546e:design/SymbolicDynamicScope.md` (reference-symbol sections), that commit's registry and `cod/lang_syntax.hh`, `cod/lang_checked.hh`, `cod/lang_llvm.hh`; mainline assessment received through the authorized chat, not human confirmation. Documentation checks only; no build/tests.
+
+
 ## 2026-11-17 — Canonical alias glossary and current design documents
 
 <a id="h-558"></a>

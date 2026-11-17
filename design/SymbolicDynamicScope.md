@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 194 · Recorded: 2026-11-17 · Phase: language/application co-design.
+Design revision: 195 · Recorded: 2026-11-17 · Phase: language/application co-design.
 
 ## Design authority
+
+- **Owner-parameter reference-symbol assessment:** [D-10-OWNER-SYMBOL](DesignAuthorityRegistry.md#d-10-owner-symbol)/P-497–P-499, [H-560](../CHANGELOG.md#h-560) and [K-OWNER-SYMBOL-COST-20261117](../CHANGELOG.md#k-owner-symbol-cost-20261117) cover r195's proposed owner-parameter form, cost comparison and bounded acceptance below. The human favors support if its incremental cost is not substantially greater than region-symbol backing; the agent assessment recommends support under that criterion. Candidate C-36/C-54/C-65/C-93 and charter §§2/3.2–3.3/4.3/6.3/8 serve reusable dynamic context with explicit storage/lifetime responsibility. Preserve one proved actual owner, permissions, symbol identity, restoration, capture timing, no lifetime extension and D-16. H-482 remains the baseline for the region-selector form. Exact new source/proof scope and full value-path/physical qualification remain pending-human; this assessment is not compiler support or an implementation mandate. Acceptance and exclusions are in the proposed section; unrelated qualified contracts continue.
 
 - **Native-coverage reference continuity:** [K-AOT-CONTRACT-CONSOLIDATION-20261117](../CHANGELOG.md#k-aot-contract-consolidation-20261117) preserves this revision's D-26 dependency at its current AOT contract section. Only dependency links and this summary change; existing semantics, authority, acceptance and D-16 remain unchanged.
 
@@ -138,7 +140,85 @@ Acceptance covers regional scalar and object targets, unchanged plain TLS scalar
 
 H-555 permits an explicit `in O` lexical-owner borrow when it cannot outlive O, including through a callable view. This is independent of the regional symbol form above: a live lexical owner does not implicitly satisfy an `in @arena` declaration or create a regional resource. D-18 owns ordinary references and explicit place-alias captures; all transitive views and deferred uses must retain their actual owner dependencies. No implicit slot sharing, TLS-cell capture or owner extension follows.
 
-Module symbol identities remain static; H-113's exclusion of lexical symbolic variable declarations is unchanged. A generalized symbolic declaration that selects a particular lexical owner would need an expressible declaration/context association and a proof covering active effects, saved restoration bindings and captured values. That syntax and proof contract are not selected here. The compiler must reject unproved installations/restorations rather than fabricate a module-visible owner, silently promote a local slot or restore an expired binding. Shared mutable state already expressible through region-backed reference symbols keeps its existing installation-time owner rules.
+Module symbol identities remain static; H-113's exclusion of lexical symbolic variable declarations is unchanged. The owner-parameter proposal below supplies a declaration-level owner binder, with installation-specific actual-owner evidence, rather than creating a lexical symbol identity. H-560 conditionally favors this extension subject to its implementation cost; its detailed proof/profile remains a proposal. The compiler must reject unproved installations/restorations rather than fabricate a module-visible owner, silently promote a local slot or restore an expired binding. H-482's region-selector form keeps its installation-time owner constraint.
+
+### Owner-parameter reference symbols: proposed scope and implementation cost
+
+H-560 favors this form if the incremental implementation cost is not substantially greater than requiring a region symbol. The assessment recommends supporting it: the reference-symbol baseline already needs most of the machinery. This is a conditional design direction and a proposed bounded profile, not an implemented feature or whole-mechanism qualification.
+
+```cod
+ref symbol @current:u64 in S where {owner S};
+
+proc bump() {
+    @current <- @current + 1u64;
+}
+
+proc increment(ref n:u64 in O) where {owner O} {
+    effect @current = n;
+    bump();
+}
+
+proc run() -> u64 {
+    val n <- 0u64;
+    increment(n);
+    return n;  # 1; increment's effect was restored before it returned.
+}
+```
+
+The symbol identity is module-declared. S is a declaration-scoped owner parameter, instantiated from the single proved actual owner of the RHS at each installation. It is not a global owner, a newly allocated region, a new symbol or an ambient owner value visible in every procedure. A lexical target and an ordinarily held regional target can both supply that owner. No owning-region symbol needs to be installed first. The existing `in @arena` form adds an installation-time owner-selector constraint; the proposed form omits that constraint, without weakening reference validity.
+
+An installation borrows the selected target; it does not retain n's reference-binding slot. Target writes remain visible to other references to that target: runtime target aliasing. Explicit `var a -> slot` retains its separate declared place-alias meaning, and symbol selection retains name/identity aliasing. Symbol identity, target identity, actual owner and current physical address remain distinct.
+
+The required invariants are the existing ones, applied to the selected actual owner:
+
+- Each installation has one statically established owner association. Different calls or nested shadows may instantiate S differently; that does not authorize a single reference with an unresolved set of possible owners. Separate declarations spelling S do not acquire an owner-equality constraint. Recursive activations remain distinct unless their actual owners are proved equal; sharing resolution information by the spelling S would be incorrect.
+- Active bindings, hidden saved bindings, captured views and deferred uses must all stay within that owner's logical lifetime. Scope restoration restores the original target/owner association. Neither temporary shadowing nor copying a view erases the dependency.
+- Dereference uses the selected actual owner and locator, including the current lexical backing base when that backing can grow. Stack/register allocation, stable-address optimization and shared owner-resolution information remain available under D-28; no pointer ABI or mandatory per-reference owner allocation is selected.
+- Ref/ptr nullability, initialized-target requirements and access permissions remain unchanged. A proposed `ptr symbol @optional:u64 in S where {owner S};` can receive `null in here` or a suitably named owner. Bare null supplies no evidence for a fresh unconstrained S; it must not acquire an owner from a previous installation or a later first non-null assignment. An independently established contextual owner may still supply ordinary null typing.
+- Type-only inspection may use the declared reference/owner contract without reading a TLS binding; declaration alone supplies no installed actual owner. An owner binder does not grant owning access, a region root or lifetime extension. Ordinary owner-parameter permission inference still applies when a selected reference is passed to another callable. Functions remain unable to access dynamic bindings.
+- RHS preparation, failure, publication and restoration follow H-482. Saved owner information is restored on every completion path, before its own dependencies end; proof cannot repair an invalid program by reordering observable user cleanup. Target mutations and allocations performed by an RHS are not rolled back.
+
+For example, nested full scopes may temporarily bind @current to their own local m, then restore an outer n binding before m's owner ends. The same procedure body can serve either binding without making their owners identical. In contrast, returning a callable view that retains the current invocation's local target must reject:
+
+```cod
+proc read_current() -> u64 { return @current; }
+
+proc leak() -> proc()->u64 {
+    val n <- 0u64;
+    effect @current = n;
+    return read_current;  # Reject: this fresh view retains a borrow of n.
+}
+```
+
+A helper returning a view that borrows its caller's still-live owner is not intrinsically an escape error. Acceptance depends on the actual owner's lifetime and all transitive uses, as in D-18; an implementation may conservatively reject an unproved case. A result contract that cannot express/preserve the borrowed owner cannot erase it into an unconstrained reference result.
+
+#### Cost comparison and source evidence
+
+The comparison is against **complete H-482 reference symbols**, including hidden owners and captured replay, not just the existing bits-valued TLS implementation. The latter cannot already implement either reference-symbol form.
+
+| Work | Required by the region-symbol-backed baseline | Increment for the owner-parameter form |
+| --- | --- | --- |
+| Declaration and typing | Explicit ref/ptr mode, target/access/null contract and owner-selector identity. | Parse an owner binder without a required region-root type; obtain its actual owner from RHS evidence. Small, localized addition. |
+| Effect checking and summaries | Track selected targets and actual owners through installation, demanded calls, saved bindings and restoration. Current symbol-presence facts alone are insufficient. | Admit ordinary regional and lexical owner sources, substitute them through the same summaries and check their validity. Moderate extension; no new analysis category is apparent. |
+| Native transport | Carry enough target/owner-resolution information through TLS, saved bindings and captured contexts; a stale raw address cannot stand in for the H-482 owner contract. | Use the already required generic owner resolver for lexical as well as regional storage. No separate ownership manager is justified. |
+| Captures and lifetime proof | Retain the original owner under owner-symbol shadowing, copying and replay; reject use after its owning effect ends. | Lexical scope exit and ordinary regional ownership consumption become additional invalidation boundaries. This shares D-18/D-28's ordinary borrowed-view work. |
+| Precision and validation | Check branches, calls, cleanup, hidden restoration and independent/grouped owner relationships. | Add lexical nesting, recursive activations, growth and non-symbol-backed region cases. The test matrix grows; no constant-factor or schedule estimate is established. |
+
+The current compiler separates proof owner identities from executable owner handles (`EvidenceOwner` in [lang_checked.hh](../cod/lang_checked.hh)), and `CheckedFrame::owners` already transports one owner identity per input-bound owner rather than duplicating it for every target. These are reusable foundations, not proof that reference symbols are implemented. `CheckedSymbol` and the dynamic-symbol checker currently cover supported bits/complete-callable payloads and binding availability; `register_module` explicitly rejects `symbol_owner` contracts. [lang_syntax.hh](../cod/lang_syntax.hh)'s `SymbolOwner` requires a region root and its parser recognizes the grouped region form, so merely lifting a rejection is insufficient.
+
+[lang_llvm.hh](../cod/lang_llvm.hh)'s native-call owner transport, saved `perform` bindings and callable-image construction supply relevant integration points. Their current scalar/image paths need checked target/owner provenance before they can transport arbitrary borrowed symbols. No cost conclusion here assumes that copying an image header copies ownership correctly, or that an address remains valid after lexical backing growth. Compiler implementation evidence is read-only inspection at `44bc1765be05f255e576cccce0f5ec4a2209546e`; this is a qualitative architectural assessment, not measured implementation effort or a native acceptance report.
+
+The [mainline developer](codex://threads/01a1cefe-fe25-7251-b25b-b3908d803ff6) independently reviewed these paths and reached the same bounded conclusion: no inherent source-semantic blocker or separate backend is apparent; the extra form can reuse the owner-bearing installation architecture required by H-482. That review also identifies the current native `owner_identity` gap for an external owner without input-bound actual context. A reference symbol must provide an installed/captured actual-owner source; merely removing that diagnostic would not implement the contract. This consultation is engineering evidence, not human design confirmation or implementation approval.
+
+The difficult total work is therefore the outstanding reference-symbol and borrowed-view support. Requiring a region symbol does not remove its hard hidden-owner, replay and cleanup obligations. Adding an owner parameter is not cost-free, but no separate closure, garbage collector, runtime borrow registry, retained lexical frame or graph-copy subsystem is needed. Restricting ordinary source usage to region symbols would save some cases, not eliminate the core machinery.
+
+#### Bounded implementation profile and remaining review
+
+A first implementation should accept direct lexical and ordinary regional targets, synchronous procedure calls, nested shadow/restoration, ordinary target mutation and normal/exceptional exits whenever existing owner evidence proves them. Keep the same language model for captured replay; implement that acceptance when the corresponding D-18 owner-dependency proof and native carrier are available. Missing precision should produce a specific unsupported/unproved-owner diagnostic, not silently capture an owning region, extend a lifetime or reinterpret a reference as a copied scalar.
+
+Conservatively reject unresolved owner joins, unknown transitive escapes, invalid restoration, consuming/replacing a region while an active/saved/captured binding still requires its owner, cross-context transport without a lifetime contract and reference results whose owner cannot be retained in their contract. Generalize the existing finite summaries only where needed for accepted programs. This is staged compiler coverage, not a permanent language ban on every returned view or an excuse to accept a case without proof.
+
+The proposed single-symbol profile does not choose combined multi-symbol generic-owner grammar, new source annotations for higher-order escape summaries, a runtime carrier/ABI, thread migration or persistent captured lexical storage. Existing H-284–H-286 shared-region groups remain separate; spelling one binder in independent declarations cannot silently create such a group. The exact new source/proof contract and complete value path remain pending-human, with H-560's conditional preference recorded. D-16 fraction payloads retain fixed bits representation and validity invariants; the proposal changes neither numerical promotion nor regional graph transfer.
 
 ### Shared-region symbol declarations
 
