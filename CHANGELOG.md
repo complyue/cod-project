@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-17 — Assess caller-provided outputs and named result construction
+
+<a id="h-570"></a>
+**H-570 — Propose unified output destinations, init place parameters and named result groups.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-17 America/Los_Angeles; exact timestamps/personal name unavailable. Requests assessment of all result forms under “caller allocated output var”, mixed named reception such as `{ val count, val ready } =<< inspect();`, and declaration-derived `=`/`<-` operations; explicitly treats `=<<` as provisional. Corrects remembered `out` to the discussed `init` direction, then suggests init means “caller allocated slot aliasing”. Provisionally proposes `return { n -> count, true -> ready }`, adding “先这么说着”. These are proposals/assessment instructions, not confirmation of the full result/parameter contract, grammar, ABI or value path.
+
+<a id="k-output-assessment-20261117"></a>
+**K-OUTPUT-ASSESSMENT-20261117 — Preserve result categories under a common destination proposal.** D-22r25→26/registry819→821 adds pending D-22-RESULT-DESTINATION/P-512–P-514 and extends pending D-22-ANON-DATA. Candidate C-54/C-63/C-65/C-72/C-73 → charter §§2/3.2–3.3/4.3/6.3/8/12 separates caller-owned hidden result storage from visible receivers, reference carriers from referents, and init place identity from payload readiness. Reviews named return construction, new-binder-only receiving with candidate `:=`, per-field operations, once-only effects, omitted-field cleanup and growth-safe destination forwarding. Local inspection and mainline's bounded read-only review find no general out/init implementation; existing callable destinations and assignment slots are scoped precedents. Shared ADT/owner/cleanup work remains substantial. Preserve D-23/D-24 modes/inference, D-17 completion, D-18r113's unchanged separate review, D-16 and no object copy/move/rollback. Baseline: `2300d905de6316a1a0b16505290500ebc359f7eb:design/ConstructionAndAcquisition.md`, its registry/source413, `cod/lang_syntax.hh`, `cod/lang_llvm.hh`, and `applications/cod-booter/docs/LLVMInterop.md`. Documentation only; no local code/build/tests or new human qualification.
+
 ## 2026-11-17 — Keep native binding roles with their slots
 
 <a id="k-784"></a>
