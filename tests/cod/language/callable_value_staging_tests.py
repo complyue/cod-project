@@ -80,8 +80,7 @@ def main():
     passed = sum(item['passed'] for item in results)
     print(f'Callable staging: {passed}/{len(results)} passed')
     if report := os.environ.get('COD_LANGUAGE_REPORT'):
-        sources = [ROOT/'cod'/name for name in ('main.cc','lang_checked.hh','lang_completion.hh','lang_diagnostics.hh',
-                   'lang_frontend.hh','lang_llvm.hh','lang_syntax.hh','lang_exceptions.hh','lang_native_runtime.hh')]
+        sources = [ROOT / 'cod/main.cc', *sorted((ROOT / 'cod').glob('lang_*.hh'))]
         sources += [Path(__file__).with_name("language_test_support.py"), Path(__file__), Path(__file__).with_name('foundation_tests.py')]
         Path(report).write_text(json.dumps(dict(recorded_utc=datetime.datetime.now(datetime.timezone.utc).isoformat(),
             toolchain=MODE, passed=passed, total=len(results), results=results,

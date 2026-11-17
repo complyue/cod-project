@@ -1,7 +1,7 @@
 //===--- lang_llvm.hh - Checked scalar native emission --------------===//
 #pragma once
 
-#include "lang_checked.hh"
+#include "lang_checked_program.hh"
 #include "lang_exceptions.hh"
 
 #include <clang/Basic/Diagnostic.h>

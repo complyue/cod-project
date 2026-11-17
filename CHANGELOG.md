@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-17 — Separate checked programs from source analysis
+
+<a id="k-790"></a>
+**K-790 — Make the checked/native phase boundary explicit.** Agent continuity under D-26/H-407, existing D-14/D-18 contracts and H-420/H-423: source417→418/registry832→833 separates shared checked definitions from mutable source checking, with explicit driver dependencies and native emission consuming the shared artifact. Definitions/checker behavior and selected-context/owner/completion evidence are preserved; validation fingerprints the complete header and native-fixture inputs. Charter §§2/3.3/5.3/6.3/8/12 and D-16 continue. Baseline: `d8a6878edcf0f2f331802e2e351b9121298bf00b` at compiler/source-reference/registry paths. No new source feature, analysis algorithm, persistent representation, ABI or broader qualification follows; D-18r113 remains byte-identical and pending.
+
 ## 2026-11-17 — Consolidate ranged-for and generator design
 
 <a id="h-577"></a>

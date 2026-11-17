@@ -31,7 +31,8 @@ proc otherhighshow({PARAMETERS})->void{{observe(n0+n31+10u64);}}
 }}}};
 observe(9000u64);
 '''
-FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__), Path(__file__).with_name('uniform_family_tests.py')])
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__), Path(__file__).with_name('uniform_family_tests.py'),
+    Path(__file__).with_name('foundation_tests.py')])
 FIXTURE = FIXTURE.updated(source=FIXTURE.source + SOURCE,
     expected_values=[*FIXTURE.expected_values, '35', '43', '35000', '43', '34'],
     harness=FIXTURE.harness.replace('checkpoints==6', 'checkpoints==7')

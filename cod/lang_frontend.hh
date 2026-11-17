@@ -1,8 +1,8 @@
 //===--- lang_frontend.hh - CoD source compilation pipeline ---------===//
 #pragma once
 
-#include "lang_syntax.hh"
 #include "lang_llvm.hh"
+#include "lang_checked.hh"
 
 #include <set>
 #include <string>
