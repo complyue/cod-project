@@ -219,11 +219,33 @@ public:
       entries.insert(other.entries.begin(), other.entries.end());
     }
   };
+  struct InitializationInput {
+    size_t id;
+    // Absent means the incoming selection of this relation. A captured frame
+    // remains independent of slot mutations while nested relations compose.
+    std::optional<size_t> frame;
+    bool physical = false;
+    InitializationInput(size_t id, std::optional<size_t> frame = {}, bool physical = false) : id(id), frame(frame), physical(physical) {}
+    static InitializationInput payload(size_t place) { return {place, {}, true}; }
+    auto operator<=>(const InitializationInput &) const = default;
+  };
+  using Initialization = std::set<InitializationInput>;
+  static size_t action_frame(size_t action) { return action + 1; }
+  static Initialization capture_initialization(const Initialization &conditions, size_t frame) {
+    Initialization result;
+    for (auto input : conditions) { if (!input.physical && !input.frame) input.frame = frame; result.insert(input); }
+    return result;
+  }
+  static Initialization enter_initialization(const Initialization &conditions, size_t frame) {
+    Initialization result;
+    for (auto input : conditions) { if (input.frame == frame) input.frame.reset(); result.insert(input); }
+    return result;
+  }
   // A selection fact describes the current target, so rebinding can invalidate it.
   struct Selections {
     std::set<size_t> initialized, invalidated;
     // Sufficient entry-target initialization for a current selected target.
-    std::map<size_t, std::set<size_t>> initialized_if;
+    std::map<size_t, Initialization> initialized_if;
     // Initialization of entry targets survives changes to the current selection.
     std::set<size_t> entry_initialized, entry_nonnull;
     // Actual branch conditions are separate from conditional callee guarantees.
@@ -242,20 +264,39 @@ public:
       initialized_if.erase(id);
       if (!invalidated.contains(id)) entry_initialized.insert(id);
     }
-    std::optional<std::set<size_t>> initialization_requirements(size_t id) const {
-      if (initialized.contains(id)) return std::set<size_t>{};
+    std::optional<Initialization> initialization_requirements(size_t id) const {
+      if (initialized.contains(id)) return Initialization{};
       if (const auto found = initialized_if.find(id); found != initialized_if.end()) return found->second;
-      if (!invalidated.contains(id)) return std::set<size_t>{id};
+      if (!invalidated.contains(id)) return Initialization{id};
+      if (const auto found = targets.find(id); found != targets.end()) {
+        const auto &target = found->second;
+        if (target.places.empty() && target.entries.empty() && !target.nullable) return {};
+        Initialization required(target.entries.begin(), target.entries.end());
+        for (const auto place : target.places) required.insert(InitializationInput::payload(place));
+        return required;
+      }
       return {};
     }
-    std::optional<std::set<size_t>> initialization_requirements(const std::set<size_t> &entries) const {
-      std::set<size_t> required;
+    std::optional<Initialization> initialization_requirements(const Initialization &entries) const {
+      Initialization required;
       for (const auto entry : entries) {
-        const auto condition = initialization_requirements(entry);
+        if (entry.frame || entry.physical) { required.insert(entry); continue; }
+        const auto condition = initialization_requirements(entry.id);
         if (!condition) return {};
         required.insert(condition->begin(), condition->end());
       }
       return required;
+    }
+    void enter_initialization(size_t frame) {
+      for (auto &[binding, conditions] : initialized_if)
+        conditions = CleanupEquations::enter_initialization(conditions, frame);
+    }
+    void forget_initialization(size_t id, bool physical = false) {
+      if (!physical) initialized.erase(id);
+      std::erase_if(initialized_if, [&](const auto &entry) {
+        return (!physical && entry.first == id) || std::any_of(entry.second.begin(), entry.second.end(),
+            [&](const auto &input) { return input.physical == physical && input.id == id; });
+      });
     }
     void refine(size_t id, bool null) {
       // Null never reads a payload.
@@ -309,8 +350,8 @@ public:
         changed = false;
         for (const auto &[id, target] : targets) {
           if (std::all_of(target.places.begin(), target.places.end(), [&](size_t place) { return known.contains(place); })) {
-            auto required = target.entries;
-            std::erase_if(required, [&](size_t entry) { return entry_initialized.contains(entry); });
+            Initialization required(target.entries.begin(), target.entries.end());
+            std::erase_if(required, [&](const auto &entry) { return entry_initialized.contains(entry.id); });
             if (required.empty()) changed = initialized.insert(id).second || changed;
             else if (!initialized.contains(id)) {
               const auto found = initialized_if.find(id);
@@ -322,7 +363,9 @@ public:
             changed = known.insert(*target.places.begin()).second || changed;
         }
         for (const auto &[id, required] : initialized_if)
-          if (std::all_of(required.begin(), required.end(), [&](size_t entry) { return entry_initialized.contains(entry); }))
+          if (std::all_of(required.begin(), required.end(), [&](const auto &entry) {
+                return entry.physical ? known.contains(entry.id) : !entry.frame && entry_initialized.contains(entry.id);
+              }))
             changed = initialized.insert(id).second || changed;
       } while (changed);
       for (const auto id : initialized) initialized_if.erase(id);
@@ -358,7 +401,7 @@ public:
       }
       for (const auto &[id, required] : next.initialized_if) {
         auto remaining = required;
-        std::erase_if(remaining, [&](size_t entry) { return next.entry_initialized.contains(entry); });
+        std::erase_if(remaining, [&](const auto &entry) { return !entry.physical && !entry.frame && next.entry_initialized.contains(entry.id); });
         auto incoming = before.initialization_requirements(remaining);
         if (incoming) {
           if (incoming->empty()) initialized.insert(id);
@@ -662,7 +705,7 @@ public:
     ConditionClauses when{ConditionFacts{}};
     MissingInitialization uninitialized{};
     // Sufficient initialization of the sequence's incoming selected targets.
-    std::optional<std::set<size_t>> initialized_selections = {};
+    std::optional<Initialization> initialized_selections = {};
     bool operator==(const ReadRequirement &) const = default;
     bool satisfied(size_t place, const std::set<size_t> &known, const Selections &selections) const {
       if (when.empty()) return true;
@@ -671,7 +714,7 @@ public:
       const auto ready = [&](size_t id) { return initialized.contains(id) || known.contains(id); };
       return ready(place) || (selection && selections.initialized.contains(*selection)) ||
           (initialized_selections && std::all_of(initialized_selections->begin(), initialized_selections->end(),
-              [&](size_t id) { return selections.initialized.contains(id); })) ||
+              [&](const auto &entry) { return entry.physical ? ready(entry.id) : !entry.frame && selections.initialized.contains(entry.id); })) ||
           (targets && std::all_of(targets->begin(), targets->end(), ready));
     }
     void substitute(const Selections &before) {
@@ -705,6 +748,9 @@ public:
         }
       }
       if (before.invalidated.contains(*selection)) selection.reset();
+    }
+    void enter_initialization(size_t frame) {
+      if (initialized_selections) initialized_selections = CleanupEquations::enter_initialization(*initialized_selections, frame);
     }
     void merge(const ReadRequirement &other) {
       for (const auto &facts : other.when) add_condition(when, facts);
@@ -780,6 +826,10 @@ public:
     // Source handling requirements are independent of runtime category paths.
     std::set<size_t> declared_failures{};
     MissingInitialization uninitialized{};
+    void enter_initialization(size_t frame) {
+      selections.enter_initialization(frame);
+      for (auto &[read, requirement] : reads) requirement.enter_initialization(frame);
+    }
     template <typename Transform> void transform_conditions(const Transform &transform) {
       for (auto &[truth, clauses] : returned.boolean) clauses = transform(clauses);
       for (auto &[truth, clauses] : returned.nullness) clauses = transform(clauses);
@@ -1005,6 +1055,7 @@ public:
               if (next.reason < 3) effects.thrown.clear();
               for (const auto &[intermediate, nested] : solved_[path.queue][next.index()]) {
                 auto invoked = compose(effects, nested);
+                invoked.enter_initialization(action_frame(*node.action));
                 const auto arrival = incoming.reason >= 3
                     ? ExceptionFacts::arrival().restricted({incoming.reason - 3}) : ExceptionFacts{};
                 invoked.transform_values([&](const auto &value) { return value.enter(*node.action, arrival); });

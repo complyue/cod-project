@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-16 — Prepared initialization provenance
+
+<a id="k-772"></a>
+**K-772 — Retain prepared initialization through owning frames and calls.** Source399→400/registry797→798 continues K-771’s qualified D-14r116/P-258, D-17r83/P-235/P-236/P-280/H-356/H-525, D-28-IDENTITY, D-18r107, confirmed D-23r17 results and D-26r21/H-407 under H-420/H-423. Shared sufficient conditions distinguish payload-place facts from captured entry selections and cross nested cleanup at the matching proof frame. Borrowed-input read summaries project them onto prepared actuals. Acceptance covers independent repeated-capture models, direct/generic/recursive/callable invocation, late writes versus slot changes, weak/alias destinations, failed registration, native sharing and exact release. Preserve charter §§2/3.3/4.3/5.3/6.3/8/12, owners/access/nullness, fresh storage, ordered reads/writes, declared obligations and D-16. Wider conditional invariants, caller-slot relationships and new runtime/ABI/queue/return-inspection or aggregate protocols remain separate. Baseline: `79ab06728798226a2847dca2a7e7af6d53b57415:tests/cod/language/README.md` and that commit’s `design/DesignAuthorityRegistry.md`. No new source policy, runtime initialization flag or human confirmation.
+
 ## 2026-11-16 — Inductive selected-target initialization
 
 <a id="k-771"></a>

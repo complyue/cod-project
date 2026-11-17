@@ -80,9 +80,7 @@ copied('slot_join',setup=COPY_SETUP+'ptr other=a;',copy='(if(i==0u64){p}else{oth
 copied('slot_join_missing_write',setup=COPY_SETUP+'ptr other=a;',copy='(if(i==0u64){p}else{other})=q;',read='behave @print(p);behave @print(other);',update=COPY_UPDATE.replace('c<-9u64;',''),reject=True)
 copied('borrowed_result',definitions='func choose(ptr x:u64 in O)->ptr u64 in O where {owner O}{return x;}',copy='p=choose(q);')
 copied('borrowed_result_missing_write',definitions='func choose(ptr x:u64 in O)->ptr u64 in O where {owner O}{return x;}',copy='p=choose(q);',update=COPY_UPDATE.replace('c<-9u64;',''),reject=True)
-# This safe case needs conditional registration-frame evidence transport.
-# Keep its conservative diagnostic distinct from the invalid snapshot controls.
-copied('prepared_conditional_unproved',copy='{{defer (=)(p,q);q=c;}};',update='q=a;',reject=True)
+copied('prepared_conditional',copy='{{defer (=)(p,q);q=c;}};',update='q=a;',output='7\n'*4)
 copied('prepared_readiness',setup=COPY_SETUP.replace('make local u64','9u64'),copy='{{defer (=)(p,q);q=c;}};',update='q=a;',output='7\n'*4)
 copied('prepared_changed_entry',copy='{{defer (=)(p,q);q=a;}};',update='',after='q=c;',reject=True)
 copied('prepared_written_entry',copy='{{defer (=)(p,q);q=a;}};',update='',after='c<-9u64;q=c;',output='7\n9\n7\n7\n')
