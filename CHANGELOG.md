@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-17 — Share native invocation parameter roles
+
+<a id="k-797"></a>
+**K-797 — Keep declarations, calls and entry on one native layout.** Agent continuity source424→425/registry857→858 under D-26/H-407/P-371/P-372/P-374/P-375, existing D-14 input/owner/access, D-18 complete values and D-17 completion, with H-420/H-423. Continues K-793’s checked/native separation: one private per-method record describes existing parameter roles and result requirements for declaration, invocation and entry. Preserve order/types, checked contexts, general/specialized behavior and exact cleanup under charter §§2/3.3/5.3/6.3/8/12. Acceptance includes unchanged LLVM/diagnostics/native resources and recursive direct/deferred calls combining owners, captures, retained types, declaration evidence and complete results. No new source permission, convention, permanent ABI or broader qualification; D-16 and pending byte-identical D-18r113 remain. Baseline: `c69e850155e9b03c5495a8a5153057f49d3d96ca` at `cod/lang_llvm.hh` and the affected documentation paths.
+
 ## 2026-11-17 — Integrate current source and discussion contracts
 
 <a id="k-discussion-integration-20261117"></a>

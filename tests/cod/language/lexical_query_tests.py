@@ -43,6 +43,28 @@ runner.CASES={
  'query_only_loop_control':(IO+'proc outer()->void{for(i in 0u64..2u64){ {{func inner()->const u64{val y<-make local typeof(i){16u64};return y;};behave @print(inner());}}; };}outer();',0,'16\n16\n',''),
  'initializer_keeps_runtime_capture':(IO+'func id(x:i64)->const i64{return x;}func outer()->const i64{func f=id;val x<-1;func inner()->const i64{val y<-make local typeof(x){f(17)};return y;};return inner();}behave @print(outer());',0,'17\n',''),
 }
+
+CALL_FRAME_ROLES = '''using symbol "std:io" @print;
+func base()->const i64{return 10;}
+func classify(x:u64)->const i64{return 100;}
+func classify(x:bool)->const i64{return 200;}
+func factory(x:T,f:func()->const i64)->func()->const i64 where T{
+ func inner[f](ref y:T in P,n:u64)->func()->const i64 where {owner P}{
+  if(n==0u64){
+   val temporary<-make local typeof(x){y};
+   if(classify(temporary)==100){return func[f]()->const i64{return f()+1;};}
+   else{return func[f]()->const i64{return f()+2;};};
+  }else{return inner(y,n-1u64);};
+ };
+ CLEANUP
+ return inner(x,20u64);
+}
+func a=factory(1u64,base);func b=factory(true,base);
+behave @print(a());behave @print(b());behave @print(a());
+'''
+for name, cleanup in (('captured_query_with_owner_and_result', ''),
+                      ('deferred_captured_query_with_owner_and_result', 'defer inner(x,0u64);')):
+ runner.CASES[name] = (CALL_FRAME_ROLES.replace('CLEANUP', cleanup), 0, '11\n12\n11\n', '')
 runner.CASE_ARGUMENTS={}
 runner.CASE_SHADOWS = {
     'shadowing_outer_parameter': ['x'],

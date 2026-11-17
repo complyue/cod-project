@@ -36,6 +36,17 @@ class LLVMEmission {
   llvm::StructType *outcome_ = llvm::StructType::create(context_,
       {scalar_, b_.getInt64Ty(), b_.getInt64Ty(), b_.getPtrTy(), b_.getInt64Ty(), b_.getInt64Ty(), b_.getInt64Ty()}, "cod.outcome");
   const CheckedProgram *program_ = nullptr;
+  // Transient native parameter roles shared by declarations, calls and entry.
+  struct CallLayout {
+    size_t operands = 0, owners = 0, captures = 0, retained = 0;
+    bool declaration_context = false, destination = false;
+    size_t captures_index() const { return operands + owners; }
+    size_t retained_begin() const { return captures_index() + (captures != 0); }
+    size_t query_index() const { return retained_begin() + retained; }
+    size_t result_index() const { return query_index() + declaration_context; }
+    size_t parameter_count() const { return result_index() + destination; }
+  };
+  std::vector<CallLayout> call_layouts_;
   bool specialize_ = true;
   bool bounds_checks_ = true;
   bool environments_ = false;
@@ -470,10 +481,6 @@ class LLVMEmission {
     if (!result) throw std::logic_error("unchecked scalar operator");
     return pack(result, choice.operation->type);
   }
-  bool caller_destination(size_t method) const {
-    const auto &instances = program_->methods[method].instances;
-    return std::any_of(instances.begin(), instances.end(), [&](size_t id) { return !program_->instances[id].result.borrowed() && program_->instances[id].result.type->kind == Type::procedure; });
-  }
   const CheckedFrame &input_frame(size_t method) const {
     return program_->instances.at(program_->methods.at(method).instances.front()).frame;
   }
@@ -505,8 +512,9 @@ class LLVMEmission {
   }
   llvm::Value *native_call(const Expression &expr, llvm::Function *target, size_t method, std::vector<llvm::Value *> prepared,
                            const std::vector<llvm::Value *> &captured = {}, std::optional<size_t> instance = {}, const Type *callable_view = nullptr) {
+    const auto &layout = call_layouts_.at(method);
     const auto &inputs = input_frame(method).inputs;
-    if (prepared.size() != inputs.size()) throw std::logic_error("unchecked native call arity");
+    if (prepared.size() != layout.operands) throw std::logic_error("unchecked native call arity");
     for (size_t i = 0; i < prepared.size(); ++i) {
       if (inputs[i].mode == ArgumentMode::value) take_value(prepared[i]);
     }
@@ -514,7 +522,7 @@ class LLVMEmission {
     const size_t offset = expr.kind == Expression::Kind::value_call ? 1 : 0;
     for (const auto &[owner, input] : input_frame(method).owners)
       prepared.push_back(selected_owner(*expr.children.at(input + offset), &expr, method, callable_view));
-    if (captured.size() != program_->methods[method].captures.size()) throw std::logic_error("native call lacks its lexical captures");
+    if (captured.size() != layout.captures) throw std::logic_error("native call lacks its lexical captures");
     if (!captured.empty()) {
       auto *values = slot(llvm::ArrayType::get(scalar_, captured.size()), "call.captures");
       for (size_t i = 0; i < captured.size(); ++i)
@@ -523,16 +531,18 @@ class LLVMEmission {
     }
     if (instance) {
       for (const auto &type : program_->instances[*instance].retained_types) prepared.push_back(b_.getInt32(tag(type)));
-    } else if (!program_->methods[method].retained_types.empty()) {
-      if (program_->methods[method].retained_types.size() != retained_types_.size())
+    } else if (layout.retained) {
+      if (layout.retained != retained_types_.size())
         throw std::logic_error("native call lacks its lexical type context");
       prepared.insert(prepared.end(), retained_types_.begin(), retained_types_.end());
     }
-    if (program_->methods[method].declaration_context()) {
+    if (layout.declaration_context) {
       if (!instance && !query_environment_) throw std::logic_error("native call lacks its declaration evidence context");
       prepared.push_back(instance ? b_.getInt32(program_->instances[*instance].query_environment) : query_environment_);
     }
-    if (caller_destination(method)) { destination = slot(scalar_, "callable.result"); prepared.push_back(destination); }
+    if (layout.destination) { destination = slot(scalar_, "callable.result"); prepared.push_back(destination); }
+    if (!target || prepared.size() != layout.parameter_count() || target->arg_size() != layout.parameter_count())
+      throw std::logic_error("native call disagrees with its parameter roles");
     llvm::Value *result = b_.CreateCall(target, prepared);
     if (destination) result = b_.CreateInsertValue(result, load(destination), 0);
     return result;
@@ -1610,12 +1620,12 @@ class LLVMEmission {
     default: throw std::logic_error("unchecked expression reached LLVM emission");
     }
   }
-  llvm::Function *declare(const std::string &name, size_t arity, bool destination, bool environment, size_t retained, size_t owners) {
-    std::vector<llvm::Type *> parameters(arity, scalar_);
-    parameters.insert(parameters.end(), owners, b_.getPtrTy());
-    if (environment) parameters.push_back(b_.getPtrTy());
-    parameters.insert(parameters.end(), retained, b_.getInt32Ty());
-    if (destination) parameters.push_back(b_.getPtrTy());
+  llvm::Function *declare(const std::string &name, const CallLayout &layout) {
+    std::vector<llvm::Type *> parameters(layout.operands, scalar_);
+    parameters.insert(parameters.end(), layout.owners, b_.getPtrTy());
+    if (layout.captures) parameters.push_back(b_.getPtrTy());
+    parameters.insert(parameters.end(), layout.retained + layout.declaration_context, b_.getInt32Ty());
+    if (layout.destination) parameters.push_back(b_.getPtrTy());
     return llvm::Function::Create(llvm::FunctionType::get(outcome_, parameters, false),
         llvm::GlobalValue::InternalLinkage, name, module_);
   }
@@ -1667,24 +1677,25 @@ class LLVMEmission {
     const auto &layout = program_->instances[instance ? *instance : method.instances.front()];
     const auto prepared = checked_body(*program_, method, instance);
     const auto &frame = prepared.frame;
-    const auto arity = frame.inputs.size() + frame.owners.size();
+    const auto &call = call_layouts_.at(layout.method);
+    if (function->arg_size() != call.parameter_count()) throw std::logic_error("native body disagrees with its parameter roles");
     begin(function, prepared.storage, layout.bindings, frame);
     contexts_.clear();
     for (const auto &context : prepared.contexts) contexts_.push_back({&context.operations(), context.instance});
-    if (!method.captures.empty()) {
-      auto *values = function->getArg(arity);
-      for (size_t c = 0; c < method.captures.size(); ++c) {
+    if (call.captures) {
+      auto *values = function->getArg(call.captures_index());
+      for (size_t c = 0; c < call.captures; ++c) {
         auto *captured = b_.CreateLoad(scalar_, b_.CreateGEP(scalar_, values, integer(c)));
         b_.CreateStore(captured, storage_.at(frame.captures.at(c))); arguments_.push_back(captured);
       }
     }
-    for (size_t i = 0; i < method.retained_types.size(); ++i) {
-      auto *type = function->getArg(arity + !method.captures.empty() + i);
+    for (size_t i = 0; i < call.retained; ++i) {
+      auto *type = function->getArg(call.retained_begin() + i);
       retained_types_.push_back(type);
       arguments_.push_back(b_.CreateInsertValue(empty_scalar(), type, 1));
     }
-    if (method.declaration_context())
-      query_environment_ = function->getArg(arity + !method.captures.empty() + method.retained_types.size());
+    if (call.declaration_context)
+      query_environment_ = function->getArg(call.query_index());
     llvm::Value *returns_value = nullptr;
     if (instance) {
       if (*program_->instances[*instance].result.type != Type::void_type) returns_value = b_.getTrue();
@@ -1715,8 +1726,7 @@ class LLVMEmission {
       b_.CreateCondBr(b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(2)), failed, ready);
       b_.SetInsertPoint(failed); clear_value(completion_.value); b_.CreateBr(ready); b_.SetInsertPoint(ready);
     }
-    const auto result_index = arity + !method.captures.empty() + method.retained_types.size() + method.declaration_context();
-    if (function->arg_size() > result_index) b_.CreateStore(load(completion_.value), function->getArg(result_index));
+    if (call.destination) b_.CreateStore(load(completion_.value), function->getArg(call.result_index()));
     b_.CreateRet(outcome(load(completion_.value), load(completion_.category), load(completion_.site), load(completion_.fatal),
         load(completion_.requested), load(completion_.available), load(completion_.cause)));
   }
@@ -1774,24 +1784,34 @@ public:
     std::unique_ptr<clang::TargetInfo> target(clang::TargetInfo::CreateTargetInfo(diagnostics, options));
     if (!target) throw std::runtime_error("cannot obtain the native target data layout");
     module_.setTargetTriple(triple); module_.setDataLayout(target->getDataLayoutString());
+    call_layouts_.resize(program.methods.size());
+    for (size_t i = 0; i < program.methods.size(); ++i) {
+      const auto &method = program.methods[i]; if (method.instances.empty()) continue;
+      const auto &frame = input_frame(i);
+      const bool destination = std::any_of(method.instances.begin(), method.instances.end(), [&](size_t id) {
+        const auto &result = program.instances[id].result;
+        return !result.borrowed() && result.type->kind == Type::procedure;
+      });
+      call_layouts_[i] = {frame.inputs.size(), frame.owners.size(), method.captures.size(),
+          method.retained_types.size(), method.declaration_context(), destination};
+    }
     general_.resize(program.methods.size()); specialized_.resize(program.instances.size());
     for (size_t i = 0; i < program.methods.size(); ++i) {
       const auto &method = program.methods[i]; if (method.instances.empty()) continue;
-      const auto arity = input_frame(i).inputs.size();
-      const auto owners = input_frame(i).owners.size();
+      const auto &layout = call_layouts_[i];
       const auto prefix = "cod.method." + std::to_string(method.definition) + "." + method.source->name +
           (i == method.definition ? std::string{} : ".interpretation." + std::to_string(i));
       if (method.source->type_parameters.empty() && method.captures.empty() && method.retained_types.empty() && !method.declaration_context()) {
-        general_[i] = declare(prefix + ".native", arity, caller_destination(i), false, 0, owners);
+        general_[i] = declare(prefix + ".native", layout);
         specialized_[method.instances.front()] = general_[i];
         continue;
       }
-      general_[i] = declare(prefix + ".general", arity, caller_destination(i), !method.captures.empty(), method.retained_types.size() + method.declaration_context(), owners);
+      general_[i] = declare(prefix + ".general", layout);
       if (specialize) for (const auto id : method.instances) {
         std::string name = prefix + ".specialized";
         for (const auto &type : program.instances[id].context) name += "." + type_name(type);
         if (method.declaration_context()) name += ".query." + std::to_string(program.instances[id].query_environment);
-        specialized_[id] = declare(name, arity, caller_destination(i), !method.captures.empty(), method.retained_types.size() + method.declaration_context(), owners);
+        specialized_[id] = declare(name, layout);
       }
     }
     for (size_t i = 0; i < program.methods.size(); ++i) {
