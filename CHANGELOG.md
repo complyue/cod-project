@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-17 — Factor independent scalar input checks
+
+<a id="k-796"></a>
+**K-796 — Preserve original-type selection with finite fixed-formal coverage.** Agent continuity source423→424/registry855→856 under D-26/H-407/P-371/P-372/P-374/P-375, existing D-14/H-295, D-18 and D-24/H-421–H-424/H-420/H-423 continues K-789/K-792’s whole-input proof. Shared planning checks identical independently preparable scalar formals across candidates/declarations; remaining coordinates retain original type selection and complete contracts. Equal qualifiers preserve exact-before-widening choice; native preparation retains all actual inputs. Acceptance includes independent selection/counterexample models, wide module/view/query paths, prepared/captured calls, recursive sharing and exact failure release. Charter §§2/3.3/5.3/6.3/8/12 and D-16 remain; no new source policy, permanent domain/ABI or pending capture/init/receiving/generator qualification. Baselines: `e28d2c42b7a7a2fc2563d9c970c1f8f3cc0a5aff:cod/lang_checked.hh` and `dca4f4815170148ba4d841c4d354c1edee734e0d:design/DesignAuthorityRegistry.md`. D-22r41’s init wording editorially names declared place/runtime target aliasing and reference binding under its unchanged contract. D-18r113 stays byte-identical and pending.
+
 ## 2026-11-17 — Separate source decisions from remaining implementation work
 
 <a id="k-tracker-boundaries-20261117"></a>

@@ -300,6 +300,8 @@ struct CheckedCallable {
   std::vector<std::pair<std::vector<Type>, size_t>> dispatch = {};
   // A whole-domain proof can establish one prepared implementation.
   std::optional<size_t> uniform_target = {};
+  // Original input types at these positions distinguish fixed scalar rows.
+  std::optional<std::vector<size_t>> selection_inputs = {};
   std::set<size_t> implementations() const {
     std::set<size_t> result;
     if (uniform_target) result.insert(*uniform_target);
@@ -307,19 +309,23 @@ struct CheckedCallable {
     return result;
   }
   size_t target(const std::vector<Type> &arguments) const {
-    if (uniform_target) {
+    if (uniform_target || selection_inputs) {
       if (arguments.size() != type.parameters.size()) throw std::logic_error("unchecked callable family invocation");
       for (size_t i = 0; i < arguments.size(); ++i)
         if (!scalar_type(arguments[i]) || !transfers_value(arguments[i], type.parameters[i]))
           throw std::logic_error("unchecked callable family invocation");
-      return *uniform_target;
     }
-    const auto found = std::find_if(dispatch.begin(), dispatch.end(), [&](const auto &entry) { return entry.first == arguments; });
+    if (uniform_target) return *uniform_target;
+    const auto found = std::find_if(dispatch.begin(), dispatch.end(), [&](const auto &entry) {
+      if (!selection_inputs) return entry.first == arguments;
+      return entry.first.size() == arguments.size() && std::all_of(selection_inputs->begin(), selection_inputs->end(),
+          [&](size_t input) { return entry.first.at(input) == arguments.at(input); });
+    });
     if (found == dispatch.end()) throw std::logic_error("unchecked callable family invocation");
     return found->second;
   }
   std::vector<std::pair<std::vector<Type>, size_t>> alternatives(const std::vector<Type> &arguments) const {
-    if (uniform_target) return {{arguments, target(arguments)}};
+    if (uniform_target || selection_inputs) return {{arguments, target(arguments)}};
     std::vector<std::pair<std::vector<Type>, size_t>> result;
     for (const auto &entry : dispatch) {
       bool admitted = entry.first.size() == arguments.size();

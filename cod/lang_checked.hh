@@ -4445,23 +4445,26 @@ class ScalarChecker {
     };
     cover();
   }
-  static bool fixed_preparation(const CheckedMethod &method, const Type &view, const InputDomains &domains) {
-    // Each admitted scalar prepares independently to the same fixed formal.
-    // Joint binders and conditional declarations retain the tuple proof.
-    // Declaration evidence is fixed per materialization across these inputs.
+  static bool fixed_parameters(const CheckedMethod &method, const Type &view, const InputDomains &domains) {
     if (variadic(method) || !method.type_parameters.empty() || !method.retained_types.empty() ||
         !method.source->owner_parameters.empty() || caller_bindings(method) ||
         method.parameters.size() != domains.size() || !view.value_result || method.result.mode != ResultMode::value)
       return false;
-    for (size_t i = 0; i < domains.size(); ++i) {
+    for (size_t i = 0; i < domains.size(); ++i)
       if (argument_mode(parameter_at(method, i)) != ArgumentMode::value ||
           (!view.argument_modes.empty() && view.argument_modes[i] != ArgumentMode::value) ||
-          (!view.owners.empty() && view.owners[i]) || !scalar_type(method.parameters[i]) || domains[i].empty())
+          (!view.owners.empty() && view.owners[i]) || !scalar_type(method.parameters[i]) || domains[i].empty() ||
+          std::any_of(domains[i].begin(), domains[i].end(), [](const auto &actual) { return !scalar_type(actual); }))
         return false;
-      for (const auto &actual : domains[i]) {
-        Substitutions substitutions;
-        if (!scalar_type(actual) || !bind_parameter(method, i, actual, substitutions, true)) return false;
-      }
+    return true;
+  }
+  static bool fixed_preparation(const CheckedMethod &method, const Type &view, const InputDomains &domains) {
+    // Each admitted scalar prepares independently to the same fixed formal.
+    // Declaration evidence is fixed per materialization across these inputs.
+    if (!fixed_parameters(method, view, domains)) return false;
+    for (size_t i = 0; i < domains.size(); ++i) for (const auto &actual : domains[i]) {
+      Substitutions substitutions;
+      if (!bind_parameter(method, i, actual, substitutions, true)) return false;
     }
     return true;
   }
@@ -4471,6 +4474,42 @@ class ScalarChecker {
       for (const auto &declaration : program_.families[*method.family].declarations)
         if (!fixed_preparation(declaration, view, domains)) return false;
     return true;
+  }
+  struct InputPlan {
+    InputDomains domains;
+    std::optional<std::vector<size_t>> selection_inputs = {};
+  };
+  InputPlan plan_inputs(const Type &view, const InputDomains &domains, std::vector<const CheckedMethod *> contracts) const {
+    InputPlan plan{domains};
+    const auto methods = contracts.size();
+    std::set<size_t> declarations;
+    for (size_t i = 0; i < methods; ++i) {
+      const auto &method = *contracts[i];
+      if (method.family && !lexical_methods_.contains(method.source) && declarations.insert(*method.family).second)
+        for (const auto &declaration : program_.families[*method.family].declarations) contracts.push_back(&declaration);
+    }
+    if (contracts.empty() || std::any_of(contracts.begin(), contracts.end(),
+        [&](const auto *contract) { return !fixed_parameters(*contract, view, domains); })) return plan;
+    // Exact matches precede widening. Equal qualifiers preserve dominance of
+    // an exact signature when a common input requires widening instead.
+    for (size_t i = 0; i < domains.size(); ++i)
+      if (std::any_of(contracts.begin(), contracts.end(), [&](const auto *contract) {
+            return parameter_at(*contract, i).read_only != parameter_at(*contracts.front(), i).read_only;
+          })) return plan;
+    std::vector<size_t> selection;
+    for (size_t i = 0; i < domains.size(); ++i) {
+      const auto &formal = contracts.front()->parameters[i];
+      const bool same = std::all_of(contracts.begin(), contracts.end(),
+          [&](const auto *contract) { return contract->parameters[i] == formal; });
+      const bool prepares = same && std::all_of(domains[i].begin(), domains[i].end(), [&](const auto &actual) {
+        Substitutions substitutions;
+        return bind_parameter(*contracts.front(), i, actual, substitutions, true);
+      });
+      if (prepares) plan.domains[i] = {view.parameters[i]};
+      else selection.push_back(i);
+    }
+    if (selection.size() != domains.size()) plan.selection_inputs = std::move(selection);
+    return plan;
   }
   struct CallableInputEvidence {
     Access access;
@@ -4490,7 +4529,7 @@ class ScalarChecker {
     return evidence;
   }
   template <typename Validate>
-  bool cover_family(const std::vector<size_t> &family, const Type &view, const Location &at, const Validate &validate,
+  std::optional<std::vector<size_t>> cover_family(const std::vector<size_t> &family, const Type &view, const Location &at, const Validate &validate,
                     const std::vector<Type> &retained = {}) const {
     const auto evidence = callable_input_evidence(view);
     const auto domains = input_domains(view, at);
@@ -4499,18 +4538,24 @@ class ScalarChecker {
     };
     if (family.size() == 1 && fixed_method_preparation(program_.methods[family.front()], view, domains)) {
       check(view.parameters);
-      return true;
+      return std::vector<size_t>{};
     }
-    cover_domains(view, at, domains, check);
-    return false;
+    std::vector<const CheckedMethod *> contracts;
+    for (const auto id : family) contracts.push_back(&program_.methods[id]);
+    const auto plan = plan_inputs(view, domains, std::move(contracts));
+    cover_domains(view, at, plan.domains, check);
+    return plan.selection_inputs;
   }
   Type complete_callable_type(const CheckedMethod &method, const std::vector<Type> &arguments, const ResultContract &result) const {
     auto type = callable_type(method, arguments, result);
     if (method.family && !program_.families[*method.family].declarations.empty()) {
       const auto domains = input_domains(type, method.source->at);
       if (fixed_method_preparation(method, type, domains)) add_declared_failures(type, method, type.parameters);
-      else cover_domains(type, method.source->at, domains,
-          [&](const std::vector<Type> &inputs) { add_declared_failures(type, method, inputs); });
+      else {
+        const auto plan = plan_inputs(type, domains, {&method});
+        cover_domains(type, method.source->at, plan.domains,
+            [&](const std::vector<Type> &inputs) { add_declared_failures(type, method, inputs); });
+      }
     }
     return resolve_type(std::move(type));
   }
@@ -4680,7 +4725,13 @@ class ScalarChecker {
         [&](const auto &contract) { return fixed_preparation(contract, *view, domains); });
     const bool fixed_method = methods.size() == 1 && fixed_method_preparation(program_.methods[methods.front()], *view, domains);
     if (fixed_contracts && (fixed_method || (methods.empty() && !contracts.empty()))) validate(view->parameters);
-    else cover_domains(*view, at, domains, validate);
+    else {
+      std::vector<const CheckedMethod *> candidates;
+      for (const auto &contract : contracts) candidates.push_back(&contract);
+      for (const auto id : methods) candidates.push_back(&program_.methods[id]);
+      const auto plan = plan_inputs(*view, domains, std::move(candidates));
+      cover_domains(*view, at, plan.domains, validate);
+    }
     return resolved ? view : std::nullopt;
   }
   bool inspect_method_contract(size_t selected, const std::vector<Type> &arguments, const std::vector<Type> &retained,
@@ -4712,7 +4763,7 @@ class ScalarChecker {
   size_t intern_callable(CheckedCallable value) {
     const auto found = std::find_if(program_.callables.begin(), program_.callables.end(), [&](const auto &prior) {
       return prior.family == value.family && prior.type == value.type && prior.dispatch == value.dispatch &&
-          prior.uniform_target == value.uniform_target;
+          prior.uniform_target == value.uniform_target && prior.selection_inputs == value.selection_inputs;
     });
     const auto id = std::distance(program_.callables.begin(), found);
     if (found == program_.callables.end()) program_.callables.push_back(std::move(value));
@@ -4821,13 +4872,15 @@ class ScalarChecker {
     CheckedCallable value{selection.type};
     const auto query = family.context ? family.context->query_environment : family.definition ? family.definition->query
         : retain_query_environment(definition, selection.definition_result, &state);
-    const auto uniform = cover_family(family.methods, selection.type, at, [&](size_t selected, const std::vector<Type> &arguments) {
+    const auto selection_inputs = cover_family(family.methods, selection.type, at, [&](size_t selected, const std::vector<Type> &arguments) {
       const auto target = demand(selected, arguments, at, environment, selection.retained, query, &state);
       const auto &instance = program_.instances[target];
       check_family_contract(program_.methods[selected], arguments, instance.arguments, instance.result, selection.type, at);
       value.dispatch.emplace_back(arguments, target);
     }, selection.retained);
-    if (uniform) { value.uniform_target = value.dispatch.front().second; value.dispatch.clear(); }
+    if (selection_inputs && selection_inputs->empty()) {
+      value.uniform_target = value.dispatch.front().second; value.dispatch.clear();
+    } else value.selection_inputs = selection_inputs;
     return materialized_value(intern_callable(std::move(value)), std::move(captures), at);
   }
   CheckedOperation materialize(const std::vector<size_t> &family, const Type *expected, const Location &at, bool definition_site = false) {
@@ -4849,13 +4902,15 @@ class ScalarChecker {
     const auto id = std::distance(program_.callables.begin(), found);
     if (found == program_.callables.end()) {
       CheckedCallable value{view, family_id};
-      const auto uniform = cover_family(family, view, at, [&](size_t selected, const std::vector<Type> &arguments) {
+      const auto selection_inputs = cover_family(family, view, at, [&](size_t selected, const std::vector<Type> &arguments) {
         const auto target = demand(selected, arguments, at);
         const auto &instance = program_.instances[target];
         check_family_contract(program_.methods[selected], arguments, instance.arguments, instance.result, view, at);
         value.dispatch.emplace_back(arguments, target);
       });
-      if (uniform) { value.uniform_target = value.dispatch.front().second; value.dispatch.clear(); }
+      if (selection_inputs && selection_inputs->empty()) {
+        value.uniform_target = value.dispatch.front().second; value.dispatch.clear();
+      } else value.selection_inputs = selection_inputs;
       program_.callables.push_back(std::move(value));
     }
     return materialized_value(id, {}, at);
