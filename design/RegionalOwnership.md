@@ -1,8 +1,10 @@
 # CoD regional ownership: syntax, semantics and use
 
-Design revision: 122 · Recorded: 2026-11-17 · Status: design draft with scoped confirmed requirements.
+Design revision: 123 · Recorded: 2026-11-17 · Status: design draft with scoped confirmed requirements.
 
 ## Design authority
+
+- **Discussion-index continuity:** [K-DISCUSSION-SCAN-20261117](../CHANGELOG.md#k-discussion-scan-20261117) continues r122→123’s function-result summary from H-262/H-263/H-267 and D-17 E4/E5. C-54/P-143/P-155 and charter §§3.2–3.3/4.3/6.3/8 preserve explicit cleanup responsibility, consumed source names and lifetime-checked views. Existing acceptance and broader pending qualification remain; owner reassignment/reinitialization and mailbox recovery are still separate choices. No new ownership, syntax or physical contract follows.
 
 - **Generator invocation owner:** [H-604](../CHANGELOG.md#h-604)/[K-GENERATOR-HERE-20261117](../CHANGELOG.md#k-generator-here-20261117), [D-29-LENDING](DesignAuthorityRegistry.md#d-29-lending)/P-552–P-554, adds r122's scoped here clarification. In a generator yield contract, here denotes that invocation's lexical owner, fixed across the for; ordinary caller/local here retains its own lexical scope. C-65/C-96 → charter §§2/3.2–3.3/4.3/6.3/8/12 preserves explicit owner identity and bounded borrowing. D-29 owns acceptance and the source confirmation; ordinary return escape, same-owner/access/init rules, D-16 and D-18r113 are unchanged. Complete generator proof/native/value-path qualification remains separate.
 
@@ -923,7 +925,7 @@ The function keyword guarantees independence from dynamic context, not mathemati
 | Local allocation and scope exit | make-created regions are locally owned until legitimately returned/transferred. Still-owned regions release once at lexical exit; forwarded owners are excluded from that cleanup. Allocation/failure semantics still need their own explicit contract. |
 | Caller-owned input region | An access parameter may allow content edits without transferring the owner's cleanup responsibility. Exiting the function must not free the caller's region. Returning an interior reference is allowed only while its caller-region provenance remains valid. |
 | Local reference escape | Returning only `T` into a region destroyed at function exit is rejected. Return the intrinsic whole-region resource instead, or allocate the result inside a supplied live region. No hidden lifetime extension or nullable dangling-reference state. |
-| Returned whole region | Under an owning-result contract, `function make_packet(...) -> owned region :Packet { make Packet(...) { ... } }` returns the intrinsic owner without copying the root. Named return-source rules remain the same open issue as for procedures. |
+| Returned whole region | An explicit `return packet;` under an owning-result contract transfers the intrinsic region responsibility under D-17 E4/E5, without copying its contents. H-262 supplies the consumed named-source state; delivery follows successful required cleanup. Reinitialization, occupied destinations and mailbox recovery remain separate choices for functions and procedures alike. |
 | Snapshot semantics | Nested functions may now change input-reachable data, so the earlier automatic read-only snapshot guarantee no longer holds. Keeping read-only inputs would require a separately specified parameter restriction; merely calling the code a function cannot supply it. |
 | Sequencing and optimization | Preserve source evaluation order around observable memory effects. Do not infer LLVM readonly/readnone, memoization, repeated-call elimination or reorderability from the function keyword. Existing inlining can expose actual loads/stores to LLVM; no new optimizer is required. |
 | Errors | Lexical cleanup releases owned storage; it does not undo earlier edits to a caller region. Failed effect initialization preserves the prior binding/owner, but does not promise rollback of graph edits made while evaluating its RHS. |

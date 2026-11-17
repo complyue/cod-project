@@ -1,9 +1,19 @@
 # Changelog
 
+## 2026-11-17 — Integrate current source and discussion contracts
+
+<a id="k-discussion-integration-20261117"></a>
+**K-DISCUSSION-INTEGRATION-20261117 — Preserve independent source and design scopes.** Agent editorial continuity reconciles the two registry856 branches at source424/registry857: `e65eb1f:design/DesignAuthorityRegistry.md` and `1e429f80deb1413c2fd417e6f08d0c5d59f46ee7` at the affected design paths. K-796's qualified finite scalar coverage and K-DISCUSSION-SCAN-20261117's current topics retain their contracts, value/dependency paths and exclusions under charter §§2/3.2–3.3/4.3/5.3/6.3/8/12. D-12r33/D-14r123/D-23r25 and H-604 remain documentation scope; no new source choice or implementation qualification. D-16, D-18r113's single pending review and all original human evidence remain unchanged.
+
 ## 2026-11-17 — Factor independent scalar input checks
 
 <a id="k-796"></a>
 **K-796 — Preserve original-type selection with finite fixed-formal coverage.** Agent continuity source423→424/registry855→856 under D-26/H-407/P-371/P-372/P-374/P-375, existing D-14/H-295, D-18 and D-24/H-421–H-424/H-420/H-423 continues K-789/K-792’s whole-input proof. Shared planning checks identical independently preparable scalar formals across candidates/declarations; remaining coordinates retain original type selection and complete contracts. Equal qualifiers preserve exact-before-widening choice; native preparation retains all actual inputs. Acceptance includes independent selection/counterexample models, wide module/view/query paths, prepared/captured calls, recursive sharing and exact failure release. Charter §§2/3.3/5.3/6.3/8/12 and D-16 remain; no new source policy, permanent domain/ABI or pending capture/init/receiving/generator qualification. Baselines: `e28d2c42b7a7a2fc2563d9c970c1f8f3cc0a5aff:cod/lang_checked.hh` and `dca4f4815170148ba4d841c4d354c1edee734e0d:design/DesignAuthorityRegistry.md`. D-22r41’s init wording editorially names declared place/runtime target aliasing and reference binding under its unchanged contract. D-18r113 stays byte-identical and pending.
+
+## 2026-11-17 — Refresh the current design discussion index
+
+<a id="k-discussion-scan-20261117"></a>
+**K-DISCUSSION-SCAN-20261117 — Route real choices without reopening settled behavior.** Agent editorial continuity under the user's repo-rescan instruction: D-12r32→33/D-14r122→123/D-23r24→25/registry855→856 corrects stale consumed-source, named owning-return and receiving-overlap summaries from H-262/H-263/H-267/H-576/H-593. Preserves C-52/C-54/C-65/C-72, P-131–P-135/P-143/P-155/P-354–P-355 and charter §§2/3.2–3.3/4.3/6.3/8/12; no new value edge, semantic choice or qualification. The registry links five current discussion topics and separates proof/implementation reviews, deferred increments and application research. Original H-262/H-263 evidence was checked at `0c0efbfde4dccb3f3397b6f961bd82bd9a12c848:design/DesignAuthorityRegistry.md:4123–4146`; current baseline is `dca4f4815170148ba4d841c4d354c1edee734e0d` at the affected design paths. D-16, byte-identical D-18r113 and source423 remain unchanged. Documentation only; no code/build/tests.
 
 ## 2026-11-17 — Separate source decisions from remaining implementation work
 
