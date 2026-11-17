@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-17 — Stabilize contextual callable coverage
+
+<a id="k-792"></a>
+**K-792 — Keep fixed callable coverage independent of mutable analysis hints.** Agent continuity source419→420/registry837→838 under K-789’s D-26/H-407, D-14/H-295, existing D-18 complete values, D-24/H-421–H-424 and H-420/H-423. Fixed expected-result/type-only declaration evidence remains per materialization; preparation preserves input, query/context, result/throws/body and cleanup obligations. Acceptance includes the existing explicit/contextual LLVM equality assertion, wide anonymous/returned views, distinct lexical query environments and preserved scalar/native controls. Charter §§2/3.3/5.3/6.3/8/12 and D-16 continue. Baselines: `db3bee68093db532f64169909c2c50adb39467f0:cod/lang_checked.hh`, `db3bee68093db532f64169909c2c50adb39467f0:tests/cod/language/README.md` and `d8a6878edcf0f2f331802e2e351b9121298bf00b:cod/lang_checked.hh`. No new inference/conversion, scalar capture transport, permanent proof/ABI or broader qualification; D-18r113 remains byte-identical and pending, D-29r4 unimplemented.
+
 ## 2026-11-17 — Preserve lexical returns across generator cleanup
 
 <a id="h-589"></a>

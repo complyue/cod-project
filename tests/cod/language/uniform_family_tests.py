@@ -14,6 +14,15 @@ BASE = f'func base({PARAMETERS})->u64{{return n0+n31;}}'
 HELD = f'func held:{VIEW}=base;'
 CALL = f'behave @print(held({ARGUMENTS}));'
 runner.CASES = {
+    'contextual_value_result': (IO + f'func held:{VIEW}=func({PARAMETERS}){{return 7u32;}};' + CALL, 0, '7\n', ''),
+    'contextual_returned_result': (IO + f'func factory()->{VIEW}{{return func({PARAMETERS}){{return 7u32;}};}}'
+        'func held=factory();' + CALL, 0, '7\n', ''),
+    'query_context_retains_fixed_view': (IO +
+        'func classify(x:u8)->u64{return 1u64;}func classify(x:u32)->u64{return 7u64;}' +
+        f'func factory(sample:T)->{VIEW} where T{{return func({PARAMETERS})->u64{{'
+        'val value<-make local typeof(sample){7u8};return classify(value);};}' +
+        'func first=factory(1u8);func second=factory(1u32);' +
+        f'behave @print(first({ARGUMENTS}));behave @print(second({ARGUMENTS}));', 0, '1\n7\n', ''),
     'mixed_inputs': (IO + BASE + HELD + CALL, 0, '33\n', ''),
     'inferred_signature': (IO + BASE.replace('->u64', '') + 'func held=base;' + CALL, 0, '33\n', ''),
     'fixed_declaration': (IO + f'func base({PARAMETERS})->u64;' + BASE + 'func held=base;' + CALL, 0, '33\n', ''),

@@ -4416,8 +4416,9 @@ class ScalarChecker {
   static bool fixed_preparation(const CheckedMethod &method, const Type &view, const InputDomains &domains) {
     // Each admitted scalar prepares independently to the same fixed formal.
     // Joint binders and conditional declarations retain the tuple proof.
+    // Declaration evidence is fixed per materialization across these inputs.
     if (variadic(method) || !method.type_parameters.empty() || !method.retained_types.empty() ||
-        !method.source->owner_parameters.empty() || caller_bindings(method) || method.declaration_context() ||
+        !method.source->owner_parameters.empty() || caller_bindings(method) ||
         method.parameters.size() != domains.size() || !view.value_result || method.result.mode != ResultMode::value)
       return false;
     for (size_t i = 0; i < domains.size(); ++i) {
