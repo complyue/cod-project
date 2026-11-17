@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-17 — Preserve checked native emission contexts
+
+<a id="k-779"></a>
+**K-779 — Keep native operation evidence with its interpretation.** Source407→408/registry806→807 continues D-26/H-407, D-18, D-14 and unaffected D-17/H-525 under H-420/H-423. Paired operation/instance records and scoped restoration replace parallel native-emission state. Acceptance preserves LLVM/diagnostics for unchanged programs in both native modes and established capture/owner/cleanup observations; H-481 copy-failure injection uses a stored callable value. Charter §§3.2/4.2/5.3/6.3/12 and D-16 continue; no language policy, runtime representation or new qualification. Baseline: `a98a57745809ebb6850bc6191576ffa68d8da2c1:cod/lang_llvm.hh` and that commit's source reference/authority registry.
+
 ## 2026-11-17 — Swap-method signature inspection
 
 <a id="k-778"></a>

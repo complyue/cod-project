@@ -43,7 +43,24 @@ class LLVMEmission {
   std::vector<llvm::Function *> general_, specialized_;
   std::vector<llvm::GlobalVariable *> symbols_;
   std::map<size_t, llvm::AllocaInst *> effect_values_;
-  std::vector<const std::map<const Expression *, CheckedOperation> *> facts_;
+  // Operation facts retain the checked interpretation that justifies them.
+  struct EmissionContext {
+    const std::map<const Expression *, CheckedOperation> *operations;
+    const CheckedInstance *instance = nullptr;
+    const CheckedOperation &at(const Expression *expression) const { return operations->at(expression); }
+  };
+  std::vector<EmissionContext> contexts_;
+  class ContextSelection {
+    std::vector<EmissionContext> &active_;
+    std::vector<EmissionContext> saved_;
+  public:
+    explicit ContextSelection(std::vector<EmissionContext> &active)
+        : active_(active), saved_(std::exchange(active, {})) {}
+    ContextSelection(const ContextSelection &) = delete;
+    ContextSelection &operator=(const ContextSelection &) = delete;
+    ~ContextSelection() { active_ = std::move(saved_); }
+    const std::vector<EmissionContext> &all() const { return saved_; }
+  };
   std::vector<llvm::Value *> arguments_, retained_types_;
   std::vector<llvm::AllocaInst *> storage_;
   std::vector<llvm::Value *> bindings_;
@@ -51,7 +68,6 @@ class LLVMEmission {
   std::vector<llvm::AllocaInst *> selections_;
   const std::vector<CheckedBinding> *binding_layout_ = nullptr;
   std::vector<llvm::AllocaInst *> parameter_values_;
-  std::vector<const CheckedInstance *> frame_contexts_;
   llvm::Value *query_environment_ = nullptr;
   llvm::Function *function_ = nullptr;
   llvm::BasicBlock *finish_ = nullptr;
@@ -238,22 +254,22 @@ class LLVMEmission {
   }
   llvm::Value *view_address(llvm::Value *value) { return b_.CreateIntToPtr(b_.CreateExtractValue(value, 0), b_.getPtrTy()); }
   llvm::Value *pack_view(llvm::Value *address, const Expression &expr, bool returned = false) {
-    const auto type = [&](size_t i) { const auto &fact = facts_[i]->at(&expr); return returned ? fact.operand_type : fact.type; };
+    const auto type = [&](size_t i) { const auto &fact = contexts_[i].at(&expr); return returned ? fact.operand_type : fact.type; };
     // An untyped null has no target identity.
     const auto target_tag = [&](const Type &type) { return type.kind == Type::null_ref ? 0u : tag(type); };
     llvm::Value *identity = b_.getInt32(target_tag(type(0)));
-    if (std::any_of(facts_.begin(), facts_.end(), [&](const auto *facts) {
-          const auto &fact = facts->at(&expr); return (returned ? fact.operand_type : fact.type) != type(0);
+    if (std::any_of(contexts_.begin(), contexts_.end(), [&](const auto &context) {
+          const auto &fact = context.at(&expr); return (returned ? fact.operand_type : fact.type) != type(0);
         })) {
       std::optional<size_t> parameter;
       for (size_t p = 0; p < arguments_.size(); ++p) {
         bool same = true;
-        for (size_t i = 0; i < facts_.size(); ++i) same = same && frame_contexts_[i]->context.at(p) == type(i);
+        for (size_t i = 0; i < contexts_.size(); ++i) same = same && contexts_[i].instance->context.at(p) == type(i);
         if (same) { parameter = p; break; }
       }
       if (parameter) identity = b_.CreateExtractValue(arguments_[*parameter], 1);
-      else for (size_t i = 1; i < facts_.size(); ++i)
-        identity = b_.CreateSelect(matches_context(*frame_contexts_[i]), b_.getInt32(target_tag(type(i))), identity);
+      else for (size_t i = 1; i < contexts_.size(); ++i)
+        identity = b_.CreateSelect(matches_context(*contexts_[i].instance), b_.getInt32(target_tag(type(i))), identity);
     }
     auto *value = b_.CreateInsertValue(empty_scalar(), b_.CreatePtrToInt(address, b_.getInt64Ty()), 0);
     return b_.CreateInsertValue(value, identity, 1);
@@ -317,12 +333,11 @@ class LLVMEmission {
   }
   std::vector<Choice> choices(const Expression &expr, const std::vector<const Expression *> &inputs, bool prepared = false) {
     std::vector<Choice> result;
-    for (size_t i = 0; i < facts_.size(); ++i) {
-      const auto *facts = facts_[i];
-      if (std::any_of(inputs.begin(), inputs.end(), [&](const auto *input) { return facts->at(input).type == Type::never; })) continue;
-      Choice choice{{}, &facts->at(&expr)};
+    for (const auto &context : contexts_) {
+      if (std::any_of(inputs.begin(), inputs.end(), [&](const auto *input) { return context.at(input).type == Type::never; })) continue;
+      Choice choice{{}, &context.at(&expr)};
       for (size_t p = 0; p < inputs.size(); ++p)
-        choice.inputs.push_back(prepared ? choice.operation->arguments.at(p).type : facts->at(inputs[p]).type);
+        choice.inputs.push_back(prepared ? choice.operation->arguments.at(p).type : context.at(inputs[p]).type);
       const auto same = [&](const Choice &other) {
         return other.inputs == choice.inputs && other.operation->callee == choice.operation->callee &&
             other.operation->symbol == choice.operation->symbol &&
@@ -332,7 +347,7 @@ class LLVMEmission {
       };
       auto found = std::find_if(result.begin(), result.end(), same);
       if (found == result.end()) { result.push_back(std::move(choice)); found = std::prev(result.end()); }
-      if (i < frame_contexts_.size()) found->contexts.push_back(frame_contexts_[i]);
+      if (context.instance) found->contexts.push_back(context.instance);
     }
     for (auto &choice : result)
       if (std::none_of(result.begin(), result.end(), [&](const auto &other) { return &choice != &other && choice.inputs == other.inputs; }))
@@ -456,14 +471,14 @@ class LLVMEmission {
   llvm::Value *selected_owner(const Expression &expr, const Expression *call = nullptr,
                               std::optional<size_t> method = {}, const Type *callable_view = nullptr) {
     std::map<size_t, std::vector<size_t>> alternatives;
-    for (size_t i = 0; i < facts_.size(); ++i) {
+    for (size_t i = 0; i < contexts_.size(); ++i) {
       if (call) {
-        const auto &invocation = facts_[i]->at(call);
+        const auto &invocation = contexts_[i].at(call);
         if (callable_view) {
           if (!invocation.callable_call || invocation.operand_type != *callable_view) continue;
         } else if (!invocation.callee || program_->instances[*invocation.callee].method != *method) continue;
       }
-      const auto &fact = facts_[i]->at(&expr);
+      const auto &fact = contexts_[i].at(&expr);
       if (fact.type == Type::never) continue;
       if (fact.owners.size() != 1) throw std::logic_error("unchecked reference owner reached native transport");
       alternatives[*fact.owners.begin()].push_back(i);
@@ -547,8 +562,8 @@ class LLVMEmission {
   }
   llvm::Value *invoke_value(const Expression &expr, const std::vector<llvm::Value *> &prepared) {
     std::vector<Choice> cases;
-    for (const auto *facts : facts_) {
-      const auto &fact = facts->at(&expr);
+    for (const auto &context : contexts_) {
+      const auto &fact = context.at(&expr);
       if (fact.type == Type::never) continue;
       Choice choice{{fact.operand_type}, &fact};
       for (size_t i = expr.kind == Expression::Kind::value_call ? 1 : 0; i < expr.children.size(); ++i)
@@ -563,8 +578,8 @@ class LLVMEmission {
       for (size_t id = 0; id < program_->callables.size(); ++id) {
         const auto &value = program_->callables[id];
         if (value.type != choice.inputs.front()) continue;
-        if (std::none_of(facts_.begin(), facts_.end(), [&](const auto *facts) {
-              const auto &fact = facts->at(&expr);
+        if (std::none_of(contexts_.begin(), contexts_.end(), [&](const auto &context) {
+              const auto &fact = context.at(&expr);
               return fact.type != Type::never && fact.operand_type == value.type && (!fact.callable_choices || fact.callable_choices->contains(id));
             })) continue;
         auto *selected = block("callable.selected"); select->addCase(integer(id + 1), selected);
@@ -614,10 +629,10 @@ class LLVMEmission {
     return outcome(empty_scalar(), integer(0), integer(0), null_pointer());
   }
   llvm::Value *invoke(const Expression &expr, const std::vector<llvm::Value *> &arguments) {
-    const auto &fact = facts_.front()->at(&expr);
+    const auto &fact = contexts_.front().at(&expr);
     if (fact.callable_call) return invoke_value(expr, arguments);
-    if (std::all_of(facts_.begin(), facts_.end(), [&](const auto *facts) {
-          return facts->at(&expr).builtin == BuiltinOperation::reference_swap;
+    if (std::all_of(contexts_.begin(), contexts_.end(), [&](const auto &context) {
+          return context.at(&expr).builtin == BuiltinOperation::reference_swap;
         })) return swap_builtin(arguments, BuiltinOperation::reference_swap);
     if (fact.builtin == BuiltinOperation::identity) {
       auto *left_owner = selected_owner(*expr.children[0]);
@@ -708,10 +723,10 @@ class LLVMEmission {
     for (const auto &child : expr.children) collect_deferred(*child, scope);
     if (expr.kind != Expression::Kind::deferred) return;
     const auto &body = *expr.children.front();
-    if (body.kind != Expression::Kind::block && std::all_of(facts_.begin(), facts_.end(),
-        [&](const auto *facts) { return facts->at(&body).type == Type::never; })) return;
+    if (body.kind != Expression::Kind::block && std::all_of(contexts_.begin(), contexts_.end(),
+        [&](const auto &context) { return context.at(&body).type == Type::never; })) return;
     std::set<std::set<size_t>> layouts;
-    for (const auto *facts : facts_) layouts.insert(facts->at(&expr).captures);
+    for (const auto &context : contexts_) layouts.insert(context.at(&expr).captures);
     for (const auto &captures : layouts) {
       std::vector<llvm::Type *> fields{deferred_header_};
       fields.insert(fields.end(), body.kind == Expression::Kind::block ? captures.size() : prepared_count(body), scalar_);
@@ -777,15 +792,11 @@ class LLVMEmission {
       auto *run = block("defer.invoke");
       dispatch->addCase(integer(i), run);
       b_.SetInsertPoint(run);
-      const auto all_facts = facts_;
-      const auto all_contexts = frame_contexts_;
-      facts_.clear(); frame_contexts_.clear();
-      for (size_t j = 0; j < all_facts.size(); ++j)
-        if (all_facts[j]->at(descriptor.action).captures == descriptor.captures &&
-            (body.kind == Expression::Kind::block || all_facts[j]->at(&body).type != Type::never)) {
-          facts_.push_back(all_facts[j]);
-          if (!all_contexts.empty()) frame_contexts_.push_back(all_contexts.at(j));
-        }
+      const ContextSelection selection(contexts_);
+      for (const auto &context : selection.all())
+        if (context.at(descriptor.action).captures == descriptor.captures &&
+            (body.kind == Expression::Kind::block || context.at(&body).type != Type::never))
+          contexts_.push_back(context);
       if (body.kind == Expression::Kind::block) {
         std::vector<std::pair<size_t, llvm::AllocaInst *>> bindings;
         size_t field = 1;
@@ -802,7 +813,6 @@ class LLVMEmission {
           else emit_finally(*descriptor.action, Projection::value, true, pending_failure);
         }, descriptor.action->children.size() > 1);
         for (const auto &[id, place] : bindings) storage_[id] = place;
-        facts_ = all_facts; frame_contexts_ = all_contexts;
         b_.CreateBr(scope.cleanup);
         continue;
       }
@@ -814,12 +824,11 @@ class LLVMEmission {
       if (body.kind == Expression::Kind::transfer || body.kind == Expression::Kind::rebind) {
         if (body.kind == Expression::Kind::transfer) arguments[1] = own_value(arguments[1]);
         assign_prepared(body, arguments);
-        facts_ = all_facts; frame_contexts_ = all_contexts;
         b_.CreateBr(scope.cleanup);
         continue;
       }
-      if (std::any_of(facts_.begin(), facts_.end(), [&](const auto *facts) {
-            const auto &call = facts->at(&body);
+      if (std::any_of(contexts_.begin(), contexts_.end(), [&](const auto &context) {
+            const auto &call = context.at(&body);
             return call.destination_arguments && std::any_of(call.arguments.begin(), call.arguments.end(),
                 [](const auto &argument) { return argument.binding_slot && argument.mode == ArgumentMode::borrowed_read; });
           })) {
@@ -832,16 +841,14 @@ class LLVMEmission {
           b_.SetInsertPoint(replace); save_failure(result); b_.CreateBr(done);
           b_.SetInsertPoint(done);
         });
-        facts_ = all_facts; frame_contexts_ = all_contexts;
         b_.CreateBr(scope.cleanup);
         continue;
       }
       auto *result = invoke(body, arguments);
       release_value(b_.CreateExtractValue(result, 0));
-      if (facts_.front()->at(&body).callable_call) release_value(arguments.front());
-      if (facts_.front()->at(&body).callee)
+      if (contexts_.front().at(&body).callable_call) release_value(arguments.front());
+      if (contexts_.front().at(&body).callee)
         for (size_t i = body.children.size(); i < arguments.size(); ++i) release_value(arguments[i]);
-      facts_ = all_facts; frame_contexts_ = all_contexts;
       auto *replace = block("defer.failed");
       b_.CreateCondBr(failed(result), replace, scope.cleanup);
       b_.SetInsertPoint(replace); save_failure(result); b_.CreateBr(scope.cleanup);
@@ -863,7 +870,7 @@ class LLVMEmission {
   void collect_effects(const Expression &expr, std::set<size_t> &symbols) const {
     using K = Expression::Kind;
     if ((expr.kind == K::block && expr.scoped) || expr.kind == K::callable) return;
-    if (expr.kind == K::effect || expr.kind == K::procedure_effect) symbols.insert(*facts_.front()->at(&expr).symbol);
+    if (expr.kind == K::effect || expr.kind == K::procedure_effect) symbols.insert(*contexts_.front().at(&expr).symbol);
     const size_t children = expr.kind == K::range_for ? 2 : expr.kind == K::fold ? 3 : expr.children.size();
     for (size_t i = 0; i < children; ++i) collect_effects(*expr.children[i], symbols);
   }
@@ -912,7 +919,7 @@ class LLVMEmission {
     auto *continuation = block("iteration.continue");
     b_.CreateCondBr(b_.CreateICmpEQ(load(exit_), b_.getInt8(0)), continuation, control_->exit);
     b_.SetInsertPoint(continuation);
-    if (std::all_of(facts_.begin(), facts_.end(), [&](const auto *facts) { return facts->at(&expr).type == Type::never; })) {
+    if (std::all_of(contexts_.begin(), contexts_.end(), [&](const auto &context) { return context.at(&expr).type == Type::never; })) {
       b_.CreateUnreachable(); return nullptr;
     }
     return load(result);
@@ -981,7 +988,7 @@ class LLVMEmission {
     for (size_t i = 1; i < expr.children.size(); ++i) {
       const auto &handler = *expr.children[i];
       if (handler.kind == Expression::Kind::block) { finalizer = &handler; break; }
-      const auto &fact = facts_.front()->at(&handler);
+      const auto &fact = contexts_.front().at(&handler);
       auto *selected = block("catch.selected"), *next = block("catch.next");
       auto *caught = choose(handler, {}, choices(handler, {}), scalar_, [&](const Choice &choice) -> llvm::Value * {
         const auto &type = choice.operation->type;
@@ -1008,7 +1015,7 @@ class LLVMEmission {
     b_.CreateCondBr(b_.CreateICmpEQ(load(exit_), b_.getInt8(0)), done, control_->exit);
     b_.SetInsertPoint(done);
     if (read && discard) return empty_scalar();
-    if (facts_.front()->at(&expr).type == Type::never) { b_.CreateUnreachable(); return nullptr; }
+    if (contexts_.front().at(&expr).type == Type::never) { b_.CreateUnreachable(); return nullptr; }
     auto *result = load(saved);
     if (environments_ && read) value_owners_[result] = saved;
     return result;
@@ -1022,12 +1029,12 @@ class LLVMEmission {
     return address;
   }
   llvm::Value *checked_address(llvm::Value *address, const Expression &expr, const Location &at, bool callable = false) {
-    return checked_address(address, std::any_of(facts_.begin(), facts_.end(), [&](const auto *facts) {
-      return callable ? facts->at(&expr).callable_nullable : facts->at(&expr).targets.contains(null_target);
+    return checked_address(address, std::any_of(contexts_.begin(), contexts_.end(), [&](const auto &context) {
+      return callable ? context.at(&expr).callable_nullable : context.at(&expr).targets.contains(null_target);
     }), at);
   }
   size_t prepared_count(const Expression &expr) const {
-    const auto &fact = facts_.front()->at(&expr);
+    const auto &fact = contexts_.front().at(&expr);
     return expr.children.size() + (expr.kind != Expression::Kind::value_call && fact.callable_call ? 1 : 0)
         + (fact.callee ? fact.callable_captures.size() : 0);
   }
@@ -1053,18 +1060,17 @@ class LLVMEmission {
                                  const std::string &label, const Emit &emit, llvm::Type *result_type = nullptr) {
     if (alternatives.size() == 1) return emit(alternatives.begin()->first);
     if (!result_type) result_type = scalar_;
-    const auto all_facts = facts_;
-    const auto all_contexts = frame_contexts_;
     auto *join = block(label + ".prepared");
     auto *saved = environments_ && result_type == scalar_ ? owned_slot(*temporaries_, label + ".value") : nullptr;
     std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> incoming;
     for (const auto &[key, indices] : alternatives) {
       auto *selected = block(label + ".prepare"), *next = block(label + ".next");
       llvm::Value *condition = b_.getFalse();
-      facts_.clear(); frame_contexts_.clear();
+      const ContextSelection selection(contexts_);
       for (const auto i : indices) {
-        condition = b_.CreateOr(condition, matches_context(*all_contexts.at(i)));
-        facts_.push_back(all_facts[i]); frame_contexts_.push_back(all_contexts[i]);
+        const auto &context = selection.all().at(i);
+        condition = b_.CreateOr(condition, matches_context(*context.instance));
+        contexts_.push_back(context);
       }
       b_.CreateCondBr(condition, selected, next);
       b_.SetInsertPoint(selected);
@@ -1075,7 +1081,6 @@ class LLVMEmission {
       }
       b_.SetInsertPoint(next);
     }
-    facts_ = all_facts; frame_contexts_ = all_contexts;
     fail_path(ExceptionCategory::unsound_runtime_typing, expr.at);
     b_.SetInsertPoint(join);
     if (incoming.empty()) { b_.CreateUnreachable(); return nullptr; }
@@ -1091,7 +1096,7 @@ class LLVMEmission {
       auto *value = emit_expression(child, binding_slot ? Projection::slot : mode == ArgumentMode::value ? Projection::value : Projection::target);
       if (!reachable()) return nullptr;
       if (mode != ArgumentMode::value) {
-        if ((mode == ArgumentMode::borrowed_read && !facts_.front()->at(&expr).destination_arguments) ||
+        if ((mode == ArgumentMode::borrowed_read && !contexts_.front().at(&expr).destination_arguments) ||
             (expr.kind == Expression::Kind::transfer && index == 0))
           value = checked_address(value, child, child.at);
         return pack_view(value, child);
@@ -1100,24 +1105,24 @@ class LLVMEmission {
       return copy ? copy_temporary(value, child.at) : value;
     };
     std::map<std::pair<ArgumentMode, bool>, std::vector<size_t>> alternatives;
-    for (size_t i = 0; i < facts_.size(); ++i) {
-      const auto &argument = facts_[i]->at(&expr).arguments.at(index);
+    for (size_t i = 0; i < contexts_.size(); ++i) {
+      const auto &argument = contexts_[i].at(&expr).arguments.at(index);
       alternatives[{argument.mode, argument.binding_slot}].push_back(i);
     }
     return contextual_value(child, alternatives, "argument", prepare);
   }
   std::vector<llvm::Value *> prepare_arguments(const Expression &expr, bool deferred = false) {
     std::vector<llvm::Value *> arguments;
-    const auto &fact = facts_.front()->at(&expr);
+    const auto &fact = contexts_.front().at(&expr);
     const size_t offset = expr.kind == Expression::Kind::value_call ? 1 : 0;
     const bool protect = deferred || std::any_of(expr.children.begin() + offset, expr.children.end(),
                                                [](const auto &child) { return !inert_argument(*child); });
     std::vector<llvm::Value *> captured;
     if (fact.callee) for (size_t i = 0; i < fact.callable_captures.size(); ++i) {
       std::vector<Choice> cases;
-      for (size_t j = 0; j < facts_.size(); ++j)
-        cases.push_back({{}, &facts_[j]->at(&expr).callable_captures.at(i), frame_contexts_.empty() ? std::vector<const CheckedInstance *>{}
-            : std::vector<const CheckedInstance *>{frame_contexts_.at(j)}});
+      for (const auto &context : contexts_)
+        cases.push_back({{}, &context.at(&expr).callable_captures.at(i), context.instance
+            ? std::vector<const CheckedInstance *>{context.instance} : std::vector<const CheckedInstance *>{}});
       auto *value = choose(expr, {}, cases, scalar_, [&](const Choice &choice) { return captured_value(*choice.operation, expr.at); });
       captured.push_back(protect ? copy_temporary(value, expr.at) : value);
     }
@@ -1139,17 +1144,17 @@ class LLVMEmission {
   }
   void check_destination_arguments(const Expression &expr, const std::vector<llvm::Value *> &arguments,
                                    bool deferred = false) {
-    if (facts_.front()->at(&expr).destination_arguments) for (size_t i = 0; i < expr.children.size(); ++i) {
+    if (contexts_.front().at(&expr).destination_arguments) for (size_t i = 0; i < expr.children.size(); ++i) {
       std::map<bool, std::vector<size_t>> alternatives;
-      for (size_t j = 0; j < facts_.size(); ++j)
-        alternatives[facts_[j]->at(&expr).arguments.at(i).mode == ArgumentMode::borrowed_read].push_back(j);
+      for (size_t j = 0; j < contexts_.size(); ++j)
+        alternatives[contexts_[j].at(&expr).arguments.at(i).mode == ArgumentMode::borrowed_read].push_back(j);
       contextual_value(*expr.children[i], alternatives, "destination.check", [&](bool read) {
         if (read) {
           auto *address = view_address(arguments[i]);
-          if (facts_.front()->at(&expr).arguments[i].binding_slot) {
+          if (contexts_.front().at(&expr).arguments[i].binding_slot) {
             address = b_.CreateLoad(b_.getPtrTy(), address);
-            checked_address(address, deferred || std::any_of(facts_.begin(), facts_.end(), [&](const auto *facts) {
-              return facts->at(&expr).nullable_arguments.contains(i);
+            checked_address(address, deferred || std::any_of(contexts_.begin(), contexts_.end(), [&](const auto &context) {
+              return context.at(&expr).nullable_arguments.contains(i);
             }), expr.at);
           } else checked_address(address, *expr.children[i], expr.at);
         }
@@ -1224,13 +1229,13 @@ class LLVMEmission {
   }
   llvm::Value *declare_local(const Expression &declaration) {
     std::map<std::pair<bool, bool>, std::vector<size_t>> alternatives;
-    for (size_t i = 0; i < facts_.size(); ++i) {
-      const auto &binding = facts_[i]->at(&declaration);
+    for (size_t i = 0; i < contexts_.size(); ++i) {
+      const auto &binding = contexts_[i].at(&declaration);
       alternatives[{binding.view, binding.mixed_view}].push_back(i);
     }
     return contextual_value(declaration, alternatives, "storage", [&](auto mode) {
       const auto [borrowed, mixed] = mode;
-      const auto &binding = facts_.front()->at(&declaration);
+      const auto &binding = contexts_.front().at(&declaration);
       llvm::Value *address = binding.place ? static_cast<llvm::Value *>(storage_.at(*binding.place)) : null_pointer();
       if (environments_ && binding.place) scope_->values.values.push_back(storage_.at(*binding.place));
       if (mixed) {
@@ -1263,17 +1268,17 @@ class LLVMEmission {
     });
   }
   llvm::Value *emit_expression(const Expression &expr, Projection projection = Projection::value, bool discard = false) {
-    const bool abrupt = std::all_of(facts_.begin(), facts_.end(), [&](const auto *facts) { return facts->at(&expr).type == Type::never; });
+    const bool abrupt = std::all_of(contexts_.begin(), contexts_.end(), [&](const auto &context) { return context.at(&expr).type == Type::never; });
     // An abrupt mixed branch has no target/slot result. Retain its intermediate
     // value or view through cleanup without forcing the parent's result shape.
     if (!carries_value(projection) && abrupt &&
-        std::any_of(facts_.begin(), facts_.end(), [&](const auto *facts) { return facts->at(&expr).mixed_view; }))
+        std::any_of(contexts_.begin(), contexts_.end(), [&](const auto &context) { return context.at(&expr).mixed_view; }))
       projection = Projection::receiver;
     llvm::Value *value;
     if (projection == Projection::receiver) {
       std::map<unsigned, std::vector<size_t>> alternatives;
-      for (size_t i = 0; i < facts_.size(); ++i) {
-        const auto &fact = facts_[i]->at(&expr);
+      for (size_t i = 0; i < contexts_.size(); ++i) {
+        const auto &fact = contexts_[i].at(&expr);
         alternatives[fact.mixed_view ? 2u : fact.view ? 1u : 0u].push_back(i);
       }
       value = contextual_value(expr, alternatives, "receiver", [&](unsigned kind) -> llvm::Value * {
@@ -1295,17 +1300,17 @@ class LLVMEmission {
   llvm::Value *emit_checked_expression(const Expression &expr, Projection projection, bool discard) {
     const bool read = carries_value(projection);
     using K = Expression::Kind;
-    const auto &fact = facts_.front()->at(&expr);
-    if (std::any_of(facts_.begin(), facts_.end(), [&](const auto *facts) {
-          return facts->at(&expr).borrowed_result != fact.borrowed_result;
+    const auto &fact = contexts_.front().at(&expr);
+    if (std::any_of(contexts_.begin(), contexts_.end(), [&](const auto &context) {
+          return context.at(&expr).borrowed_result != fact.borrowed_result;
         })) {
       if (!read) implementation_gap(expr.at, "context-dependent value/view results without a common value-consuming boundary");
       std::map<bool, std::vector<size_t>> alternatives;
-      for (size_t i = 0; i < facts_.size(); ++i) alternatives[facts_[i]->at(&expr).borrowed_result].push_back(i);
+      for (size_t i = 0; i < contexts_.size(); ++i) alternatives[contexts_[i].at(&expr).borrowed_result].push_back(i);
       return contextual_value(expr, alternatives, "result", [&](bool) { return emit_expression(expr, projection, discard); });
     }
-    if (std::all_of(facts_.begin(), facts_.end(), [&](const auto *facts) {
-          const auto builtin = facts->at(&expr).builtin;
+    if (std::all_of(contexts_.begin(), contexts_.end(), [&](const auto &context) {
+          const auto builtin = context.at(&expr).builtin;
           return builtin == BuiltinOperation::unary || builtin == BuiltinOperation::binary;
         })) {
       std::vector<llvm::Value *> arguments;
@@ -1322,9 +1327,9 @@ class LLVMEmission {
         return this->materialize(value, installation ? value.operand_type : value.type, expr.at);
       };
       llvm::Value *value;
-      if (std::any_of(facts_.begin(), facts_.end(), [&](const auto *facts) { return facts->at(&expr).callable != fact.callable; }) || (!fact.callable_captures.empty() && facts_.size() > 1)) {
+      if (std::any_of(contexts_.begin(), contexts_.end(), [&](const auto &context) { return context.at(&expr).callable != fact.callable; }) || (!fact.callable_captures.empty() && contexts_.size() > 1)) {
         std::vector<Choice> cases;
-        for (size_t i = 0; i < facts_.size(); ++i) cases.push_back({{}, &facts_[i]->at(&expr), {frame_contexts_[i]}});
+        for (const auto &context : contexts_) cases.push_back({{}, &context.at(&expr), {context.instance}});
         value = choose(expr, {}, cases, scalar_, [&](const Choice &choice) { return materialize(*choice.operation); });
       } else value = materialize(fact);
       if (installation) {
@@ -1361,9 +1366,9 @@ class LLVMEmission {
     case K::name: {
       if (projection == Projection::slot) return binding_slot(*fact.binding);
       std::map<std::optional<size_t>, std::vector<size_t>> alternatives;
-      for (size_t i = 0; i < facts_.size(); ++i) alternatives[facts_[i]->at(&expr).captured_place].push_back(i);
+      for (size_t i = 0; i < contexts_.size(); ++i) alternatives[contexts_[i].at(&expr).captured_place].push_back(i);
       auto *address = contextual_value(expr, alternatives, "storage.address", [&](std::optional<size_t> captured) {
-        const auto &selected = facts_.front()->at(&expr);
+        const auto &selected = contexts_.front().at(&expr);
         auto *address = binding_address(*selected.binding, selected.place);
         if (captured && !binding_layout_->at(*selected.binding).value_binding)
           address = b_.CreateSelect(b_.CreateICmpEQ(address, null_pointer()), null_pointer(), storage_.at(*captured));
@@ -1519,7 +1524,7 @@ class LLVMEmission {
     case K::field: {
       auto *value = emit_expression(*expr.children[0]);
       if (!reachable()) return nullptr;
-      const auto &type = facts_.front()->at(expr.children[0].get()).type;
+      const auto &type = contexts_.front().at(expr.children[0].get()).type;
       auto *payload = unpack(value, type);
       const unsigned index = expr.text == "category" ? 0 : expr.text == "site" ? 1 : expr.text == "requested" ? 2 : expr.text == "available" ? 3 : 4;
       auto *field = b_.CreateExtractValue(payload, index);
@@ -1553,7 +1558,7 @@ class LLVMEmission {
     case K::try_scope: return emit_finally(expr, projection, discard);
     case K::deferred: {
       std::map<std::set<size_t>, std::vector<size_t>> alternatives;
-      for (size_t i = 0; i < facts_.size(); ++i) alternatives[facts_[i]->at(&expr).captures].push_back(i);
+      for (size_t i = 0; i < contexts_.size(); ++i) alternatives[contexts_[i].at(&expr).captures].push_back(i);
       if (alternatives.size() > 1)
         return contextual_value(expr, alternatives, "defer", [&](const auto &) { return emit_expression(expr, projection, discard); });
       return temporary_scope(expr.at, scalar_, [&]() -> llvm::Value * {
@@ -1644,7 +1649,7 @@ class LLVMEmission {
     std::vector<CheckedStorage> storage;
     std::map<size_t, size_t> places;
     std::deque<std::map<const Expression *, CheckedOperation>> operations;
-    std::vector<const std::map<const Expression *, CheckedOperation> *> lowered;
+    std::vector<EmissionContext> lowered;
     // A lexical declaration has one frame role even when a checked context
     // borrows an existing target and another constructs local payload storage.
     for (const auto id : instances) {
@@ -1667,7 +1672,7 @@ class LLVMEmission {
       frame = std::move(inputs);
       bool unchanged = true;
       for (size_t i = 0; i < checked.storage.size(); ++i) unchanged = unchanged && remap(i) == i;
-      if (unchanged) { lowered.push_back(&checked.operations); continue; }
+      if (unchanged) { lowered.push_back({&checked.operations, &checked}); continue; }
       const auto optional = [&](std::optional<size_t> &place) { if (place) place = remap(*place); };
       const auto set = [&](std::set<size_t> &source) {
         std::set<size_t> result;
@@ -1681,13 +1686,10 @@ class LLVMEmission {
       };
       operations.push_back(checked.operations);
       for (auto &[expr, operation] : operations.back()) lower(lower, operation);
-      lowered.push_back(&operations.back());
+      lowered.push_back({&operations.back(), &checked});
     }
     const auto arity = frame->inputs.size() + frame->owners.size();
-    begin(function, storage, layout.bindings, *frame); facts_ = std::move(lowered); frame_contexts_.clear();
-    for (size_t i = 0; i < instances.size(); ++i) {
-      frame_contexts_.push_back(&program_->instances[instances[i]]);
-    }
+    begin(function, storage, layout.bindings, *frame); contexts_ = std::move(lowered);
     if (!method.captures.empty()) {
       auto *values = function->getArg(arity);
       for (size_t c = 0; c < method.captures.size(); ++c) {
@@ -1822,7 +1824,7 @@ public:
     auto *main = llvm::Function::Create(llvm::FunctionType::get(b_.getInt32Ty(), false), llvm::GlobalValue::ExternalLinkage, "main", module_);
     std::vector<const Expression *> initializers;
     for (const auto &initializer : program.initializers) initializers.push_back(initializer.expression);
-    begin(main, program.entry_storage, program.entry_bindings); facts_ = {&program.entry}; full_scope(initializers, true, Location{}, nullptr, Projection::value, true);
+    begin(main, program.entry_storage, program.entry_bindings); contexts_ = {{&program.entry}}; full_scope(initializers, true, Location{}, nullptr, Projection::value, true);
     b_.SetInsertPoint(finish_);
     auto *fatal = block("fatal"), *exception = block("exception"), *normal = block("normal");
     b_.CreateCondBr(b_.CreateICmpNE(load(fatal_), null_pointer()), fatal, exception);
