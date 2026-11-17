@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-16 — Return-pattern typing and materialization
+
+<a id="h-549"></a>
+**H-549 — Keep return inference independent of inspection.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-16 America/Los_Angeles; exact timestamp/personal name unavailable. “if returning 只消费已经 inferred 返回类型，不参与 return type inference。” Confirms the bounded profile's one-way type dependency. The accompanying request for binding-failure examples is a clarification request, not confirmation of a new runtime-check mechanism.
+
+<a id="k-returning-binding-20261116"></a>
+**K-RETURNING-BINDING-20261116 — Explain existing complete-value allocation failure.** D-17r84→85/registry800→801 preserves H-548's bounded profile, with H-549 explicitly confirming inference direction. Matching adds no conversion, dereference, allocation or assertion; bits/ref/ptr binding adds no special fallible operation. D-18's ordinary complete-callable environment copy can allocate and raise unchecked OutOfMemoryError before branch entry; no fallback retry. The example distinguishes this from invoking the successfully bound callable. Candidate C-54/C-63/C-65/P-482–P-484 and charter §§2/3.2–3.3/4.3/6.3/8/12 preserve observable completion and valid storage; no new mechanism or value-path qualification. Owners/lifetimes, FIFO, declared obligations and D-16 continue. Baseline: `e7f310b22e5467bb45329a9e6a78b8491e6ae8e0:design/ExceptionControl.md`, return-state section; D-18 dependency at that commit's `design/RegionalClosures.md`, lexical payload/copy contract. Documentation only; no source/build/tests.
+
 ## 2026-11-16 — Bounded return-inspection profile
 
 <a id="h-548"></a>
