@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-17 — Define receiving borrowed-read conflicts as undefined behavior
+
+<a id="h-576"></a>
+**H-576 — Author responsibility for overlapping receiving writes and borrowed reads.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-17 America/Los_Angeles; exact timestamp/personal name unavailable. Responding to the two-field borrowed a/b receiving example, states: “CoD语言层面把这种overlapping定义为undefined behavior，属于用户责任，编译器有选择 snapshot 或者 乱序读写的自由”; requests analysis warnings with opt-in promotion to errors and permits postponing difficult implementation. Confirms that scoped source boundary, optimization/responsibility trade-off and diagnostic requirement, replacing the pending order/snapshot choice. Does not define all runtime target sharing or write/write-only overlap as UB, relax other owner/type/access/init rules, or qualify the complete receiving/analysis/ABI mechanism. D-18r113’s separate review is unanswered.
+
+<a id="k-receive-overlap-20261117"></a>
+**K-RECEIVE-OVERLAP-20261117 — Scope the UB and diagnostic contract.** D-22r32→33/D-23r22→23/registry829→830 adds D-22-RECEIVE-OVERLAP/P-518–P-520 and updates receiving dependencies. H-576’s C-65/C-72/C-73 → charter §§3.3/4.3/6.3/8/12 trade-off permits optimized handling of invalid receiving conflicts while preserving defined-program observations and explicit programmer responsibility. Documents val-snapshot/sharing/single-entry controls, no guaranteed UB output/runtime trap, staged diagnostics and warning-as-error. Exact detection/flag policy and wider receiving/ownership/native coverage remain separate; write/write-only conflicts stay open. Baseline: `ced1e7bdb7ef51bff129dcf42fd2d4290eea2474` at affected design/registry/changelog paths. Preserve D-16, source416, no copying/moving/promotion/rollback and byte-identical D-18r113. Documentation only; no code/build/tests.
+
 ## 2026-11-17 — Require a declarative receiving specification
 
 <a id="h-575"></a>
