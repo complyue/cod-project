@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-17 — Keep generator loop-control owners fixed
+
+<a id="h-600"></a>
+**H-600 — Reject a fresh owner parameter per yield.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded2026-11-17 America/Los_Angeles; exact timestamp/personal name unavailable. Responds to the per-handoff yield owner Y proposal: “我感觉不能支持，会让 loop var `item` 的owner无法静态分析证明”. Rejects the proposed change of owner between handoffs under CoD's statically established owner model. D-29r9 records the fixed-owner consequence; this is not a claim about impossibility in other type systems or confirmation of complete generator/native mechanisms. Replaces the pending proposal in K-GENERATOR-BORROWS-20261117; original payload: `cc9c18d8d07e3717a4c2e912c2d09da4fc28a3ca:design/RangedForAndGenerators.md`, section “Pending decision: a fresh owner parameter per handoff”.
+
+<a id="k-generator-fixed-owners-20261117"></a>
+**K-GENERATOR-FIXED-OWNERS-20261117 — Preserve one actual owner across borrowed handoffs.** D-29r8→9/registry845→846 updates D-29-LENDING/P-552–P-554 under H-600; C-96/C-65 → charter §§2/3.2–3.3/4.3/6.3/8/12 retains typed traversal and explicit storage responsibility. Derived consequences distinguish varying targets from varying owners, per-field fixed owners, declared val snapshots, null and fixed-owner checks through forwarding/fresh controls/result-bound labels. Ordinary D-22 single-call result owners remain unchanged. Removes the proposed syntax from current design; generator-local public owner naming and complete proof/view/native/value-path qualification remain open. Baseline: `cc9c18d8d07e3717a4c2e912c2d09da4fc28a3ca` at D-29/registry. Source421, D-16 and byte-identical D-18r113 unchanged; documentation only, no local code/build/tests.
+
 ## 2026-11-17 — Bound borrowed yields by ordinary owners
 
 <a id="k-generator-borrows-20261117"></a>
