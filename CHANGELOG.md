@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-17 — Derive generator header reception from existing scope rules
+
+<a id="k-generator-headers-20261117"></a>
+**K-GENERATOR-HEADERS-20261117 — Keep control bindings distinct from materialized targets.** Agent settlement under H-592 using H-578, D-17 loop scopes and D-23/H-416 scalar materialization: D-29r5→6/registry840→841 adds D-29-HEADERS/P-540–P-542. Select all existing destinations at each actual post-argument handoff before writes; fresh new-control initialization preserves const/zero-yield behavior. New scalar ref targets belong to the enclosing full scope and retain fresh identity; borrowed targets keep their owner, while control-slot lifetime/capture restrictions remain. Sole labelled outputs admit single-item header mapping without type equality. Candidate C-96/C-65/C-72/C-73 → charter §§2/3.2–3.3/4.3/6.3/8/12 preserves explicit operation/lifetime responsibility. Read-only [mainline review](codex://threads/01a1cefe-fe25-7251-b25b-b3908d803ff6), recorded2026-11-17, found no contract conflict or simpler consistent owner model; this is not human confirmation, measured cost or implementation evidence. Baseline7c1b41f44f1a6b9d54803170052985c75054458b at affected paths. Complete lending/native/value-path proof remains pending; source420, D-16 and D-18r113 unchanged. Documentation only; no local code/build/tests.
+
 ## 2026-11-17 — Settle derived receiving and result rules
 
 <a id="h-592"></a>

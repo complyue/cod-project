@@ -1,12 +1,14 @@
 # Ranged for-loops and synchronous generators
 
-Design revision: 5 · Recorded: 2026-11-17 · Status: selected generator/feedback syntax and checked forwarding; remaining scope, effect proofs and transport pending.
+Design revision: 6 · Recorded: 2026-11-17 · Status: selected generator/feedback syntax and checked forwarding; remaining scope, effect proofs and transport pending.
 
 ## Design authority
 
-- **Receiving-overlap continuity:** [H-593](../CHANGELOG.md#h-593)/[K-RECEIVING-CORE-20261117](../CHANGELOG.md#k-receiving-core-20261117) aligns r4→5 with D-22-RECEIVE-OVERLAP/P-518–P-520: each yielded/feedback receiving spec prohibits cross-entry write/write overlap as UB as well as H-576 borrowed-read overlap. Existing warning/opt-in-error planning and defined single-operation/sequential/target-sharing behavior remain. C-96/C-65/C-72/C-73 and charter §§3.3/4.3/6.3/8/12 preserve receiving optimization and author responsibility without choosing repeated destination timing, header lifetime, signature variance or transport. Acceptance below changes only overlap cases; whole generator mechanism/value path remains pending-human.
+- **Header receiving and materialization:** [K-GENERATOR-HEADERS-20261117](../CHANGELOG.md#k-generator-headers-20261117), [D-29-HEADERS](DesignAuthorityRegistry.md#d-29-headers)/P-540–P-542, records r5→6 source consequences selected under [H-592](../CHANGELOG.md#h-592) delegation. H-578 receiving-style headers, D-23's enclosing-full-scope scalar materialization and D-17's distinct loop-control/full-scope lifetimes determine per-handoff reception and fresh new-control initialization. Candidate C-96/C-65/C-72/C-73 → charter §§2/3.2–3.3/4.3/6.3/8/12 preserves visible operations, actual owners and observable target identity without an implicit iteration scope. Acceptance is below; complete header/native/lending proof and whole mechanism/value-path qualification remain pending. No generator-local lending, regional materialization permission or ABI is inferred.
 
-- **Registry / scope:** [D-29](DesignAuthorityRegistry.md#d-29), r5, all sections. C-96/P-521–P-524 records a candidate value path and dependency constraints; the complete mechanism remains `pending-human`, not a delegated implementation contract.
+- **Receiving-overlap continuity:** [H-593](../CHANGELOG.md#h-593)/[K-RECEIVING-CORE-20261117](../CHANGELOG.md#k-receiving-core-20261117) aligns r4→5 with D-22-RECEIVE-OVERLAP/P-518–P-520: each yielded/feedback receiving spec prohibits cross-entry write/write overlap as UB as well as H-576 borrowed-read overlap. Existing warning/opt-in-error planning and defined single-operation/sequential/target-sharing behavior remain. C-96/C-65/C-72/C-73 and charter §§3.3/4.3/6.3/8/12 preserve receiving optimization and author responsibility without choosing signature variance or transport; the following header scope owns its separate receiving/lifetime derivation. Acceptance below changes only overlap cases; whole generator mechanism/value path remains pending-human.
+
+- **Registry / scope:** [D-29](DesignAuthorityRegistry.md#d-29), r6, all sections. C-96/P-521–P-524 records a candidate value path and dependency constraints; the complete mechanism remains `pending-human`, not a delegated implementation contract.
 - **Human baseline:** [H-577](../CHANGELOG.md#h-577) proposes a typed single-method loop body using its lexical context and confirms that explicit body return targets the surrounding callable. The later H-580–H-584 feedback decisions below define its normal-result and continue forms. [H-578](../CHANGELOG.md#h-578) requests receiving-spec reuse and the assignment-style headers below. [H-579](../CHANGELOG.md#h-579) prefers void-only generator completion; this draft adopts that bounded recommendation without inferring approval of the remaining signature/proof details. [H-580](../CHANGELOG.md#h-580) requires unrestricted normal body-result types for void feedback and static conformity of all normal branches for non-void feedback; [D-29-FEEDBACK](DesignAuthorityRegistry.md#d-29-feedback)/P-525–P-527 records that source boundary separately. [H-581](../CHANGELOG.md#h-581) adds explicit body feedback with continue; [H-582](../CHANGELOG.md#h-582) restricts void feedback to bare continue and rejects its operand-bearing form. [H-583](../CHANGELOG.md#h-583) selects multi-field yield results through existing structural result declarations and receiving specifications. [H-584](../CHANGELOG.md#h-584) accepts the presented yields Y [-> F] syntax, omitted-feedback void and contextual multi-field feedback/receiving model. [H-585](../CHANGELOG.md#h-585) selects automatic checked-body forwarding; [H-588](../CHANGELOG.md#h-588) refines it to bypass generator catches and resume ordinary exception handling at the lexical for site. Fixed explicit generator throws remains required. [D-29-SIGNATURE](DesignAuthorityRegistry.md#d-29-signature), [D-29-FAILURES](DesignAuthorityRegistry.md#d-29-failures) and [D-29-CONTROL](DesignAuthorityRegistry.md#d-29-control) keep those source decisions separate from complete implementation qualification. [H-586](../CHANGELOG.md#h-586) requests assessment of private/native propagation versus special exception wrappers; no public wrapper hierarchy is selected. [H-587](../CHANGELOG.md#h-587) requires entered try/finally cleanup on every protected exit, regardless of lowering. [H-589](../CHANGELOG.md#h-589) treats generator cleanup as part of the whole for operation; [H-590](../CHANGELOG.md#h-590) rejects using generator-local return to replace a pending body exception or enclosing-callable return. Exact source scope and provenance are in those records.
 - **Value rationale:** candidate C-63/C-65/C-73 → C-96 → D-29 under charter §§2/3.2–3.3/4.3/6.1–6.3/8/12: express traversal, data exchange and lexical control in a checked, readable program, while reusing ordinary receiving operations and natural owner lifetimes. Native outlining must preserve that program rather than define its meaning.
 - **Dependencies / invariants:** D-10 calls/effects, D-14/D-28 owners, D-17 scopes/completion, D-18 callable values, D-22 result/receiving specifications, D-23 operations, D-24 inference and D-16 numerical compatibility. Preserve unique actual owners, access/readiness, exact cleanup and the no-closure-cell/no-lifetime-extension boundary. Callable views remain lexical, never regional. There is no C++ object copying/moving model.
@@ -88,9 +90,9 @@ for { val n <- count; ref selected = cell; } := inspect_one(storage) {
 
 Use expression-first named arguments inside `yield(...)`, matching the existing `expression -> name` vocabulary. Each required yielded label must be supplied exactly once; unknown, duplicate or missing fields reject. For the bounded labelled form, recommend naming every component, avoiding positional field-order meaning. The producer still evaluates written expressions once in source order. Reception may select a subset or rename fields, without suppressing unreceived expressions or required cleanup. Yield labels have no default-argument/omission semantics, and introduce no generator-local variables.
 
-The current proposal distinguishes one unnamed component (`yields u64`, `yield(x)`) from a labelled schema (`yields { value:u64; }`, `yield(x -> value)`). Whether single-value for shorthand also accepts a one-label schema remains a receiving grammar question. There is no implicit first-field selection from a larger schema.
+The current proposal distinguishes one unnamed component (`yields u64`, `yield(x)`) from a labelled schema (`yields { value:u64; }`, `yield(x -> value)`). The single-value for header may receive that one labelled component as the unambiguous single-item shorthand below. This is a receiving mapping, not type equality between a schema and scalar; no implicit first-field selection exists for a larger schema.
 
-## Proposed for headers
+## For headers
 
 ```cod
 for { val count <-; ref selected = node; total <- count; } := inspect_all() {
@@ -108,7 +110,7 @@ for target <- values() { consume(target); }
 
 The braces before `:=` are a [receiving specification](ConstructionAndAcquisition.md#receiving-specifications), not executable code. The following braces are the loop body. Simple labels, explicit item operators, same-name selector omission, partial reception and field/local renaming reuse that proposal. A selector is a yielded label, not an arbitrary expression or another entry's newly introduced local. Neither the spec nor the receiver types select the producer's overload or infer its yield contract.
 
-Single-value `=` / `<-` headers consume one yielded component; they never choose the first component of a multi-field yield or consume the generator's final completion. Whether a one-label schema also admits the shorthand can be resolved with the schema-compatibility grammar; no invented field name is required.
+Single-value `=` / `<-` headers consume one yielded component; they never choose the first component of a multi-field yield or consume the generator's final completion. A one-label schema also admits this single-item shorthand: select its sole component, retaining its full contract without inventing a field name. A schema with multiple labels requires an explicit receiving specification, even if a receiver type would match only one of them.
 
 | Header | Receiving operation |
 | --- | --- |
@@ -122,13 +124,15 @@ Single-value `=` / `<-` headers consume one yielded component; they never choose
 
 The distinction between declarations and existing destinations is syntactic. Ptr/null handling, callable construction/replacement and owning operations retain their separate contracts; this table does not turn them into scalar bits transfer. A new declaration's materialization permission does not apply to rebinding an existing reference.
 
-New header names are loop controls, not bindings published after the loop. Their exact repeated-initialization, const, storage and materialization lifetime must be specified with D-17's loop-control rules before implementation. Do not silently treat all iterations after the first as ordinary assignment: that would change new-ref materialization and const initialization. Do not infer a fresh full scope or fresh target owner from each invocation either.
+New header names are loop controls, not bindings published after the loop. Each actual handoff initializes fresh logical control bindings before entering that body invocation. A const control may therefore initialize at every handoff while retaining its ordinary restrictions within the body; later handoffs are not user rebinding of the previous const slot. Ordinary body mutation permissions remain unchanged. With zero yields there is no control initialization/materialization, and pre-existing receivers retain their values unless ordinary generator effects changed them. The control names are unavailable after the loop or in a zero-iteration else.
+
+Distinguish control-binding lifetime from its selected referent. D-17's restrictions on delayed captures/borrows of loop-control storage still apply. A ref control bound to an already existing target retains that target's actual owner/lifetime; its own short-lived binding does not shorten or extend the referent's lifetime. For an independent scalar yield, a new ref declaration instead performs D-23's ordinary fresh materialization, described below. This distinction grants no implicit closure cell or retention of the loop-control slot.
 
 ### Repeated destination selection
 
 Ordinary one-shot reception selects existing destinations before its producer call and delivers after that call's cleanup. A generator call instead contains multiple handoffs, so its final return cannot serve as every receiving boundary.
 
-The proposed generator-specific rule is to select existing destinations anew at each yield handoff, after the yield arguments are prepared and before the receiving operations. This preserves changes deliberately made by earlier body invocations:
+Select existing destinations anew at each actual yield handoff, after the yield arguments are prepared. Select all existing destinations for that spec before any receiving write; keep each selected binding slot or payload target fixed for the handoff. This preserves changes deliberately made by earlier body invocations:
 
 ```cod
 # a and b are writable scalar targets with the same live owner O.
@@ -138,9 +142,47 @@ for dst <- values() {
 }
 ```
 
-Under this recommendation, the first yield writes a and subsequent yields write b, assuming no other rebindings. Selecting the payload target once at loop entry would write a on every yield. This observable timing choice remains pending; header syntax alone does not settle it. Once a destination is selected for a handoff, ordinary owner-plus-locator retention applies across its preparation/delivery effects. Existing one-shot receiving rules are unchanged.
+The first yield writes a and subsequent yields write b, assuming no other rebindings. Yield-argument effects also precede that handoff's selection. There is no speculative destination selection/check before a yield exists: the generator may yield zero times or perform more work without another handoff. Its ordinary input arguments are still prepared once. This receiving point follows the supplied-body entry boundary, not the generator's final return. Once a destination is selected for a handoff, ordinary owner-plus-locator retention applies across its preparation/delivery effects. Existing one-shot receiving rules are unchanged.
 
 Each multi-field handoff preserves [H-576/H-593's receiving-overlap boundary](ConstructionAndAcquisition.md#receiving-overlap-and-diagnostics): cross-entry write/borrowed-read and write/write overlap are author-responsibility UB, with planned warnings and optional error escalation. This does not forbid ordinary target sharing through distinct reference slots or earlier/later sequential loop-body operations. The rule applies separately to each handoff; it is not a new cross-iteration no-sharing requirement.
+
+### Fresh scalar materialization keeps the enclosing full-scope owner
+
+D-23 places a new ref's independently returned scalar bits in its declaration's enclosing full lexical scope. D-17 specifies that the loop and its ordinary body are not full scopes. Therefore each `for ref item = values()` handoff with a scalar val payload creates a fresh semantic target in the enclosing full scope. There is no implicit per-iteration owner. The ref control's visibility ends with its body invocation, but references to that separately materialized target may survive under the target's ordinary owner/lifetime contract.
+
+```cod
+proc two_values() yields u64 {
+    yield(1u64);
+    yield(2u64);
+}
+proc distinct_targets() -> bool {
+    ref first:u64 = 0u64;
+    ref last:u64 = 0u64;
+    for ref item = two_values() {
+        if (item == 1u64) { first = item; } else {};
+        last = item;
+    }
+    return first is not last;  # true: the two materializations are distinct.
+}
+```
+
+This saves selected referents, not the loop-control binding. It does not authorize a delayed block capture of item or borrowing the control slot after its lifetime. The initial first/last targets and every per-yield materialization obey their ordinary enclosing-scope cleanup. A ref header receiving a borrowed yield performs no such construction and keeps the producer-selected target instead. Existing ref receivers do not acquire declaration-only materialization permission.
+
+The full-scope target lifetime can accumulate storage when targets remain observable. That is the ordinary repeated-construction cost, not a hidden lifetime extension. Register/stack allocation or reuse is permitted only when complete reference/identity/cleanup observations are preserved; retained references in the example forbid collapsing both targets to one slot. Callable/owning result operations retain their separately qualified contracts. This scalar rule grants no regional allocation or wider owner-placement permission.
+
+To request per-iteration storage, use a val header and an explicit body full scope:
+
+```cod
+for val item <- two_values() {
+    {{
+        val local <- item;
+        ref current = local;
+        consume(current);
+    }}
+}
+```
+
+Here consume must not retain a borrow beyond its admitted lifetime. Local and current end with the explicit full scope; no corresponding target is allocated by the val header's ordinary control initialization. A full scope around the whole loop instead bounds all header materializations to that surrounding scope. Explicit owner annotations must still match the actual selected/materialized owner under existing rules. Generator-local borrowed yields and their owner quantification remain a separate lending proof scope.
 
 ## Void final completion
 
@@ -264,7 +306,7 @@ The body uses contextual named construction in `continue { expression -> label, 
 
 The generator may select a subset, rename destinations, declare new receivers or update existing ones through the same declarative specification. Each item keeps its explicit `=` or `<-`; no arbitrary receiver expressions or new-binding dependencies appear. Omitted fields are still produced and require their ordinary cleanup. Repeated consumption, callable/owning values and owning-output dependencies retain D-22's restrictions rather than acquiring new permissions through yield.
 
-Reception occurs at the completed body-feedback boundary, after required body-local cleanup and iteration restoration allow successful resumption. The generator's destinations are selected before that yield producer using the ordinary one-shot receiving rule and retained across body effects; the still-pending per-yield destination-selection question concerns the opposite, loop-header receiving direction. The two boundaries must not be conflated. A body that returns from the outer callable or escapes with an error delivers no feedback and performs no final generator receiving updates. Earlier observable effects remain; there is no rollback.
+Reception occurs at the completed body-feedback boundary, after required body-local cleanup and iteration restoration allow successful resumption. The generator's destinations are selected before that yield producer using the ordinary one-shot receiving rule and retained across body effects; loop-header reception instead selects its destinations at each actual yielded-payload handoff as specified above. The two boundaries must not be conflated. A body that returns from the outer callable or escapes with an error delivers no feedback and performs no final generator receiving updates. Earlier observable effects remain; there is no rollback.
 
 H-576/H-593's write/borrowed-read and write/write UB and planned diagnostics also apply to generator receiving specs consuming feedback fields. Independent val snapshots remove borrowed payload reads but do not excuse two entries writing the same destination. Distinct-slot target sharing, fixed-owner/access/init rules and source-ordered producer effects remain. No body-local or iteration-owned reference may survive beyond its proved lifetime merely because the generator selected that field.
 
@@ -480,7 +522,7 @@ All yield sites in one selected generator method use the same established protoc
 
 The next substantive boundaries are:
 
-1. Repeated destination timing and header-control storage/initialization lifetime, especially new ref materialization, const controls, generator-local borrows and zero yields.
+1. Complete header proof/transport for the selected per-handoff destinations, fresh control initialization and enclosing-full-scope scalar materialization. Generator-local borrowed yields still require their separate owner-quantification/lending contract.
 2. Remaining grouped-type grammar and structural-schema compatibility, type/owner quantification, independent inference and dynamic effect eligibility. H-588 selects catch bypass and direct obligation composition; recursive/stored generator and native proofs remain work. A nonlocal return is not a catchable exception.
 3. Proof and transport of the selected lexical completion targets through generator cleanup, including nested iteration and generator-local `if returning`; the source rule above is settled independently of the mechanism.
 4. Nonescaping body-entry proof and transport, including direct/stored/generic generator invocation if admitted. Ordinary callable values or annotations alone do not prove the body's required lexical permissions.
@@ -493,7 +535,7 @@ The following is a review checklist, not current passing-test evidence:
 
 - Once-only invocation/argument preparation; zero, one and multiple yields; explicit labels/subsets/renaming; all scalar new/existing receiver combinations and invalid operators. No arbitrary spec expressions or forward receiver dependencies.
 - Distinct val snapshots and live borrowed targets; fixed owners/access/init/null rules; destination retention across permitted backing growth; defined nonoverlapping reception and diagnostic-only checks for H-576/H-593 UB examples, including val-only conflicting writes.
-- Loop-control lifetime/const/materialization and omitted-output cleanup; no escaping generator-local, iteration-local or callable-bearing storage; complete cleanup on partial receiving or feedback failure.
+- Per-handoff destination selection after yield preparation, zero-yield noninitialization, fresh const/new control initialization and enclosing-full-scope materialized target identity; distinct control-slot versus referent lifetime and omitted-output cleanup; no escaping generator-local, iteration-local or callable-bearing storage; complete cleanup on partial receiving or feedback failure.
 - Void feedback accepts heterogeneous discarded fallthrough branches, preserving effects/failures/cleanup and ordinary intermediate typing; only bare continue is admitted. Reject valued continue even with a void-typed operand, and preserve an explicit separate operand evaluation followed by bare continue. Non-void feedback accepts compatible tail/continue results, rejects bare continue and missing/incompatible normal branches, and checks recovered catches. Escaping throw/enclosing return is not a missing normal value; no runtime check substitutes for the static contract.
 - Distinguish feedback from enclosing return, generator fallthrough/early void return and discarded per-yield responses; reject a generator-owned non-void return. Generator cleanup runs on exit, not at every yield. Check explicit/omitted void, declaration/definition protocol agreement and labelled completeness/effect order; exact nested callable-type grouping remains separately scoped. Multi-field feedback must reuse complete production, partial/renamed/new/existing receiving, pre-yield destination selection, component owners and omitted cleanup; control exits must publish no final feedback writes.
 - Direct lexical body access, ordinary body-scope restrictions, explicit full-scope cleanup, outer defer registration and iteration effect restoration. Nested loops and generator invocations preserve lexical targets without implicit closure cells.
