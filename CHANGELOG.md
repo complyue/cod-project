@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-11-17 — Explicit captures, aliases and lifetimes
+
+<a id="h-553"></a>
+**H-553 — Ordinary captured values are invocation inputs.** Human/source for H-553–H-557: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-17 America/Los_Angeles; exact message timestamps/personal name unavailable. After the implicit-value-parameter explanation (saved scalar/callable snapshot, independent local on each call), the user confirms: “对，allocation failure （OOM）是极端情况，不要让它冲击正常语义推演；allocation该谁分配就谁分配，没有内部引用 outliving，没有 lexical-scope-back-storage / region 泄漏，就不影响 CoD soundness。” Requests the general scalar rule and quirks. Confirms the value model and allocation/lifetime criterion, not a particular layout, allocation count or new pure-callable policy.
+
+<a id="h-554"></a>
+**H-554 — No hidden shared captured-variable cells.** Same human/chat: “CoD的原则是不创建传统的closure提供共享可更新slots，这方面需求要求用户通过显式的 dynamic-scoped symbolic variables 表达，共享可更新slots必须是显式静态追踪的某region作为owner，也就是 `in @region_owner` 声明”. Confirms explicit dynamic context/owner responsibility instead of closure-created shared slots; existing explicit object/place borrowing is not withdrawn.
+
+<a id="h-555"></a>
+**H-555 — Permit proved lexical-owner borrows.** Same human/chat: “静态可以证明不会逃逸的 `in some_lexical_owner` 引用也允许”. Extends the preceding lifetime criterion to explicit lexical-owner references with a static non-escape proof. Does not approve a new lexical symbol-declaration grammar, owner binder, escape-analysis algorithm or source-lifetime extension.
+
+<a id="h-556"></a>
+**H-556 — Put explicit lifetimes in the vision.** Same human/chat: “CoD的设计目标之一就是消除这种隐式生命周期机制： lexical-scope 的自然嵌套结构生命周期自然允许，打破这种well nesting的生命周期，必须是形式化可静态检查的 dynamic scoping。 GlobalVariablesDoneRight vision 应该明确阐述这个设计原则”. Explicitly requests compiler-developer guidance against traditional closure lifetime extension. Confirms the principle/value and its place in D-12, not all dependent operational mechanisms or Actor/continuation lifetimes.
+
+<a id="h-557"></a>
+**H-557 — Review explicit aliases and strengthen compiler guidance.** Same human/chat asks whether “`var v -> some_slot` 才是传统的 alias ... 而且是显式声明的” and requests broad analysis; then instructs “这个说法确认成立以后，提醒 CoD compiler 开发者时刻抵制传统 变量 aliasing 的语义诱惑”. The later question “是否可以更坚决地说： CoD中没有 ‘closure’ 设计？” requests assessment of stronger terminology. These are review/guidance instructions, not independent approval of every derived mechanism. Agent reconciliation below retains the existing confirmed explicit-place contract and defines “no closure abstraction” without denying captured values.
+
+<a id="k-capture-lifetimes-20261117"></a>
+**K-CAPTURE-LIFETIMES-20261117 — Separate values, reference targets and explicit places.** D-18r107→108/D-12r26→27 records H-553–H-557; D-14r116→117/D-10r193→194/D-21r25→26/D-22r20→21/D-28r26→27/source408→409/registry807→808 aligns dependencies. P-485–P-493 serves inspectable storage, identity and lifetime responsibility under charter §§2/3.2–3.3/4.3/6.3/8; source decisions and the explicit-lifetime vision have stated confirmation, full new proof/physical/value-path qualification remains separate. Agent elaborations preserve qualifiers, snapshot timing, independent nested values, transitive owner proofs, failure cleanup and conservative rejection. A ptr snapshot reads its reference value, not pointee bits; ref retains its ordinary obligations. Explicit var aliases preserve selected places through capture; ordinary reference captures retain targets. This preserves H-327/H-329 rather than silently converting alias captures to snapshots. The draft's blanket alias-snapshot interpretation and callable-only readonly recommendation are withdrawn; neither is an accepted contract. “No closure abstraction” names the confirmed no-hidden-cell/no-extension model, while allowing callable views, value captures and explicit borrows. Existing symbol declaration restrictions, assignment-family destination slots and D-16 remain. Acceptance covers scalar/callable repeated calls, local mutation, explicit alias observation, target/slot independence, null/uninitialized-pointer selection and rejected owner escape/promotion. Mainline peer review supplied proof/cost checks, not human confirmation. New source paths remain implementation work; no code/build/tests. Baseline: `fb765cf2305ad713b127c653ea4c16d4fcc2838c` at the affected documentation paths. Verified alias evidence: `0c0efbfde4dccb3f3397b6f961bd82bd9a12c848:design/DesignAuthorityRegistry.md#h-327` and `#h-329`; complete-value/heap-backing evidence at `#h-342`/`#h-344` in that commit. K-779 and unrelated qualified behavior continue.
+
 ## 2026-11-17 — Preserve checked native emission contexts
 
 <a id="k-779"></a>
