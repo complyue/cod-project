@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Prepared assignments retain operands and publish mutations during cleanup."""
 from pathlib import Path
+from itertools import product
 import foundation_tests as runner
 
 IO = 'using symbol "std:io" @print;'
@@ -57,6 +58,22 @@ for spelling in ('call', 'intrinsic'):
         'source_uninitialized': ('val a<-1,b<-make local i64;'+defer('<-','a','b'),2,'','before definite initialization'),
     }
     for name, case in cases.items(): runner.CASES[spelling+'_'+name] = case
+    # Rebinding changes slots; no action in this model initializes a payload.
+    for number, (destination, initialized, observer) in enumerate(product(
+            ('p', 'q', 'destination'), (False, True), ('p', 'q', 'r', 'c'))):
+        cells = {'a': 1, 'b': 7, 'c': 9 if initialized else None}
+        bindings = {'p': 'a', 'q': 'b', 'r': 'b'}
+        saved_slot = 'p' if destination == 'destination' else destination
+        saved_target = bindings['q']
+        bindings.update(q='c', r='c')
+        bindings[saved_slot] = saved_target
+        value = cells[bindings.get(observer, observer)]
+        source = (IO+'val a<-1,b<-7,c<-'+('9' if initialized else 'make local i64')+
+                  ';ptr p=a,q=b,r=q;ptr var destination->p;{{'+defer('=', destination, 'q')+
+                  'q=c;r=c;}};'+OUT(observer))
+        runner.CASES[spelling+'_initialization_model_'+str(number)] = (
+            source, 2 if value is None else 0, '' if value is None else str(value)+'\n',
+            'before definite initialization' if value is None else '')
 runner.CASE_ARGUMENTS = {}
 runner.CASE_SHADOWS = {}
 runner.EXTRA_SOURCES = [Path(__file__)]

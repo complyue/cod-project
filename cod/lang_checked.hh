@@ -6125,6 +6125,8 @@ class ScalarChecker {
           lexical_.selections = {};
           for (auto &[input, facts] : lexical_.input_facts) facts.selections = {};
           auto snapshot = selected;
+          // The saved operand is independent of current slot selections at invocation.
+          snapshot.selection_identity.reset();
           if (snapshot.initialization)
             snapshot.initialization = CleanupEquations::capture_initialization(*snapshot.initialization, initialization_frame());
           rebind(target, snapshot);

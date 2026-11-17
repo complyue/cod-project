@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-11-17 — Partial named receiving and anonymous structural typing
+
+<a id="h-569"></a>
+**H-569 — Prioritize partial named receiving; assess structural anonymous data.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-17 America/Los_Angeles; exact timestamp/name unavailable. “anonymous `data { ... }` 是不是适用 structural typing 规则最好？ 接收方有方便的语法去接收部分字段是很重要的ux价值，评估时考虑上”. Confirms partial reception's UX value and requests the structural typing assessment. Agent D-22r24→25/registry815→816 distinguishes structural anonymous products from named nominal ADTs, once-only subset unpacking from general width/depth subtyping, and per-field reception from non-bits whole-value copying. Exact identity/order/variance, result/receiving syntax and full value-path qualification remain pending. Preserve producer effects/cleanup, owner/access, H-563/H-567/H-568 and D-16; no implementation claim.
+
+
+## 2026-11-17 — Consolidate mainline evidence and the design checkpoint
+
+<a id="k-design-mainline-20261117"></a>
+**K-DESIGN-MAINLINE-20261117 — Preserve both evidence histories and current contracts.** Merge main `2a385f2a1f4818ddebe964efb6c4303f3035c00a` with design `ea4ae30e3963773b04dfef87a25127748ec2f329` without rewriting commits cited by decision records. Registry814/811→815 retains source411/K-780/K-781, H-561–H-568 and the current D-18r112/D-22r24/D-28r30 scopes. Mainline's prepared-target fix and tests are unchanged; no new compiler feature, local build/test result or qualification is inferred. Preserve both parents' changelog payloads, actual owners, independent callable construction, bits transfer/graph-transfer distinctions, no C++ object copying/moving, D-16 and unrelated qualified contracts under charter §§2/3.2–3.3/4.3/6.3/8. Anonymous-data identity/result/unpacking and the full new ordinary-capture value path remain separately pending. Documentation/link/history checks only.
+
+
 ## 2026-11-17 — Callable storage, transfer semantics and anonymous-data direction
 
 Human/source for H-563–H-568: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-17 America/Los_Angeles; exact timestamps/personal name unavailable.
@@ -53,6 +65,11 @@ Human/source for H-563–H-568: current project user in [this design chat](codex
 **K-OWNER-SYMBOL-COST-20261117 — Separate shared reference support from owner-binding increment.** D-10r194→195/registry810→811 adds D-10-OWNER-SYMBOL/P-497–P-499 and its proposed bounded profile. Design and authorized mainline-developer read-only reviews find no inherent semantic blocker or separate backend, and recommend support under H-560's criterion. Substantial mode/provenance/save/restore/capture work is common with H-482; binder/RHS owner sources and lifetime cases add bounded work, while D-18/D-28's transitive borrow/current-base obligations remain substantial shared prerequisites. Preserve one actual owner, permissions, active/saved/captured validity, no owner extension, H-482 selector semantics, unrelated qualifications and D-16 under charter §§2/3.2–3.3/4.3/6.3/8. Detailed new source/proof/profile and full value-path/physical qualification stay pending-human; no code or native acceptance claim. Baseline/source evidence: `44bc1765be05f255e576cccce0f5ec4a2209546e:design/SymbolicDynamicScope.md` (reference-symbol sections), that commit's registry and `cod/lang_syntax.hh`, `cod/lang_checked.hh`, `cod/lang_llvm.hh`; mainline assessment received through the authorized chat, not human confirmation. Documentation checks only; no build/tests.
 
 
+## 2026-11-17 — Prepared-readiness and terminology integration
+
+<a id="k-781"></a>
+**K-781 — Preserve readiness proofs and explicit identity distinctions.** Source410/409→411 and registry809/810→811 integrates K-780 with H-558/H-559's qualified glossary, canonical callable document and D-26r22 coverage within D-21r27. Prepared rebinds update selected destination slots without writing payloads; saved readiness supplies no proof for a different later target. Declared place aliasing, runtime target aliasing and name/identity aliasing retain separate contracts; overlap grants no exclusivity or lifetime extension. Preserve H-407's acceptance, P-258/H-525, owners/access, D-16 and charter §§2/3.2–3.3/4.3/5.3/6.3/8/12. Capture/borrow proof and physical/value paths, FIFO, return inspection and nested-defer enforcement remain separately scoped. No new human approval or runtime mechanism. Parents: `0642146b89e1574c1a0e7903f3c9f6894f48d0a0` compiler maintenance and `44bc1765be05f255e576cccce0f5ec4a2209546e` terminology/consolidation; their changelog records remain intact.
+
 ## 2026-11-17 — Canonical alias glossary and current design documents
 
 <a id="h-558"></a>
@@ -76,6 +93,11 @@ Human/source for H-563–H-568: current project user in [this design chat](codex
 
 <a id="k-formal-aliasing-20261117"></a>
 **K-FORMAL-ALIASING-20261117 — No hidden slot aliasing, without an exclusivity promise.** D-18r108→109/D-12r27→28/registry808→809 continues H-327/H-329/H-553–H-557 and P-488–P-493 after the current project user asks whether CoD aliasing should always be “explicit formal aliasing”, with no implicit aliasing. Source: [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-17 America/Los_Angeles; exact timestamp/personal name unavailable. Agent clarification: explicit means licensed by a formal source storage/borrow contract, including permitted inference; the same-target call example remains legal and observes overlapping writes through independent parameter bindings. Unique owner and readonly access do not prove distinct targets or exclusivity. This continues the existing identity/storage value under charter §§2/3.2–3.3/4.3/6.3/8, not a newly human-approved alias restriction, precise-target solver or optimizer mechanism. Preserve lifetimes, assignment-family destination contracts, current qualification/support limits and D-16. Baseline: `aff17e114c195cce32f2426834cbb8807e699232:design/RegionalClosures.md`, compiler alias section; that commit's vision and registry. Documentation only; no code/build/tests.
+
+## 2026-11-17 — Preserve prepared source-target initialization
+
+<a id="k-780"></a>
+**K-780 — Keep saved target readiness separate from live slots.** Source409→410/registry808→809 continues H-297/P-258, existing D-17 prepared operands/cleanup, H-525 and D-26/H-407 under H-420/H-423. Prepared rebind summaries detach registration-time source identity from invocation-time slots; rebinds supply no physical payload writes. Acceptance includes independent slot/payload models, unchanged initialization rejection tests, prepared/returned-view composition and native cleanup. Broad declared-Exception diagnostic expectations retain H-525's rejection contract. Charter §§3.2/3.3/4.3/5.3/6.3/8/12 and D-16 continue; no capture/FIFO/return-state policy, runtime flag or new qualification. Baseline: `7a6847fa1f771bc9acd32a80a13fb8fac0c4083b:cod/lang_checked.hh` and that commit's source reference/authority registry.
 
 ## 2026-11-17 — Explicit captures, aliases and lifetimes
 
