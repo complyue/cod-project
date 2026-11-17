@@ -1,9 +1,22 @@
 # Changelog
 
+## 2026-11-17 — Reconcile result assessment with declaration completion
+
+<a id="k-786"></a>
+**K-786 — Keep the output proposal pending beside current completion support.** D-22r26→27/registry820–821→822 integrates H-570/P-512–P-514 with source414/K-785. Editorial scope qualifies declared place aliasing and presents the shared aggregate-cost assessment as current evidence; no output/init syntax, ABI, value path or new mechanism is accepted. Preserve charter §§2/3.2–3.3/4.3/6.3/8/12, D-16, D-17 completion, D-23/D-24 modes/results, actual owners and the byte-identical D-18r113 pending review. Human evidence and preceding qualifications are unchanged. Baselines: `cb976840c2583626e50672f7918d417bad9a7ac1:design/ConstructionAndAcquisition.md` and that commit's registry/changelog; `adcef3584f588ecd32bb1f54498ffbb8957b02df:tests/cod/language/README.md` and its registry/changelog. Documentation integration only.
+
 ## 2026-11-17 — Preserve abrupt declaration initialization
 
 <a id="k-785"></a>
 **K-785 — Keep initializer completion independent of receiving payload classification.** Source413→414/registry819→820 continues D-17/H-361/H-362/P-235–P-236, D-14/H-297/P-258, independent D-24 result evidence and D-26/H-407 under H-420/H-423. Untyped ordinary declarations preserve an initializer return/throw; no value is constructed or published on that path. Known declaration contracts, initialization/owner/return checks and H-525 obligations remain. Acceptance covers grouped effects, all declaration kinds, generic/recursive/borrowed/complete results, independent typed LLVM controls and native preparation-failure release. Preserve D-16 and charter §§2/3.2–3.3/4.3/5.3/6.3/8/12; no source non-returning type, new payload/capture permission or broader qualification. D-18r113’s separate review remains pending. Baseline: `2300d905de6316a1a0b16505290500ebc359f7eb:cod/lang_checked.hh` and that commit’s source reference/tests/registry.
+
+## 2026-11-17 — Assess caller-provided outputs and named result construction
+
+<a id="h-570"></a>
+**H-570 — Propose unified output destinations, init place parameters and named result groups.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-17 America/Los_Angeles; exact timestamps/personal name unavailable. Requests assessment of all result forms under “caller allocated output var”, mixed named reception such as `{ val count, val ready } =<< inspect();`, and declaration-derived `=`/`<-` operations; explicitly treats `=<<` as provisional. Corrects remembered `out` to the discussed `init` direction, then suggests init means “caller allocated slot aliasing”. Provisionally proposes `return { n -> count, true -> ready }`, adding “先这么说着”. These are proposals/assessment instructions, not confirmation of the full result/parameter contract, grammar, ABI or value path.
+
+<a id="k-output-assessment-20261117"></a>
+**K-OUTPUT-ASSESSMENT-20261117 — Preserve result categories under a common destination proposal.** D-22r25→26/registry819→821 adds pending D-22-RESULT-DESTINATION/P-512–P-514 and extends pending D-22-ANON-DATA. Candidate C-54/C-63/C-65/C-72/C-73 → charter §§2/3.2–3.3/4.3/6.3/8/12 separates caller-owned hidden result storage from visible receivers, reference carriers from referents, and init place identity from payload readiness. Reviews named return construction, new-binder-only receiving with candidate `:=`, per-field operations, once-only effects, omitted-field cleanup and growth-safe destination forwarding. Local inspection and mainline's bounded read-only review find no general out/init implementation; existing callable destinations and assignment slots are scoped precedents. Shared ADT/owner/cleanup work remains substantial. Preserve D-23/D-24 modes/inference, D-17 completion, D-18r113's unchanged separate review, D-16 and no object copy/move/rollback. Baseline: `2300d905de6316a1a0b16505290500ebc359f7eb:design/ConstructionAndAcquisition.md`, its registry/source413, `cod/lang_syntax.hh`, `cod/lang_llvm.hh`, and `applications/cod-booter/docs/LLVMInterop.md`. Documentation only; no local code/build/tests or new human qualification.
 
 ## 2026-11-17 — Keep native binding roles with their slots
 
