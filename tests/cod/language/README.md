@@ -1,8 +1,10 @@
 # CoD source compiler validation
 
-Reference revision: 414 · Recorded: 2026-11-17 America/Los_Angeles.
+Reference revision: 415 · Recorded: 2026-11-17 America/Los_Angeles.
 
 ## Design authority
+
+- **Native pending completion:** [K-787](../../../CHANGELOG.md#k-787) continues the existing D-17/P-235–P-236/H-361/H-362 completion and cleanup contract, D-18/P-300–P-303 complete-result ownership and D-26/H-407 under H-420/H-423. Live native slots and suspended cleanup values use one internal record for the result, failure details, control kind and explicit-return marker. Whole-state restoration preserves their correspondence; native call outcomes retain their separate established representation. Acceptance requires identical LLVM/diagnostics and unchanged source, staging and native completion/resource observations. Charter §§2/3.2–3.3/4.3/6.3/8/12 and D-16 continue. This maintenance grants no return inspection, FIFO handling, capture permission, output/init implementation or ABI qualification; D-18r113's review remains separate.
 
 - **Declaration initializer completion:** [K-785](../../../CHANGELOG.md#k-785) continues D-17/H-361/H-362/C-63/P-235–P-236, D-14/H-297/P-258, D-24’s independent result evidence and D-26/H-407 under H-420/H-423. An initializer that returns or throws supplies no normal receiving value, including for an untyped val/ref/ptr/func/proc declaration. Known annotations and ordinary source constraints remain checked; failed initialization supplies no available binding, initialized payload or result-inference anchor. Acceptance covers grouped effects, cleanup, scalar/borrowed/complete callable returns, generic/recursive bodies, retained declared Exception obligations, typed/untyped LLVM equivalence and native failure-prefix release. Charter §§2/3.2–3.3/4.3/5.3/6.3/8/12 and D-16 continue. This adds no source non-returning type, payload transfer, capture permission or pending mechanism qualification.
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-17 — Keep pending completion fields together
+
+<a id="k-787"></a>
+**K-787 — Share native completion state across suspension and restoration.** Source414→415/registry823→824 continues D-17/P-235–P-236/H-361/H-362, D-18/P-300–P-303 and D-26/H-407 under H-420/H-423. Live slots and suspended values share one internal result/failure/control record; cleanup restores corresponding fields without an address-keyed map. Preserve native layout/instruction order, explicit-return markers, complete-result ownership and source/staging/native release evidence. D-28r31→32 editorially qualifies declared place aliasing in the init summary. Charter §§2/3.2–3.3/4.3/6.3/8/12 and D-16 continue; no source policy, new mechanism/ABI qualification or answer to D-18r113's separate review follows. Baseline: `bded2d864ece6640fdfbdfef418817ae3cabf5db:cod/lang_llvm.hh` and that commit's source reference; `008724fec56b16f81e1ea475902e89bb9a286fd3:design/RegionalAndLexicalStorageRefactor.md` and its registry/changelog. H-571's selected source forms retain separate implementation boundaries.
+
 ## 2026-11-17 — Select logical output destinations and named reception
 
 <a id="h-571"></a>

@@ -16,6 +16,7 @@
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/TargetParser/Host.h>
 
+#include <array>
 #include <functional>
 #include <iterator>
 #include <memory>
@@ -77,9 +78,17 @@ class LLVMEmission {
   llvm::Value *query_environment_ = nullptr;
   llvm::Function *function_ = nullptr;
   llvm::BasicBlock *finish_ = nullptr;
-  llvm::AllocaInst *result_ = nullptr, *category_ = nullptr, *site_ = nullptr, *fatal_ = nullptr, *exit_ = nullptr;
-  llvm::AllocaInst *requested_ = nullptr, *available_ = nullptr, *cause_ = nullptr;
-  llvm::AllocaInst *returning_ = nullptr;
+  // Live slots and suspended values share the complete pending state. Native
+  // call outcomes omit the local control kind and explicit-return marker.
+  template <typename T> struct CompletionState {
+    T value{}, category{}, site{}, fatal{}, requested{}, available{}, cause{}, kind{}, has_return{};
+    auto fields() const { return std::array{value, category, site, fatal, requested, available, cause, kind, has_return}; }
+    template <typename Transform> auto transform(const Transform &apply) const {
+      return CompletionState<decltype(apply(value))>{apply(value), apply(category), apply(site), apply(fatal),
+          apply(requested), apply(available), apply(cause), apply(kind), apply(has_return)};
+    }
+  };
+  CompletionState<llvm::AllocaInst *> completion_;
   std::vector<Location> sites_;
   enum class Projection { value, target, slot, receiver };
   static bool carries_value(Projection projection) { return projection == Projection::value || projection == Projection::receiver; }
@@ -212,7 +221,7 @@ class LLVMEmission {
     b_.SetInsertPoint(control.exit); release_values(lifetime);
     control_ = control.parent; temporaries_ = outer;
     auto *done = block("expression.completed");
-    b_.CreateCondBr(b_.CreateICmpEQ(load(exit_), b_.getInt8(0)), done, control_->exit);
+    b_.CreateCondBr(b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(0)), done, control_->exit);
     b_.SetInsertPoint(done);
     auto *result = load(saved); if (result_type == scalar_) value_owners_[result] = saved; return result;
   }
@@ -309,13 +318,13 @@ class LLVMEmission {
         b_.CreateICmpNE(b_.CreateExtractValue(result, 3), null_pointer()));
   }
   void save_failure(llvm::Value *result) {
-    b_.CreateStore(b_.CreateExtractValue(result, 1), category_);
-    b_.CreateStore(b_.CreateExtractValue(result, 2), site_);
-    b_.CreateStore(b_.CreateExtractValue(result, 3), fatal_);
-    b_.CreateStore(b_.CreateExtractValue(result, 4), requested_);
-    b_.CreateStore(b_.CreateExtractValue(result, 5), available_);
-    b_.CreateStore(b_.CreateExtractValue(result, 6), cause_);
-    b_.CreateStore(b_.getInt8(2), exit_);
+    b_.CreateStore(b_.CreateExtractValue(result, 1), completion_.category);
+    b_.CreateStore(b_.CreateExtractValue(result, 2), completion_.site);
+    b_.CreateStore(b_.CreateExtractValue(result, 3), completion_.fatal);
+    b_.CreateStore(b_.CreateExtractValue(result, 4), completion_.requested);
+    b_.CreateStore(b_.CreateExtractValue(result, 5), completion_.available);
+    b_.CreateStore(b_.CreateExtractValue(result, 6), completion_.cause);
+    b_.CreateStore(b_.getInt8(2), completion_.kind);
   }
   void fail_path(ExceptionCategory category, const Location &at, llvm::Value *fatal = nullptr) {
     save_failure(outcome(empty_scalar(), integer(exception_id(category)), integer(site(at)), fatal ? fatal : null_pointer()));
@@ -324,7 +333,8 @@ class LLVMEmission {
   llvm::Value *active_exception() {
     llvm::Value *value = llvm::UndefValue::get(exception_);
     unsigned index = 0;
-    for (auto *place : {category_, site_, requested_, available_, cause_}) value = b_.CreateInsertValue(value, load(place), index++);
+    for (auto *place : {completion_.category, completion_.site, completion_.requested, completion_.available, completion_.cause})
+      value = b_.CreateInsertValue(value, load(place), index++);
     return value;
   }
   void raise_exception(llvm::Value *value) {
@@ -743,16 +753,14 @@ class LLVMEmission {
   }
   void complete_cleanup(const std::function<void()> &emit, bool handles_failure = false) {
     // Suspend the pending completion while cleanup executes its own control flow.
-    const auto places = {result_, category_, site_, fatal_, requested_, available_, cause_, exit_, returning_};
-    std::map<llvm::AllocaInst *, llvm::Value *> pending;
-    for (auto *place : places) pending.emplace(place, load(place));
-    if (environments_) b_.CreateStore(empty_scalar(), result_);
-    auto *pending_failure = b_.CreateICmpEQ(pending.at(exit_), b_.getInt8(2));
+    const auto pending = completion_.transform([&](auto *place) { return load(place); });
+    if (environments_) b_.CreateStore(empty_scalar(), completion_.value);
+    auto *pending_failure = b_.CreateICmpEQ(pending.kind, b_.getInt8(2));
     auto *entered_failure = handles_failure ? pending_failure : b_.getFalse();
-    b_.CreateStore(b_.CreateSelect(entered_failure, b_.getInt8(2), b_.getInt8(0)), exit_);
-    b_.CreateStore(b_.CreateSelect(entered_failure, pending.at(category_), integer(0)), category_);
-    b_.CreateStore(b_.CreateSelect(entered_failure, pending.at(fatal_), null_pointer()), fatal_);
-    b_.CreateStore(b_.getFalse(), returning_);
+    b_.CreateStore(b_.CreateSelect(entered_failure, b_.getInt8(2), b_.getInt8(0)), completion_.kind);
+    b_.CreateStore(b_.CreateSelect(entered_failure, pending.category, integer(0)), completion_.category);
+    b_.CreateStore(b_.CreateSelect(entered_failure, pending.fatal, null_pointer()), completion_.fatal);
+    b_.CreateStore(b_.getFalse(), completion_.has_return);
     Control action{control_, block("cleanup.completed")};
     control_ = &action;
     emit();
@@ -760,26 +768,28 @@ class LLVMEmission {
     b_.SetInsertPoint(action.exit);
     control_ = action.parent;
     auto *restore = block("cleanup.preserve"), *replace = block("cleanup.replace"), *done = block("cleanup.done");
-    b_.CreateCondBr(b_.CreateICmpEQ(load(exit_), b_.getInt8(0)), restore, replace);
+    b_.CreateCondBr(b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(0)), restore, replace);
     b_.SetInsertPoint(restore);
-    if (environments_) clear_value(result_);
-    for (auto *place : places) b_.CreateStore(pending.at(place), place);
+    if (environments_) clear_value(completion_.value);
+    const auto places = completion_.fields();
+    const auto values = pending.fields();
+    for (size_t i = 0; i < places.size(); ++i) b_.CreateStore(values[i], places[i]);
     if (handles_failure) {
-      auto *resumed = b_.CreateSelect(pending.at(returning_), b_.getInt8(1), b_.getInt8(0));
-      b_.CreateStore(b_.CreateSelect(pending_failure, resumed, pending.at(exit_)), exit_);
-      b_.CreateStore(b_.CreateSelect(pending_failure, integer(0), pending.at(category_)), category_);
-      b_.CreateStore(b_.CreateSelect(pending_failure, null_pointer(), pending.at(fatal_)), fatal_);
+      auto *resumed = b_.CreateSelect(pending.has_return, b_.getInt8(1), b_.getInt8(0));
+      b_.CreateStore(b_.CreateSelect(pending_failure, resumed, pending.kind), completion_.kind);
+      b_.CreateStore(b_.CreateSelect(pending_failure, integer(0), pending.category), completion_.category);
+      b_.CreateStore(b_.CreateSelect(pending_failure, null_pointer(), pending.fatal), completion_.fatal);
     }
     b_.CreateBr(done);
     b_.SetInsertPoint(replace);
     auto *retain = block("cleanup.retain.return"), *replaced = block("cleanup.replaced.return");
-    b_.CreateCondBr(b_.CreateAnd(b_.CreateICmpEQ(load(exit_), b_.getInt8(2)), b_.CreateNot(load(returning_))), retain, replaced);
+    b_.CreateCondBr(b_.CreateAnd(b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(2)), b_.CreateNot(load(completion_.has_return))), retain, replaced);
     b_.SetInsertPoint(retain);
-    if (environments_) clear_value(result_);
-    b_.CreateStore(pending.at(result_), result_);
-    b_.CreateStore(pending.at(returning_), returning_);
+    if (environments_) clear_value(completion_.value);
+    b_.CreateStore(pending.value, completion_.value);
+    b_.CreateStore(pending.has_return, completion_.has_return);
     b_.CreateBr(done);
-    b_.SetInsertPoint(replaced); release_value(pending.at(result_)); b_.CreateBr(done);
+    b_.SetInsertPoint(replaced); release_value(pending.value); b_.CreateBr(done);
     b_.SetInsertPoint(done);
   }
   void drain(Scope &scope) {
@@ -815,7 +825,7 @@ class LLVMEmission {
           storage_[id] = captured;
         }
         b_.CreateCall(release, {record});
-        auto *pending_failure = b_.CreateICmpEQ(load(exit_), b_.getInt8(2));
+        auto *pending_failure = b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(2));
         complete_cleanup([&] {
           if (descriptor.action->children.size() == 1) emit_expression(body, Projection::value, true);
           else emit_finally(*descriptor.action, Projection::value, true, pending_failure);
@@ -925,7 +935,7 @@ class LLVMEmission {
     restore_effects(saved);
     control_ = control.parent;
     auto *continuation = block("iteration.continue");
-    b_.CreateCondBr(b_.CreateICmpEQ(load(exit_), b_.getInt8(0)), continuation, control_->exit);
+    b_.CreateCondBr(b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(0)), continuation, control_->exit);
     b_.SetInsertPoint(continuation);
     if (std::all_of(contexts_.begin(), contexts_.end(), [&](const auto &context) { return context.at(&expr).type == Type::never; })) {
       b_.CreateUnreachable(); return nullptr;
@@ -959,7 +969,7 @@ class LLVMEmission {
     if (callable) {
       if (returns_value) {
         auto *missing = block("return.missing");
-        b_.CreateCondBr(b_.CreateAnd(returns_value, b_.CreateICmpEQ(load(exit_), b_.getInt8(0))), missing, finish_);
+        b_.CreateCondBr(b_.CreateAnd(returns_value, b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(0))), missing, finish_);
         b_.SetInsertPoint(missing);
         save_failure(outcome(empty_scalar(), integer(exception_id(ExceptionCategory::missing_return)), integer(site(at)), null_pointer()));
       }
@@ -967,7 +977,7 @@ class LLVMEmission {
       return nullptr;
     }
     auto *continuation = block("scope.continue");
-    b_.CreateCondBr(b_.CreateICmpEQ(load(exit_), b_.getInt8(0)), continuation, control_->exit);
+    b_.CreateCondBr(b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(0)), continuation, control_->exit);
     b_.SetInsertPoint(continuation);
     auto *result = load(saved);
     if (environments_ && read_last) value_owners_[result] = saved;
@@ -989,7 +999,7 @@ class LLVMEmission {
     b_.SetInsertPoint(guarded.exit);
     control_ = guarded.parent;
     auto *handled = block("try.handled"), *dispatch = block("catch.dispatch");
-    auto *catchable = b_.CreateAnd(b_.CreateICmpNE(load(category_), integer(0)), b_.CreateICmpEQ(load(fatal_), null_pointer()));
+    auto *catchable = b_.CreateAnd(b_.CreateICmpNE(load(completion_.category), integer(0)), b_.CreateICmpEQ(load(completion_.fatal), null_pointer()));
     b_.CreateCondBr(catchable, dispatch, handled);
     b_.SetInsertPoint(dispatch);
     const Expression *finalizer = nullptr;
@@ -1001,14 +1011,14 @@ class LLVMEmission {
       auto *caught = choose(handler, {}, choices(handler, {}), scalar_, [&](const Choice &choice) -> llvm::Value * {
         const auto &type = choice.operation->type;
         auto *value = pack(active_exception(), type);
-        return type.identity ? b_.CreateSelect(b_.CreateICmpEQ(load(category_), integer(type.identity)), value, empty_scalar()) : value;
+        return type.identity ? b_.CreateSelect(b_.CreateICmpEQ(load(completion_.category), integer(type.identity)), value, empty_scalar()) : value;
       });
       b_.CreateCondBr(b_.CreateICmpNE(b_.CreateExtractValue(caught, 1), b_.getInt32(0)), selected, next);
       b_.SetInsertPoint(selected);
       b_.CreateStore(caught, storage_.at(*fact.place));
-      b_.CreateStore(b_.getInt8(0), exit_); b_.CreateStore(integer(0), category_); b_.CreateStore(null_pointer(), fatal_);
-      b_.CreateStore(b_.getFalse(), returning_);
-      clear_value(result_);
+      b_.CreateStore(b_.getInt8(0), completion_.kind); b_.CreateStore(integer(0), completion_.category); b_.CreateStore(null_pointer(), completion_.fatal);
+      b_.CreateStore(b_.getFalse(), completion_.has_return);
+      clear_value(completion_.value);
       Control catching{control_, handled};
       control_ = &catching;
       auto *result = emit_expression(*handler.children.front(), projection, discard);
@@ -1020,7 +1030,7 @@ class LLVMEmission {
     b_.SetInsertPoint(handled);
     if (finalizer) complete_cleanup([&] { emit_expression(*finalizer); });
     auto *done = block("try.continue");
-    b_.CreateCondBr(b_.CreateICmpEQ(load(exit_), b_.getInt8(0)), done, control_->exit);
+    b_.CreateCondBr(b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(0)), done, control_->exit);
     b_.SetInsertPoint(done);
     if (read && discard) return empty_scalar();
     if (contexts_.front().at(&expr).type == Type::never) { b_.CreateUnreachable(); return nullptr; }
@@ -1524,9 +1534,9 @@ class LLVMEmission {
         if (fact.borrowed_result) value = pack_view(value, expr, true);
         else value = convert_result(expr, *expr.children.front(), value);
       }
-      assign_value(result_, value, expr.at); b_.CreateStore(integer(0), category_); b_.CreateStore(null_pointer(), fatal_);
-      b_.CreateStore(b_.getTrue(), returning_);
-      b_.CreateStore(b_.getInt8(1), exit_); b_.CreateBr(control_->exit);
+      assign_value(completion_.value, value, expr.at); b_.CreateStore(integer(0), completion_.category); b_.CreateStore(null_pointer(), completion_.fatal);
+      b_.CreateStore(b_.getTrue(), completion_.has_return);
+      b_.CreateStore(b_.getInt8(1), completion_.kind); b_.CreateBr(control_->exit);
       return nullptr;
     }
     case K::field: {
@@ -1617,15 +1627,15 @@ class LLVMEmission {
     owner_identities_.clear();
     size_t owner_index = frame.inputs.size();
     for (const auto &[owner, input] : frame.owners) owner_identities_[owner] = function->getArg(owner_index++);
-    result_ = slot(scalar_, "return.value"); category_ = slot(b_.getInt64Ty(), "exception.category");
-    site_ = slot(b_.getInt64Ty(), "exception.site"); fatal_ = slot(b_.getPtrTy(), "numeric.failure");
-    requested_ = slot(b_.getInt64Ty(), "exception.requested"); available_ = slot(b_.getInt64Ty(), "exception.available"); cause_ = slot(b_.getInt64Ty(), "exception.cause");
-    exit_ = slot(b_.getInt8Ty(), "completion.kind");
-    returning_ = slot(b_.getInt1Ty(), "completion.has.return");
-    b_.CreateStore(b_.getFalse(), returning_);
-    b_.CreateStore(empty_scalar(), result_); b_.CreateStore(integer(0), category_);
-    b_.CreateStore(integer(0), site_); b_.CreateStore(null_pointer(), fatal_); b_.CreateStore(b_.getInt8(0), exit_);
-    for (auto *place : {requested_, available_, cause_}) b_.CreateStore(integer(0), place);
+    completion_ = {slot(scalar_, "return.value"), slot(b_.getInt64Ty(), "exception.category"),
+        slot(b_.getInt64Ty(), "exception.site"), slot(b_.getPtrTy(), "numeric.failure"),
+        slot(b_.getInt64Ty(), "exception.requested"), slot(b_.getInt64Ty(), "exception.available"),
+        slot(b_.getInt64Ty(), "exception.cause"), slot(b_.getInt8Ty(), "completion.kind"),
+        slot(b_.getInt1Ty(), "completion.has.return")};
+    b_.CreateStore(b_.getFalse(), completion_.has_return);
+    b_.CreateStore(empty_scalar(), completion_.value); b_.CreateStore(integer(0), completion_.category);
+    b_.CreateStore(integer(0), completion_.site); b_.CreateStore(null_pointer(), completion_.fatal); b_.CreateStore(b_.getInt8(0), completion_.kind);
+    for (auto *place : {completion_.requested, completion_.available, completion_.cause}) b_.CreateStore(integer(0), place);
     storage_.clear();
     for (const auto &binding : storage) {
       auto *place = binding.borrowed ? nullptr : slot(scalar_, binding.name + ".storage");
@@ -1741,12 +1751,13 @@ class LLVMEmission {
     b_.SetInsertPoint(finish_);
     if (environments_) {
       auto *failed = block("return.discard"), *ready = block("return.ready");
-      b_.CreateCondBr(b_.CreateICmpEQ(load(exit_), b_.getInt8(2)), failed, ready);
-      b_.SetInsertPoint(failed); clear_value(result_); b_.CreateBr(ready); b_.SetInsertPoint(ready);
+      b_.CreateCondBr(b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(2)), failed, ready);
+      b_.SetInsertPoint(failed); clear_value(completion_.value); b_.CreateBr(ready); b_.SetInsertPoint(ready);
     }
     const auto result_index = arity + !method.captures.empty() + method.retained_types.size() + method.declaration_context();
-    if (function->arg_size() > result_index) b_.CreateStore(load(result_), function->getArg(result_index));
-    b_.CreateRet(outcome(load(result_), load(category_), load(site_), load(fatal_), load(requested_), load(available_), load(cause_)));
+    if (function->arg_size() > result_index) b_.CreateStore(load(completion_.value), function->getArg(result_index));
+    b_.CreateRet(outcome(load(completion_.value), load(completion_.category), load(completion_.site), load(completion_.fatal),
+        load(completion_.requested), load(completion_.available), load(completion_.cause)));
   }
   void emit_sites() {
     function_ = llvm::Function::Create(llvm::FunctionType::get(b_.getPtrTy(), {b_.getInt64Ty()}, false),
@@ -1837,15 +1848,15 @@ public:
     begin(main, program.entry_storage, program.entry_bindings); contexts_ = {{&program.entry}}; full_scope(initializers, true, Location{}, nullptr, Projection::value, true);
     b_.SetInsertPoint(finish_);
     auto *fatal = block("fatal"), *exception = block("exception"), *normal = block("normal");
-    b_.CreateCondBr(b_.CreateICmpNE(load(fatal_), null_pointer()), fatal, exception);
+    b_.CreateCondBr(b_.CreateICmpNE(load(completion_.fatal), null_pointer()), fatal, exception);
     b_.SetInsertPoint(fatal);
-    b_.CreateCall(runtime("cod_lang_fail", b_.getVoidTy(), {b_.getPtrTy()}), {load(fatal_)}); b_.CreateUnreachable();
+    b_.CreateCall(runtime("cod_lang_fail", b_.getVoidTy(), {b_.getPtrTy()}), {load(completion_.fatal)}); b_.CreateUnreachable();
     b_.SetInsertPoint(exception);
     auto *uncaught = block("uncaught");
-    b_.CreateCondBr(b_.CreateICmpNE(load(category_), integer(0)), uncaught, normal);
+    b_.CreateCondBr(b_.CreateICmpNE(load(completion_.category), integer(0)), uncaught, normal);
     b_.SetInsertPoint(uncaught);
     b_.CreateCall(runtime("cod_lang_uncaught", b_.getVoidTy(), std::vector<llvm::Type *>(5, b_.getInt64Ty())),
-        {load(category_), load(site_), load(requested_), load(available_), load(cause_)}); b_.CreateUnreachable();
+        {load(completion_.category), load(completion_.site), load(completion_.requested), load(completion_.available), load(completion_.cause)}); b_.CreateUnreachable();
     b_.SetInsertPoint(normal);
     b_.CreateCall(runtime("cod_lang_exception_finish", b_.getVoidTy(), {})); b_.CreateRet(b_.getInt32(0));
     emit_sites();
