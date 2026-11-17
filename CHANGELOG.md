@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-17 — Apply ordinary liveness to result-bound owners
+
+<a id="h-594"></a>
+**H-594 — Allow result-bound owners without paired-field reception.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-17 America/Los_Angeles; exact timestamp/personal name unavailable. Accepts the arena:owned region:Graph / root in arena result relationship: “拒绝只接收 `root` 不接收 `arena` 的判据不需要特殊化”, because root requires proof its owner remains live; “否则也可以选择不接收一个 owned region，让它当场release就完了。” Confirms the source owner/lifetime and omitted-cleanup rule, replacing the agent's suggested special receipt-pair restriction. Does not qualify complete proofs, native transport, new ADT fields or the separate D-18 review.
+
+<a id="k-result-owners-20261117"></a>
+**K-RESULT-OWNERS-20261117 — Preserve dependencies rather than mandate receipt pairs.** D-22r35→36/registry842→843 adds D-22-RESULT-OWNERS/P-543–P-545 under H-594. Agent integration under H-592 derives actual-owner-preserving renaming, declaration-order-independent metadata, ordinary temporary bits reception before omitted cleanup, projection evidence and exact abandonment/replacement cleanup. Candidate C-63/C-65/C-72/C-73 → charter §§2/3.2–3.3/4.3/6.3/8/12 preserves explicit storage responsibility and composed results without hidden retention; full mechanism/value-path qualification remains pending. Baseline: `2a042da4f5ea818eae9285520d7641794b13e214:design/ConstructionAndAcquisition.md` and the same commit's registry. Source421, D-16, D-23r24, D-29r6 and byte-identical D-18r113 unchanged. Documentation only; no local code/build/tests.
+
 ## 2026-11-17 — Prepare checked body storage independently of LLVM
 
 <a id="k-793"></a>
