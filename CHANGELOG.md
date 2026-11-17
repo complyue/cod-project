@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-16 — Reject nested defer declarations
+
+<a id="h-552"></a>
+**H-552 — Reject nested defer declarations.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-16 America/Los_Angeles; exact timestamps/personal name unavailable. “reject嵌套defer声明”, stated directly and repeated in the answer to whether a handler registered during cleanup may inspect earlier pending errors. Selects rejection instead of either proposed dynamic-registration eligibility policy. This settles the nested-declaration source boundary; it is not a ban on calling helpers that have independent cleanup, on automatic owner release, or a full queue/ABI approval.
+
+<a id="k-defer-nesting-20261116"></a>
+**K-DEFER-NESTING-20261116 — Bound registration before draining.** D-17r86→87/D-15r44→45/D-10r192→193/D-21r24→25/source404→405/registry803→804 records H-552 under D-17-DEFER-DISPATCH/P-461–P-463. Reject nested declarations in deferred bodies, catches and finally through grouping, control flow and explicit full scopes. Separately checked callable bodies retain independent cleanup; inlining preserves that boundary, and intrinsic owner/effect cleanup remains. No owning action list grows during its drain. Candidate C-36/C-44/C-63/C-65 serves explicit registration, observable order and checkable failure responsibility under charter §§2/3.1–3.3/4.3/6.3/8/12. Preserve FIFO, H-525/H-550/H-551, return semantics, owners and D-16. Acceptance covers rejected nesting forms, valid independent helpers and ordinary pre-cleanup loops/scopes. Existing nested-registration and throws-only compiler acceptance is identified as a source enforcement gap; it does not qualify either target behavior. Full queue/value-path/physical qualification remains separate; unaffected qualified contracts continue. Baseline: `261f0960538fce7caeaa468afebb864e4be2daf4:design/ExceptionControl.md`, deferred-work/open-registration sections, and the other affected documentation paths at that commit. Documentation only; no code/build/tests.
+
 ## 2026-11-16 — Native-validation and deferred-coverage integration
 
 <a id="k-775"></a>
