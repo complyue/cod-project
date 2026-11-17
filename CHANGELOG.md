@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-17 — Refresh the current design discussion index
+
+<a id="k-discussion-scan-20261117"></a>
+**K-DISCUSSION-SCAN-20261117 — Route real choices without reopening settled behavior.** Agent editorial continuity under the user's repo-rescan instruction: D-12r32→33/D-14r122→123/D-23r24→25/registry855→856 corrects stale consumed-source, named owning-return and receiving-overlap summaries from H-262/H-263/H-267/H-576/H-593. Preserves C-52/C-54/C-65/C-72, P-131–P-135/P-143/P-155/P-354–P-355 and charter §§2/3.2–3.3/4.3/6.3/8/12; no new value edge, semantic choice or qualification. The registry links five current discussion topics and separates proof/implementation reviews, deferred increments and application research. Original H-262/H-263 evidence was checked at `0c0efbfde4dccb3f3397b6f961bd82bd9a12c848:design/DesignAuthorityRegistry.md:4123–4146`; current baseline is `dca4f4815170148ba4d841c4d354c1edee734e0d` at the affected design paths. D-16, byte-identical D-18r113 and source423 remain unchanged. Documentation only; no code/build/tests.
+
 ## 2026-11-17 — Separate source decisions from remaining implementation work
 
 <a id="k-tracker-boundaries-20261117"></a>
