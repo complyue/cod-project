@@ -50,12 +50,12 @@ def cases():
         yield name, prefix + blank(declaration + ';') + declaration + body, prefix + declaration + ';' + header + body, output
 
 
-def main():
+def main(programs=None, extra_sources=()):
     results = []
     with tempfile.TemporaryDirectory(prefix='cod-declaration-equivalence-') as directory:
         root = Path(directory)
         source = root / 'main.cod'
-        for name, explicit, inherited, expected in cases():
+        for name, explicit, inherited, expected in cases() if programs is None else programs:
             for general in (False, True):
                 mode = 'general' if general else 'default'
                 outputs = []
@@ -83,6 +83,7 @@ def main():
         sources = [ROOT / 'cod/main.cc', *sorted((ROOT / 'cod').glob('lang_*.hh'))]
         sources += [Path(__file__).with_name("language_test_support.py"), Path(__file__), Path(staging.__file__), Path(declared.__file__), Path(__file__).with_name('foundation_tests.py')]
         sources += EXTRA_SOURCES
+        sources += extra_sources
         digest = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
         Path(report).write_text(json.dumps(dict(recorded_utc=datetime.datetime.now(datetime.timezone.utc).isoformat(),
             toolchain=MODE, passed=count, total=len(results), results=results, executable_sha256=digest(COD),

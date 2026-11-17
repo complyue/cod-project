@@ -15,7 +15,7 @@ cases.update({
  'typed_callable_initializer':(IO+'func f()->const i64{func x:func(i64)->const i64={{return 8;}};return 0;}behave @print(f());',0,'8\n',''),
  'typed_procedure_initializer':(IO+'proc f()->const i64{proc x:proc(i64)->void={{return 9;}};return 0;}behave @print(f());',0,'9\n',''),
  'wrong_callable_kind_rejects':('func f()->const i64{func x:proc(i64)->void={{return 9;}};return 0;}f();',2,'','matching func/proc value'),
- 'unknown_initializer_type_remains_unproved':('func f()->const i64{val x<-{{return 9;}};return 0;}f();',2,'','non-value or abruptly completing operand'),
+ 'untyped_initializer_returns':('func f()->const i64{val x<-{{return 9;}};return 0;}f();',0,'',''),
  'group_retains_earlier_effects':(OBS+'proc f()->const i64{val a<-{observe(1);1},b:i64<-{{return 10;}},c<-{observe(99);2};return 0;}behave @print(f());',0,'1\n10\n',''),
  'group_body_returns':(OBS+'proc f()->const i64{val a<-1,{observe(a);return 11;};observe(99);return 0;}behave @print(f());',0,'1\n11\n',''),
  'later_group_type_still_checked':('func f()->const i64{val a:i64<-{{return 11;}},b:bool<-1;return 0;}f();',2,'','initializer does not satisfy'),
@@ -51,6 +51,8 @@ cases.update({
  'swap_fixed_binding_still_rejects':('func f()->const i64{val x<-1;const ptr p=x;p<=>{{return 31;}};return 0;}f();',2,'','const reference binding'),
  'swap_normal_operand_requires_storage':('func f()->const i64{1<->{{return 31;}};return 0;}f();',2,'','storage destinations'),
  'deferred_block_initializer_return':(OBS+'proc f()->const i64{defer observe(1);defer{0;{{val x:i64<-{{return 32;}};}};};return 0;}behave @print(f());',0,'1\n32\n',''),
+ 'untyped_deferred_initializer_return':(OBS+'proc finish()->const i64{defer observe(1);defer{ {{val pending<-{return 7;};}};};return 8;}behave @print(finish());',0,'1\n7\n',''),
+ 'untyped_finally_initializer_return':(OBS+'proc finish()->const i64{defer observe(1);try{return 8;}finally{ {{val pending<-{return 7;};}}; };}behave @print(finish());',0,'1\n7\n',''),
  'deferred_block_swap_return':(OBS+'proc f()->const i64{val x<-1;defer observe(1);defer{x<->{{return 33;}};};return 0;}behave @print(f());',0,'1\n33\n',''),
  'aborted_constructor_returns_complete_image':(IO+'func base(x:i64)->const i64{return x;}func factory()->const (func(i64)->const i64){func f=base;val unused<-make local i64 {return func[f](x:i64)->const i64{return f(x)+1;};};return base;}behave @print(factory()(33));',0,'34\n',''),
 })

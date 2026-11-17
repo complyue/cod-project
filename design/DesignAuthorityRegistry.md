@@ -1,7 +1,9 @@
 # Design authority and value lineage
 
-Registry revision: 819 · Audit date: 2026-11-17 (America/Los_Angeles)
+Registry revision: 820 · Audit date: 2026-11-17 (America/Los_Angeles)
 
+
+[K-785](../CHANGELOG.md#k-785), source414, continues D-17/H-361/H-362/P-235–P-236, D-14/H-297/P-258, independent D-24 results and D-26/H-407 under H-420/H-423. Declaration initialization preserves a return/throw without requiring a payload classification when none is produced. Known annotations and declaration constraints remain checked; failure publishes no receiving binding, initialization proof or inferred normal result. Acceptance covers all ordinary declaration kinds, grouped effects, generic/recursive and borrowed/complete results, H-525 declared obligations, typed/untyped LLVM equality and exact native failure cleanup. Charter §§2/3.2–3.3/4.3/5.3/6.3/8/12 and D-16 continue. No source non-returning type, new storage/capture permission, ABI or broader qualification follows; the separate D-18r113 review is unchanged and pending.
 
 [K-784](../CHANGELOG.md#k-784), source413, continues D-26/H-407, D-14’s established place/access/initialization and D-18’s existing callable/native boundary under H-420/H-423. Native bindings retain their checked common place mode, reference slot and selected place together; context-dependent type/access/owner evidence and physical payload indices remain distinct. Acceptance preserves LLVM/diagnostics across current fixtures in both modes, ordinary source/staging/native outcomes and exact release. Charter §§2/3.2–3.3/4.3/5.3/6.3/8/12 and D-16 continue. No source permission, runtime representation contract or new qualification follows; the D-18r113 ordinary value-input review remains pending and unchanged.
 

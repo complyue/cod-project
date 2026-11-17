@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-17 — Preserve abrupt declaration initialization
+
+<a id="k-785"></a>
+**K-785 — Keep initializer completion independent of receiving payload classification.** Source413→414/registry819→820 continues D-17/H-361/H-362/P-235–P-236, D-14/H-297/P-258, independent D-24 result evidence and D-26/H-407 under H-420/H-423. Untyped ordinary declarations preserve an initializer return/throw; no value is constructed or published on that path. Known declaration contracts, initialization/owner/return checks and H-525 obligations remain. Acceptance covers grouped effects, all declaration kinds, generic/recursive/borrowed/complete results, independent typed LLVM controls and native preparation-failure release. Preserve D-16 and charter §§2/3.2–3.3/4.3/5.3/6.3/8/12; no source non-returning type, new payload/capture permission or broader qualification. D-18r113’s separate review remains pending. Baseline: `2300d905de6316a1a0b16505290500ebc359f7eb:cod/lang_checked.hh` and that commit’s source reference/tests/registry.
+
 ## 2026-11-17 — Keep native binding roles with their slots
 
 <a id="k-784"></a>

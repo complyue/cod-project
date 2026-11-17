@@ -5999,11 +5999,14 @@ class ScalarChecker {
           fail(declaration->at, "reference initializer does not belong to the declared owner");
         if ((!borrowed || mixed) && type.kind == Type::procedure) note_abrupt(declaration->at, {exception_id(ExceptionCategory::out_of_memory)});
         if (type == Type::null_ref) fail(declaration->at, "a null initializer requires an explicit target type");
-        require_value(type);
-        if (callable_value && (type.kind != Type::procedure || type.pure_callable != (expr.declaration_kind == "func")))
-          fail(declaration->at, "callable declaration requires a matching func/proc value");
-        if (type.kind == Type::procedure && !callable_value && expr.declaration_kind != "ptr")
-          implementation_gap(declaration->at, "callable storage uses func/proc values or ptr views");
+        const bool untyped_exit = !completes && !declaration->annotation && initializer.kind != K::make_local;
+        if (!untyped_exit) {
+          require_value(type);
+          if (callable_value && (type.kind != Type::procedure || type.pure_callable != (expr.declaration_kind == "func")))
+            fail(declaration->at, "callable declaration requires a matching func/proc value");
+          if (type.kind == Type::procedure && !callable_value && expr.declaration_kind != "ptr")
+            implementation_gap(declaration->at, "callable storage uses func/proc values or ptr views");
+        }
         if (completes && (borrowed ? initial_type != Type::null_ref && initial_type != type : !transfers_value(initial_type, type)))
           fail(declaration->at, "initializer does not satisfy declared " + expr.declaration_kind + " type");
         if (borrowed && completes) {

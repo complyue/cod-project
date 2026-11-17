@@ -47,6 +47,47 @@ runner.CASES={
  'generic_logical_completion':(IO+'func f(x:T,flag:bool)->const T where T{flag&&{{return x;}};return x+x;}behave @print(f(3u64,true));behave @print(f(1.5f32,false));',0,'3\n3\n',''),
  'recursive_logical_completion':(IO+'func f(n:i64)->const i64{(n==0)&&{{return 7;}};return f(n-1);}behave @print(f(40));',0,'7\n',''),
 }
+for kind, declaration in {
+    'val': 'val pending<-',
+    'ref': 'ref pending=',
+    'ptr': 'ptr pending=',
+    'func': 'func pending=',
+    'proc': 'proc pending=',
+}.items():
+    runner.CASES[f'{kind}_declaration_initializer_return'] = (
+        OBS+'proc finish()->const i64{defer observe(1);'+declaration+
+        '{{defer observe(2);return 7;}};observe(99);return 8;}observe(finish());',
+        0, '2\n1\n7\n', '')
+    runner.CASES[f'{kind}_declaration_initializer_throw'] = (
+        OBS+EX+'proc finish()->void{defer observe(1);'+declaration+
+        '{{defer observe(2);throw error();}};observe(99);}'+
+        'try{finish();}catch(failure:const MissingReturnError){observe(3);};',
+        0, '2\n1\n3\n', '[-Wmissing-return]')
+runner.CASES.update({
+ 'declaration_initializer_void_return':(OBS+'proc finish()->void{defer observe(1);val pending<-{{defer observe(2);return;}};observe(99);}finish();observe(3);',0,'2\n1\n3\n',''),
+ 'declaration_initializer_inferred_result':(IO+'func finish(){val pending<-{return 7;};}behave @print(finish());',0,'7\n',''),
+ 'declaration_initializer_generic_result':(IO+'func finish(input:T)->const T where T{val pending<-{return input;};}behave @print(finish(7u64));behave @print(finish(true));behave @print(finish(1.5f32));',0,'7\ntrue\n1.5\n',''),
+ 'declaration_initializer_recursive_result':(IO+'func finish(n:i64){if(n==0){return 7;}else{};val pending<-{return finish(n-1);};}behave @print(finish(40));',0,'7\n',''),
+ 'declaration_initializer_borrowed_result':(IO+'proc finish(ref target:i64 in O)->ref i64 in O where {owner O}{defer{target<-9;};val pending<-{return target;};}val cell<-1;ref retained=finish(cell);behave @print(retained);cell<-2;behave @print(retained);',0,'9\n2\n',''),
+ 'declaration_initializer_complete_result':(IO+VIEW+'func finish()->func(i64,i64)->const i64{func pending={return first;};}behave @print(finish()(7,8));',0,'7\n',''),
+ 'declaration_initializer_normal_branch':(IO+'func finish(flag:bool)->const i64{val value<-if(flag){return 7;}else{8};return value+1;}behave @print(finish(true));behave @print(finish(false));',0,'7\n9\n',''),
+ 'declaration_initializer_group_order':(OBS+'proc finish()->const i64{defer observe(1);val before<-{observe(2);3},pending<-{observe(before);return 7;},after<-{observe(99);8};return after;}observe(finish());',0,'2\n3\n1\n7\n',''),
+ 'declaration_initializer_cannot_initialize_unwritten':(OBS+'proc finish()->const i64{val cell<-make local i64;defer{observe(cell);};val pending<-{return 7;};}finish();',2,'','cannot prove initialization'),
+ 'declaration_initializer_prior_read_required':('func finish()->const i64{val cell<-make local i64;val pending<-{cell;return 7;};}finish();',2,'','before definite initialization'),
+ 'declaration_initializer_wrong_return_rejects':('func finish()->const i64{val pending<-{return false;};}finish();',2,'','return type'),
+ 'declaration_initializer_void_value_rejects':('proc finish()->void{val pending<-{};}finish();',2,'','non-value or abruptly completing operand'),
+ 'declaration_initializer_known_kind_rejects':('func finish()->const i64{func pending:proc()->void={return 7;};}finish();',2,'','matching func/proc value'),
+ 'declaration_initializer_known_annotation_required':('func finish()->const i64{val pending:UnknownType<-{return 7;};}finish();',2,'','UnknownType'),
+ 'declaration_initializer_duplicate_rejects':('func finish()->const i64{val pending<-{return 7;};val pending<-8;}finish();',2,'','duplicate declaration'),
+ 'declaration_initializer_recovery_does_not_publish':(EX+'proc finish()->void{try{val pending<-{throw error();};}catch(failure:const MissingReturnError){};pending;}finish();',2,'',"binding 'pending' is not available on every reaching path"),
+ 'declaration_initializer_throw_only_needs_contract':(EX+'func finish(failure:MissingReturnError){val pending<-{throw failure;};}finish(error());',2,'','unproved callable result'),
+ 'declaration_initializer_declared_exception_obligation':('using "std:exceptions" Exception;'+EX+'proc finish(failure:Exception)->void{val pending<-{throw failure;};}finish(error());',2,'',"declared checked exception 'Exception' requires"),
+ 'declaration_initializer_declared_exception_recovery':(IO+'using "std:exceptions" Exception;'+EX+'proc finish(failure:Exception)->void throws Exception{val pending<-{throw failure;};}try{finish(error());}catch(caught:const Exception){behave @print(caught.category);};',0,'5\n','[-Wmissing-return]'),
+ 'declaration_unproduced_type_cannot_construct':('func finish()->const i64{val pending<-{return 7;};val constructed<-make local typeof(pending);}finish();',2,'','non-value or abruptly completing operand'),
+ 'declaration_unproduced_annotation_cannot_skip_check':('func finish()->const i64{val pending<-{return 7;};val constructed:typeof(pending)<-{return 8;};}finish();',2,'','non-value local storage type'),
+ 'declaration_unproduced_construction_type_cannot_skip_check':('func finish()->const i64{val pending<-{return 7;};val constructed<-make local typeof(pending){return 8;};}finish();',2,'','non-value or abruptly completing operand'),
+ 'declaration_initializer_borrowed_escape_rejects':('proc finish(ref target:i64 in O)->ref i64 in O where {owner O}{val local<-1;val pending<-{return local;};}val cell<-1;finish(cell);',2,'','declared external owner'),
+})
 runner.CASE_ARGUMENTS={}
 runner.CASE_SHADOWS = {
     'logical_null_refinement': ['p'],
