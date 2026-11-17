@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-11-17 — Integrate init-place clarification with ready-ref proofs
+
+<a id="k-init-source-integration-20261117"></a>
+**K-INIT-SOURCE-INTEGRATION-20261117 — Preserve separate readiness and mandatory-write obligations.** Agent continuity registry847/848→849 reconciles `e3c81af8b205b6b2054813a9ae28554ecddf359c:design/DesignAuthorityRegistry.md` with `ac77b227de0f33511af3a885d862ddf5e1205e7b` at the affected design paths. H-601/H-602's D-22r39/D-28r35/D-20r6 init-reference and explicit-var scope coexists with K-794/source422's ordinary ready-ref invariant. An established init target identity is not initialized payload evidence; entry readiness alone does not discharge promised writes. Preserve C-65/C-72/C-95, charter §§2/3.3/4.3/6.3/8/12, actual owners, normal-completion publication and exact failure cleanup. Human records, source422, D-16 and pending D-18r113 remain unchanged; no new modifier/proof/native/value-path qualification follows.
+
+## 2026-11-17 — Clarify init references and explicit caller places
+
+<a id="h-601"></a>
+**H-601 — Preserve init reference shorthand; reject the extra target distinction.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded2026-11-17 America/Los_Angeles; exact timestamp/personal name unavailable. “参数里的 `init n:Node in O` 总是 `init ref n:Node in O` 语义吧？ 不存在 target 与否的区别，你想多了？” Confirms shorthand equality and rejects the extra target-modifier split. Agent evidence audit finds that `bded2d864ece6640fdfbdfef418817ae3cabf5db:design/ConstructionAndAcquisition.md`, “Init destinations and declared place aliasing”, explicitly left the declaration-directed reference-slot role as a proposal requiring reconciliation. The later H-571/K-OUTPUT-ACCEPT-20261117 summaries overstated that detailed role's settled scope. This new correction preserves their original evidence and the unaffected general output contract.
+
+<a id="h-602"></a>
+**H-602 — Express the caller place explicitly with var.** Same human/source/date, following H-601: “`init ref var n:Node in O` 大概更准确”. Selects the clearer explicit declared-place direction for the caller reference-slot form. Ref describes the binding, var supplies caller-place aliasing and init adds initialization responsibility. Ordinary operator/flow consequences and analogous modifier combinations are agent-derived, not a separate human approval of every modifier, nullability, aggregate, ABI or proof detail. The separate target-modifier proposal has no current contract.
+
+<a id="k-init-place-correction-20261117"></a>
+**K-INIT-PLACE-CORRECTION-20261117 — Reconcile ordinary references and explicit var places.** D-22r37/pending-r38→39, D-28r34→35, D-20 LLVMInterop/CompilerPipeline r5→6 and registry846/pending847→848 updates D-22-INIT-PLACES/P-555–P-557 and P-512–P-514/P-319–P-320 under H-601/H-602. Removes the pending target helper; plain init references retain selected-target semantics, while explicit ref var/ptr var names caller reference slots and val var names caller bits places. Preserve common identity/readiness/mandatory-write flow, ordinary = versus field/<- operations, immediate public writes, exact cleanup/no rollback and C-65/C-72/C-95 → charter §§2/3.3/4.3/6.3/8/12. Full combinations/nullability/publication/view/native/value-path qualification remain open. Committed baseline: `44ff01c8afcf84a76a0075b52aececf82c10a3a4` at affected paths; K-INIT-TARGET-REVIEW-20261117 records the intervening unpublished proposal. Source421, D-16, D-29r9 and byte-identical D-18r113 unchanged; documentation only, no local code/build/tests.
+
+## 2026-11-17 — Isolate the target-initialization helper interface
+
+<a id="k-init-target-review-20261117"></a>
+**K-INIT-TARGET-REVIEW-20261117 — Keep target initialization distinct from reference-slot initialization.** Agent assessment under H-592/H-595: D-22r37→38/registry846→847 adds pending D-22-INIT-TARGET/P-555–P-557. H-445/H-447/H-571's common flow and declared-place roles determine identity-only destination preparation, actual owner/access, fixed target, mandatory writes, delegation and no rollback; they do not select explicit init target versus a bare-init shorthand exception. Candidate C-65/C-72/C-95 → charter §§2/3.3/4.3/6.3/8/12 preserves visible storage responsibility. Baseline: `44ff01c8afcf84a76a0075b52aececf82c10a3a4:design/ConstructionAndAcquisition.md` and registry. Complete grammar/proofs/native/value-path qualification remain pending; source421, D-16, D-29r9 and byte-identical D-18r113 unchanged. Documentation only, no local code/build/tests.
+
 ## 2026-11-17 — Prove caller ref invariants through pointer methods
 
 <a id="k-794"></a>
