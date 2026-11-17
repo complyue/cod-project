@@ -1,8 +1,10 @@
 # CoD construction, bits ADTs and region acquisition
 
-Design revision: 20 · Recorded: 2026-11-15 · Status: discussion draft with confirmed requirements; consuming resize direction recorded; RHS normalization and capacity/backend details under review; whole-document approval pending; implementation incomplete.
+Design revision: 21 · Recorded: 2026-11-17 · Status: discussion draft with confirmed requirements; consuming resize direction recorded; RHS normalization and capacity/backend details under review; whole-document approval pending; implementation incomplete.
 
 ## Design authority
+
+- **Capture/lifetime alignment:** [H-553–H-557](../CHANGELOG.md#h-553)/[K-CAPTURE-LIFETIMES-20261117](../CHANGELOG.md#k-capture-lifetimes-20261117), [D-18-VALUE-CAPTURE](DesignAuthorityRegistry.md#d-18-value-capture)/P-485–P-490 and [D-12-LIFETIME](DesignAuthorityRegistry.md#d-12-lifetime)/P-491–P-493 cover this revision's capture/owner dependency wording. Preserve independent value locals, selected reference targets, explicit var places, unique actual owners and statically bounded borrows; reject implicit slot sharing, closure-cell promotion and lifetime extension. C-36/C-54/C-65/C-73/C-75 and charter §§2/3.2–3.3/4.3/6.3/8 preserve visible storage/lifetime responsibility. D-18 owns acceptance and H-327/H-329 alias continuity. D-16, unrelated qualified scopes and existing symbol-declaration restrictions continue. New proof/physical/value-path qualification and source support remain separate; no allocator or graph-copy mechanism follows.
 
 - **Nominal ADT placement:** [H-478](../CHANGELOG.md#h-478)/[K-SINGLE-ADT-20261115](../CHANGELOG.md#k-single-adt-20261115) covers r19→20's alignment with [D-28-ADT](DesignAuthorityRegistry.md#d-28-adt), P-416–P-418. One CoD ADT retains nominal identity across lexical/regional placement; actual owners provide layout/access evidence. The candidate C-10/C-39/C-65/C-91 path serves charter §§3.1/4.3/6.3/7.1/8 through shared business types and checked storage. Preserve same-owner edges, bits classification, initialization, lifetimes and explicit graph transfer; no C++ regional-type stack allocation, capture/TLS extension, graph copy or runtime support is implied. Acceptance and unresolved physical protocols belong to D-28's composed cases. This scoped human decision and direct integration do not qualify the whole document or settle H-146's encoding mechanism.
 
@@ -31,7 +33,7 @@ The ordinary construction direction is `make T [in o]`; intrinsic resource acqui
 
 `make const region` restricts the published result view. Explicit preparation writes, including selected create/initialize/expand/eligible-trim operations, may precede that result subject to permissions and the selected protocol. Constness does not freeze the file, imply a snapshot or remove the owning acquisition's release obligation. Final DBMR grammar, sharing/defaults and operation/failure protocols remain unselected.
 
-Callable payloads retain D-18's complete intrinsic value category and scope-owned backing; they are not bits ADTs or ordinary independently owned references. Local ADTs do not authorize lexical-cell captures or lifetime extension. H-370's deferred owning-argument transfer at invocation and H-365/H-371's scope restrictions remain unchanged.
+Callable payloads retain D-18's complete intrinsic value category and scope-owned backing; they are not bits ADTs or ordinary independently owned references. Local ADT placement alone authorizes no capture or lifetime extension. D-18 admits value snapshots and explicit non-escaping owner-qualified references under H-553–H-556, without promoting lexical cells or copying regional graphs. H-370's deferred owning-argument transfer at invocation and H-365/H-371's scope restrictions remain unchanged.
 
 ## Bits classification and representation obligations
 

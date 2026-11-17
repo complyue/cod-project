@@ -1,8 +1,10 @@
-# Regional variables and callable captures
+# Callable views, value captures and explicit aliases
 
-Design revision: 107 · Recorded: 2026-11-16 · Status: scoped callable contract; implementation boundaries recorded separately.
+Design revision: 108 · Recorded: 2026-11-17 · Status: scoped callable contract; implementation boundaries recorded separately.
 
 ## Design authority
+
+- **Value captures and explicit lifetimes:** [D-18-VALUE-CAPTURE](DesignAuthorityRegistry.md#d-18-value-capture)/P-485–P-487 and [D-18-BORROW](DesignAuthorityRegistry.md#d-18-borrow)/P-488–P-490 cover r108's value-snapshot, alias and borrowed-capture sections. H-553 confirms independent invocation locals; H-554–H-556 prohibits implicit shared cells/lifetime extension and admits proved lexical-owner borrows. H-327/H-329's explicit place-alias contract continues; H-557 requests its compiler-facing distinction from ordinary references. C-54/C-65/C-73/C-75 and charter §§2/3.2–3.3/4.3/6.3/8 serve explicit identity, storage and lifetime reasoning. Acceptance below distinguishes target versus slot sharing, repeated/local writes, alias observation, initialization and transitive owner validity. No graph copy, promotion, new pure policy or ABI. [K-CAPTURE-LIFETIMES-20261117](../CHANGELOG.md#k-capture-lifetimes-20261117) records baseline/coverage and agent elaborations. Source decisions are confirmed within that scope; full new proof/physical/value-path qualification and compiler support remain separate.
 
 - **Evidence retention and coverage:** [K-746](../CHANGELOG.md#k-746) continues r107 under H-329/H-331/H-342/H-344/H-481 and P-297/P-301–P-303. The qualified capture/value contract preserves definition identity, required lexical and symbolic dependencies, nonexecuting queries, actual owners, shadow diagnostics and complete cleanup under charter §§3.2/3.3/4.3/6.3/8/12. Compilation-scale acceptance includes wide declaration sets with declared and inferred results. Current implementation evidence lives in the source capability reference; this alignment grants no new capture permission, representation or module-startup qualification.
 
@@ -19,18 +21,24 @@ Design revision: 107 · Recorded: 2026-11-16 · Status: scoped callable contract
 - **Named-argument boundary:** [H-457](../CHANGELOG.md#h-457)/[K-ARGUMENT-CONTEXTS-20261115](../CHANGELOG.md#k-argument-contexts-20261115) continues r95→96's borrowed-owner contract while integrating [D-10-ARGUMENTS](SymbolicDynamicScope.md#named-arguments-defaults-and-complete-binding): group an owner projection used as an argument value to distinguish it from the new expression-first named arrow. C-65/C-73/C-75 and P-294/P-295/P-297/P-298 retain actual-owner identity, access and lifetime under charter §§3.3/4.3/8. Acceptance must distinguish positional/grouped and named projection without copying, consuming or extending an owner. Named-argument parser migration remains unimplemented; no callable ABI or broader qualification follows.
 
 - **Registry / current scope:** [D-18](DesignAuthorityRegistry.md#d-18); the semantic revision stated above and the independently qualified scopes in the current registry. **Confirmed/continued only for recorded capture/value/native-boundary scope.** H-327–H-335/H-337–H-344/H-349/H-350; C-65/C-73/C-75/P-293–P-303. H-342 replaces callable alias initialization; H-344 permits runtime-sized scope-owned backing. H-417 requires statically unique ref/ptr owners through selected calls and captures; K-UNIQUE-OWNER-20261114 integrates that scoped constraint while preserving the established complete-value/native contract.
-- **Value path:** C-65/C-73/C-75 and P-294/P-295/P-297/P-298 make storage selection, access and lifetime visible in source, serving charter §§1–3/§8. P-299/P-300/P-301/P-302/P-303 connects the runtime callable boundary and caller placement to explicit storage lifetimes and relocatable regional data. C-65/P-258 requires payload reads to have definite prior initialization, independently of storage naming or invocation form. P-293 covers the bounded structural-region work; it does not approve every possible region or closure representation.
+- **Value path:** C-65/C-73/C-75 and P-294/P-295/P-297/P-298 make storage selection, access and lifetime visible in source, serving charter §§1–3/§8. P-299/P-300/P-301/P-302/P-303 connects the runtime callable boundary and caller placement to explicit storage lifetimes and relocatable regional data. C-65/P-258 requires payload reads to have definite prior initialization, independently of storage naming or invocation form. P-293 covers the bounded structural-region work; it does not approve every possible region or callable-view representation.
 - **Contract boundary:** Preserve actual borrowed owners, complete nested values, recursion, caller destinations, access and cleanup; measure allocation/compilation. No regional callable payload, lexical-cell promotion, independent user heap lifetime or captured-region retention. H-417 rejects ref/ptr results without one statically provable owner; D18-Q-result-discrimination representation remains pending; native fixtures do not establish D-21’s wider stage/family contract.
 - **Invariants / non-goals:** D-14 owns storage/access/lifetimes, D-10 distinguishes lexical and dynamic calls, and D-17 owns checked exceptions. D-01 relocation, D-15 module/TLS separation and D-16 numeric/fraction constraints remain unchanged. No lexical-cell promotion, independently managed user heap objects, regional object copy/move, ownership extension or RTTI. Lexical lifetime ownership does not require stack backing.
 - **Acceptance:** Exercise both selection paths, captured-slot writes, owner adaptation, complete nested values, nullable invocation and deep recursion; reject invalid kind, owner, access and lifetime. Preserve caller-owned results, independent copies, cleanup and relocation, and measure construction/invocation cost and compilation scale. Current compiler availability is recorded in the [source capability reference](../tests/cod/language/README.md).
 - **Evidence / continuity:** human baselines are the H records identified by the registry; [K-682](../CHANGELOG.md#k-682) covers r91→92’s runtime-callable parameter-access clarification under H-366–H-369/P-327 and H-375/H-378: a view preserves its declared access contract alongside actual type identity. [K-UNIQUE-OWNER-20261114](../CHANGELOG.md#k-unique-owner-20261114) covers r90→91: H-417 closes only reference-owner alternatives, preserving independently qualified complete values, capture/access, recursion, native coverage and cleanup. Abstract concrete-type evidence representation retains its own review scope. [K-REFERENCE-IDENTITY-20261114](../CHANGELOG.md#k-reference-identity-20261114) integrates H-439/H-440 owner-plus-locator identity and is null, preserving established access, result and lifetime behavior. Current source/native coverage and proof boundaries are recorded in the [source capability reference](../tests/cod/language/README.md).
 - **Current implementation alignment:** [K-718](../CHANGELOG.md#k-718) continues r101→102 under H-342/H-344/H-417/H-423 and P-300–P-303. The [source capability reference](../tests/cod/language/README.md) covers runtime ptr initialization from an existing callable target or a fresh complete value through shared receiving/cleanup. Existing targets retain identity; fresh storage receives the complete environment under one proven lexical owner. Acceptance preserves captures, independent copies, initialization obligations, recursive native coverage and exact release, including construction/copy failure. Direct/prepared caller-slot methods continue through shared invocation evidence. Callable method-value adaptation, default-context transport, regional storage and native-interface obligations remain separate.
 
+## Language model: no closure abstraction
+
+CoD does not define a closure abstraction. It defines callable definitions, materialized callable views, value captures and explicit owner-bounded borrows. A broad computer-science usage may call any callable with an environment a closure; that terminology must not introduce an additional CoD mechanism. In particular there is no closure-owned mutable variable cell, shared retained invocation frame or automatic extension of a lexical variable's lifetime.
+
+Compiler implementations must preserve source-visible distinctions: independent value storage, a reference's target, an explicit var alias's selected place, and a symbolic identity's dynamically installed value. Natural lexical nesting supplies ordinary lifetimes. Access that exceeds that nesting must be expressed through the formally specified, statically checked dynamic-scope/owner contracts; capture, heap allocation and code sharing are not escape hatches. Existing explicit region ownership transfer remains its own contract. See the [vision principle](GlobalVariablesDoneRight.md#explicit-lifetimes-without-closures).
+
 ## Structural regions
 
 `region` declares a product of named fields. A consumer can require a compatible field subset; WPO retains the concrete region layout, including additional fields and their actual offsets. Field names, val/ref/ptr kinds and data/UoM identities remain significant. Structural compatibility neither creates an owner nor converts one actual region into another. A requirement is a lower bound, not an access view that hides extra concrete fields.
 
-Unmodified/val fields store bits directly; ref/ptr fields store same-owner references. Capturing a val slot observes its current bits. Capturing a ref/ptr slot observes its current binding and later rebinding, with ordinary initialization and checked-NPE obligations. Region-level allocation/release remains intrinsic; free lists, pools and item reuse remain library policies. No physical allocator or relative-pointer encoding change follows.
+Unmodified/val fields store bits directly; ref/ptr fields store same-owner references. An explicit var alias captures the selected field place: reads observe its later writes or rebinding under ordinary access/initialization and checked-NPE obligations. An ordinary value binding copied from that field instead captures its selected value, as specified below. Region-level allocation/release remains intrinsic; free lists, pools and item reuse remain library policies. No physical allocator or relative-pointer encoding change follows.
 
 ## Callable completion
 
@@ -44,9 +52,32 @@ H-361/H-362 and [D-17](ExceptionControl.md) require explicit `return` for values
 
 An alias selects existing storage once. It creates no holder, allocation, payload copy or ownership transfer. Omitted kind is inferred; an explicit prefix must match exactly. A ptr field remains ptr even when currently non-null. An optional type annotation checks the selected view without numeric conversion. `:const` is also valid without an explicit type.
 
-`in owner` checks the storage's actual owner. Declaration-leading `const` restricts the selected binding/storage through the alias; type-leading `const` restricts its target and every derived access path. These dimensions are independent under D-14; other writable aliases can still change the storage. Existing `=`, `<-`, `<=>` and `<->` rules apply through either name. Selecting an array element or field path fixes that storage location, rather than re-evaluating the selection later.
+`in owner` checks the storage's actual owner. For `val var`, this annotates the aliased place, not an owner-qualified independent val type; the ban on `val T in O` remains. Declaration-leading `const` restricts the selected binding/storage through the alias; type-leading `const` restricts its target and every derived access path. These dimensions are independent under D-14; other writable aliases can still change the storage. Existing `=`, `<-`, `<=>` and `<->` rules apply through either name. Selecting an array element or field path fixes that storage location, rather than re-evaluating the selection later.
 
-Aliases can name ordinary variables, regional fields and addressable array elements. Whole-region holders, TLS bindings, temporaries and non-addressable logical container elements do not supply this alias form. Selecting a field through a dynamic region resource does not alias its TLS binding. A lexical pointer into a region still has lexical binding storage and is ineligible for closure capture.
+Aliases can name ordinary variables, regional fields and addressable array elements. Whole-region holders, TLS bindings, temporaries and non-addressable logical container elements do not supply this alias form. Selecting a field through a dynamic region resource does not alias its TLS binding. Capturing an explicit alias preserves its once-selected place and the place's actual owner dependency; it creates neither a new shared slot nor a longer lifetime. Copying its value into an ordinary binding before capture explicitly requests value semantics instead. A lexical-place alias is admitted only when every use is statically within that place's owner lifetime.
+
+### Compiler rule: target sharing is not binding-slot aliasing
+
+Use **place alias** for `var a -> slot`: a second name for the same existing storage, with no independently rebindable alias holder. Use **borrowed target** for an ordinary ref/ptr binding. Two references may select the same target while their binding slots remain independent. Module/type/symbol name aliases are compile-time identity mappings, not this storage operation. Do not infer place aliasing merely from equal targets, identical types, a borrowed parameter, a captured reference, or an implementation that temporarily shares a native address.
+
+```cod
+proc distinguish(ref x:u64 in O, ref y:u64 in O) where {owner O} {
+    ref p:u64 in O = x;
+    ref q:u64 in O = p;  # Independent binding, same initial target.
+    ref var a -> p;       # Explicit alias of p's binding slot.
+    a = y;               # Rebinds p; q still selects x.
+    q <- 7u64;           # Writes x's payload, not p's binding.
+    a <- 9u64;           # Writes p's current target, y.
+}
+```
+
+If x and y happen to select the same target, the writes naturally alias that target; they still do not merge p and q's slots. `a = y` does not retarget the alias a to y's slot: a remains a name for p's slot. `var b -> a` denotes that same place, without adding a proxy chain. For a val place, `<-` writes that place and builtin `=` has no reference slot to rebind. Alias const restricts access through the alias, not other names. An alias type assertion cannot convert the selected storage, alter ptr/ref mode or upgrade permissions.
+
+Selecting `var element -> items[index]` evaluates the selection once. Later index changes or rebinding items do not select a different element. Backing movement follows the selected owner's current resolution information; logical target removal/reuse still needs the container's validity contract. An alias neither pins native addresses nor extends storage lifetime. It need not read a payload merely to name an admitted uninitialized place; later reads/writes retain ordinary definite-initialization rules.
+
+Ordinary parameter passing and result reception obey their declared value/borrow contracts. Passing a var alias does not automatically pass its binding slot as an out parameter; assignment-family destination parameters expose slots only under their explicit D-14 contract. Builtin assignment results expose target views, never the lhs slot. Callable value copies retain independent complete values; sharing immutable code or optimized backing must preserve that independence. Capture of an explicit alias retains the place, while ordinary ref/ptr capture retains the selected target. These distinctions must survive inference, generic specialization, inlining and optimization. No runtime alias registry or ban on legitimate target sharing follows.
+
+**Two owner roles matter for reference-slot aliases.** In `ref p:T in O`, O owns the target; p's binding slot ordinarily belongs to the current lexical invocation. `var a -> p` names that local slot, so retaining a requires the slot owner as well as the target dependencies of its uses. An alias annotation `var a in O -> p` cannot relabel that local slot as region O storage. A callable capturing ordinary p may outlive the helper when O belongs to a still-live caller; a callable capturing a may not outlive the helper's slot. An alias directly selecting a field in O instead depends on that field's actual owner, irrespective of where the alias name was declared. This prevents an explicit alias from laundering a short-lived binding through a long-lived referent.
 
 ## Callable owners and captures
 
@@ -68,13 +99,95 @@ function reader(ref stream:Stream in state)
 }
 ```
 
-The stream argument supplies its actual region owner; a separate region parameter is unnecessary. The alias selects a regional slot, so the callback can outlive the factory call while that region remains live. It does not retain the factory's lexical alias cell. Named and anonymous functions/procedures share these capture rules.
+The stream argument supplies its actual region owner; a separate region parameter is unnecessary. The explicit alias names the regional scalar place, so the callback can outlive the factory call while that region remains live and observes later writes to ticks. Its local spelling creates no factory-local holder to retain. Named and anonymous functions/procedures share these capture rules.
 
-Omitted brackets infer required variables. An explicit list must include every required capture: missing entries error, unused entries warn. Every listed capture remains retained, even if unused. Its owner must appear in with before any unused warning is considered. Every with-listed owner must actually be captured; the list is not a conservative lifetime upper bound.
+Omitted brackets infer required variables. An explicit list must include every required capture: missing entries error, unused entries warn. Every listed capture remains retained, even if unused. Every borrowed-owner dependency must appear in with before any unused warning is considered; an independent scalar value has no dependency on its source storage owner. Every with-listed owner must actually be captured; the list is not a conservative lifetime upper bound.
 
-Captures may retain regional slots, borrowed regional access and statically known callables with valid dependencies. H-482 additionally makes explicit scalar/object ref/ptr symbolic binding mode available to the existing dynamic-capture contract: capture the selected reference and actual owner, not the TLS binding cell or a scalar payload snapshot. Later target mutation remains visible, while later TLS rebinding does not retarget the capture. Retaining owner-resolution evidence does not implicitly capture/replay the region-symbol value; a hidden original owner is sufficient while its owning effect lives. Replay/restoration must satisfy separately declared shared-owner groups and all lifetime/access/initialization/nullability constraints. H-481 still determines fresh definition-view versus stored-value-copy timing. Ordinary lexical val/ref/ptr binding cells cannot be promoted or captured. Captures do not freeze regional contents or extend owner lifetimes. Functions remain independent of dynamic effects; procedure lexical captures remain separate from perform's captured symbolic values and behave/direct calls' current dynamic context.
+Captures distinguish independent values from explicit borrows. H-553 gives scalar val and complete callable values one snapshot/per-invocation-value rule. H-554 prohibits creating traditional closure storage with shared updatable lexical binding cells; dynamically shared variable state uses symbolic variables and an explicit statically tracked owner. H-555 also permits explicit lexical-owner references whose lifetime is statically proved. H-327/H-329's explicit place aliases retain their existing borrowed-place meaning: no implicit conversion into an ordinary value variable, and no hidden slot promotion. No capture promotes storage, freezes external targets, copies a regional graph or extends an owner lifetime. Functions remain independent of dynamic effects; procedure lexical captures remain separate from perform's captured symbolic values and behave/direct calls' current dynamic context.
 
 Parentheses group callable types. `-> func()->T with {...} throws E` declares the returned callback's exception, while `-> (func()->T with {...}) throws E` declares the factory's exception. Unbound with names reject; with does not declare a new owner.
+
+## Value snapshots and invocation-local captures
+
+H-553 confirms the implicit-value-parameter model. Materializing a callable view evaluates and retains each admitted value capture as an independent snapshot. Each invocation initializes an independent local binding from that retained snapshot, with the captured name's declared type, mode and access qualifiers. Explicit var aliases instead retain their selected place under the separate alias contract; their spelling is not an ordinary value binding. Captures are hidden inputs to invocation, not additional public parameters or overload-selection evidence. There is no source-level currently-executing-callable value or writable alias to the retained capture record.
+
+| Captured source | Retained information | Meaning inside an invocation |
+| --- | --- | --- |
+| Ordinary scalar val | Independent initialized bits | A fresh invocation-local val; permitted writes affect only this invocation. |
+| Complete func/proc value | Complete selected callable and nested environment | An independent local callable value; replacement or writable borrowing acts on that local value. |
+| Explicit ref/ptr in O | Selected target, actual owner, type/access and null state | A local reference binding to the selected target; rebinding is local, target writes obey the borrowed view. |
+| Explicit var alias | Selected place and its actual owner/access contract | An alias to that same live place; writes/rebinding affect it, without a new retained binding cell. |
+
+This adds no general by-value regional/ADT graph category. Scalar types retain their exact numeric/UoM/validity rules, with no capture conversion or canonicalization. Complete callables remain their distinct intrinsic lexical value category. Copies of borrowed references do not copy their targets. Implicit and explicit capture lists choose the same semantics; list completeness and unused-entry rules remain.
+
+```cod
+proc make_value() -> proc()->u64 {
+    val v <- 1u64;
+    return proc [v]()->u64 {
+        val before <- v;
+        v <- 2u64;
+        return before;
+    };
+}
+proc f = make_value();
+f();  # 1
+f();  # 1: a new invocation-local v, initialized from the saved 1.
+```
+
+The original v may end with make_value: no reference to its cell was captured. Replacing the source variable after view materialization does not change the snapshot. Changing an invocation-local v does not change that snapshot, another invocation, or another copy of the callable. Complete callable replacement follows exactly the same rule:
+
+```cod
+proc make_switch() -> proc()->u64 {
+    proc current = proc()->u64 { return 1u64; };
+    proc replacement = proc()->u64 { return 2u64; };
+    return proc [current, replacement]()->u64 {
+        val before <- current();
+        current <- replacement;
+        return before;
+    };
+}
+proc s = make_switch();
+s();  # 1
+s();  # 1: replacement changed the first invocation's local current only.
+```
+
+**Timing and initialization.** The snapshot is taken when a runtime view is materialized, not when a named definition is registered and not when the stored view is invoked. Copying/adapting an existing view retains its snapshots; mentioning a definition follows H-481's fresh-view rule in its definition-bound context. Type-only queries neither read capture payloads nor allocate a view. Every snapshotted value must be initialized at materialization, even if the body will overwrite it before its first read or an explicit list entry is unused. Copying a ptr's owner/locator is not a pointee read: the ptr may be null or select uninitialized storage under D-14; ref retains its ordinary non-null/initialized-target requirements. Capturing a place alias also does not itself read that place's payload. Subsequent target/alias reads require ordinary definite initialization; there is no implicit init/out responsibility or exemption. A nested view materialized after local mutation snapshots that current local value; returning the new view by value can preserve that new snapshot without retaining the invocation's cell.
+
+**Const, aliases and local identity.** The captured name retains its declared readonly restrictions in the implicit parameter; capture does not silently make const val mutable. A separately declared writable local copy remains permitted under ordinary value-copy rules. A non-const val/callable capture remains writable inside the invocation. A readonly holder of the outer callable may still invoke it: mutation of invocation-local copies does not replace that holder or its retained snapshot, nor make regional target access pure. Local aliases/writable borrowed parameters can refer to a mutable invocation-local capture with its actual invocation owner. A reference to that local cannot outlive that owner. This is separate from retaining an explicitly borrowed external target. Replacing a local captured callable prepares the new complete value before releasing the old local value; it never updates the saved environment.
+
+**Nested calls and recursion.** Repeated, recursive or reentrant invocations of the same stored view receive independent locals from its saved values. Ordinary definition mentions can materialize a fresh view using the current permitted lexical dependencies; no recursion-specific lookup selects a mutable saved environment. Copying a view during an invocation copies that selected view's saved values, while a new inner view can capture the invocation's current local values. Existing definition/value identity, effect permissions and scope rules remain.
+
+**Allocation and soundness.** Use ordinary value-parameter/materialization semantics for ownership of the required storage. Retained snapshots belong to their callable value's owning storage; invocation locals belong to that invocation. Register, stack, lexical backing and permitted copy elimination are implementation choices. Internal references must remain valid until their specified last use, and normal/exceptional cleanup must release owned backing without leaking lexical storage or regions. Borrowed owners are not kept alive by copying a capture. H-553 treats OOM as an exceptional allocation outcome, not a reason to introduce readonly callable captures, persistent mutation or a weaker header-only copy. No allocation on every invocation, permanent ABI, shared mutable capture cell, regional copy/move or allocator protocol is mandated.
+
+## Explicit borrowed captures and shared state
+
+H-554 requires shared mutable captured-variable state to be explicit through dynamic-scoped symbolic variables backed by a tracked owner, such as `ref symbol @value:u64 in @region_owner` under D-10. Capturing a symbol retains its value or selected reference according to its declaration; it does not retain the mutable TLS binding cell. perform replay, behave/current invocation and scoped restoration keep their existing meanings. Writing an admitted reference target is an explicit shared-state operation. Rebinding an invocation-local captured reference or a scoped TLS effect does not rewrite another view's retained capture.
+
+H-555 admits `in O` references when O is an explicitly established lexical owner as well as a region, provided all uses are statically proved not to outlive O. This includes a callable value retaining such a reference. No owner or ordinary lexical binding is promoted. Each ref/ptr still has one provable actual owner; several captures may have different separately identified owners. The resulting view's lifetime must satisfy every borrowed dependency. The `with {owner O}` association uses an existing generic/lexical owner; `with {region r}` retains its regional shape contract. Neither form declares a new owner.
+
+```cod
+proc reader(ref x:u64 in O) where {owner O}
+    -> proc()->u64 with {owner O} {
+    return proc [x]()->u64 with {owner O} { return x; };
+}
+
+proc within_owner() {
+    val n <- 1u64;
+    proc read = reader(n);
+    n <- 2u64;
+    read();  # 2: a borrowed target, not a copied scalar payload.
+}
+```
+
+Returning read from reader is valid: x's owner belongs to its caller and remains live. Returning a view that borrows a local n from within_owner would reject when that n's owner ends. Non-escape therefore means not escaping the actual owner, not a blanket ban on returning callbacks from helper calls. Type adaptation, storing/copying a view, nested captures, recursion, deferred use and symbolic replay/restoration cannot erase that dependency. An unknown lifetime proof rejects conservatively; no runtime extension or hidden owning handle repairs it.
+
+An ordinary ref/ptr snapshot fixes its selected target and initializes a local reference binding on each invocation. An explicit var alias instead retains its selected place. For an alias of a ref/ptr field, later field rebinding is observed; for an alias of a scalar field, later bits writes are observed. To freeze the scalar bits or selected reference, first initialize an ordinary val/ref/ptr binding and capture that binding. Neither reading a ref nor naming an alias authorizes graph copying, a new shared cell or lifetime extension. D-10's owner-qualified symbolic references express dynamically scoped shared variable state; ordinary object/field borrowing remains valid. Const, nullability, definite initialization, target identity and owner-plus-locator resolution remain ordinary constraints.
+
+### Capture acceptance and remaining scope
+
+Accept independent scalar/complete-callable snapshots, repeated calls with fresh locals, const-preserving access, mutable local replacement and writable borrowing, nested post-write value snapshots, ordinary definition-versus-view timing, and explicit regional/lexical borrows whose owner outlives every use. Reject uninitialized snapshots, readonly escalation, omitted required owner dependencies, unknown/multiple owners for one reference, view/alias/effect restoration escaping a lexical owner, and any implicit promotion to a shared mutable closure cell. Cover source-holder replacement, copies, recursion/reentrancy, active invocation protection, normal/exceptional release and no backing/region leaks. D-10 owns symbolic declaration/installation constraints; D-14 owns ordinary storage and D-28 owner/locator transport.
+
+Current compiler coverage is recorded separately. Scalar/reference captures and mutation of invocation-local captured callable values require implementation work; existing complete-value copying alone does not establish those paths. Physical snapshot/local transport and whole value-path qualification remain separately scoped. Future pure-callable rules, arbitrary regional graph copying and general runtime lifetime tracking are not selected here.
 
 ## Owner projection
 
@@ -116,13 +229,13 @@ ptr optional:func()->const u64 with {region state} = null;
 
 The initializer is evaluated once. A fresh callable result constructs its complete payload and environment into caller-provided lexical storage. At the internal ABI boundary, a callable-returning function/procedure receives a hidden destination pointer; a forwarding call may pass that destination onward. Merely returning a header pointing into an expired callee environment is invalid. Captured regions remain borrowed and retain their original lifetimes and access permissions.
 
-Declaration and nested capture copy the complete selected callable value, including its environment. A wrapper retains an independent callable snapshot; replacing the original later does not change that snapshot. Regional slots and regions inside either environment remain borrowed, so their subsequent content changes stay observable. No regional object is copied and no lifetime is extended.
+Declaration and nested value capture copy the complete selected callable value, including its environment. Each invocation initializes its local captured callable values from the retained snapshots under H-553; local replacement does not update those snapshots. A wrapper retains an independent callable snapshot; replacing the original later does not change that snapshot. Explicitly aliased places, referenced targets and regions inside either environment remain borrowed, so permitted changes to those places/targets stay observable. Rebinding an ordinary source reference does not retarget its saved reference value. No regional object is copied and no lifetime is extended.
 
 A default callable parameter has an independent callee-local target, following D-14's default parameter ownership. Its value is prepared at that argument's evaluation boundary, before later arguments can replace the source holder. An explicit `in O` parameter borrows external callable storage instead. A callable value result constructs an independent complete value; an explicitly borrowed result retains its declared external owner. Fresh unaliased images may transfer into their destination without copying. Allocation failure and later-argument failure must release prepared values without altering the source holder or extending captured-region lifetimes.
 
 `destination <- source` replaces a compatible callable value in existing lexical storage, preserving type/owner checks. Ordinary `destination = source` cannot rebind a func/proc variable. A ptr instead refers to callable storage and uses ordinary nullable-reference rebinding/lifetime rules. Its invocation reads the currently stored callable value. typeof is compile-time only; H-440 uses is null for absence testing, while actual nullable-target access retains checked NPE. H-439 is compares selected storage identity, not code or captured-payload equality; complete independent value copies remain distinct storage.
 
-[D-28](RegionalAndLexicalStorageRefactor.md#captures-tls-native-interfaces-and-persistence) reviews complete environments and caller destinations under growable lexical backing. Environment-relative coordinates, lexical slot locators and borrowed target references remain distinct. The hidden destination denotes the selected caller storage; a future lowering must preserve it if that owner's backing can grow during construction. The existing native destination-pointer path alone supplies no such proof. H-437/[D-28-OWNERS](RegionalAndLexicalStorageRefactor.md#shared-owner-information-from-checked-declarations) requires parameter, result and admitted capture transport to reuse shared actual-owner information while retaining each selected target. Recursive activations keep distinct owner instances where required; shared metadata neither permits lexical-cell capture nor extends a borrowed owner lifetime. These integration obligations preserve complete-value copies, prepared snapshots, borrowed-region lifetimes and the existing ban on lexical-cell capture; physical anchor/destination protocols remain pending.
+[D-28](RegionalAndLexicalStorageRefactor.md#captures-tls-native-interfaces-and-persistence) reviews complete environments and caller destinations under growable lexical backing. Environment-relative coordinates, lexical slot locators and borrowed target references remain distinct. The hidden destination denotes the selected caller storage; a future lowering must preserve it if that owner's backing can grow during construction. The existing native destination-pointer path alone supplies no such proof. H-437/[D-28-OWNERS](RegionalAndLexicalStorageRefactor.md#shared-owner-information-from-checked-declarations) requires parameter, result and admitted capture transport to reuse shared actual-owner information while retaining each selected target. Recursive activations keep distinct owner instances where required; shared metadata does not promote lexical cells or extend borrowed owners; H-555 admits explicitly owned lexical references only with a non-escape proof. These integration obligations preserve complete-value copies, prepared snapshots, borrowed-region lifetimes and the ban on implicit lexical-cell promotion and shared captured binding slots; physical anchor/destination protocols remain pending.
 
 The complete callable representation must remain valid after bits movement: it contains no pointers into its own prior storage or an expired factory frame. Nested callable environments are included by value. This is an intrinsic lexical value category, not a general bits type that may enter regional fields/arrays. The adapter computes environment access from the current payload address; a copied header pointing to a previous lexical environment does not satisfy this contract.
 

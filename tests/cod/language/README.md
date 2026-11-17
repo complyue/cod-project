@@ -1,8 +1,10 @@
 # CoD source compiler validation
 
-Reference revision: 408 · Recorded: 2026-11-17 America/Los_Angeles.
+Reference revision: 409 · Recorded: 2026-11-17 America/Los_Angeles.
 
 ## Design authority
+
+- **Capture contract versus support:** [D-18r108](../../../design/RegionalClosures.md#capture-acceptance-and-remaining-scope), [D-12r27](../../../design/GlobalVariablesDoneRight.md#explicit-lifetimes-without-closures) and [K-CAPTURE-LIFETIMES-20261117](../../../CHANGELOG.md#k-capture-lifetimes-20261117) record H-553–H-557 and P-485–P-493. Ordinary scalar/complete-callable captures use independent invocation locals; ordinary reference snapshots do not share source slots; explicit var aliases retain selected places and checked owners. No hidden closure cells or lifetime extension. Compiler developers must preserve these distinctions through specialization/native lowering. New scalar/reference capture, lexical-alias lifetime proof and writable invocation-local captured callable paths require implementation coverage; existing copied callable environments do not establish them. Candidate C-36/C-54/C-65/C-73/C-75 and charter §§2/3.2–3.3/4.3/6.3/8 preserve visible identity/storage/lifetimes. Unrelated qualified behavior, D-16 and K-779 support remain unchanged; this documentation checkpoint runs no compiler tests and grants no broader qualification.
 
 - **Native emission contexts:** [K-779](../../../CHANGELOG.md#k-779) continues D-26/H-407's checked native coverage, D-18's retained callable interpretations, D-14's owner/access/initialization and unaffected D-17 completion/H-525 under H-420/H-423. Native emission retains operation facts together with their checked instance; scoped selections restore the enclosing evidence. Acceptance requires equivalent LLVM and diagnostics for unchanged source fixtures in both native modes, plus source/staging/native checks of captures, owners, selected operations and cleanup. Copy-failure instrumentation uses stored callable values under H-481, separately from fresh definition materialization. Charter §§3.2/4.2/5.3/6.3/12 and D-16 continue. This internal maintenance selects no language rule, capture mutation policy, runtime representation or additional qualification.
 

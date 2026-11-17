@@ -1,8 +1,10 @@
 # CoD regional ownership: syntax, semantics and use
 
-Design revision: 116 · Recorded: 2026-11-16 · Status: design draft with scoped confirmed requirements.
+Design revision: 117 · Recorded: 2026-11-17 · Status: design draft with scoped confirmed requirements.
 
 ## Design authority
+
+- **Capture/lifetime alignment:** [H-553–H-557](../CHANGELOG.md#h-553)/[K-CAPTURE-LIFETIMES-20261117](../CHANGELOG.md#k-capture-lifetimes-20261117), [D-18-VALUE-CAPTURE](DesignAuthorityRegistry.md#d-18-value-capture)/P-485–P-490 and [D-12-LIFETIME](DesignAuthorityRegistry.md#d-12-lifetime)/P-491–P-493 cover this revision's capture/owner dependency wording. Preserve independent value locals, selected reference targets, explicit var places, unique actual owners and statically bounded borrows; reject implicit slot sharing, closure-cell promotion and lifetime extension. C-36/C-54/C-65/C-73/C-75 and charter §§2/3.2–3.3/4.3/6.3/8 preserve visible storage/lifetime responsibility. D-18 owns acceptance and H-327/H-329 alias continuity. D-16, unrelated qualified scopes and existing symbol-declaration restrictions continue. New proof/physical/value-path qualification and source support remain separate; no allocator or graph-copy mechanism follows.
 
 - **Reference-symbol owners:** [H-482](../CHANGELOG.md#h-482)/[K-REFERENCE-SYMBOLS-20261116](../CHANGELOG.md#k-reference-symbols-20261116) integrates [D-10-REF-SYMBOL](DesignAuthorityRegistry.md#d-10-ref-symbol), P-422–P-424, into r116's dynamic-symbol rule. Explicit ref/ptr symbols admit scalar or object targets and retain the actual region selected at installation through shadowing, capture and restoration. Candidate C-36/C-54/C-65/C-93 and charter §§3.2/3.3/4.3/6.3/8 preserves explicit ownership, identity/address separation and readable bindings. D-10 owns syntax and acceptance; preserve actual-owner lifetime, access/init/null rules, separate shared-owner groups and no region extraction/extension. The source decision is confirmed; no lexical-owner symbol extension, physical protocol, whole-file qualification or compiler-support claim follows.
 
@@ -118,8 +120,8 @@ H-313 accepts explicit bits storage in lexical scopes and function/procedure par
 
 ```text
 val n:i64 <- 3;
-ref alias = n;
-alias <- 4;
+ref borrowed = n;
+borrowed <- 4;
 function copied(val x:i64) -> i64 { x <- 9; return x; }
 ```
 
@@ -127,7 +129,7 @@ Fresh val declaration initialization materializes independent lexical bits; `mak
 
 A reference to local val storage cannot escape that scope or be stored in a regional object. Future fraction val storage uses D-16's fixed bits with its nonzero-denominator validity requirement; no implicit zero initialization, layout, widening, canonicalization or fraction execution follows. Typed local storage and initialized reference targets remain separate from the nullable-pointer contract.
 
-A val initializer requests a bits copy before its result-producing lexical block, conditional branch or handler ends. This permits copying an intrinsic exception payload out of an ending region. Ref/ptr initialization requests a view and still rejects escaping storage. Const ref may bind a statically known procedure as a fixed lexical callable alias; this is compile-time metadata and introduces no runtime closure allocation or mutable callable-pointer model.
+A val initializer requests a bits copy before its result-producing lexical block, conditional branch or handler ends. This permits copying an intrinsic exception payload out of an ending region. Ref/ptr initialization requests a view and still rejects escaping storage. Const ref may bind a statically known procedure as a fixed lexical callable alias; this is compile-time metadata and introduces no hidden shared-cell allocation or mutable callable-pointer model.
 
 ### Scalar results and receiving storage
 
@@ -207,9 +209,9 @@ H-317/P-284 retains nullable ptr edges for cyclic construction in the current pr
 
 ## Unified callable captures and region owners
 
-[RegionalClosures.md](RegionalClosures.md) specifies ordinary regional aliases, inferred/explicit body captures, named owner associations and projection. The storage of a captured val/ref/ptr slot must belong to a live region; a lexical pointer into that region is not a regional binding slot. Captures borrow access and do not extend ownership or freeze contents. Captured slots observe later bits writes or reference rebinding, subject to initialization, access and checked-NPE rules.
+[RegionalClosures.md](RegionalClosures.md#value-snapshots-and-invocation-local-captures) specifies aliases, inferred/explicit captures and owner associations. H-553 gives scalar and complete callable captures retained value snapshots plus independent invocation-local bindings. H-554/H-556 forbids hidden shared capture cells or implicit source-lifetime extension. A captured ref/ptr is a snapshot of target/owner/access, not of its source binding slot; later source rebinding does not retarget it, while permitted target writes remain observable. An explicit var alias retains its selected place under H-327/H-329, including through capture when its owner outlives every use; an ordinary ref/ptr copy does not alias its source binding slot. The [compiler rule](RegionalClosures.md#compiler-rule-target-sharing-is-not-binding-slot-aliasing) separates place aliasing from shared targets, identity aliases and assignment-family slot capabilities. H-555 also admits explicit lexical-owner references when every use remains within that owner's proven lifetime; no source cell is promoted. D-10 owns explicit symbolic shared-state declarations and installation/restoration constraints. Initialization, const, nullability and unique-owner checks remain.
 
-Owner lifetime does not promise a historical business identity for a reused library slot. [Item validity](#reuse-is-not-whole-region-release) remains a library policy. Lexical callable captures do not change perform/behave's separate dynamic binding semantics. General stored closures and the scope/defer increment remain outside the implemented contract.
+Owner lifetime does not promise a historical business identity for a reused library slot. [Item validity](#reuse-is-not-whole-region-release) remains a library policy. Lexical callable captures do not change perform/behave's separate dynamic binding semantics. CoD defines callable views rather than a closure abstraction. Current implementation coverage for captures, local writes and owner proofs is recorded separately in the source capability reference.
 
 ## Pointer variables and owner-generic parameters
 
@@ -652,7 +654,7 @@ A read-only pattern or projection from `@y : Opt(R)` cannot yield a writable own
 
 The bare rule “bits or region only” does not describe all effect bindings. H-184 explicitly permits both ordinary lexical procedure definitions and symbolic dynamic procedure definitions, and installing an already defined lexical procedure as an effect. These carry lexical meaning and captured dynamic values. They cannot be declared independent bits merely because machine code has an address, nor assumed to be freshly allocated regions.
 
-For this draft, the fresh/optional-source rule applies to resource-valued data effects. Procedure declarations, using/import and procedure-value bindings retain their own callable rules while their representation is designed. A unified type/category account may cover them later, but this draft does not silently remove them or invent a runtime closure allocation.
+For this draft, the fresh/optional-source rule applies to resource-valued data effects. Procedure declarations, using/import and procedure-value bindings retain their own callable rules while their representation is designed. A unified type/category account may cover them later, but this draft does not silently remove them or invent a hidden shared-cell allocation.
 
 ### Typed symbols and procedure installation
 
@@ -672,7 +674,7 @@ effect @direct;
 
 `step(...)` is a lexical call using current dynamic bindings under H-189. `perform @step_effect(...)` restores the existing procedure's captures; `behave @step_effect(...)` uses current bindings. H-186/H-187's `proc @direct` also declares its typed symbol if absent. Neither `perform step(...)` nor `behave step(...)` is admitted; functions cannot call either procedure form. Callable types and this syntax do not settle whole-region owning-result types or optional extraction.
 
-This gives the ownership design a concrete boundary: procedure-valued effects are admitted separately from bits and region-resource data. A lexical procedure used as a factory still needs a defined owning-result contract; a lexical name alone does not grant freshness, purity or consuming authority. No arbitrary lexical capture lifetime or hidden heap closure is introduced.
+This gives the ownership design a concrete boundary: procedure-valued effects are admitted separately from bits and region-resource data. A lexical procedure used as a factory still needs a defined owning-result contract; a lexical name alone does not grant freshness, purity or consuming authority. No arbitrary lexical capture lifetime or hidden heap capture cell is introduced.
 
 ## Whole-region construction needs a separate contract
 
@@ -768,7 +770,7 @@ An adapted-factory acceptance case combines selected implementations with borrow
 
 The frozen procedure produces11 under captured gain10 and21 under current gain20; the imported procedure selects score7 and produces17/27. A captured-region result remains usable after an unrelated inner resource scope ends, supports later field writes and links to another allocation in that captured region. The hidden outer caller region retains its occupied size. A current inner-region result cannot escape; a stored edge from a captured-region object to a caller-region object also rejects, with both acquisition locations reported.
 
-The record's K-382 supplement forwards those factory values through four modules to a router with a `proc(Metric) -> Output` parameter. The router explicitly installs the supplied value in a symbolic binding and invokes perform or behave. The selected factory context and its source captures survive forwarding; the returned reference retains the region actually used by that invocation. Under inner gain 40, current source/adapted calls produce 41/47, while captured adapted calls retain 17. The captured object remains writable after the inner region ends and can link to another object in its original region. Returning a current inner-region allocation through the same router is rejected at the enclosing scope. This exercises statically known procedure values and borrowed results, without adding direct calls on procedure parameters or runtime closures.
+The record's K-382 supplement forwards those factory values through four modules to a router with a `proc(Metric) -> Output` parameter. The router explicitly installs the supplied value in a symbolic binding and invokes perform or behave. The selected factory context and its source captures survive forwarding; the returned reference retains the region actually used by that invocation. Under inner gain 40, current source/adapted calls produce 41/47, while captured adapted calls retain 17. The captured object remains writable after the inner region ends and can link to another object in its original region. Returning a current inner-region allocation through the same router is rejected at the enclosing scope. This exercises statically known procedure values and borrowed results, without itself adding direct calls on procedure parameters or a callable-view transport.
 
 These results distinguish implementation selection from allocation ownership. Import adaptation does not allocate a replacement region, move a captured owner or change the source representation. This is placement within existing regions and borrowing of the resulting objects; whole-region factory results and typed make have separate D-17 evidence above.
 
