@@ -1,8 +1,10 @@
 # CoD construction, bits ADTs and region acquisition
 
-Design revision: 37 · Recorded: 2026-11-17 · Status: discussion draft with confirmed requirements; logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
+Design revision: 39 · Recorded: 2026-11-17 · Status: discussion draft with confirmed requirements; logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
 
 ## Design authority
+
+- **Init shorthand and explicit place parameters:** [H-601](../CHANGELOG.md#h-601)/[H-602](../CHANGELOG.md#h-602), [D-22-INIT-PLACES](DesignAuthorityRegistry.md#d-22-init-places)/P-555–P-557 and [K-INIT-PLACE-CORRECTION-20261117](../CHANGELOG.md#k-init-place-correction-20261117) covers r39. Bare init n:T in O retains the init ref spelling's meaning; init ref var explicitly supplies caller reference-slot declared place aliasing. Init adds initialization responsibility, not another reference indirection or a target modifier. This corrects the overly broad earlier attribution of reference-slot roles to H-571; original evidence remains in the changelog. Candidate C-65/C-72/C-95 → charter §§2/3.3/4.3/6.3/8/12 preserves readable operations, actual storage and common initialization flow. Source spelling/direction is selected; derived operation distinctions and acceptance are below. Complete modifier/nullability, field/publication, view/native and value-path proofs remain separate; D-16 and D-18r113 are unchanged.
 
 - **Region roots and per-root initialization:** [H-595](../CHANGELOG.md#h-595)–[H-599](../CHANGELOG.md#h-599), [D-13-ROOT-ACCESS](DesignAuthorityRegistry.md#d-13-root-access)/P-546–P-548 and [D-22-REGION-INIT](DesignAuthorityRegistry.md#d-22-region-init)/P-549–P-551, covers r37's region-source receiving and named root initializer assessment. Direct root destinations and receiving reuse ordinary field operations/lifetimes; omitted existing roots are untouched. Separate root initializers retain one new owner, in-place preparation and ordinary failure cleanup. Candidate C-74/C-65/C-72/C-63 → charter §§2/3.1–3.3/4.3/6.3/8/12 preserves visible storage intent without whole-root conversion, hidden retention or rollback. [K-NAMED-ROOTS-20261117](../CHANGELOG.md#k-named-roots-20261117) records confirmed source choices versus derived consequences and the construction-local owner binder and init-helper integration. Acceptance is below; preserve D-16, D-17, D-23 and unchanged D-18r113. Complete initialization/native/value-path proofs remain separate.
 
@@ -18,7 +20,7 @@ Design revision: 37 · Recorded: 2026-11-17 · Status: discussion draft with con
 
 - **Return-only structural result assessment:** [H-572](../CHANGELOG.md#h-572), D-22-ANON-DATA/P-509–P-511, covers r29’s preferred proposal: `-> { ... }` describes a named product of return contracts, received as independent lexical variables without a source-visible group object. Product-only/return-only use and independent component owners are the human’s proposed scope, not a full type/ABI/proof approval. The candidate C-10/C-65/C-72/C-73 rationale serves charter §§2/3.2–3.3/4.3/6.3/8/12 through readable composition using existing result modes and lifetime rules. Preserve H-571 syntax/completion, ordinary nominal ADT same-owner fields, D-16 and the unchanged separate D-18r113 review. Supported uses, exclusions, acceptance and unresolved interfaces are below; [K-STRUCTURAL-RESULTS-20261117](../CHANGELOG.md#k-structural-results-20261117) records this assessment.
 
-- **Accepted output and receiving source contract:** [H-571](../CHANGELOG.md#h-571) confirms the recommendations in [D-22-RESULT-DESTINATION](DesignAuthorityRegistry.md#d-22-result-destination)/P-512–P-514 and the named-return/receiving scope of D-22-ANON-DATA/P-509–P-511 at r28: logical caller-provided results, pending completion before delivery, explicit init declared-place roles, `return { expr -> field, ... };`, and new-declaration groups `{ ... } := expression;` with ordinary per-field initialization. The C-54/C-63/C-65/C-72/C-73 rationale serves charter §§2/3.2–3.3/4.3/6.3/8/12 through explicit storage responsibility, preserved effects/cleanup and readable named composition. The human confirms this bounded source recommendation, not full aggregate/init proof mechanisms, physical ABI, foreign handles, every modifier combination or the separate D-18r113 review. Preserve D-23 modes, D-17 completion, actual owners, no lifetime extension, bits-only payload transfer, ordinary same-owner ADT restrictions, and D-16. Acceptance is below; [K-OUTPUT-ACCEPT-20261117](../CHANGELOG.md#k-output-accept-20261117) records integration and unaffected qualifications.
+- **Accepted output and receiving source contract:** [H-571](../CHANGELOG.md#h-571) confirms the recommendations in [D-22-RESULT-DESTINATION](DesignAuthorityRegistry.md#d-22-result-destination)/P-512–P-514 and the named-return/receiving scope of D-22-ANON-DATA/P-509–P-511 at r28: logical caller-provided results, pending completion before delivery, general caller-provided initialization, clarified below by H-601/H-602, `return { expr -> field, ... };`, and new-declaration groups `{ ... } := expression;` with ordinary per-field initialization. The C-54/C-63/C-65/C-72/C-73 rationale serves charter §§2/3.2–3.3/4.3/6.3/8/12 through explicit storage responsibility, preserved effects/cleanup and readable named composition. The human confirms this bounded source recommendation, not full aggregate/init proof mechanisms, physical ABI, foreign handles, every modifier combination or the separate D-18r113 review. Preserve D-23 modes, D-17 completion, actual owners, no lifetime extension, bits-only payload transfer, ordinary same-owner ADT restrictions, and D-16. Acceptance is below; [K-OUTPUT-ACCEPT-20261117](../CHANGELOG.md#k-output-accept-20261117) records integration and unaffected qualifications.
 
 - **Structural-product UX review:** [H-569](../CHANGELOG.md#h-569), [D-22-ANON-DATA](DesignAuthorityRegistry.md#d-22-anon-data)/P-509–P-511, covers r25's partial named reception requirement and structural-anonymous-data candidate. Preserve named nominal identity, once-only evaluation, per-field operations, required cleanup, owner/access and H-563/H-567/H-568. D-22-RESULT-COMPAT settles schema identity and directional callable-result projection; broader variance and full mechanism/value-path qualification remain pending; H-571 selects named return and receiving-group forms, while partial receiving does not itself require general structural subtyping.
 
@@ -241,15 +243,53 @@ Destination forwarding through nested calls must preserve result replacement, ac
 
 ### Init destinations and declared place aliasing
 
-H-571 confirms init as declared place aliasing of caller-selected slots: **an explicit declaration of a caller-selected destination place, plus an initialization obligation**. The place may be a local payload, reference binding, or eligible aggregate field; its actual owner and access must be proved. It need not have been freshly allocated by the immediately calling activation. No binding is captured implicitly and no lifetime is extended.
+H-601 preserves ordinary parameter shorthand: `init n:Node in O` and `init ref n:Node in O` have the same meaning. Adding init supplies an initialization obligation; it does not add an extra reference indirection, change the declared type/owner, or invent a separate target parameter category. The parameter's ordinary value/reference/place role still determines which storage it exposes.
 
-Two facts must remain separate: which place the parameter denotes, and what must be initialized before reads and successful completion. A slot containing a reference and that reference's selected target are different places. D-28 separately admits an established pointer identity with an unreadable referent. Initializing that referent remains distinct from initializing a caller reference slot.
+H-602 makes caller-slot declared place aliasing explicit:
 
-`init val x:T` names a caller bits destination and `x <- value` initializes it; `init ref p:T in O` names a caller reference slot and `p = target` initializes that slot. An init ptr parameter analogously initializes a nullable reference slot under its fixed-owner contract. Neither reference-slot form itself initializes the target payload. These are the selected declaration-directed roles; the exact target-place helper spelling, modifier combinations and complete proof/transport remain under review. Identity use is allowed only when the relevant reference slot is initialized; an unreadable referent need not forbid comparing an already established target identity. Preserve mandatory-write obligations on normal completion, delegation through checked helpers, and no success guarantee/rollback on failure.
+```cod
+init ref var n:Node in O
+```
 
-For a reference-slot parameter, the slot's own owner and the pointee owner O are separate evidence. Declared place aliasing of a caller lexical slot does not make its target lexical or change that target's fixed owner. Forwarding the slot must preserve its actual place/access and encoding. An initialized reference slot still cannot provide ordinary readable-ref access to an incomplete referent without the separately checked construction obligation.
+Here ref describes the reference binding, var makes n a declared place alias of the caller-selected reference slot, and init supplies the initialization contract. This is distinct from plain init ref n, which does not implicitly alias the caller's reference slot. The target owner O and the owner of that reference slot remain separate evidence. No hidden allocation, capture, ownership transfer or lifetime extension follows.
 
-[D-20’s native output integration](../applications/cod-booter/docs/LLVMInterop.md#initialization-through-an-output-reference) uses the selected init roles; its native handle category and initializer/cleanup proof remain pending. Current source has value/borrowed-read/ref/ptr argument modes and assignment-family caller-slot destinations; it does not implement a general out or init parameter modifier. `cod/lang_llvm.hh::caller_destination` currently covers non-borrowed procedure results. These facilities support a reuse assessment, not a claim that the proposed general output contract already exists.
+```cod
+data Node { value:u64; ptr next:Node; }
+
+proc create(init ref var n:Node in O) where {owner O} {
+    n = make Node in O { value <- 1u64; next = null; };
+    n.value <- 2u64;
+}
+
+# arena is an existing live writable region.
+ref node:Node in arena;
+create(node);
+# node now selects the constructed, initialized Node.
+```
+
+The ordinary operators distinguish the places without another parameter modifier. `n = ...` initializes/rebinds the aliased caller reference slot. Once its identity is established, `n.value <- ...` initializes/writes a field of its selected target. If the slot is uninitialized, field selection cannot obtain a target from it. If the target is unfinished, knowing its identity does not make its payload readable. The compiler tracks these facts and mandatory writes separately; writing a target field cannot substitute for an owed reference-slot initialization.
+
+For ordinary target initialization, the existing reference parameter form suffices:
+
+```cod
+proc fill(init n:Node in O) where {owner O} {
+    n.value <- 1u64;
+    n.next = null;
+}
+
+ptr reserved:Node in arena = make Node in arena;
+fill(reserved);
+```
+
+Bare make establishes this non-null target identity without payload readiness. The init reference contract permits that incomplete destination and requires the declared initialization on successful completion; ordinary readable-ref interfaces cannot erase the restriction. Writing init ref n explicitly gives the same contract. Ordinary parameter-local rebinding does not rebind reserved or discharge initialization owed to the originally selected target. No target keyword is needed.
+
+The same explicit-place composition gives `init val var x:T` for a caller bits place and `init ptr var p:T in O` for a caller nullable reference slot. These are derived combinations of the existing place and initialization roles, not permission to treat every plain init val/ref/ptr parameter as a caller-slot alias. All modifiers retain their ordinary type, access, owner and nullability restrictions; complete shorthand/combination and nullable-target checking remain separate proof scope. A native handle's category must be established before selecting one of these forms.
+
+Initialization facts follow the selected storage through local flow, field writes and compatible helper delegation. Successful completion discharges the declared obligations, including mandatory writes; pre-existing readable caller state does not substitute for promised writes. Argument preparation may select an uninitialized destination without reading its old payload, but cannot obtain an object identity from an uninitialized reference slot. The selected place/target and actual owner must remain valid through effects, cleanup and permitted backing growth. Reference identity use is not a payload read and cannot manufacture missing readiness.
+
+Public init writes take effect when executed; exceptions promise neither complete initialization nor rollback. Init region retains its separate already-selected root-storage contract, and ordinary ADT fields, graph readiness, D-16 numeric validity and sound conservative rejection remain. No implicit graph transfer, whole-object copying/moving, arbitrary resource reinitialization, reference-slot encoding conversion or native ABI follows. [D-20's native output planning](../applications/cod-booter/docs/LLVMInterop.md#initialization-through-an-output-reference) consumes these distinctions without selecting its handle representation.
+
+**Acceptance / proof scope:** check shorthand equivalence, caller-visible slot writes only with explicit var, ordinary borrowed-target initialization, field access before/after reference-slot binding, same-owner/access constraints, mandatory writes and delegated normal/exceptional completion. Full generic/callable-view/recursive summaries, nullable combinations and native transport remain work. Existing compiler argument modes and assignment-family destinations do not constitute a general init implementation.
 
 ### Named return construction and declaration-directed reception
 
@@ -503,7 +543,7 @@ owned region result:State <- make region r:State(4096u64 -> capacity) {
 
 Treat whole-region readiness as coarse state: constructing until all root contracts are established, then ready. Local definite-initialization facts for the finite named slots are enough to recognize an earlier initialized count and derive that completion. Branch joins retain only facts established on every continuing path; reads and helper calls cannot manufacture missing facts. No runtime readiness flag or full field-sensitive interprocedural analysis is implied. For the first sound implementation, whole-region init summaries establish the complete set on normal return; unknown partial/recursive relationships may reject. A narrower structural parameter requirement must not mark additional concrete roots ready without proof; require full construction-shape coverage for the whole-region summary.
 
-Existing `init val`/`init ref`/`init ptr` place parameters may separately initialize eligible root slots, with their ordinary bits-place/reference-slot roles. Selecting an uninitialized slot as an init destination does not read its old contents; initializing a ref/ptr slot still does not initialize its referent. A helper with only ordinary readable parameters cannot receive an unfinished region. On exceptional helper exit, no successful whole-region completion is promised; construction follows its ordinary cleanup, retaining permitted external effects. Init does not grant owning extraction, early publication with invalid lifetimes or arbitrary storage retyping.
+Explicit `init val var`/`init ref var`/`init ptr var` place parameters may separately initialize eligible root slots under their declared bits/reference-slot roles. Plain init ref preserves ordinary borrowed-target semantics; it does not silently select a root reference slot. Selecting an uninitialized slot as an init destination does not read its old contents; initializing a ref/ptr slot still does not initialize its referent. A helper with only ordinary readable parameters cannot receive an unfinished region. On exceptional helper exit, no successful whole-region completion is promised; construction follows its ordinary cleanup, retaining permitted external effects. Init does not grant owning extraction, early publication with invalid lifetimes or arbitrary storage retyping.
 
 The free block must finish normally with a ready region before make produces its owning result. An escaping exception or other existing abrupt completion abandons the unfinished construction under ordinary cleanup; no constructor-specific return value or implicit final-expression result is added. Concrete syntax/proofs for all init modifier combinations and deeper graphs remain separately bounded.
 
