@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-11-17 — Accept generator signatures and checked body forwarding
+
+<a id="h-584"></a>
+**H-584 — Accept the presented generator/feedback syntax.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-17 America/Los_Angeles; exact timestamp/personal name unavailable. “同意。再看看 checked exception 声明和执行过程中的语义解释”. Accepts the preceding yields YieldType -> FeedbackType proposal, omitted feedback defaulting to void, independent single/multi-field directions, contextual continue field construction, ordinary receiving reuse, fixed void generator completion and outer-callable return distinction. Requests the next checked-exception analysis. This does not approve unpresented grouped-type grammar, complete generator views, all inference/lifetime/effect mechanisms, native transport or D-18r113's separate review. Baseline: fa56eb44bc1092c0e59d4f06ddcd483067d373f3:design/RangedForAndGenerators.md, with confirmation limited to the preceding chat presentation.
+
+<a id="h-585"></a>
+**H-585 — Forward the supplied body's remaining checked obligations.** Human/source: same current design chat/user, recorded 2026-11-17 America/Los_Angeles; exact timestamp/personal name unavailable. Selects “Forward body obligations (Recommended)” for the numbers/parse/ParseException example. Accepts checking the body after ordinary generator selection, statically composing its declared failures through yield sites and generator catches, and forwarding remaining obligations without requiring ParseException in numbers' own declaration. Explicit generator throws still remains a fixed caller obligation. Confirms this generator-specific conditional failure boundary; does not select general ordinary-callable effect polymorphism, runtime exception checking instead of static proof, a summary algorithm/ABI or new dynamic-effect permissions.
+
+<a id="h-586"></a>
+**H-586 — Assess a special propagation carrier and native alternatives.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-17 America/Los_Angeles; exact timestamp/personal name unavailable. Proposes considering “LoopBodyReturn <: LoopBodyPassthrough <: Error” to assist body exception/return propagation, suggests cleanup through defer rather than explicit wrapper catches, and prefers a better LLVM non-exception mechanism if available. This requests comparison, not adoption of public wrapper types, an Error classification, catch-filter exceptions or a native ABI.
+
+<a id="h-587"></a>
+**H-587 — Preserve finally independently of propagation machinery.** Human/source: same current design chat/user, recorded 2026-11-17 America/Los_Angeles; exact timestamp/personal name unavailable. States that for generator `try { yield ...; } finally { ... }`, “finally 块应该总是确保执行的吧，不管最终用什么机制去实现body穿透”. Reaffirms D-17's cleanup invariant at the new generator boundary: leaving an entered protected region executes its finally on normal/abnormal body completion. This does not select an ABI or resolve competing cleanup return/throw priorities across distinct targets.
+
+<a id="h-588"></a>
+**H-588 — Body exceptions bypass generator catches.** Human/source: same current design chat/user, recorded 2026-11-17 America/Los_Angeles; exact timestamp/personal name unavailable. Refines the source boundary: “loop body exception 最好不能被 generator 的 `try { yield ... } catch (...) {}` 捕获，总是透穿回loop所在callable更正确一些”. Replaces H-585's generator-handler discharge/interception part: after body-local handling, escaping body exceptions pass through required generator cleanup to ordinary handling at the lexical for site. Automatic checked forwarding and fixed explicit generator throws remain; the generator may still catch its own failures. Does not select a public exception wrapper, native carrier, hidden lifetime extension or competing cleanup-completion priority. H-587 finally guarantees continue.
+
+<a id="k-generator-failures-20261117"></a>
+**K-GENERATOR-FAILURES-20261117 — Keep body escapes outside generator catches.** D-29r2→3/registry835→836 adds D-29-SIGNATURE/P-528–P-530, D-29-FAILURES/P-531–P-533 and D-29-CONTROL/P-534–P-536 under H-584–H-588. Candidate C-96/C-63/C-65/C-84 → charter §§2/3.3/4.3/6.1–6.3/8/12 preserves typed traversal, lexical failure responsibility and cleanup. H-588 supersedes only H-585's generator-catch handling of body failures; current design distinguishes generator-own failures, nested lexical for boundaries and fixed declared obligations. Records finally/defer coverage and recommends evaluating private completion transport before a public Error hierarchy; native choice and competing cleanup priorities remain pending. Mainline 4f1cc02eb17efdc88a56d272e59639362a3ad8dc/source419 is fast-forward integrated with K-790/K-791 and all parent evidence preserved. Design baseline: fa56eb44bc1092c0e59d4f06ddcd483067d373f3 at affected paths. Preserve D-16 and byte-identical D-18r113; documentation only, no local code/build/tests or broader qualification.
+
 ## 2026-11-17 — Bound source preparation depth
 
 <a id="k-791"></a>

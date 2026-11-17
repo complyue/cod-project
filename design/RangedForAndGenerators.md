@@ -1,15 +1,15 @@
 # Ranged for-loops and synchronous generators
 
-Design revision: 2 · Recorded: 2026-11-17 · Status: source-design draft; enclosing return target confirmed, feedback checking selected; signature/transport integration pending.
+Design revision: 3 · Recorded: 2026-11-17 · Status: selected generator/feedback syntax and checked forwarding; remaining scope, effect proofs and transport pending.
 
 ## Design authority
 
-- **Registry / scope:** [D-29](DesignAuthorityRegistry.md#d-29), r2, all sections. C-96/P-521–P-524 records a candidate value path and dependency constraints; the complete mechanism remains `pending-human`, not a delegated implementation contract.
-- **Human baseline:** [H-577](../CHANGELOG.md#h-577) proposes a typed single-method loop body using its lexical context and confirms that explicit body return targets the surrounding callable. Normal body-expression feedback is proposed. [H-578](../CHANGELOG.md#h-578) requests receiving-spec reuse and the assignment-style headers below. [H-579](../CHANGELOG.md#h-579) prefers void-only generator completion; this draft adopts that bounded recommendation without inferring approval of the remaining signature/proof details. [H-580](../CHANGELOG.md#h-580) requires unrestricted normal body-result types for void feedback and static conformity of all normal branches for non-void feedback; [D-29-FEEDBACK](DesignAuthorityRegistry.md#d-29-feedback)/P-525–P-527 records that source boundary separately. [H-581](../CHANGELOG.md#h-581) adds explicit body feedback with continue; [H-582](../CHANGELOG.md#h-582) restricts void feedback to bare continue and rejects its operand-bearing form. [H-583](../CHANGELOG.md#h-583) selects multi-field yield results through existing structural result declarations and receiving specifications. Exact source scope and provenance are in those records.
+- **Registry / scope:** [D-29](DesignAuthorityRegistry.md#d-29), r3, all sections. C-96/P-521–P-524 records a candidate value path and dependency constraints; the complete mechanism remains `pending-human`, not a delegated implementation contract.
+- **Human baseline:** [H-577](../CHANGELOG.md#h-577) proposes a typed single-method loop body using its lexical context and confirms that explicit body return targets the surrounding callable. The later H-580–H-584 feedback decisions below define its normal-result and continue forms. [H-578](../CHANGELOG.md#h-578) requests receiving-spec reuse and the assignment-style headers below. [H-579](../CHANGELOG.md#h-579) prefers void-only generator completion; this draft adopts that bounded recommendation without inferring approval of the remaining signature/proof details. [H-580](../CHANGELOG.md#h-580) requires unrestricted normal body-result types for void feedback and static conformity of all normal branches for non-void feedback; [D-29-FEEDBACK](DesignAuthorityRegistry.md#d-29-feedback)/P-525–P-527 records that source boundary separately. [H-581](../CHANGELOG.md#h-581) adds explicit body feedback with continue; [H-582](../CHANGELOG.md#h-582) restricts void feedback to bare continue and rejects its operand-bearing form. [H-583](../CHANGELOG.md#h-583) selects multi-field yield results through existing structural result declarations and receiving specifications. [H-584](../CHANGELOG.md#h-584) accepts the presented yields Y [-> F] syntax, omitted-feedback void and contextual multi-field feedback/receiving model. [H-585](../CHANGELOG.md#h-585) selects automatic checked-body forwarding; [H-588](../CHANGELOG.md#h-588) refines it to bypass generator catches and resume ordinary exception handling at the lexical for site. Fixed explicit generator throws remains required. [D-29-SIGNATURE](DesignAuthorityRegistry.md#d-29-signature), [D-29-FAILURES](DesignAuthorityRegistry.md#d-29-failures) and [D-29-CONTROL](DesignAuthorityRegistry.md#d-29-control) keep those source decisions separate from complete implementation qualification. [H-586](../CHANGELOG.md#h-586) requests assessment of private/native propagation versus special exception wrappers; no public wrapper hierarchy is selected. [H-587](../CHANGELOG.md#h-587) requires entered try/finally cleanup on every protected exit, regardless of lowering. Exact source scope and provenance are in those records.
 - **Value rationale:** candidate C-63/C-65/C-73 → C-96 → D-29 under charter §§2/3.2–3.3/4.3/6.1–6.3/8/12: express traversal, data exchange and lexical control in a checked, readable program, while reusing ordinary receiving operations and natural owner lifetimes. Native outlining must preserve that program rather than define its meaning.
 - **Dependencies / invariants:** D-10 calls/effects, D-14/D-28 owners, D-17 scopes/completion, D-18 callable values, D-22 result/receiving specifications, D-23 operations, D-24 inference and D-16 numerical compatibility. Preserve unique actual owners, access/readiness, exact cleanup and the no-closure-cell/no-lifetime-extension boundary. Callable views remain lexical, never regional. There is no C++ object copying/moving model.
 - **Non-goals:** no retained iterator object, async callback, persistent continuation, independently resumable generator frame, first-class result group, custom final generator result or physical ABI is selected. A synchronous native call stack is not a persistent execution-state contract. D-18r113 and its separate whole-file review remain unchanged.
-- **Acceptance / record:** the final section identifies observations and rejection cases for a future qualified implementation. [K-GENERATOR-DRAFT-20261117](../CHANGELOG.md#k-generator-draft-20261117) records this new draft and its open boundaries; it is not continuity qualification of a previously accepted generator mechanism. [K-GENERATOR-FEEDBACK-20261117](../CHANGELOG.md#k-generator-feedback-20261117) updates r1→2 with H-580 and a concrete pending signature proposal. No compiler support is claimed.
+- **Acceptance / record:** the final section identifies observations and rejection cases for a future qualified implementation. [K-GENERATOR-DRAFT-20261117](../CHANGELOG.md#k-generator-draft-20261117) records this new draft and its open boundaries; it is not continuity qualification of a previously accepted generator mechanism. [K-GENERATOR-FEEDBACK-20261117](../CHANGELOG.md#k-generator-feedback-20261117) updates r1→2 with H-580 and a concrete pending signature proposal. [K-GENERATOR-FAILURES-20261117](../CHANGELOG.md#k-generator-failures-20261117) records r2→3 under H-584/H-585, with source-level failure composition, H-588 catch bypass, H-587 cleanup and outstanding proof scope. No compiler support is claimed.
 
 ## Data and control directions
 
@@ -25,7 +25,7 @@ The proposed synchronous model invokes the generator once, preparing its ordinar
 
 Describing the body as a typed anonymous single method does not make it an ordinary source callable scope or an escaping callable value. The generator may invoke it only while the enclosing loop invocation is active under the proposed synchronous boundary. Retention, deferred invocation after that boundary, or implicit boxing of outer variables requires a different design and is excluded here.
 
-## Proposed generator and yield signatures
+## Generator and yield signatures
 
 Use an explicit `yields` clause with two directions:
 
@@ -35,7 +35,7 @@ proc scan(limit:u64) yields u64 -> bool;
 
 The clause reads **yield u64, receive bool feedback**. The arrow following the yield contract belongs to that clause; scan itself has fixed void completion. An ordinary callable's `-> T` still denotes its own result. The bounded generator grammar omits a separate final-result annotation rather than exposing two result arrows at the same level.
 
-The proposed declaration shape is:
+H-584 selects this declaration shape:
 
 ```text
 func/proc name (ordinary parameters)
@@ -44,9 +44,9 @@ func/proc name (ordinary parameters)
     body-or-semicolon
 ```
 
-`yields` identifies a generator method without introducing another func/proc kind. A single YieldContract uses ordinary result-mode/type/owner syntax; multiple labelled components use the structural result schema below. This extends result-contract notation to the yield boundary, not the storage/use permissions of structural groups. Existing func/proc effect restrictions remain obligations; the body's effect/throws channel still needs the separately described integration.
+`yields` identifies a generator method without introducing another func/proc kind. A single YieldContract uses ordinary result-mode/type/owner syntax; multiple labelled components use the structural result schema below. This extends result-contract notation to the yield boundary, not the storage/use permissions of structural groups. Existing func/proc effect restrictions remain obligations. H-585 supplies the checked-exception forwarding rule below; dynamic effect eligibility and complete proof/transport remain separate.
 
-Recommend requiring an explicit yield contract for this initial design. Omitted feedback means **void**, not inference from the consuming body. Explicit `-> void` is equivalent. Requiring a non-void feedback contract prevents accidental return requirements from a generator's incidental use of yield. Ordinary input defaults, named arguments and owner/type parameters keep their established rules. A declaration ending with a semicolon supplies the same complete yield/feedback contract as a definition.
+Recommend requiring an explicit yield contract for this initial design. Under H-584, omitted feedback means **void**, not inference from the consuming body. Explicit `-> void` is equivalent. Requiring a non-void feedback contract prevents accidental return requirements from a generator's incidental use of yield. Ordinary input defaults, named arguments and owner/type parameters keep their established rules. A declaration ending with a semicolon supplies the same complete yield/feedback contract as a definition.
 
 Callable-valued component contracts need grouping to distinguish an inner callable arrow/throws from the yield protocol; proposed spelling is `yields (proc() -> u64) -> bool`. This is signature grouping, not a positional tuple or a new runtime object. Exact grouped-type grammar remains part of the syntax proposal. Generator callable-view types, if admitted, must retain the protocol, e.g. `proc(u64) yields u64 -> bool`; they cannot erase it to `proc(u64) -> void`. That notation alone grants no new value/capture/ABI support.
 
@@ -148,7 +148,7 @@ The whole `for` has no data result beyond void. There is no path-dependent resul
 
 This removes a fourth user-defined data channel and its otherwise necessary zero-yield, early-exit, receiving and result-inference rules. It leaves useful feedback intact: a body can propose a bool response to each yield without making the generator itself return bool. Reporting aggregate outcomes can use ordinary explicitly admitted caller state or a separate ordinary callable contract; no new implicit shared slot is introduced.
 
-The proposed `yields Y -> F` clause fixes final completion to void without a separate final-result annotation. Its F describes the result of each yield invocation, not the generator's final return; the grammar remains a proposal.
+The selected `yields Y -> F` clause fixes final completion to void without a separate final-result annotation. Its F describes the result of each yield invocation, not the generator's final return. Exact grouped nested-type and broader callable-view integration remain separate.
 
 ## Yield payload and normal feedback
 
@@ -243,7 +243,7 @@ Nested loops use the innermost lexical loop target; do not skip an inner loop me
 
 ### Multiple feedback fields
 
-H-583 reuses structural result declarations and receiving specifications for the result of yield. YieldContract and FeedbackContract may independently be a single result contract or a labelled schema; neither requires a first-class product object. The proposed signature and explicit-feedback construction are:
+H-583 reuses structural result declarations and receiving specifications for the result of yield. YieldContract and FeedbackContract may independently be a single result contract or a labelled schema; neither requires a first-class product object. H-584 accepts the signature and explicit-feedback construction:
 
 ```cod
 proc two_steps() yields u64 -> { again:bool; step:u64; } {
@@ -270,7 +270,7 @@ A normally completed producer expression with a compatible structural result can
 
 ## Lexical scope and completion
 
-The confirmed return target is illustrated independently of the pending generator signature:
+The confirmed return target is independent of the generator feedback type:
 
 ```cod
 proc search() -> u64 {
@@ -289,9 +289,159 @@ These are constraints on integration, not a claim that an ordinary callable-valu
 
 If the new form supports `else`, retain the existing zero-body-executions meaning rather than interpreting it as successful exhaustion; header controls are unavailable there. H-581/H-582 selects the generator-loop continue forms above; no break, labelled control or non-void feedback default is selected here. Nested generator composition must resolve yield to its lexical generator definition, not whichever generator happens to execute most recently; the exact nesting contract remains part of signature/control review.
 
+## Checked declarations and exception execution
+
+H-585/H-588 selects **automatic forwarding of the supplied body's unhandled checked obligations, bypassing generator catches**. The body belongs lexically to the caller. Its own local handlers work normally; once an exception escapes that body invocation, required generator cleanup runs and ordinary exception handling resumes at the caller's for site. A generator catch around yield cannot discharge or intercept that failure, even if it names the exact exception type, Error, Exception or a catch-all.
+
+The generator remains an ordinary checked callable for its own operations. This additional body-dependent forwarding contract is specific to generators; it adds neither general exception inference nor conditional throws for ordinary callables.
+
+### Fixed generator declarations and forwarded body obligations
+
+The ordinary trailing throws clause is the generator's fixed outward declaration:
+
+```cod
+proc records() yields u64 -> bool throws ReadException {
+    yield(read_one());
+}
+```
+
+Assume read_one declares ReadException. The generator must catch that own-operation obligation or cover it with its ordinary declaration. Explicit throws remains a caller obligation under D-17/H-525 even if a current implementation/path/body appears unable to raise it. Feedback type and checkedness are independent: void feedback neither suppresses failures nor exempts body code from checking.
+
+The body needs no new throws annotation. First select the generator from ordinary inputs/declarations; then check the consuming body. Its unhandled declared checked obligations belong to the enclosing for operation, in addition to the generator's fixed contract. Do not probe bodies to choose an overload or narrow explicit exception declarations using actual-value/optimizer evidence.
+
+```cod
+# ParseException is an already selected checked exception type.
+proc parse(x:u64) -> void throws ParseException;
+
+proc numbers() yields u64 {
+    yield(1u64);
+}
+
+proc run() throws ParseException {
+    for val x <- numbers() { parse(x); }
+}
+```
+
+This accepts without adding ParseException to numbers. An enclosing covering catch could replace run's throws. Omitting both leaves an uncovered checked obligation and rejects. A body with no remaining checked operations contributes none. An explicit broad throws Exception on numbers would still require its full declared handling.
+
+Conceptually the for operation must cover ordinary caller-side callee/argument/pre-entry failures, the generator's fixed explicit throws, and remaining checked body failures. This is a static obligation composition, not a source union type or a new exception class. Generator catches do not subtract body obligations. Body-local catches may handle them before forwarding; an enclosing caller catch may handle them after the for unwinds. Resolve type identities and admitted generic substitutions normally, preserving declared bounds independently of actual runtime category matching.
+
+### Generator catches handle generator work
+
+```cod
+# load_one and read_body declare ReadException.
+# report and finish_attempt have no escaping checked failure.
+proc guarded() yields u64 {
+    try { yield(load_one()); }
+    catch (e:const ReadException) { report(e); }
+    finally { finish_attempt(); }
+}
+
+proc run_guarded() throws ReadException {
+    for val x <- guarded() { read_body(x); }
+}
+```
+
+If load_one fails, the generator catch handles it: the body was never entered. If read_body fails, the same exception type bypasses that catch, finish_attempt executes, and the failure reaches run_guarded's for site. The run_guarded declaration therefore remains necessary unless a caller-side catch covers it. The distinction is the failure's execution boundary, not its class, construction history or filename.
+
+A body can recover locally and provide normal feedback:
+
+```cod
+for val x <- first_two() {
+    try { validate(x); true }
+    catch (e:const ParseException) { false }
+}
+```
+
+Assume validate declares ParseException and first_two expects bool feedback. The local catch supplies false before leaving the body. Without that local recovery, a generator catch cannot invent feedback or retry the failed body. Caller recovery outside the for resumes after that construct; it does not resume the abandoned body/yield.
+
+The generator's checked calls or explicit throws in its own handlers/finally still need ordinary covering catches or explicit generator throws. A root-typed `catch (e:const Exception) { throw e; }` retains the declared Exception obligation; no narrower observed value excuses it. Existing bare throw/rethrow and wrapper-summary rules remain governed by D-17. Automatic body forwarding does not broaden own-generator checked permissions.
+
+### Execution and nested-loop boundaries
+
+For an exception escaping the body:
+
+```text
+body-local handlers and required local cleanup
+    → iteration restoration / body exit
+    → generator cleanup, bypassing its ordinary catches for this body escape
+    → ordinary caller exception handling at the for site
+```
+
+The original exception identity, cause chain and construction trace are preserved by forwarding. It is not automatically changed into an Error or a newly constructed exception. Source-order matching and standard rethrow-wrapper transparency apply once ordinary handling resumes. A body handler cannot catch a generator failure that occurred before body entry or after that invocation completed.
+
+Nested loops repeat this boundary locally. An inner body failure bypasses its inner generator and reaches the inner for in the outer body. A try in that outer body can handle it there. If it then escapes the outer body, it bypasses the outer generator and reaches the outer for. Use actual active invocation identity, not a process-wide current generator or a code-definition identity shared by recursive calls.
+
+| Failure phase | Checked-contract/handler boundary |
+| --- | --- |
+| Selecting/evaluating the generator call and explicit caller-side inputs | Ordinary caller-side preparation; generator body handlers are not yet active. |
+| Generator operations, including yield-argument evaluation and production conversions | Generator's own checked code; a surrounding generator catch may handle it before body entry. |
+| Receiving the prepared yielded payload, body evaluation, feedback preparation, and required body-local completion | Loop-side body invocation. A failure escaping it bypasses generator catches and reaches the caller's for. Failed reception enters no body; failed body execution supplies no feedback. |
+| Generator receiving updates after successful yield feedback | Ordinary generator-side receiving operations; generator handlers may catch these distinct failures. |
+| Remaining generator operations/cleanup | Generator's own completion/failure rules; normal cleanup must preserve an incoming body escape. Cleanup-produced competing completions retain the separate review boundary below. |
+| Later execution of direct loop-body defers in an outer full scope | That lexical scope's deferred pass; the completed generator cannot catch it retroactively. |
+
+Successful feedback delivery follows required body-local cleanup/restoration. Val snapshots retain prepared bits; borrowed outputs retain selected targets. Failure or outer return cancels final feedback receiving writes and releases prepared outputs as required. Earlier observable effects are not rolled back. The mechanism may not re-execute the body, create an implicit cause or make an opaque unchecked wrapper satisfy a checked obligation.
+
+### Finally and defer are independent of the transport
+
+H-587 requires every entered try's finally to execute when control leaves its protected construct, including normal feedback, body continue, a forwarded body exception and return to the body's enclosing callable. A finally runs once for that dynamic exit. Several yields within one try do not each trigger its finally merely by handing back feedback; the finally runs when that try exits. Failure in a yield argument after entering the try also follows the ordinary finally rule.
+
+```cod
+proc once() yields u64 {
+    try { yield(1u64); }
+    finally { finish_attempt(); }
+}
+
+proc find() -> u64 {
+    for val n <- once() { return n; };
+    return 0u64;
+}
+```
+
+Assuming finish_attempt completes normally, it runs before find delivers 1. It also runs if the body throws or completes normally. Native outlining/inlining, explicit status propagation or exception unwinding must preserve this observation; a direct nonlocal jump that skips cleanup is not an implementation of the contract.
+
+Use ordinary try/finally or defer for resource cleanup. Generator authors need not name an internal propagation object to obtain that guarantee. A normally completing cleanup cannot swallow an incoming body exception or enclosing return. A cleanup that itself throws or executes a return introduces a competing completion: exact priority across generator/outer targets remains a substantive open issue, rather than being decided by choosing a carrier representation. Existing same-target D-17 rules continue within their qualified scope.
+
+D-17/H-550/H-551 still requires checked failures from deferred work to be handled by completion of their owning defer pass. A covering defer catch counts; generator/caller throws or an outer ordinary catch does not authorize residual checked queue members. UnhandledDeferError remains the unchecked aggregate of permitted residual deferred errors; ordinary body exceptions are not wrapped merely because a generator was involved.
+
+A direct body defer registers in the nearest enclosing lexical full scope. Registration-time preparation can fail during the body invocation and forward through the loop boundary; its later action failure belongs to that outer scope's defer pass. An explicit body-local full scope drains its local defers before leaving; checked failures must still be handled within that pass. An escaping unchecked aggregate from that body-local completion follows the same body forwarding boundary. Generator-owned defers retain their own queue and coverage rules.
+
+## Internal propagation and native lowering — assessment
+
+H-586 asks whether special exceptions such as LoopBodyReturn <: LoopBodyPassthrough <: Error would help implement forwarding and outer return, while preferring a suitable non-exception LLVM mechanism if available. This is an implementation proposal, not approval of public exception types. H-588's catch bypass and H-587's cleanup guarantee constrain every candidate.
+
+### Keep control transport outside ordinary exception matching
+
+A public Error-derived carrier would match ordinary catch Error, catch Exception and catch-all clauses. Advising authors not to name the special types would not stop those handlers from swallowing a return or a forwarded body failure. An opaque wrapper would also change actual-type matching/checkedness, while ordinary construction would introduce trace/cause semantics. Automatically stripping it everywhere would instead let generator handlers intercept the original body exception, violating H-588.
+
+The recommended starting point is a compiler-private completion protocol with distinct meanings, schematically:
+
+```text
+body normal completion: feedback components
+body failure escape:    destination for-invocation + original exception
+body enclosing return:  destination callable-activation + pending result
+```
+
+These are internal states, not CoD Exception subtypes, storable user values or a prescribed native struct. Generator ordinary catches handle only its ordinary failure path; body escape passes through required cleanup to the designated for boundary, where it resumes as the original exception. Outer return similarly remains control completion rather than a catchable Error. Actual activation identity matters under recursion and nested generators. All saved references/results still require valid owners through cleanup; no implicit closure cells or lifetime promotion follow.
+
+### Existing compiler and LLVM evidence
+
+The current [native emitter](../cod/lang_llvm.hh) already uses CompletionState for local pending control, an outcome aggregate for native call values/failures, and explicit control/cleanup branches. Native call outcomes currently omit the local return kind/marker; neither that outcome nor the [checked Completion](../cod/lang_completion.hh) establishes arbitrary lexical return targets. Extending that internal protocol or composing known direct control-flow graphs is therefore a plausible smaller starting change than introducing a new public exception hierarchy. This is an engineering inference, not implemented support, an ABI selection or a performance measurement.
+
+LLVM's ordinary ret returns to its caller, and ordinary branches target blocks within the current function. Thus separate native generator/body functions need an explicit propagation protocol or unwinding; a merged native graph can instead branch through generated cleanup. These instructions do not supply CoD's lexical return/catch-bypass policy themselves. See the [LLVM language reference](https://llvm.org/docs/LangRef.html#ret-instruction).
+
+LLVM also provides native exception-handling control flow and language-specific personalities; a compiler-private signal could use those facilities without becoming a CoD Error subtype. Such a route must still implement catch bypass, all cleanup, actual destination identity and the selected pending-completion rules across supported targets. Existing status-based CoD calls would need compatible integration. See [LLVM exception handling](https://llvm.org/docs/ExceptionHandling.html). Choose between qualified lowerings using actual complexity/performance evidence; no coroutine, unwinder ABI or exception allocation is mandated here.
+
+### Remaining proof scope
+
+Body checked obligations now compose directly with the generator's fixed declarations; generator handlers cannot remove them. Complete checking still needs separate ordinary generator versus body-escape paths, preparation/receiving effects, owner/initialization facts and cleanup. Nested/recursive generators, stored views and multiple selected contexts require the same proof. Unresolved coverage must reject or report a precise implementation gap rather than rely on a runtime exception check.
+
+Dynamic symbolic effects and func/proc eligibility remain distinct from checked forwarding. It does not authorize a function generator to perform otherwise forbidden procedure effects through the body. Nonescaping lexical entry, target-aware cleanup, body-control lifetime and complete native coverage remain pending. The public carrier hierarchy is not selected; the private protocol and native alternatives remain proposed mechanisms.
+
 ## Signature and proof work remaining
 
-The proposed `yields Y [-> F]` clause separates ordinary inputs, yielded contracts and body feedback while fixing final completion to void. The yields spelling, default-void shorthand and generator callable types remain under review; H-580–H-583 selects feedback checking, explicit continue forms and schema/receiving reuse without approving those separate syntactic details. Keep func/proc effect restrictions explicit. Ordinary generator `throws` describes outward failures; the body-to-yield checked-failure/effect interface must also be specified so a generator cannot erase a caller obligation simply by having a void result. The void-feedback discard rule grants no exception suppression.
+H-584 selects the `yields Y [-> F]` clause and default-void feedback while retaining fixed void final completion. H-585/H-588 supplies checked failure forwarding and generator-catch bypass; H-587 requires finally execution as specified above. Exact nested grouped-type syntax, independently complete generator-view contracts, general inference, dynamic effects and native proof/transport remain under review. Neither feedback discard nor body-specific exception analysis suppresses an explicit declared obligation.
 
 Yield and feedback contracts must be independently established under D-24's inference principles. Select the generator method from ordinary explicit inputs and existing declaration rules before checking its body consumer; do not probe loop bodies/receivers to break an overload tie. Methods cannot be selected merely because their feedback type happens to fit the body. For the bounded recommendation, an unresolved generic feedback type must come from independent input/type evidence or an explicit contract; it is not inferred by circularly trying consuming bodies. Supporting additional noncircular feedback inference can be considered separately.
 
@@ -300,7 +450,7 @@ All yield sites in one selected generator method use the same established protoc
 The next substantive boundaries are:
 
 1. Repeated destination timing and header-control storage/initialization lifetime, especially new ref materialization, const controls, generator-local borrows and zero yields.
-2. Exact declaration/grouped-type grammar and structural-schema compatibility, type/owner quantification, independent inference and checked effect/exception composition. A body failure reaching yield must have a defined catch boundary; a nonlocal return is not a catchable exception.
+2. Remaining grouped-type grammar and structural-schema compatibility, type/owner quantification, independent inference and dynamic effect eligibility. H-588 selects catch bypass and direct obligation composition; recursive/stored generator and native proofs remain work. A nonlocal return is not a catchable exception.
 3. Target-aware propagation of body return through generator cleanup, including generator-local returns or failures during that cleanup, nested iteration and the lexical meaning of `if returning`.
 4. Nonescaping body-entry proof and transport, including direct/stored/generic generator invocation if admitted. Ordinary callable values or annotations alone do not prove the body's required lexical permissions.
 
@@ -314,7 +464,9 @@ The following is a review checklist, not current passing-test evidence:
 - Distinct val snapshots and live borrowed targets; fixed owners/access/init/null rules; destination retention across permitted backing growth; defined nonoverlapping reception and diagnostic-only checks for H-576 UB examples.
 - Loop-control lifetime/const/materialization and omitted-output cleanup; no escaping generator-local, iteration-local or callable-bearing storage; complete cleanup on partial receiving or feedback failure.
 - Void feedback accepts heterogeneous discarded fallthrough branches, preserving effects/failures/cleanup and ordinary intermediate typing; only bare continue is admitted. Reject valued continue even with a void-typed operand, and preserve an explicit separate operand evaluation followed by bare continue. Non-void feedback accepts compatible tail/continue results, rejects bare continue and missing/incompatible normal branches, and checks recovered catches. Escaping throw/enclosing return is not a missing normal value; no runtime check substitutes for the static contract.
-- Distinguish feedback from enclosing return, generator fallthrough/early void return and discarded per-yield responses; reject a generator-owned non-void return. Generator cleanup runs on exit, not at every yield. Explicit/omitted void, declaration/definition protocol agreement, labelled completeness/effect order and nested callable-type grouping need syntax acceptance. Multi-field feedback must reuse complete production, partial/renamed/new/existing receiving, pre-yield destination selection, component owners and omitted cleanup; control exits must publish no final feedback writes.
+- Distinguish feedback from enclosing return, generator fallthrough/early void return and discarded per-yield responses; reject a generator-owned non-void return. Generator cleanup runs on exit, not at every yield. Check explicit/omitted void, declaration/definition protocol agreement and labelled completeness/effect order; exact nested callable-type grouping remains separately scoped. Multi-field feedback must reuse complete production, partial/renamed/new/existing receiving, pre-yield destination selection, component owners and omitted cleanup; control exits must publish no final feedback writes.
 - Direct lexical body access, ordinary body-scope restrictions, explicit full-scope cleanup, outer defer registration and iteration effect restoration. Nested loops and generator invocations preserve lexical targets without implicit closure cells.
-- Checked/unchecked failures, normal feedback preparation failure and nonlocal completion across generator cleanup; retained return inspection/replacement and cleanup priorities must be settled before these paths can qualify.
+- Checked and unchecked body failures bypass exact-type, Error, Exception and catch-all generator handlers, while generator-own failures of the same type remain locally catchable. Cover nested for boundaries, caller/body local recovery, receiving/pre-entry phases and fixed throws. Reject uncovered obligations, broad-declaration narrowing, body-driven overload selection and defer-pass bypass. Preserve exception identity/trace/cause and no implicit wrapper/rollback.
+- Every entered try/finally executes at protected exit on normal feedback, continue, body throw and outer return, once per exit rather than once per yield. Preserve generator defer cleanup and outer lexical registration. A public Error carrier must not silently change catch behavior; any private/native mechanism must prove the same control paths.
+- Nonlocal completion across generator cleanup, retained return inspection/replacement and crossed-target cleanup priorities must be settled before those paths can qualify.
 - D-16 comments/numerics/representation/transfer invariants; reference interpretation and native observations agree with the selected source contract. No build/test or permanent native layout is prescribed by this draft.
