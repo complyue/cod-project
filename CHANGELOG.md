@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-17 — Assess return-only structural result signatures
+
+<a id="h-572"></a>
+**H-572 — Propose structural results without a stored group.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-17 America/Los_Angeles; exact timestamps/personal name unavailable. Proposes “structural data types” instead of “lexical ADTs”, no sum form, use only in return types, and field mapping to ordinary lexical variables without a separate structural group; observes that individual lexical refs can already have distinct in O owners. Initially retains data braces, then refines: “放在返回类型声明的位置， `data` 关键词感觉都可以不要”. The current assessment uses `-> { ... }` and preserves H-571 named return/receiving syntax. This narrows the pending anonymous-data direction; it does not approve a full result-use/type/proof/ABI contract, new ordinary ADT field permissions or the independent D-18r113 review.
+
+<a id="k-structural-results-20261117"></a>
+**K-STRUCTURAL-RESULTS-20261117 — Replace the aggregate-field question with a return-only assessment.** D-22r28→29/D-07r166→167/D-12r31→32/D-28r32→33/registry824→825 updates D-22-ANON-DATA/P-509–P-511 while preserving H-571/D-22-RESULT-DESTINATION. Candidate C-10/C-65/C-72/C-73 → charter §§2/3.2–3.3/4.3/6.3/8/12 derives readable named outputs from existing lexical/result contracts without a first-class group, group owner or stored cross-owner edge. Product-only/return-only use, direct forwarding, type-only schema metadata, per-component effects/cleanup and one pending completion are assessed; exact compatibility, owning-output dependencies and inspection remain open. Independent mainline review finds less work than general lexical products but substantive multi-output callable checking/transport/cleanup; no source implementation or ABI is selected. Preserve ordinary nominal ADT rules, D-16, no copying/moving/promotion/rollback, source415 and byte-identical D-18r113. Baseline: `412e127e623debf28fb828bf52f815b37b5172e5` at affected design/registry paths and `cod/lang_syntax.hh`, `cod/lang_checked.hh`, `cod/lang_llvm.hh`. Documentation only; no local code/build/tests.
+
 ## 2026-11-17 — Keep pending completion fields together
 
 <a id="k-787"></a>
