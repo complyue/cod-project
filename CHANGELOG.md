@@ -1,9 +1,22 @@
 # Changelog
 
+## 2026-11-16 — Caller-access and defer-nesting integration
+
+<a id="k-777"></a>
+**K-777 — Align caller access with independent cleanup boundaries.** Source405 on both branches→406/registry804→805 preserves K-776's qualified caller-binding/access implementation with H-552/D-17r87/D-15r45/D-10r193/D-21r25. Nested defer declarations reject lexically; separately checked helpers retain independent cleanup. Existing nested-registration compiler acceptance remains an enforcement gap and does not qualify that source contract. Unaffected owner/access/initialization, ordinary completion, native coverage and D-16 continue under charter §§2/3.3/4.3/5.3/6.3/8/12; full queue/value-path/physical qualification remains separate. No new runtime mechanism or human confirmation. Integrated design: `9881df9be5d1facebd6ecbff9de8316052f24f74`; compiler baseline: `022272847bd7c31a7512f774894463add7fc78ac:cod/lang_checked.hh` and that commit's source reference.
+
 ## 2026-11-16 — Caller-binding target-access preservation
 
 <a id="k-776"></a>
 **K-776 — Prove physical slot access through readonly aliases.** Source404→405/registry803→804 continues D-14r116/P-269/P-327 under H-306/H-366–H-369, D-18r107, unaffected D-17 completion/H-525 and D-26r21/H-407. Finite input-source summaries retain intermediate selections through nested/recursive calls and cleanup; every source must preserve the physical destination's access. Exact expression/formal qualifiers and ref validity remain. Acceptance covers independent write-history models, restoration-negative controls, prepared slots, callable targets, shared native bodies and exact release. Charter §§3.3/4.3/5.3/6.3/8/12 and D-16 continue. Alias-conditioned mixed-access precision, caller ref/non-ref adaptation, method-value and pending runtime/ABI protocols remain separate; no new policy, permission flag or human confirmation. Baseline: `261f0960538fce7caeaa468afebb864e4be2daf4:cod/lang_checked.hh` and that commit's source reference/authority registry.
+
+## 2026-11-16 — Reject nested defer declarations
+
+<a id="h-552"></a>
+**H-552 — Reject nested defer declarations.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-16 America/Los_Angeles; exact timestamps/personal name unavailable. “reject嵌套defer声明”, stated directly and repeated in the answer to whether a handler registered during cleanup may inspect earlier pending errors. Selects rejection instead of either proposed dynamic-registration eligibility policy. This settles the nested-declaration source boundary; it is not a ban on calling helpers that have independent cleanup, on automatic owner release, or a full queue/ABI approval.
+
+<a id="k-defer-nesting-20261116"></a>
+**K-DEFER-NESTING-20261116 — Bound registration before draining.** D-17r86→87/D-15r44→45/D-10r192→193/D-21r24→25/source404→405/registry803→804 records H-552 under D-17-DEFER-DISPATCH/P-461–P-463. Reject nested declarations in deferred bodies, catches and finally through grouping, control flow and explicit full scopes. Separately checked callable bodies retain independent cleanup; inlining preserves that boundary, and intrinsic owner/effect cleanup remains. No owning action list grows during its drain. Candidate C-36/C-44/C-63/C-65 serves explicit registration, observable order and checkable failure responsibility under charter §§2/3.1–3.3/4.3/6.3/8/12. Preserve FIFO, H-525/H-550/H-551, return semantics, owners and D-16. Acceptance covers rejected nesting forms, valid independent helpers and ordinary pre-cleanup loops/scopes. Existing nested-registration and throws-only compiler acceptance is identified as a source enforcement gap; it does not qualify either target behavior. Full queue/value-path/physical qualification remains separate; unaffected qualified contracts continue. Baseline: `261f0960538fce7caeaa468afebb864e4be2daf4:design/ExceptionControl.md`, deferred-work/open-registration sections, and the other affected documentation paths at that commit. Documentation only; no code/build/tests.
 
 ## 2026-11-16 — Native-validation and deferred-coverage integration
 
