@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-16 — Complete reference-comparison evidence
+
+<a id="k-768"></a>
+**K-768 — Preserve both observed identity outcomes through the shared proof path.** Source395→396/registry793→794 continues K-767's qualified D-28-IDENTITY, D-14r116/P-258, D-17r83/P-235/P-236/P-280/H-525, D-18r107, confirmed D-23r17 results and D-26r21/H-407 under H-420/H-423. Equality and inequality observations share predicate constraints with guarded result joins; unknown and impossible evidence remain distinct. Acceptance covers complementary writes, finite reference partitions, saved/transitive observations, changed selections, ordinary/prepared calls, cleanup/failure paths, native sharing and exact release. Preserve charter §§2/3.1–3.3/4.3/6.3/8/12, owners/access/ref-entry/init, declared completion obligations and D-16. Wider caller-slot proofs and new runtime/ABI/return-inspection/queue or aggregate initialization protocols remain separate. Baseline: `739018306e019117df1477e8a334c33f3091db12:tests/cod/language/README.md` and that commit’s `design/DesignAuthorityRegistry.md`. No new semantic decision or human confirmation.
+
 ## 2026-11-16 — Borrowed selected initialization
 
 <a id="k-767"></a>

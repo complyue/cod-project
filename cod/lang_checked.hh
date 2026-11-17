@@ -1317,17 +1317,23 @@ class ScalarChecker {
     return constrain_predicate(proof, clauses);
   }
   static std::shared_ptr<const CheckedOperation::Predicate> constrain_predicate(
-      const std::shared_ptr<const CheckedOperation::Predicate> &proof, const CleanupEquations::ConditionClauses &conditions) {
-    if (conditions == CleanupEquations::ConditionClauses{CleanupEquations::ConditionFacts{}}) return proof;
+      const std::shared_ptr<const CheckedOperation::Predicate> &proof, const CleanupEquations::BooleanValue &conditions) {
     auto result = proof ? std::make_shared<Predicate>(*proof) : std::make_shared<Predicate>();
     if (!proof) result->kind = Predicate::Kind::presence;
     for (const bool truth : {false, true}) {
       auto &clauses = result->results[truth];
       if (clauses.empty() && !result->complete_results) clauses.insert(CleanupEquations::ConditionFacts{});
-      clauses = CleanupEquations::conjoin_conditions(clauses, conditions);
+      const auto known = conditions.find(truth);
+      clauses = known == conditions.end() ? CleanupEquations::ConditionClauses{} :
+          CleanupEquations::conjoin_conditions(clauses, known->second);
     }
     result->complete_results = true;
     return result;
+  }
+  static std::shared_ptr<const CheckedOperation::Predicate> constrain_predicate(
+      const std::shared_ptr<const CheckedOperation::Predicate> &proof, const CleanupEquations::ConditionClauses &conditions) {
+    if (conditions == CleanupEquations::ConditionClauses{CleanupEquations::ConditionFacts{}}) return proof;
+    return constrain_predicate(proof, CleanupEquations::BooleanValue{{false, conditions}, {true, conditions}});
   }
   CleanupEquations::BooleanValue snapshot_boolean(const std::shared_ptr<const CheckedOperation::Predicate> &proof,
       const LexicalState &state, const Location &at) {
@@ -2622,15 +2628,15 @@ class ScalarChecker {
         predicate(Predicate::Kind::conjunction, nulls,
             owners == OwnerMatch::satisfied ? constant_predicate(true) : nullptr),
         predicate(Predicate::Kind::conjunction, nonnulls, {}));
-    if (!left.selection_identity || !right.selection_identity || left.selection_identity == right.selection_identity) return relation;
-    auto result = relation ? std::make_shared<Predicate>(*relation) : std::make_shared<Predicate>();
-    if (!relation) result->kind = Predicate::Kind::presence;
-    CleanupEquations::ConditionFacts equal;
-    equal.same_selections.insert({*left.selection_identity, *right.selection_identity});
-    auto &clauses = result->results[true];
-    if (clauses.empty() && !result->complete_results) clauses.insert(CleanupEquations::ConditionFacts{});
-    clauses = CleanupEquations::conjoin_conditions(clauses, {equal});
-    return result;
+    if (!left.selection_identity || !right.selection_identity) return relation;
+    CleanupEquations::BooleanValue observations;
+    for (const bool equal : {false, true}) {
+      CleanupEquations::ConditionFacts observed;
+      if (equal) observed.same_selections.insert({*left.selection_identity, *right.selection_identity});
+      else observed.different_selections.emplace(*left.selection_identity, *right.selection_identity);
+      CleanupEquations::add_condition(observations[equal], std::move(observed));
+    }
+    return constrain_predicate(relation, observations);
   }
   void predicate_paths(const std::shared_ptr<const Predicate> &proof, bool value, const Location &at,
       const std::function<void()> &next) {
