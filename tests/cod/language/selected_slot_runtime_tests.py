@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Selected reference slots allocate nothing and preserve image ownership on failure."""
 from pathlib import Path
+from native_test_support import run_native
 import contextual_capture_runtime_tests as fixture
-runner = fixture.runner
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
 
-runner.SOURCE += '''
+FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 proc selected_images(flag:bool)->void{
  func f=wrap(base);func g=wrap(other);ptr a=f,b=g,c=f;
  observe(9010u64);
@@ -23,11 +24,10 @@ func selected_return(flag:bool)->const (func(u64)->const u64){
 selected_images(true);selected_images(false);
 observe(selected_return(true)(1u64));observe(selected_return(false)(1u64));
 observe(9000u64);
-'''
-runner.HARNESS = runner.HARNESS.replace('checkpoints==10', 'checkpoints==11')
-runner.HARNESS = runner.HARNESS.replace('copy_failures==5 && record_failures', 'copy_failures==7 && record_failures')
-runner.EXPECTED_VALUES += ['2', '2', '2', '12', '2', '2', '12', '2', '12', '12', '12', '12', '2', '2']
-runner.EXPECTED_SHADOWS = []
-runner.EXTRA_SOURCES += [Path(fixture.__file__), Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('checkpoints==10', 'checkpoints==11'))
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('copy_failures==5 && record_failures', 'copy_failures==7 && record_failures'))
+FIXTURE = FIXTURE.updated(expected_values=list(FIXTURE.expected_values) + ['2', '2', '2', '12', '2', '2', '12', '2', '12', '12', '12', '12', '2', '2'])
+FIXTURE = FIXTURE.updated(expected_shadows=[])
 if __name__ == '__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

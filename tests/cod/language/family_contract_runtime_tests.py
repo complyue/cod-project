@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Check family argument ownership and cleanup under native allocation failures."""
 from pathlib import Path
+from native_test_support import run_native
 import captured_callable_runtime_tests as fixture
 
-runner = fixture.runner
-runner.SOURCE = '''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source='''
 using symbol "std:io" @print;
 using "std:exceptions" OutOfMemoryError;
 using "std:exceptions" Exception;
@@ -67,11 +68,11 @@ observe(9000u64);
  };
 }};
 observe(9000u64);
-'''
-runner.WRAPPERS += '#define cod_lang_exception_cause cod_original_cause\n'
-runner.HARNESS = runner.HARNESS.replace('copy_failures==3', 'copy_failures==2').replace('largest>4000', 'largest>0')
-runner.HARNESS = '#include <iterator>\n'+runner.HARNESS
-runner.HARNESS = runner.HARNESS.replace('static bool deny_create=', '''static std::uint64_t invalid_category=0, breaches=0;
+''')
+FIXTURE = FIXTURE.updated(wrappers=FIXTURE.wrappers + '#define cod_lang_exception_cause cod_original_cause\n')
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('copy_failures==3', 'copy_failures==2').replace('largest>4000', 'largest>0'))
+FIXTURE = FIXTURE.updated(harness='#include <iterator>\n'+FIXTURE.harness)
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('static bool deny_create=', '''static std::uint64_t invalid_category=0, breaches=0;
 static bool deny_cause=false;
 #undef cod_lang_exception_cause
 extern "C" std::uint64_t cod_lang_exception_cause(std::uint64_t cause,std::uint64_t index,std::uint64_t *result,std::uint64_t check_bounds){
@@ -79,14 +80,13 @@ extern "C" std::uint64_t cod_lang_exception_cause(std::uint64_t cause,std::uint6
   for(unsigned i=0;i<4;++i)result[i]=0;
   result[4]=invalid_category;return 1;
 }
-static bool deny_create=''')
-runner.HARNESS = runner.HARNESS.replace('if(value==9000)', '''if(value>=9060 && value<9064){
+static bool deny_create='''))
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('if(value==9000)', '''if(value>=9060 && value<9064){
     deny_cause=true;invalid_category=value==9060?0:value==9061?std::size(cod_exception_names):value==9062?(std::uint64_t{1}<<32)+5:static_cast<std::uint64_t>(CoDException::IndexOutOfBoundsError);return;
   }
-  if(value==9000)''').replace('assert(created+copied==released', 'assert(!deny_cause && breaches==4);\n  assert(created+copied==released')
-runner.EXPECTED_VALUES = ['6500', '9', '1', '8', '7', '1', '7', '6', '9', '6', '9', '6', '9', '9']
-runner.EXPECTED_SHADOWS = []
-runner.EXTRA_SOURCES += [Path(__file__)]
+  if(value==9000)''').replace('assert(created+copied==released', 'assert(!deny_cause && breaches==4);\n  assert(created+copied==released'))
+FIXTURE = FIXTURE.updated(expected_values=['6500', '9', '1', '8', '7', '1', '7', '6', '9', '6', '9', '6', '9', '9'])
+FIXTURE = FIXTURE.updated(expected_shadows=[])
 
 if __name__ == '__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

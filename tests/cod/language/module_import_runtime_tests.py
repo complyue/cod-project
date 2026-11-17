@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """Imported complete callables retain native ownership and failure cleanup."""
 from pathlib import Path
+from native_test_support import run_native
 import captured_callable_runtime_tests as fixture
 
-runner = fixture.runner
-definitions, execution = runner.SOURCE.split('{{func f=wrap(wrap(base));', 1)
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+definitions, execution = FIXTURE.source.split('{{func f=wrap(wrap(base));', 1)
 exports = ['observe', 'base', 'other', 'wrap', 'apply', 'missing', 'one', 'two', 'wrapped', 'replaced', 'copy_recovery', 'retained']
-runner.SOURCE_FILES = {'library.cod': definitions + ''.join('export ' + name + ';' for name in exports)}
-runner.SOURCE = ('using "std:exceptions" OutOfMemoryError;using "std:exceptions" MissingReturnError;'
+FIXTURE = FIXTURE.updated(source_files={'library.cod': definitions + ''.join('export ' + name + ';' for name in exports)})
+FIXTURE = FIXTURE.updated(source='using "std:exceptions" OutOfMemoryError;using "std:exceptions" MissingReturnError;'
                  + ''.join('import "library.cod" ' + name + ';' for name in exports)
                  + '{{func f=wrap(wrap(base));' + execution)
-runner.EXPECTED_SHADOWS = []
-runner.EXTRA_SOURCES += [Path(__file__)]
+FIXTURE = FIXTURE.updated(expected_shadows=[])
 
 if __name__ == '__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

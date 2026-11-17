@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Prepared builtin swaps preserve queue ownership and failure atomicity."""
 from pathlib import Path
-import exception_value_runtime_tests as runner
+from native_test_support import run_native
+import exception_value_runtime_tests as fixture
 
-runner.SOURCE = '''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+
+FIXTURE = FIXTURE.updated(source='''
 using symbol "std:io" @print;
 using "std:exceptions" OutOfMemoryError;
 using "std:exceptions" NullPointerException;
@@ -64,14 +67,14 @@ observe(9000u64);
  missing();{}
 }};
 observe(9000u64);
-'''
-runner.WRAPPERS = '''
+''')
+FIXTURE = FIXTURE.updated(wrappers='''
 #define cod_lang_defer_allocate cod_record_allocate
 #define cod_lang_defer_free cod_record_free
 #define cod_lang_exception_finish cod_finish
 #define cod_lang_print_u64 cod_trace
-'''
-runner.HARNESS = r'''
+''')
+FIXTURE = FIXTURE.updated(harness=r'''
 #undef cod_lang_defer_allocate
 #undef cod_lang_defer_free
 #undef cod_lang_exception_finish
@@ -117,7 +120,7 @@ extern "C" void cod_lang_exception_finish() noexcept{
       (unsigned long long)created,(unsigned long long)released,(unsigned long long)failures,
       (unsigned long long)peak_records,(unsigned long long)peak_bytes,(unsigned long long)largest);
 }
-'''
+''')
 
 
 def batch_result(n):
@@ -128,9 +131,8 @@ def batch_result(n):
     return list(map(str, values))
 
 
-runner.EXPECTED_VALUES = batch_result(0) + batch_result(3) + batch_result(10000)
-runner.EXPECTED_VALUES += ['1', '2', '2', '1', '70', '71', '1', '2', '3', '2', '1', '3', '75', '1', '2', '1', '2', '1', '78']
-runner.EXPECTED_SHADOWS = []
-runner.EXTRA_SOURCES = [Path(__file__)]
+FIXTURE = FIXTURE.updated(expected_values=batch_result(0) + batch_result(3) + batch_result(10000))
+FIXTURE = FIXTURE.updated(expected_values=list(FIXTURE.expected_values) + ['1', '2', '2', '1', '70', '71', '1', '2', '3', '2', '1', '3', '75', '1', '2', '1', '2', '1', '78'])
+FIXTURE = FIXTURE.updated(expected_shadows=[])
 if __name__ == '__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

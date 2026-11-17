@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Faulted registrations cannot supply initialization to later cleanup reads."""
 from pathlib import Path
-import exception_value_runtime_tests as runner
+from native_test_support import run_native
+import exception_value_runtime_tests as fixture
 
-runner.SOURCE = '''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+
+FIXTURE = FIXTURE.updated(source='''
 using symbol "std:io" @print;
 using "std:exceptions" OutOfMemoryError;
 using "std:exceptions" MissingReturnError;
@@ -35,14 +38,14 @@ proc nested()->void {
 normal();
 try{failed_registration();}catch(e:const OutOfMemoryError){observe(1u64);};
 failed_action();nested();
-'''
-runner.WRAPPERS = '''
+''')
+FIXTURE = FIXTURE.updated(wrappers='''
 #define cod_lang_defer_allocate cod_record_allocate
 #define cod_lang_defer_free cod_record_free
 #define cod_lang_exception_finish cod_finish
 #define cod_lang_print_u64 cod_trace
-'''
-runner.HARNESS = r'''
+''')
+FIXTURE = FIXTURE.updated(harness=r'''
 #undef cod_lang_defer_allocate
 #undef cod_lang_defer_free
 #undef cod_lang_exception_finish
@@ -71,10 +74,9 @@ extern "C" void cod_lang_exception_finish() noexcept {
   std::printf("{\"records\":%llu,\"released\":%llu,\"peak\":%llu,\"failures\":%llu}\n",
       (unsigned long long)created,(unsigned long long)released,(unsigned long long)peak,(unsigned long long)failures);
 }
-'''
-runner.EXPECTED_VALUES = ['41', '41', '1', '43', '44']
-runner.EXPECTED_SHADOWS = []
-runner.EXTRA_SOURCES = [Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(expected_values=['41', '41', '1', '43', '44'])
+FIXTURE = FIXTURE.updated(expected_shadows=[])
 
 if __name__ == '__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

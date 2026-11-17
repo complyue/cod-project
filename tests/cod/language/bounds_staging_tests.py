@@ -67,7 +67,7 @@ def main():
     count = sum(item['passed'] for item in results)
     print(f'Bounds staging: {count}/{len(results)} passed')
     if report := os.environ.get('COD_LANGUAGE_REPORT'):
-        sources = [ROOT/'cod/main.cc',*sorted((ROOT/'cod').glob('lang_*.hh')),Path(__file__),
+        sources = [Path(__file__).with_name("language_test_support.py"), ROOT/'cod/main.cc',*sorted((ROOT/'cod').glob('lang_*.hh')),Path(__file__),
                    Path(__file__).with_name('foundation_tests.py'),Path(__file__).with_name('callable_value_staging_tests.py'),Path(__file__).with_name('bounds_tests.py')]
         digest = lambda path:hashlib.sha256(path.read_bytes()).hexdigest()
         Path(report).write_text(json.dumps(dict(recorded_utc=datetime.datetime.now(datetime.timezone.utc).isoformat(),

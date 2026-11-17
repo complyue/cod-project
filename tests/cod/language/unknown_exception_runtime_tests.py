@@ -1,18 +1,13 @@
 #!/usr/bin/env python3
 """Inject declared failures at native methods; no unknown-type ingress is claimed."""
-import datetime
-import hashlib
-import json
-import os
 from pathlib import Path
 import re
-import tempfile
+from native_test_support import run_native
 import owner_dispatch_runtime_tests as fixture
-from foundation_tests import ROOT, MODE, COD, shadow_diagnostics
-from regional_runtime_tests import checked
 
-runner=fixture.runner
-SOURCE=runner.SOURCE+'''
+
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+SOURCE=FIXTURE.source+'''
 using "std:exceptions" StaticallyUnknownTypeException;
 using "std:exceptions" UnsoundRuntimeTypingError;
 using "std:exceptions" Exception;
@@ -65,11 +60,11 @@ proc delayed_unknown()->void{
 }};
 observe(9000u64);
 '''
-WRAPPERS=runner.WRAPPERS
-HARNESS=runner.HARNESS.replace('checkpoints==10','checkpoints==11').replace('copy_failures==9','copy_failures==10').replace('record_failures==6','record_failures==7')
-EXPECTED_VALUES=runner.EXPECTED_VALUES+['7','5','7','1','321','123','1','7','321','7','310','7','302','300','2','12','6','10000','7']
+WRAPPERS=FIXTURE.wrappers
+HARNESS=FIXTURE.harness.replace('checkpoints==10','checkpoints==11').replace('copy_failures==9','copy_failures==10').replace('record_failures==6','record_failures==7')
+EXPECTED_VALUES=list(FIXTURE.expected_values)+['7','5','7','1','321','123','1','7','321','7','310','7','302','300','2','12','6','10000','7']
 EXPECTED_SHADOWS=['other']
-EXTRA_SOURCES=[*runner.EXTRA_SOURCES,Path(fixture.__file__),Path(runner.__file__),Path(__file__)]
+EXTRA_SOURCES=[*list(FIXTURE.sources),Path(fixture.__file__),Path(__file__).with_name('exception_value_runtime_tests.py'),Path(__file__)]
 
 
 def inject_failures(ir, runtime):
@@ -82,47 +77,11 @@ def inject_failures(ir, runtime):
         ir,count=re.subn(pattern,lambda match:match[1]+body,ir)
         if count!=1:raise RuntimeError(f'Expected exactly one native provider for {method}, found {count}')
         injected.append(dict(method=method,category=category,identity=identity))
-    return ir,injected
+    return ir, {"injected": injected}
 
 
-def main():
-    tool=ROOT/MODE/'bin';results=[]
-    with tempfile.TemporaryDirectory(prefix='cod-unknown-exception-') as directory:
-        scratch=Path(directory);source=scratch/'main.cod';source.write_text(SOURCE)
-        for general in (False,True):
-            ir=scratch/'main.ll';bc=scratch/'injected.bc';runtime=scratch/'runtime.cc'
-            command=[COD,'--check',source,'--emit-llvm',ir,'--emit-runtime',runtime]
-            if general:command.append('--no-specialize')
-            diagnostics=[]
-            output,frontend_seconds=checked(command,ROOT,('[-Wmissing-return]','[-Wshadow]'),diagnostics)
-            if not shadow_diagnostics(''.join(diagnostics),EXPECTED_SHADOWS)[0]:
-                raise RuntimeError(f'Unexpected shadow diagnostics: {diagnostics}')
-            if output:raise RuntimeError('Checking executed runtime effects')
-            original=ir.read_text();modified,injected=inject_failures(original,runtime.read_text())
-            ir.write_text(modified)
-            checked([tool/'llvm-as',ir,'-o',bc],ROOT)
-            checked([tool/'opt','-passes=verify','-disable-output',bc],ROOT)
-            harness=scratch/'instrumented.cc';harness.write_text(WRAPPERS+runtime.read_text()+HARNESS)
-            executable=scratch/'native'
-            compile_command=[tool/'clang++','-std=c++20','-O2','-g','-UNDEBUG','-stdlib=libc++','-fuse-ld=lld',bc,harness,'-o',executable,
-                             '-L'+str(ROOT/MODE/'lib'),'-Wl,-rpath,'+str(ROOT/MODE/'lib')]
-            _,compile_seconds=checked(compile_command,ROOT)
-            output,execution_seconds=checked([executable],ROOT)
-            *values,metrics=output.splitlines()
-            if values!=EXPECTED_VALUES:raise RuntimeError(f'Unexpected exception trace: {values}')
-            results.append(dict(name='general' if general else 'default',passed=True,metrics=json.loads(metrics),stdout=values,injected=injected,diagnostics=diagnostics,
-                                frontend_seconds=frontend_seconds,compile_seconds=compile_seconds,execution_seconds=execution_seconds,
-                                check_command=list(map(str,command)),compile_command=list(map(str,compile_command)),
-                                original_ir_sha256=hashlib.sha256(original.encode()).hexdigest(),injected_ir_sha256=hashlib.sha256(modified.encode()).hexdigest()))
-            print(f"PASS {results[-1]['name']}: {metrics}",flush=True)
-    if report:=os.environ.get('COD_LANGUAGE_REPORT'):
-        sources=[ROOT/'cod/main.cc',*sorted((ROOT/'cod').glob('lang_*.hh')),Path(__file__),Path(__file__).with_name('foundation_tests.py'),
-                 Path(__file__).with_name('regional_runtime_tests.py'),*EXTRA_SOURCES]
-        digest=lambda path:hashlib.sha256(path.read_bytes()).hexdigest()
-        Path(report).write_text(json.dumps(dict(recorded_utc=datetime.datetime.now(datetime.timezone.utc).isoformat(),toolchain=MODE,
-                                               passed=len(results),total=2,results=results,executable_sha256=digest(COD),
-                                               sources={str(path.relative_to(ROOT)):digest(path) for path in sources}),indent=2)+'\n')
-    return 0
+FIXTURE = FIXTURE.updated(source=SOURCE, wrappers=WRAPPERS, harness=HARNESS, expected_values=EXPECTED_VALUES,
+                          expected_shadows=EXPECTED_SHADOWS, sources=EXTRA_SOURCES, transform_ir=inject_failures)
 
-if __name__=='__main__':
-    raise SystemExit(main())
+if __name__ == '__main__':
+    raise SystemExit(run_native(FIXTURE))

@@ -46,7 +46,7 @@ def main():
     passed = sum(result['passed'] for result in results)
     print(f'Definition contexts: {passed}/{len(results)} passed')
     if report := os.environ.get('COD_LANGUAGE_REPORT'):
-        sources = [ROOT / 'cod/main.cc', *sorted((ROOT / 'cod').glob('lang_*.hh')), Path(__file__),
+        sources = [Path(__file__).with_name("language_test_support.py"), ROOT / 'cod/main.cc', *sorted((ROOT / 'cod').glob('lang_*.hh')), Path(__file__),
                    Path(__file__).with_name('foundation_tests.py')]
         Path(report).write_text(json.dumps(dict(recorded_utc=datetime.datetime.now(datetime.timezone.utc).isoformat(),
             toolchain=MODE, passed=passed, total=len(results), results=results,

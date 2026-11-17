@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Nested handler queues preserve ordering, failure cleanup and native release."""
 from pathlib import Path
+from native_test_support import run_native
 import handler_payload_runtime_tests as fixture
 
-runner=fixture.runner
-runner.SOURCE+='''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 func recover_queued(ref target:Exception in O,item:MissingReturnError,n:u64)->void where {owner O}{
  defer catch(e:const MissingReturnError){defer write_payload(target,e,10u64);};
  if(n==0u64){throw item;}else{recover_queued(target,item,n-1u64);};
@@ -35,9 +36,8 @@ proc failed_nested_queue(ref target:Exception in O)->void where {owner O}{
  try{failed_nested_queue(payload);}catch(e:const OutOfMemoryError){observe(9051u64);observe(payload.category);};
  try{throw payload;}catch(e:const Exception){observe(e.category);};
 }};
-'''
-runner.EXPECTED_VALUES+=['5','5','5','5','5','5','5']
-runner.HARNESS=runner.HARNESS.replace('record_failures==2','record_failures==3')
-runner.EXTRA_SOURCES+=[Path(fixture.__file__),Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(expected_values=list(FIXTURE.expected_values) + ['5','5','5','5','5','5','5'])
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('record_failures==2','record_failures==3'))
 if __name__=='__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

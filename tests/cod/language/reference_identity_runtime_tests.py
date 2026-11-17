@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Shared owner identities preserve native resource balance through calls and cleanup."""
 from pathlib import Path
+from native_test_support import run_native
 import captured_callable_runtime_tests as fixture
 
-runner = fixture.runner
-runner.SOURCE += '''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 func same(ptr lhs:T in A,ptr rhs:U in B)->bool where {T,U,owner A,owner B}{return lhs is rhs;}
 func repeated(ptr lhs:T in A,ptr rhs:T in B,n:u64)->bool where {T,owner A,owner B}{
  if(n==0u64){return same(lhs,rhs);}else{return repeated(lhs,rhs,n-1u64);};
@@ -29,10 +30,9 @@ proc identity_later(ptr lhs:u64 in A,ptr rhs:u64 in B)->void where {owner A,owne
  }};
 }};
 observe(9000u64);
-'''
-runner.HARNESS = runner.HARNESS.replace('checkpoints==5', 'checkpoints==6')
-runner.EXPECTED_VALUES += ['1000','1','0']
-runner.EXPECTED_SHADOWS = []
-runner.EXTRA_SOURCES += [Path(fixture.__file__), Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('checkpoints==5', 'checkpoints==6'))
+FIXTURE = FIXTURE.updated(expected_values=list(FIXTURE.expected_values) + ['1000','1','0'])
+FIXTURE = FIXTURE.updated(expected_shadows=[])
 if __name__ == '__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

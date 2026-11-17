@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Callable snapshots, failed preparation and allocation-free empty environments."""
 from pathlib import Path
-import exception_value_runtime_tests as runner
+from native_test_support import run_native
+import exception_value_runtime_tests as fixture
 
-runner.SOURCE = '''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+
+FIXTURE = FIXTURE.updated(source='''
 using symbol "std:io" @print;
 using "std:exceptions" OutOfMemoryError;
 using "std:exceptions" MissingReturnError;
@@ -31,8 +34,8 @@ observe(9003u64);
 val total<-0u64;
 for(i in 0u64..10000u64){{func a=factory(true);func b=a;a<-minus;total<-total+b(i);}};
 observe(9004u64);observe(total);
-'''
-runner.WRAPPERS = '''
+''')
+FIXTURE = FIXTURE.updated(wrappers='''
 #define cod_lang_defer_allocate cod_record_allocate
 #define cod_lang_defer_free cod_record_free
 #define cod_lang_exception_finish cod_finish
@@ -40,8 +43,8 @@ runner.WRAPPERS = '''
 #define cod_lang_callable_create cod_image_create
 #define cod_lang_callable_copy cod_image_copy
 #define cod_lang_callable_free cod_image_free
-'''
-runner.HARNESS = r'''
+''')
+FIXTURE = FIXTURE.updated(harness=r'''
 #undef cod_lang_defer_allocate
 #undef cod_lang_defer_free
 #undef cod_lang_exception_finish
@@ -84,10 +87,9 @@ extern "C" void cod_lang_exception_finish() noexcept{
       (unsigned long long)created,(unsigned long long)released,(unsigned long long)peak,(unsigned long long)failures,
       (unsigned long long)images,(unsigned long long)copies);
 }
-'''
-runner.EXPECTED_VALUES = ['12','11','12','22','21','31','1','4','3','39','41','50005000']
-runner.EXPECTED_SHADOWS = ['f', 'f']
-runner.EXTRA_SOURCES = [Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(expected_values=['12','11','12','22','21','31','1','4','3','39','41','50005000'])
+FIXTURE = FIXTURE.updated(expected_shadows=['f', 'f'])
 
 if __name__ == '__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

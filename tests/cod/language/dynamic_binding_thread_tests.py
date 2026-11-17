@@ -8,7 +8,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 from foundation_tests import ROOT, MODE, COD
-from regional_runtime_tests import checked
+from language_test_support import checked
 
 TLS_SLOTS = 1
 EXTRA_SOURCES = []
@@ -91,7 +91,7 @@ def main():
                 print(('PASS ' if passed else 'FAIL ')+results[-1]['name'], flush=True)
     count = sum(result['passed'] for result in results)
     if report := os.environ.get('COD_LANGUAGE_REPORT'):
-        sources = [ROOT/'cod/main.cc', *sorted((ROOT/'cod').glob('lang_*.hh')), Path(__file__),
+        sources = [Path(__file__).with_name("language_test_support.py"), ROOT/'cod/main.cc', *sorted((ROOT/'cod').glob('lang_*.hh')), Path(__file__),
                    Path(__file__).with_name('foundation_tests.py'), Path(__file__).with_name('regional_runtime_tests.py'), *EXTRA_SOURCES]
         Path(report).write_text(json.dumps(dict(recorded_utc=datetime.datetime.now(datetime.timezone.utc).isoformat(),
             toolchain=MODE, passed=count, total=len(results), results=results,

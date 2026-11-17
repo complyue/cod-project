@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Swap selection, failure and cleanup retain exact native storage behavior."""
 from pathlib import Path
+from native_test_support import run_native
 import mutable_reference_runtime_tests as fixture
 
-runner = fixture.runner
-runner.SOURCE = runner.SOURCE.replace('ptr p=a;', 'ptr p=a,q=b;').replace('p=b;', 'p<=>q;')
-runner.SOURCE = runner.SOURCE.replace('defer{p=a;};', 'defer{p<=>q;};')
-runner.SOURCE += '''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source=FIXTURE.source.replace('ptr p=a;', 'ptr p=a,q=b;').replace('p=b;', 'p<=>q;'))
+FIXTURE = FIXTURE.updated(source=FIXTURE.source.replace('defer{p=a;};', 'defer{p<=>q;};'))
+FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 using "std:exceptions" NullPointerException;
 proc bits_order()->void{
  val x<-71u64,y<-72u64;ptr p=x,q=y;
@@ -18,9 +19,8 @@ proc bits_order()->void{
  observe(y);
 }
 bits_order();
-'''
-runner.EXPECTED_VALUES += ['72','71','71','72','73','75','76','73']
-runner.EXPECTED_SHADOWS = []
-runner.EXTRA_SOURCES += [Path(fixture.__file__), Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(expected_values=list(FIXTURE.expected_values) + ['72','71','71','72','73','75','76','73'])
+FIXTURE = FIXTURE.updated(expected_shadows=[])
 if __name__ == '__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

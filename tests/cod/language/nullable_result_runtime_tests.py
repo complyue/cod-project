@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Nullable result forwarding preserves deferred reads and exact resource release."""
 from pathlib import Path
+from native_test_support import run_native
 import nullable_alias_runtime_tests as fixture
 
-runner = fixture.runner
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
 relay = 'func relay(ptr p:const Exception in O)->ptr const Exception in O where {owner O}{return p;}'
 needle = 'ptr observed=selected;ptr saved=observed;'
-assert needle in runner.SOURCE
-runner.SOURCE = relay+runner.SOURCE.replace(needle, 'ptr observed=relay(selected);ptr saved=relay(observed);')
-runner.EXTRA_SOURCES += [Path(fixture.__file__), Path(__file__)]
+assert needle in FIXTURE.source
+FIXTURE = FIXTURE.updated(source=relay+FIXTURE.source.replace(needle, 'ptr observed=relay(selected);ptr saved=relay(observed);'))
 if __name__ == '__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

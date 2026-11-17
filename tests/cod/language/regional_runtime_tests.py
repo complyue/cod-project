@@ -7,9 +7,9 @@ import json
 import os
 from pathlib import Path
 import platform
-import subprocess
 import tempfile
-import time
+
+from language_test_support import checked
 
 
 # The only hook runs when the generated program releases its region. The CoD
@@ -208,19 +208,6 @@ extern "C" void cod_lang_region_free(void *owner) {
 }
 '''
 
-
-def checked(command, root, allowed_warnings=(), diagnostics=None):
-    started = time.perf_counter()
-    result = subprocess.run([str(x) for x in command], cwd=root, capture_output=True, text=True, timeout=120)
-    seconds = time.perf_counter() - started
-    unexpected = any(not ('warning:' in line or ': note:' in line) or
-                     not any(line.endswith(warning) for warning in allowed_warnings)
-                     for line in result.stderr.splitlines())
-    if result.returncode or unexpected:
-        raise RuntimeError(f"{command}\nexit={result.returncode}\n{result.stdout}\n{result.stderr}")
-    if diagnostics is not None and result.stderr:
-        diagnostics.append(result.stderr)
-    return result.stdout, seconds
 
 
 def run_case(root, toolchain, entry, scratch, harness, capture_lifetimes=False, extra_wrappers="", frontend_warnings=()):

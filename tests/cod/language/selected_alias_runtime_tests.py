@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Selected aliases preserve original image ownership and failure-safe replacement."""
 from pathlib import Path
+from native_test_support import run_native
 import lexical_query_runtime_tests as fixture
-runner=fixture.runner
-runner.SOURCE+='''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 proc selected_aliases(flag:bool)->void{
  func f=wrap(base);func g=wrap(other);func h=wrap(base);
  ptr a=f,b=g,c=h;
@@ -20,10 +21,9 @@ proc selected_aliases(flag:bool)->void{
  v<-h;observe(saved(1u64));observe(v(1u64));
 }
 selected_aliases(true);selected_aliases(false);observe(9000u64);
-'''
-runner.HARNESS=runner.HARNESS.replace('checkpoints==15','checkpoints==16').replace('copy_failures==9 && record_failures','copy_failures==11 && record_failures')
-runner.EXPECTED_VALUES+=['12','2','12','12','2','2','2','2','2','2']
-runner.EXPECTED_SHADOWS = []
-runner.EXTRA_SOURCES+=[Path(fixture.__file__),Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('checkpoints==15','checkpoints==16').replace('copy_failures==9 && record_failures','copy_failures==11 && record_failures'))
+FIXTURE = FIXTURE.updated(expected_values=list(FIXTURE.expected_values) + ['12','2','12','12','2','2','2','2','2','2'])
+FIXTURE = FIXTURE.updated(expected_shadows=[])
 if __name__=='__main__':
- raise SystemExit(runner.main())
+ raise SystemExit(run_native(FIXTURE))

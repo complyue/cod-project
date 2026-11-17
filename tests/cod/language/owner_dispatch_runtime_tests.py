@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Owner-selected native calls preserve images, preparation failures and reuse."""
 from pathlib import Path
+from native_test_support import run_native
 import access_dispatch_runtime_tests as fixture
-runner=fixture.runner
-runner.SOURCE += '''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 proc visit_owner(ref f:func(u64)->const u64 in O,ref g:func(u64)->const u64 in O)->void where {owner O}{f<-wrap(g);}
 proc visit_owner(ref f:func(u64)->const u64 in O,ref g:func(u64)->const u64 in P)->void where {owner O,owner P}{observe(f(0u64));}
 proc copy_owner(ref f:func(u64)->const u64 in O,ref g:func(u64)->const u64 in O)->void where {owner O}{func c=f;observe(c(0u64));}
@@ -30,10 +31,9 @@ func walk_owner(select:F,ref f:func(u64)->const u64 in O,n:u64)->const u64 where
  observe(9011u64);observe(total);
 }};
 observe(9000u64);
-'''
-runner.HARNESS=runner.HARNESS.replace('checkpoints==9','checkpoints==10').replace('creation_failures==3','creation_failures==4').replace('copy_failures==8','copy_failures==9').replace('record_failures==5','record_failures==6')
-runner.EXPECTED_VALUES += ['1','1','11','11','1','101','200','2000000']
-runner.EXPECTED_SHADOWS = ['other']
-runner.EXTRA_SOURCES += [Path(fixture.__file__),Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('checkpoints==9','checkpoints==10').replace('creation_failures==3','creation_failures==4').replace('copy_failures==8','copy_failures==9').replace('record_failures==5','record_failures==6'))
+FIXTURE = FIXTURE.updated(expected_values=list(FIXTURE.expected_values) + ['1','1','11','11','1','101','200','2000000'])
+FIXTURE = FIXTURE.updated(expected_shadows=['other'])
 if __name__=='__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Faulted registration and RHS evaluation preserve current reference targets."""
 from pathlib import Path
+from native_test_support import run_native
 import deferred_initialization_runtime_tests as initialization
 
-runner = initialization.runner
-runner.SOURCE = '''
+FIXTURE = initialization.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source='''
 using symbol "std:io" @print;
 using "std:exceptions" OutOfMemoryError;
 using "std:exceptions" MissingReturnError;
@@ -36,12 +37,11 @@ proc queued(n:u64)->void {
 normal();
 try{failed_registration();}catch(e:const OutOfMemoryError){observe(1u64);};
 failed_rhs();destination();queued(3u64);
-'''
-runner.HARNESS = runner.HARNESS.replace('created==6 && peak==2 && failures==2',
-    'created==8 && peak==3 && failures==1')
-runner.EXPECTED_VALUES = ['11','32','1','42','42','41','42','99','52','62','62','62']
-runner.EXPECTED_SHADOWS = []
-runner.EXTRA_SOURCES = [Path(initialization.__file__), Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('created==6 && peak==2 && failures==2',
+    'created==8 && peak==3 && failures==1'))
+FIXTURE = FIXTURE.updated(expected_values=['11','32','1','42','42','41','42','99','52','62','62','62'])
+FIXTURE = FIXTURE.updated(expected_shadows=[])
 
 if __name__ == '__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Nullable result provenance retains image and cleanup ownership."""
 from pathlib import Path
+from native_test_support import run_native
 import callable_flow_runtime_tests as fixture
-runner=fixture.runner
-runner.SOURCE += '''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 func nullable_holder(ptr f:F in O)->ptr F in O where {F,owner O}{return f;}
 func walk_nullable(f:F,ptr value:T in O,n:u64)->ptr T in O where {F,T,owner O}{
  if(n==0u64){return f(value);}else{return walk_nullable(f,value,n-1u64);};
@@ -29,10 +30,9 @@ proc null_recovery(ptr x:u64 in O,ptr y:u64 in O)->ptr u64 in O where {owner O}{
  val x<-18u64,y<-19u64;observe(null_recovery(x,y));
 }};
 observe(9000u64);
-'''
-runner.HARNESS=runner.HARNESS.replace('checkpoints==7','checkpoints==8').replace('copy_failures==6','copy_failures==7').replace('record_failures==3','record_failures==4')
-runner.EXPECTED_VALUES += ['3','4','14','15','50105000','17','19']
-runner.EXPECTED_SHADOWS = ['other']
-runner.EXTRA_SOURCES += [Path(fixture.__file__),Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('checkpoints==7','checkpoints==8').replace('copy_failures==6','copy_failures==7').replace('record_failures==3','record_failures==4'))
+FIXTURE = FIXTURE.updated(expected_values=list(FIXTURE.expected_values) + ['3','4','14','15','50105000','17','19'])
+FIXTURE = FIXTURE.updated(expected_shadows=['other'])
 if __name__=='__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

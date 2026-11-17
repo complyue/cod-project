@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Measure immutable catch snapshots and inject failure in nested registration."""
 from pathlib import Path
-import exception_value_runtime_tests as runner
+from native_test_support import run_native
+import exception_value_runtime_tests as fixture
 
-runner.SOURCE = '''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+
+FIXTURE = FIXTURE.updated(source='''
 using symbol "std:io" @print;
 using "std:exceptions" MissingReturnError;
 using "std:exceptions" OutOfMemoryError;
@@ -32,14 +35,14 @@ proc failing()->void {
   };
 }
 try{failing();}catch(e:const OutOfMemoryError){behave @print(e.cause_count);behave @print(9002u64);};
-'''
-runner.WRAPPERS = '''
+''')
+FIXTURE = FIXTURE.updated(wrappers='''
 #define cod_lang_defer_allocate cod_record_allocate
 #define cod_lang_defer_free cod_record_free
 #define cod_lang_exception_finish cod_finish
 #define cod_lang_print_u64 cod_trace
-'''
-runner.HARNESS = r'''
+''')
+FIXTURE = FIXTURE.updated(harness=r'''
 #undef cod_lang_defer_allocate
 #undef cod_lang_defer_free
 #undef cod_lang_exception_finish
@@ -70,10 +73,9 @@ extern "C" void cod_lang_exception_finish() noexcept {
   std::printf("{\"records\":%llu,\"released\":%llu,\"peak\":%llu,\"failures\":%llu,\"zero_capture_bytes\":16,\"one_capture_bytes\":72,\"two_capture_bytes\":128}\n",
       (unsigned long long)created,(unsigned long long)released,(unsigned long long)peak,(unsigned long long)failures);
 }
-'''
-runner.EXPECTED_VALUES = ['4', '3', '2', '1', '10', '5', '5', '0', '1', '1', '0']
-runner.EXPECTED_SHADOWS = ['e']
-runner.EXTRA_SOURCES = [Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(expected_values=['4', '3', '2', '1', '10', '5', '5', '0', '1', '1', '0'])
+FIXTURE = FIXTURE.updated(expected_shadows=['e'])
 
 if __name__ == "__main__":
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

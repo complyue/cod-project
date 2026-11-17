@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Loop-selected initialized targets survive cleanup and injected registration failure."""
 from pathlib import Path
+from native_test_support import run_native
 import call_initialization_runtime_tests as fixture
 
-runner=fixture.runner
-runner.SOURCE+='''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 proc verify(fail:bool)->void{
  val first<-87u64,next<-make local u64;
  ptr selected=first;
@@ -24,10 +25,9 @@ proc verify(fail:bool)->void{
 }
 verify(false);
 verify(true);
-'''
-runner.EXPECTED_VALUES+=['87','88','88','88']*2
-assert 'created==5 && peak==1 && failures==1' in runner.HARNESS
-runner.HARNESS=runner.HARNESS.replace('created==5 && peak==1 && failures==1','created==8 && peak==1 && failures==4')
-runner.EXTRA_SOURCES+=[Path(fixture.__file__),Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(expected_values=list(FIXTURE.expected_values) + ['87','88','88','88']*2)
+assert 'created==5 && peak==1 && failures==1' in FIXTURE.harness
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('created==5 && peak==1 && failures==1','created==8 && peak==1 && failures==4'))
 if __name__=='__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

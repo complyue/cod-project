@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Common exception borrows retain payloads and cleanup under native failures."""
 from pathlib import Path
+from native_test_support import run_native
 import captured_callable_runtime_tests as fixture
 
-runner = fixture.runner
-runner.SOURCE += '''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 using "std:exceptions" Exception;
 using "std:exceptions" NullPointerException;
 func missing_value()->const MissingReturnError{try{missing();}catch(caught:const MissingReturnError){return caught;};}
@@ -39,9 +40,8 @@ proc show(snapshot:Exception,ref live:const Exception in O)->void where {owner O
  observe(captured(chain));observe(chain.cause_count);observe(cause_at(chain,0u64).category);
 }};
 observe(9000u64);
-'''
-runner.HARNESS = runner.HARNESS.replace('checkpoints==5','checkpoints==6').replace('creation_failures==1','creation_failures==2').replace('copy_failures==3','copy_failures==4').replace('record_failures==1','record_failures==2')
-runner.EXPECTED_VALUES += ['50000','4','4','4','5','5','4','4','5','1','4']
-runner.EXTRA_SOURCES += [Path(fixture.__file__),Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('checkpoints==5','checkpoints==6').replace('creation_failures==1','creation_failures==2').replace('copy_failures==3','copy_failures==4').replace('record_failures==1','record_failures==2'))
+FIXTURE = FIXTURE.updated(expected_values=list(FIXTURE.expected_values) + ['50000','4','4','4','5','5','4','4','5','1','4'])
 if __name__ == '__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

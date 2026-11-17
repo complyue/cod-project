@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Reference-join proof transport preserves exact native resource release."""
 from pathlib import Path
+from native_test_support import run_native
 import returned_view_runtime_tests as fixture
 
-runner = fixture.runner
-runner.SOURCE = runner.SOURCE.replace('return x;', 'return if(x is y){x}else{x};', 2)
-runner.SOURCE += '''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source=FIXTURE.source.replace('return x;', 'return if(x is y){x}else{x};', 2))
+FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 func choose(ptr left:const u64 in O,ptr right:const u64 in O,ref fallback:const u64 in O)->ptr const u64 in O where {owner O}{
  return if(left is right){null in O}else{fallback};
 }
@@ -19,8 +20,7 @@ proc verify_choice(first:bool,second:bool)->void{
 }
 verify_choice(false,false);verify_choice(false,true);
 verify_choice(true,false);verify_choice(true,true);
-'''
-runner.EXPECTED_VALUES += ['85', '86', '86', '85']
-runner.EXTRA_SOURCES += [Path(fixture.__file__), Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(expected_values=list(FIXTURE.expected_values) + ['85', '86', '86', '85'])
 if __name__ == '__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

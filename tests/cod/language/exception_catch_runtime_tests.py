@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Nested deferred catches retain distinct saved and arriving exception values."""
 from pathlib import Path
+from native_test_support import run_native
 import exception_return_runtime_tests as fixture
 
-runner = fixture.runner
-runner.SOURCE += '''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 func caught_copy(input:Exception)->const Exception{try{throw input;}catch(e){return e;};}
 func catch_saved(input:const Exception,replacement:const Exception)->const Exception throws Exception{
  defer catch(last){return last;};
@@ -32,8 +33,7 @@ func catch_nested_call(input:const Exception,replacement:const Exception)->const
  payload<-missing_value();
  try{throw catch_nested_call(payload,replacement);}catch(e:const Exception){observe(e.category);};
 }};
-'''
-runner.EXPECTED_VALUES += ['5','5','4','5','4','5']
-runner.EXTRA_SOURCES += [Path(fixture.__file__),Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(expected_values=list(FIXTURE.expected_values) + ['5','5','4','5','4','5'])
 if __name__ == '__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Prepared reference intrinsics preserve image ownership and registration cleanup."""
 from pathlib import Path
+from native_test_support import run_native
 import captured_callable_runtime_tests as fixture
 
-runner = fixture.runner
-runner.SOURCE += '''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 {{
  func f=wrap(base);func g=wrap(other);ptr p=f,q=g;
  observe(9010u64);
@@ -17,11 +18,10 @@ runner.SOURCE += '''
  {{defer (is)(uninitialized,null);defer (is)(p,null);defer (is)(q,null);}};
 }};
 observe(9000u64);
-'''
-runner.HARNESS = runner.HARNESS.replace('checkpoints==5', 'checkpoints==6').replace('record_failures==1', 'record_failures==2')
-runner.EXPECTED_VALUES += ['12', '2', '13', '3']
-runner.EXPECTED_SHADOWS = []
-runner.EXTRA_SOURCES += [Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('checkpoints==5', 'checkpoints==6').replace('record_failures==1', 'record_failures==2'))
+FIXTURE = FIXTURE.updated(expected_values=list(FIXTURE.expected_values) + ['12', '2', '13', '3'])
+FIXTURE = FIXTURE.updated(expected_shadows=[])
 
 if __name__ == '__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Contextual preparation and lexical recursion retain native image ownership."""
 from pathlib import Path
+from native_test_support import run_native
 import owner_dispatch_runtime_tests as fixture
-runner=fixture.runner
-runner.SOURCE += '''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 func identity_prepared(x:T)->const T where T{return x;}
 func apply_prepared(f:func(T)->const T,x:T)->const T where T{return f(x);}
 func missing_prepared()->const (func(u64)->const u64){}
@@ -28,10 +29,9 @@ proc show_prepared(f:func(T)->const T,x:T)->void where T{observe(f(x)(1u64));}
  defer recur(g,2u64);defer show_prepared(identity_prepared,g);g<-wrap(other);observe(g(1u64));
 }};
 observe(9000u64);
-'''
-runner.HARNESS=runner.HARNESS.replace('checkpoints==10','checkpoints==11').replace('creation_failures==4','creation_failures==5').replace('copy_failures==9','copy_failures==10').replace('record_failures==6','record_failures==7')
-runner.EXPECTED_VALUES += ['3','3','3','320','30000','12','3']
-runner.EXPECTED_SHADOWS = ['other']
-runner.EXTRA_SOURCES += [Path(fixture.__file__),Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('checkpoints==10','checkpoints==11').replace('creation_failures==4','creation_failures==5').replace('copy_failures==9','copy_failures==10').replace('record_failures==6','record_failures==7'))
+FIXTURE = FIXTURE.updated(expected_values=list(FIXTURE.expected_values) + ['3','3','3','320','30000','12','3'])
+FIXTURE = FIXTURE.updated(expected_shadows=['other'])
 if __name__=='__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

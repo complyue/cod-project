@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Context-selected copies and borrows preserve native ownership and cleanup."""
 from pathlib import Path
+from native_test_support import run_native
 import captured_callable_runtime_tests as fixture
 
-runner = fixture.runner
-runner.SOURCE += '''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 func choose_mode(tag:bool,ref f:func(u64)->const u64 in O,x:u64)->const u64 where {owner O}{return f(x);}
 func choose_mode(tag:i64,f:func(u64)->const u64,x:u64)->const u64{return f(x);}
 func inspect(tag:T,ref f:func(u64)->const u64 in O,x:u64)->const u64 where {T,owner O}{return choose_mode(tag,f,x);}
@@ -28,10 +29,9 @@ observe(9000u64);
   try{later(false,f);}catch(e:const OutOfMemoryError){observe(9051u64);};
 }};
 observe(9000u64);
-'''
-runner.HARNESS = runner.HARNESS.replace('checkpoints==5', 'checkpoints==7').replace('copy_failures==3', 'copy_failures==4').replace('record_failures==1', 'record_failures==2')
-runner.EXPECTED_VALUES += ['21', '22', '9100', '2', '50005000', '34', '24']
-runner.EXPECTED_SHADOWS = []
-runner.EXTRA_SOURCES += [Path(fixture.__file__), Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('checkpoints==5', 'checkpoints==7').replace('copy_failures==3', 'copy_failures==4').replace('record_failures==1', 'record_failures==2'))
+FIXTURE = FIXTURE.updated(expected_values=list(FIXTURE.expected_values) + ['21', '22', '9100', '2', '50005000', '34', '24'])
+FIXTURE = FIXTURE.updated(expected_shadows=[])
 if __name__ == '__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

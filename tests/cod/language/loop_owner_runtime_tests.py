@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Loop result/query evidence preserves complete images and bounded invocation."""
 from pathlib import Path
+from native_test_support import run_native
 import scoped_owner_runtime_tests as fixture
 
-runner = fixture.runner
-runner.SOURCE += '''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 func loop_tag(ref a:const u64 in O,ref b:const u64 in O)->bool where {owner O}{return true;}
 func loop_tag(ref a:const u64 in O,ref b:const u64 in P)->u64 where {owner O,owner P}{return 0u64;}
 func loop_code(value:bool)->u64{return 101u64;}
@@ -26,10 +27,9 @@ func loop_factory(){
  observe(9011u64);observe(total);
 }};
 observe(9000u64);
-'''
-runner.HARNESS = runner.HARNESS.replace('checkpoints==11', 'checkpoints==12')
-runner.EXPECTED_VALUES += ['101', '202', '2020000']
-runner.EXTRA_SOURCES += [Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('checkpoints==11', 'checkpoints==12'))
+FIXTURE = FIXTURE.updated(expected_values=list(FIXTURE.expected_values) + ['101', '202', '2020000'])
 
 if __name__ == '__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

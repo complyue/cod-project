@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Native and IR checks for the supported scalar source foundation."""
 import datetime
-from collections import Counter
 import hashlib
 import json
 import os
@@ -11,12 +10,7 @@ import subprocess
 import sys
 import tempfile
 
-DIRECTORY = Path(__file__).resolve().parent
-ROOT = DIRECTORY.parents[2]
-MODE = os.environ.get("COD_TEST_TOOLCHAIN", "build")
-if MODE not in ("build", "built"):
-    raise SystemExit("COD_TEST_TOOLCHAIN must be build or built")
-COD = ROOT / MODE / "bin" / ("cod.exe" if os.name == "nt" else "cod")
+from language_test_support import DIRECTORY, ROOT, MODE, COD, shadow_diagnostics, diagnostic_matches
 PRELUDE = 'using symbol "std:io" @print;\n'
 OBSERVER = PRELUDE + 'proc observe(x:u64)->void { behave @print(x); }\n'
 CASES = {
@@ -48,22 +42,6 @@ CASE_ARGUMENTS = {"missing_return_error": ["-Werror=missing-return"]}
 CASE_SHADOWS = {}
 CASE_LOCATIONS = {}
 EXTRA_SOURCES = []
-
-
-def shadow_diagnostics(stderr, expected):
-    pattern = r"^.+:\d+:\d+: warning: declaration shadows outer binding '([^']+)' \[-Wshadow\]\n"
-    names = re.findall(pattern, stderr, re.M)
-    return Counter(names) == Counter(expected), re.sub(pattern, '', stderr, flags=re.M)
-
-
-def diagnostic_matches(stderr, expected, path, location=None):
-    messages = re.sub(r'^.+:\d+:\d+: ', '', stderr, flags=re.M)
-    if expected not in messages:
-        return False
-    if location is None:
-        return True
-    line, column = location
-    return re.search(rf'^{re.escape(str(path))}:{line}:{column}: ', stderr, re.M) is not None
 
 
 def main():
@@ -147,7 +125,7 @@ def main():
     print(f"Scalar foundation: {count}/{len(results)} passed")
     if report := os.environ.get("COD_LANGUAGE_REPORT"):
         sources = [ROOT / "cod/main.cc", *sorted((ROOT / "cod").glob("lang_*.hh"))]
-        sources += [Path(__file__), *EXTRA_SOURCES, *sorted((DIRECTORY / "foundation").glob("*.cod"))]
+        sources += [Path(__file__), Path(__file__).with_name("language_test_support.py"), *EXTRA_SOURCES, *sorted((DIRECTORY / "foundation").glob("*.cod"))]
         evidence = {"recorded_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(), "toolchain": MODE,
                     "passed": count, "total": len(results), "results": results,
                     "executable_sha256": hashlib.sha256(COD.read_bytes()).hexdigest(),

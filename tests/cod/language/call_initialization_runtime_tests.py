@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Uninitialized borrowed inputs acquire guarantees only through executed writes."""
 from pathlib import Path
+from native_test_support import run_native
 import deferred_initialization_runtime_tests as initialization
 
-runner=initialization.runner
-runner.SOURCE='''
+FIXTURE = initialization.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source='''
 using symbol "std:io" @print;
 using "std:exceptions" NullPointerException;
 using "std:exceptions" OutOfMemoryError;
@@ -31,17 +32,16 @@ val c<-make local u64;
 try{alias(c,c);observe(c);}catch(e:const NullPointerException){observe(99u64);};
 val d<-make local u64;
 try{{defer read(d);d<-76u64;{}}}catch(e:const NullPointerException){observe(99u64);};
-'''
-runner.HARNESS=runner.HARNESS.replace('static bool deny_record=false;',
-    'static bool deny_record=false;static std::uint64_t borrows=0,setters=0;')
-runner.HARNESS=runner.HARNESS.replace('assert(bytes==16);',
-    'assert(bytes==16 || bytes==72);if(bytes==72 && !deny_record)++borrows;')
-runner.HARNESS=runner.HARNESS.replace('if(value==9001)',
-    'if(value==9003){++setters;return;}if(value==9001)')
-runner.HARNESS=runner.HARNESS.replace('created==6 && peak==2 && failures==2',
-    'created==5 && peak==1 && failures==1 && borrows==2 && setters==2')
-runner.EXPECTED_VALUES=['71','71','1','73','74','75','75','76']
-runner.EXPECTED_SHADOWS = []
-runner.EXTRA_SOURCES=[Path(initialization.__file__),Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('static bool deny_record=false;',
+    'static bool deny_record=false;static std::uint64_t borrows=0,setters=0;'))
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('assert(bytes==16);',
+    'assert(bytes==16 || bytes==72);if(bytes==72 && !deny_record)++borrows;'))
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('if(value==9001)',
+    'if(value==9003){++setters;return;}if(value==9001)'))
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('created==6 && peak==2 && failures==2',
+    'created==5 && peak==1 && failures==1 && borrows==2 && setters==2'))
+FIXTURE = FIXTURE.updated(expected_values=['71','71','1','73','74','75','75','76'])
+FIXTURE = FIXTURE.updated(expected_shadows=[])
 
-if __name__=='__main__':raise SystemExit(runner.main())
+if __name__=='__main__':raise SystemExit(run_native(FIXTURE))

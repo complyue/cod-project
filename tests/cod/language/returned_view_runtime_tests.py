@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Returned addresses survive failed registrations, recovery and replacement."""
 from pathlib import Path
+from native_test_support import run_native
 import deferred_recovery_runtime_tests as recovery
 
-runner = recovery.runner
-runner.SOURCE = '''
+FIXTURE = recovery.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source='''
 using symbol "std:io" @print;
 using "std:exceptions" OutOfMemoryError;
 using "std:exceptions" MissingReturnError;
@@ -32,12 +33,11 @@ try{observe(retained(a,b));observe(replacement(a,c));}catch(e:const NullPointerE
 try{absent(a);{}}catch(e:const MissingReturnError){observe(4u64);};
 val d<-make local u64,e<-make local u64;ptr p=if(true){d}else{e};
 try{observe(initialized(p));}catch(e:const NullPointerException){observe(99u64);};
-'''
-runner.HARNESS = runner.HARNESS.replace('created==4 && peak==2 && failures==3',
-    'created==6 && peak==2 && failures==3')
-runner.EXPECTED_VALUES = ['1', '81', '2', '82', '3', '4', '84']
-runner.EXPECTED_SHADOWS = ['e', 'e', 'e', 'e']
-runner.EXTRA_SOURCES = [Path(recovery.__file__), Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('created==4 && peak==2 && failures==3',
+    'created==6 && peak==2 && failures==3'))
+FIXTURE = FIXTURE.updated(expected_values=['1', '81', '2', '82', '3', '4', '84'])
+FIXTURE = FIXTURE.updated(expected_shadows=['e', 'e', 'e', 'e'])
 
 if __name__ == '__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

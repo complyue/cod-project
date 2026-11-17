@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Generic callback completion owns prepared images through cleanup failures."""
 from pathlib import Path
-import exception_value_runtime_tests as runner
+from native_test_support import run_native
+import exception_value_runtime_tests as fixture
 
-runner.SOURCE = '''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+
+FIXTURE = FIXTURE.updated(source='''
 using symbol "std:io" @print;
 using "std:exceptions" OutOfMemoryError;
 using "std:exceptions" MissingReturnError;
@@ -24,8 +27,8 @@ observe(recover(wrap(number)));recover(empty);
   observe(f());
 }};
 observe(9002u64);
-'''
-runner.WRAPPERS = '''
+''')
+FIXTURE = FIXTURE.updated(wrappers='''
 #define cod_lang_callable_create cod_image_create
 #define cod_lang_callable_copy cod_image_copy
 #define cod_lang_callable_free cod_image_free
@@ -33,8 +36,8 @@ runner.WRAPPERS = '''
 #define cod_lang_defer_free cod_record_free
 #define cod_lang_exception_finish cod_finish
 #define cod_lang_print_u64 cod_trace
-'''
-runner.HARNESS = r'''
+''')
+FIXTURE = FIXTURE.updated(harness=r'''
 #undef cod_lang_callable_create
 #undef cod_lang_callable_copy
 #undef cod_lang_callable_free
@@ -75,9 +78,8 @@ extern "C" void cod_lang_exception_finish() noexcept{
       (unsigned long long)created,(unsigned long long)copied,(unsigned long long)released,
       (unsigned long long)registered,(unsigned long long)freed,(unsigned long long)denied);
 }
-'''
-runner.EXPECTED_VALUES = ['1','1','2','41','41','3','41']
-runner.EXPECTED_SHADOWS = []
-runner.EXTRA_SOURCES = [Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(expected_values=['1','1','2','41','41','3','41'])
+FIXTURE = FIXTURE.updated(expected_shadows=[])
 if __name__ == '__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Caught-owner proofs preserve delayed recovery, images and query-only values."""
 from pathlib import Path
+from native_test_support import run_native
 import loop_owner_runtime_tests as fixture
 
-runner = fixture.runner
-runner.SOURCE += '''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 func handler_tag(ref a:const A in O,ref b:const B in O)->bool where {A,B,owner O}{return true;}
 func handler_tag(ref a:const A in O,ref b:const B in P)->u64 where {A,B,owner O,owner P}{return 0u64;}
 func handler_code(value:bool)->u64{return 101u64;}
@@ -33,10 +34,9 @@ func handler_recover(input:func(u64)->const u64){
  try{handler_recover(base);{}}catch(caught:const MissingReturnError){observe(303u64);};
 }};
 observe(9000u64);
-'''
-runner.HARNESS = runner.HARNESS.replace('checkpoints==12', 'checkpoints==13').replace('creation_failures==4', 'creation_failures==5')
-runner.EXPECTED_VALUES += ['101', '202', '2020000', '101', '303']
-runner.EXTRA_SOURCES += [Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('checkpoints==12', 'checkpoints==13').replace('creation_failures==4', 'creation_failures==5'))
+FIXTURE = FIXTURE.updated(expected_values=list(FIXTURE.expected_values) + ['101', '202', '2020000', '101', '303'])
 
 if __name__ == '__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

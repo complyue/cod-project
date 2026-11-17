@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Callable-flow proofs preserve nested images, native recursion and cleanup."""
 from pathlib import Path
+from native_test_support import run_native
 import borrowed_callable_runtime_tests as fixture
-runner=fixture.runner
-runner.SOURCE += '''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 using "std:exceptions" NullPointerException;
 proc set_target(ptr x:u64 in O)->void throws NullPointerException where {owner O}{x<-7u64;}
 proc ignore_target(ptr x:u64 in O)->void throws NullPointerException where {owner O}{}
@@ -28,10 +29,9 @@ proc walk_writer(f:F,ptr x:u64 in O,n:u64)->void throws NullPointerException whe
  observe(9011u64);
 }};
 observe(9000u64);
-'''
-runner.HARNESS=runner.HARNESS.replace('checkpoints==6','checkpoints==7').replace('creation_failures==1','creation_failures==2').replace('copy_failures==5','copy_failures==6').replace('record_failures==2','record_failures==3')
-runner.EXPECTED_VALUES += ['7','7','7']
-runner.EXPECTED_SHADOWS = ['other']
-runner.EXTRA_SOURCES += [Path(fixture.__file__),Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('checkpoints==6','checkpoints==7').replace('creation_failures==1','creation_failures==2').replace('copy_failures==5','copy_failures==6').replace('record_failures==2','record_failures==3'))
+FIXTURE = FIXTURE.updated(expected_values=list(FIXTURE.expected_values) + ['7','7','7'])
+FIXTURE = FIXTURE.updated(expected_shadows=['other'])
 if __name__=='__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

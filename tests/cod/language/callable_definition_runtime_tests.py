@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Definition construction and direct capture preparation balance native resources."""
 from pathlib import Path
+from native_test_support import run_native
 import captured_callable_runtime_tests as fixture
 
-runner = fixture.runner
-runner.SOURCE += '''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 {{
  func source=wrap(base);
  func read[source](x:u64)->u64{return source(x);};
@@ -51,20 +52,19 @@ proc fresh()->u64{
  return perform @recursive(1u64);
 }
 observe(fresh());observe(9000u64);
-'''
-runner.HARNESS = runner.HARNESS.replace('checkpoints==5 && creation_failures==1 && copy_failures==3 && record_failures==1',
-                                      'checkpoints==8 && creation_failures==3 && copy_failures==4 && record_failures==2')
-runner.HARNESS = runner.HARNESS.replace('static bool deny_create=false',
-    'static bool partial_create_failure=false; static unsigned remaining_creations=0;\nstatic bool deny_create=false')
-runner.HARNESS = runner.HARNESS.replace('if(deny_create){++creation_failures;status[0]=1;return nullptr;}',
-    'if(deny_create || (partial_create_failure && remaining_creations==0)){++creation_failures;status[0]=1;return nullptr;} if(partial_create_failure)--remaining_creations;')
-runner.HARNESS = runner.HARNESS.replace('if(value==9020)',
+''')
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('checkpoints==5 && creation_failures==1 && copy_failures==3 && record_failures==1',
+                                      'checkpoints==8 && creation_failures==3 && copy_failures==4 && record_failures==2'))
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('static bool deny_create=false',
+    'static bool partial_create_failure=false; static unsigned remaining_creations=0;\nstatic bool deny_create=false'))
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('if(deny_create){++creation_failures;status[0]=1;return nullptr;}',
+    'if(deny_create || (partial_create_failure && remaining_creations==0)){++creation_failures;status[0]=1;return nullptr;} if(partial_create_failure)--remaining_creations;'))
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('if(value==9020)',
     'if(value==9022){partial_create_failure=true;remaining_creations=1;live_baseline=images.size();return;} '
     'if(value==9023){assert(partial_create_failure && remaining_creations==0 && images.size()==live_baseline);partial_create_failure=false;return;} '
-    'if(value==9020)')
-runner.HARNESS = runner.HARNESS.replace('&& !deny_create &&', '&& !partial_create_failure && !deny_create &&')
-runner.EXPECTED_VALUES += ['8','2','12','14','15','6','50005000','7','20']
-runner.EXTRA_SOURCES += [Path(fixture.__file__), Path(__file__)]
+    'if(value==9020)'))
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('&& !deny_create &&', '&& !partial_create_failure && !deny_create &&'))
+FIXTURE = FIXTURE.updated(expected_values=list(FIXTURE.expected_values) + ['8','2','12','14','15','6','50005000','7','20'])
 
 if __name__ == '__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

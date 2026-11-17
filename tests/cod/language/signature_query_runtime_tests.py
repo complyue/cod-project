@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Callable signature queries allocate no images and require no executable bodies."""
 from pathlib import Path
+from native_test_support import run_native
 import declaration_query_runtime_tests as fixture
 
-runner = fixture.runner
-runner.SOURCE += '''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 func signature_only(input:T)->const T where T;
 proc procedure_signature_only(input:T)->const T where T;
 proc signature_queries(callback:func(u64)->const u64)->void{
@@ -18,9 +19,8 @@ proc signature_queries(callback:func(u64)->const u64)->void{
  observe(callback(1u64));
 }
 signature_queries(wrap(base));observe(9000u64);
-'''
-runner.HARNESS = runner.HARNESS.replace('checkpoints==14', 'checkpoints==15')
-runner.EXPECTED_VALUES += ['36', '37', '2']
-runner.EXTRA_SOURCES += [Path(fixture.__file__), Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('checkpoints==14', 'checkpoints==15'))
+FIXTURE = FIXTURE.updated(expected_values=list(FIXTURE.expected_values) + ['36', '37', '2'])
 if __name__ == '__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

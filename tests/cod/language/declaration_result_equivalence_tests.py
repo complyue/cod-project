@@ -81,7 +81,7 @@ def main():
     print(f'Declaration equivalence: {count}/{len(results)} passed')
     if report := os.environ.get('COD_LANGUAGE_REPORT'):
         sources = [ROOT / 'cod/main.cc', *sorted((ROOT / 'cod').glob('lang_*.hh'))]
-        sources += [Path(__file__), Path(staging.__file__), Path(declared.__file__), Path(__file__).with_name('foundation_tests.py')]
+        sources += [Path(__file__).with_name("language_test_support.py"), Path(__file__), Path(staging.__file__), Path(declared.__file__), Path(__file__).with_name('foundation_tests.py')]
         sources += EXTRA_SOURCES
         digest = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
         Path(report).write_text(json.dumps(dict(recorded_utc=datetime.datetime.now(datetime.timezone.utc).isoformat(),

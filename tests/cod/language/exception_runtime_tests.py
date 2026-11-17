@@ -9,7 +9,8 @@ from pathlib import Path
 import subprocess
 import tempfile
 
-from regional_runtime_tests import checked, run_case
+from language_test_support import checked
+from regional_runtime_tests import run_case
 
 
 HARNESS = r'''

@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Borrowed returns survive prepared-registration failures with exact release."""
 from pathlib import Path
+from native_test_support import run_native
 import deferred_initialization_runtime_tests as fixture
 
-runner=fixture.runner
-runner.SOURCE='''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source='''
 using symbol "std:io" @print;
 using "std:exceptions" OutOfMemoryError;
 using "std:exceptions" NullPointerException;
@@ -29,11 +30,10 @@ try{
  ptr second=select(b,c,true);
  observe(second);
 }catch(e:const NullPointerException){observe(99u64);};
-'''
-runner.HARNESS=runner.HARNESS.replace('assert(bytes==16);','assert(bytes>=16);')
-runner.HARNESS=runner.HARNESS.replace('created==6 && peak==2 && failures==2','created==3 && peak==1 && failures==3')
-runner.EXPECTED_VALUES=['87','88']
-runner.EXPECTED_SHADOWS=[]
-runner.EXTRA_SOURCES=[Path(fixture.__file__),Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('assert(bytes==16);','assert(bytes>=16);'))
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('created==6 && peak==2 && failures==2','created==3 && peak==1 && failures==3'))
+FIXTURE = FIXTURE.updated(expected_values=['87','88'])
+FIXTURE = FIXTURE.updated(expected_shadows=[])
 if __name__=='__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

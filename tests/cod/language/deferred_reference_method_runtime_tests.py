@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Saved scalar slots preserve native cleanup on registration and entry failures."""
 from pathlib import Path
+from native_test_support import run_native
 import captured_callable_runtime_tests as fixture
-runner = fixture.runner
-runner.SOURCE += '''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 using "std:exceptions" NullPointerException;
 func (<=>)(ref a:u64 in O,ref b:u64 in O)->void where {owner O}{intrinsic (<=>)(a,b);}
 proc (<=>)(a:i64 in O,b:i64 in O)->void where {owner O}{behave @print(a);behave @print(b);}
@@ -27,9 +28,8 @@ proc (<=>)(a:i64 in O,b:i64 in O)->void where {owner O}{behave @print(a);behave 
  observe(p);observe(q);
 }};
 observe(9000u64);
-'''
-runner.HARNESS = runner.HARNESS.replace('checkpoints==5','checkpoints==6').replace('record_failures==1','record_failures==2')
-runner.EXPECTED_VALUES += ['9','1','9','1','1','9','8','1','9']
-runner.EXTRA_SOURCES += [Path(fixture.__file__), Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('checkpoints==5','checkpoints==6').replace('record_failures==1','record_failures==2'))
+FIXTURE = FIXTURE.updated(expected_values=list(FIXTURE.expected_values) + ['9','1','9','1','1','9','8','1','9'])
 if __name__ == '__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

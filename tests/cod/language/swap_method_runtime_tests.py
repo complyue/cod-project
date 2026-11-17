@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Destination dispatch retains complete values and exact failure cleanup."""
 from pathlib import Path
+from native_test_support import run_native
 import captured_callable_runtime_tests as fixture
 
-runner = fixture.runner
-runner.SOURCE += '''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 proc (<->)(x:bool in O,y:bool in P)->void where {owner O,owner P}{
  intrinsic (<->)(x,y);observe(81u64);
 }
@@ -35,19 +36,18 @@ proc show_bool(x:bool)->void{observe(if(x){1u64}else{0u64});}
  observe(9010u64);dispatch(a,b,2u64);observe(9011u64);show_bool(a);
 }};
 observe(9000u64);
-'''
-runner.HARNESS = runner.HARNESS.replace('checkpoints==5', 'checkpoints==6').replace(
-    'copy_failures==3', 'copy_failures==6').replace('record_failures==1', 'record_failures==2')
-runner.HARNESS = runner.HARNESS.replace('static void track', 'static std::uint64_t copy_budget=0;\nstatic void track').replace(
+''')
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('checkpoints==5', 'checkpoints==6').replace(
+    'copy_failures==3', 'copy_failures==6').replace('record_failures==1', 'record_failures==2'))
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('static void track', 'static std::uint64_t copy_budget=0;\nstatic void track').replace(
     'if(deny_copy){', 'if(deny_copy || (copy_budget && !--copy_budget)){').replace(
     'assert(value!=9999);', '''
   if(value==9060 || value==9062){assert(!copy_budget);copy_budget=value==9060?2:3;live_baseline=images.size();return;}
   if(value==9061){assert(!copy_budget && images.size()==live_baseline);return;}
-  assert(value!=9999);''')
-runner.EXPECTED_VALUES += ['81', '81', '81', '1', '0', '1', '2',
+  assert(value!=9999);'''))
+FIXTURE = FIXTURE.updated(expected_values=list(FIXTURE.expected_values) + ['81', '81', '81', '1', '0', '1', '2',
                           '81', '1', '0', '0', '0', '1',
-                          '12', '2', '13', '3', '13', '3', '3', '3', '4', '5', '81', '81', '0']
-runner.EXPECTED_SHADOWS = []
-runner.EXTRA_SOURCES += [Path(fixture.__file__), Path(__file__)]
+                          '12', '2', '13', '3', '13', '3', '3', '3', '4', '5', '81', '81', '0'])
+FIXTURE = FIXTURE.updated(expected_shadows=[])
 if __name__ == '__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

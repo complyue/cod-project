@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Complete callable results survive context-selected reads, failures and cleanup."""
 from pathlib import Path
+from native_test_support import run_native
 import captured_callable_runtime_tests as fixture
 
-runner = fixture.runner
-runner.SOURCE += '''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 func choose_result(tag:bool,ref f:func(u64)->const u64 in O)->(func(u64)->const u64) in O where {owner O}{return f;}
 func choose_result(tag:i64,ref f:func(u64)->const u64 in O)->func(u64)->const u64 where {owner O}{return f;}
 func copy_selected(tag:T,ref f:func(u64)->const u64 in O)->func(u64)->const u64 where {T,owner O}{return choose_result(tag,f);}
@@ -37,8 +38,8 @@ observe(9000u64);
  try{later_selected(0,f);}catch(e:const OutOfMemoryError){observe(9051u64);};
 }};
 observe(9000u64);
-'''
-runner.SOURCE += '''
+''')
+FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 func cleanup_result(tag:bool,ref f:func(u64)->const u64 in O)->(func(u64)->const u64) in O where {owner O}{defer{f<-wrap(other);};return f;}
 func cleanup_result(tag:i64,ref f:func(u64)->const u64 in O)->func(u64)->const u64 where {owner O}{defer{f<-wrap(other);};return f;}
 func copy_cleanup(tag:T,ref f:func(u64)->const u64 in O)->func(u64)->const u64 where {T,owner O}{return cleanup_result(tag,f);}
@@ -46,10 +47,9 @@ func copy_cleanup(tag:T,ref f:func(u64)->const u64 in O)->func(u64)->const u64 w
 observe(9000u64);
 {{func f=wrap(base);func g=copy_cleanup(0,f);f<-base;observe(g(31u64));}};
 observe(9000u64);
-'''
-runner.HARNESS = runner.HARNESS.replace('checkpoints==5', 'checkpoints==9').replace('copy_failures==3', 'copy_failures==5').replace('record_failures==1', 'record_failures==3')
-runner.EXPECTED_VALUES += ['2','3','14','15','6050','6050','41','32']
-runner.EXPECTED_SHADOWS = []
-runner.EXTRA_SOURCES += [Path(fixture.__file__), Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('checkpoints==5', 'checkpoints==9').replace('copy_failures==3', 'copy_failures==5').replace('record_failures==1', 'record_failures==3'))
+FIXTURE = FIXTURE.updated(expected_values=list(FIXTURE.expected_values) + ['2','3','14','15','6050','6050','41','32'])
+FIXTURE = FIXTURE.updated(expected_shadows=[])
 if __name__ == '__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

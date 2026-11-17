@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Retained binding slots exchange images without copying or losing failed records."""
 from pathlib import Path
+from native_test_support import run_native
 import deferred_assignment_runtime_tests as fixture
 
-runner = fixture.runner
-runner.SOURCE += '''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 proc swap_images(flag:bool)->void{
  func f=wrap(base);func g=wrap(other);func h=wrap(wrap(base));
  ptr p=f,q=g,r=h;
@@ -17,9 +18,8 @@ proc swap_images(flag:bool)->void{
 }
 swap_images(true);observe(9000u64);
 swap_images(false);observe(9000u64);
-'''
-runner.HARNESS = runner.HARNESS.replace('checkpoints==6', 'checkpoints==8').replace('record_failures==2', 'record_failures==4')
-runner.EXPECTED_VALUES += ['3','12','2','3','12','2','2','3','12','2','3','12']
-runner.EXTRA_SOURCES += [Path(fixture.__file__), Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('checkpoints==6', 'checkpoints==8').replace('record_failures==2', 'record_failures==4'))
+FIXTURE = FIXTURE.updated(expected_values=list(FIXTURE.expected_values) + ['3','12','2','3','12','2','2','3','12','2','3','12'])
 if __name__ == '__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

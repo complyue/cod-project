@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Track captured TLS images through replacement, replay and allocation failures."""
 from pathlib import Path
+from native_test_support import run_native
 import captured_callable_runtime_tests as fixture
 
-runner = fixture.runner
-runner.SOURCE = '''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source='''
 using symbol "std:io" @print;
 using "std:exceptions" OutOfMemoryError;
 proc observe(x:u64)->void{behave @print(x);}
@@ -68,16 +69,15 @@ observe(9000u64);
  observe(perform @p());
 }};
 observe(9000u64);
-'''
-runner.HARNESS = runner.HARNESS.replace('static bool deny_create=', 'static int creation_countdown=-1;\nstatic bool deny_create=')
-runner.HARNESS = runner.HARNESS.replace('if(deny_create){', 'if(deny_create || (creation_countdown>=0 && creation_countdown--==0)){')
-runner.HARNESS = runner.HARNESS.replace('if(value==9000)', '''if(value==9060){creation_countdown=1;live_baseline=images.size();return;}
+''')
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('static bool deny_create=', 'static int creation_countdown=-1;\nstatic bool deny_create='))
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('if(deny_create){', 'if(deny_create || (creation_countdown>=0 && creation_countdown--==0)){'))
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('if(value==9000)', '''if(value==9060){creation_countdown=1;live_baseline=images.size();return;}
   if(value==9061){assert(creation_countdown==-1 && images.size()==live_baseline);return;}
-  if(value==9000)''')
-runner.HARNESS = runner.HARNESS.replace('checkpoints==5', 'checkpoints==9').replace('creation_failures==1', 'creation_failures==3').replace('copy_failures==3', 'copy_failures==2').replace('largest>4000', 'largest>0')
-runner.EXPECTED_VALUES = ['3000', '2', '1', '1', '1', '1', '1', '1', '2', '1', '1']
-runner.EXPECTED_SHADOWS = ['x']
-runner.EXTRA_SOURCES += [Path(__file__)]
+  if(value==9000)'''))
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('checkpoints==5', 'checkpoints==9').replace('creation_failures==1', 'creation_failures==3').replace('copy_failures==3', 'copy_failures==2').replace('largest>4000', 'largest>0'))
+FIXTURE = FIXTURE.updated(expected_values=['3000', '2', '1', '1', '1', '1', '1', '1', '2', '1', '1'])
+FIXTURE = FIXTURE.updated(expected_shadows=['x'])
 
 if __name__ == '__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

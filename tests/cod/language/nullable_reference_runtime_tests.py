@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Checked null failures compose with allocation denial, recovery and snapshots."""
 from pathlib import Path
+from native_test_support import run_native
 import deferred_initialization_runtime_tests as initialization
 
-runner = initialization.runner
-runner.SOURCE = '''
+FIXTURE = initialization.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source='''
 using symbol "std:io" @print;
 using "std:exceptions" NullPointerException;
 using "std:exceptions" OutOfMemoryError;
@@ -43,16 +44,15 @@ try{deferred_null();}catch(e:const NullPointerException){observe(4u64);};
 observe(recover());
 try{registration();}catch(e:const OutOfMemoryError){observe(1u64);}catch(e:const NullPointerException){observe(99u64);};
 captured();
-'''
-runner.HARNESS = runner.HARNESS.replace('static bool deny_record=false;',
-    'static bool deny_record=false;static std::uint64_t captures=0;')
-runner.HARNESS = runner.HARNESS.replace('assert(bytes==16);',
-    'assert(bytes==16 || bytes==72);if(bytes==72)++captures;')
-runner.HARNESS = runner.HARNESS.replace('created==6 && peak==2 && failures==2',
-    'created==7 && peak==2 && failures==1 && captures==1')
-runner.EXPECTED_VALUES = ['4','0','0','0','31','33','4','34','36','1','37']
-runner.EXPECTED_SHADOWS = []
-runner.EXTRA_SOURCES = [Path(initialization.__file__), Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('static bool deny_record=false;',
+    'static bool deny_record=false;static std::uint64_t captures=0;'))
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('assert(bytes==16);',
+    'assert(bytes==16 || bytes==72);if(bytes==72)++captures;'))
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('created==6 && peak==2 && failures==2',
+    'created==7 && peak==2 && failures==1 && captures==1'))
+FIXTURE = FIXTURE.updated(expected_values=['4','0','0','0','31','33','4','34','36','1','37'])
+FIXTURE = FIXTURE.updated(expected_shadows=[])
 
 if __name__ == '__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

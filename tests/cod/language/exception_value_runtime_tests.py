@@ -1,14 +1,7 @@
 #!/usr/bin/env python3
 """Inject allocation failures at exception and deferred-record service boundaries."""
-import datetime
-import hashlib
-import json
-import os
 from pathlib import Path
-import tempfile
-
-from foundation_tests import ROOT, MODE, COD, shadow_diagnostics
-from regional_runtime_tests import checked
+from native_test_support import NativeFixture, run_native
 
 SOURCE = '''
 using symbol "std:io" @print;
@@ -87,60 +80,12 @@ extern "C" void cod_lang_exception_finish() noexcept {
 }
 '''
 EXPECTED_VALUES = ['1', '1', '0', '1', '1', '0', '0', '1', '5']
-EXTRA_SOURCES = []
 SOURCE_FILES = {}
 EXPECTED_SHADOWS = []
 
 
-def main():
-    toolchain = ROOT / MODE
-    results = []
-    with tempfile.TemporaryDirectory(prefix="cod-exception-runtime-") as directory:
-        scratch = Path(directory)
-        entry = scratch / "main.cod"
-        for name, contents in SOURCE_FILES.items():
-            path = scratch / name
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(contents)
-        entry.write_text(SOURCE)
-        for general in (False, True):
-            ir, bc, runtime = [scratch / name for name in ("main.ll", "main.bc", "runtime.cc")]
-            command = [COD, "--check", entry, "--emit-llvm", ir, "--emit-bc", bc, "--emit-runtime", runtime]
-            if general:
-                command.append("--no-specialize")
-            diagnostics = []
-            output, frontend_seconds = checked(command, ROOT, ('[-Wmissing-return]', '[-Wshadow]'), diagnostics)
-            if not shadow_diagnostics(''.join(diagnostics), EXPECTED_SHADOWS)[0]:
-                raise RuntimeError(f"Unexpected shadow diagnostics: {diagnostics}")
-            if output:
-                raise RuntimeError("Checking executed runtime effects")
-            checked([toolchain / "bin/llvm-as", ir, "-o", scratch / "roundtrip.bc"], ROOT)
-            checked([toolchain / "bin/opt", "-passes=verify", "-disable-output", bc], ROOT)
-            source = scratch / "instrumented.cc"
-            source.write_text(WRAPPERS + runtime.read_text() + HARNESS)
-            executable = scratch / "native"
-            compile_command = [toolchain / "bin/clang++", "-std=c++20", "-O2", "-g", "-UNDEBUG", "-stdlib=libc++",
-                               "-fuse-ld=lld", "-I" + str(ROOT / "include"), bc, source, "-o", executable,
-                               "-L" + str(toolchain / "lib"), "-Wl,-rpath," + str(toolchain / "lib")]
-            _, compile_seconds = checked(compile_command, ROOT)
-            output, execution_seconds = checked([executable], ROOT)
-            *values, metrics = output.splitlines()
-            if values != EXPECTED_VALUES:
-                raise RuntimeError(f"Unexpected exception trace: {values}")
-            results.append({"name": "general" if general else "default", "passed": True, "metrics": json.loads(metrics),
-                            "stdout": values, "diagnostics": diagnostics, "frontend_seconds": frontend_seconds, "compile_seconds": compile_seconds,
-                            "execution_seconds": execution_seconds, "check_command": list(map(str, command)),
-                            "compile_command": list(map(str, compile_command))})
-            print(f"PASS {results[-1]['name']}: {metrics}", flush=True)
-    if report := os.environ.get("COD_LANGUAGE_REPORT"):
-        sources = [ROOT / "cod/main.cc", *sorted((ROOT / "cod").glob("lang_*.hh"))]
-        sources += [Path(__file__), Path(__file__).with_name("foundation_tests.py"), Path(__file__).with_name("regional_runtime_tests.py"), *EXTRA_SOURCES]
-        Path(report).write_text(json.dumps({"recorded_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(), "toolchain": MODE,
-                                         "passed": len(results), "total": len(results), "results": results,
-                                         "executable_sha256": hashlib.sha256(COD.read_bytes()).hexdigest(),
-                                         "sources": {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest() for path in sources}}, indent=2) + "\n")
-    return 0
+FIXTURE = NativeFixture(SOURCE, WRAPPERS, HARNESS, EXPECTED_VALUES, EXPECTED_SHADOWS,
+                        SOURCE_FILES, (Path(__file__),))
 
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+if __name__ == '__main__':
+    raise SystemExit(run_native(FIXTURE))

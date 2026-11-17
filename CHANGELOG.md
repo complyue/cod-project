@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-16 — Independent native validation fixtures
+
+<a id="k-774"></a>
+**K-774 — Isolate native fixtures and centralize validation support.** Source402→403/registry800→801 continues the existing qualified compiler/native acceptance under H-420/H-423 and D-26/H-407. Immutable fixture derivation preserves source, wrapper/assertion and observation inputs across import orders; shared support owns commands, diagnostics, native execution, provider injection and helper provenance. Acceptance compares all 128 fixture inputs with isolated baselines, checks shuffled imports and transitive dependencies, and preserves current source/native results. Charter §§5.3/6.3/8/12, owner/access/completion obligations and D-16 continue. No language, runtime, ABI or qualification change; return inspection remains design-only. Baseline: `d7ba556989aee827d7690dd54cca116a52c7de9b:tests/cod/language/exception_value_runtime_tests.py` and `e7f310b22e5467bb45329a9e6a78b8491e6ae8e0:tests/cod/language/README.md`.
+
 ## 2026-11-16 — Bounded return-inspection profile
 
 <a id="h-548"></a>

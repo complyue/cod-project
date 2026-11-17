@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Adapted calls preserve fresh ownership and release failed preparations."""
 from pathlib import Path
+from native_test_support import run_native
 import generic_callable_runtime_tests as fixture
 from generic_catch_tests import IO, ERRORS
 
-runner = fixture.runner
-runner.SOURCE = IO + ERRORS + '''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__), Path(__file__).with_name('foundation_tests.py'), Path(__file__).with_name('generic_catch_tests.py')])
+FIXTURE = FIXTURE.updated(source=IO + ERRORS + '''
 using "std:exceptions" OutOfMemoryError;
 proc observe(x:u64)->void{behave @print(x);}
 func number()->const u64{return 41u64;}
@@ -37,8 +38,8 @@ observe(9002u64);
 observe(9004u64);
 try{{defer deferred(missing_error(),wrap(number));}}catch(e:const OutOfMemoryError){observe(9005u64);observe(3u64);};
 observe(9002u64);
-'''
-runner.HARNESS = r'''
+''')
+FIXTURE = FIXTURE.updated(harness=r'''
 #undef cod_lang_callable_create
 #undef cod_lang_callable_copy
 #undef cod_lang_callable_free
@@ -86,9 +87,8 @@ extern "C" void cod_lang_exception_finish() noexcept{
       (unsigned long long)created,(unsigned long long)copied,(unsigned long long)released,
       (unsigned long long)registered,(unsigned long long)freed,(unsigned long long)copy_failures,(unsigned long long)record_failures);
 }
-'''
-runner.EXPECTED_VALUES = ['5','41','1','4','2','5','41','3']
-runner.EXPECTED_SHADOWS = []
-runner.EXTRA_SOURCES = [Path(__file__),Path(__file__).with_name('generic_catch_tests.py'),Path(__file__).with_name('generic_callable_runtime_tests.py')]
+''')
+FIXTURE = FIXTURE.updated(expected_values=['5','41','1','4','2','5','41','3'])
+FIXTURE = FIXTURE.updated(expected_shadows=[])
 if __name__ == '__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

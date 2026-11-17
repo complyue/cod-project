@@ -1,8 +1,11 @@
 # CoD source compiler validation
 
-Reference revision: 402 · Recorded: 2026-11-16 America/Los_Angeles.
+Reference revision: 403 · Recorded: 2026-11-16 America/Los_Angeles.
 
 ## Design authority
+
+
+- **Validation infrastructure:** [K-774](../../../CHANGELOG.md#k-774) continues the qualified source/native acceptance scopes below under H-420/H-423 and D-26/H-407. Immutable native fixtures retain independent source, wrappers, resource checks, expected observations and dependency evidence; shared support owns commands, diagnostics, LLVM/native execution and reports. Acceptance requires import-order independence, complete helper provenance and preserved native results in both execution modes. Charter §§5.3/6.3/8/12, existing owner/access/completion rules and D-16 continue. This maintenance selects no language mechanism or broader qualification.
 
 - **Return-state dependency:** [D-17-RETURN-STATE](../../../design/DesignAuthorityRegistry.md#d-17-return-state)/[H-542–H-547](../../../CHANGELOG.md#h-542), [H-548](../../../CHANGELOG.md#h-548)/[K-RETURNING-PROFILE-20261116](../../../CHANGELOG.md#k-returning-profile-20261116), aligns this revision’s source-support boundary under P-484. Candidate C-54/C-63/C-65 and charter §§2/3.2–3.3/4.3/6.3/8/12 preserve author-controlled completion, result/owner validity and observable cleanup. D-17/D-23 own acceptance: scoped cancellation, explicit-return markers, ordinary binding grammar/copy/borrow lifetimes and owning inspection without capture. Module cleanup has no callable return target. Preserve unrelated qualified contracts, FIFO failures and D-16. The H-548 agent selections do not add implementation support or full value-path/physical qualification; owning capture and future pure-callable rules are excluded.
 
@@ -420,11 +423,16 @@ Fixtures outside the admitted scalar foundation describe target behavior and do 
 
 Concrete scalar result spellings share one value-passing contract, independent of target-access qualifiers. Their receiving storage may be writable even when the result is spelled `const`. Owner-annotated `T in O` and `const T in O` retain the explicit borrowed-result contract; `val T in O` rejects. Cleanup may replace a pending return, but ordinary source writes cannot change saved value bits, and rebinding a source slot cannot change a saved borrowed target. A failed RHS preserves earlier effects without performing the receiving update. Generic and non-scalar result defaults remain unselected; the existing explicit `const T` generic value contract and complete callable values retain their separate support. Explicit val results currently require a concrete primitive scalar type.
 
+Native runtime fixtures are immutable values exported as `FIXTURE`. A derived fixture uses `updated(...)` to retain its own source, service wrappers, native assertions and expected observations; importing it cannot modify its parent or siblings. Fixture source dependencies accumulate through derivation and appear in JSON evidence. `language_test_support.py` supplies toolchain selection, diagnostic matching and checked commands. `native_test_support.py` owns LLVM emission, assembly/verification, native compilation/execution and reports. A fixture may supply an explicit LLVM transformation for native-provider failure injection; reports then include the original and injected IR hashes. Such injection verifies compiled consumers against declared failures, without claiming general unknown-input support.
+
+The native-fixture support suite checks all 128 fixture declarations in forward, reverse and shuffled import orders, immutable input snapshots, transitive source provenance, command/diagnostic failure handling and provider injection in both modes. Import checks establish fixture isolation, not runtime support for every declaration. Individual runtime suites establish the supported behaviors they execute; sanitizer claims apply only to suites that explicitly enable that instrumentation.
+
 ## Focused validation
 
 Run the focused source checks:
 
 ```sh
+COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-native-fixture-validation.json python3 tests/cod/language/native_fixture_tests.py
 COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-reference-identity-validation.json python3 tests/cod/language/reference_identity_tests.py
 COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-reference-identity-model-validation.json python3 tests/cod/language/reference_identity_model_tests.py
 COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-reference-identity-staging-validation.json python3 tests/cod/language/reference_identity_staging_tests.py

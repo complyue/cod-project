@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Loop setup exits retain returned images and skip accumulator/queue allocation."""
 from pathlib import Path
+from native_test_support import run_native
 import storage_completion_runtime_tests as fixture
-runner=fixture.runner
-runner.SOURCE += '''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 proc stop_bounds(ref f:func(u64)->const u64 in O)->const u64 where {owner O}{
  func saved=f;defer observe(45u64);
  for(i in 0u64..{{return saved(1u64);}}){defer observe(9999u64);}else{observe(9999u64);};return 0u64;
@@ -30,10 +31,9 @@ proc throw_bound(ref f:func(u64)->const u64 in O)->void where {owner O}{
  observe(9040u64);try{throw_bound(f);}catch(e:const MissingReturnError){observe(9041u64);observe(48u64);};
 }};
 observe(9000u64);
-'''
-runner.HARNESS=runner.HARNESS.replace('checkpoints==8','checkpoints==9')
-runner.EXPECTED_VALUES += ['45','2','3','46','47','48']
-runner.EXPECTED_SHADOWS = []
-runner.EXTRA_SOURCES += [Path(fixture.__file__),Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('checkpoints==8','checkpoints==9'))
+FIXTURE = FIXTURE.updated(expected_values=list(FIXTURE.expected_values) + ['45','2','3','46','47','48'])
+FIXTURE = FIXTURE.updated(expected_shadows=[])
 if __name__=='__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Account for complete family captures, replay and failed preparations."""
 from pathlib import Path
+from native_test_support import run_native
 import captured_callable_runtime_tests as fixture
 
-runner = fixture.runner
-runner.SOURCE = '''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source='''
 using symbol "std:io" @print;
 using "std:exceptions" OutOfMemoryError;
 proc observe(x:u64)->void{behave @print(x);}
@@ -53,11 +54,10 @@ observe(9000u64);
  observe(perform @f(1u8));
 }};
 observe(9000u64);
-'''
-runner.HARNESS = runner.HARNESS.replace('checkpoints==5', 'checkpoints==6').replace('creation_failures==1', 'creation_failures==2').replace('copy_failures==3', 'copy_failures==2').replace('largest>4000', 'largest>0')
-runner.EXPECTED_VALUES = ['12000', '3', '4', '7', '1', '7', '1', '7', '1', '9', '7']
-runner.EXPECTED_SHADOWS = ['x']
-runner.EXTRA_SOURCES += [Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('checkpoints==5', 'checkpoints==6').replace('creation_failures==1', 'creation_failures==2').replace('copy_failures==3', 'copy_failures==2').replace('largest>4000', 'largest>0'))
+FIXTURE = FIXTURE.updated(expected_values=['12000', '3', '4', '7', '1', '7', '1', '7', '1', '9', '7'])
+FIXTURE = FIXTURE.updated(expected_shadows=['x'])
 
 if __name__ == '__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Identity guards and aliased calls preserve exact native resource release."""
 from pathlib import Path
+from native_test_support import run_native
 import returned_view_runtime_tests as fixture
 
-runner = fixture.runner
-runner.SOURCE += '''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 func same(ptr left:const u64 in O,ptr right:const u64 in O)->bool where {owner O}{return left is right;}
 proc fill(ptr destination:u64 in O,ptr observed:const u64 in O)->void throws NullPointerException where {owner O}{
  destination<-85u64;observe(observed);
@@ -18,8 +19,7 @@ proc verify_choice(first:bool,second:bool)->void{
 }
 verify_choice(false,false);verify_choice(false,true);
 verify_choice(true,false);verify_choice(true,true);
-'''
-runner.EXPECTED_VALUES += ['85', '86', '86', '85']
-runner.EXTRA_SOURCES += [Path(fixture.__file__), Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(expected_values=list(FIXTURE.expected_values) + ['85', '86', '86', '85'])
 if __name__ == '__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

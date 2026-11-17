@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """Partial declaration proofs preserve complete images and failure cleanup."""
 from pathlib import Path
+from native_test_support import run_native
 import declaration_domain_runtime_tests as fixture
 
-runner = fixture.runner
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
 old = '''func shared(ref x:const u64 in A,ref y:const u64 in B)->ref const u64 in A where {owner A,owner B};
 func shared(ref x:u64 in O,ref y:u64 in O) where {owner O}{return x;}'''
 new = '''func shared(ref x:const u64 in O,ref y:const u64 in O)->ref const u64 in O where {owner O};
 func shared(ref x:const u64 in A,ref y:const u64 in B)->ref const u64 in A where {owner A,owner B}{return x;}'''
-assert old in runner.SOURCE
-runner.SOURCE = runner.SOURCE.replace(old, new)
-runner.SOURCE += '''
+assert old in FIXTURE.source
+FIXTURE = FIXTURE.updated(source=FIXTURE.source.replace(old, new))
+FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 func snapshot(ref input:const (func(u64)->const u64) in O,ref marker:const u64 in O)->func(u64)->const u64 where {owner O};
 func snapshot(ref input:const (func(u64)->const u64) in A,ref marker:const u64 in B)->func(u64)->const u64 where {owner A,owner B}{return input;}
 {{
@@ -22,9 +23,8 @@ func snapshot(ref input:const (func(u64)->const u64) in A,ref marker:const u64 i
  }};
 }};
 observe(9000u64);
-'''
-runner.HARNESS = runner.HARNESS.replace('checkpoints==5', 'checkpoints==6').replace('copy_failures==3', 'copy_failures==4')
-runner.EXPECTED_VALUES += ['7', '4']
-runner.EXTRA_SOURCES += [Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('checkpoints==5', 'checkpoints==6').replace('copy_failures==3', 'copy_failures==4'))
+FIXTURE = FIXTURE.updated(expected_values=list(FIXTURE.expected_values) + ['7', '4'])
 if __name__ == '__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

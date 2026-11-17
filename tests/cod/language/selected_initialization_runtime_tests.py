@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Registration failures recover selected writes with exact cleanup accounting."""
 from pathlib import Path
+from native_test_support import run_native
 import deferred_recovery_runtime_tests as fixture
 
-runner = fixture.runner
-runner.SOURCE = '''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source='''
 using symbol "std:io" @print;
 using "std:exceptions" OutOfMemoryError;
 using "std:exceptions" NullPointerException;
@@ -21,20 +22,19 @@ proc verify(first:bool,second:bool,fail:bool,conditional:bool)->void{
   {}
  }};}catch(e:const NullPointerException){observe(99u64);};
 }
-'''
-runner.EXPECTED_VALUES = []
+''')
+FIXTURE = FIXTURE.updated(expected_values=[])
 for conditional in (False, True):
     for fail in (False, True):
         for first,second in ((False,False),(False,True),(True,False),(True,True)):
             args=','.join(str(value).lower() for value in (first,second,fail,conditional))
-            runner.SOURCE += 'verify('+args+');\n'
-            runner.EXPECTED_VALUES.append('7' if first==second else '0')
-runner.HARNESS = runner.HARNESS.replace('assert(bytes==72)', 'assert(bytes==16)')
-runner.HARNESS = runner.HARNESS.replace('assert(live.empty() && created==released);deny_record=false',
-    'assert(live.size()==1 && created==released+1);deny_record=false')
-runner.HARNESS = runner.HARNESS.replace('created==4 && peak==2 && failures==3',
-    'created==24 && peak==2 && failures==8')
-runner.EXPECTED_SHADOWS = []
-runner.EXTRA_SOURCES = [Path(fixture.__file__), Path(__file__)]
+            FIXTURE = FIXTURE.updated(source=FIXTURE.source + 'verify('+args+');\n')
+            FIXTURE = FIXTURE.updated(expected_values=(*FIXTURE.expected_values, '7' if first==second else '0'))
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('assert(bytes==72)', 'assert(bytes==16)'))
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('assert(live.empty() && created==released);deny_record=false',
+    'assert(live.size()==1 && created==released+1);deny_record=false'))
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('created==4 && peak==2 && failures==3',
+    'created==24 && peak==2 && failures==8'))
+FIXTURE = FIXTURE.updated(expected_shadows=[])
 if __name__ == '__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

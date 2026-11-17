@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Aborted storage operations preserve complete images, targets and cleanup."""
 from pathlib import Path
+from native_test_support import run_native
 import named_completion_runtime_tests as fixture
-runner=fixture.runner
-runner.SOURCE += '''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 proc stop_storage(ref f:func(u64)->const u64 in O)->const u64 where {owner O}{
  func copied=f;defer observe(41u64);
  func unused:func(u64)->const u64={{return copied(1u64);}};
@@ -29,11 +30,10 @@ func no_storage_copy()->const u64{
  observe(9030u64);observe(no_storage_copy());observe(9061u64);
 }};
 observe(9000u64);
-'''
-runner.HARNESS=runner.HARNESS.replace('checkpoints==7','checkpoints==8').replace('copy_failures==4','copy_failures==5')
-runner.HARNESS=runner.HARNESS.replace('  assert(value!=9999);','  if(value==9061){assert(deny_copy && copy_failures==5 && images.size()==live_baseline);deny_copy=false;return;}\n  assert(value!=9999);')
-runner.EXPECTED_VALUES += ['41','2','3','2','42','2','12','43','44']
-runner.EXPECTED_SHADOWS = []
-runner.EXTRA_SOURCES += [Path(fixture.__file__),Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('checkpoints==7','checkpoints==8').replace('copy_failures==4','copy_failures==5'))
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('  assert(value!=9999);','  if(value==9061){assert(deny_copy && copy_failures==5 && images.size()==live_baseline);deny_copy=false;return;}\n  assert(value!=9999);'))
+FIXTURE = FIXTURE.updated(expected_values=list(FIXTURE.expected_values) + ['41','2','3','2','42','2','12','43','44'])
+FIXTURE = FIXTURE.updated(expected_shadows=[])
 if __name__=='__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

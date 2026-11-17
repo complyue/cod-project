@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Selected cleanup writes survive real failure paths with exact resource release."""
 from pathlib import Path
+from native_test_support import run_native
 import selected_alias_runtime_tests as fixture
-runner=fixture.runner
-runner.SOURCE+='''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 proc cleanup_selected(flag:bool)->void{
  val x<-make local u64,y<-make local u64,z<-make local u64;
  ptr a=x,b=y;var p->if(flag){a}else{b};
@@ -23,9 +24,8 @@ proc cleanup_selected(flag:bool)->void{
  {{for(i in 0u64..100u64){defer{p<-45u64;};};}};observe(p);
 }
 cleanup_selected(true);cleanup_selected(false);observe(9000u64);
-'''
-runner.HARNESS=runner.HARNESS.replace('checkpoints==16','checkpoints==17').replace('copy_failures==11 && record_failures==3','copy_failures==13 && record_failures==5')
-runner.EXPECTED_VALUES+=['41','42','43','44','44','45']*2
-runner.EXPECTED_SHADOWS = []
-runner.EXTRA_SOURCES+=[Path(fixture.__file__),Path(__file__)]
-if __name__=='__main__':raise SystemExit(runner.main())
+''')
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('checkpoints==16','checkpoints==17').replace('copy_failures==11 && record_failures==3','copy_failures==13 && record_failures==5'))
+FIXTURE = FIXTURE.updated(expected_values=list(FIXTURE.expected_values) + ['41','42','43','44','44','45']*2)
+FIXTURE = FIXTURE.updated(expected_shadows=[])
+if __name__=='__main__':raise SystemExit(run_native(FIXTURE))

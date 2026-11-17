@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Symbol type inspection creates no runtime binding or captured image."""
 from pathlib import Path
+from native_test_support import run_native
 import captured_callable_runtime_tests as fixture
 
-runner = fixture.runner
-runner.SOURCE += '''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 symbol @amount:u64;
 {{
  func retained=wrap(base);
@@ -19,11 +20,10 @@ symbol @amount:u64;
  observe(9011u64);
 }};
 observe(9000u64);
-'''
-runner.HARNESS = runner.HARNESS.replace('checkpoints==5', 'checkpoints==6')
-runner.EXPECTED_VALUES += ['17', '18']
-runner.EXPECTED_SHADOWS = ['retained']
-runner.EXTRA_SOURCES += [Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('checkpoints==5', 'checkpoints==6'))
+FIXTURE = FIXTURE.updated(expected_values=list(FIXTURE.expected_values) + ['17', '18'])
+FIXTURE = FIXTURE.updated(expected_shadows=['retained'])
 
 if __name__ == '__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

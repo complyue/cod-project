@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Borrowed argument records preserve addresses, cleanup and failure timing."""
 from pathlib import Path
+from native_test_support import run_native
 import deferred_initialization_runtime_tests as initialization
 
-runner = initialization.runner
-runner.SOURCE = '''
+FIXTURE = initialization.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source='''
 using symbol "std:io" @print;
 using "std:exceptions" NullPointerException;
 using "std:exceptions" OutOfMemoryError;
@@ -34,16 +35,15 @@ prepared();
 try{failed();}catch(e:const OutOfMemoryError){observe(1u64);};
 try{null_deferred();}catch(e:const NullPointerException){observe(4u64);};
 val a<-38u64;observe(cleanup(a));recursive(a,40u64)<-40u64;observe(a);
-'''
-runner.HARNESS = runner.HARNESS.replace('static bool deny_record=false;',
-    'static bool deny_record=false;static std::uint64_t borrows=0;')
-runner.HARNESS = runner.HARNESS.replace('assert(bytes==16);',
-    'assert(bytes==16 || bytes==72);if(bytes==72 && !deny_record)++borrows;')
-runner.HARNESS = runner.HARNESS.replace('created==6 && peak==2 && failures==2',
-    'created==6 && peak==2 && failures==1 && borrows==3')
-runner.EXPECTED_VALUES = ['33','33','32','34','1','37','4','39','40']
-runner.EXPECTED_SHADOWS = ['a', 'a', 'a']
-runner.EXTRA_SOURCES = [Path(initialization.__file__), Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('static bool deny_record=false;',
+    'static bool deny_record=false;static std::uint64_t borrows=0;'))
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('assert(bytes==16);',
+    'assert(bytes==16 || bytes==72);if(bytes==72 && !deny_record)++borrows;'))
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('created==6 && peak==2 && failures==2',
+    'created==6 && peak==2 && failures==1 && borrows==3'))
+FIXTURE = FIXTURE.updated(expected_values=['33','33','32','34','1','37','4','39','40'])
+FIXTURE = FIXTURE.updated(expected_shadows=['a', 'a', 'a'])
 
 if __name__ == '__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

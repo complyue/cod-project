@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Borrowed callable views preserve image ownership and allocation-free access."""
 from pathlib import Path
+from native_test_support import run_native
 import captured_callable_runtime_tests as fixture
-runner=fixture.runner
-runner.SOURCE += '''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 func borrow_holder(ref f:func(u64)->const u64 in O)->ref (func(u64)->const u64) in O where {owner O}{return f;}
 proc replace_borrowed(ref f:func(u64)->const u64 in O,ref g:func(u64)->const u64 in P)->void where {owner O,owner P}{f<-g;}
 func walk_borrow(select:F,ref f:func(u64)->const u64 in O,n:u64)->ref (func(u64)->const u64) in O where {F,owner O}{
@@ -23,10 +24,9 @@ func walk_borrow(select:F,ref f:func(u64)->const u64 in O,n:u64)->ref (func(u64)
  observe(walk_borrow(select,f,40u64)(5u64));
 }};
 observe(9000u64);
-'''
-runner.HARNESS=runner.HARNESS.replace('checkpoints==5','checkpoints==6').replace('copy_failures==3','copy_failures==5').replace('record_failures==1','record_failures==2')
-runner.EXPECTED_VALUES += ['2','12','3','14','15','50105000','16']
-runner.EXPECTED_SHADOWS = []
-runner.EXTRA_SOURCES += [Path(fixture.__file__),Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('checkpoints==5','checkpoints==6').replace('copy_failures==3','copy_failures==5').replace('record_failures==1','record_failures==2'))
+FIXTURE = FIXTURE.updated(expected_values=list(FIXTURE.expected_values) + ['2','12','3','14','15','50105000','16'])
+FIXTURE = FIXTURE.updated(expected_shadows=[])
 if __name__=='__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

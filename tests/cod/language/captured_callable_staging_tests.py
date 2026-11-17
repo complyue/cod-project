@@ -62,7 +62,7 @@ def main():
     if report:=os.environ.get('COD_LANGUAGE_REPORT'):
         sources=[ROOT/'cod'/name for name in ('main.cc','lang_checked.hh','lang_completion.hh','lang_diagnostics.hh','lang_frontend.hh',
                  'lang_llvm.hh','lang_syntax.hh','lang_exceptions.hh','lang_native_runtime.hh')]
-        sources += [Path(__file__),Path(__file__).with_name('foundation_tests.py'),Path(__file__).with_name('callable_value_staging_tests.py')]
+        sources += [Path(__file__).with_name("language_test_support.py"), Path(__file__),Path(__file__).with_name('foundation_tests.py'),Path(__file__).with_name('callable_value_staging_tests.py')]
         Path(report).write_text(json.dumps(dict(recorded_utc=datetime.datetime.now(datetime.timezone.utc).isoformat(),toolchain=MODE,
             passed=passed,total=len(results),results=results,executable_sha256=hashlib.sha256(COD.read_bytes()).hexdigest(),
             sources={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in sources}),indent=2)+'\n')

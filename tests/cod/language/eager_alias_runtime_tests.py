@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Aliased builtin arithmetic preserves native registration and failure cleanup."""
 from pathlib import Path
+from native_test_support import run_native
 import captured_callable_runtime_tests as fixture
-runner = fixture.runner
-runner.SOURCE_FILES = {'ops.cod': 'func (+)(a:bool,b:bool)->bool{return a||b;}export (+);'
-    'func (/)(a:bool,b:bool)->bool{}export (/);'}
-runner.SOURCE = 'using "ops.cod" (+) as add;using "ops.cod" (/) as divide;' + runner.SOURCE
-runner.SOURCE += '''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source_files={'ops.cod': 'func (+)(a:bool,b:bool)->bool{return a||b;}export (+);'
+    'func (/)(a:bool,b:bool)->bool{}export (/);'})
+FIXTURE = FIXTURE.updated(source='using "ops.cod" (+) as add;using "ops.cod" (/) as divide;' + FIXTURE.source)
+FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 {{
  func kept=wrap(base);
  val x<-1u64;
@@ -23,9 +24,8 @@ runner.SOURCE += '''
  observe(add(x,2u64));
 }};
 observe(9000u64);
-'''
-runner.HARNESS = runner.HARNESS.replace('checkpoints==5','checkpoints==6').replace('record_failures==1','record_failures==2')
-runner.EXPECTED_VALUES += ['9','8','3']
-runner.EXTRA_SOURCES += [Path(fixture.__file__),Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('checkpoints==5','checkpoints==6').replace('record_failures==1','record_failures==2'))
+FIXTURE = FIXTURE.updated(expected_values=list(FIXTURE.expected_values) + ['9','8','3'])
 if __name__ == '__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

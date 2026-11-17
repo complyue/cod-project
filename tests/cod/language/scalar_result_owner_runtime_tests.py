@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Scalar results retain snapshots or targets through cleanup and failed delivery."""
 from pathlib import Path
+from native_test_support import run_native
 import captured_callable_runtime_tests as fixture
 
-runner = fixture.runner
-runner.SOURCE += '''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 func snapshot(ref x:u64 in O)->u64 where {owner O}{defer{x<-9u64;};return x;}
 func target(ref x:u64 in O)->u64 in O where {owner O}{defer{x<-9u64;};return x;}
 func selected_target(ref x:u64 in O,ref y:u64 in O)->const u64 in O where {owner O}{
@@ -35,10 +36,9 @@ func scalar_increment(x:u64)->val u64{return x+1u64;}
  observe(9011u64);observe(total);observe(live(1u64));
 }};
 observe(9000u64);
-'''
-runner.EXPECTED_VALUES += ['1', '9', '1', '8', '9', '8', '7', '2', '8', '1', '9', '9', '30', '2', '30', 'true', '50005000', '2']
-runner.HARNESS = runner.HARNESS.replace('checkpoints==5', 'checkpoints==6').replace('record_failures==1', 'record_failures==2')
-runner.EXPECTED_SHADOWS = ['retained']
-runner.EXTRA_SOURCES += [Path(fixture.__file__), Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(expected_values=list(FIXTURE.expected_values) + ['1', '9', '1', '8', '9', '8', '7', '2', '8', '1', '9', '9', '30', '2', '30', 'true', '50005000', '2'])
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('checkpoints==5', 'checkpoints==6').replace('record_failures==1', 'record_failures==2'))
+FIXTURE = FIXTURE.updated(expected_shadows=['retained'])
 if __name__ == '__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

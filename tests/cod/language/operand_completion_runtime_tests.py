@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Operand completion releases prepared images and never registers unfinished work."""
 from pathlib import Path
+from native_test_support import run_native
 import captured_callable_runtime_tests as fixture
-runner=fixture.runner
-runner.SOURCE += '''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 proc finish_operand(f:func(u64)->const u64)->const u64{
  func invoke=apply;defer observe(20u64);
  return invoke(f,{{defer observe(21u64);return f(1u64);}});
@@ -33,8 +34,8 @@ func logical_image(f:func(u64)->const u64,flag:bool)->func(u64)->const u64{
  func a=logical_image(f,true);func b=logical_image(f,false);observe(a(2u64));observe(b(2u64));
 }};
 observe(9000u64);
-'''
-runner.SOURCE += '''
+''')
+FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 using "std:exceptions" NullPointerException;
 func pick_image(tag:bool,ptr f:func(u64)->const u64 in O)->ptr (func(u64)->const u64) in O where {owner O}{return f;}
 func pick_image(tag:i64,ptr f:func(u64)->const u64 in O)->func(u64)->const u64 where {owner O}{return wrap(base);}
@@ -45,10 +46,9 @@ proc schedule_image(tag:T,ref f:func(u64)->const u64 in O)->void throws NullPoin
 }
 {{func f=wrap(base);try{schedule_image(false,f);}catch(e:const NullPointerException){observe(8u64);};try{schedule_image(0,f);}catch(e:const NullPointerException){};}};
 observe(9000u64);
-'''
-runner.HARNESS=runner.HARNESS.replace('checkpoints==5','checkpoints==7').replace('copy_failures==3','copy_failures==4').replace('  assert(value!=9999);', '  if(value==9060){assert(deny_record && record_failures==1 && images.size()==live_baseline);deny_record=false;return;}\n  assert(value!=9999);')
-runner.EXPECTED_VALUES += ['21','20','2','23','3','4','3','4','3','8','9','6']
-runner.EXPECTED_SHADOWS = []
-runner.EXTRA_SOURCES += [Path(fixture.__file__),Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('checkpoints==5','checkpoints==7').replace('copy_failures==3','copy_failures==4').replace('  assert(value!=9999);', '  if(value==9060){assert(deny_record && record_failures==1 && images.size()==live_baseline);deny_record=false;return;}\n  assert(value!=9999);'))
+FIXTURE = FIXTURE.updated(expected_values=list(FIXTURE.expected_values) + ['21','20','2','23','3','4','3','4','3','8','9','6'])
+FIXTURE = FIXTURE.updated(expected_shadows=[])
 if __name__=='__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))

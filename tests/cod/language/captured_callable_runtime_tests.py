@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Account for complete images through growth, preparation and cleanup failures."""
 from pathlib import Path
-import exception_value_runtime_tests as runner
+from native_test_support import run_native
+import exception_value_runtime_tests as fixture
 
-runner.SOURCE = '''
+FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
+
+FIXTURE = FIXTURE.updated(source='''
 using symbol "std:io" @print;
 using "std:exceptions" OutOfMemoryError;
 using "std:exceptions" MissingReturnError;
@@ -59,8 +62,8 @@ observe(9000u64);
 observe(9000u64);
 {{observe(replaced()(6u64));observe(retained()(7u64));observe(copy_recovery()(8u64));}};
 observe(9000u64);
-'''
-runner.WRAPPERS = '''
+''')
+FIXTURE = FIXTURE.updated(wrappers='''
 #define cod_lang_callable_create cod_image_create
 #define cod_lang_callable_copy cod_image_copy
 #define cod_lang_callable_free cod_image_free
@@ -68,8 +71,8 @@ runner.WRAPPERS = '''
 #define cod_lang_defer_free cod_record_free
 #define cod_lang_exception_finish cod_finish
 #define cod_lang_print_u64 cod_trace
-'''
-runner.HARNESS = r'''
+''')
+FIXTURE = FIXTURE.updated(harness=r'''
 #undef cod_lang_callable_create
 #undef cod_lang_callable_copy
 #undef cod_lang_callable_free
@@ -130,9 +133,8 @@ extern "C" void cod_lang_exception_finish() noexcept{
       (unsigned long long)created,(unsigned long long)copied,(unsigned long long)released,(unsigned long long)peak_bytes,
       (unsigned long long)largest,(unsigned long long)creation_failures,(unsigned long long)copy_failures,(unsigned long long)record_failures);
 }
-'''
-runner.EXPECTED_VALUES = ['3','12','50795000','3','4','5','17','8','9']
-runner.EXPECTED_SHADOWS = []
-runner.EXTRA_SOURCES = [Path(__file__)]
+''')
+FIXTURE = FIXTURE.updated(expected_values=['3','12','50795000','3','4','5','17','8','9'])
+FIXTURE = FIXTURE.updated(expected_shadows=[])
 if __name__ == '__main__':
-    raise SystemExit(runner.main())
+    raise SystemExit(run_native(FIXTURE))
