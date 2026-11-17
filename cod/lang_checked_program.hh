@@ -182,7 +182,8 @@ struct CallEffects {
   };
   std::map<size_t, std::map<size_t, BindingResult>> bindings;
   // Every input target that can be written into a caller binding, including
-  // intermediate selections not retained by any completed outcome.
+  // intermediate selections not retained by any completed outcome. null_target
+  // records an independently absent target introduced by the method.
   std::map<size_t, std::set<size_t>> binding_sources;
   // Postconditions describe the original borrowed targets, not local parameter
   // bindings after rebinding. Values refer to argument snapshots at call entry.

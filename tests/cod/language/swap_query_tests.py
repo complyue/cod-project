@@ -75,7 +75,7 @@ runner.CASES['readonly_alias_owner_mismatch']=(READONLY_METHOD+'val x<-1;ptr p:c
 runner.CASES['readonly_alias_selected_family']=({'ops.cod':READONLY_METHOD+'export (<=>);','main.cod':IO+'using "ops.cod" (<=>) as exchange;'+ALIASES+QUERY('exchange(ro,other)')+OUT('result')},0,'9\n','')
 
 runner.CASES['readonly_method_query_has_no_write']=(READONLY_METHOD+ALIASES.replace('x<-1','x<-make local i64')+QUERY('ro<=>other')+'x;',2,'','before definite initialization')
-runner.CASES['query_does_not_supply_ref_preservation']=(READONLY_METHOD.replace('lhs_view<-true;','lhs_view=rhs_view;')+BASE.replace('ptr p=x,q=y;','ref p=x,q=y;')+'ref var ro:const->p;ref var other:const->q;'+QUERY('ro<=>other')+'ro<=>other;',2,'','caller ref preservation')
+runner.CASES['query_does_not_supply_ref_preservation']=(READONLY_METHOD.replace('lhs_view<-true;','lhs_view=rhs_view;')+BASE.replace('ptr p=x,q=y;','ref p=x,q=y;')+'ref var ro:const->p;ref var other:const->q;'+QUERY('ro<=>other')+'ro<=>other;',0,'','')
 
 runner.CASE_ARGUMENTS = {}
 runner.CASE_SHADOWS = {}

@@ -1508,9 +1508,14 @@ class ScalarChecker {
       for (size_t p = 0; p < arguments.size(); ++p) {
         auto &targets = effects.bindings[reason][p];
         targets.initialized = true;
-        if (argument_mode(method.source->parameters[p]) != ArgumentMode::borrowed_ref) targets.null_sources.insert(null_target);
+        // Nullable input origins stay distinct from absence introduced by a body.
         for (size_t q = 0; q < arguments.size(); ++q)
-          if (arguments[p] == arguments[q] && same_owner(method, p, q)) targets.targets.insert(q);
+          if (arguments[p] == arguments[q] && same_owner(method, p, q)) {
+            targets.targets.insert(q);
+            if (argument_mode(method.source->parameters[p]) != ArgumentMode::borrowed_ref &&
+                argument_mode(method.source->parameters[q]) == ArgumentMode::borrowed_ptr)
+              targets.null_sources.insert(q);
+          }
       }
     return effects;
   }
@@ -1600,8 +1605,14 @@ class ScalarChecker {
       for (const auto &[binding, current] : lexical_.targets) {
         if (intersect(written, physical_slots({binding})).empty()) continue;
         for (const auto input : sources) {
+          if (input == null_target) {
+            possible_targets_.at(binding).insert(null_target);
+            possible_null_sources_.at(binding).insert(null_target);
+            continue;
+          }
           const auto &source = views.at(input);
           for (const auto place : source.targets) if (place != null_target) possible_targets_.at(binding).insert(place);
+          possible_null_sources_.at(binding).insert(source.null_sources.begin(), source.null_sources.end());
           target_dependencies_.at(binding).insert(source.origins.begin(), source.origins.end());
         }
       }
@@ -1644,7 +1655,16 @@ class ScalarChecker {
             possible_targets_.at(binding).insert(selected.places.begin(), selected.places.end());
             if (selected.nullable) {
               possible_targets_.at(binding).insert(null_target);
-              possible_null_sources_.at(binding).insert(null_target);
+              for (const auto input : targets.null_sources) {
+                if (input == null_target) possible_null_sources_.at(binding).insert(null_target);
+                else if (prepared) {
+                  for (const auto slot : physical_slots(views.at(input).slots))
+                    possible_null_sources_.at(binding).insert(possible_null_sources_.at(slot).begin(), possible_null_sources_.at(slot).end());
+                } else {
+                  const auto &sources = views.at(input).null_sources;
+                  possible_null_sources_.at(binding).insert(sources.begin(), sources.end());
+                }
+              }
             }
             for (const auto input : targets.targets) {
               const auto &origins = views.at(input).origins;
@@ -3209,6 +3229,7 @@ class ScalarChecker {
             const auto found = sources.find(i);
             const bool preserved = found != sources.end() && !found->second.empty() &&
                 std::all_of(found->second.begin(), found->second.end(), [&](size_t input) {
+                  if (input == null_target) return true;
                   const auto slots = physical_slots(views.at(input).slots);
                   return !slots.empty() && std::all_of(slots.begin(), slots.end(), [&](size_t source) {
                     return !bindings_->at(source).read_only;
@@ -3216,8 +3237,19 @@ class ScalarChecker {
                 });
             if (!preserved) implementation_gap(expr.at, "caller-binding target permission preservation remains unproved");
           }
-          if (binding.requires_initialized && argument_mode(definition.parameters[i]) != ArgumentMode::borrowed_ref)
-            implementation_gap(expr.at, "caller ref preservation through a non-ref method parameter remains unproved");
+          if (binding.requires_initialized && argument_mode(definition.parameters[i]) != ArgumentMode::borrowed_ref && proving_ && validating_) {
+            const auto &sources = read_effects(*operation.callee).binding_sources;
+            const auto found = sources.find(i);
+            const bool preserved = found != sources.end() && !found->second.empty() &&
+                std::all_of(found->second.begin(), found->second.end(), [&](size_t input) {
+                  if (input == null_target) return false;
+                  const auto slots = physical_slots(views.at(input).slots);
+                  return !slots.empty() && std::all_of(slots.begin(), slots.end(), [&](size_t source) {
+                    return bindings_->at(source).requires_initialized;
+                  });
+                });
+            if (!preserved) implementation_gap(expr.at, "caller ref preservation through a non-ref method parameter remains unproved");
+          }
         }
       }
     }
@@ -6543,6 +6575,7 @@ class ScalarChecker {
             implementation_gap(method.at, "caller-binding access source without input provenance");
           sources.insert(input_ordinal(place));
         }
+        if (possible_null_sources_.at(storage(input.place).binding).contains(null_target)) sources.insert(null_target);
       }
       // Recursive closure retains conservative absent outcomes, while a slot
       // with no possible mutation preserves its entry selection on every exit.

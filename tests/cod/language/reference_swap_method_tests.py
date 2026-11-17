@@ -22,7 +22,7 @@ runner.CASES = {
  'prepared_builtin_in_method': (IO+'func (<=>)(ref a:i64 in O,ref b:i64 in O)->void where {owner O}{defer intrinsic (<=>)(a,b);}'+BASE+'p<=>q;'+OUT('p')+OUT('q'),0,'7\n1\n',''),
  'normal_helper_binding_local': (IO+'func helper(ptr a:i64 in O,ptr b:i64 in O)->void where {owner O}{intrinsic (<=>)(a,b);}func (<=>)(ref a:i64 in O,ref b:i64 in O)->void where {owner O}{helper(a,b);}'+BASE+'p<=>q;'+OUT('p')+OUT('q'),0,'1\n7\n',''),
  'generic_shared_method': (IO+'func (<=>)(ref a:T in O,ref b:T in O)->void where {T,owner O}{intrinsic (<=>)(a,b);}'+BASE+'val f<-false,t<-true;ptr s=f,r=t;p<=>q;s<=>r;'+OUT('p')+OUT('s'),0,'7\ntrue\n',''),
- 'invariant_ref_not_weakened': (PTR+'val x<-1,y<-2;ref p=x,q=y;p<=>q;',2,'','caller ref preservation'),
+ 'invariant_ref_not_weakened': (PTR+'val x<-1,y<-2;ref p=x,q=y;p<=>q;',0,'',''),
  'const_binding_rejected': (REF+'val x<-1,y<-2;const ptr p=x;ptr q=y;p<=>q;',2,'','const reference binding'),
  'val_rejected': (REF+'val x<-1,y<-2;x<=>y;',2,'','val storage has no reference binding'),
  'ref_alias_cannot_be_cleared': ('func (<=>)(ref a:i64 in O,ptr b:i64 in O)->void where {owner O}{b=null;}'+BASE+'p<=>q;',2,'','ref requires a proven non-null target'),

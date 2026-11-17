@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-17 — Prove caller ref invariants through pointer methods
+
+<a id="k-794"></a>
+**K-794 — Retain intermediate target and absence provenance.** Agent continuity source421→422/registry846→847 under D-14/H-306/H-366–H-369/P-269/P-327/H-420/H-423, existing D-17/D-18 and D-26/H-407 extends K-776’s finite source proof to caller ref slots passed to ptr-formal methods. Every source must retain physical ref initialization/non-null guarantees; independently introduced absence rejects even after restoration. Nullable input origins remain distinct through recursive assumptions and nested/prepared calls. Exact access/type/owners, ordered preparation, declared checked obligations and cleanup continue under charter §§3.3/4.3/5.3/6.3/8/12 and D-16. Acceptance includes independent intermediate-write histories, source-preserved prior gap cases, recursive native sharing and exact failure release. Baselines: `2a042da4f5ea818eae9285520d7641794b13e214:cod/lang_checked.hh` and `44ff01c8afcf84a76a0075b52aececf82c10a3a4:design/DesignAuthorityRegistry.md`. No new source rule, runtime permission, owner/capture mechanism, permanent domain/ABI or broader qualification; D-18r113 remains byte-identical and pending.
+
 ## 2026-11-17 — Keep generator loop-control owners fixed
 
 <a id="h-600"></a>

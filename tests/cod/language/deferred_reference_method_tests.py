@@ -39,7 +39,7 @@ runner.CASES = {
  'failed_operand': (IO+NPE+PTR+BASE+'ptr absent:i64=null in here;try{ {{defer (<=>)(p,{absent;q});}};{}}catch(e:const NullPointerException){'+OUT('p')+OUT('q')+'};',0,'1\n7\n',''),
  'ended_slot': (PTR+BASE+'defer (<=>)(({{ptr r=x;r}}),q);',2,'','lexical scope has ended'),
  'fixed_slot': (PTR+'val x<-1,y<-7;const ptr p=x;ptr q=y;'+CALL,2,'','const reference binding'),
- 'ref_permission': (PTR+'val x<-1,y<-7;ref p=x,q=y;'+CALL,2,'','caller ref preservation'),
+ 'ref_permission': (PTR+'val x<-1,y<-7;ref p=x,q=y;'+CALL,0,'',''),
  'late_tls': (IO+'symbol @amount:i64;proc (<=>)(ptr a:i64 in O,ptr b:i64 in O)->void where {owner O}{'+OUT('@amount')+'}'+BASE+'effect @amount<-1;{{'+CALL+'effect @amount<-7;}};',0,'7\n',''),
 }
 for name, body, result, output, diagnostic in (

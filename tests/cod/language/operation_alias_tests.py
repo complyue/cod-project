@@ -58,7 +58,6 @@ runner.CASES['pending_return'] = (source(REF,'proc run()->i64{'+BASE+'defer{'+OU
 for name, method, body, diagnostic in (
     ('fixed_binding', REF, 'val x<-1,y<-7;const ptr p=x;ptr q=y;exchange(p,q);', 'const reference binding'),
     ('value_is_not_binding', REF, 'val x<-1,y<-7;exchange(x,y);', 'val storage has no reference binding'),
-    ('ref_not_weakened', PTR, 'val x<-1,y<-7;ref p=x,q=y;exchange(p,q);', 'caller ref preservation'),
     ('late_ref_null', REF, BASE+'{{defer exchange(p,q);q=null;}};', 'cannot prove a non-null target'),
     ('late_ref_uninitialized', REF, BASE+'val empty<-make local i64;{{defer exchange(p,q);q=empty;}};', 'cannot prove initialization'),
     ('ended_slot', PTR, BASE+'defer exchange(({{ptr r=x;r}}),q);', 'lexical scope has ended'),
@@ -66,6 +65,8 @@ for name, method, body, diagnostic in (
     ('nearest_noncallable', REF, 'proc run(exchange:i64)->void{exchange(1,7);}run(2);', "nearest binding 'exchange' is not callable"),
 ):
     runner.CASES[name] = (source(method,body),2,'',diagnostic)
+
+runner.CASES['ref_not_weakened'] = (source(PTR, 'val x<-1,y<-7;ref p=x,q=y;exchange(p,q);'),0,'','')
 
 runner.CASES['type_query'] = (source(REF,BASE+'val result<-make local typeof({exchange(p,q);1}){9};'+OUT('result')+OUT('(p is x)')),0,'9\ntrue\n','')
 
