@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026-11-17 — Require a declarative receiving specification
+
+<a id="h-575"></a>
+**H-575 — Receiving describes destinations, not an executable body.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-17 America/Los_Angeles; exact timestamp/personal name unavailable. Rejects the recommended receiving-block model: “我不倾向于 "receiving block" 心智模型，我更倾向于 ‘receiving specification’ 的语义，只是澄清返回字段的去向关系，语义清晰后留给编译器做优化处理。‘receiving spec’ 不允许任意expr”. Replaces the H-574 assessment’s imperative/call-first recommendation with a declarative no-arbitrary-expression requirement. Does not select unspecified overlap outcomes, automatic borrowed snapshots, an optimization-dependent language meaning or full proof/ABI qualification; D-18r113’s separate review remains unanswered.
+
+<a id="k-receiving-spec-20261117"></a>
+**K-RECEIVING-SPEC-20261117 — Keep receiving declarative.** D-22r31→32/D-23r21→22/registry828→829 updates pending P-515–P-517 under H-573–H-575. Candidate C-65/C-72/C-73 → charter §§3.3/4.3/6.3/8/12 uses simple field/destination names and explicit receiving operations; no executable receiving body, arbitrary expressions or forward dependence on a new receiver. Preserve ordinary pre-RHS destination selection and post-cleanup delivery; exact overlap/borrowed-read and temporary-scope details remain open rather than delegated to optimizer choice. Supersedes the unselected imperative recommendation in K-RECEIVER-ITEMS-20261117, without altering its historical evidence. Public baseline: `908e6d1abb0e7ccc995b87cb6ad1e76b3cc80db0` at affected design/registry/changelog paths. Preserve D-16, source416, ordinary ADT/owner rules and byte-identical D-18r113; documentation only, no code/build/tests or new mechanism qualification.
+
+## 2026-11-17 — Assess explicit receiving items and same-name omission
+
+<a id="h-574"></a>
+**H-574 — Put receiving intent in each item.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-17 America/Los_Angeles; exact timestamp/personal name unavailable. Proposes “`{ val count<-; ref selected=node; } := inspect();` 同名的可以省略rhs，lhs也可以是之前已经定义的变量”. Requests another syntax assessment, not either implicit slot/target policy from H-573. The current proposal distinguishes declarations from existing destinations and names `=`/`<-` per item. It preserves the earlier existing-variable/renaming and temporary-scope goals. Call-first sequential group execution, exact scope/grammar, complete proofs and native transport remain unconfirmed; D-18r113’s separate review is unanswered.
+
+<a id="k-receiver-items-20261117"></a>
+**K-RECEIVER-ITEMS-20261117 — Replace implicit receiving policy with explicit item operations.** D-22r30→31/D-23r20→21/registry827→828 updates pending D-22-RECEIVE-SCOPE/P-515–P-517. Candidate C-65/C-72/C-73 → charter §§3.3/4.3/6.3/8/12 reuses ordinary declaration, initialization, rebinding and payload-write intent. Assesses same-name omission, mixed new/existing receivers, selector lookup, optional temporary scope, repeated consumption and exact failure cleanup. Recommends one complete producer followed by sequential items, explicitly distinguishing this pending choice from ordinary pre-RHS destination selection; no group-wide borrowed snapshot is silently introduced. Mainline `908e6d1abb0e7ccc995b87cb6ad1e76b3cc80db0`/source416/K-788 was fast-forward integrated with all prior evidence preserved; public design baseline remains that commit’s D-22r29/D-23r19. H-573 records the preceding unpublished draft. Preserve D-16, H-571 completion, ordinary ADT/owner rules and byte-identical D-18r113; no code/build/tests or new implementation qualification here.
+
+## 2026-11-17 — Assess temporary mappings into existing result receivers
+
+<a id="h-573"></a>
+**H-573 — Existing destinations and temporary field aliases.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-17 America/Los_Angeles; exact timestamps/personal name unavailable. Corrects the declaration-only example: “不是新定义变量，而是用已有变量去接收返回字段，包括变量名与返回字段名不同时的匹配”; requests syntax/semantic combinations and quirks. Proposes `{ var <rtn-field-name> -> <local-var-name>, ... }`, then `{{ ... }} := inspect();` with temporary names that do not escape. This establishes the existing-receiver requirement and candidate syntax/scope, not a selected slot-versus-target policy, borrowed-read ordering or full mechanism/ABI. H-571’s earlier declaration form is not the complete receiving requirement; its other source decisions and H-572’s return-only assessment remain. The independent D-18r113 review is unanswered.
+
+<a id="k-receiver-scope-20261117"></a>
+**K-RECEIVER-SCOPE-20261117 — Assess existing-place result maps.** D-22r29→30/D-23r19→20/registry825→827 adds pending D-22-RECEIVE-SCOPE/P-515–P-517. Candidate C-65/C-72/C-73 → charter §§3.3/4.3/6.3/8/12 relates temporary label-to-place aliases to explicit storage/lifetime intent and readable named composition. Records same-name/renamed/subset/overlapping destinations, fixed-owner and const boundaries, private completion, per-operation failure and omitted cleanup. Slot delivery versus field-mode-directed target writes, borrowed read timing and exact scope grammar remain open; no candidate is silently qualified. Preserve D-23 scalar matrices, D-16, no implicit copy/move/promotion/rollback, source415 and byte-identical D-18r113. Baseline: `ab40e3fdb2b9dbd76767b8a607233f360daefea6` at the affected design/registry paths and `CHANGELOG.md#h-571`. Documentation only; no code/build/tests.
+
 ## 2026-11-17 — Identify callable-family coverage exhaustion
 
 <a id="k-788"></a>
