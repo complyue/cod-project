@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-11-17 — Callable storage, transfer semantics and anonymous-data direction
+
+Human/source for H-563–H-568: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-17 America/Los_Angeles; exact timestamps/personal name unavailable.
+
+<a id="h-563"></a>
+**H-563 — Keep callable-view values out of regions.** “region （为了relocatability）不能存 callable view value，只有 lexical-scope 可以存 ... 要落实到相关文档位置”. Confirms lexical callable-view storage and the regional prohibition, with relocation as the stated rationale. Does not select a regional encoding or extend captured owners.
+
+<a id="h-564"></a>
+**H-564 — Propose restricted tuples for multiple results.** Initially says ADTs cannot contain callable fields and suggests tuples excluded from regions and ADT fields, with proc/func returns and unpacking. H-565/H-566 subsequently reopens/replaces that proposed packaging approach; do not publish an unconditional all-ADT callable-field ban or an independent tuple mechanism as the final choice.
+
+<a id="h-565"></a>
+**H-565 — Consider storage-classified ADTs instead.** “另外一个方案是允许ADT包含 callable 类型字段，但这种ADT不能进region，要增加ADT kind： bits, with relocatable ptrs, with callables。” Proposes lexical-only callable-bearing ADTs and storage classification as an alternative to H-564. Exact field/type/result contracts remain under review.
+
+<a id="h-566"></a>
+**H-566 — Prefer anonymous data over positional-only tuples if costs are comparable.** “如果允许匿名 `data { ... }` 作为 "named tuple" 等价机制，就不需要 "positional-only tuple" 类型了，综合看工程成本，不是太悬殊的话优先选这个方向吧”. Establishes the preferred engineering direction and requests comparison. Does not independently choose anonymous structural identity, result allocation/ABI or unpacking syntax.
+
+<a id="h-567"></a>
+**H-567 — Only pure bits permit whole-value payload copying.** “在CoD的心智模型里，只有纯bits value满足 ‘safe to copy as a whole value.’，其它都不行，这点可以明确讲出来。” Rejects inferring non-bits aggregate copying from a lexical/callable-bearing storage category. Existing specifically defined callable construction/capture behavior remains separate, without granting generic aggregate copying.
+
+<a id="h-568"></a>
+**H-568 — No C++ object copying/moving model.** “CoD没有C++的 moving/copying 语义概念，相近的只有 graph transfer 概念”. Confirms the source-language principle. Agent integration distinguishes bits transfer, reference binding, release-responsibility transfer and dedicated callable construction from explicit graph transfer and from native implementation byte/C++ operations; it does not withdraw prior independent capture/lifetime contracts.
+
+<a id="k-lexical-products-20261117"></a>
+**K-LEXICAL-PRODUCTS-20261117 — Keep fixed boundaries separate from compound proposals.** D-18r111→112/D-22r23→24/D-28r29→30/D-12r30→31/D-14r119→120/D-10r196→197/D-15r46→47/D-07r165→166/D-13r32→33/registry813→814/AGENTS adds D-18-LEXICAL-STORAGE/P-503–P-505, D-22-TRANSFER/P-506–P-508 and pending D-22-ANON-DATA/P-509–P-511. Preserve lexical callable lifetimes, existing symbolic replay, bits-only payload operations, no implicit object copying/moving, actual owners, same-owner edges, prior qualified contracts and D-16 under charter §§2/3.2–3.3/4.3/6.3/8. Independent design/mainline source reviews find bounded marginal cost for fixed-name anonymous products versus equally capable tuples, with substantial shared construction/result/lifetime work; D-22 records the unresolved anonymous identity/result/unpacking contracts; no new aggregate implementation or full proof/physical/value-path qualification. Baseline/source inspection: `7701bc70316d08ee4cff7470ae67632e041e36e5:design/ConstructionAndAcquisition.md`, that commit's affected docs/registry and `cod/lang_syntax.hh`, `cod/lang_checked.hh`, `cod/lang_llvm.hh`. Documentation only; no build/tests.
+
+
 ## 2026-11-17 — Typed reservation uses the existing block distinction
 
 <a id="h-562"></a>

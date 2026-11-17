@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 196 · Recorded: 2026-11-17 · Phase: language/application co-design.
+Design revision: 197 · Recorded: 2026-11-17 · Phase: language/application co-design.
 
 ## Design authority
+
+- **Callable placement and transfer boundaries:** [H-563](../CHANGELOG.md#h-563)/[H-567–H-568](../CHANGELOG.md#h-567), [D-18-LEXICAL-STORAGE](DesignAuthorityRegistry.md#d-18-lexical-storage)/P-503–P-505 and [D-22-TRANSFER](DesignAuthorityRegistry.md#d-22-transfer)/P-506–P-508 cover D-10r197's placement/operation terminology. Callable-view values have lexical-scope storage, never regional storage; only pure bits admit whole-payload transfer. CoD has no C++ object copying/moving model. C-54/C-65/C-72/C-73/C-75 and charter §§2/3.2–3.3/4.3/6.3/8 preserve regional relocatability and explicit identity/lifetime responsibility. D-18/D-22 own acceptance; retain dedicated callable construction/capture, graph transfer, actual owners and D-16. [K-LEXICAL-PRODUCTS-20261117](../CHANGELOG.md#k-lexical-products-20261117) aligns dependencies. H-564–H-566's callable-bearing ADT/anonymous-data direction remains under review, including type identity/results; no new aggregate implementation or full proof/physical/value-path qualification follows.
 
 - **Owner-parameter reference symbols:** [H-561](../CHANGELOG.md#h-561)/[K-OWNER-SYMBOL-ACCEPT-20261117](../CHANGELOG.md#k-owner-symbol-accept-20261117), [D-10-OWNER-SYMBOL](DesignAuthorityRegistry.md#d-10-owner-symbol)/P-497–P-499 covers r196's source form and staged sound acceptance. An installation obtains its one actual lexical or ordinary regional owner from the RHS; the region-selector form retains its extra owner constraint. Candidate C-36/C-54/C-65/C-93 and charter §§2/3.2–3.3/4.3/6.3/8 preserve reusable dynamic context with explicit storage/lifetime responsibility. Preserve owner/access/null/init, saved/captured validity, module symbol identity, no lifetime extension and D-16. Acceptance, cost evidence and exclusions are below. The source choice is confirmed; full proof/physical/value-path qualification and compiler support remain separate. Other qualified contracts continue.
 
@@ -82,7 +84,7 @@ Dynamic symbolic variables have their own storage and rebinding contract (H-277�
 | Explicit `ref/ptr symbol @x:T in @arena` | A borrowed target in the region selected through @arena at installation; T may be scalar/bits or an admissible object type. `effect @x = rhs` installs the reference and actual-owner association. |
 | Explicit `ref/ptr symbol @x:T in S where {owner S}` | A borrowed target whose one actual owner is established from the RHS; lexical and ordinary regional owners are admitted under H-561 without installing a region symbol. |
 | Region symbol | It provides the whole-region resource under the existing ownership contract. Shadowing preserves hidden owners; extraction remains forbidden. |
-| Procedure-valued symbol | It retains the separately defined callable/capture contract. The object-reference rule does not select a new callable-view representation. |
+| Procedure-valued symbol | It selects/replays lexical callable-view values under the separate scoped capture contract. H-563 forbids regional view storage; TLS binding bookkeeping cannot retain an expired lexical/captured owner or authorize a regional carrier. |
 
 Symbolic binding writes require `effect`: `effect @x = rhs` performs rebinding, while `effect @x <- rhs` performs ownership/bits transfer (H-280). Bare `@x = rhs` and bare `@x <- rhs` cannot write a symbolic binding. The proposed object-content transfer form is distinguished below. Both forms have scoped validity: an effect saves the preceding binding and restores it when its scope ends. For bits, the saved state is the preceding bits value; for an object reference, it is the preceding reference and its provenance. Edits to referenced regional contents are not undone by restoration. Every effect expression has type `void` (H-288). A following explicit symbolic read obtains the current binding; an effect cannot supply a value argument or form an assignment chain.
 

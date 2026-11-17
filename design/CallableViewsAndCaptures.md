@@ -1,8 +1,10 @@
 # Callable views, value captures and declared place aliases
 
-Design revision: 111 · Recorded: 2026-11-17 · Status: scoped callable contract; implementation boundaries recorded separately.
+Design revision: 112 · Recorded: 2026-11-17 · Status: scoped callable contract; implementation boundaries recorded separately.
 
 ## Design authority
+
+- **Callable placement and transfer boundaries:** [H-563](../CHANGELOG.md#h-563)/[H-567–H-568](../CHANGELOG.md#h-567), [D-18-LEXICAL-STORAGE](DesignAuthorityRegistry.md#d-18-lexical-storage)/P-503–P-505 and [D-22-TRANSFER](DesignAuthorityRegistry.md#d-22-transfer)/P-506–P-508 cover D-18r112's placement/operation terminology. Callable-view values have lexical-scope storage, never regional storage; only pure bits admit whole-payload transfer. CoD has no C++ object copying/moving model. C-54/C-65/C-72/C-73/C-75 and charter §§2/3.2–3.3/4.3/6.3/8 preserve regional relocatability and explicit identity/lifetime responsibility. D-18/D-22 own acceptance; retain dedicated callable construction/capture, graph transfer, actual owners and D-16. [K-LEXICAL-PRODUCTS-20261117](../CHANGELOG.md#k-lexical-products-20261117) aligns dependencies. H-564–H-566's callable-bearing ADT/anonymous-data direction remains under review, including type identity/results; no new aggregate implementation or full proof/physical/value-path qualification follows.
 
 - **Owner-parameter symbol integration:** [H-561](../CHANGELOG.md#h-561)/[K-OWNER-SYMBOL-ACCEPT-20261117](../CHANGELOG.md#k-owner-symbol-accept-20261117), [D-10-OWNER-SYMBOL](DesignAuthorityRegistry.md#d-10-owner-symbol)/P-497–P-499, covers D-18r111's reference-symbol/owner dependency wording. The source form and staged sound acceptance are confirmed: installation selects one actual lexical or ordinary regional owner from the RHS; an `in @arena` declaration retains its additional selector constraint. C-36/C-54/C-65/C-93 and charter §§2/3.2–3.3/4.3/6.3/8 preserve explicit dynamic context and lifetime responsibility. D-10 owns examples and acceptance. Preserve saved/captured owner validity, access/null/init, module symbol identity, no lifetime extension and D-16; full proof/physical/value-path qualification and source implementation remain separate. Other qualified scopes continue.
 
@@ -39,6 +41,30 @@ Design revision: 111 · Recorded: 2026-11-17 · Status: scoped callable contract
 CoD does not define a closure abstraction. It defines callable definitions, materialized callable views, value captures and explicit owner-bounded borrows. A broad computer-science usage may call any callable with an environment a closure; that terminology must not introduce an additional CoD mechanism. In particular there is no closure-owned mutable variable cell, shared retained invocation frame or automatic extension of a lexical variable's lifetime.
 
 Compiler implementations must preserve source-visible distinctions: independent value storage, a reference's target, an explicit var alias's selected place, and a symbolic identity's dynamically installed value. Natural lexical nesting supplies ordinary lifetimes. Access that exceeds that nesting must be expressed through the formally specified, statically checked dynamic-scope/owner contracts; capture, heap allocation and code sharing are not escape hatches. Existing explicit region ownership transfer remains its own contract. See the [vision principle](GlobalVariablesDoneRight.md#explicit-lifetimes-without-closures).
+
+## Callable views have lexical storage
+
+H-563 makes the placement boundary explicit: a CoD callable-view value, including its complete captured environment, belongs to lexical-scope storage and must not be stored in a region. Lexical storage may be optimized into registers, stack storage or scope-owned backing; those implementation choices do not change its logical lifetime. The prohibition applies even to an empty-capture view or a representation that happens to fit in a machine word.
+
+A regional aggregate or array cannot evade this boundary by embedding a callable-view value directly, through another compound value or through a generic instantiation. Same-owner field references cannot make a lexical callable target regional. Storage eligibility is a type/owner contract, not a special permission inferred because one runtime value is null or has no captures. H-565/H-566 reviews whether callable-bearing ADTs should be admitted specifically in lexical storage; this does not reopen the regional prohibition or automatically qualify such aggregate fields.
+
+Procedure-valued symbolic bindings keep their established selection, capture and scoped replay behavior. Their runtime binding records are not a regional home for the complete view/environment and cannot extend its lexical or borrowed-owner lifetimes. A module lifetime is a full lexical scope. Likewise, program/type/definition descriptions in regional semantic graphs are not executable callable-view values; a definition mention materializes a view only where the callable contract requires one.
+
+Acceptance must reject regional construction/storage of a callable view, including empty captures, nested carriers and generic instances. Existing lexical callable parameters/results/captures retain their independent complete environments and checked external borrows. No new regional carrier, graph serialization permission or lifetime extension follows.
+
+## Copying, moving and graph transfer
+
+H-567/H-568 fixes the source-language mental model: **CoD has no C++-style object copying/moving semantics. Only pure bits values admit whole-payload transfer; other objects do not acquire that operation because they are lexical, relocatable or initialized.** CoD does not infer copy/move constructors, source invalidation, hidden graph duplication or lifetime transfer from assignment, capture, grouping or return syntax.
+
+Keep the actual operations distinct:
+
+- Bits transfer reads an initialized valid payload and initializes/writes a destination under its declared rules; it does not transfer object identity or consume the source.
+- Reference binding selects an existing target and preserves its actual owner/access. It does not duplicate the pointee or make a declared place alias of the source reference slot.
+- Ownership transfer changes responsibility for an existing region resource under the consuming contract; it does not move or copy regional objects.
+- Callable-view construction, capture, parameter preparation and result construction follow their dedicated complete-environment contracts. Their existing independent-value behavior remains; it is not a general whole-object copying permission for callable-bearing ADTs. References to callable “copies” elsewhere in this contract describe that dedicated semantic construction, not C++ copy construction or an opaque byte-copy license.
+- Graph transfer is explicit construction/mapping into a destination graph according to the applicable library contract. It preserves or transforms sharing/cycles as that contract specifies; CoD supplies no automatic default graph copier or mover.
+
+Compiler-level loads/stores, byte copying, register movement and native C++ utility operations may implement admitted behavior. They cannot establish source-level operation eligibility. In particular, relocating backing while preserving the same logical owner is distinct from graph transfer to another owner. [D-22](ConstructionAndAcquisition.md#storage-eligibility-and-payload-transfer) records aggregate consequences; ordinary capture/cleanup/owner obligations remain unchanged.
 
 ## Structural regions
 
@@ -270,7 +296,7 @@ A default callable parameter has an independent callee-local target, following D
 
 [D-28](RegionalAndLexicalStorageRefactor.md#captures-tls-native-interfaces-and-persistence) reviews complete environments and caller destinations under growable lexical backing. Environment-relative coordinates, lexical slot locators and borrowed target references remain distinct. The hidden destination denotes the selected caller storage; a future lowering must preserve it if that owner's backing can grow during construction. The existing native destination-pointer path alone supplies no such proof. H-437/[D-28-OWNERS](RegionalAndLexicalStorageRefactor.md#shared-owner-information-from-checked-declarations) requires parameter, result and admitted capture transport to reuse shared actual-owner information while retaining each selected target. Recursive activations keep distinct owner instances where required; shared metadata does not promote lexical cells or extend borrowed owners; H-555 admits explicitly owned lexical references only with a non-escape proof. These integration obligations preserve complete-value copies, prepared snapshots, borrowed-region lifetimes and the ban on implicit lexical-cell promotion and shared captured binding slots; physical anchor/destination protocols remain pending.
 
-The complete callable representation must remain valid after bits movement: it contains no pointers into its own prior storage or an expired factory frame. Nested callable environments are included by value. This is an intrinsic lexical value category, not a general bits type that may enter regional fields/arrays. The adapter computes environment access from the current payload address; a copied header pointing to a previous lexical environment does not satisfy this contract.
+At the implementation level, the complete callable representation must remain valid under its admitted storage relocation: it contains no pointers into its own prior storage or an expired factory frame. Nested callable environments are included by value. This is an intrinsic lexical value category, not a general bits type that may enter regional fields/arrays. The adapter computes environment access from the current payload address; a copied header pointing to a previous lexical environment does not satisfy this contract.
 
 Direct/behave procedure calls use current dynamic bindings; perform installs the selected procedure's captured symbolic values for its execution scope. Native representation must not merge bodies, module contexts or captured snapshots merely because signatures match.
 

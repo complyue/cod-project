@@ -2,9 +2,11 @@
 
 *显式组合，动态上下文 · Explicit composition and dynamic context*
 
-Design revision 30 · 2026-11-17
+Design revision 31 · 2026-11-17
 
 ## Design authority
+
+- **Callable placement and transfer boundaries:** [H-563](../CHANGELOG.md#h-563)/[H-567–H-568](../CHANGELOG.md#h-567), [D-18-LEXICAL-STORAGE](DesignAuthorityRegistry.md#d-18-lexical-storage)/P-503–P-505 and [D-22-TRANSFER](DesignAuthorityRegistry.md#d-22-transfer)/P-506–P-508 cover D-12r31's placement/operation terminology. Callable-view values have lexical-scope storage, never regional storage; only pure bits admit whole-payload transfer. CoD has no C++ object copying/moving model. C-54/C-65/C-72/C-73/C-75 and charter §§2/3.2–3.3/4.3/6.3/8 preserve regional relocatability and explicit identity/lifetime responsibility. D-18/D-22 own acceptance; retain dedicated callable construction/capture, graph transfer, actual owners and D-16. [K-LEXICAL-PRODUCTS-20261117](../CHANGELOG.md#k-lexical-products-20261117) aligns dependencies. H-564–H-566's callable-bearing ADT/anonymous-data direction remains under review, including type identity/results; no new aggregate implementation or full proof/physical/value-path qualification follows.
 
 - **Owner-parameter symbol integration:** [H-561](../CHANGELOG.md#h-561)/[K-OWNER-SYMBOL-ACCEPT-20261117](../CHANGELOG.md#k-owner-symbol-accept-20261117), [D-10-OWNER-SYMBOL](DesignAuthorityRegistry.md#d-10-owner-symbol)/P-497–P-499, covers D-12r30's reference-symbol/owner dependency wording. The source form and staged sound acceptance are confirmed: installation selects one actual lexical or ordinary regional owner from the RHS; an `in @arena` declaration retains its additional selector constraint. C-36/C-54/C-65/C-93 and charter §§2/3.2–3.3/4.3/6.3/8 preserve explicit dynamic context and lifetime responsibility. D-10 owns examples and acceptance. Preserve saved/captured owner validity, access/null/init, module symbol identity, no lifetime extension and D-16; full proof/physical/value-path qualification and source implementation remain separate. Other qualified scopes continue.
 
@@ -36,6 +38,10 @@ Shared mutable variable state across dynamic call contexts must use explicit, fo
 Do not repair an invalid escape by boxing a lexical variable, retaining a frame, reference-counting a hidden shared cell or extending a whole lexical owner. Heap backing for valid scope-owned values is permitted, as are stack/register allocation and copy elimination that preserve observable behavior. Physical allocation or delayed allocator reuse does not change logical scope exit. Internal references must remain valid and owned backing must be released on normal and exceptional paths. OOM is an exceptional allocation outcome, not a reason to substitute shared mutable captures for value semantics.
 
 A dynamically scoped resource can be hidden, replayed and restored while its actual owner remains live; these operations neither prolong nor duplicate ownership. Existing explicit region transfer remains separately checked. Actor scheduling, continuations and detached callbacks need their own qualified lifetime contracts; this vision grants no asynchronous escape mechanism. The [callable contract](CallableViewsAndCaptures.md#language-model-no-closure-abstraction) specifies capture distinctions and acceptance, and the [storage refactor](RegionalAndLexicalStorageRefactor.md#captures-tls-native-interfaces-and-persistence) carries the same rule into owner/locator lowering.
+
+## No C++ object copy/move model
+
+H-567/H-568 makes operation responsibility explicit: CoD has no C++-style object copying/moving semantics. Pure bits transfer, reference binding, owned-region responsibility transfer and dedicated callable-view construction/capture retain their own contracts. Graph transfer explicitly constructs/maps a destination graph; lexical placement, relocation or return syntax does not silently duplicate or move objects. Compiler byte operations do not grant source permission. Callable-view values use lexical-scope storage under H-563 and cannot enter regions; dynamic symbolic bindings retain their established lexical/borrowed lifetime constraints. Anonymous data and callable-bearing lexical ADTs are reviewed in [D-22](ConstructionAndAcquisition.md#anonymous-data-and-lexical-compound-results--preferred-direction-under-review).
 
 ## Two complementary worlds
 

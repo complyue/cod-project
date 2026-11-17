@@ -1,8 +1,10 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 46 · Recorded: 2026-11-17 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 47 · Recorded: 2026-11-17 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
+
+- **Callable placement and transfer boundaries:** [H-563](../CHANGELOG.md#h-563)/[H-567–H-568](../CHANGELOG.md#h-567), [D-18-LEXICAL-STORAGE](DesignAuthorityRegistry.md#d-18-lexical-storage)/P-503–P-505 and [D-22-TRANSFER](DesignAuthorityRegistry.md#d-22-transfer)/P-506–P-508 cover D-15r47's placement/operation terminology. Callable-view values have lexical-scope storage, never regional storage; only pure bits admit whole-payload transfer. CoD has no C++ object copying/moving model. C-54/C-65/C-72/C-73/C-75 and charter §§2/3.2–3.3/4.3/6.3/8 preserve regional relocatability and explicit identity/lifetime responsibility. D-18/D-22 own acceptance; retain dedicated callable construction/capture, graph transfer, actual owners and D-16. [K-LEXICAL-PRODUCTS-20261117](../CHANGELOG.md#k-lexical-products-20261117) aligns dependencies. H-564–H-566's callable-bearing ADT/anonymous-data direction remains under review, including type identity/results; no new aggregate implementation or full proof/physical/value-path qualification follows.
 
 - **Owner-parameter symbol integration:** [H-561](../CHANGELOG.md#h-561)/[K-OWNER-SYMBOL-ACCEPT-20261117](../CHANGELOG.md#k-owner-symbol-accept-20261117), [D-10-OWNER-SYMBOL](DesignAuthorityRegistry.md#d-10-owner-symbol)/P-497–P-499, covers D-15r46's reference-symbol/owner dependency wording. The source form and staged sound acceptance are confirmed: installation selects one actual lexical or ordinary regional owner from the RHS; an `in @arena` declaration retains its additional selector constraint. C-36/C-54/C-65/C-93 and charter §§2/3.2–3.3/4.3/6.3/8 preserve explicit dynamic context and lifetime responsibility. D-10 owns examples and acceptance. Preserve saved/captured owner validity, access/null/init, module symbol identity, no lifetime extension and D-16; full proof/physical/value-path qualification and source implementation remain separate. Other qualified scopes continue.
 
@@ -376,6 +378,8 @@ This is explanatory notation, not a public struct, boxed-value ABI or requiremen
 | Dynamic scope behavior | Effects shadow the current association and restore the preceding association on scope exit, following the binding/capture contracts. The flattened active collection does not require a dictionary or a separate TLS namespace per module. |
 
 The [symbolic contract](SymbolicDynamicScope.md#symbolic-storage-and-regional-provenance) distinguishes inline bits, regional object references, whole-region resources and procedure bindings. Independent bits bindings require `effect @x <- rhs`; regional reference bindings, including explicit scalar ref/ptr symbols under H-482/H-561, use `effect @x = rhs`. These storage categories do not put type definitions, method sets or region contents into TLS. No raw symbolic assignment is permitted.
+
+H-563 confines complete callable-view/environment storage to lexical scopes. Procedure-valued symbolic bindings retain their existing selection/capture/replay behavior; a binding record is not permission to put a callable view in a region or keep its borrowed owner alive.
 
 The flat collection describes active entries. Saved values/pointers needed for scope restoration and procedure captures are supporting execution semantics, not a second catalog of module definitions. This does not prescribe a heap-allocated scope frame or runtime closure.
 

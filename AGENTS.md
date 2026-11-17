@@ -66,6 +66,7 @@
 - You may execute test scripts under `tests/` and its subdirectories (e.g., `tests/**/run-all.sh`) or invoke CTest/CMake test targets directly when running tests.
 
 ## Compiler Terminology
+- Follow the [CoD operation terminology](design/CallableViewsAndCaptures.md#copying-moving-and-graph-transfer): CoD has no C++-style object copying/moving semantic model. Distinguish bits transfer, reference binding, ownership transfer, dedicated callable construction/capture and explicit graph transfer; native byte copying or C++ utility moves do not grant source-language permissions. Callable views require lexical-scope storage and cannot be stored in regions, including through compound carriers.
 - Follow the [alias glossary](design/CallableViewsAndCaptures.md#alias-terminology). Every use of the alias concept must identify **declared place aliasing**, **runtime target aliasing**, or **name/identity aliasing**; do not use unqualified alias/aliasing as an umbrella category. Apply this to design/development discussions, documentation, source comments, diagnostics and new/refactored interface or data names.
 - Compile-time/runtime labels do not prove when a selected place or target equality becomes known. Explicit place declarations may select runtime-indexed storage; independent references may share targets without a pairwise declaration. Preserve these distinctions, ordinary access/owner/lifetime checks and permitted overlap; this rule grants no exclusivity or new capture/lifetime mechanism.
 

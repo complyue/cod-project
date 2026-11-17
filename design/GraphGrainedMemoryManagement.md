@@ -1,8 +1,10 @@
 # CoD Regional Memory Vision and Implementation Tracker
 
-Design revision 32 · 2026-11-17
+Design revision 33 · 2026-11-17
 
 ## Design authority
+
+- **Callable placement and transfer boundaries:** [H-563](../CHANGELOG.md#h-563)/[H-567–H-568](../CHANGELOG.md#h-567), [D-18-LEXICAL-STORAGE](DesignAuthorityRegistry.md#d-18-lexical-storage)/P-503–P-505 and [D-22-TRANSFER](DesignAuthorityRegistry.md#d-22-transfer)/P-506–P-508 cover D-13r33's placement/operation terminology. Callable-view values have lexical-scope storage, never regional storage; only pure bits admit whole-payload transfer. CoD has no C++ object copying/moving model. C-54/C-65/C-72/C-73/C-75 and charter §§2/3.2–3.3/4.3/6.3/8 preserve regional relocatability and explicit identity/lifetime responsibility. D-18/D-22 own acceptance; retain dedicated callable construction/capture, graph transfer, actual owners and D-16. [K-LEXICAL-PRODUCTS-20261117](../CHANGELOG.md#k-lexical-products-20261117) aligns dependencies. H-564–H-566's callable-bearing ADT/anonymous-data direction remains under review, including type identity/results; no new aggregate implementation or full proof/physical/value-path qualification follows.
 
 - **Owner-parameter symbol integration:** [H-561](../CHANGELOG.md#h-561)/[K-OWNER-SYMBOL-ACCEPT-20261117](../CHANGELOG.md#k-owner-symbol-accept-20261117), [D-10-OWNER-SYMBOL](DesignAuthorityRegistry.md#d-10-owner-symbol)/P-497–P-499, covers D-13r32's reference-symbol/owner dependency wording. The source form and staged sound acceptance are confirmed: installation selects one actual lexical or ordinary regional owner from the RHS; an `in @arena` declaration retains its additional selector constraint. C-36/C-54/C-65/C-93 and charter §§2/3.2–3.3/4.3/6.3/8 preserve explicit dynamic context and lifetime responsibility. D-10 owns examples and acceptance. Preserve saved/captured owner validity, access/null/init, module symbol identity, no lifetime extension and D-16; full proof/physical/value-path qualification and source implementation remain separate. Other qualified scopes continue.
 
@@ -160,6 +162,8 @@ No universal Maybe transformation, runtime presence flag or new pointer represen
 <a id="proposed-dynamic-value-boundary-and-soundness"></a>
 
 ## Symbolic references and soundness
+
+H-563 forbids regional storage of callable-view values, including through compound carriers. This concerns executable views/environments, not regional data describing programs or definitions. H-567/H-568 supplies the source model: CoD has no C++ object copying/moving semantics; only pure bits admit whole-payload transfer. Reference binding, owned-region responsibility transfer, dedicated callable construction and explicit graph transfer remain distinct. Native implementation operations cannot grant wider source permissions.
 
 Module method registration and bare symbol lookup create no runtime capture or TLS binding. Explicit materialization/installation and invocation retain the actual owners of captured or referenced resources. Family-dispatch evidence under H-375/H-376 must survive the applicable regional relocation and reference lifetime without making module definitions into resource owners. The physical evidence/ABI is a separate D-21 design task; no graph edge, allocator or owner protocol is changed by stage separation.
 

@@ -1,8 +1,10 @@
 # CoD regional ownership: syntax, semantics and use
 
-Design revision: 119 · Recorded: 2026-11-17 · Status: design draft with scoped confirmed requirements.
+Design revision: 120 · Recorded: 2026-11-17 · Status: design draft with scoped confirmed requirements.
 
 ## Design authority
+
+- **Callable placement and transfer boundaries:** [H-563](../CHANGELOG.md#h-563)/[H-567–H-568](../CHANGELOG.md#h-567), [D-18-LEXICAL-STORAGE](DesignAuthorityRegistry.md#d-18-lexical-storage)/P-503–P-505 and [D-22-TRANSFER](DesignAuthorityRegistry.md#d-22-transfer)/P-506–P-508 cover D-14r120's placement/operation terminology. Callable-view values have lexical-scope storage, never regional storage; only pure bits admit whole-payload transfer. CoD has no C++ object copying/moving model. C-54/C-65/C-72/C-73/C-75 and charter §§2/3.2–3.3/4.3/6.3/8 preserve regional relocatability and explicit identity/lifetime responsibility. D-18/D-22 own acceptance; retain dedicated callable construction/capture, graph transfer, actual owners and D-16. [K-LEXICAL-PRODUCTS-20261117](../CHANGELOG.md#k-lexical-products-20261117) aligns dependencies. H-564–H-566's callable-bearing ADT/anonymous-data direction remains under review, including type identity/results; no new aggregate implementation or full proof/physical/value-path qualification follows.
 
 - **Typed reservation and completed construction:** [H-562](../CHANGELOG.md#h-562)/[K-TYPED-RESERVATION-20261117](../CHANGELOG.md#k-typed-reservation-20261117), [D-22-RESERVATION](DesignAuthorityRegistry.md#d-22-reservation)/P-500–P-502 covers D-14r119's initialization boundary. Bare `make T [in o]` reserves typed storage; an attached initializer block requests completed construction. C-65/C-72/C-95 and charter §§3.3/4.3/6.3/8 preserve explicit allocation and flow-checked readability. D-22 owns examples/acceptance; preserve established identity versus payload readiness, actual owners, staged sound proofs, no rollback and D-16. The source distinction is confirmed; aggregate algorithms/native support and complete value-path qualification remain separate. Other qualified contracts continue.
 
@@ -42,6 +44,8 @@ Design revision: 119 · Recorded: 2026-11-17 · Status: design draft with scoped
 - **Integrated continuity:** [K-706](../CHANGELOG.md#k-706) preserves the qualified alias/destination contract alongside H-448's bounds policy. Cyclic-construction planning and ordinary readable-reference guarantees remain scoped to their existing records; neither current implementation evidence nor the bounds decision grants whole-document qualification.
 
 ## Ref and ptr declaration direction
+
+H-567/H-568 forbids inferring C++ object copying/moving from these declarations or operators. Whole-payload transfer is limited to pure bits. Reference binding retains target identity and actual owner; ownership transfer changes release responsibility, not the regional graph. Explicit graph transfer and callable construction retain their separate contracts. H-563 confines callable-view storage to lexical scopes; a region or regional field cannot store such a value. [D-22](ConstructionAndAcquisition.md#storage-eligibility-and-payload-transfer) owns compound consequences.
 
 H-309 confirms `ptr next:Node` as the declaration shape for a stored pointer field. It also directs ordinary variables toward ref or ptr declarations, eliminating let/var-style variable declarations. H-311 separately permits direct bits fields with val or no modifier. For reference declarations, ref must reject reads before initialization at compile time; dereferencing ptr may produce a null-pointer exception. H-313 accepts the coordinated checked-NPE and val increment; native evidence and remaining source boundaries are recorded separately.
 
