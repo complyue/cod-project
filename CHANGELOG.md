@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-17 — Propose bounded deferred-execution source checks
+
+<a id="k-798"></a>
+**K-798 — Make the missing enforcement contract reviewable.** Agent proposal registry858→859 introduces DeferredExecutionChecks.md r1/D-17-DEFER-CHECKS/P-561–P-563, pending human whole-file/value-path review. H-552’s source ban remains selected; candidate D-17-DEFER-CHECKS → C-63 → C-10 via P-561/P-235, with the P-236 preservation baseline and charter §§2/3.3/4.3/6.3/8/12 preserves explicit, checkable cleanup responsibility. H-356/H-371/H-295 and ordinary callable/owner rules constrain eager preparation, explicit-scope permissions, helper boundaries and nonexecuting queries; dependencies do not qualify the new mechanism. D-17r88 and source425 gain editorial review links only. Full queue/FIFO/aggregate/checked-pass/return-inspection, module/generator and ordinary capture scopes remain separate; D-16 and byte-identical D-18r113 remain. Baseline: `ed6315b67d6402d4e72c14c5c15694781dd0333a` at affected paths. Original human evidence and current compiler behavior are unchanged; no implementation or new human confirmation is asserted.
+
 ## 2026-11-17 — Share native invocation parameter roles
 
 <a id="k-797"></a>
