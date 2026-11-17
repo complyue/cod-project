@@ -1,8 +1,10 @@
 # CoD regional ownership: syntax, semantics and use
 
-Design revision: 120 · Recorded: 2026-11-17 · Status: design draft with scoped confirmed requirements.
+Design revision: 121 · Recorded: 2026-11-17 · Status: design draft with scoped confirmed requirements.
 
 ## Design authority
+
+- **Named region roots:** [H-595](../CHANGELOG.md#h-595)/[K-NAMED-ROOTS-20261117](../CHANGELOG.md#k-named-roots-20261117), [D-13-ROOT-ACCESS](DesignAuthorityRegistry.md#d-13-root-access)/P-546–P-548, aligns this revision's regional examples with named roots, ordinary `r.name` assignment destinations and receiving specifications; the source root intrinsic is removed. Reuse C-74/C-65/C-72 and charter §§2/3.1–3.3/4.3/6.3/8/12 for explicit storage, access and lifetime responsibility. D-13 owns acceptance; preserve existing qualifications, actual-owner checks, nominal component identity, D-16 and D-18r113. Full structural/receiving proof and compiler migration remain separate; no C++ storage API changes follow.
 
 - **Callable placement and transfer boundaries:** [H-563](../CHANGELOG.md#h-563)/[H-567–H-568](../CHANGELOG.md#h-567), [D-18-LEXICAL-STORAGE](DesignAuthorityRegistry.md#d-18-lexical-storage)/P-503–P-505 and [D-22-TRANSFER](DesignAuthorityRegistry.md#d-22-transfer)/P-506–P-508 cover D-14r120's placement/operation terminology. Callable-view values have lexical-scope storage, never regional storage; only pure bits admit whole-payload transfer. CoD has no C++ object copying/moving model. C-54/C-65/C-72/C-73/C-75 and charter §§2/3.2–3.3/4.3/6.3/8 preserve regional relocatability and explicit identity/lifetime responsibility. D-18/D-22 own acceptance; retain dedicated callable construction/capture, graph transfer, actual owners and D-16. [K-LEXICAL-PRODUCTS-20261117](../CHANGELOG.md#k-lexical-products-20261117) aligns dependencies. H-564–H-566's callable-bearing ADT/anonymous-data direction remains under review, including type identity/results; no new aggregate implementation or full proof/physical/value-path qualification follows.
 
@@ -195,7 +197,7 @@ Bare null obtains the other reference operand’s owner context. Same-owner null
 
 H-428 treats allocation as an allowed initialization side effect. Failure of a later initializer does not rewind prior allocations or valid publications into an existing live region. Incomplete bindings/readable objects remain unavailable; D-17's failed whole-region acquisition cleanup remains exact. The language provides no allocation checkpoint or automatic undo; applications/libraries may define their own framework within ordinary lifetime/access rules.
 
-For `count:i64` or `val count:i64`, `make Packet(capacity = bytes) { count <- 3 }` initializes the directly stored bits. It does not allocate a separate target. The construction-allocation question applies only when count is explicitly ref or ptr. For such a field, automatic same-region target allocation during initialization versus explicit target allocation remains unselected; H-311's correction is not an answer choosing either policy. Ordinary later <- writes an existing target and = rebinds an edge; neither gains implicit allocation from this discussion.
+For `count:i64` or `val count:i64`, `make region Packet(bytes -> capacity) { count <- 3 }` initializes the directly stored bits. It does not allocate a separate target. The construction-allocation question applies only when count is explicitly ref or ptr. For such a field, automatic same-region target allocation during initialization versus explicit target allocation remains unselected; H-311's correction is not an answer choosing either policy. Ordinary later <- writes an existing target and = rebinds an edge; neither gains implicit allocation from this discussion.
 
 The first source rule must handle both a delayed reference target and an allocated-but-uninitialized bits destination. An allocated slot can be a valid destination before it is readable. A ref-backed graph may likewise need its nodes allocated before all cyclic edges can be filled. Merely sharing one region cannot prove those edges initialized. H-562 permits bare typed reservation through `make T [in o]`; an attached initializer block requests completed construction. Identity-only ptr use may precede readiness, but ordinary readable-ref publication requires proved field/target completion. D-22 owns this source distinction and the bounded staged-cycle acceptance; exact aggregate proof coverage remains implementation work. No general runtime initialization registry is introduced.
 
@@ -259,11 +261,12 @@ Variable names in read positions always denote their dereferenced contents. For 
 Schematic declarations, with the established `ptr` keyword and the existing assignment distinction:
 
 ```text
-ptr current = root(first_region);
+# Both region shapes declare a ref entry:Node root.
+ptr current = first_region.entry;
 ptr next = another_node_in_first_region;
 current = next;                      # Same owner: rebind, without copying Node.
-current = root(second_region);       # Different owner: compile error.
-current.count <- root(second_region).count; # Bits transfer can cross owners.
+current = second_region.entry;       # Different owner: compile error.
+current.count <- second_region.entry.count; # Bits transfer can cross owners.
 ```
 
 The two regions may both have the same root type. Type identity does not establish allocation-owner identity. Repeated calls to one allocation site likewise create distinct owner instances. A control-flow join cannot forget the initializer's fixed owner or accept a cross-owner rebind simply because both paths are individually live. New `ptr` shadowing declarations have their own initialization; rebinding an existing pointer does not redeclare it.
@@ -324,20 +327,22 @@ Owner qualifiers distinguish allocation permission; H-274/H-275 additionally dis
 | --- | --- | --- |
 | `owner O` | Region or lexical scope, with H-438 writable-input eligibility | Fixed actual owner plus allocation access through make; no direct region-root view or root-policy methods are implied. |
 | `const owner O` | Region or lexical scope, including all-readonly inputs or a deliberate weaker contract | Fixed actual owner with no allocation through this path; declared writable-target access remains independent. |
-| Region-specific owner constrained by RootType | A region whose concrete root satisfies the selected type constraint | An implicit const lexical binding with the same owner constraint plus a usable borrowed reference to that actual region, permitting authorized calls to its root's memory-management methods. |
+| Region-specific owner constrained by a root schema | A region whose named roots satisfy the structural field requirement | An implicit const lexical binding and a usable borrowed region reference; named policy roots supply the objects needed by authorized library methods. |
 
-H-275 confirms the region-specific declaration spelling:
+The region-specific binder retains H-275's actual-owner role. Its structural requirement names roots used by the helper; an ordinary named policy object can retain an abstract nominal interface:
 
-```text
-function extend(node:Node in r) -> Node in r
-  where {region r:NodeStore} {
-  allocate_neighbour(r, root(r), node)
+```cod
+type PoolPolicy;
+region NodeStore { ref pool:PoolPolicy; }
+func extend(node:Node in r) -> ref Node in r
+    where {region r:NodeStore} {
+    return allocate_neighbour(r, r.pool, node);
 }
 ```
 
-`NodeStore` names a concrete root type or an abstract root-policy interface. `region` declares the kind of owner and `:NodeStore` constrains its root; r is not the root object itself. The body can use r as a borrowed region reference and `root(r)` to access its root. `allocate_neighbour` is an ordinary user-library method in this example, not a new intrinsic. The actual region is inferred from node's tracked owner; no lookup of an ambient effect or separate user-supplied owner ID is needed. The generic `owner O` spelling remains unchanged.
+NodeStore describes the required root fields, while PoolPolicy describes the selected pool object's interface. `allocate_neighbour` is an ordinary library callable. The actual region is inferred from node's tracked owner; matching a schema does not locate a region, read an ambient effect or supply a separate user owner ID. Generic `owner O` remains unchanged and supplies no root schema by itself.
 
-An abstract root constraint follows the existing explicit-conformance and module-visibility rules. It retains the actual concrete root type and region instance for demanded method selection; it introduces no structural-field test, base-layout cast, copied root or general RTTI. Two arguments marked `in r` must belong to the same region instance even if two different regions both satisfy NodeStore. A lexical-scope-owned argument cannot satisfy the region-specific declaration.
+Nominal abstract constraints on a selected root retain explicit conformance and module visibility. Structural region matching retains concrete layout/owner evidence without a base-layout cast, product-to-object conversion or general RTTI. Two arguments `in r` must name the same actual region even when separate regions satisfy the same shape. A lexical-scope-owned argument cannot satisfy a region-specific declaration.
 
 The region reference conveys borrowed access rather than cleanup responsibility. It cannot be consumed, sent away or installed as a new owning effect. The method may call permitted user allocation/reuse operations while the region remains live. Its root-policy reference does not bypass const restrictions or manufacture write permission from read-only input; the exact const/permission spelling remains part of the wider qualifier work. A function receives the reference explicitly through its signature and therefore needs no dynamic-context access. Returning `Node in r` retains the same lifetime dependency.
 
@@ -351,7 +356,7 @@ H-284 proposes `symbol @o1:T1 in r, @o2:T2 in r where {region r:RT};`, applying 
 
 ### Region as a declaration keyword throughout the language
 
-H-275 selects this language-wide direction. A region declaration identifies the storage resource and its root type; a ptr declaration identifies an object or bits view. The actual region is not its root object: `root(r)` supplies that object while r supplies the region reference needed by storage-policy methods. Generic `owner O` remains a provenance constraint accepting regions and lexical scopes; it introduces no resource value by itself.
+H-275 selects this language-wide direction. A region declaration identifies the storage resource and its structural root schema; a ptr declaration identifies an object or bits view. The actual region is distinct from each selected root: `r.name` or a receiving spec supplies the corresponding field view, while r supplies regional access to storage-policy helpers. Generic `owner O` remains a provenance constraint accepting regions and lexical scopes; it introduces no resource value by itself.
 
 The root annotation must not be reinterpreted as allocating a RootType object in the surrounding lexical scope. The resource remains intrinsic; a borrowed region reference does not gain cleanup responsibility, and an owned region still has exactly one transferable cleanup obligation. Removing a user-facing type-constructor spelling does not erase the compiler's distinction between a whole-region reference, a region owner and an interior object view.
 
@@ -362,7 +367,7 @@ The declaration shape covers locals, explicit parameters, results and symbolic p
 | Inferred owner and actual region reference | `where {region r:NodeStore}` | Confirmed by H-275; infer r from arguments marked `in r`, check its root constraint and provide borrowed access. |
 | Explicit borrowed region parameter | `function edit(region r:NodeStore, node:Node in r) -> void` | The caller supplies r explicitly; the node must belong to that same instance. This also serves calls with no interior argument from which to infer a region. |
 | Borrowed local region binding | `region view:Pool = existing_region;` | No ownership acquisition; retain the actual region and its lifetime dependency. |
-| Owning local region binding | `owned region packet:Packet <- make Packet(capacity = bytes) { sequence <- initial };` | Retain the owned qualifier; construction and single-owner transfer/cleanup remain the accepted E4/E5 contract. |
+| Owning local region binding | `owned region packet:Packet <- make region Packet(bytes -> capacity) { sequence <- initial };` | Retain the owned qualifier; construction and single-owner transfer/cleanup remain the accepted E4/E5 contract. |
 | Consuming region parameter | `function process(owned region packet:Packet) -> void` | Preserve consumption at callee entry after arguments/conversions succeed. |
 | Borrowed or owning region result | `-> region :Pool` / `-> owned region :Pool` | Unnamed result declaration; avoids adding a named-result scope solely to remove the type-constructor spelling. Borrowed provenance and owning-result transfer remain distinct. |
 | Typed symbolic region resource | `region symbol @state:Pool;` | Preferred symbol declaration form under H-276. It does not install a value; installation still uses `effect @state <- rhs`, and lookup cannot extract ownership. |
@@ -450,7 +455,7 @@ Consider an existing declaration `owned region packet:Packet` and the operation:
 effect @state <- packet;
 ```
 
-H-262 makes `packet` unavailable in the compiler's control-flow state. A later `root(packet)` or second transfer is a compile error; the runtime value does not become an implicit nullable region. The installed resource remains alive under `@state`, whose reads provide non-extractable access. This chooses a source post-state, not an allocation layout or a new runtime ownership wrapper.
+H-262 makes `packet` unavailable in the compiler's control-flow state. A later `packet.sequence` or second transfer is a compile error; the runtime value does not become an implicit nullable region. The installed resource remains alive under `@state`, whose reads provide non-extractable access. This chooses a source post-state, not an allocation layout or a new runtime ownership wrapper.
 
 A transferable named region need not occupy optional storage. Explicit optional/result types express runtime absence or a returned send-error outcome; they are not inserted to represent a consumed ordinary variable. Provenance, capture and branch checks remain necessary.
 
@@ -461,10 +466,10 @@ Under this contract, every path reaching a use must retain a valid owner. If one
 The source name and the storage reached by an existing view have different validity rules:
 
 ```text
-ref view = root(packet);
+ref view = packet.sequence;
 effect @state <- packet;
-view.sequence <- 9u64; # Valid while @state's owner remains alive and accessible.
-# root(packet) is invalid: the original owning declaration was consumed.
+view <- 9u64; # Valid while @state's owner remains alive and accessible.
+# packet.sequence is invalid: the original owning declaration was consumed.
 ```
 
 H-263 selects this behavior. Transferring a whole-region handle changes cleanup responsibility, not the region instance or its internal references. The compiler must associate view validity with that actual region and the new owner's lifetime/access. It must not blindly attach every borrow to the original variable's availability. Conversely, consuming an outer owner into an inner scope can shorten the region's remaining lifetime: views may be used within the inner owning scope, but not after it ends. Dynamic shadowing alone does not end a hidden owner's lifetime; H-180's capture/shadow rule remains unchanged.
@@ -479,22 +484,22 @@ H-431 retains D-17 E4: argument evaluation/conversion precedes entry; after entr
 
 ### Construction-to-installation walkthrough
 
-The H-264 construction contract, expressed with the H-307 declaration surface, is `owned region packet:Packet <- make Packet(capacity = bytes) { sequence <- initial };`: capacity may be a runtime expression, the root initializes directly inside the new region, and the result transfers ownership into the declaration. D-17 implements this form and unchecked allocation/capacity failures. The extended walkthrough below expresses the target qualifier/field-transfer surface; executable examples use both field `<-` and the explicit setfield intrinsic for bits edits. Wider const/resource combinations remain separate from the validated make/call/result lifecycle.
+The H-264 construction contract, expressed with the H-307 declaration surface, is `owned region packet:Packet <- make region Packet(bytes -> capacity) { sequence <- initial };`: capacity may be a runtime expression, the root initializes directly inside the new region, and the result transfers ownership into the declaration. D-17 governs construction cleanup and unchecked allocation/capacity failures; current source support is limited as recorded in the source capability reference. The extended walkthrough below expresses the target qualifier/field-transfer surface; executable examples use both field `<-` and the explicit setfield intrinsic for bits edits. Wider const/resource combinations remain separate from the validated make/call/result lifecycle.
 
 ```text
-data Packet { sequence:u64; }
+region Packet { sequence:u64; }
 region symbol state:Packet;
 
 function make_packet(bytes:const u64, initial:const u64)
     -> owned region :Packet {
-  make Packet(capacity = bytes) { sequence <- initial }
+  return make region Packet(bytes -> capacity) { sequence <- initial; };
 }
 
 {
   owned region packet:Packet <- make_packet(4096u64, 7u64);
-  root(packet).sequence <- 8u64;
+  packet.sequence <- 8u64;
   effect @state <- packet;
-  proc @inspect() -> const u64 { root(@state).sequence }
+  proc @inspect() -> const u64 { return @state.sequence; }
   {
     effect @state <- make_packet(4096u64, 20u64);
     perform @inspect(); # 8; the captured resource retains its owner.
@@ -510,7 +515,7 @@ The matching ordinary-use example returns an owner from the same factory and pas
 
 ```text
 function update(region packet:Packet, value:const u64) -> void {
-  root(packet).sequence <- value;
+  packet.sequence <- value;
   {}
 }
 
@@ -526,7 +531,7 @@ D-17 E4 admits a borrowed argument without transferring responsibility. An ownin
 
 | Gate | Decision required | Existing implementation and acceptance boundary |
 | --- | --- | --- |
-| Construction | D-17 E5 fixes runtime payload capacity and every-field initialization in written order. | `make Root(capacity = bytes) { field <- value }` reserves root storage before evaluating fields and releases unfinished construction on exception. `root(region)` returns a borrowed product view. |
+| Construction | D-17 E5 fixes runtime payload capacity and every-field initialization in written order. | `make region Root(bytes -> capacity) { field <- value }` reserves root storage before evaluating fields and releases unfinished construction on exception. Named root access selects borrowed fields under the actual owner; no whole-product intrinsic is exposed. |
 | Access and assignment | H-302 fixes ordinary reference-assignment qualifier selection; wider const/place propagation remains bounded. | LLVM storage places support explicit field/element edits. Fresh owning region declarations use `<-`; unqualified region parameters/results borrow. |
 | Ownership flow | D-17 E4 fixes consuming entry/result boundaries; owner reassignment remains excluded. | Holder availability and region liveness are separate compiler facts. Normal/exceptional joins track consumed names and permit different fresh owning results; potentially ended borrows reject. |
 | Failure and exit | D-17 fixes exact intrinsic catches, finally replacement and cleanup without graph rollback. H-269 retains explicit causes beyond catch exit; K-414 validates their fallible creation and storage. | Native checks cover failure before entry, failure inside the callee, failed root initialization and abandoned owning results. |
@@ -703,7 +708,7 @@ H-182 proposes the first wording; the second is an agent alternative, not a conf
 
 | Form to explore | Semantic requirement | Practical trade-off |
 | --- | --- | --- |
-| Explicit resource expression, illustratively `make Packet(capacity = bytes) { ... }` | Create and initialize one whole region; yield a checked owning temporary. | Makes effectful construction visible at the use site, but requires syntax for construction inputs, internal access and root completion. |
+| Explicit resource expression, illustratively `make region Packet(bytes -> capacity) { ... }` | Create and initialize one whole region; yield a checked owning temporary. | Makes effectful construction visible at the use site, but requires syntax for construction inputs, internal access and root completion. |
 | Procedure factory, illustratively `behave @make_R(...)` | Its checked result must satisfy the same temporary/ownership contract. | Reuses named, testable procedural construction and composition; owning return semantics must be defined first. |
 | Contextual optional source, illustratively `effect @x : R <- source_place` | The initializer consumes a writable present optional place rather than reading/copying its value. | Concise and consistent with the transfer arrow, but diagnostics and source typing must expose the consumption. |
 | Explicit extraction expression before effect installation | Extraction produces a valid transferable result with a specified absent-source behavior. | Makes removal visible outside the effect form, but introduces another operation and broadens the temporary-result contract. No such operation is selected without a concrete need. |
@@ -799,11 +804,11 @@ The type categories below distinguish borrowed whole-region access from ownershi
 | `region packet:Packet` | Borrowed access to the whole region with its designated Packet root. | No release/transfer responsibility and no lifetime extension. |
 | `owned region packet:Packet` | Whole-region ownership tied to the holding declaration's scope. | One release-or-transfer responsibility; borrowing does not duplicate it. |
 
-A `region packet:Packet` declaration denotes an intrinsic resource with the D-17 borrowed/owning call contract. It is not a library struct containing a pointer and destructor. It carries the root's nominal type identity; two unrelated root types do not become interchangeable because their layouts match. The physical image need not contain a new runtime owner object merely because the source type is explicit. Region storage and regional objects remain the same intrinsic lifetime unit.
+A `region packet:Packet` declaration denotes an intrinsic resource with the D-17 borrowed/owning call contract. It is not a library struct containing a pointer and destructor. Its region schema is a structural field requirement; names, storage kinds and full component contracts matter, and a matching layout alone proves nothing. Nominal data types used by its fields retain their own identity. The physical image need not contain a new runtime owner object merely because the source type is explicit. Region storage and regional objects remain the same intrinsic lifetime unit.
 
 H-200 selects the short unqualified spelling for borrowed access. An owning declaration uses `owned region packet:Packet`; the declaration always states region and ownership, while the root may be inferred. A single scope manages the region's lifetime at a time. If an authorized operation transfers ownership, its destination becomes responsible and the source cannot also release it. Returning ownership from a factory therefore cannot leave cleanup attached to the factory's expired scope.
 
-In particular, `region symbol @state:Packet` can remain a direct resource type under H-181. Reading `@state` supplies access under its dynamic owner; it does not authorize removal. `root(@state)` may supply object access, while installation into a second owning binding or sending the resource remains invalid. This requires checking the expression's source permission as well as its declared type. A matching `region :Packet` annotation alone cannot convert a dynamic resource read into a transferable result. Making every named whole-region value have identical extraction permissions would contradict the confirmed dynamic-resource rule.
+In particular, `region symbol @state:Packet` can remain a direct resource type under H-181. Reading `@state` supplies access under its dynamic owner; it does not authorize removal. Named root access such as `@state.sequence` supplies the selected field view, while installation into a second owning binding or sending the resource remains invalid. This requires checking the expression's source permission as well as its declared type. A matching `region :Packet` annotation alone cannot convert a dynamic resource read into a transferable result. Making every named whole-region value have identical extraction permissions would contradict the confirmed dynamic-resource rule.
 
 Functions operate on explicitly supplied regional data and may read or modify it without accessing dynamic context. Returned object references retain their region provenance; function return does not itself end a caller-owned region. H-197/H-198 supplies the mutable baseline, with the implementation boundary recorded below.
 
@@ -811,9 +816,9 @@ H-478/D-28-ADT selects one nominal ADT across lexical and regional placement, in
 
 ### Reference provenance and escape checking
 
-A Packet view must retain a compile-time association with its enclosing region. In analysis notation, `Packet@rho` means a reference whose access depends on region `rho`; this is not a selected source lifetime-parameter syntax or a stored region ID in every pointer.
+A selected root or interior object view must retain a compile-time association with its enclosing region. In analysis notation, `Node@rho` means a reference whose access depends on region `rho`; this is not a selected source lifetime-parameter syntax or a stored region ID in every pointer.
 
-- `root(packet)` inherits packet's region association. Field/index traversal and returned references preserve the association; following an intra-region reference stays in that same region.
+- `packet.sequence` inherits packet's region association. Field/index traversal and returned references preserve the association; following an intra-region reference stays in that same region.
 - Ordinary aliases, branch results and demanded calls must retain enough provenance to check subsequent access. A join cannot discard region information merely because both alternatives have the same element type. Uncertain joins must be represented soundly or rejected.
 - A reference may return from a function while the caller still owns a sufficiently long-lived region. Ending the call does not destroy that caller-owned region. A reference cannot escape the actual enclosing region lifetime or the sender's valid access after handoff.
 - Captured references/resources retain their access dependencies. Capturing a value cannot extend ownership or make an expired reference usable through perform. Existing non-consuming captured shadows preserve still-live owners.
@@ -826,17 +831,17 @@ The compiler already carries a `region_id` for the supported reference subset an
 H-264 selects the construction and initialization contract with allocation parameters separate from in-place root initialization and H-200's explicit ownership qualifier:
 
 ```text
-data Packet { sequence:u64; }
+region Packet { sequence:u64; }
 {
   owned region packet:Packet <-
-    make Packet(capacity = 65536u64) { sequence <- 7u64 };
-  ref view = root(packet);
-  setfield(view, sequence, 8u64);
+    make region Packet(65536u64 -> capacity) { sequence <- 7u64 };
+  ref view = packet.sequence;
+  view <- 8u64;
   # Ordinary scope exit releases the still-held region.
 };
 ```
 
-H-264 confirms the named capacity argument and in-place root initializer; H-307 supplies the owning region declaration shown here. D-17 E5 implements this bounded construction. Typed root access must preserve the same region provenance as the existing object-access operations. `make Packet` chooses the root object type; the result carries whole-region ownership, while unqualified `region :Packet` supplies borrowed access. The initializer is an in-place root initializer in the newly allocated region, not evaluation of a stack Packet followed by copying it. `root` only obtains an object reference and transfers no ownership.
+H-264 confirms the named capacity argument and in-place root initializer; H-307 supplies the owning region declaration shown here. D-17 E5 governs this bounded construction; current implementation coverage remains in the source capability reference. Typed root access must preserve the same region provenance as the existing object-access operations. `make region Packet` chooses the structural root schema; the result carries whole-region ownership, while unqualified `region :Packet` supplies borrowed access. The initializer is an in-place root initializer in the newly allocated region, not evaluation of a stack Packet followed by copying it. Named root selection transfers no ownership.
 
 The parentheses supply region-allocation inputs, with capacity required. The braces initialize the root's fields. A root can therefore have its own field named `capacity` without colliding with the allocator parameter. Capacity can be a runtime expression; `make` is not compile-time enumeration of region instances. The suggested first interpretation is usable content capacity for the root and subsequent regional allocations, with system-header overhead accounted separately. Exact capacity units, rounding, minimum size and error behavior remain design work; this draft does not establish a new allocator ABI or automatic growth policy.
 
@@ -865,7 +870,7 @@ A factory would instead return the newly made resource:
 
 ```text
 proc make_packet(sequence:const u64, bytes:const u64) -> owned region :Packet {
-  make Packet(capacity = bytes) { sequence <- sequence }
+  return make region Packet(bytes -> capacity) { sequence <- sequence; };
 }
 ```
 
@@ -1214,7 +1219,7 @@ The target view retains its exact type, fixed owner, lifetime and destination ac
 
 Lean acceptance distinguishes writable chaining, readonly transfer results, exact and weakened input matches, actual caller rebinding, readonly access preservation, cross-owner rejection, ambiguous type/qualifier tradeoffs, invalid selected bodies and invalid destination results. No overload can obtain missing access from its declared return type.
 
-**Confirmed RO-Q2 — local pointer owner is fixed.** H-271 rejects `a = b` after `ptr a = root(regionA); ptr b = root(regionB);` when A and B are distinct owners, even if both remain live and have the same type. Rebinding within the initializer's owner remains permitted. H-270's owner-mismatch diagnostic applies. The pointer's own local declaration does not allow it to switch target owners; H-203 separately constrains stored graph edges. RO-Q1's destination identity/lifetime rule remains; H-302 defines reference-result access.
+**Confirmed RO-Q2 — local pointer owner is fixed.** H-271 rejects `a = b` after `ptr a = regionA.entry; ptr b = regionB.entry;` when A and B are distinct owners, even if both remain live and have the same type. Rebinding within the initializer's owner remains permitted. H-270's owner-mismatch diagnostic applies. The pointer's own local declaration does not allow it to switch target owners; H-203 separately constrains stored graph edges. RO-Q1's destination identity/lifetime rule remains; H-302 defines reference-result access.
 
 H-293 forbids a newly established alias from regaining write permission through a read-only source. In a chain, the inner assignment's read-only destination result remains read-only when borrowed by the outer assignment. Independently held writable aliases can still modify the target; the RHS is never required to be writable merely to read it. The existing ([]=) hook and scalar-by-value prototype do not prove the proposed general reference-assignment, qualifier or storage-result contract.
 
@@ -1277,9 +1282,9 @@ The storage rules remain intact: operands may be permitted bits storage or admit
 
 ### Root-policy dispatch and actual owner arguments
 
-H-206 requires selection by both sides' region types, including abstract root-type matching in region :RT; RT supplies the region's internal memory-management strategy interface. H-208 requires the selected function/procedure to receive both actual region references so it can call those methods. Type information alone cannot allocate into the intended region instance.
+H-206 requires selection using both sides' region contracts. Structural root requirements retain their concrete layouts and can name policy objects with nominal abstract interfaces; those objects supply the library memory-management strategy. H-208 requires the selected function/procedure to receive both actual region references so it can call those methods. Type information alone cannot allocate into the intended region instance.
 
-H-274 extends this requirement to ordinary owner-constrained signatures. [The region-owner form](#region-owners-with-root-policy-access), with its where binder confirmed by H-275, supplies both the root constraint and the actual borrowed region; generic owner constraints support common construction under H-438 when direct regional root-policy access and a region-only restriction are unnecessary. The graph-overload expansion below must use that same owner/reference relationship rather than infer a region from root-type identity alone. Its older type-constructor notation illustrates logical inputs only; the target public form uses region declarations.
+H-274 extends this requirement to ordinary owner-constrained signatures. [The region-owner form](#region-owners-with-root-policy-access), with its where binder confirmed by H-275, supplies both the root constraint and the actual borrowed region; generic owner constraints support common construction under H-438 when direct regional root-policy access and a region-only restriction are unnecessary. The graph-overload expansion below must use that same owner/reference relationship rather than infer a region from root-type identity alone. Use explicit region declarations and named policy roots; no whole-root conversion is implied.
 
 The proposed logical dispatch inputs are destination value/access type, destination owner/root type, source value/access type and source owner/root type. The concrete owner instances remain distinct facts: two region :PoolRoot operands can name different allocations, and matching their root types does not satisfy the same-owner edge check.
 
@@ -1292,7 +1297,7 @@ function (<-)(
 ) { ... }
 ```
 
-WritableNodeStore and ReadableNodeStore stand for abstract root interfaces in this example; declaration/conformance grammar and the exact overload header/result syntax are not selected. The two region parameters are borrowed. The destination supports the permitted allocation/access methods; source permissions are declared by the algorithm. Both function and procedure overloads may use explicit region references; only procedures may additionally use dynamic context.
+WritableNodeStore and ReadableNodeStore stand for structural region requirements with appropriately typed named policy roots; the policy objects retain nominal conformance. The exact graph-overload adaptation/header/result syntax remains separately reviewed. The two region parameters are borrowed. The destination supports the permitted allocation/access methods; source permissions are declared by the algorithm. Both function and procedure overloads may use explicit region references; only procedures may additionally use dynamic context.
 
 For the two-operand source form destination <- source, the proposed compiler expansion supplies the matching owner arguments from tracked provenance. It must prove each region argument actually owns its paired object, including for explicit operator-call syntax; matching types alone is insufficient. This is not ambient @region lookup, user heap allocation or permission to recover a writable region from a const operand. Precise owner-argument adaptation, including how const access limits allocation methods, remains part of the source contract.
 
@@ -1325,13 +1330,13 @@ Under H-262, a completed ownership transfer removes the source declaration's ava
 The proposed send result owns the disposition on every outcome: local acceptance returns no packet; a local error returns the unsent region together with the error. The original source is unavailable on both paths, so caller code does not have to infer whether a hidden runtime mutation restored it. In schematic source only:
 
 ```text
-ref view = root(packet);
+ref view = packet.sequence;
 ref outcome = send(mailbox, packet);
-# root(packet), deref(view), or send(mailbox, packet): compile errors here.
+# packet.sequence, deref(view), or send(mailbox, packet): compile errors here.
 match outcome {
   Accepted => { /* No packet remains with the sender. */ }
   LocalError(error, returned_packet) => {
-    ref editable = root(returned_packet);
+    ref editable = returned_packet.sequence;
     # Edit, retry with returned_packet, or release it by ending this arm.
   }
 }
@@ -1352,7 +1357,7 @@ The following proposed forms avoid a named transfer source; the resource shadow/
 ```text
 region symbol state:Packet;
 effect @state <- make_packet(1u64, 65536u64);
-proc read_state() -> u64 { return deref(root(@state)).sequence; }
+proc read_state() -> u64 { return @state.sequence; }
 symbol probe : proc() -> u64;
 effect @probe = read_state;
 {{

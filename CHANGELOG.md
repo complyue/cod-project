@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-11-17 — Select named region access and compositional initialization
+
+<a id="h-595"></a>
+**H-595 — Keep root receiving and direct destinations; remove root(r).** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded2026-11-17 America/Los_Angeles; exact timestamps/personal name unavailable. Requests evaluating redundant whole-root access and region receiving, then answers “两者同时支持呗，让 `r.<root-name>` 可以作为 `=` `<-` 的lhs不就行了” and explicitly directs “`root(r)` 直接删了吧”. Confirms both root access forms and removal of the source intrinsic; ordinary standalone var place binding supplies a named slot without the agent's extra receiving operator. Renews autonomous settlement/documentation of unambiguous tracker items. Does not direct removal of C++ root-address internals or qualify the complete regional native mechanism.
+
+<a id="h-596"></a>
+**H-596 — Initialize each region root independently.** Same human/source/date: “make region 语法语义也往细了推演一下，每个root应该可以单独指定 initializer”. Confirms the per-root construction requirement and requests detailed composition with existing allocation, field and cleanup rules; does not by itself approve every constructor grammar/proof detail.
+
+<a id="h-597"></a>
+**H-597 — Allow a construction-local owner name.** Same human/source/date, reply to call_8fb14ebb355f4562b1d7717f73175fd7 selects “Allow optional construction-local region binder” for make region r:State(capacity) with ordered count/head/next initialization. Confirms r is available only during construction, the destination becomes available after success, and unfinished-root reads reject. Full init/helper/physical proofs remain separate.
+
+<a id="h-598"></a>
+**H-598 — Permit init helpers and keep whole-region readiness explicit.** Same human/source/date: “以 `init` 修饰符的参数传给helper去初始化应该也是允许的，否则跟本地变量未初始化不能读的静态规则一致处理”, and proposes treating the region as incomplete until all roots are initialized to avoid complex field analysis. Confirms helper delegation under initialization restrictions; the coarse call-boundary/local finite-root-fact strategy is an agent-derived implementation direction, not a human-selected algorithm or relaxation of soundness.
+
+<a id="h-599"></a>
+**H-599 — Allow a free initialization block to delegate all roots.** Same human/source/date: “你的自由初始化块建议，能内部调用helper完成所有roots的初始化的话，也挺好”. Accepts the free-block/helper direction. Integration requires complete root initialization on successful completion rather than one literal initializer entry per root; normal ordered effects, initialization checks and failed-new-region cleanup remain. No allocation rollback or early readable/owning publication is approved.
+
+<a id="k-named-roots-20261117"></a>
+**K-NAMED-ROOTS-20261117 — Unify root access and initialization responsibilities.** D-13r33→34/D-22r36→37/registry843→844 adds D-13-ROOT-ACCESS/P-546–P-548 and D-22-REGION-INIT/P-549–P-551 under H-595–H-599. Derived source-category cleanup, field-kind/owner and staged whole-region readiness boundaries preserve C-74/C-65/C-72/C-63 → charter §§2/3.1–3.3/4.3/6.3/8/12; full value-path/proof/native qualification remains pending. D-07r167→168/D-10r197→198/D-11r35→36/D-14r120→121/D-17r87→88/D-28r33→34 aligns root examples, policy-object constraints and lifecycle wording, preserving unrelated qualified contracts. Baseline: `c507c2c4a84a324956d9ef3e9bd67c6d141cca83` at these paths; original structural direction is H-323 at `0c0efbfde4dccb3f3397b6f961bd82bd9a12c848:design/DesignAuthorityRegistry.md:4792`. Source421, D-16 and byte-identical D-18r113 unchanged; documentation only, no local code/build/tests.
+
+<a id="k-generator-protocol-20261117"></a>
+**K-GENERATOR-PROTOCOL-20261117 — Establish the protocol independently of its body consumer.** Agent settlement under H-592/H-595, H-584 and D-24: D-29r6→7/P-528–P-530 retains declared/default-void feedback, independent generic/declaration evidence, explicit labelled production and lexical yield targets. Nested ordinary callables cannot implicitly capture an outer yield entry; nested for bodies retain lexical targets. Preserve C-96/C-65/C-84 → charter §§2/3.2–3.3/4.3/6.3/8/12, receiving effects/owners and fixed void final completion. Baseline: `c507c2c4a84a324956d9ef3e9bd67c6d141cca83:design/RangedForAndGenerators.md`. Grouped callable-view grammar, additional inference and complete native/value-path proof remain separate; no implementation qualification.
+
 ## 2026-11-17 — Apply ordinary liveness to result-bound owners
 
 <a id="h-594"></a>

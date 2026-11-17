@@ -1,8 +1,10 @@
 # Regional and lexical storage: reference-model refactoring
 
-Design revision: 33 · Recorded: 2026-11-17 · Status: one-ADT placement and scoped storage semantics selected; complete layout, encoding, backend and implementation contracts remain under review.
+Design revision: 34 · Recorded: 2026-11-17 · Status: one-ADT placement and scoped storage semantics selected; complete layout, encoding, backend and implementation contracts remain under review.
 
 ## Design authority
+
+- **Named region roots:** [H-595](../CHANGELOG.md#h-595)/[K-NAMED-ROOTS-20261117](../CHANGELOG.md#k-named-roots-20261117), [D-13-ROOT-ACCESS](DesignAuthorityRegistry.md#d-13-root-access)/P-546–P-548, aligns this revision's regional examples with named roots, ordinary `r.name` assignment destinations and receiving specifications; the source root intrinsic is removed. Reuse C-74/C-65/C-72 and charter §§2/3.1–3.3/4.3/6.3/8/12 for explicit storage, access and lifetime responsibility. D-13 owns acceptance; preserve existing qualifications, actual-owner checks, nominal component identity, D-16 and D-18r113. Full structural/receiving proof and compiler migration remain separate; no C++ storage API changes follow.
 
 - **Structural result assessment:** [H-572](../CHANGELOG.md#h-572)/[K-STRUCTURAL-RESULTS-20261117](../CHANGELOG.md#k-structural-results-20261117) covers r32→33’s dependency summary. D-22-ANON-DATA/P-509–P-511 evaluates a return-only named product signature `-> { ... }`, received as independent lexical variables. Preserve H-571, explicit actual owners, existing nominal ADT field rules, no object copying/moving or lifetime extension and D-16 under charter §§2/3.2–3.3/4.3/6.3/8/12. This pending source restriction introduces no aggregate-field permission or implementation qualification; acceptance/details belong to D-22.
 
@@ -296,12 +298,12 @@ The schematic signature makes the requested capacity explicit; exact generic/par
 The direct lifetime consequence of replacement is that the old region's lifetime ends and the output has a new actual owner identity. Root type R is preserved, but type equality does not equate the old and new owners. Existing references, aliases and captured/deferred views into the old region cannot be used after replacement or refreshed merely by receiving the output. A reference binding whose owner is fixed to the input cannot be rebound to the output; callers obtain fresh views instead.
 
 ```text
-# r is an owned region with root type Root.
-ref before = root(r);
+# r is an owned region whose Root schema declares ref entry:Node.
+ref before = r.entry;
 # Reads/writes through before are valid while r remains live.
 owned region resized:Root <- resize(r, 65536u64);
-ref after = root(resized);  # Fresh view associated with the returned owner.
-# root(r) rejects: r was consumed.
+ref after = resized.entry;  # Fresh view associated with the returned owner.
+# r.entry rejects: r was consumed.
 # Using before after resize rejects: its target owner ended.
 ```
 

@@ -1,8 +1,10 @@
 # CoD Regional Memory Vision and Implementation Tracker
 
-Design revision 33 · 2026-11-17
+Design revision 34 · 2026-11-17
 
 ## Design authority
+
+- **Named root access:** [H-595](../CHANGELOG.md#h-595)/[K-NAMED-ROOTS-20261117](../CHANGELOG.md#k-named-roots-20261117), [D-13-ROOT-ACCESS](DesignAuthorityRegistry.md#d-13-root-access)/P-546–P-548, covers r34's structural-region access section and aligned dependent examples. The human confirms both direct named-root access and region receiving, including ordinary assignment destinations, and explicitly removes the source root intrinsic. Candidate C-74/C-65/C-72 → charter §§2/3.1–3.3/4.3/6.3/8/12 serves readable storage selection with unchanged field kinds, actual owners, access, initialization and release. Acceptance is below; complete structural matching/proof/value-path qualification and compiler migration remain separate. Preserve D-01 physical protocols, D-16, D-17 cleanup and byte-identical D-18r113; no new whole-product value or capture authority follows.
 
 - **Callable placement and transfer boundaries:** [H-563](../CHANGELOG.md#h-563)/[H-567–H-568](../CHANGELOG.md#h-567), [D-18-LEXICAL-STORAGE](DesignAuthorityRegistry.md#d-18-lexical-storage)/P-503–P-505 and [D-22-TRANSFER](DesignAuthorityRegistry.md#d-22-transfer)/P-506–P-508 cover D-13r33's placement/operation terminology. Callable-view values have lexical-scope storage, never regional storage; only pure bits admit whole-payload transfer. CoD has no C++ object copying/moving model. C-54/C-65/C-72/C-73/C-75 and charter §§2/3.2–3.3/4.3/6.3/8 preserve regional relocatability and explicit identity/lifetime responsibility. D-18/D-22 own acceptance; retain dedicated callable construction/capture, graph transfer, actual owners and D-16. [K-LEXICAL-PRODUCTS-20261117](../CHANGELOG.md#k-lexical-products-20261117) aligns dependencies. H-564–H-566's callable-bearing ADT/anonymous-data direction remains under review, including type identity/results; no new aggregate implementation or full proof/physical/value-path qualification follows.
 
@@ -25,9 +27,50 @@ A direct pointer is a traversable edge between objects in the same region. The r
 
 ## Structural region definitions and variable storage
 
-[CallableViewsAndCaptures.md](CallableViewsAndCaptures.md#structural-regions) specifies the implemented field-subset requirement and its relation to captured regional slots. WPO retains concrete layouts and actual owners; structural compatibility does not authorize layout casts, cross-owner stored edges or nominal data-interface conformance.
+[CallableViewsAndCaptures.md](CallableViewsAndCaptures.md#structural-regions) records the field-subset source requirement and its relation to captured regional slots. Current compiler coverage is separately bounded by the source capability reference. WPO retains concrete layouts and actual owners; structural compatibility does not authorize layout casts, cross-owner stored edges or nominal data-interface conformance.
 
-Region acquisition/release, capacity, typed placement and reference provenance remain intrinsic services. Free lists, typed pools and item reuse remain CoD library policies under H-190. The source contract uses the existing native root shell and shilos allocator without changing D-01's physical representation. Overlapping/retyping storage, compaction with outstanding captures and custom physical allocators require separate design.
+Region acquisition/release, capacity, typed placement and reference provenance remain intrinsic services. Free lists, typed pools and item reuse remain CoD library policies under H-190. A native root shell may implement this source contract without changing D-01's physical representation; it is not a separately exposed CoD object. Overlapping/retyping storage, compaction with outstanding captures and custom physical allocators require separate design.
+
+### Named root access and receiving specifications
+
+H-595 removes the CoD `root(r)` intrinsic. A region is a structural product of named root fields, accessed either by `r.name` or by a receiving specification. Neither form exposes a separate unnamed whole-root object. A named region schema and an otherwise admitted structural field requirement use the same field semantics; this does not select new anonymous-annotation grammar.
+
+```cod
+data Node { value:u64; }
+region State { count:u64; ptr next:Node; }
+
+# state is a live region matching State; other belongs to the same region.
+{ ref n = count; ptr p = next; val old <- count; } := state;
+n <- 10u64;           # Write the region's count field.
+p = other;            # Rebind only local p.
+state.next = other;   # Rebind the region's next slot.
+state.count <- 11u64; # Write the direct bits field.
+
+ptr var link -> state.next;
+link = other;         # Explicit declared place alias of that regional slot.
+```
+
+Receiving a reference creates an ordinary independent local binding; it does not declare a place alias of the source slot. The existing standalone `var name -> place` form supplies an explicit place alias when needed. Receiving items keep their existing `=`/`<-` operators; no additional `var ... -> ...` receiving-item form is introduced. Ordinary ADT field access remains unchanged.
+
+| Declared root field | Selected meaning and permitted destination operation |
+| --- | --- |
+| Direct/unmodified or val bits field | An addressable bits place in r. Value reception reads independent bits; ref reception borrows that place with owner r. `r.count <- bits` writes it; `r.count = target` rejects because it has no reference slot. This does not create an owner-qualified independent val type. |
+| ref field | Its non-null selected target has owner r and admitted target access. `r.head = target` rebinds its regional slot; `r.head <- bits` writes the selected referent when that payload operation is admitted. |
+| ptr field | Its nullable target/absence retains owner r. `r.next = target_or_null` updates the slot; `<-` writes through the selected non-null target under ordinary access/readiness/null rules. Ref reception still needs valid non-null evidence. |
+
+Selecting a known field place does not read its payload. Reading a ref/ptr field's selected target requires an initialized slot; reading through it independently requires readable payload and any necessary non-null proof. Binding const and target const remain independent: a fixed ref slot may still expose a writable target, while writable rebinding cannot strengthen target access. Selecting roots grants no allocation, release or ownership-transfer authority beyond the existing region contract.
+
+A receiving RHS evaluates once. For an existing region expression it borrows that region, selects the named fields and performs the ordinary requested operations. Omitted roots are untouched: there is no implicit read, initialization, destruction, ownership transfer or cleanup of those fields. This differs from a callable structural result, whose omitted outputs still receive their ordinary cleanup. An owned region returned by a source expression remains subject to ordinary temporary-owner cleanup; any selected borrow must satisfy the resulting lifetime, without retaining that region implicitly. Independent bits may outlive it after a valid read. [D-22](ConstructionAndAcquisition.md#region-sources-for-receiving) owns the shared receiving rules and this source-category distinction.
+
+A spec selects current target/value information at its receiving operation. Later rebinding of state.next does not retarget p. A direct later occurrence of state.next observes its then-current binding; an explicit place alias such as link continues to name the selected regional slot. Dynamic region-symbol shadowing likewise affects new selections, while already selected views retain their actual owner. Cleanup, ownership transfer, release and resize preserve those ordinary distinctions.
+
+Structural requirements match names and full field contracts, not ordinal positions or nominal region-schema names. Retain actual concrete layout and owner when a consumer requires a compatible subset. Additional known concrete fields follow D-18's lower-bound rule; no missing field becomes available merely because an owner is live. A generic `owner O` without regional shape evidence cannot select named roots. Nominal ADTs held by fields retain their own identity and explicit conformance.
+
+There is no implicit first-root selection or flattening of a referenced object's fields. A single-field region still uses that field's name or a corresponding receiving item. A helper needing a Node receives the selected root; one needing region shape or allocation access receives the region. A policy object is an ordinary named field, such as `r.pool`, whose own abstract interface retains nominal conformance. Structural region compatibility does not invent a product-level nominal object or a packed-prefix layout. A field named root or capacity has only its ordinary declared meaning.
+
+**Implementation boundary:** no builtin or compatibility meaning remains for `root(r)` in the language contract. An ordinary user callable named root follows normal naming rules after parser migration. The current parser still classifies root as an intrinsic name; this requires removal in compiler development. C++ `memory_region::root()` and native root-address helpers are physical storage internals and can remain. This documentation change edits no code and establishes no current regional native/receiving support; the [source capability reference](../tests/cod/language/README.md) remains authoritative for implementation coverage.
+
+**Acceptance:** cover direct and receiving access to bits/ref/ptr roots, single/multiple roots, renamed/reordered/subset selection, actual layout differences, omitted roots left untouched, destination selection/effect order, valid declared place aliases, later rebinding, inherited access, unreadable slots/payloads, nullable-to-ref rejection, missing fields, same shape with different owners, symbolic shadowing and ownership transfer/release/resize. Apply receiving overlap rules to the actual selected reads/writes, not to harmless shared target identities. Reject builtin whole-root access, hidden owner retention and invalid temporary borrows. No regional callable field, owning user-data field, general structural ADT, automatic graph transfer, RTTI or physical allocator change follows; D-16 bits/UoM identities and validity remain unchanged.
 
 ## Relationships between regions
 
@@ -201,7 +244,7 @@ ref packet = create_region(...);
 ref result = send(mailbox, packet);
 ```
 
-Construction and editing under a procedure-local ordinary owner do not capture it or an interior pointer in a procedure definition. Captured effect-resource access must be distinguished from access to a packet region created during the current invocation. A packet-building procedure can eventually return ownership to its caller rather than retaining it dynamically. D-17 fixes and implements bounded make/root/owning-call forms. Send and owner-bearing optional outcomes remain separate design work.
+Construction and editing under a procedure-local ordinary owner do not capture it or an interior pointer in a procedure definition. Captured effect-resource access must be distinguished from access to a packet region created during the current invocation. A packet-building procedure can eventually return ownership to its caller rather than retaining it dynamically. D-17 fixes bounded construction, borrowing and owning-call contracts; current support remains scoped by the source capability reference. Send and owner-bearing optional outcomes remain separate design work.
 
 An owner returned from a block or procedure must transfer cleanup responsibility to the receiving holder before the source scope closes. A conditional result may select different region instances with the same owner type: joining their types alone cannot invent a shared region identity or declare both source holders live. The result must have one owner on each path, and each source's ownership availability and existing views must be checked on that path. These are concrete extensions beyond today's same-region-only join and effect-only acquisition. No runtime alias registry or general predicate theorem prover is implied.
 
@@ -217,7 +260,7 @@ The checker tracks the owning region of a regional reference and rejects local-r
 
 For the SNN, an owner for the CC plus a typed target-neuron index and frame selector can identify work without putting a borrowed target/frame view in the dynamic context. A helper obtains lexical views from the live CC and traverses them through explicit parameters. This fits the existing SoA and typed-index direction. If A and B are parts of one CC region, they must not become two independent owners of that same region; selectors distinguish them. Matching index brands alone do not establish the intended CC instance. Index selection must either deliberately mean the current CC or carry the required business/provenance check.
 
-This requires an ergonomic, checked way to obtain a declared typed root or subview from an owner. The native language provides typed region declarations, make/root and alloc views. These operations retain explicit owner provenance; the wider optional-owner transport API remains unselected. The API should be designed from the actual access paths, without inventing an unrestricted offset-to-pointer primitive or a new global lookup service.
+Named root selection supplies the checked typed subview through `r.name`, without a whole-root intrinsic. Construction and field access retain explicit owner provenance; the wider optional-owner transport API remains unselected. The API should be designed from the actual access paths, without inventing an unrestricted offset-to-pointer primitive or a new global lookup service.
 
 H-170’s owner-bearing send result belongs to the ordinary packet flow. It does not force an owning sum into the proposed dynamic-value categories. H-181 independently permits an optional effect resource when that optionality is a business requirement. It does not make the packet result an effect resource or permit owner extraction from a dynamic optional value.
 

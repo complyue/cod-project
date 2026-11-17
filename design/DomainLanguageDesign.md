@@ -1,12 +1,14 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 167
+Discussion revision: 168
 
 Recorded: 2026-11-17
 
 Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
+
+- **Named region roots:** [H-595](../CHANGELOG.md#h-595)/[K-NAMED-ROOTS-20261117](../CHANGELOG.md#k-named-roots-20261117), [D-13-ROOT-ACCESS](DesignAuthorityRegistry.md#d-13-root-access)/P-546–P-548, aligns this revision's regional examples with named roots, ordinary `r.name` assignment destinations and receiving specifications; the source root intrinsic is removed. Reuse C-74/C-65/C-72 and charter §§2/3.1–3.3/4.3/6.3/8/12 for explicit storage, access and lifetime responsibility. D-13 owns acceptance; preserve existing qualifications, actual-owner checks, nominal component identity, D-16 and D-18r113. Full structural/receiving proof and compiler migration remain separate; no C++ storage API changes follow.
 
 - **Structural result assessment:** [H-572](../CHANGELOG.md#h-572)/[K-STRUCTURAL-RESULTS-20261117](../CHANGELOG.md#k-structural-results-20261117) covers r166→167’s dependency summary. D-22-ANON-DATA/P-509–P-511 evaluates a return-only named product signature `-> { ... }`, received as independent lexical variables. Preserve H-571, explicit actual owners, existing nominal ADT field rules, no object copying/moving or lifetime extension and D-16 under charter §§2/3.2–3.3/4.3/6.3/8/12. This pending source restriction introduces no aggregate-field permission or implementation qualification; acceptance/details belong to D-22.
 
@@ -191,7 +193,7 @@ Sum alternatives and abstract descendants serve different roles. The recommended
 
 Storage classification is independent of nominal declaration identity. H-563 excludes callable-view values from regions; H-567/H-568 confines whole-payload transfer to pure bits and rejects C++ object copying/moving semantics. D-22 reviews return-only structural result signatures and named mapping to independent lexical variables. This candidate introduces no first-class aggregate or stored field and leaves ordinary ADT field permissions unchanged; callable-bearing named ADTs remain a separate unapproved extension. H-383/H-384 admits recursively finite bits ADTs to lexical or regional storage; stored references, ownership carriers, managed environments and implicit cleanup exclude that category. H-478/D-28-ADT extends placement to same-owner pointer-bearing lexical graphs while retaining the same nominal ADT. Full native layouts/initialization coverage remain outstanding; regional instances still use relative edges and C++ regional types remain region-only. The `data` keyword alone does not establish bits eligibility, immutability or GC. [D-22](ConstructionAndAcquisition.md#confirmed-requirements) records the confirmed boundary and its incomplete implementation. Ordinary references borrow, const non-bits references restrict holder writes without freezing aliases, and owned remains an intrinsic resource responsibility. User data containing owned-region fields, including through variants/generic instantiation, remains forbidden by H-196. Builtin resource optional/results are a separate intrinsic facility.
 
-Static abstract root bounds do not require a runtime object wrapper. Persisting heterogeneous abstract-typed fields or dispatching on a runtime sum nevertheless needs a sound representation/discrimination contract; WPO does not make runtime alternatives constant. No object header, fat pointer or general inheritance runtime is selected solely to support the first root-policy method.
+Static abstract bounds on a selected named root do not require a runtime object wrapper or a whole-region-to-object conversion. Persisting heterogeneous abstract-typed fields or dispatching on a runtime sum nevertheless needs a sound representation/discrimination contract; WPO does not make runtime alternatives constant. No object header, fat pointer or general inheritance runtime is selected solely to support the first root-policy method.
 
 **Primary-language comparison:** Julia explicitly declares nominal subtyping, makes abstract types non-instantiable and concrete types non-subclassable, and does not generally make parametric types covariant. These are useful reference points; CoD has its own data sums, storage and ownership semantics. [Julia types](https://docs.julialang.org/en/v1/manual/types/)
 

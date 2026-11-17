@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 197 · Recorded: 2026-11-17 · Phase: language/application co-design.
+Design revision: 198 · Recorded: 2026-11-17 · Phase: language/application co-design.
 
 ## Design authority
+
+- **Named region roots:** [H-595](../CHANGELOG.md#h-595)/[K-NAMED-ROOTS-20261117](../CHANGELOG.md#k-named-roots-20261117), [D-13-ROOT-ACCESS](DesignAuthorityRegistry.md#d-13-root-access)/P-546–P-548, aligns this revision's regional examples with named roots, ordinary `r.name` assignment destinations and receiving specifications; the source root intrinsic is removed. Reuse C-74/C-65/C-72 and charter §§2/3.1–3.3/4.3/6.3/8/12 for explicit storage, access and lifetime responsibility. D-13 owns acceptance; preserve existing qualifications, actual-owner checks, nominal component identity, D-16 and D-18r113. Full structural/receiving proof and compiler migration remain separate; no C++ storage API changes follow.
 
 - **Callable placement and transfer boundaries:** [H-563](../CHANGELOG.md#h-563)/[H-567–H-568](../CHANGELOG.md#h-567), [D-18-LEXICAL-STORAGE](DesignAuthorityRegistry.md#d-18-lexical-storage)/P-503–P-505 and [D-22-TRANSFER](DesignAuthorityRegistry.md#d-22-transfer)/P-506–P-508 cover D-10r197's placement/operation terminology. Callable-view values have lexical-scope storage, never regional storage; only pure bits admit whole-payload transfer. CoD has no C++ object copying/moving model. C-54/C-65/C-72/C-73/C-75 and charter §§2/3.2–3.3/4.3/6.3/8 preserve regional relocatability and explicit identity/lifetime responsibility. D-18/D-22 own acceptance; retain dedicated callable construction/capture, graph transfer, actual owners and D-16. [K-LEXICAL-PRODUCTS-20261117](../CHANGELOG.md#k-lexical-products-20261117) aligns dependencies. H-564–H-566's callable-bearing ADT/anonymous-data direction remains under review, including type identity/results; no new aggregate implementation or full proof/physical/value-path qualification follows.
 
@@ -118,12 +120,12 @@ The selected association is **per installed effect**, not a requirement to agree
 
 ```cod
 # Design sketch: State has a bits field bias.
-effect @arena <- make State(capacity = 256u64) { bias <- 10u64; };
-effect @bias = root(@arena).bias;       # Borrow R1's scalar target.
+effect @arena <- make region State(256u64 -> capacity) { bias <- 10u64; };
+effect @bias = @arena.bias;       # Borrow R1's scalar target.
 {{
-    effect @arena <- make State(capacity = 256u64) { bias <- 20u64; };
+    effect @arena <- make region State(256u64 -> capacity) { bias <- 20u64; };
     val old <- @bias;                  # 10: R1 is hidden but alive.
-    effect @bias = root(@arena).bias;   # New reference effect selects R2.
+    effect @bias = @arena.bias;   # New reference effect selects R2.
     val current <- @bias;              # 20.
 }};
 val restored <- @bias;                 # 10: preceding R1 binding restored.

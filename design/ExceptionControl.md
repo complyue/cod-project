@@ -1,8 +1,10 @@
 # CoD exception control and regional cleanup
 
-Design revision: 87 · Recorded: 2026-11-16 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; current implementation availability is recorded in the source capability reference.
+Design revision: 88 · Recorded: 2026-11-17 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; current implementation availability is recorded in the source capability reference.
 
 ## Design authority
+
+- **Named region roots:** [H-595](../CHANGELOG.md#h-595)/[K-NAMED-ROOTS-20261117](../CHANGELOG.md#k-named-roots-20261117), [D-13-ROOT-ACCESS](DesignAuthorityRegistry.md#d-13-root-access)/P-546–P-548, aligns this revision's regional examples with named roots, ordinary `r.name` assignment destinations and receiving specifications; the source root intrinsic is removed. Reuse C-74/C-65/C-72 and charter §§2/3.1–3.3/4.3/6.3/8/12 for explicit storage, access and lifetime responsibility. D-13 owns acceptance; preserve existing qualifications, actual-owner checks, nominal component identity, D-16 and D-18r113. H-596–H-599/D-22-REGION-INIT separately extends the root initializer surface while preserving whole-region cleanup; complete initialization proof/native coverage remains pending. Full structural/receiving proof and compiler migration remain separate; no C++ storage API changes follow.
 
 - **Native-coverage reference continuity:** [K-AOT-CONTRACT-CONSOLIDATION-20261117](../CHANGELOG.md#k-aot-contract-consolidation-20261117) preserves this revision's D-26 dependency at its current AOT contract section. Only dependency links and this summary change; existing semantics, authority, acceptance and D-16 remain unchanged.
 
@@ -702,7 +704,7 @@ The exception identities are explicitly selected into the module before use:
 ```text
 try {
   owned region packet:Packet <-
-    make Packet(capacity = bytes) { sequence <- initial };
+    make region Packet(bytes -> capacity) { sequence <- initial };
   process_packet(packet)
 } catch (error : const OutOfMemoryError) {
   handle_allocation_failure(error)
@@ -806,7 +808,7 @@ The first increment does not select overloads whose only distinction is owning v
 
 ### E5 — Bounded construction and acceptance scope
 
-This increment completes typed make/root access, fresh owning declarations, factory results, borrowed/owning calls, effect installation, branch/exception ownership joins, and try/catch/finally together. The required capacity is a runtime byte budget for the root and subsequent payload allocations, including their internal alignment consumption but excluding the fixed region header. No automatic growth is introduced. The first root initializer names every declared field exactly once and evaluates initializers in written order; omitted/duplicate fields reject. More general initializer bodies and defaults remain separate.
+The bounded lifecycle contract covers typed region construction and named-root access, fresh owning declarations, factory results, borrowed/owning calls, effect installation, branch/exception ownership joins, and try/catch/finally together; current implementation coverage is separately recorded. The required capacity is a runtime byte budget for the root and subsequent payload allocations, including their internal alignment consumption but excluding the fixed region header. No automatic growth is introduced. H-596–H-599 extends construction to separate root initializers or a free initialization block with a construction-local region name and init helpers. Successful completion requires every root contract established, with source-ordered effects and ordinary whole-region failure cleanup. Missing initialization rejects; repeated ordinary writes are permitted. D-22 owns this source extension and its separately pending full proof/native integration; root defaults remain unselected.
 
 Ordinary owner reassignment/reinitialization, occupied owner destinations, general reference-assignment/const-view overloads, mailbox transport, user exception graphs and general RTTI are outside this increment. Existing typed memory operations can demonstrate root edits without pretending that the complete assignment surface is implemented. Exceptions must not roll back prior graph edits or ownership transfers.
 
