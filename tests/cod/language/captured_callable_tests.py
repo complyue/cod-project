@@ -42,7 +42,23 @@ runner.CASES = {
     'no_lexical_scalar_promotion': ('val x<-1;func f=func[x]()->const i64{return x;};',2,'','implementation gap'),
     'no_pointer_cell_promotion': (BASE+'func f=base;ptr p=f;func g=func[p](x:i64)->const i64{return p(x);};',2,'','implementation gap'),
     'captured_replacement_gap': (BASE+'func f=base;func g=func[f](x:i64)->const i64{f<-other;return f(x);};',2,'','replacement of a captured callable payload'),
+    'place_value_passed_to_capture_parameter': (IO+BASE+WRAP+'func f=base;var selected->f;func retained=wrap(selected);f<-other;behave @print(retained(4));',0,'5\n',''),
+    'unused_place_capture_still_requires_proof': (BASE+'proc inspect()->void{func f=base;var selected->f;func retained[selected](x:i64)->const i64{return x;};}inspect();',2,'','capture of a declared place alias'),
+    'transitive_place_capture_requires_proof': (BASE+'func f=base;var selected->f;func outer=func()->func(i64)->const i64{return func[selected](x:i64)->const i64{return selected(x);};};',2,'','capture of a declared place alias'),
 }
+for place_name, place in {
+    'fixed': 'func stored=base;var selected->stored;',
+    'chain': 'func stored=base;var first->stored;var selected->first;',
+    'selected': 'func left=base;func right=other;val flag<-true;var selected->if(flag){left}else{right};',
+}.items():
+    for definition_name, definition in {
+        'anonymous_explicit': 'func retained=func[selected](x:i64)->const i64{return selected(x);};',
+        'anonymous_inferred': 'func retained=func(x:i64)->const i64{return selected(x);};',
+        'named_explicit': 'func retained[selected](x:i64)->const i64{return selected(x);};',
+        'named_inferred': 'func retained(x:i64)->const i64{return selected(x);};',
+    }.items():
+        runner.CASES[f'{place_name}_place_capture_{definition_name}'] = (
+            BASE+'proc inspect()->void{'+place+definition+'}inspect();', 2, '', 'capture of a declared place alias')
 runner.CASE_SHADOWS = {
     'factory_result': ['f'],
     'nested_value_copy': ['f'],
@@ -58,6 +74,7 @@ runner.CASE_SHADOWS = {
     'borrowed_holder_replacement': ['f', 'f'],
     'nullable_captured_holder': ['f'],
     'recursive_capture_context_survives_shadow': ['f'],
+    'place_value_passed_to_capture_parameter': ['f'],
 }
 runner.EXTRA_SOURCES = [Path(__file__)]
 if __name__ == '__main__':

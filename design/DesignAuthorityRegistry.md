@@ -1,7 +1,9 @@
 # Design authority and value lineage
 
-Registry revision: 816 · Audit date: 2026-11-17 (America/Los_Angeles)
+Registry revision: 817 · Audit date: 2026-11-17 (America/Los_Angeles)
 
+
+[K-782](../CHANGELOG.md#k-782), source412, continues D-18/H-327/H-329/C-75/P-295/P-297 and D-26/H-407 under H-420/H-423. Declared place captures retain their selected place and actual owner requirements; unproved capture sources reject before ordinary binding canonicalization can silently produce independent value snapshots. Explicit independent callable construction from the selected payload remains supported. Acceptance covers source declaration forms, inferred/explicit/transitive captures, ordinary value controls and native resource cleanup. Charter §§2/3.2–3.3/4.3/6.3/8/12 and D-16 continue. No new capture permission, lifetime proof/transport mechanism, source rule or full value-path qualification follows.
 
 [K-DESIGN-MAINLINE-20261117](../CHANGELOG.md#k-design-mainline-20261117) combines source411/K-780/K-781 with H-561–H-568 and the current D-18r112/D-22r24/D-28r30 scopes. Both parent histories and mainline compiler/test contents are preserved. Fixed storage/transfer boundaries and qualified source scopes remain distinct from pending anonymous-data/result/identity and new ordinary-capture proof/value-path work. No local build/test or broader qualification is inferred.
 

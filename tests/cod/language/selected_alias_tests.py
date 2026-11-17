@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Selected aliases retain slot identity and independent permissions through effects."""
+"""Selected declared place aliases retain slot identity and access through effects."""
 from pathlib import Path
 import foundation_tests as runner
 
@@ -47,7 +47,8 @@ runner.CASES={
  'call_initializes_selected_alias':(IO+NPE+'proc set(ptr x:i64 in O)->void throws NullPointerException where {owner O}{x<-19;}proc run(flag:bool)->void{val x<-make local i64,y<-make local i64;ptr a=x,b=y;var p->if(flag){a}else{b};try{set(p);behave @print(p);}catch(e:const NullPointerException){};}run(true);run(false);',0,'19\n19\n',''),
  'callable_value_alias':(run('var p->if(flag){f}else{g};behave @print(p());p<-three;behave @print(f());behave @print(g());',setup='func f=one;func g=two;',show='').replace(IO,IO+FUNCTIONS,1),0,'1\n3\n2\n2\n1\n3\n',''),
  'callable_pointer_alias':(run('var p->if(flag){a}else{b};p=h;behave @print(p());',setup='func f=one;func g=two;func h=three;ptr a=f,b=g;',show='').replace(IO,IO+FUNCTIONS,1),0,'3\n3\n',''),
- 'callable_alias_snapshot_capture':(run('var p->if(flag){f}else{g};func h=func[p]()->const i64{return p();};p<-three;behave @print(h());behave @print(p());',setup='func f=one;func g=two;',show='').replace(IO,IO+FUNCTIONS,1),0,'1\n3\n2\n3\n',''),
+ 'explicit_callable_value_from_selected_place':(run('var p->if(flag){f}else{g};func snapshot=p;func h=func[snapshot]()->const i64{return snapshot();};p<-three;behave @print(h());behave @print(p());',setup='func f=one;func g=two;',show='').replace(IO,IO+FUNCTIONS,1),0,'1\n3\n2\n3\n',''),
+ 'callable_place_capture_unproved':(run('var p->if(flag){f}else{g};func h=func[p]()->const i64{return p();};p<-three;behave @print(h());behave @print(p());',setup='func f=one;func g=two;',show='').replace(IO,IO+FUNCTIONS,1),2,'','capture of a declared place alias'),
  'query_alias_declaration_evidence':(run('var p->if(flag){a}else{b};func f=func()->const i64{val x<-make local typeof(p){20};return x;};behave @print(f());',show=''),0,'20\n20\n',''),
  'kind_assertion_rejects_ptr':('val x<-1;ptr a=x,b=x;ref var p->if(true){a}else{b};',2,'','must match the selected ptr storage'),
  'mixed_storage_kinds_unproved':('val x<-1;ptr a=x;ref b=x;var p->if(true){a}else{b};',2,'','different storage kinds'),
@@ -70,7 +71,7 @@ runner.CASES={
  'expired_physical_slots_rejected':('val x<-1;var p->{{ptr a=x,b=x;if(true){a}else{b}}};',2,'',"aliased binding's lexical scope has ended"),
  'expired_value_storage_rejected':('var p->{{val x<-1,y<-2;if(true){x}else{y}}};',2,'',"aliased binding's lexical scope has ended"),
  'owner_assertion_checks_slots':('func run(ref x:i64 in O,ref y:i64 in O)->void where {owner O}{var p in O->if(true){x}else{y};}',2,'','selected binding storage, not its target owner'),
- 'ordinary_capture_still_rejected':('func run(flag:bool)->void{val x<-1,y<-2;var p->if(flag){x}else{y};func f=func[p]()->const i64{return p;};}',2,'','ordinary lexical cells'),
+ 'ordinary_capture_still_rejected':('func run(flag:bool)->void{val x<-1,y<-2;var p->if(flag){x}else{y};func f=func[p]()->const i64{return p;};}',2,'','capture of a declared place alias'),
 }
 runner.CASE_ARGUMENTS={}
 runner.CASE_SHADOWS = {

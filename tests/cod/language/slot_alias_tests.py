@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fixed slot aliases share state while retaining independent access paths."""
+"""Declared place aliases share slots while retaining independent access paths."""
 from pathlib import Path
 import foundation_tests as runner
 
@@ -46,7 +46,8 @@ runner.CASES = {
     'borrowed_parameter_alias': (IO+'proc run(ref x:i64 in O,ref y:i64 in O)->void where {owner O}{var a->x;a=y;a<-20;}val x<-1,y<-2;run(x,y);behave @print(x);behave @print(y);',0,'1\n20\n',''),
     'callable_holder_alias': (IO+CALLABLES+'func f=one;val var a->f;behave @print(a());a<-two;behave @print(f());',0,'1\n2\n',''),
     'callable_pointer_slot': (IO+CALLABLES+'func f=one;func g=two;ptr p=f;var a->p;a=g;behave @print(p());',0,'2\n',''),
-    'callable_alias_capture_snapshot': (IO+CALLABLES+'proc run()->void{func f=one;var a->f;func g=func[a]()->const i64{return a();};f<-two;behave @print(g());}run();',0,'1\n',''),
+    'explicit_callable_value_from_place': (IO+CALLABLES+'proc run()->void{func f=one;var a->f;func snapshot=a;func g=func[snapshot]()->const i64{return snapshot();};f<-two;behave @print(g());behave @print(a());}run();',0,'1\n2\n',''),
+    'callable_place_capture_unproved': (IO+CALLABLES+'proc run()->void{func f=one;var a->f;func g=func[a]()->const i64{return a();};f<-two;behave @print(g());}run();',2,'','capture of a declared place alias'),
     'same_slot_branch_permissions': (IO+'val x<-1,y<-2;ptr p=x;var a->p;var b->if(true){a}else{p};b=y;behave @print(p);',0,'2\n',''),
     'selection_cleanup_retains_slot': (IO+'val x<-1,y<-2;ptr p=x;var a->{{defer{p=y;};p}};behave @print(a);p=x;behave @print(a);',0,'2\n1\n',''),
     'ending_alias_name_retains_original_slot': (IO+'val x<-1,y<-2;ptr p=x;var a->{{var local->p;local}};a=y;behave @print(p);',0,'2\n',''),
@@ -82,7 +83,7 @@ runner.CASES = {
     'loop_requires_explicit_scope': ('val x<-1;for(i in 0..1){var a->x;};',2,'','requires a nested per-iteration'),
     'defer_requires_explicit_scope': ('val x<-1;defer{var a->x;};',2,'','requires a nested explicit'),
     'runtime_selected_slot': ('val x<-1,y<-2;ptr p=x,q=y;var a->if(true){p}else{q};',0,'',''),
-    'alias_does_not_promote_cell_capture': ('proc run()->void{val x<-1;var a->x;func f=func[a]()->const i64{return a;};}run();',2,'','capture of ordinary lexical cells'),
+    'alias_does_not_promote_cell_capture': ('proc run()->void{val x<-1;var a->x;func f=func[a]()->const i64{return a;};}run();',2,'','capture of a declared place alias'),
 }
 runner.CASE_ARGUMENTS = {}
 runner.CASE_SHADOWS = {

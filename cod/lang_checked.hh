@@ -5000,6 +5000,12 @@ class ScalarChecker {
                          [&](const auto &used) { return used.name == capture.name; }))
           program_.warnings.push_back({Warning::unused_capture, capture.at, "unused callable capture '" + capture.name + "' remains retained"});
   }
+  void require_value_capture_source(std::optional<size_t> binding, const Location &at) const {
+    if (!binding) return;
+    const auto &source = bindings_->at(*binding);
+    if (source.alias || !source.selection.empty())
+      implementation_gap(at, "capture of a declared place alias requires selected-place lifetime and transport proof");
+  }
   void define_callable(size_t method, const Location &at) {
     auto &definition = program_.methods[method];
     resolve_captures(definition);
@@ -5007,6 +5013,7 @@ class ScalarChecker {
     DefinitionContext context{method, evidence, {}, {}, definition_retained(method, *evidence)};
     for (const auto &capture : definition.captures) {
       const auto binding = lexical_.lookup(capture.name);
+      require_value_capture_source(binding, capture.at);
       const auto family = binding ? NamedFamily{} : named_family(capture.name);
       context.captures.push_back({binding, family.methods, family.context != nullptr});
       Expression name{}; name.kind = Expression::Kind::name; name.at = capture.at; name.text = capture.name;
@@ -5039,12 +5046,19 @@ class ScalarChecker {
       CheckedOperation value;
       if (family.context) {
         const auto binding = storage(family.context->frame.captures.at(i)).binding;
+        require_value_capture_source(binding, capture.at);
         value = read_binding(name, true, binding);
       } else if (family.definition) {
         const auto &source = family.definition->captures[i];
-        if (source.binding) value = named_binding(name, *source.binding);
+        if (source.binding) {
+          require_value_capture_source(source.binding, capture.at);
+          value = named_binding(name, *source.binding);
+        }
         else value = materialize_definition(NamedFamily{source.methods, source.enclosing ? checking_instance_ : nullptr}, nullptr, at);
-      } else value = named_value(name);
+      } else {
+        require_value_capture_source(lexical_.lookup(capture.name), capture.at);
+        value = named_value(name);
+      }
       if (value.type.kind != Type::procedure || (value.binding && !bindings_->at(*value.binding).callable_value))
         implementation_gap(capture.at, "capture of ordinary lexical cells or non-callable values");
       captures.push_back(std::move(value));

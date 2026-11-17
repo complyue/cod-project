@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Selected aliases preserve original image ownership and failure-safe replacement."""
+"""Declared place aliases preserve image ownership and failure-safe replacement."""
 from pathlib import Path
 from native_test_support import run_native
 import lexical_query_runtime_tests as fixture
@@ -17,7 +17,8 @@ proc selected_aliases(flag:bool)->void{
  observe(9030u64);
  try{v<-h;{}}catch(e:const OutOfMemoryError){observe(9031u64);};
  observe(v(1u64));
- func saved=func [v](x:u64)->const u64{return v(x);};
+ func snapshot=v;
+ func saved=func [snapshot](x:u64)->const u64{return snapshot(x);};
  v<-h;observe(saved(1u64));observe(v(1u64));
 }
 selected_aliases(true);selected_aliases(false);observe(9000u64);

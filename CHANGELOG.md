@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-17 — Preserve declared places at the capture boundary
+
+<a id="k-782"></a>
+**K-782 — Reject unproved declared place captures.** Source411→412/registry816→817 continues D-18/H-327/H-329/C-75/P-295/P-297 and D-26/H-407 under H-420/H-423. Check original capture-source identity before ordinary place canonicalization; an explicit place cannot silently become a callable value snapshot. Explicit independent callable construction remains supported. Preserve owner/access/init, existing complete values/cleanup, D-16 and charter §§2/3.2–3.3/4.3/6.3/8/12. Source/native acceptance covers fixed/chained/selected places, declaration/capture forms, independent-value controls and exact failure cleanup. No new borrowed capture transport, lifetime extension or broader qualification. Baseline: `841222622ca30a9fd26de1a88091231193423131:cod/lang_checked.hh` and that commit’s source reference/tests; original human declared place alias evidence remains at `0c0efbfde4dccb3f3397b6f961bd82bd9a12c848:design/DesignAuthorityRegistry.md#h-327`/`#h-329`.
+
 ## 2026-11-17 — Partial named receiving and anonymous structural typing
 
 <a id="h-569"></a>
