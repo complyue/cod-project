@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-11-17 — Integrate caller-owned generator effect boundaries
+
+<a id="k-generator-effect-integration-20261117"></a>
+**K-GENERATOR-EFFECT-INTEGRATION-20261117 — Preserve source permissions independently of native handoff.** Agent continuity registry850/851→852 reconciles `318d2cd79adf37c7df6a22a033b6ad7b3894ca2b:design/DesignAuthorityRegistry.md` with `ea8174e68b574b8efd98acab9a23188b05ab160a` at the affected design paths. D-29r11/D-10r199 retains H-603's lexical caller-body permissions and generator-owned function restrictions, grouped protocol metadata, active dynamic bindings and whole-for owner/readiness obligations under C-96/C-37/C-65/C-84 and charter §§2/3.2–3.3/4.3/6.1–6.3/8/12. Source423/K-795's root-name migration and original human records remain intact. Corrects the registry's stale D-29 revision label; full generator value-path/checker/view/native qualification, D-16 and byte-identical D-18r113 remain separate. Documentation integration only; no compiler or fixture changes.
+
+## 2026-11-17 — Keep generator bodies under caller permissions
+
+<a id="h-603"></a>
+**H-603 — Yield hands control to the caller-owned body.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-17 America/Los_Angeles; exact timestamp/personal name unavailable. “我倾向于允许，loop body 属于 caller，yield 只是把控制交回 caller，不应该算 func generator 间接调用 proc。generator 自己的代码仍遵守 func 限制，按这个边界推演看看。” Selects acceptance of a proc caller's procedure-using body with a func generator, with lexical control ownership as its rationale; generator-owned operations retain function restrictions. Replaces the pending strict-transitivity recommendation in K-GENERATOR-TYPE-CONTEXT-20261117. Does not approve a general callback/effect calculus, future pure semantics, complete view/native mechanism or full value path.
+
+<a id="k-generator-caller-effects-20261117"></a>
+**K-GENERATOR-CALLER-EFFECTS-20261117 — Preserve lexical eligibility through handoff.** D-29r10→11/D-10r198→199/registry850→851 updates D-29-EFFECTS/P-558–P-560 under H-603, C-96/C-37/C-65/C-84 and charter §§2/3.2–3.3/4.3/6.1–6.3/8/12. Derives caller/generator kind matrix, operand/feedback/cleanup attribution and nested forwarding without source permissions depending on native calls. Existing dynamic bindings and iteration restoration remain, with no implicit snapshot/replay; caller symbol demands are retained separately and body writes/readiness/owner facts remain in the whole for analysis. Ordinary callback restrictions, independent selection, checked forwarding, H-600 owners, H-601/H-602 init, D-16, source422 and byte-identical D-18r113 remain. Complete effect/view/native/value-path qualification stays pending. Baseline: `477d33b681db14b2b7e09d4beb4b3d21b62f2418:design/RangedForAndGenerators.md`, `design/SymbolicDynamicScope.md` and registry. Documentation only; no local code/build/tests.
+
+## 2026-11-17 — Delimit generator callable types and isolate effect eligibility
+
+<a id="k-generator-type-context-20261117"></a>
+**K-GENERATOR-TYPE-CONTEXT-20261117 — Preserve protocol metadata and review the supplied-body effect boundary.** Agent derivation under H-584/H-592/H-595: D-29r9→10/registry849→850 specifies type-position parentheses for callable yield/feedback contracts, full typeof/view metadata and independent selection without void-result erasure. C-96/C-65/C-84/P-528–P-530 → charter §§2/3.3/4.3/6.3/8/12 preserves readable typed composition; complete view/variance/native/value-path qualification remains pending. New D-29-EFFECTS/P-558–P-560 isolates strict function transitivity versus a special caller-body yield handoff under C-37; no relaxation is selected. Baseline: `708031d8dcb0be60a7f3c7c1259869b5cf4b0350:design/RangedForAndGenerators.md` and registry. Mainline source422/K-794 and H-601/H-602 integration is incorporated with both histories preserved; D-16, D-22r39 and byte-identical D-18r113 unchanged. Documentation only, no local code/build/tests.
+
 ## 2026-11-17 — Retire the source root intrinsic
 
 <a id="k-795"></a>
