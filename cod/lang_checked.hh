@@ -1407,6 +1407,7 @@ class ScalarChecker {
     CleanupEquations::ConditionClauses result;
     for (const auto &known : alternatives) {
       CleanupEquations::ConditionFacts facts;
+      std::set<size_t> observed_selections;
       for (const auto parameter : known.present) {
         const auto &view = views.at(parameter);
         const auto present = selected_input(view.targets);
@@ -1417,12 +1418,17 @@ class ScalarChecker {
       if (!slots) for (const auto &group : known.same_inputs) {
         std::set<size_t> selections;
         for (const auto parameter : group)
-          if (const auto identity = views.at(parameter).selection_identity) selections.insert(*identity);
+          if (const auto identity = views.at(parameter).selection_identity) {
+            selections.insert(*identity); observed_selections.insert(parameter);
+          }
         if (selections.size() > 1) facts.same_selections.insert(std::move(selections));
       }
       if (!slots) for (const auto &[left, right] : known.different_inputs) {
         const auto lhs = views.at(left).selection_identity, rhs = views.at(right).selection_identity;
-        if (lhs && rhs) facts.different_selections.emplace(*lhs, *rhs);
+        if (lhs && rhs) {
+          facts.different_selections.emplace(*lhs, *rhs);
+          observed_selections.insert(left); observed_selections.insert(right);
+        }
       }
       // Caller-slot invocations do not provide a stable selection snapshot here.
       if (!slots) for (const auto parameter : known.absent) {
@@ -1431,6 +1437,8 @@ class ScalarChecker {
       }
       CleanupEquations::ConditionClauses clauses;
       CleanupEquations::add_condition(clauses, std::move(facts));
+      for (const auto parameter : observed_selections)
+        clauses = CleanupEquations::conjoin_conditions(clauses, selection_bounds(views.at(parameter)));
       if (!slots) for (const bool null : {false, true})
         for (const auto parameter : null ? known.absent : known.present) if (views.at(parameter).nullness) {
           const auto &value = *views[parameter].nullness;
@@ -1568,6 +1576,13 @@ class ScalarChecker {
       else facts.different_selections.emplace(*view.selection_identity, incoming->second);
     } else facts.conditions.add({{}, *view.selection_identity, place, equal, true});
     return facts;
+  }
+  CleanupEquations::ConditionClauses selection_bounds(const CheckedOperation &view) const {
+    CleanupEquations::ConditionClauses bounds;
+    if (view.targets.empty()) bounds.insert(CleanupEquations::ConditionFacts{});
+    for (const auto place : view.targets)
+      CleanupEquations::add_condition(bounds, selected_target(view, place, true).value_or(CleanupEquations::ConditionFacts{}));
+    return bounds;
   }
   void initialize_targets(const CheckedOperation &view, std::set<size_t> &initialized,
       CleanupEquations::MissingInitialization &missing,
@@ -2629,12 +2644,14 @@ class ScalarChecker {
             owners == OwnerMatch::satisfied ? constant_predicate(true) : nullptr),
         predicate(Predicate::Kind::conjunction, nonnulls, {}));
     if (!left.selection_identity || !right.selection_identity) return relation;
+    const auto bounds = CleanupEquations::conjoin_conditions(selection_bounds(left), selection_bounds(right));
     CleanupEquations::BooleanValue observations;
     for (const bool equal : {false, true}) {
       CleanupEquations::ConditionFacts observed;
       if (equal) observed.same_selections.insert({*left.selection_identity, *right.selection_identity});
       else observed.different_selections.emplace(*left.selection_identity, *right.selection_identity);
       CleanupEquations::add_condition(observations[equal], std::move(observed));
+      observations[equal] = CleanupEquations::conjoin_conditions(observations[equal], bounds);
     }
     return constrain_predicate(relation, observations);
   }

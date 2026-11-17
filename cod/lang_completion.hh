@@ -431,6 +431,14 @@ public:
           if (group.contains(term.binding)) { term.binding = *group.begin(); break; }
         selected.add(term);
       }
+      SelectionConditions excluded;
+      for (const auto &[left, right] : different_selections)
+        for (auto term : selected.terms) if (term.immutable && term.equal && (term.binding == left || term.binding == right)) {
+          term.binding = term.binding == left ? right : left;
+          term.equal = false;
+          excluded.add(term);
+        }
+      selected.append(excluded);
       conditions = std::move(selected);
       for (const auto &group : same_bindings) {
         if (std::any_of(group.begin(), group.end(), [&](const auto &value) { return bindings.contains(value); }))
