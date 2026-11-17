@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-11-17 — Consolidate ranged-for and generator design
+
+<a id="h-577"></a>
+**H-577 — Lexical return target and generator/body proposal.** Human/source: current project user in the [generator side chat](codex://threads/01a1e9b0-d9c2-7223-87c0-72b964f19118), original user messages verified through native chat reading; recorded 2026-11-17 America/Los_Angeles, exact timestamps/personal name unavailable. Proposes yield as invoking a typed anonymous single-method for-body with the loop site's lexical context. Explicitly states: “我认为 `return` inside this `for` to return from the surrounding callable”. Also proposes considering normal body-expression evaluation as feedback to yield and requests signature design. Confirms the return target, not the full synchronous/nonescape, feedback, signature, owner/proof or ABI mechanism. Directs the side chat to draft and hand over without further exploration. Original `for (...) from gen(...)` spelling is superseded in the current proposal by H-578; no historical draft is retained as another authority.
+
+<a id="h-578"></a>
+**H-578 — Assess receiving specifications as generator-loop headers.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-17 America/Los_Angeles; exact timestamps/personal name unavailable. Requests generator/for analysis alongside return reception, asks whether loop variables can reuse receiving specs, then proposes `for { ... } := gen() { ... }` for multiple yielded fields and `for <ref-var> = gen() { ... }` / `for <val-or-ref-var> <- gen() { ... }` for one value. Requests suitability assessment, not blanket approval of repeated destination timing, header lifetime or full mechanism. H-574–H-576 and D-23 remain dependencies; the proposed header does not make new ref declarations with `<-` valid.
+
+<a id="h-579"></a>
+**H-579 — Prefer void-only final generator completion.** Human/source: current project user in this design chat, recorded 2026-11-17 America/Los_Angeles; exact timestamp/personal name unavailable. Asks “generator只能return void 类型吧？” and observes that a custom final type could become the overall for evaluation result but has little practical value. D-29 adopts void-only final completion as the bounded recommendation, with no custom final data result of for. This preference does not prohibit proposed non-void per-yield body feedback or change H-577's outer return target; it is not confirmation of a complete signature/cleanup implementation contract.
+
+<a id="k-generator-draft-20261117"></a>
+**K-GENERATOR-DRAFT-20261117 — Register the integrated pending proposal.** New D-29r1/C-96/P-521–P-524 and registry831→832 integrate the side-chat evidence with H-578/H-579 and latest D-22r33/D-23r23. Candidate C-63/C-65/C-73 → C-96 → D-29 under charter §§2/3.2–3.3/4.3/6.1–6.3/8/12 preserves readable traversal, explicit receiving and natural lexical lifetime/control. Records header combinations, separate payload/feedback/void completion, no final result-bearing for, and pending repeated destination/lifetime, signature/effect/borrow and target-aware cleanup choices. New value paths remain pending rather than borrowing ancestor qualification. Mainline `d8a6878edcf0f2f331802e2e351b9121298bf00b`/source417 is fast-forward integrated; its prior evidence remains intact. D-16 and byte-identical D-18r113 are unchanged; no compiler/build/test/ABI work. The temporary outside-repository handoff is removed after canonical integration/publication, not archived.
+
 ## 2026-11-17 — Prove uniform scalar callable coverage
 
 <a id="k-789"></a>
