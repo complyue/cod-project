@@ -1,6 +1,6 @@
 # CoD source compiler validation
 
-Reference revision: 457 · Recorded: 2026-11-18 America/Los_Angeles.
+Reference revision: 458 · Recorded: 2026-11-18 America/Los_Angeles.
 
 ## Design authority
 
@@ -979,7 +979,7 @@ Selected-slot checks cover conditional and guarded destinations, chained assignm
 
 Contextual-capture checks cover distinct snapshot sets, different selected catch bindings, local address choices within a common record layout, rejected same-drain registration and independent helper/scoped cleanup, recursion, null views, aliases and return/failure replacement. Invalid writes, escaping borrows and loop declarations remain rejected. Native failure injection verifies exact capture payload sizes, prior-record preservation and complete-image cleanup; sanitizer checks cover both execution modes. Staging verifies local layout choices in one recursive general method, direct layouts in known specializations and stable method inventory across runtime depth and demand order. Record sizes describe the private test carrier, not a public ABI.
 
-Operand-completion checks cover short-circuit and condition exits, surviving-path initialization/null proofs, declared callable preparation, prior cleanup, print/assignment/throw/field consumers, checked-exception boundaries and native recursion. Live uninitialized reads and invalid operand contracts remain rejected. Native injection verifies release of already prepared complete images and unchanged prior registrations; an allocation-denied registration probe confirms that aborted preparation attempts no registration. Staging verifies absent invocation/record services for such a call and stable method inventory across greater recursion depth.
+Operand-completion checks cover short-circuit and condition exits, surviving-path initialization/null proofs, declared callable preparation, prior cleanup, print/assignment/throw/field consumers, checked-exception boundaries and native recursion. These operand and builtin fixtures use ordinary groups for returns from the enclosing callable. Live uninitialized reads and invalid operand contracts remain rejected. Native injection verifies release of already prepared complete images and unchanged prior registrations; an allocation-denied registration probe confirms that aborted preparation attempts no registration. Staging verifies absent invocation/record services for such a call and stable method inventory across greater recursion depth.
 
 Builtin completion checks cover each arithmetic/comparison operation, supported unary forms, first/later/all non-producing operands, known invalid values, inferred returns, null-check ordering and cleanup replacement. Deferred preparation creates no record after an operand exits. Native instrumentation verifies complete-image release and earlier copy failure before later effects; shared recursion and equivalent explicit/intrinsic code remain stable at greater runtime depth. Unestablished user-method input types retain explicit diagnostics.
 
