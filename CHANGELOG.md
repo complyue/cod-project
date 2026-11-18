@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-11-18 — Give collections and builtin containers a dedicated design
+
+<a id="k-collection-interfaces-20261118"></a>
+**K-COLLECTION-INTERFACES-20261118.** The project user in [the design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-18 America/Los_Angeles, placed `visit`, `take_at` and `drain` at general collection scope and requested “Collections and builtin containers 应该有个专门文档”. D-30r1/registry909 inventory the CoD forms and propose the common operations. D-17r119 retains the exception-specific application of H-DEFER-MEMBER-TAKE-20261118. P-589/P-590 and the general signatures, conformance and lowering remain pending-human.
+
+## 2026-11-18 — Take one independently owned deferred failure
+
+<a id="h-defer-member-take-20261118"></a>
+**H-DEFER-MEMBER-TAKE-20261118.** The project user in [the design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-18 America/Los_Angeles, clarified “UnhandledDeferError 的每个 member 都是有独立 ownership 的，不需要为了拿出一个把其它都销毁吧”. The user also requires “exceptions 应该有类似只读枚举写法”. D-17r118/registry908 record ordinary borrowing for readonly enumeration, transfer of just one holder on extraction and continued ownership of its siblings and the separate body failure. This corrects the simultaneous shared-owner assumption at `06c4a03dda4f495ea7076bdadfa203dc23413285:design/ExceptionControl.md`, “Region and members of UnhandledDeferError”. H-541 still forwards a selected holder to the FIFO tail. Indexed removal, scoped observation and consuming iteration are source-interface proposals. No native implementation or general owning-yield contract is qualified.
+
+## 2026-11-18 — Select the cause before braced exception fields
+
+<a id="h-braced-cause-20261118"></a>
+**H-BRACED-CAUSE-20261118.** The project user in [the design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-18 America/Los_Angeles, confirms “`from cause` 只有写在 {} 之前一种语法，其它都从设计中删除。” D-17r117/D-22r51/registry907 settle braced constructing throw and normal make: evaluate a named or effectful cause once before reserving the object and running any fields. This supersedes the trailing braced spelling and its open admission question at `91ebd79938389b59fa23caf57ff34f36bb0493b2:design/ExceptionControl.md`, “Exception construction, throw and rethrow”. Parenthesized constructors and propagation forms are outside this syntax decision. H-EXCEPTION-CAUSE-HANDOFF-20261118 governs ownership on publication. No native implementation qualification follows.
+
+## 2026-11-18 — Type membership guards for abstract targets
+
+<a id="h-isa-20261118"></a>
+**H-ISA-20261118.** The project user in the [isa design discussion](codex://threads/01a1eeed-9421-7721-b2a0-67a830f3b5c5), recorded 2026-11-18 America/Los_Angeles, confirmed “`isa` 就按这个口径定” and specifically requested the successful ptr test’s non-null guarantee and invalidation of the old type proof after rebinding. D-10r205, “Type membership and branch refinement”, and registry906 record the source contract. P-587/P-588 record its proposed derivation and existing dependencies. Native representation and implementation qualification remain open.
+
 ## 2026-11-18 — Best-effort reporting on memory exhaustion
 
 <a id="h-oom-best-effort-20261118"></a>
