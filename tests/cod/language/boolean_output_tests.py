@@ -9,10 +9,12 @@ COPY = 'func copy(ref out:bool in B,flag:bool)->void where {owner B}{out<-flag;}
 BORROW = 'func copy(ref out:bool in B,ref flag:const bool in C)->void where {owner B,owner C}{out<-flag;}'
 CALLS = 'val x<-7,y<-11;ptr absent:i64=null in here;'+''.join(
     'behave @print(choose('+args+'));' for args in ('x,y','absent,y','x,absent','absent,absent'))
+VALUE_OUTPUT = 'val ok<-false;'
+BORROWED_OUTPUT = 'ref ok:bool=false;'
 runner.CASES = {}
 
 
-def case(name, work='set(ok,p);', definitions=SET, setup='val ok<-false;', condition='ok', yes='p',
+def case(name, work='set(ok,p);', definitions=SET, setup=VALUE_OUTPUT, condition='ok', yes='p',
          output='7\n0\n7\n0\n', diagnostic=''):
     source = IO+definitions+'proc choose(ptr p:i64 in O,ptr q:i64 in O)->i64 where {owner O}{'+setup+work
     source += 'if('+condition+'){return '+yes+';}else{return 0;};}'+CALLS
@@ -69,26 +71,26 @@ case('recursive_preserve_or_write', definitions=MAYBE.replace('change:bool', 'ch
 case('branch_alias_preserve', definitions='func maybe(ref out:bool in B,ref other:bool in B,flag:bool,change:bool)->void where {owner B}{ref target=if(change){out}else{other};target<-flag;}',
     setup='val ok<-p is not null,other<-p is not null;', work='maybe(ok,other,p is not null,q is not null);')
 
-case('prepared_call', work='{{defer set(ok,p);}};')
-case('deferred_block', work='{{defer{ok<-p is not null;};}};')
-case('deferred_block_call', work='{{defer{set(ok,p);};}};')
+case('prepared_call', setup=BORROWED_OUTPUT, work='{{defer set(ok,p);}};')
+case('deferred_block', setup=BORROWED_OUTPUT, work='{{defer{ok<-p is not null;};}};')
+case('deferred_block_call', setup=BORROWED_OUTPUT, work='{{defer{set(ok,p);};}};')
 case('nested_deferred_block', work='{{defer{defer{ok<-p is not null;};};}};')
-case('prepared_copy', definitions=COPY, work='{{defer copy(ok,p is not null);}};')
-case('prepared_transfer', work='{{defer (<-)(ok,p is not null);}};')
-case('prepared_swap', setup='val ok<-false,source<-p is not null;', work='{{defer (<->)(ok,source);}};')
-case('prepared_value_snapshot', definitions=COPY, setup='val ok<-false,source<-p is not null;', work='{{defer copy(ok,source);source<-true;}};')
-case('prepared_borrow_entry', definitions=BORROW, setup='val ok<-false,source<-true;', work='{{defer copy(ok,source);source<-p is not null;}};')
-case('prepared_target_snapshot', setup='val ok<-false,other<-true;ref output=ok;', work='{{defer set(output,p);output=other;}};')
+case('prepared_copy', setup=BORROWED_OUTPUT, definitions=COPY, work='{{defer copy(ok,p is not null);}};')
+case('prepared_transfer', setup=BORROWED_OUTPUT, work='{{defer (<-)(ok,p is not null);}};')
+case('prepared_swap', setup=BORROWED_OUTPUT+'val source<-p is not null;', work='{{defer (<->)(ok,source);}};')
+case('prepared_value_snapshot', definitions=COPY, setup=BORROWED_OUTPUT+'val source<-p is not null;', work='{{defer copy(ok,source);source<-true;}};')
+case('prepared_borrow_entry', definitions=BORROW, setup=BORROWED_OUTPUT+'val source<-true;', work='{{defer copy(ok,source);source<-p is not null;}};')
+case('prepared_target_snapshot', setup='ref ok:bool=false,other:bool=true;ref output=ok;', work='{{defer set(output,p);output=other;}};')
 case('rebound_target_direct', setup='val ok<-false,other<-true;ref output=other;', work='output=ok;set(output,p);')
-case('deferred_target_checked', setup='val ok<-false,other<-true;ref output=other;', work='{{defer{set(output,p);};output=ok;}};', yes='try{p}catch(e:const NullPointerException){-1}')
-case('ordered_cleanup', work='{{defer{ok<-p is not null;};defer{ok<-true;};}};')
-case('cleanup_copy_chain', setup='val ok<-false,source<-false;', work='{{defer{ok<-source;};defer{source<-p is not null;};}};')
-case('cleanup_prepared_chain', definitions=COPY+BORROW.replace('copy(','borrow('), setup='val ok<-false,source<-false;', work='{{defer borrow(ok,source);defer copy(source,p is not null);}};')
-case('cleanup_input_snapshot', definitions=COPY, setup='val ok<-false,source<-p is not null;', work='{{defer copy(ok,source);defer{source<-true;};}};')
-case('prepared_loop', work='for(i in 0u64..3u64){ {{defer set(ok,p);}};};')
-case('repeated_cleanup', work='{{for(i in 0u64..3u64){defer set(ok,p);};}};')
-case('repeated_block_cleanup', work='{{for(i in 0u64..3u64){defer{ok<-p is not null;};};}};')
-case('cleanup_saved_pointer', setup='val ok<-false;ptr saved=p;', work='{{defer set(ok,p);p=q;}};', yes='saved')
+case('deferred_target_checked', setup='ref ok:bool=false,other:bool=true;ref output=other;', work='{{defer{set(output,p);};output=ok;}};', yes='try{p}catch(e:const NullPointerException){-1}')
+case('ordered_cleanup', setup=BORROWED_OUTPUT, work='{{defer{ok<-p is not null;};defer{ok<-true;};}};')
+case('cleanup_copy_chain', setup=BORROWED_OUTPUT+'val source<-false;', work='{{defer{ok<-source;};defer{source<-p is not null;};}};')
+case('cleanup_prepared_chain', definitions=COPY+BORROW.replace('copy(','borrow('), setup=BORROWED_OUTPUT+'val source<-false;', work='{{defer borrow(ok,source);defer copy(source,p is not null);}};')
+case('cleanup_input_snapshot', definitions=COPY, setup=BORROWED_OUTPUT+'val source<-p is not null;', work='{{defer copy(ok,source);defer{source<-true;};}};')
+case('prepared_loop', setup=BORROWED_OUTPUT, work='for(i in 0u64..3u64){ {{defer set(ok,p);}};};')
+case('repeated_cleanup', setup=BORROWED_OUTPUT, work='{{for(i in 0u64..3u64){defer set(ok,p);};}};')
+case('repeated_block_cleanup', setup=BORROWED_OUTPUT, work='{{for(i in 0u64..3u64){defer{ok<-p is not null;};};}};')
+case('cleanup_saved_pointer', setup=BORROWED_OUTPUT+'ptr saved=p;', work='{{defer set(ok,p);p=q;}};', yes='saved')
 for name, operator, before, after, check in (
     ('saved_assignment_source', '=', 'p', 'q', case),
     ('independent_saved_assignment_source', '=', 'q', 'p', reject),
@@ -157,13 +159,14 @@ reject('callee_alias_overwrite', definitions='func set(ref out:bool in B,ref ali
 reject('caller_alias_overwrite', setup='val ok<-false;ref alias=ok;', work='set(ok,p);alias<-true;')
 reject('callable_unknown_alternative', definitions=SET+SET.replace('set(','other(').replace('p is not null','true'), work='func write=if(q is null){set}else{other};write(ok,p);')
 reject('declared_failure', definitions=SET.replace(')->void',')->void throws NullPointerException'))
-reject('cleanup_overwrite', work='{{defer{ok<-true;};defer set(ok,p);}};')
-reject('cleanup_pointer_rebind', work='{{defer{p=q;{}};defer set(ok,p);}};')
-reject('prepared_borrow_overwrite', definitions=BORROW, setup='val ok<-false,source<-p is not null;', work='{{defer copy(ok,source);source<-true;}};')
-reject('deferred_borrow_overwrite', setup='val ok<-false,source<-p is not null;', work='{{defer{ok<-source;};source<-true;}};')
-reject('cleanup_bad_chain', setup='val ok<-false,source<-p is not null;', work='{{defer{ok<-source;};defer{source<-true;};}};')
-case('deferred_rebound_target', setup='val ok<-false,other<-true;ref output=other;', work='{{defer{set(output,p);};output=ok;}};')
-reject('repeated_cleanup_bad', work='{{for(i in 0u64..3u64){defer set(ok,q);};}};')
+reject('cleanup_overwrite', setup=BORROWED_OUTPUT, work='{{defer{ok<-true;};defer set(ok,p);}};')
+reject('source_pointer_rebound_after_cleanup', setup=BORROWED_OUTPUT, work='{{defer set(ok,p);}};p=q;')
+case('cleanup_local_pointer_rebind', setup=BORROWED_OUTPUT, work='{{defer{p=q;{}};defer set(ok,p);}};')
+reject('prepared_borrow_overwrite', definitions=BORROW, setup=BORROWED_OUTPUT+'val source<-p is not null;', work='{{defer copy(ok,source);source<-true;}};')
+reject('deferred_borrow_overwrite', setup=BORROWED_OUTPUT+'val source<-p is not null;', work='{{defer{ok<-source;};source<-true;}};')
+reject('cleanup_bad_chain', setup=BORROWED_OUTPUT+'val source<-p is not null;', work='{{defer{ok<-source;};defer{source<-true;};}};')
+case('deferred_rebound_target', setup='ref ok:bool=false,other:bool=true;ref output=other;', work='{{defer{set(output,p);};output=ok;}};')
+reject('repeated_cleanup_bad', setup=BORROWED_OUTPUT, work='{{for(i in 0u64..3u64){defer set(ok,q);};}};')
 case('initialization_independent', setup='val x<-make local i64;ptr target=x;val ok<-false;', work='set(ok,target);', yes='target', diagnostic='before definite initialization')
 case('readonly_output', setup='const val ok<-false;', diagnostic='readonly argument')
 
@@ -179,6 +182,7 @@ for mask in range(1, 15):
         for prepared in (False, True):
             call = 'set(ok,p is not null,q is not null);'
             case('truth_table_'+str(mask)+'_'+name+('_prepared' if prepared else ''), definitions=definitions,
+                 setup=BORROWED_OUTPUT if prepared else VALUE_OUTPUT,
                  work='{{defer '+call+'}};' if prepared else call, yes=name, output=output,
                  diagnostic='' if valid else 'requires a covering catch')
 
