@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-18 — Keep each cause chain in one owner
+
+<a id="h-same-owner-cause-20261118"></a>
+**H-SAME-OWNER-CAUSE-20261118 — Enforce owner equality on cause links.** The project user in [the design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-18 America/Los_Angeles, specifies “必须 `in same_owner` … 自然不允许跨owner建链”. D-17r104/registry893 correct the cross-owner wrapper case in `a9e7c4f8995fd0a10e8284ff080949d0e335e6fb:design/ExceptionControl.md`, “Exception owners across callable boundaries”. The existing nullable ptr and readonly catch-tip field modes continue.
+
+<a id="k-exception-scope-release-20261118"></a>
+**K-EXCEPTION-SCOPE-RELEASE-20261118 — Review release authority.** The user asks whether release requires “owned exception e” or “owned owner ex”. D-17r104 compares managed handling-scope lifetime with a packaged owning exception and an explicit, separately transferable scope capability. One scope can contain multiple exceptions. A retained catch/return or deferred dependency prevents premature release; an internal cause link supplies no independent cleanup responsibility. The effect on the H-EXCEPTION-FACTORY-20261118 result and the full mechanism remain under review.
+
 ## 2026-11-18 — Account for exception owners at catch and return
 
 <a id="k-explicit-exception-owners-20261118"></a>
