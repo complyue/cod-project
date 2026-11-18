@@ -1,12 +1,14 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 169
+Discussion revision: 171
 
 Recorded: 2026-11-18
 
 Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
+
+- **Named sum constructor discussion.** [D-07-SUM-CONSTRUCTORS](DesignAuthorityRegistry.md#d-07-sum-constructors), r171 DL-01, is pending human review for the constructor body and grammar. [D-07-DCTOR-PUBLICATION](DesignAuthorityRegistry.md#d-07-dctor-publication) records the [confirmed selection unit and make-site world](../CHANGELOG.md#h-dctor-world-publication-20261118). [K-SUM-CONSTRUCTOR-DRAFT-20261118](../CHANGELOG.md#k-sum-constructor-draft-20261118) records the proposed surface. C-10/C-65/C-72, charter §§4.3/8.1, D-10-ISA and D-22-INIT-PLACES connect readable constructor names to owner-checked initialization. Check per-alternative overloads, fallthrough readiness, nullable membership and the parallel-world example below. Selective lookup of unlisted constructors remains under review. No implementation profile or layout is selected.
 
 - **Native integration.** [D-07](DesignAuthorityRegistry.md#d-07) r169, DL-11, follows [D-20-NATIVE-C](DesignAuthorityRegistry.md#d-20-native-c) and [H-NATIVE-C-INTERFACE-20261118](../CHANGELOG.md#h-native-c-interface-20261118). C-79/C-80 and charter §§4.3/6.3 connect typed external operations to checked CoD lifetimes. DL-11 supplies the caller, failure and release acceptance cases. Provider registration and the concrete ABI remain open.
 
@@ -206,6 +208,69 @@ Static abstract bounds on a selected named root do not require a runtime object 
 A fold accumulator retains its explicit type guarantees and facts for its concrete value and possible stored-reference targets, including cycles. Unrelated facts visible only in a factory module do not become loop invariants. This is evidence preservation, not structural interface inference; unknown layouts cannot justify erasing required guarantees.
 
 Lean acceptance must show one data identity with head-only conformance declarations in different modules, rejection of structural lookalikes without a declaration, adapter-import permission versus using-only declaration rejection, and consumer acceptance through using the adapter, invalid direct abstract construction, deterministic unique-best selection and an ambiguous crossed-specialization rejection. Product/sum construction and exhaustiveness need separate cases once their grammar is selected; no full GADT or general multiple-inheritance implementation is implied by this declaration split.
+
+#### Named sum constructors under discussion
+
+This DL-01 candidate gives each alternative of a nominal sum a directly visible data constructor name. The same identity selects the alternative in `make Accepted(...)` and tests it in `r isa Accepted`. The predicate checks the active alternative without calling an initializer. An initialized null ptr tests false. A successful ptr test refines the target and non-null facts while the binding and the active alternative remain stable. The parent sum supplies the nominal result type.
+
+```cod
+data Receipt =
+    Accepted { id:u64; ptr prior:Receipt; }
+  | Skipped  {};
+
+func Accepted(raw:u64) -> ref Receipt in O where {owner O} {
+    assert raw != 0u64;
+    id <- raw;
+    prior = null;
+}
+
+# batch is a live writable owner.
+ref a:Receipt in batch = make Accepted(42u64) in batch;
+ref s:Receipt in batch = make Skipped in batch {};
+```
+
+The destination owner comes from ordinary `make` placement. The header may omit the result annotation because the constructor declaration already determines the parent sum, reference mode and actual destination owner. An explicit annotation must agree. The body can name the supplied owner with `where {owner O}`. The construction destination supplies this owner even for a fieldless alternative. Writing an ordinary callable result annotation still cannot invent an owner.
+
+Only the selected alternative’s fields enter the body as implicit initialization destinations. In the example they behave as `init val var id:u64` and `init ptr var prior:Receipt in O`. Explicit parameters supply the call arguments and determine overload matching. A parameter that duplicates an implicit field name at the same binding level would be a duplicate declaration. Field writes, reads after initialization and delegation to an `init` helper follow the [existing place rules](ConstructionAndAcquisition.md#init-destinations-and-declared-place-aliasing). The constructor keeps its ordinary lexical scope, argument evaluation, callable effects and cleanup. On every normal exit after cleanup, all required fields must be ready before `make` delivers the ref. An escaping failure delivers no completed result. Both bare and value-bearing returns targeting the constructor are forbidden, including from its deferred actions. A nested callable or standalone `{{ ... }}` owns its own returns.
+
+Check for the presence of constructor overloads **per alternative, before testing applicability**. With the declaration above, `make Accepted in batch { id <- 0u64; prior = null; }` rejects and `make Accepted() in batch` reports a missing applicable overload. A `proc` initializer still counts when the call site only permits a `func`. Skipped has no initializer overload, so its empty block supplies a complete payload. An initializer-free alternative with required fields must initialize each on every normally completing path. Bare reservation retains its [identity-only meaning](ConstructionAndAcquisition.md#typed-reservation-and-completed-construction). A staged path must respect the same restriction when it turns reserved storage into a readable alternative. The in-place completion interface for such a path remains open.
+
+#### Publishing and selecting data constructors
+
+Exporting a nominal sum type publishes every data constructor of that type. A constructor is one selection unit: its alternative identity travels with its entire initializer overload family in the publishing world, including an empty family. The same unit applies to export, using, import and re-export. Selecting a constructor cannot filter by initializer signature. Its nominal identity determines `r isa Accepted`; overloads determine which initializer can run for `make Accepted(...)`.
+
+At a `make` site, resolve the constructor in that site's module world. Inspect its overload family there before argument or callable-kind matching. Zero overloads permit braced field initialization. A nonempty family requires an applicable initializer for a call with arguments. Overloads that exist solely in a parallel world have no effect, even if both worlds are incorporated in the same program.
+
+The proposed CoD selector goes after the existing module source and type name:
+
+```cod
+using  "model.cod" Receipt {Accepted};          # Select Receipt and the complete Accepted constructor.
+import "model.cod" Receipt {Accepted, Skipped}; # Explicitly import both constructor families.
+import "model.cod" Receipt {..};                # Explicitly import all Receipt constructors.
+```
+
+Names in the list must denote constructors of the selected type. A misspelling or a constructor of a different type rejects. `using` preserves the published implementation context. `import` permits adding overloads to the selected constructor in the receiving world. Such an extension preserves the underlying alternative identity, so values remain recognizable across worlds that select that identity. The selector names constructors. Ordinary type-associated methods keep their existing `with methods` selection. No module operation selects an individual initializer out of a constructor.
+
+```cod
+# model.cod: Receipt includes the fieldless Skipped and declares no Skipped initializer.
+export Receipt;
+
+# audited.cod
+import "model.cod" Receipt {Skipped};
+func Skipped(reason:u64) { assert reason != 0u64; }
+export Receipt;
+
+# A client using the Skipped constructor from model.cod:
+ref first:Receipt in batch = make Skipped in batch {};
+
+# A different client using the Skipped constructor from audited.cod:
+ref next:Receipt in batch = make Skipped(7u64) in batch;
+# make Skipped in batch {} rejects here, even though Skipped has no fields.
+```
+
+**Unlisted constructor names.** Proposed: `using "model.cod" Receipt {Accepted};` makes Accepted explicit. As with a bare type selection, existing public-source fallback may still find Skipped at lower priority. An implicit hit grants no permission to extend that constructor. A stricter selector could exclude the unlisted constructors of Receipt from fallback along that selection. An independent explicit selection could still bring one in. This choice concerns name lookup only and cannot split a constructor’s overload family. Subset selection also leaves the full set of Receipt alternatives intact for type checking and future exhaustiveness checking.
+
+Haskell 2010 spells the analogous import `import Model (Receipt(Accepted))` or `import Model (Receipt(..))`. Within explicit lists, bare `Receipt` selects the type alone. Haskell’s wildcard also covers exported record field names. CoD uses its ordinary `export Receipt;` to publish all constructors and their overloads. [Haskell 2010 Report, §§5.2–5.3](https://www.haskell.org/onlinereport/haskell2010/haskellch5.html)
 
 #### Standalone callable declarations
 

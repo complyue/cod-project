@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-18 — Publish and select whole data constructors in their module world
+
+<a id="h-dctor-world-publication-20261118"></a>
+**H-DCTOR-WORLD-PUBLICATION-20261118.** In the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), the project user specified automatic publication of a type’s constructors, “overload family 作为 dctor 的一部分，整体 export/using/import”, and “有没有overload是看 `make` site 所在的 module world ，跟其它平行世界的状态无关”. D-07r171/D-15r51/registry921 record those source decisions. Braced constructor lists and wildcard selection are proposed. Unlisted-name lookup and implementation qualification remain open.
+
+## 2026-11-18 — Draft named sum constructor bodies
+
+<a id="k-sum-constructor-draft-20261118"></a>
+**K-SUM-CONSTRUCTOR-DRAFT-20261118.** In the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), the project user proposed direct constructor names in `make` and `isa`, explicit `func`/`proc` bodies, fields as implicit `init var` parameters, destination owner supplied by placement, optional result annotation, no constructor-targeting return and braced construction only in the absence of overloads. D-07r170/registry920 draft the source examples and the adapter question. Value path, grammar and implementation qualification remain pending.
+
 ## 2026-11-18 — Region holder reuse and completion of persistent graph versions
 
 <a id="h-owner-reuse-20261118"></a>
