@@ -247,6 +247,7 @@ class ScalarChecker {
       std::shared_ptr<const TypeEvidenceState> declaration;
     };
     std::map<std::string, std::optional<Type>> bindings;
+    std::map<std::string, const Expression *> local_declarations;
     std::map<std::string, Definition> definitions;
     std::set<std::string> symbol_shadows;
     std::map<std::string, ViewEvidence> views;
@@ -3983,7 +3984,21 @@ class ScalarChecker {
     if (state.required) fail(at, state.bindings.contains(name) ? "nearest binding '" + name + "' is not an owner" : "unknown owner '" + name + "'");
     return {};
   }
-  static TypeEvidenceState merge_evidence(TypeEvidenceState left, const TypeEvidenceState &right) {
+  static TypeEvidenceState merge_evidence(TypeEvidenceState left, const TypeEvidenceState &right, bool right_exits = false) {
+    // An ending arm can introduce a nearer lexical declaration, but cannot
+    // establish that declaration's availability at the normal continuation.
+    for (const auto &[name, declaration] : right.local_declarations) {
+      const auto [entry, inserted] = left.local_declarations.try_emplace(name, declaration);
+      const bool different = !inserted && entry->second != declaration;
+      if (different) entry->second = nullptr;
+      if (right_exits && (inserted || different)) {
+        left.bindings[name].reset();
+        left.views[name] = {};
+        left.definitions.erase(name);
+        left.owner_bindings.erase(name);
+      }
+    }
+    if (right_exits) return left;
     std::erase_if(left.definitions, [&](const auto &entry) {
       const auto found = right.definitions.find(entry.first);
       return found == right.definitions.end() || found->second.method != entry.second.method ||
@@ -4035,6 +4050,7 @@ class ScalarChecker {
     auto caught = entry;
     caught.catch_context = true;
     caught.bindings[handler.text] = type;
+    caught.local_declarations[handler.text] = &handler;
     caught.definitions.erase(handler.text);
     caught.owner_bindings.erase(handler.text);
     caught.views[handler.text] = {true, true, true, EvidenceOwner::for_scope(handler), false, false, true, true};
@@ -4193,6 +4209,7 @@ class ScalarChecker {
             fail(declaration->at, "ref requires definitely initialized target storage");
         }
         state.bindings[declaration->text] = type;
+        state.local_declarations[declaration->text] = declaration.get();
         state.definitions.erase(declaration->text);
         state.owner_bindings.erase(declaration->text);
         std::optional<bool> readonly = declaration->read_only || (value && expr.fixed_binding);
@@ -4211,6 +4228,7 @@ class ScalarChecker {
       const auto type = child(0);
       if (type == Type::never) return Type::never;
       state.bindings[expr.text] = type;
+      state.local_declarations[expr.text] = &expr;
       state.definitions.erase(expr.text);
       state.owner_bindings.erase(expr.text);
       auto selected = state.value;
@@ -4259,12 +4277,16 @@ class ScalarChecker {
     case K::conditional: {
       const auto condition = child(0);
       if (state.returns && condition == Type::never) return Type::never;
-      if (state.required && condition != Type::boolean) fail(expr.at, "condition requires bool");
+      if (state.required && condition != Type::boolean && condition != Type::never) fail(expr.at, "condition requires bool");
       auto yes_state = state, no_state = state;
       const auto yes = type_evidence(*expr.children[1], yes_state, contextual, expected, alternatives);
       const auto no = type_evidence(*expr.children[2], no_state, contextual, expected, alternatives);
-      state = merge_evidence(std::move(yes_state), no_state);
       view = yes == Type::never ? no_state.value : no == Type::never ? yes_state.value : join_views(yes_state.value, no_state.value);
+      const bool yes_exits = yes == Type::never, no_exits = no == Type::never;
+      if (condition != Type::never && yes_exits != no_exits)
+        state = yes_exits ? merge_evidence(std::move(no_state), yes_state, true)
+                          : merge_evidence(std::move(yes_state), no_state, true);
+      else state = merge_evidence(std::move(yes_state), no_state);
       if (condition == Type::never) return Type::never;
       if (yes == Type::never) return no;
       if (no == Type::never || yes == no) return yes;
@@ -4306,6 +4328,9 @@ class ScalarChecker {
         if (const auto outer = catch_entry.bindings.find(handler.text); outer != catch_entry.bindings.end())
           caught.bindings[handler.text] = outer->second;
         else caught.bindings.erase(handler.text);
+        if (const auto outer = catch_entry.local_declarations.find(handler.text); outer != catch_entry.local_declarations.end())
+          caught.local_declarations[handler.text] = outer->second;
+        else caught.local_declarations.erase(handler.text);
         if (const auto definition = catch_entry.definitions.find(handler.text); definition != catch_entry.definitions.end())
           caught.definitions.emplace(*definition);
         if (const auto owner = catch_entry.owner_bindings.find(handler.text); owner != catch_entry.owner_bindings.end())
@@ -4331,10 +4356,12 @@ class ScalarChecker {
       auto iteration = state;
       const auto control_owner = EvidenceOwner::for_scope(expr);
       iteration.bindings[expr.text] = index; iteration.views[expr.text] = {true, true, true, control_owner, false, false, true, true};
+      iteration.local_declarations[expr.text] = &expr;
       iteration.definitions.erase(expr.text);
       iteration.owner_bindings.erase(expr.text);
       if (fold) {
         iteration.bindings[expr.binding] = accumulator; iteration.views[expr.binding] = {true, true, true, control_owner, false, false, true, true};
+        iteration.local_declarations[expr.binding] = &expr;
         iteration.definitions.erase(expr.binding);
         iteration.owner_bindings.erase(expr.binding);
       }
@@ -4596,6 +4623,7 @@ class ScalarChecker {
         const auto method = lexical_method(expr.definition.get(), state.method);
         auto declaration = std::make_shared<TypeEvidenceState>(project_evidence(state, definition_dependencies(*expr.definition)));
         state.bindings[expr.definition->name] = callable_evidence(method, &state);
+        state.local_declarations[expr.definition->name] = &expr;
         state.definitions[expr.definition->name] = {method, std::move(declaration)};
         state.owner_bindings.erase(expr.definition->name);
         state.views[expr.definition->name] = {false, false, {}, {}, false, {}, {}, true};

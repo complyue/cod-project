@@ -39,6 +39,17 @@ runner.CASES = {
     'query_needs_no_installed_binding': (IO+'symbol @bias:u64;val result<-make local typeof({{return @bias;}}){8u64};behave @print(result);', 0, '8\n', ''),
     'query_established_nested_signature': (IO+'func unused(x:T)->u64 where T{return true;}val result<-make local typeof({{return unused(1u64);}}){8u64};behave @print(result);', 0, '8\n', ''),
     'query_tail_is_void': ('val result<-make local typeof({{7u64;}}){8u64};', 2, '', 'initializer does not satisfy local storage type'),
+    'query_uses_continuing_arm': (IO +
+        query('if(true){return 1u32;}else{val remaining<-4294967296u64;};return remaining;') + 'behave @print(result);',
+        0, '4\n', ''),
+    'query_keeps_obligation_from_abrupt_condition': (IO +
+        query('if({return 7u64;}){}else{};') + 'behave @print(result);', 0, '4\n', ''),
+    'query_checks_arms_after_abrupt_condition': (query('if({return 7u64;}){val wrong:bool<-1u64;}else{};'),
+        2, '', 'initializer does not satisfy declared val type'),
+    'query_does_not_fall_back_to_outer_callable': ('func helper()->u64{return 90u64;}'
+        'proc outer(flag:bool)->void{' +
+        query('if(flag){func helper()->u64{return 3u64;};return 1u64;}else{};return helper();') +
+        '}outer(false);', 2, '', "nearest binding 'helper' is not callable"),
     'query_range_checks_first_endpoint': (query('for(i in true..2){};return 7u64;'), 2, '', 'a range requires integer endpoints'),
     'query_range_checks_last_endpoint': (query('for(i in 0..2f32){};return 7u64;'), 2, '', 'a range requires integer endpoints'),
     'query_range_checks_endpoint_agreement': (query('for(i in 0u32..2u64){};return 7u64;'),

@@ -12,6 +12,20 @@ runner.CASES = {
  'parameter_anchor': (IO+'func f(x:T,n:u64) where T{if(n==0u64){return x;}else{return f(x,n-1u64);};}behave @print(f(true,30u64));behave @print(f(2u32,30u64));',0,'true\n2\n',''),
  'nonrecursive_anchor': (IO+'func plus(x:u64)->u64{return x+1u64;}func f(x:u64,n:u64){if(n==0u64){return plus(x);}else{return f(x,n-1u64);};}behave @print(f(5u64,30u64));',0,'6\n',''),
  'transitive_join': (IO+'func f(flag:bool){if(flag){return 1u32;}else{return g();};}func g(){return 2u64;}func tag(x:u32)->u64{return 32u64;}func tag(x:u64)->u64{return 64u64;}behave @print(tag(f(true)));behave @print(f(false));',0,'64\n2\n',''),
+ 'then_exit_keeps_continuing_return_evidence': (
+     IO+'func f(flag:bool){if(flag){return 1u32;}else{val remaining<-4294967296u64;};return remaining;}'
+     'func tag(x:u32)->u64{return 32u64;}func tag(x:u64)->u64{return 64u64;}'
+     'behave @print(tag(f(true)));behave @print(f(false));',0,'64\n4294967296\n',''),
+ 'else_exit_keeps_continuing_return_evidence': (
+     IO+'func f(flag:bool){if(flag){val remaining<-4294967296u64;}else{return 1u32;};return remaining;}'
+     'behave @print(f(true));behave @print(f(false));',0,'4294967296\n1\n',''),
+ 'nested_exits_keep_continuing_return_evidence': (
+     IO+'func f(flag:bool){if(flag){if(flag){return 1u32;}else{return 2u32;};}'
+     'else{val remaining<-4294967296u64;};return remaining;}'
+     'behave @print(f(true));behave @print(f(false));',0,'1\n4294967296\n',''),
+ 'two_reaching_arms_still_require_availability': (
+     'func f(flag:bool)->u64{if(flag){val remaining<-7u64;}else{};return remaining;}f(false);',
+     2,'','not available on every reaching path'),
  'numeric_cross_join': (IO+'func f(flag:bool){if(flag){return 16777217u32;}else{return 1f32;};}func tag(x:f64)->u64{return 64u64;}behave @print(tag(f(true)));behave @print(f(true));behave @print(f(false));',0,'64\n16777217\n1\n',''),
  'numeric_reverse_join': (IO+'func f(flag:bool){if(flag){return 1f32;}else{return 16777217u32;};}func tag(x:f64)->u64{return 64u64;}behave @print(tag(f(false)));behave @print(f(false));',0,'64\n16777217\n',''),
  'join_preserves_earlier_overflow': (IO+'func f(flag:bool){if(flag){return 4294967295u32+1u32;}else{return 1u64;};}f(true);',70,'','u32 addition overflow'),

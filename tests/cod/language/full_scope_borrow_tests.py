@@ -75,6 +75,13 @@ runner.CASES = {
     'query_accepts_existing_declared_owner': (IO + 'func run(ref outer:u64 in O)->u64 where {owner O}{' +
         query('ptr selected:u64 in O=outer;return 7u64;') +
         'return queried;}ref actual:u64=1u64;behave @print(run(actual));', 0, '4\n', ''),
+    'query_preserves_continuing_borrow_owner': (IO + 'func inspect(ref a:const u64 in O,ref b:const u64 in O)->u64'
+        ' where {owner O}{return b;}func run(ref external:const u64 in E,flag:bool)->u64 where {owner E}{' +
+        query('if(flag){return 1u32;}else{ref selected:const u64 in E=external;};return inspect(external,selected);') +
+        'return queried;}ref actual:const u64=1u64;behave @print(run(actual,false));', 0, '4\n', ''),
+    'query_preserves_continuing_borrow_access': ('ref source:const u64=1u64;' +
+        query('if(false){return 1u64;}else{ref selected:const u64=source;};selected<-2u64;return 3u64;'),
+        2, '', 'cannot write through a readonly destination'),
     'query_does_not_read_uninitialized_target': (IO+'val source<-make local u64;ptr p:u64=source;'
         'val result<-make local typeof({{return p;}}){6u64};behave @print(result);', 0, '6\n', ''),
     'nested_query_retains_binding_evidence_only': (IO+'proc run()->void{val source<-make local u64;ptr p:u64=source;'
