@@ -435,7 +435,8 @@ inline CheckedBody checked_body(const CheckedProgram &program, const CheckedMeth
         if (operation.arguments[a].mode == ArgumentMode::value) continue;
         const auto &argument = checked.operations.at(expr->children.at(a).get());
         for (size_t c = 0; c < checked.frame.captures.size(); ++c)
-          if (argument.targets.contains(checked.frame.captures[c])) result.writable_captures.insert(c);
+          if (!checked.storage.at(checked.frame.captures[c]).read_only &&
+              argument.targets.contains(checked.frame.captures[c])) result.writable_captures.insert(c);
       }
     }
     if (unchanged) continue;

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-18 — Preserve readonly capture ownership and measure native cost
+
+<a id="k-readonly-capture-cost-20261118"></a>
+**K-READONLY-CAPTURE-COST-20261118 — Elide acquisition for readonly capture access.** Source431→432/registry873→874 continues D-18r114's confirmed ordinary value-input profile/P-485–P-487 without a semantic revision. Checked bodies use preserved readonly access to rule out replacement through helper borrows; observing such an input needs no additional owned writable image. Explicit local value construction and mutable-input acquisition/failure cleanup keep their ordinary responsibilities. Native evidence separates construction, dedicated duplication, stored-view invocation/query and direct-definition invocation/query; scalar-capture staging retains shared bodies across concrete types and greater runtime depth. The C-65/C-73/C-75 → charter §§2/3.2–3.3/4.3/6.3/8/12 path preserves independent execution state, source access, owners, exact cleanup and D-16. This is implementation/editorial continuity, not human confirmation or complete profile/goal acceptance. It supplies no new source rule, allocation count, ABI, stored borrowed/place capture proof or pure policy. Full-scope lowering retains its independently confirmed r92 contract; parenthesized-value mechanisms retain their recorded review boundary. Baseline: `40c0d3f4249133e5e056adbeabe77a378eb7e89a` at the design, registry and source-reference paths, with compiler baseline `478276983eba5787abbfb027850091df82c211b2`.
+
 ## 2026-11-18 — Select parenthesized value results and unparenthesized operator idioms
 
 <a id="h-parenthesized-values-20261118"></a>
