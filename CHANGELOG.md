@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-11-18 — Region holder reuse and completion of persistent graph versions
+
+<a id="h-owner-reuse-20261118"></a>
+**H-OWNER-REUSE-20261118.** The project user in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-18 (America/Los_Angeles) said “4 感觉可以快速确定允许， p <- p 相当于 nop，有没有什么坑？” in response to the outstanding conditional-handoff assignment and direct self-transfer cases. D-14r126/registry919 record both permissions for ordinary writable region holders. H-262/H-263, H-OCCUPIED-OWNER-20261118 and D-17 supply RHS liveness, consuming entry and prior-instance cleanup. P-597/P-598 record the candidate value path and dependencies.
+
+<a id="h-dbmr-image-completion-20261118"></a>
+**H-DBMR-IMAGE-COMPLETION-20261118.** In the same [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), the user specified “预期90%workload是共享只读利用图数据”, “整体完成后才打完成标识” and mandatory detection of files left incomplete by process exit. D-22r58/registry919 record short-lived builders, readonly old versions, new version files and emergency-only in-place edits. P-599/P-600 link this goal to the existing publication and access decisions. File format, repair strategy, power-loss durability and native qualification were outside this decision.
+
+<a id="h-dbmr-payload-checksum-20261118"></a>
+**H-DBMR-PAYLOAD-CHECKSUM-20261118.** The project user in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) proposed “完成标识就用有效载荷的checksum”. D-22r58 specifies the checksum record as the completion mark under H-DBMR-IMAGE-COMPLETION-20261118. Pre-edit invalidation and last-step publication preserve detection of interrupted work even when the bytes happen to match an earlier payload. The algorithm, encoding and power-loss guarantees remain open.
+
 ## 2026-11-18 — Distinguish parked questions from the active discussion queue
 
 <a id="k-discussion-parked-20261118"></a>
