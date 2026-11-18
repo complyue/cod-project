@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-11-18 — Correct implementation defects under the confirmed design
+
+<a id="h-implementation-correction-20261118"></a>
+**H-IMPLEMENTATION-CORRECTION-20261118.** The project user in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-18 (America/Los_Angeles) directed “如果是纠正实现瑕疵，不需要人类批准，除非潜在工程量明显不合算”. This clarifies H-IMPLEMENTATION-FIDELITY-20261117 for engineering work that restores an established contract.
+
+<a id="k-scalar-correction-20261118"></a>
+**K-SCALAR-CORRECTION-20261118.** Engineering assessment under that rule: the scalar target/value join and parenthesis cases in D-22r53 are regression criteria for H-CONDITIONAL-RESULT-20261118 and H-PARENTHESIZED-VALUES-20261118. They require coordinated parser, checker, type-query, lowering and fixture changes. No disproportionate cost was identified. The observed discrepancy is documented at `529c9d1f974dbb4d9d2b43bb394b6926b0360026:tests/cod/language/README.md`, “Scalar conditional migration”. Registry912 routes this work under the existing decisions. Non-scalar results and any change to source semantics retain their separate review.
+
+## 2026-11-18 — Publish initialized DBMRs exclusively and define the native C boundary
+
+<a id="h-dbmr-new-publication-20261118"></a>
+**H-DBMR-NEW-PUBLICATION-20261118.** In the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-18 (America/Los_Angeles), the project user answered “我认同这个设计目标” to the fresh DBMR publication case. D-22r52 records complete initialization before the final pathname becomes visible and exclusive publication. Failure leaves the name available to retry if no other creator claimed it. Existing images, acquisition grammar and crash recovery remain open. Earlier matrix at `43a741c89b9f4f4950ffef5cfd4971734a2eadb8:design/ConstructionAndAcquisition.md`, “DBMR alternatives and protocol work”.
+
+<a id="h-native-c-interface-20261118"></a>
+**H-NATIVE-C-INTERFACE-20261118.** In the same [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-18 (America/Los_Angeles), the project user directed “用 C 语言实现新的CoD native components，原C++实现的region等仅作历史参考；CoD native interface 也改为基于 C 而不是 C++”. D-20 roadmap r8 selects C implementation and a C interface driven by CoD runtime semantics, including D-22 publication. D-01 scopes the existing C++ reference, D-07r169 and LLVM interop r7 apply the C boundary. This extends the planning direction in H-TOOLCHAIN-REPOSITORIES-20261118. Concrete ABI, host protocols and migration remain future work.
+
+## 2026-11-18 — Clarify collection visitor proof cases
+
+<a id="k-collection-visitor-proof-20261118"></a>
+**K-COLLECTION-VISITOR-PROOF-20261118.** Engineering feedback from the [mainline chat](codex://threads/01a1cefe-fe25-7251-b25b-b3908d803ff6) clarifies the existing structural-mutation exclusion and per-call member-owner rule at `f717084223f844ea382f25ad490de873fb5a65b3:design/CollectionsAndBuiltinContainers.md`, “Observation and owner scope”. D-30r2/registry910 add acceptance for a second collection handle, a captured mutating callable and stable member identity after index compaction. P-589/P-590 remain candidate relationships. The feedback selects no proof algorithm or native representation.
+
 ## 2026-11-18 — Give collections and builtin containers a dedicated design
 
 <a id="k-collection-interfaces-20261118"></a>

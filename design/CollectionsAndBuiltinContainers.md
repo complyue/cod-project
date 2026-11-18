@@ -1,12 +1,13 @@
 # Collections and builtin containers
 
-Design revision 1 · 2026-11-18 · Source design draft
+Design revision 2 · 2026-11-18 · Source design draft
 
 ## Design authority
 
 - [D-30](DesignAuthorityRegistry.md#d-30) covers the CoD builtin container inventory and the proposed collection operations for read-only visitation, indexed removal and consuming traversal. The user placed these operations at collection scope. The names, method contracts and general owning loop header are proposals. [Scope and evidence](../CHANGELOG.md#k-collection-interfaces-20261118)
 - Candidate P-589 derives from C-10/C-54/C-65. A caller can tell when it is inspecting an element and when it takes responsibility for that element. P-590 depends on CoD’s existing index domains, target access, owner and generator rules. [Charter §§3.3, 4.1, 4.3 and 8.1](RegionalSemanticPlatformCharter.md)
 - The confirmed instance is the exception aggregate’s independently owned members and read-only enumeration. Its confirmation covers that instance. General collection conformance, operation names, storage layout, native lowering and ABI remain unqualified. [H-DEFER-MEMBER-TAKE-20261118](../CHANGELOG.md#h-defer-member-take-20261118)
+- Revision 2 makes the r1 visitor mutation rule explicit for indirect calls and gives acceptance cases for owner identity after compaction. The proposed operation contracts retain their pending status. [Engineering review](../CHANGELOG.md#k-collection-visitor-proof-20261118)
 
 ## Builtin containers and related forms
 
@@ -41,6 +42,19 @@ for val remaining <- drain(samples) {
 
 A visit passes the callback as the first parameter under the ordinary trailing-callback rules. Each callback call that borrows an owning element binds the actual owner of that element for that call. This permits one visit to inspect objects from several regions. A reference derived from the callback argument requires a live, statically provable owner at every later use. Conflicting structural mutation during a visit rejects. A callback failure preserves completed user effects. [Trailing callback arguments](SymbolicDynamicScope.md#trailing-callback-arguments)
 
+A visit relies on three facts. The collection remains available for traversal, the selected entry retains its release responsibility, and the observer may read the selected target while its actual owner is live. Each callback entry binds the owner of that particular target, including when one compiled callback body visits several regions. An index selects the entry at that step. Compaction can change a surviving element’s index while preserving its owner.
+
+The structural mutation exclusion follows the collection wherever the callback can reach it. For example, suppose `remove_first()` can call `take_at` on the same collection through a second handle:
+
+```cod
+visit(batch.exceptions) {{=> index, member;
+    remove_first();          # Reject while this collection is being visited.
+    report(index, member);
+}};
+```
+
+The same rule applies to a captured callable that can drain this collection. Removing from a provably distinct collection is compatible with this visit, subject to its ordinary access rules.
+
 A borrowed generator yield requires one fixed owner for that output over the invocation. Per-call binding in a visitor preserves that rule. The generator contract separately governs a consuming loop’s body, early return and required cleanup. [Borrowed yields](RangedForAndGenerators.md#one-fixed-owner-per-borrowed-yield-component) · [For headers](RangedForAndGenerators.md#for-headers)
 
 ### Removal, order and failure
@@ -55,4 +69,4 @@ A borrowed generator yield requires one fixed owner for that output over the inv
 
 ## Acceptance boundary
 
-For an empty sequence, visit and drain make zero handoffs. For a three-element indexed sequence, taking the middle element delivers it once and leaves the first and last in order. Cover an invalid checked index, a throwing observer, and early exit after one draining handoff. In the owning instance, verify that a readonly collection supports observation, that a removed member survives disposal of the batch, and that sibling regions and the body failure remain live while the batch retains them. The aggregate’s internal holder array is a dedicated builtin. Ordinary regional user data remains subject to its existing element and relocatability restrictions, including the exclusion of callable views. Existing subscript read/write methods continue to have their declared result and access modes. [Logical indexed transfer](RegionalOwnership.md#logical-indexed-transfer)
+For an empty sequence, visit and drain make zero handoffs. For a three-element indexed sequence, taking the middle element delivers it once and leaves the first and last in order. Cover an invalid checked index, a throwing observer, and early exit after one draining handoff. In the owning instance, verify that a readonly collection supports observation, that a removed member survives disposal of the batch, and that sibling regions and the body failure remain live while the batch retains them. For members A, B and C from three distinct owners, take B, then visit A and C with the same callback body. C is now at the former index of B and the callback must read C under its own owner. On batch disposal A and C are released exactly once, and the holder of B retains responsibility for its later release. The aggregate’s internal holder array is a dedicated builtin. Ordinary regional user data remains subject to its existing element and relocatability restrictions, including the exclusion of callable views. Existing subscript read/write methods continue to have their declared result and access modes. [Logical indexed transfer](RegionalOwnership.md#logical-indexed-transfer)

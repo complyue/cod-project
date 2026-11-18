@@ -1,8 +1,12 @@
 # CoD construction, bits ADTs and region acquisition
 
-Design revision: 51 · Recorded: 2026-11-18 · Status: discussion draft with confirmed requirements; logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
+Design revision: 53 · Recorded: 2026-11-18 · Status: discussion draft with confirmed requirements; logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
 
 ## Design authority
+
+- **Scalar regression cases.** Revision 53 adds [paired target-identity checks](#scalar-expression-checking-and-lowering) to the confirmed [D-22 conditional](DesignAuthorityRegistry.md#d-22-conditional) and [D-10 parentheses](DesignAuthorityRegistry.md#d-10-parens) scopes. The examples exercise the existing C-65/C-72 ownership and value rules under charter §§4.3/6.3 and D-23 reception. [K-SCALAR-CORRECTION-20261118](../CHANGELOG.md#k-scalar-correction-20261118) records the engineering assessment.
+
+- **New DBMR publication.** [D-22-DBMR-PUBLICATION](DesignAuthorityRegistry.md#d-22-dbmr-publication), r52, records the [confirmed visibility rule](../CHANGELOG.md#h-dbmr-new-publication-20261118). A reader opening the final name can rely on complete initialization. The success, failure, retry and competing-creator cases below cover the C-05/C-09/C-54 consistency and ownership goals in charter §§4.3/7.2. Source spelling, existing-file updates and crash recovery remain open.
 
 - **Exception placement.** [H-MAKE-EXCEPTION-20261118](../CHANGELOG.md#h-make-exception-20261118) scopes D-22r49 to the boundary with [D-17 fresh exception construction](ExceptionControl.md#make-exception-expressions). D-22 supplies constructor arguments, field readiness and ordinary payload allocation. C-54/C-65 and charter §§3.3/4.1/4.3 motivate a provable owner. Accept dedicated, complete exception construction with an optional fresh-region capacity. Reject ordinary `make T` for an exception subtype and direct `in o` placement. [H-BRACED-CAUSE-20261118](../CHANGELOG.md#h-braced-cause-20261118) carries the [normal make with a cause](ExceptionControl.md#constructing-a-normal-result-with-a-cause) into D-22r51. The cause supplies the owner before any field runs, including for a nested allocation. D-17 owns the handoff contract. Physical support remains pending.
 
@@ -736,6 +740,29 @@ A value result carries no owner. A selected readable target can therefore contri
 
 The join uses existing type, unit, validity and conversion rules, including D-16 where applicable. It supplies no new implicit dereference of a nullable pointer, whole-object bits transfer, ownership conversion or graph transfer. Other result kinds need an admitted way to produce their common contract.
 
+### Scalar expression checking and lowering
+
+For supported scalar bits and readable scalar targets, the following checks apply to expression parentheses and conditionals. Determine the common result type and category before applying a receiver. Preserve the distinction between expression parentheses and syntax delimiters. On a selected value arm, obtain the independent bits once where that arm produces its value. On a selected reference arm, retain the target, its access and its proven owner through reception. An implementation can use registers, branches or a result destination as long as these observations agree.
+
+```cod
+proc observe(left:bool) -> u64 {
+    ref a:u64 = 1u64;
+    ref b:u64 = 2u64;
+    ref chosen:u64 = if (left) { a } else { (b) };
+    chosen <- 9u64;
+    return a * 10u64 + b;
+}
+```
+
+| Arms (true / false) | Result used by the receiver | `observe(true)` | `observe(false)` |
+| --- | --- | ---: | ---: |
+| `a` / `(b)` as written | Independent bits on either path. The declaration supplies fresh storage. | 12 | 12 |
+| `a` / `b` | Both writable references have the same lexical owner. The declaration binds the selected target. | 92 | 19 |
+
+Exercise both arm orders. A value receiver transfers bits under its ordinary rules. An existing reference rebind or an argument requiring an existing target must reject a projected value. A bare readonly target retains its access. A retained reference still requires one provable owner. The condition and selected arm execute once. A nonexecuting type query must use the same static result and leave program state untouched. A returning or throwing arm supplies no value to the join. For a call yielding a scalar reference, projection reads after the call’s cleanup and before later enclosing cleanup can change those bits.
+
+Check the examples and these acceptance cases in the checker and in both native lowering modes. Acceptance includes the mixed reference/literal example above and the reference/reference control. Existing numeric types, units and validity rules apply. Non-scalar carriers, implicit ownership or graph transfer and new numeric conversions are outside this scope. [Expression parentheses](SymbolicDynamicScope.md#parenthesized-value-expressions-and-operator-idioms) · [Scalar receiving rules](ScalarCallResults.md#call-site-matrix-new-declarations)
+
 ### Initialization order and allowed allocation effects
 
 H-427's joint initialization establishes the group bindings on success; H-428 explicitly permits allocation as an initialization side effect. There is no CoD allocation checkpoint, automatic cursor rewind or implied transaction over initializer effects. Initializers run in source order and evaluate once. For a fresh target, H-416's conceptual order remains reserve, evaluate/convert, initialize; failure to reserve may prevent RHS effects. Earlier bindings are available to later initializers and the final group block. Lookup in an individual initializer still uses the preceding lexical environment. Owner liveness and allocation access must survive every pending write.
@@ -819,16 +846,40 @@ These are comparison candidates. Both preserve confirmed result-only constness a
 
 **Provisional recommendation: A** for the initial explicit acquisition surface. It introduces less request-value machinery and keeps persistent-file effects visible. B is useful if real applications need reusable runtime-selected acquisition descriptions. No latency/code-size benchmark supports a performance preference yet; both can lower to the same acquisition operations. This is not a final R3 selection or frozen syntax.
 
-The operation matrix below applies to either candidate and is still proposed. A source-form preference alone cannot qualify these file protocols.
+### Publishing a newly created DBMR
 
-| Situation | Proposed outcome / contract still needed |
+The following uses candidate acquisition syntax. The final-path rule applies to either spelling.
+
+```cod
+region Catalog { version:u64; rows:u64; }
+owned region catalog:Catalog <- make region Catalog from new path {
+    version <- 1u64;
+    rows <- read_manifest();
+};
+```
+
+A creator may prepare storage privately. It may publish the final pathname only after every root and all fallible acquisition preparation have completed. Publication installs the complete region in one step conditional on the destination still being absent. Only a successful publisher delivers its owning result.
+
+| Observation | Required behavior |
 | --- | --- |
-| New source, destination exists | Reject without overwriting; creation must be exclusive rather than an existence-check/open race. |
+| Another process opens the destination during initialization | This attempt exposes nothing there. Once published, the first successful open can observe both initialized roots. |
+| `read_manifest()` throws, or publication fails | Deliver no owner and release this attempt’s private resources exactly once. The attempt leaves no final entry of its own. A retry can use the name if it is still free. |
+| The destination already exists, or two creators race | Preserve the existing entry. At most one creator can publish at an absent name. A loser cannot overwrite, truncate or unlink the winner’s file, including during cleanup. |
+
+Initializer effects on other resources follow ordinary CoD rules. Visibility at the final name is distinct from persistence after a process or system crash. Recovery of abandoned staging storage, flush guarantees and modifications to existing images require separate protocols.
+
+### Other acquisition operations
+
+The matrix applies to both source candidates. Fresh publication is settled above. The other file protocols are proposals.
+
+| Situation | Contract or open question |
+| --- | --- |
+| New source, destination exists | Acquisition fails and preserves that entry under the fresh-publication rule. |
 | Existing source missing, invalid or incompatible | Reject; no silent create, rebuild or clear. Specify root/layout/reference validation and failure types. |
 | Const result with requested preparation writes | Obtain authorized preparation access, perform specified writes, then publish the restricted result. Decide physical mapping protection independently of the already-confirmed language access rule. |
 | Expansion/trim request already satisfied | Specify exact-size versus minimum-capacity semantics, total/payload/free-byte units, limits and idempotence; do not inherit the C++ reserve-free API accidentally. |
 | Trim intersects occupied storage | Reject. Tail trim preserves retained offsets and is not compaction. Validate under the selected coordination boundary. |
-| Partial acquisition/preparation failure | Release every acquired handle/mapping exactly once; specify remaining file contents/extent. File rollback is not supplied by region cleanup. |
+| Failure while preparing an existing image | Release every acquired handle/mapping exactly once. The remaining file contents and extent require a separate contract. |
 | Shared mapping and preparation/replacement | Define admissible access and coordination. H-430 excludes ordinary in-place language growth; acquisition preparation or a consuming replacement still needs a backing-file/shared-mapping protocol. Shared mapping supplies neither ownership exclusivity, locking nor transactions. |
 | Release/flush failure | Define explicit observable failure and cleanup behavior; closing an acquisition does not delete data or guarantee durable publication. |
 
@@ -838,7 +889,7 @@ Before final R3 selection, compare a concrete capacity/failure/coordination cont
 
 The [source capability reference](../tests/cod/language/README.md) owns current compiler support. Construction integration must keep syntax, payload placement, field access, owner/access/initialization proofs, callable transport and cleanup consistent. A bits predicate alone cannot establish aggregate transport or lexical field-place support.
 
-[DBMR](../include/shilos/dbmr.hh) acquisition must be assessed against the proposed exclusive creation, validation, capacity, access, failure and coordination contract. Existing storage primitives do not establish full graph/schema validation, failure atomicity or durable publication. Measurements must distinguish counted operations from observed latency and resource totals.
+The current C++ [DBMR::create](../include/shilos/dbmr.hh) opens or creates the final file, resizes and maps it, then constructs the root. A throwing root constructor unmaps the view after the name is already visible. The [new C native provider](../applications/cod-booter/README.md#next-stage-repositories-and-native-runtime) must implement exclusive publication of the initialized image. A separate existence check followed by an overwriting publish would race with another creator. Measurements must distinguish counted operations from observed latency and resource totals.
 
 [K-RESIZE-20261114](../CHANGELOG.md#k-resize-20261114) records the current proposal review; whole-file and unresolved construction/acquisition qualification remain pending-human.
 
@@ -853,7 +904,7 @@ The [source capability reference](../tests/cod/language/README.md) owns current 
 | Initialization effects | A later initializer failure preserves earlier valid publications and allocations in an existing live region; incomplete bindings/readable objects are not exposed. Preserve source order, exact cleanup for failed whole-region acquisition, nested effects and existing defer/completion rules. No implicit allocation or graph rollback. |
 | Distinct storage and explicit resize | Use D-28 placement/representation acceptance. Cover grow/shrink/equal-capacity replacement, lossless retained extent, pre-entry failure, consuming entry, old-view invalidation, fresh result views, post-entry rejection/failure cleanup and abandoned owning results. No automatic growth, ownership restoration or scope-region backing; capacity/backend details need their own acceptance. |
 | Composition | Aggregate arguments/results through native recursion, callable captures/dynamic bindings, deferred execution and loops preserve value/view semantics and existing ownership transfer timing. |
-| File acquisition | Selected source/access/capacity operation matrix, invalid image rejection, exact handle/mapping release, relocation preserving sharing/cycles and observable preparation effects before const publication. |
+| File acquisition | Fresh creation covers reader visibility, failure and retry, and two racing publishers with exactly one winner when both are otherwise successful. Further coverage includes the selected source/access/capacity operation matrix, invalid image rejection, exact handle/mapping release, relocation preserving sharing/cycles and observable preparation effects before const publication. |
 | Costs | Compile time, generated text/bitcode, stack/backing bytes, region/mapping count and peak extent; no accidental per-object cleanup or graph copy. No numeric target is assumed. |
 
 ## Review process and remaining topics
@@ -866,6 +917,6 @@ Contextual owner inference and the coordinated migration direction are recorded 
 - **RHS normalization:** complete type-specific owning/non-bits carrier integration under the common conditional result rule. Parenthesized scalar bits and assignment-result projection are selected; bare readonly reference reception preserves access and rejects incompatible writable reception. Value-category parentheses grant no generic object copying/moving, graph transfer or lifetime extension.
 - **Initialization integration:** preserve H-428 allowed allocation effects and D-17 cleanup while completing precise RHS/name/order checking. No checkpoint or publication-rollback choice remains open at the language level.
 - **Storage refactoring and explicit-region resize:** D-28 owns lexical/regional reference representation, any lexical non-bits layout and external_ptr naming. H-430–H-432 supplies explicit consuming resize with lossless success and ordinary failure cleanup; review the capacity/error mapping and DBMR backing protocols.
-- **Persistent acquisition:** complete the source/access/capacity/failure/coordination matrix and compare its implementations before choosing the DBMR surface. Result-only constness is already confirmed; mapping protection, capacity units, partial effects, validation and release/durability outcomes remain explicit topics.
+- **Persistent acquisition:** complete the source/access/capacity/failure/coordination matrix and compare its implementations before choosing the DBMR surface. Result-only constness and fresh final-path publication are confirmed. Mapping protection, capacity units, existing-image effects, validation and release/durability outcomes remain open.
 
 The candidate value rationale, constraints, non-goals and acceptance remain part of the eventual whole-document review. No separate approval of internal relationship numbers is requested.

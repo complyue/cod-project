@@ -24,6 +24,7 @@
 - Do not disguise a design change as implementation-only work. If code, tests, defaults or interfaces would change the contract, follow the design-change procedure even if no Markdown edit was initially planned.
 
 ### Semantic fidelity and implementation obstacles
+- When an implementation disagrees with a confirmed rule, correct it under the existing decision and update any fixtures that encode the defect. Seek human review if the expected engineering cost is clearly disproportionate. A change to the language contract still follows the design-change procedure.
 - Implement the latest confirmed semantics and required guarantees faithfully. A technical obstacle that would require weakening them must be raised as a design issue before introducing the compromised implementation. Explain the concrete obstacle, affected guarantees, alternatives and costs, and obtain the necessary human design decision; unrelated qualified work may continue.
 - Do not pressure the human to approve a known-defective or semantically reduced implementation as an implementation-level compromise. Material trade-offs belong in the design contract. Routine engineering choices that preserve that contract remain the implementer's responsibility.
 - When existing code conflicts with newly confirmed semantics, disclose the sunk cost and expected rework factually, then migrate to the latest confirmed contract. Prior implementation effort does not justify weakening that contract. Use the migration to reduce technical debt: remove obsolete paths and assumptions, update documentation and preserve meaningful verification of the current semantics.
@@ -77,7 +78,7 @@
 - Compile-time/runtime labels do not prove when a selected place or target equality becomes known. Explicit place declarations may select runtime-indexed storage; independent references may share targets without a pairwise declaration. Preserve these distinctions, ordinary access/owner/lifetime checks and permitted overlap; this rule grants no exclusivity or new capture/lifetime mechanism.
 
 ## Code Changes
-- C++20 only; prefer modern features and avoid legacy patterns unless strictly necessary.
+- Use C++20 for C++ code, including the seed compiler. New CoD native components are written in C and expose a C interface defined by CoD runtime requirements. Follow the [native component roadmap](applications/cod-booter/README.md#next-stage-repositories-and-native-runtime) and the applicable operation contract.
 - Mimic existing style and header layout under `include/`.
 - Reuse existing libraries/utilities in the repo; do not add external dependencies unless requested by the user.
 
@@ -96,6 +97,9 @@
 - Fraction support remains a design draft with implementation deferred. H-256 separately prioritizes reserving `//` with `#` comments and the representation-independent UoM refactor. Those prerequisites do not authorize implementing fractions or silently deciding the draft's open questions.
 
 ## Memory Regions and Regional Types (Critical)
+
+The C++ types and maintenance protocols below apply to the existing shilos implementation. For the new C region service, preserve CoD’s relocation, ownership and publication guarantees. The C++ classes and file operations are historical reference.
+
 - Zero-cost relocation is mandatory for regional types.
 - Allocate regional types in memory regions only (never on the stack).
 - No copy/move semantics for regional types.
