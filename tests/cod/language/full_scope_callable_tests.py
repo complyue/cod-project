@@ -28,6 +28,12 @@ runner.CASES = {
     'inferred_void': (IO+'func run(){ {{return 7u64;}};true;}run();behave @print(9u64);', 0, '9\n', ''),
     'void_fallthrough': (IO+'proc run()->void{ {{behave @print(1u64);}};behave @print(2u64);}run();', 0, '1\n2\n', ''),
     'cleanup_completion': (IO+'proc run()->u64{val n<-1u64;val inner<-{{defer{n<-3u64;};return n;}};return n+inner;}behave @print(run());', 0, '2\n', ''),
+    'cleanup_loop_preserves_payload_before_each_registration': (IO +
+        'func run(ptr input:u64 in O)->u64 where {owner O}{const val present<-{{'
+        'val seen<-false;for(i in 0..2){defer{return seen;};defer{seen<-(input is not null);};};return false;}};'
+        'if(present){return input;}else{return 7u64;};}'
+        'ref item:u64=5u64;ptr absent:u64=null in here;behave @print(run(item));behave @print(run(absent));',
+        0, '5\n7\n', ''),
     'cleanup_local_return': (IO+'proc run()->u64{defer{{return 9u64;}};return 2u64;}behave @print(run());', 0, '2\n', ''),
     'cleanup_local_return_grouped': (IO+'proc run()->u64{defer{ {{return 9u64;}};};return 2u64;}behave @print(run());', 0, '2\n', ''),
     'delayed_capture': (IO+'proc run()->void{val n<-1u64;defer{{behave @print(n);}};n<-2u64;}run();', 0, '2\n', ''),

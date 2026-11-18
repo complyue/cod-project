@@ -978,8 +978,8 @@ class ScalarChecker {
     TypeEvidenceExits *exits = nullptr;
     TypeDeferredFlow *deferred = nullptr;
     size_t deferred_queue = 0;
-    bool repeated_registration = false;
     bool has_deferred_action = false;
+    std::set<const Expression *> delayed_controls;
     const Expression *prepared_call = nullptr;
     struct Returns {
       std::vector<Type> types;
@@ -1017,8 +1017,20 @@ class ScalarChecker {
       ObservationPaths condition;
     };
     using Choice = std::pair<Alternative, Alternative>;
-    std::vector<std::variant<Action, Choice>> entries;
-    bool repeated = false;
+    struct Loop {
+      size_t entry;
+      size_t backedge = 0;
+      size_t first_observation;
+    };
+    std::vector<std::variant<Action, Choice, Loop>> entries;
+
+    size_t header(size_t entry, size_t first_observation) {
+      entries.emplace_back(Loop{entry, 0, first_observation});
+      return entries.size();
+    }
+    void backedge(size_t header, size_t body) {
+      if (header != body) std::get<Loop>(entries.at(header - 1)).backedge = body;
+    }
 
     size_t join(const TypeEvidenceState &left, const TypeEvidenceState &right) {
       if (left.deferred_queue == right.deferred_queue) return left.deferred_queue;
@@ -1540,6 +1552,18 @@ class ScalarChecker {
     if (first != Type::never && last != Type::never && first != last)
       implementation_gap(at, "range endpoints with different integer types");
     return first == Type::never ? last : first;
+  }
+  struct RangeReachability {
+    bool body;
+    bool empty;
+    bool repeat;
+  };
+  static RangeReachability range_reachability(bool completes, const std::optional<Type> &index,
+      std::optional<std::uint64_t> first, std::optional<std::uint64_t> last) {
+    if (!completes) return {};
+    if (!index || !first || !last) return {true, true, true};
+    const bool enters = index == Type::integer ? std::bit_cast<std::int64_t>(*first) < std::bit_cast<std::int64_t>(*last) : *first < *last;
+    return {enters, !enters, enters && *last - *first > 1};
   }
   static void check_fold_body(const Type &body, const Type &accumulator, const Location &at) {
     if (body != Type::never && body != accumulator && !widens(body, accumulator))
@@ -5026,6 +5050,26 @@ class ScalarChecker {
   Type evidence_annotation(const Type &type, const TypeEvidenceState &state) const {
     return state.method ? substitute(type, program_.methods[*state.method], state.substitutions, true) : resolve_type(type);
   }
+  static bool type_loop_control(const Expression *declaration) {
+    return declaration && (declaration->kind == Expression::Kind::range_for || declaration->kind == Expression::Kind::fold);
+  }
+  static void enter_type_defer(TypeEvidenceState &state) {
+    for (const auto &[name, declaration] : state.local_declarations)
+      if (type_loop_control(declaration)) state.delayed_controls.insert(declaration);
+  }
+  static void check_type_capture(const TypeEvidenceState &state, const std::string &name, const Location &at) {
+    if (!state.required || state.delayed_controls.empty()) return;
+    const auto declared = state.local_declarations.find(name);
+    if (declared != state.local_declarations.end() && state.delayed_controls.contains(declared->second))
+      fail(at, "a deferred block cannot capture loop-control binding '" + name + "'");
+  }
+  static void check_type_deferred_argument(const TypeEvidenceState &state, const Expression &call, const Expression &operand,
+                                           const ViewEvidence &view, ArgumentMode mode) {
+    if (!state.required || &call != state.prepared_call || mode == ArgumentMode::value || !view.owner) return;
+    for (const auto &[name, declaration] : state.local_declarations)
+      if (type_loop_control(declaration) && *view.owner == EvidenceOwner::for_scope(*declaration))
+        fail(operand.at, "deferred borrowed argument does not outlive its cleanup scope");
+  }
   TypeEvidenceState catch_evidence(const Expression &handler, const TypeEvidenceState &entry,
                                    std::set<size_t> &handled) const {
     const auto type = handler.annotation ? evidence_annotation(*handler.annotation, entry) : exception_type(0);
@@ -5040,18 +5084,21 @@ class ScalarChecker {
     caught.views[handler.text] = {true, true, true, EvidenceOwner::for_scope(handler), false, false, true, true};
     return caught;
   }
-  static void leave_type_catch(TypeEvidenceState &caught, const TypeEvidenceState &entry, const std::string &name) {
+  static void restore_type_binding(TypeEvidenceState &state, const TypeEvidenceState &entry, const std::string &name) {
     const auto restore = [&](auto &bindings, const auto &outer) {
       if (const auto found = outer.find(name); found != outer.end()) bindings.insert_or_assign(name, found->second);
       else bindings.erase(name);
     };
-    restore(caught.bindings, entry.bindings);
-    restore(caught.local_declarations, entry.local_declarations);
-    restore(caught.definitions, entry.definitions);
-    restore(caught.owner_bindings, entry.owner_bindings);
-    restore(caught.views, entry.views);
-    restore(caught.selections.bindings, entry.selections.bindings);
-    restore(caught.selections.value_places, entry.selections.value_places);
+    restore(state.bindings, entry.bindings);
+    restore(state.local_declarations, entry.local_declarations);
+    restore(state.definitions, entry.definitions);
+    restore(state.owner_bindings, entry.owner_bindings);
+    restore(state.views, entry.views);
+    restore(state.selections.bindings, entry.selections.bindings);
+    restore(state.selections.value_places, entry.selections.value_places);
+  }
+  static void leave_type_catch(TypeEvidenceState &caught, const TypeEvidenceState &entry, const std::string &name) {
+    restore_type_binding(caught, entry, name);
     caught.caught_exception = entry.caught_exception;
   }
   static std::optional<TypeEvidenceState> take_type_catch(TypeEvidenceExits &incoming, const Type &type) {
@@ -5083,6 +5130,7 @@ class ScalarChecker {
   TypeEvidenceExits replay_type_defer(const Expression &entry, TypeEvidenceState state, size_t pending_error) const {
     using K = Expression::Kind;
     TypeEvidenceExits incoming, outgoing;
+    enter_type_defer(state);
     state.exits = &incoming;
     // The current lowering enters any guarded deferred entry with its pending
     // failure. Model this until native cleanup separates the error queue.
@@ -5139,11 +5187,8 @@ class ScalarChecker {
   }
   std::optional<PresenceBranches> deferred_boolean_result(const TypeDeferredFlow &flow, const TypeEvidenceExits &exits,
                                                            const TypeEvidenceState &body, bool falls_through) const {
-    // Repeated registrations need a loop summary, since this graph records
-    // each registration at most once along an acyclic path.
     const bool may_replace = body.selections.deferred_return || std::ranges::any_of(exits.paths,
         [](const auto &path) { return path.state.selections.deferred_return; });
-    if (flow.repeated && may_replace) return {};
     bool returning = false;
     std::optional<PresenceBranches> proof = PresenceBranches{{}, {}};
     const auto collect = [&](const auto &result) {
@@ -5163,7 +5208,8 @@ class ScalarChecker {
       const auto *action = std::get_if<TypeDeferredFlow::Action>(&entry);
       return action && action->entry && action->entry->children.size() > 1;
     });
-    std::map<std::tuple<size_t, bool, size_t>, Pending> pending;
+    using WorkKey = std::tuple<size_t, bool, size_t>;
+    std::map<WorkKey, Pending> pending, loop_inputs;
     const auto enqueue = [&](size_t queue, bool returned, size_t error, TypeEvidenceState state,
                              std::optional<PresenceBranches> result) {
       state.exits = nullptr;
@@ -5186,8 +5232,8 @@ class ScalarChecker {
     }
     if (falls_through) enqueue(body.deferred_queue, false, 0, body, {});
 
-    // Every edge leads to an older entry. Joining at a shared queue tail
-    // prevents independent conditional registrations from multiplying paths.
+    // Reverse registration order visits older tails first within each path.
+    // Loop headers also feed earlier iterations until their input stabilizes.
     while (!pending.empty()) {
       auto next = pending.extract(std::prev(pending.end()));
       const auto [queue, returned, error] = next.key();
@@ -5197,6 +5243,26 @@ class ScalarChecker {
         continue;
       }
       const auto &entry = flow.entries.at(queue - 1);
+      if (const auto *loop = std::get_if<TypeDeferredFlow::Loop>(&entry)) {
+        // A registration decision from one dynamic iteration cannot select
+        // a branch in another. Keep the immutable observations from outside.
+        state.selections.forget_observations(loop->first_observation);
+        if (result) result->forget_observations(loop->first_observation);
+        const auto [known, inserted] = loop_inputs.try_emplace(next.key(), Pending{state, result});
+        auto &input = known->second;
+        if (!inserted) {
+          auto joined = merge_evidence(input.state, state);
+          auto joined_result = QuerySelections::alternatives(input.result, result);
+          const auto &previous = input.state.selections;
+          const auto &current = joined.selections;
+          if (previous.same_flow(current) && previous.footprints == current.footprints &&
+              previous.possible_overlap == current.possible_overlap && joined_result == input.result) continue;
+          input = {std::move(joined), std::move(joined_result)};
+        }
+        enqueue(loop->entry, returned, error, input.state, input.result);
+        if (loop->backedge) enqueue(loop->backedge, returned, error, input.state, input.result);
+        continue;
+      }
       if (const auto *choice = std::get_if<TypeDeferredFlow::Choice>(&entry)) {
         for (const auto *arm : {&choice->first, &choice->second}) {
           const PresenceBranches condition{arm->condition, {}};
@@ -5263,6 +5329,7 @@ class ScalarChecker {
     if (expr.annotation) storage.type = evidence_annotation(*expr.annotation, state);
     else {
       auto query = state; query.returns = nullptr; query.exits = nullptr;
+      query.delayed_controls.clear();
       storage.type = type_evidence(*expr.children.front(), query);
     }
     if (state.required && storage.type && storage.type->kind == Type::procedure)
@@ -5291,6 +5358,7 @@ class ScalarChecker {
       return Type::never;
     }
     const auto &captures = free_bindings(*callee.definition).captures;
+    for (const auto &capture : captures) check_type_capture(state, capture.name, capture.at);
     std::vector<EvidencePlaces> writable_booleans;
     if (state.selections.tracking) for (const auto &capture : captures) {
       const auto binding = state.bindings.find(capture.name);
@@ -5358,7 +5426,6 @@ class ScalarChecker {
       if (track_return) {
         body.deferred = &deferred;
         body.deferred_queue = 0;
-        body.repeated_registration = false;
       }
       if (state.exits) {
         for (const auto &capture : captures) {
@@ -5492,6 +5559,7 @@ class ScalarChecker {
     case K::name: {
       if (!state.complete) return {};
       const auto *expected_callable = callable_expectation(expected);
+      check_type_capture(state, expr.text, expr.at);
       if (state.required) {
         if (state.owner_bindings.contains(expr.text)) fail(expr.at, "owner binding is not a value in typeof");
         if (!state.validating_body) check_query_binding(expr.text, expr.at);
@@ -5791,6 +5859,7 @@ class ScalarChecker {
         delayed.selections.payload_writes = {};
         delayed.selections.deferred_writes = {};
         delayed.selections.deferred_return = false;
+        enter_type_defer(delayed);
         const auto delayed_entry = delayed.selections.writes;
         bool may_rebind = action.kind != K::block;
         QueryPayloadWrites writes;
@@ -5818,12 +5887,9 @@ class ScalarChecker {
         state.selections.deferred_writes.merge(writes);
         state.selections.deferred_return |= may_replace;
         if (state.deferred) {
-          if (state.repeated_registration) state.deferred->repeated = true;
-          else {
-            const bool bodyless_catch = expr.binding == "fallback" && expr.children[1]->kind == K::handler;
-            state.deferred_queue = state.deferred->push(state,
-                action.kind == K::block && !bodyless_catch ? &expr : nullptr, may_replace, may_rebind, std::move(writes));
-          }
+          const bool bodyless_catch = expr.binding == "fallback" && expr.children[1]->kind == K::handler;
+          state.deferred_queue = state.deferred->push(state,
+              action.kind == K::block && !bodyless_catch ? &expr : nullptr, may_replace, may_rebind, std::move(writes));
         }
         return Type::void_type;
       }
@@ -5948,8 +6014,13 @@ class ScalarChecker {
       const auto accumulator = fold ? child(2, false, completes) : std::optional<Type>{Type::void_type};
       if (fold && state.required) require_value(*accumulator, expr.at);
       if (fold && completes && accumulator && accumulator->kind == Type::procedure) note_type_allocation(state);
+      const auto bound = [&](const Expression &operand) -> std::optional<std::uint64_t> {
+        if (state.required && operand.kind == K::integer) return literal(operand).integer;
+        return {};
+      };
+      const auto reach = range_reachability(completes && accumulator != Type::never, index,
+                                            bound(*expr.children[0]), bound(*expr.children[1]));
       auto iteration = state;
-      iteration.repeated_registration = true;
       const auto control_owner = EvidenceOwner::for_scope(expr);
       iteration.bindings[expr.text] = index; iteration.views[expr.text] = {true, true, true, control_owner, false, false, true, true};
       iteration.local_declarations[expr.text] = &expr;
@@ -5966,14 +6037,17 @@ class ScalarChecker {
       const auto &loop_body = *expr.children[fold ? 3 : 2];
       const auto loop_read = fold ? EvidenceRead::payload : EvidenceRead::discarded;
       const auto first_iteration_observation = state.selections.observation_decisions ? state.selections.observation_decisions->next_observation : 0;
+      const auto header = state.deferred && reach.repeat
+          ? state.deferred->header(state.deferred_queue, first_iteration_observation) : 0;
+      if (header) iteration.deferred_queue = header;
       // Only facts that survive every backedge are available in the body.
       // Each abstract iteration can only remove facts from this finite set.
-      if (iteration.selections.tracking && completes && accumulator != Type::never) {
+      if (iteration.selections.tracking && reach.repeat) {
         while (!iteration.selections.facts.empty() || !iteration.selections.booleans.empty() ||
                !iteration.selections.targets.empty() || !iteration.selections.equal_selections.empty() ||
                !iteration.selections.reference_observations.empty()) {
           auto probe = iteration;
-          probe.required = false; probe.returns = nullptr; probe.exits = nullptr;
+          probe.required = false; probe.returns = nullptr; probe.exits = nullptr; probe.deferred = nullptr;
           if (type_evidence(loop_body, probe, false, nullptr, nullptr, ExpectedTypeUse::materialization, true, loop_read) == Type::never) break;
           probe.selections.forget_observations(first_iteration_observation);
           auto invariant = iteration.selections;
@@ -5981,23 +6055,34 @@ class ScalarChecker {
           if (iteration.selections.same_flow(invariant)) break;
         }
       }
+      TypeEvidenceExits iteration_exits;
+      if (state.exits) iteration.exits = &iteration_exits;
       const auto body = type_evidence(loop_body, iteration, false, nullptr, nullptr,
-                                      ExpectedTypeUse::materialization, completes && accumulator != Type::never, loop_read);
-      if (fold && completes && accumulator != Type::never && body && body->kind == Type::procedure)
+                                      ExpectedTypeUse::materialization, reach.body, loop_read);
+      if (fold && reach.body && body && body->kind == Type::procedure)
         note_type_allocation(iteration);
-      if (body != Type::never && completes && accumulator != Type::never) {
-        iteration.selections.forget_observations(first_iteration_observation);
-        state.selections.join_flow(iteration.selections);
+      if (header && body != Type::never) state.deferred->backedge(header, iteration.deferred_queue);
+      const auto leave_iteration = [&](TypeEvidenceState &path) {
+        restore_type_binding(path, state, expr.text);
+        if (fold) restore_type_binding(path, state, expr.binding);
+        if (reach.repeat) path.selections.forget_observations(first_iteration_observation);
+      };
+      leave_iteration(iteration);
+      iteration.exits = state.exits;
+      if (state.exits) for (auto &path : iteration_exits.paths) {
+        leave_iteration(path.state);
+        if (reach.repeat && path.boolean_return) path.boolean_return->forget_observations(first_iteration_observation);
+        forward_type_exit(*state.exits, path);
       }
       if (fold && state.required) check_fold_body(*body, *accumulator, expr.at);
-      if (!fold && expr.children.size() == 4) {
-        auto empty = state;
-        type_evidence(*expr.children[3], empty, false, nullptr, nullptr, ExpectedTypeUse::materialization,
-                      completes, EvidenceRead::discarded);
-        state = merge_evidence(std::move(state), empty);
-      }
-      if (first == Type::never || last == Type::never || accumulator == Type::never) return Type::never;
-      return accumulator;
+      const auto otherwise = !fold && expr.children.size() == 4
+          ? type_evidence(*expr.children[3], state, false, nullptr, nullptr, ExpectedTypeUse::materialization,
+                          reach.empty, EvidenceRead::discarded)
+          : std::optional<Type>{Type::void_type};
+      const bool body_exits = !reach.body || body == Type::never;
+      const bool empty_exits = !reach.empty || otherwise == Type::never;
+      state = merge_reaching_evidence(std::move(state), std::move(iteration), empty_exits, body_exits);
+      return body_exits && empty_exits ? std::optional<Type>{Type::never} : accumulator;
     }
     case K::binary:
       if (expr.text == "&&" || expr.text == "||") {
@@ -6139,6 +6224,7 @@ class ScalarChecker {
           fail(expr.at, "a function cannot invoke a procedure");
         if (state.required) for (size_t i = 0; i < arguments.size(); ++i) {
           const auto mode = target->argument_modes.empty() ? ArgumentMode::value : target->argument_modes[i];
+          check_type_deferred_argument(state, expr, *expr.children[i + offset], views[i], mode);
           if (!accepts_argument(arguments[i], target->parameters[i], mode))
             fail(expr.children[i + (expr.kind == K::value_call)]->at, "argument does not satisfy the callable view type");
           if (mode != ArgumentMode::value && (views[i].view != true || views[i].mixed_view))
@@ -6254,9 +6340,12 @@ class ScalarChecker {
                                 caller_bindings(declaration));
           }
           if (invokes) note_type_call(state, declaration);
-          if (state.required) for (size_t i = 0; i < arguments.size(); ++i)
-            if (argument_mode(parameter_at(declaration, i)) != ArgumentMode::value && (views[i].view != true || views[i].mixed_view))
+          if (state.required) for (size_t i = 0; i < arguments.size(); ++i) {
+            const auto mode = argument_mode(parameter_at(declaration, i));
+            check_type_deferred_argument(state, expr, *expr.children[i], views[i], mode);
+            if (mode != ArgumentMode::value && (views[i].view != true || views[i].mixed_view))
               implementation_gap(expr.at, "borrowed parameter requires an existing view");
+          }
         });
         if (result) view = result->view;
         return result ? std::optional<Type>{result->type} : std::nullopt;
@@ -6293,9 +6382,12 @@ class ScalarChecker {
         if (state.validating_body && state.method && program_.methods[*state.method].source->kind == Form::Kind::function &&
             method.source->kind == Form::Kind::procedure)
           fail(expr.at, "a function cannot invoke a procedure");
-        if (state.required) for (size_t i = 0; i < arguments.size(); ++i)
-          if (argument_mode(method.input_parameters()[i]) != ArgumentMode::value && (views[i].view != true || views[i].mixed_view))
+        if (state.required) for (size_t i = 0; i < arguments.size(); ++i) {
+          const auto mode = argument_mode(parameter_at(method, i));
+          check_type_deferred_argument(state, expr, *expr.children[i], views[i], mode);
+          if (mode != ArgumentMode::value && (views[i].view != true || views[i].mixed_view))
             implementation_gap(expr.at, "borrowed parameter requires an existing view");
+        }
         const auto type = infer_result(id, arguments, retained, family.declaration ? family.declaration : &state).contract;
         if (!type || nested_binder(method, *type->type) || (result && result != type->type)) return {};
         if (state.exits && invokes) {
@@ -6373,6 +6465,8 @@ class ScalarChecker {
         state.views[expr.definition->name] = {false, false, {}, {}, false, {}, {}, true};
         return Type::void_type;
       }
+      const auto &captures = expr.definition->explicit_captures ? expr.definition->captures : free_bindings(*expr.definition).captures;
+      for (const auto &capture : captures) check_type_capture(state, capture.name, capture.at);
       if (state.exits && has_type_captures(method, state)) note_type_allocation(state);
       if (expected && expected->kind == Type::procedure)
         return callable_query({method}, expected, expr.at, state, true);
@@ -8273,13 +8367,8 @@ class ScalarChecker {
       Type accumulator;
       if (fold) { accumulator = child(2); require_value(accumulator, expr.at); if (accumulator.kind == Type::procedure) note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)}); }
       const auto before = lexical_;
-      bool body_possible = completes, empty_possible = completes, repeat_possible = completes;
       const auto start = constant_integer(*expr.children[0], operations), end = constant_integer(*expr.children[1], operations);
-      if (completes && start && end) {
-        body_possible = first == Type::integer ? std::bit_cast<std::int64_t>(*start) < std::bit_cast<std::int64_t>(*end) : *start < *end;
-        empty_possible = !body_possible;
-        repeat_possible = body_possible && *end - *start > 1;
-      }
+      const auto [body_possible, empty_possible, repeat_possible] = range_reachability(completes, index, start, end);
       std::map<size_t, size_t> headers;
       for (const auto input : inputs(lexical_.inputs)) {
         auto &queue = lexical_.input_facts.at(input).queues.at(cleanup_scope_);
@@ -8708,6 +8797,9 @@ class ScalarChecker {
       CleanupEquations::Action summary;
       if (expr.children.front()->kind == K::block) {
         const auto before = lexical_;
+        // Delayed bodies contribute effects to the cleanup sequence. Writes
+        // made when it drains are outside the registering loop's backedge.
+        auto registering_loops = std::exchange(active_loops_, {});
         auto caught_inputs = std::move(caught_inputs_);
         caught_inputs_.clear();
         const auto controls = delayed_controls_;
@@ -8781,6 +8873,7 @@ class ScalarChecker {
           }
         }
         lexical_ = before;
+        active_loops_ = std::move(registering_loops);
         caught_inputs_ = std::move(caught_inputs);
         delayed_controls_ = controls;
         operation.captures = std::move(captures.required);

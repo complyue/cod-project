@@ -169,6 +169,20 @@ runner.CASES={
     GUARDED_RESULT),2,'',UNPROVED_TARGET),
  'projection_takes_deferred_observation_after_ordinary_fallthrough':(saved_query(
     'const val present<-{{defer{return input is not null;};}};'+GUARDED_RESULT),0,'9\n',''),
+ 'projection_uses_repeated_deferred_return':(saved_query(
+    'const val present<-{{for(i in 0..2){defer{return input is not null;};};return false;}};'+GUARDED_RESULT),0,'9\n',''),
+ 'projection_uses_only_empty_range_else_registration':(saved_query(
+    'const val present<-{{for(i in 2..2){defer{return true;};}else{defer{return input is not null;};};return true;}};'+
+    GUARDED_RESULT),0,'9\n',''),
+ 'projection_proves_repeated_cleanup_in_reverse_registration_order':(saved_query(
+    'const val present<-{{val seen<-false;for(i in 0..2){defer{return seen;};defer{seen<-(input is not null);};};'
+    'return false;}};'+GUARDED_RESULT),0,'9\n',''),
+ 'projection_checks_partially_registered_loop_iteration':(saved_query(
+    'const val present<-{{val seen<-true;for(i in 0..2){defer{return seen;};defer{seen<-(input is not null);};};'
+    'return false;}};'+GUARDED_RESULT),2,'',UNPROVED_TARGET),
+ 'projection_checks_empty_path_for_dynamic_range':(saved_query(
+    'const val present<-{{for(i in 0..if(flag){2}else{0}){defer{return input is not null;};};return true;}};'
+    'return if(present){input}else{7u64};'),2,'',UNPROVED_TARGET),
  'projection_uses_return_from_deferred_finally':(saved_query(
     'const val present<-{{defer{return true;}finally{return input is not null;};return true;}};'+
     GUARDED_RESULT),0,'9\n',''),
@@ -312,6 +326,19 @@ runner.CASES={
  'callable_owner':('func f(ref x:i64 in O,ref y:i64 in O)->const i64 where {owner O}{return x;}func g=f;val a<-1;{{val b<-2;val x<-make local typeof(g(a,b));}};',2,'','different actual owners'),
  'lexical_recursive_query':(IO+'func run(x:T)->const T where T{func recurse(x:T,n:i64)->const T{val y<-make local typeof(recurse(x,n-1)){x};if(n==0){return y;}else{return recurse(y,n-1);};};return recurse(x,4);}behave @print(run(23));behave @print(run(true));',0,'23\ntrue\n',''),
  'delayed_loop_type_only':(IO+'for(i in 0..2){defer{{val x<-make local typeof(i){24};behave @print(x);}};};',0,'24\n24\n',''),
+ 'query_does_not_grant_delayed_loop_control_capture':(
+    storage('{{for(i in 0u64..2u64){defer{discard(i);};};return 7u64;}}','9u64','func discard(n:u64)->void{};'),
+    2,'','cannot capture loop-control binding'),
+ 'query_checks_loop_control_capture_through_nested_callable':(
+    storage('{{for(i in 0u64..2u64){defer{ {{discard(i);}};};};return 7u64;}}','9u64','func discard(n:u64)->void{};'),
+    2,'','cannot capture loop-control binding'),
+ 'query_accepts_prepared_loop_control_bits':(
+    storage('{{for(i in 0u64..2u64){defer discard(i);};return 7u64;}}','9u64','func discard(n:u64)->void{};'),
+    0,'9\n',''),
+ 'query_rejects_prepared_borrow_of_loop_control':(
+    storage('{{for(i in 0u64..2u64){defer discard(i);};return 7u64;}}','9u64',
+            'func discard(ref n:const u64 in O)->void where {owner O}{};'),
+    2,'','deferred borrowed argument does not outlive its cleanup scope'),
  'deferred_exception_type_only':(IO+'using "std:exceptions" MissingReturnError;func missing()->const i64{}try{missing();{}}catch(e:const MissingReturnError){defer{{val x<-make local typeof(e.category){25u64};behave @print(x);}};};',0,'25\n','[-Wmissing-return]'),
  'initializer_still_captures':(IO+'func id(x:i64)->const i64{return x;}proc run()->void{func f=id;func nested[f]()->const i64{val x<-make local typeof(1){f(26)};return x;};behave @print(nested());}run();',0,'26\n',''),
 }
