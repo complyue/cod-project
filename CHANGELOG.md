@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-18 — Report the incoming exception from its catch
+
+<a id="h-catch-tip-20261118"></a>
+**H-CATCH-TIP-20261118 — Expose the incoming exception for reporting.** In [the design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-18 America/Los_Angeles, the current project user answered “认同” to explicit full-chain reporting and proposed “`report(e.tip)` 如何？ tip 作为只读字段。” In the follow-up choice between `catch.tip` and reserving `e.tip` on exception types, the user preferred the second and specified “应该是运行时 intrinsic 虚拟字段访问”. D-17r95 selects the catch binding’s readonly virtual field. The existing H-520–H-522 propagation rule applies to `throw e;`.
+
+<a id="k-catch-tip-20261118"></a>
+**K-CATCH-TIP-20261118 — Keep the reporting value tied to its catch invocation.** Registry880→881/D-17r94→95 applies D-17-CATCH-WRAPPERS/P-470–P-472 to direct and wrapped arrivals, nested catches and helper arguments. Postfix member syntax is reused. The field supplies a readonly root-typed reporting value, and exception types reserve the name. Reporting retains the original exception object. It adds no cause link, trace capture or implicit context in the helper. The previous matched-value/tip rule is at `ae48a760b09fc7757e2b85080e5d795b1f58bd0e:design/ExceptionControl.md`, “Matched binding and hidden tip”.
+
 ## 2026-11-18 — Integrate standalone scope decisions
 
 <a id="k-standalone-scope-integration-20261118"></a>
