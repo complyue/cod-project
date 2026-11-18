@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-18 — Compare spellings for one exception-scope handoff
+
+<a id="h-exception-whole-owner-20261118"></a>
+**H-EXCEPTION-WHOLE-OWNER-20261118 — Transfer the entire handling owner.** The project user in [the design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-18 America/Los_Angeles, specifies “肯定都是carry整个owner” so that callers can allocate state for exception fields, with the distinction confined to “语法，外围写法的pragmatics”. D-17r105/registry894 compare receiving, field construction and forwarding with one named exception or a separately named owner. The exact syntax remains open. Previous discussion at `61f74a3373c3b74b23162ad7ee7620180325fbd1:design/ExceptionControl.md`, “Who releases the exception-handling scope?”.
+
 ## 2026-11-18 — Keep each cause chain in one owner
 
 <a id="h-same-owner-cause-20261118"></a>
