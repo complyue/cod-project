@@ -170,7 +170,13 @@ class ScalarChecker {
   std::map<const Expression *, LoopState> loop_states_;
   bool loop_initialization_changed_ = false;
   std::vector<const Expression *> active_loops_;
-  struct AbruptPath { LexicalState state; ExceptionFacts exceptions; Location at; Completion completion{2, false}; };
+  struct AbruptPath {
+    LexicalState state;
+    ExceptionFacts exceptions;
+    Location at;
+    Completion completion{2, false};
+    bool immediate_scope_failure = false;
+  };
   struct AbruptFlow { size_t depth; std::vector<AbruptPath> paths; std::set<size_t> declared{}; };
   AbruptFlow *abrupt_ = nullptr;
   std::optional<size_t> caught_;
@@ -192,6 +198,7 @@ class ScalarChecker {
   std::vector<Location> read_sites_;
   std::vector<Location> declared_sites_;
   std::map<const Expression *, size_t> declared_requirements_;
+  std::set<size_t> deferred_actions_with_checked_scopes_;
   bool delayed_ = false;
   size_t next_scope_ = 1;
   static constexpr size_t instance_limit = 4096;
@@ -246,6 +253,8 @@ class ScalarChecker {
       std::vector<Type> types;
       bool value_obligation = false;
       bool unresolved = false;
+      bool saw_throw = false;
+      bool unresolved_throw = false;
     } *returns = nullptr;
   };
 
@@ -1743,7 +1752,8 @@ class ScalarChecker {
   }
   void finish_call(const Expression &expr, const Type &contract, const CallEffects &summary,
       const std::set<size_t> &reasons, const std::vector<Type> &arguments,
-      const std::vector<CheckedOperation> &views, CheckedOperation &operation, bool read, bool discard, size_t offset = 0) {
+      const std::vector<CheckedOperation> &views, CheckedOperation &operation, bool read, bool discard,
+      size_t offset = 0, bool immediate_scope = false) {
     std::vector<ExceptionFacts> exception_inputs;
     const bool prepared = &expr == prepared_call_;
     const bool prepared_slots = prepared && !summary.bindings.empty();
@@ -1925,7 +1935,9 @@ class ScalarChecker {
         lexical_ = before; apply_effects(lexical_, effects, expr.at);
         if (!summary.bindings.empty()) refresh_targets(lexical_, false);
         refine_arguments(reason);
-        note_abrupt(expr.at, reason >= 3 ? std::set<size_t>{reason - 3} : std::set<size_t>{}, {reason, false});
+        const bool scope_failure = immediate_scope && reason >= 3 &&
+            (exception_categories.at(reason - 3).checked || declares_root(contract.throws_types));
+        note_abrupt(expr.at, reason >= 3 ? std::set<size_t>{reason - 3} : std::set<size_t>{}, {reason, false}, scope_failure);
       }
       lexical_ = before; apply_effects(lexical_, operation.invocation.at(0), expr.at);
       if (!summary.bindings.empty()) refresh_targets(lexical_, false);
@@ -2294,23 +2306,24 @@ class ScalarChecker {
       if (frame->bindings.contains(id)) { frame->required.insert(id); captured = true; }
     return captured;
   }
-  void note_abrupt(const Location &at, ExceptionFacts exceptions = {}, Completion completion = {2, false}) {
+  void note_abrupt(const Location &at, ExceptionFacts exceptions = {}, Completion completion = {2, false},
+                   bool immediate_scope_failure = false) {
     if (!lexical_.live) return;
     const auto categories = exceptions.possibilities();
     if (!categories.empty()) completion.reason = 3 + *categories.begin();
     if (!abrupt_) {
-      if (!proving_ || !validating_) return;
-      for (const auto category : categories)
-        if (exception_categories.at(category).checked && (!checking_method_ || !checking_method_->throws_categories.contains(category))) {
-          if (checking_method_ && checking_method_->source->implicit_scope)
-            implementation_gap(at, "implicit full-scope checked interface inference is not yet implemented");
+      if (!proving_) return;
+      for (const auto category : categories) if (exception_categories.at(category).checked) {
+        if (checking_method_ && checking_method_->source->implicit_scope)
+          observed_.scope_checked_failures.insert(category);
+        else if (validating_ && (!checking_method_ || !checking_method_->throws_categories.contains(category)))
           fail(at, "checked exception '" + std::string(exception_categories[category].name) + "' requires a covering catch or throws declaration");
-        }
+      }
       return;
     }
     auto state = lexical_;
     while (state.scopes.size() > abrupt_->depth) retire_scope(state);
-    abrupt_->paths.push_back({std::move(state), std::move(exceptions), at, completion});
+    abrupt_->paths.push_back({std::move(state), std::move(exceptions), at, completion, immediate_scope_failure});
   }
   static bool declares_root(const std::vector<Type> &types) {
     return std::any_of(types.begin(), types.end(), [](const Type &type) { return type.kind == Type::exception && !type.identity; });
@@ -2322,13 +2335,16 @@ class ScalarChecker {
   }
   void note_declared(size_t requirement) {
     if (abrupt_) { abrupt_->declared.insert(requirement); return; }
-    if (!proving_ || !validating_) return;
+    if (!proving_) return;
+    if (checking_method_ && checking_method_->source->implicit_scope) {
+      observed_.scope_checked_failures.insert(0);
+      return;
+    }
+    if (!validating_) return;
     if (checking_method_) {
       auto types = checking_method_->throws_types;
       if (checking_instance_) for (auto &type : types) type = substitute(type, *checking_method_, checking_instance_->substitutions);
       if (declares_root(types)) return;
-      if (checking_method_->source->implicit_scope)
-        implementation_gap(declared_sites_.at(requirement), "implicit full-scope declared Exception interface inference is not yet implemented");
     }
     fail(declared_sites_.at(requirement), "declared checked exception 'Exception' requires a covering catch or throws declaration; coverage by narrower catches is unproved");
   }
@@ -2541,6 +2557,14 @@ class ScalarChecker {
       if (path.exceptions.empty()) inputs.push_back(path.completion);
       else for (const auto category : path.exceptions.possibilities()) inputs.push_back({3 + category, path.completion.returned});
       for (const auto input : inputs) for (const auto &[encoded, effects] : cleanup_.apply(queue, input)) {
+        if (proving_ && validating_) {
+          const bool checked_body_failure = input.reason >= 3 &&
+              (exception_categories.at(input.reason - 3).checked || !flow.declared.empty());
+          const bool guards_checked_body = effects.guarded_pending_failure &&
+              (path.immediate_scope_failure || (checked_body_failure && checking_method_ && checking_method_->source->implicit_scope));
+          if (effects.needs_checked_cleanup_proof || guards_checked_body)
+            implementation_gap(path.at, "checked failures involving deferred execution require coverage within the owning pass");
+        }
         declared.insert(effects.declared_failures.begin(), effects.declared_failures.end());
         const auto completion = Completion::from(encoded);
         auto state = path.state;
@@ -2586,7 +2610,7 @@ class ScalarChecker {
           normal_type = type;
           normals.push_back(std::move(state));
         } else {
-          exits.push_back({std::move(state), std::move(failure), path.at, completion});
+          exits.push_back({std::move(state), std::move(failure), path.at, completion, path.immediate_scope_failure});
         }
       }
     }
@@ -2594,7 +2618,7 @@ class ScalarChecker {
     for (const auto requirement : declared) note_declared(requirement);
     for (const auto &path : exits) {
       lexical_ = path.state;
-      note_abrupt(path.at, path.exceptions, path.completion);
+      note_abrupt(path.at, path.exceptions, path.completion, path.immediate_scope_failure);
     }
     lexical_ = body;
     if (normals.empty()) { lexical_.live = false; result.type = Type::never; }
@@ -3539,6 +3563,10 @@ class ScalarChecker {
     result_probe_ = previous;
     if (!returns.value_obligation && completion != Type::never && state.complete)
       returns.types.push_back(Type::void_type);
+    if (method.source->implicit_scope && completion == Type::never && state.complete &&
+        returns.types.empty() && !returns.value_obligation && !returns.unresolved &&
+        returns.saw_throw && !returns.unresolved_throw)
+      return Type::void_type;
     if (complete && returns.unresolved) return {};
     return common_result(returns.types, method.source->at);
   }
@@ -4300,11 +4328,25 @@ class ScalarChecker {
       }
       return Type::never;
     }
-    case K::raise:
+    case K::raise: {
       if (state.validating_body && expr.children.empty() && !state.catch_context)
         fail(expr.at, "bare throw requires an active catch");
-      for (const auto &item : expr.children) type_evidence(*item, state);
+      if (state.returns) {
+        state.returns->saw_throw = true;
+        if (expr.children.empty() && !state.catch_context) {
+          if (state.method && program_.methods[*state.method].source->implicit_scope)
+            fail(expr.at, "bare throw requires an active catch");
+          state.returns->unresolved_throw = true;
+        }
+      }
+      for (const auto &item : expr.children) {
+        const auto type = type_evidence(*item, state);
+        if (state.returns && !type) state.returns->unresolved_throw = true;
+        if (state.validating_body && type && type->kind != Type::exception && type != Type::never)
+          fail(item->at, "throw requires an intrinsic exception value");
+      }
       return Type::never;
+    }
     case K::callable:
       if (expr.definition->implicit_scope && state.required) {
         const auto id = lexical_method(expr.definition.get(), state.method);
@@ -4985,7 +5027,8 @@ class ScalarChecker {
     return materialized_value(id, {}, at);
   }
   void check_value_call(const Expression &expr, const Type &contract, size_t offset, CheckedInstance *instance,
-      std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation, bool read, bool discard) {
+      std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation, bool read, bool discard,
+      std::optional<size_t> immediate_scope = {}) {
     note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
     if (checking_method_ && checking_method_->source->kind == Form::Kind::function && !contract.pure_callable)
       fail(expr.at, "a function cannot invoke a procedure");
@@ -5011,6 +5054,20 @@ class ScalarChecker {
       operation.arguments.push_back({mode, argument == Type::never ? parameter : argument});
     }
     if (!completes) { operation.type = Type::never; return; }
+    if (immediate_scope) {
+      const auto &callable = program_.callables.at(*immediate_scope);
+      operation.callable_choices = std::set<size_t>{*immediate_scope};
+      const auto &effects = read_effects(callable.target(arguments));
+      // The internal interface belongs to this checked invocation. Keep it
+      // out of the materialized view used for native dispatch.
+      auto invocation = contract;
+      for (const auto failure : effects.scope_checked_failures)
+        invocation.throws_types.push_back(exception_type(failure));
+      if (deferred_action_ && !effects.scope_checked_failures.empty())
+        deferred_actions_with_checked_scopes_.insert(*deferred_action_);
+      finish_call(expr, invocation, effects, call_reasons(invocation), arguments, views, operation, read, discard, offset, true);
+      return;
+    }
     if (checking_context_ < callable_choices_.size())
       if (const auto found = callable_choices_[checking_context_].find(&expr); found != callable_choices_[checking_context_].end())
         operation.callable_choices = found->second;
@@ -5168,8 +5225,11 @@ class ScalarChecker {
           pending_return = pending_return || input.completion.returned;
           pending_normal = pending_normal || !input.completion.returned;
         }
-        if (pending_normal) note_abrupt(path.at, path.exceptions, path.completion);
-        if (pending_return) { auto retained = path.completion; retained.returned = true; note_abrupt(path.at, path.exceptions, retained); }
+        if (pending_normal) note_abrupt(path.at, path.exceptions, path.completion, path.immediate_scope_failure);
+        if (pending_return) {
+          auto retained = path.completion; retained.returned = true;
+          note_abrupt(path.at, path.exceptions, retained, path.immediate_scope_failure);
+        }
       }
     }
     if (cleanup != Type::never) {
@@ -5185,7 +5245,7 @@ class ScalarChecker {
           preserve_initialization(lexical_, path.state);
         }
         refresh_input_facts(lexical_);
-        note_abrupt(path.at, path.exceptions, path.completion);
+        note_abrupt(path.at, path.exceptions, path.completion, path.immediate_scope_failure);
       }
     }
     lexical_ = body_state;
@@ -5498,7 +5558,11 @@ class ScalarChecker {
           operation.callable_nullable = target.targets.contains(null_target);
           operation.callable_targets = target.targets;
         }
-        check_value_call(expr, target.type, offset, instance, operations, operation, read, discard);
+        const auto *definition = offset ? expr.children.front()->definition.get() : nullptr;
+        if (definition && definition->implicit_scope && !target.callable)
+          throw std::logic_error("immediate scope lacks its selected callable");
+        check_value_call(expr, target.type, offset, instance, operations, operation, read, discard,
+                         definition && definition->implicit_scope ? target.callable : std::nullopt);
         break;
       }
       if (expr.intrinsic && !eager && expr.text != "cause_at")
@@ -6258,6 +6322,8 @@ class ScalarChecker {
           }
         } else summary.paths.push_back({1, {0, false}, 0});
       }
+      summary.enforce_checked_boundary = (checking_method_ && checking_method_->source->implicit_scope) ||
+          deferred_actions_with_checked_scopes_.contains(action);
       cleanup_.define(action, std::move(summary));
       note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
       if (lexical_.live) for (const auto input : inputs(lexical_.inputs)) {
@@ -6430,6 +6496,7 @@ class ScalarChecker {
     if (!proving) { possible_targets_.clear(); possible_null_sources_.clear(); target_dependencies_.clear(); catalog_storage_.clear(); rebound_.clear(); loop_states_.clear(); }
     lexical_ = {}; cleanup_ = {}; scope_storage_.clear(); checked_scope_owners_.clear(); read_sites_.clear(); external_owners_.clear();
     declared_sites_.clear(); declared_requirements_.clear();
+    deferred_actions_with_checked_scopes_.clear();
     loop_controls_.clear(); delayed_controls_.clear(); deferred_inputs_.clear(); active_loops_.clear();
     caught_.reset(); catch_bindings_.clear(); caught_inputs_.clear();
     captures_ = nullptr; delayed_ = false; deferred_action_.reset(); prepared_call_ = nullptr;
@@ -6732,6 +6799,10 @@ class ScalarChecker {
       if (known.initialized != effects.initialized) { known.initialized = effects.initialized; changed = true; }
       if (known.uninitialized != effects.uninitialized) { known.uninitialized = effects.uninitialized; changed = true; }
       if (known.present != effects.present) { known.present = effects.present; changed = true; }
+      if (known.scope_checked_failures != effects.scope_checked_failures) {
+        known.scope_checked_failures = effects.scope_checked_failures;
+        changed = true;
+      }
       if (known.booleans != effects.booleans) { known.booleans = effects.booleans; changed = true; }
       auto returned = effects.returned;
       returned.value.merge(known.returned.value);

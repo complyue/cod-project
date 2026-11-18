@@ -843,6 +843,8 @@ public:
     // Source handling requirements are independent of runtime category paths.
     std::set<size_t> declared_failures{};
     MissingInitialization uninitialized{};
+    bool needs_checked_cleanup_proof = false;
+    bool guarded_pending_failure = false;
     void enter_initialization(size_t frame) {
       selections.enter_initialization(frame);
       returned.enter_initialization(frame);
@@ -891,7 +893,11 @@ public:
     }
   };
   struct Path { std::uint64_t inputs; Completion completion; size_t queue; Effects effects{}; };
-  struct Action { bool guarded = false; std::vector<Path> paths; };
+  struct Action {
+    bool guarded = false;
+    std::vector<Path> paths;
+    bool enforce_checked_boundary = false;
+  };
 private:
   struct Queue {
     std::vector<size_t> previous;
@@ -911,6 +917,8 @@ private:
     result.payload_writes.insert(second.payload_writes.begin(), second.payload_writes.end());
     result.present.insert(second.present.begin(), second.present.end());
     result.declared_failures.insert(second.declared_failures.begin(), second.declared_failures.end());
+    result.needs_checked_cleanup_proof = first.needs_checked_cleanup_proof || second.needs_checked_cleanup_proof;
+    result.guarded_pending_failure = first.guarded_pending_failure || second.guarded_pending_failure;
     auto next = second;
     next.returned.substitute(first.selections);
     next.resolve_conditions([&](size_t binding) { return first.selections.substitute({{}, false, {binding}}); });
@@ -952,11 +960,15 @@ private:
     const auto previous_present = known.present;
     const auto previous_booleans = known.booleans;
     const auto previous_declared = known.declared_failures;
+    const auto previous_checked_cleanup = known.needs_checked_cleanup_proof;
+    const auto previous_guarded_failure = known.guarded_pending_failure;
     const auto previous_selections = known.selections;
     const auto previous_symbols = known.symbols;
     known.symbols.insert(effects.symbols.begin(), effects.symbols.end());
     known.payload_writes.insert(effects.payload_writes.begin(), effects.payload_writes.end());
     known.declared_failures.insert(effects.declared_failures.begin(), effects.declared_failures.end());
+    known.needs_checked_cleanup_proof = previous_checked_cleanup || effects.needs_checked_cleanup_proof;
+    known.guarded_pending_failure = previous_guarded_failure || effects.guarded_pending_failure;
     for (const auto &[read, before] : effects.reads) merge_read(known.reads, read, before);
     combine_initialization(known.initialized, known.uninitialized, effects.initialized, effects.uninitialized, true);
     std::erase_if(known.present, [&](size_t id) { return !effects.present.contains(id); });
@@ -982,7 +994,8 @@ private:
     return previous_reads != known.reads || previous_initialized != known.initialized || previous_uninitialized != known.uninitialized ||
         previous_returned != known.returned || previous_thrown != known.thrown || previous_unknown_thrown != known.unknown_thrown || previous_payloads != known.payloads ||
         previous_selections != known.selections || previous_symbols != known.symbols || previous_payload_writes != known.payload_writes ||
-        previous_present != known.present || previous_booleans != known.booleans || previous_declared != known.declared_failures;
+        previous_present != known.present || previous_booleans != known.booleans || previous_declared != known.declared_failures ||
+        previous_checked_cleanup != known.needs_checked_cleanup_proof || previous_guarded_failure != known.guarded_pending_failure;
   }
 public:
   static void merge_read(Reads &reads, size_t read, const ReadRequirement &before) {
@@ -1071,6 +1084,14 @@ public:
                     Completion{incoming.returned ? size_t{1} : size_t{0}, incoming.returned} : incoming;
               } else if (next.reason != 1) next.returned = next.returned || incoming.returned;
               auto effects = path.effects;
+              // The single-pending-failure model cannot prove coverage of
+              // checked failures produced by an action. Retain potential
+              // guarded dispatch on the separate ordinary body failure too.
+              const auto output = path.completion.reason;
+              if (action.enforce_checked_boundary &&
+                  ((output >= 3 && exception_categories.at(output - 3).checked) || !effects.declared_failures.empty()))
+                effects.needs_checked_cleanup_proof = true;
+              if (action.guarded && incoming.reason >= 3) effects.guarded_pending_failure = true;
               if (next.reason < 3) effects.thrown.clear();
               for (const auto &[intermediate, nested] : solved_[path.queue][next.index()]) {
                 auto invoked = compose(effects, nested);

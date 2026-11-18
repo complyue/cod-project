@@ -4,7 +4,7 @@ Design revision: 10 · Recorded: 2026-11-18 · Status: scoped result-inference c
 
 ## Design authority
 
-- **Standalone throw-only scopes.** [H-STANDALONE-VOID-20261118](../CHANGELOG.md#h-standalone-void-20261118) confirms r10’s narrow default under D-17-FULL-SCOPE and D-24. C-84/P-356–P-357 links independent return evidence to an inspectable callable signature under charter §§3.3/6.3/8. P-358 supplies the completion dependency. The examples below distinguish value, normal void and throw-only results. Ordinary callable and recursive inference, access, checked failures and D-16 remain in force.
+- **Standalone throw-only scopes.** [H-STANDALONE-VOID-20261118](../CHANGELOG.md#h-standalone-void-20261118) confirms r10’s narrow default under D-17-FULL-SCOPE and D-24. C-84/P-356–P-357 links independent return evidence to an inspectable callable signature under charter §§3.3/6.3/8. P-358 supplies the completion dependency. The examples below distinguish value, normal void and throw-only results. Ordinary callable and recursive inference, access, checked failures and D-16 remain in force. [K-FULL-SCOPE-CHECKED-INTERFACE-20261118](../CHANGELOG.md#k-full-scope-checked-interface-20261118) records bounded source and native acceptance for throw-only results, queries and explicit value returns. Semantic r10 and the ordinary result contracts govern those checks.
 
 - **Full-scope dependency continuity:** [K-FULL-SCOPE-IMPLEMENTATION-20261118](../CHANGELOG.md#k-full-scope-implementation-20261118) updates only the referenced r92 qualification. This document’s semantic revision, own qualification, acceptance and exclusions are unchanged.
 

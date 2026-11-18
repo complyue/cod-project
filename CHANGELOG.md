@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-18 — Infer checked failures of standalone full scopes
+
+<a id="k-full-scope-checked-interface-20261118"></a>
+**K-FULL-SCOPE-CHECKED-INTERFACE-20261118 — Implement the bounded standalone call interface.** D-17r94 and D-24r10 retain independent results and declared failures. Standalone scopes with only throwing completion default to void. The ordinary call checker carries escaping checked obligations, including the declared Exception root, after local handling. Unproved deferred coverage remains a separate gap. Current acceptance appears in source435/registry881. The prior qualified contracts are at `ae48a760b09fc7757e2b85080e5d795b1f58bd0e:design/ExceptionControl.md` and `ae48a760b09fc7757e2b85080e5d795b1f58bd0e:design/CallableResultInference.md`.
+
 ## 2026-11-18 — Integrate standalone scope decisions
 
 <a id="k-standalone-scope-integration-20261118"></a>

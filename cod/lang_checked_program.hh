@@ -191,6 +191,9 @@ struct CallEffects {
   std::map<size_t, CleanupEquations::BooleanValues> booleans;
   CleanupEquations::Returned returned;
   std::set<size_t> symbols; // Required current symbol identities, not operand positions.
+  // Checked obligations of an immediate scope after local completion. Zero
+  // represents the declared Exception root independently of payload evidence.
+  std::set<size_t> scope_checked_failures;
 };
 enum class OwnerMatch { satisfied, unknown, mismatch };
 // Proof identities are separate from executable owner handles. Scoped identities
