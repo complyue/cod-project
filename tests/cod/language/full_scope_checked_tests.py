@@ -9,6 +9,8 @@ PAYLOAD = ('func sample_error()->const NullPointerException{ptr absent:u64=null 
            'try{absent;{}}catch(caught:const NullPointerException){return caught;};return sample_error();}')
 FORWARD = 'proc forward(val e:NullPointerException)->void throws NullPointerException{throw e;}'
 DECLARED = 'proc declared()->void throws NullPointerException{}'
+STOP = ('using "std:exceptions" MissingReturnError;'
+        'func stop(val e:MissingReturnError)->void{throw e;}')
 ROOT = 'proc broad(val e:NullPointerException)->void throws Exception{throw e;}'
 TAKE = 'proc take(value:u64)->void{behave @print(value);}'
 OBSERVE = 'proc observe(value:u64)->void{behave @print(value);}'
@@ -98,6 +100,55 @@ runner.CASES = {
     'query_finally_checks_declared_call_failure': (DECLARED +
         query('try{declared();val late<-7u64;{}}finally{late;{}};return late;'),
         2, '', 'typeof requires a known declaration or operand type'),
+    'query_finally_checks_unchecked_call_failure': (STOP +
+        query('val e<-make local MissingReturnError;'
+              'try{stop(e);val late<-7u64;{}}finally{late;{}};return late;'),
+        2, '', 'typeof requires a known declaration or operand type'),
+    'query_finally_checks_callable_view_failure': (STOP +
+        query('func invoke=stop;val e<-make local MissingReturnError;'
+              'try{invoke(e);val late<-7u64;{}}finally{late;{}};return late;'),
+        2, '', 'typeof requires a known declaration or operand type'),
+    'query_finally_observes_capture_preparation_before_arguments': (
+        query('val n<-1u64;func read[n](value:u64)->u64{return n+value;};'
+              'try{read({val late<-7u64;late});{}}finally{late;{}};return late;'),
+        2, '', 'typeof requires a known declaration or operand type'),
+    'query_does_not_capture_caller_binding_for_module_call': (IO +
+        'func helper(x:u64)->u64{return x;}func forward(x:u64)->u64{return helper(x);}' +
+        query('func helper=forward;try{forward({val early<-7u64;early});{}}finally{early;{}};return early;') +
+        'behave @print(result);', 0, '4\n', ''),
+    'query_finally_checks_unchecked_failure_through_nested_scope': (STOP +
+        query('val e<-make local MissingReturnError;'
+              'try{ {{stop(e);}};val late<-7u64;{}}finally{late;{}};return late;'),
+        2, '', 'typeof requires a known declaration or operand type'),
+    'query_accepts_bodyless_call_after_binding': (IO + 'proc declared()->void;' +
+        query('try{val early<-7u64;declared();{}}finally{early;{}};return early;') +
+        'behave @print(result);', 0, '4\n', ''),
+    'query_rejects_bodyless_call_before_binding': ('proc declared()->void;' +
+        query('try{declared();val late<-7u64;{}}finally{late;{}};return late;'),
+        2, '', 'typeof requires a known declaration or operand type'),
+    'query_handler_uses_presence_at_matching_failure': (IO +
+        query('val e<-make local NullPointerException;ref item:u64=1u64;ptr p:u64=null in here;'
+              'try{p=item;throw e;}catch(caught:const NullPointerException){if(true){p}else{7u64};{}};'
+              'return 9u64;') + 'behave @print(result);', 0, '4\n', ''),
+    'query_handler_joins_matching_payload_failure_paths': (
+        query('val e<-make local NullPointerException;ref item:u64=1u64;ptr p:u64=null in here;'
+              'try{p;p=item;throw e;}catch(caught:const NullPointerException){if(true){p}else{7u64};{}};'
+              'return 9u64;'), 2, '', 'conditional scalar value requires a proven non-null target'),
+    'query_handler_skips_nonmatching_failure_path': (IO + 'using "std:exceptions" MissingReturnError;' +
+        query('val e<-make local NullPointerException;val other<-make local MissingReturnError;'
+              'ref item:u64=1u64;ptr p:u64=null in here;'
+              'try{if(true){throw other;}else{};p=item;throw e;}'
+              'catch(caught:const NullPointerException){if(true){p}else{7u64};{}}catch(rest:const Exception){};'
+              'return 9u64;') + 'behave @print(result);', 0, '4\n', ''),
+    'query_identity_does_not_load_nullable_payload': (IO +
+        query('val e<-make local NullPointerException;ref item:u64=1u64;ptr p:u64=null in here;'
+              'try{p is null;p=item;throw e;}catch(caught:const NullPointerException){if(true){p}else{7u64};{}};'
+              'return 9u64;') + 'behave @print(result);', 0, '4\n', ''),
+    'query_handler_observes_callable_allocation_failure': ('using "std:exceptions" OutOfMemoryError;'
+        'func one()->u64{return 1u64;}' +
+        query('ref item:u64=1u64;ptr p:u64=item;try{func invoke=one;{}}'
+              'catch(e:const OutOfMemoryError){p=null in here;{}};return if(true){p}else{7u64};'),
+        2, '', 'conditional scalar value requires a proven non-null target'),
     'query_consumes_caught_failure_before_outer_finally': (IO +
         query('val e<-make local NullPointerException;'
               'try{try{throw e;}catch(caught:const NullPointerException){};val late<-7u64;{}}'
