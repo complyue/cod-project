@@ -1,5 +1,38 @@
 # Changelog
 
+## 2026-11-18 — Settle normal exception construction
+
+<a id="h-make-exception-20261118"></a>
+**H-MAKE-EXCEPTION-20261118 — Dedicated normal construction and fresh-region placement.** The project user in [the design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-18 America/Los_Angeles, proposed `make exception SomeExType {...}` for creating and passing a failure without raising it, suggested the `in region (... -> capacity)` clause, and directed “`make exception ...` 的语法也敲定一下吧，然后记录、推送、同步。” D-17r112/D-22r49/registry901 settle both constructor and field forms by reusing the fresh throw syntax. The normal result owns the fresh region, and creation captures the trace. This supersedes the raising-only restriction in H-EXCEPTION-FACTORY-20261118 at `b8a20c508ada537ca7faa6122707a604c35a3f6e:design/ExceptionControl.md`, “Returning a locally caught exception”. Clause placement and evaluation are the delegated source resolution. A cause-consuming make, a hidden holder for a sole borrow, and compiler/ABI qualification are outside this decision.
+
+## 2026-11-18 — Exception capacity tuning and next-stage toolchain planning
+
+<a id="h-exception-capacity-20261118"></a>
+**H-EXCEPTION-CAPACITY-20261118 — Size fresh exception regions at construction.** The project user in [the design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-18 America/Los_Angeles, answers “认同，也考虑语法让每个throw site有办法独立指定capacity吧”. D-17r111/registry900 records the preceding image-default recommendation (100 MiB on suitable 64-bit targets, demand backing) and enough initial capacity for an oversized built-in aggregate. The user then proposes “`throw E(...) in region (50_000_000->capacity);` 如何？”. D-17 evaluates this placement clause for fresh construction. Its detailed grammar/evaluation and the VM implementation remain proposals. H-DEFER-AGGREGATE-REGION-20261118 governs retained members.
+
+<a id="h-toolchain-repositories-20261118"></a>
+**H-TOOLCHAIN-REPOSITORIES-20261118 — Plan the next repository split and C runtime.** In the same design chat on 2026-11-18 America/Los_Angeles, the project user identifies “cod-seed”, “cod”, “codup” and “codmate”, assigns the C++ seed, C native components, CoD-written compiler, toolchain version management and editor tooling, and asks “现在想到的相关细节先记录着，将来待办”. D-20 roadmap r7/registry900 records these as future work. The existing compiler-application baseline is at `b8a20c508ada537ca7faa6122707a604c35a3f6e:applications/cod-booter/README.md`, “Purpose”. No repository migration, native ABI or toolchain work is authorized by this record.
+
+## 2026-11-18 — Give a deferred aggregate its own region and exception array
+
+<a id="h-defer-aggregate-region-20261118"></a>
+**H-DEFER-AGGREGATE-REGION-20261118 — Residual aggregate ownership.** The project user in [the design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-18 America/Los_Angeles, confirms “`UnhandledDeferError` 抛出时新建自己的region，内部通过 `exception` 性质的动态数组聚合引用其它独立抛出的exception”. D-17r110/registry899 applies H-509/H-538/H-541 and whole-owner handoff to that built-in. Previous retention requirements are at `b8a20c508ada537ca7faa6122707a604c35a3f6e:design/ExceptionControl.md`, “Exceptions between deferred actions”. The image-build capacity setting, approximate 100 MB default and demand backing were proposed for evaluation. The byte unit, numeric default, oversized-array policy and runtime implementation were not confirmed.
+
+## 2026-11-18 — Evaluate exception values backed by owned regions
+
+<a id="k-exception-region-model-20261118"></a>
+**K-EXCEPTION-REGION-MODEL-20261118 — Handoff timing and proposed region representation.** The project user in [the design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-18 America/Los_Angeles, locates consumption at successful `throw outer;` and requests evaluation of “仅使用上述心智模型”, including `make exception SomeExType {...}`. D-17r108→109/registry897→898 correct the example and review a selected reference plus an owned region. The single-keyword grammar, direct construction and owning-factory replacement are proposals for review against H-EXCEPTION-FACTORY-20261118 and H-EXCEPTION-DECL-OWNED-20261118. The earlier holder baseline is at `b8a20c508ada537ca7faa6122707a604c35a3f6e:design/ExceptionControl.md`, “Exception declarations and catch bindings”. No aggregate design or implementation approval is inferred.
+
+## 2026-11-18 — Trace exception ownership across control flow
+
+<a id="k-exception-scenarios-20261118"></a>
+**K-EXCEPTION-SCENARIOS-20261118 — Ownership consequences and open handoffs.** D-17r107→108/registry896→897 applies H-EXCEPTION-DECL-OWNED-20261118 to call entry, borrowed inspection, forwarding, saved results and cleanup. It corrects exception-value examples and distinguishes a reporter's view of the tip from a relay's whole-scope handoff. The published holder baseline is at `b8a20c508ada537ca7faa6122707a604c35a3f6e:design/ExceptionControl.md`, “Exception declarations and catch bindings”. This is an agent continuity assessment of existing source rules. Factory release, late cause selection, owning tip selection, aggregate member access and catch shorthand receive no new qualification.
+
+## 2026-11-18 — Give exception declarations one ownership mode
+
+<a id="h-exception-decl-owned-20261118"></a>
+**H-EXCEPTION-DECL-OWNED-20261118 — Exception variables and parameters are always owning.** The project user in [the design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-18 America/Los_Angeles, states “变量/参数声明中的 `exception` 应该始终等同于 `owned exception`，exception 必然是 owned 才行，其它都是 ref ... in e”. D-17r107/registry896 apply the same initialization, call-entry handoff and release obligation to both spellings. The comparison in `b8a20c508ada537ca7faa6122707a604c35a3f6e:design/ExceptionControl.md`, “Exception declarations and catch bindings”, is superseded for unqualified exception declarations. Shorthand omitting the exception keyword in a catch is separate.
+
 ## 2026-11-18 — Name the exception object and its owner together
 
 <a id="h-exception-holder-20261118"></a>
