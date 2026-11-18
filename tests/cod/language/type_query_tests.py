@@ -14,6 +14,8 @@ MISS='using "std:exceptions" MissingReturnError;func may_stop()->u64;'
 OBSERVATION='const val present<-(input is not null);'
 GUARDED_RESULT='return if(present&&flag){input}else{7u64};'
 UNPROVED_TARGET='conditional scalar value requires a proven non-null target'
+CONDITIONAL_TARGET='ptr selected:u64 in O=if(flag){input}else{null in O};'
+GUARDED_INPUT='return if(selected is not null){input}else{7u64};'
 def storage(query, value, prefix=''):
     return IO+prefix+'val result<-make local typeof('+query+'){'+value+'};behave @print(result);'
 def saved_query(body, setup='', declarations=''):
@@ -166,6 +168,35 @@ runner.CASES={
  'projection_checks_reference_kind_before_using_selected_value':(saved_query(
     'ref same:u64 in O=input;return if(same is not null){input}else{7u64};'),
     2,'','ref requires a proven non-null target'),
+ 'projection_uses_outcomes_of_nullable_conditional':(saved_query(CONDITIONAL_TARGET+GUARDED_INPUT),0,'9\n',''),
+ 'projection_uses_outcome_of_conditional_assignment':(saved_query(
+    'ptr selected:u64=null in O;return if((selected=if(flag){input}else{null in O}) is not null){input}else{7u64};'),
+    0,'9\n',''),
+ 'projection_imports_conditional_selection_from_query_entry':(saved_query(GUARDED_INPUT,setup=CONDITIONAL_TARGET),0,'9\n',''),
+ 'projection_returns_conditional_observation_from_nested_scope':(saved_query(CONDITIONAL_TARGET+
+    'const val present<-{{return selected is not null;}};return if(present){input}else{7u64};'),0,'9\n',''),
+ 'projection_retains_conditional_witness_after_rebinding_peer':(saved_query(
+    'ptr saved:u64 in O=input;'+CONDITIONAL_TARGET+'input=null in O;return if(selected is not null){saved}else{7u64};'),
+    0,'9\n',''),
+ 'discarded_rebind_does_not_read_new_selection':(saved_query(
+    'ptr alternate:u64 in O=if(flag){input}else{null in O};input=alternate;return if(flag){input}else{7u64};'),
+    2,'',UNPROVED_TARGET),
+ 'conditional_test_does_not_prove_rebound_slot_present':(saved_query(
+    CONDITIONAL_TARGET+'input=alternate;'+GUARDED_INPUT,
+    setup='ptr alternate:u64 in O=if(flag){null in O}else{input};'),2,'',UNPROVED_TARGET),
+ 'projection_conditional_observation_survives_rebinding_tested_slot':(saved_query(CONDITIONAL_TARGET+
+    'const val present<-(selected is not null);selected=null in O;return if(present){input}else{7u64};'),0,'9\n',''),
+ 'projection_drops_outcome_witness_written_in_finally':(saved_query(
+    'ptr selected:u64 in O=try{if(flag){input}else{null in O}}finally{input=null in O;{}};'+GUARDED_INPUT),
+    2,'',UNPROVED_TARGET),
+ 'projection_conditional_outcomes_follow_reference_swap':(saved_query(CONDITIONAL_TARGET+
+    'ptr other:u64=null in O;selected<=>other;return if(other is not null){input}else{7u64};'),0,'9\n',''),
+ 'projection_conditional_outcomes_rechecked_on_loop_backedge':(saved_query(CONDITIONAL_TARGET+
+    'for(i in 0u64..2u64){if(selected is not null){input}else{7u64};input=null in O;};return 7u64;'),
+    2,'',UNPROVED_TARGET),
+ 'projection_rejects_conditional_with_another_present_target':(saved_query(
+    'ptr selected:u64 in O=if(flag){input}else{other};'+GUARDED_INPUT, setup='ptr other:u64 in O=input;input=null in O;'),
+    2,'',UNPROVED_TARGET),
  'arithmetic_without_division':(storage('3/0+4','9'),0,'9\n',''),
  'numeric_widening':(storage('3u8+4u64','9u64'),0,'9\n',''),
  'intrinsic_selected':(storage('intrinsic (+)(3u64,4u64)','9u64'),0,'9\n',''),

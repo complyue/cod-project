@@ -29,6 +29,13 @@ def borrowed_test_scope(body, before='', declaration='ref guard:const bool=obser
             'behave @print(inspect(item));behave @print(inspect(missing));')
 
 
+def conditional_scope(body):
+    return (IO+'func inspect(ptr input:u64 in O,flag:bool)->u64 where {owner O}{'
+            'ptr selected:u64 in O=if(flag){input}else{null in O};return {{'+body+'}};}'
+            'ref item:u64=5u64;ptr missing:u64=null in here;'
+            'behave @print(inspect(item,true));behave @print(inspect(missing,true));behave @print(inspect(item,false));')
+
+
 runner.CASES = {
     'local_slot_and_deferred_target': (IO+'ref a:u64=1u64;ref b:u64=10u64;ref p:u64=a;'
         '{{p=b;defer{p<-20u64;};}};behave @print(p is a);behave @print(a+b);', 0, 'true\n21\n', ''),
@@ -130,6 +137,12 @@ runner.CASES = {
     'captured_selection_equality_ends_at_rebind': (
         saved_scope('input=null in O;return if(same is not null){input}else{7u64};','ptr same:u64 in O=input;'),
         2, '', 'checked exception'),
+    'scope_captures_conditional_target_outcomes': (
+        conditional_scope('return if(selected is not null){input}else{7u64};'), 0, '5\n7\n7\n', ''),
+    'nested_scope_captures_conditional_target_outcomes': (
+        conditional_scope('return {{return if(selected is not null){input}else{7u64};}};'), 0, '5\n7\n7\n', ''),
+    'conditional_target_outcome_cannot_refine_rebound_input': (
+        conditional_scope('input=null in O;return if(selected is not null){input}else{7u64};'), 2, '', 'checked exception'),
     'escape_through_returned_callable_rejected': ('ref a:u64=1u64;func held={{return func[a]()->u64{return a;};}};',
         2, '', 'selected-target lifetime and transport proof'),
     'value_snapshot_survives_write_through_borrow': (IO+VALUES+'func original=wrap(one);ptr target=original;'

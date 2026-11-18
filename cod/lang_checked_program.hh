@@ -336,7 +336,8 @@ struct CheckedMethod {
     std::vector<std::vector<OwnerMatch>> relations;
     std::vector<bool> nonnull;
     std::map<size_t, BooleanPresence> boolean_presence;
-    std::set<std::set<size_t>> same_selections;
+    // Entry reference facts use input ordinals until the body allocates local slots.
+    CleanupEquations::ConditionClauses reference_conditions;
   };
   std::optional<ScopeInputs> scope_inputs;
   const std::vector<Parameter> &input_parameters() const {
