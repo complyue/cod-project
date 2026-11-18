@@ -68,6 +68,10 @@ runner.CASES.update({
  'logical_recursive_operand_is_not_anchor': ('func f(){return f()&&true;}',2,'','unproved callable result'),
  'logical_independent_short_circuit': (IO+'func f(flag:bool){return flag&&f(flag);}behave @print(f(false));',0,'false\n',''),
  'logical_or_independent_short_circuit': (IO+'func f(flag:bool){return flag||f(flag);}behave @print(f(true));',0,'true\n',''),
+ 'logical_and_abrupt_left_cannot_anchor_recursion': (
+     'func f(n:u64){ {return f(n);}&&{return 7u64;};}',2,'','unproved callable result'),
+ 'logical_or_abrupt_left_cannot_anchor_recursion': (
+     'func f(n:u64){ {return f(n);}||{return 7u64;};}',2,'','unproved callable result'),
  'same_owner_selection': (IO+'func pick(x:i64 in O,y:i64 in O)->u32 where {owner O}{return 1u32;}func pick(x:i64 in O,y:i64 in P)->u64 where {owner O,owner P}{return 2u64;}func f(x:i64 in O) where {owner O}{return pick(x,x);}func tag(x:u32)->u64{return 32u64;}val x<-1;behave @print(tag(f(x)));',0,'32\n',''),
  'unknown_owner_selection': ('func pick(x:i64 in O,y:i64 in O)->u32 where {owner O}{return 1u32;}func pick(x:i64 in O,y:i64 in P)->u64 where {owner O,owner P}{return 2u64;}func f(x:i64 in O,y:i64 in P) where {owner O,owner P}{return pick(x,y);}',2,'','unproved callable result'),
 })

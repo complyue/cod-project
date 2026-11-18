@@ -4376,9 +4376,14 @@ class ScalarChecker {
     }
     case K::binary:
       if (expr.text == "&&" || expr.text == "||") {
-        const auto left = child(0); auto skipped = state; const auto right = child(1);
-        if (state.required && (left != Type::boolean || right != Type::boolean)) fail(expr.at, "logical operation requires bool operands");
-        state = merge_evidence(std::move(skipped), state);
+        const auto left = child(0);
+        if (state.returns && left == Type::never) return Type::never;
+        auto skipped = state;
+        const auto right = child(1);
+        if (state.required && ((left != Type::boolean && left != Type::never) ||
+                               (right != Type::boolean && right != Type::never)))
+          fail(expr.at, "logical operation requires bool operands");
+        state = merge_evidence(std::move(skipped), state, left != Type::never && right == Type::never);
         if (state.returns && !left) return {};
         return left == Type::never ? Type{Type::never} : Type{Type::boolean};
       }

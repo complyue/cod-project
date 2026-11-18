@@ -46,6 +46,16 @@ runner.CASES = {
         query('if({return 7u64;}){}else{};') + 'behave @print(result);', 0, '4\n', ''),
     'query_checks_arms_after_abrupt_condition': (query('if({return 7u64;}){val wrong:bool<-1u64;}else{};'),
         2, '', 'initializer does not satisfy declared val type'),
+    'query_and_allows_abrupt_left_operand': (IO + query('{return 7u64;}&&false;') + 'behave @print(result);',
+        0, '4\n', ''),
+    'query_or_allows_abrupt_left_operand': (IO + query('{return 7u64;}||false;') + 'behave @print(result);',
+        0, '4\n', ''),
+    'query_and_allows_abrupt_right_operand': (IO + query('false&&{return 7u64;};return 8u64;') + 'behave @print(result);',
+        0, '4\n', ''),
+    'query_or_allows_abrupt_right_operand': (IO + query('true||{return 7u64;};return 8u64;') + 'behave @print(result);',
+        0, '4\n', ''),
+    'query_checks_invalid_right_operand_after_abrupt_left': (query('{return 7u64;}&&5u32;'),
+        2, '', 'logical operation requires bool operands'),
     'query_does_not_fall_back_to_outer_callable': ('func helper()->u64{return 90u64;}'
         'proc outer(flag:bool)->void{' +
         query('if(flag){func helper()->u64{return 3u64;};return 1u64;}else{};return helper();') +
