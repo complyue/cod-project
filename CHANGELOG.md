@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-18 — Assess application lifetime for exception objects
+
+<a id="k-exception-owner-review-20261118"></a>
+**K-EXCEPTION-OWNER-REVIEW-20261118 — Review lifetime and retention cost.** D-17r97→98/registry883→884 records the user’s application-scope proposal and its candidate P-579–P-581 relationships. H-269 confirms that retained causes can escape a catch. The broader owner proposal would cover all observable exception objects, including through module initialization and shutdown. It requires payload lifetime checks and a decision on memory retention when exceptions are repeatedly discarded. Previous scope at `355630e12331c45e78d53420fd3171483b4437b4:design/ExceptionControl.md`, “Cause initialization” and “Compiler and runtime implementation”.
+
 ## 2026-11-18 — Use a nullable pointer for cause and a non-null reference for tip
 
 <a id="h-cause-ptr-tip-ref-20261118"></a>

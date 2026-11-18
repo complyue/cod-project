@@ -1,8 +1,10 @@
 # CoD exception control and regional cleanup
 
-Design revision: 97 · Recorded: 2026-11-18 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; bounded full-scope elaboration profile confirmed; current implementation availability is recorded in the source capability reference.
+Design revision: 98 · Recorded: 2026-11-18 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; bounded full-scope elaboration profile confirmed; current implementation availability is recorded in the source capability reference.
 
 ## Design authority
+
+- **Exception object lifetime.** [D-17-EXCEPTION-OWNER](DesignAuthorityRegistry.md#d-17-exception-owner) records the [application-owner proposal](#application-lifetime-for-exception-objects) in r98. H-269 confirms retained causes beyond a catch. D-14, D-28 shared owner information and D-15-SHUTDOWN supply the lifetime, address-resolution and cleanup boundaries. C-54/C-63/C-65 and charter §§3.2–3.3/4.1/4.3/6.3/8 motivate one provable owner and stable identity. The implications for retained memory and borrowed payloads are under review. Source spelling for naming the owner and physical allocation policy are outside this assessment.
 
 - **Cause and tip reference modes.** [H-CAUSE-PTR-TIP-REF-20261118](../CHANGELOG.md#h-cause-ptr-tip-ref-20261118) specifies the r97 field modes under D-17-RETHROW/P-464–P-466 and D-17-CATCH-WRAPPERS/P-470–P-472. Both target Exception. A nullable cause and non-null tip make absence explicit and preserve the identity of each selected exception. H-515 and H-CATCH-TIP-20261118 govern field immutability and catch selection. D-14 and D-17/H-313 govern owner and null checks. Charter §§3.2–3.3/4.3/6.3/8 connects those guarantees to typed reporting. Acceptance below covers absent and present causes, unwrapped and wrapped tips, and readonly access. Physical backing and general implementation qualification remain open.
 
@@ -199,6 +201,14 @@ rethrow DomainError(details) from another;
 ```
 
 The named constructor's semantic type determines matching and checkedness. A checked cause does not make an explicitly constructed unchecked business type checked, nor does an unchecked cause remove a checked business constructor's obligation. Standard rethrow wrappers have the additional cause constraint below. Bare rethrow and rethrow from cause choose the corresponding wrapper using the selected cause's actual semantic checkedness, even through the root Exception type or aliases. Catch matching uses the wrapper-prefix rule below: only consecutive standard rethrow wrappers are transparent. A named business exception or UnhandledDeferError stops standard-wrapper cause traversal. That traversal does not itself search arbitrary causes or aggregate members; H-537 places the finished deferred aggregate on the ordinary exception path, not back in the completed defer-handler pass. Checked failure coverage must reflect both the incoming checked type and the selected transparent matching rule; the [application-facing contract](#application-facing-failure-contracts) specifies ordinary checked declarations and the conservative wrapper-only case.
+
+### Application lifetime for exception objects
+
+**Proposal.** Associate every successfully constructed exception object with a single logical owner for the current application execution. Establish it before any incorporated module can run initialization. Keep it live through the final [application-wide cleanup](ModuleWorlds.md#cross-module-shutdown-order) and terminal reporting, including on startup failure. A later run has its own owner. The selected entry module identifies the run, but its ordinary prefix executes late and its lexical locals have their own lifetimes.
+
+This gives both `e.cause` and `e.tip` a statically unique target owner, even for a null cause. The local catch parameter and its association with the incoming tip end under ordinary scope rules. A reference obtained from either field while available can continue to denote its selected exception after the catch if stored in a compatible destination. All surviving links must keep the original exception identity and immutable cause chain. A helper’s local slot containing an exception value still belongs to the helper. A borrow of that slot, or of data in a request region, retains its own lifetime. Any admitted user exception payload must itself be safe for application lifetime. Reject a field that would retain a borrow after its target owner ends.
+
+Retaining all backing until execution ends is simple, but a service that constructs, handles and discards N exceptions can then retain N objects. An implementation can elide construction or reclaim backing early only when future observation through any valid ref, ptr, value, cause or aggregate member is impossible. Whether the language requires bounded storage for a stream of discarded exceptions is the open trade-off. A deliberately retained chain of N distinct exceptions necessarily preserves those N identities. H-516/H-517’s bounded process OOM diagnostic window has a separate lifetime: evicting trace details cannot invalidate a live exception object. A common application owner alone gives no concurrent-access or cross-execution transport permission.
 
 ### Standard wrapper construction and diagnostics
 
