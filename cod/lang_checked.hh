@@ -593,7 +593,7 @@ class ScalarChecker {
   }
   size_t bind(const std::string &name, const Type &type, const std::set<size_t> &targets,
               bool read_only, bool value_binding, bool fixed, const Location &at, std::optional<size_t> alias = {},
-              bool source_declaration = true) {
+              bool source_declaration = true, LexicalState::InputFacts *callable_entry = nullptr) {
     auto &scope = declaration_scope(name, at);
     if (source_declaration) warn_shadow(name, at);
     const auto id = bindings_->size();
@@ -606,7 +606,9 @@ class ScalarChecker {
       lexical_.owners[id] = target_owners(targets);
       lexical_.target_versions[id] = {next_target_version_++};
       lexical_.selection_identities[id] = new_selection_identity();
-      assign_selection(lexical_, id, selection_targets(targets));
+      const auto selection = selection_targets(targets);
+      if (callable_entry) callable_entry->selections.assign(id, selection);
+      else assign_selection(lexical_, id, selection);
     }
     if (!proving_) {
       possible_targets_.push_back(targets);
@@ -618,12 +620,12 @@ class ScalarChecker {
     return id;
   }
   size_t declare(const std::string &name, const Type &type, bool read_only, bool value_binding, const Location &at,
-                 bool source_declaration = true) {
+                 bool source_declaration = true, LexicalState::InputFacts *callable_entry = nullptr) {
     const auto scope = declaration_scope(name, at).id;
     const auto id = storage_->size();
     storage_->push_back({name, type, scope, read_only});
     scope_storage_[scope].push_back(id);
-    storage_->back().binding = bind(name, type, {id}, read_only, value_binding, false, at, {}, source_declaration);
+    storage_->back().binding = bind(name, type, {id}, read_only, value_binding, false, at, {}, source_declaration, callable_entry);
     lexical_.available.insert(id);
     return id;
   }
@@ -6931,10 +6933,13 @@ class ScalarChecker {
     check_flow([&](bool proving) {
       begin_check(instance.storage, instance.bindings, instance.operations, proving);
       instance.frame = {};
+      // Entry bindings select fresh proof places. Seed their contract facts
+      // together before deriving any facts for the body.
+      auto &entry = lexical_.input_facts.at(0);
       for (size_t i = 0; i < checking_method_->input_owners().size(); ++i)
         external_owners_[checking_method_->input_owners()[i].name] = null_target - 1 - i;
       for (const auto &owner : checking_method_->input_owners()) {
-        const auto id = bind(owner.name, Type::void_type, {}, true, true, true, owner.at);
+        const auto id = bind(owner.name, Type::void_type, {}, true, true, true, owner.at, {}, true, &entry);
         bindings_->at(id).owner_binding = external_owners_.at(owner.name);
       }
       if (checking_method_->scope_inputs) {
@@ -6942,7 +6947,7 @@ class ScalarChecker {
         for (const auto &[name, role] : profile.owner_names) {
           const auto &owner = profile.owners.at(role);
           const auto actual = external_owners_.at(owner.name);
-          const auto id = bind(name, Type::void_type, {}, true, true, true, owner.at, {}, false);
+          const auto id = bind(name, Type::void_type, {}, true, true, true, owner.at, {}, false, &entry);
           bindings_->at(id).owner_binding = actual;
           external_owners_.emplace(name, actual);
         }
@@ -6950,18 +6955,19 @@ class ScalarChecker {
       for (size_t c = 0; c < instance.environment.size(); ++c) {
         const auto &capture = checking_method_->captures[c];
         const auto &input = instance.environment[c];
-        const auto id = declare(capture.name, input.type, input.read_only, true, capture.at, false);
+        const auto id = declare(capture.name, input.type, input.read_only, true, capture.at, false, &entry);
         instance.frame.captures.push_back(id);
         bindings_->back().callable_value = input.type.kind == Type::procedure;
-        initialize(id);
+        entry.initialized.insert(id);
       }
       for (size_t p = 0; p < checking_method_->input_parameters().size(); ++p) {
         const auto &parameter = checking_method_->input_parameters()[p];
         const bool value = parameter.declaration_kind == "val";
+        const auto mode = argument_mode(parameter);
         const auto id = declare(parameter.name, instance.arguments[p], parameter.read_only || (value && parameter.fixed_binding),
-                                value, parameter.at, !checking_method_->scope_inputs);
+                                value, parameter.at, !checking_method_->scope_inputs, &entry);
         const auto binding = storage_->at(id).binding;
-        instance.frame.inputs.push_back({id, argument_mode(parameter), caller_bindings(*checking_method_)});
+        instance.frame.inputs.push_back({id, mode, caller_bindings(*checking_method_)});
         bindings_->back().fixed = parameter.fixed_binding;
         bindings_->back().requires_initialized = parameter.declaration_kind == "ref";
         bindings_->back().callable_value = instance.arguments[p].kind == Type::procedure && parameter.owner.empty();
@@ -6977,19 +6983,14 @@ class ScalarChecker {
           if (parameter.declaration_kind == "ptr" && !nonnull) {
             lexical_.targets[binding].insert(null_target);
             lexical_.null_sources[binding] = {id};
-            assign_selection(lexical_, binding, selection_targets(lexical_.targets[binding]));
+            entry.selections.assign(binding, selection_targets(lexical_.targets[binding]));
             if (!proving) { possible_targets_[binding].insert(null_target); possible_null_sources_[binding] = {id}; }
           }
-          if (nonnull) record_presence({id});
+          if (nonnull || mode != ArgumentMode::borrowed_ptr) entry.present.insert(id);
         }
-        if (argument_mode(parameter) != ArgumentMode::borrowed_ptr) {
-          initialize(id);
-          if (storage_->at(id).borrowed) record_presence({id});
-        }
-        if (instance.arguments[p].kind == Type::exception) {
-          auto value = ExceptionFacts::input(p, exception_possibilities(instance.arguments[p]));
-          assign_exceptions(id, value);
-        }
+        if (mode != ArgumentMode::borrowed_ptr) entry.initialized.insert(id);
+        if (instance.arguments[p].kind == Type::exception)
+          entry.exceptions.emplace(id, ExceptionFacts::input(p, exception_possibilities(instance.arguments[p])));
         if (instance.arguments[p] == Type::boolean) {
           auto proof = std::make_shared<Predicate>();
           proof->kind = Predicate::Kind::presence;
@@ -7010,6 +7011,7 @@ class ScalarChecker {
               bindings_->at(left).read_only == bindings_->at(right).read_only)
             bindings_->at(left).overlaps.insert(right);
         }
+      refresh_input_facts(lexical_);
       AbruptFlow flow{1, {}}, outcomes{1, {}};
       abrupt_ = &flow;
       const auto incoming = lexical_;
