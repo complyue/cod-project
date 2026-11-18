@@ -36,7 +36,7 @@ runner.CASES = {
     'function_permissions': (IO+'func run()->void{ {{behave @print(1u64);}};}run();', 2, '', 'function cannot invoke a dynamic procedure'),
     'readonly_capture': ('proc run()->void{const val n<-1u64;{{n<-2u64;}};}run();', 2, '', 'readonly'),
     'capture_requires_initialization': ('proc run()->void{val n<-make local u64;{{n<-2u64;}};}run();', 2, '', 'before definite initialization'),
-    'reference_input_requires_transport': ('proc run()->void{ref n:u64=1u64;{{n<-2u64;}};}run();', 2, '', 'selected-target lifetime and transport proof'),
+    'reference_input_writes_target': (IO+'proc run()->void{ref n:u64=1u64;{{n<-2u64;}};behave @print(n);}run();', 0, '2\n', ''),
     'place_capture_requires_proof': ('proc run()->void{val n<-1u64;var p->n;{{p<-2u64;}};}run();', 2, '', 'selected-place lifetime and transport proof'),
     'missing_return_after_inner_completion': (IO+'using "std:exceptions" MissingReturnError;proc run()->u64{ {{return 1u64;}};}try{run();{}}catch(e:const MissingReturnError){behave @print(5u64);};', 0, '5\n', '[-Wmissing-return]'),
     'inner_missing_return': (IO+'using "std:exceptions" MissingReturnError;proc run(val flag:bool)->void{try{val n<-{{if(flag){return 1u64;}else{};}};behave @print(n);}catch(e:const MissingReturnError){behave @print(5u64);};}run(false);run(true);', 0, '5\n1\n', '[-Wmissing-return]'),

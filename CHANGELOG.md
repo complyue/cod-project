@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-18 — Pass immediate scope inputs through ordinary call roles
+
+<a id="k-immediate-scope-inputs-20261118"></a>
+**K-IMMEDIATE-SCOPE-INPUTS-20261118 — Implement bounded immediate lexical ref/ptr inputs.** D-17-FULL-SCOPE/P-564–P-566 implements selected targets, independent slots and shared actual-owner information through ordinary parameters. Type queries retain declaration evidence. Source436 records supported inputs and remaining proof and migration boundaries. Prior qualified scope is at `0206333ed80b3f157046ad4f2a0ed7ade5b161c0:design/ExceptionControl.md`.
+
 ## 2026-11-18 — Integrate exception inspection and ownership review
 
 <a id="k-exception-inspection-integration-20261118"></a>

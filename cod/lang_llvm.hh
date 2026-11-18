@@ -520,8 +520,22 @@ class LLVMEmission {
     }
     llvm::AllocaInst *destination = nullptr;
     const size_t offset = expr.kind == Expression::Kind::value_call ? 1 : 0;
-    for (const auto &[owner, input] : input_frame(method).owners)
-      prepared.push_back(selected_owner(*expr.children.at(input + offset), &expr, method, callable_view));
+    const auto &invocation = contexts_.front().at(&expr);
+    for (const auto &[owner, input] : input_frame(method).owners) {
+      if (invocation.scope_operands) {
+        std::map<size_t, std::vector<size_t>> alternatives;
+        for (size_t i = 0; i < contexts_.size(); ++i) {
+          const auto &call = contexts_[i].at(&expr);
+          if (call.callee && program_->instances[*call.callee].method == method)
+            alternatives[call.scope_owners.at(null_target - 1 - owner)].push_back(i);
+        }
+        prepared.push_back(contextual_value(expr, alternatives, "owner", [&](size_t actual) {
+          return owner_identity(actual, expr.at);
+        }, b_.getPtrTy()));
+      } else {
+        prepared.push_back(selected_owner(invocation.argument(expr, input + offset), &expr, method, callable_view));
+      }
+    }
     if (captured.size() != layout.captures) throw std::logic_error("native call lacks its lexical captures");
     if (!captured.empty()) {
       auto *values = slot(llvm::ArrayType::get(scalar_, captured.size()), "call.captures");
@@ -671,10 +685,10 @@ class LLVMEmission {
       return outcome(pack(equal, Type::boolean), integer(0), integer(0), null_pointer());
     }
     std::vector<const Expression *> source_inputs;
-    for (const auto &argument : expr.children) source_inputs.push_back(argument.get());
+    for (size_t i = 0; i < fact.argument_count(expr); ++i) source_inputs.push_back(&fact.argument(expr, i));
     const auto cases = choices(expr, source_inputs, true);
-    const std::vector<llvm::Value *> inputs(arguments.begin(), arguments.begin() + expr.children.size());
-    const std::vector<llvm::Value *> captured(arguments.begin() + expr.children.size(), arguments.end());
+    const std::vector<llvm::Value *> inputs(arguments.begin(), arguments.begin() + source_inputs.size());
+    const std::vector<llvm::Value *> captured(arguments.begin() + source_inputs.size(), arguments.end());
     if (cases.front().operation->callee && (cases.size() > 1 || !specialize_)) {
       const auto id = *cases.front().operation->callee;
       const auto &target = program_->instances[id];
@@ -1045,7 +1059,7 @@ class LLVMEmission {
   }
   size_t prepared_count(const Expression &expr) const {
     const auto &fact = contexts_.front().at(&expr);
-    return expr.children.size() + (expr.kind != Expression::Kind::value_call && fact.callable_call ? 1 : 0)
+    return fact.argument_count(expr) + (expr.kind != Expression::Kind::value_call && fact.callable_call ? 1 : 0)
         + (fact.callee ? fact.callable_captures.size() : 0);
   }
   static bool inert_argument(const Expression &expr) {
@@ -1053,7 +1067,7 @@ class LLVMEmission {
     return expr.kind == K::name || expr.kind == K::integer || expr.kind == K::real || expr.kind == K::boolean || expr.kind == K::null_ref;
   }
   llvm::Value *prepare_value(const Expression &expr, size_t index, llvm::Value *value) {
-    const auto &child = *expr.children[index];
+    const auto &child = contexts_.front().at(&expr).argument(expr, index);
     const auto cases = choices(expr, {&child});
     if (std::all_of(cases.begin(), cases.end(), [&](const Choice &choice) {
           return choice.inputs.front() == choice.operation->arguments.at(index).type;
@@ -1100,7 +1114,7 @@ class LLVMEmission {
     return value;
   }
   llvm::Value *prepare_argument(const Expression &expr, size_t index, bool copy) {
-    const auto &child = *expr.children[index];
+    const auto &child = contexts_.front().at(&expr).argument(expr, index);
     const auto prepare = [&](const std::pair<ArgumentMode, bool> &plan) -> llvm::Value * {
       const auto [mode, binding_slot] = plan;
       auto *value = emit_expression(child, binding_slot ? Projection::slot : mode == ArgumentMode::value ? Projection::value : Projection::target);
@@ -1124,9 +1138,10 @@ class LLVMEmission {
   std::vector<llvm::Value *> prepare_arguments(const Expression &expr, bool deferred = false) {
     std::vector<llvm::Value *> arguments;
     const auto &fact = contexts_.front().at(&expr);
-    const size_t offset = expr.kind == Expression::Kind::value_call ? 1 : 0;
-    const bool protect = deferred || std::any_of(expr.children.begin() + offset, expr.children.end(),
-                                               [](const auto &child) { return !inert_argument(*child); });
+    const size_t offset = expr.kind == Expression::Kind::value_call && fact.callable_call ? 1 : 0;
+    bool protect = deferred;
+    for (size_t i = offset; !protect && i < fact.argument_count(expr); ++i)
+      protect = !inert_argument(fact.argument(expr, i));
     std::vector<llvm::Value *> captured;
     if (fact.callee) for (size_t i = 0; i < fact.callable_captures.size(); ++i) {
       std::vector<Choice> cases;
@@ -1143,7 +1158,7 @@ class LLVMEmission {
       arguments.push_back(protect ? copy_temporary(value, expr.at) : value);
     }
 
-    for (size_t i = 0; i < expr.children.size(); ++i) {
+    for (size_t i = 0; i < fact.argument_count(expr); ++i) {
       auto *value = prepare_argument(expr, i, !offset || i || protect);
       if (!reachable()) return {};
       arguments.push_back(value);
@@ -1311,6 +1326,15 @@ class LLVMEmission {
     const bool read = carries_value(projection);
     using K = Expression::Kind;
     const auto &fact = contexts_.front().at(&expr);
+    if (fact.scope_operands) {
+      std::map<std::vector<const Expression *>, std::vector<size_t>> alternatives;
+      for (size_t i = 0; i < contexts_.size(); ++i)
+        alternatives[contexts_[i].at(&expr).scope_operands.value()].push_back(i);
+      if (alternatives.size() > 1)
+        return contextual_value(expr, alternatives, "scope.inputs", [&](const auto &) {
+          return emit_checked_expression(expr, projection, discard);
+        });
+    }
     if (std::any_of(contexts_.begin(), contexts_.end(), [&](const auto &context) {
           return context.at(&expr).borrowed_result != fact.borrowed_result;
         })) {
@@ -1802,7 +1826,8 @@ public:
       const auto &layout = call_layouts_[i];
       const auto prefix = "cod.method." + std::to_string(method.definition) + "." + method.source->name +
           (i == method.definition ? std::string{} : ".interpretation." + std::to_string(i));
-      if (method.source->type_parameters.empty() && method.captures.empty() && method.retained_types.empty() && !method.declaration_context()) {
+      if (method.instances.size() == 1 && method.source->type_parameters.empty() && method.captures.empty() &&
+          method.retained_types.empty() && !method.declaration_context()) {
         general_[i] = declare(prefix + ".native", layout);
         specialized_[method.instances.front()] = general_[i];
         continue;
@@ -1817,8 +1842,9 @@ public:
     }
     for (size_t i = 0; i < program.methods.size(); ++i) {
       const auto &method = program.methods[i]; if (method.instances.empty()) continue;
-      if (method.source->type_parameters.empty() && method.captures.empty() && method.retained_types.empty() && !method.declaration_context()) {
-        body(general_[i], method, method.instances.front());
+      const auto first = method.instances.front();
+      if (specialized_[first] == general_[i]) {
+        body(general_[i], method, first);
         continue;
       }
       body(general_[i], method, {});

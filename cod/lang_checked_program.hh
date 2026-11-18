@@ -109,6 +109,16 @@ struct CheckedOperation {
   // Destination calls select every address before checking entry-read promises.
   bool destination_arguments = false;
   std::vector<CheckedArgument> arguments;
+  // An immediate scope's operands are compiler-generated names. The source
+  // children describe its callable body, not its transport.
+  std::optional<std::vector<const Expression *>> scope_operands;
+  std::vector<size_t> scope_owners;
+  size_t argument_count(const Expression &expr) const {
+    return scope_operands ? scope_operands->size() : expr.children.size();
+  }
+  const Expression &argument(const Expression &expr, size_t i) const {
+    return scope_operands ? *scope_operands->at(i) : *expr.children.at(i);
+  }
   // Possible borrowed callable targets at invocation, after slot selection.
   std::vector<std::set<size_t>> callable_argument_targets;
   std::set<size_t> nullable_arguments;
@@ -229,6 +239,7 @@ struct QueryBinding {
   std::string name;
   Type type;
   ViewEvidence view;
+  std::optional<EvidenceOwner> owner_binding = {};
   bool operator==(const QueryBinding &) const = default;
 };
 enum class ResultMode { value, borrowed_ref, borrowed_ptr };
@@ -246,6 +257,7 @@ struct QueryEnvironment {
   std::vector<QueryBinding> bindings;
   std::set<std::string> symbol_shadows;
   std::vector<std::vector<OwnerMatch>> owners;
+  std::vector<std::vector<OwnerMatch>> scope_owners;
   std::optional<ResultContract> result;
   bool operator==(const QueryEnvironment &) const = default;
 };
@@ -304,6 +316,21 @@ struct CheckedMethod {
   std::vector<std::string> type_parameters;
   std::vector<size_t> retained_types;
   std::optional<size_t> parent;
+  struct ScopeInputs {
+    size_t lexical_method;
+    std::vector<Parameter> parameters;
+    std::vector<OwnerParameter> owners;
+    std::map<std::string, size_t> owner_names;
+    std::vector<std::vector<OwnerMatch>> relations;
+    std::vector<bool> nonnull;
+  };
+  std::optional<ScopeInputs> scope_inputs;
+  const std::vector<Parameter> &input_parameters() const {
+    return scope_inputs ? scope_inputs->parameters : source->parameters;
+  }
+  const std::vector<OwnerParameter> &input_owners() const {
+    return scope_inputs ? scope_inputs->owners : source->owner_parameters;
+  }
 };
 struct CheckedCallable {
   Type type;
@@ -372,6 +399,7 @@ struct CheckedProgram {
   std::deque<CheckedFamily> families;
   std::vector<QueryEnvironment> query_environments{{}};
   std::vector<CheckedCallable> callables;
+  std::vector<std::unique_ptr<Expression>> scope_operands;
   std::deque<CheckedMethod> methods;
   std::deque<CheckedInstance> instances;
   std::map<const Expression *, CheckedOperation> entry;
@@ -438,7 +466,7 @@ inline CheckedBody checked_body(const CheckedProgram &program, const CheckedMeth
     for (const auto &[expr, operation] : checked.operations) {
       for (size_t a = 0; a < operation.arguments.size(); ++a) {
         if (operation.arguments[a].mode == ArgumentMode::value) continue;
-        const auto &argument = checked.operations.at(expr->children.at(a).get());
+        const auto &argument = checked.operations.at(&operation.argument(*expr, a));
         for (size_t c = 0; c < checked.frame.captures.size(); ++c)
           if (!checked.storage.at(checked.frame.captures[c]).read_only &&
               argument.targets.contains(checked.frame.captures[c])) result.writable_captures.insert(c);

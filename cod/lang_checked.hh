@@ -128,12 +128,19 @@ class ScalarChecker {
     return program_.families[family].declarations;
   }
   bool has_declarations(const std::string &name) const { return !declarations(name).empty(); }
+  std::optional<size_t> lexical_template(std::optional<size_t> method) const {
+    if (method && program_.methods[*method].scope_inputs) return program_.methods[*method].scope_inputs->lexical_method;
+    return method;
+  }
   size_t lexical_method(const Form *form, std::optional<size_t> parent = {}) const {
     if (!parent && checking_instance_) parent = checking_instance_->method;
+    parent = lexical_template(parent);
     if (parent) if (const auto found = lexical_variants_.find({form, *parent}); found != lexical_variants_.end()) return found->second;
     return lexical_methods_.at(form);
   }
   std::map<const Form *, size_t> lexical_methods_;
+  std::map<std::pair<size_t, std::string>, const Expression *> scope_operand_names_;
+  std::map<size_t, std::vector<size_t>> scope_profiles_;
   struct FreeBindings {
     std::vector<Capture> captures, queries, symbols;
     std::set<std::string> declarations;
@@ -282,7 +289,7 @@ class ScalarChecker {
     return access;
   }
   static bool variadic(const CheckedMethod &method) {
-    return !method.source->parameters.empty() && method.source->parameters.back().variadic;
+    return !method.input_parameters().empty() && method.input_parameters().back().variadic;
   }
   static bool accepts_arity(const CheckedMethod &method, size_t count) {
     return variadic(method) ? count + 1 >= method.parameters.size() : count == method.parameters.size();
@@ -291,7 +298,7 @@ class ScalarChecker {
     return variadic(method) ? std::min(argument, method.parameters.size() - 1) : argument;
   }
   static const Parameter &parameter_at(const CheckedMethod &method, size_t argument) {
-    return method.source->parameters[parameter_index(method, argument)];
+    return method.input_parameters()[parameter_index(method, argument)];
   }
   static bool admits_parameter_access(const CheckedMethod &method, size_t i, bool readonly) {
     const auto &parameter = parameter_at(method, i);
@@ -321,7 +328,7 @@ class ScalarChecker {
   }
   static bool same_access(const CheckedMethod &a, const CheckedMethod &b) {
     for (size_t i = 0; i < a.parameters.size(); ++i)
-      if (a.source->parameters[i].read_only != b.source->parameters[i].read_only) return false;
+      if (a.input_parameters()[i].read_only != b.input_parameters()[i].read_only) return false;
     return true;
   }
   using Owners = std::vector<std::optional<EvidenceOwner>>;
@@ -362,8 +369,14 @@ class ScalarChecker {
       return owner.kind == EvidenceOwner::Kind::checked && external_owner(owner.id);
     };
     if (retained(*a) && retained(*b)) return relations.at(a->id).at(b->id);
-    if (retained(*a) || retained(*b))
-      return external(retained(*a) ? *b : *a) ? OwnerMatch::unknown : OwnerMatch::mismatch;
+    if (retained(*a) || retained(*b)) {
+      const auto [saved, other] = retained(*a) ? std::pair{*a, *b} : std::pair{*b, *a};
+      if (!external(other)) return OwnerMatch::mismatch;
+      const auto &scope_owners = query_environment().scope_owners;
+      return scope_owners.empty() ? OwnerMatch::unknown : scope_owners.at(saved.id).at(null_target - 1 - other.id);
+    }
+    if (external(*a) && external(*b) && checking_method_ && checking_method_->scope_inputs)
+      return checking_method_->scope_inputs->relations.at(null_target - 1 - a->id).at(null_target - 1 - b->id);
     // Distinct formal names admit equal actual owners; local scopes do not.
     return external(*a) && external(*b) ? OwnerMatch::unknown : OwnerMatch::mismatch;
   }
@@ -517,7 +530,7 @@ class ScalarChecker {
     if ((state || (eager_operation(operation) && family.methods.empty())) && applicable.empty()) {
       const ModuleLookup lookup(module_, state && state->method ? program_.methods[*state->method].module : module_);
       for (const auto &declaration : declarations(expr.text)) {
-        if (!state && std::any_of(declaration.source->parameters.begin(), declaration.source->parameters.end(),
+        if (!state && std::any_of(declaration.input_parameters().begin(), declaration.input_parameters().end(),
             [](const auto &parameter) { return argument_mode(parameter) != ArgumentMode::value; })) continue;
         const auto substitutions = match_evidence(declaration, arguments, {}, true);
         if (!substitutions || !admits_access(declaration, access) ||
@@ -1503,8 +1516,8 @@ class ScalarChecker {
   static CallEffects initial_effects(const CheckedMethod &method, const std::vector<Type> &arguments) {
     CallEffects effects;
     std::set<size_t> borrowed;
-    for (size_t p = 0; p < method.source->parameters.size(); ++p)
-      if (!method.source->parameters[p].owner.empty()) borrowed.insert(p);
+    for (size_t p = 0; p < method.input_parameters().size(); ++p)
+      if (!method.input_parameters()[p].owner.empty()) borrowed.insert(p);
     for (const auto reason : call_reasons(method)) {
       effects.initialized[reason] = borrowed;
       effects.present[reason] = borrowed;
@@ -1524,8 +1537,8 @@ class ScalarChecker {
         for (size_t q = 0; q < arguments.size(); ++q)
           if (arguments[p] == arguments[q] && same_owner(method, p, q)) {
             targets.targets.insert(q);
-            if (argument_mode(method.source->parameters[p]) != ArgumentMode::borrowed_ref &&
-                argument_mode(method.source->parameters[q]) == ArgumentMode::borrowed_ptr)
+            if (argument_mode(method.input_parameters()[p]) != ArgumentMode::borrowed_ref &&
+                argument_mode(method.input_parameters()[q]) == ArgumentMode::borrowed_ptr)
               targets.null_sources.insert(q);
           }
       }
@@ -1783,16 +1796,16 @@ class ScalarChecker {
       if (!role) continue;
       const bool readonly = !contract.const_views.empty() && contract.const_views.at(i);
       const auto &view = views[i];
-      if (view.owners.size() != 1) fail(expr.children[i + offset]->at, "borrowed argument requires one statically provable owner");
+      if (view.owners.size() != 1) fail(operation.argument(expr, i + offset).at, "borrowed argument requires one statically provable owner");
       const auto owner = *view.owners.begin();
-      require_borrow_lifetime(view, expr.children[i + offset]->at, &expr == prepared_call_);
+      require_borrow_lifetime(view, operation.argument(expr, i + offset).at, &expr == prepared_call_);
       if (const auto [found, inserted] = owners.emplace(role, owner); !inserted) {
         const auto equality = compare_owners(found->second, owner);
         if (equality == OwnerMatch::unknown) implementation_gap(expr.at, "borrowed call requires an unproved owner equality");
         if (equality == OwnerMatch::mismatch) fail(expr.at, "arguments for one owner role have different actual owners");
       }
-      if (!readonly && view.read_only) fail(expr.children[i + offset]->at, "readonly argument cannot supply a writable borrowed parameter");
-      if (arguments[i] != contract.parameters[i]) implementation_gap(expr.children[i + offset]->at, "borrowed exception upcasts");
+      if (!readonly && view.read_only) fail(operation.argument(expr, i + offset).at, "readonly argument cannot supply a writable borrowed parameter");
+      if (arguments[i] != contract.parameters[i]) implementation_gap(operation.argument(expr, i + offset).at, "borrowed exception upcasts");
     }
     operation.type = *contract.target;
     if (operation.type.kind == Type::exception)
@@ -2727,7 +2740,13 @@ class ScalarChecker {
         required.declarations.insert(dependencies.declarations.begin(), dependencies.declarations.end());
         if (!nested.name.empty()) required.declarations.insert(nested.name);
         for (const auto &symbol : dependencies.symbols) use(symbol.name, symbol.at, bound, query, true);
-        if (query) return;
+        if (query) {
+          if (nested.implicit_scope) {
+            for (const auto &capture : dependencies.captures) use(capture.name, capture.at, bound, true);
+            for (const auto &reference : dependencies.queries) use(reference.name, reference.at, bound, true);
+          }
+          return;
+        }
         for (const auto &capture : dependencies.captures) use(capture.name, capture.at, bound, false);
         for (const auto &capture : dependencies.queries) use(capture.name, capture.at, bound, true);
         for (const auto &capture : nested.captures) use(capture.name, capture.at, bound, false);
@@ -2737,6 +2756,8 @@ class ScalarChecker {
       if (expr.kind == K::pointer_group) {
         for (const auto &declaration : expr.children) {
           if (declaration->kind == K::block) { visit(*declaration, bound, query); continue; }
+          if (method.implicit_scope && !declaration->owner_name.empty() && declaration->owner_name != "here")
+            use(declaration->owner_name, declaration->at, bound, query);
           for (const auto &child : declaration->children) visit(*child, bound, query);
           bound.insert(declaration->text);
           required.declarations.insert(declaration->text);
@@ -2910,7 +2931,7 @@ class ScalarChecker {
                              Substitutions &substitutions, bool widening) {
     index = parameter_index(method, index);
     if (bind_type(method, method.parameters[index], argument, substitutions, true)) return true;
-    if (!widening || argument_mode(method.source->parameters[index]) != ArgumentMode::value) return false;
+    if (!widening || argument_mode(method.input_parameters()[index]) != ArgumentMode::value) return false;
     auto target = method.parameters[index];
     if (const auto type = binder(method, target)) {
       // An enclosing type is already fixed. This method's own binders still
@@ -3111,7 +3132,7 @@ class ScalarChecker {
         implementation_gap(method.source->at, "declared result type parameter is not determined by the arguments");
       if (result.borrowed()) {
         for (size_t i = 0; i < arguments.size(); ++i) if (parameter_at(*declaration, i).owner == result.owner) {
-          const auto &mapped = method.source->parameters[i].owner;
+          const auto &mapped = method.input_parameters()[i].owner;
           if (!mapped.empty()) owner_roles.insert(mapped);
         }
         if (owner_roles.empty()) implementation_gap(method.source->at, "declared result owner is not established by a parameter");
@@ -3121,8 +3142,8 @@ class ScalarChecker {
         do {
           previous = owner_roles.size();
           for (size_t i = 0; i < arguments.size(); ++i) for (size_t j = 0; j < arguments.size(); ++j)
-            if (same_owner(*declaration, i, j) && owner_roles.contains(method.source->parameters[i].owner))
-              owner_roles.insert(method.source->parameters[j].owner);
+            if (same_owner(*declaration, i, j) && owner_roles.contains(method.input_parameters()[i].owner))
+              owner_roles.insert(method.input_parameters()[j].owner);
         } while (owner_roles.size() != previous);
         result.owner = *owner_roles.begin();
       }
@@ -3189,8 +3210,8 @@ class ScalarChecker {
         if (stricter_owners && match_owners(alternative, owners, state) != OwnerMatch::satisfied) return false;
         bool strict = !implies(definition, alternative, widening) || stricter_owners;
         for (size_t i = 0; i < alternative.parameters.size(); ++i) {
-          const auto exact = alternative.source->parameters[i].read_only;
-          if (exact == definition.source->parameters[i].read_only) continue;
+          const auto exact = alternative.input_parameters()[i].read_only;
+          if (exact == definition.input_parameters()[i].read_only) continue;
           if (i >= access.size() || !access[i] || exact != *access[i]) return false;
           strict = true;
         }
@@ -3245,6 +3266,7 @@ class ScalarChecker {
     const auto &target = program_.instances[*operation.callee];
     const auto &method = program_.methods[target.method];
     const auto &definition = *method.source;
+    const auto &parameters = method.input_parameters();
     if (std::any_of(operation.arguments.begin(), operation.arguments.end(), [&](const auto &argument) {
           return argument.binding_slot != caller_bindings(method);
         })) implementation_gap(expr.at, "selected method requires unproved slot preparation adaptation");
@@ -3253,7 +3275,7 @@ class ScalarChecker {
         if (&expr == prepared_call_) require_deferred_slots(views[i], expr.at);
         for (const auto slot : physical_slots(views[i].slots)) {
           const auto &binding = bindings_->at(slot);
-          if (binding.read_only != definition.parameters[i].read_only && proving_ && validating_) {
+          if (binding.read_only != parameters[i].read_only && proving_ && validating_) {
             const auto &sources = read_effects(*operation.callee).binding_sources;
             const auto found = sources.find(i);
             const bool preserved = found != sources.end() && !found->second.empty() &&
@@ -3266,7 +3288,7 @@ class ScalarChecker {
                 });
             if (!preserved) implementation_gap(expr.at, "caller-binding target permission preservation remains unproved");
           }
-          if (binding.requires_initialized && argument_mode(definition.parameters[i]) != ArgumentMode::borrowed_ref && proving_ && validating_) {
+          if (binding.requires_initialized && argument_mode(parameters[i]) != ArgumentMode::borrowed_ref && proving_ && validating_) {
             const auto &sources = read_effects(*operation.callee).binding_sources;
             const auto found = sources.find(i);
             const bool preserved = found != sources.end() && !found->second.empty() &&
@@ -3283,7 +3305,7 @@ class ScalarChecker {
       }
     }
     for (size_t i = 0; i < arguments.size(); ++i) {
-      const auto mode = argument_mode(definition.parameters[i]);
+      const auto mode = argument_mode(parameters[i]);
       if (operation.destination_arguments) {
         operation.arguments[i].mode = mode;
         if (completes) prepare_borrow(views[i], mode, expr.children[i]->at);
@@ -3533,13 +3555,43 @@ class ScalarChecker {
         found->second.fixed_binding = false;
         found->second.slot_read_only = found->second.read_only;
       }
-    for (size_t i = 0; i < method.source->owner_parameters.size(); ++i) {
+    for (size_t i = 0; i < method.input_owners().size(); ++i) {
       const auto owner = EvidenceOwner::parameter(i);
-      state.owner_bindings[method.source->owner_parameters[i].name] = owner;
+      state.owner_bindings[method.input_owners()[i].name] = owner;
       state.external_owners.insert(owner);
     }
+    if (method.scope_inputs) {
+      const auto &profile = *method.scope_inputs;
+      std::map<EvidenceOwner, EvidenceOwner> forwarded;
+      const auto retain = [&](const std::string &name, std::optional<EvidenceOwner> caller) {
+        if (!caller) return;
+        const auto role = std::find_if(profile.owners.begin(), profile.owners.end(),
+            [&](const auto &owner) { return owner.name == name; });
+        if (role != profile.owners.end())
+          forwarded.emplace(*caller, EvidenceOwner::parameter(std::distance(profile.owners.begin(), role)));
+      };
+      for (const auto &parameter : profile.parameters)
+        if (!parameter.owner.empty() && state.views.contains(parameter.name))
+          retain(parameter.owner, state.views.at(parameter.name).owner);
+      for (const auto &[name, role] : profile.owner_names)
+        if (context.owner_bindings.contains(name))
+          retain(profile.owners[role].name, context.owner_bindings.at(name));
+      for (auto &[name, view] : state.views)
+        if (view.owner && forwarded.contains(*view.owner)) view.owner = forwarded.at(*view.owner);
+      for (auto &[name, owner] : state.owner_bindings)
+        if (forwarded.contains(owner)) owner = forwarded.at(owner);
+      for (const auto &[pair, relation] : context.owner_relations) {
+        const auto translate = [&](EvidenceOwner owner) { return forwarded.contains(owner) ? forwarded.at(owner) : owner; };
+        state.owner_relations[{translate(pair.first), translate(pair.second)}] = relation;
+      }
+      for (const auto &[name, role] : profile.owner_names)
+        state.owner_bindings[name] = EvidenceOwner::parameter(role);
+      for (size_t i = 0; i < profile.owners.size(); ++i)
+        for (size_t j = 0; j < profile.owners.size(); ++j)
+          state.owner_relations[{EvidenceOwner::parameter(i), EvidenceOwner::parameter(j)}] = profile.relations[i][j];
+    }
     for (size_t i = 0; i < method.parameters.size(); ++i) {
-      const auto &parameter = method.source->parameters[i];
+      const auto &parameter = method.input_parameters()[i];
       const bool value = parameter.owner.empty();
       const bool independent = parameter.declaration_kind == "val" || (value && arguments[i].kind == Type::procedure);
       state.bindings[parameter.name] = arguments[i];
@@ -3717,7 +3769,7 @@ class ScalarChecker {
     const auto parent = state ? state->method : checking_instance_ ? std::optional<size_t>{checking_instance_->method} : std::nullopt;
     if (parent == id) retained = state ? state->retained : checking_instance_->retained_types;
     else if (!method.retained_types.empty()) {
-      if (method.parent != parent || !parent) return {};
+      if (method.parent != lexical_template(parent) || !parent) return {};
       const auto &substitutions = state ? state->substitutions : checking_instance_->substitutions;
       for (const auto index : method.retained_types) {
         const auto &type = substitutions.at(index);
@@ -3780,11 +3832,11 @@ class ScalarChecker {
     if (expr.text != "category" && expr.text != "site" && expr.text != "requested" && expr.text != "available" && expr.text != "cause_count")
       fail(expr.at, "unknown intrinsic exception field '" + expr.text + "'");
   }
-  void check_query_binding(const std::string &name, const Location &at) const {
+  void check_query_binding(const std::string &name, const Location &at, bool owner_metadata = false) const {
     if (const auto id = lexical_.lookup(name)) {
       if (!lexical_.bindings_available.contains(*id))
         fail(at, "binding '" + name + "' is not available on every reaching path");
-      if (bindings_->at(*id).owner_binding) fail(at, "owner binding is not a value in typeof");
+      if (bindings_->at(*id).owner_binding && !owner_metadata) fail(at, "owner binding is not a value in typeof");
     }
   }
   static ViewEvidence join_views(const ViewEvidence &a, const ViewEvidence &b) {
@@ -3910,7 +3962,10 @@ class ScalarChecker {
     case K::touch: return Type::void_type;
     case K::name:
       if (!state.complete) return {};
-      if (state.required) check_query_binding(expr.text, expr.at);
+      if (state.required) {
+        if (state.owner_bindings.contains(expr.text)) fail(expr.at, "owner binding is not a value in typeof");
+        if (!state.validating_body) check_query_binding(expr.text, expr.at);
+      }
       if (const auto found = state.bindings.find(expr.text); found != state.bindings.end() && !state.definitions.contains(expr.text)) {
         view = state.views.at(expr.text); return found->second;
       }
@@ -4299,7 +4354,7 @@ class ScalarChecker {
             method.source->kind == Form::Kind::procedure)
           fail(expr.at, "a function cannot invoke a procedure");
         if (state.required) for (size_t i = 0; i < arguments.size(); ++i)
-          if (argument_mode(method.source->parameters[i]) != ArgumentMode::value && (views[i].view != true || views[i].mixed_view))
+          if (argument_mode(method.input_parameters()[i]) != ArgumentMode::value && (views[i].view != true || views[i].mixed_view))
             implementation_gap(expr.at, "borrowed parameter requires an existing view");
         const auto type = infer_result(id, arguments, retained, family.declaration ? family.declaration : &state);
         if (!type || nested_binder(method, *type->type) || (result && result != type->type)) return {};
@@ -4389,6 +4444,7 @@ class ScalarChecker {
     for (const auto &binding : query_environment().bindings) if (selected(binding.name)) {
       state.bindings[binding.name] = binding.type;
       state.views[binding.name] = binding.view;
+      if (binding.owner_binding) state.owner_bindings[binding.name] = *binding.owner_binding;
     }
     const auto retain_binding = [&](const std::string &name, size_t id) {
       const auto &binding = bindings_->at(id);
@@ -4435,7 +4491,7 @@ class ScalarChecker {
     return state;
   }
   size_t retain_query_environment(const CheckedMethod &method, const std::optional<ResultContract> &result = {},
-                                  const TypeEvidenceState *declaration = nullptr) {
+                                  const TypeEvidenceState *declaration = nullptr, const std::vector<size_t> &scope_owners = {}) {
     const auto &symbols = free_bindings(*method.source).symbols;
     if (method.queries.empty() && symbols.empty() && !result) return 0;
     QueryEnvironment environment;
@@ -4445,8 +4501,14 @@ class ScalarChecker {
       for (const auto &symbol : symbols)
         if (symbol_shadowed(symbol.name, state)) environment.symbol_shadows.insert(symbol.name);
     std::vector<EvidenceOwner> owners;
+    const auto retained_owner = [&](EvidenceOwner owner) {
+      const auto prior = std::find(owners.begin(), owners.end(), owner);
+      const auto id = std::distance(owners.begin(), prior);
+      if (prior == owners.end()) owners.push_back(owner);
+      return EvidenceOwner::retained(id);
+    };
     for (const auto &query : method.queries) {
-      check_query_binding(query.name, query.at);
+      check_query_binding(query.name, query.at, true);
       const auto found = state.bindings.find(query.name);
       if (found == state.bindings.end() && lexical_self(query.name, state.method)) {
         const auto type = callable_query({*state.method}, nullptr, query.at, state);
@@ -4457,18 +4519,20 @@ class ScalarChecker {
       if (found == state.bindings.end() || !found->second)
         implementation_gap(query.at, "typeof requires a known lexical declaration with a proved result contract");
       auto view = state.views.at(query.name);
-      if (view.owner) {
-        const auto prior = std::find(owners.begin(), owners.end(), *view.owner);
-        const auto id = std::distance(owners.begin(), prior);
-        if (prior == owners.end()) owners.push_back(*view.owner);
-        view.owner = EvidenceOwner::retained(id);
-      }
-      environment.bindings.push_back({query.name, *found->second, view});
+      if (view.owner) view.owner = retained_owner(*view.owner);
+      std::optional<EvidenceOwner> owner;
+      if (const auto named = state.owner_bindings.find(query.name); named != state.owner_bindings.end())
+        owner = retained_owner(named->second);
+      environment.bindings.push_back({query.name, *found->second, view, owner});
     }
     for (const auto owner : owners) {
       std::vector<OwnerMatch> relations;
       for (const auto other : owners) relations.push_back(compare_owners(owner, other));
       environment.owners.push_back(std::move(relations));
+      if (!scope_owners.empty()) {
+        auto &incoming = environment.scope_owners.emplace_back();
+        for (const auto other : scope_owners) incoming.push_back(compare_owners(owner, other));
+      }
     }
     const auto found = std::find(program_.query_environments.begin(), program_.query_environments.end(), environment);
     const auto id = std::distance(program_.query_environments.begin(), found);
@@ -4499,7 +4563,7 @@ class ScalarChecker {
     const auto role = expected.owners.empty() ? 0 : expected.owners.back();
     if (!role) implementation_gap(at, "expected borrowed result requires an independently established owner");
     for (size_t i = 0; i < expected.parameters.size(); ++i) if (expected.owners[i] == role) {
-      const auto &owner = method.source->parameters[i].owner;
+      const auto &owner = method.input_parameters()[i].owner;
       if (owner.empty() || (!result.owner.empty() && result.owner != owner))
         implementation_gap(at, "expected result owner does not map to one definition owner");
       result.owner = owner;
@@ -4555,7 +4619,7 @@ class ScalarChecker {
   }
   static bool fixed_parameters(const CheckedMethod &method, const Type &view, const InputDomains &domains) {
     if (variadic(method) || !method.type_parameters.empty() || !method.retained_types.empty() ||
-        !method.source->owner_parameters.empty() || caller_bindings(method) ||
+        !method.input_owners().empty() || caller_bindings(method) ||
         method.parameters.size() != domains.size() || !view.value_result || method.result.mode != ResultMode::value)
       return false;
     for (size_t i = 0; i < domains.size(); ++i)
@@ -4702,7 +4766,7 @@ class ScalarChecker {
     if (state.method == id) return state.retained;
     std::vector<Type> retained;
     if (!definition.retained_types.empty()) {
-      if (definition.parent != state.method)
+      if (definition.parent != lexical_template(state.method))
         implementation_gap(definition.source->at, "callable definition lacks its enclosing type context");
       for (const auto index : definition.retained_types) {
         const auto &type = state.substitutions.at(index);
@@ -4725,7 +4789,7 @@ class ScalarChecker {
     const auto parent = state ? state->method : checking_instance_ ? std::optional<size_t>{checking_instance_->method} : std::nullopt;
     if (parent == family.front()) retained = state ? state->retained : checking_instance_->retained_types;
     else if (!definition.retained_types.empty()) {
-      if (!parent || definition.parent != parent) return {};
+      if (!parent || definition.parent != lexical_template(parent)) return {};
       const auto &substitutions = state ? state->substitutions : checking_instance_->substitutions;
       for (const auto index : definition.retained_types) {
         const auto &type = substitutions.at(index);
@@ -5026,9 +5090,116 @@ class ScalarChecker {
     }
     return materialized_value(id, {}, at);
   }
+  const Expression &scope_operand(size_t method, const Capture &capture) {
+    const auto key = std::pair{method, capture.name};
+    if (const auto found = scope_operand_names_.find(key); found != scope_operand_names_.end()) return *found->second;
+    auto operand = std::make_unique<Expression>();
+    operand->kind = Expression::Kind::name; operand->at = capture.at; operand->text = capture.name;
+    const auto &stored = *program_.scope_operands.emplace_back(std::move(operand));
+    scope_operand_names_.emplace(key, &stored);
+    return stored;
+  }
+  size_t scope_profile(CheckedMethod::ScopeInputs inputs) {
+    auto &profiles = scope_profiles_[inputs.lexical_method];
+    for (const auto id : profiles) {
+      const auto &candidate = *program_.methods[id].scope_inputs;
+      if (candidate.owner_names != inputs.owner_names || candidate.relations != inputs.relations ||
+          candidate.nonnull != inputs.nonnull || candidate.parameters.size() != inputs.parameters.size()) continue;
+      if (std::equal(candidate.parameters.begin(), candidate.parameters.end(), inputs.parameters.begin(),
+          [](const auto &a, const auto &b) {
+            return a.name == b.name && a.owner == b.owner && a.declaration_kind == b.declaration_kind &&
+                a.fixed_binding == b.fixed_binding && a.read_only == b.read_only;
+          })) return id;
+    }
+    auto method = program_.methods[inputs.lexical_method];
+    method.instances.clear(); method.captures.clear();
+    for (auto &parameter : inputs.parameters) {
+      const auto name = "$scope.input." + std::to_string(method.parameters.size());
+      parameter.type = Type{Type::named, name};
+      method.parameters.push_back(parameter.type);
+      method.type_parameters.push_back(name);
+    }
+    method.scope_inputs = std::move(inputs);
+    const auto id = program_.methods.size();
+    program_.methods.push_back(std::move(method));
+    profiles.push_back(id);
+    return id;
+  }
+  void check_scope_call(const Expression &expr, size_t method_id, CheckedInstance *instance,
+      std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation, bool read, bool discard) {
+    auto &method = program_.methods[method_id];
+    resolve_captures(method);
+    const auto &dependencies = definition_dependencies(*method.source);
+    const auto state = evidence_state(false, &dependencies);
+    const auto retained = definition_retained(method_id, state);
+    CheckedMethod::ScopeInputs inputs{method_id, {}, {}, {}, {}, {}};
+    operation.scope_operands.emplace();
+    std::map<size_t, size_t> owner_roles;
+    const auto owner_role = [&](size_t actual, const Location &at) {
+      if (lexical_.live && !owner_alive(actual)) fail(at, "full-scope input owner has ended");
+      const auto [role, inserted] = owner_roles.emplace(actual, owner_roles.size());
+      if (inserted) {
+        operation.scope_owners.push_back(actual);
+        inputs.owners.push_back({"$scope.owner." + std::to_string(role->second), {}, at});
+      }
+      return role->second;
+    };
+    std::vector<Type> arguments;
+    std::vector<CheckedOperation> views;
+    for (const auto &capture : method.captures) {
+      const auto binding = lexical_.lookup(capture.name);
+      const auto *source = binding ? &bindings_->at(*binding) : nullptr;
+      if (source && source->owner_binding) {
+        inputs.owner_names.emplace(capture.name, owner_role(named_owner(capture.name, capture.at), capture.at));
+        continue;
+      }
+      if (source && (source->alias || !source->selection.empty()))
+        implementation_gap(capture.at, "capture of a declared place alias requires selected-place lifetime and transport proof");
+      const bool independent = !source || source->value_binding || source->callable_value || source->definition;
+      Parameter parameter; parameter.name = capture.name; parameter.at = capture.at;
+      parameter.declaration_kind = independent ? "val" : source->requires_initialized ? "ref" : "ptr";
+      parameter.fixed_binding = !independent && source->fixed;
+      const auto &operand = scope_operand(method_id, capture);
+      const auto type = check(operand, instance, operations, independent);
+      const auto &view = operations.at(&operand);
+      if (!lexical_value_type(type))
+        implementation_gap(capture.at, "full-scope input requires an admitted target or independent value type");
+      parameter.read_only = view.read_only;
+      if (!independent) {
+        if (view.owners.size() != 1)
+          implementation_gap(capture.at, "full-scope reference input requires one statically provable owner");
+        require_borrow_lifetime(view, capture.at, false);
+        parameter.owner = inputs.owners[owner_role(*view.owners.begin(), capture.at)].name;
+      } else if (type.kind == Type::procedure) {
+        note_abrupt(capture.at, {exception_id(ExceptionCategory::out_of_memory)});
+      }
+      const auto mode = argument_mode(parameter);
+      prepare_borrow(view, mode, capture.at);
+      inputs.nonnull.push_back(!independent && !view.targets.empty() && !view.targets.contains(null_target));
+      inputs.parameters.push_back(std::move(parameter));
+      operation.scope_operands->push_back(&operand);
+      operation.arguments.push_back({mode, type});
+      arguments.push_back(type);
+      views.push_back(view);
+    }
+    for (const auto a : operation.scope_owners) {
+      auto &relations = inputs.relations.emplace_back();
+      for (const auto b : operation.scope_owners) relations.push_back(compare_owners(a, b));
+    }
+    const auto query = retain_query_environment(method, {}, &state, operation.scope_owners);
+    const auto profile = scope_profile(std::move(inputs));
+    const auto target = demand(profile, arguments, expr.at, {}, retained, query, &state);
+    operation.callee = target;
+    const auto &selected = program_.instances[target];
+    auto contract = callable_type(program_.methods[profile], selected.arguments, selected.result);
+    const auto &effects = read_effects(target);
+    for (const auto failure : effects.scope_checked_failures) contract.throws_types.push_back(exception_type(failure));
+    if (deferred_action_ && !effects.scope_checked_failures.empty())
+      deferred_actions_with_checked_scopes_.insert(*deferred_action_);
+    finish_call(expr, contract, effects, call_reasons(contract), arguments, views, operation, read, discard, 0, true);
+  }
   void check_value_call(const Expression &expr, const Type &contract, size_t offset, CheckedInstance *instance,
-      std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation, bool read, bool discard,
-      std::optional<size_t> immediate_scope = {}) {
+      std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation, bool read, bool discard) {
     note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
     if (checking_method_ && checking_method_->source->kind == Form::Kind::function && !contract.pure_callable)
       fail(expr.at, "a function cannot invoke a procedure");
@@ -5054,20 +5225,6 @@ class ScalarChecker {
       operation.arguments.push_back({mode, argument == Type::never ? parameter : argument});
     }
     if (!completes) { operation.type = Type::never; return; }
-    if (immediate_scope) {
-      const auto &callable = program_.callables.at(*immediate_scope);
-      operation.callable_choices = std::set<size_t>{*immediate_scope};
-      const auto &effects = read_effects(callable.target(arguments));
-      // The internal interface belongs to this checked invocation. Keep it
-      // out of the materialized view used for native dispatch.
-      auto invocation = contract;
-      for (const auto failure : effects.scope_checked_failures)
-        invocation.throws_types.push_back(exception_type(failure));
-      if (deferred_action_ && !effects.scope_checked_failures.empty())
-        deferred_actions_with_checked_scopes_.insert(*deferred_action_);
-      finish_call(expr, invocation, effects, call_reasons(invocation), arguments, views, operation, read, discard, offset, true);
-      return;
-    }
     if (checking_context_ < callable_choices_.size())
       if (const auto found = callable_choices_[checking_context_].find(&expr); found != callable_choices_[checking_context_].end())
         operation.callable_choices = found->second;
@@ -5548,6 +5705,11 @@ class ScalarChecker {
       }
       if (expr.kind == K::value_call || (!expr.intrinsic && lexical_.lookup(expr.text) && named_family(expr.text).methods.empty())) {
         const size_t offset = expr.kind == K::value_call ? 1 : 0;
+        const auto *definition = offset ? expr.children.front()->definition.get() : nullptr;
+        if (definition && definition->implicit_scope) {
+          check_scope_call(expr, lexical_method(definition), instance, operations, operation, read, discard);
+          break;
+        }
         CheckedOperation target;
         if (offset) { child(0); target = operations.at(expr.children.front().get()); }
         else target = read_binding(expr);
@@ -5558,11 +5720,7 @@ class ScalarChecker {
           operation.callable_nullable = target.targets.contains(null_target);
           operation.callable_targets = target.targets;
         }
-        const auto *definition = offset ? expr.children.front()->definition.get() : nullptr;
-        if (definition && definition->implicit_scope && !target.callable)
-          throw std::logic_error("immediate scope lacks its selected callable");
-        check_value_call(expr, target.type, offset, instance, operations, operation, read, discard,
-                         definition && definition->implicit_scope ? target.callable : std::nullopt);
+        check_value_call(expr, target.type, offset, instance, operations, operation, read, discard);
         break;
       }
       if (expr.intrinsic && !eager && expr.text != "cause_at")
@@ -6386,7 +6544,7 @@ class ScalarChecker {
       const auto &instance = program_.instances[target - 1];
       for (size_t i = 0; i < instance.arguments.size(); ++i) {
         if (instance.arguments[i].kind != Type::procedure) continue;
-        const auto *argument = expr.children.at(i + offset).get();
+        const auto *argument = &fact.argument(expr, i + offset);
         const auto &input = instance.frame.inputs.at(i);
         if (input.mode == ArgumentMode::value)
           edges.emplace_back(expression(c, argument), contexts[target].places.at(input.place));
@@ -6642,11 +6800,21 @@ class ScalarChecker {
     check_flow([&](bool proving) {
       begin_check(instance.storage, instance.bindings, instance.operations, proving);
       instance.frame = {};
-      for (size_t i = 0; i < method.owner_parameters.size(); ++i)
-        external_owners_[method.owner_parameters[i].name] = null_target - 1 - i;
-      for (const auto &owner : method.owner_parameters) {
+      for (size_t i = 0; i < checking_method_->input_owners().size(); ++i)
+        external_owners_[checking_method_->input_owners()[i].name] = null_target - 1 - i;
+      for (const auto &owner : checking_method_->input_owners()) {
         const auto id = bind(owner.name, Type::void_type, {}, true, true, true, owner.at);
         bindings_->at(id).owner_binding = external_owners_.at(owner.name);
+      }
+      if (checking_method_->scope_inputs) {
+        const auto &profile = *checking_method_->scope_inputs;
+        for (const auto &[name, role] : profile.owner_names) {
+          const auto &owner = profile.owners.at(role);
+          const auto actual = external_owners_.at(owner.name);
+          const auto id = bind(name, Type::void_type, {}, true, true, true, owner.at, {}, false);
+          bindings_->at(id).owner_binding = actual;
+          external_owners_.emplace(name, actual);
+        }
       }
       for (size_t c = 0; c < instance.environment.size(); ++c) {
         const auto &capture = checking_method_->captures[c];
@@ -6656,10 +6824,11 @@ class ScalarChecker {
         bindings_->back().callable_value = input.type.kind == Type::procedure;
         initialize(id);
       }
-      for (size_t p = 0; p < method.parameters.size(); ++p) {
-        const auto &parameter = method.parameters[p];
+      for (size_t p = 0; p < checking_method_->input_parameters().size(); ++p) {
+        const auto &parameter = checking_method_->input_parameters()[p];
         const bool value = parameter.declaration_kind == "val";
-        const auto id = declare(parameter.name, instance.arguments[p], parameter.read_only || (value && parameter.fixed_binding), value, parameter.at);
+        const auto id = declare(parameter.name, instance.arguments[p], parameter.read_only || (value && parameter.fixed_binding),
+                                value, parameter.at, !checking_method_->scope_inputs);
         const auto binding = storage_->at(id).binding;
         instance.frame.inputs.push_back({id, argument_mode(parameter), caller_bindings(*checking_method_)});
         bindings_->back().fixed = parameter.fixed_binding;
@@ -6673,12 +6842,14 @@ class ScalarChecker {
           incoming_selections_.emplace(id, lexical_.selection_identities.at(binding));
           std::erase(scope_storage_[0], id);
           lexical_.owners[binding] = {owner};
-          if (parameter.declaration_kind == "ptr") {
+          const bool nonnull = checking_method_->scope_inputs && checking_method_->scope_inputs->nonnull.at(p);
+          if (parameter.declaration_kind == "ptr" && !nonnull) {
             lexical_.targets[binding].insert(null_target);
             lexical_.null_sources[binding] = {id};
             assign_selection(lexical_, binding, selection_targets(lexical_.targets[binding]));
             if (!proving) { possible_targets_[binding].insert(null_target); possible_null_sources_[binding] = {id}; }
           }
+          if (nonnull) record_presence({id});
         }
         if (argument_mode(parameter) != ArgumentMode::borrowed_ptr) {
           initialize(id);
@@ -6698,6 +6869,9 @@ class ScalarChecker {
           lexical_.predicates[id] = std::move(proof);
         }
       }
+      if (checking_method_->scope_inputs)
+        for (const auto &owner : checking_method_->input_owners())
+          instance.frame.owners.try_emplace(external_owners_.at(owner.name), null_target);
       if (caller_bindings(*checking_method_)) for (const auto &a : instance.frame.inputs)
         for (const auto &b : instance.frame.inputs) {
           const auto left = storage(a.place).binding, right = storage(b.place).binding;
@@ -7233,7 +7407,7 @@ class ScalarChecker {
         const auto &definition = program_.methods[other];
         if (implies(prepared, definition) && implies(definition, prepared)) {
           for (size_t p = 0; p < form->parameters.size(); ++p) {
-            if (form->parameters[p].owner.empty() != definition.source->parameters[p].owner.empty())
+            if (form->parameters[p].owner.empty() != definition.input_parameters()[p].owner.empty())
               implementation_gap(form->at, "owner-constrained overload selection");
           }
           if (same_access(prepared, definition) && implies_owners(prepared, definition) && implies_owners(definition, prepared))
