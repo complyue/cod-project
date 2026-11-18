@@ -4691,13 +4691,14 @@ class ScalarChecker {
     account();
     for (;;) {
       if (depth == varying.size()) {
-        validate(arguments);
         if (const auto &example = plan.widening_example) {
-          account();
+          // The admitted narrower types precede the exact type in the domain.
           auto widened = arguments;
           widened.at(example->first) = example->second;
           validate(widened);
+          account();
         }
+        validate(arguments);
       } else {
         const auto input = varying[depth];
         if (next[depth] < plan.domains[input].size()) {
@@ -4773,14 +4774,12 @@ class ScalarChecker {
       if (!context) return plan;
       contexts.push_back(std::move(*context));
     }
-    // Equal qualifiers preserve fixed-signature dominance across phases.
-    // Generic candidates also need the shared-input widening distinction.
-    for (size_t i = 0; i < domains.size(); ++i)
-      if (std::any_of(contracts.begin(), contracts.end(), [&](const auto *contract) {
-            return parameter_at(*contract, i).read_only != parameter_at(*contracts.front(), i).read_only;
-          })) return plan;
-    const bool phase_sensitive = std::any_of(contracts.begin(), contracts.end(),
-        [](const auto *contract) { return !contract->type_parameters.empty(); });
+    // The view fixes access throughout coverage. Qualifier differences can
+    // affect dominance when more candidates enter the lossless phase, even
+    // for fixed formals. Generic candidates can also distinguish the phases.
+    const bool phase_sensitive = std::any_of(contracts.begin(), contracts.end(), [&](const auto *contract) {
+      return !contract->type_parameters.empty() || !same_access(*contract, *contracts.front());
+    });
     CallableSelectionInputs selection;
     bool always_widens = false;
     for (size_t i = 0; i < domains.size(); ++i) {

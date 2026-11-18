@@ -108,6 +108,42 @@ runner.CASES['generic_phase_signature_query'] = (
     IO + phase_family(COUNT) + 'func inspect(value:' + VIEW + ')->u64;'
     'val mark<-make local typeof(inspect(choose)){7u64};behave @print(mark);', 0, '7\n', '')
 
+
+def qualified_phase_family(count):
+    readonly = parameters(count, first='const u64')
+    return phase_family(count) + f'func choose({readonly})->u64{{return 303u64;}}'
+
+
+for count in (16, 32):
+    compare_phase_selection(f'qualified_phase_width_{count}', qualified_phase_family(count), ['u64'] * count, [
+        (['u8'] + ['u64'] * (count - 1), 101),
+        (['u8', 'u8'] + ['u64'] * (count - 2), 202),
+        (['u32'] + ['u64'] * (count - 2) + ['u32'], 202),
+        (['u64'] * count, 202),
+    ])
+runner.CASES['qualified_phase_signature_query'] = (
+    IO + qualified_phase_family(COUNT) + 'func inspect(value:' + VIEW + ')->u64;'
+    'val mark<-make local typeof(inspect(choose)){7u64};behave @print(mark);', 0, '7\n', '')
+QUALIFIED_SYMBOL = qualified_phase_family(COUNT).replace('func choose(', 'proc @choose(').replace('u64;}', 'u64+@bias;}')
+EXACT_TAIL = ','.join(['1u8'] + ['1u64'] * (COUNT - 1))
+runner.CASES['qualified_symbol_uses_both_phases'] = (
+    IO + 'symbol @bias:u64;symbol @choose:' + view(kind='proc') + ';' + QUALIFIED_SYMBOL +
+    'effect @bias<-1u64;effect @choose;effect @bias<-7u64;'
+    f'behave @print(perform @choose({EXACT_TAIL}));'
+    f'behave @print(behave @choose({ARGUMENTS}));', 0, '102\n209\n', '')
+
+QUALIFIED = 'func choose(' + parameters(first='const u64') + ')->u64{return 202u64;}'
+READONLY_VIEW = VIEW.replace('func(u64', 'func(const u64', 1)
+TAIL = ','.join(['1u64'] * (COUNT - 1))
+runner.CASES['view_keeps_declared_access'] = (
+    IO + 'func choose(' + PARAMETERS + ')->u64{return 101u64;}' + QUALIFIED +
+    'func open:' + VIEW + '=choose;func fixed:' + READONLY_VIEW + '=choose;const val arg<-1u8;'
+    f'behave @print(choose(1u8,{TAIL}));behave @print(open(arg,{TAIL}));'
+    f'behave @print(choose(arg,{TAIL}));behave @print(fixed(1u8,{TAIL}));', 0, '101\n101\n202\n202\n', '')
+runner.CASES['qualified_unused_case_must_conform'] = (
+    'func choose(' + parameters(first='u8') + ')->u64{return 101u64;}' + QUALIFIED + HELD,
+    2, '', 'callable view contract')
+
 runner.CASES['returned_complete_capture'] = (IO + BASE +
     'func wrap(callback:' + VIEW + ')->' + VIEW + '{return func[callback](' + PARAMETERS +
     ')->u64{return callback(' + NAMES + ')+1u64;};}func held=wrap(choose);' + CALL,
