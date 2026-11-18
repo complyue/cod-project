@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-18 — Clarify source validity in a full-scope type query
+
+<a id="k-full-scope-query-20261118"></a>
+**K-FULL-SCOPE-QUERY-20261118 — Apply the existing r92 query acceptance.** Mainline’s readonly-write and dynamic-procedure probes expose missing static checks in an inferred `typeof({{ ... }})` body. D-17r93/registry877→878 applies the already confirmed D-17-FULL-SCOPE/P-564–P-566 boundary. The query checks source permissions without creating executable demand. Annotated callable signature queries retain their separate treatment. The qualified acceptance appears at `e617cad669a4f0aaf91f550ec25f28471633f629:design/ExceptionControl.md`, “Checking and queries”. This is a continuity assessment, with no new human decision or compiler-support claim.
+
 ## 2026-11-18 — Specify checked failures for standalone and callback double braces
 
 <a id="h-double-brace-throws-20261118"></a>
