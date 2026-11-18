@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-18 — Account for exception owners at catch and return
+
+<a id="k-explicit-exception-owners-20261118"></a>
+**K-EXPLICIT-EXCEPTION-OWNERS-20261118 — Close the procedure-wide owner review.** The project user in [the design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) asked on 2026-11-18 to evaluate “`catch` 可以引入 `ex`，需要把异常引用返回给 caller 的 callable 在签名里显式声明就行”. D-17r103/source439/registry892 derives that model from H-CATCH-OWNER-TRANSFER-20261118 and H-EXCEPTION-FACTORY-20261118. It distinguishes propagation, result-only owner evidence, input-fixed equality and liveness across cleanup. The universal procedure binder is unnecessary. Physical retention, cross-owner projection proofs and writable handling of readonly arrivals remain separately scoped. This assessment grants no new implementation qualification. Prior scope at `dd304fb24ecd81b902c162f6044ae75e17e0b793:design/ExceptionControl.md`, “Implicit procedure owner under review”.
+
 ## 2026-11-18 — Integrate the exception factory and full-scope records
 
 <a id="k-exception-factory-mainline-20261118"></a>

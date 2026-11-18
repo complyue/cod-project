@@ -1,10 +1,10 @@
 # CoD source compiler validation
 
-Reference revision: 438 · Recorded: 2026-11-18 America/Los_Angeles.
+Reference revision: 439 · Recorded: 2026-11-18 America/Los_Angeles.
 
 ## Design authority
 
-- **Exception object migration.** [H-EXCEPTION-OBJECT-OWNER-20261118](../../../CHANGELOG.md#h-exception-object-owner-20261118) selects [owner-qualified objects and payload transfer](../../../design/ExceptionControl.md#exception-object-owners-and-release). Current native carriers and fixtures exercise independent intrinsic-exception bits in catches, arguments, captures and results. Migration must exercise actual owner/identity preservation, payload lifetime and release across these paths, while retaining checked-failure and trace coverage. The implicit procedure owner and its native transport remain under review.
+- **Exception object migration.** [H-EXCEPTION-OBJECT-OWNER-20261118](../../../CHANGELOG.md#h-exception-object-owner-20261118) selects [owner-qualified objects and payload transfer](../../../design/ExceptionControl.md#exception-object-owners-and-release). Current native carriers and fixtures exercise independent intrinsic-exception bits in catches, arguments, captures and results. Migration must exercise actual owner/identity preservation, payload lifetime and release across these paths, while retaining checked-failure and trace coverage. [D-17r103](../../../design/ExceptionControl.md#exception-owners-across-callable-boundaries) requires evidence from the failure, the catch or an explicit normal-result contract. Native transport and backing lifetime still require implementation evidence.
 
 - **Cause inspection migration.** [H-CAUSE-PTR-TIP-REF-20261118](../../../CHANGELOG.md#h-cause-ptr-tip-ref-20261118) and [H-CAUSE-LINK-ONLY-20261118](../../../CHANGELOG.md#h-cause-link-only-20261118) select readonly cause/tip views in [D-17](../../../design/ExceptionControl.md#exception-construction-throw-and-rethrow) and retire the public `cause_at` intrinsic. The checker and native path still expose indexed inspection. Migrate cause-chain fixtures to successive `.cause` reads and exercise index failures, deferred index timing and bounds opt-out on actual indexed operations as those become available. Preserve cause identity/trace and retained lifetime coverage. The existing indexed fixtures do not establish direct-field support.
 
