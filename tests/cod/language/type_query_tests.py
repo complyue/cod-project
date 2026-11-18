@@ -138,6 +138,34 @@ runner.CASES={
     'return if(input is not null in here){input}else{7u64};'),2,'',UNPROVED_TARGET),
  'projection_loses_replaced_return_predicate_during_defer':(saved_query(
     'const val present<-{{defer{return true;};return input is not null;}};'+GUARDED_RESULT),2,'',UNPROVED_TARGET),
+ 'projection_returns_proof_from_independent_reference_binding':(saved_query(
+    'const val present<-{{ptr same:u64 in O=input;input=null in O;return same is not null;}};'+
+    GUARDED_RESULT),0,'9\n',''),
+ 'projection_carries_observation_to_later_reference_binding':(saved_query(
+    'const val present<-(input is not null);ptr same:u64 in O=input;input=null in O;'
+    'return if(present){same}else{7u64};'),0,'9\n',''),
+ 'projection_imports_observation_of_reference_bound_before_query':(saved_query(
+    'return if(present){same}else{7u64};',setup=
+    'const val present<-(input is not null);ptr same:u64 in O=input;input=null in O;'),0,'9\n',''),
+ 'projection_intersects_equal_selections_across_arms':(saved_query(
+    'ptr left:u64 in O=input,right:u64 in O=input;ptr same:u64 in O=if(flag){left}else{right};'
+    'return if(same is not null){input}else{7u64};'),0,'9\n',''),
+ 'projection_rejects_unrelated_selection_on_one_arm':(saved_query(
+    'ptr left:u64 in O=input,right:u64 in O=input;if(flag){right=null in O;}else{};'
+    'return if(left is not null){right}else{7u64};'),2,'',UNPROVED_TARGET),
+ 'projection_invalidates_relation_when_rebinding_one_slot':(saved_query(
+    'ptr same:u64 in O=input;input=null in O;return if(same is not null){input}else{7u64};'),2,'',UNPROVED_TARGET),
+ 'projection_retains_selected_copy_through_other_operand':(saved_query(
+    'ptr same:u64 in O=input;return if(input is not {input=null in O;null}){same}else{7u64};'),0,'9\n',''),
+ 'projection_preserves_peer_after_reference_swap':(saved_query(
+    'ptr saved:u64 in O=input,other:u64=null in O;input<=>other;'
+    'return if(other is not null){saved}else{7u64};'),0,'9\n',''),
+ 'projection_forgets_changed_selection_at_loop_header':(saved_query(
+    'ptr same:u64 in O=input;for(i in 0u64..2u64){if(same is not null){input}else{7u64};input=null in O;};'
+    'return 7u64;'),2,'',UNPROVED_TARGET),
+ 'projection_checks_reference_kind_before_using_selected_value':(saved_query(
+    'ref same:u64 in O=input;return if(same is not null){input}else{7u64};'),
+    2,'','ref requires a proven non-null target'),
  'arithmetic_without_division':(storage('3/0+4','9'),0,'9\n',''),
  'numeric_widening':(storage('3u8+4u64','9u64'),0,'9\n',''),
  'intrinsic_selected':(storage('intrinsic (+)(3u64,4u64)','9u64'),0,'9\n',''),

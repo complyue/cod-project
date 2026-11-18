@@ -297,6 +297,7 @@ class ScalarChecker {
     std::optional<PresenceBranches> branches;
     EvidencePlaces places;
     bool contextual_null = false;
+    EvidencePlaces same_selected;
   };
   struct QueryPayloadWrites {
     EvidencePlaces places;
@@ -328,6 +329,9 @@ class ScalarChecker {
     std::map<EvidenceSlot, EvidencePlaces> targets;
     std::map<EvidenceSlot, PresenceBranches> booleans;
     std::map<EvidenceSlot, size_t> changed;
+    // The members retain one selected reference value in independent slots.
+    // A write removes the affected slot from its group.
+    std::set<EvidencePlaces> equal_selections;
     QueryPayloadWrites payload_writes, deferred_writes;
     bool deferred_return = false;
 
@@ -335,6 +339,93 @@ class ScalarChecker {
       if (left.empty() || right.empty()) return {};
       left.insert(right.begin(), right.end());
       return left;
+    }
+    static EvidencePlaces common_slots(EvidencePlaces left, const EvidencePlaces &right) {
+      std::erase_if(left, [&](const auto &slot) { return !right.contains(slot); });
+      return left;
+    }
+    const EvidencePlaces *selection_group(const EvidenceSlot &slot) const {
+      for (const auto &group : equal_selections) if (group.contains(slot)) return &group;
+      return nullptr;
+    }
+    EvidencePlaces same_selected(const EvidenceSlot &slot) const {
+      const auto *group = selection_group(slot);
+      return group ? *group : EvidencePlaces{slot};
+    }
+    template <typename Removed> void remove_selected(Removed removed) {
+      std::set<EvidencePlaces> retained;
+      for (auto group : equal_selections) {
+        std::erase_if(group, removed);
+        if (group.size() > 1) retained.insert(std::move(group));
+      }
+      equal_selections = std::move(retained);
+    }
+    bool include_presence(PresenceFacts &into, const PresenceFacts &known) const {
+      std::set<const EvidencePlaces *> expanded;
+      const auto insert = [&](const EvidenceSlot &slot, TargetPresence value) {
+        const auto [entry, inserted] = into.emplace(slot, value);
+        return inserted || entry->second == value;
+      };
+      for (const auto &[slot, fact] : known) {
+        if (!insert(slot, fact)) return false;
+        const auto *group = selection_group(slot);
+        if (group && expanded.insert(group).second)
+          for (const auto &same : *group) if (!insert(same, fact)) return false;
+      }
+      return true;
+    }
+    void retain_selection(const EvidenceSlot &slot, EvidencePlaces selected) {
+      if (selected.empty()) return;
+      selected.insert(slot);
+      if (selected.size() < 2) return;
+      equal_selections.insert(std::move(selected));
+      CleanupEquations::ConditionFacts::close_equalities(equal_selections);
+      auto expanded = facts;
+      if (include_presence(expanded, facts)) facts = std::move(expanded);
+    }
+    std::optional<PresenceBranches> compact(std::optional<PresenceBranches> proof) const {
+      if (!proof || equal_selections.empty()) return proof;
+      for (const bool value : {false, true}) if (auto &observed = proof->at(value)) {
+        PresenceFacts retained;
+        bool consistent = true;
+        for (const auto &[slot, fact] : *observed) {
+          const auto *group = selection_group(slot);
+          const auto [entry, inserted] = retained.emplace(group ? *group->begin() : slot, fact);
+          consistent &= inserted || entry->second == fact;
+        }
+        if (consistent) *observed = std::move(retained);
+        else observed.reset();
+      }
+      return proof;
+    }
+    PresenceBranches expanded(PresenceBranches proof) const {
+      for (const bool value : {false, true}) if (auto &observed = proof.at(value)) {
+        PresenceFacts retained;
+        if (include_presence(retained, *observed)) *observed = std::move(retained);
+        else observed.reset();
+      }
+      return proof;
+    }
+    template <typename Written> void preserve_observations(Written written) {
+      if (booleans.empty()) return;
+      std::map<EvidenceSlot, EvidenceSlot> replacements;
+      for (const auto &group : equal_selections) {
+        const auto survivor = std::find_if_not(group.begin(), group.end(), written);
+        if (survivor == group.end()) continue;
+        for (const auto &slot : group) if (written(slot)) replacements.emplace(slot, *survivor);
+      }
+      for (auto &[place, proof] : booleans) for (const bool value : {false, true}) if (auto &observed = proof.at(value)) {
+        PresenceFacts retained;
+        bool consistent = true;
+        for (const auto &[slot, fact] : *observed) {
+          const auto replacement = replacements.find(slot);
+          if (replacement == replacements.end() && written(slot)) continue;
+          const auto [entry, inserted] = retained.emplace(replacement == replacements.end() ? slot : replacement->second, fact);
+          consistent &= inserted || entry->second == fact;
+        }
+        if (consistent) *observed = std::move(retained);
+        else observed.reset();
+      }
     }
     static std::optional<PresenceBranches> alternatives(std::optional<PresenceBranches> left,
                                                          const std::optional<PresenceBranches> &right) {
@@ -365,19 +456,21 @@ class ScalarChecker {
       for (const auto &place : places) {
         const auto found = booleans.find(place);
         if (found == booleans.end()) return {};
-        result = first ? std::optional{found->second} : alternatives(std::move(result), found->second);
+        const auto stored = compact(found->second);
+        result = first ? stored : alternatives(std::move(result), stored);
         first = false;
       }
-      return result;
+      return result ? std::optional{expanded(std::move(*result))} : std::nullopt;
     }
     void write_boolean(const EvidencePlaces &places, const std::optional<PresenceBranches> &proof) {
       if (!tracking) return;
       payload_writes.record(places);
       if (places.empty()) { booleans.clear(); return; }
+      const auto incoming = compact(proof);
       for (const auto &place : places) {
         const auto before = booleans.find(place);
-        const auto assigned = places.size() == 1 ? proof : alternatives(
-            before == booleans.end() ? std::nullopt : std::optional{before->second}, proof);
+        const auto assigned = places.size() == 1 ? incoming : alternatives(
+            before == booleans.end() ? std::nullopt : compact(before->second), incoming);
         if (assigned) booleans.insert_or_assign(place, *assigned);
         else booleans.erase(place);
       }
@@ -400,20 +493,30 @@ class ScalarChecker {
       }
       return known->second;
     }
-    void bind(const std::string &name, EvidenceSlot slot, TargetPresence known, const EvidencePlaces &places = {}) {
+    void bind(const std::string &name, EvidenceSlot slot, TargetPresence known, const EvidencePlaces &places = {},
+              EvidencePlaces selected = {}) {
       if (!tracking) return;
+      if (footprints.contains(slot)) {
+        // A declaration can be reached again during an abstract iteration.
+        assign({slot, {slot}}, known, places, std::move(selected));
+        bindings[name] = {slot, {slot}};
+        return;
+      }
       bindings[name] = {slot, {slot}};
       footprints[slot] = {slot};
       if (known == TargetPresence::unknown) facts.erase(slot);
       else facts[slot] = known;
       if (places.empty()) targets.erase(slot);
       else targets[slot] = places;
+      retain_selection(slot, std::move(selected));
     }
-    void declare_place(const std::string &name, EvidenceSlot slot, EvidenceSelection source, TargetPresence known) {
+    void declare_place(const std::string &name, EvidenceSlot slot, EvidenceSelection source, TargetPresence known,
+                       EvidencePlaces selected) {
       if (!tracking) return;
       if (!source.slot) source.slot = std::move(slot);
       footprints.try_emplace(*source.slot, source.footprint);
       if (known != TargetPresence::unknown) facts[*source.slot] = known;
+      retain_selection(*source.slot, std::move(selected));
       bindings[name] = std::move(source);
     }
     void forget() {
@@ -422,50 +525,78 @@ class ScalarChecker {
       facts.clear();
       targets.clear();
       booleans.clear();
+      equal_selections.clear();
       for (const auto &[slot, footprint] : footprints) changed[slot] = writes;
     }
-    void assign(const EvidenceSelection &selection, TargetPresence known, const EvidencePlaces &places = {}) {
+    bool may_overlap(const EvidencePlaces &footprint, const EvidencePlaces &written) const {
+      return footprint.empty() || written.empty() || std::any_of(footprint.begin(), footprint.end(),
+            [&](const auto &slot) {
+              if (written.contains(slot)) return true;
+              const auto other = possible_overlap.find(slot);
+              return other != possible_overlap.end() && std::any_of(other->second.begin(), other->second.end(),
+                  [&](const auto &candidate) { return written.contains(candidate); });
+            });
+    }
+    void record_assignment_selection(const EvidenceSelection &selection, EvidencePlaces selected) {
+      if (selection.footprint.size() == 1) {
+        const auto &physical = *selection.footprint.begin();
+        if (!selection.slot || *selection.slot != physical) retain_selection(physical, selected);
+      }
+      if (selection.slot) retain_selection(*selection.slot, std::move(selected));
+    }
+    void assign(const EvidenceSelection &selection, TargetPresence known, const EvidencePlaces &places = {},
+                EvidencePlaces selected = {}) {
       if (!tracking) return;
       if (selection.footprint.empty()) { forget(); return; }
       ++writes;
-      const auto overlaps = [&](const auto &footprint) {
-        return footprint.empty() || std::any_of(footprint.begin(), footprint.end(),
-            [&](const auto &slot) {
-              if (selection.footprint.contains(slot)) return true;
-              const auto other = possible_overlap.find(slot);
-              return other != possible_overlap.end() && std::any_of(other->second.begin(), other->second.end(),
-                  [&](const auto &candidate) { return selection.footprint.contains(candidate); });
-            });
+      const auto written = [&](const EvidenceSlot &slot) {
+        return may_overlap(footprints.at(slot), selection.footprint);
       };
       std::erase_if(facts, [&](const auto &fact) {
-        return fact.second != known && overlaps(footprints.at(fact.first));
+        return fact.second != known && written(fact.first);
       });
-      for (const auto &[slot, footprint] : footprints) if (overlaps(footprint)) changed[slot] = writes;
-      for (auto &[place, proof] : booleans) proof.forget([&](const EvidenceSlot &slot) {
-        return overlaps(footprints.at(slot));
-      });
-      std::erase_if(targets, [&](const auto &target) {
-        return overlaps(footprints.at(target.first));
-      });
+      for (const auto &[slot, footprint] : footprints) if (written(slot)) changed[slot] = writes;
+      preserve_observations(written);
+      std::erase_if(targets, [&](const auto &target) { return written(target.first); });
+      remove_selected(written);
+      std::erase_if(selected, written);
       if (!places.empty()) {
         if (selection.footprint.size() == 1) targets[*selection.footprint.begin()] = places;
         if (selection.slot) targets[*selection.slot] = places;
       }
-      if (known == TargetPresence::unknown) return;
-      if (selection.footprint.size() == 1) facts[*selection.footprint.begin()] = known;
-      if (selection.slot) facts[*selection.slot] = known;
+      if (known != TargetPresence::unknown) {
+        if (selection.footprint.size() == 1) facts[*selection.footprint.begin()] = known;
+        if (selection.slot) facts[*selection.slot] = known;
+      }
+      record_assignment_selection(selection, std::move(selected));
+    }
+    void exchange(const EvidenceSelection &left, const EvidenceSelection &right) {
+      const auto left_presence = presence(left), right_presence = presence(right);
+      const auto left_places = places(left), right_places = places(right);
+      auto left_selected = left.slot ? same_selected(*left.slot) : EvidencePlaces{};
+      auto right_selected = right.slot ? same_selected(*right.slot) : EvidencePlaces{};
+      const auto before = writes;
+      const bool overlap = may_overlap(left.footprint, right.footprint);
+      assign(left, right_presence, right_places);
+      assign(right, left_presence, left_places);
+      if (overlap) return;
+      const auto written = [&](const EvidenceSlot &slot) {
+        const auto changed_slot = changed.find(slot);
+        return changed_slot != changed.end() && changed_slot->second > before;
+      };
+      std::erase_if(left_selected, written);
+      std::erase_if(right_selected, written);
+      record_assignment_selection(left, std::move(right_selected));
+      record_assignment_selection(right, std::move(left_selected));
     }
     void refine(const PresenceFacts &known) {
-      for (const auto &[slot, presence] : known) facts.try_emplace(slot, presence);
+      auto refined = facts;
+      if (include_presence(refined, known)) facts = std::move(refined);
     }
     std::optional<PresenceFacts> outcome(const std::optional<PresenceBranches> &proof, bool value) const {
       auto result = facts;
       const auto assumed = proof ? proof->at(value) : std::optional{PresenceFacts{}};
-      if (!assumed) return {};
-      for (const auto &[slot, presence] : *assumed) {
-        const auto [known, inserted] = result.try_emplace(slot, presence);
-        if (!inserted && known->second != presence) return {};
-      }
+      if (!assumed || !include_presence(result, *assumed)) return {};
       return result;
     }
     void assume(const std::optional<PresenceBranches> &proof, bool value) {
@@ -481,19 +612,29 @@ class ScalarChecker {
       };
       if (target.selection.slot && written(*target.selection.slot)) target.selection.slot.reset();
       if (target.branches) target.branches->forget(written);
+      std::erase_if(target.same_selected, written);
     }
     void join_flow(const QuerySelections &other) {
       facts = common(std::move(facts), other.facts);
+      std::set<EvidencePlaces> shared;
+      for (const auto &left : equal_selections) for (const auto &right : other.equal_selections) {
+        auto group = common_slots(left, right);
+        if (group.size() > 1) shared.insert(std::move(group));
+      }
       std::erase_if(targets, [&](auto &target) {
         return !other.targets.contains(target.first);
       });
       for (auto &[slot, places] : targets) places = join_places(std::move(places), other.targets.at(slot));
       for (auto stored = booleans.begin(); stored != booleans.end();) {
         const auto right = other.booleans.find(stored->first);
-        const auto joined = right == other.booleans.end() ? std::nullopt : alternatives(stored->second, right->second);
+        if (right != other.booleans.end() && stored->second == right->second) { ++stored; continue; }
+        const auto joined = right == other.booleans.end() ? std::nullopt :
+            alternatives(expanded(stored->second), other.expanded(right->second));
         if (joined) { stored->second = *joined; ++stored; }
         else stored = booleans.erase(stored);
       }
+      equal_selections = std::move(shared);
+      for (auto &[place, proof] : booleans) proof = *compact(std::move(proof));
       writes = std::max(writes, other.writes);
       for (const auto &[slot, revision] : other.changed) changed[slot] = std::max(changed[slot], revision);
       payload_writes.merge(other.payload_writes);
@@ -501,7 +642,7 @@ class ScalarChecker {
       deferred_return |= other.deferred_return;
     }
     bool same_flow(const QuerySelections &other) const {
-      return facts == other.facts && booleans == other.booleans && targets == other.targets;
+      return facts == other.facts && booleans == other.booleans && targets == other.targets && equal_selections == other.equal_selections;
     }
     static PresenceFacts common(PresenceFacts left, const PresenceFacts &right) {
       std::erase_if(left, [&](const auto &fact) {
@@ -4317,6 +4458,7 @@ class ScalarChecker {
     left.branches = QuerySelections::alternatives(std::move(left.branches), right.branches);
     left.places = QuerySelections::join_places(std::move(left.places), right.places);
     left.contextual_null = left.contextual_null && right.contextual_null;
+    left.same_selected = QuerySelections::common_slots(std::move(left.same_selected), right.same_selected);
     return left;
   }
   static void require_present_projection(const ViewEvidence &view, TargetPresence presence, const Location &at) {
@@ -4470,7 +4612,9 @@ class ScalarChecker {
   static void read_type_target(TypeEvidenceState &state, const ViewEvidence &view, const TargetEvidence &target) {
     if (!state.selections.tracking || !view.nullable || target.presence == TargetPresence::present) return;
     note_type_exit(state, Completion::failure(exception_id(ExceptionCategory::null_pointer)));
-    if (target.selection.slot) state.selections.refine({{*target.selection.slot, TargetPresence::present}});
+    PresenceFacts selected;
+    for (const auto &slot : target.same_selected) selected.emplace(slot, TargetPresence::present);
+    state.selections.refine(selected);
   }
   static TargetEvidence named_type_target(const TypeEvidenceState &state, const std::string &name) {
     TargetEvidence target;
@@ -4478,6 +4622,7 @@ class ScalarChecker {
       target.selection = slot->second;
       target.presence = state.selections.presence(slot->second);
       target.places = state.selections.places(slot->second);
+      if (slot->second.slot) target.same_selected = state.selections.same_selected(*slot->second.slot);
     }
     if (const auto place = state.selections.value_places.find(name); place != state.selections.value_places.end())
       target.places = place->second;
@@ -4631,9 +4776,13 @@ class ScalarChecker {
           const auto source = named_type_target(state, name);
           const EvidenceSlot local = std::pair{callee.definition.get(), name};
           if (view->second.value_binding != true && source.selection.slot) {
-            body.selections.bind(name, local, source.presence, source.places);
-            imported_slots[*source.selection.slot].insert(local);
-            exported_slots[local].insert(*source.selection.slot);
+            // Entry observations outlive writes to the invocation's slots.
+            for (const auto &slot : source.same_selected) {
+              body.selections.footprints.try_emplace(slot, EvidencePlaces{slot});
+              imported_slots[slot].insert(local);
+              exported_slots[slot].insert(slot);
+            }
+            body.selections.bind(name, local, source.presence, source.places, source.same_selected);
             for (const auto &place : source.places)
               if (const auto found = state.selections.booleans.find(place); found != state.selections.booleans.end())
                 imported_booleans.insert(*found);
@@ -4651,7 +4800,7 @@ class ScalarChecker {
             body.selections.footprints.try_emplace(slot, EvidencePlaces{slot});
           }
         for (const auto &[place, proof] : imported_booleans)
-          body.selections.booleans.emplace(place, proof.remap(imported_slots));
+          body.selections.booleans.emplace(place, *body.selections.compact(proof.remap(imported_slots)));
       }
       body.invocation_result = *result.contract->type;
       body.supplied_invocation_result = result.origin == ResultOrigin::supplied;
@@ -4719,14 +4868,17 @@ class ScalarChecker {
         const auto owners = (left == Type::null_ref && tested_left.contextual_null) ||
             (right == Type::null_ref && state.target.contextual_null) ? OwnerMatch::satisfied :
             compare_owners(first.owner, second.owner, &state);
-        const auto slot = right == Type::null_ref ? tested_left.selection.slot :
-            left == Type::null_ref ? state.target.selection.slot : std::nullopt;
         if (owners == OwnerMatch::mismatch) target_facts.branches = PresenceBranches::constant(unequally);
-        else if (slot) {
-          auto &proof = target_facts.branches.emplace();
-          proof.at(!unequally)->emplace(*slot, TargetPresence::absent);
-          // Inequality can also distinguish two nulls with different owners.
-          if (owners == OwnerMatch::satisfied) proof.at(unequally)->emplace(*slot, TargetPresence::present);
+        else if (left == Type::null_ref || right == Type::null_ref) {
+          const auto &selected = right == Type::null_ref ? tested_left.same_selected : state.target.same_selected;
+          if (!selected.empty()) {
+            auto &proof = target_facts.branches.emplace();
+            for (const auto &slot : selected) {
+              proof.at(!unequally)->emplace(slot, TargetPresence::absent);
+              // Inequality can also distinguish two nulls with different owners.
+              if (owners == OwnerMatch::satisfied) proof.at(unequally)->emplace(slot, TargetPresence::present);
+            }
+          }
         }
       }
       return left == Type::never || right == Type::never ? Type{Type::never} : Type{Type::boolean};
@@ -4883,6 +5035,9 @@ class ScalarChecker {
           check_initializer_type(expr, *declaration, *initial, *type, borrowed);
           if (*initial != Type::never && borrowed == true)
             check_initializer_access(*declaration, state.value.read_only.value_or(false));
+          if (proving_ && validating_ && expr.declaration_kind == "ref" && *initial != Type::never &&
+              borrowed == true && state.value.nullable && state.target.presence != TargetPresence::present)
+            fail(initializer.at, "ref requires a proven non-null target");
           if (expr.declaration_kind == "ref" && initializer.kind == K::make_local &&
               initializer.children.size() == (initializer.annotation ? 0u : 1u))
             fail(declaration->at, "ref requires definitely initialized target storage");
@@ -4916,7 +5071,8 @@ class ScalarChecker {
         if (!value && initial && *initial != Type::never)
           state.selections.bind(declaration->text, declaration.get(),
               expr.declaration_kind != "ptr" || declaration->binding == "<-" || initializer.kind == K::make_local ?
-                  TargetPresence::present : state.target.presence, places);
+                  TargetPresence::present : state.target.presence, places,
+              borrowed == true && !state.value.mixed_view ? state.target.same_selected : EvidencePlaces{});
       }
       return completes ? Type{Type::void_type} : Type{Type::never};
     }
@@ -4939,7 +5095,7 @@ class ScalarChecker {
       if (type == Type::boolean && selected.value_binding == true && !state.target.places.empty())
         state.selections.value_places.emplace(expr.text, state.target.places);
       if (selected.nullable || !state.target.selection.footprint.empty())
-        state.selections.declare_place(expr.text, &expr, state.target.selection, state.target.presence);
+        state.selections.declare_place(expr.text, &expr, state.target.selection, state.target.presence, state.target.same_selected);
       return Type::void_type;
     }
     case K::make_local: {
@@ -4976,6 +5132,8 @@ class ScalarChecker {
         if (selected.view != true || selected.mixed_view)
           implementation_gap(expr.at, "rebinding from a fresh value without an existing target");
         rebind_type(*type, *source, expr.at);
+        if (proving_ && validating_ && !view.nullable && selected.nullable && state.target.presence != TargetPresence::present)
+          fail(expr.at, "ref requires a proven non-null target");
         if (!selected.read_only || (!view.slot_read_only && *selected.read_only))
           implementation_gap(expr.at, "reference target access is not established");
         rebind_access(view.slot_read_only.value_or(false), *selected.read_only, expr.at);
@@ -4988,9 +5146,11 @@ class ScalarChecker {
       if (expr.kind == K::rebind) {
         target_facts.presence = state.target.presence;
         target_facts.places = state.target.places;
-        if (&expr != state.prepared_call && (view.nullable || !destination.selection.footprint.empty()))
-          state.selections.assign(destination.selection, target_facts.presence, target_facts.places);
-        target_facts.selection.slot = destination.selection.slot;
+        if (&expr != state.prepared_call && (view.nullable || !destination.selection.footprint.empty())) {
+          state.selections.assign(destination.selection, target_facts.presence, target_facts.places, state.target.same_selected);
+          target_facts.selection.slot = destination.selection.slot;
+          if (const auto &slot = target_facts.selection.slot) target_facts.same_selected = state.selections.same_selected(*slot);
+        }
       }
       view.value_binding.reset(); view.fixed_binding.reset(); view.slot_read_only.reset();
       return type;
@@ -5210,7 +5370,8 @@ class ScalarChecker {
       // Only facts that survive every backedge are available in the body.
       // Each abstract iteration can only remove facts from this finite set.
       if (iteration.selections.tracking && completes && accumulator != Type::never) {
-        while (!iteration.selections.facts.empty() || !iteration.selections.booleans.empty() || !iteration.selections.targets.empty()) {
+        while (!iteration.selections.facts.empty() || !iteration.selections.booleans.empty() ||
+               !iteration.selections.targets.empty() || !iteration.selections.equal_selections.empty()) {
           auto probe = iteration;
           probe.required = false; probe.returns = nullptr; probe.exits = nullptr;
           if (type_evidence(loop_body, probe) == Type::never) break;
@@ -5410,10 +5571,7 @@ class ScalarChecker {
         const auto methods = method_candidates(family.methods, arguments, family.retained_types(), access, owners, &state);
         if (reference && invokes && state.selections.tracking && methods.methods.empty()) {
           const auto &left = operand_targets[0].selection, &right = operand_targets[1].selection;
-          const auto a = state.selections.presence(left), b = state.selections.presence(right);
-          const auto left_places = state.selections.places(left), right_places = state.selections.places(right);
-          state.selections.assign(left, b, right_places);
-          state.selections.assign(right, a, left_places);
+          state.selections.exchange(left, right);
         }
         for (const auto id : methods.methods) {
           const auto &method = program_.methods[id];
@@ -5427,6 +5585,7 @@ class ScalarChecker {
           for (size_t i = 0; i < views.size(); ++i) {
             auto selected = operand_targets[i];
             selected.selection.slot.reset();
+            selected.same_selected.clear();
             read_type_target(state, views[i], selected);
           }
         if (!reference && methods.methods.empty() && operand_targets.size() == 2 && arguments.front() == Type::boolean) {
@@ -5565,12 +5724,8 @@ class ScalarChecker {
       if (result && result->kind == Type::procedure) note_type_allocation(state);
       if (result != Type::never) {
         std::optional<PresenceBranches> returned;
-        if (state.exits && state.selections.tracking && result == Type::boolean) {
+        if (state.exits && state.selections.tracking && result == Type::boolean)
           returned = state.selections.observe(state.target.branches);
-          // The caller retained its original selection. A proof about a
-          // replacement within this invocation cannot describe that input.
-          returned->forget([&](const EvidenceSlot &slot) { return state.selections.changed.contains(slot); });
-        }
         note_type_exit(state, {1, true}, std::move(returned));
       }
       return Type::never;
@@ -5717,6 +5872,19 @@ class ScalarChecker {
     } else if (names) {
       for (const auto &name : *names) if (const auto binding = lexical_.lookup(name)) retain_binding(name, *binding);
     } else for (const auto &scope : lexical_.scopes) for (const auto &[name, id] : scope.bindings) retain_binding(name, id);
+    if (track_selection) {
+      std::map<size_t, size_t> selected;
+      for (const auto &[slot, footprint] : state.selections.footprints)
+        if (const auto id = std::get_if<size_t>(&slot)) {
+          const auto identity = lexical_.selection_identities.find(*id);
+          if (identity != lexical_.selection_identities.end()) selected.emplace(*id, identity->second);
+        }
+      for (const auto &group : selection_groups(selected, lexical_)) {
+        EvidencePlaces witnesses(group.begin(), group.end());
+        state.selections.retain_selection(*group.begin(), std::move(witnesses));
+      }
+    }
+    const auto conditions = track_selection && proving_ ? path_conditions(lexical_) : CleanupEquations::ConditionClauses{};
     if (track_selection && proving_) for (const auto &[place, proof] : lexical_.predicates) {
       if (!proof || !proof->complete_results || storage(place).borrowed) continue;
       PresenceBranches branches;
@@ -5725,7 +5893,8 @@ class ScalarChecker {
         outcome.reset();
         const auto clauses = proof->results.find(value);
         if (clauses == proof->results.end()) continue;
-        for (const auto &clause : clauses->second) {
+        const auto applicable = conditions.empty() ? clauses->second : CleanupEquations::conjoin_conditions(clauses->second, conditions);
+        for (const auto &clause : applicable) {
           PresenceFacts facts;
           const auto retain = [&](const auto &observed, TargetPresence presence) {
             for (const auto &[slot, versions] : observed) {
@@ -5739,7 +5908,7 @@ class ScalarChecker {
           outcome = outcome ? QuerySelections::common(std::move(*outcome), facts) : std::move(facts);
         }
       }
-      if (branches != PresenceBranches{}) state.selections.booleans.emplace(place, std::move(branches));
+      if (branches != PresenceBranches{}) state.selections.booleans.emplace(place, *state.selections.compact(std::move(branches)));
     }
     std::set<EvidenceOwner> owners;
     for (const auto &[name, view] : state.views) if (view.owner) owners.insert(*view.owner);
@@ -6456,6 +6625,7 @@ class ScalarChecker {
       const auto &candidate = *program_.methods[id].scope_inputs;
       if (candidate.owner_names != inputs.owner_names || candidate.relations != inputs.relations ||
           candidate.nonnull != inputs.nonnull || candidate.boolean_presence != inputs.boolean_presence ||
+          candidate.same_selections != inputs.same_selections ||
           candidate.parameters.size() != inputs.parameters.size()) continue;
       if (std::equal(candidate.parameters.begin(), candidate.parameters.end(), inputs.parameters.begin(),
           [](const auto &a, const auto &b) {
@@ -6476,6 +6646,18 @@ class ScalarChecker {
     program_.methods.push_back(std::move(method));
     profiles.push_back(id);
     return id;
+  }
+  static std::set<std::set<size_t>> selection_groups(const std::map<size_t, size_t> &selected, const LexicalState &state) {
+    std::set<std::set<size_t>> groups;
+    if (selected.size() < 2) return groups;
+    const auto conditions = path_conditions(state);
+    for (auto left = selected.begin(); left != selected.end(); ++left)
+      for (auto right = std::next(left); right != selected.end(); ++right)
+        if (left->second == right->second || (!conditions.empty() && std::ranges::all_of(conditions, [&](const auto &facts) {
+              return facts.same_selection(left->second, right->second);
+            }))) groups.insert({left->first, right->first});
+    CleanupEquations::ConditionFacts::close_equalities(groups);
+    return groups;
   }
   void scope_boolean_inputs(CheckedMethod::ScopeInputs &inputs, const std::vector<CheckedOperation> &views,
                             const Location &at) {
@@ -6510,7 +6692,7 @@ class ScalarChecker {
     const auto &dependencies = definition_dependencies(*method.source);
     const auto state = evidence_state(false, &dependencies);
     const auto retained = definition_retained(method_id, state);
-    CheckedMethod::ScopeInputs inputs{method_id, {}, {}, {}, {}, {}, {}};
+    CheckedMethod::ScopeInputs inputs{method_id, {}, {}, {}, {}, {}, {}, {}};
     operation.scope_operands.emplace();
     std::map<size_t, size_t> owner_roles;
     const auto owner_role = [&](size_t actual, const Location &at) {
@@ -6565,6 +6747,11 @@ class ScalarChecker {
       for (const auto b : operation.scope_owners) relations.push_back(compare_owners(a, b));
     }
     scope_boolean_inputs(inputs, views, expr.at);
+    std::map<size_t, size_t> selections;
+    for (size_t index = 0; index < views.size(); ++index)
+      if (!inputs.parameters[index].owner.empty() && views[index].selection_identity)
+        selections.emplace(index, *views[index].selection_identity);
+    inputs.same_selections = selection_groups(selections, lexical_);
     const auto profile = scope_profile(std::move(inputs));
     std::optional<ResultContract> supplied;
     if (expected) {
@@ -8315,6 +8502,20 @@ class ScalarChecker {
       if (checking_method_->scope_inputs) {
         for (const auto &owner : checking_method_->input_owners())
           instance.frame.owners.try_emplace(external_owners_.at(owner.name), null_target);
+        CleanupEquations::ConditionFacts captured;
+        for (const auto &group : checking_method_->scope_inputs->same_selections) {
+          std::set<size_t> identities;
+          std::set<CleanupEquations::BindingSnapshot> bindings;
+          for (const auto ordinal : group) {
+            const auto binding = storage(instance.frame.inputs.at(ordinal).place).binding;
+            identities.insert(lexical_.selection_identities.at(binding));
+            bindings.emplace(binding, lexical_.target_versions.at(binding));
+          }
+          captured.same_bindings.insert(std::move(bindings));
+          captured.same_selections.insert(std::move(identities));
+        }
+        if (!captured.same_bindings.empty())
+          lexical_.predicate_conditions = CleanupEquations::conjoin_conditions(lexical_.predicate_conditions, {captured});
         for (const auto &[input, presence] : checking_method_->scope_inputs->boolean_presence) {
           CleanupEquations::BooleanValue proof;
           for (const auto &[truth, known] : presence) {

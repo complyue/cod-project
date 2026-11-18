@@ -336,6 +336,7 @@ struct CheckedMethod {
     std::vector<std::vector<OwnerMatch>> relations;
     std::vector<bool> nonnull;
     std::map<size_t, BooleanPresence> boolean_presence;
+    std::set<std::set<size_t>> same_selections;
   };
   std::optional<ScopeInputs> scope_inputs;
   const std::vector<Parameter> &input_parameters() const {

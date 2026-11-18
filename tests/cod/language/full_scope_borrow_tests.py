@@ -121,6 +121,15 @@ runner.CASES = {
     'saved_boolean_lost_after_overlapping_borrow_write': (borrowed_test_scope(
         'writer<-true;return if(guard){input}else{7u64};', 'ref writer:bool=observed;'),
         2, '', 'checked exception'),
+    'captured_independent_reference_bindings_share_selection': (
+        saved_scope('return if(same is not null){input}else{7u64};','ptr same:u64 in O=input;'),
+        0, '5\n7\n', ''),
+    'nested_scope_receives_proven_selection_equality': (
+        saved_scope('return {{return if(same is not null){input}else{7u64};}};','ptr same:u64 in O=input;'),
+        0, '5\n7\n', ''),
+    'captured_selection_equality_ends_at_rebind': (
+        saved_scope('input=null in O;return if(same is not null){input}else{7u64};','ptr same:u64 in O=input;'),
+        2, '', 'checked exception'),
     'escape_through_returned_callable_rejected': ('ref a:u64=1u64;func held={{return func[a]()->u64{return a;};}};',
         2, '', 'selected-target lifetime and transport proof'),
     'value_snapshot_survives_write_through_borrow': (IO+VALUES+'func original=wrap(one);ptr target=original;'
