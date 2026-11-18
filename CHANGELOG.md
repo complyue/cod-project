@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-18 — Release the displaced region on successful owning assignment
+
+<a id="h-occupied-owner-20261118"></a>
+**H-OCCUPIED-OWNER-20261118 — Allow occupied replacement with static invalidation.** In [the design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-18 America/Los_Angeles, the current project user accepted replacement and specified “旧region被release后，之前 `in` 它的引用全部失效，不能因为 `p` 仍指向有效region就错误认为之前的引用未outlive”. The question concerned assigning a distinct fresh region to an occupied ordinary holder after successful construction, with the original retained on non-consuming RHS failure. D-14r125/P-578 records this source contract. Consumed-holder reinitialization, self-transfer and the checker implementation were outside the decision.
+
+<a id="k-occupied-owner-20261118"></a>
+**K-OCCUPIED-OWNER-20261118 — Scope the proof and implementation cost.** D-14r124→125/registry875→876 relates the source rule to H-262/H-263, D-17 E4/E5 and D-28 shared owner information through P-576–P-578. The static feasibility assessment distinguishes fresh instances from a holder, allocation site or address, including on loop, exceptional and delayed paths. Prior alternatives are at `822a8b67c25fe1587314576e97fa90b80eb7cf6d:design/RegionalOwnership.md`, “Occupied destination and self-transfer”. No implementation or broader qualification is claimed.
+
 ## 2026-11-18 — Integrate conditional source decisions and capture evidence
 
 <a id="k-conditional-capture-integration-20261118"></a>
