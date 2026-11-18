@@ -252,6 +252,7 @@ class ScalarChecker {
     return type && type->kind == Type::procedure ? type : nullptr;
   }
   struct TypeEvidenceExits;
+  struct TypeDeferredFlow;
   enum class TargetPresence { unknown, present, absent };
   using EvidenceSlot = std::variant<size_t, const Expression *, std::string, std::pair<const Form *, std::string>>;
   using PresenceFacts = std::map<EvidenceSlot, TargetPresence>;
@@ -825,6 +826,28 @@ class ScalarChecker {
     bool reachable(const std::optional<PresenceBranches> &proof, bool value) const {
       return !proof || static_cast<bool>(outcome(proof, value));
     }
+    ObservationPaths reach_condition() const {
+      auto condition = conditions.value_or(ObservationPaths::unconditional());
+      condition.presence.clear();
+      return condition;
+    }
+    PresenceBranches on_reaching_path(PresenceBranches proof) const {
+      proof = expanded(std::move(proof));
+      if (conditions) {
+        const auto condition = reach_condition();
+        for (const bool value : {false, true}) proof.at(value).conjoin(condition);
+      }
+      return proof;
+    }
+    void observe_choice(std::optional<PresenceBranches> &proof) const {
+      if (!observation_decisions) return;
+      auto branches = proof.value_or(PresenceBranches{});
+      const auto yes = outcome(proof, true), no = outcome(proof, false);
+      if (!observation_decisions->both(yes.reachable, no.reachable)) return;
+      const auto choice = PresenceBranches::observed(observation_decisions, observation_decisions->next_observation++);
+      for (const bool value : {false, true}) branches.at(value).conjoin(choice.at(value));
+      proof = std::move(branches);
+    }
     void retain_conditions(ObservationPaths current) {
       // Unconditional presence stays in the cheap, direct lookup table.
       current.forget_presence([&](const auto &slot) { return facts.contains(slot); });
@@ -874,11 +897,22 @@ class ScalarChecker {
         const auto right = other.booleans.find(stored->first);
         if (right != other.booleans.end() && stored->second == right->second) { ++stored; continue; }
         const auto joined = right == other.booleans.end() ? std::nullopt :
-            alternatives(expanded(stored->second), other.expanded(right->second));
+            alternatives(on_reaching_path(stored->second), other.on_reaching_path(right->second));
         if (joined) { stored->second = *joined; ++stored; }
         else stored = booleans.erase(stored);
       }
       Observations joined_selections;
+      EvidencePlaces observed_slots;
+      for (const auto &[slot, proof] : reference_observations) observed_slots.insert(slot);
+      for (const auto &[slot, proof] : other.reference_observations) observed_slots.insert(slot);
+      // Equality may hold on only one path. The selected value on that
+      // path can still provide evidence for a particular joined outcome.
+      const auto add_changed_groups = [&](const auto &groups) {
+        for (const auto &group : groups) if (!shared.contains(group))
+          observed_slots.insert(group.begin(), group.end());
+      };
+      add_changed_groups(equal_selections);
+      add_changed_groups(other.equal_selections);
       const auto join_selection = [&](const EvidenceSlot &slot) {
         const EvidenceSelection selected{slot, {slot}};
         auto joined = alternatives(selection_outcomes(selected_target(selected)),
@@ -888,9 +922,7 @@ class ScalarChecker {
         joined->forget([&](const auto &observed) { return observed == slot; });
         if (*joined != PresenceBranches{}) joined_selections.emplace(slot, std::move(*joined));
       };
-      for (const auto &[slot, proof] : reference_observations) join_selection(slot);
-      for (const auto &[slot, proof] : other.reference_observations)
-        if (!reference_observations.contains(slot)) join_selection(slot);
+      for (const auto &slot : observed_slots) join_selection(slot);
       // Join paths before intersecting their direct facts, so the facts
       // established under a distinguishable Boolean outcome are retained.
       std::optional<ObservationPaths> reaching;
@@ -944,6 +976,9 @@ class ScalarChecker {
     // Immutable definition evidence lives in result_obligations_; body scopes may shadow it.
     const TypeEvidenceState *declaration = nullptr;
     TypeEvidenceExits *exits = nullptr;
+    TypeDeferredFlow *deferred = nullptr;
+    size_t deferred_queue = 0;
+    bool repeated_registration = false;
     const Expression *prepared_call = nullptr;
     struct Returns {
       std::vector<Type> types;
@@ -963,6 +998,40 @@ class ScalarChecker {
     // Outcomes of one operation begin with the same source evidence.
     // A handler consumes only the matching reasons from each path.
     std::vector<Path> paths;
+  };
+  struct TypeDeferredFlow {
+    struct Action {
+      size_t earlier;
+      const Expression *body;
+      std::unique_ptr<TypeEvidenceState> declaration;
+      bool may_replace;
+      bool may_rebind;
+      QueryPayloadWrites writes;
+    };
+    struct Alternative {
+      size_t queue;
+      ObservationPaths condition;
+    };
+    using Choice = std::pair<Alternative, Alternative>;
+    std::vector<std::variant<Action, Choice>> entries;
+    bool repeated = false;
+
+    size_t join(const TypeEvidenceState &left, const TypeEvidenceState &right) {
+      if (left.deferred_queue == right.deferred_queue) return left.deferred_queue;
+      entries.emplace_back(Choice{{left.deferred_queue, left.selections.reach_condition()},
+                                   {right.deferred_queue, right.selections.reach_condition()}});
+      return entries.size();
+    }
+    size_t push(const TypeEvidenceState &state, const Expression *body, bool may_replace, bool may_rebind,
+                QueryPayloadWrites writes) {
+      auto declaration = body ? std::make_unique<TypeEvidenceState>(state) : nullptr;
+      if (declaration) {
+        declaration->exits = nullptr;
+        declaration->deferred = nullptr;
+      }
+      entries.emplace_back(Action{state.deferred_queue, body, std::move(declaration), may_replace, may_rebind, std::move(writes)});
+      return entries.size();
+    }
   };
 
   struct DefinitionContext {
@@ -4815,6 +4884,8 @@ class ScalarChecker {
     };
     combine(selection.footprints, other_selections.footprints);
     combine(selection.possible_overlap, other_selections.possible_overlap);
+    if (left.deferred && left.deferred == right.deferred)
+      left.deferred_queue = left.deferred->join(left, right);
     selection.join_flow(other_selections);
     left.complete = left.complete && right.complete;
     return left;
@@ -4912,7 +4983,12 @@ class ScalarChecker {
     TargetEvidence target;
     std::vector<Type> independent;
     auto *const exits = state.exits;
-    if (!reached) state.exits = nullptr;
+    auto *const deferred = state.deferred;
+    const auto deferred_queue = state.deferred_queue;
+    if (!reached) {
+      state.exits = nullptr;
+      state.deferred = nullptr;
+    }
     const auto type = query_evidence(expr, state, view, target, contextual, expected, alternatives ? &independent : nullptr, expected_use, read);
     const bool reads_result = read == EvidenceRead::payload && &expr != state.prepared_call;
     // Bare names still read their payload in statement position. A borrowed
@@ -4922,6 +4998,10 @@ class ScalarChecker {
         expr.kind != K::block && expr.kind != K::conditional && expr.kind != K::try_scope)
       read_type_target(state, view, target);
     state.exits = exits;
+    if (!reached) {
+      state.deferred = deferred;
+      state.deferred_queue = deferred_queue;
+    }
     if (alternatives && type != Type::never) {
       if (type) alternatives->push_back(*type);
       else alternatives->insert(alternatives->end(), independent.begin(), independent.end());
@@ -4970,13 +5050,114 @@ class ScalarChecker {
   std::optional<Type> project_finalizer(const Expression &handler, TypeEvidenceState &state) const {
     const bool required = state.required;
     auto *const returns = state.returns;
+    auto *const exits = state.exits;
     TypeEvidenceState::Returns projected_returns;
     state.required = false;
+    state.exits = nullptr;
     if (returns) state.returns = &projected_returns;
-    const auto type = type_evidence(handler, state, false, nullptr, nullptr, ExpectedTypeUse::materialization, false);
+    const auto type = type_evidence(handler, state);
     state.required = required;
     state.returns = returns;
+    state.exits = exits;
     return type;
+  }
+  std::optional<PresenceBranches> deferred_boolean_result(const TypeDeferredFlow &flow, const TypeEvidenceExits &exits,
+                                                           const TypeEvidenceState &body, bool falls_through) const {
+    // Repeated registrations need a loop summary, since this graph records
+    // each registration at most once along an acyclic path.
+    const bool may_replace = body.selections.deferred_return || std::ranges::any_of(exits.paths,
+        [](const auto &path) { return path.state.selections.deferred_return; });
+    if (flow.repeated && may_replace) return {};
+    bool returning = false;
+    std::optional<PresenceBranches> proof = PresenceBranches{{}, {}};
+    const auto collect = [&](const auto &result) {
+      proof = QuerySelections::alternatives(std::move(proof), result);
+      returning = true;
+    };
+    if (!may_replace) {
+      for (const auto &path : exits.paths) if (path.reasons.contains(1)) collect(path.boolean_return);
+      return returning ? proof : std::nullopt;
+    }
+
+    struct Pending {
+      TypeEvidenceState state;
+      std::optional<PresenceBranches> result;
+    };
+    std::map<std::pair<size_t, bool>, Pending> pending;
+    const auto enqueue = [&](size_t queue, bool returned, TypeEvidenceState state,
+                             std::optional<PresenceBranches> result) {
+      state.exits = nullptr;
+      state.deferred = nullptr;
+      if (returned) {
+        if (!result) result.emplace();
+        const auto condition = state.selections.reach_condition();
+        for (const bool value : {false, true}) result->at(value).conjoin(condition);
+      }
+      const auto key = std::pair{queue, returned};
+      if (const auto entry = pending.find(key); entry != pending.end()) {
+        entry->second.state = merge_evidence(std::move(entry->second.state), state);
+        entry->second.result = QuerySelections::alternatives(std::move(entry->second.result), result);
+      } else pending.emplace(key, Pending{std::move(state), std::move(result)});
+    };
+    for (const auto &path : exits.paths)
+      enqueue(path.state.deferred_queue, path.reasons.contains(1), path.state, path.boolean_return);
+    if (falls_through) enqueue(body.deferred_queue, false, body, {});
+
+    // Every edge leads to an older entry. Joining at a shared queue tail
+    // prevents independent conditional registrations from multiplying paths.
+    while (!pending.empty()) {
+      auto next = pending.extract(std::prev(pending.end()));
+      const auto [queue, returned] = next.key();
+      auto &[state, result] = next.mapped();
+      if (!queue) {
+        if (returned) collect(result);
+        continue;
+      }
+      const auto &entry = flow.entries.at(queue - 1);
+      if (const auto *choice = std::get_if<TypeDeferredFlow::Choice>(&entry)) {
+        for (const auto *arm : {&choice->first, &choice->second}) {
+          const PresenceBranches condition{arm->condition, {}};
+          if (!state.selections.reachable(condition, true)) continue;
+          auto selected = state;
+          selected.selections.assume(condition, true);
+          enqueue(arm->queue, returned, std::move(selected), result);
+        }
+        continue;
+      }
+      const auto &action = std::get<TypeDeferredFlow::Action>(entry);
+      if (!action.body) {
+        if (action.may_rebind) {
+          const auto condition = state.selections.reach_condition();
+          state.selections.forget();
+          state.selections.retain_conditions(condition);
+        } else if (action.writes.unknown || !action.writes.places.empty())
+          state.selections.write_boolean(action.writes.unknown ? EvidencePlaces{} : action.writes.places, {});
+        if (action.may_replace) enqueue(action.earlier, true, state, {});
+        enqueue(action.earlier, returned, std::move(state), std::move(result));
+        continue;
+      }
+
+      auto invocation = *action.declaration;
+      auto bindings = std::move(invocation.selections.bindings);
+      auto places = std::move(invocation.selections.value_places);
+      invocation.selections = std::move(state.selections);
+      invocation.selections.bindings = std::move(bindings);
+      invocation.selections.value_places = std::move(places);
+      TypeEvidenceExits completed;
+      invocation.exits = &completed;
+      invocation.prepared_call = nullptr;
+      // The declaration supplies names. The queue supplies the live values.
+      auto normal = type_evidence(*action.body, invocation, false, nullptr, nullptr,
+                                  ExpectedTypeUse::materialization, true, EvidenceRead::discarded);
+      if (normal != Type::never) enqueue(action.earlier, returned, std::move(invocation), result);
+      for (auto &path : completed.paths) {
+        const bool replacement = path.reasons.contains(1);
+        // An escaping deferred failure cannot establish a replacement.
+        // Retaining the pending result here overapproximates normal delivery.
+        enqueue(action.earlier, replacement || returned, std::move(path.state), replacement ? path.boolean_return : result);
+      }
+    }
+    return returning ? proof : std::nullopt;
   }
   struct LocalStorageEvidence {
     std::optional<Type> type;
@@ -5054,7 +5235,6 @@ class ScalarChecker {
             for (const auto &slot : source.same_selected) {
               retain_witness(slot);
               imported_slots[slot].insert(local);
-              exported_slots[slot].insert(slot);
             }
             if (source.presence_proof) retain_observed(*source.presence_proof);
             body.selections.bind(name, local, source);
@@ -5080,6 +5260,12 @@ class ScalarChecker {
       const bool track_return = body.selections.tracking && body.invocation_result == Type::boolean && !result.contract->borrowed();
       const auto first_local_observation = body.selections.observation_decisions ? body.selections.observation_decisions->next_observation : 0;
       TypeEvidenceExits exits;
+      TypeDeferredFlow deferred;
+      if (track_return) {
+        body.deferred = &deferred;
+        body.deferred_queue = 0;
+        body.repeated_registration = false;
+      }
       if (state.exits) {
         for (const auto &capture : captures) {
           const auto binding = body.bindings.find(capture.name);
@@ -5091,16 +5277,9 @@ class ScalarChecker {
         }
       }
       if (state.exits || track_return || !writable_booleans.empty()) body.exits = &exits;
-      type_evidence(*callee.definition->body, body);
-      if (track_return && !body.selections.deferred_return &&
-          std::ranges::none_of(exits.paths, [](const auto &path) { return path.state.selections.deferred_return; })) {
-        std::optional<PresenceBranches> proof = PresenceBranches{{}, {}};
-        bool returns_value = false;
-        for (const auto &path : exits.paths) if (path.reasons.contains(1)) {
-          proof = QuerySelections::alternatives(std::move(proof), path.boolean_return);
-          returns_value = true;
-        }
-        if (returns_value && proof) {
+      const auto completion = type_evidence(*callee.definition->body, body);
+      if (track_return) {
+        if (auto proof = deferred_boolean_result(deferred, exits, body, completion != Type::never)) {
           proof->forget_observations(first_local_observation);
           returned.branches = proof->remap(exported_slots);
         }
@@ -5441,6 +5620,7 @@ class ScalarChecker {
       const auto condition = child(0);
       if (state.returns && condition == Type::never) return Type::never;
       if (state.required && condition != Type::boolean && condition != Type::never) fail(expr.at, "condition requires bool");
+      if (state.deferred) state.selections.observe_choice(state.target.branches);
       const auto condition_proof = state.target.branches;
       const bool reaches_yes = state.selections.reachable(condition_proof, true);
       const bool reaches_no = state.selections.reachable(condition_proof, false);
@@ -5483,6 +5663,8 @@ class ScalarChecker {
         if (state.required) require_conditional_owner(relation, expr.at);
         if (relation == OwnerMatch::satisfied) view.owner = left;
       }
+      if (!reaches_yes) yes_state.deferred_queue = no_state.deferred_queue;
+      if (!reaches_no) no_state.deferred_queue = yes_state.deferred_queue;
       state = condition == Type::never ? merge_evidence(std::move(yes_state), no_state) :
           merge_reaching_evidence(std::move(yes_state), std::move(no_state), yes == Type::never, no == Type::never);
       if (condition == Type::never) return Type::never;
@@ -5502,13 +5684,18 @@ class ScalarChecker {
         auto delayed = state;
         TypeEvidenceExits delayed_exits;
         delayed.exits = state.selections.tracking ? &delayed_exits : nullptr;
+        delayed.deferred = nullptr;
         delayed.selections.forget();
         delayed.selections.payload_writes = {};
         delayed.selections.deferred_writes = {};
         delayed.selections.deferred_return = false;
+        const auto delayed_entry = delayed.selections.writes;
+        bool may_rebind = action.kind != K::block;
+        QueryPayloadWrites writes;
         const auto include_writes = [&](const TypeEvidenceState &path) {
-          state.selections.deferred_writes.merge(path.selections.payload_writes);
-          state.selections.deferred_writes.merge(path.selections.deferred_writes);
+          writes.merge(path.selections.payload_writes);
+          writes.merge(path.selections.deferred_writes);
+          may_rebind |= path.selections.writes != delayed_entry;
           state.selections.deferred_return |= path.selections.deferred_return;
         };
         if (action.kind == K::block) type_evidence(action, delayed);
@@ -5521,9 +5708,18 @@ class ScalarChecker {
           include_writes(caught);
         }
         include_writes(delayed);
+        bool may_replace = false;
         for (const auto &path : delayed_exits.paths) {
           include_writes(path.state);
-          state.selections.deferred_return |= path.reasons.contains(1);
+          may_replace |= path.reasons.contains(1);
+        }
+        state.selections.deferred_writes.merge(writes);
+        state.selections.deferred_return |= may_replace;
+        if (state.deferred) {
+          if (state.repeated_registration) state.deferred->repeated = true;
+          else state.deferred_queue = state.deferred->push(state,
+              action.kind == K::block && expr.children.size() == 1 ? &action : nullptr,
+              may_replace, may_rebind, std::move(writes));
         }
         return Type::void_type;
       }
@@ -5643,6 +5839,7 @@ class ScalarChecker {
       if (fold && state.required) require_value(*accumulator, expr.at);
       if (fold && completes && accumulator && accumulator->kind == Type::procedure) note_type_allocation(state);
       auto iteration = state;
+      iteration.repeated_registration = true;
       const auto control_owner = EvidenceOwner::for_scope(expr);
       iteration.bindings[expr.text] = index; iteration.views[expr.text] = {true, true, true, control_owner, false, false, true, true};
       iteration.local_declarations[expr.text] = &expr;
@@ -5697,6 +5894,7 @@ class ScalarChecker {
         const auto left = child(0);
         if (state.returns && left == Type::never) return Type::never;
         const bool short_result = expr.text == "||";
+        if (state.deferred) state.selections.observe_choice(state.target.branches);
         auto skipped = state;
         const auto proof = state.target.branches;
         const auto skip_facts = state.selections.outcome(proof, short_result);

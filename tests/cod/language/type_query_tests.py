@@ -141,6 +141,34 @@ runner.CASES={
     'return if(input is not null in here){input}else{7u64};'),2,'',UNPROVED_TARGET),
  'projection_loses_replaced_return_predicate_during_defer':(saved_query(
     'const val present<-{{defer{return true;};return input is not null;}};'+GUARDED_RESULT),2,'',UNPROVED_TARGET),
+ 'projection_observes_replacement_return_from_defer':(saved_query(
+    'const val present<-{{defer{return input is not null;};return false;}};'+GUARDED_RESULT),0,'9\n',''),
+ 'projection_uses_last_executed_deferred_return':(saved_query(
+    'const val present<-{{defer{return input is not null;};defer{return false;};return true;}};'+GUARDED_RESULT),0,'9\n',''),
+ 'projection_retains_deferred_return_through_older_rebind':(saved_query(
+    'const val present<-{{defer{input=null in O;{};};defer{return input is not null;};return false;}};'+
+    GUARDED_RESULT),0,'9\n',''),
+ 'projection_observes_conditional_deferred_registration':(saved_query(
+    'const val present<-{{if(input is not null){defer{return true;};{}}else{};return false;}};'+
+    GUARDED_RESULT),0,'9\n',''),
+ 'projection_checks_unregistered_defer_path':(saved_query(
+    'const val present<-{{if(flag){defer{return input is not null;};{}}else{};return true;}};'
+    'return if(present){input}else{7u64};'),2,'',UNPROVED_TARGET),
+ 'projection_reads_deferred_payload_at_drain_time':(saved_query(
+    'const val present<-{{val observed<-true;defer{return observed;};observed<-(input is not null);return true;}};'+
+    GUARDED_RESULT),0,'9\n',''),
+ 'projection_preserves_deferred_selection_on_one_arm':(saved_query(
+    'const val present<-{{defer{return input is not null;};if(flag){defer{input=null in O;{};};{}}else{};return false;}};'
+    'return if(present){input}else{7u64};'),0,'9\n',''),
+ 'projection_correlates_conditional_deferred_payload_write':(saved_query(
+    'const val present<-{{val observed<-false;defer{return observed;};'
+    'if(input is not null){defer{observed<-true;};{}}else{};return false;}};return if(present){input}else{7u64};'),
+    0,'9\n',''),
+ 'projection_checks_earlier_actions_after_failed_registration':(saved_query(
+    'const val present<-{{val observed<-true;defer{return observed;};defer{observed<-(input is not null);};return true;}};'+
+    GUARDED_RESULT),2,'',UNPROVED_TARGET),
+ 'projection_takes_deferred_observation_after_ordinary_fallthrough':(saved_query(
+    'const val present<-{{defer{return input is not null;};}};'+GUARDED_RESULT),0,'9\n',''),
  'projection_returns_proof_from_independent_reference_binding':(saved_query(
     'const val present<-{{ptr same:u64 in O=input;input=null in O;return same is not null;}};'+
     GUARDED_RESULT),0,'9\n',''),
