@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-17 — Preserve readonly reference reception
+
+<a id="h-readonly-ref-binding-20261117"></a>
+**H-READONLY-REF-BINDING-20261117 — Reject implicit writable reception.** Human/source: current project user in [the design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-17 America/Los_Angeles; exact time/personal name unavailable. “`ref snapshot:u64 = watch(n);` 应该reject才对吧，怎么能把 const 转非const呢”. Rejects the candidate that makes this declaration succeed by materializing writable bits from a readonly returned reference. The reviewed proposal is preserved at `a8f04015dfac6a31eebbd531fffa50528fb163be:design/ConstructionAndAcquisition.md`, readonly receiving section. This correction does not approve exact scalar grouping/conditional rules, a new borrow operator or wider implementation mechanisms.
+
+<a id="k-readonly-ref-binding-20261117"></a>
+**K-READONLY-REF-BINDING-20261117 — Restore the ordinary access boundary.** D-22r43→44/D-23r25→26/registry867→868 removes the rejected receiving alternative and aligns the initialization table, acceptance and discussion queue. Under the human correction and D-23’s existing matrix, readonly reception retains its target/access/owner; incompatible writable reception rejects; explicit `<-` into independent bits remains valid. Inferred references, declaration-leading const, explicit owners and receiving/field operations cannot bypass access checks. Preserve C-39/C-65/C-72/P-348/P-350/P-354–P-355 and charter §§2/3.3/4.3/6.3/8/12, existing qualification limits, D-16 and D-18’s adopted bounded scope. No new value path, scalar grouping policy, compiler support or ABI is qualified. Baseline: `a8f04015dfac6a31eebbd531fffa50528fb163be` at affected paths. Documentation only; no code/build/tests.
+
 ## 2026-11-17 — Isolate the readonly receiving choice
 
 <a id="k-rhs-review-20261117"></a>
