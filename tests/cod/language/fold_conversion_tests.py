@@ -39,7 +39,7 @@ runner.CASES.update({
         'behave @print(fold(i in 0..3,a=0f64){f(a)});', 0, '5\n', ''),
     'empty_range': (IO + 'behave @print(fold(i in 3..3,a=9f64){behave @print(99);7u8});', 0, '9\n', ''),
     'body_scope_cleanup': (IO + 'proc observe(x:f64)->void {behave @print(x);}'
-        'behave @print(fold(i in 0..2,a=0f64){{defer observe(a);7u8}});', 0, '0\n7\n7\n', ''),
+        'behave @print(fold(i in 0..2,a=0f64){{defer observe(a);return 7u8;}});', 0, '0\n7\n7\n', ''),
     'deferred_snapshots': (IO + 'proc observe(x:f64)->void {behave @print(x);}'
         '{{behave @print(fold(i in 0..2,a=0f64){defer observe(a);7u8});}};', 0, '7\n7\n0\n', ''),
     'body_failure': (IO + 'proc observe(x:f64)->void {behave @print(x);}'

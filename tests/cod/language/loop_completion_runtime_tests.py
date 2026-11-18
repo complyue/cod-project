@@ -7,22 +7,22 @@ FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
 FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 proc stop_bounds(ref f:func(u64)->const u64 in O)->const u64 where {owner O}{
  func saved=f;defer observe(45u64);
- for(i in 0u64..{{return saved(1u64);}}){defer observe(9999u64);}else{observe(9999u64);};return 0u64;
+ for(i in 0u64..{return saved(1u64);}){defer observe(9999u64);}else{observe(9999u64);};return 0u64;
 }
 proc skip_loop_records()->const u64{
- for(i in 0u64..{{return 46u64;}}){defer observe(9999u64);}else{defer observe(9999u64);};return 0u64;
+ for(i in 0u64..{return 46u64;}){defer observe(9999u64);}else{defer observe(9999u64);};return 0u64;
 }
 func fold_setup(ref f:func(u64)->const u64 in O)->const u64 where {owner O}{
- return fold(i in 0u64..{{return 47u64;}},a=f){a};
+ return fold(i in 0u64..{return 47u64;},a=f){a};
 }
 func image_bound(f:func(u64)->const u64)->const (func(u64)->const u64){
- for(i in 0u64..{{return wrap(f);}}){};return base;
+ for(i in 0u64..{return wrap(f);}){};return base;
 }
 func bound_error()->const MissingReturnError{
  try{missing();}catch(e:const MissingReturnError){return e;};
 }
 proc throw_bound(ref f:func(u64)->const u64 in O)->void where {owner O}{
- func saved=f;for(i in 0u64..{{throw bound_error();}}){observe(9999u64);}else{observe(9999u64);};
+ func saved=f;for(i in 0u64..{throw bound_error();}){observe(9999u64);}else{observe(9999u64);};
 }
 {{
  func f=wrap(base);observe(stop_bounds(f));func result=image_bound(f);observe(result(1u64));

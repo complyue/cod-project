@@ -7,20 +7,20 @@ FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
 FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 proc stop_storage(ref f:func(u64)->const u64 in O)->const u64 where {owner O}{
  func copied=f;defer observe(41u64);
- func unused:func(u64)->const u64={{return copied(1u64);}};
+ func unused:func(u64)->const u64={return copied(1u64);};
  observe(9999u64);return 0u64;
 }
 func image_storage(f:func(u64)->const u64)->const (func(u64)->const u64){
  val unused<-make local u64 {return wrap(f);};return base;
 }
 proc rebind_storage(ref f:func(u64)->const u64 in O)->const u64 where {owner O}{
- ptr p=f;defer{observe(p(1u64));};p={{return 42u64;}};return 0u64;
+ ptr p=f;defer{observe(p(1u64));};p={return 42u64;};return 0u64;
 }
 proc swap_storage(ref f:func(u64)->const u64 in O,ref g:func(u64)->const u64 in O)->const u64 where {owner O}{
- ptr p=f,q=g;defer{observe(p(1u64));observe(q(1u64));};p<=>{{return 43u64;}};return 0u64;
+ ptr p=f,q=g;defer{observe(p(1u64));observe(q(1u64));};p<=>{return 43u64;};return 0u64;
 }
 func no_storage_copy()->const u64{
- func unused:func(u64)->const u64={{return 44u64;}};return 0u64;
+ func unused:func(u64)->const u64={return 44u64;};return 0u64;
 }
 {{
  func f=wrap(base);func g=wrap(other);
