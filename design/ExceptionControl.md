@@ -1,8 +1,10 @@
 # CoD exception control and regional cleanup
 
-Design revision: 112 · Recorded: 2026-11-18 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; bounded full-scope elaboration profile confirmed; current implementation availability is recorded in the source capability reference.
+Design revision: 115 · Recorded: 2026-11-18 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; bounded full-scope elaboration profile confirmed; current implementation availability is recorded in the source capability reference.
 
 ## Design authority
+
+- **Placement when constructing with a cause.** [K-MAKE-CAUSE-PLACEMENT-20261118](../CHANGELOG.md#k-make-cause-placement-20261118) evaluates the user's mutually exclusive `from cause` and `in region (...)` clauses in [D-17-MAKE-EXCEPTION](DesignAuthorityRegistry.md#d-17-make-exception), r115. H-SAME-OWNER-CAUSE-20261118 and H-EXCEPTION-WHOLE-OWNER-20261118 constrain the selected target, retention of identity and single release obligation. The [source extension](#constructing-a-normal-result-with-a-cause) covers written operand order, handoff on successful publication and local recovery from a failed initializer. [H-EXCEPTION-CAUSE-HANDOFF-20261118](../CHANGELOG.md#h-exception-cause-handoff-20261118) confirms transfer from the named cause to the completed holder. H-262/H-263 constrain the [use of an explicitly borrowed original](#keeping-a-typed-reference-to-the-original). [K-CAUSE-BORROW-COST-20261118](../CHANGELOG.md#k-cause-borrow-cost-20261118) records the user’s agreement that the source binding keeps its declared mode and the [deferred implementation plan](#implementation-cost-of-preserving-the-borrow). Detailed operand order and implementation qualification remain under review.
 
 - **Fresh-region capacity.** [H-EXCEPTION-CAPACITY-20261118](../CHANGELOG.md#h-exception-capacity-20261118) records the [image default and aggregate sizing](#image-setting-for-exception-region-capacity) and the request for [site-specific tuning](#capacity-at-a-fresh-construction-site). [D-17-EXCEPTION-CAPACITY](DesignAuthorityRegistry.md#d-17-exception-capacity), r112, applies D-14 fixed region ownership, D-22 acquisition and D-17-AGGREGATE-OWNERSHIP to predictable recovery storage under charter §§4.1/4.3/6.3. Acceptance covers a smaller and a larger site budget, field/argument distinction, existing-owner propagation and complete oversized aggregates. The [construction grammar](#make-exception-expressions) fixes clause placement. The physical backend remains pending.
 
@@ -194,7 +196,7 @@ The nested `make` creates ordinary retry data in the field's owner. The caller c
 
 ### Make exception expressions
 
-Use `make exception` to construct an exception and receive it normally. The result is a single owning holder for the selected concrete object and its fresh region. A later `throw` of that holder propagates the same identity and creation-site trace.
+Use `make exception` to construct an exception and receive it normally. The following cause-less forms return one holder for the new concrete object and its fresh region. A later `throw` of that holder propagates the same identity and creation-site trace.
 
 ```text
 make exception T(args...) [in region (bytes -> capacity)]
@@ -219,13 +221,69 @@ With parentheses, prepare explicit constructor arguments in source order, evalua
 
 Making a checked type does not itself raise it or require `throws T`. Checked failures of arguments, capacity or initialization still need coverage. An owning result is delivered after required cleanup succeeds. Discard releases the holder. The later `throw saved;` consumes it immediately on successful propagation and incurs the checked obligation of its declared type. Using the make expression directly as a throw operand still creates one object and captures one trace.
 
-Fresh make has a null cause, including inside a catch. Its grammar excludes `from`, a supplied existing owner (`in e`), and uninitialized reservation. `in region (...)` configures a new owner. Ordinary `make T` and a bare constructor call `T(...)` cannot be used to bypass the exception constructor. A future expression that consumes an existing cause owner to return a new same-region holder is a separate design choice.
+Omitting `from` leaves the cause null, including inside a catch. Existing-owner placement (`in e`) and uninitialized reservation reject. `in region (...)` configures a new owner. Ordinary `make T` and a bare constructor call `T(...)` cannot bypass the exception constructor.
+
+#### Constructing a normal result with a cause
+
+Use one optional placement clause. With neither clause, acquire a fresh region using the image default. `in region (...)` acquires a fresh region with the given budget. The proposed `from cause` alternative constructs the new exception in the selected cause's existing region, retains that cause through the readonly link and returns the owning holder normally. Both clauses together reject in either order. Cause selection uses the usual catch-local tip rule.
+
+```cod
+data WriteException <: Exception { job_id:u64; }
+data SaveException <: Exception { job_id:u64; }
+
+func translate(exception original:WriteException) -> exception :SaveException {
+    return make exception SaveException from original {
+        job_id <- original.job_id;
+    };
+}
+```
+
+For `make exception E(f()) from g()`, prepare the explicit constructor arguments first, then evaluate the cause once. For braced initialization, write `make exception E from g() { ... }`: resolve the cause and its owner once before reserving the object and evaluating its fields. Both forms preserve written effect order. A previously evaluated owner-producing expression can also be bound to a local. No trailing after-braces form is needed for normal make.
+
+The cause supplies a non-null target and a provable handoff of its whole region. A plain borrowed argument alone cannot supply that handoff. While the new object is being initialized, a named source holder still covers reads such as `original.job_id`. At successful publication the result takes the one release obligation and the source holder is consumed. The old object remains reachable through `.cause`, along with its original trace. The new object has its own construction trace and uses the existing region's remaining capacity.
+
+If initialization fails, no outgoing result is published. A still-live source holder remains responsible for the region, so a local handler can continue using it. If evaluation instead produced an owning temporary, its ordinary failure cleanup applies. Effects or independent ownership transfers already performed by operands stand. Failed construction in a live region creates no allocation rollback promise. Construction with a cause adds no implicit throw of either exception type.
+
+##### Keeping a typed reference to the original
+
+The named `exception` binding is consumed on successful handoff. Keeping an independently declared reference follows [D-14’s local transfer rule](RegionalOwnership.md#local-view-validity-after-ownership-transfer). The declaration records the target, its access and its actual owner while the source holder is available.
+
+```cod
+func translate_for_job(exception original:WriteException) -> exception :SaveException {
+    ref detail:const WriteException in original = original;
+    exception wrapped:SaveException <- make exception SaveException from original {
+        job_id <- original.job_id;
+    };
+    report(detail.job_id);
+    return wrapped;
+}
+```
+
+Assume `report` accepts the scalar ID. On success, `wrapped` holds the same region. `detail` still selects the original `WriteException` with its declared access. Its `in original` names the region established at declaration time. A later read does not evaluate the consumed binding again. Using `original` itself to inspect, transfer or throw still rejects. This leaves each declaration with one mode on every path. If the author wants to keep the spelling `original` for reads, a separately named exception holder can be borrowed into a ref named `original` before the handoff.
+
+A direct local make gives the checker the owner equality. Track the live holder of that instance across normal and exceptional completion. A local use of the saved reference needs proof of live, permitted access on every reaching path. Passing the holder to a consuming helper whose contract gives no such proof prevents subsequent use. Releasing it ends the borrow. This uses existing owner evidence and requires no extra per-reference ownership accounting. The direct case has one known transition. Joins, callbacks and independently compiled helpers still require their ordinary lifetime proofs.
+
+If the only later use is to report the immediate cause, the readonly `wrapped.cause` view suffices under its existing null and access rules. In a transparent catch, that link can select the incoming tip. A typed borrow taken from the matched binding continues to select the matched business exception. This difference matters to code that needs fields specific to that type.
+
+##### Implementation cost of preserving the borrow
+
+**Disposition:** keep the H-263 same-region rule and defer compiler support for a typed borrow used after `from original`. The source `exception` binding remains consumed. Until the compiler can prove the surviving borrow, diagnose its post-handoff use as unsupported. An application needing only an ID or code can receive its bits before wrapping. The caller can also inspect the immediate cause while the wrapper lives when a readonly root-typed view suffices.
+
+The [checker](../cod/lang_checked.hh) has separate availability, target and owner facts. Its `owner_alive` recognizes external owners and active lexical scopes. Membership in an active scope cannot establish that a releasable region instance still has a live holder. The [checked result modes](../cod/lang_checked_program.hh) cover values, borrowed refs and borrowed ptrs. The [LLVM exception value](../cod/lang_llvm.hh) contains five scalar fields. The [runtime cause table](../cod/lang_native_runtime.hh) stores diagnostic records by index. A borrow of an intrinsic value or its lexical slot therefore cannot serve as proof or native transport of the original business object inside a transferred region.
+
+| Work | Engineering estimate and scope |
+| --- | --- |
+| Shared owning-exception groundwork | Multi-week work from the present compiler, with low schedule confidence until the representation is selected. Represent the actual region and selected target on normal and thrown outcomes, place typed payloads in it, preserve a distinct incoming tip when applicable, and validate the exact construction/publication/cleanup boundary. These are dependencies of owning exceptions themselves. |
+| Direct named local handoff, once those dependencies work | Roughly 1–2 engineer-days for checker and lowering integration, assuming a stable target locator and reusable region-instance liveness evidence. Retain the original locator, reassign responsibility on the success edge and use the existing ownership state on the failure edge. |
+| Focused verification of that direct case | Roughly 1–3 engineer-days. Check that success reads the original subtype’s field, use of the consumed name rejects, a local catch of initializer failure retains the source, and use after releasing or potentially consuming the final holder rejects. Check consistent behavior on shared and specialized native paths and one release per region, including injected allocation failure. Existing [region cleanup fixtures](../tests/cod/language/owned_region_tests.py) provide patterns. The [intrinsic exception borrow fixtures](../tests/cod/language/exception_borrow_staging_tests.py) exercise a different representation. |
+
+These are planning ranges for one engineer familiar with the seed compiler. Revisit the direct case when the checker can distinguish a holder from the instance it covers and both native outcome paths transfer the selected object and owner with exact cleanup. The incremental estimate is 2–5 engineer-days at that point. It excludes proving the same fact through arbitrary calls, captures, loop iterations, deferred work or joins with different owners. Accept those additional cases as their ordinary proofs become available. A cast, a still-live lexical name or a second release obligation cannot stand in for the missing proof.
 
 ### Returning a locally caught exception
 
 A handler that already owns a caught exception can return its holder normally. This requires neither a new object nor a second trace. A factory creating a fresh diagnostic can return the [owning make result](#make-exception-expressions) directly. A `ref T in O` result instead requires proof that O covers the caller's use. The previously discussed result-only borrowed-catch signature still needs a specified release holder when no other owner reaches the caller. It supplies no implicit handoff for `make exception`.
 
-**Cause initialization.** Only a `from` clause on a constructing throw or rethrow can explicitly supply the canonical cause. Positional arguments, named arguments, ordinary field initializers and parameter defaults cannot set it. The cause becomes readonly at publication and cannot be rebound or mutated through an alias or assertion. A business payload containing another exception remains distinct from the reserved cause relationship. Construction without a cause leaves the cause pointer null.
+**Cause initialization.** An explicit canonical cause comes from a constructor’s `from` clause on a constructing throw, rethrow, or the proposed [caused normal make](#constructing-a-normal-result-with-a-cause). Positional arguments, named arguments, ordinary field initializers and parameter defaults cannot set it. The cause becomes readonly at publication and cannot be rebound or mutated through an alias or assertion. A business payload containing another exception remains distinct from the reserved cause relationship. Construction without a cause leaves the cause pointer null.
 
 The readonly built-in `e.cause` yields a **nullable ptr** to the immediate cause of e. Its target owner is always the owner of e, including when the pointer is null. Every link in a cause chain therefore has one common actual owner. The readonly catch field [`e.tip`](#the-catch-bindings-readonly-tip-field) yields a **non-null ref** to the incoming exception. Both targets have type `Exception` and are readable through these fields. Neither field permits rebinding its link or writing through it. Reading an absent cause yields an ordinary null pointer with its owner evidence. Testing it with `is null` yields true. A payload read through that pointer follows the [checked null-dereference rules](#checked-nullpointerexception). The bounds-check switch has no effect on either field.
 
@@ -293,7 +351,7 @@ proc submit(id:u64) {
 | Readonly handler and broad static type | An owning `catch (e:const T)` can release and forward its holder while preserving readonly target access. A separate consuming helper would need compatible access. Moving responsibility cannot upgrade a readonly binding. A `throw` at declared type `Exception` keeps its checked obligation under H-525. |
 | Existing cause | Every link must stay in one actual owner. A wrapper with cause e must be constructed in e's region. After successful construction the new selected object and the same region travel together. Bare rethrow uses the incoming tip. A failed translation cannot publish a partial wrapper or undo earlier initializer effects. Any still-live input holder follows its ordinary cleanup path. |
 
-For example, evaluating `rethrow;` inside a catch constructs a new wrapper and captures a trace. Using a fresh region for the wrapper would create a forbidden cross-owner cause link. Building the wrapper under the current holder uses the same static ownership rule as enriching a failure with a retry plan. A cause-less `throw OtherError {};` in the same catch establishes a new owner. The two mechanisms have different owner choices even though both create a new exception object. For an explicitly supplied cause, a plain borrowed helper argument gives target access only. Constructing and propagating a wrapper additionally requires the ability to hand off that region. If a braced initializer needs the cause owner before an effectful trailing `from` can supply it, prebinding the cause in an owning local makes the order explicit. Admission of the unbound spelling remains under review. Extending the new expression to `make exception DomainError {} from e` would also have to consume the cause holder when returning the new holder. Keeping both as independent owners of the same region would contradict uniqueness. The fresh make expression has no such clause.
+For example, evaluating `rethrow;` inside a catch constructs a new wrapper and captures a trace. Using a fresh region for the wrapper would create a forbidden cross-owner cause link. Building the wrapper under the current holder uses the same static ownership rule as enriching a failure with a retry plan. A cause-less `throw OtherError {};` in the same catch establishes a new owner. The two mechanisms have different owner choices even though both create a new exception object. For an explicitly supplied cause, a plain borrowed helper argument gives target access only. Constructing and propagating a wrapper additionally requires the ability to hand off that region. If a braced initializer needs the cause owner before an effectful trailing `from` can supply it, prebinding the cause in an owning local makes the order explicit. Admission of the unbound spelling remains under review. For normal make, [placing `from e` before the field block](#constructing-a-normal-result-with-a-cause) puts owner selection before its first use and hands the one owner to the completed result.
 
 #### Region and members of UnhandledDeferError
 
