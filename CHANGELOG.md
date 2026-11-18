@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-17 — Keep review routing and registry records current
+
+<a id="k-review-routing-20261117"></a>
+**K-REVIEW-ROUTING-20261117 — Current review routing and concise registry records.** Editorial continuity registry860→861 preserves all current qualifications, value/dependency edges, exclusions and evidence locators. The two existing defer/capture reviews are discussed in the design chat; mainline integrates recorded decisions. Current entries replace duplicated implementation/revision narratives, and operation name/identity references use the established glossary. Baseline: `f2b7cf3a9cb3d213fc42624be63a7f4a8be48c8c:design/DesignAuthorityRegistry.md`; historical payloads remain there and under their stable changelog IDs. DeferredExecutionChecks r2 and D-18r113 are unchanged and unadopted.
+
 ## 2026-11-17 — Give explicit full scopes independent deferred cleanup
 
 <a id="h-full-scope-defer-20261117"></a>
