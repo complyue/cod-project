@@ -1,6 +1,6 @@
 # CoD source compiler validation
 
-Reference revision: 452 · Recorded: 2026-11-18 America/Los_Angeles.
+Reference revision: 453 · Recorded: 2026-11-18 America/Los_Angeles.
 
 ## Design authority
 
@@ -163,7 +163,7 @@ The compiler driver connects source discovery/checking to native emission explic
 
 Before checking a callable body, the checker assembles the entry facts for owners, captures and parameters and derives their shared initialization facts once. Borrowed target presence, payload initialization and owner/access evidence remain independent. Body operations and cleanup consume the same entry facts.
 
-Type queries of immediate full scopes use the ordinary declaration checks for known initializer types, target access and explicit owner mismatches. Value initializers permit established lossless transfers, while borrowed targets require the exact type. Fresh local storage and null initializers retain their source requirements. The same loop checks establish range index and fold accumulator types, including checking an empty range's fold body. The query establishes the scope's type without evaluating its effects or allocating its storage.
+Type queries of immediate full scopes use the ordinary declaration checks for known initializer types, target access and explicit owner mismatches. Value initializers permit established lossless transfers, while borrowed targets require the exact type. Fresh local storage and null initializers retain their source requirements. The same loop checks establish range index and fold accumulator types, including checking an empty range's fold body. Ordinary and deferred handlers use the same exception-category validation and handler-local lookup. Queries also validate the known result types of a try body and its catch arms. The query establishes the scope's type without evaluating its effects or allocating its storage.
 
 A callable family containing one method with fixed inputs can cover its view without enumerating all input tuples. Each per-input domain must prepare to the fixed formal, including every associated declaration. Expected-result evidence and type-only lexical queries stay fixed per materialization; mutable analysis/emission hints cannot change the proof or callable identity. Distinct result/query contexts retain their own checked implementations.
 

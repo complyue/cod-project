@@ -23,6 +23,10 @@ def reject(source, diagnostic=NPE):
     return TYPES + PAYLOAD + source, 2, '', diagnostic
 
 
+def query(body):
+    return TYPES + 'val result<-make local typeof({{' + body + '}}){4u64};'
+
+
 runner.CASES = {
     'throw_only_typed': run('val e<-sample_error();try{ {{throw e;}}; }'
                             'catch(caught:const NullPointerException){behave @print(caught.category);};', '4\n'),
@@ -32,6 +36,26 @@ runner.CASES = {
                                          'val result<-make local typeof({ {{throw e;}};7u64 }){9u64};behave @print(result);', '9\n'),
     'throw_only_unchecked_query_validity': reject('val result<-make local typeof({{throw 7u64;}});',
                                                   'throw requires an intrinsic exception value'),
+    'query_checks_catch_category': (query('try{}catch(e:const u64){};return 7u64;'),
+        2, '', 'catch requires a selected intrinsic exception type'),
+    'query_rejects_repeated_catch_category': (query('try{}catch(e:const NullPointerException){}'
+        'catch(f:const NullPointerException){};return 7u64;'), 2, '', 'duplicate exception category in catch clauses'),
+    'query_matches_root_and_untyped_catch_category': (query('try{}catch(e:const Exception){}catch(f){};return 7u64;'),
+        2, '', 'duplicate exception category in catch clauses'),
+    'query_checks_deferred_catch_category': (query('defer catch(e:const u64){};return 7u64;'),
+        2, '', 'catch requires a selected intrinsic exception type'),
+    'query_rejects_repeated_deferred_catch_category': (query('defer catch(e:const NullPointerException){}'
+        'catch(f:const NullPointerException){};return 7u64;'), 2, '', 'duplicate exception category in catch clauses'),
+    'query_checks_guarded_arm_types': (query('try{true}catch(e:const NullPointerException){7u64};return 6u64;'),
+        2, '', 'try body and catch arms must have the same result type'),
+    'query_uses_deferred_catch_binding_within_handler': (IO +
+        query('func e()->u64{return 7u64;};defer catch(e:const NullPointerException){e.category;};return e();') +
+        'behave @print(result);', 0, '4\n', ''),
+    'query_checks_handlers_without_running_cleanup': (IO +
+        query('defer{behave @print(88u64);};defer catch(e:const NullPointerException){};'
+              'try{behave @print(99u64);}catch(e:const NullPointerException){}catch(e:const Exception){}'
+              'finally{behave @print(77u64);};return 7u64;') +
+        'behave @print(result);', 0, '4\n', ''),
     'ordinary_throw_only_requires_result': reject('proc plain(val e:NullPointerException) throws NullPointerException{throw e;}',
                                                   'unproved callable result'),
     'throw_only_requires_coverage': reject('val e<-sample_error();{{throw e;}};'),

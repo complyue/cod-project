@@ -780,6 +780,14 @@ class ScalarChecker {
     if (body != Type::never && body != accumulator && !widens(body, accumulator))
       fail(at, "fold body does not satisfy the accumulator type");
   }
+  static void check_catch_category(const Type &type, std::set<size_t> &handled, const Location &at) {
+    if (type.kind != Type::exception) fail(at, "catch requires a selected intrinsic exception type");
+    if (!handled.insert(type.identity).second) fail(at, "duplicate exception category in catch clauses");
+  }
+  static void check_guarded_result(const Type &body, const Type &handler, const Location &at) {
+    if (body != Type::never && handler != Type::never && body != handler)
+      fail(at, "try body and catch arms must have the same result type");
+  }
   void reference_destination(const CheckedOperation &view, const Location &at) const {
     if (view.slots.empty()) fail(at, "reference operation requires a binding slot");
     require_slots_live(view.slots, at, "reference binding's lexical scope has ended");
@@ -4007,15 +4015,28 @@ class ScalarChecker {
     state.value = type && type != Type::never ? view : ViewEvidence{};
     return type;
   }
+  Type evidence_annotation(const Type &type, const TypeEvidenceState &state) const {
+    return state.method ? substitute(type, program_.methods[*state.method], state.substitutions, true) : resolve_type(type);
+  }
+  TypeEvidenceState catch_evidence(const Expression &handler, const TypeEvidenceState &entry,
+                                   std::set<size_t> &handled) const {
+    const auto type = handler.annotation ? evidence_annotation(*handler.annotation, entry) : exception_type(0);
+    if (entry.required) check_catch_category(type, handled, handler.at);
+    auto caught = entry;
+    caught.catch_context = true;
+    caught.bindings[handler.text] = type;
+    caught.definitions.erase(handler.text);
+    caught.owner_bindings.erase(handler.text);
+    caught.views[handler.text] = {true, true, true, EvidenceOwner::for_scope(handler), false, false, true, true};
+    return caught;
+  }
   struct LocalStorageEvidence {
     std::optional<Type> type;
     bool completes = true;
   };
   LocalStorageEvidence local_storage_evidence(const Expression &expr, TypeEvidenceState &state) const {
     LocalStorageEvidence storage;
-    if (expr.annotation) storage.type = state.method
-        ? substitute(*expr.annotation, program_.methods[*state.method], state.substitutions, true)
-        : resolve_type(*expr.annotation);
+    if (expr.annotation) storage.type = evidence_annotation(*expr.annotation, state);
     else {
       auto query = state; query.returns = nullptr;
       storage.type = type_evidence(*expr.children.front(), query);
@@ -4033,9 +4054,6 @@ class ScalarChecker {
                                      bool contextual, const Type *expected, std::vector<Type> *alternatives) const {
     using K = Expression::Kind;
     const auto child = [&](size_t i, bool context = false) { return type_evidence(*expr.children.at(i), state, context); };
-    const auto annotation = [&](const Type &type) {
-      return state.method ? substitute(type, program_.methods[*state.method], state.substitutions, true) : resolve_type(type);
-    };
     if ((expr.kind == K::binary || expr.kind == K::call) && identity_operation(expr.text)) {
       if (expr.children.size() != 2) fail(expr.at, "reference identity requires two reference views");
       const auto left = child(0); const auto first = state.value;
@@ -4135,7 +4153,8 @@ class ScalarChecker {
         if (state.required && value && !declaration->owner_name.empty())
           fail(declaration->at, "val storage belongs to its lexical scope, not an external owner");
         const auto declared_owner = declaration->owner_name.empty() ? std::optional<EvidenceOwner>{} : owner_evidence(declaration->owner_name, state, declaration->at);
-        const auto declared = declaration->annotation ? std::optional<Type>{annotation(*declaration->annotation)} : std::nullopt;
+        const auto declared = declaration->annotation ?
+            std::optional<Type>{evidence_annotation(*declaration->annotation, state)} : std::nullopt;
         const auto &initializer = *declaration->children.front();
         std::optional<Type> initial, storage_type;
         if (initializer.kind == K::make_local) {
@@ -4245,12 +4264,11 @@ class ScalarChecker {
       if (state.validating_body) {
         auto delayed = state;
         type_evidence(*expr.children.front(), delayed);
+        std::set<size_t> handled;
         for (size_t i = 1; i < expr.children.size(); ++i) {
           const auto &handler = *expr.children[i];
           if (handler.kind == K::block) { type_evidence(handler, delayed); continue; }
-          auto caught = delayed; caught.catch_context = true;
-          caught.bindings[handler.text] = handler.annotation ? annotation(*handler.annotation) : exception_type(0);
-          caught.views[handler.text] = {true, true, true, EvidenceOwner::for_scope(handler), false, false, true, true};
+          auto caught = catch_evidence(handler, delayed, handled);
           type_evidence(*handler.children.front(), caught);
         }
         return Type::void_type;
@@ -4265,19 +4283,16 @@ class ScalarChecker {
       auto result = type_evidence(*expr.children.front(), state, contextual, nullptr, alternatives); view = state.value;
       const auto body_state = state;
       const auto catch_entry = merge_evidence(before, body_state);
+      std::set<size_t> handled;
       for (size_t i = 1; i < expr.children.size(); ++i) {
         const auto &handler = *expr.children[i];
         if (handler.kind == K::block) {
           if (type_evidence(handler, state) == Type::never) result = Type::never;
           break;
         }
-        auto caught = catch_entry;
-        caught.catch_context = true;
-        caught.bindings[handler.text] = handler.annotation ? annotation(*handler.annotation) : exception_type(0);
-        caught.definitions.erase(handler.text);
-        caught.owner_bindings.erase(handler.text);
-        caught.views[handler.text] = {true, true, true, EvidenceOwner::for_scope(handler), false, false, true, true};
+        auto caught = catch_evidence(handler, catch_entry, handled);
         const auto type = type_evidence(*handler.children.front(), caught, contextual, nullptr, alternatives);
+        if (state.required) check_guarded_result(*result, *type, handler.at);
         if (const auto outer = catch_entry.bindings.find(handler.text); outer != catch_entry.bindings.end())
           caught.bindings[handler.text] = outer->second;
         else caught.bindings.erase(handler.text);
@@ -5493,8 +5508,7 @@ class ScalarChecker {
       const auto type = !handler.annotation ? exception_type(0) : instance
           ? substitute(*handler.annotation, program_.methods[instance->method], instance->substitutions)
           : resolve_type(*handler.annotation);
-      if (type.kind != Type::exception) fail(handler.at, "catch requires a selected intrinsic exception type");
-      if (!handled.insert(type.identity).second) fail(handler.at, "duplicate exception category in catch clauses");
+      check_catch_category(type, handled, handler.at);
       if (!type.identity) incoming.declared.clear();
       std::vector<LexicalState> entries;
       ExceptionFacts categories;
@@ -5533,8 +5547,7 @@ class ScalarChecker {
       CheckedOperation fact; fact.type = type; fact.place = id; fact.exceptions = categories;
       operations[&handler] = fact;
       if (handled_type != Type::never) {
-        if (result_type != Type::never && result_type != handled_type && expr.kind != Expression::Kind::deferred)
-          fail(handler.at, "try body and catch arms must have the same result type");
+        if (expr.kind != Expression::Kind::deferred) check_guarded_result(result_type, handled_type, handler.at);
         result_type = handled_type;
         if (!entries.empty()) {
           normals.push_back(lexical_);
