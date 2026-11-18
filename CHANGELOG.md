@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-11-18 — Integrate standalone scope decisions
+
+<a id="k-standalone-scope-integration-20261118"></a>
+**K-STANDALONE-SCOPE-INTEGRATION-20261118 — Integrate design and implementation evidence.** Registry880 retains current compiler support under K-FULL-SCOPE-VALUE-BOUNDARY-20261118 and the confirmed r94 source decisions and D-24r10 in the merged parent. Qualification and implementation status follow their respective records.
+
+## 2026-11-18 — Set the throw-only scope default and application rethrow guidance
+
+<a id="h-standalone-void-20261118"></a>
+**H-STANDALONE-VOID-20261118 — Preserve explicit results and default standalone throw-only scopes to void.** On 2026-11-18 America/Los_Angeles the current project user selected “Keep explicit value returns; default a throw-only standalone body to void” in [the design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50). The question concerned standalone scopes without an expected result. D-17r94/D-24r10 retain ordinary expected signatures, explicit local value returns, enclosing func/proc permissions and independent checked obligations.
+
+<a id="h-wrapper-usage-20261118"></a>
+**H-WRAPPER-USAGE-20261118 — Prefer underlying failures in application code.** In the same chat on 2026-11-18 America/Los_Angeles the user said “虽然技术上允许，但是实践上强烈建议用户不要碰它” about using RethrownException, and reiterated “去掉链上所有前缀的 RethrownException 后去匹配声明的 catch 类型” and “用wrapper作为 cause 保持完整性”. D-17r94 keeps H-518–H-523’s source order, explicit-wrapper case and catch-local identity rule. The guidance covers public throws declarations. It selects no warning, new inspection API or physical representation.
+
+<a id="k-standalone-void-wrapper-20261118"></a>
+**K-STANDALONE-VOID-WRAPPER-20261118 — Apply the two source decisions.** Registry878→879 links D-17-FULL-SCOPE/D-24 and D-17-CATCH-WRAPPERS to their examples. Derive ordinary checked coverage through transparent wrappers, conservative coverage of an explicitly named wrapper and preservation of both prior trace links on rethrow. General correlated checker evidence remains open. The previous contracts are at `f36a4b29991a1a0b3012d1531cd87c2e3eb89c6d:design/ExceptionControl.md` and `f36a4b29991a1a0b3012d1531cd87c2e3eb89c6d:design/CallableResultInference.md`.
+
 ## 2026-11-18 — Share full-scope value and callable completion
 
 <a id="k-full-scope-value-boundary-20261118"></a>
