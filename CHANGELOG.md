@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-18 — Prioritize constructor and functor discussions
+
+<a id="k-discussion-priorities-20261118"></a>
+**K-DISCUSSION-PRIORITIES-20261118.** The project user in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) requested discussion of constructors, especially for sums, and functors through overloaded `()`, and delegated their ordering. Registry916→917 puts constructor selection first and invocation of a data value second. This editorial change preserves the existing contract qualifications.
+
 ## 2026-11-18 — Assign DBMR contention handling to the native provider
 
 <a id="h-dbmr-contention-work-20261118"></a>
