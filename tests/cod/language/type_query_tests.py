@@ -132,6 +132,24 @@ runner.CASES={
     'const val present<-{{val saved<-(input is not null);defer{return saved;};defer set_true(saved,saved);return false;}};'+
     GUARDED_RESULT,declarations='func set_true(ref read:const bool in B,ref write:bool in B)->void where {owner B}{write<-true;};'),
     2,'',UNPROVED_TARGET),
+ 'projection_keeps_prepared_transfer_observation_after_input_rebinding':(saved_query(
+    'const val present<-{{val saved<-false;defer{return saved;};defer (<-)(saved,input is not null);'
+    'input=null in O;return false;}};'+GUARDED_RESULT),0,'9\n',''),
+ 'projection_does_not_reread_prepared_boolean_source':(saved_query(
+    'const val present<-{{val saved<-false,source<-true;defer{return saved;};defer (<-)(saved,source);'
+    'source<-(input is not null);return false;}};'+GUARDED_RESULT),2,'',UNPROVED_TARGET),
+ 'projection_reads_prepared_bits_swap_payload_at_cleanup':(saved_query(
+    'const val present<-{{val saved<-false,source<-false;defer{return saved;};defer (<->)(saved,source);'
+    'source<-(input is not null);return false;}};'+GUARDED_RESULT),0,'9\n',''),
+ 'projection_keeps_prepared_reference_selection_after_source_rebinding':(saved_query(
+    'const val present<-{{ptr saved:u64=null in O;ptr source:u64 in O=input;defer{return saved is not null;};'
+    'defer (=)(saved,source);source=null in O;return false;}};'+GUARDED_RESULT),0,'9\n',''),
+ 'projection_reads_prepared_reference_swap_selection_at_cleanup':(saved_query(
+    'const val present<-{{ptr saved:u64=null in O;ptr source:u64=null in O;defer{return saved is not null;};'
+    'defer (<=>)(saved,source);source=input;return false;}};'+GUARDED_RESULT),0,'9\n',''),
+ 'projection_uses_repeated_transfer_of_stable_observation':(saved_query(
+    'const val present<-{{val saved<-false;defer{return saved;};'
+    'for(i in 0..2){defer (<-)(saved,input is not null);};return false;}};'+GUARDED_RESULT),0,'9\n',''),
  'projection_reads_returned_boolean':(saved_query(
     'return if({{return input is not null;}}){input}else{7u64};'),0,'9\n',''),
  'projection_returns_observation_without_capturing_reference':(saved_query(

@@ -9,6 +9,7 @@
 #include <charconv>
 #include <cmath>
 #include <tuple>
+#include <type_traits>
 #include <variant>
 
 namespace cod::language {
@@ -499,10 +500,27 @@ class ScalarChecker {
       return unknown || std::ranges::any_of(selected, [&](const auto &place) { return places.contains(place); });
     }
   };
+  struct PreparedBooleanTransfer {
+    EvidencePlaces destination;
+    PresenceBranches value;
+  };
+  struct PreparedReferenceAssignment {
+    EvidenceSelection destination;
+    TargetEvidence value;
+  };
+  struct PreparedBooleanSwap {
+    EvidencePlaces left, right;
+  };
+  struct PreparedReferenceSwap {
+    EvidenceSelection left, right;
+  };
+  using PreparedBuiltin = std::variant<std::monostate, PreparedBooleanTransfer, PreparedReferenceAssignment,
+                                       PreparedBooleanSwap, PreparedReferenceSwap>;
   struct TypeDeferredEffects {
     QueryWrites payloads, slots;
     std::set<size_t> outcomes;
     bool opaque = false;
+    PreparedBuiltin builtin;
   };
   struct TypePreparedCall {
     const Expression *expression;
@@ -528,6 +546,8 @@ class ScalarChecker {
     std::map<EvidenceSlot, EvidencePlaces> targets;
     Observations booleans, reference_observations;
     std::map<EvidenceSlot, size_t> changed;
+    // Invocation entry selections have no writable binding in this body.
+    EvidencePlaces entry_selections;
     // The members retain one selected reference value in independent slots.
     // A write removes the affected slot from its group.
     std::set<EvidencePlaces> equal_selections;
@@ -673,6 +693,12 @@ class ScalarChecker {
         else booleans.erase(place);
       }
     }
+    void exchange_boolean(const EvidencePlaces &left, const EvidencePlaces &right) {
+      if (left.size() == 1 && left == right) return;
+      const auto lhs = read_boolean(left), rhs = read_boolean(right);
+      write_boolean(left, rhs);
+      write_boolean(right, lhs);
+    }
     void remove_binding(const std::string &name) {
       bindings.erase(name);
       value_places.erase(name);
@@ -810,6 +836,7 @@ class ScalarChecker {
       record_assignment_selection(selection, std::move(selected));
     }
     void exchange(const EvidenceSelection &left, const EvidenceSelection &right) {
+      if (left.footprint.size() == 1 && left.footprint == right.footprint) return;
       auto left_selected = selected_target(left), right_selected = selected_target(right);
       const auto before = writes;
       const bool overlap = may_overlap(left.footprint, right.footprint);
@@ -986,6 +1013,7 @@ class ScalarChecker {
     TypeEvidenceExits *exits = nullptr;
     TypeDeferredFlow *deferred = nullptr;
     size_t deferred_queue = 0;
+    std::optional<size_t> repeated_observations;
     bool has_deferred_action = false;
     std::set<const Expression *> delayed_controls;
     std::optional<TypePreparedCall> prepared_call;
@@ -5068,6 +5096,32 @@ class ScalarChecker {
     if (state.preparing(expr)) state.prepared_call->effects.slots.record(slot.footprint);
     else state.selections.assign(slot, {});
   }
+  static PresenceBranches snapshot_type_branches(const TypeEvidenceState &state,
+                                                   const std::optional<PresenceBranches> &value) {
+    auto saved = state.selections.observe(value);
+    saved.forget([&](const auto &slot) { return !state.selections.entry_selections.contains(slot); });
+    if (state.repeated_observations) saved.forget_observations(*state.repeated_observations);
+    return saved;
+  }
+  static TargetEvidence snapshot_type_target(const TypeEvidenceState &state, TargetEvidence selected) {
+    selected.selection = {};
+    std::erase_if(selected.same_selected, [&](const auto &slot) { return !state.selections.entry_selections.contains(slot); });
+    selected.presence_proof = snapshot_type_branches(state, selected.presence_proof);
+    return selected;
+  }
+  static void apply_type_builtin(QuerySelections &selections, const PreparedBuiltin &operation) {
+    std::visit([&](const auto &effect) {
+      using Effect = std::decay_t<decltype(effect)>;
+      if constexpr (std::is_same_v<Effect, PreparedBooleanTransfer>)
+        selections.write_boolean(effect.destination, effect.value);
+      else if constexpr (std::is_same_v<Effect, PreparedReferenceAssignment>)
+        selections.assign(effect.destination, effect.value);
+      else if constexpr (std::is_same_v<Effect, PreparedBooleanSwap>)
+        selections.exchange_boolean(effect.left, effect.right);
+      else if constexpr (std::is_same_v<Effect, PreparedReferenceSwap>)
+        selections.exchange(effect.left, effect.right);
+    }, operation);
+  }
   static void type_input_mutation(const Expression &expr, TypeEvidenceState &state, const Type &argument, const TargetEvidence &target,
                                   ArgumentMode mode, bool readonly, bool writable_slot = false) {
     if (writable_slot) type_slot_write(expr, state, target.selection);
@@ -5349,6 +5403,13 @@ class ScalarChecker {
       const auto &action = std::get<TypeDeferredFlow::Action>(entry);
       if (!action.entry) {
         const auto &effects = action.effects;
+        const bool exact = !std::holds_alternative<std::monostate>(effects.builtin);
+        if (exact && effects.outcomes.contains(0)) {
+          auto normal = state;
+          apply_type_builtin(normal.selections, effects.builtin);
+          enqueue(action.earlier, returned, error, std::move(normal), result);
+          if (effects.outcomes.size() == 1) continue;
+        }
         if (effects.opaque || effects.slots.unknown) {
           const auto condition = state.selections.reach_condition();
           state.selections.forget();
@@ -5361,6 +5422,7 @@ class ScalarChecker {
         if (guards_errors) {
           const bool prepared = !effects.outcomes.empty();
           for (const auto outcome : prepared ? effects.outcomes : deferred_outcomes()) {
+            if (exact && !outcome) continue;
             // An ordinary call cannot consume a failure already pending.
             const auto next_error = prepared && !outcome ? error : outcome;
             if (action.may_replace) enqueue(action.earlier, true, next_error, state, {});
@@ -5456,6 +5518,7 @@ class ScalarChecker {
         QuerySelections::Observations imported_booleans;
         const auto retain_witness = [&](const EvidenceSlot &slot) {
           body.selections.footprints.try_emplace(slot, EvidencePlaces{slot});
+          body.selections.entry_selections.insert(slot);
           imported_slots[slot].insert(slot);
           exported_slots[slot].insert(slot);
         };
@@ -5827,6 +5890,9 @@ class ScalarChecker {
         if (type == Type::boolean) {
           target_facts.branches = state.target.branches;
           type_boolean_write(expr, state, destination.places, target_facts.branches);
+          if (state.preparing(expr) && !destination.places.empty())
+            state.prepared_call->effects.builtin =
+                PreparedBooleanTransfer{destination.places, snapshot_type_branches(state, target_facts.branches)};
         }
       } else if (state.required) {
         reference_destination(view, expr.at);
@@ -5848,7 +5914,12 @@ class ScalarChecker {
       if (expr.kind == K::rebind) {
         target_facts = state.target;
         target_facts.selection = {};
-        if (state.preparing(expr)) type_slot_write(expr, state, destination.selection);
+        if (state.preparing(expr)) {
+          type_slot_write(expr, state, destination.selection);
+          if (!destination.selection.footprint.empty())
+            state.prepared_call->effects.builtin =
+                PreparedReferenceAssignment{destination.selection, snapshot_type_target(state, target_facts)};
+        }
         else if (view.nullable || !destination.selection.footprint.empty()) {
           const auto before = state.selections.writes;
           state.selections.assign(destination.selection, target_facts);
@@ -6114,6 +6185,7 @@ class ScalarChecker {
       const auto &loop_body = *expr.children[fold ? 3 : 2];
       const auto loop_read = fold ? EvidenceRead::payload : EvidenceRead::discarded;
       const auto first_iteration_observation = state.selections.observation_decisions ? state.selections.observation_decisions->next_observation : 0;
+      if (reach.repeat && !iteration.repeated_observations) iteration.repeated_observations = first_iteration_observation;
       const auto header = state.deferred && reach.repeat
           ? state.deferred->header(state.deferred_queue, first_iteration_observation) : 0;
       if (header) iteration.deferred_queue = header;
@@ -6143,6 +6215,7 @@ class ScalarChecker {
         restore_type_binding(path, state, expr.text);
         if (fold) restore_type_binding(path, state, expr.binding);
         if (reach.repeat) path.selections.forget_observations(first_iteration_observation);
+        path.repeated_observations = state.repeated_observations;
       };
       leave_iteration(iteration);
       iteration.exits = state.exits;
@@ -6370,9 +6443,12 @@ class ScalarChecker {
           }
         if (!reference && methods.methods.empty() && operand_targets.size() == 2 && arguments.front() == Type::boolean) {
           const auto &left = operand_targets.front().places, &right = operand_targets.back().places;
-          const auto lhs = state.selections.read_boolean(left), rhs = state.selections.read_boolean(right);
-          type_boolean_write(expr, state, left, rhs);
-          type_boolean_write(expr, state, right, lhs);
+          if (invokes) state.selections.exchange_boolean(left, right);
+          else {
+            type_boolean_write(expr, state, left);
+            type_boolean_write(expr, state, right);
+            if (!left.empty() && !right.empty()) state.prepared_call->effects.builtin = PreparedBooleanSwap{left, right};
+          }
         }
         if (!state.required) return Type::void_type;
         for (const auto &operand : views) {
@@ -6407,7 +6483,13 @@ class ScalarChecker {
         }
         const auto declared = builtin_declarations(expr, arguments, Type::void_type, true, access, owners, &state);
         if (!invokes) {
-          if (reference) for (const auto &operand : operand_targets) type_slot_write(expr, state, operand.selection);
+          if (reference && operand_targets.size() == 2) {
+            const auto &left = operand_targets.front().selection, &right = operand_targets.back().selection;
+            type_slot_write(expr, state, left);
+            type_slot_write(expr, state, right);
+            if (!left.footprint.empty() && !right.footprint.empty())
+              state.prepared_call->effects.builtin = PreparedReferenceSwap{left, right};
+          }
           std::set<size_t> outcomes{0};
           for (const auto category : declared) outcomes.insert(Completion::failure(category).reason);
           record_type_invocation(expr, state, std::move(outcomes), true);
