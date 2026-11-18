@@ -49,7 +49,7 @@ runner.CASES = {
  'signed_minimum_throws': (NPE+'func (-)(x:i64)->i64 throws NullPointerException;-9223372036854775808;',2,'','requires a covering catch or throws'),
  'swap_method': (IO+SWAP+'func (<->)(x:i64 in P,y:i64 in Q) where {owner P,owner Q}{intrinsic (<->)(x,y);}val x<-1,y<-2;x<->y;behave @print(x);behave @print(y);',0,'2\n1\n',''),
  'swap_builtin': (IO+SWAP+'val x<-1,y<-2;x<->y;behave @print(x);behave @print(y);',0,'2\n1\n',''),
- 'deferred_swap_builtin': (IO+SWAP+'val x<-1,y<-2;{{defer (<->)(x,y);x<-3;}};behave @print(x);behave @print(y);',0,'2\n3\n',''),
+ 'deferred_swap_builtin': (IO+SWAP+'ref x:i64=1,y:i64=2;{{defer (<->)(x,y);x<-3;}};behave @print(x);behave @print(y);',0,'2\n3\n',''),
  'swap_checked_obligation': (NPE+SWAP.replace(' where',' throws NullPointerException where')+'val x<-1,y<-2;x<->y;',2,'','requires a covering catch or throws'),
  'deferred_swap_checked_obligation': (NPE+SWAP.replace(' where',' throws NullPointerException where')+'val x<-1,y<-2;defer (<->)(x,y);',2,'','requires a covering catch or throws'),
  'swap_intrinsic_bypasses_declaration': (IO+SWAP.replace('func','proc')+'val x<-1,y<-2;intrinsic (<->)(x,y);behave @print(x);',0,'2\n',''),
@@ -64,28 +64,28 @@ for index, op in enumerate(('+', '-', '*', '/', '%', '==', '!=', '<', '>', '<=',
     result = 'bool' if op in ('==', '!=', '<', '>', '<=', '>=') else 'u64'
     declaration = f'func ({op})(x:u64,y:u64)->{result} throws NullPointerException;'
     for position, operands, output in (
-        ('first', '{{return 7u64;}},{observe(99u64);2u64}', '1\n7\n'),
-        ('second', '{observe(2u64);1u64},{{return 7u64;}}', '2\n1\n7\n'),
+        ('first', '{return 7u64;},{observe(99u64);2u64}', '1\n7\n'),
+        ('second', '{observe(2u64);1u64},{return 7u64;}', '2\n1\n7\n'),
     ):
         program = IO+NPE+declaration+'proc observe(x:u64)->void{behave @print(x);}' + \
             'proc f()->u64{defer observe(1u64);('+op+')('+operands+');return 0u64;}behave @print(f());'
         runner.CASES[f'aborted_binary_{index}_{position}'] = (program, 0, output, '')
 for op, argument, result in (('!', 'bool', 'bool'), ('-', 'i64', 'i64'), ('+', 'i64', 'i64')):
     program = IO+NPE+f'func ({op})(x:{argument})->{result} throws NullPointerException;' + \
-        'func f()->u64{('+op+')({{return 7u64;}});return 0u64;}behave @print(f());'
+        'func f()->u64{('+op+')({return 7u64;});return 0u64;}behave @print(f());'
     runner.CASES['aborted_unary_'+op] = (program, 0, '7\n', '')
 runner.CASES.update({
- 'aborted_generic_input': (IO+NPE+'func (+)(x:T,y:T)->const T throws NullPointerException where T;func f()->u64{(+)({{return 7u64;}},2u64);return 0u64;}behave @print(f());',0,'7\n',''),
- 'aborted_inferred_result': (IO+ADD+'func f(){(+)({{return 7u64;}},2);};behave @print(f());',0,'7\n',''),
- 'aborted_deferred_registration': (IO+NPE+'func (+)(x:u64,y:u64)->u64 throws NullPointerException;proc f()->u64{defer{behave @print(1u64);};defer (+)(1u64,{{return 7u64;}});return 0u64;}behave @print(f());',0,'1\n7\n',''),
- 'throwing_operand_keeps_own_category': (IO+NPE+'using "std:exceptions" StaticallyUnknownTypeException;func (+)(x:u64,y:u64)->u64 throws StaticallyUnknownTypeException;func f()->u64 throws NullPointerException{ptr p:u64=null in here;try{p;{}}catch(e:const NullPointerException){(+)({{throw e;}},2u64);{};};return 0u64;}try{f();{}}catch(e:const NullPointerException){behave @print(9u64);};',0,'9\n',''),
- 'aborted_declared_result_conflict': ('func (+)(x:u64,y:u64)->bool;func f()->u64{(+)({{return 7u64;}},2u64);return 0u64;}f();',2,'','does not satisfy callable declaration'),
- 'aborted_known_invalid_input': ('func (+)(x:bool,y:bool)->bool;func f()->u64{(+)({{return 7u64;}},false);return 0u64;}f();',2,'','no applicable numeric operation'),
- 'aborted_generic_unary_unproved': ('func (!)(x:T)->bool where T;func f()->u64{(!)({{return 7u64;}});return 0u64;}f();',2,'','cannot establish a parameter type'),
- 'aborted_inconsistent_inputs_unproved': ('func (+)(x:u32,y:u64)->u64;func (+)(x:u64,y:u64)->u64;func f()->u64{(+)({{return 7u64;}},2u64);return 0u64;}f();',2,'','cannot establish a parameter type'),
- 'aborted_borrowed_declaration_unproved': ('func (+)(ref x:u64 in O,ref y:u64 in O)->u64 where {owner O};func f()->u64{(+)({{return 7u64;}},2u64);return 0u64;}f();',2,'','cannot establish a parameter type'),
+ 'aborted_generic_input': (IO+NPE+'func (+)(x:T,y:T)->const T throws NullPointerException where T;func f()->u64{(+)({return 7u64;},2u64);return 0u64;}behave @print(f());',0,'7\n',''),
+ 'aborted_inferred_result': (IO+ADD+'func f(){(+)({return 7u64;},2);};behave @print(f());',0,'7\n',''),
+ 'aborted_deferred_registration': (IO+NPE+'func (+)(x:u64,y:u64)->u64 throws NullPointerException;proc f()->u64{defer{behave @print(1u64);};defer (+)(1u64,{return 7u64;});return 0u64;}behave @print(f());',0,'1\n7\n',''),
+ 'throwing_operand_keeps_own_category': (IO+NPE+'using "std:exceptions" StaticallyUnknownTypeException;func (+)(x:u64,y:u64)->u64 throws StaticallyUnknownTypeException;func f()->u64 throws NullPointerException{ptr p:u64=null in here;try{p;{}}catch(e:const NullPointerException){(+)({throw e;},2u64);{};};return 0u64;}try{f();{}}catch(e:const NullPointerException){behave @print(9u64);};',0,'9\n',''),
+ 'aborted_declared_result_conflict': ('func (+)(x:u64,y:u64)->bool;func f()->u64{(+)({return 7u64;},2u64);return 0u64;}f();',2,'','does not satisfy callable declaration'),
+ 'aborted_known_invalid_input': ('func (+)(x:bool,y:bool)->bool;func f()->u64{(+)({return 7u64;},false);return 0u64;}f();',2,'','no applicable numeric operation'),
+ 'aborted_generic_unary_unproved': ('func (!)(x:T)->bool where T;func f()->u64{(!)({return 7u64;});return 0u64;}f();',2,'','cannot establish a parameter type'),
+ 'aborted_inconsistent_inputs_unproved': ('func (+)(x:u32,y:u64)->u64;func (+)(x:u64,y:u64)->u64;func f()->u64{(+)({return 7u64;},2u64);return 0u64;}f();',2,'','cannot establish a parameter type'),
+ 'aborted_borrowed_declaration_unproved': ('func (+)(ref x:u64 in O,ref y:u64 in O)->u64 where {owner O};func f()->u64{(+)({return 7u64;},2u64);return 0u64;}f();',2,'','cannot establish a parameter type'),
  'surviving_branch_keeps_checked_failure': (NPE+'func (+)(x:u64,y:u64)->u64 throws NullPointerException;func f(flag:bool)->u64{return (+)(if(flag){return 7u64;}else{1u64},2u64);}f(true);',2,'','requires a covering catch'),
- 'aborted_alias': ({'ops.cod':NPE+'func (+)(x:u64,y:u64)->u64 throws NullPointerException;export (+);','main.cod':IO+'using "ops.cod" (+) as add;func f()->u64{add({{return 7u64;}},2u64);return 0u64;}behave @print(f());'},0,'7\n',''),
+ 'aborted_alias': ({'ops.cod':NPE+'func (+)(x:u64,y:u64)->u64 throws NullPointerException;export (+);','main.cod':IO+'using "ops.cod" (+) as add;func f()->u64{add({return 7u64;},2u64);return 0u64;}behave @print(f());'},0,'7\n',''),
 })
 runner.CASE_ARGUMENTS = {}
 runner.CASE_SHADOWS = {

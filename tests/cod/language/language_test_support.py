@@ -23,6 +23,12 @@ def expect_source_rejections(fixture, names, diagnostic):
             getattr(fixture, field, {}).pop(name, None)
 
 
+def observe_after_cleanup(work, observation):
+    """Observe a callable's final state after normal preparation and newer actions."""
+    return ('val observe_on_exit<-false;defer{if(observe_on_exit){' + observation + '}else{};};'
+            + work + 'observe_on_exit<-true;')
+
+
 def shadow_diagnostics(stderr, expected):
     pattern = r"^.+:\d+:\d+: warning: declaration shadows outer binding '([^']+)' \[-Wshadow\]\n"
     names = re.findall(pattern, stderr, re.M)

@@ -6,6 +6,7 @@ import foundation_tests as runner
 IO = 'using symbol "std:io" @print;'
 OUT = lambda value: 'behave @print('+value+');'
 BASE = 'val x<-1,y<-7;ptr p=x,q=y;'
+BORROWED_TARGETS = 'ref x:i64=1,y:i64=7;ptr p=x,q=y;'
 runner.CASES = {}
 for spelling in ('infix','explicit','intrinsic'):
     def rebind(left, right):
@@ -28,7 +29,7 @@ for spelling in ('infix','explicit','intrinsic'):
     runner.CASES[spelling+'_swap_bits'] = (IO+BASE+'{ '+result+'}<->x;'+OUT('x')+OUT('y')+OUT('p'),0,'7\n1\n1\n','')
     runner.CASES[spelling+'_retained_target'] = (IO+BASE+'ref target='+result+';p=x;target<-9;'+OUT('p')+OUT('y'),0,'1\n9\n','')
     runner.CASES[spelling+'_cleanup_target'] = (IO+BASE+'{try{ '+result+'}finally{p=x;{}}}<-9;'+OUT('p')+OUT('y'),0,'1\n9\n','')
-    runner.CASES[spelling+'_deferred_target'] = (IO+BASE+'{{defer (<-)('+result+',9);p=x;}};'+OUT('p')+OUT('y'),0,'1\n9\n','')
+    runner.CASES[spelling+'_deferred_target'] = (IO+BORROWED_TARGETS+'{{defer (<-)('+result+',9);p=x;}};'+OUT('p')+OUT('y'),0,'1\n9\n','')
 runner.CASE_ARGUMENTS = {}
 runner.EXTRA_SOURCES = [Path(__file__)]
 if __name__ == '__main__':
