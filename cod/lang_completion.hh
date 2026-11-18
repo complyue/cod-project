@@ -360,6 +360,28 @@ public:
     std::erase_if(clauses, [&](const auto &known) { return known.implies(facts); });
     clauses.insert(std::move(facts));
   }
+  static void add_reaching_condition(ConditionClauses &clauses, ConditionFacts facts) {
+    // Otherwise identical control-flow paths can share their common facts
+    // when they cover both values of an immutable formal input.
+    const auto combine = [&] {
+      auto test = facts;
+      for (const auto &literal : facts.inputs) {
+        const auto opposite = std::pair{literal.first, !literal.second};
+        test.inputs.erase(literal);
+        test.inputs.insert(opposite);
+        if (clauses.contains(test)) {
+          test.inputs.erase(opposite);
+          facts = std::move(test);
+          return true;
+        }
+        test.inputs.erase(opposite);
+        test.inputs.insert(literal);
+      }
+      return false;
+    };
+    if (!clauses.empty()) while (!facts.inputs.empty() && combine()) {}
+    add_condition(clauses, std::move(facts));
+  }
   static ConditionClauses conjoin_conditions(const ConditionClauses &left, const ConditionClauses &right) {
     ConditionClauses result;
     for (const auto &a : left) for (const auto &b : right) {
@@ -1000,8 +1022,15 @@ private:
   std::set<size_t> observed_inputs_, observed_references_;
   static constexpr size_t states = 2 * (3 + exception_categories.size());
   std::vector<size_t> reads_;
-  using Relation = std::vector<std::map<size_t, Effects>>;
-  std::vector<Relation> solved_;
+  using Outcomes = std::map<size_t, Effects>;
+  using QueueState = std::pair<size_t, size_t>;
+  struct SolvedState {
+    Outcomes outcomes;
+    std::set<QueueState> dependents;
+  };
+  // New nodes leave existing dependencies intact. Changes to backedges,
+  // action definitions or the observation projection can revise old results.
+  std::map<QueueState, SolvedState> solved_;
   static ConditionClauses intersect_reaching(const ConditionClauses &left, const ConditionClauses &right) {
     if (unconditional(left)) return right;
     if (unconditional(right)) return left;
@@ -1015,7 +1044,7 @@ private:
       std::erase_if(path.inputs, [&](const auto &input) { return !observed_inputs_.contains(input.first); });
       std::erase_if(path.present, [&](size_t place) { return !observed_references_.contains(place); });
       std::erase_if(path.absent, [&](size_t place) { return !observed_references_.contains(place); });
-      add_condition(result, std::move(path));
+      add_reaching_condition(result, std::move(path));
       if (unconditional(result)) break;
     }
     return result;
@@ -1078,7 +1107,7 @@ private:
     const auto previous_selections = known.selections;
     const auto previous_symbols = known.symbols;
     const auto previous_reaching = known.reaching;
-    for (const auto &path : effects.reaching) add_condition(known.reaching, path);
+    for (const auto &path : effects.reaching) add_reaching_condition(known.reaching, path);
     known.symbols.insert(effects.symbols.begin(), effects.symbols.end());
     known.payload_writes.insert(effects.payload_writes.begin(), effects.payload_writes.end());
     known.declared_failures.insert(effects.declared_failures.begin(), effects.declared_failures.end());
@@ -1127,7 +1156,7 @@ public:
     auto [found, inserted] = reads.emplace(read, before);
     if (!inserted) found->second.merge(before);
   }
-  size_t read(size_t binding) { solved_.clear(); reads_.push_back(binding); return reads_.size() - 1; }
+  size_t read(size_t binding) { reads_.push_back(binding); return reads_.size() - 1; }
   size_t binding(size_t read) const { return reads_.at(read); }
   bool has_actions(size_t queue) const {
     std::set<size_t> seen;
@@ -1141,24 +1170,23 @@ public:
     }
     return false;
   }
-  size_t action() { solved_.clear(); actions_.push_back({}); return actions_.size() - 1; }
+  size_t action() { actions_.push_back({}); return actions_.size() - 1; }
   void define(size_t id, Action action) { solved_.clear(); actions_.at(id) = std::move(action); }
   size_t push(size_t previous, size_t action, const ConditionClauses &reaching) {
-    solved_.clear(); queues_.push_back({{previous}, action, {}, {}, reaching}); return queues_.size() - 1;
+    queues_.push_back({{previous}, action, {}, {}, reaching}); return queues_.size() - 1;
   }
   size_t join(size_t a, size_t b) {
     if (a == b) return a;
-    solved_.clear(); queues_.push_back({{a, b}, {}}); return queues_.size() - 1;
+    queues_.push_back({{a, b}, {}}); return queues_.size() - 1;
   }
   size_t known(size_t queue, const std::set<size_t> &initialized, const MissingInitialization &uninitialized,
                const ConditionClauses &reaching) {
     if (initialized.empty() && uninitialized.empty() && unconditional(reaching)) return queue;
-    solved_.clear(); queues_.push_back({{queue}, {}, initialized, uninitialized, reaching}); return queues_.size() - 1;
+    queues_.push_back({{queue}, {}, initialized, uninitialized, reaching}); return queues_.size() - 1;
   }
   size_t append(size_t previous, size_t suffix) {
     if (!previous) return suffix;
     if (!suffix) return previous;
-    solved_.clear();
     std::map<size_t, size_t> copied{{0, previous}};
     std::vector<size_t> pending{suffix};
     while (!pending.empty()) {
@@ -1177,69 +1205,85 @@ public:
     return copied.at(suffix);
   }
   size_t header(size_t entry) {
-    solved_.clear(); queues_.push_back({{entry}, {}}); return queues_.size() - 1;
+    queues_.push_back({{entry}, {}}); return queues_.size() - 1;
   }
   void backedge(size_t header, size_t body) { solved_.clear(); queues_.at(header).previous.push_back(body); }
-  const std::map<size_t, Effects> &apply(size_t queue, Completion input) {
-    if (solved_.empty()) {
-      solved_.assign(queues_.size(), Relation(states));
-      for (size_t state = 0; state < states; ++state) solved_[0][state].emplace(state, Effects{});
-      std::vector<ConditionClauses> reaching;
-      reaching.reserve(queues_.size());
-      for (const auto &queue : queues_) reaching.push_back(queue_conditions(queue.reaching));
-      bool changed;
-      do {
-        changed = false;
-        for (size_t id = 1; id < queues_.size(); ++id) {
-          const auto &node = queues_[id];
-          for (size_t state = 0; state < states; ++state) {
-            auto &result = solved_[id][state];
-            if (!node.action) {
-              Effects known{{}, node.initialized};
-              known.uninitialized = node.uninitialized;
-              known.reaching = reaching[id];
-              for (const auto previous : node.previous) for (const auto &[value, effects] : solved_[previous][state])
-                changed = merge(result, value, compose(known, effects)) || changed;
-              continue;
-            }
-            const auto &action = actions_.at(*node.action);
-            const auto incoming = Completion::from(state);
-            const auto selected = !action.guarded || incoming.reason < 2 ? 0 :
-                incoming.reason == 2 ? exception_categories.size() : incoming.reason - 3;
-            for (const auto &path : action.paths) {
-              if (!(path.inputs & (std::uint64_t{1} << selected))) continue;
-              auto next = path.completion;
-              if (!next.reason) {
-                next = action.guarded && incoming.reason >= 2 ?
-                    Completion{incoming.returned ? size_t{1} : size_t{0}, incoming.returned} : incoming;
-              } else if (next.reason != 1) next.returned = next.returned || incoming.returned;
-              auto effects = path.effects;
-              effects.reaching = intersect_reaching(effects.reaching, reaching[id]);
-              // The single-pending-failure model cannot prove coverage of
-              // checked failures produced by an action. Retain potential
-              // guarded dispatch on the separate ordinary body failure too.
-              const auto output = path.completion.reason;
-              if (action.enforce_checked_boundary &&
-                  ((output >= 3 && exception_categories.at(output - 3).checked) || !effects.declared_failures.empty()))
-                effects.needs_checked_cleanup_proof = true;
-              if (action.guarded && incoming.reason >= 3) effects.guarded_pending_failure = true;
-              if (next.reason < 3) effects.thrown.clear();
-              for (const auto &[intermediate, nested] : solved_[path.queue][next.index()]) {
-                auto invoked = compose(effects, nested);
-                invoked.enter_initialization(action_frame(*node.action));
-                const auto arrival = incoming.reason >= 3
-                    ? ExceptionFacts::arrival().restricted({incoming.reason - 3}) : ExceptionFacts{};
-                invoked.transform_values([&](const auto &value) { return value.enter(*node.action, arrival); });
-                invoked.transform_conditions([&](const auto &clauses) { return enter_conditions(clauses, *node.action); });
-                for (const auto &[value, previous] : solved_[node.previous.front()][intermediate])
-                  changed = merge(result, value, compose(invoked, previous)) || changed;
-              }
-            }
+  const Outcomes &apply(size_t queue, Completion input) {
+    static const auto identity = [] {
+      std::vector<Outcomes> relation(states);
+      for (size_t state = 0; state < states; ++state) relation[state].emplace(state, Effects{});
+      return relation;
+    }();
+    if (!queue) return identity.at(input.index());
+    const QueueState root{queue, input.index()};
+    const auto [entry, inserted] = solved_.try_emplace(root);
+    if (!inserted) return entry->second.outcomes;
+
+    std::set<QueueState> pending{root};
+    std::map<size_t, ConditionClauses> reaching;
+    while (!pending.empty()) {
+      const auto key = *pending.begin();
+      pending.erase(pending.begin());
+      const auto [id, state] = key;
+      const auto &node = queues_.at(id);
+      auto &result = solved_.at(key);
+      const auto [conditions, project] = reaching.try_emplace(id);
+      if (project) conditions->second = queue_conditions(node.reaching);
+      const auto require = [&](size_t dependency, size_t completion) -> const Outcomes & {
+        if (!dependency) return identity.at(completion);
+        const QueueState needed{dependency, completion};
+        const auto [found, fresh] = solved_.try_emplace(needed);
+        found->second.dependents.insert(key);
+        if (fresh) pending.insert(needed);
+        return found->second.outcomes;
+      };
+      bool changed = false;
+      if (!node.action) {
+        Effects known{{}, node.initialized};
+        known.uninitialized = node.uninitialized;
+        known.reaching = conditions->second;
+        for (const auto previous : node.previous) for (const auto &[value, effects] : require(previous, state))
+          changed = merge(result.outcomes, value, compose(known, effects)) || changed;
+      } else {
+        const auto &action = actions_.at(*node.action);
+        const auto incoming = Completion::from(state);
+        const auto selected = !action.guarded || incoming.reason < 2 ? 0 :
+            incoming.reason == 2 ? exception_categories.size() : incoming.reason - 3;
+        for (const auto &path : action.paths) {
+          if (!(path.inputs & (std::uint64_t{1} << selected))) continue;
+          auto next = path.completion;
+          if (!next.reason) {
+            next = action.guarded && incoming.reason >= 2 ?
+                Completion{incoming.returned ? size_t{1} : size_t{0}, incoming.returned} : incoming;
+          } else if (next.reason != 1) next.returned = next.returned || incoming.returned;
+          auto effects = path.effects;
+          effects.reaching = intersect_reaching(effects.reaching, conditions->second);
+          // The single-pending-failure model cannot prove coverage of
+          // checked failures produced by an action. Retain potential
+          // guarded dispatch on the separate ordinary body failure too.
+          const auto output = path.completion.reason;
+          if (action.enforce_checked_boundary &&
+              ((output >= 3 && exception_categories.at(output - 3).checked) || !effects.declared_failures.empty()))
+            effects.needs_checked_cleanup_proof = true;
+          if (action.guarded && incoming.reason >= 3) effects.guarded_pending_failure = true;
+          if (next.reason < 3) effects.thrown.clear();
+          for (const auto &[intermediate, nested] : require(path.queue, next.index())) {
+            auto invoked = compose(effects, nested);
+            invoked.enter_initialization(action_frame(*node.action));
+            const auto arrival = incoming.reason >= 3
+                ? ExceptionFacts::arrival().restricted({incoming.reason - 3}) : ExceptionFacts{};
+            invoked.transform_values([&](const auto &value) { return value.enter(*node.action, arrival); });
+            invoked.transform_conditions([&](const auto &clauses) { return enter_conditions(clauses, *node.action); });
+            for (const auto &[value, previous] : require(node.previous.front(), intermediate))
+              changed = merge(result.outcomes, value, compose(invoked, previous)) || changed;
           }
         }
-      } while (changed);
+      }
+      // In a cyclic registration graph a later contribution can change an
+      // earlier state. Recheck only the consumers of that state.
+      if (changed) pending.insert(result.dependents.begin(), result.dependents.end());
     }
-    return solved_.at(queue).at(input.index());
+    return entry->second.outcomes;
   }
 };
 

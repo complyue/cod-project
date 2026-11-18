@@ -125,6 +125,25 @@ for name, initial, operator, before, after, repeat, succeeds in (
     runner.CASES[name] = (source, 0, '5\n7\n7\n7\n', '') if succeeds else (
         source, 2, '', 'conditional scalar value requires a proven non-null target')
 
+# Independent registration decisions preserve the selected input and LIFO order.
+guards = tuple(range(1, 9))
+guard_parameters = ''.join(f',gate{i}:bool' for i in guards)
+registrations = ''.join(f'if(gate{i}){{defer work({i}u64);{{}}}}else{{}};' for i in guards)
+for placement, setup in (
+    ('early', PICK_REFERENCE+registrations),
+    ('late', registrations+PICK_REFERENCE),
+):
+    source = (IO+'proc work(label:u64)->void{behave @print(label);}'
+              'proc inspect(ptr input:u64 in O,ptr peer:u64 in O,flag:bool'+guard_parameters+')->u64 where {owner O}{'
+              'val present<-{{ptr side:u64=null in O;defer{return side is not null;};'
+              +setup+'if(flag){defer (<=>)(side,source);{}}else{};'
+              'return false;}};return if(present){input}else{7u64};}'
+              'ref item:u64=5u64,other:u64=6u64;ptr absent:u64=null in here;'
+              'behave @print(inspect(item,other,true'+',true'*len(guards)+'));'
+              'behave @print(inspect(absent,other,false'+',true'*len(guards)+'));')
+    order = ''.join(f'{i}\n' for i in reversed(guards))
+    runner.CASES['independent_cleanup_guards_'+placement] = (source, 0, order+'5\n'+order+'7\n', '')
+
 case('deferred_return_payload', definitions='func echo(flag:bool)->bool{defer{return flag;};return true;}', setup='', work='', condition='echo(p is not null)')
 
 reject('constant_output', definitions=SET.replace('p is not null','true'))

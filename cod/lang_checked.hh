@@ -3116,7 +3116,7 @@ class ScalarChecker {
     lexical_.uninitialized = a_exits ? b.uninitialized : a.uninitialized;
     lexical_.predicate_conditions = a_exits ? right_paths : left_paths;
     if (!a_exits && !b_exits) {
-      for (const auto &facts : right_paths) CleanupEquations::add_condition(lexical_.predicate_conditions, facts);
+      for (const auto &facts : right_paths) CleanupEquations::add_reaching_condition(lexical_.predicate_conditions, facts);
       std::set<size_t> candidates = a.initialized;
       candidates.insert(b.initialized.begin(), b.initialized.end());
       for (const auto &[place, conditions] : a.uninitialized) candidates.insert(place);
