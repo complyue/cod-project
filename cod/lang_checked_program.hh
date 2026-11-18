@@ -333,6 +333,17 @@ struct CheckedMethod {
     return scope_inputs ? scope_inputs->owners : source->owner_parameters;
   }
 };
+struct CallableSelectionInputs {
+  std::vector<size_t> positions;
+  // Shared inputs that can force all candidates into the lossless phase.
+  std::vector<size_t> widening_positions;
+  bool uniform() const { return positions.empty() && widening_positions.empty(); }
+  bool operator==(const CallableSelectionInputs &) const = default;
+  bool widens_shared_input(const std::vector<Type> &arguments, const std::vector<Type> &formals) const {
+    return std::any_of(widening_positions.begin(), widening_positions.end(),
+        [&](size_t input) { return arguments.at(input) != formals.at(input); });
+  }
+};
 struct CheckedCallable {
   Type type;
   std::optional<size_t> family = {};
@@ -340,8 +351,8 @@ struct CheckedCallable {
   std::vector<std::pair<std::vector<Type>, size_t>> dispatch = {};
   // A whole-domain proof can establish one prepared implementation.
   std::optional<size_t> uniform_target = {};
-  // Original input types at these positions distinguish fixed scalar rows.
-  std::optional<std::vector<size_t>> selection_inputs = {};
+  // Scalar rows retain distinguishing types and the shared widening phase.
+  std::optional<CallableSelectionInputs> selection_inputs = {};
   std::set<size_t> implementations() const {
     std::set<size_t> result;
     if (uniform_target) result.insert(*uniform_target);
@@ -356,10 +367,13 @@ struct CheckedCallable {
           throw std::logic_error("unchecked callable family invocation");
     }
     if (uniform_target) return *uniform_target;
+    const bool shared_widening = selection_inputs && selection_inputs->widens_shared_input(arguments, type.parameters);
     const auto found = std::find_if(dispatch.begin(), dispatch.end(), [&](const auto &entry) {
       if (!selection_inputs) return entry.first == arguments;
-      return entry.first.size() == arguments.size() && std::all_of(selection_inputs->begin(), selection_inputs->end(),
-          [&](size_t input) { return entry.first.at(input) == arguments.at(input); });
+      const auto &positions = selection_inputs->positions;
+      return entry.first.size() == arguments.size() &&
+          selection_inputs->widens_shared_input(entry.first, type.parameters) == shared_widening &&
+          std::all_of(positions.begin(), positions.end(), [&](size_t input) { return entry.first.at(input) == arguments.at(input); });
     });
     if (found == dispatch.end()) throw std::logic_error("unchecked callable family invocation");
     return found->second;

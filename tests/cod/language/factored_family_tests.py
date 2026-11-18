@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Fixed scalar families preserve original-input selection and preparation."""
+"""Shared scalar formals preserve original-input selection and preparation."""
+from itertools import product
 from pathlib import Path
 import foundation_tests as runner
 
@@ -54,7 +55,59 @@ runner.CASES['ordered_operands'] = (IO + BASE + HELD +
     'behave @print(held(' + ','.join(f'operand({i + 1}u8)' for i in range(COUNT)) + '));',
     0, ''.join(f'{i + 1}\n' for i in range(COUNT)) + f'{32000 + TOTAL}\n', '')
 runner.CASES['prepared_callee'] = (IO + BASE + family(name='other', extra=1000) + HELD +
-    CALL.replace('1u8,', '{{held<-other;1u8}},', 1) + CALL, 0, f'{32000 + TOTAL}\n{33000 + TOTAL}\n', '')
+    CALL.replace('1u8,', '{held<-other;1u8},', 1) + CALL, 0, f'{32000 + TOTAL}\n{33000 + TOTAL}\n', '')
+
+
+def phase_family(count, common='u64', repeated=False):
+    formals = parameters(count, first='T', common=common)
+    if repeated:
+        formals = formals.replace('n1:' + common, 'n1:T')
+    fixed = parameters(count, first='u64', common=common)
+    return ('func choose(' + formals + ')->u64 where T{return 101u64;}' +
+            'func choose(' + fixed + ')->u64{return 202u64;}')
+
+
+def compare_phase_selection(name, definitions, formals, calls):
+    source = IO + definitions + 'func held:func(' + ','.join(formals) + ')->u64=choose;'
+    expected = []
+    for types, value in calls:
+        operands = ','.join('1' + type_name for type_name in types)
+        source += 'behave @print(choose(' + operands + '));behave @print(held(' + operands + '));'
+        expected.extend((value, value))
+    runner.CASES[name] = (source, 0, ''.join(f'{value}\n' for value in expected), '')
+
+
+compare_phase_selection('generic_phase_exhaustive', phase_family(3), ['u64'] * 3,
+    [(types, 101 if types[0] != 'u64' and all(t == 'u64' for t in types[1:]) else 202)
+     for types in product(('u8', 'u32', 'u64'), repeat=3)])
+for count in (16, 32):
+    compare_phase_selection(f'generic_phase_width_{count}', phase_family(count), ['u64'] * count, [
+        (['u8'] + ['u64'] * (count - 1), 101),
+        (['u8', 'u8'] + ['u64'] * (count - 2), 202),
+        (['u32'] + ['u64'] * (count - 2) + ['u32'], 202),
+        (['u64'] * count, 202),
+    ])
+compare_phase_selection('generic_phase_same_type', phase_family(COUNT, repeated=True), ['u64'] * COUNT, [
+    (['u8', 'u8'] + ['u64'] * (COUNT - 2), 101),
+    (['u8', 'u32'] + ['u64'] * (COUNT - 2), 202),
+    (['u8', 'u8', 'u8'] + ['u64'] * (COUNT - 3), 202),
+])
+compare_phase_selection('generic_phase_always_widens', phase_family(COUNT, common='f64'),
+    ['u64'] + ['u32'] * (COUNT - 1), [
+        (['u8'] + ['u32'] * (COUNT - 1), 202),
+        (['u8'] * COUNT, 202),
+    ])
+CLASSIFY = 'func classify(x:u8)->u64{return 8u64;}func classify(x:u32)->u64{return 32u64;}'
+compare_phase_selection('generic_phase_preserves_type',
+    CLASSIFY + phase_family(COUNT).replace('return 101u64;', 'return classify(n0);'), ['u64'] * COUNT, [
+        (['u8'] + ['u64'] * (COUNT - 1), 8),
+        (['u32'] + ['u64'] * (COUNT - 1), 32),
+        (['u32', 'u8'] + ['u64'] * (COUNT - 2), 202),
+    ])
+runner.CASES['generic_phase_signature_query'] = (
+    IO + phase_family(COUNT) + 'func inspect(value:' + VIEW + ')->u64;'
+    'val mark<-make local typeof(inspect(choose)){7u64};behave @print(mark);', 0, '7\n', '')
+
 runner.CASES['returned_complete_capture'] = (IO + BASE +
     'func wrap(callback:' + VIEW + ')->' + VIEW + '{return func[callback](' + PARAMETERS +
     ')->u64{return callback(' + NAMES + ')+1u64;};}func held=wrap(choose);' + CALL,

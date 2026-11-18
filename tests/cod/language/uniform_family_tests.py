@@ -40,7 +40,7 @@ runner.CASES = {
     'returned_complete_capture': (IO + BASE + f'func wrap(f:{VIEW})->{VIEW}{{return func[f]({PARAMETERS})->u64{{return f({NAMES})+1u64;}};}}'
         'func held=wrap(wrap(base));' + CALL, 0, '35\n', ''),
     'prepared_callee_before_operand_rebind': (IO + BASE + BASE.replace('base(', 'other(').replace('n0+n31', 'n0+n31+10u64') +
-        HELD + CALL.replace('1u8,', '{{held<-other;1u8}},', 1) + CALL, 0, '33\n43\n', ''),
+        HELD + CALL.replace('1u8,', '{held<-other;1u8},', 1) + CALL, 0, '33\n43\n', ''),
     'deferred_prepared_call': (IO + f'proc show({PARAMETERS})->void{{behave @print(n0+n31);}}'
         f'proc held:proc({INPUTS})->void=show;defer held({ARGUMENTS});behave @print(1u64);', 0, '1\n33\n', ''),
     'complete_dynamic_replay': (IO + 'symbol @bias:u64;' +

@@ -4649,8 +4649,13 @@ class ScalarChecker {
     }
     return domains;
   }
+  struct InputPlan {
+    InputDomains domains;
+    std::optional<CallableSelectionInputs> selection_inputs = {};
+    std::optional<std::pair<size_t, Type>> widening_example = {};
+  };
   template <typename Validate>
-  static void cover_domains(const Type &view, const Location &at, const InputDomains &domains, const Validate &validate) {
+  static void cover_inputs(const Type &view, const Location &at, const InputPlan &plan, const Validate &validate) {
     std::vector<Type> arguments;
     size_t obligations = 0;
     const auto account = [&] {
@@ -4660,25 +4665,32 @@ class ScalarChecker {
     };
     const std::function<void()> cover = [&] {
       account();
-      if (arguments.size() != domains.size()) {
-        for (const auto &type : domains[arguments.size()]) {
+      if (arguments.size() != plan.domains.size()) {
+        for (const auto &type : plan.domains[arguments.size()]) {
           arguments.push_back(type); cover(); arguments.pop_back();
         }
         return;
       }
       validate(arguments);
+      if (const auto &example = plan.widening_example) {
+        account();
+        auto widened = arguments;
+        widened.at(example->first) = example->second;
+        validate(widened);
+      }
     };
     cover();
   }
-  static bool fixed_parameters(const CheckedMethod &method, const Type &view, const InputDomains &domains) {
-    if (variadic(method) || !method.type_parameters.empty() || !method.retained_types.empty() ||
+  static bool scalar_value_parameters(const CheckedMethod &method, const Type &view, const InputDomains &domains) {
+    if (variadic(method) || !method.retained_types.empty() ||
         !method.input_owners().empty() || caller_bindings(method) ||
         method.parameters.size() != domains.size() || !view.value_result || method.result.mode != ResultMode::value)
       return false;
     for (size_t i = 0; i < domains.size(); ++i)
       if (argument_mode(parameter_at(method, i)) != ArgumentMode::value ||
           (!view.argument_modes.empty() && view.argument_modes[i] != ArgumentMode::value) ||
-          (!view.owners.empty() && view.owners[i]) || !scalar_type(method.parameters[i]) || domains[i].empty() ||
+          (!view.owners.empty() && view.owners[i]) || domains[i].empty() ||
+          (!scalar_type(method.parameters[i]) && !binder(method, method.parameters[i])) ||
           std::any_of(domains[i].begin(), domains[i].end(), [](const auto &actual) { return !scalar_type(actual); }))
         return false;
     return true;
@@ -4686,7 +4698,7 @@ class ScalarChecker {
   static bool fixed_preparation(const CheckedMethod &method, const Type &view, const InputDomains &domains) {
     // Each admitted scalar prepares independently to the same fixed formal.
     // Declaration evidence is fixed per materialization across these inputs.
-    if (!fixed_parameters(method, view, domains)) return false;
+    if (!method.type_parameters.empty() || !scalar_value_parameters(method, view, domains)) return false;
     for (size_t i = 0; i < domains.size(); ++i) for (const auto &actual : domains[i]) {
       Substitutions substitutions;
       if (!bind_parameter(method, i, actual, substitutions, true)) return false;
@@ -4700,10 +4712,6 @@ class ScalarChecker {
         if (!fixed_preparation(declaration, view, domains)) return false;
     return true;
   }
-  struct InputPlan {
-    InputDomains domains;
-    std::optional<std::vector<size_t>> selection_inputs = {};
-  };
   InputPlan plan_inputs(const Type &view, const InputDomains &domains, std::vector<const CheckedMethod *> contracts) const {
     InputPlan plan{domains};
     const auto methods = contracts.size();
@@ -4714,26 +4722,46 @@ class ScalarChecker {
         for (const auto &declaration : program_.families[*method.family].declarations) contracts.push_back(&declaration);
     }
     if (contracts.empty() || std::any_of(contracts.begin(), contracts.end(),
-        [&](const auto *contract) { return !fixed_parameters(*contract, view, domains); })) return plan;
-    // Exact matches precede widening. Equal qualifiers preserve dominance of
-    // an exact signature when a common input requires widening instead.
+        [&](const auto *contract) { return !scalar_value_parameters(*contract, view, domains); })) return plan;
+    // Equal qualifiers preserve fixed-signature dominance across phases.
+    // Generic candidates also need the shared-input widening distinction.
     for (size_t i = 0; i < domains.size(); ++i)
       if (std::any_of(contracts.begin(), contracts.end(), [&](const auto *contract) {
             return parameter_at(*contract, i).read_only != parameter_at(*contracts.front(), i).read_only;
           })) return plan;
-    std::vector<size_t> selection;
+    const bool phase_sensitive = std::any_of(contracts.begin(), contracts.end(),
+        [](const auto *contract) { return !contract->type_parameters.empty(); });
+    CallableSelectionInputs selection;
+    bool always_widens = false;
     for (size_t i = 0; i < domains.size(); ++i) {
       const auto &formal = contracts.front()->parameters[i];
-      const bool same = std::all_of(contracts.begin(), contracts.end(),
+      const bool same = scalar_type(formal) && std::all_of(contracts.begin(), contracts.end(),
           [&](const auto *contract) { return contract->parameters[i] == formal; });
       const bool prepares = same && std::all_of(domains[i].begin(), domains[i].end(), [&](const auto &actual) {
         Substitutions substitutions;
         return bind_parameter(*contracts.front(), i, actual, substitutions, true);
       });
-      if (prepares) plan.domains[i] = {view.parameters[i]};
-      else selection.push_back(i);
+      if (!prepares) {
+        selection.positions.push_back(i);
+        continue;
+      }
+      plan.domains[i] = {view.parameters[i]};
+      if (!phase_sensitive) continue;
+      if (formal != view.parameters[i]) {
+        always_widens = true;
+      } else if (const auto narrower = std::find_if(domains[i].begin(), domains[i].end(),
+          [&](const auto &actual) { return actual != formal; }); narrower != domains[i].end()) {
+        selection.widening_positions.push_back(i);
+        if (!plan.widening_example) plan.widening_example = std::pair{i, *narrower};
+      }
     }
-    if (selection.size() != domains.size()) plan.selection_inputs = std::move(selection);
+    // One witness covers any widening at a shared coordinate. It rules out
+    // exact matching for every candidate without affecting their substitutions.
+    if (always_widens) {
+      selection.widening_positions.clear();
+      plan.widening_example.reset();
+    }
+    if (selection.positions.size() != domains.size()) plan.selection_inputs = std::move(selection);
     return plan;
   }
   struct CallableInputEvidence {
@@ -4754,7 +4782,7 @@ class ScalarChecker {
     return evidence;
   }
   template <typename Validate>
-  std::optional<std::vector<size_t>> cover_family(const std::vector<size_t> &family, const Type &view, const Location &at, const Validate &validate,
+  std::optional<CallableSelectionInputs> cover_family(const std::vector<size_t> &family, const Type &view, const Location &at, const Validate &validate,
                     const std::vector<Type> &retained = {}) const {
     const auto evidence = callable_input_evidence(view);
     const auto domains = input_domains(view, at);
@@ -4763,12 +4791,12 @@ class ScalarChecker {
     };
     if (family.size() == 1 && fixed_method_preparation(program_.methods[family.front()], view, domains)) {
       check(view.parameters);
-      return std::vector<size_t>{};
+      return CallableSelectionInputs{};
     }
     std::vector<const CheckedMethod *> contracts;
     for (const auto id : family) contracts.push_back(&program_.methods[id]);
     const auto plan = plan_inputs(view, domains, std::move(contracts));
-    cover_domains(view, at, plan.domains, check);
+    cover_inputs(view, at, plan, check);
     return plan.selection_inputs;
   }
   Type complete_callable_type(const CheckedMethod &method, const std::vector<Type> &arguments, const ResultContract &result) const {
@@ -4778,7 +4806,7 @@ class ScalarChecker {
       if (fixed_method_preparation(method, type, domains)) add_declared_failures(type, method, type.parameters);
       else {
         const auto plan = plan_inputs(type, domains, {&method});
-        cover_domains(type, method.source->at, plan.domains,
+        cover_inputs(type, method.source->at, plan,
             [&](const std::vector<Type> &inputs) { add_declared_failures(type, method, inputs); });
       }
     }
@@ -4955,7 +4983,7 @@ class ScalarChecker {
       for (const auto &contract : contracts) candidates.push_back(&contract);
       for (const auto id : methods) candidates.push_back(&program_.methods[id]);
       const auto plan = plan_inputs(*view, domains, std::move(candidates));
-      cover_domains(*view, at, plan.domains, validate);
+      cover_inputs(*view, at, plan, validate);
     }
     return resolved ? view : std::nullopt;
   }
@@ -5106,7 +5134,7 @@ class ScalarChecker {
       check_family_contract(program_.methods[selected], arguments, instance.arguments, instance.result, selection.type, at);
       value.dispatch.emplace_back(arguments, target);
     }, selection.retained);
-    if (selection_inputs && selection_inputs->empty()) {
+    if (selection_inputs && selection_inputs->uniform()) {
       value.uniform_target = value.dispatch.front().second; value.dispatch.clear();
     } else value.selection_inputs = selection_inputs;
     return materialized_value(intern_callable(std::move(value)), std::move(captures), at);
@@ -5136,7 +5164,7 @@ class ScalarChecker {
         check_family_contract(program_.methods[selected], arguments, instance.arguments, instance.result, view, at);
         value.dispatch.emplace_back(arguments, target);
       });
-      if (selection_inputs && selection_inputs->empty()) {
+      if (selection_inputs && selection_inputs->uniform()) {
         value.uniform_target = value.dispatch.front().second; value.dispatch.clear();
       } else value.selection_inputs = selection_inputs;
       program_.callables.push_back(std::move(value));
