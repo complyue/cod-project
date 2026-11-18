@@ -6,6 +6,10 @@ import foundation_tests as runner
 IO = 'using symbol "std:io" @print;'
 BASE = 'func score(x:T)->u64 where T{return 1u64;}func relay(x:u64){return score(x);}export score;export relay;'
 FAMILY = 'symbol @score:proc(u64)->u64;proc @score(x:T)->u64 where T{return 1u64;}proc @score(x:u8)->u64{return 7u64;}export @score;'
+ENTRY_EXTENSION = (IO+'symbol from "base.cod" @score;import "./base.cod" @score;'
+                   'proc @score(x:u64)->u64{return 9u64;}')
+CALL_SCORE = 'behave @print(behave @score(1u64));'
+GATED_INSTALLATION = 'symbol @gate:bool;effect @gate<-true;'
 
 runner.CASES = {
     'private_helper_keeps_source_context': ({
@@ -33,6 +37,38 @@ runner.CASES = {
         'base.cod': FAMILY,
         'main.cod': IO + 'using symbol "base.cod" @score;effect @score;behave @print(behave @score(1u8));behave @print(behave @score(1u64));',
     }, 0, '7\n1\n', ''),
+    'entry_extension_preserves_cancelled_operand_effects': ({
+        'base.cod': IO+FAMILY+'proc candidate(n:u64)->u64{return n;}'
+            'effect @score={behave @print(21u64);candidate};behave @print(22u64);',
+        'main.cod': ENTRY_EXTENSION+'effect @score;'+CALL_SCORE,
+    }, 0, '21\n22\n9\n', ''),
+    'entry_extension_preserves_cancelled_operand_failure': ({
+        'base.cod': IO+FAMILY+'proc candidate(n:u64)->u64{return n;}'
+            'proc prepare(n:u64)->proc(u64)->u64{behave @print(21u64);behave @print(1u64/n);return candidate;}'
+            'effect @score=prepare(0u64);behave @print(22u64);',
+        'main.cod': ENTRY_EXTENSION+'effect @score;'+CALL_SCORE,
+    }, 70, '21\n', 'division by zero'),
+    'entry_extension_requires_installation_in_entry_scope': ({
+        'base.cod': FAMILY+'effect @score;',
+        'main.cod': ENTRY_EXTENSION+'proc local()->void{effect @score;}local();',
+    }, 2, '', 'without an explicit installation'),
+    'entry_extension_proves_conditional_installation': ({
+        'base.cod': FAMILY+'effect @score;',
+        'main.cod': ENTRY_EXTENSION+GATED_INSTALLATION+'if(@gate){effect @score;}else{effect @score;};'+CALL_SCORE,
+    }, 0, '9\n', ''),
+    'entry_extension_conditional_installation_is_unproved': ({
+        'base.cod': FAMILY+'effect @score;',
+        'main.cod': ENTRY_EXTENSION+GATED_INSTALLATION+'if(@gate){effect @score;}else{};',
+    }, 2, '', 'cannot prove an entry-scope installation'),
+    'entry_installation_does_not_supply_earlier_dependency_read': ({
+        'base.cod': IO+FAMILY+'effect @score;'+CALL_SCORE,
+        'main.cod': ENTRY_EXTENSION+'effect @score;'+CALL_SCORE,
+    }, 2, '', 'cannot prove an installed binding'),
+    'entry_cancellation_preserves_procedure_local_source_installation': ({
+        'base.cod': FAMILY+'proc previous()->u64{effect @score;return behave @score(1u64);}export previous;effect @score;',
+        'main.cod': ENTRY_EXTENSION+'using "base.cod" previous;effect @score;'
+            +CALL_SCORE+'behave @print(previous());'+CALL_SCORE,
+    }, 0, '9\n1\n9\n', ''),
     'symbol_from_preserves_identity_and_semantics': ({
         'base.cod': FAMILY,
         'main.cod': IO + 'symbol from "base.cod" @score as @first;symbol from "./base.cod" @score as @second;'

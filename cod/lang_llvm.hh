@@ -911,7 +911,10 @@ class LLVMEmission {
   void collect_effects(const Expression &expr, std::set<size_t> &symbols) const {
     using K = Expression::Kind;
     if (expr.kind == K::callable) return;
-    if (expr.kind == K::effect || expr.kind == K::procedure_effect) symbols.insert(*contexts_.front().at(&expr).symbol);
+    if (expr.kind == K::effect || expr.kind == K::procedure_effect) {
+      const auto &effect = contexts_.front().at(&expr);
+      if (effect.publishes_effect) symbols.insert(*effect.symbol);
+    }
     const size_t children = expr.kind == K::range_for ? 2 : expr.kind == K::fold ? 3 : expr.children.size();
     for (size_t i = 0; i < children; ++i) collect_effects(*expr.children[i], symbols);
   }
@@ -945,6 +948,25 @@ class LLVMEmission {
       }
       b_.CreateStore(effect.value, symbols_.at(effect.symbol));
     }
+  }
+  llvm::Value *finish_effect(const CheckedOperation &effect, llvm::Value *value, const Location &at) {
+    if (!effect.publishes_effect) {
+      // Complete the candidate image, including any required copy, but
+      // release it as a temporary without publishing or saving a binding.
+      if (effect.operand_type.kind == Type::procedure) {
+        if (value_owners_.contains(value)) take_value(value);
+        else value = copy_value(value, at);
+        release_value(value);
+      }
+      return empty_scalar();
+    }
+    if (effect.operand_type.kind == Type::procedure) {
+      auto *owned = effect_values_.at(*effect.symbol);
+      assign_value(owned, value, at);
+      value = load(owned);
+    }
+    b_.CreateStore(value, symbols_.at(*effect.symbol));
+    return empty_scalar();
   }
   llvm::Value *iteration(const Expression &expr, bool discard) {
     const auto saved = save_effects({&expr});
@@ -1406,12 +1428,8 @@ class LLVMEmission {
         for (const auto &context : contexts_) cases.push_back({{}, &context.at(&expr), {context.instance}});
         value = choose(expr, {}, cases, scalar_, [&](const Choice &choice) { return materialize(*choice.operation); });
       } else value = materialize(fact);
-      if (installation) {
-        auto *owned = effect_values_.at(*fact.symbol);
-        assign_value(owned, own_value(value), expr.at);
-        b_.CreateStore(load(owned), symbols_.at(*fact.symbol));
-      } else value = own_value(value);
-      return installation ? empty_scalar() : value;
+      value = own_value(value);
+      return installation ? finish_effect(fact, value, expr.at) : value;
     }
     switch (expr.kind) {
     case K::grouped: {
@@ -1437,13 +1455,7 @@ class LLVMEmission {
     case K::effect: {
       auto *value = emit_expression(*expr.children.front());
       if (!reachable()) return nullptr;
-      value = convert_result(expr, *expr.children.front(), value);
-      if (fact.operand_type.kind == Type::procedure) {
-        auto *owned = effect_values_.at(*fact.symbol);
-        assign_value(owned, value, expr.at); value = load(owned);
-      }
-      b_.CreateStore(value, symbols_.at(*fact.symbol));
-      return empty_scalar();
+      return finish_effect(fact, convert_result(expr, *expr.children.front(), value), expr.at);
     }
     case K::integer: case K::boolean:
       return pack(llvm::ConstantInt::get(llvm::cast<llvm::IntegerType>(native_type(fact.type)), fact.integer), fact.type);
@@ -1837,9 +1849,11 @@ public:
     scalar_->setBody(fields);
     std::set<size_t> used_symbols;
     const auto collect_symbols = [&](const auto &operations) {
-      for (const auto &[expr, operation] : operations)
-        if (operation.symbol && (expr->kind == Expression::Kind::symbol || expr->kind == Expression::Kind::effect || expr->kind == Expression::Kind::procedure_effect || operation.callable_call))
+      for (const auto &[expr, operation] : operations) {
+        const bool installation = expr->kind == Expression::Kind::effect || expr->kind == Expression::Kind::procedure_effect;
+        if (operation.symbol && (expr->kind == Expression::Kind::symbol || (installation && operation.publishes_effect) || operation.callable_call))
           used_symbols.insert(*operation.symbol);
+      }
     };
     collect_symbols(program.entry);
     for (const auto &instance : program.instances) collect_symbols(instance.operations);

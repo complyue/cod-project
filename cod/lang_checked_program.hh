@@ -71,6 +71,7 @@ struct CheckedOperation {
   Type type;
   Type operand_type;
   std::optional<size_t> symbol;
+  bool publishes_effect = true;
   std::optional<size_t> callee;
   std::optional<size_t> callable, callable_binding, callable_place;
   std::vector<CheckedOperation> callable_captures;

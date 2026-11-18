@@ -95,6 +95,7 @@ class ScalarChecker {
     std::map<std::string, Resource> exports;
   };
   std::vector<ModuleNames> modules_;
+  std::map<size_t, const Form *> entry_extensions_;
   mutable size_t module_ = 0;
   struct ModuleLookup {
     size_t &current;
@@ -8464,12 +8465,16 @@ class ScalarChecker {
       if (method && method->kind == Form::Kind::function)
         fail(expr.at, "a function cannot access dynamic bindings");
       if (expr.kind == K::effect || expr.kind == K::procedure_effect) {
+        const bool cancelled = !instance && cancels_module_installation(*operation.symbol) &&
+            std::ranges::none_of(lexical_.scopes, [](const auto &scope) { return scope.symbol_entry.has_value(); });
+        operation.publishes_effect = !cancelled;
         if (expr.children.empty()) {
           if (symbol.type->kind != Type::procedure) fail(expr.at, "a scalar symbol installation requires an explicit value");
           const auto id = *operation.symbol;
           operation = materialize_symbol(id, *symbol.type, expr.at);
           operation.symbol = id; operation.operand_type = operation.type; operation.type = Type::void_type;
-          if (lexical_.live) lexical_.bound_symbols.insert(id);
+          operation.publishes_effect = !cancelled;
+          if (!cancelled && lexical_.live) lexical_.bound_symbols.insert(id);
           break;
         }
         if (symbol.type->kind == Type::procedure) {
@@ -8490,7 +8495,7 @@ class ScalarChecker {
         operation.operand_type = *symbol.type;
         operation.type = source == Type::never ? Type{Type::never} : Type{Type::void_type};
         if (source.kind == Type::procedure) note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
-        if (source != Type::never && lexical_.live) lexical_.bound_symbols.insert(*operation.symbol);
+        if (!cancelled && source != Type::never && lexical_.live) lexical_.bound_symbols.insert(*operation.symbol);
       } else {
         require_symbol(lexical_, *operation.symbol, expr.at);
         operation.type = expr.kind == K::touch ? Type{Type::void_type} : *symbol.type;
@@ -9297,7 +9302,8 @@ class ScalarChecker {
       for (const auto &[expr, fact] : *contexts[c].facts) {
         const auto node = expression(c, expr);
         value(c, fact, node);
-        if ((expr->kind == K::effect || expr->kind == K::procedure_effect) && fact.operand_type.kind == Type::procedure)
+        if ((expr->kind == K::effect || expr->kind == K::procedure_effect) && fact.publishes_effect &&
+            fact.operand_type.kind == Type::procedure)
           flow.link(fact.callable ? node : expression(c, expr->children.front().get()), symbols.at(*fact.symbol));
         if (expr->kind == K::symbol && fact.type.kind == Type::procedure)
           flow.link(symbols.at(*fact.symbol), node);
@@ -9428,6 +9434,10 @@ class ScalarChecker {
       }
       CheckedOperation entry_result; entry_result.type = lexical_.live ? Type{Type::void_type} : Type{Type::never};
       finish_scope(entry_result, entry_flow, nullptr, 0, program_.initializers.empty() ? Location{} : program_.initializers.front().expression->at);
+      if (validating_ && lexical_.live)
+        for (const auto &[symbol, extension] : entry_extensions_)
+          if (!lexical_.bound_symbols.contains(symbol))
+            implementation_gap(extension->at, "cannot prove an entry-scope installation for extended callable '@" + extension->name + "'");
     });
   }
   void observe_outcome(size_t reason, const LexicalState &state) {
@@ -9818,7 +9828,7 @@ class ScalarChecker {
     if (const auto found = module_names().imports.find(source); found != module_names().imports.end()) return found->second;
     const auto &original = program_.families[source];
     const auto id = program_.families.size();
-    program_.families.push_back({{}, module_, original.origin, at, source, {}, original.declarations, original.operation});
+    program_.families.push_back({original.symbol, module_, original.origin, at, source, {}, original.declarations, original.operation});
     module_names().imports.emplace(source, id);
     for (auto &declaration : program_.families[id].declarations) declaration.family = id;
     for (const auto method : original.methods) program_.families[id].methods.push_back(adapt_method(method, module_, id));
@@ -9902,17 +9912,34 @@ class ScalarChecker {
     if (form.symbolic != (resource.kind == Resource::Kind::symbol))
       fail(form.at, "selected resource does not match the requested symbol or lexical category");
     if (resource.kind == Resource::Kind::symbol) {
-      if (importing) implementation_gap(form.at, "symbolic import and entry-installation composition remain unproved");
       if (form.kind == Form::Kind::using_resource && !form.using_symbol)
         implementation_gap(form.at, "symbolic destination selection; select its identity with 'symbol from' and install explicitly");
+      if (importing) {
+        const auto destination = module_names().symbols.find(form.alias);
+        if (destination == module_names().symbols.end())
+          fail(form.at, "select the destination symbol identity before importing its callable family");
+        if (destination->second != resource.symbol)
+          implementation_gap(form.at, "callable import into a different symbol identity; use explicit effect installation for a value");
+        if (!resource.family) fail(form.at, "symbol does not export a callable family");
+      }
       const auto [alias, inserted] = module_names().symbols.emplace(form.alias, resource.symbol);
       if (!inserted && alias->second != resource.symbol) fail(form.at, "conflicting symbol alias '" + form.alias + "'");
+      bool receiver_import = false;
       if (resource.family) {
-        const auto [family, new_family] = module_names().families.emplace(resource.symbol, *resource.family);
-        if (!new_family && family->second != *resource.family)
+        const auto source = *resource.family;
+        const auto family = module_names().families.try_emplace(resource.symbol, source).first;
+        const auto previous = module_names().imports.find(source);
+        receiver_import = previous != module_names().imports.end() && previous->second == family->second;
+        if (family->second != source && !receiver_import)
           implementation_gap(form.at, "composition of distinct selected interpretations for one symbol");
+        if (importing) {
+          resource.family = import_family(source, form.at);
+          family->second = *resource.family;
+          receiver_import = true;
+        }
       }
-      module_names().selected_symbols.insert(resource.symbol);
+      if (receiver_import) module_names().selected_symbols.erase(resource.symbol);
+      else module_names().selected_symbols.insert(resource.symbol);
     } else if (resource.kind == Resource::Kind::exception) {
       const auto [alias, inserted] = module_names().exception_types.emplace(form.alias, resource.type);
       if (!inserted && alias->second != resource.type) fail(form.at, "conflicting type alias '" + form.alias + "'");
@@ -9945,16 +9972,43 @@ class ScalarChecker {
     }
   }
 
-  static void check_dependency_lifetime(const Expression &expr, bool iteration = false) {
+  bool cancels_module_installation(size_t symbol) const {
+    return module_ != 0 && entry_extensions_.contains(symbol);
+  }
+  void check_dependency_lifetime(const Expression &expr, bool iteration = false) const {
     using K = Expression::Kind;
+    bool retained_effect = !iteration && (expr.kind == K::effect || expr.kind == K::procedure_effect);
+    if (retained_effect) {
+      const auto symbol = module_names().symbols.find(expr.text);
+      if (symbol != module_names().symbols.end()) retained_effect = !cancels_module_installation(symbol->second);
+    }
     if (expr.kind == K::deferred || expr.kind == K::pointer_group || expr.kind == K::alias ||
-        expr.kind == K::region_binding || (expr.kind == K::callable && !expr.definition->name.empty()) ||
-        (!iteration && (expr.kind == K::effect || expr.kind == K::procedure_effect)))
+        expr.kind == K::region_binding || (expr.kind == K::callable && !expr.definition->name.empty()) || retained_effect)
       implementation_gap(expr.at, "retained dependency initialization scope remains unproved; use an explicit full scope for resources that end during initialization");
     for (size_t i = 0; i < expr.children.size(); ++i) {
       const bool loop_body = (expr.kind == K::range_for && i == 2) || (expr.kind == K::fold && i == 3);
       check_dependency_lifetime(*expr.children[i], iteration || loop_body);
     }
+  }
+
+  void plan_entry_installations() {
+    if (entry_extensions_.empty()) return;
+    using K = Expression::Kind;
+    const auto &symbols = modules_.front().symbols;
+    std::set<size_t> explicit_installs;
+    const std::function<void(const Expression &)> collect = [&](const Expression &expr) {
+      if (expr.kind == K::callable || expr.kind == K::deferred) return;
+      if (expr.kind == K::effect || expr.kind == K::procedure_effect)
+        if (const auto symbol = symbols.find(expr.text); symbol != symbols.end()) explicit_installs.insert(symbol->second);
+      const size_t begin = expr.kind == K::make_local && !expr.annotation ? 1 : 0;
+      const auto end = expr.kind == K::range_for ? 2 : expr.kind == K::fold ? 3 : expr.children.size();
+      for (size_t i = begin; i < end; ++i) collect(*expr.children[i]);
+    };
+    for (const auto &[module, expression] : program_.initializers)
+      if (!module) collect(*expression);
+    for (const auto &[symbol, extension] : entry_extensions_)
+      if (!explicit_installs.contains(symbol))
+        fail(extension->at, "entry module extends callable '@" + extension->name + "' without an explicit installation");
   }
 
   void plan_initialization(const SourceProgram &source) {
@@ -9981,9 +10035,13 @@ class ScalarChecker {
       }
       if (form->kind != Form::Kind::expression) continue;
       current.execution_started = true;
-      if (module) check_dependency_lifetime(*form->body);
+      if (module) {
+        const ModuleLookup lookup(module_, module);
+        check_dependency_lifetime(*form->body);
+      }
       program_.initializers.push_back({module, form->body.get()});
     }
+    plan_entry_installations();
   }
 
   void register_module(const SourceModule &source, std::optional<size_t> &print_symbol) {
@@ -10148,6 +10206,11 @@ class ScalarChecker {
       if (symbol) {
         if (!module_names().families.contains(*symbol)) module_names().families.emplace(*symbol, new_family());
         prepared.family = module_names().families.at(*symbol);
+        const auto &family = program_.families[*prepared.family];
+        if (form->body && family.module == module_ && family.imported_from) {
+          module_names().extensions[*prepared.family].emplace(form->name, form->at);
+          if (!module_) entry_extensions_.try_emplace(*symbol, form);
+        }
       } else if (!lexical) {
         if (!module_names().callables.contains(form->name)) module_names().callables.emplace(form->name, new_family());
         prepared.family = module_names().callables.at(form->name);
