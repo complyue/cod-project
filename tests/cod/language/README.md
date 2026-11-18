@@ -1,6 +1,6 @@
 # CoD source compiler validation
 
-Reference revision: 459 · Recorded: 2026-11-18 America/Los_Angeles.
+Reference revision: 460 · Recorded: 2026-11-18 America/Los_Angeles.
 
 ## Design authority
 

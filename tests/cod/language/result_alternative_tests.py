@@ -8,7 +8,7 @@ MISSING = 'using "std:exceptions" MissingReturnError;'
 runner.CASES = {
     'conditional_recursive_sum': (IO + 'func sum(n:u64){return if(n==0u64){0u64}else{n+sum(n-1u64)};}behave @print(sum(30u64));', 0, '465\n', ''),
     'reverse_recursive_sum': (IO + 'func sum(n:u64){return if(n!=0u64){n+sum(n-1u64)}else{0u64};}behave @print(sum(30u64));', 0, '465\n', ''),
-    'scoped_conditional_result': (IO + 'func f(n:u64){return {{val x<-7u64;if(n==0u64){x}else{f(n-1u64)}}};}behave @print(f(30u64));', 0, '7\n', ''),
+    'scoped_conditional_result': (IO + 'func f(n:u64){return {{val x<-7u64;return if(n==0u64){x}else{f(n-1u64)};}};}behave @print(f(30u64));', 0, '7\n', ''),
     'generic_parameter_alternative': (IO + 'func f(x:T,n:u64) where T{return if(n==0u64){x}else{f(x,n-1u64)};}behave @print(f(true,30u64));behave @print(f(7u32,30u64));', 0, 'true\n7\n', ''),
     'mutual_expression_results': (IO + 'func a(n:u64){return b(n);}func b(n:u64){return if(n==0u64){7u64}else{a(n-1u64)};}behave @print(a(30u64));', 0, '7\n', ''),
     'nested_retained_generic_type': (IO + 'func outer(x:T) where T{func f(v:T,n:u64){return if(n==0u64){v}else{f(v,n-1u64)};};return f(x,10u64);}behave @print(outer(true));', 0, 'true\n', ''),
