@@ -72,6 +72,35 @@ case('conditional_selection_across_iterations',setup='ptr arm=a;ptr prior=a;ptr 
      body='for(i in 0u64..2u64){current=if(flag){arm}else{b};'
           'if(i==0u64){prior=current;arm=c;{}}else{current<-7u64;behave @print(prior);};};',reject=True)
 
+DECIDE='func decide(n:u64)->bool{return n==0u64;}'
+LOCAL_GATE=LOCAL.replace('ptr selected=if(flag)', 'val gate<-decide(if(flag){0u64}else{1u64});ptr selected=if(gate)')
+MATCHED_GATE=MATCHED_SELECTION.replace('if(flag)', 'if(gate)')
+case('stored_boolean_decision',definitions=DECIDE,local=LOCAL_GATE,setup=MATCHED_GATE,
+     body=WRITE_READ_SELECTION,output='7\n'*4)
+case('stored_boolean_in_full_scope',definitions=DECIDE,local=LOCAL_GATE,setup=MATCHED_GATE,
+     body='{{'+WRITE_READ_SELECTION+'}};',output='7\n'*4)
+case('stored_boolean_in_cleanup',definitions=DECIDE,local=LOCAL_GATE,setup=MATCHED_GATE,
+     body='{{defer{behave @print(matched);};selected<-7u64;}};',output='7\n'*4)
+case('stored_boolean_copy_survives_replacement',definitions=DECIDE,local=LOCAL_GATE,
+     setup='val saved<-gate;gate<-!gate;'+MATCHED_GATE.replace('if(gate)', 'if(saved)'),
+     body=WRITE_READ_SELECTION,output='7\n'*4)
+case('negated_stored_boolean',definitions=DECIDE,local=LOCAL_GATE,setup='ptr matched=if(!gate){b}else{a};',
+     body=WRITE_READ_SELECTION,output='7\n'*4)
+case('stored_negation',definitions=DECIDE,local=LOCAL_GATE.replace('gate<-decide', 'gate<-!decide'),
+     setup='ptr matched=if(!gate){b}else{a};',body=WRITE_READ_SELECTION,output='7\n'*4)
+case('stored_boolean_replacement',definitions=DECIDE,local=LOCAL_GATE,setup='gate<-!gate;'+MATCHED_GATE,
+     body=WRITE_READ_SELECTION,reject=True)
+case('stored_boolean_reference_write',definitions=DECIDE,local=LOCAL_GATE,
+     setup='ref writable:bool=gate;writable<-!writable;'+MATCHED_GATE,
+     body=WRITE_READ_SELECTION,reject=True)
+FLIP='proc flip(ref target:bool in O)->void where {owner O}{target<-!target;}'
+case('stored_boolean_call_write',definitions=DECIDE+FLIP,local=LOCAL_GATE,setup='flip(gate);'+MATCHED_GATE,
+     body=WRITE_READ_SELECTION,reject=True)
+case('stored_boolean_replacement_in_loop',definitions=DECIDE,local=LOCAL_GATE,
+     setup='ptr prior=a;ptr current=a;',
+     body='for(i in 0u64..2u64){current=if(gate){a}else{b};'
+          'if(i==0u64){prior=current;gate<-!gate;{}}else{current<-7u64;behave @print(prior);};};',reject=True)
+
 for name,condition,reject in (
     ('finite_bounds','selected is not a&&selected is not b',False),
     ('disjoint','selected is c',False),

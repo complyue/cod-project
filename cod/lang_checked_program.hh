@@ -131,6 +131,7 @@ struct CheckedOperation {
     std::shared_ptr<const Predicate> left, right;
     CleanupEquations::BooleanValue results{};
     bool complete_results = false;
+    std::optional<size_t> storage_observation{};
   };
   // Immutable evidence describes the produced boolean, independently of its source spelling.
   std::shared_ptr<const Predicate> predicate;

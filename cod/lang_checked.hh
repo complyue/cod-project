@@ -165,7 +165,14 @@ class ScalarChecker {
   size_t next_target_version_ = 0;
   size_t next_selection_identity_ = 0;
   std::map<size_t, std::set<size_t>> selection_sources_;
-  std::map<std::tuple<size_t, size_t, size_t>, size_t> conditional_selections_;
+  struct BooleanDecision {
+    enum class Origin { input, storage };
+    Origin origin;
+    size_t id;
+    bool value_when_true;
+  };
+  size_t next_boolean_observation_ = 0;
+  std::map<std::tuple<BooleanDecision::Origin, size_t, size_t, size_t>, size_t> conditional_selections_;
   std::map<size_t, size_t> incoming_selections_;
   std::set<size_t> rebound_;
   std::map<std::string, size_t> external_owners_;
@@ -982,8 +989,20 @@ class ScalarChecker {
     state.payload_writes.insert(written.begin(), written.end());
     for (const auto place : written) state.predicates.erase(place);
   }
-  std::shared_ptr<const CheckedOperation::Predicate> stored_predicate(const CheckedOperation &view) const {
+  std::shared_ptr<const CheckedOperation::Predicate> stored_predicate(const CheckedOperation &view) {
     if (view.type != Type::boolean) return {};
+    if (view.place) {
+      auto &proof = lexical_.predicates[*view.place];
+      if (!boolean_decision(proof.get())) {
+        // A definite place supplies one Boolean until the next possible write.
+        // The proof follows value copies even after that place is overwritten.
+        auto observed = proof ? std::make_shared<Predicate>(*proof) :
+                                std::make_shared<Predicate>(Predicate{Predicate::Kind::presence, {}, {}, {}});
+        observed->storage_observation = next_boolean_observation_++;
+        proof = std::move(observed);
+      }
+      return proof;
+    }
     std::shared_ptr<const Predicate> result;
     for (const auto place : view.targets) if (place != null_target) {
       const auto found = lexical_.predicates.find(place);
@@ -2416,12 +2435,14 @@ class ScalarChecker {
     }
     return operation.predicate;
   }
-  static std::optional<std::pair<size_t, bool>> boolean_input(const Predicate *proof) {
+  static std::optional<BooleanDecision> boolean_decision(const Predicate *proof) {
     if (!proof) return {};
+    if (proof->storage_observation) return BooleanDecision{BooleanDecision::Origin::storage, *proof->storage_observation, true};
     if (proof->kind == Predicate::Kind::negation) {
-      auto input = boolean_input(proof->left.get());
-      if (input) input->second = !input->second;
-      return input;
+      if (auto decision = boolean_decision(proof->left.get())) {
+        decision->value_when_true = !decision->value_when_true;
+        return decision;
+      }
     }
     const auto yes = proof->results.find(true), no = proof->results.find(false);
     if (yes == proof->results.end() || no == proof->results.end() || yes->second.empty() || no->second.empty()) return {};
@@ -2430,15 +2451,17 @@ class ScalarChecker {
     };
     // Both outcomes must identify the same immutable input with opposite truth.
     for (const auto &[input, value] : yes->second.begin()->inputs)
-      if (entails(yes->second, input, value) && entails(no->second, input, !value)) return {{input, value}};
+      if (entails(yes->second, input, value) && entails(no->second, input, !value))
+        return BooleanDecision{BooleanDecision::Origin::input, input, value};
     return {};
   }
   size_t conditional_selection(const CheckedOperation &condition, const CheckedOperation &yes, const CheckedOperation &no) {
     auto when_true = yes.selection_identity, when_false = no.selection_identity;
     if (when_true && when_false && when_true != when_false && yes.view && no.view) {
-      if (const auto input = boolean_input(condition.predicate.get())) {
-        if (!input->second) std::swap(when_true, when_false);
-        const auto [entry, inserted] = conditional_selections_.try_emplace({input->first, *when_true, *when_false}, 0);
+      if (const auto decision = boolean_decision(condition.predicate.get())) {
+        if (!decision->value_when_true) std::swap(when_true, when_false);
+        const auto [entry, inserted] = conditional_selections_.try_emplace(
+            {decision->origin, decision->id, *when_true, *when_false}, 0);
         if (inserted) entry->second = merge_selection_identities(when_true, when_false);
         return entry->second;
       }
@@ -2456,7 +2479,7 @@ class ScalarChecker {
     };
     if (kind == Predicate::Kind::negation) {
       if (const auto value = constant(left)) return constant_predicate(!*value);
-      if (left->kind == Predicate::Kind::negation) return left->left;
+      if (left->kind == Predicate::Kind::negation && !left->storage_observation) return left->left;
     }
     if (kind == Predicate::Kind::conjunction || kind == Predicate::Kind::disjunction) {
       const bool conjunction = kind == Predicate::Kind::conjunction;
@@ -6691,7 +6714,7 @@ class ScalarChecker {
     cleanup_scope_ = 0; next_scope_ = 1;
     next_target_version_ = 0;
     next_selection_identity_ = 0; selection_sources_.clear(); incoming_selections_.clear();
-    conditional_selections_.clear();
+    next_boolean_observation_ = 0; conditional_selections_.clear();
   }
 
   template <typename Check> void check_flow(const Check &check) {
