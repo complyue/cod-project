@@ -29,9 +29,9 @@ def borrowed_test_scope(body, before='', declaration='ref guard:const bool=obser
             'behave @print(inspect(item));behave @print(inspect(missing));')
 
 
-def conditional_scope(body):
+def conditional_scope(body, before='ptr selected:u64 in O=if(flag){input}else{null in O};'):
     return (IO+'func inspect(ptr input:u64 in O,flag:bool)->u64 where {owner O}{'
-            'ptr selected:u64 in O=if(flag){input}else{null in O};return {{'+body+'}};}'
+            +before+'return {{'+body+'}};}'
             'ref item:u64=5u64;ptr missing:u64=null in here;'
             'behave @print(inspect(item,true));behave @print(inspect(missing,true));behave @print(inspect(item,false));')
 
@@ -143,6 +143,13 @@ runner.CASES = {
         conditional_scope('return {{return if(selected is not null){input}else{7u64};}};'), 0, '5\n7\n7\n', ''),
     'conditional_target_outcome_cannot_refine_rebound_input': (
         conditional_scope('input=null in O;return if(selected is not null){input}else{7u64};'), 2, '', 'checked exception'),
+    'conditional_boolean_result_keeps_input_observation': (
+        conditional_scope('const val present<-{{return if(flag){input is not null}else{true};}};'
+                          'return if(present&&flag){input}else{7u64};', ''), 0, '5\n7\n7\n', ''),
+    'boolean_result_and_guard_retained_at_scope_entry': (
+        conditional_scope('return if(present&&flag){input}else{7u64};',
+                          'const val present<-{{if(flag){return input is not null;}else{return true;};}};'),
+        0, '5\n7\n7\n', ''),
     'escape_through_returned_callable_rejected': ('ref a:u64=1u64;func held={{return func[a]()->u64{return a;};}};',
         2, '', 'selected-target lifetime and transport proof'),
     'value_snapshot_survives_write_through_borrow': (IO+VALUES+'func original=wrap(one);ptr target=original;'

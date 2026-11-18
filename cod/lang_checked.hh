@@ -257,42 +257,225 @@ class ScalarChecker {
   using PresenceFacts = std::map<EvidenceSlot, TargetPresence>;
   using EvidencePlaces = std::set<EvidenceSlot>;
   using PresenceSlotMap = std::map<EvidenceSlot, EvidencePlaces>;
+  using BooleanObservations = std::map<size_t, bool>;
+  struct ObservationPath {
+    BooleanObservations booleans;
+    PresenceFacts presence;
+  };
+  // Share Boolean decisions while keeping the proof for each reference
+  // separate. Independent conditional writes need one decision per reference.
+  struct ObservationDecisions {
+    using Condition = size_t;
+    struct Node {
+      size_t observation;
+      Condition when_false, when_true;
+      auto operator<=>(const Node &) const = default;
+    };
+    size_t next_observation = 0;
+    std::vector<Node> nodes;
+    std::map<Node, Condition> indexed;
+    std::map<std::pair<Condition, Condition>, Condition> intersections;
+
+    static Condition negate(Condition value) { return value ^ 1; }
+    Condition decision(size_t observation, Condition when_false, Condition when_true) {
+      if (when_false == when_true) return when_true;
+      const auto flipped = when_true & 1;
+      const Node node{observation, when_false ^ flipped, when_true ^ flipped};
+      const auto [entry, inserted] = indexed.try_emplace(node, 2 * (nodes.size() + 1));
+      if (inserted) nodes.push_back(node);
+      return entry->second ^ flipped;
+    }
+    Node split(Condition condition) const {
+      const auto &node = nodes.at((condition >> 1) - 1);
+      return {node.observation, node.when_false ^ (condition & 1), node.when_true ^ (condition & 1)};
+    }
+    Condition both(Condition left, Condition right) {
+      if (left > right) std::swap(left, right);
+      if (!left || left == negate(right)) return 0;
+      if (left == right || left == 1) return right;
+      const auto key = std::pair{left, right};
+      if (const auto known = intersections.find(key); known != intersections.end()) return known->second;
+      const auto a = split(left), b = split(right);
+      const auto observation = std::min(a.observation, b.observation);
+      const auto no = both(a.observation == observation ? a.when_false : left,
+                           b.observation == observation ? b.when_false : right);
+      const auto yes = both(a.observation == observation ? a.when_true : left,
+                            b.observation == observation ? b.when_true : right);
+      const auto result = decision(observation, no, yes);
+      intersections.emplace(key, result);
+      return result;
+    }
+    Condition either(Condition left, Condition right) { return negate(both(negate(left), negate(right))); }
+    Condition project(Condition value, size_t first, std::map<Condition, Condition> &known) {
+      if (value < 2) return value;
+      const auto node = split(value);
+      if (node.observation >= first) return 1;
+      if (const auto found = known.find(value); found != known.end()) return found->second;
+      const auto no = project(node.when_false, first, known), yes = project(node.when_true, first, known);
+      const auto result = decision(node.observation, no, yes);
+      known.emplace(value, result);
+      return result;
+    }
+  };
+  struct ObservationPaths {
+    using Condition = ObservationDecisions::Condition;
+    struct Outcomes {
+      Condition present = 0, absent = 0;
+      bool operator==(const Outcomes &) const = default;
+    };
+    std::shared_ptr<ObservationDecisions> decisions;
+    Condition reachable = 0;
+    std::map<EvidenceSlot, Outcomes> presence;
+
+    static ObservationPaths unconditional() { return {{}, 1, {}}; }
+    explicit operator bool() const { return reachable != 0; }
+    bool operator==(const ObservationPaths &other) const {
+      return reachable == other.reachable && presence == other.presence;
+    }
+    Condition both(Condition left, Condition right) const { return decisions ? decisions->both(left, right) : left & right; }
+    Condition either(Condition left, Condition right) const { return decisions ? decisions->either(left, right) : left | right; }
+    static Condition negate(Condition condition) { return ObservationDecisions::negate(condition); }
+    static PresenceFacts common_presence(PresenceFacts left, const PresenceFacts &right) {
+      std::erase_if(left, [&](const auto &fact) {
+        const auto other = right.find(fact.first);
+        return other == right.end() || other->second != fact.second;
+      });
+      return left;
+    }
+    PresenceFacts known_presence() const {
+      PresenceFacts known;
+      if (reachable) for (const auto &[slot, evidence] : presence) {
+        if (evidence.present == reachable) known.emplace(slot, TargetPresence::present);
+        if (evidence.absent == reachable) known.emplace(slot, TargetPresence::absent);
+      }
+      return known;
+    }
+    void mask_presence() {
+      for (auto &[slot, evidence] : presence) {
+        evidence.present = both(evidence.present, reachable);
+        evidence.absent = both(evidence.absent, reachable);
+      }
+      std::erase_if(presence, [](const auto &entry) { return entry.second == Outcomes{}; });
+    }
+    void add(const ObservationPath &path) {
+      auto branch = unconditional();
+      branch.decisions = decisions;
+      for (const auto &[id, value] : path.booleans) {
+        const auto observed = decisions->decision(id, 0, 1);
+        branch.reachable = both(branch.reachable, value ? observed : negate(observed));
+      }
+      for (const auto &[slot, fact] : path.presence) {
+        if (fact == TargetPresence::present) branch.presence[slot].present = branch.reachable;
+        if (fact == TargetPresence::absent) branch.presence[slot].absent = branch.reachable;
+      }
+      join(branch);
+    }
+    void join(const ObservationPaths &other) {
+      if (!other) return;
+      if (!*this) { *this = other; return; }
+      if (!decisions) decisions = other.decisions;
+      const auto left = reachable, right = other.reachable;
+      const auto joined = either(left, right);
+      auto at_join = [&](Condition a, Condition b) {
+        return both(joined, both(either(a, negate(left)), either(b, negate(right))));
+      };
+      for (auto &[slot, evidence] : presence) {
+        const auto found = other.presence.find(slot);
+        const auto fact = found == other.presence.end() ? Outcomes{} : found->second;
+        evidence = {at_join(evidence.present, fact.present), at_join(evidence.absent, fact.absent)};
+      }
+      for (const auto &[slot, fact] : other.presence) if (!presence.contains(slot))
+        presence.emplace(slot, Outcomes{at_join(0, fact.present), at_join(0, fact.absent)});
+      reachable = joined;
+      std::erase_if(presence, [](const auto &entry) { return entry.second == Outcomes{}; });
+    }
+    void exclude_conflicts() {
+      for (const auto &[slot, fact] : presence)
+        reachable = both(reachable, negate(both(fact.present, fact.absent)));
+      mask_presence();
+    }
+    void conjoin(const ObservationPaths &other) {
+      if (!decisions) decisions = other.decisions;
+      reachable = both(reachable, other.reachable);
+      for (const auto &[slot, fact] : other.presence) {
+        auto &retained = presence[slot];
+        retained = {either(retained.present, fact.present), either(retained.absent, fact.absent)};
+      }
+      exclude_conflicts();
+    }
+    template <typename Map> ObservationPaths map_presence(Map map, bool same_selection) const {
+      auto result = *this;
+      result.presence.clear();
+      for (const auto &[slot, fact] : presence) map(slot, [&](const auto &mapped) {
+        auto &retained = result.presence[mapped];
+        retained = {either(retained.present, fact.present), either(retained.absent, fact.absent)};
+      });
+      if (same_selection) result.exclude_conflicts();
+      else for (auto &[slot, fact] : result.presence) {
+        const auto consistent = negate(both(fact.present, fact.absent));
+        fact = {both(fact.present, consistent), both(fact.absent, consistent)};
+      }
+      std::erase_if(result.presence, [](const auto &entry) { return entry.second == Outcomes{}; });
+      return result;
+    }
+    template <typename Predicate> void forget_presence(Predicate removed) {
+      std::erase_if(presence, [&](const auto &fact) { return removed(fact.first); });
+    }
+    void forget_observations(size_t first) {
+      if (!decisions) return;
+      std::map<Condition, Condition> known;
+      const auto projected = decisions->project(reachable, first, known);
+      const auto must_hold = [&](Condition condition) {
+        const auto counterexample = decisions->project(both(reachable, negate(condition)), first, known);
+        return both(projected, negate(counterexample));
+      };
+      for (auto &[slot, fact] : presence) fact = {must_hold(fact.present), must_hold(fact.absent)};
+      reachable = projected;
+      std::erase_if(presence, [](const auto &entry) { return entry.second == Outcomes{}; });
+    }
+    ObservationPaths remap(const PresenceSlotMap &slots) const {
+      return map_presence([&](const auto &slot, const auto &accept) {
+        if (const auto mapped = slots.find(slot); mapped != slots.end())
+          for (const auto &id : mapped->second) accept(id);
+      }, false);
+    }
+  };
   struct EvidenceSelection {
     std::optional<EvidenceSlot> slot;
     std::set<EvidenceSlot> footprint;
     bool operator==(const EvidenceSelection &) const = default;
   };
   struct PresenceBranches {
-    std::optional<PresenceFacts> when_true = PresenceFacts{}, when_false = PresenceFacts{};
+    ObservationPaths when_true = ObservationPaths::unconditional(), when_false = ObservationPaths::unconditional();
     auto &at(bool value) { return value ? when_true : when_false; }
     const auto &at(bool value) const { return value ? when_true : when_false; }
     bool operator==(const PresenceBranches &) const = default;
     static PresenceBranches constant(bool value) {
       PresenceBranches result;
-      result.at(!value).reset();
+      result.at(!value) = {};
       return result;
     }
-    template <typename Removed> void forget(Removed removed) {
-      for (const bool value : {false, true}) if (auto &facts = at(value))
-        std::erase_if(*facts, [&](const auto &fact) { return removed(fact.first); });
-    }
-    PresenceBranches remap(const PresenceSlotMap &slots) const {
-      PresenceBranches result{std::nullopt, std::nullopt};
-      for (const bool value : {false, true}) if (const auto &observed = at(value)) {
-        auto &facts = result.at(value).emplace();
-        for (const auto &[slot, presence] : *observed)
-          if (const auto mapped = slots.find(slot); mapped != slots.end())
-            for (const auto &id : mapped->second) {
-              const auto [prior, inserted] = facts.emplace(id, presence);
-              if (!inserted && prior->second != presence) prior->second = TargetPresence::unknown;
-            }
-        std::erase_if(facts, [](const auto &fact) { return fact.second == TargetPresence::unknown; });
+    static PresenceBranches observed(const std::shared_ptr<ObservationDecisions> &decisions, size_t id) {
+      PresenceBranches result{{}, {}};
+      for (const bool value : {false, true}) {
+        auto &outcome = result.at(value);
+        outcome.decisions = decisions;
+        outcome.add({{{id, value}}, {}});
       }
       return result;
     }
+    template <typename Removed> void forget(Removed removed) {
+      for (const bool value : {false, true}) at(value).forget_presence(removed);
+    }
+    void forget_observations(size_t first) {
+      for (const bool value : {false, true}) at(value).forget_observations(first);
+    }
+    PresenceBranches remap(const PresenceSlotMap &slots) const {
+      return {when_true.remap(slots), when_false.remap(slots)};
+    }
   };
   struct TargetEvidence {
-    EvidenceSelection selection;
+    EvidenceSelection selection{};
     TargetPresence presence = TargetPresence::unknown;
     std::optional<PresenceBranches> branches;
     EvidencePlaces places;
@@ -326,6 +509,10 @@ class ScalarChecker {
     std::map<EvidenceSlot, std::set<EvidenceSlot>> footprints;
     std::map<EvidenceSlot, std::set<EvidenceSlot>> possible_overlap;
     PresenceFacts facts;
+    std::optional<ObservationPaths> conditions;
+    // Branches share an identity source. A new payload never reuses the
+    // identity of a Boolean observed before a write.
+    std::shared_ptr<ObservationDecisions> observation_decisions;
     // Selection slots and payload places have separate write effects. A
     // borrowed Boolean and an independent Boolean can read the same payload.
     std::map<std::string, EvidencePlaces> value_places;
@@ -388,63 +575,55 @@ class ScalarChecker {
     }
     std::optional<PresenceBranches> compact(std::optional<PresenceBranches> proof) const {
       if (!proof || equal_selections.empty()) return proof;
-      for (const bool value : {false, true}) if (auto &observed = proof->at(value)) {
-        PresenceFacts retained;
-        bool consistent = true;
-        for (const auto &[slot, fact] : *observed) {
-          const auto *group = selection_group(slot);
-          const auto [entry, inserted] = retained.emplace(group ? *group->begin() : slot, fact);
-          consistent &= inserted || entry->second == fact;
-        }
-        if (consistent) *observed = std::move(retained);
-        else observed.reset();
-      }
+      for (const bool value : {false, true}) proof->at(value) = compact_paths(proof->at(value));
       return proof;
     }
+    ObservationPaths compact_paths(const ObservationPaths &paths) const {
+      return paths.map_presence([&](const auto &slot, const auto &accept) {
+        const auto *group = selection_group(slot);
+        accept(group ? *group->begin() : slot);
+      }, true);
+    }
+    ObservationPaths expand_paths(ObservationPaths paths) const {
+      if (equal_selections.empty() || paths.presence.empty()) return paths;
+      return compact_paths(paths).map_presence([&](const auto &slot, const auto &accept) {
+        if (const auto *group = selection_group(slot)) for (const auto &same : *group) accept(same);
+        else accept(slot);
+      }, true);
+    }
     PresenceBranches expanded(PresenceBranches proof) const {
-      for (const bool value : {false, true}) if (auto &observed = proof.at(value)) {
-        PresenceFacts retained;
-        if (include_presence(retained, *observed)) *observed = std::move(retained);
-        else observed.reset();
-      }
+      for (const bool value : {false, true}) proof.at(value) = expand_paths(std::move(proof.at(value)));
       return proof;
     }
     template <typename Written> void preserve_observations(Written written, std::optional<PresenceBranches> &incoming) {
-      if (booleans.empty() && reference_observations.empty() && !incoming) return;
+      if (booleans.empty() && reference_observations.empty() && !incoming && !conditions) return;
       std::map<EvidenceSlot, EvidenceSlot> replacements;
       for (const auto &group : equal_selections) {
         const auto survivor = std::find_if_not(group.begin(), group.end(), written);
         if (survivor == group.end()) continue;
         for (const auto &slot : group) if (written(slot)) replacements.emplace(slot, *survivor);
       }
-      const auto preserve = [&](PresenceBranches &proof) {
-        for (const bool value : {false, true}) if (auto &observed = proof.at(value)) {
-          PresenceFacts retained;
-          bool consistent = true;
-          for (const auto &[slot, fact] : *observed) {
-            const auto replacement = replacements.find(slot);
-            if (replacement == replacements.end() && written(slot)) continue;
-            const auto [entry, inserted] = retained.emplace(replacement == replacements.end() ? slot : replacement->second, fact);
-            consistent &= inserted || entry->second == fact;
-          }
-          if (consistent) *observed = std::move(retained);
-          else observed.reset();
-        }
+      const auto preserve = [&](ObservationPaths &paths) {
+        paths = paths.map_presence([&](const auto &slot, const auto &accept) {
+          if (const auto replacement = replacements.find(slot); replacement != replacements.end()) accept(replacement->second);
+          else if (!written(slot)) accept(slot);
+        }, true);
       };
-      for (auto &[place, proof] : booleans) preserve(proof);
-      for (auto &[slot, proof] : reference_observations) preserve(proof);
-      if (incoming) preserve(*incoming);
+      const auto preserve_proof = [&](PresenceBranches &proof) {
+        preserve(proof.at(true));
+        preserve(proof.at(false));
+      };
+      for (auto &[place, proof] : booleans) preserve_proof(proof);
+      for (auto &[slot, proof] : reference_observations) preserve_proof(proof);
+      if (incoming) preserve_proof(*incoming);
+      if (conditions) preserve(*conditions);
     }
     static std::optional<PresenceBranches> alternatives(std::optional<PresenceBranches> left,
                                                          const std::optional<PresenceBranches> &right) {
       if (!left && !right) return {};
       auto joined = left.value_or(PresenceBranches{});
       const auto other = right.value_or(PresenceBranches{});
-      for (const bool value : {false, true}) {
-        auto &result = joined.at(value);
-        if (!result) result = other.at(value);
-        else if (other.at(value)) *result = common(std::move(*result), *other.at(value));
-      }
+      for (const bool value : {false, true}) joined.at(value).join(other.at(value));
       if (joined == PresenceBranches{}) return {};
       return joined;
     }
@@ -458,7 +637,9 @@ class ScalarChecker {
       }
       return places;
     }
-    std::optional<PresenceBranches> read_boolean(const EvidencePlaces &places) const {
+    std::optional<PresenceBranches> read_boolean(const EvidencePlaces &places) {
+      if (places.size() == 1 && !booleans.contains(*places.begin()) && observation_decisions)
+        booleans.emplace(*places.begin(), PresenceBranches::observed(observation_decisions, observation_decisions->next_observation++));
       std::optional<PresenceBranches> result;
       bool first = true;
       for (const auto &place : places) {
@@ -518,11 +699,15 @@ class ScalarChecker {
       for (const bool present : {false, true}) {
         const auto fact = present ? TargetPresence::present : TargetPresence::absent;
         auto &observed = proof.at(present);
-        if (target.presence != TargetPresence::unknown && target.presence != fact) observed.reset();
+        if (target.presence != TargetPresence::unknown && target.presence != fact) observed = {};
         if (!observed) continue;
         PresenceFacts same;
         for (const auto &slot : target.same_selected) same.emplace(slot, fact);
-        if (!include_presence(*observed, same)) observed.reset();
+        if (!same.empty()) {
+          ObservationPaths known;
+          known.add({{}, std::move(same)});
+          observed.conjoin(known);
+        }
       }
       return proof == PresenceBranches{} ? std::nullopt : std::optional{std::move(proof)};
     }
@@ -559,6 +744,7 @@ class ScalarChecker {
       if (!tracking) return;
       ++writes;
       facts.clear();
+      conditions.reset();
       targets.clear();
       booleans.clear();
       reference_observations.clear();
@@ -626,18 +812,40 @@ class ScalarChecker {
       record_assignment_selection(left, std::move(right_selected));
       record_assignment_selection(right, std::move(left_selected));
     }
-    void refine(const PresenceFacts &known) {
-      auto refined = facts;
-      if (include_presence(refined, known)) facts = std::move(refined);
+    ObservationPaths outcome(const std::optional<PresenceBranches> &proof, bool value) const {
+      auto result = conditions.value_or(ObservationPaths::unconditional());
+      if (proof) result.conjoin(proof->at(value));
+      if (!facts.empty()) {
+        ObservationPaths known;
+        known.add({{}, facts});
+        result.conjoin(known);
+      }
+      return expand_paths(std::move(result));
     }
-    std::optional<PresenceFacts> outcome(const std::optional<PresenceBranches> &proof, bool value) const {
-      auto result = facts;
-      const auto assumed = proof ? proof->at(value) : std::optional{PresenceFacts{}};
-      if (!assumed || !include_presence(result, *assumed)) return {};
-      return result;
+    bool reachable(const std::optional<PresenceBranches> &proof, bool value) const {
+      return !proof || static_cast<bool>(outcome(proof, value));
+    }
+    void retain_conditions(ObservationPaths current) {
+      // Unconditional presence stays in the cheap, direct lookup table.
+      current.forget_presence([&](const auto &slot) { return facts.contains(slot); });
+      if (!current || current == ObservationPaths::unconditional()) conditions.reset();
+      else conditions = std::move(current);
     }
     void assume(const std::optional<PresenceBranches> &proof, bool value) {
-      if (proof && proof->at(value)) refine(*proof->at(value));
+      if (!proof) return;
+      auto refined = outcome(proof, value);
+      if (!refined) return;
+      facts = refined.known_presence();
+      retain_conditions(std::move(refined));
+    }
+    void forget_observations(size_t first) {
+      for (auto &[place, proof] : booleans) proof.forget_observations(first);
+      for (auto &[slot, proof] : reference_observations) proof.forget_observations(first);
+      if (conditions) {
+        auto retained = std::move(*conditions);
+        retained.forget_observations(first);
+        retain_conditions(std::move(retained));
+      }
     }
     PresenceBranches observe(const std::optional<PresenceBranches> &proof) const {
       return {outcome(proof, true), outcome(proof, false)};
@@ -683,7 +891,15 @@ class ScalarChecker {
       for (const auto &[slot, proof] : reference_observations) join_selection(slot);
       for (const auto &[slot, proof] : other.reference_observations)
         if (!reference_observations.contains(slot)) join_selection(slot);
-      facts = common(std::move(facts), other.facts);
+      // Join paths before intersecting their direct facts, so the facts
+      // established under a distinguishable Boolean outcome are retained.
+      std::optional<ObservationPaths> reaching;
+      if (conditions || other.conditions) {
+        reaching = outcome({}, true);
+        reaching->join(other.outcome({}, true));
+      }
+      facts = ObservationPaths::common_presence(std::move(facts), other.facts);
+      if (reaching) retain_conditions(std::move(*reaching));
       equal_selections = std::move(shared);
       for (auto &[place, proof] : booleans) proof = *compact(std::move(proof));
       reference_observations.clear();
@@ -695,15 +911,8 @@ class ScalarChecker {
       deferred_return |= other.deferred_return;
     }
     bool same_flow(const QuerySelections &other) const {
-      return facts == other.facts && booleans == other.booleans && targets == other.targets &&
+      return facts == other.facts && conditions == other.conditions && booleans == other.booleans && targets == other.targets &&
           reference_observations == other.reference_observations && equal_selections == other.equal_selections;
-    }
-    static PresenceFacts common(PresenceFacts left, const PresenceFacts &right) {
-      std::erase_if(left, [&](const auto &fact) {
-        const auto other = right.find(fact.first);
-        return other == right.end() || other->second != fact.second;
-      });
-      return left;
     }
   };
   struct TypeEvidenceState {
@@ -4533,10 +4742,12 @@ class ScalarChecker {
                                        const Type *expected, std::vector<Type> *alternatives,
                                        ExpectedTypeUse expected_use, bool reached, EvidenceRead read = EvidenceRead::payload) const {
     ConditionalEvidence arms{{}, {}, state, state};
+    const bool yes_reaches = state.selections.reachable(state.target.branches, true);
+    const bool no_reaches = state.selections.reachable(state.target.branches, false);
     arms.yes_state.selections.assume(state.target.branches, true);
     arms.no_state.selections.assume(state.target.branches, false);
-    arms.yes = type_evidence(*expr.children[1], arms.yes_state, contextual, expected, alternatives, expected_use, reached, read);
-    arms.no = type_evidence(*expr.children[2], arms.no_state, contextual, expected, alternatives, expected_use, reached, read);
+    arms.yes = type_evidence(*expr.children[1], arms.yes_state, contextual, expected, alternatives, expected_use, reached && yes_reaches, read);
+    arms.no = type_evidence(*expr.children[2], arms.no_state, contextual, expected, alternatives, expected_use, reached && no_reaches, read);
     return arms;
   }
   static std::optional<EvidenceOwner> owner_evidence(const std::string &name, const TypeEvidenceState &state, const Location &at) {
@@ -4818,6 +5029,7 @@ class ScalarChecker {
       auto body = body_evidence(id, {}, *retained, declaration);
       body.required = body.validating_body = true;
       body.selections.tracking = state.selections.tracking;
+      body.selections.observation_decisions = state.selections.observation_decisions;
       PresenceSlotMap exported_slots;
       if (body.selections.tracking) {
         PresenceSlotMap imported_slots;
@@ -4828,8 +5040,8 @@ class ScalarChecker {
           exported_slots[slot].insert(slot);
         };
         const auto retain_observed = [&](const PresenceBranches &proof) {
-          for (const bool value : {false, true}) if (const auto &facts = proof.at(value))
-            for (const auto &[slot, presence] : *facts) retain_witness(slot);
+          for (const bool value : {false, true})
+            for (const auto &[slot, presence] : proof.at(value).presence) retain_witness(slot);
         };
         for (const auto &capture : captures) {
           const auto &name = capture.name;
@@ -4846,6 +5058,7 @@ class ScalarChecker {
             }
             if (source.presence_proof) retain_observed(*source.presence_proof);
             body.selections.bind(name, local, source);
+            if (body.bindings.at(name) == Type::boolean) state.selections.read_boolean(source.places);
             for (const auto &place : source.places)
               if (const auto found = state.selections.booleans.find(place); found != state.selections.booleans.end())
                 imported_booleans.insert(*found);
@@ -4859,10 +5072,13 @@ class ScalarChecker {
         for (const auto &[place, proof] : imported_booleans) retain_observed(proof);
         for (const auto &[place, proof] : imported_booleans)
           body.selections.booleans.emplace(place, *body.selections.compact(proof.remap(imported_slots)));
+        if (state.selections.conditions)
+          body.selections.assume(PresenceBranches{state.selections.conditions->remap(imported_slots), {}}, true);
       }
       body.invocation_result = *result.contract->type;
       body.supplied_invocation_result = result.origin == ResultOrigin::supplied;
       const bool track_return = body.selections.tracking && body.invocation_result == Type::boolean && !result.contract->borrowed();
+      const auto first_local_observation = body.selections.observation_decisions ? body.selections.observation_decisions->next_observation : 0;
       TypeEvidenceExits exits;
       if (state.exits) {
         for (const auto &capture : captures) {
@@ -4878,13 +5094,16 @@ class ScalarChecker {
       type_evidence(*callee.definition->body, body);
       if (track_return && !body.selections.deferred_return &&
           std::ranges::none_of(exits.paths, [](const auto &path) { return path.state.selections.deferred_return; })) {
-        std::optional<PresenceBranches> proof = PresenceBranches{std::nullopt, std::nullopt};
+        std::optional<PresenceBranches> proof = PresenceBranches{{}, {}};
         bool returns_value = false;
         for (const auto &path : exits.paths) if (path.reasons.contains(1)) {
           proof = QuerySelections::alternatives(std::move(proof), path.boolean_return);
           returns_value = true;
         }
-        if (returns_value && proof) returned.branches = proof->remap(exported_slots);
+        if (returns_value && proof) {
+          proof->forget_observations(first_local_observation);
+          returned.branches = proof->remap(exported_slots);
+        }
       }
       for (const auto &places : writable_booleans) {
         const auto written = [&](const QuerySelections &flow) {
@@ -5223,7 +5442,8 @@ class ScalarChecker {
       if (state.returns && condition == Type::never) return Type::never;
       if (state.required && condition != Type::boolean && condition != Type::never) fail(expr.at, "condition requires bool");
       const auto condition_proof = state.target.branches;
-      const auto reaches_arm = [&](bool yes) { return state.selections.outcome(condition_proof, yes).has_value(); };
+      const bool reaches_yes = state.selections.reachable(condition_proof, true);
+      const bool reaches_no = state.selections.reachable(condition_proof, false);
       auto arms = conditional_arms(expr, state, contextual, expected, alternatives, expected_use, condition != Type::never, read);
       auto &[yes, no, yes_state, no_state] = arms;
       view = yes == Type::never ? no_state.value : no == Type::never ? yes_state.value : join_views(yes_state.value, no_state.value);
@@ -5242,15 +5462,14 @@ class ScalarChecker {
       if (yes_null || no_null) result = yes_null ? no : yes;
       if (result == Type::boolean && state.selections.tracking && read == EvidenceRead::payload) {
         const auto outcome = [&](const TypeEvidenceState &arm, const std::optional<Type> &type, bool branch) {
-          if (type == Type::never || (condition_proof && !condition_proof->at(branch)))
-            return PresenceBranches{std::nullopt, std::nullopt};
+          if (type == Type::never || !(branch ? reaches_yes : reaches_no)) return PresenceBranches{{}, {}};
           return arm.selections.observe(arm.target.branches);
         };
         target_facts.branches = QuerySelections::alternatives(outcome(yes_state, yes, true), outcome(no_state, no, false));
       }
       if (state.selections.tracking && view.view == true && view.nullable && !view.mixed_view) {
         const auto outcome = [&](const TypeEvidenceState &arm, const std::optional<Type> &type, bool branch) {
-          if (type == Type::never || !reaches_arm(branch)) return PresenceBranches{std::nullopt, std::nullopt};
+          if (type == Type::never || !(branch ? reaches_yes : reaches_no)) return PresenceBranches{{}, {}};
           return arm.selections.observe(arm.selections.selection_outcomes(arm.target));
         };
         target_facts.presence_proof = QuerySelections::alternatives(outcome(yes_state, yes, true), outcome(no_state, no, false));
@@ -5439,6 +5658,7 @@ class ScalarChecker {
       }
       const auto &loop_body = *expr.children[fold ? 3 : 2];
       const auto loop_read = fold ? EvidenceRead::payload : EvidenceRead::discarded;
+      const auto first_iteration_observation = state.selections.observation_decisions ? state.selections.observation_decisions->next_observation : 0;
       // Only facts that survive every backedge are available in the body.
       // Each abstract iteration can only remove facts from this finite set.
       if (iteration.selections.tracking && completes && accumulator != Type::never) {
@@ -5448,6 +5668,7 @@ class ScalarChecker {
           auto probe = iteration;
           probe.required = false; probe.returns = nullptr; probe.exits = nullptr;
           if (type_evidence(loop_body, probe, false, nullptr, nullptr, ExpectedTypeUse::materialization, true, loop_read) == Type::never) break;
+          probe.selections.forget_observations(first_iteration_observation);
           auto invariant = iteration.selections;
           iteration.selections.join_flow(probe.selections);
           if (iteration.selections.same_flow(invariant)) break;
@@ -5457,8 +5678,10 @@ class ScalarChecker {
                                       ExpectedTypeUse::materialization, completes && accumulator != Type::never, loop_read);
       if (fold && completes && accumulator != Type::never && body && body->kind == Type::procedure)
         note_type_allocation(iteration);
-      if (body != Type::never && completes && accumulator != Type::never)
+      if (body != Type::never && completes && accumulator != Type::never) {
+        iteration.selections.forget_observations(first_iteration_observation);
         state.selections.join_flow(iteration.selections);
+      }
       if (fold && state.required) check_fold_body(*body, *accumulator, expr.at);
       if (!fold && expr.children.size() == 4) {
         auto empty = state;
@@ -5480,12 +5703,12 @@ class ScalarChecker {
         const auto evaluate_right = state.selections.outcome(proof, !short_result);
         skipped.selections.assume(proof, short_result);
         state.selections.assume(proof, !short_result);
-        const auto right = child(1, false, left != Type::never && evaluate_right.has_value());
+        const auto right = child(1, false, left != Type::never && static_cast<bool>(evaluate_right));
         if (state.required && ((left != Type::boolean && left != Type::never) ||
                                (right != Type::boolean && right != Type::never)))
           fail(expr.at, "logical operation requires bool operands");
         if (state.selections.tracking && left != Type::never) {
-          PresenceBranches skip{std::nullopt, std::nullopt}, evaluated{std::nullopt, std::nullopt};
+          PresenceBranches skip{{}, {}}, evaluated{{}, {}};
           skip.at(short_result) = skip_facts;
           if (evaluate_right && right != Type::never)
             for (const bool value : {false, true}) evaluated.at(value) = state.selections.outcome(state.target.branches, value);
@@ -5856,6 +6079,7 @@ class ScalarChecker {
                                   bool track_selection = false) const {
     TypeEvidenceState state;
     state.selections.tracking = track_selection;
+    if (track_selection) state.selections.observation_decisions = std::make_shared<ObservationDecisions>();
     const auto selected = [&](const std::string &name) { return !names || names->contains(name); };
     for (const auto &name : query_environment().symbol_shadows) if (selected(name)) state.symbol_shadows.insert(name);
     if (checking_instance_) {
@@ -5982,14 +6206,13 @@ class ScalarChecker {
           if (!state.selections.facts.contains(slot)) observed.insert(slot);
       }
       for (const auto &slot : observed) {
-        PresenceBranches branches{std::nullopt, std::nullopt};
+        PresenceBranches branches{{}, {}};
         for (const auto &path : paths) {
           const auto selected = path.find(slot);
           for (const bool present : {false, true}) {
             const auto fact = present ? TargetPresence::present : TargetPresence::absent;
             if (selected != path.end() && selected->second != fact) continue;
-            auto &outcome = branches.at(present);
-            outcome = outcome ? QuerySelections::common(std::move(*outcome), path) : path;
+          branches.at(present).add({{}, path});
           }
         }
         const auto same = state.selections.same_selected(slot);
@@ -5999,21 +6222,53 @@ class ScalarChecker {
         state.selections.remember_selection(slot, branches);
       }
     }
-    if (track_selection && proving_) for (const auto &[place, proof] : lexical_.predicates) {
-      if (!proof || !proof->complete_results || storage(place).borrowed) continue;
-      PresenceBranches branches;
-      for (const bool value : {false, true}) {
-        auto &outcome = branches.at(value);
-        outcome.reset();
-        const auto clauses = proof->results.find(value);
-        if (clauses == proof->results.end()) continue;
-        const auto applicable = conditions.empty() ? clauses->second : CleanupEquations::conjoin_conditions(clauses->second, conditions);
-        for (const auto &clause : applicable) {
-          auto facts = project_presence(clause);
-          outcome = outcome ? QuerySelections::common(std::move(*outcome), facts) : std::move(facts);
+    if (track_selection && proving_) {
+      std::map<std::pair<BooleanDecision::Origin, size_t>, size_t> observation_ids;
+      const auto &decisions = state.selections.observation_decisions;
+      const auto observation_id = [&](BooleanDecision::Origin origin, size_t id) {
+        const auto [observation, inserted] = observation_ids.try_emplace({origin, id}, decisions->next_observation);
+        if (inserted) ++decisions->next_observation;
+        return observation->second;
+      };
+      const auto project_path = [&](const CleanupEquations::ConditionFacts &clause) {
+        ObservationPath path;
+        for (const auto &[input, value] : clause.inputs)
+          path.booleans.emplace(observation_id(BooleanDecision::Origin::input, input), value);
+        path.presence = project_presence(clause);
+        return path;
+      };
+      ObservationPaths reaching;
+      reaching.decisions = decisions;
+      for (const auto &clause : conditions) reaching.add(project_path(clause));
+      state.selections.retain_conditions(std::move(reaching));
+      for (const auto &[place, proof] : lexical_.predicates) {
+        if (!proof || storage(place).borrowed) continue;
+        const auto decision = boolean_decision(proof.get());
+        if (!proof->complete_results && !decision) continue;
+        PresenceBranches branches{{}, {}};
+        for (const bool value : {false, true}) branches.at(value).decisions = decisions;
+        const auto attach_decision = [&](ObservationPath &path, bool value) {
+          if (!decision) return true;
+          const bool truth = value == decision->value_when_true;
+          const auto [observation, inserted] = path.booleans.emplace(observation_id(decision->origin, decision->id), truth);
+          return inserted || observation->second == truth;
+        };
+        for (const bool value : {false, true}) {
+          const auto clauses = proof->results.find(value);
+          if (!proof->complete_results) {
+            ObservationPath path;
+            if (attach_decision(path, value)) branches.at(value).add(std::move(path));
+            continue;
+          }
+          if (clauses == proof->results.end()) continue;
+          const auto applicable = conditions.empty() ? clauses->second : CleanupEquations::conjoin_conditions(clauses->second, conditions);
+          for (const auto &clause : applicable) {
+            auto path = project_path(clause);
+            if (attach_decision(path, value)) branches.at(value).add(std::move(path));
+          }
         }
+        if (branches != PresenceBranches{}) state.selections.booleans.emplace(place, *state.selections.compact(std::move(branches)));
       }
-      if (branches != PresenceBranches{}) state.selections.booleans.emplace(place, *state.selections.compact(std::move(branches)));
     }
     std::set<EvidenceOwner> owners;
     for (const auto &[name, view] : state.views) if (view.owner) owners.insert(*view.owner);
@@ -6729,7 +6984,7 @@ class ScalarChecker {
     for (const auto id : profiles) {
       const auto &candidate = *program_.methods[id].scope_inputs;
       if (candidate.owner_names != inputs.owner_names || candidate.relations != inputs.relations ||
-          candidate.nonnull != inputs.nonnull || candidate.boolean_presence != inputs.boolean_presence ||
+          candidate.nonnull != inputs.nonnull || candidate.boolean_conditions != inputs.boolean_conditions ||
           candidate.reference_conditions != inputs.reference_conditions ||
           candidate.parameters.size() != inputs.parameters.size()) continue;
       if (std::equal(candidate.parameters.begin(), candidate.parameters.end(), inputs.parameters.begin(),
@@ -6790,22 +7045,32 @@ class ScalarChecker {
     if (inputs.reference_conditions == CleanupEquations::ConditionClauses{CleanupEquations::ConditionFacts{}})
       inputs.reference_conditions.clear();
     if (selections.empty()) return;
+    std::map<size_t, std::shared_ptr<const Predicate>> booleans;
+    std::map<size_t, std::vector<std::pair<size_t, bool>>> captured_inputs;
     for (size_t i = 0; i < views.size(); ++i) {
       if (views[i].type != Type::boolean) continue;
       const auto predicate = inputs.parameters[i].owner.empty() ? predicate_of(views[i]) : stored_predicate(views[i]);
       if (!predicate) continue;
-      CheckedMethod::ScopeInputs::BooleanPresence presence;
-      for (const auto &[truth, clauses] : snapshot_boolean(predicate, lexical_, at)) {
-        if (clauses.empty()) continue;
-        auto &known = presence[truth];
-        for (const auto &[p, selected] : selections) {
-          if (std::ranges::all_of(clauses, [&](const auto &clause) { return clause.bindings.contains(selected); })) known[p] = true;
-          else if (std::ranges::all_of(clauses, [&](const auto &clause) { return clause.absent_bindings.contains(selected); }))
-            known[p] = false;
+      booleans.emplace(i, predicate);
+      if (const auto decision = boolean_decision(predicate.get()); decision && decision->origin == BooleanDecision::Origin::input)
+        captured_inputs[decision->id].emplace_back(i, decision->value_when_true);
+    }
+    const auto no_conditions = CleanupEquations::ConditionClauses{CleanupEquations::ConditionFacts{}};
+    for (const auto &[input, predicate] : booleans) {
+      CleanupEquations::BooleanValue proof;
+      for (const auto &[truth, clauses] : snapshot_boolean(predicate, lexical_, at)) for (const auto &clause : clauses) {
+        CleanupEquations::ConditionFacts facts;
+        for (const auto &[other, value] : clause.inputs) if (const auto captured = captured_inputs.find(other); captured != captured_inputs.end())
+          for (const auto &[ordinal, when_true] : captured->second) if (ordinal != input)
+            facts.inputs.emplace(ordinal, value == when_true);
+        for (const auto &[ordinal, selected] : selections) {
+          if (clause.bindings.contains(selected)) facts.present.insert(ordinal);
+          if (clause.absent_bindings.contains(selected)) facts.absent.insert(ordinal);
         }
+        CleanupEquations::add_condition(proof[truth], std::move(facts));
       }
-      if (std::ranges::any_of(presence, [](const auto &outcome) { return !outcome.second.empty(); }))
-        inputs.boolean_presence.emplace(i, std::move(presence));
+      if (std::ranges::any_of(proof, [&](const auto &outcome) { return outcome.second != no_conditions; }))
+        inputs.boolean_conditions.emplace(input, std::move(proof));
     }
   }
   void check_scope_call(const Expression &expr, size_t method_id, CheckedInstance *instance,
@@ -7626,7 +7891,11 @@ class ScalarChecker {
       if (yes == Type::never) view(no_fact);
       else if (no == Type::never) view(yes_fact);
       else {
-        operation.predicate = predicate(Predicate::Kind::alternatives, predicate_of(yes_fact), predicate_of(no_fact));
+        if (operation.type == Type::boolean && read && !discard) {
+          auto proof = snapshot_boolean(predicate_of(yes_fact), yes_state, expr.at);
+          CleanupEquations::merge_boolean(proof, snapshot_boolean(predicate_of(no_fact), no_state, expr.at));
+          operation.predicate = boolean_predicate(proof);
+        } else operation.predicate = predicate(Predicate::Kind::alternatives, predicate_of(yes_fact), predicate_of(no_fact));
         if (independent) {
           operation.scalar_value_join = true;
           break;
@@ -8644,13 +8913,14 @@ class ScalarChecker {
           CleanupEquations::add_condition(captured, std::move(facts));
         }
         if (!captured.empty()) lexical_.predicate_conditions = CleanupEquations::conjoin_conditions(lexical_.predicate_conditions, captured);
-        for (const auto &[input, presence] : checking_method_->scope_inputs->boolean_presence) {
+        for (const auto &[input, observations] : checking_method_->scope_inputs->boolean_conditions) {
           CleanupEquations::BooleanValue proof;
-          for (const auto &[truth, known] : presence) {
+          for (const auto &[truth, clauses] : observations) for (const auto &clause : clauses) {
             CleanupEquations::ConditionFacts facts;
+            facts.inputs = clause.inputs;
             facts.inputs.emplace(input, truth);
-            for (const auto &[selected, present] : known)
-              (present ? facts.bindings : facts.absent_bindings).insert(binding_snapshot(selected));
+            for (const auto ordinal : clause.present) facts.bindings.insert(binding_snapshot(ordinal));
+            for (const auto ordinal : clause.absent) facts.absent_bindings.insert(binding_snapshot(ordinal));
             CleanupEquations::add_condition(proof[truth], std::move(facts));
           }
           lexical_.predicates[instance.frame.inputs.at(input).place] = boolean_predicate(proof);

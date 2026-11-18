@@ -16,6 +16,7 @@ GUARDED_RESULT='return if(present&&flag){input}else{7u64};'
 UNPROVED_TARGET='conditional scalar value requires a proven non-null target'
 CONDITIONAL_TARGET='ptr selected:u64 in O=if(flag){input}else{null in O};'
 GUARDED_INPUT='return if(selected is not null){input}else{7u64};'
+CORRELATED_RESULT='const val present<-{{if(flag){return input is not null;}else{return true;};}};'
 def storage(query, value, prefix=''):
     return IO+prefix+'val result<-make local typeof('+query+'){'+value+'};behave @print(result);'
 def saved_query(body, setup='', declarations=''):
@@ -197,6 +198,26 @@ runner.CASES={
  'projection_rejects_conditional_with_another_present_target':(saved_query(
     'ptr selected:u64 in O=if(flag){input}else{other};'+GUARDED_INPUT, setup='ptr other:u64 in O=input;input=null in O;'),
     2,'',UNPROVED_TARGET),
+ 'projection_relates_scope_result_to_retained_boolean':(saved_query(CORRELATED_RESULT+GUARDED_RESULT),0,'9\n',''),
+ 'projection_imports_result_correlated_with_outer_boolean':(saved_query(GUARDED_RESULT,setup=CORRELATED_RESULT),0,'9\n',''),
+ 'projection_rejects_uncorrelated_boolean':(saved_query(
+    CORRELATED_RESULT+'return if(present&&(input is null)){input}else{7u64};'),2,'',UNPROVED_TARGET),
+ 'projection_keeps_boolean_snapshot_through_overwrite':(saved_query(
+    'val current<-flag;const val saved<-current;'+CORRELATED_RESULT.replace('if(flag)', 'if(current)')+
+    'current<-true;return if(present&&saved){input}else{7u64};'),0,'9\n',''),
+ 'projection_drops_relation_to_written_boolean_payload':(saved_query(
+    'val current<-flag;ref borrowed:bool=current;'+CORRELATED_RESULT.replace('if(flag)', 'if(borrowed)')+
+    'borrowed<-true;return if(present&&current){input}else{7u64};'),2,'',UNPROVED_TARGET),
+ 'projection_keeps_independent_copy_of_borrowed_boolean':(saved_query(
+    'val current<-flag;ref borrowed:bool=current;const val saved<-borrowed;'+
+    CORRELATED_RESULT.replace('if(flag)', 'if(borrowed)')+
+    'borrowed<-true;return if(present&&saved){input}else{7u64};'),0,'9\n',''),
+ 'projection_keeps_correlated_return_outcome_through_finally':(saved_query(
+    'const val present<-{{val current<-flag;try{if(current){return input is not null;}else{return true;};}'
+    'finally{current<-true;{}};}};'+GUARDED_RESULT),0,'9\n',''),
+ 'projection_rechecks_boolean_payload_at_loop_backedge':(saved_query(
+    'val current<-flag;'+CORRELATED_RESULT.replace('if(flag)', 'if(current)')+
+    'for(i in 0u64..2u64){if(present&&current){input}else{7u64};current<-true;};return 7u64;'),2,'',UNPROVED_TARGET),
  'arithmetic_without_division':(storage('3/0+4','9'),0,'9\n',''),
  'numeric_widening':(storage('3u8+4u64','9u64'),0,'9\n',''),
  'intrinsic_selected':(storage('intrinsic (+)(3u64,4u64)','9u64'),0,'9\n',''),

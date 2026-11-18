@@ -327,16 +327,14 @@ struct CheckedMethod {
   std::vector<size_t> retained_types;
   std::optional<size_t> parent;
   struct ScopeInputs {
-    // For each captured Boolean outcome, record the presence of other inputs.
-    using BooleanPresence = std::map<bool, std::map<size_t, bool>>;
     size_t lexical_method;
     std::vector<Parameter> parameters;
     std::vector<OwnerParameter> owners;
     std::map<std::string, size_t> owner_names;
     std::vector<std::vector<OwnerMatch>> relations;
     std::vector<bool> nonnull;
-    std::map<size_t, BooleanPresence> boolean_presence;
-    // Entry reference facts use input ordinals until the body allocates local slots.
+    // Entry observations use input ordinals until the body allocates local slots.
+    CleanupEquations::BooleanValues boolean_conditions;
     CleanupEquations::ConditionClauses reference_conditions;
   };
   std::optional<ScopeInputs> scope_inputs;
