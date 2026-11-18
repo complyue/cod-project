@@ -151,7 +151,7 @@ runner.CASES={
     'ptr left:u64 in O=input,right:u64 in O=input;ptr same:u64 in O=if(flag){left}else{right};'
     'return if(same is not null){input}else{7u64};'),0,'9\n',''),
  'projection_rejects_unrelated_selection_on_one_arm':(saved_query(
-    'ptr left:u64 in O=input,right:u64 in O=input;if(flag){right=null in O;}else{};'
+    'ptr left:u64 in O=input,right:u64 in O=input;if(flag){right=null in O;{}}else{};'
     'return if(left is not null){right}else{7u64};'),2,'',UNPROVED_TARGET),
  'projection_invalidates_relation_when_rebinding_one_slot':(saved_query(
     'ptr same:u64 in O=input;input=null in O;return if(same is not null){input}else{7u64};'),2,'',UNPROVED_TARGET),
