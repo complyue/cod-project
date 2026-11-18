@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-17 — Give explicit full scopes independent deferred cleanup
+
+<a id="h-full-scope-defer-20261117"></a>
+**H-FULL-SCOPE-DEFER-20261117 — Explicit full scopes must admit their own defer.** Human/source: current project user in [this design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-17 America/Los_Angeles; exact timestamp/personal name unavailable. “`{{ ... }}}` 应该等效于adhoc定义一个callable并立即调用它，所以允许helper在自己的scope执行defer而不允许 {{}} 执行，就不对了。” The extra trailing brace is interpreted as the established double-brace full-scope form. Confirms independent registration/draining for explicit full scopes by the immediate-helper rationale, correcting K-DEFER-NESTING/H-552’s overbroad full-scope prohibition and rejecting that boundary in K-798/r1. The user also asks what “Ordinary captured-value implementation” means; no adoption of D-18r113 or the complete checker/value path is inferred. Literal callable equivalence’s effects on outer-value capture and return/loop control need explicit reconciliation with existing contracts; no broad control/capture change is silently activated.
+
+<a id="k-full-scope-defer-20261117"></a>
+**K-FULL-SCOPE-DEFER-20261117 — Track cleanup scope separately from lexical nesting.** DeferredExecutionChecks r1→2/D-17r88→89/D-10r199→200/D-15r47→48/D-21r27→28/registry859→860 aligns the confirmed correction and source425’s interpretation of existing evidence. Explicit inner scopes and helpers have independent action lists; direct registrations into a draining list still reject. Preserve charter §§2/3.2–3.3/4.3/6.3/8/12, C-63/P-235/P-236 and candidate P-461–P-463/P-561–P-563 without qualifying the complete mechanism. D-17 return/if-returning, D-18 capture and D-29 loop/generator control are the identified review dependencies for literal callable equivalence; unrelated scopes remain qualified as recorded. D-18r113/D-16 and code/fixtures are unchanged; no build/tests. Baseline: `3009a367c774cc98655c959fe937335798566920` at affected paths, including the original r1 proposal; original evidence remains append-only.
+
 ## 2026-11-17 — Propose bounded deferred-execution source checks
 
 <a id="k-798"></a>

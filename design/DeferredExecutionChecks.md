@@ -1,10 +1,11 @@
 # Static checks for deferred execution
 
-Design revision: 1 · Recorded: 2026-11-17 · Status: pending human whole-file/value-path review.
+Design revision: 2 · Recorded: 2026-11-17 · Status: pending human whole-file/value-path review.
 
 ## Design authority
 
-- **Registry and coverage:** [D-17-DEFER-CHECKS](DesignAuthorityRegistry.md#d-17-defer-checks), revision 1, this whole file. Candidate P-561–P-563; [K-798](../CHANGELOG.md#k-798) records the proposal. This document is not a delegated implementation contract before human confirmation.
+- **Current correction and review:** [H-FULL-SCOPE-DEFER-20261117](../CHANGELOG.md#h-full-scope-defer-20261117)/[K-FULL-SCOPE-DEFER-20261117](../CHANGELOG.md#k-full-scope-defer-20261117) confirms independent defer registration/draining in explicit full scopes and rejects the contrary boundary. This r2 remains pending whole-file/value-path review; the broader immediate-callable model’s capture/control consequences are unresolved below. The source correction is not adoption of r1 or r2.
+- **Registry and coverage:** [D-17-DEFER-CHECKS](DesignAuthorityRegistry.md#d-17-defer-checks), revision 2, this whole file. Candidate P-561–P-563; [K-798](../CHANGELOG.md#k-798) records the proposal. This document is not a delegated implementation contract before human confirmation.
 - **Candidate value path:** C-63 → C-10 through H-267-confirmed P-235 preserves explicit typed failure and cleanup responsibility. P-236 retains the bounded D-17 preservation baseline. Candidate P-561 connects this bounded source check through that existing value path to charter §§2/3.3/4.3/6.3/8/12: visible registration has a checkable execution context, valid helpers retain their own cleanup, and source errors are diagnosed before execution without adding runtime state.
 - **Human-confirmed baseline:** [H-552](../CHANGELOG.md#h-552) selects rejection of nested defer declarations; [H-356](../CHANGELOG.md#h-356) fixes eager call preparation versus delayed blocks; [H-371](../CHANGELOG.md#h-371) requires explicit scopes for deferred-block declarations/effects; [H-295](../CHANGELOG.md#h-295) makes typeof nonexecuting. These are source confirmations, not confirmation of this new bounded mechanism/value path.
 - **Dependencies and invariants:** P-562 requires D-10’s lookup/call permissions, D-17’s source contexts, D-14’s query/access/owner rules, D-18’s independent callable bodies, D-26’s diagnostics and D-16 compatibility. C-65 storage/lifetime rules are dependencies, not a new value grant. Preserve ordinary lexical lookup, func/proc permissions, actual owners, explicit returns, successful registration and intrinsic cleanup. Dependencies grant no new source permission.
@@ -12,7 +13,7 @@ Design revision: 1 · Recorded: 2026-11-17 · Status: pending human whole-file/v
 
 ## Source rule and execution boundaries
 
-A callable may register deferred work while executing its ordinary body. A defer declaration in that callable’s deferred execution body, catch or attached finally is a source error. Ordinary groups, conditionals, loops and explicit full scopes preserve the enclosing deferred execution context.
+A callable may register deferred work while executing its ordinary body. A defer declaration targeting the currently draining scope is a source error. Ordinary groups, conditionals and loops preserve that context. An explicit full scope starts its own registration and cleanup context, even when entered from deferred execution.
 
 The check distinguishes the source declaration’s execution context from the storage/effect permissions of an explicit scope:
 
@@ -22,13 +23,14 @@ The check distinguishes the source declaration’s execution context from the st
 | Callable expression and arguments prepared for a plain deferred call | Their actual enclosing context. Preparing a top-level deferred call is ordinary execution; preparation inside deferred work retains that enclosing deferred context. |
 | Explicit delayed block, its catches and attached finally | Deferred execution context anchored at that enclosing defer declaration. |
 | Bodyless deferred catches and optional finally | Deferred execution context, independent of whether an error eventually matches. |
-| Ordinary group, conditional, loop or explicit full scope inside deferred execution | The same deferred execution context. An explicit scope may admit variables/effects under H-371; it does not admit another defer declaration. |
+| Ordinary group, conditional or loop inside deferred execution | The same deferred execution context; no new cleanup owner. |
+| Explicit full scope inside deferred execution | A new independent registration/cleanup context; its own deferred actions cannot append to its draining sequence. Restore the outer context on exit. |
 | A separately checked named, local or anonymous callable body | A fresh ordinary callable context. Construction/capture evaluation and the declaration itself retain their enclosing checks. |
 | A typeof operand | Structural source constraints retain its enclosing callable/deferred context. Inspection performs no runtime work; H-295 supplies no exemption for otherwise invalid nested source. Separately defined callable bodies still have their independent context. |
 
 Only the final invocation of a plain deferred call is delayed. For example, `defer consume({ defer earlier(); 7u64 });` prepares the grouped argument during ordinary registration. Both declarations are ordinary registrations, subject to existing scope and lifetime rules. A failed outer preparation registers no outer action and retains already successful registrations and their ordinary cleanup obligations.
 
-In `defer { consume({ defer earlier(); 7u64 }); }`, the grouped argument executes as part of deferred work. Its defer declaration is rejected. Explicit `{{ ... }}` around that argument does not change this result.
+In `defer { consume({ defer earlier(); 7u64 }); }`, the grouped argument executes as part of deferred work. Its defer declaration is rejected. Explicit `{{ ... }}` around that argument instead gives its defer an independent scope, which drains before argument evaluation returns to the enclosing deferred action.
 
 A separately checked helper may have its own deferred work. Its defers belong to its invocation/full scopes; calling it during cleanup does not append them to the caller’s draining sequence. Inlining preserves those source scope and cleanup boundaries.
 
@@ -49,11 +51,11 @@ Type inspection retains ordinary source, destination, storage, access and owner 
 
 Validate every incorporated source body, including unused methods, generic bodies and anonymous definitions, in checking-only and emission paths before accepting an executable artifact. Source well-formedness does not depend on a particular call, specialization or runtime branch being reached. Bodyless declarations have no invented execution body.
 
-A read-only source-structure pass may reuse the compiler’s scope validation. Its information consists of the enclosing callable boundary and, when applicable, the enclosing deferred execution site. H-371 declaration/effect permissions and loop declaration restrictions remain separate state: resetting those permissions at an explicit full scope must preserve the deferred execution site.
+A read-only source-structure pass may reuse the compiler’s scope validation. Its information includes the current cleanup scope and, when applicable, its enclosing deferred execution site. Explicit full scopes and callable bodies start independent cleanup contexts; leaving one restores the surrounding context. H-371 declaration/effect permissions and loop restrictions retain their own scope rules. Broader callable equivalence is not inferred from this context reset.
 
 At each defer declaration:
 
-1. If the current callable is already in deferred execution, report the inner declaration and its enclosing deferred execution site.
+1. If the current cleanup scope is already draining, report the inner declaration and its enclosing deferred execution site.
 2. For a plain deferred call, check its eagerly prepared callable expression and operands in the current context. The separately checked callee body retains its own callable context.
 3. For a delayed block or bodyless entry, check the delayed body, catches and attached finally in its deferred context.
 
@@ -69,7 +71,8 @@ The check preserves intrinsic owner release and effect restoration. It establish
 | --- | --- |
 | Proposed source-context check with eager-preparation and callable boundaries | Preserves H-356 timing and independent helper cleanup while rejecting source declarations in deferred execution. No runtime state is added. |
 | Treat every syntactic descendant of a defer token as delayed | Rejects ordinary eager-preparation registrations and loses H-356’s execution distinction. |
-| Reset the prohibition at an explicit full scope | Admits nested declarations during deferred execution, contrary to H-552. |
+| Give an explicit full scope its own registration/drain context | Selected cleanup boundary: preserves independent scope cleanup without appending to the outer draining sequence. |
+| Carry the outer prohibition through every explicit full scope | Rejects independent scope cleanup that the user explicitly requires. |
 | Propagate the prohibition into called helper bodies | Rejects independent helper cleanup and makes source validity depend on inlining or call-graph expansion. |
 
 ## Acceptance
@@ -77,7 +80,7 @@ The check preserves intrinsic owner release and effect restoration. It establish
 Negative cases must identify the nested declaration and its enclosing deferred context:
 
 - Plain-call and block-form declarations in a deferred body, catch or attached finally, including a bodyless catch/finally.
-- Nesting through ordinary groups, conditionals, loops and explicit full scopes, including an explicit-scope delayed action.
+- Same-drain nesting through ordinary groups, conditionals and loops. Within an independent full scope, its own deferred body still cannot directly register another action into that scope.
 - Nesting in an unused or generic callable body and an unreachable branch. No invocation or specialization is required to discover the structural error.
 - A queried nested declaration retains structural checks; nonexecution alone must not hide it. This case does not authorize unsupported statement inspection.
 - Nested deferred work in a helper’s own deferred body is rejected within that helper, even when the helper itself is permitted.
@@ -87,10 +90,14 @@ Positive cases preserve their source-order effects and ordinary ownership/covera
 - Several ordinary registrations, ordinary loops and independent full scopes before cleanup.
 - A top-level deferred call whose eager callable/argument preparation registers another action. Preserve successful registration order and the failure case where only the earlier action was registered.
 - A deferred call to a separately checked helper with its own cleanup; local/anonymous helpers have the same independent body rule where their declarations/construction are otherwise permitted.
-- Explicit scopes inside deferred work with permitted variables/effects and intrinsic cleanup, without another user defer declaration.
+- Explicit scopes inside deferred work with permitted variables/effects, independent user defer registration and intrinsic cleanup. Inner cleanup completes before enclosing execution resumes; the outer action list does not grow.
 - Type inspection of a cleanup-capable helper under deferred execution: no helper invocation, action registration, capture allocation or input initialization.
 
 Validate source rejection before execution and preserve legal native behavior in specialized and general modes. Active fixtures must enforce the selected restriction and retain meaningful legal helper/preparation counterparts. Their original observations remain available in immutable Git history; passing the older nested-registration prototype is not acceptance of this contract.
+
+## Immediate-callable model: unresolved interactions
+
+The independent cleanup boundary is selected. Literal equivalence to an ordinary immediately invoked callable would also affect value captures and control targets. For example, writing an outer val from an ordinary captured-value callable changes an invocation local, and return targets that callable rather than its lexical caller. Establish whether those ordinary rules also apply to `{{ ... }}`, or whether the equivalence is limited to independent scope/cleanup with lexical access/control retained. Check return/if-returning, loop continue and generator yield/feedback against that decision. No broader capture/control change, implicit shared cell or lifetime extension is authorized here. This affected scope remains pending review; D-18r113 stays unchanged.
 
 ## Qualification boundary
 
