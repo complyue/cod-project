@@ -1,23 +1,25 @@
 # LLVM bindings, handles and scoped cleanup
 
-Revision: 6 · Recorded: 2026-11-17 · Status: planning draft; examples are proposed source notation, not executable fixtures.
+Revision: 7 · Recorded: 2026-11-18 · Status: planning draft; examples are proposed source notation, not executable fixtures.
 
 ## Design authority
+
+- **CoD native interface.** [D-20-NATIVE-C](../../../design/DesignAuthorityRegistry.md#d-20-native-c) and [H-NATIVE-C-INTERFACE-20261118](../../../CHANGELOG.md#h-native-c-interface-20261118) cover r7’s interface language. C-80 and charter §6.3 place LLVM behind explicit compiler operations. Expose each selected operation through C and preserve the handle lifetime and release criteria below. Specific entry points and error conventions remain open.
 
 - **Output-contract alignment:** [H-601](../../../CHANGELOG.md#h-601)/[H-602](../../../CHANGELOG.md#h-602)/[K-INIT-PLACE-CORRECTION-20261117](../../../CHANGELOG.md#k-init-place-correction-20261117) covers r5→6. D-22 keeps ordinary init reference semantics and explicit var for caller-slot declared place aliasing; no target modifier is introduced. Native handle storage, ownership and provider proof remain pending. Preserve C-81/C-65, charter §§4.3/6.3/8/12, D-16 and D-17 timing/cleanup. Only the dependency/initialization interpretation changes; pipeline behavior and full application/native/value-path qualification remain unchanged.
 
 - **Callable-reference continuity:** [K-ALIAS-GLOSSARY-20261117](../../../CHANGELOG.md#k-alias-glossary-20261117) preserves this revision's existing D-18 dependency under the canonical CallableViewsAndCaptures.md path. Only dependency links and this continuity summary change; existing contracts, qualification, acceptance and D-16 remain unchanged.
 
-- **Registry / coverage:** [D-20](../../../design/DesignAuthorityRegistry.md#d-20), revision 6, all sections. Native handle, provider and output-parameter contracts remain `pending-human`. The call/block distinction and registration-time evaluation are confirmed language requirements under [D-17](../../../design/ExceptionControl.md#deferred-work-and-explicit-scopes), not implementation evidence for this application.
+- **Registry / coverage:** [D-20](../../../design/DesignAuthorityRegistry.md#d-20), revision 7, all sections. Native handle, provider and output-parameter contracts remain `pending-human`. The call/block distinction and registration-time evaluation are confirmed language requirements under [D-17](../../../design/ExceptionControl.md#deferred-work-and-explicit-scopes), not implementation evidence for this application.
 - **Baseline / assessment:** [H-353](../../../CHANGELOG.md#h-353) requests selective LLVM bindings, scoped release and explicit generic-owner ref access. [H-354](../../../CHANGELOG.md#h-354) identifies output-initialization and uninitialized-handle storage requirements; H-571 supplies current init-place roles without selecting a native handle representation. [H-355](../../../CHANGELOG.md#h-355) supplies registration-time evaluation terminology; [H-356](../../../CHANGELOG.md#h-356) selects `defer init(...)()` and authorizes immediate language work. [K-515](../../../CHANGELOG.md#k-515) records this plan update. C-80/P-314/P-316–P-318 connects native integration to C-02/C-11/C-79 and charter §6; C-81/P-319/P-320 relates output initialization to C-65's explicit storage/owner contract.
 - **Dependencies / invariants:** [D-14](../../../design/RegionalOwnership.md) owner/access and initialization, [D-17](../../../design/ExceptionControl.md) exceptions/scopes, and [D-18](../../../design/CallableViewsAndCaptures.md) callable values/captures remain authoritative within their recorded scopes. Preserve relocation and distinguish native-resource lifetime from handle storage. No general lexical-reference capture or implicit lifetime extension follows.
-- **Acceptance / exclusions:** a future binding must demonstrate valid argument access, normal/exceptional release and no use after native invalidation. This document neither selects a C versus C++ shim ABI nor changes parsing, callable-environment representation, provider registration or runtime code loading.
+- **Acceptance / exclusions:** a future binding must demonstrate valid argument access, normal/exceptional release and no use after native invalidation. CoD’s LLVM bindings expose a C interface. Concrete signatures, handle representations and provider registration remain open.
 
 ## Select APIs by application demand
 
 Introduce bindings when a concrete compiler operation needs them: context/module construction, type/value/block construction, verification, selected optimization and output. Tokenization and parsing have no inherent LLVM dependency. Avoid generating an entire API binding surface before the application uses it.
 
-A small provider boundary can expose native services while CoD owns compiler algorithms and regional semantic data. [H-352](../../../CHANGELOG.md#h-352) places third-party intrinsic extension on an SPI planning path; it does not yet define registration, loading, provider selection or a native ABI. Prefer source-visible module selection over an implicitly edited global registry. The native shim should not become a second implementation of CoD's parser or analyzer.
+A small provider boundary can expose native services while CoD owns compiler algorithms and regional semantic data. [H-352](../../../CHANGELOG.md#h-352) places third-party intrinsic extension on an SPI planning path; it does not yet define registration, loading, provider selection or the detailed ABI. Prefer source-visible module selection over an implicitly edited global registry. The native shim should not become a second implementation of CoD's parser or analyzer.
 
 ## Opaque handles and separate lifetimes
 

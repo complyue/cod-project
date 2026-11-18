@@ -1,12 +1,14 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 168
+Discussion revision: 169
 
-Recorded: 2026-11-17
+Recorded: 2026-11-18
 
 Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
+
+- **Native integration.** [D-07](DesignAuthorityRegistry.md#d-07) r169, DL-11, follows [D-20-NATIVE-C](DesignAuthorityRegistry.md#d-20-native-c) and [H-NATIVE-C-INTERFACE-20261118](../CHANGELOG.md#h-native-c-interface-20261118). C-79/C-80 and charter §§4.3/6.3 connect typed external operations to checked CoD lifetimes. DL-11 supplies the caller, failure and release acceptance cases. Provider registration and the concrete ABI remain open.
 
 - **Current capture-review reference:** [K-REPLACEMENT-EFFECTS-20261117](../CHANGELOG.md#k-replacement-effects-20261117) keeps the separate D-18 value-input qualification current. This file changes only review references; its semantic revision, governing value paths, constraints and acceptance are unchanged. The registry owns the current review scope.
 
@@ -555,13 +557,13 @@ The native source prototype reports selected implementation contexts alongside a
 
 **Question:** What interoperability contract exposes useful operations while preserving regional and language semantics?
 
-**Planning direction (H-352):** provide a service provider interface (SPI) through which third parties can extend intrinsics; other extension logic belongs in CoD user-program libraries. C/C++ remains the compatibility role from H-06. The SPI is the expected integration path, not a chosen registration, loading or native-call ABI.
+**Planning direction (H-352):** provide a service provider interface (SPI) through which third parties can extend intrinsics; other extension logic belongs in CoD user-program libraries. External C and C++ systems can integrate through CoD’s C native interface. The SPI is the intended extension path. Provider registration and loading remain open.
 
 - Specify ownership of buffers/regions, borrowed-view lifetimes, allocation/deallocation symmetry, error results, calling threads and callbacks. Separate physical image compatibility from a function-call ABI.
 - Decide which foreign values must be materialized and which runtime handles can be temporarily bound. Native heap pointers, callbacks and operating-system handles need an explicit execution-lifetime treatment.
 - Define how providers expose typed intrinsic operations and how external runtimes construct/check packets, invoke methods, consume responses and bind effects while preserving language invariants. Provider selection must fit module-world visibility and function/procedure contracts; it does not imply mutable shared registries or dynamic code loading.
 
-**Remaining interface work:** typed provider declarations, compiler/runtime integration, native argument/result and error conventions, owner/lifetime checking and provider version compatibility. A C ABI or C++ adapter may serve that SPI, but neither an opaque-handle ABI nor a mandatory wrapper is selected. No third-party intrinsic extension is claimed implemented here.
+**Remaining interface work:** typed provider declarations, compiler/runtime integration, native argument/result and error conventions, owner/lifetime checking and provider version compatibility. The CoD-facing interface uses C. A provider can adapt its own implementation language behind that boundary. Handle representation and the need for a wrapper depend on the operation. No third-party intrinsic extension is claimed implemented here.
 
 **Decision evidence:** trace one foreign-runtime caller through construction, application, result consumption and release, including an error and a rejected lifetime violation.
 
