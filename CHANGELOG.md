@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-18 — Infer one type and category for conditional results
+
+<a id="h-conditional-result-20261118"></a>
+**H-CONDITIONAL-RESULT-20261118 — Branch results converge before reception.** The current project user replied in [the design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-18 America/Los_Angeles, “同意，各分支先合并推断同意的结果类型和性质，然后最终eval结果都往确定的统一类型和性质去靠”. In the reviewed scalar example, both paths of `ref chosen:u64 = if (use_n) { n } else { 7u64 };` initialize fresh storage. Writing through chosen leaves n at 1. This confirms the common-result source rule and its scalar application in D-22r46/D-23r28. The exact non-bits carriers and lowering remain under review.
+
+<a id="k-conditional-result-20261118"></a>
+**K-CONDITIONAL-RESULT-20261118 — Reconcile receiving, owner and source coverage.** Registry873→874/source431→432 records D-22-CONDITIONAL, its D-14/D-17/D-23 dependencies and scalar acceptance under C-65/C-72/P-348/P-350/P-354–P-355. Compatible target arms retain the selected target with one proven owner. K-714’s mixed scalar target/value behavior requires compiler and fixture migration. Prior contract and expectations are at `40c0d3f4249133e5e056adbeabe77a378eb7e89a:design/ScalarCallResults.md` and the same commit’s `tests/cod/language/conditional_storage_tests.py`. The D-16 validity and conversion rules still apply.
+
 ## 2026-11-18 — Select parenthesized value results and unparenthesized operator idioms
 
 <a id="h-parenthesized-values-20261118"></a>
