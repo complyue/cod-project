@@ -1,10 +1,10 @@
 # CoD construction, bits ADTs and region acquisition
 
-Design revision: 48 · Recorded: 2026-11-18 · Status: discussion draft with confirmed requirements; logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
+Design revision: 49 · Recorded: 2026-11-18 · Status: discussion draft with confirmed requirements; logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
 
 ## Design authority
 
-- **Exception placement.** [H-EXCEPTION-FACTORY-20261118](../CHANGELOG.md#h-exception-factory-20261118) scopes D-22r48 to source construction at a raising site. [D-17-EXCEPTION-OWNER](ExceptionControl.md#returning-a-locally-caught-exception) selects the handling owner on demand and permits a locally caught reference to return normally. H-384/H-438 retain explicit owner selection for ordinary payload objects. Acceptance covers rejected exception `make` forms, a throw-and-catch factory and ordinary payload allocation in its owner. C-54/C-65 and charter §§3.3/4.1/4.3 motivate a provable owner in each case.
+- **Exception placement.** [H-MAKE-EXCEPTION-20261118](../CHANGELOG.md#h-make-exception-20261118) scopes D-22r49 to the boundary with [D-17 fresh exception construction](ExceptionControl.md#make-exception-expressions). D-22 supplies constructor arguments, field readiness and ordinary payload allocation. C-54/C-65 and charter §§3.3/4.1/4.3 motivate a provable owner. Accept dedicated, complete exception construction with an optional fresh-region capacity. Reject ordinary `make T` for an exception subtype and any attempt to select an existing destination owner. Physical support remains pending.
 
 - **Conditional results.** [H-CONDITIONAL-RESULT-20261118](../CHANGELOG.md#h-conditional-result-20261118) confirms [D-22-CONDITIONAL](DesignAuthorityRegistry.md#d-22-conditional) in r46. A single inferred result type and category makes target identity and scalar reads predictable from the expression. C-65/C-72 and P-348/P-350 connect this source rule to charter §§3.3/4.3/6.3/8. The scalar examples below define acceptance under D-23’s receiving rules. Non-bits carriers, lowering and wider qualification remain open.
 
@@ -543,7 +543,7 @@ The proposed compiler check for the confirmed construction behavior carries the 
 
 | Source situation | Required behavior and implementation boundary |
 | --- | --- |
-| Exception type T | Reject standalone `make T`, including constructor and initializer forms with or without explicit placement. A constructing throw or rethrow obtains the handling owner on demand. A helper may return the caught reference with that owner. |
+| Exception type T | Use [`make exception T(...)` or `make exception T { ... }`](ExceptionControl.md#make-exception-expressions) to receive a complete owning result normally. The optional `in region (bytes -> capacity)` configures a fresh region. Ordinary `make T [in o]` rejects for an exception subtype. |
 | Explicit `make T in r` for ordinary data | Use r only if it supplies the required placement/capability. Reject a conflicting receiver owner before runtime evaluation. H-384 confirms explicit selection and mismatch rejection; H-438 supplies the generic owner allocation-access rule. |
 | Ordinary data, omitted owner, receiver has one unique owner and suitable allocation access | Construct there. A field may supply its containing owner to an explicitly written nested make. H-386 accepts this contextual inference. |
 | Ordinary data, omitted owner, no destination | Bits use the current full lexical scope. Non-bits still require an explicit actual owner when none is supplied by context; H-478 admits `in here` as well as a regional destination. No TLS fallback, hidden region or automatic owner choice follows. H-386's explicitness boundary remains; missing capability never causes a hidden allocator or fallback. |

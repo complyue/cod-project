@@ -1,12 +1,14 @@
 # CoD booter: a compiler application written in CoD
 
-Document set: revision 5 · Recorded: 2026-11-17 · Phase: application planning; prerequisite defer implementation authorized separately.
+Roadmap revision: 7 · Recorded: 2026-11-18 · Phase: application and repository planning.
 
 ## Design authority
 
+- **Next-stage roadmap.** [H-TOOLCHAIN-REPOSITORIES-20261118](../../CHANGELOG.md#h-toolchain-repositories-20261118) records the four proposed repository responsibilities and a future C implementation of native services. [D-20-REPOSITORIES](../../design/DesignAuthorityRegistry.md#d-20-repositories), r7, covers [repository and native-runtime planning](#next-stage-repositories-and-native-runtime). C-80/P-314–P-318 and charter §§4.3/6.3 connect a self-hosted compiler to explicit native services. Compare seed-built and self-built behavior and retain owner, relocation and cleanup semantics across the C boundary. Repository creation, bootstrap stages, toolchain releases, native ABI and implementation remain future work.
+
 - **Output-contract continuity:** [H-571](../../CHANGELOG.md#h-571)/[K-OUTPUT-ACCEPT-20261117](../../CHANGELOG.md#k-output-accept-20261117) covers document-set r4→5. D-22’s selected init declared-place roles replace a separate out spelling; native handle storage, target-initializing helper syntax, ownership and provider proof remain pending. Preserve C-81/C-65, charter §§4.3/6.3/8/12, D-16 and existing D-17 call/block timing. No application implementation, physical ABI or broader qualification follows; pipeline semantics are unchanged.
 
-- **Registry / scope:** [D-20](../../design/DesignAuthorityRegistry.md#d-20), revision 5, this README and both linked planning documents. Detailed application designs are `pending-human`; the selected defer call/block rule is governed by D-17, not by a broader implementation qualification of this set.
+- **Registry / scope:** [D-20](../../design/DesignAuthorityRegistry.md#d-20), roadmap revision 7. The pipeline and LLVM interop documents retain their own scoped revisions. Detailed application designs are `pending-human`; the selected defer call/block rule is governed by D-17, not by a broader implementation qualification of this set.
 - **Human baseline:** [H-353](../../CHANGELOG.md#h-353) requests a parallel compiler application, CoD-native design, regional stage caches and incremental LLVM bindings, with documentation only at this stage. [H-354](../../CHANGELOG.md#h-354) identifies output-initialization and uninitialized-handle storage requirements; H-571 supplies the current init language roles, while handle classification remains pending. [H-355](../../CHANGELOG.md#h-355) supplies registration-time terminology. [H-356](../../CHANGELOG.md#h-356) selects call/block defer timing and immediate language implementation; [K-515](../../CHANGELOG.md#k-515) records this application-plan update.
 - **Value:** C-80/P-314–P-318 connects inspectable compiler semantics to C-01, reusable structured artifacts to C-05, and native integration to C-02/C-11/C-79. The charter's §§2, 5.3–5.4, 6–7 and 12 provide the context; detailed derivation and trade-offs remain pending.
 - **Boundaries / acceptance:** preserve regional relocation, owner/access checks, independent module worlds and explicit TLS effects. Keep confirmed direction, proposals and missing evidence distinguishable. D-17 supplies the separately authorized defer work. No compiler-application source port, native ABI, toolchain/bootstrap operation or performance claim is authorized by this plan.
@@ -18,6 +20,19 @@ Use compiler construction as a second application alongside [steady-snn](../stea
 The unit of design is the compiler operation and its data, not a C++ class translated into CoD. Existing C++ code can supply the seed compiler, implementation evidence and a behavioral comparison. Its container choices, frontend/backend coupling and internal helper structure do not prescribe the new application's architecture. The language contracts remain authoritative when an existing implementation disagrees.
 
 This application should expose useful language opportunities through real work: typed source positions and indices, ADT-based syntax and diagnostics, identity-based module information, regional intermediate artifacts, owner-checked operations and scoped native resources. A feature needs a concrete compiler use and a demonstrated reduction in complexity or cost; a compiler pilot is not a reason to add a general framework in advance.
+
+## Next-stage repositories and native runtime
+
+| Planned repository | Responsibility |
+| --- | --- |
+| `cod-seed` | The seed compiler in C++. CoD's native components, including the region core and LLVM bindings, are planned in C. |
+| `cod` | The CoD compiler written in CoD. The seed builds the initial compiler, which can then compile its own sources. |
+| `codup` | Toolchain version management in the role of rustup. CoD package dependency resolution and lockfiles have their own [codp design](../../design/CodProjectStructureAndPkgMgmt.md). |
+| `codmate` | The Language Server Protocol server and IDE plugins. |
+
+The proposed split gives the seed and the self-hosted compiler a common native region service. When designing its C interface, distinguish fixed logical capacity, host address-space reservation, backing enabled on demand, and resident pages. Choose suitable host VM operations behind that interface. Preserve owner identity and locators while enabling pages, and retain allocation/release symmetry through partial failure. The C runtime must release owned exception-array members as well as the aggregate region. The native provider should support the [exception capacity rules](../../design/ExceptionControl.md#image-setting-for-exception-region-capacity), including site budgets if their syntax is adopted. Measure virtual address space and resident use separately on target systems. The current C++ allocator is implementation evidence; its API need not constrain the C design.
+
+Deferred work includes specifying the region and LLVM binding interfaces the two compilers actually need, checking that both toolchains agree on those interfaces, and choosing toolchain distribution and editor integration details when those repositories are established. The plan leaves repository creation, source migration and the current bootstrap independent of this design record.
 
 ## Document map
 
