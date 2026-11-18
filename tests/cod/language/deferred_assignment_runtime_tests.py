@@ -9,9 +9,10 @@ FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 func selected_image(ref input:func(u64)->const u64 in O)->ref (func(u64)->const u64) in O where {owner O}{return input;}
 {{
  func f=wrap(base);func g=wrap(other);
+ ptr destination=f,source=g;
  {{
-  defer intrinsic (<-)(f,g);
-  observe(f(1u64));g<-wrap(base);observe(g(1u64));
+  defer intrinsic (<-)(destination,source);
+  observe(destination(1u64));source<-wrap(base);observe(source(1u64));
   observe(9010u64);
  }};
  observe(9011u64);observe(f(1u64));
@@ -21,10 +22,12 @@ func selected_image(ref input:func(u64)->const u64 in O)->ref (func(u64)->const 
  observe(9050u64);
  try{defer intrinsic (<-)(f,g);}catch(e:const OutOfMemoryError){observe(9051u64);};
  observe(f(1u64));
- ptr p=f,q=g;
  func select_image=selected_image;
- {{defer (=)((if(true){p}else{q}),select_image(g));}};
- observe(p(1u64));
+ {{
+  ptr p=destination,q=source;
+  defer{observe(p(1u64));};
+  defer (=)(if(true){p}else{q},select_image(source));
+ }};
 }};
 observe(9000u64);
 ''')
