@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-18 — Correct implementation defects under the confirmed design
+
+<a id="h-implementation-correction-20261118"></a>
+**H-IMPLEMENTATION-CORRECTION-20261118.** The project user in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-18 (America/Los_Angeles) directed “如果是纠正实现瑕疵，不需要人类批准，除非潜在工程量明显不合算”. This clarifies H-IMPLEMENTATION-FIDELITY-20261117 for engineering work that restores an established contract.
+
+<a id="k-scalar-correction-20261118"></a>
+**K-SCALAR-CORRECTION-20261118.** Engineering assessment under that rule: the scalar target/value join and parenthesis cases in D-22r53 are regression criteria for H-CONDITIONAL-RESULT-20261118 and H-PARENTHESIZED-VALUES-20261118. They require coordinated parser, checker, type-query, lowering and fixture changes. No disproportionate cost was identified. The observed discrepancy is documented at `529c9d1f974dbb4d9d2b43bb394b6926b0360026:tests/cod/language/README.md`, “Scalar conditional migration”. Registry912 routes this work under the existing decisions. Non-scalar results and any change to source semantics retain their separate review.
+
 ## 2026-11-18 — Publish initialized DBMRs exclusively and define the native C boundary
 
 <a id="h-dbmr-new-publication-20261118"></a>

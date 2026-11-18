@@ -1,8 +1,10 @@
 # CoD construction, bits ADTs and region acquisition
 
-Design revision: 52 · Recorded: 2026-11-18 · Status: discussion draft with confirmed requirements; logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
+Design revision: 53 · Recorded: 2026-11-18 · Status: discussion draft with confirmed requirements; logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
 
 ## Design authority
+
+- **Scalar regression cases.** Revision 53 adds [paired target-identity checks](#scalar-expression-checking-and-lowering) to the confirmed [D-22 conditional](DesignAuthorityRegistry.md#d-22-conditional) and [D-10 parentheses](DesignAuthorityRegistry.md#d-10-parens) scopes. The examples exercise the existing C-65/C-72 ownership and value rules under charter §§4.3/6.3 and D-23 reception. [K-SCALAR-CORRECTION-20261118](../CHANGELOG.md#k-scalar-correction-20261118) records the engineering assessment.
 
 - **New DBMR publication.** [D-22-DBMR-PUBLICATION](DesignAuthorityRegistry.md#d-22-dbmr-publication), r52, records the [confirmed visibility rule](../CHANGELOG.md#h-dbmr-new-publication-20261118). A reader opening the final name can rely on complete initialization. The success, failure, retry and competing-creator cases below cover the C-05/C-09/C-54 consistency and ownership goals in charter §§4.3/7.2. Source spelling, existing-file updates and crash recovery remain open.
 
@@ -737,6 +739,29 @@ Both `example(true)` and `example(false)` return `1u64`. A readable scalar targe
 A value result carries no owner. A selected readable target can therefore contribute bits from another live owner. Require initialization and ordinary read access at the point of projection. A borrowed call result becomes available after that call's cleanup, so its projection observes completed callee writes. Cleanup enclosing an already evaluated bits result cannot change its snapshot. Reference results retain the common access and require a single statically provable owner. The receiver cannot promote readonly target access or invent an external owner for fresh storage. Later rebinding and borrowed arguments still require an existing target.
 
 The join uses existing type, unit, validity and conversion rules, including D-16 where applicable. It supplies no new implicit dereference of a nullable pointer, whole-object bits transfer, ownership conversion or graph transfer. Other result kinds need an admitted way to produce their common contract.
+
+### Scalar expression checking and lowering
+
+For supported scalar bits and readable scalar targets, the following checks apply to expression parentheses and conditionals. Determine the common result type and category before applying a receiver. Preserve the distinction between expression parentheses and syntax delimiters. On a selected value arm, obtain the independent bits once where that arm produces its value. On a selected reference arm, retain the target, its access and its proven owner through reception. An implementation can use registers, branches or a result destination as long as these observations agree.
+
+```cod
+proc observe(left:bool) -> u64 {
+    ref a:u64 = 1u64;
+    ref b:u64 = 2u64;
+    ref chosen:u64 = if (left) { a } else { (b) };
+    chosen <- 9u64;
+    return a * 10u64 + b;
+}
+```
+
+| Arms (true / false) | Result used by the receiver | `observe(true)` | `observe(false)` |
+| --- | --- | ---: | ---: |
+| `a` / `(b)` as written | Independent bits on either path. The declaration supplies fresh storage. | 12 | 12 |
+| `a` / `b` | Both writable references have the same lexical owner. The declaration binds the selected target. | 92 | 19 |
+
+Exercise both arm orders. A value receiver transfers bits under its ordinary rules. An existing reference rebind or an argument requiring an existing target must reject a projected value. A bare readonly target retains its access. A retained reference still requires one provable owner. The condition and selected arm execute once. A nonexecuting type query must use the same static result and leave program state untouched. A returning or throwing arm supplies no value to the join. For a call yielding a scalar reference, projection reads after the call’s cleanup and before later enclosing cleanup can change those bits.
+
+Check the examples and these acceptance cases in the checker and in both native lowering modes. Acceptance includes the mixed reference/literal example above and the reference/reference control. Existing numeric types, units and validity rules apply. Non-scalar carriers, implicit ownership or graph transfer and new numeric conversions are outside this scope. [Expression parentheses](SymbolicDynamicScope.md#parenthesized-value-expressions-and-operator-idioms) · [Scalar receiving rules](ScalarCallResults.md#call-site-matrix-new-declarations)
 
 ### Initialization order and allowed allocation effects
 
