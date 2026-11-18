@@ -169,6 +169,21 @@ runner.CASES={
     GUARDED_RESULT),2,'',UNPROVED_TARGET),
  'projection_takes_deferred_observation_after_ordinary_fallthrough':(saved_query(
     'const val present<-{{defer{return input is not null;};}};'+GUARDED_RESULT),0,'9\n',''),
+ 'projection_uses_return_from_deferred_finally':(saved_query(
+    'const val present<-{{defer{return true;}finally{return input is not null;};return true;}};'+
+    GUARDED_RESULT),0,'9\n',''),
+ 'projection_preserves_deferred_return_across_normal_finally':(saved_query(
+    'const val present<-{{defer{return input is not null;}finally{input=null in O;{}};return false;}};'+
+    GUARDED_RESULT),0,'9\n',''),
+ 'projection_uses_deferred_catch_with_signature_only_call':(saved_query(
+    'const val present<-{{defer{may_stop();{}}catch(e:const MissingReturnError){return input is not null;};'
+    'return false;}};'+GUARDED_RESULT,declarations=MISS),0,'9\n',''),
+ 'projection_checks_both_outcomes_of_deferred_finally':(saved_query(
+    'const val present<-{{defer{return true;}finally{if(flag){return input is not null;}else{};};return false;}};'
+    'return if(present){input}else{7u64};'),2,'',UNPROVED_TARGET),
+ 'projection_accounts_for_replacement_from_deferred_catch':(saved_query(
+    'const val present<-{{defer{may_stop();{}}catch(e:const MissingReturnError){return true;};'
+    'return input is not null;}};'+GUARDED_RESULT,declarations=MISS),2,'',UNPROVED_TARGET),
  'projection_returns_proof_from_independent_reference_binding':(saved_query(
     'const val present<-{{ptr same:u64 in O=input;input=null in O;return same is not null;}};'+
     GUARDED_RESULT),0,'9\n',''),

@@ -979,6 +979,7 @@ class ScalarChecker {
     TypeDeferredFlow *deferred = nullptr;
     size_t deferred_queue = 0;
     bool repeated_registration = false;
+    bool has_deferred_action = false;
     const Expression *prepared_call = nullptr;
     struct Returns {
       std::vector<Type> types;
@@ -994,6 +995,9 @@ class ScalarChecker {
       TypeEvidenceState state;
       // A returned Boolean observes the invocation's entry selections before cleanup.
       std::optional<PresenceBranches> boolean_return;
+      bool retained_return = false;
+
+      bool returned() const { return retained_return || reasons.contains(1); }
     };
     // Outcomes of one operation begin with the same source evidence.
     // A handler consumes only the matching reasons from each path.
@@ -1002,7 +1006,7 @@ class ScalarChecker {
   struct TypeDeferredFlow {
     struct Action {
       size_t earlier;
-      const Expression *body;
+      const Expression *entry;
       std::unique_ptr<TypeEvidenceState> declaration;
       bool may_replace;
       bool may_rebind;
@@ -1022,14 +1026,14 @@ class ScalarChecker {
                                    {right.deferred_queue, right.selections.reach_condition()}});
       return entries.size();
     }
-    size_t push(const TypeEvidenceState &state, const Expression *body, bool may_replace, bool may_rebind,
+    size_t push(const TypeEvidenceState &state, const Expression *entry, bool may_replace, bool may_rebind,
                 QueryPayloadWrites writes) {
-      auto declaration = body ? std::make_unique<TypeEvidenceState>(state) : nullptr;
+      auto declaration = entry ? std::make_unique<TypeEvidenceState>(state) : nullptr;
       if (declaration) {
         declaration->exits = nullptr;
         declaration->deferred = nullptr;
       }
-      entries.emplace_back(Action{state.deferred_queue, body, std::move(declaration), may_replace, may_rebind, std::move(writes)});
+      entries.emplace_back(Action{state.deferred_queue, entry, std::move(declaration), may_replace, may_rebind, std::move(writes)});
       return entries.size();
     }
   };
@@ -4887,6 +4891,7 @@ class ScalarChecker {
     if (left.deferred && left.deferred == right.deferred)
       left.deferred_queue = left.deferred->join(left, right);
     selection.join_flow(other_selections);
+    left.has_deferred_action |= right.has_deferred_action;
     left.complete = left.complete && right.complete;
     return left;
   }
@@ -4896,11 +4901,13 @@ class ScalarChecker {
     return merge_evidence(std::move(left), right, right_exits && !left_exits);
   }
   static void merge_type_exits(TypeEvidenceExits &flow, std::set<size_t> reasons, const TypeEvidenceState &state,
-                               std::optional<PresenceBranches> boolean_return = {}) {
+                               std::optional<PresenceBranches> boolean_return = {}, bool retained_return = false) {
     if (reasons.empty()) return;
-    auto entry = std::ranges::find(flow.paths, reasons, &TypeEvidenceExits::Path::reasons);
+    const auto entry = std::ranges::find_if(flow.paths, [&](const auto &path) {
+      return path.reasons == reasons && path.retained_return == retained_return;
+    });
     if (entry == flow.paths.end()) {
-      flow.paths.push_back({std::move(reasons), state, std::move(boolean_return)});
+      flow.paths.push_back({std::move(reasons), state, std::move(boolean_return), retained_return});
       flow.paths.back().state.exits = nullptr;
     } else {
       entry->state = merge_evidence(std::move(entry->state), state);
@@ -5047,6 +5054,75 @@ class ScalarChecker {
     restore(caught.selections.value_places, entry.selections.value_places);
     caught.caught_exception = entry.caught_exception;
   }
+  static std::optional<TypeEvidenceState> take_type_catch(TypeEvidenceExits &incoming, const Type &type) {
+    std::optional<TypeEvidenceState> selected;
+    const auto reason = Completion::failure(type.identity).reason;
+    for (auto &path : incoming.paths)
+      if (std::erase_if(path.reasons, [&](size_t outcome) { return outcome >= 3 && (!type.identity || outcome == reason); }))
+        selected = selected ? merge_evidence(std::move(*selected), path.state) : path.state;
+    return selected;
+  }
+  static void forward_type_exit(TypeEvidenceExits &outgoing, TypeEvidenceExits::Path &path) {
+    merge_type_exits(outgoing, std::move(path.reasons), path.state, std::move(path.boolean_return), path.retained_return);
+  }
+  std::optional<Type> complete_type_finalizer(const Expression &handler, TypeEvidenceExits::Path &pending,
+                                              TypeEvidenceExits &outgoing) const {
+    TypeEvidenceExits exits;
+    pending.state.exits = &exits;
+    const auto type = type_evidence(handler, pending.state);
+    pending.state.exits = nullptr;
+    for (auto &path : exits.paths) {
+      if (!path.returned() && pending.returned()) {
+        path.retained_return = true;
+        path.boolean_return = pending.boolean_return;
+      }
+      forward_type_exit(outgoing, path);
+    }
+    return type;
+  }
+  TypeEvidenceExits replay_type_defer(const Expression &entry, TypeEvidenceState state, size_t pending_error) const {
+    using K = Expression::Kind;
+    TypeEvidenceExits incoming, outgoing;
+    state.exits = &incoming;
+    // The current lowering enters any guarded deferred entry with its pending
+    // failure. Model this until native cleanup separates the error queue.
+    if (entry.children.size() > 1 && pending_error)
+      merge_type_exits(incoming, {pending_error}, state);
+    else if (type_evidence(*entry.children.front(), state, false, nullptr, nullptr,
+                           ExpectedTypeUse::materialization, true, EvidenceRead::discarded) != Type::never)
+      merge_type_exits(outgoing, {0}, state);
+
+    const Expression *finalizer = nullptr;
+    std::set<size_t> handled;
+    for (size_t i = 1; i < entry.children.size(); ++i) {
+      const auto &handler = *entry.children[i];
+      if (handler.kind == K::block) {
+        finalizer = &handler;
+        break;
+      }
+      const auto type = handler.annotation ? evidence_annotation(*handler.annotation, state) : exception_type(0);
+      const auto selected = take_type_catch(incoming, type);
+      if (!selected) continue;
+      auto caught = catch_evidence(handler, *selected, handled);
+      TypeEvidenceExits exits;
+      caught.exits = &exits;
+      if (type_evidence(*handler.children.front(), caught, false, nullptr, nullptr,
+                        ExpectedTypeUse::materialization, true, EvidenceRead::discarded) != Type::never)
+        merge_type_exits(exits, {0}, caught);
+      for (auto &path : exits.paths) {
+        leave_type_catch(path.state, *selected, handler.text);
+        forward_type_exit(outgoing, path);
+      }
+    }
+    for (auto &path : incoming.paths) forward_type_exit(outgoing, path);
+    if (!finalizer) return outgoing;
+
+    TypeEvidenceExits completed;
+    for (auto &path : outgoing.paths)
+      if (complete_type_finalizer(*finalizer, path, completed) != Type::never)
+        forward_type_exit(completed, path);
+    return completed;
+  }
   std::optional<Type> project_finalizer(const Expression &handler, TypeEvidenceState &state) const {
     const bool required = state.required;
     auto *const returns = state.returns;
@@ -5075,7 +5151,7 @@ class ScalarChecker {
       returning = true;
     };
     if (!may_replace) {
-      for (const auto &path : exits.paths) if (path.reasons.contains(1)) collect(path.boolean_return);
+      for (const auto &path : exits.paths) if (path.returned()) collect(path.boolean_return);
       return returning ? proof : std::nullopt;
     }
 
@@ -5083,8 +5159,12 @@ class ScalarChecker {
       TypeEvidenceState state;
       std::optional<PresenceBranches> result;
     };
-    std::map<std::pair<size_t, bool>, Pending> pending;
-    const auto enqueue = [&](size_t queue, bool returned, TypeEvidenceState state,
+    const bool guards_errors = std::ranges::any_of(flow.entries, [](const auto &entry) {
+      const auto *action = std::get_if<TypeDeferredFlow::Action>(&entry);
+      return action && action->entry && action->entry->children.size() > 1;
+    });
+    std::map<std::tuple<size_t, bool, size_t>, Pending> pending;
+    const auto enqueue = [&](size_t queue, bool returned, size_t error, TypeEvidenceState state,
                              std::optional<PresenceBranches> result) {
       state.exits = nullptr;
       state.deferred = nullptr;
@@ -5093,21 +5173,24 @@ class ScalarChecker {
         const auto condition = state.selections.reach_condition();
         for (const bool value : {false, true}) result->at(value).conjoin(condition);
       }
-      const auto key = std::pair{queue, returned};
+      const auto key = std::tuple{queue, returned, guards_errors ? error : 0};
       if (const auto entry = pending.find(key); entry != pending.end()) {
         entry->second.state = merge_evidence(std::move(entry->second.state), state);
         entry->second.result = QuerySelections::alternatives(std::move(entry->second.result), result);
       } else pending.emplace(key, Pending{std::move(state), std::move(result)});
     };
-    for (const auto &path : exits.paths)
-      enqueue(path.state.deferred_queue, path.reasons.contains(1), path.state, path.boolean_return);
-    if (falls_through) enqueue(body.deferred_queue, false, body, {});
+    for (const auto &path : exits.paths) {
+      if (!guards_errors) enqueue(path.state.deferred_queue, path.returned(), 0, path.state, path.boolean_return);
+      else for (const auto reason : path.reasons)
+        enqueue(path.state.deferred_queue, path.returned(), reason >= 2 ? reason : 0, path.state, path.boolean_return);
+    }
+    if (falls_through) enqueue(body.deferred_queue, false, 0, body, {});
 
     // Every edge leads to an older entry. Joining at a shared queue tail
     // prevents independent conditional registrations from multiplying paths.
     while (!pending.empty()) {
       auto next = pending.extract(std::prev(pending.end()));
-      const auto [queue, returned] = next.key();
+      const auto [queue, returned, error] = next.key();
       auto &[state, result] = next.mapped();
       if (!queue) {
         if (returned) collect(result);
@@ -5120,20 +5203,30 @@ class ScalarChecker {
           if (!state.selections.reachable(condition, true)) continue;
           auto selected = state;
           selected.selections.assume(condition, true);
-          enqueue(arm->queue, returned, std::move(selected), result);
+          enqueue(arm->queue, returned, error, std::move(selected), result);
         }
         continue;
       }
       const auto &action = std::get<TypeDeferredFlow::Action>(entry);
-      if (!action.body) {
+      if (!action.entry) {
         if (action.may_rebind) {
           const auto condition = state.selections.reach_condition();
           state.selections.forget();
           state.selections.retain_conditions(condition);
         } else if (action.writes.unknown || !action.writes.places.empty())
           state.selections.write_boolean(action.writes.unknown ? EvidencePlaces{} : action.writes.places, {});
-        if (action.may_replace) enqueue(action.earlier, true, state, {});
-        enqueue(action.earlier, returned, std::move(state), std::move(result));
+        if (guards_errors) {
+          // A prepared call or queue handler can finish with any opaque
+          // failure. If it produced a return, it may still carry that value.
+          for (size_t outcome = 0; outcome < 3 + exception_categories.size(); ++outcome) {
+            if (outcome == 1 || outcome == 3) continue;
+            if (action.may_replace) enqueue(action.earlier, true, outcome, state, {});
+            enqueue(action.earlier, returned, outcome, state, result);
+          }
+        } else {
+          if (action.may_replace) enqueue(action.earlier, true, 0, state, {});
+          enqueue(action.earlier, returned, 0, std::move(state), std::move(result));
+        }
         continue;
       }
 
@@ -5143,18 +5236,19 @@ class ScalarChecker {
       invocation.selections = std::move(state.selections);
       invocation.selections.bindings = std::move(bindings);
       invocation.selections.value_places = std::move(places);
-      TypeEvidenceExits completed;
-      invocation.exits = &completed;
       invocation.prepared_call = nullptr;
       // The declaration supplies names. The queue supplies the live values.
-      auto normal = type_evidence(*action.body, invocation, false, nullptr, nullptr,
-                                  ExpectedTypeUse::materialization, true, EvidenceRead::discarded);
-      if (normal != Type::never) enqueue(action.earlier, returned, std::move(invocation), result);
+      auto completed = replay_type_defer(*action.entry, std::move(invocation), error);
       for (auto &path : completed.paths) {
-        const bool replacement = path.reasons.contains(1);
-        // An escaping deferred failure cannot establish a replacement.
-        // Retaining the pending result here overapproximates normal delivery.
-        enqueue(action.earlier, replacement || returned, std::move(path.state), replacement ? path.boolean_return : result);
+        const bool replacement = path.returned();
+        const auto &proof = replacement ? path.boolean_return : result;
+        if (!guards_errors) enqueue(action.earlier, replacement || returned, 0, std::move(path.state), proof);
+        else for (const auto reason : path.reasons) {
+          // A normal plain entry preserves the existing failure. A guarded
+          // entry had the opportunity to handle it as part of its body exit.
+          const auto pending_error = reason >= 2 ? reason : reason == 0 && action.entry->children.size() == 1 ? error : 0;
+          enqueue(action.earlier, replacement || returned, pending_error, path.state, proof);
+        }
       }
     }
     return returning ? proof : std::nullopt;
@@ -5291,9 +5385,16 @@ class ScalarChecker {
         if (written(body.selections) || std::ranges::any_of(exits.paths, [&](const auto &path) { return written(path.state.selections); }))
           state.selections.write_boolean(places, {});
       }
-      if (state.exits) for (auto &path : exits.paths) {
-        path.reasons.erase(1);
-        merge_type_exits(*state.exits, std::move(path.reasons), state);
+      if (state.exits) {
+        if (completion != Type::never && body.invocation_result != Type::void_type)
+          note_type_exit(state, Completion::failure(exception_id(ExceptionCategory::missing_return)));
+        const auto registered = [](const TypeEvidenceExits::Path &path) { return path.state.has_deferred_action; };
+        if (body.has_deferred_action || std::ranges::any_of(exits.paths, registered))
+          note_type_call(state, complete_callable_type(program_.methods[id], {}, *result.contract));
+        for (auto &path : exits.paths) {
+          path.reasons.erase(1);
+          merge_type_exits(*state.exits, std::move(path.reasons), state);
+        }
       }
     } else for (const auto &places : writable_booleans) state.selections.write_boolean(places, {});
     return complete_callable_type(program_.methods[id], {}, *result.contract);
@@ -5681,6 +5782,7 @@ class ScalarChecker {
           if (preparation == Type::never) return Type::never;
         }
         note_type_allocation(state);
+        state.has_deferred_action = true;
         auto delayed = state;
         TypeEvidenceExits delayed_exits;
         delayed.exits = state.selections.tracking ? &delayed_exits : nullptr;
@@ -5711,15 +5813,17 @@ class ScalarChecker {
         bool may_replace = false;
         for (const auto &path : delayed_exits.paths) {
           include_writes(path.state);
-          may_replace |= path.reasons.contains(1);
+          may_replace |= path.returned();
         }
         state.selections.deferred_writes.merge(writes);
         state.selections.deferred_return |= may_replace;
         if (state.deferred) {
           if (state.repeated_registration) state.deferred->repeated = true;
-          else state.deferred_queue = state.deferred->push(state,
-              action.kind == K::block && expr.children.size() == 1 ? &action : nullptr,
-              may_replace, may_rebind, std::move(writes));
+          else {
+            const bool bodyless_catch = expr.binding == "fallback" && expr.children[1]->kind == K::handler;
+            state.deferred_queue = state.deferred->push(state,
+                action.kind == K::block && !bodyless_catch ? &expr : nullptr, may_replace, may_rebind, std::move(writes));
+          }
         }
         return Type::void_type;
       }
@@ -5755,10 +5859,7 @@ class ScalarChecker {
         std::optional<TypeEvidenceState> incoming;
         if (track_exits) {
           const auto type = handler.annotation ? evidence_annotation(*handler.annotation, before) : exception_type(0);
-          const auto reason = Completion::failure(type.identity).reason;
-          for (auto &path : body_exits.paths)
-            if (std::erase_if(path.reasons, [&](size_t outcome) { return outcome >= 3 && (!type.identity || outcome == reason); }))
-              incoming = incoming ? merge_evidence(std::move(*incoming), path.state) : path.state;
+          incoming = take_type_catch(body_exits, type);
         }
         const bool handler_reaches = !track_exits || incoming.has_value();
         const auto catch_entry = track_exits ? merge_evidence(incoming ? std::move(*incoming) : before, body_state, true)
@@ -5780,7 +5881,7 @@ class ScalarChecker {
         }
         for (auto &path : exits.paths) {
           leave_type_catch(path.state, catch_entry, handler.text);
-          merge_type_exits(outgoing, std::move(path.reasons), path.state, std::move(path.boolean_return));
+          forward_type_exit(outgoing, path);
         }
         const bool prior_exits = result == Type::never, catch_exits = type == Type::never;
         view = prior_exits ? caught_view : catch_exits ? view : join_views(view, caught_view);
@@ -5794,8 +5895,8 @@ class ScalarChecker {
         if (prior_exits) result = type;
         else if (!catch_exits && type != result) result.reset();
       }
-      for (auto &path : body_exits.paths)
-        merge_type_exits(outgoing, std::move(path.reasons), path.state, std::move(path.boolean_return));
+      for (auto &path : body_exits.paths) forward_type_exit(outgoing, path);
+      const bool project_paths = finalizer && outer && state.selections.tracking && !outgoing.paths.empty();
       if (finalizer) {
         const auto before_cleanup = state.selections.writes;
         if (!outgoing.paths.empty()) {
@@ -5808,13 +5909,22 @@ class ScalarChecker {
           finalizer_entry = merge_evidence(std::move(*incoming), joined, true);
         }
         auto &entry = finalizer_entry ? *finalizer_entry : state;
-        entry.exits = outer;
+        entry.exits = project_paths ? nullptr : outer;
         const auto cleanup = type_evidence(*finalizer, entry);
         if (guarded && entry.required && cleanup != Type::void_type && cleanup != Type::never)
           fail(finalizer->at, "finally must complete with void or an explicit return");
         // Check against every incoming completion, then project the effects
         // onto the normal continuation and the still-pending abrupt paths.
-        if (finalizer_entry) {
+        if (project_paths) {
+          if (result != Type::never) {
+            TypeEvidenceExits::Path normal{{0}, std::move(state), {}};
+            if (complete_type_finalizer(*finalizer, normal, *outer) == Type::never) result = Type::never;
+            state = std::move(normal.state);
+          } else state = std::move(entry);
+          for (auto &path : outgoing.paths)
+            if (complete_type_finalizer(*finalizer, path, *outer) != Type::never)
+              forward_type_exit(*outer, path);
+        } else if (finalizer_entry) {
           if (cleanup == Type::never || result == Type::never) state = std::move(*finalizer_entry);
           else if (project_finalizer(*finalizer, state) == Type::never) result = Type::never;
         }
@@ -5823,9 +5933,9 @@ class ScalarChecker {
         // reach it through a mutable slot or a Boolean test may have expired.
         state.selections.forget_changed(target_facts, before_cleanup);
       }
-      if (outer) for (auto &path : outgoing.paths)
+      if (outer && !project_paths) for (auto &path : outgoing.paths)
         if (!finalizer || project_finalizer(*finalizer, path.state) != Type::never)
-          merge_type_exits(*outer, std::move(path.reasons), path.state, std::move(path.boolean_return));
+          forward_type_exit(*outer, path);
       if (expr.kind == K::deferred) { state = before; return Type::void_type; }
       return result;
     }
