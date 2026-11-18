@@ -1,6 +1,6 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 171
+Discussion revision: 173
 
 Recorded: 2026-11-18
 
@@ -8,7 +8,7 @@ Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
 
-- **Named sum constructor discussion.** [D-07-SUM-CONSTRUCTORS](DesignAuthorityRegistry.md#d-07-sum-constructors), r171 DL-01, is pending human review for the constructor body and grammar. [D-07-DCTOR-PUBLICATION](DesignAuthorityRegistry.md#d-07-dctor-publication) records the [confirmed selection unit and make-site world](../CHANGELOG.md#h-dctor-world-publication-20261118). [K-SUM-CONSTRUCTOR-DRAFT-20261118](../CHANGELOG.md#k-sum-constructor-draft-20261118) records the proposed surface. C-10/C-65/C-72, charter §§4.3/8.1, D-10-ISA and D-22-INIT-PLACES connect readable constructor names to owner-checked initialization. Check per-alternative overloads, fallthrough readiness, nullable membership and the parallel-world example below. Selective lookup of unlisted constructors remains under review. No implementation profile or layout is selected.
+- **Named sum constructors.** [D-07-SUM-CONSTRUCTORS](DesignAuthorityRegistry.md#d-07-sum-constructors), r173 DL-01, records the [source decision](../CHANGELOG.md#h-dctor-source-20261118). C-10/C-65/C-72 and charter §§4.3/8.1 connect readable alternatives, owner-qualified construction and definite field initialization. Acceptance covers nullable membership, successful and failed initializers, staged constructor-free cycles, distinct regional slot and target identities, and [two module worlds](#publishing-and-selecting-data-constructors). Native layout and proofs, and invoking an overload on reserved storage, remain separate.
 
 - **Native integration.** [D-07](DesignAuthorityRegistry.md#d-07) r169, DL-11, follows [D-20-NATIVE-C](DesignAuthorityRegistry.md#d-20-native-c) and [H-NATIVE-C-INTERFACE-20261118](../CHANGELOG.md#h-native-c-interface-20261118). C-79/C-80 and charter §§4.3/6.3 connect typed external operations to checked CoD lifetimes. DL-11 supplies the caller, failure and release acceptance cases. Provider registration and the concrete ABI remain open.
 
@@ -134,7 +134,7 @@ The sixteen topics contain confirmed local propositions and open implementation/
 
 H-209 separates declarations by purpose: `type` declares an abstract type; `data` declares a concrete product/sum representation. H-210 uses `<:` to declare subtype relationships. Both are type definitions with nominal module-defined identities; data is not a value declaration, and an abstract type is not a symbolic dynamic variable.
 
-Illustrative declaration headers, with constructor/sum and standalone method-signature grammar still pending. Abstract declarations have no Interface body:
+Illustrative product and abstract declaration headers follow. Abstract declarations have no Interface body:
 
 ```text
 type RegionStore;
@@ -150,7 +150,7 @@ The abstract NodeStore <: RegionStore edge is nominal and inherits methods. Data
 | --- | --- |
 | Abstract type | Declares a nominal abstraction; its methods are separate declarations that may be distributed across modules. There is no Interface body or directly constructible layout. |
 | Product data | Declares the concrete fields/constructor of a region-resident user object. |
-| Sum data | Declares alternatives and their payloads; the variant/constructor grammar and physical tag representation remain to be selected. |
+| Sum data | Declares the fixed alternatives and payloads described under [named sum constructors](#named-sum-constructors). The physical tag representation remains open. |
 | Intrinsic type | Primitive bits, region ownership and intrinsic owner-bearing outcomes retain their language-defined rules; a user data declaration cannot manufacture those privileges. |
 
 Abstract-to-abstract <: stays nominal; similar method signatures do not make abstract declarations parent/child or identical. Multiple abstract parents remain deferred. A concrete data identity may explicitly conform to several abstractions through separate declarations; this is not concrete-layout inheritance or a second data representation.
@@ -195,7 +195,7 @@ Neither nominal abstract inheritance nor an explicit data conformance declaratio
 
 Generic argument matching and generic subtyping must remain distinct. The intended root method can constrain a parameter R by `R <: NodeStore` and receive region :R; this does not automatically establish `region :ArenaRoot <: region :NodeStore` as a mutable-value conversion. The generic bound/header syntax is still proposed. Similar constraints apply to array element types, const access and owning qualifiers; <: cannot erase ownership or permission differences.
 
-Sum alternatives and abstract descendants serve different roles. The recommended initial data sum is a fixed alternative set suitable for exhaustive matching. An abstract family may acquire nominal abstract descendants and explicitly conforming data types in other modules; neither current set is an implicit closed sum. Sum closure/extension and constructor namespaces still need an explicit contract. Future GADT constructors may refine indices of the declared data family; subtype syntax alone does not define those refinements or permit unchecked casts.
+Sum alternatives and abstract descendants serve different roles. A nominal data sum declares a fixed set of alternatives suitable for exhaustive matching. An abstract family may acquire nominal abstract descendants and explicitly conforming data types in other modules; neither current set is an implicit closed sum. The defining sum determines alternative identity. A selected module world may extend a constructor’s initializer family. Future GADT constructors may refine indices of the declared data family; subtype syntax alone does not define those refinements or permit unchecked casts.
 
 Storage classification is independent of nominal declaration identity. H-563 excludes callable-view values from regions; H-567/H-568 confines whole-payload transfer to pure bits and rejects C++ object copying/moving semantics. D-22 reviews return-only structural result signatures and named mapping to independent lexical variables. This candidate introduces no first-class aggregate or stored field and leaves ordinary ADT field permissions unchanged; callable-bearing named ADTs remain a separate unapproved extension. H-383/H-384 admits recursively finite bits ADTs to lexical or regional storage; stored references, ownership carriers, managed environments and implicit cleanup exclude that category. H-478/D-28-ADT extends placement to same-owner pointer-bearing lexical graphs while retaining the same nominal ADT. Full native layouts/initialization coverage remain outstanding; regional instances still use relative edges and C++ regional types remain region-only. The `data` keyword alone does not establish bits eligibility, immutability or GC. [D-22](ConstructionAndAcquisition.md#confirmed-requirements) records the confirmed boundary and its incomplete implementation. Ordinary references borrow, const non-bits references restrict holder writes without freezing aliases, and owned remains an intrinsic resource responsibility. User data containing owned-region fields, including through variants/generic instantiation, remains forbidden by H-196. Builtin resource optional/results are a separate intrinsic facility.
 
@@ -207,11 +207,11 @@ Static abstract bounds on a selected named root do not require a runtime object 
 
 A fold accumulator retains its explicit type guarantees and facts for its concrete value and possible stored-reference targets, including cycles. Unrelated facts visible only in a factory module do not become loop invariants. This is evidence preservation, not structural interface inference; unknown layouts cannot justify erasing required guarantees.
 
-Lean acceptance must show one data identity with head-only conformance declarations in different modules, rejection of structural lookalikes without a declaration, adapter-import permission versus using-only declaration rejection, and consumer acceptance through using the adapter, invalid direct abstract construction, deterministic unique-best selection and an ambiguous crossed-specialization rejection. Product/sum construction and exhaustiveness need separate cases once their grammar is selected; no full GADT or general multiple-inheritance implementation is implied by this declaration split.
+Lean acceptance must show one data identity with head-only conformance declarations in different modules, rejection of structural lookalikes without a declaration, adapter-import permission versus using-only declaration rejection, and consumer acceptance through using the adapter, invalid direct abstract construction, deterministic unique-best selection and an ambiguous crossed-specialization rejection. Product/sum construction and exhaustiveness need separate acceptance cases; no full GADT or general multiple-inheritance implementation is implied by this declaration split.
 
-#### Named sum constructors under discussion
+#### Named sum constructors
 
-This DL-01 candidate gives each alternative of a nominal sum a directly visible data constructor name. The same identity selects the alternative in `make Accepted(...)` and tests it in `r isa Accepted`. The predicate checks the active alternative without calling an initializer. An initialized null ptr tests false. A successful ptr test refines the target and non-null facts while the binding and the active alternative remain stable. The parent sum supplies the nominal result type.
+Each alternative of a nominal sum has a directly visible data constructor name. The same identity selects the alternative in `make Accepted(...)` and tests it in `r isa Accepted`. The predicate checks the active alternative without calling an initializer. An initialized null ptr tests false. A successful ptr test refines the target and non-null facts while the binding and the active alternative remain stable. The parent sum supplies the nominal result type.
 
 ```cod
 data Receipt =
@@ -233,7 +233,43 @@ The destination owner comes from ordinary `make` placement. The header may omit 
 
 Only the selected alternative’s fields enter the body as implicit initialization destinations. In the example they behave as `init val var id:u64` and `init ptr var prior:Receipt in O`. Explicit parameters supply the call arguments and determine overload matching. A parameter that duplicates an implicit field name at the same binding level would be a duplicate declaration. Field writes, reads after initialization and delegation to an `init` helper follow the [existing place rules](ConstructionAndAcquisition.md#init-destinations-and-declared-place-aliasing). The constructor keeps its ordinary lexical scope, argument evaluation, callable effects and cleanup. On every normal exit after cleanup, all required fields must be ready before `make` delivers the ref. An escaping failure delivers no completed result. Both bare and value-bearing returns targeting the constructor are forbidden, including from its deferred actions. A nested callable or standalone `{{ ... }}` owns its own returns.
 
-Check for the presence of constructor overloads **per alternative, before testing applicability**. With the declaration above, `make Accepted in batch { id <- 0u64; prior = null; }` rejects and `make Accepted() in batch` reports a missing applicable overload. A `proc` initializer still counts when the call site only permits a `func`. Skipped has no initializer overload, so its empty block supplies a complete payload. An initializer-free alternative with required fields must initialize each on every normally completing path. Bare reservation retains its [identity-only meaning](ConstructionAndAcquisition.md#typed-reservation-and-completed-construction). A staged path must respect the same restriction when it turns reserved storage into a readable alternative. The in-place completion interface for such a path remains open.
+Check for the presence of constructor overloads **per alternative, before testing applicability**. With the declaration above, `make Accepted in batch { id <- 0u64; prior = null; }` rejects and `make Accepted() in batch` reports a missing applicable overload. A `proc` initializer still counts when the call site only permits a `func`. Skipped has no initializer overload, so its empty block supplies a complete payload. An initializer-free alternative with required fields must initialize each on every normally completing path. For a sum, reserve a named alternative under the [sum construction rule](#sum-object-construction-and-reference-storage). A constructor-backed alternative needs its initializer before it can become an ordinary readable result.
+
+#### Sum object construction and reference storage
+
+For a nominal sum, the operand naming the object in `make` must select a data constructor. With the declaration below, `Node` is the type accepted by variables, parameters and reference fields. `Link` and `End` select layouts for construction. Reject `make Node in graph`, `make Node() in graph` and `make Node in graph { ... }` even when the receiving type or some field names are known. A product such as `data Pair { left:u64; right:u64; }` retains its existing `make Pair` spelling: the product name also identifies its sole constructor. Scalar allocation and intrinsic resource construction retain their own forms.
+
+```cod
+data Node = Link { key:u64; ref next:Node; } | End {};
+
+# No Link initializer overloads in this world. graph is a writable region.
+ptr a:Node in graph = make Link in graph;
+ptr b:Node in graph = make Link in graph;
+a.key <- 1u64;
+b.key <- 2u64;
+a.next = b;
+b.next = a;
+ref first:Node in graph = a;  # The required component is ready here.
+```
+
+Bare `make Link in graph` reserves one target with a known alternative and a stable identity. Forming destinations for its Link fields uses that construction evidence. Binding another edge can use the identity before the payload is readable. An ordinary payload read still requires initialization. `make End in graph {}` completes a fieldless alternative with zero overloads. `make DCtor(args) in graph`, including a call with zero arguments, selects an initializer by the ordinary overload rules. If Link has an overload, scattered field writes cannot substitute for it. Invoking a required initializer on an already reserved target is deferred. Reject staged programs that require that operation.
+
+A declaration such as `ref r:Node in graph;` makes a local binding whose eventual non-null target must belong to graph. `ptr p:Node in graph = null;` gives a local binding an initialized absence with that same target owner. An uninitialized slot has no readable reference identity. Neither declaration allocates a Node. Named roots and fields can already store references, and `var edge -> graph.head;` can name an existing root slot.
+
+The forms `make ref Node in graph` and `make ptr Node in graph` allocate anonymous reference and pointer slots, respectively. In this regional example the result denotes a writable place in graph, subject to the same regional rule as a stored edge: every non-null target must also belong to graph. Whether a lexical slot points into another owner is already expressible by the named lexical declaration above. The new expression supplies a place to a declared place alias or compatible init-place parameter. It creates no Node and supplies no implicit forward reference.
+
+```cod
+var edge -> make ptr Node in graph;  # New uninitialized regional pointer slot.
+edge = null;                         # Now reading its identity is valid.
+ptr saved:Node in graph = edge;      # Independent lexical binding, currently null.
+edge = make End in graph {};
+# saved is still null.
+
+var required -> make ref Node in graph;
+required = edge;  # edge is known non-null here; required = null would reject.
+```
+
+Before the first binding write, `edge is null` would read an uninitialized slot. Passing the slot to a compatible `init ptr var` helper instead is valid. After binding, `=` changes the selected target and `<-` writes through it where the payload type admits that operation. A declared place alias or init-place parameter can use this storage directly. Anonymous lexical slot placement with a separately specified target owner is outside this scope.
 
 #### Publishing and selecting data constructors
 
@@ -241,7 +277,7 @@ Exporting a nominal sum type publishes every data constructor of that type. A co
 
 At a `make` site, resolve the constructor in that site's module world. Inspect its overload family there before argument or callable-kind matching. Zero overloads permit braced field initialization. A nonempty family requires an applicable initializer for a call with arguments. Overloads that exist solely in a parallel world have no effect, even if both worlds are incorporated in the same program.
 
-The proposed CoD selector goes after the existing module source and type name:
+The constructor selector goes after the existing module source and type name:
 
 ```cod
 using  "model.cod" Receipt {Accepted};          # Select Receipt and the complete Accepted constructor.
@@ -268,7 +304,7 @@ ref next:Receipt in batch = make Skipped(7u64) in batch;
 # make Skipped in batch {} rejects here, even though Skipped has no fields.
 ```
 
-**Unlisted constructor names.** Proposed: `using "model.cod" Receipt {Accepted};` makes Accepted explicit. As with a bare type selection, existing public-source fallback may still find Skipped at lower priority. An implicit hit grants no permission to extend that constructor. A stricter selector could exclude the unlisted constructors of Receipt from fallback along that selection. An independent explicit selection could still bring one in. This choice concerns name lookup only and cannot split a constructor’s overload family. Subset selection also leaves the full set of Receipt alternatives intact for type checking and future exhaustiveness checking.
+A constructor list makes the listed names explicit. For `using "model.cod" Receipt {Accepted};`, ordinary public-source fallback can still find Skipped at lower priority. That implicit selection grants no extension permission. Selecting a subset leaves the full set of alternatives intact for type checking and exhaustiveness.
 
 Haskell 2010 spells the analogous import `import Model (Receipt(Accepted))` or `import Model (Receipt(..))`. Within explicit lists, bare `Receipt` selects the type alone. Haskell’s wildcard also covers exported record field names. CoD uses its ordinary `export Receipt;` to publish all constructors and their overloads. [Haskell 2010 Report, §§5.2–5.3](https://www.haskell.org/onlinereport/haskell2010/haskellch5.html)
 

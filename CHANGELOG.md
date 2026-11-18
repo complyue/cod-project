@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-18 — Close the ordinary sum constructor source design
+
+<a id="h-dctor-source-20261118"></a>
+**H-DCTOR-SOURCE-20261118.** In the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-18 (America/Los_Angeles), the project user said “dctor我感觉目前都满意了”, clarified constructor-target versus ref/ptr-slot allocation, then directed “没有其它问题可以提交推送进入下一个议题了”. D-07r173/D-15r52/D-22r60/registry923 close ordinary construction, selector/fallback rules and regional slot syntax. H-DCTOR-WORLD-PUBLICATION-20261118 governs whole families in the make-site world. Invoking a required initializer on reserved storage is deferred. This source decision selects no ABI or compiler proof profile.
+
+## 2026-11-18 — Distinguish constructing a sum alternative from allocating a reference slot
+
+<a id="k-dctor-slot-review-20261118"></a>
+**K-DCTOR-SLOT-REVIEW-20261118.** In the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), the project user distinguished “只能 make DCtor 不能 make Type” from “允许 make Type ref/ptr” and requested a syntax and semantics review. D-07r172/D-22r59/registry922 correct the staged sum example and distinguish local bindings, stored reference places and constructor-selected targets. The anonymous slot spelling and static contract are proposals. H-562’s product reservation and H-601/H-602’s caller-place semantics continue to apply in their existing scopes.
+
 ## 2026-11-18 — Publish and select whole data constructors in their module world
 
 <a id="h-dctor-world-publication-20261118"></a>

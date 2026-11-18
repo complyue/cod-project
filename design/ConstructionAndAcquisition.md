@@ -1,8 +1,10 @@
 # CoD construction, bits ADTs and region acquisition
 
-Design revision: 58 · Recorded: 2026-11-18 · Status: discussion draft with confirmed requirements; logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
+Design revision: 60 · Recorded: 2026-11-18 · Status: discussion draft with confirmed requirements; logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
 
 ## Design authority
+
+- **Scope of ordinary ADT reservation.** [D-22-RESERVATION](DesignAuthorityRegistry.md#d-22-reservation), r60 in the reservation section, retains H-562’s product and readiness rules. [H-DCTOR-SOURCE-20261118](../CHANGELOG.md#h-dctor-source-20261118) selects [constructor-target reservation and regional ref/ptr slot allocation](DomainLanguageDesign.md#sum-object-construction-and-reference-storage). C-65/C-72 and charter §§4.3/8.1 require an explicit target owner and checkable readiness. Acceptance distinguishes an uninitialized binding, a null binding, a reserved alternative and a completed object. Native verification is separate.
 
 - **DBMR image completion.** [D-22-DBMR-COMPLETION](DesignAuthorityRegistry.md#d-22-dbmr-completion), r58, records the [read-mostly workload and interrupted-writer rule](../CHANGELOG.md#h-dbmr-image-completion-20261118). The [payload checksum decision](../CHANGELOG.md#h-dbmr-payload-checksum-20261118) selects the image completion record. The [version-building contract](#building-and-maintaining-dbmr-versions) connects C-05/C-09 consistency to charter §§7.1–7.2 through P-599/P-600. It depends on the fresh-publication and cooperating-process access rules. Acceptance includes a killed builder, a reader of the old version, and a killed emergency writer. The C provider must establish the process-exit guarantee. The file format, power-loss policy and recovery tools remain open.
 
@@ -639,7 +641,7 @@ The free block must finish normally with a ready region before make produces its
 
 ## Typed reservation and completed construction
 
-H-562 fixes the distinction through the existing initializer-block syntax; no extra allocation keyword is needed:
+H-562 fixes the distinction through the existing initializer-block syntax. In this table T names an eligible construction operand. A product name identifies its sole constructor. For a nominal sum the [D-07 sum construction rule](DomainLanguageDesign.md#sum-object-construction-and-reference-storage) requires an alternative such as Link. Its parent sum type still annotates ref/ptr bindings and fields.
 
 | Form | Completion contract |
 | --- | --- |
