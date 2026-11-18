@@ -11,10 +11,13 @@ runner.CASES = {
  'later_storage_identity':(IO+PICK+'func read(tag:T,ref x:i64 in O)->const i64 where {T,owner O}{ref y=pick(tag,x);val z<-3;ptr p=z;val var alias->z;alias<-4;x<-9;return y+p+alias;}val x<-1;behave @print(read(false,x));x<-1;behave @print(read(0,x));',0,'17\n9\n',''),
  'two_contextual_declarations':(IO+PICK+'func read(tag:T,other:U,ref x:i64 in O)->const i64 where {T,U,owner O}{ref a=pick(tag,x);ref b=pick(other,x);val c<-3;x<-9;return a+b+c;}val x<-1;behave @print(read(false,0,x));x<-1;behave @print(read(0,false,x));x<-1;behave @print(read(false,false,x));x<-1;behave @print(read(0,0,x));',0,'14\n13\n21\n6\n',''),
  'ordinary_group_initializer':(IO+PICK+'func read(tag:T,ref x:i64 in O)->const i64 where {T,owner O}{ref y={val z<-3;pick(tag,x)};x<-9;return y+z;}val x<-1;behave @print(read(false,x));x<-1;behave @print(read(0,x));',0,'12\n4\n',''),
- 'scoped_guarded_initializer':(IO+PICK+'func read(tag:T,ref x:i64 in O)->const i64 where {T,owner O}{ref y=try{{defer{x<-8;};pick(tag,x)}}finally{x<-9;{}};return y;}val x<-1;behave @print(read(false,x));x<-1;behave @print(read(0,x));',0,'9\n1\n',''),
+ 'guarded_callable_initializer':(IO+PICK+
+     'func guarded(tag:bool,ref target:i64 in A)->ref i64 in A where {owner A}{defer{target<-8;};return pick(tag,target);}'
+     'func guarded(tag:i64,ref target:i64 in A)->const i64 where {owner A}{defer{target<-8;};return pick(tag,target);}'
+     'func read(tag:T,ref x:i64 in O)->const i64 where {T,owner O}{ref y=try{guarded(tag,x)}finally{x<-9;{}};return y;}val x<-1;behave @print(read(false,x));x<-1;behave @print(read(0,x));',0,'9\n1\n',''),
  'conditional_initializer':(IO+PICK+'func read(tag:T,ref x:i64 in O,c:bool)->const i64 where {T,owner O}{ref y=if(c){pick(tag,x)}else{pick(tag,x)};x<-9;return y;}val x<-1;behave @print(read(false,x,true));x<-1;behave @print(read(0,x,false));',0,'9\n1\n',''),
- 'per_iteration_storage':(IO+PICK+'func read(tag:T,ref x:i64 in O)->const i64 where {T,owner O}{val sum<-0;for(i in 0..3){{ref y=pick(tag,x);val z<-1;x<-x+1;sum<-sum+y+z;}};return sum;}val x<-1;behave @print(read(false,x));x<-1;behave @print(read(0,x));',0,'18\n12\n',''),
- 'fold_storage':(IO+PICK+'func read(tag:T,ref x:i64 in O)->const i64 where {T,owner O}{return fold(i in 0..3,sum=0){{ref y=pick(tag,x);x<-x+1;sum+y}};}val x<-1;behave @print(read(false,x));x<-1;behave @print(read(0,x));',0,'15\n9\n',''),
+ 'per_iteration_storage':(IO+PICK+'func read(tag:T,ref x:i64 in O)->const i64 where {T,owner O}{val sum<-0;for(i in 0..3){sum<-sum+{{ref y=pick(tag,x);val z<-1;x<-x+1;return y+z;}};};return sum;}val x<-1;behave @print(read(false,x));x<-1;behave @print(read(0,x));',0,'18\n12\n',''),
+ 'fold_storage':(IO+PICK+'func read(tag:T,ref x:i64 in O)->const i64 where {T,owner O}{return fold(i in 0..3,sum=0){{ref y=pick(tag,x);x<-x+1;return sum+y;}};}val x<-1;behave @print(read(false,x));x<-1;behave @print(read(0,x));',0,'15\n9\n',''),
  'recursive_frames':(IO+PICK+'func walk(tag:T,ref x:i64 in O,n:i64)->const i64 where {T,owner O}{ref y=pick(tag,x);val z<-n;if(n>0){walk(tag,x,n-1);{}}else{};return y+z;}val x<-1;behave @print(walk(false,x,30));x<-1;behave @print(walk(0,x,40));',0,'62\n41\n',''),
  'deferred_local_reads':(IO+PICK+'proc run(tag:T,ref x:i64 in O)->void where {T,owner O}{ref y=pick(tag,x);val z<-3;defer{behave @print(y);behave @print(z);};x<-9;}val x<-1;run(false,x);x<-1;run(0,x);',0,'9\n3\n1\n3\n',''),
  'deferred_prepared_borrows':(IO+PICK+'proc show(ref y:const i64 in O)->void where {owner O}{behave @print(y);}proc run(tag:T,ref x:i64 in O)->void where {T,owner O}{ref y=pick(tag,x);defer show(y);x<-9;}val x<-1;run(false,x);x<-1;run(0,x);',0,'9\n1\n',''),
@@ -42,7 +45,7 @@ runner.CASE_SHADOWS = {
     'later_storage_identity': ['x', 'x', 'x'],
     'two_contextual_declarations': ['x', 'x', 'x'],
     'ordinary_group_initializer': ['x', 'x', 'x'],
-    'scoped_guarded_initializer': ['x', 'x', 'x'],
+    'guarded_callable_initializer': ['x', 'x', 'x'],
     'conditional_initializer': ['x', 'x', 'x'],
     'per_iteration_storage': ['x', 'x', 'x'],
     'fold_storage': ['x', 'x', 'x'],
