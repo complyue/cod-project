@@ -9,7 +9,7 @@ TYPES = 'using "std:exceptions" MissingReturnError; using "std:exceptions" OutOf
 ERROR = PRINT + TYPES + 'func missing()->const i64 {} func error()->const MissingReturnError {try{missing();}catch(e:const MissingReturnError){return e;};}\n'
 WARN = '[-Wmissing-return]'
 runner.CASES = {
-    "try_destination": (PRINT + 'val x<-1;(try{x}finally{})<-2;behave @print(x);', 0, "2\n", ""),
+    "try_destination": (PRINT + 'val x<-1; { try{x}finally{} } <-2;behave @print(x);', 0, "2\n", ""),
     "catch_result": (ERROR + 'behave @print(try{missing()}catch(e:const MissingReturnError){7}finally{behave @print(8);});', 0, "8\n7\n", WARN),
     "catch_fields": (ERROR + 'val e<-error();behave @print(e.category);behave @print(e.site>0u64);behave @print(e.requested);behave @print(e.available);behave @print(e.cause_count);', 0, "5\ntrue\n0\n0\n0\n", WARN),
     "catch_exact": (ERROR + 'val e<-error();try{throw e;}catch(x:const OutOfMemoryError){behave @print(99);}catch(x:const MissingReturnError){behave @print(1);}finally{behave @print(2);};', 0, "1\n2\n", WARN),

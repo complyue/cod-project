@@ -14,6 +14,20 @@ runner.CASES = {
  'borrowed_owner_shorthand': (IO+'func get(x:i64 in O)->i64 in O where {owner O}{defer{x<-9;};return x;}val x<-1;ref r=get(x);x<-8;behave @print(r);',0,'8\n',''),
  'readonly_owner_shorthand': (IO+'func get(x:const i64 in O)->const i64 in O where {owner O}{return x;}val x<-1;val n<-get(x);x<-9;behave @print(n);',0,'1\n',''),
  'borrowed_copy_after_cleanup': (IO+'func get(x:i64 in O)->i64 in O where {owner O}{defer{x<-9;};return x;}val x<-1;val n<-get(x);x<-8;behave @print(n);',0,'9\n',''),
+ 'grouped_borrow_after_cleanup': (IO+'func get(x:i64 in O)->ref i64 in O where {owner O}{defer{x<-9;};return x;}'
+     'val source<-1;ref n=(get(source));source<-8;behave @print(n);behave @print(n is source);',0,'9\nfalse\n',''),
+ 'grouped_operator_snapshot': (IO+'ref source:i64=1;ref live:const i64=source<-2;ref n:i64=((source<-3));source<-4;'
+     'behave @print(live);behave @print(n);behave @print(n is source);',0,'4\n3\nfalse\n',''),
+ 'grouped_readonly_source': (IO+'ref source:const i64=1;ref n:i64=(source);n<-9;behave @print(source);',0,'1\n',''),
+ 'grouped_target_rejects_write': ('ref x:i64=1;(x)<-7;',2,'','destination'),
+ 'grouped_target_rejects_identity': ('ref x:i64=1;(x) is x;',2,'','reference identity requires existing target views'),
+ 'grouped_target_rejects_rebind_source': ('ref x:i64=1,y:i64=2;x=(y);',2,'','fresh value without an existing target'),
+ 'grouped_uninitialized_read': ('val x<-make local i64;ptr y=(x);',2,'','before definite initialization'),
+ 'grouped_nullable_keeps_owner': (IO+'ptr p:i64=null in here;ptr copy=(p);ref x:i64=12;copy=x;'
+     'behave @print(p is null);behave @print(copy is x);',0,'true\ntrue\n',''),
+ 'grouped_nullable_keeps_present_target': (IO+'ref x:i64=12;ptr p=x;ptr selected=(p);'
+     'behave @print(selected is x);',0,'true\n',''),
+ 'grouped_nullable_exposes_no_slot': ('val x<-1;ptr p=x;(p)=x;',2,'','reference operation requires a binding slot'),
  'value_result_from_local_parameter': (IO+'func get(x:i64)->i64{return x;}ref r=get(4);r<-5;behave @print(r);',0,'5\n',''),
  'callable_bare_value_type': (IO+'func get(x:i64)->i64{return x;}func f:func(i64)->i64=get;behave @print(f(6));',0,'6\n',''),
  'callable_explicit_val_type': (IO+'func get(x:i64)->val i64{return x;}func f:func(i64)->val i64=get;behave @print(f(7));',0,'7\n',''),

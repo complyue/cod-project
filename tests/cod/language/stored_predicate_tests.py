@@ -61,7 +61,7 @@ for name, mutation in {
     'direct_write': 'saved<-true;',
     'aliased_write': 'ref alias=saved;alias<-true;',
     'binding_alias_write': 'var alias->saved;alias<-true;',
-    'selected_write': 'val other<-false;(if(q is null){saved}else{other})<-true;',
+    'selected_write': 'val other<-false;{if(q is null){saved}else{other}}<-true;',
     'branch_write': 'if(q is null){saved<-true;{}}else{};',
     'writable_call': 'write(saved,true);',
     'writable_callable': 'func writer=write;writer(saved,true);',

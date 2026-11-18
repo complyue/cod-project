@@ -29,7 +29,7 @@ runner.CASES = {
  'no_early_effect': (IO+PTR+queued(CALL+PAIR,PAIR),0,'1\n7\n7\n1\n',''),
  'late_null': (IO+NPE+PTR+queued(CALL+'q=null;',guarded_observation(OUT('(p is null)')+OUT('q'))),0,'true\n1\n',''),
  'null_initially': (IO+NPE+PTR+queued('p=null;'+CALL,guarded_observation(OUT('p')+OUT('(q is null)'))),0,'7\ntrue\n',''),
- 'selected_binding': (IO+PTR+queued('defer (<=>)((if(flag){p}else{q}),r);flag<-false;p=y;',
+ 'selected_binding': (IO+PTR+queued('defer (<=>)({if(flag){p}else{q}},r);flag<-false;p=y;',
      PAIR+OUT('r'),BASE+'ptr r=z;val flag<-true;'),0,'9\n7\n7\n',''),
  'temporary_alias': (IO+PTR+BASE+'{{defer (<=>)(({{ptr var chosen->p;chosen}}),q);q=z;}};'+OUT('p')+OUT('q'),0,'9\n1\n',''),
  'ordered_operands': (IO+REF+queued('defer (<=>)({'+OUT('1')+'p},{'+OUT('2')+'p=z;q});'+OUT('3'),PAIR),0,'1\n2\n3\n7\n9\n',''),

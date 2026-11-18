@@ -22,7 +22,7 @@ runner.CASES = {
     "const_val_parameter": ('func f(const val x:u64)->const u64 {x<-2u64;return x;} f(1u64);', 2, "", "readonly destination"),
     "const_copy": (PRELUDE + 'const val x<-1u64; val copy<-x; copy<-2u64; behave @print(x); behave @print(copy);', 0, "1\n2\n", ""),
     "val_rebind": ('val x<-1u64,y<-2u64; x=y;', 2, "", "val storage has no reference binding"),
-    "transfer_result_readonly": ('val x<-1u64; (x<-2u64)<-3u64;', 2, "", "readonly destination"),
+    "transfer_result_readonly": ('val x<-1u64; {x<-2u64}<-3u64;', 2, "", "readonly destination"),
     "full_scope_value_is_not_destination": ('{{ val x<-1u64; return x; }} <- 2u64;', 2, "", "assignment requires a storage destination"),
     "duplicate_group": ('val x<-1u64; {val x<-2u64;};', 2, "", "duplicate declaration"),
     "duplicate_branch": ('if(true){val x<-1u64;}else{val x<-2u64;};', 2, "", "duplicate declaration"),

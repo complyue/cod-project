@@ -17,6 +17,8 @@ runner.CASES = {
  'pointer_receiver': (run(BASE+'ptr y=if(flag){x}else{7};x<-9;'+OUT('y')+'y=z;'+OUT('y')),0,'1\n3\n7\n3\n',''),
  'target_identity': (run(BASE+'ref y=if(flag){x}else{7};'+OUT('y is x')+OUT('y is y')),0,'false\ntrue\nfalse\ntrue\n',''),
  'same_owner_targets': (run(BASE+'ref y=if(flag){x}else{z};y<-9;'+OUT('x')+OUT('z')),0,'9\n3\n1\n9\n',''),
+ 'grouped_arm_supplies_bits': (run(BASE+'ref y=if(flag){x}else{(z)};y<-9;'+OUT('x')+OUT('z')),0,'1\n3\n1\n3\n',''),
+ 'grouped_arm_supplies_bits_reversed': (run(BASE+'ref y=if(flag){(x)}else{z};y<-9;'+OUT('x')+OUT('z')),0,'1\n3\n1\n3\n',''),
  'alias_of_receiver': (run(BASE+'ref y=if(flag){x}else{7};ref var alias->y;alias=z;'+OUT('y')+OUT('x')),0,'3\n1\n3\n1\n',''),
  'ordinary_group': (run(BASE+'ref y={val extra<-2;if(flag){x}else{7}};x<-9;'+OUT('y+extra')),0,'3\n9\n',''),
  'scope_cleanup_keeps_pending_bits': (run(
@@ -24,6 +26,13 @@ runner.CASES = {
      +OUT('y')+OUT('p')+OUT('p is x')),0,'1\n9\ntrue\n2\n9\ntrue\n',''),
  'finally_keeps_snapshot': (run(BASE+'ref y=try{if(flag){x}else{x+1}}finally{x<-9;{}};'+OUT('y')),0,'1\n2\n',''),
  'selected_reference_reads_after_its_finally': (run(BASE+'ref y=if(flag){try{x}finally{x<-2;{}}}else{7};x<-9;'+OUT('y')),0,'2\n7\n',''),
+ 'guarded_result_snapshot_after_finally': (MISSING+run(BASE+'ref y=(try{if(!flag){missing();{}}else{};x}'
+     'catch(e:const MissingReturnError){7}finally{x<-2;{}});x<-9;'+OUT('y')),0,'2\n7\n','[-Wmissing-return]'),
+ 'mixed_arm_projects_after_finally': (MISSING+run(BASE+'ref y=if(true){try{if(!flag){missing();{}}else{};x}'
+     'catch(e:const MissingReturnError){7}finally{x<-2;{}}}else{8};x<-9;'+OUT('y')),0,'2\n7\n','[-Wmissing-return]'),
+ 'grouped_boolean_proof_uses_final_payload': (IO+'proc observe()->u64{val flag<-false;val ready<-make local u64;'
+     'val saved<-(try{flag<-false}finally{flag<-true;{}});'
+     'if(saved){ready<-8u64;{}}else{};return ready;}'+OUT('observe()'),0,'8\n',''),
  'value_operand_reads_after_arm_finally': (run('val x<-make local i64;'+OUT('if(flag){try{x}finally{x<-2;{}}}else{7}')),
      0,'2\n7\n',''),
  'selected_borrow_reads_after_its_cleanup': (IO+'func expose(ref source:i64 in O)->ref i64 in O where {owner O}{'
@@ -66,7 +75,7 @@ runner.CASES = {
  'abrupt_target_branch': (IO+'proc work(flag:bool)->i64{val x<-1;ref y=if(flag){try{x}finally{return 8;};}else{x};'
      +OUT('99')+'return y;}'+OUT('work(true)')+OUT('work(false)'),0,'8\n99\n1\n',''),
  'abrupt_slot_branch': (IO+'proc work(flag:bool)->i64{val x<-1,z<-7;ptr p=x;'
-     '(if(flag){try{p}finally{return 8;};}else{p})=z;return p;}'+OUT('work(true)')+OUT('work(false)'),0,'8\n7\n',''),
+     ' { if(flag){try{p}finally{return 8;};}else{p} } =z;return p;}'+OUT('work(true)')+OUT('work(false)'),0,'8\n7\n',''),
  'abrupt_borrow_argument': (IO+'func read(ref value:i64 in O)->i64 where {owner O}{return value;}'
      'proc work(flag:bool)->i64{val x<-1;return read(if(flag){try{x}finally{return 8;};}else{x});}'
      +OUT('work(true)')+OUT('work(false)'),0,'8\n1\n',''),

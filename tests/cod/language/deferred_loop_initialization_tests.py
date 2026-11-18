@@ -76,15 +76,15 @@ copied('saved_unwritten',copy='p=q;q=a;',update='',after='q=c;',reject=True)
 copied('conditional',copy='p=if(i==0u64){q}else{q};')
 copied('conditional_unknown',copy='p=if(i==0u64){q}else{c};',reject=True)
 copied('handler_join',copy='p=try{q}catch(e:const NullPointerException){q};')
-copied('slot_join',setup=COPY_SETUP+'ptr other=a;',copy='(if(i==0u64){p}else{other})=q;',read='behave @print(p);behave @print(other);',output='7\n'*7+'9\n')
-copied('slot_join_missing_write',setup=COPY_SETUP+'ptr other=a;',copy='(if(i==0u64){p}else{other})=q;',read='behave @print(p);behave @print(other);',update=COPY_UPDATE.replace('c<-9u64;',''),reject=True)
+copied('slot_join',setup=COPY_SETUP+'ptr other=a;',copy='{if(i==0u64){p}else{other}}=q;',read='behave @print(p);behave @print(other);',output='7\n'*7+'9\n')
+copied('slot_join_missing_write',setup=COPY_SETUP+'ptr other=a;',copy='{if(i==0u64){p}else{other}}=q;',read='behave @print(p);behave @print(other);',update=COPY_UPDATE.replace('c<-9u64;',''),reject=True)
 copied('borrowed_result',definitions='func choose(ptr x:u64 in O)->ptr u64 in O where {owner O}{return x;}',copy='p=choose(q);')
 copied('borrowed_result_missing_write',definitions='func choose(ptr x:u64 in O)->ptr u64 in O where {owner O}{return x;}',copy='p=choose(q);',update=COPY_UPDATE.replace('c<-9u64;',''),reject=True)
 copied('prepared_conditional',copy='{{defer (=)(p,q);q=c;}};',update='q=a;',output='7\n'*4)
 copied('prepared_readiness',setup=COPY_SETUP.replace('make local u64','9u64'),copy='{{defer (=)(p,q);q=c;}};',update='q=a;',output='7\n'*4)
 copied('prepared_changed_entry',copy='{{defer (=)(p,q);q=a;}};',update='',after='q=c;',reject=True)
 copied('prepared_written_entry',copy='{{defer (=)(p,q);q=a;}};',update='',after='c<-9u64;q=c;',output='7\n9\n7\n7\n')
-copied('prepared_weak_changed_entry',setup=COPY_SETUP+'ptr other=a;',copy='{{defer (=)((if(i==0u64){p}else{other}),q);q=a;}};',update='',after='q=c;',reject=True)
+copied('prepared_weak_changed_entry',setup=COPY_SETUP+'ptr other=a;',copy='{{defer (=)({if(i==0u64){p}else{other}},q);q=a;}};',update='',after='q=c;',reject=True)
 
 # Reuse the independent cell/binding interpreter's exact source and outcomes,
 # moving the complete loop into an invocation-time deferred action.

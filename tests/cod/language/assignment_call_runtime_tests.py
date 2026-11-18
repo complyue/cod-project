@@ -6,9 +6,9 @@ import selected_slot_runtime_tests as fixture
 
 FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
 for source, explicit in (
-    ('(if(flag){b}else{a})=c;', 'intrinsic (=)((if(flag){b}else{a}),c);'),
-    ('((if(flag){a}else{b})=g)<-f;', '(<-)((=)((if(flag){a}else{b}),g),f);'),
-    ('defer{(if(flag){a}else{b})=g;}', 'defer{intrinsic (=)((if(flag){a}else{b}),g);}'),
+    ('{if(flag){b}else{a}}=c;', 'intrinsic (=)({if(flag){b}else{a}},c);'),
+    ('({if(flag){a}else{b}}=g)<-f;', '(<-)((=)({if(flag){a}else{b}},g),f);'),
+    ('defer{ {if(flag){a}else{b}}=g;}', 'defer{intrinsic (=)({if(flag){a}else{b}},g);}'),
 ):
     assert source in FIXTURE.source
     FIXTURE = FIXTURE.updated(source=FIXTURE.source.replace(source, explicit))

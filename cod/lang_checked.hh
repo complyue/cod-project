@@ -1084,6 +1084,11 @@ class ScalarChecker {
     }
     return result;
   }
+  std::shared_ptr<const CheckedOperation::Predicate> projected_predicate(const CheckedOperation &view) {
+    // Cleanup can change the selected target after the operand produced its
+    // view. A mixed result may also contain bits selected before cleanup.
+    return view.mixed_view ? nullptr : stored_predicate(view);
+  }
   static std::shared_ptr<const CheckedOperation::Predicate> boolean_predicate(const CleanupEquations::BooleanValue &value) {
     auto proof = std::make_shared<CheckedOperation::Predicate>();
     proof->kind = CheckedOperation::Predicate::Kind::presence;
@@ -2085,6 +2090,7 @@ class ScalarChecker {
       }
       if (!operation.null_sources.empty()) operation.targets.insert(null_target);
       const bool nullable_result = !contract.nullable_views.empty() && contract.nullable_views.back();
+      operation.nullable_view = nullable_result;
       if (!nullable_result) operation.targets.erase(null_target);
       select_targets(operation, operation.targets);
       std::set<size_t> identities, sources;
@@ -3298,6 +3304,7 @@ class ScalarChecker {
   }
   static ViewEvidence result_view(const CheckedMethod &method, const ResultContract &result, const Owners &owners) {
     ViewEvidence view{result.read_only, result.borrowed(), {}};
+    view.nullable = result.nullable();
     if (result.borrowed()) for (size_t i = 0; i < owners.size(); ++i)
       if (parameter_at(method, i).owner == result.owner && owners[i]) view.owner = owners[i];
     return view;
@@ -3758,7 +3765,8 @@ class ScalarChecker {
       state.views[parameter.name] = {parameter.read_only || (parameter.declaration_kind == "val" && parameter.fixed_binding), true,
                                     parameter.declaration_kind == "val",
                                     value ? EvidenceOwner{} : state.owner_bindings.at(parameter.owner), false,
-                                    parameter.fixed_binding, parameter.read_only, independent};
+                                    parameter.fixed_binding, parameter.read_only, independent,
+                                    argument_mode(parameter) == ArgumentMode::borrowed_ptr};
     }
     return state;
   }
@@ -4013,7 +4021,14 @@ class ScalarChecker {
     return {either(a.read_only, b.read_only), either(a.view, b.view), a.value_binding == b.value_binding ? a.value_binding : std::nullopt,
             owner, a.mixed_view || b.mixed_view || a.view != b.view,
             either(a.fixed_binding, b.fixed_binding), a.slot_read_only == b.slot_read_only ? a.slot_read_only : std::nullopt,
-            a.value_capture == b.value_capture ? a.value_capture : std::nullopt};
+            a.value_capture == b.value_capture ? a.value_capture : std::nullopt, a.nullable || b.nullable};
+  }
+  enum class GroupResult { value, nullable_target, unsupported };
+  static GroupResult group_result(const Type &type, bool view, bool nullable, bool mixed) {
+    if (nullable)
+      return mixed ? GroupResult::unsupported : GroupResult::nullable_target;
+    if (!view || scalar_type(type) || type.kind == Type::procedure) return GroupResult::value;
+    return GroupResult::unsupported;
   }
   static bool independent_scalar_conditional(const Type &type, std::optional<bool> yes_view,
                                              std::optional<bool> no_view, bool mixed) {
@@ -4243,7 +4258,7 @@ class ScalarChecker {
       if (!state.validating_body) switch (expr.kind) {
       case K::integer: case K::real: case K::boolean: case K::null_ref: case K::name: case K::symbol:
       case K::unary: case K::binary: case K::call: case K::value_call: case K::behave: case K::perform: case K::field:
-      case K::conditional: case K::block: case K::transfer: case K::rebind: break;
+      case K::conditional: case K::block: case K::grouped: case K::transfer: case K::rebind: break;
       case K::callable:
         if (expr.definition->name.empty()) break;
         [[fallthrough]];
@@ -4263,6 +4278,7 @@ class ScalarChecker {
     case K::boolean: return Type::boolean;
     case K::null_ref:
       view.view = true;
+      view.nullable = true;
       if (!expr.owner_name.empty()) view.owner = expr.owner_name == "here" ? state.full_scope_owner : owner_evidence(expr.owner_name, state, expr.at);
       return Type::null_ref;
     case K::symbol: {
@@ -4298,6 +4314,20 @@ class ScalarChecker {
       } else if (has_declarations(expr.text) && (expected_callable || !contextual || state.required))
         return declared_callable_query(expr.text, expected_callable, expr.at, state);
       return {};
+    }
+    case K::grouped: {
+      const auto type = type_evidence(*expr.children.front(), state, contextual, expected, alternatives, expected_use);
+      if (!type || type == Type::never) return type;
+      const auto &source = state.value;
+      const auto result = group_result(*type, source.view.value_or(false), source.nullable, source.mixed_view);
+      if (result == GroupResult::unsupported) {
+        if (state.required) implementation_gap(expr.at, "parenthesized result with no proved value or nullable-target contract");
+        return {};
+      }
+      if (result == GroupResult::nullable_target) view = {source.read_only, true, {}, source.owner, false, {}, {}, {}, true};
+      if (result == GroupResult::value && type->kind == Type::procedure && source.view == true)
+        note_type_exit(state, Completion::failure(exception_id(ExceptionCategory::out_of_memory)));
+      return type;
     }
     case K::block: {
       std::optional<Type> result = Type::void_type;
@@ -4366,7 +4396,8 @@ class ScalarChecker {
         auto owner = !declaration->owner_name.empty() ? declared_owner :
             value || declaration->binding == "<-" || state.value.view == false ? state.full_scope_owner : state.value.owner;
         if (!value && declaration->binding != "<-" && state.value.mixed_view && owner != state.full_scope_owner) owner.reset();
-        state.views[declaration->text] = {readonly, true, value, owner, false, expr.fixed_binding, readonly, value};
+        state.views[declaration->text] = {readonly, true, value, owner, false, expr.fixed_binding, readonly, value,
+                                         expr.declaration_kind == "ptr"};
       }
       return completes ? Type{Type::void_type} : Type{Type::never};
     }
@@ -4403,6 +4434,7 @@ class ScalarChecker {
           transfer_type(*source, *type, expr.at);
         }
         view.read_only = true;
+        view.nullable = false;
       } else if (state.required) {
         reference_destination(view, expr.at);
         const auto &selected = state.value;
@@ -4699,6 +4731,7 @@ class ScalarChecker {
         }
         const bool borrowed = !target->owners.empty() && target->owners.back();
         view = {borrowed && !target->const_views.empty() && target->const_views.back(), borrowed, {}};
+        view.nullable = borrowed && !target->nullable_views.empty() && target->nullable_views.back();
         if (borrowed) for (size_t i = 0; i < owners.size(); ++i)
           if (target->owners[i] == target->owners.back() && owners[i]) view.owner = owners[i];
         if (invokes) note_type_failures(state, target->throws_types);
@@ -4909,7 +4942,8 @@ class ScalarChecker {
         first = false;
       }
       state.views[name] = {binding.read_only, true, binding.value_binding, owner, false, fixed, slot_read_only,
-                           !binding.alias && binding.selection.empty() && (binding.value_binding || binding.callable_value)};
+                           !binding.alias && binding.selection.empty() && (binding.value_binding || binding.callable_value),
+                           binding.nullable};
     };
     if (retained_only) {
       if (checking_instance_) for (const auto place : checking_instance_->frame.captures) {
@@ -5976,6 +6010,7 @@ class ScalarChecker {
       for (const auto *view : views) {
         result.selection_identity = merge_selection_identities(result.selection_identity, view->selection_identity);
         result.view = result.view || view->view;
+        result.nullable_view = result.nullable_view || view->nullable_view;
         result.read_only = result.read_only || view->read_only;
         result.fixed_binding = result.fixed_binding || view->fixed_binding;
         if (result.place != view->place) result.place.reset();
@@ -6019,6 +6054,7 @@ class ScalarChecker {
     select_targets(operation, lexical_.targets.at(selected));
     operation.origins = {selected};
     operation.type = slot.type;
+    operation.nullable_view = slot.nullable;
     operation.read_only = slot.read_only;
     operation.fixed_binding = slot.fixed;
     operation.view = true;
@@ -6074,6 +6110,7 @@ class ScalarChecker {
       operation.initialization = source.initialization;
       operation.mixed_view = source.mixed_view;
       operation.view = source.view;
+      operation.nullable_view = source.nullable_view;
       operation.read_only = source.read_only;
       operation.fixed_binding = source.fixed_binding;
     };
@@ -6115,7 +6152,7 @@ class ScalarChecker {
       break;
     case K::null_ref:
       if (read) implementation_gap(expr.at, "untyped null in a payload expression; bind a typed ptr view first");
-      operation.type = Type::null_ref; operation.view = true; select_targets(operation, {null_target});
+      operation.type = Type::null_ref; operation.view = operation.nullable_view = true; select_targets(operation, {null_target});
       if (!expr.owner_name.empty()) operation.owners = {expr.owner_name == "here" ? cleanup_scope_ : named_owner(expr.owner_name, expr.at)};
       break;
     case K::name: operation = named_value(expr, callable_expectation(expected), read); break;
@@ -6394,6 +6431,31 @@ class ScalarChecker {
       operation.builtin = BuiltinOperation::print;
       break;
     }
+    case K::grouped: {
+      const auto &operand = *expr.children.front();
+      operation.type = check(operand, instance, operations, false, discard, expected, expected_use);
+      if (operation.type == Type::never) break;
+      const auto &source = operations.at(&operand);
+      const auto result = group_result(operation.type, source.view, source.nullable_view, source.mixed_view);
+      if (result == GroupResult::unsupported)
+        implementation_gap(expr.at, "parenthesized result with no proved value or nullable-target contract");
+      operation.exceptions = source.exceptions;
+      if (result == GroupResult::nullable_target) {
+        if (read && operation.type == Type::null_ref)
+          implementation_gap(expr.at, "untyped null in a payload expression; bind a typed ptr view first");
+        view(source);
+        operation.slots.clear();
+        operation.fixed_binding = false;
+      }
+      if (source.view && (result == GroupResult::value || (read && !discard))) {
+        require_live_view(source, expr.at);
+        read_view(source, expr.at, "parenthesized result");
+        operation.predicate = projected_predicate(source);
+      } else operation.predicate = predicate_of(source);
+      if (result == GroupResult::value && operation.type.kind == Type::procedure && source.view)
+        note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
+      break;
+    }
     case K::conditional: {
       // When the joined scalar result needs a value, read a selected
       // reference after that arm's cleanup has finished.
@@ -6422,10 +6484,11 @@ class ScalarChecker {
           if (!fact.view) return;
           if (proving_ && validating_ && fact.targets.contains(null_target))
             fail(arm.at, "conditional scalar value requires a proven non-null target");
-          if (read && !discard && !value_join) return;
+          const bool needs_read = !read || discard || value_join;
+          if (!needs_read && fact.type != Type::boolean) return;
           lexical_ = std::move(state);
-          read_view(fact, arm.at, "conditional scalar result");
-          if (fact.type == Type::boolean && !fact.predicate) fact.predicate = stored_predicate(fact);
+          if (needs_read) read_view(fact, arm.at, "conditional scalar result");
+          if (fact.type == Type::boolean) fact.predicate = projected_predicate(fact);
           state = std::move(lexical_);
         };
         project(*expr.children[1], yes_fact, yes_state);
@@ -6449,6 +6512,7 @@ class ScalarChecker {
         }
         operation.selection_identity = conditional_selection(operations.at(expr.children[0].get()), yes_fact, no_fact);
         operation.view = yes_fact.view || no_fact.view;
+        operation.nullable_view = yes_fact.nullable_view || no_fact.nullable_view;
         operation.mixed_view = yes_fact.mixed_view || no_fact.mixed_view || yes_fact.view != no_fact.view;
         operation.read_only = yes_fact.read_only || no_fact.read_only;
         operation.fixed_binding = yes_fact.fixed_binding || no_fact.fixed_binding;
@@ -6681,6 +6745,7 @@ class ScalarChecker {
           }
         }
         bindings_->back().requires_initialized = expr.declaration_kind == "ref";
+        bindings_->back().nullable = expr.declaration_kind == "ptr";
         bindings_->back().callable_value = callable_value;
         CheckedOperation binding;
         binding.binding = *lexical_.lookup(declaration->text);
@@ -6730,6 +6795,7 @@ class ScalarChecker {
           source.read_only || expr.read_only || (selected.value_binding && expr.fixed_binding),
           selected.value_binding, source.fixed_binding || expr.fixed_binding, expr.at, canonical);
       bindings_->at(id).requires_initialized = selected.requires_initialized;
+      bindings_->at(id).nullable = selected.nullable;
       bindings_->at(id).callable_value = std::all_of(slots.begin(), slots.end(),
           [&](size_t slot) { return bindings_->at(slot).callable_value; });
       if (!canonical) {
@@ -6789,6 +6855,7 @@ class ScalarChecker {
         operation.exceptions = stored_exceptions(operation);
         operation.predicate = stored_predicate(operation);
         operation.view = true;
+        operation.nullable_view = target.nullable_view;
         operation.binding = target.binding;
         operation.selection_identity = selected.selection_identity;
         operation.owners.clear(); operation.selection_versions.clear();
@@ -7171,6 +7238,7 @@ class ScalarChecker {
         if (fact.type.kind != Type::procedure || fact.callable || fact.callee || fact.callable_call) continue;
         const auto input = [&](const Expression *child) { flow.link(expression(c, child), node); };
         switch (expr->kind) {
+        case K::grouped: input(expr->children.front().get()); break;
         case K::block:
           if (!expr->children.empty()) input(expr->children.back().get());
           break;
@@ -7397,6 +7465,7 @@ class ScalarChecker {
         instance.frame.inputs.push_back({id, mode, caller_bindings(*checking_method_)});
         bindings_->back().fixed = parameter.fixed_binding;
         bindings_->back().requires_initialized = parameter.declaration_kind == "ref";
+        bindings_->back().nullable = mode == ArgumentMode::borrowed_ptr;
         bindings_->back().callable_value = instance.arguments[p].kind == Type::procedure && parameter.owner.empty();
         if (!parameter.owner.empty()) {
           const auto owner = external_owners_.at(parameter.owner);

@@ -18,6 +18,11 @@ runner.CASES = {
     'independent_copy': (IO+INC+'func f=inc;func g=f;f<-dec;behave @print(g(10));behave @print(f(10));',0,'11\n9\n',''),
     'conditional_value': (IO+INC+'func f=if(false){inc}else{dec};behave @print(f(12));',0,'11\n',''),
     'value_expression_call': (IO+INC+'behave @print((if(true){inc}else{dec})(12));',0,'13\n',''),
+    'grouped_callable_prepared_before_operands': (IO+INC+'func held=inc;'
+        'behave @print((held)({held<-dec;12}));behave @print(held(12));',0,'13\n11\n',''),
+    'grouped_callable_snapshot': (IO+INC+'func wrap(val offset:i64)->func(i64)->i64{'
+        'return func[offset](input:i64)->i64{return input+offset;};}'
+        'func held=wrap(4);ptr saved=(held);held<-inc;behave @print(saved(10));behave @print(held(10));',0,'14\n11\n',''),
     'anonymous_expression_call': (IO+'behave @print((func(x:i64)->const i64{return x+5;})(1));',0,'6\n',''),
     'copy_outlives_original_holder': (IO+INC+'func f={{func g=inc;g}};behave @print(f(14));',0,'15\n',''),
     'pointer_observes_replacement': (PRE+INC+'func f=inc;ptr p=f;f<-dec;behave @print(p(16));',0,'15\n',''),

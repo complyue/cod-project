@@ -21,7 +21,7 @@ runner.CASES.update({
  'fixed_bits_slots': ('const ptr p=make local i64,q=make local i64;'+QUERY('p<->q'),0,'',''),
  'readonly_reference_targets': ('val x<-1,y<-7;ptr p:const i64=x,q:const i64=y;'+QUERY('p<=>q'),0,'',''),
  'different_bits_owners': ('val x<-1;{{val y<-7;'+QUERY('x<->y')+'}};',0,'',''),
- 'selected_slots': (BASE+QUERY('(if(true){p}else{q})<=>q'),0,'',''),
+ 'selected_slots': (BASE+QUERY('{if(true){p}else{q}}<=>q'),0,'',''),
  'ordinary_alias': (BASE+'ptr var alias->p;'+QUERY('alias<=>q'),0,'',''),
  'method_body_not_demanded': ('func (<=>)(ptr a:T in O,ptr b:T in O)->void where {T,owner O}{a<-true;}'+BASE+QUERY('p<=>q'),0,'',''),
  'bits_method_body_not_demanded': ('func (<->)(ref a:T in O,ref b:T in P)->void where {T,owner O,owner P}{a<-true;}'+BASE+QUERY('p<->q'),0,'',''),
@@ -43,7 +43,7 @@ runner.CASES.update({
  'reference_borrowed_result': ('func target(ptr a:i64 in O)->ptr i64 in O where {owner O}{return a;}'+BASE+QUERY('target(p)<=>q'),2,'','requires a binding slot'),
  'fixed_reference_slot': ('val x<-1,y<-7;const ptr p=x;ptr q=y;'+QUERY('p<=>q'),2,'','const reference binding'),
  'fixed_slot_alias': (BASE+'const ptr var alias->p;'+QUERY('alias<=>q'),2,'','const reference binding'),
- 'conditional_fixed_slot': ('val x<-1,y<-7;const ptr p=x;ptr q=y;'+QUERY('(if(true){p}else{q})<=>q'),2,'','const reference binding'),
+ 'conditional_fixed_slot': ('val x<-1,y<-7;const ptr p=x;ptr q=y;'+QUERY('{if(true){p}else{q}}<=>q'),2,'','const reference binding'),
  'readonly_bits': ('const val x<-1;val y<-7;'+QUERY('x<->y'),2,'','readonly destination'),
  'different_bits_types': ('val x<-1,y<-7u64;'+QUERY('x<->y'),2,'','exact same type'),
  'different_reference_types': ('val x<-1,y<-7u64;ptr p=x,q=y;'+QUERY('p<=>q'),2,'','exact target type'),
@@ -51,7 +51,7 @@ runner.CASES.update({
  'readonly_reference_source': ('val x<-1,y<-7;ptr p:const i64=x,q=y;'+QUERY('p<=>q'),2,'','readonly source'),
  'alias_permission_laundering': (BASE+'ptr var a:const->p;ptr var b:const->q;'+QUERY('a<=>b'),2,'','readonly source'),
  'method_alias_contract': ('func (<=>)(ptr a:const i64 in O,ptr b:const i64 in O)->void where {owner O}{}'+BASE+'ptr var left:const->p;ptr var right:const->q;'+QUERY('left<=>right'),0,'',''),
- 'mixed_view': (BASE+QUERY('(if(true){x}else{1})<->y'),2,'','mixed value/storage view'),
+ 'mixed_view': (BASE+QUERY('{if(true){x}else{1}}<->y'),2,'','storage destinations'),
  'callable_bits': ('func one()->u64{return 1u64;}func x=one;func y=one;'+QUERY('x<->y'),2,'','bits storage destinations'),
  'method_owner_constraint': (REF+'val x<-1;ptr p=x;{{val y<-7;ptr q=y;'+QUERY('p<=>q')+'}};',2,'','initializer-fixed owner'),
 })
@@ -62,7 +62,7 @@ runner.CASES['selected_operation_identity'] = ({'ops.cod':REF+'export (<=>);',
     'main.cod':IO+'using "ops.cod" (<=>) as (<->);'+BASE+QUERY('p<->q')+OUT('(p is x)')},0,'true\n','')
 READONLY_METHOD='func (<=>)(ptr lhs_view:const T in O,ptr rhs_view:const T in O)->void where {T,owner O}{lhs_view<-true;}'
 ALIASES=BASE+'ptr var ro:const->p;ptr var other:const->q;'
-for name,operation in [('infix','ro<=>other'),('explicit','(<=>)(ro,other)'),('selected','(if(true){ro}else{other})<=>other')]:
+for name,operation in [('infix','ro<=>other'),('explicit','(<=>)(ro,other)'),('selected','{if(true){ro}else{other}}<=>other')]:
     runner.CASES['readonly_alias_'+name]=(IO+READONLY_METHOD+ALIASES+QUERY(operation)+OUT('result')+OUT('p')+OUT('q'),0,'9\n1\n7\n','')
 runner.CASES['readonly_alias_generic_context']=(IO+READONLY_METHOD+'func run(value:T)->i64 where T{val x<-value,y<-value;ptr p=x,q=y;ptr var ro:const->p;ptr var other:const->q;'+QUERY('ro<=>other')+'return result;}'+OUT('run(1)')+OUT('run(true)'),0,'9\n9\n','')
 runner.CASES['readonly_alias_retained_query']=(IO+READONLY_METHOD+'func outer()->i64{'+ALIASES+'func inner()->i64{'+QUERY('ro<=>other')+'return result;};return inner();}'+OUT('outer()'),0,'9\n','')

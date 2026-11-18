@@ -1322,18 +1322,44 @@ class LLVMEmission {
     }
     return value;
   }
+  static Projection result_source(const CheckedOperation &fact) {
+    if (!fact.view || fact.type == Type::never) return Projection::value;
+    return fact.mixed_view ? Projection::receiver : Projection::target;
+  }
+  llvm::Value *emit_projected_value(const Expression &expr, Projection source, bool discard) {
+    auto *result = emit_expression(expr, source, discard);
+    if (source == Projection::value || !reachable()) return result;
+    if (discard) return empty_scalar();
+    if (source == Projection::target) return b_.CreateLoad(scalar_, checked_address(result, expr, expr.at));
+    // Carry bits or the selected target through the operand's own cleanup.
+    // The receiver encoding reserves tag zero for a target address.
+    auto *saved = environments_ ? owned_slot(*temporaries_, "projection.value") : nullptr;
+    auto *direct = block("projection.direct"), *borrowed = block("projection.target"), *done = block("projection.ready");
+    b_.CreateCondBr(b_.CreateICmpEQ(b_.CreateExtractValue(result, 1), b_.getInt32(0)), borrowed, direct);
+    b_.SetInsertPoint(direct);
+    if (saved) assign_value(saved, result, expr.at);
+    auto *value_path = b_.GetInsertBlock(); b_.CreateBr(done);
+    b_.SetInsertPoint(borrowed);
+    auto *value = b_.CreateLoad(scalar_, checked_address(view_address(result), expr, expr.at));
+    if (saved) assign_value(saved, value, expr.at);
+    auto *target_path = b_.GetInsertBlock(); b_.CreateBr(done);
+    b_.SetInsertPoint(done);
+    if (saved) {
+      auto *owned = load(saved); value_owners_[owned] = saved; return owned;
+    }
+    auto *selected = b_.CreatePHI(scalar_, 2, "projection.value");
+    selected->addIncoming(result, value_path); selected->addIncoming(value, target_path);
+    return selected;
+  }
   llvm::Value *emit_conditional_bits(const Expression &conditional, const Expression &arm, bool discard) {
-    std::map<bool, std::vector<size_t>> alternatives;
+    std::map<Projection, std::vector<size_t>> alternatives;
     for (size_t i = 0; i < contexts_.size(); ++i) {
       const auto &fact = contexts_[i].at(&arm);
-      alternatives[contexts_[i].at(&conditional).scalar_value_join && fact.type != Type::never &&
-                    fact.view && !fact.mixed_view].push_back(i);
+      const auto source = contexts_[i].at(&conditional).scalar_value_join ? result_source(fact) : Projection::value;
+      alternatives[source].push_back(i);
     }
-    return contextual_value(arm, alternatives, "if.arm", [&](bool select_target) -> llvm::Value * {
-      if (!select_target) return emit_expression(arm, Projection::value, discard);
-      auto *address = emit_expression(arm, Projection::target);
-      if (!reachable()) return nullptr;
-      return discard ? empty_scalar() : b_.CreateLoad(scalar_, checked_address(address, arm, arm.at));
+    return contextual_value(arm, alternatives, "if.arm", [&](Projection source) {
+      return emit_projected_value(arm, source, discard);
     });
   }
   llvm::Value *emit_checked_expression(const Expression &expr, Projection projection, bool discard) {
@@ -1388,6 +1414,22 @@ class LLVMEmission {
       return installation ? empty_scalar() : value;
     }
     switch (expr.kind) {
+    case K::grouped: {
+      const auto &operand = *expr.children.front();
+      if (projection != Projection::value) return emit_expression(operand, projection, discard);
+      std::map<std::pair<Projection, bool>, std::vector<size_t>> alternatives;
+      for (size_t i = 0; i < contexts_.size(); ++i) {
+        const auto &result = contexts_[i].at(&expr);
+        const auto source = result_source(contexts_[i].at(&operand));
+        alternatives[{source, source == Projection::target && !result.view &&
+                              result.type.kind == Type::procedure}].push_back(i);
+      }
+      return contextual_value(expr, alternatives, "group", [&](const auto &mode) -> llvm::Value * {
+        const auto [source, snapshot_callable] = mode;
+        auto *value = emit_projected_value(operand, source, discard);
+        return reachable() && snapshot_callable && !discard ? copy_temporary(value, expr.at) : value;
+      });
+    }
     case K::callable: return empty_scalar();
     case K::null_ref: return null_pointer();
     case K::symbol: return b_.CreateLoad(scalar_, symbols_.at(*fact.symbol), "effect.current");

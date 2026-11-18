@@ -9,7 +9,7 @@ FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 proc swap_images(flag:bool)->void{
  func f=wrap(base);func g=wrap(other);func h=wrap(wrap(base));
  ptr p=f,q=g,r=h;
- {{defer intrinsic (<=>)((if(flag){p}else{q}),r);observe(9010u64);}};
+ {{defer intrinsic (<=>)({if(flag){p}else{q}},r);observe(9010u64);}};
  observe(9011u64);
  observe(p(1u64));observe(q(1u64));observe(r(1u64));
  observe(9050u64);

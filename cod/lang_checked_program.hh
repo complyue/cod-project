@@ -92,6 +92,8 @@ struct CheckedOperation {
   bool read_only = false;
   bool fixed_binding = false;
   bool view = false;
+  // The result may retain a ptr carrier even if the current target is present.
+  bool nullable_view = false;
   std::uint64_t integer = 0;
   bool minimum_literal = false;
   bool initializes = false;
@@ -169,6 +171,7 @@ struct CheckedBinding {
   std::set<size_t> selection = {};
   // Caller-slot inputs can denote the same binding in an activation.
   std::set<size_t> overlaps = {};
+  bool nullable = false;
 };
 
 // Substitutions are checking obligations, not semantic methods or activation records.
@@ -238,6 +241,7 @@ struct ViewEvidence {
   std::optional<bool> fixed_binding = {}, slot_read_only = {};
   // Independent capture eligibility is distinct from the binding-slot category.
   std::optional<bool> value_capture = {};
+  bool nullable = false;
   bool operator==(const ViewEvidence &) const = default;
 };
 struct QueryBinding {

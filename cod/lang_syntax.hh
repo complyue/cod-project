@@ -285,7 +285,7 @@ inline std::string type_name(const Type &type) {
 struct Form;
 struct Expression {
   enum class Kind { integer, real, boolean, name, symbol, unary, binary, call, value_call, perform, behave, effect,
-                    block, conditional, field, range_for, fold, allocate, index, null_ref,
+                    block, grouped, conditional, field, range_for, fold, allocate, index, null_ref,
                     try_scope, handler, raise, return_value, deferred, make_region, touch, effect_group, transfer, procedure_effect,
                     pointer_group, pointer, make_local, rebind, region_binding, callable, alias, capture_owner };
   Kind kind;
@@ -1061,7 +1061,8 @@ class Parser {
       return expr;
     }
     if (take("(")) {
-      auto expr = expression();
+      auto expr = make(Expression::Kind::grouped, token);
+      expr->children.push_back(expression());
       expect(")");
       return expr;
     }
@@ -1374,10 +1375,12 @@ public:
         if (*form->result_type == Type::void_type) fail(start.at, "a bits global cannot be void");
         expect("=");
         form->body = expression();
-        const auto kind = form->body->kind;
-        const bool negative_literal = kind == Expression::Kind::unary && form->body->text == "-" &&
-                                      (form->body->children.front()->kind == Expression::Kind::integer ||
-                                       form->body->children.front()->kind == Expression::Kind::real);
+        const auto *root = form->body.get();
+        while (root->kind == Expression::Kind::grouped) root = root->children.front().get();
+        const auto kind = root->kind;
+        const bool negative_literal = kind == Expression::Kind::unary && root->text == "-" &&
+                                      (root->children.front()->kind == Expression::Kind::integer ||
+                                       root->children.front()->kind == Expression::Kind::real);
         if (kind != Expression::Kind::integer && kind != Expression::Kind::real && kind != Expression::Kind::boolean &&
             kind != Expression::Kind::call && !negative_literal)
           fail(start.at, "a bits global initializer must be a bits literal or function call");

@@ -33,7 +33,7 @@ runner.CASES = {
         '{{ptr p=f;defer (is)(p,null);}};behave @print(f());', 0, '7\n', ''),
     'local_proc_test': (OBS + 'proc f()->void{ptr p:i64=null in here;defer (is)(p,null);defer observe(1);}f();', 0, '1\n', ''),
     'swap_saved_slots': (OBS + 'val x<-1,y<-2,z<-3;ptr p=x,q=y,r=z;'
-        '(if(true){p}else{q})<=>{observe(8);p=r;q};observe(p);observe(q);', 0, '8\n2\n3\n', ''),
+        '{if(true){p}else{q}}<=>{observe(8);p=r;q};observe(p);observe(q);', 0, '8\n2\n3\n', ''),
     'swap_cleanup_before_invocation': (OBS + 'val x<-1,y<-2,z<-3;ptr p=x,q=y;'
         '{{defer{p=z;};p}}<=>{observe(8);q};observe(p);observe(q);', 0, '8\n2\n3\n', ''),
     'null_test_operand_cleanup': (IO + 'ptr p:i64=null in here;val x<-1;'

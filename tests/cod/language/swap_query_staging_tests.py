@@ -10,7 +10,7 @@ runner.CASES = (
     ('intrinsic_reference', BASE, '{intrinsic (<=>)(p,q);1}', 'i64', '9', '9\n'),
     ('uninitialized_bits', 'val p<-make local i64,q<-make local i64;', '{p<->q;1}', 'i64', '9', '9\n'),
     ('null_bits', 'ptr p:i64=null in here,q:i64=null in here;', '{p<->q;1}', 'i64', '9', '9\n'),
-    ('selected_slots', BASE, '{(if(true){p}else{q})<=>q;1}', 'i64', '9', '9\n'),
+    ('selected_slots', BASE, '{ {if(true){p}else{q}}<=>q;1}', 'i64', '9', '9\n'),
     ('procedure_method', 'proc (<->)(ref a:i64 in O,ref b:i64 in P)->void where {owner O,owner P}{behave @print(99);}'+BASE,
      '{p<->q;1}', 'i64', '9', '9\n'),
     ('generic_body_not_demanded', 'func (<=>)(ptr a:T in O,ptr b:T in O)->void where {T,owner O}{a<-true;}'+BASE,
@@ -25,7 +25,7 @@ ALIASES=BASE+'ptr var ro:const->p;ptr var other:const->q;'
 runner.CASES += (
     ('readonly_alias',READONLY_METHOD+ALIASES,'{ro<=>other;1}','i64','9','9\n'),
     ('readonly_alias_explicit',READONLY_METHOD+ALIASES,'{(<=>)(ro,other);1}','i64','9','9\n'),
-    ('readonly_alias_selected',READONLY_METHOD+ALIASES,'{(if(true){ro}else{other})<=>other;1}','i64','9','9\n'),
+    ('readonly_alias_selected',READONLY_METHOD+ALIASES,'{ {if(true){ro}else{other}}<=>other;1}','i64','9','9\n'),
 )
 
 runner.EXTRA_SOURCES = [Path(__file__)]

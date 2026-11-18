@@ -15,7 +15,7 @@ runner.CASES = {
  'return_conversion_only': (IO+'func (+)(x:u32,y:u32)->u64;func (+)(x:u32,y:u32){return intrinsic (+)(x,y);}behave @print(1u32+2u32);',0,'3\n',''),
  'intermediate_overflow': ('func (+)(x:u32,y:u32)->u64;func (+)(x:u32,y:u32){return intrinsic (+)(x,y);}4294967295u32+1u32;',70,'','u32 addition overflow'),
  'procedure_declaration': (IO+'proc (+)(x:bool,y:bool)->void;proc (+)(x:bool,y:bool){behave @print(x);behave @print(y);}false+true;',0,'false\ntrue\n',''),
- 'borrowed_declared_result': (IO+'func (+)(ref x:i64 in O,ref y:i64 in P)->ref i64 in O where {owner O,owner P};func (+)(ref x:i64 in A,ref y:i64 in B) where {owner A,owner B}{return x;}val x<-1,y<-2;(x+y)<-7;behave @print(x);',0,'7\n',''),
+ 'borrowed_declared_result': (IO+'func (+)(ref x:i64 in O,ref y:i64 in P)->ref i64 in O where {owner O,owner P};func (+)(ref x:i64 in A,ref y:i64 in B) where {owner A,owner B}{return x;}val x<-1,y<-2;x+y<-7;behave @print(x);',0,'7\n',''),
  'explicit_result_conflict': ('func (+)(x:bool,y:bool)->bool;func (+)(x:bool,y:bool)->u64{return 1u64;}',2,'','does not satisfy callable declaration'),
  'body_result_conflict': ('func (+)(x:bool,y:bool)->bool;func (+)(x:bool,y:bool){return 1u64;}',2,'','return type'),
  'kind_conflict': ('func (+)(x:bool,y:bool)->bool;proc (+)(x:bool,y:bool){return true;}',2,'','implementation kind'),

@@ -39,8 +39,8 @@ case('owner_mismatch',setup='val x<-1;ptr p:const i64=x;ptr var ro:const->p;',ca
 GENERIC=HEAD.replace('i64','T').replace('where {owner O}','where {T,owner O}')
 case('generic_alias_swap',definition=GENERIC+'{intrinsic (<=>)(left,right);}',output='7\n1\n')
 case('null_input',body='intrinsic (<=>)(left,right);',setup=BASE+'q=null;',output='99\n')
-case('selected_destination',body='intrinsic (<=>)(left,right);',call='(if(x==1){ro}else{other})<=>other;',output='7\n1\n')
-case('selected_bad_source',body='left=right;',setup=BASE.replace('ptr p=x,q=y;','ptr p=x;ptr q:const i64=y;'),call='ro<=>(if(x==1){ro}else{other});',reject=True)
+case('selected_destination',body='intrinsic (<=>)(left,right);',call=' { if(x==1){ro}else{other} } <=>other;',output='7\n1\n')
+case('selected_bad_source',body='left=right;',setup=BASE.replace('ptr p=x,q=y;','ptr p=x;ptr q:const i64=y;'),call='ro<=> { if(x==1){ro}else{other} } ;',reject=True)
 case('finally_restoration_bad_source',definition=HEAD.replace(' where',' throws NullPointerException where')+'{ptr saved=left;try{left=right;left;{}}finally{left=saved;{}};}',setup=BASE.replace('ptr p=x,q=y;','ptr p=x;ptr q:const i64=y;'),reject=True)
 CALLABLE='func()->const u64'
 case('callable_payload_targets',definition=HEAD.replace('i64',CALLABLE)+'{intrinsic (<=>)(left,right);}',setup='func one()->const u64{return 1u64;}func two()->const u64{return 7u64;}func first=one;func second=two;ptr p=first,q=second;ptr var ro:const->p;ptr var other:const->q;',after='behave @print(p());behave @print(q());',output='7\n1\n')

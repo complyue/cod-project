@@ -14,9 +14,9 @@ for spelling in ('call', 'intrinsic'):
     cases = {
         'current_targets': (IO+BASE+'{{'+swap()+'q=c;}};'+OUT('p')+OUT('q'),0,'9\n1\n',''),
         'no_early_exchange': (IO+BASE+'{{'+swap()+OUT('p')+OUT('q')+'}};'+OUT('p')+OUT('q'),0,'1\n7\n7\n1\n',''),
-        'selected_slot': (IO+BASE+'ptr r=c;val flag<-true;{{'+swap('(if(flag){p}else{q})','r')+'flag<-false;}};'+OUT('p')+OUT('q')+OUT('r'),0,'9\n7\n1\n',''),
-        'selected_alias': (IO+BASE+'ptr r=c;val flag<-true;ptr var chosen->(if(flag){p}else{q});{{'+swap('chosen','r')+'flag<-false;p=b;}};'+OUT('p')+OUT('q')+OUT('r'),0,'9\n7\n7\n',''),
-        'temporary_alias': (IO+BASE+'ptr r=c;{{'+swap('({{ptr var chosen->(if(true){p}else{q});chosen}})','r')+'}};'+OUT('p')+OUT('q')+OUT('r'),0,'9\n7\n1\n',''),
+        'selected_slot': (IO+BASE+'ptr r=c;val flag<-true;{{'+swap('{if(flag){p}else{q}}','r')+'flag<-false;}};'+OUT('p')+OUT('q')+OUT('r'),0,'9\n7\n1\n',''),
+        'selected_alias': (IO+BASE+'ptr r=c;val flag<-true;ptr var chosen->{if(flag){p}else{q}};{{'+swap('chosen','r')+'flag<-false;p=b;}};'+OUT('p')+OUT('q')+OUT('r'),0,'9\n7\n7\n',''),
+        'temporary_alias': (IO+BASE+'ptr r=c;{{'+swap('({{ptr var chosen->{if(true){p}else{q}};chosen}})','r')+'}};'+OUT('p')+OUT('q')+OUT('r'),0,'9\n7\n1\n',''),
         'same_slot': (IO+BASE+'{{'+swap('p','p')+'p=c;}};'+OUT('p')+OUT('q'),0,'9\n7\n',''),
         'same_slot_alias': (IO+BASE+'ptr var alias->p;{{'+swap('alias','p')+'p=c;}};'+OUT('p'),0,'9\n',''),
         'nullable_slots': (IO+BASE+'{{'+swap()+'q=null;}};'+OUT('(p is null)')+OUT('q'),0,'true\n1\n',''),
