@@ -1,5 +1,46 @@
 # Changelog
 
+## 2026-11-18 — Close the ordinary sum constructor source design
+
+<a id="h-dctor-source-20261118"></a>
+**H-DCTOR-SOURCE-20261118.** In the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-18 (America/Los_Angeles), the project user said “dctor我感觉目前都满意了”, clarified constructor-target versus ref/ptr-slot allocation, then directed “没有其它问题可以提交推送进入下一个议题了”. D-07r173/D-15r52/D-22r60/registry923 close ordinary construction, selector/fallback rules and regional slot syntax. H-DCTOR-WORLD-PUBLICATION-20261118 governs whole families in the make-site world. Invoking a required initializer on reserved storage is deferred. This source decision selects no ABI or compiler proof profile.
+
+## 2026-11-18 — Distinguish constructing a sum alternative from allocating a reference slot
+
+<a id="k-dctor-slot-review-20261118"></a>
+**K-DCTOR-SLOT-REVIEW-20261118.** In the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), the project user distinguished “只能 make DCtor 不能 make Type” from “允许 make Type ref/ptr” and requested a syntax and semantics review. D-07r172/D-22r59/registry922 correct the staged sum example and distinguish local bindings, stored reference places and constructor-selected targets. The anonymous slot spelling and static contract are proposals. H-562’s product reservation and H-601/H-602’s caller-place semantics continue to apply in their existing scopes.
+
+## 2026-11-18 — Publish and select whole data constructors in their module world
+
+<a id="h-dctor-world-publication-20261118"></a>
+**H-DCTOR-WORLD-PUBLICATION-20261118.** In the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), the project user specified automatic publication of a type’s constructors, “overload family 作为 dctor 的一部分，整体 export/using/import”, and “有没有overload是看 `make` site 所在的 module world ，跟其它平行世界的状态无关”. D-07r171/D-15r51/registry921 record those source decisions. Braced constructor lists and wildcard selection are proposed. Unlisted-name lookup and implementation qualification remain open.
+
+## 2026-11-18 — Draft named sum constructor bodies
+
+<a id="k-sum-constructor-draft-20261118"></a>
+**K-SUM-CONSTRUCTOR-DRAFT-20261118.** In the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), the project user proposed direct constructor names in `make` and `isa`, explicit `func`/`proc` bodies, fields as implicit `init var` parameters, destination owner supplied by placement, optional result annotation, no constructor-targeting return and braced construction only in the absence of overloads. D-07r170/registry920 draft the source examples and the adapter question. Value path, grammar and implementation qualification remain pending.
+
+## 2026-11-18 — Region holder reuse and completion of persistent graph versions
+
+<a id="h-owner-reuse-20261118"></a>
+**H-OWNER-REUSE-20261118.** The project user in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-18 (America/Los_Angeles) said “4 感觉可以快速确定允许， p <- p 相当于 nop，有没有什么坑？” in response to the outstanding conditional-handoff assignment and direct self-transfer cases. D-14r126/registry919 record both permissions for ordinary writable region holders. H-262/H-263, H-OCCUPIED-OWNER-20261118 and D-17 supply RHS liveness, consuming entry and prior-instance cleanup. P-597/P-598 record the candidate value path and dependencies.
+
+<a id="h-dbmr-image-completion-20261118"></a>
+**H-DBMR-IMAGE-COMPLETION-20261118.** In the same [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), the user specified “预期90%workload是共享只读利用图数据”, “整体完成后才打完成标识” and mandatory detection of files left incomplete by process exit. D-22r58/registry919 record short-lived builders, readonly old versions, new version files and emergency-only in-place edits. P-599/P-600 link this goal to the existing publication and access decisions. File format, repair strategy, power-loss durability and native qualification were outside this decision.
+
+<a id="h-dbmr-payload-checksum-20261118"></a>
+**H-DBMR-PAYLOAD-CHECKSUM-20261118.** The project user in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) proposed “完成标识就用有效载荷的checksum”. D-22r58 specifies the checksum record as the completion mark under H-DBMR-IMAGE-COMPLETION-20261118. Pre-edit invalidation and last-step publication preserve detection of interrupted work even when the bytes happen to match an earlier payload. The algorithm, encoding and power-loss guarantees remain open.
+
+## 2026-11-18 — Distinguish parked questions from the active discussion queue
+
+<a id="k-discussion-parked-20261118"></a>
+**K-DISCUSSION-PARKED-20261118.** Editorial follow-up to K-DISCUSSION-PRIORITIES-20261118 at registry917→918. The owner decision H-OCCUPIED-OWNER-20261118 excludes reinitialization after handoff and direct self-transfer. The DBMR decisions cover fresh publication, access modes, cooperating processes and provider retries. The discussion index parks the remaining owner and existing-image questions until a use case calls for a decision. Contract qualifications are unchanged.
+
+## 2026-11-18 — Prioritize constructor and functor discussions
+
+<a id="k-discussion-priorities-20261118"></a>
+**K-DISCUSSION-PRIORITIES-20261118.** The project user in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) requested discussion of constructors, especially for sums, and functors through overloaded `()`, and delegated their ordering. Registry916→917 puts constructor selection first and invocation of a data value second. This editorial change preserves the existing contract qualifications.
+
 ## 2026-11-18 — Assign DBMR contention handling to the native provider
 
 <a id="h-dbmr-contention-work-20261118"></a>

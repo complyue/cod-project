@@ -1,8 +1,10 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 50 · Recorded: 2026-11-18 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 52 · Recorded: 2026-11-18 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
+
+- **Data constructor families.** [D-07-DCTOR-PUBLICATION](DesignAuthorityRegistry.md#d-07-dctor-publication), r52 in the type-selection section, records [whole-family selection](../CHANGELOG.md#h-dctor-world-publication-20261118) and the [selector and fallback rule](../CHANGELOG.md#h-dctor-source-20261118). C-35/C-45 and charter §§4.3/8.1 connect stable constructor identity with explicit selection in a module world. D-07 owns the two-world example. Native implementation qualification remains open.
 
 - **Module shutdown reporting.** D-15r50 applies the [D-17 publication rule](ExceptionControl.md#when-a-defer-pass-cannot-publish-its-aggregate) to the D-15-SHUTDOWN/P-458–P-460 drain. [H-OOM-BEST-EFFORT-20261118](../CHANGELOG.md#h-oom-best-effort-20261118) records this dependency update. Startup remains aborted, committed cleanup runs and owners are released even if final reporting loses detail. Native integration remains open.
 
@@ -132,6 +134,8 @@ proc use(x:Node in O) -> u64 where {owner O} {
 ```
 
 To extend a source family, explicitly select that callable with import under the intended local alias, then use the established extension rules. Importing a type still grants its existing type-level permissions; this name rule does not remove permitted explicit conformance declarations. Explicit callable import, using's preserved implementation context, import's receiving interpretation, mixin body redefinition and explicit same-alias unions remain separate operations. Local shadowing alone is not explicit overload-conflict arbitration inside a composed family.
+
+For a nominal sum, exporting its type publishes every constructor together with its complete overload family in the exporting world. Using and import select a constructor as that same unit. An adapter may extend a constructor it imports in its own world. The family in the world of the `make` site determines whether braces are available. See the [two-world example and constructor selectors](DomainLanguageDesign.md#publishing-and-selecting-data-constructors).
 
 ### Types carried by symbol selection
 
