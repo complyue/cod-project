@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-18 — Align the full-scope exception input contract
+
+<a id="k-full-scope-exception-references-20261118"></a>
+**K-FULL-SCOPE-EXCEPTION-REFERENCES-20261118 — Editorial continuity.** Aligns D-17r101's bounded full-scope profile and dependency references with H-EXCEPTION-OBJECT-OWNER-20261118 and D-18r115 (registry 889→890/source437→438). Ordinary scalar, complete callable and immediate borrowed inputs retain their confirmed value path and acceptance. Exception inputs require actual owners under D-17-EXCEPTION-OWNER, with their physical transport still pending. No semantic revision changes. Prior text in commit 8cfa34c187a2501936f2115720cae7689debfb31, path design/ExceptionControl.md, “Full-scope implementation profile”.
+
 ## 2026-11-18 — Construct and initialize at a throw site
 
 <a id="h-throw-initializer-20261118"></a>
