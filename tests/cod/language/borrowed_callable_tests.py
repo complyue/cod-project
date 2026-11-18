@@ -18,8 +18,8 @@ runner.CASES={
  'readonly_write_rejected':('func id(ref x:const i64 in O)->ref const i64 in O where {owner O}{return x;}val x<-1;func f=id;f(x)<-7;',2,'','readonly destination'),
  'readonly_argument_rejected':(ID+'const val x<-1;func f=id;f(x);',2,'','readonly argument'),
  'repeated_owner':(IO+'func pick(ref x:i64 in O,ref y:i64 in O,flag:bool)->ref i64 in O where {owner O}{return if(flag){x}else{y};}val x<-1,y<-2;func f=pick;f(x,y,false)<-7;behave @print(y);',0,'7\n',''),
- 'owner_mismatch':('func pick(ref x:i64 in O,ref y:i64 in O)->ref i64 in O where {owner O}{return x;}val x<-1;func f=pick;{{val y<-2;f(x,y);}};',2,'','different actual owners'),
- 'owner_renaming':(IO+'func first(ref x:i64 in A,ref y:i64 in B)->ref i64 in A where {owner A,owner B}{return x;}func same(ref x:i64 in X,ref y:i64 in Y)->ref i64 in X where {owner Y,owner X}{return x;}val x<-1;func f=first;f<-same;{{val y<-2;f(x,y)<-7;}};behave @print(x);',0,'7\n',''),
+ 'owner_mismatch':('func pick(ref x:i64 in O,ref y:i64 in O)->ref i64 in O where {owner O}{return x;}ref x:i64=1;func f=pick;{{val y<-2;f(x,y);}};',2,'','different actual owners'),
+ 'owner_renaming':(IO+'func first(ref x:i64 in A,ref y:i64 in B)->ref i64 in A where {owner A,owner B}{return x;}func same(ref x:i64 in X,ref y:i64 in Y)->ref i64 in X where {owner Y,owner X}{return x;}ref x:i64=1;func f=first;f<-same;{{val y<-2;f(x,y)<-7;}};behave @print(x);',0,'7\n',''),
  'owner_relationship_mismatch':('func first(ref x:i64 in A,ref y:i64 in B)->ref i64 in A where {owner A,owner B}{return x;}func same(ref x:i64 in X,ref y:i64 in X)->ref i64 in X where {owner X}{return x;}func f=first;f<-same;',2,'','unproved owner equality'),
  'returned_owner_mismatch':('func first(ref x:i64 in A,ref y:i64 in B)->ref i64 in A where {owner A,owner B}{return x;}func last(ref x:i64 in A,ref y:i64 in B)->ref i64 in B where {owner A,owner B}{return y;}func f=first;f<-last;',2,'','does not satisfy the callable view contract'),
  'borrow_and_value_contracts_distinct':(ID+'func value(x:i64)->const i64{return x;}func f=id;f<-value;',2,'','does not satisfy the callable view contract'),
@@ -39,7 +39,10 @@ runner.CASES={
  'deferred_writer_initializes':(IO+NPE+SET+'proc f(ptr x:i64 in O)->void throws NullPointerException where {owner O}{proc writer=set;defer writer(x);}val x<-make local i64;try{f(x);behave @print(x);}catch(e:const NullPointerException){};',0,'7\n',''),
  'deferred_borrow_observes_later_write':(IO+'proc show(ref x:i64 in O)->void where {owner O}{behave @print(x);}{{val x<-1;proc f=show;defer f(x);x<-7;}};',0,'7\n',''),
  'deferred_view_expires':('using "std:exceptions" MissingReturnError;proc show(ref x:const MissingReturnError in O)->void where {owner O}{}func bad()->const i64{}proc f=show;try{bad();{}}catch(e:const MissingReturnError){defer f(e);};',2,'','does not outlive'),
- 'returned_view_escape_rejected':(ID+'ptr p={{val x<-1;func f=id;f(x)}};p;',2,'','owner has ended'),
+ 'returned_view_escape_rejected':(ID+'func leak(ref seed:i64 in O)->ref i64 in O where {owner O}{'
+     'val local<-1;func f=id;return f(local);}ref actual:i64=0;leak(actual);',2,'','borrowed result does not retain its declared external owner'),
+ 'standalone_scope_returns_independent_bits':(IO+ID+'val saved<-{{val local<-1;func f=id;return f(local);}};'
+     'behave @print(saved);',0,'1\n',''),
  'generic_higher_order_borrow':(IO+ID+'func apply(f:F,ref x:i64 in O)->ref i64 in O where {F,owner O}{return f(x);}val x<-1;func f=id;apply(f,x)<-7;behave @print(x);',0,'7\n',''),
  'recursive_higher_order_borrow':(IO+ID+'func walk(f:F,ref x:i64 in O,n:i64)->ref i64 in O where {F,owner O}{if(n==0){return f(x);}else{return walk(f,x,n-1);};}val x<-1;func f=id;walk(f,x,40)<-7;behave @print(x);',0,'7\n',''),
  'captured_borrowing_callable':(IO+ID+'val x<-1;func f=id;func wrap=func[f](ref y:i64 in O)->ref i64 in O where {owner O}{return f(y);};wrap(x)<-7;behave @print(x);',0,'7\n',''),
