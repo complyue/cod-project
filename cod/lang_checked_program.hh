@@ -327,12 +327,15 @@ struct CheckedMethod {
   std::vector<size_t> retained_types;
   std::optional<size_t> parent;
   struct ScopeInputs {
+    // For each captured Boolean outcome, record the presence of other inputs.
+    using BooleanPresence = std::map<bool, std::map<size_t, bool>>;
     size_t lexical_method;
     std::vector<Parameter> parameters;
     std::vector<OwnerParameter> owners;
     std::map<std::string, size_t> owner_names;
     std::vector<std::vector<OwnerMatch>> relations;
     std::vector<bool> nonnull;
+    std::map<size_t, BooleanPresence> boolean_presence;
   };
   std::optional<ScopeInputs> scope_inputs;
   const std::vector<Parameter> &input_parameters() const {

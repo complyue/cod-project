@@ -253,21 +253,49 @@ class ScalarChecker {
   }
   struct TypeEvidenceExits;
   enum class TargetPresence { unknown, present, absent };
-  using EvidenceSlot = std::variant<size_t, const Expression *, std::string>;
+  using EvidenceSlot = std::variant<size_t, const Expression *, std::string, std::pair<const Form *, std::string>>;
   using PresenceFacts = std::map<EvidenceSlot, TargetPresence>;
+  using EvidencePlaces = std::set<EvidenceSlot>;
   struct EvidenceSelection {
     std::optional<EvidenceSlot> slot;
     std::set<EvidenceSlot> footprint;
     bool operator==(const EvidenceSelection &) const = default;
   };
   struct PresenceBranches {
-    PresenceFacts when_true, when_false;
-    const PresenceFacts &at(bool value) const { return value ? when_true : when_false; }
+    std::optional<PresenceFacts> when_true = PresenceFacts{}, when_false = PresenceFacts{};
+    auto &at(bool value) { return value ? when_true : when_false; }
+    const auto &at(bool value) const { return value ? when_true : when_false; }
+    bool operator==(const PresenceBranches &) const = default;
+    static PresenceBranches constant(bool value) {
+      PresenceBranches result;
+      result.at(!value).reset();
+      return result;
+    }
+    template <typename Removed> void forget(Removed removed) {
+      for (const bool value : {false, true}) if (auto &facts = at(value))
+        std::erase_if(*facts, [&](const auto &fact) { return removed(fact.first); });
+    }
   };
   struct TargetEvidence {
     EvidenceSelection selection;
     TargetPresence presence = TargetPresence::unknown;
     std::optional<PresenceBranches> branches;
+    EvidencePlaces places;
+  };
+  struct QueryPayloadWrites {
+    EvidencePlaces places;
+    bool unknown = false;
+    void record(const EvidencePlaces &written) {
+      if (written.empty()) unknown = true;
+      else places.insert(written.begin(), written.end());
+    }
+    void merge(const QueryPayloadWrites &other) {
+      places.insert(other.places.begin(), other.places.end());
+      unknown |= other.unknown;
+    }
+    bool touches(const EvidencePlaces &selected) const {
+      return unknown || std::ranges::any_of(selected, [&](const auto &place) { return places.contains(place); });
+    }
   };
   struct QuerySelections {
     bool tracking = false;
@@ -278,6 +306,69 @@ class ScalarChecker {
     std::map<EvidenceSlot, std::set<EvidenceSlot>> footprints;
     std::map<EvidenceSlot, std::set<EvidenceSlot>> possible_overlap;
     PresenceFacts facts;
+    // Selection slots and payload places have separate write effects. A
+    // borrowed Boolean and an independent Boolean can read the same payload.
+    std::map<std::string, EvidencePlaces> value_places;
+    std::map<EvidenceSlot, EvidencePlaces> targets;
+    std::map<EvidenceSlot, PresenceBranches> booleans;
+    std::map<EvidenceSlot, size_t> changed;
+    QueryPayloadWrites payload_writes, deferred_writes;
+
+    static EvidencePlaces join_places(EvidencePlaces left, const EvidencePlaces &right) {
+      if (left.empty() || right.empty()) return {};
+      left.insert(right.begin(), right.end());
+      return left;
+    }
+    static std::optional<PresenceBranches> alternatives(std::optional<PresenceBranches> left,
+                                                         const std::optional<PresenceBranches> &right) {
+      if (!left && !right) return {};
+      auto joined = left.value_or(PresenceBranches{});
+      const auto other = right.value_or(PresenceBranches{});
+      for (const bool value : {false, true}) {
+        auto &result = joined.at(value);
+        if (!result) result = other.at(value);
+        else if (other.at(value)) *result = common(std::move(*result), *other.at(value));
+      }
+      if (joined == PresenceBranches{}) return {};
+      return joined;
+    }
+    EvidencePlaces places(const EvidenceSelection &selection) const {
+      if (selection.slot) if (const auto found = targets.find(*selection.slot); found != targets.end()) return found->second;
+      EvidencePlaces places;
+      for (const auto &slot : selection.footprint) {
+        const auto found = targets.find(slot);
+        if (found == targets.end()) return {};
+        places.insert(found->second.begin(), found->second.end());
+      }
+      return places;
+    }
+    std::optional<PresenceBranches> read_boolean(const EvidencePlaces &places) const {
+      std::optional<PresenceBranches> result;
+      bool first = true;
+      for (const auto &place : places) {
+        const auto found = booleans.find(place);
+        if (found == booleans.end()) return {};
+        result = first ? std::optional{found->second} : alternatives(std::move(result), found->second);
+        first = false;
+      }
+      return result;
+    }
+    void write_boolean(const EvidencePlaces &places, const std::optional<PresenceBranches> &proof) {
+      if (!tracking) return;
+      payload_writes.record(places);
+      if (places.empty()) { booleans.clear(); return; }
+      for (const auto &place : places) {
+        const auto before = booleans.find(place);
+        const auto assigned = places.size() == 1 ? proof : alternatives(
+            before == booleans.end() ? std::nullopt : std::optional{before->second}, proof);
+        if (assigned) booleans.insert_or_assign(place, *assigned);
+        else booleans.erase(place);
+      }
+    }
+    void remove_binding(const std::string &name) {
+      bindings.erase(name);
+      value_places.erase(name);
+    }
 
     TargetPresence presence(const EvidenceSelection &selection) const {
       if (selection.slot) {
@@ -292,12 +383,14 @@ class ScalarChecker {
       }
       return known->second;
     }
-    void bind(const std::string &name, EvidenceSlot slot, TargetPresence known) {
+    void bind(const std::string &name, EvidenceSlot slot, TargetPresence known, const EvidencePlaces &places = {}) {
       if (!tracking) return;
       bindings[name] = {slot, {slot}};
       footprints[slot] = {slot};
       if (known == TargetPresence::unknown) facts.erase(slot);
       else facts[slot] = known;
+      if (places.empty()) targets.erase(slot);
+      else targets[slot] = places;
     }
     void declare_place(const std::string &name, EvidenceSlot slot, EvidenceSelection source, TargetPresence known) {
       if (!tracking) return;
@@ -310,8 +403,11 @@ class ScalarChecker {
       if (!tracking) return;
       ++writes;
       facts.clear();
+      targets.clear();
+      booleans.clear();
+      for (const auto &[slot, footprint] : footprints) changed[slot] = writes;
     }
-    void assign(const EvidenceSelection &selection, TargetPresence known) {
+    void assign(const EvidenceSelection &selection, TargetPresence known, const EvidencePlaces &places = {}) {
       if (!tracking) return;
       if (selection.footprint.empty()) { forget(); return; }
       ++writes;
@@ -327,12 +423,64 @@ class ScalarChecker {
       std::erase_if(facts, [&](const auto &fact) {
         return fact.second != known && overlaps(footprints.at(fact.first));
       });
+      for (const auto &[slot, footprint] : footprints) if (overlaps(footprint)) changed[slot] = writes;
+      for (auto &[place, proof] : booleans) proof.forget([&](const EvidenceSlot &slot) {
+        return overlaps(footprints.at(slot));
+      });
+      std::erase_if(targets, [&](const auto &target) {
+        return overlaps(footprints.at(target.first));
+      });
+      if (!places.empty()) {
+        if (selection.footprint.size() == 1) targets[*selection.footprint.begin()] = places;
+        if (selection.slot) targets[*selection.slot] = places;
+      }
       if (known == TargetPresence::unknown) return;
       if (selection.footprint.size() == 1) facts[*selection.footprint.begin()] = known;
       if (selection.slot) facts[*selection.slot] = known;
     }
     void refine(const PresenceFacts &known) {
       for (const auto &[slot, presence] : known) facts.try_emplace(slot, presence);
+    }
+    std::optional<PresenceFacts> outcome(const std::optional<PresenceBranches> &proof, bool value) const {
+      auto result = facts;
+      const auto assumed = proof ? proof->at(value) : std::optional{PresenceFacts{}};
+      if (!assumed) return {};
+      for (const auto &[slot, presence] : *assumed) {
+        const auto [known, inserted] = result.try_emplace(slot, presence);
+        if (!inserted && known->second != presence) return {};
+      }
+      return result;
+    }
+    void assume(const std::optional<PresenceBranches> &proof, bool value) {
+      if (proof && proof->at(value)) refine(*proof->at(value));
+    }
+    void forget_changed(TargetEvidence &target, size_t since) const {
+      const auto written = [&](const EvidenceSlot &slot) {
+        const auto last = changed.find(slot);
+        return last != changed.end() && last->second > since;
+      };
+      if (target.selection.slot && written(*target.selection.slot)) target.selection.slot.reset();
+      if (target.branches) target.branches->forget(written);
+    }
+    void join_flow(const QuerySelections &other) {
+      facts = common(std::move(facts), other.facts);
+      std::erase_if(targets, [&](auto &target) {
+        return !other.targets.contains(target.first);
+      });
+      for (auto &[slot, places] : targets) places = join_places(std::move(places), other.targets.at(slot));
+      for (auto stored = booleans.begin(); stored != booleans.end();) {
+        const auto right = other.booleans.find(stored->first);
+        const auto joined = right == other.booleans.end() ? std::nullopt : alternatives(stored->second, right->second);
+        if (joined) { stored->second = *joined; ++stored; }
+        else stored = booleans.erase(stored);
+      }
+      writes = std::max(writes, other.writes);
+      for (const auto &[slot, revision] : other.changed) changed[slot] = std::max(changed[slot], revision);
+      payload_writes.merge(other.payload_writes);
+      deferred_writes.merge(other.deferred_writes);
+    }
+    bool same_flow(const QuerySelections &other) const {
+      return facts == other.facts && booleans == other.booleans && targets == other.targets;
     }
     static PresenceFacts common(PresenceFacts left, const PresenceFacts &right) {
       std::erase_if(left, [&](const auto &fact) {
@@ -4143,7 +4291,8 @@ class ScalarChecker {
     if (left.selection.slot != right.selection.slot) left.selection.slot.reset();
     if (left.selection.footprint.empty() || right.selection.footprint.empty()) left.selection.footprint.clear();
     else left.selection.footprint.insert(right.selection.footprint.begin(), right.selection.footprint.end());
-    left.branches.reset();
+    left.branches = QuerySelections::alternatives(std::move(left.branches), right.branches);
+    left.places = QuerySelections::join_places(std::move(left.places), right.places);
     return left;
   }
   static void require_present_projection(const ViewEvidence &view, TargetPresence presence, const Location &at) {
@@ -4163,10 +4312,8 @@ class ScalarChecker {
                                        const Type *expected, std::vector<Type> *alternatives,
                                        ExpectedTypeUse expected_use, bool reached, EvidenceRead read = EvidenceRead::payload) const {
     ConditionalEvidence arms{{}, {}, state, state};
-    if (state.target.branches) {
-      arms.yes_state.selections.refine(state.target.branches->when_true);
-      arms.no_state.selections.refine(state.target.branches->when_false);
-    }
+    arms.yes_state.selections.assume(state.target.branches, true);
+    arms.no_state.selections.assume(state.target.branches, false);
     arms.yes = type_evidence(*expr.children[1], arms.yes_state, contextual, expected, alternatives, expected_use, reached, read);
     arms.no = type_evidence(*expr.children[2], arms.no_state, contextual, expected, alternatives, expected_use, reached, read);
     return arms;
@@ -4182,7 +4329,7 @@ class ScalarChecker {
       left.views[name] = {};
       left.definitions.erase(name);
       left.owner_bindings.erase(name);
-      left.selections.bindings.erase(name);
+      left.selections.remove_binding(name);
     };
     // An ending arm can introduce a nearer lexical declaration, but cannot
     // establish that declaration's availability at the normal continuation.
@@ -4223,17 +4370,20 @@ class ScalarChecker {
       if (!left.views.contains(name)) left.views.emplace(name, ViewEvidence{});
     auto &selection = left.selections;
     const auto &other_selections = right.selections;
-    std::erase_if(selection.bindings, [&](const auto &item) {
-      const auto other = other_selections.bindings.find(item.first);
-      return other == other_selections.bindings.end() || other->second != item.second;
-    });
+    const auto retain_shared = [](auto &names, const auto &other_names) {
+      std::erase_if(names, [&](const auto &item) {
+        const auto other = other_names.find(item.first);
+        return other == other_names.end() || other->second != item.second;
+      });
+    };
+    retain_shared(selection.bindings, other_selections.bindings);
+    retain_shared(selection.value_places, other_selections.value_places);
     const auto combine = [](auto &into, const auto &from) {
       for (const auto &[slot, footprint] : from) into[slot].insert(footprint.begin(), footprint.end());
     };
     combine(selection.footprints, other_selections.footprints);
     combine(selection.possible_overlap, other_selections.possible_overlap);
-    selection.facts = QuerySelections::common(std::move(selection.facts), other_selections.facts);
-    selection.writes = std::max(selection.writes, other_selections.writes);
+    selection.join_flow(other_selections);
     left.complete = left.complete && right.complete;
     return left;
   }
@@ -4298,8 +4448,22 @@ class ScalarChecker {
     if (const auto slot = state.selections.bindings.find(name); slot != state.selections.bindings.end()) {
       target.selection = slot->second;
       target.presence = state.selections.presence(slot->second);
+      target.places = state.selections.places(slot->second);
     }
+    if (const auto place = state.selections.value_places.find(name); place != state.selections.value_places.end())
+      target.places = place->second;
     return target;
+  }
+  static void type_boolean_write(const Expression &expr, TypeEvidenceState &state, const EvidencePlaces &places,
+                                 const std::optional<PresenceBranches> &proof = {}) {
+    if (&expr == state.prepared_call) state.selections.deferred_writes.record(places);
+    else state.selections.write_boolean(places, proof);
+  }
+  static void type_input_mutation(const Expression &expr, TypeEvidenceState &state, const Type &argument, const TargetEvidence &target,
+                                  ArgumentMode mode, bool readonly, bool writable_slot = false) {
+    if (writable_slot && &expr != state.prepared_call) state.selections.assign(target.selection, TargetPresence::unknown);
+    if (argument == Type::boolean && mode != ArgumentMode::value && !readonly)
+      type_boolean_write(expr, state, writable_slot ? EvidencePlaces{} : target.places);
   }
   // Evidence only: no reads, captures, demands, storage or cleanup equations are created here.
   // Operand hints defer validation to ordered checking; required typeof queries validate their bounded source forms here.
@@ -4328,6 +4492,8 @@ class ScalarChecker {
     state.value = type && type != Type::never ? view : ViewEvidence{};
     if (type && type != Type::never && state.selections.tracking) {
       if (view.view.has_value() && !view.nullable) target.presence = TargetPresence::present;
+      if (read == EvidenceRead::payload && type == Type::boolean && !target.branches)
+        target.branches = state.selections.read_boolean(target.places);
       state.target = std::move(target);
     } else state.target = {};
     return type;
@@ -4345,7 +4511,7 @@ class ScalarChecker {
     caught.local_declarations[handler.text] = &handler;
     caught.definitions.erase(handler.text);
     caught.owner_bindings.erase(handler.text);
-    caught.selections.bindings.erase(handler.text);
+    caught.selections.remove_binding(handler.text);
     caught.views[handler.text] = {true, true, true, EvidenceOwner::for_scope(handler), false, false, true, true};
     return caught;
   }
@@ -4360,6 +4526,7 @@ class ScalarChecker {
     restore(caught.owner_bindings, entry.owner_bindings);
     restore(caught.views, entry.views);
     restore(caught.selections.bindings, entry.selections.bindings);
+    restore(caught.selections.value_places, entry.selections.value_places);
     caught.caught_exception = entry.caught_exception;
   }
   std::optional<Type> project_finalizer(const Expression &handler, TypeEvidenceState &state) const {
@@ -4375,6 +4542,7 @@ class ScalarChecker {
   }
   struct LocalStorageEvidence {
     std::optional<Type> type;
+    std::optional<PresenceBranches> boolean;
     bool completes = true;
   };
   LocalStorageEvidence local_storage_evidence(const Expression &expr, TypeEvidenceState &state, bool reached = true) const {
@@ -4391,6 +4559,7 @@ class ScalarChecker {
                                              ExpectedTypeUse::materialization, reached && storage.completes);
       if (initializer == Type::never) storage.completes = false;
       if (state.required && storage.type && initializer) check_local_initializer(*initializer, *storage.type, expr.at);
+      if (storage.completes && initializer == Type::boolean) storage.boolean = state.target.branches;
     }
     return storage;
   }
@@ -4408,21 +4577,56 @@ class ScalarChecker {
       state.returns->saw_throw = true;
       return Type::never;
     }
+    const auto &captures = free_bindings(*callee.definition).captures;
+    std::vector<EvidencePlaces> writable_booleans;
+    if (state.selections.tracking) for (const auto &capture : captures) {
+      const auto binding = state.bindings.find(capture.name);
+      const auto view = state.views.find(capture.name);
+      if (binding != state.bindings.end() && binding->second == Type::boolean && view != state.views.end() &&
+          view->second.value_capture != true && !view->second.read_only.value_or(false))
+        writable_booleans.push_back(named_type_target(state, capture.name).places);
+    }
     if (state.required) {
       const auto declaration = result_context(id, &state);
       auto body = body_evidence(id, {}, *retained, declaration);
       body.required = body.validating_body = true;
       body.selections.tracking = state.selections.tracking;
-      if (body.selections.tracking) for (const auto &[name, view] : body.views) {
-        const auto caller = state.selections.bindings.find(name);
-        if (view.nullable && caller != state.selections.bindings.end())
-          body.selections.bind(name, name, state.selections.presence(caller->second));
+      if (body.selections.tracking) {
+        std::map<EvidenceSlot, EvidencePlaces> imported_slots;
+        std::map<EvidenceSlot, PresenceBranches> imported_booleans;
+        for (const auto &capture : captures) {
+          const auto &name = capture.name;
+          const auto view = body.views.find(name);
+          if (view == body.views.end()) continue;
+          const auto source = named_type_target(state, name);
+          if (view->second.value_binding != true && source.selection.slot) {
+            body.selections.bind(name, name, source.presence, source.places);
+            imported_slots[*source.selection.slot].insert(name);
+            for (const auto &place : source.places)
+              if (const auto found = state.selections.booleans.find(place); found != state.selections.booleans.end())
+                imported_booleans.insert(*found);
+          } else if (body.bindings.at(name) == Type::boolean && view->second.value_binding == true) {
+            const auto place = std::pair{callee.definition.get(), name};
+            body.selections.value_places.emplace(name, EvidencePlaces{place});
+            if (const auto proof = state.selections.read_boolean(source.places)) imported_booleans.emplace(place, *proof);
+          }
+        }
+        for (const auto &[place, proof] : imported_booleans) {
+          auto imported = proof;
+          for (const bool value : {false, true}) if (auto &facts = imported.at(value)) {
+            facts->clear();
+            for (const auto &[slot, presence] : *proof.at(value))
+              if (const auto local = imported_slots.find(slot); local != imported_slots.end())
+                for (const auto &id : local->second) facts->emplace(id, presence);
+          }
+          body.selections.booleans.emplace(place, std::move(imported));
+        }
       }
       body.invocation_result = *result.contract->type;
       body.supplied_invocation_result = result.origin == ResultOrigin::supplied;
       TypeEvidenceExits exits;
       if (state.exits) {
-        for (const auto &capture : free_bindings(*callee.definition).captures) {
+        for (const auto &capture : captures) {
           const auto binding = body.bindings.find(capture.name);
           if (binding != body.bindings.end() && binding->second && binding->second->kind == Type::procedure &&
               body.views.at(capture.name).value_binding == true) {
@@ -4430,14 +4634,21 @@ class ScalarChecker {
             break;
           }
         }
-        body.exits = &exits;
       }
+      if (state.exits || !writable_booleans.empty()) body.exits = &exits;
       type_evidence(*callee.definition->body, body);
-      for (auto &[reasons, exit] : exits.paths) {
+      for (const auto &places : writable_booleans) {
+        const auto written = [&](const QuerySelections &flow) {
+          return flow.payload_writes.touches(places) || flow.deferred_writes.touches(places);
+        };
+        if (written(body.selections) || std::ranges::any_of(exits.paths, [&](const auto &path) { return written(path.state.selections); }))
+          state.selections.write_boolean(places, {});
+      }
+      if (state.exits) for (auto &[reasons, exit] : exits.paths) {
         reasons.erase(1);
         merge_type_exits(*state.exits, std::move(reasons), state);
       }
-    }
+    } else for (const auto &places : writable_booleans) state.selections.write_boolean(places, {});
     return complete_callable_type(program_.methods[id], {}, *result.contract);
   }
   std::optional<Type> query_evidence(const Expression &expr, TypeEvidenceState &state, ViewEvidence &view, TargetEvidence &target_facts,
@@ -4450,7 +4661,7 @@ class ScalarChecker {
     if ((expr.kind == K::binary || expr.kind == K::call) && identity_operation(expr.text)) {
       if (expr.children.size() != 2) fail(expr.at, "reference identity requires two reference views");
       const auto left = child(0, false, true, EvidenceRead::target); const auto first = state.value;
-      const auto lhs = state.target.selection.slot;
+      auto tested_left = state.target;
       const auto version = state.selections.writes;
       const auto right = child(1, false, left != Type::never, EvidenceRead::target); const auto second = state.value;
       if (state.required) {
@@ -4460,13 +4671,14 @@ class ScalarChecker {
         if (left != Type::never && right != Type::never && !first.owner && !second.owner)
           fail(expr.at, "reference identity requires an owner context; two unqualified nulls have none");
       }
-      if (state.selections.tracking && state.selections.writes == version) {
-        const auto slot = right == Type::null_ref ? lhs :
+      if (state.selections.tracking) {
+        state.selections.forget_changed(tested_left, version);
+        const auto slot = right == Type::null_ref ? tested_left.selection.slot :
             left == Type::null_ref ? state.target.selection.slot : std::nullopt;
         if (slot) {
           const auto yes = expr.text == "is not" ? TargetPresence::present : TargetPresence::absent;
           const auto no = expr.text == "is not" ? TargetPresence::absent : TargetPresence::present;
-          target_facts.branches = PresenceBranches{{{*slot, yes}}, {{*slot, no}}};
+          target_facts.branches = PresenceBranches{PresenceFacts{{*slot, yes}}, PresenceFacts{{*slot, no}}};
         }
       }
       return left == Type::never || right == Type::never ? Type{Type::never} : Type{Type::boolean};
@@ -4497,7 +4709,9 @@ class ScalarChecker {
     case K::real:
       if (state.required) return literal(expr).type;
       return expr.text.ends_with("f32") ? Type::float32 : Type::float64;
-    case K::boolean: return Type::boolean;
+    case K::boolean:
+      if (state.selections.tracking) target_facts.branches = PresenceBranches::constant(expr.text == "true");
+      return Type::boolean;
     case K::null_ref:
       view.view = true;
       view.nullable = true;
@@ -4557,7 +4771,9 @@ class ScalarChecker {
       if (result == GroupResult::nullable_target) {
         target_facts = state.target;
         target_facts.selection.footprint.clear();
-      } else target_facts.branches = state.target.branches;
+      } else if (type == Type::boolean) {
+        target_facts.branches = state.target.branches ? state.target.branches : state.selections.read_boolean(state.target.places);
+      }
       if (result == GroupResult::value && type->kind == Type::procedure && source.view == true)
         note_type_allocation(state);
       return type;
@@ -4591,11 +4807,13 @@ class ScalarChecker {
             std::optional<Type>{evidence_annotation(*declaration->annotation, state)} : std::nullopt;
         const auto &initializer = *declaration->children.front();
         std::optional<Type> initial, storage_type;
+        std::optional<PresenceBranches> boolean;
         if (initializer.kind == K::make_local) {
           // The raw storage type remains known if evaluating its initializer
           // completes the callable before the declaration can finish.
           const auto storage = local_storage_evidence(initializer, state, completes);
           storage_type = storage.type;
+          boolean = storage.boolean;
           initial = storage.completes ? storage.type : std::optional<Type>{Type::never};
           state.value = storage.completes ? ViewEvidence{false, false, {}} : ViewEvidence{};
         } else initial = type_evidence(initializer, state, declared.has_value(),
@@ -4634,11 +4852,22 @@ class ScalarChecker {
         if (!value && declaration->binding != "<-" && state.value.mixed_view && owner != state.full_scope_owner) owner.reset();
         state.views[declaration->text] = {readonly, true, value, owner, false, expr.fixed_binding, readonly, value,
                                          expr.declaration_kind == "ptr"};
-        state.selections.bindings.erase(declaration->text);
+        state.selections.remove_binding(declaration->text);
+        EvidencePlaces places;
+        if (state.selections.tracking && completes && type == Type::boolean) {
+          if (borrowed == true && !state.value.mixed_view) places = state.target.places;
+          else if (borrowed == false && !state.value.mixed_view) {
+            places.insert(declaration.get());
+            if (value) state.selections.value_places.insert_or_assign(declaration->text, places);
+            if (initializer.kind != K::make_local)
+              boolean = state.target.branches ? state.target.branches : state.selections.read_boolean(state.target.places);
+            state.selections.write_boolean(places, boolean);
+          }
+        }
         if (!value && initial && *initial != Type::never)
           state.selections.bind(declaration->text, declaration.get(),
               expr.declaration_kind != "ptr" || declaration->binding == "<-" || initializer.kind == K::make_local ?
-                  TargetPresence::present : state.target.presence);
+                  TargetPresence::present : state.target.presence, places);
       }
       return completes ? Type{Type::void_type} : Type{Type::never};
     }
@@ -4657,7 +4886,9 @@ class ScalarChecker {
       if (expr.fixed_binding) selected.fixed_binding = true;
       state.views[expr.text] = selected;
       state.views[expr.text].value_capture = false;
-      state.selections.bindings.erase(expr.text);
+      state.selections.remove_binding(expr.text);
+      if (type == Type::boolean && selected.value_binding == true && !state.target.places.empty())
+        state.selections.value_places.emplace(expr.text, state.target.places);
       if (selected.nullable || !state.target.selection.footprint.empty())
         state.selections.declare_place(expr.text, &expr, state.target.selection, state.target.presence);
       return Type::void_type;
@@ -4668,7 +4899,7 @@ class ScalarChecker {
     }
     case K::transfer: case K::rebind: {
       const auto type = child(0, false, true, EvidenceRead::target); view = state.value;
-      const auto destination = state.target.selection;
+      const auto destination = state.target;
       if (expr.kind == K::transfer && type != Type::never) read_type_target(state, view, state.target);
       const auto *context = expr.kind == K::transfer && type && type->kind == Type::procedure ? &*type : nullptr;
       const auto source = type_evidence(*expr.children[1], state, context != nullptr, context, nullptr,
@@ -4685,6 +4916,11 @@ class ScalarChecker {
         }
         view.read_only = true;
         view.nullable = false;
+        target_facts.places = destination.places;
+        if (type == Type::boolean) {
+          target_facts.branches = state.target.branches;
+          type_boolean_write(expr, state, destination.places, target_facts.branches);
+        }
       } else if (state.required) {
         reference_destination(view, expr.at);
         const auto &selected = state.value;
@@ -4702,9 +4938,10 @@ class ScalarChecker {
       }
       if (expr.kind == K::rebind) {
         target_facts.presence = state.target.presence;
-        if (&expr != state.prepared_call && (view.nullable || !destination.footprint.empty()))
-          state.selections.assign(destination, target_facts.presence);
-        target_facts.selection.slot = destination.slot;
+        target_facts.places = state.target.places;
+        if (&expr != state.prepared_call && (view.nullable || !destination.selection.footprint.empty()))
+          state.selections.assign(destination.selection, target_facts.presence, target_facts.places);
+        target_facts.selection.slot = destination.selection.slot;
       }
       view.value_binding.reset(); view.fixed_binding.reset(); view.slot_read_only.reset();
       return type;
@@ -4713,6 +4950,7 @@ class ScalarChecker {
       const auto condition = child(0);
       if (state.returns && condition == Type::never) return Type::never;
       if (state.required && condition != Type::boolean && condition != Type::never) fail(expr.at, "condition requires bool");
+      const auto condition_proof = state.target.branches;
       auto arms = conditional_arms(expr, state, contextual, expected, alternatives, expected_use, condition != Type::never, read);
       auto &[yes, no, yes_state, no_state] = arms;
       view = yes == Type::never ? no_state.value : no == Type::never ? yes_state.value : join_views(yes_state.value, no_state.value);
@@ -4729,6 +4967,14 @@ class ScalarChecker {
       const bool yes_null = yes == Type::null_ref && no_state.value.view == true;
       const bool no_null = no == Type::null_ref && yes_state.value.view == true;
       if (yes_null || no_null) result = yes_null ? no : yes;
+      if (result == Type::boolean && state.selections.tracking && read == EvidenceRead::payload) {
+        const auto outcome = [&](const TypeEvidenceState &arm, const std::optional<Type> &type, bool branch) {
+          if (type == Type::never || (condition_proof && !condition_proof->at(branch)))
+            return PresenceBranches{std::nullopt, std::nullopt};
+          return PresenceBranches{arm.selections.outcome(arm.target.branches, true), arm.selections.outcome(arm.target.branches, false)};
+        };
+        target_facts.branches = QuerySelections::alternatives(outcome(yes_state, yes, true), outcome(no_state, no, false));
+      }
       if (!independent && result && scalar_type(*result) && !view.mixed_view &&
           yes_state.value.view == true && no_state.value.view == true) {
         auto left = yes_state.value.owner, right = no_state.value.owner;
@@ -4755,8 +5001,15 @@ class ScalarChecker {
         }
         note_type_allocation(state);
         auto delayed = state;
-        delayed.exits = nullptr;
+        TypeEvidenceExits delayed_exits;
+        delayed.exits = state.selections.tracking ? &delayed_exits : nullptr;
         delayed.selections.forget();
+        delayed.selections.payload_writes = {};
+        delayed.selections.deferred_writes = {};
+        const auto include_writes = [&](const TypeEvidenceState &path) {
+          state.selections.deferred_writes.merge(path.selections.payload_writes);
+          state.selections.deferred_writes.merge(path.selections.deferred_writes);
+        };
         if (action.kind == K::block) type_evidence(action, delayed);
         std::set<size_t> handled;
         for (size_t i = 1; i < expr.children.size(); ++i) {
@@ -4764,7 +5017,10 @@ class ScalarChecker {
           if (handler.kind == K::block) { type_evidence(handler, delayed); continue; }
           auto caught = catch_evidence(handler, delayed, handled);
           type_evidence(*handler.children.front(), caught);
+          include_writes(caught);
         }
+        include_writes(delayed);
+        for (const auto &path : delayed_exits.paths) include_writes(path.state);
         return Type::void_type;
       }
       if (!state.returns || expr.children.front()->kind != K::block) {
@@ -4864,10 +5120,7 @@ class ScalarChecker {
         if (cleanup == Type::never) return Type::never;
         // A saved result selection survives cleanup. Facts about how to
         // reach it through a mutable slot or a Boolean test may have expired.
-        if (state.selections.writes != before_cleanup) {
-          target_facts.selection.slot.reset();
-          target_facts.branches.reset();
-        }
+        state.selections.forget_changed(target_facts, before_cleanup);
       }
       if (outer) for (auto &[reasons, exit] : outgoing.paths)
         if (!finalizer || project_finalizer(*finalizer, exit) != Type::never)
@@ -4890,36 +5143,33 @@ class ScalarChecker {
       iteration.local_declarations[expr.text] = &expr;
       iteration.definitions.erase(expr.text);
       iteration.owner_bindings.erase(expr.text);
-      iteration.selections.bindings.erase(expr.text);
+      iteration.selections.remove_binding(expr.text);
       if (fold) {
         iteration.bindings[expr.binding] = accumulator; iteration.views[expr.binding] = {true, true, true, control_owner, false, false, true, true};
         iteration.local_declarations[expr.binding] = &expr;
         iteration.definitions.erase(expr.binding);
         iteration.owner_bindings.erase(expr.binding);
-        iteration.selections.bindings.erase(expr.binding);
+        iteration.selections.remove_binding(expr.binding);
       }
       const auto &loop_body = *expr.children[fold ? 3 : 2];
       // Only facts that survive every backedge are available in the body.
       // Each abstract iteration can only remove facts from this finite set.
       if (iteration.selections.tracking && completes && accumulator != Type::never) {
-        auto &invariant = iteration.selections.facts;
-        while (!invariant.empty()) {
+        while (!iteration.selections.facts.empty() || !iteration.selections.booleans.empty() || !iteration.selections.targets.empty()) {
           auto probe = iteration;
           probe.required = false; probe.returns = nullptr; probe.exits = nullptr;
           if (type_evidence(loop_body, probe) == Type::never) break;
-          auto next = QuerySelections::common(invariant, probe.selections.facts);
-          if (next == invariant) break;
-          invariant = std::move(next);
+          auto invariant = iteration.selections;
+          iteration.selections.join_flow(probe.selections);
+          if (iteration.selections.same_flow(invariant)) break;
         }
       }
       const auto body = type_evidence(loop_body, iteration, false, nullptr, nullptr,
                                       ExpectedTypeUse::materialization, completes && accumulator != Type::never);
       if (fold && completes && accumulator != Type::never && body && body->kind == Type::procedure)
         note_type_allocation(iteration);
-      if (body != Type::never && completes && accumulator != Type::never) {
-        state.selections.facts = QuerySelections::common(std::move(state.selections.facts), iteration.selections.facts);
-        state.selections.writes = std::max(state.selections.writes, iteration.selections.writes);
-      }
+      if (body != Type::never && completes && accumulator != Type::never)
+        state.selections.join_flow(iteration.selections);
       if (fold && state.required) check_fold_body(*body, *accumulator, expr.at);
       if (!fold && expr.children.size() == 4) {
         auto empty = state;
@@ -4935,25 +5185,24 @@ class ScalarChecker {
         if (state.returns && left == Type::never) return Type::never;
         const bool short_result = expr.text == "||";
         auto skipped = state;
-        if (state.target.branches) {
-          skipped.selections.refine(state.target.branches->at(short_result));
-          state.selections.refine(state.target.branches->at(!short_result));
-        }
-        const auto right = child(1, false, left != Type::never);
+        const auto proof = state.target.branches;
+        const auto skip_facts = state.selections.outcome(proof, short_result);
+        const auto evaluate_right = state.selections.outcome(proof, !short_result);
+        skipped.selections.assume(proof, short_result);
+        state.selections.assume(proof, !short_result);
+        const auto right = child(1, false, left != Type::never && evaluate_right.has_value());
         if (state.required && ((left != Type::boolean && left != Type::never) ||
                                (right != Type::boolean && right != Type::never)))
           fail(expr.at, "logical operation requires bool operands");
-        if (state.selections.tracking && right != Type::never) {
-          auto yes = state.selections, no = state.selections;
-          if (state.target.branches) {
-            yes.refine(state.target.branches->when_true);
-            no.refine(state.target.branches->when_false);
-          }
-          auto &short_path = short_result ? yes : no;
-          short_path.facts = QuerySelections::common(std::move(short_path.facts), skipped.selections.facts);
-          target_facts.branches = PresenceBranches{std::move(yes.facts), std::move(no.facts)};
+        if (state.selections.tracking && left != Type::never) {
+          PresenceBranches skip{std::nullopt, std::nullopt}, evaluated{std::nullopt, std::nullopt};
+          skip.at(short_result) = skip_facts;
+          if (evaluate_right && right != Type::never)
+            for (const bool value : {false, true}) evaluated.at(value) = state.selections.outcome(state.target.branches, value);
+          target_facts.branches = QuerySelections::alternatives(std::move(skip), evaluated);
         }
-        state = merge_evidence(std::move(skipped), state, left != Type::never && right == Type::never);
+        state = merge_reaching_evidence(std::move(skipped), std::move(state), !skip_facts,
+                                       left != Type::never && (right == Type::never || !evaluate_right));
         if (state.returns && !left) return {};
         return left == Type::never ? Type{Type::never} : Type{Type::boolean};
       }
@@ -5086,7 +5335,12 @@ class ScalarChecker {
         view.nullable = borrowed && !target->nullable_views.empty() && target->nullable_views.back();
         if (borrowed) for (size_t i = 0; i < owners.size(); ++i)
           if (target->owners[i] == target->owners.back() && owners[i]) view.owner = owners[i];
-        if (invokes && !implicit) note_type_call(state, *target);
+        if (!implicit) {
+          for (size_t i = 0; i < operand_targets.size(); ++i)
+            type_input_mutation(expr, state, arguments[i], operand_targets[i], argument_mode(*target, i),
+                                !target->const_views.empty() && target->const_views[i]);
+          if (invokes) note_type_call(state, *target);
+        }
         return *target->target;
       }
       if (!state.complete) return {};
@@ -5099,20 +5353,33 @@ class ScalarChecker {
         const bool reference = name == "<=>";
         const auto family = expr.intrinsic ? NamedFamily{} : named_family(expr.text, &state);
         const auto methods = method_candidates(family.methods, arguments, family.retained_types(), access, owners, &state);
-        if (reference && invokes && state.selections.tracking) {
+        if (reference && invokes && state.selections.tracking && methods.methods.empty()) {
           const auto &left = operand_targets[0].selection, &right = operand_targets[1].selection;
-          const auto a = methods.methods.empty() ? state.selections.presence(left) : TargetPresence::unknown;
-          const auto b = methods.methods.empty() ? state.selections.presence(right) : TargetPresence::unknown;
-          state.selections.assign(left, b);
-          state.selections.assign(right, a);
+          const auto a = state.selections.presence(left), b = state.selections.presence(right);
+          const auto left_places = state.selections.places(left), right_places = state.selections.places(right);
+          state.selections.assign(left, b, right_places);
+          state.selections.assign(right, a, left_places);
         }
-        if (invokes) for (const auto id : methods.methods) note_type_call(state, program_.methods[id]);
+        for (const auto id : methods.methods) {
+          const auto &method = program_.methods[id];
+          for (size_t i = 0; i < operand_targets.size(); ++i) {
+            const auto &parameter = method.input_parameters()[i];
+            type_input_mutation(expr, state, arguments[i], operand_targets[i], argument_mode(parameter), parameter.read_only, reference);
+          }
+          if (invokes) note_type_call(state, method);
+        }
         if (!reference && methods.methods.empty() && operand_targets.size() == 2)
           for (size_t i = 0; i < views.size(); ++i) {
             auto selected = operand_targets[i];
             selected.selection.slot.reset();
             read_type_target(state, views[i], selected);
           }
+        if (!reference && methods.methods.empty() && operand_targets.size() == 2 && arguments.front() == Type::boolean) {
+          const auto &left = operand_targets.front().places, &right = operand_targets.back().places;
+          const auto lhs = state.selections.read_boolean(left), rhs = state.selections.read_boolean(right);
+          type_boolean_write(expr, state, left, rhs);
+          type_boolean_write(expr, state, right, lhs);
+        }
         if (!state.required) return Type::void_type;
         for (const auto &operand : views) {
           if (operand.view != true) fail(expr.at, "swap requires two storage destinations");
@@ -5161,6 +5428,11 @@ class ScalarChecker {
           (!eager_operation(name) || !eager_types(name, arguments).error.empty())) {
         const auto result = inspect_declarations(expr.text, arguments, access, owners, expr.at, state,
             [&](const CheckedMethod &declaration, const Substitutions &, const ResultContract &) {
+          for (size_t i = 0; i < operand_targets.size(); ++i) {
+            const auto &parameter = parameter_at(declaration, i);
+            type_input_mutation(expr, state, arguments[i], operand_targets[i], argument_mode(parameter), parameter.read_only,
+                                caller_bindings(declaration));
+          }
           if (invokes) note_type_call(state, declaration);
           if (state.required) for (size_t i = 0; i < arguments.size(); ++i)
             if (argument_mode(parameter_at(declaration, i)) != ArgumentMode::value && (views[i].view != true || views[i].mixed_view))
@@ -5192,8 +5464,11 @@ class ScalarChecker {
       std::optional<Type> result;
       for (const auto id : best) {
         const auto &method = program_.methods[id];
-        if (invokes && state.selections.tracking && caller_bindings(method))
-          for (const auto &operand : operand_targets) state.selections.assign(operand.selection, TargetPresence::unknown);
+        for (size_t i = 0; i < operand_targets.size(); ++i) {
+          const auto &parameter = method.input_parameters()[i];
+          type_input_mutation(expr, state, arguments[i], operand_targets[i], argument_mode(parameter), parameter.read_only,
+                              caller_bindings(method));
+        }
         if (invokes) note_type_call(state, method);
         if (state.validating_body && state.method && program_.methods[*state.method].source->kind == Form::Kind::function &&
             method.source->kind == Form::Kind::procedure)
@@ -5301,7 +5576,7 @@ class ScalarChecker {
     }
     const auto retain_binding = [&](const std::string &name, size_t id) {
       const auto &binding = bindings_->at(id);
-      state.selections.bindings.erase(name);
+      state.selections.remove_binding(name);
       state.bindings[name] = binding.type;
       state.definitions.erase(name);
       if (binding.definition) {
@@ -5329,12 +5604,33 @@ class ScalarChecker {
       state.views[name] = {binding.read_only, true, binding.value_binding, owner, false, fixed, slot_read_only,
                            !binding.alias && binding.selection.empty() && (binding.value_binding || binding.callable_value),
                            binding.nullable};
-      if (!track_selection || binding.value_binding || binding.owner_binding || physical_selection.empty()) return;
+      if (!track_selection || binding.owner_binding || physical_selection.empty()) return;
+      const auto places = [&](size_t slot) {
+        EvidencePlaces result;
+        if (binding.type != Type::boolean) return result;
+        if (const auto targets = lexical_.targets.find(slot); targets != lexical_.targets.end()) {
+          for (const auto place : targets->second) {
+            if (place == null_target) continue;
+            if (storage(place).borrowed) return EvidencePlaces{};
+            result.insert(place);
+          }
+        }
+        return result;
+      };
+      if (binding.value_binding) {
+        if (physical_selection.size() == 1) {
+          auto known = places(*physical_selection.begin());
+          if (!known.empty()) state.selections.value_places.emplace(name, std::move(known));
+        }
+        return;
+      }
       const auto remember = [&](size_t slot) {
         if (const auto targets = lexical_.targets.find(slot); targets != lexical_.targets.end() && !targets->second.empty()) {
           if (!targets->second.contains(null_target)) state.selections.facts[slot] = TargetPresence::present;
           else if (targets->second.size() == 1) state.selections.facts[slot] = TargetPresence::absent;
         }
+        const auto known = places(slot);
+        if (!known.empty()) state.selections.targets[slot] = known;
       };
       const auto handle = physical_selection.size() == 1 ? *physical_selection.begin() : binding.alias.value_or(id);
       EvidenceSelection selection{handle, {}};
@@ -5357,6 +5653,30 @@ class ScalarChecker {
     } else if (names) {
       for (const auto &name : *names) if (const auto binding = lexical_.lookup(name)) retain_binding(name, *binding);
     } else for (const auto &scope : lexical_.scopes) for (const auto &[name, id] : scope.bindings) retain_binding(name, id);
+    if (track_selection && proving_) for (const auto &[place, proof] : lexical_.predicates) {
+      if (!proof || !proof->complete_results || storage(place).borrowed) continue;
+      PresenceBranches branches;
+      for (const bool value : {false, true}) {
+        auto &outcome = branches.at(value);
+        outcome.reset();
+        const auto clauses = proof->results.find(value);
+        if (clauses == proof->results.end()) continue;
+        for (const auto &clause : clauses->second) {
+          PresenceFacts facts;
+          const auto retain = [&](const auto &observed, TargetPresence presence) {
+            for (const auto &[slot, versions] : observed) {
+              const auto current = lexical_.target_versions.find(slot);
+              if (current != lexical_.target_versions.end() && current->second == versions && state.selections.footprints.contains(slot))
+                facts[slot] = presence;
+            }
+          };
+          retain(clause.bindings, TargetPresence::present);
+          retain(clause.absent_bindings, TargetPresence::absent);
+          outcome = outcome ? QuerySelections::common(std::move(*outcome), facts) : std::move(facts);
+        }
+      }
+      if (branches != PresenceBranches{}) state.selections.booleans.emplace(place, std::move(branches));
+    }
     std::set<EvidenceOwner> owners;
     for (const auto &[name, view] : state.views) if (view.owner) owners.insert(*view.owner);
     for (const auto &[name, owner] : state.owner_bindings) owners.insert(owner);
@@ -6071,7 +6391,8 @@ class ScalarChecker {
     for (const auto id : profiles) {
       const auto &candidate = *program_.methods[id].scope_inputs;
       if (candidate.owner_names != inputs.owner_names || candidate.relations != inputs.relations ||
-          candidate.nonnull != inputs.nonnull || candidate.parameters.size() != inputs.parameters.size()) continue;
+          candidate.nonnull != inputs.nonnull || candidate.boolean_presence != inputs.boolean_presence ||
+          candidate.parameters.size() != inputs.parameters.size()) continue;
       if (std::equal(candidate.parameters.begin(), candidate.parameters.end(), inputs.parameters.begin(),
           [](const auto &a, const auto &b) {
             return a.name == b.name && a.owner == b.owner && a.declaration_kind == b.declaration_kind &&
@@ -6092,6 +6413,31 @@ class ScalarChecker {
     profiles.push_back(id);
     return id;
   }
+  void scope_boolean_inputs(CheckedMethod::ScopeInputs &inputs, const std::vector<CheckedOperation> &views,
+                            const Location &at) {
+    std::map<size_t, CleanupEquations::BindingSnapshot> selections;
+    for (size_t p = 0; p < views.size(); ++p)
+      if (inputs.parameters[p].declaration_kind == "ptr" && !inputs.nonnull[p] && views[p].binding)
+        selections.emplace(p, CleanupEquations::BindingSnapshot{*views[p].binding, views[p].selection_versions});
+    if (selections.empty()) return;
+    for (size_t i = 0; i < views.size(); ++i) {
+      if (!inputs.parameters[i].owner.empty() || views[i].type != Type::boolean) continue;
+      const auto predicate = predicate_of(views[i]);
+      if (!predicate) continue;
+      CheckedMethod::ScopeInputs::BooleanPresence presence;
+      for (const auto &[truth, clauses] : snapshot_boolean(predicate, lexical_, at)) {
+        if (clauses.empty()) continue;
+        auto &known = presence[truth];
+        for (const auto &[p, selected] : selections) {
+          if (std::ranges::all_of(clauses, [&](const auto &clause) { return clause.bindings.contains(selected); })) known[p] = true;
+          else if (std::ranges::all_of(clauses, [&](const auto &clause) { return clause.absent_bindings.contains(selected); }))
+            known[p] = false;
+        }
+      }
+      if (std::ranges::any_of(presence, [](const auto &outcome) { return !outcome.second.empty(); }))
+        inputs.boolean_presence.emplace(i, std::move(presence));
+    }
+  }
   void check_scope_call(const Expression &expr, size_t method_id, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation, bool read, bool discard,
       const Type *expected) {
@@ -6100,7 +6446,7 @@ class ScalarChecker {
     const auto &dependencies = definition_dependencies(*method.source);
     const auto state = evidence_state(false, &dependencies);
     const auto retained = definition_retained(method_id, state);
-    CheckedMethod::ScopeInputs inputs{method_id, {}, {}, {}, {}, {}};
+    CheckedMethod::ScopeInputs inputs{method_id, {}, {}, {}, {}, {}, {}};
     operation.scope_operands.emplace();
     std::map<size_t, size_t> owner_roles;
     const auto owner_role = [&](size_t actual, const Location &at) {
@@ -6154,6 +6500,7 @@ class ScalarChecker {
       auto &relations = inputs.relations.emplace_back();
       for (const auto b : operation.scope_owners) relations.push_back(compare_owners(a, b));
     }
+    scope_boolean_inputs(inputs, views, expr.at);
     const auto profile = scope_profile(std::move(inputs));
     std::optional<ResultContract> supplied;
     if (expected) {
@@ -7901,9 +8248,23 @@ class ScalarChecker {
           lexical_.predicates[id] = std::move(proof);
         }
       }
-      if (checking_method_->scope_inputs)
+      if (checking_method_->scope_inputs) {
         for (const auto &owner : checking_method_->input_owners())
           instance.frame.owners.try_emplace(external_owners_.at(owner.name), null_target);
+        for (const auto &[input, presence] : checking_method_->scope_inputs->boolean_presence) {
+          CleanupEquations::BooleanValue proof;
+          for (const auto &[truth, known] : presence) {
+            CleanupEquations::ConditionFacts facts;
+            facts.inputs.emplace(input, truth);
+            for (const auto &[selected, present] : known) {
+              const auto binding = storage(instance.frame.inputs.at(selected).place).binding;
+              (present ? facts.bindings : facts.absent_bindings).emplace(binding, lexical_.target_versions.at(binding));
+            }
+            CleanupEquations::add_condition(proof[truth], std::move(facts));
+          }
+          lexical_.predicates[instance.frame.inputs.at(input).place] = boolean_predicate(proof);
+        }
+      }
       if (caller_bindings(*checking_method_)) for (const auto &a : instance.frame.inputs)
         for (const auto &b : instance.frame.inputs) {
           const auto left = storage(a.place).binding, right = storage(b.place).binding;

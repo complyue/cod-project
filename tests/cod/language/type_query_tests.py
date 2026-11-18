@@ -11,8 +11,15 @@ PRESENT='ref item:u64=1u64;ptr p:u64=item;'
 ABSENT='ref item:u64=1u64;ptr p:u64=null in here;'
 PROJECT='if(true){p}else{7u64}'
 MISS='using "std:exceptions" MissingReturnError;func may_stop()->u64;'
+OBSERVATION='const val present<-(input is not null);'
+GUARDED_RESULT='return if(present&&flag){input}else{7u64};'
+UNPROVED_TARGET='conditional scalar value requires a proven non-null target'
 def storage(query, value, prefix=''):
     return IO+prefix+'val result<-make local typeof('+query+'){'+value+'};behave @print(result);'
+def saved_query(body, setup='', declarations=''):
+    return (IO+declarations+'func inspect(ptr input:u64 in O,flag:bool)->u64 where {owner O}{'+setup+
+            'val answer<-make local typeof({{'+body+'}}){9u64};return answer;}'+
+            ABSENT+'behave @print(inspect(p,true));')
 runner.CASES={
  'literal_i64':(storage('3','8'),0,'8\n',''),
  'literal_u8':(storage('3u8','8u8'),0,'8\n',''),
@@ -78,6 +85,34 @@ runner.CASES={
  'projection_checks_mutated_loop_backedge':(
     storage('{{ref item:u64=1u64;ptr p=item;for(i in 0u64..2u64){'+PROJECT+';p=null;};return 7u64;}}','9u64'),
     2,'','conditional scalar value requires a proven non-null target'),
+ 'projection_reads_saved_boolean':(saved_query(OBSERVATION+GUARDED_RESULT),0,'9\n',''),
+ 'projection_copy_survives_boolean_overwrite':(saved_query(
+    'val seen<-(input is not null);const val present<-seen;seen<-flag;'+GUARDED_RESULT),0,'9\n',''),
+ 'projection_loses_saved_boolean_after_rebind':(saved_query(OBSERVATION+'input=null in O;'+GUARDED_RESULT),2,'',UNPROVED_TARGET),
+ 'projection_loses_overwritten_borrowed_boolean':(saved_query(
+    'val present<-(input is not null);ref carrier:bool=present;carrier<-flag;'+GUARDED_RESULT),2,'',UNPROVED_TARGET),
+ 'projection_reads_boolean_through_reference':(saved_query(OBSERVATION+'ref carrier:const bool=present;'+
+    GUARDED_RESULT.replace('present', 'carrier')),0,'9\n',''),
+ 'projection_loses_boolean_written_through_declared_place':(saved_query(
+    'val present<-(input is not null);var selected->present;selected<-flag;'+GUARDED_RESULT),2,'',UNPROVED_TARGET),
+ 'projection_reads_shared_proof_from_either_declared_place':(saved_query(
+    'val first<-(input is not null),second<-(input is not null);var present->if(flag){first}else{second};'+
+    GUARDED_RESULT),0,'9\n',''),
+ 'projection_keeps_observation_after_independent_slot_rebind':(saved_query(
+    OBSERVATION+'ptr other:u64=input;other=null in O;'+GUARDED_RESULT),0,'9\n',''),
+ 'projection_loses_observation_after_overlapping_slot_rebind':(saved_query(OBSERVATION+
+    'ptr other:u64=input;ptr var chosen->if(flag){input}else{other};chosen=null in O;'+GUARDED_RESULT),2,'',UNPROVED_TARGET),
+ 'projection_joins_conditional_boolean_outcomes':(saved_query(
+    'const val present<-if(flag){input is not null}else{false};'+GUARDED_RESULT),0,'9\n',''),
+ 'projection_imports_live_boolean_at_query_entry':(saved_query(GUARDED_RESULT,setup=OBSERVATION),0,'9\n',''),
+ 'projection_keeps_guarded_observation_after_unrelated_cleanup':(saved_query(
+    'ptr other:u64=input;const val present<-try{input is not null}finally{other=null in O;{}};'+GUARDED_RESULT),0,'9\n',''),
+ 'projection_loses_observation_on_loop_backedge':(saved_query(OBSERVATION+
+    'for(i in 0u64..2u64){if(present&&flag){input}else{7u64};input=null in O;};return 7u64;'),2,'',UNPROVED_TARGET),
+ 'projection_loses_borrowed_boolean_after_scope_cleanup':(saved_query(
+    'val present<-(input is not null);ref write:bool=present;{{defer{write<-flag;};}};'+GUARDED_RESULT),2,'',UNPROVED_TARGET),
+ 'projection_loses_borrowed_boolean_after_prepared_write':(saved_query(
+    'val present<-(input is not null);ref write:bool=present;{{defer (<-)(write,flag);}};'+GUARDED_RESULT),2,'',UNPROVED_TARGET),
  'arithmetic_without_division':(storage('3/0+4','9'),0,'9\n',''),
  'numeric_widening':(storage('3u8+4u64','9u64'),0,'9\n',''),
  'intrinsic_selected':(storage('intrinsic (+)(3u64,4u64)','9u64'),0,'9\n',''),
