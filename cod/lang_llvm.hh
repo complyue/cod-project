@@ -747,7 +747,6 @@ class LLVMEmission {
     return b_.CreateExtractValue(result, 0);
   }
   void collect_deferred(const Expression &expr, Scope &scope) {
-    if (expr.kind == Expression::Kind::block && expr.scoped) return;
     for (const auto &child : expr.children) collect_deferred(*child, scope);
     if (expr.kind != Expression::Kind::deferred) return;
     const auto &body = *expr.children.front();
@@ -897,7 +896,7 @@ class LLVMEmission {
   }
   void collect_effects(const Expression &expr, std::set<size_t> &symbols) const {
     using K = Expression::Kind;
-    if ((expr.kind == K::block && expr.scoped) || expr.kind == K::callable) return;
+    if (expr.kind == K::callable) return;
     if (expr.kind == K::effect || expr.kind == K::procedure_effect) symbols.insert(*contexts_.front().at(&expr).symbol);
     const size_t children = expr.kind == K::range_for ? 2 : expr.kind == K::fold ? 3 : expr.children.size();
     for (size_t i = 0; i < children; ++i) collect_effects(*expr.children[i], symbols);
@@ -952,14 +951,11 @@ class LLVMEmission {
     }
     return load(result);
   }
-  llvm::Value *full_scope(const std::vector<const Expression *> &expressions, bool callable,
-                          const Location &at, llvm::Value *returns_value = nullptr, Projection projection = Projection::value, bool discard_last = false) {
-    const bool read_last = carries_value(projection);
+  void call_scope(const std::vector<const Expression *> &expressions, const Location &at,
+                  llvm::Value *returns_value = nullptr) {
     auto *outer_temporaries = temporaries_;
-    auto *saved = !callable && read_last && environments_ ? owned_slot(*outer_temporaries, "scope.value")
-        : slot(read_last ? scalar_ : static_cast<llvm::Type *>(b_.getPtrTy()), "scope.value");
     Scope scope{scope_, block("scope.cleanup"), slot(b_.getPtrTy(), "defer.head"), {}, {}};
-    if (callable && environments_) scope.values.values = parameter_values_;
+    if (environments_) scope.values.values = parameter_values_;
     Control control{control_, scope.cleanup};
     control_ = &control;
     scope_ = &scope;
@@ -967,31 +963,17 @@ class LLVMEmission {
     b_.CreateStore(null_pointer(), scope.head);
     for (const auto *expr : expressions) collect_deferred(*expr, scope);
     const auto effects = save_effects(expressions);
-    if (!environments_ || !read_last || callable) b_.CreateStore(read_last ? empty_scalar() : null_pointer(), saved);
-    auto *value = sequence(expressions, projection, discard_last);
-    if (reachable()) {
-      if (!callable && read_last && environments_) assign_value(saved, discard_last ? empty_scalar() : value, at);
-      else b_.CreateStore(value, saved);
-      b_.CreateBr(scope.cleanup);
-    }
+    sequence(expressions, Projection::value, true);
+    if (reachable()) b_.CreateBr(scope.cleanup);
     drain(scope); release_values(scope.values); restore_effects(effects);
     scope_ = scope.parent; control_ = control.parent; temporaries_ = outer_temporaries;
-    if (callable) {
-      if (returns_value) {
-        auto *missing = block("return.missing");
-        b_.CreateCondBr(b_.CreateAnd(returns_value, b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(0))), missing, finish_);
-        b_.SetInsertPoint(missing);
-        save_failure(outcome(empty_scalar(), integer(exception_id(ExceptionCategory::missing_return)), integer(site(at)), null_pointer()));
-      }
-      b_.CreateBr(finish_);
-      return nullptr;
+    if (returns_value) {
+      auto *missing = block("return.missing");
+      b_.CreateCondBr(b_.CreateAnd(returns_value, b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(0))), missing, finish_);
+      b_.SetInsertPoint(missing);
+      save_failure(outcome(empty_scalar(), integer(exception_id(ExceptionCategory::missing_return)), integer(site(at)), null_pointer()));
     }
-    auto *continuation = block("scope.continue");
-    b_.CreateCondBr(b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(0)), continuation, control_->exit);
-    b_.SetInsertPoint(continuation);
-    auto *result = load(saved);
-    if (environments_ && read_last) value_owners_[result] = saved;
-    return result;
+    b_.CreateBr(finish_);
   }
   llvm::Value *emit_finally(const Expression &expr, Projection projection, bool discard = false, llvm::Value *skip_body = nullptr) {
     const bool read = carries_value(projection);
@@ -1456,8 +1438,7 @@ class LLVMEmission {
     case K::block: {
       std::vector<const Expression *> expressions;
       for (const auto &child : expr.children) expressions.push_back(child.get());
-      auto *value = expr.scoped ? full_scope(expressions, false, expr.at, nullptr, projection, discard) : sequence(expressions, projection, discard);
-      return value;
+      return sequence(expressions, projection, discard);
     }
     case K::range_for: case K::fold: {
       const bool fold = expr.kind == K::fold;
@@ -1733,7 +1714,7 @@ class LLVMEmission {
       auto *value = arguments_.at(call.operands + c);
       b_.CreateStore(copy_value(value, method.captures.at(c).at), place);
     }
-    full_scope({method.source->body.get()}, true, method.source->at, returns_value, Projection::value, true);
+    call_scope({method.source->body.get()}, method.source->at, returns_value);
     if (initialization) {
       b_.SetInsertPoint(initialization->exit);
       for (auto i = parameter_values_.rbegin(); i != parameter_values_.rend(); ++i) clear_value(*i);
@@ -1846,7 +1827,7 @@ public:
     auto *main = llvm::Function::Create(llvm::FunctionType::get(b_.getInt32Ty(), false), llvm::GlobalValue::ExternalLinkage, "main", module_);
     std::vector<const Expression *> initializers;
     for (const auto &initializer : program.initializers) initializers.push_back(initializer.expression);
-    begin(main, program.entry_storage, program.entry_bindings); contexts_ = {{&program.entry}}; full_scope(initializers, true, Location{}, nullptr, Projection::value, true);
+    begin(main, program.entry_storage, program.entry_bindings); contexts_ = {{&program.entry}}; call_scope(initializers, Location{});
     b_.SetInsertPoint(finish_);
     auto *fatal = block("fatal"), *exception = block("exception"), *normal = block("normal");
     b_.CreateCondBr(b_.CreateICmpNE(load(completion_.fatal), null_pointer()), fatal, exception);

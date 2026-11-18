@@ -13,7 +13,7 @@ proc visit(n:u64) -> const u64 {
 }
 proc early() -> const u64 {
   defer observe(8u64);
-  {{ defer observe(7u64); return 6u64; }};
+  return {{ defer observe(7u64); return 6u64; }};
 }
 proc nested() -> void {
   defer observe({ defer observe(10u64); 11u64 });

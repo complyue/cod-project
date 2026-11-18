@@ -18,7 +18,7 @@ runner.CASES = {
     'boolean_operand': (query('inspect(declared,true)','false'),0,'false\n',''),
     'concrete_operand': (query(prefix='func declared(input:i64)->i64;'+APPLY),0,'7\n',''),
     'grouped_operand': (query('inspect({declared},1)'),0,'7\n',''),
-    'scoped_operand': (query('inspect({{declared}},1)'),0,'7\n',''),
+    'scoped_operand': (query('inspect({{return declared;}},1)', prefix='func declared(input:i64)->const i64;'+APPLY),0,'7\n',''),
     'conditional_operand': (query('inspect(if(true){declared}else{declared},1)'),0,'7\n',''),
     'nested_operand': (query('inspect(declared,inspect(declared,1))'),0,'7\n',''),
     'implemented_consumer': (query(prefix=ID+'func inspect(callback:func(T)->const T,input:T)->const T where T{return callback(input);}'),0,'7\n',''),

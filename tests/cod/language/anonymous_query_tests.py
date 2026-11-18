@@ -15,7 +15,7 @@ runner.CASES={
  'concrete_context':(query('apply(func(x:i64)->const i64{return x;},1)'),0,'7\n',''),
  'boolean_context':(query('apply('+IDENTITY+',true)','false'),0,'false\n',''),
  'grouped_context':(query('apply({'+IDENTITY+'},1)'),0,'7\n',''),
- 'scoped_context':(query('apply({{'+IDENTITY+'}},1)'),0,'7\n',''),
+ 'scoped_context':(query('apply({{return func(x:i64)->const i64{return x;};}},1)'),0,'7\n',''),
  'conditional_context':(query('apply(if(true){'+IDENTITY+'}else{'+IDENTITY+'},1)'),0,'7\n',''),
  'nested_context':(query('apply('+IDENTITY+',apply('+IDENTITY+',1))'),0,'7\n',''),
  'earlier_argument_context':(query('reverse(1,'+IDENTITY+')','8','func reverse(x:T,f:func(T)->const T)->const T where T{return f(x);}'),0,'8\n',''),

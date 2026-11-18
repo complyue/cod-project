@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-18 — Share full-scope value and callable completion
+
+<a id="k-full-scope-value-boundary-20261118"></a>
+**K-FULL-SCOPE-VALUE-BOUNDARY-20261118 — Implement the bounded independent-input scope path.** Under the confirmed D-17r93/P-564–P-566 and D-18r114/P-485–P-487 contracts, elaborate full scopes into ordinary anonymous calls, preserve delayed block timing and remove lexical checker/native completion paths. Share invocation-local value-owner evidence with inference and validate inferred scope queries without execution. Source/native failure checks cover the bounded slice; immediate ref/ptr transport, inferred checked interfaces and complete fixture migration remain incomplete in source434/registry879. Semantic contracts, qualification and exclusions are unchanged; prior scope is at `314ff6ffc6045acdc8e05ddac0e21400e4eca29f:design/ExceptionControl.md` and `b7dd3ba437c4f0e84e68f211009dffd90f5235e8:design/CallableViewsAndCaptures.md`.
+
 ## 2026-11-18 — Clarify source validity in a full-scope type query
 
 <a id="k-full-scope-query-20261118"></a>
@@ -24,7 +29,7 @@
 ## 2026-11-18 — Integrate conditional source decisions and capture evidence
 
 <a id="k-conditional-capture-integration-20261118"></a>
-**K-CONDITIONAL-CAPTURE-INTEGRATION-20261118 — Reconcile current authority and coverage.** Registry875/source433 integrates `822a8b6:design/ConstructionAndAcquisition.md` and its associated current contracts with `b7dd3ba:design/CallableViewsAndCaptures.md` and that commit's compiler/source reference. Preserve H-CONDITIONAL-RESULT-20261118, H-PARENTHESIZED-VALUES-20261118, the confirmed full-scope r92 profile, D-18r114 and their distinct qualification boundaries. This editorial integration preserves their recorded charter paths, constraints, acceptance and exclusions; it grants no new mechanism or human confirmation. Current capture observations do not establish the pending grouping/conditional lowering or full-scope implementation. D-16 and original human evidence remain unchanged.
+**K-CONDITIONAL-CAPTURE-INTEGRATION-20261118 — Reconcile current authority and coverage.** Registry875/source433 integrates `822a8b6:design/ConstructionAndAcquisition.md` and its associated current contracts with `b7dd3ba437c4f0e84e68f211009dffd90f5235e8:design/CallableViewsAndCaptures.md` and that commit's compiler/source reference. Preserve H-CONDITIONAL-RESULT-20261118, H-PARENTHESIZED-VALUES-20261118, the confirmed full-scope r92 profile, D-18r114 and their distinct qualification boundaries. This editorial integration preserves their recorded charter paths, constraints, acceptance and exclusions; it grants no new mechanism or human confirmation. Current capture observations do not establish the pending grouping/conditional lowering or full-scope implementation. D-16 and original human evidence remain unchanged.
 
 ## 2026-11-18 — Infer one type and category for conditional results
 

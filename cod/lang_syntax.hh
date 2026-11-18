@@ -348,6 +348,7 @@ struct Form {
   std::vector<Parameter> parameters;
   std::vector<Capture> captures;
   bool explicit_captures = false;
+  bool implicit_scope = false;
   std::vector<TypeParameter> type_parameters;
   std::vector<Type> throws_types;
   std::vector<OwnerParameter> owner_parameters;
@@ -1190,6 +1191,34 @@ class Parser {
     for (const auto &child : expr.children) normalize_assignment_calls(*child);
     if (expr.definition && expr.definition->body) normalize_assignment_calls(*expr.definition->body);
   }
+  static void normalize_full_scopes(Expression &expr, Form::Kind callable_kind) {
+    using K = Expression::Kind;
+    const bool delayed_scope = expr.kind == K::deferred && expr.children.front()->kind == K::block &&
+        expr.children.front()->scoped;
+    for (const auto &child : expr.children) normalize_full_scopes(*child, callable_kind);
+    if (expr.definition && expr.definition->body)
+      normalize_full_scopes(*expr.definition->body, expr.definition->kind);
+    if (delayed_scope) {
+      // Keep block-defer preparation delayed after its full scope becomes a call.
+      auto body = std::make_unique<Expression>();
+      body->kind = K::block; body->at = expr.children.front()->at;
+      body->children.push_back(std::move(expr.children.front()));
+      expr.children.front() = std::move(body);
+    }
+    if (expr.kind != K::block || !expr.scoped) return;
+    auto definition = std::make_shared<Form>();
+    definition->kind = callable_kind;
+    definition->at = expr.at;
+    definition->implicit_scope = true;
+    definition->body = std::make_unique<Expression>(std::move(expr));
+    definition->body->scoped = false;
+    expr = Expression{};
+    expr.kind = K::value_call; expr.at = definition->at;
+    auto callable = std::make_unique<Expression>();
+    callable->kind = K::callable; callable->at = definition->at;
+    callable->definition = std::move(definition);
+    expr.children.push_back(std::move(callable));
+  }
   static void validate_explicit_scopes(const Expression &expr, bool iteration = false, bool deferred = false,
                                        const Location *draining = nullptr) {
     using K = Expression::Kind;
@@ -1404,6 +1433,7 @@ public:
     for (const auto &form : forms) if (form->body) {
       validate_explicit_scopes(*form->body);
       normalize_assignment_calls(*form->body);
+      normalize_full_scopes(*form->body, form->kind == Form::Kind::function ? Form::Kind::function : Form::Kind::procedure);
     }
     return forms;
   }

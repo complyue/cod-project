@@ -48,7 +48,7 @@ val queried <- make local typeof(allocated);
 allocated <- 2u64;
 queried <- allocated + 1u64;
 behave @print(queried);
-val inside <- {{ val temporary <- 12u64; temporary }};
+val inside <- {{ val temporary <- 12u64; return temporary; }};
 behave @print(inside);
 val n <- 1u8, wide:u32 <- n, { wide <- wide + 2u32; };
 behave @print(wide);

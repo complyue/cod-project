@@ -40,7 +40,7 @@ runner.CASES={
  'checked_failure_not_raised':(storage('read(p)','19',NPE+'func read(ptr x:i64 in O)->const i64 throws NullPointerException where {owner O}{return x;}val x<-1;ptr p=x;p=null;'),0,'19\n',''),
  'overload_result':(storage('choose(true)','20u64','func choose(x:i64)->const i64{return x;}func choose(x:bool)->const u64{return 1u64;}'),0,'20\n',''),
  'generic_local_storage':(IO+'func query(x:T)->const T where T{val y<-make local typeof(id(x)){x};return y;}'+ID+'behave @print(query(21));behave @print(query(true));',0,'21\ntrue\n',''),
- 'later_operand_evidence':(IO+ID+'func apply(f:func(T)->const T,x:T)->const T where T{return f(x);}behave @print(apply(id,{{val x<-make local typeof(1){22};x}}));',0,'22\n',''),
+ 'later_operand_evidence':(IO+ID+'func apply(f:func(T)->const T,x:T)->const T where T{return f(x);}behave @print(apply(id,{{val x<-make local typeof(1){22};return x;}}));',0,'22\n',''),
  'unknown_name':('val x<-make local typeof(missing);',2,'','known declaration or operand type'),
  'unknown_callable':('val x<-make local typeof(missing(1));',2,'','known callable signature'),
  'ambiguous_same_result':('func f(x:T,y:i64)->const i64 where T{return y;}func f(x:i64,y:T)->const i64 where T{return x;}val x<-make local typeof(f(1,2));',2,'','ambiguous methods'),

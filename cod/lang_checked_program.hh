@@ -218,6 +218,8 @@ struct ViewEvidence {
   std::optional<EvidenceOwner> owner = {};
   bool mixed_view = false;
   std::optional<bool> fixed_binding = {}, slot_read_only = {};
+  // Independent capture eligibility is distinct from the binding-slot category.
+  std::optional<bool> value_capture = {};
   bool operator==(const ViewEvidence &) const = default;
 };
 struct QueryBinding {

@@ -5,9 +5,9 @@ import sys
 import foundation_tests as runner
 
 PRELUDE = 'using symbol "std:io" @print;\n'
-SHADOW = PRELUDE + 'val x<-1u64; {{val x<-x+1u64; behave @print(x);}};'
+SHADOW = PRELUDE + 'val x<-1u64; {{val x<-2u64; behave @print(x);}};'
 runner.CASES = {
-    "storage": (None, 0, "3\n4\n4\n3\n9\n3\n3\n2\n15\n7.5\n5\n6\n7\n8\n11\ntrue\n3\n12\n3\n2\n13\n", ""),
+    "storage": (None, 0, "3\n4\n4\n3\n9\n3\n3\n2\n15\n7.5\n5\n6\n7\n8\n11\ntrue\n3\n12\n3\n2\n2\n", ""),
     "storage_shadow": (None, 0, "12\n11\n10\n", "[-Wshadow]"),
     "shadow_error": (SHADOW, 2, "", "treated as error"),
     "unrelated_warning_error": (SHADOW, 0, "2\n", "[-Wshadow]"),
@@ -23,7 +23,7 @@ runner.CASES = {
     "const_copy": (PRELUDE + 'const val x<-1u64; val copy<-x; copy<-2u64; behave @print(x); behave @print(copy);', 0, "1\n2\n", ""),
     "val_rebind": ('val x<-1u64,y<-2u64; x=y;', 2, "", "val storage has no reference binding"),
     "transfer_result_readonly": ('val x<-1u64; (x<-2u64)<-3u64;', 2, "", "readonly destination"),
-    "ended_destination": ('({{ val x<-1u64; x }}) <- 2u64;', 2, "", "lexical owner has ended"),
+    "full_scope_value_is_not_destination": ('{{ val x<-1u64; return x; }} <- 2u64;', 2, "", "assignment requires a storage destination"),
     "duplicate_group": ('val x<-1u64; {val x<-2u64;};', 2, "", "duplicate declaration"),
     "duplicate_branch": ('if(true){val x<-1u64;}else{val x<-2u64;};', 2, "", "duplicate declaration"),
     "duplicate_parameter": ('func f(x:u64)->const u64 {val x<-2u64;return x;} f(1u64);', 2, "", "duplicate declaration"),
