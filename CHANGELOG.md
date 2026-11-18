@@ -1,5 +1,42 @@
 # Changelog
 
+## 2026-11-18 — Integrate exception inspection and ownership review
+
+<a id="k-exception-inspection-integration-20261118"></a>
+**K-EXCEPTION-INSPECTION-INTEGRATION-20261118 — Integrate current source decisions and open retention review.** Registry885 retains the implemented standalone checked interface and the cause/tip source decisions from the design parent. Application owner retention is pending human confirmation under D-17r98. The source reference records the compiler migration boundary.
+
+## 2026-11-18 — Assess application lifetime for exception objects
+
+<a id="k-exception-owner-review-20261118"></a>
+**K-EXCEPTION-OWNER-REVIEW-20261118 — Review lifetime and retention cost.** D-17r97→98/registry883→884 records the user’s application-scope proposal and its candidate P-579–P-581 relationships. H-269 confirms that retained causes can escape a catch. The broader owner proposal would cover all observable exception objects, including through module initialization and shutdown. It requires payload lifetime checks and a decision on memory retention when exceptions are repeatedly discarded. Previous scope at `355630e12331c45e78d53420fd3171483b4437b4:design/ExceptionControl.md`, “Cause initialization” and “Compiler and runtime implementation”.
+
+## 2026-11-18 — Use a nullable pointer for cause and a non-null reference for tip
+
+<a id="h-cause-ptr-tip-ref-20261118"></a>
+**H-CAUSE-PTR-TIP-REF-20261118 — Distinguish optional cause from guaranteed catch tip.** In [the design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-18 America/Los_Angeles the project user answered the absent-cause question with “e.cause 是  ptr ，e.tip 是 ref 就行了吧？” D-17r97 preserves Exception as the common readonly target type and supersedes H-EXCEPTION-FIELD-TYPES-20261118’s direct-value mode. No missing-cause bounds failure is introduced.
+
+<a id="h-cause-link-only-20261118"></a>
+**H-CAUSE-LINK-ONLY-20261118 — Inspect causes through the immediate link.** In the same design chat on 2026-11-18 the user proposed “我倾向于删掉 `cause_at()` 最多有一个cause”. D-17r97 retires the indexed intrinsic. Deeper history follows successive nullable links. Indexed bounds policy and deferred aggregates retain their separate contracts.
+
+<a id="k-cause-ptr-tip-ref-20261118"></a>
+**K-CAUSE-PTR-TIP-REF-20261118 — Apply ordinary null, owner and access rules.** Registry882→883/source434→435 records the field modes and indexed-inspection migration in D-17-RETHROW and D-17-CATCH-WRAPPERS. The example distinguishes reading a null link, guarding a payload read and reporting the incoming exception. H-518–H-523 catch selection and propagation, H-525 declared checkedness and indexed bounds policy retain their scopes. Prior direct-value rule at `ef9371d32238f73abddabf70bbc7eff0280834c5:design/ExceptionControl.md`, “Cause initialization” and “The catch binding’s readonly tip field”.
+
+## 2026-11-18 — Give cause and tip the direct Exception type
+
+<a id="h-exception-field-types-20261118"></a>
+**H-EXCEPTION-FIELD-TYPES-20261118 — Type the two readonly field reads.** The current project user proposed “e.cause 和 e.tip 类型都是直接的 `Exception` 就行吧” in [the design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-18 America/Los_Angeles. D-17r96 distinguishes the static type of each read from its readonly field access. H-515 governs the stored cause and H-CATCH-TIP-20261118 governs the handler’s incoming exception.
+
+<a id="k-exception-field-types-20261118"></a>
+**K-EXCEPTION-FIELD-TYPES-20261118 — Distinguish the two receivers.** D-17r95→96/registry881→882 applies D-17-RETHROW and D-17-CATCH-WRAPPERS to direct cause selection on the matched exception and on the retained incoming object. Current member checking and bounded indexed cause access are distinguished from the direct field design. Prior field contract at `e34c2fb4da36f908ea98faf7cd9cb868f0cabe85:design/ExceptionControl.md`, “The catch binding’s readonly tip field”.
+
+## 2026-11-18 — Report the incoming exception from its catch
+
+<a id="h-catch-tip-20261118"></a>
+**H-CATCH-TIP-20261118 — Expose the incoming exception for reporting.** In [the design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-18 America/Los_Angeles, the current project user answered “认同” to explicit full-chain reporting and proposed “`report(e.tip)` 如何？ tip 作为只读字段。” In the follow-up choice between `catch.tip` and reserving `e.tip` on exception types, the user preferred the second and specified “应该是运行时 intrinsic 虚拟字段访问”. D-17r95 selects the catch binding’s readonly virtual field. The existing H-520–H-522 propagation rule applies to `throw e;`.
+
+<a id="k-catch-tip-20261118"></a>
+**K-CATCH-TIP-20261118 — Keep the reporting value tied to its catch invocation.** Registry880→881/D-17r94→95 applies D-17-CATCH-WRAPPERS/P-470–P-472 to direct and wrapped arrivals, nested catches and helper arguments. Postfix member syntax is reused. The field supplies a readonly root-typed reporting value, and exception types reserve the name. Reporting retains the original exception object. It adds no cause link, trace capture or implicit context in the helper. The previous matched-value/tip rule is at `ae48a760b09fc7757e2b85080e5d795b1f58bd0e:design/ExceptionControl.md`, “Matched binding and hidden tip”.
+
 ## 2026-11-18 — Infer checked failures of standalone full scopes
 
 <a id="k-full-scope-checked-interface-20261118"></a>
