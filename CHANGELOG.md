@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-17 — Isolate the readonly receiving choice
+
+<a id="k-rhs-review-20261117"></a>
+**K-RHS-REVIEW-20261117 — Preserve non-bits grouping and expose observable alternatives.** Agent derivation under H-427/H-592 and the user’s current backlog instruction: D-22r42→43/registry866→867 states that grouping a non-bits operand preserves its existing category/access/owner/lifetime and grants no construction or transfer. Candidate C-39/C-65/C-72/P-348/P-350 paths to charter §§2/3.3/4.3/6.3/8/12 and their qualification remain unchanged. The readonly-bits live-view versus snapshot example makes the remaining identity choice explicit, including inferred receivers and the D-23 assignment-result interaction; no receiving alternative is adopted. Preserve D-16 numeric validity, D-23’s independent baseline, D-18’s bounded qualification and all original human evidence. Baseline: `1f72b69dc1854ab5e01b0f4ebac0898df2e16d60` at the affected paths. Documentation only; no compiler/build/tests.
+
 ## 2026-11-17 — Adopt bounded implementation contracts and require semantic fidelity
 
 <a id="h-bounded-implementation-adoption-20261117"></a>

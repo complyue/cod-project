@@ -1,10 +1,10 @@
 # CoD construction, bits ADTs and region acquisition
 
-Design revision: 42 · Recorded: 2026-11-17 · Status: discussion draft with confirmed requirements; logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
+Design revision: 43 · Recorded: 2026-11-17 · Status: discussion draft with confirmed requirements; logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
 
 ## Design authority
 
-- **Current capture-review reference:** [K-REPLACEMENT-EFFECTS-20261117](../CHANGELOG.md#k-replacement-effects-20261117) keeps the separate D-18 value-input qualification current. This file changes only review references; its semantic revision, governing value paths, constraints and acceptance are unchanged. The registry owns the current review scope.
+- **RHS review boundary:** [K-RHS-REVIEW-20261117](../CHANGELOG.md#k-rhs-review-20261117) records r42→43 under H-427/H-592 and the user’s current instruction to derive straightforward consequences. Non-bits grouping preserves the operand’s existing category, access, owner and lifetime; it grants no transfer or construction operation. C-39/C-65/C-72 and candidate P-348/P-350 retain the charter §§2/3.3/4.3/6.3/8/12 rationale of visible storage responsibility and preserved identity/effects. The readonly-bits receiving alternatives below remain **pending-human**, because their observable identity differs; D-23’s qualified baseline and D-18’s separate value-input qualification are unchanged. Acceptance distinguishes live target identity from snapshots, inferred versus explicit receivers, and unchanged non-bits permissions. No new mechanism/value path, ABI or implementation support is qualified.
 
 - **Full scopes are ordinary callable invocations:** [H-FULL-SCOPE-CALLABLE-20261117](../CHANGELOG.md#h-full-scope-callable-20261117)/[K-FULL-SCOPE-CALLABLE-20261117](../CHANGELOG.md#k-full-scope-callable-20261117), [D-17-FULL-SCOPE](DesignAuthorityRegistry.md#d-17-full-scope)/P-564–P-566, covers r41→42 in the explicit-full-scope interactions below. The user confirms ordinary capture, local return and independent cleanup everywhere; D-17 owns the source acceptance. Reuse C-63/C-65/C-73/C-75/C-84 and charter §§2/3.2–3.3/4.3/6.3/8/12 for one inspectable callable/lifetime model. Preserve actual owners, permissions, declared failures and D-16; no shared cells, lifetime extension or implicit value return. Complete checker/value-path and capture implementation qualification remain separate; D-18's value-input review retains its separate qualification. D-10 separately records the selected trailing callback surface; complete implementation/value-path qualification remains pending.
 
@@ -682,7 +682,27 @@ ref c:Box in r = make Box in r { n = (a.n); };   # Fresh copied bits, even in r.
 
 A `val T in O` remains invalid. Fresh target placement comes from the receiver/containing object or the full-scope default, with usable allocation access; the copied value carries no owner. No owner-mismatch heuristic selects copying. Independent targets remain distinct even when their bits compare equal. Direct/val fields use `<-` to initialize inline payloads, without a separate target. Ref declaration `<-` stays rejected; later `=` rebinding and `<-` payload writes retain their separate contracts. D-14's ptr transfer-declaration shorthand is not silently extended or removed.
 
-Grouping now has observable category consequences: `consume(x)` versus `consume((x))` may select different admissible access/parameter behavior, and `(x) <- value` cannot write through an independent bits result. Assignment-result views must be checked through grouping without changing the operator's own result contract. Retaining a readonly scalar alias needs a clearly specified borrow/alias path; the existing ordinary-place alias can name an existing place but is not a general syntax for retaining an arbitrary returned view. Non-bits grouping must retain a view without copy/move; whether it narrows access remains a separate precise rule. Complete callable values retain D-18 rather than being reclassified as scalar bits. These are outstanding integration cases, not new operators or ABI choices.
+Grouping readable bits under the scalar proposal has observable category consequences: `consume(x)` versus `consume((x))` may select different admissible access/parameter behavior, and `(x) <- value` cannot write through an independent bits result. Assignment-result views must be reconciled with this grouping rule without changing the operator’s own result contract; D-23 currently preserves a readonly destination view in `ref q = (n <- V())`. The pending normalization policy cannot silently supersede that acceptance case. Syntactic delimiters such as call argument parentheses are not an additional grouping expression.
+
+For non-bits operands, ordinary grouping preserves the existing expression category, target access, owner, identity and lifetime. In particular, grouping a writable ADT view does not make it readonly; grouping a readonly view does not make it writable. It neither constructs a new object nor transfers ownership. Nullable pointer views keep their pointer category and absence/provenance: grouping is not a target read or a non-null proof. Complete callable values and intrinsic ownership carriers keep their dedicated contracts. Subsequent ordinary operations still apply their own construction, ownership or access rules. This follows H-427’s no-move boundary and the established distinction between bits and views; no universal value normalization or extra access-narrowing operator is introduced.
+
+### Readonly bits: live view versus snapshot — open decision
+
+Readonly target access does not freeze the target. Another writable reference may update it, so retaining the returned target and initializing fresh bits are observably different:
+
+```text
+proc watch(x:const u64 in O) -> ref const u64 in O
+    where {const owner O} { return x; }
+
+ref n:u64 = 7u64;
+ref live:const u64 = watch(n);
+ref snapshot:u64 = watch(n);
+n <- 9u64;
+```
+
+The RHS-only normalization proposal above would materialize both receivers, making both observe 7. A candidate refinement uses the receiving target access: a readonly receiving reference retains the existing readonly target (`live` observes 9 and `live is n`), while a writable receiving reference requests fresh bits (`snapshot` observes 7 and `snapshot is not n`). An explicitly grouped value could then request a readonly snapshot with `ref frozen:const u64 = (watch(n));`. The alternative keeps RHS-only materialization and needs a separate explicit way to retain the returned target. Neither policy is selected here. This is a source identity/access trade-off, not an implementation obstacle.
+
+A complete choice must also specify omitted target annotations (`ref inferred = watch(n)`), explicit receiver owners, assignment-result grouping, and corresponding ref-field/receiving-spec forms. Owner mismatches must never trigger an implicit borrow-versus-materialization guess. Any retained view preserves its actual owner and needs the ordinary liveness proof; a fresh destination needs usable allocation access. Declaration-leading `const ref` remains slot immutability and must not select a different target-access policy. A declared place alias names an existing place, so it does not by itself supply a general way to retain an arbitrary readonly returned view. Later assignment operators, callable result modes, non-bits grouping and D-16 numeric validity remain unchanged.
 
 ### Conditional results
 
@@ -822,7 +842,7 @@ Discuss unresolved design topics in terms of source examples, behavior, alternat
 Contextual owner inference and the coordinated migration direction are recorded above and need no repeated preference question. The remaining topics are:
 
 - **Aggregate values and native calls:** define concrete product/sum representation, sufficient generic bits evidence, initialization granularity and parameter/result transport while preserving nominal identity, relative graphs, complete callable values and fraction validity. Distinguish internal compiler choices from observable layout or validity commitments.
-- **RHS normalization:** complete bare-place/grouped-value semantics, readonly alias reception, non-bits grouping and operator/parameter interactions. Conditional bits normalize to a value; no implicit move or graph copy follows.
+- **RHS normalization:** choose readonly returned-target retention versus materialization, including inferred/explicit receiver access, grouped bits, assignment results and operator/parameter interactions. Non-bits grouping preserves the operand’s existing category/access; conditional bits normalization remains part of the proposal. No implicit object copying/moving or graph transfer follows.
 - **Initialization integration:** preserve H-428 allowed allocation effects and D-17 cleanup while completing precise RHS/name/order checking. No checkpoint or publication-rollback choice remains open at the language level.
 - **Storage refactoring and explicit-region resize:** D-28 owns lexical/regional reference representation, any lexical non-bits layout and external_ptr naming. H-430–H-432 supplies explicit consuming resize with lossless success and ordinary failure cleanup; review the capacity/error mapping and DBMR backing protocols.
 - **Persistent acquisition:** complete the source/access/capacity/failure/coordination matrix and compare its implementations before choosing the DBMR surface. Result-only constness is already confirmed; mapping protection, capacity units, partial effects, validation and release/durability outcomes remain explicit topics.
