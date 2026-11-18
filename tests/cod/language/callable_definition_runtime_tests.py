@@ -20,9 +20,11 @@ FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
  observe(9020u64);
  try{func failed=read;}catch(e:const OutOfMemoryError){observe(9021u64);};
  observe(9030u64);
- try{read({{observe(9999u64);0u64}});{}}catch(e:const OutOfMemoryError){observe(9031u64);};
+ try{read({{observe(9999u64);return 0u64;}});{}}catch(e:const OutOfMemoryError){observe(9031u64);};
  proc later[source](x:u64)->void{observe(source(x));};
  {{defer later(4u64);source<-wrap(base);}};
+ observe(source(5u64));
+ source<-wrap(base);
  observe(9050u64);
  try{defer later(99u64);}catch(e:const OutOfMemoryError){observe(9051u64);};
  observe(9040u64);
@@ -64,7 +66,7 @@ FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('if(value==9020)',
     'if(value==9023){assert(partial_create_failure && remaining_creations==0 && images.size()==live_baseline);partial_create_failure=false;return;} '
     'if(value==9020)'))
 FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('&& !deny_create &&', '&& !partial_create_failure && !deny_create &&'))
-FIXTURE = FIXTURE.updated(expected_values=list(FIXTURE.expected_values) + ['8','2','12','14','15','6','50005000','7','20'])
+FIXTURE = FIXTURE.updated(expected_values=list(FIXTURE.expected_values) + ['8','2','12','14','15','16','6','50005000','7','20'])
 
 if __name__ == '__main__':
     raise SystemExit(run_native(FIXTURE))
