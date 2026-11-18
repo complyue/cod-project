@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-18 — Construct and initialize at a throw site
+
+<a id="h-throw-initializer-20261118"></a>
+**H-THROW-INITIALIZER-20261118 — Braced throw construction.** The project user in [the design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-18 America/Los_Angeles, specifies “`throw SomeException {}` 语法自带分配+初始化语义”. D-17r101/registry889 records the braced construction statement, completed-field and failure boundaries under D-22, and preservation of plain propagation. The user's proposed alternative of withdrawing standalone exception `make` reopens that part of H-EXCEPTION-MAKE-SCOPE-20261118. Prior scope at `fee092536fd6e79a92a9c02f9935c9e9ffa4773b:design/ExceptionControl.md`, “Exception construction, throw and rethrow”.
+
 ## 2026-11-18 — Select exception storage at construction
 
 <a id="h-exception-make-scope-20261118"></a>
