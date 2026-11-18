@@ -11,7 +11,6 @@
 #include <cstdint>
 #include <deque>
 #include <functional>
-#include <limits>
 #include <map>
 #include <memory>
 #include <optional>
@@ -29,7 +28,6 @@ namespace cod::language {
 inline bool scalar_type(const Type &type) { return numeric(type) || type == Type::boolean; }
 inline bool bits_type(const Type &type) { return scalar_type(type) || type.kind == Type::exception; }
 inline bool lexical_value_type(const Type &type) { return bits_type(type) || type.kind == Type::procedure; }
-inline constexpr size_t null_target = std::numeric_limits<size_t>::max();
 enum class BuiltinOperation { none, unary, binary, identity, cause_at, reference_swap, bits_swap, print };
 inline bool eager_operation(std::string_view name) {
   return name == "+" || name == "-" || name == "*" || name == "/" || name == "%" || name == "!" ||

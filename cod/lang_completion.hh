@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
+#include <limits>
 #include <map>
 #include <optional>
 #include <set>
@@ -15,6 +16,8 @@
 #include <vector>
 
 namespace cod::language {
+
+inline constexpr size_t null_target = std::numeric_limits<size_t>::max();
 
 struct SelectionCondition {
   std::optional<size_t> action;
@@ -57,11 +60,14 @@ struct SelectionConditions {
       if (term.immutable || term.action) { result.add(term); continue; }
       const auto selected = resolve(term.binding);
       if (!selected) continue;
-      if (selected->entries.size() == 1 && selected->places.empty() && !selected->nullable) {
-        term.action = action; term.binding = *selected->entries.begin(); result.add(term);
+      if (const auto entry = selected->single_entry()) {
+        term.action = action; term.binding = *entry; result.add(term);
       } else if (selected->entries.empty()) {
-        const bool contains = selected->places.contains(term.target);
-        const bool exact = contains && selected->places.size() == 1 && !selected->nullable;
+        const bool null = term.target == null_target;
+        if (null && selected->places.empty() && !selected->nullable()) continue;
+        const bool contains = null ? selected->nullable() : selected->places.contains(term.target);
+        const bool exact = contains && (null ? selected->places.empty() :
+            selected->places.size() == 1 && !selected->nullable());
         if ((!contains && term.equal) || (exact && !term.equal)) result.possible = false;
       }
       // Wider selections cannot establish this equality or its negation.
@@ -209,13 +215,19 @@ public:
   struct Targets {
     // Physical cells only; absence cannot justify initializing a cell.
     std::set<size_t> places;
-    bool nullable = false;
+    // Immutable nullable inputs, or null_target for independent absence.
+    std::set<size_t> null_sources;
     // Targets selected by these bindings on entry to the summarized sequence.
     std::set<size_t> entries;
     bool operator==(const Targets &) const = default;
+    bool nullable() const { return !null_sources.empty(); }
+    std::optional<size_t> single_entry() const {
+      if (entries.size() == 1 && places.empty() && !nullable()) return *entries.begin();
+      return {};
+    }
     void merge(const Targets &other) {
       places.insert(other.places.begin(), other.places.end());
-      nullable = nullable || other.nullable;
+      null_sources.insert(other.null_sources.begin(), other.null_sources.end());
       entries.insert(other.entries.begin(), other.entries.end());
     }
   };
@@ -255,7 +267,7 @@ public:
     bool operator==(const Selections &) const = default;
     bool nonnull(size_t id) const {
       if (const auto target = targets.find(id); target != targets.end())
-        return !target->second.nullable && (!target->second.places.empty() || !target->second.entries.empty()) &&
+        return !target->second.nullable() && (!target->second.places.empty() || !target->second.entries.empty()) &&
             std::all_of(target->second.entries.begin(), target->second.entries.end(), [&](size_t entry) { return entry_nonnull.contains(entry); });
       return !invalidated.contains(id) && entry_nonnull.contains(id);
     }
@@ -270,7 +282,7 @@ public:
       if (!invalidated.contains(id)) return Initialization{id};
       if (const auto found = targets.find(id); found != targets.end()) {
         const auto &target = found->second;
-        if (target.places.empty() && target.entries.empty() && !target.nullable) return {};
+        if (target.places.empty() && target.entries.empty() && !target.nullable()) return {};
         Initialization required(target.entries.begin(), target.entries.end());
         for (const auto place : target.places) required.insert(InitializationInput::payload(place));
         return required;
@@ -305,8 +317,12 @@ public:
       if (auto target = targets.find(id); target != targets.end()) {
         if (!null && target->second.places.empty() && target->second.entries.size() == 1)
           entry_nonnull.insert(*target->second.entries.begin());
-        if (null || !target->second.places.empty() || !target->second.entries.empty()) target->second.nullable = null;
-        if (null) { target->second.places.clear(); target->second.entries.clear(); }
+        auto &selected = target->second;
+        if (null) {
+          if (!selected.nullable() || !selected.entries.empty()) selected.null_sources.insert(null_target);
+          selected.places.clear();
+          selected.entries.clear();
+        } else if (!selected.places.empty() || !selected.entries.empty()) selected.null_sources.clear();
       }
     }
     void test(size_t id, bool null) {
@@ -315,8 +331,8 @@ public:
         if ((null ? nonnull_inputs : null_inputs).contains(id)) possible = false;
       }
       if (const auto target = targets.find(id); target != targets.end()) {
-        if (target->second.entries.empty() && (null ? !target->second.nullable : target->second.places.empty())) possible = false;
-        if (target->second.places.empty() && target->second.entries.size() == 1 && (!null || !target->second.nullable)) {
+        if (target->second.entries.empty() && (null ? !target->second.nullable() : target->second.places.empty())) possible = false;
+        if (target->second.places.empty() && target->second.entries.size() == 1 && (!null || !target->second.nullable())) {
           const auto entry = *target->second.entries.begin();
           (null ? null_inputs : nonnull_inputs).insert(entry);
           if ((null ? nonnull_inputs : null_inputs).contains(entry)) possible = false;
@@ -331,7 +347,7 @@ public:
     }
     void invalidate(size_t id) { initialized.erase(id); initialized_if.erase(id); invalidated.insert(id); targets.erase(id); }
     std::optional<Targets> substitute(const Targets &next) const {
-      Targets result{next.places, next.nullable, {}};
+      Targets result{next.places, next.null_sources, {}};
       for (const auto entry : next.entries) {
         if (const auto previous = targets.find(entry); previous != targets.end()) result.merge(previous->second);
         else if (invalidated.contains(entry)) return {};
@@ -359,7 +375,7 @@ public:
                 initialized_if[id] = std::move(required);
             }
           }
-          if (target.entries.empty() && !target.nullable && target.places.size() == 1 && initialized.contains(id))
+          if (target.entries.empty() && !target.nullable() && target.places.size() == 1 && initialized.contains(id))
             changed = known.insert(*target.places.begin()).second || changed;
         }
         for (const auto &[id, required] : initialized_if)
@@ -375,7 +391,7 @@ public:
       std::set<size_t> preserved;
       for (const auto id : entries) {
         if (const auto target = targets.find(id); target != targets.end()) {
-          if (!target->second.nullable || nonnull.contains(id)) {
+          if (!target->second.nullable() || nonnull.contains(id)) {
             if (target->second.entries.empty() && target->second.places.size() == 1)
               known.insert(*target->second.places.begin());
             if (target->second.places.empty() && target->second.entries.size() == 1)
@@ -730,7 +746,7 @@ public:
         for (const auto id : *nonnull) {
           if (before.nonnull(id)) continue;
           if (const auto target = before.targets.find(id); target != before.targets.end()) {
-            nonnull_unproved = nonnull_unproved || target->second.nullable;
+            nonnull_unproved = nonnull_unproved || target->second.nullable();
             entries.insert(target->second.entries.begin(), target->second.entries.end());
           } else if (before.invalidated.contains(id)) nonnull_unproved = true;
           else entries.insert(id);
@@ -749,8 +765,8 @@ public:
         if (target->second.entries.empty()) {
           if (!targets) targets = target->second.places;
           else std::erase_if(*targets, [&](size_t id) { return !target->second.places.contains(id); });
-        } else if (target->second.entries.size() == 1 && target->second.places.empty() && !target->second.nullable) {
-          selection = *target->second.entries.begin();
+        } else if (const auto entry = target->second.single_entry()) {
+          selection = entry;
           return;
         }
       }
@@ -894,7 +910,35 @@ public:
       transform_values([&](const auto &value) { return value.transform_conditions(transform); });
       transform_conditions([&](const auto &clauses) {
         ConditionClauses result;
-        for (auto facts : clauses) { facts.conditions = transform(facts.conditions); add_condition(result, std::move(facts)); }
+        for (auto facts : clauses) {
+          const auto observed = std::move(facts.conditions);
+          facts.conditions = transform(observed);
+          if (!facts.conditions.possible) continue;
+          std::optional<ConditionClauses> absence;
+          for (const auto &term : observed.terms) {
+            if (term.immutable || term.action || term.target != null_target) continue;
+            const auto selected = resolve(term.binding);
+            if (!selected || !selected->entries.empty()) continue;
+            if (term.equal) {
+              if (!selected->nullable() || selected->null_sources.contains(null_target)) continue;
+              ConditionClauses alternatives;
+              for (const auto source : selected->null_sources) {
+                ConditionFacts absent;
+                absent.absent.insert(source);
+                add_condition(alternatives, std::move(absent));
+              }
+              absence = absence ? conjoin_conditions(*absence, alternatives) : std::move(alternatives);
+            } else if (selected->places.size() == 1 && selected->null_sources.contains(*selected->places.begin())) {
+              // The sole target comes from this immutable nullable input.
+              facts.present.insert(*selected->places.begin());
+            }
+          }
+          if (!absence) add_condition(result, std::move(facts));
+          else for (auto path : *absence) {
+            path.append(facts);
+            add_condition(result, std::move(path));
+          }
+        }
         return result;
       });
     }
@@ -928,7 +972,7 @@ private:
     result.guarded_pending_failure = first.guarded_pending_failure || second.guarded_pending_failure;
     auto next = second;
     next.returned.substitute(first.selections);
-    next.resolve_conditions([&](size_t binding) { return first.selections.substitute({{}, false, {binding}}); });
+    next.resolve_conditions([&](size_t binding) { return first.selections.substitute({{}, {}, {binding}}); });
     next.transform_values([&](const auto &value) { return value.through(first.payloads, first.thrown); },
         [&](const auto &value) { return value.through(first.payloads, first.thrown, false, true); });
     next.transform_conditions([&](const auto &clauses) { return through_conditions(clauses, first.booleans); });

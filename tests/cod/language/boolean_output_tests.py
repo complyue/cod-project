@@ -89,6 +89,17 @@ case('prepared_loop', work='for(i in 0u64..3u64){ {{defer set(ok,p);}};};')
 case('repeated_cleanup', work='{{for(i in 0u64..3u64){defer set(ok,p);};}};')
 case('repeated_block_cleanup', work='{{for(i in 0u64..3u64){defer{ok<-p is not null;};};}};')
 case('cleanup_saved_pointer', setup='val ok<-false;ptr saved=p;', work='{{defer set(ok,p);p=q;}};', yes='saved')
+for name, operator, before, after, check in (
+    ('saved_assignment_source', '=', 'p', 'q', case),
+    ('independent_saved_assignment_source', '=', 'q', 'p', reject),
+    ('live_swap_source', '<=>', 'q', 'p', case),
+    ('independent_live_swap_source', '<=>', 'p', 'q', reject),
+):
+    check(name, setup=f'ptr side:i64=null in O;ptr source:i64 in O={before};',
+          work=f'val ok<-{{{{defer{{return side is not null;}};defer ({operator})(side,source);source={after};return false;}}}};')
+case('captured_null_keeps_read_unreachable', setup='ptr side:i64=null in O;ptr source:i64=null in O;',
+     work='val ok<-{{defer{return side is not null;};defer (=)(side,source);source=p;return false;}};',
+     output='0\n0\n0\n0\n')
 case('deferred_return_payload', definitions='func echo(flag:bool)->bool{defer{return flag;};return true;}', setup='', work='', condition='echo(p is not null)')
 
 reject('constant_output', definitions=SET.replace('p is not null','true'))

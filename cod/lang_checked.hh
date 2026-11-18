@@ -1418,7 +1418,7 @@ class ScalarChecker {
       lexical_.owners[id] = target_owners(targets);
       lexical_.target_versions[id] = {next_target_version_++};
       lexical_.selection_identities[id] = new_selection_identity();
-      const auto selection = selection_targets(targets);
+      const auto selection = selection_targets(targets, lexical_.null_sources.at(id));
       if (callable_entry) callable_entry->selections.assign(id, selection);
       else assign_selection(lexical_, id, selection);
     }
@@ -1460,10 +1460,14 @@ class ScalarChecker {
     else if (operation.null_sources.empty()) operation.null_sources.insert(null_target);
     operation.place = targets.size() == 1 && !targets.contains(null_target) ? std::optional<size_t>{*targets.begin()} : std::nullopt;
   }
-  static CleanupEquations::Targets selection_targets(const std::set<size_t> &places, std::optional<size_t> preserved = {}) {
-    CleanupEquations::Targets result{places, places.contains(null_target), {}};
+  static CleanupEquations::Targets selection_targets(const std::set<size_t> &places, const std::set<size_t> &null_sources,
+                                                      std::optional<size_t> preserved = {}) {
+    CleanupEquations::Targets result{places, {}, {}};
     if (preserved) result.entries.insert(*preserved);
-    result.places.erase(null_target);
+    if (result.places.erase(null_target)) {
+      if (null_sources.empty()) result.null_sources.insert(null_target);
+      else result.null_sources = null_sources;
+    }
     return result;
   }
   void assign_targets(size_t binding, const CheckedOperation &source, std::optional<CleanupEquations::Targets> update = {}) {
@@ -1485,7 +1489,7 @@ class ScalarChecker {
       }
       lexical_.predicate_conditions = CleanupEquations::conjoin_conditions(lexical_.predicate_conditions, alternatives);
     }
-    assign_selection(lexical_, binding, update.value_or(selection_targets(source.targets)));
+    assign_selection(lexical_, binding, update.value_or(selection_targets(source.targets, source.null_sources)));
     assign_initialization(lexical_, binding, source.initialization);
     if (!proving_) {
       possible_targets_.at(binding).insert(source.targets.begin(), source.targets.end());
@@ -1671,7 +1675,7 @@ class ScalarChecker {
         selected.origins.insert(id);
         selected.constrain_initialization(selection_initialization(lexical_, id));
       }
-      assign_targets(id, selected, selection_targets(source.targets, weak ? std::optional<size_t>{id} : std::nullopt));
+      assign_targets(id, selected, selection_targets(source.targets, source.null_sources, weak ? std::optional<size_t>{id} : std::nullopt));
       if (!proving_) record_rebinding(id, deferred);
     }
   }
@@ -1719,7 +1723,7 @@ class ScalarChecker {
       const auto incoming = physical_slots(source.slots);
       for (const auto &[id, current] : lexical_.targets) {
         if (intersect(written, physical_slots({id})).empty()) continue;
-        CleanupEquations::Targets update{{}, false, incoming};
+        CleanupEquations::Targets update{{}, {}, incoming};
         if (target.slots.size() != 1 || !target.slots.contains(id)) update.entries.insert(id);
         effects.selections.targets[id].merge(update);
         effects.selections.invalidated.insert(id);
@@ -1793,14 +1797,18 @@ class ScalarChecker {
       if (!before.contains(target) || before.at(target) != value) changed.emplace(target, value);
     return changed;
   }
+  std::optional<SelectionCondition> deferred_selection_condition(size_t binding, size_t target, bool equal) const {
+    if (!deferred_action_) return {};
+    const auto selected = lexical_.selections.substitute({{}, {}, {binding}});
+    if (selected) if (const auto entry = selected->single_entry())
+      return SelectionCondition{deferred_action_, *entry, target, equal};
+    return {};
+  }
   std::optional<SelectionCondition> payload_condition(const CheckedOperation &view, size_t place) const {
     if (!deferred_action_ || !view.targets.contains(place) || view.place ||
         std::any_of(view.targets.begin(), view.targets.end(), [&](size_t id) { return id != null_target && storage(id).borrowed; })) return {};
     const auto binding = current_binding(view);
-    if (!binding) return {};
-    const auto selected = lexical_.selections.substitute({{}, false, {*binding}});
-    if (!selected || !selected->places.empty() || selected->entries.size() != 1 || selected->nullable) return {};
-    return SelectionCondition{deferred_action_, *selected->entries.begin(), place, true};
+    return binding ? deferred_selection_condition(*binding, place, true) : std::nullopt;
   }
   template <typename Value, typename Merge, typename Guard> Value updated_payload(const CheckedOperation &target,
       size_t place, const Value &before, const Value &value, const Merge &merge, const Guard &guard) const {
@@ -2099,7 +2107,8 @@ class ScalarChecker {
         if (const auto known = state.selections.targets.find(binding);
             known != state.selections.targets.end() && known->second.entries.empty()) {
           targets = known->second.places;
-          if (known->second.nullable) targets.insert(null_target);
+          state.null_sources[binding] = known->second.null_sources;
+          if (known->second.nullable()) targets.insert(null_target);
         }
       }
       // Every mutation of a ref must preserve its checked non-null target.
@@ -2556,7 +2565,7 @@ class ScalarChecker {
       for (const auto &[parameter, targets] : outcome->second) {
         const auto &destination = views.at(parameter);
         if (targets.initialized && destination.binding) effects.selections.initialized.insert(*destination.binding);
-        CleanupEquations::Targets selected{{}, targets.null_sources.contains(null_target), {}};
+        CleanupEquations::Targets selected;
         for (const auto input : targets.targets) {
           if (prepared) {
             const auto incoming = physical_slots(views.at(input).slots);
@@ -2568,11 +2577,18 @@ class ScalarChecker {
           }
         }
         // Nullable input provenance is distinct from an independently absent target.
-        for (const auto input : targets.null_sources) if (input != null_target) {
-          if (prepared) {
+        for (const auto input : targets.null_sources) {
+          if (input == null_target) selected.null_sources.insert(null_target);
+          else if (prepared) {
             const auto incoming = physical_slots(views.at(input).slots);
             selected.entries.insert(incoming.begin(), incoming.end());
-          } else selected.nullable = selected.nullable || views.at(input).targets.contains(null_target);
+          } else {
+            const auto &view = views.at(input);
+            if (view.targets.contains(null_target)) {
+              if (view.null_sources.empty()) selected.null_sources.insert(null_target);
+              else selected.null_sources.insert(view.null_sources.begin(), view.null_sources.end());
+            }
+          }
         }
         const auto written = overlapping_slots(destination.slots);
         for (const auto &[binding, current] : lexical_.targets) {
@@ -2583,7 +2599,7 @@ class ScalarChecker {
           effects.selections.invalidated.insert(binding);
           if (!proving_) {
             possible_targets_.at(binding).insert(selected.places.begin(), selected.places.end());
-            if (selected.nullable) {
+            if (selected.nullable()) {
               possible_targets_.at(binding).insert(null_target);
               for (const auto input : targets.null_sources) {
                 if (input == null_target) possible_null_sources_.at(binding).insert(null_target);
@@ -3283,6 +3299,8 @@ class ScalarChecker {
     const bool null = value == test.null_when_true;
     CleanupEquations::ConditionFacts tested;
     (null ? tested.absent_bindings : tested.bindings).emplace(test.binding, test.versions);
+    if (const auto condition = deferred_selection_condition(test.binding, null_target, null))
+      tested.conditions.add(*condition);
     lexical_.predicate_conditions = CleanupEquations::conjoin_conditions(lexical_.predicate_conditions, {tested});
     if (null) lexical_.predicate_conditions = CleanupEquations::conjoin_conditions(lexical_.predicate_conditions,
         absence_conditions(lexical_.null_sources.at(test.binding)));
@@ -3545,9 +3563,10 @@ class ScalarChecker {
           if (value.empty()) value = exception_possibilities(storage(place).type);
         auto applied = effects;
         applied.resolve_conditions([&](size_t binding) -> std::optional<CleanupEquations::Targets> {
-          if (deferred_action_) return state.selections.substitute({{}, false, {binding}});
+          if (deferred_action_) return state.selections.substitute({{}, {}, {binding}});
           const auto found = state.targets.find(binding);
-          return found == state.targets.end() ? std::nullopt : std::optional{selection_targets(found->second)};
+          return found == state.targets.end() ? std::nullopt :
+              std::optional{selection_targets(found->second, state.null_sources.at(binding))};
         }, deferred_action_);
         applied.transform_values([&](const auto &value) { return value.through(payloads, pending, true); },
             [&](const auto &value) { return value.through(payloads, pending, true, true); });
@@ -5949,8 +5968,8 @@ class ScalarChecker {
       const bool independent = arms.independent();
       if (independent) {
         if (state.required && proving_ && validating_ && condition != Type::never) {
-          require_present_projection(yes_state.value, yes_state.target.presence, expr.children[1]->at);
-          require_present_projection(no_state.value, no_state.target.presence, expr.children[2]->at);
+          if (reaches_yes) require_present_projection(yes_state.value, yes_state.target.presence, expr.children[1]->at);
+          if (reaches_no) require_present_projection(no_state.value, no_state.target.presence, expr.children[2]->at);
         }
         view = {false, false, {}};
       } else target_facts = yes == Type::never ? no_state.target : no == Type::never ? yes_state.target :
@@ -8452,7 +8471,7 @@ class ScalarChecker {
         implementation_gap(expr.at, "scalar conditional classification changes during ordered checking");
       if (independent) {
         const auto project = [&](const Expression &arm, CheckedOperation &fact, LexicalState &state) {
-          if (!fact.view) return;
+          if (!fact.view || !state.live) return;
           if (proving_ && validating_ && fact.targets.contains(null_target))
             fail(arm.at, "conditional scalar value requires a proven non-null target");
           const bool needs_read = !read || discard || value_join;
@@ -9452,7 +9471,7 @@ class ScalarChecker {
           if (parameter.declaration_kind == "ptr" && !nonnull) {
             lexical_.targets[binding].insert(null_target);
             lexical_.null_sources[binding] = {id};
-            entry.selections.assign(binding, selection_targets(lexical_.targets[binding]));
+            entry.selections.assign(binding, selection_targets(lexical_.targets[binding], lexical_.null_sources.at(binding)));
             if (!proving) { possible_targets_[binding].insert(null_target); possible_null_sources_[binding] = {id}; }
           }
           if (nonnull || mode != ArgumentMode::borrowed_ptr) entry.present.insert(id);

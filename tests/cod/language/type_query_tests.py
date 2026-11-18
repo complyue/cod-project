@@ -40,6 +40,7 @@ runner.CASES={
  'grouped_nullable_query_keeps_target':(storage('(p) is null','true','ptr p:i64=null in here;'),0,'true\n',''),
  'projected_present_target':(storage(PROJECT,'9u64',PRESENT),0,'9\n',''),
  'projected_absent_target':(storage(PROJECT,'9u64',ABSENT),2,'','conditional scalar value requires a proven non-null target'),
+ 'unreachable_absent_target_needs_no_read':(storage('if(false){p}else{7u64}','9u64',ABSENT),0,'9\n',''),
  'projected_target_after_hypothetical_rebind':(
     storage('{p=item;'+PROJECT+'}','9u64',ABSENT)+'behave @print(p is null);',0,'9\ntrue\n',''),
  'projection_rechecks_hypothetical_absence':(
