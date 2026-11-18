@@ -7,6 +7,10 @@ IO='using symbol "std:io" @print;'
 NPE='using "std:exceptions" NullPointerException;'
 EX='using "std:exceptions" Exception;'
 ID='func id(x:T)->const T where T{return x;}'
+PRESENT='ref item:u64=1u64;ptr p:u64=item;'
+ABSENT='ref item:u64=1u64;ptr p:u64=null in here;'
+PROJECT='if(true){p}else{7u64}'
+MISS='using "std:exceptions" MissingReturnError;func may_stop()->u64;'
 def storage(query, value, prefix=''):
     return IO+prefix+'val result<-make local typeof('+query+'){'+value+'};behave @print(result);'
 runner.CASES={
@@ -24,6 +28,56 @@ runner.CASES={
  'argument_delimiters_preserve_borrow_in_query':(storage('take(x)','8',
     'func take(ref value:i64 in O)->i64 where {owner O}{return value;}val x<-1;'),0,'8\n',''),
  'grouped_nullable_query_keeps_target':(storage('(p) is null','true','ptr p:i64=null in here;'),0,'true\n',''),
+ 'projected_present_target':(storage(PROJECT,'9u64',PRESENT),0,'9\n',''),
+ 'projected_absent_target':(storage(PROJECT,'9u64',ABSENT),2,'','conditional scalar value requires a proven non-null target'),
+ 'projected_target_after_hypothetical_rebind':(
+    storage('{p=item;'+PROJECT+'}','9u64',ABSENT)+'behave @print(p is null);',0,'9\ntrue\n',''),
+ 'projection_rechecks_hypothetical_absence':(
+    storage('{p=null;'+PROJECT+'}','9u64',PRESENT),2,'','conditional scalar value requires a proven non-null target'),
+ 'projection_sees_declared_place_write':(
+    storage('{selected=item;'+PROJECT+'}','9u64',ABSENT+'ptr var selected->p;')+
+    'behave @print(p is null);',0,'9\ntrue\n',''),
+ 'projection_checks_overlapping_declared_places':(
+    storage('{selected=null;'+PROJECT+'}','9u64',PRESENT+'ptr q:u64=item;ptr var selected->if(true){p}else{q};'),
+    2,'','conditional scalar value requires a proven non-null target'),
+ 'projection_sees_builtin_slot_exchange':(
+    storage('{p<=>q;'+PROJECT+'}','9u64',ABSENT+'ptr q:u64=item;')+
+    'behave @print(p is null);',0,'9\ntrue\n',''),
+ 'projection_rechecks_exchanged_absence':(
+    storage('{p<=>q;'+PROJECT+'}','9u64',PRESENT+'ptr q:u64=null in here;'),
+    2,'','conditional scalar value requires a proven non-null target'),
+ 'projection_uses_guard_on_nullable_input':(IO+
+    'func inspect(ptr input:u64 in O,flag:bool)->u64 where {owner O}{'
+    'val answer<-make local typeof(if(!(input is null)&&flag){input}else{7u64}){9u64};return answer;}'
+    +ABSENT+'behave @print(inspect(p,true));',0,'9\n',''),
+ 'projection_does_not_reuse_mutated_guard':(
+    storage('if((p is not null)&&{p=null;true}){p}else{7u64}','9u64',PRESENT),
+    2,'','conditional scalar value requires a proven non-null target'),
+ 'projection_uses_successful_transfer_destination':(IO+
+    'func inspect(ptr input:u64 in O)->u64 where {owner O}{'
+    'val answer<-make local typeof({input<-1u64;if(true){input}else{7u64}}){9u64};return answer;}'
+    +ABSENT+'behave @print(inspect(p));',0,'9\n',''),
+ 'projection_ignores_stale_identity_operand':(
+    storage('if(p is not {p=null;null}){p}else{7u64}','9u64',PRESENT),
+    2,'','conditional scalar value requires a proven non-null target'),
+ 'ordinary_type_query_ignores_absent_payload':(storage('p','9u64',ABSENT),0,'9\n',''),
+ 'conditional_null_carrier_has_scalar_type':(storage('if(true){item}else{null}','9u64',PRESENT),0,'9\n',''),
+ 'projection_keeps_target_selected_before_cleanup':(
+    storage('{{ref item:u64=1u64;ptr p=item;'
+            'return if(true){try{p}finally{p=null;{}}}else{7u64};}}','9u64'),0,'9\n',''),
+ 'projection_sees_normal_finalizer_rebind':(
+    storage('{{ref item:u64=1u64;ptr p:u64=null in here;try{}finally{p=item;{}};return '+PROJECT+';}}','9u64'),0,'9\n',''),
+ 'projection_checks_opaque_failure_entry_to_finalizer':(
+    storage('{{ref item:u64=1u64;ptr p=item;try{p=null;may_stop();p=item;{}}finally{'+PROJECT+
+            ';{}};return 7u64;}}','9u64',MISS),2,'','conditional scalar value requires a proven non-null target'),
+ 'projection_checks_opaque_failure_entry_to_catch':(
+    storage('{{ref item:u64=1u64;ptr p=item;try{p=null;may_stop();p=item;{}}catch(e:const MissingReturnError){'+PROJECT+
+            ';{}};return 7u64;}}','9u64',MISS),2,'','conditional scalar value requires a proven non-null target'),
+ 'projection_preserves_unmodified_slot_through_loop':(
+    storage('{{ref item:u64=1u64;ptr p=item;for(i in 0u64..2u64){'+PROJECT+';};return '+PROJECT+';}}','9u64'),0,'9\n',''),
+ 'projection_checks_mutated_loop_backedge':(
+    storage('{{ref item:u64=1u64;ptr p=item;for(i in 0u64..2u64){'+PROJECT+';p=null;};return 7u64;}}','9u64'),
+    2,'','conditional scalar value requires a proven non-null target'),
  'arithmetic_without_division':(storage('3/0+4','9'),0,'9\n',''),
  'numeric_widening':(storage('3u8+4u64','9u64'),0,'9\n',''),
  'intrinsic_selected':(storage('intrinsic (+)(3u64,4u64)','9u64'),0,'9\n',''),
