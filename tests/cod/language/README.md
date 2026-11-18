@@ -1,8 +1,10 @@
 # CoD source compiler validation
 
-Reference revision: 430 · Recorded: 2026-11-18 America/Los_Angeles.
+Reference revision: 431 · Recorded: 2026-11-18 America/Los_Angeles.
 
 ## Design authority
+
+- **Parenthesized value source contract:** [H-PARENTHESIZED-VALUES-20261118](../../../CHANGELOG.md#h-parenthesized-values-20261118)/[K-PARENTHESIZED-VALUES-20261118](../../../CHANGELOG.md#k-parenthesized-values-20261118), [D-10-PARENS](../../../design/SymbolicDynamicScope.md#parenthesized-value-expressions-and-operator-idioms), selects value-category expression parentheses and readable scalar projection, including assignment-result views. Call/type/operator-name delimiters remain separate. Current `lang_syntax.hh` expression parsing returns the enclosed node without retaining this projection boundary; existing parenthesis-transparent checks/native evidence do not establish the selected semantics. Typed grouping/checker/native migration remains work, with separate complete mechanism/value-path qualification. The r92 full-scope contract and its acceptance are unchanged; do not claim its migration also implements this new expression rule. D-16 and all current source evidence remain unchanged.
 
 - **Qualified full-scope contract:** [H-FULL-SCOPE-IMPLEMENTATION-20261118](../../../CHANGELOG.md#h-full-scope-implementation-20261118)/[K-FULL-SCOPE-IMPLEMENTATION-20261118](../../../CHANGELOG.md#k-full-scope-implementation-20261118) qualifies [D-17r92’s bounded implementation profile](../../../design/ExceptionControl.md#full-scope-implementation-profile), including immediate ref/ptr lifetime/transport. It preserves the selected ordinary-callable semantics and does not claim the current lexical-block checker/native paths implement them. General escaping borrowed views, new declared-place capture, full FIFO/aggregate, broader receiving/generator and permanent ABI scopes remain separate; D-16 and current source evidence are unchanged.
 

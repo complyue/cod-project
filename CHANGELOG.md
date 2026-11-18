@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-18 — Select parenthesized value results and unparenthesized operator idioms
+
+<a id="h-parenthesized-values-20261118"></a>
+**H-PARENTHESIZED-VALUES-20261118 — Parentheses explicitly produce a value category.** Human/source: current project user in [the design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-18 America/Los_Angeles; exact time/personal identity unavailable. “我倾向于让括号总是 表达/产出 类似 C++ rvalue 语义的结果，操作符重载结果的 ref 语义这种，总是面向无括号连写用法去设计。 原则上理想的惯用法都不带括号去更改表达式优先级，当然不是绝对要求，具体情况可以具体决定，这是默认原则。” Selects expression-level value-category parentheses over transparent place grouping, including the presented scalar assignment-result snapshot and identity consequences. Selects unparenthesized operator idioms as a design default, with concrete exceptions allowed. H-427/H-568’s no-C++-copy/move and pure-bits-only whole-transfer boundaries remain; this is not approval of arbitrary non-bits carrier mechanisms, a new precedence table or complete implementation/value paths. The rejected category-preserving recommendation and prior conflicting examples are preserved at `9d69c0a5c00ae8396aaaa6a0dd5bbd37fdc23d34` in D-22/D-23 and this chat.
+
+<a id="k-parenthesized-values-20261118"></a>
+**K-PARENTHESIZED-VALUES-20261118 — Reconcile grouping and operator-result consumption.** D-10r202→203/D-22r44→45/D-23r26→27/registry872→873/source430→431 records D-10-PARENS/P-573–P-575 and scalar acceptance. Candidate C-06/C-41/C-65/C-72 → charter §§2/3.3/4.3/6.3/8/12 connects explicit value/target intent to readable typed composition. Derive once-only scalar projection, nested idempotence, no identity/destination from projected bits, unchanged operator-result modes, delimiter distinction and source-tool preservation. Bare readonly reception still rejects a writable target; explicit grouping supplies independent bits. Non-bits access/owner/transfer invariants remain, but transparent original-place forwarding is not a fallback; exact owning/non-bits carriers and conditional joins remain under review. Current parser erasure is identified as a migration gap, not acceptance; r92 full-scope qualification and other independent contracts stay scoped. No new mechanism/value-path qualification, D-16 change, local code/build/tests. Baseline: `9d69c0a5c00ae8396aaaa6a0dd5bbd37fdc23d34` at affected paths.
+
 ## 2026-11-18 — Qualify the bounded full-scope implementation profile
 
 <a id="h-full-scope-implementation-20261118"></a>

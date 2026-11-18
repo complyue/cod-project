@@ -1,12 +1,12 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 202 · Recorded: 2026-11-17 · Phase: language/application co-design.
+Design revision: 203 · Recorded: 2026-11-18 · Phase: language/application co-design.
 
 ## Design authority
 
-- **Full-scope dependency continuity:** [K-FULL-SCOPE-IMPLEMENTATION-20261118](../CHANGELOG.md#k-full-scope-implementation-20261118) updates only the referenced r92 qualification. This document’s semantic revision, own qualification, acceptance and exclusions are unchanged.
+- **Parenthesized value expressions:** [H-PARENTHESIZED-VALUES-20261118](../CHANGELOG.md#h-parenthesized-values-20261118)/[K-PARENTHESIZED-VALUES-20261118](../CHANGELOG.md#k-parenthesized-values-20261118), [D-10-PARENS](DesignAuthorityRegistry.md#d-10-parens)/P-573–P-575, selects r203’s value-category expression parentheses and preference for unparenthesized operator idioms. Scalar bits projection, unparenthesized reference-result chaining and the delimiter distinction follow the confirmed choice; no C++ copying/moving, graph transfer, access upgrade or lifetime extension follows. Candidate C-06/C-41/C-65/C-72 → charter §§2/3.3/4.3/6.3/8/12 makes value-versus-target intent explicit while preserving readable composition. Acceptance and type-specific limits are below; complete grouping grammar/checker/value-path qualification and non-bits carrier details remain separate. D-16, ordinary evaluation and the r92 full-scope profile retain their stated boundaries.
 
-- **Current capture-review reference:** [K-REPLACEMENT-EFFECTS-20261117](../CHANGELOG.md#k-replacement-effects-20261117) keeps the separate D-18 value-input qualification current. This file changes only review references; its semantic revision, governing value paths, constraints and acceptance are unchanged. The registry owns the current review scope.
+- **Full-scope dependency continuity:** [K-FULL-SCOPE-IMPLEMENTATION-20261118](../CHANGELOG.md#k-full-scope-implementation-20261118) updates only the referenced r92 qualification. This document’s semantic revision, own qualification, acceptance and exclusions are unchanged.
 
 - **Semicolon omission and syntax UX:** [H-SEMICOLON-UX-20261117](../CHANGELOG.md#h-semicolon-ux-20261117)/[K-SEMICOLON-UX-20261117](../CHANGELOG.md#k-semicolon-ux-20261117), [D-10-SEMICOLON-UX](DesignAuthorityRegistry.md#d-10-semicolon-ux)/P-570–P-572, covers r201→202's general source/diagnostic principle below. The human selects permissive omission where practical and warnings with clearer alternatives for misleading valid spellings; corner cases are ongoing UX work. Candidate C-06 → charter §§8.1–8.3/9/12 supports readable source and actionable diagnostics without guessing intent. Preserve deterministic syntax, source meaning, owners/effects and D-16; exact newline/insertion grammar, warning heuristics and complete implementation/value-path qualification remain pending. Existing examples with explicit separators are not a universal mandatory-semicolon policy.
 
@@ -1358,6 +1358,35 @@ Acceptance checks inaccessible parameter/local/loop names before execution, incl
 ### Primary module-form keywords
 
 The implemented H-161 keyword set reserves `type`, `data`, `regional`, `unit`, `array`, `using`, `import`, `mixin`, `export` and `conversion` against ordinary declarations and aliases. These names cannot introduce lexical functions, values, types or selected UoM aliases. A declaration such as `function type(...)` is rejected before execution, independent of where it would be called. Field selectors such as `record.type` and symbolic names such as `@using` retain their contextual meaning. H-149 shadowing and usable nonreserved contextual names remain unchanged. Data is the concrete-representation declaration keyword; regional remains reserved although the legacy regional type form is rejected. C-41/P-97's readable expression composition is the existing candidate value rationale; this local keyword decision does not qualify the complete grammar.
+
+### Parenthesized value expressions and operator idioms
+
+H-PARENTHESIZED-VALUES-20261118 selects expression parentheses as producing an rvalue-like result, rather than transparently forwarding the original expression's place category. This is CoD value-category terminology, not C++ object copying/moving. A parenthesized result is not automatically an owner-free `val T` for every T: its admitted typed result still follows the ordinary bits, borrowed-reference, complete-callable or ownership contract. Parentheses themselves neither acquire ownership nor perform graph transfer.
+
+For readable scalar bits, `(expr)` evaluates expr once and projects its completed result to independent bits of the same type. If expr returns a target view, read its initialized payload at this boundary while its owner is live. The independent bits carry no source owner or target identity. A later receiving declaration may materialize them in its own permitted storage. Nested parentheses are idempotent for this category; numeric type, units and validity are unchanged. Future fractions remain pure bits under D-16, without implicit reduction/conversion or authorization to implement them. Complete bits-ADT representation and transport remain under their own contracts.
+
+```cod
+ref n:u64 = 1u64;
+ref live:const u64 = n <- 2u64;     # Retain the operator's readonly target view.
+ref snapshot:u64 = (n <- 3u64);     # Explicit bits projection, then fresh storage.
+n <- 4u64;
+assert live == 4u64;
+assert snapshot == 3u64;
+assert live is n;
+assert snapshot is not n;
+```
+
+An operator still produces its declared result before the surrounding expression consumes it. Builtin bits `<-` returns its readonly destination view; a parenthesized use projects that view to bits, while an unparenthesized use retains the reference contract. Overload bodies cannot evade owner/access/initialization checks. In particular, a readonly returned view cannot initialize a writable ref unless an explicit value-producing operation supplies independent bits; receiver mutability is never a materialization heuristic.
+
+`(n) is n` rejects when n denotes scalar bits: the left operand is now an independent value without target identity. `(n) <- value` likewise cannot use the projected result as n's storage. `n is n` and `n <- value` retain their ordinary meanings. No temporary target is allocated merely to make `is` valid. An expression that selects a new place from an admitted computed view is checked by its ordinary field/index rules; parentheses grant no access escalation.
+
+Only expression-level parentheses perform this projection. Call/signature parameter delimiters, type/pattern grammar and operator-name syntax do not implicitly wrap every enclosed item in a value expression. Thus `f(n)` preserves the ordinary argument expression, while `f((n))` explicitly projects n's bits. A parenthesized callable-owner projection such as `(cb -> O)` still supplies the existing computed borrowed-region result, with its owner/access and no ownership transfer; it is not an independent region object. Nullable pointer results retain their absence and fixed owner rather than implicitly reading their pointee. Complete callable values use D-18's dedicated value rules. Exact owning-carrier and non-bits result/place combinations need their corresponding typing/transport review; the compiler must not silently restore original place semantics as a fallback.
+
+**Operator-design default.** Design reference-result overloads for useful unparenthesized chains. Prefer precedence/associativity that makes the intended common idiom readable without parentheses inserted just to override precedence. This is a default design and UX principle, not a prohibition on parentheses or a blanket rewrite of the existing precedence table. A concrete operator may justify a specifically recorded exception. Do not choose meaning from guessed user intent or retry failed overload selection under another grouping interpretation.
+
+The parser and source tools must preserve the parenthesized expression boundary until its typed effect is established. A formatter cannot add/remove parentheses as a cosmetic precedence edit without proving that value category, identity, overload selection and evaluation remain the same. Parentheses alter neither the established once-only operand/conversion order nor callable cleanup order; a returned view is projected only after its call completes. No new lexical scope is introduced.
+
+**Acceptance and remaining work:** distinguish bare/parenthesized scalar places and returned readonly/writable views; preserve snapshots across later writes; retain operator-result views for unparenthesized chains; reject scalar projected destinations/identity operands; distinguish nested grouping from call/type/operator-name delimiters. Preserve target-read readiness, actual owners, numeric/UoM/fraction validity, callable value rules and D-17 cleanup. Source policy is selected; typed group representation, complete generic/non-bits carrier integration and checker/native migration are not established by older parser evidence that erases parentheses.
 
 ### Operator and intrinsic overloads
 
