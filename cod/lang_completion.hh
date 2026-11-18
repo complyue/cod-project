@@ -621,24 +621,31 @@ public:
   static BooleanValue guard_boolean(const BooleanValue &value, const SelectionConditions &conditions) {
     return transform_boolean_conditions(value, [&](auto known) { known.append(conditions); return known; });
   }
-  static ConditionClauses through_conditions(const ConditionClauses &clauses, const BooleanValues &payloads, bool closed = false) {
+  template <typename Resolve>
+  static ConditionClauses substitute_boolean_payloads(const ConditionClauses &clauses, const Resolve &resolve, bool closed) {
     ConditionClauses output;
     for (const auto &facts : clauses) {
       auto retained = facts;
       std::erase_if(retained.payloads, [&](const auto &condition) {
-        return !condition.first.first && (closed || payloads.contains(condition.first.second));
+        return !condition.first.first && (closed || resolve(condition.first.second));
       });
       ConditionClauses substituted{std::move(retained)};
       for (const auto &[payload, truth] : facts.payloads) if (!payload.first) {
-        const auto found = payloads.find(payload.second);
-        if (found == payloads.end()) continue;
-        if (const auto known = found->second.find(truth); known != found->second.end())
+        const auto *value = resolve(payload.second);
+        if (!value) continue;
+        if (const auto known = value->find(truth); known != value->end())
           substituted = conjoin_conditions(substituted, known->second);
         else substituted.clear();
       }
       for (const auto &known : substituted) add_condition(output, known);
     }
     return output;
+  }
+  static ConditionClauses through_conditions(const ConditionClauses &clauses, const BooleanValues &payloads, bool closed = false) {
+    return substitute_boolean_payloads(clauses, [&](size_t place) -> const BooleanValue * {
+      const auto found = payloads.find(place);
+      return found == payloads.end() ? nullptr : &found->second;
+    }, closed);
   }
   static BooleanValue through_boolean(const BooleanValue &value, const BooleanValues &payloads, bool closed = false) {
     BooleanValue output;

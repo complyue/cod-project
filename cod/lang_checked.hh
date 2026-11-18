@@ -2655,8 +2655,19 @@ class ScalarChecker {
         }, deferred_action_);
         applied.transform_values([&](const auto &value) { return value.through(payloads, pending, true); },
             [&](const auto &value) { return value.through(payloads, pending, true, true); });
-        const auto booleans = current_booleans(state, at);
-        applied.transform_conditions([&](const auto &clauses) { return CleanupEquations::through_conditions(clauses, booleans, true); });
+        CleanupEquations::BooleanValues booleans;
+        const auto resolve_boolean = [&](size_t place) -> const CleanupEquations::BooleanValue * {
+          if (!state.available.contains(place) || storage(place).type != Type::boolean) return nullptr;
+          const auto [found, inserted] = booleans.try_emplace(place);
+          if (inserted) {
+            const auto proof = state.predicates.find(place);
+            found->second = snapshot_boolean(proof == state.predicates.end() ? nullptr : proof->second, state, at);
+          }
+          return &found->second;
+        };
+        applied.transform_conditions([&](const auto &clauses) {
+          return CleanupEquations::substitute_boolean_payloads(clauses, resolve_boolean, true);
+        });
         auto failure = completion.reason >= 3 ? applied.thrown.restricted({completion.reason - 3}) : ExceptionFacts{};
         if (completion.reason >= 3 && failure.empty()) {
           if (!effects.unknown_thrown) continue;
