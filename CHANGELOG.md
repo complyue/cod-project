@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-11-18 — Make exception objects owner-bound
+
+<a id="h-exception-object-owner-20261118"></a>
+**H-EXCEPTION-OBJECT-OWNER-20261118 — Object, payload and release.** The project user in [the design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-18 America/Los_Angeles, states “Exception 不是 bits val 性质，必须 `in some_owner`”, requires graph/bits transfer of program state and an owner-qualified reference result for SaveError, and permits release of the virtual scope once no outer receiver needs its owner. The subsequent “假定所有 proc 都有隐含的 `where {owner ex}` 声明” requests evaluation of that convention. Its detailed allocation, binding and reclamation contracts remain under review.
+
+<a id="h-catch-owner-transfer-20261118"></a>
+**H-CATCH-OWNER-TRANSFER-20261118 — Maintain and consume recovery state.** In the same design chat on 2026-11-18 the user explicitly permits “`catch (ref e:Exception in ex) where {owner ex} { ... }` 然后 `make XXX in ex`”, with graph/bits transfer to and from other regions and lexical scopes. This selects allocation in the matched owner and supports application recovery state across propagation. A writable catch on an arrival exposed only through a readonly operand, implicit owners on all procedures and physical transport remain separately scoped.
+
+<a id="h-exception-field-owners-20261118"></a>
+**H-EXCEPTION-FIELD-OWNERS-20261118 — Track each user-defined reference field.** In the same design chat on 2026-11-18 the user states “字段如果是引用，都要追踪owner，也允许和其它region互相transfer” for `data SomeException <: Exception`. D-17r99 applies ordinary field-owner evidence and permits transfer in both directions. D-22-TRANSFER and D-28-OWNERS constrain field reconstruction and dereference.
+
+<a id="k-exception-owner-migration-20261118"></a>
+**K-EXCEPTION-OWNER-MIGRATION-20261118 — Narrow affected qualifications.** D-17r98→99/D-18r114→115/source436→437/registry886→887 supersedes the independent exception-bits portion of the capture/full-scope profiles and updates P-485/P-579–P-581. Scalar, complete callable and already-qualified borrowed-input contracts retain their scopes. Evidence of independent intrinsic-exception transport remains compiler migration evidence. Prior scopes at `b481bf3c48bc1359d83180e3daec0553dc5749da:design/CallableViewsAndCaptures.md`, “Ordinary value-input implementation contract”, and the same commit’s `design/ExceptionControl.md`, “Application lifetime for exception objects”.
+
 ## 2026-11-18 — Pass immediate scope inputs through ordinary call roles
 
 <a id="k-immediate-scope-inputs-20261118"></a>
