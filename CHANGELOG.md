@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-18 — Integrate the exception factory and full-scope records
+
+<a id="k-exception-factory-mainline-20261118"></a>
+**K-EXCEPTION-FACTORY-MAINLINE-20261118 — Merge continuity.** Registry 890/890→891 preserves both H-EXCEPTION-FACTORY-20261118 and K-FULL-SCOPE-EXCEPTION-REFERENCES-20261118. The r102 full-scope entry retains the r101 input qualification. Standalone exception construction is withdrawn. Physical owner transport remains pending.
+
+## 2026-11-18 — Return a locally caught exception from a factory
+
+<a id="h-exception-factory-20261118"></a>
+**H-EXCEPTION-FACTORY-20261118 — Construct during propagation and return the caught reference.** The project user in [the design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-18 America/Los_Angeles, answered the standalone-make question with “整体复杂度负担不低；还不如允许一个 func helper()” and an explicit `-> ref SomeException in ex where {owner ex}` example that throws, catches in the same owner and returns e. D-17r102/D-22r48/registry890 withdraw standalone exception construction from H-515/H-EXCEPTION-MAKE-SCOPE-20261118, preserve on-demand placement, and select the factory path reopened by H-THROW-INITIALIZER-20261118. P-464–P-466/P-579–P-581 retain their scoped status. Prior source at `0278c551bdfcd883e0f83439cef2a1b8c4e63f41:design/ExceptionControl.md`, “Standalone construction under review”. The user also observed “`catch` 可以 introduce exception owner”, consistent with H-CATCH-OWNER-TRANSFER-20261118: the catch can name the matched object’s actual owner, while the factory example uses the owner declared by the result contract. General implicit owners and physical transport remain separate.
+
 ## 2026-11-18 — Align the full-scope exception input contract
 
 <a id="k-full-scope-exception-references-20261118"></a>
