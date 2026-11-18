@@ -1,6 +1,6 @@
 # CoD source compiler validation
 
-Reference revision: 439 · Recorded: 2026-11-18 America/Los_Angeles.
+Reference revision: 440 · Recorded: 2026-11-18 America/Los_Angeles.
 
 ## Design authority
 
@@ -490,6 +490,8 @@ When a selected reference has finite known incoming origins, a missing-write con
 Only supported immutable parameter evidence crosses callable boundaries; local selections without a caller interpretation are weakened conservatively. Copied arguments keep preparation-time facts, while borrowed arguments use invocation-time payloads. Skipped reads create no payload requirement, but ordinary/ref entry promises and declared throws still apply. Failed preparation/registration and outcomes without established implementation facts supply no write guarantee. Wider selected-target and prepared caller-slot correlations remain unproved; no runtime initialized flag, implicit zero value or new completion policy follows. The conditional-write suites cover source acceptance/rejection, independent input-snapshot models, shared recursive code and exact native cleanup.
 
 Selected-reference identity also preserves initialization through ordinary copies and borrowed results. A write through a forwarded selection can justify a later read through another view proven to retain that same selection. Return summaries identify original borrowed inputs and substitute the caller's prepared references; a result selecting among several inputs shares identity only when those actual inputs are the same retained selection. Independent origins and identical possible-target sets supply no equality proof. Branch joins preserve equality for matching predecessor selections. Strong rebinding changes the destination's selection; weak updates retain independent alternatives. Prepared operands keep their selected values when later operands rebind the source. Completed writes propagate among proven live aliases, while failed operands or registration supply no write. Caller-slot mutation and unsupported multi-origin relationships remain conservative. The returned-selection suites cover source behavior, shared generic/recursive bodies and exact native release.
+
+Two conditional reference results share a selection identity when both decisions are proved against the same incoming Boolean snapshot and their corresponding arms retain the same selections. A copied condition preserves that evidence. Negating the condition and exchanging the arms preserves the same selection. Changed conditions, rebound arms and independent inputs retain separate evidence. The [selection tests](selection_locator_tests.py) exercise ordinary reads, immediate calls, deferred reads and repeated execution.
 
 Finite target relationships connect a rebound selection to physical storage initialized by another action, in either execution order. A write through a selection known to denote one non-null cell also initializes that cell. Weak updates preserve unchanged entry alternatives; a null alternative never establishes physical initialization.
 

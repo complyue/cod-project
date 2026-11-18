@@ -165,6 +165,7 @@ class ScalarChecker {
   size_t next_target_version_ = 0;
   size_t next_selection_identity_ = 0;
   std::map<size_t, std::set<size_t>> selection_sources_;
+  std::map<std::tuple<size_t, size_t, size_t>, size_t> conditional_selections_;
   std::map<size_t, size_t> incoming_selections_;
   std::set<size_t> rebound_;
   std::map<std::string, size_t> external_owners_;
@@ -2414,6 +2415,35 @@ class ScalarChecker {
       return abrupt;
     }
     return operation.predicate;
+  }
+  static std::optional<std::pair<size_t, bool>> boolean_input(const Predicate *proof) {
+    if (!proof) return {};
+    if (proof->kind == Predicate::Kind::negation) {
+      auto input = boolean_input(proof->left.get());
+      if (input) input->second = !input->second;
+      return input;
+    }
+    const auto yes = proof->results.find(true), no = proof->results.find(false);
+    if (yes == proof->results.end() || no == proof->results.end() || yes->second.empty() || no->second.empty()) return {};
+    const auto entails = [](const CleanupEquations::ConditionClauses &paths, size_t input, bool value) {
+      return std::all_of(paths.begin(), paths.end(), [&](const auto &path) { return path.inputs.contains({input, value}); });
+    };
+    // Both outcomes must identify the same immutable input with opposite truth.
+    for (const auto &[input, value] : yes->second.begin()->inputs)
+      if (entails(yes->second, input, value) && entails(no->second, input, !value)) return {{input, value}};
+    return {};
+  }
+  size_t conditional_selection(const CheckedOperation &condition, const CheckedOperation &yes, const CheckedOperation &no) {
+    auto when_true = yes.selection_identity, when_false = no.selection_identity;
+    if (when_true && when_false && when_true != when_false && yes.view && no.view) {
+      if (const auto input = boolean_input(condition.predicate.get())) {
+        if (!input->second) std::swap(when_true, when_false);
+        const auto [entry, inserted] = conditional_selections_.try_emplace({input->first, *when_true, *when_false}, 0);
+        if (inserted) entry->second = merge_selection_identities(when_true, when_false);
+        return entry->second;
+      }
+    }
+    return merge_selection_identities(when_true, when_false);
   }
   static std::shared_ptr<const Predicate> predicate(Predicate::Kind kind,
       std::shared_ptr<const Predicate> left, std::shared_ptr<const Predicate> right = {}) {
@@ -5885,7 +5915,7 @@ class ScalarChecker {
       else if (no == Type::never) view(yes_fact);
       else {
         operation.predicate = predicate(Predicate::Kind::alternatives, predicate_of(yes_fact), predicate_of(no_fact));
-        operation.selection_identity = merge_selection_identities(yes_fact.selection_identity, no_fact.selection_identity);
+        operation.selection_identity = conditional_selection(operations.at(expr.children[0].get()), yes_fact, no_fact);
         operation.view = yes_fact.view || no_fact.view;
         operation.mixed_view = yes_fact.mixed_view || no_fact.mixed_view || yes_fact.view != no_fact.view;
         operation.read_only = yes_fact.read_only || no_fact.read_only;
@@ -6661,6 +6691,7 @@ class ScalarChecker {
     cleanup_scope_ = 0; next_scope_ = 1;
     next_target_version_ = 0;
     next_selection_identity_ = 0; selection_sources_.clear(); incoming_selections_.clear();
+    conditional_selections_.clear();
   }
 
   template <typename Check> void check_flow(const Check &check) {

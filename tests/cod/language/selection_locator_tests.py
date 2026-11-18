@@ -49,6 +49,29 @@ case('readonly_comparison',setup='ptr frozen:const u64=a;',condition='selected i
 case('nullable_selection',local=LOCAL.replace('else{b}', 'else{null in here}'),output='99\n99\n7\n7\n')
 case('nullable_anchor',setup='ptr anchor=if(other){a}else{null in here};',condition='selected is anchor',reject=True)
 
+MATCHED_SELECTION='ptr matched=if(flag){a}else{b};'
+WRITE_READ_SELECTION='selected<-7u64;behave @print(matched);'
+case('repeated_conditional_selection',setup=MATCHED_SELECTION,body=WRITE_READ_SELECTION,output='7\n'*4)
+case('negated_conditional_selection',setup='ptr matched=if(!flag){b}else{a};',
+     body=WRITE_READ_SELECTION,output='7\n'*4)
+case('copied_condition',setup='val saved<-flag;ptr matched=if(saved){a}else{b};',
+     body=WRITE_READ_SELECTION,output='7\n'*4)
+case('conditional_selection_in_full_scope',setup=MATCHED_SELECTION,
+     body='{{'+WRITE_READ_SELECTION+'}};',output='7\n'*4)
+case('conditional_selection_in_cleanup',setup=MATCHED_SELECTION,
+     body='{{defer{behave @print(matched);};selected<-7u64;}};',output='7\n'*4)
+case('conditionally_selected_other_input',setup='ptr matched=if(other){a}else{b};',
+     body=WRITE_READ_SELECTION,reject=True)
+case('opposite_conditional_selection',setup='ptr matched=if(flag){b}else{a};',
+     body=WRITE_READ_SELECTION,reject=True)
+case('overwritten_condition',setup='val saved<-flag;saved<-!saved;ptr matched=if(saved){a}else{b};',
+     body=WRITE_READ_SELECTION,reject=True)
+case('rebound_conditional_arm',local=LOCAL.replace('ptr selected=if(flag){a}', 'ptr arm=a;ptr selected=if(flag){arm}'),
+     setup='arm=c;ptr matched=if(flag){arm}else{b};',body=WRITE_READ_SELECTION,reject=True)
+case('conditional_selection_across_iterations',setup='ptr arm=a;ptr prior=a;ptr current=a;',
+     body='for(i in 0u64..2u64){current=if(flag){arm}else{b};'
+          'if(i==0u64){prior=current;arm=c;{}}else{current<-7u64;behave @print(prior);};};',reject=True)
+
 for name,condition,reject in (
     ('finite_bounds','selected is not a&&selected is not b',False),
     ('disjoint','selected is c',False),
