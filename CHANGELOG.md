@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-17 — Review ordinary-callable lowering for full scopes
+
+<a id="k-full-scope-lowering-review-20261117"></a>
+**K-FULL-SCOPE-LOWERING-REVIEW-20261117 — Make the remaining integration contract concrete.** Agent review following mainline’s reported adoption/integration and migration findings: D-17r90→91/registry868→869 adds the bounded full-scope elaboration profile under existing D-17-FULL-SCOPE/P-564–P-566. H-FULL-SCOPE-CALLABLE-20261117’s local returns, explicit value results, ordinary captures and independent owners/cleanup remain selected. Candidate C-63/C-65/C-73/C-75/C-84 → charter §§2/3.2–3.3/4.3/6.3/8/12 links one checked callable plan to source/query/native agreement and reduced duplicated state rules. Capture preparation, result evidence, query nonexecution, ordinary completion/failure, migration and acceptance are specified; complete implementation/value-path qualification stays pending-human. No new source alternative or qualification is inferred from the two adopted dependencies or mainline’s build/probe report. D-16 and all existing bounded qualifications are unchanged. Baseline: `92594b072c6d6bf35bcd40e03d255a5b118ad267` at affected paths. Documentation only; no local code/build/tests.
+
 ## 2026-11-17 — Preserve readonly reference reception
 
 <a id="h-readonly-ref-binding-20261117"></a>
