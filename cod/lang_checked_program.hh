@@ -351,7 +351,7 @@ struct CheckedCallable {
   std::vector<std::pair<std::vector<Type>, size_t>> dispatch = {};
   // A whole-domain proof can establish one prepared implementation.
   std::optional<size_t> uniform_target = {};
-  // Scalar rows retain distinguishing types and the shared widening phase.
+  // Factored rows retain distinguishing types and the shared widening phase.
   std::optional<CallableSelectionInputs> selection_inputs = {};
   std::set<size_t> implementations() const {
     std::set<size_t> result;
@@ -362,9 +362,11 @@ struct CheckedCallable {
   size_t target(const std::vector<Type> &arguments) const {
     if (uniform_target || selection_inputs) {
       if (arguments.size() != type.parameters.size()) throw std::logic_error("unchecked callable family invocation");
-      for (size_t i = 0; i < arguments.size(); ++i)
-        if (!scalar_type(arguments[i]) || !transfers_value(arguments[i], type.parameters[i]))
+      for (size_t i = 0; i < arguments.size(); ++i) {
+        const auto &argument = arguments[i];
+        if ((!scalar_type(argument) && argument.kind != Type::procedure) || !transfers_value(argument, type.parameters[i]))
           throw std::logic_error("unchecked callable family invocation");
+      }
     }
     if (uniform_target) return *uniform_target;
     const bool shared_widening = selection_inputs && selection_inputs->widens_shared_input(arguments, type.parameters);

@@ -4718,7 +4718,7 @@ class ScalarChecker {
     if (const auto binding = binder(method, type); binding && context.at(*binding)) return *context.at(*binding);
     return type;
   }
-  static std::optional<Substitutions> scalar_coverage_context(const CheckedMethod &method, const Type &view,
+  static std::optional<Substitutions> factored_coverage_context(const CheckedMethod &method, const Type &view,
       const InputDomains &domains, const std::vector<Type> &retained) {
     if (variadic(method) || method.retained_types.size() != retained.size() ||
         !method.input_owners().empty() || caller_bindings(method) ||
@@ -4726,12 +4726,15 @@ class ScalarChecker {
       return {};
     auto context = type_context(method, retained);
     for (size_t i = 0; i < domains.size(); ++i) {
-      const auto binding = binder(method, method.parameters[i]);
-      const bool unresolved = binding && !context.at(*binding);
       if (argument_mode(parameter_at(method, i)) != ArgumentMode::value ||
           (!view.argument_modes.empty() && view.argument_modes[i] != ArgumentMode::value) ||
-          (!view.owners.empty() && view.owners[i]) || domains[i].empty() ||
-          (!unresolved && !scalar_type(coverage_formal(method, i, context))) ||
+          (!view.owners.empty() && view.owners[i]) || domains[i].empty()) return {};
+      // The complete callable input domain has one exact signature. Matching
+      // it in each checked tuple preserves any substitutions it supplies.
+      if (view.parameters[i].kind == Type::procedure) continue;
+      const auto binding = binder(method, method.parameters[i]);
+      const bool unresolved = binding && !context.at(*binding);
+      if ((!unresolved && !scalar_type(coverage_formal(method, i, context))) ||
           std::any_of(domains[i].begin(), domains[i].end(), [](const auto &actual) { return !scalar_type(actual); }))
         return {};
     }
@@ -4739,9 +4742,9 @@ class ScalarChecker {
   }
   static bool fixed_preparation(const CheckedMethod &method, const Type &view, const InputDomains &domains,
                                 const std::vector<Type> &retained = {}) {
-    // Each admitted scalar prepares independently to the same fixed formal.
+    // Each admitted value prepares independently to the same fixed formal.
     // Declaration evidence is fixed per materialization across these inputs.
-    const auto context = scalar_coverage_context(method, view, domains, retained);
+    const auto context = factored_coverage_context(method, view, domains, retained);
     if (!context || std::any_of(context->begin(), context->end(), [](const auto &type) { return !type; })) return false;
     for (size_t i = 0; i < domains.size(); ++i) for (const auto &actual : domains[i]) {
       auto substitutions = *context;
@@ -4770,7 +4773,7 @@ class ScalarChecker {
     if (contracts.empty()) return plan;
     std::vector<Substitutions> contexts;
     for (const auto *contract : contracts) {
-      auto context = scalar_coverage_context(*contract, view, domains, retained);
+      auto context = factored_coverage_context(*contract, view, domains, retained);
       if (!context) return plan;
       contexts.push_back(std::move(*context));
     }
@@ -4783,6 +4786,7 @@ class ScalarChecker {
     CallableSelectionInputs selection;
     bool always_widens = false;
     for (size_t i = 0; i < domains.size(); ++i) {
+      if (view.parameters[i].kind == Type::procedure) continue;
       const auto &formal = coverage_formal(*contracts.front(), i, contexts.front());
       bool same = scalar_type(formal);
       for (size_t j = 1; same && j < contracts.size(); ++j)

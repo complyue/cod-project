@@ -144,6 +144,38 @@ runner.CASES['qualified_unused_case_must_conform'] = (
     'func choose(' + parameters(first='u8') + ')->u64{return 101u64;}' + QUALIFIED + HELD,
     2, '', 'callable view contract')
 
+CALLBACK = 'func(u64)->u64'
+CALLBACK_VIEW = VIEW.replace('func(', f'func({CALLBACK},', 1)
+OFFSET = ('func with_offset(val delta:u64)->func(u64)->u64{'
+          'return func[delta](value:u64)->u64{return value+delta;};}'
+          'func callback=with_offset(10u64);')
+FIXED_CALLBACK = f'func choose(cb:{CALLBACK},{PARAMETERS})->u64{{return cb(n0)+n15;}}'
+GENERIC_CALLBACK = (f'func choose(cb:{CALLBACK},{parameters(first="T")})->u64 where T'
+                    '{return cb(n0)+n15+100u64;}')
+for name, methods, outputs in (
+    ('exact_callback_with_scalar_inputs', FIXED_CALLBACK, '14\n14\n14\n14\n14\n14\n'),
+    ('exact_callback_preserves_scalar_phases', GENERIC_CALLBACK+FIXED_CALLBACK, '114\n114\n14\n14\n14\n14\n'),
+):
+    source = IO + OFFSET + methods + f'func held:{CALLBACK_VIEW}=choose;'
+    for first, second in (('1u8', '2u64'), ('1u8', '2u8'), ('1u64', '2u64')):
+        inputs = ','.join(['callback', first, second] + ['3u64'] * (COUNT - 2))
+        source += f'behave @print(choose({inputs}));behave @print(held({inputs}));'
+    runner.CASES[name] = (source, 0, outputs, '')
+
+CALLBACK_BINDS_TYPE = (f'func choose(cb:func(T)->u64,{parameters(first="T")})->u64 where T'
+                       '{return cb(n0)+n15;}')
+MATCHED_CALLBACK_VIEW = CALLBACK_VIEW.replace('func(u64)->u64,u64', 'func(u8)->u64,u8', 1)
+MATCHED_INPUTS = ','.join(['increment', '1u8'] + ['3u64'] * (COUNT - 1))
+runner.CASES['exact_callback_supplies_nested_type'] = (
+    IO + 'func increment(value:u8)->u64{return value+10u64;}' + CALLBACK_BINDS_TYPE +
+    f'func held:{MATCHED_CALLBACK_VIEW}=choose;behave @print(held({MATCHED_INPUTS}));', 0, '14\n', '')
+runner.CASES['exact_callback_preserves_same_type_constraint'] = (
+    CALLBACK_BINDS_TYPE + 'func held:' + MATCHED_CALLBACK_VIEW.replace('->u64,u8,', '->u64,u64,', 1) + '=choose;',
+    2, '', 'no applicable method')
+runner.CASES['exact_callback_declaration_query'] = (
+    IO + f'func choose(cb:{CALLBACK},{PARAMETERS})->u64;func inspect(value:{CALLBACK_VIEW})->u64;'
+    'val mark<-make local typeof(inspect(choose)){7u64};behave @print(mark);', 0, '7\n', '')
+
 runner.CASES['returned_complete_capture'] = (IO + BASE +
     'func wrap(callback:' + VIEW + ')->' + VIEW + '{return func[callback](' + PARAMETERS +
     ')->u64{return callback(' + NAMES + ')+1u64;};}func held=wrap(choose);' + CALL,
