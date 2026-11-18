@@ -92,6 +92,17 @@ runner.CASES = {
     'throw_only_requires_coverage': reject('val e<-sample_error();{{throw e;}};'),
     'bare_throw_remains_invalid': reject('try{sample_error();{}}catch(e:const Exception){ {{throw;}}; };',
                                          'bare throw requires an active catch'),
+    'bare_throw_after_continuing_catch_remains_invalid': (
+        query('val e<-make local NullPointerException;try{throw e;}catch(caught:const NullPointerException){};throw;'),
+        2, '', 'bare throw requires an active catch'),
+    'query_finally_checks_declared_call_failure': (DECLARED +
+        query('try{declared();val late<-7u64;{}}finally{late;{}};return late;'),
+        2, '', 'typeof requires a known declaration or operand type'),
+    'query_consumes_caught_failure_before_outer_finally': (IO +
+        query('val e<-make local NullPointerException;'
+              'try{try{throw e;}catch(caught:const NullPointerException){};val late<-7u64;{}}'
+              'finally{late;{}};return late;') + 'behave @print(result);',
+        0, '4\n', ''),
     'nested_checked_calls': run('proc pass(val e:NullPointerException)->void throws NullPointerException'
                                 '{ {{ {{forward(e);}}; }}; }'
                                 'try{pass(sample_error());}catch(caught:const NullPointerException){behave @print(caught.category);};',

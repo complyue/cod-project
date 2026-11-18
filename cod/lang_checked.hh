@@ -249,6 +249,7 @@ class ScalarChecker {
   static const Type *callable_expectation(const Type *type) {
     return type && type->kind == Type::procedure ? type : nullptr;
   }
+  struct TypeEvidenceExits;
   struct TypeEvidenceState {
     struct Definition {
       size_t method;
@@ -266,7 +267,8 @@ class ScalarChecker {
     std::optional<EvidenceOwner> full_scope_owner;
     bool complete = true;
     bool required = false;
-    bool validating_body = false, catch_context = false;
+    bool validating_body = false;
+    std::optional<Type> caught_exception;
     std::optional<Type> invocation_result;
     bool supplied_invocation_result = false;
     std::optional<size_t> method;
@@ -274,6 +276,8 @@ class ScalarChecker {
     std::vector<Type> retained;
     // Immutable definition evidence lives in result_obligations_; body scopes may shadow it.
     const TypeEvidenceState *declaration = nullptr;
+    TypeEvidenceExits *exits = nullptr;
+    const Expression *prepared_call = nullptr;
     struct Returns {
       std::vector<Type> types;
       bool value_obligation = false;
@@ -281,6 +285,9 @@ class ScalarChecker {
       bool saw_throw = false;
       bool unresolved_throw = false;
     } *returns = nullptr;
+  };
+  struct TypeEvidenceExits {
+    std::map<size_t, TypeEvidenceState> paths;
   };
 
   struct DefinitionContext {
@@ -3696,7 +3703,7 @@ class ScalarChecker {
     state.substitutions = *match(method, arguments, retained);
     state.retained = retained;
     state.full_scope_owner = 0;
-    state.catch_context = false;
+    state.caught_exception.reset();
     // Runtime value captures receive storage in this invocation. Query-only
     // dependencies and reference inputs retain their external owner evidence.
     for (const auto &capture : free_bindings(*method.source).captures)
@@ -4057,16 +4064,36 @@ class ScalarChecker {
     if (left_exits && !right_exits) return merge_evidence(std::move(right), left, true);
     return merge_evidence(std::move(left), right, right_exits && !left_exits);
   }
+  static void merge_type_exit(TypeEvidenceExits &flow, size_t reason, const TypeEvidenceState &state) {
+    const auto [entry, inserted] = flow.paths.try_emplace(reason, state);
+    if (!inserted) entry->second = merge_evidence(std::move(entry->second), state);
+    entry->second.exits = nullptr;
+  }
+  static void note_type_exit(const TypeEvidenceState &state, Completion completion) {
+    if (state.exits) merge_type_exit(*state.exits, completion.reason, state);
+  }
+  static void note_type_failure(const TypeEvidenceState &state, const Type &failure) {
+    if (!state.exits) return;
+    for (const auto category : exception_possibilities(failure))
+      note_type_exit(state, Completion::failure(category));
+  }
+  static void note_type_failures(const TypeEvidenceState &state, const std::vector<Type> &failures) {
+    for (const auto &failure : failures)
+      note_type_failure(state, failure);
+  }
   // Evidence only: no reads, captures, demands, storage or cleanup equations are created here.
   // Operand hints defer validation to ordered checking; required typeof queries validate their bounded source forms here.
   std::optional<Type> type_evidence(const Expression &expr, TypeEvidenceState &state, bool contextual = false,
                                     const Type *expected = nullptr, std::vector<Type> *alternatives = nullptr,
-                                    ExpectedTypeUse expected_use = ExpectedTypeUse::materialization) const {
+                                    ExpectedTypeUse expected_use = ExpectedTypeUse::materialization, bool reached = true) const {
     const ModuleLookup lookup(module_, state.method ? program_.methods[*state.method].module : module_);
     const ModuleLookup context(interpretation_, state.method ? program_.methods[*state.method].interpretation : interpretation_);
     ViewEvidence view{false, false, {}};
     std::vector<Type> independent;
+    auto *const exits = state.exits;
+    if (!reached) state.exits = nullptr;
     const auto type = query_evidence(expr, state, view, contextual, expected, alternatives ? &independent : nullptr, expected_use);
+    state.exits = exits;
     if (alternatives && type != Type::never) {
       if (type) alternatives->push_back(*type);
       else alternatives->insert(alternatives->end(), independent.begin(), independent.end());
@@ -4083,7 +4110,7 @@ class ScalarChecker {
     const auto type = handler.annotation ? evidence_annotation(*handler.annotation, entry) : exception_type(0);
     if (entry.required) check_catch_category(type, handled, handler.at);
     auto caught = entry;
-    caught.catch_context = true;
+    caught.caught_exception = type;
     caught.bindings[handler.text] = type;
     caught.local_declarations[handler.text] = &handler;
     caught.definitions.erase(handler.text);
@@ -4091,21 +4118,45 @@ class ScalarChecker {
     caught.views[handler.text] = {true, true, true, EvidenceOwner::for_scope(handler), false, false, true, true};
     return caught;
   }
+  static void leave_type_catch(TypeEvidenceState &caught, const TypeEvidenceState &entry, const std::string &name) {
+    const auto restore = [&](auto &bindings, const auto &outer) {
+      if (const auto found = outer.find(name); found != outer.end()) bindings.insert_or_assign(name, found->second);
+      else bindings.erase(name);
+    };
+    restore(caught.bindings, entry.bindings);
+    restore(caught.local_declarations, entry.local_declarations);
+    restore(caught.definitions, entry.definitions);
+    restore(caught.owner_bindings, entry.owner_bindings);
+    restore(caught.views, entry.views);
+    caught.caught_exception = entry.caught_exception;
+  }
+  std::optional<Type> project_finalizer(const Expression &handler, TypeEvidenceState &state) const {
+    const bool required = state.required;
+    auto *const returns = state.returns;
+    TypeEvidenceState::Returns projected_returns;
+    state.required = false;
+    if (returns) state.returns = &projected_returns;
+    const auto type = type_evidence(handler, state, false, nullptr, nullptr, ExpectedTypeUse::materialization, false);
+    state.required = required;
+    state.returns = returns;
+    return type;
+  }
   struct LocalStorageEvidence {
     std::optional<Type> type;
     bool completes = true;
   };
-  LocalStorageEvidence local_storage_evidence(const Expression &expr, TypeEvidenceState &state) const {
+  LocalStorageEvidence local_storage_evidence(const Expression &expr, TypeEvidenceState &state, bool reached = true) const {
     LocalStorageEvidence storage;
     if (expr.annotation) storage.type = evidence_annotation(*expr.annotation, state);
     else {
-      auto query = state; query.returns = nullptr;
+      auto query = state; query.returns = nullptr; query.exits = nullptr;
       storage.type = type_evidence(*expr.children.front(), query);
     }
     if (state.required && storage.type && storage.type->kind == Type::procedure)
       implementation_gap(expr.at, "raw callable storage construction");
     for (size_t i = expr.annotation ? 0 : 1; i < expr.children.size(); ++i) {
-      const auto initializer = type_evidence(*expr.children[i], state);
+      const auto initializer = type_evidence(*expr.children[i], state, false, nullptr, nullptr,
+                                             ExpectedTypeUse::materialization, reached && storage.completes);
       if (initializer == Type::never) storage.completes = false;
       if (state.required && storage.type && initializer) check_local_initializer(*initializer, *storage.type, expr.at);
     }
@@ -4131,7 +4182,11 @@ class ScalarChecker {
       body.required = body.validating_body = true;
       body.invocation_result = *result.contract->type;
       body.supplied_invocation_result = result.origin == ResultOrigin::supplied;
+      TypeEvidenceExits exits;
+      if (state.exits) body.exits = &exits;
       type_evidence(*callee.definition->body, body);
+      for (const auto &[reason, exit] : exits.paths)
+        if (reason != 1) note_type_exit(state, {reason, false});
     }
     return complete_callable_type(program_.methods[id], {}, *result.contract);
   }
@@ -4139,11 +4194,13 @@ class ScalarChecker {
                                      bool contextual, const Type *expected, std::vector<Type> *alternatives,
                                      ExpectedTypeUse expected_use) const {
     using K = Expression::Kind;
-    const auto child = [&](size_t i, bool context = false) { return type_evidence(*expr.children.at(i), state, context); };
+    const auto child = [&](size_t i, bool context = false, bool reached = true) {
+      return type_evidence(*expr.children.at(i), state, context, nullptr, nullptr, ExpectedTypeUse::materialization, reached);
+    };
     if ((expr.kind == K::binary || expr.kind == K::call) && identity_operation(expr.text)) {
       if (expr.children.size() != 2) fail(expr.at, "reference identity requires two reference views");
       const auto left = child(0); const auto first = state.value;
-      const auto right = child(1); const auto second = state.value;
+      const auto right = child(1, false, left != Type::never); const auto second = state.value;
       if (state.required) {
         for (const auto &operand : {std::pair{left, first}, std::pair{right, second}})
           if (operand.first != Type::never && (operand.second.view != true || operand.second.mixed_view))
@@ -4224,7 +4281,7 @@ class ScalarChecker {
       for (size_t i = 0; i < expr.children.size(); ++i) {
         const bool last = i + 1 == expr.children.size();
         result = type_evidence(*expr.children[i], state, contextual && last, last ? expected : nullptr,
-                               last ? alternatives : nullptr, expected_use);
+                               last ? alternatives : nullptr, expected_use, !exits);
         exits = exits || result == Type::never;
         if (state.returns && exits) break;
       }
@@ -4235,7 +4292,8 @@ class ScalarChecker {
       bool completes = true;
       for (const auto &declaration : expr.children) {
         if (declaration->kind == K::block) {
-          if (type_evidence(*declaration, state) == Type::never) completes = false;
+          if (type_evidence(*declaration, state, false, nullptr, nullptr, ExpectedTypeUse::materialization, completes) == Type::never)
+            completes = false;
           continue;
         }
         const bool value = expr.declaration_kind == "val" || expr.declaration_kind == "func" || expr.declaration_kind == "proc";
@@ -4249,12 +4307,13 @@ class ScalarChecker {
         if (initializer.kind == K::make_local) {
           // The raw storage type remains known if evaluating its initializer
           // completes the callable before the declaration can finish.
-          const auto storage = local_storage_evidence(initializer, state);
+          const auto storage = local_storage_evidence(initializer, state, completes);
           storage_type = storage.type;
           initial = storage.completes ? storage.type : std::optional<Type>{Type::never};
           state.value = storage.completes ? ViewEvidence{false, false, {}} : ViewEvidence{};
         } else initial = type_evidence(initializer, state, declared.has_value(),
-            declared && declared->kind == Type::procedure ? &*declared : nullptr);
+            declared && declared->kind == Type::procedure ? &*declared : nullptr, nullptr,
+            ExpectedTypeUse::materialization, completes);
         const auto type = declared ? declared : storage_type ? storage_type : initial;
         if (initial == Type::never) completes = false;
         if (state.required) {
@@ -4309,7 +4368,8 @@ class ScalarChecker {
     case K::transfer: case K::rebind: {
       const auto type = child(0); view = state.value;
       const auto *context = expr.kind == K::transfer && type && type->kind == Type::procedure ? &*type : nullptr;
-      const auto source = type_evidence(*expr.children[1], state, context != nullptr, context);
+      const auto source = type_evidence(*expr.children[1], state, context != nullptr, context, nullptr,
+                                        ExpectedTypeUse::materialization, type != Type::never);
       if (type == Type::never || source == Type::never) return Type::never;
       if (state.required) assignment_destination(view.view == true, view.mixed_view, expr.at);
       if (expr.kind == K::transfer) {
@@ -4342,8 +4402,8 @@ class ScalarChecker {
       if (state.returns && condition == Type::never) return Type::never;
       if (state.required && condition != Type::boolean && condition != Type::never) fail(expr.at, "condition requires bool");
       auto yes_state = state, no_state = state;
-      const auto yes = type_evidence(*expr.children[1], yes_state, contextual, expected, alternatives, expected_use);
-      const auto no = type_evidence(*expr.children[2], no_state, contextual, expected, alternatives, expected_use);
+      const auto yes = type_evidence(*expr.children[1], yes_state, contextual, expected, alternatives, expected_use, condition != Type::never);
+      const auto no = type_evidence(*expr.children[2], no_state, contextual, expected, alternatives, expected_use, condition != Type::never);
       view = yes == Type::never ? no_state.value : no == Type::never ? yes_state.value : join_views(yes_state.value, no_state.value);
       state = condition == Type::never ? merge_evidence(std::move(yes_state), no_state) :
           merge_reaching_evidence(std::move(yes_state), std::move(no_state), yes == Type::never, no == Type::never);
@@ -4354,8 +4414,18 @@ class ScalarChecker {
     }
     case K::deferred:
       if (state.validating_body) {
+        const auto &action = *expr.children.front();
+        if (action.kind != K::block) {
+          const auto *const prepared = state.prepared_call;
+          state.prepared_call = &action;
+          const auto preparation = type_evidence(action, state);
+          state.prepared_call = prepared;
+          if (preparation == Type::never) return Type::never;
+        }
+        note_type_exit(state, Completion::failure(exception_id(ExceptionCategory::out_of_memory)));
         auto delayed = state;
-        type_evidence(*expr.children.front(), delayed);
+        delayed.exits = nullptr;
+        if (action.kind == K::block) type_evidence(action, delayed);
         std::set<size_t> handled;
         for (size_t i = 1; i < expr.children.size(); ++i) {
           const auto &handler = *expr.children[i];
@@ -4372,52 +4442,43 @@ class ScalarChecker {
       [[fallthrough]];
     case K::try_scope: {
       const auto before = state;
-      auto result = type_evidence(*expr.children.front(), state, contextual, expected, alternatives, expected_use);
-      view = state.value;
-      const auto body_state = state;
-      const auto catch_entry = merge_evidence(before, body_state);
       const bool guarded = expr.kind == K::try_scope;
       const bool has_finalizer = guarded && expr.children.size() > 1 && expr.children.back()->kind == K::block;
+      auto *const outer = state.exits;
+      const bool track_exits = guarded && state.required && (has_finalizer || outer);
+      TypeEvidenceExits body_exits, outgoing;
+      if (track_exits) state.exits = &body_exits;
+      auto result = type_evidence(*expr.children.front(), state, contextual, expected, alternatives, expected_use);
+      state.exits = outer;
+      view = state.value;
+      const auto catch_entry = merge_evidence(before, state);
       std::optional<TypeEvidenceState> finalizer_entry;
+      const Expression *finalizer = nullptr;
       std::set<size_t> handled;
       for (size_t i = 1; i < expr.children.size(); ++i) {
         const auto &handler = *expr.children[i];
         if (handler.kind == K::block) {
-          auto &entry = finalizer_entry ? *finalizer_entry : state;
-          const auto cleanup = type_evidence(handler, entry);
-          if (cleanup == Type::never || !finalizer_entry) {
-            if (finalizer_entry) state = std::move(*finalizer_entry);
-            if (cleanup == Type::never) result = Type::never;
-            break;
-          }
-          // Checking the finalizer uses every incoming completion. Apply its
-          // effects to the normal paths separately without recording returns twice.
-          const bool required = state.required;
-          auto *returns = state.returns;
-          TypeEvidenceState::Returns projected_returns;
-          state.required = false;
-          if (returns) state.returns = &projected_returns;
-          if (type_evidence(handler, state) == Type::never) result = Type::never;
-          state.required = required;
-          state.returns = returns;
+          finalizer = &handler;
           break;
         }
         auto caught = catch_evidence(handler, catch_entry, handled);
+        TypeEvidenceExits exits;
+        if (track_exits) {
+          const auto &category = *caught.caught_exception;
+          std::erase_if(body_exits.paths, [&](const auto &path) {
+            return path.first >= 3 && (!category.identity || path.first == Completion::failure(category.identity).reason);
+          });
+          caught.exits = &exits;
+        }
         const auto type = type_evidence(*handler.children.front(), caught, contextual, expected, alternatives, expected_use);
         if (state.required) check_guarded_result(*result, *type, handler.at);
-        if (const auto outer = catch_entry.bindings.find(handler.text); outer != catch_entry.bindings.end())
-          caught.bindings[handler.text] = outer->second;
-        else caught.bindings.erase(handler.text);
-        if (const auto outer = catch_entry.local_declarations.find(handler.text); outer != catch_entry.local_declarations.end())
-          caught.local_declarations[handler.text] = outer->second;
-        else caught.local_declarations.erase(handler.text);
-        if (const auto definition = catch_entry.definitions.find(handler.text); definition != catch_entry.definitions.end())
-          caught.definitions.emplace(*definition);
-        if (const auto owner = catch_entry.owner_bindings.find(handler.text); owner != catch_entry.owner_bindings.end())
-          caught.owner_bindings.emplace(*owner);
         const auto caught_view = caught.value;
-        if (const auto outer = catch_entry.views.find(handler.text); outer != catch_entry.views.end()) caught.views[handler.text] = outer->second;
-        else caught.views.erase(handler.text);
+        leave_type_catch(caught, catch_entry, handler.text);
+        caught.exits = outer;
+        for (auto &[reason, exit] : exits.paths) {
+          leave_type_catch(exit, catch_entry, handler.text);
+          merge_type_exit(outgoing, reason, exit);
+        }
         const bool prior_exits = result == Type::never, catch_exits = type == Type::never;
         view = prior_exits ? caught_view : catch_exits ? view : join_views(view, caught_view);
         if (finalizer_entry) *finalizer_entry = merge_evidence(std::move(*finalizer_entry), caught);
@@ -4427,15 +4488,43 @@ class ScalarChecker {
         if (prior_exits) result = type;
         else if (!catch_exits && type != result) result.reset();
       }
+      for (const auto &[reason, exit] : body_exits.paths) merge_type_exit(outgoing, reason, exit);
+      if (finalizer) {
+        if (!outgoing.paths.empty()) {
+          const auto &joined = finalizer_entry ? *finalizer_entry : state;
+          std::optional<TypeEvidenceState> incoming;
+          if (result != Type::never) incoming = joined;
+          for (const auto &[reason, exit] : outgoing.paths)
+            incoming = incoming ? merge_evidence(std::move(*incoming), exit) : exit;
+          // An abandoned normal path contributes lexical declarations only.
+          finalizer_entry = merge_evidence(std::move(*incoming), joined, true);
+        }
+        auto &entry = finalizer_entry ? *finalizer_entry : state;
+        entry.exits = outer;
+        const auto cleanup = type_evidence(*finalizer, entry);
+        if (guarded && entry.required && cleanup != Type::void_type && cleanup != Type::never)
+          fail(finalizer->at, "finally must complete with void or an explicit return");
+        // Check against every incoming completion, then project the effects
+        // onto the normal continuation and the still-pending abrupt paths.
+        if (finalizer_entry) {
+          if (cleanup == Type::never || result == Type::never) state = std::move(*finalizer_entry);
+          else if (project_finalizer(*finalizer, state) == Type::never) result = Type::never;
+        }
+        if (cleanup == Type::never) return Type::never;
+      }
+      if (outer) for (auto &[reason, exit] : outgoing.paths)
+        if (!finalizer || project_finalizer(*finalizer, exit) != Type::never)
+          merge_type_exit(*outer, reason, exit);
       if (expr.kind == K::deferred) { state = before; return Type::void_type; }
       return result;
     }
     case K::range_for: case K::fold: {
       const bool fold = expr.kind == K::fold;
-      const auto first = child(0), last = child(1);
+      const auto first = child(0), last = child(1, false, first != Type::never);
       const auto index = state.required ? std::optional{range_index_type(*first, *last, expr.at)} :
           first == Type::never ? last : first;
-      const auto accumulator = fold ? child(2) : std::optional<Type>{Type::void_type};
+      const bool completes = first != Type::never && last != Type::never;
+      const auto accumulator = fold ? child(2, false, completes) : std::optional<Type>{Type::void_type};
       if (fold && state.required) require_value(*accumulator, expr.at);
       auto iteration = state;
       const auto control_owner = EvidenceOwner::for_scope(expr);
@@ -4449,10 +4538,12 @@ class ScalarChecker {
         iteration.definitions.erase(expr.binding);
         iteration.owner_bindings.erase(expr.binding);
       }
-      const auto body = type_evidence(*expr.children[fold ? 3 : 2], iteration);
+      const auto body = type_evidence(*expr.children[fold ? 3 : 2], iteration, false, nullptr, nullptr,
+                                      ExpectedTypeUse::materialization, completes && accumulator != Type::never);
       if (fold && state.required) check_fold_body(*body, *accumulator, expr.at);
       if (!fold && expr.children.size() == 4) {
-        auto empty = state; type_evidence(*expr.children[3], empty);
+        auto empty = state;
+        type_evidence(*expr.children[3], empty, false, nullptr, nullptr, ExpectedTypeUse::materialization, completes);
         state = merge_evidence(std::move(state), empty);
       }
       if (first == Type::never || last == Type::never || accumulator == Type::never) return Type::never;
@@ -4463,7 +4554,7 @@ class ScalarChecker {
         const auto left = child(0);
         if (state.returns && left == Type::never) return Type::never;
         auto skipped = state;
-        const auto right = child(1);
+        const auto right = child(1, false, left != Type::never);
         if (state.required && ((left != Type::boolean && left != Type::never) ||
                                (right != Type::boolean && right != Type::never)))
           fail(expr.at, "logical operation requires bool operands");
@@ -4473,8 +4564,9 @@ class ScalarChecker {
       }
       [[fallthrough]];
     case K::unary: case K::call: case K::value_call: case K::behave: case K::perform: {
+      const bool invokes = &expr != state.prepared_call;
       std::optional<Type> target;
-      bool local = false;
+      bool local = false, implicit = false;
       if (expr.kind == K::behave || expr.kind == K::perform) {
         if (!state.complete) return {};
         if (state.validating_body && state.method && program_.methods[*state.method].source->kind == Form::Kind::function)
@@ -4484,7 +4576,7 @@ class ScalarChecker {
           if (state.required) print_result(expr);
           bool exits = false;
           for (const auto &item : expr.children) {
-            const auto argument = type_evidence(*item, state);
+            const auto argument = type_evidence(*item, state, false, nullptr, nullptr, ExpectedTypeUse::materialization, !exits);
             exits = exits || argument == Type::never;
             if (state.required) print_result(expr, argument);
           }
@@ -4495,7 +4587,8 @@ class ScalarChecker {
       } else if (expr.kind == K::value_call) {
         const auto &callee = *expr.children.front();
         const bool scope_expectation = expected_use == ExpectedTypeUse::callable_result;
-        target = callee.definition && callee.definition->implicit_scope ?
+        implicit = callee.definition && callee.definition->implicit_scope;
+        target = implicit ?
             scope_callable_evidence(callee, state, scope_expectation ? expected : nullptr,
                                     scope_expectation && contextual && !state.required) : child(0);
         local = true;
@@ -4507,8 +4600,11 @@ class ScalarChecker {
       }
       const auto name = local ? std::string_view{} : operation_name(expr, &state);
       const size_t offset = expr.kind == K::value_call ? 1 : 0;
+      if (local && !implicit && target && target->kind == Type::procedure)
+        note_type_exit(state, Completion::failure(exception_id(ExceptionCategory::out_of_memory)));
       auto probe = state;
       probe.required = false;
+      probe.exits = nullptr;
       std::vector<ArgumentEvidence> evidence(expr.children.size());
       std::vector<ViewEvidence> hinted_views(expr.children.size());
       std::map<size_t, TypeEvidenceState> unresolved;
@@ -4538,7 +4634,7 @@ class ScalarChecker {
         auto type = evidence[i].type;
         auto selected = hinted_views[i];
         if (state.required) {
-          type = type_evidence(*expr.children[i], state, true, expected_argument, nullptr, use);
+          type = type_evidence(*expr.children[i], state, true, expected_argument, nullptr, use, !exits);
           selected = state.value;
         } else if (!type && expected_argument) {
           auto prepared = unresolved.at(i);
@@ -4576,6 +4672,7 @@ class ScalarChecker {
         view = {borrowed && !target->const_views.empty() && target->const_views.back(), borrowed, {}};
         if (borrowed) for (size_t i = 0; i < owners.size(); ++i)
           if (target->owners[i] == target->owners.back() && owners[i]) view.owner = owners[i];
+        if (invokes) note_type_failures(state, target->throws_types);
         return *target->target;
       }
       if (!state.complete) return {};
@@ -4620,6 +4717,7 @@ class ScalarChecker {
       if (expr.text == "cause_at" && (expr.intrinsic || (!module_names().callables.contains(expr.text) && !has_declarations(expr.text)))) {
         if (state.required && (arguments.size() != 2 || arguments[0].kind != Type::exception || arguments[1] != Type::uint64))
           fail(expr.at, "cause_at requires an exception and a u64 index");
+        if (invokes) note_type_exit(state, Completion::failure(exception_id(ExceptionCategory::index_out_of_bounds)));
         return exception_type(0);
       }
       if (!complete) return {};
@@ -4630,6 +4728,7 @@ class ScalarChecker {
           (!eager_operation(name) || !eager_types(name, arguments).error.empty())) {
         const auto result = inspect_declarations(expr.text, arguments, access, owners, expr.at, state,
             [&](const CheckedMethod &declaration, const Substitutions &, const ResultContract &) {
+          if (invokes) note_type_failures(state, declaration.throws_types);
           if (state.required) for (size_t i = 0; i < arguments.size(); ++i)
             if (argument_mode(parameter_at(declaration, i)) != ArgumentMode::value && (views[i].view != true || views[i].mixed_view))
               implementation_gap(expr.at, "borrowed parameter requires an existing view");
@@ -4642,7 +4741,13 @@ class ScalarChecker {
       if (candidates.methods.empty() && eager_operation(name)) {
         const auto types = eager_types(name, arguments);
         if (state.required && !types.error.empty()) fail(expr.at, types.error);
-        if (types.error.empty()) builtin_declarations(expr, arguments, types.result, false, access, owners, &state);
+        if (types.error.empty()) {
+          const auto failures = builtin_declarations(expr, arguments, types.result, false, access, owners, &state);
+          if (invokes) {
+            for (const auto category : failures) note_type_exit(state, Completion::failure(category));
+            if (types.failing) note_type_exit(state, {2, false});
+          }
+        }
         return types.error.empty() ? std::optional<Type>{types.result} : std::nullopt;
       }
       const auto best = state.required ? std::vector<size_t>{select_method(family.methods, arguments, expr.at, expr.text, retained, access, owners, &state)}
@@ -4658,6 +4763,11 @@ class ScalarChecker {
             implementation_gap(expr.at, "borrowed parameter requires an existing view");
         const auto type = infer_result(id, arguments, retained, family.declaration ? family.declaration : &state).contract;
         if (!type || nested_binder(method, *type->type) || (result && result != type->type)) return {};
+        if (state.exits && invokes) {
+          note_type_failures(state, method.throws_types);
+          for (const auto &obligation : declaration_obligations(method, arguments, access, owners, &state))
+            note_type_failures(state, obligation.declaration->throws_types);
+        }
         const auto next = result_view(method, *type, owners);
         view = !result || view == next ? next : ViewEvidence{};
         result = type->type;
@@ -4683,25 +4793,32 @@ class ScalarChecker {
         state.returns->unresolved |= !result;
         if (expr.children.empty()) state.returns->types.push_back(Type::void_type);
       }
+      if (result != Type::never) note_type_exit(state, {1, true});
       return Type::never;
     }
     case K::raise: {
-      if (state.validating_body && expr.children.empty() && !state.catch_context)
+      if (state.validating_body && expr.children.empty() && !state.caught_exception)
         fail(expr.at, "bare throw requires an active catch");
       if (state.returns) {
         state.returns->saw_throw = true;
-        if (expr.children.empty() && !state.catch_context) {
+        if (expr.children.empty() && !state.caught_exception) {
           if (state.method && program_.methods[*state.method].source->implicit_scope)
             fail(expr.at, "bare throw requires an active catch");
           state.returns->unresolved_throw = true;
         }
       }
-      for (const auto &item : expr.children) {
-        const auto type = type_evidence(*item, state);
+      auto category = state.caught_exception;
+      bool completes = true;
+      for (size_t i = 0; i < expr.children.size(); ++i) {
+        const auto &item = *expr.children[i];
+        const auto type = child(i, false, completes);
+        if (!i) category = type;
+        completes = completes && type != Type::never;
         if (state.returns && !type) state.returns->unresolved_throw = true;
         if (state.validating_body && type && type->kind != Type::exception && type != Type::never)
-          fail(item->at, "throw requires an intrinsic exception value");
+          fail(item.at, "throw requires an intrinsic exception value");
       }
+      if (completes && category) note_type_failure(state, *category);
       return Type::never;
     }
     case K::callable:

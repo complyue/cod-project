@@ -11,6 +11,8 @@ FIXED = 'func fixed(f:func(u64)->const u64,x:u64)->const u64{return f(x);}'
 GUARDED_QUERY = ('using "std:exceptions" NullPointerException;val e<-make local NullPointerException;')
 GUARDED_TRY = ('try{if(true){throw e;}else{};val n<-4294967296u64;{}}'
                'catch(c:const NullPointerException){return 7u32;}')
+FINALLY_READ = 'finally{late;{}};return late;'
+QUERY_EVIDENCE = 'typeof requires a known declaration or operand type'
 
 
 def query(body):
@@ -78,7 +80,24 @@ runner.CASES = {
               'catch(c:const NullPointerException){val n<-4294967296u64;{}}'
               'finally{val suffix<-2u64;};return n+suffix;') + 'behave @print(result);', 0, '4\n', ''),
     'query_finally_cannot_use_normal_only_declaration': (GUARDED_QUERY +
-        query(GUARDED_TRY+'finally{n;};return n;'), 2, '', 'typeof requires a known declaration or operand type'),
+        query(GUARDED_TRY+'finally{n;{}};return n;'), 2, '', QUERY_EVIDENCE),
+    'query_finally_observes_early_return': (
+        query('try{if(true){return 3u64;}else{};val late<-7u64;{}}'+FINALLY_READ), 2, '', QUERY_EVIDENCE),
+    'query_finally_observes_early_throw': (GUARDED_QUERY +
+        query('try{if(true){throw e;}else{};val late<-7u64;{}}'+FINALLY_READ), 2, '', QUERY_EVIDENCE),
+    'query_finally_keeps_binding_before_throw': (IO + GUARDED_QUERY +
+        query('try{val late<-7u64;if(true){throw e;}else{};{}}'+FINALLY_READ) + 'behave @print(result);',
+        0, '4\n', ''),
+    'query_outer_finally_sees_inner_cleanup_effects': (IO +
+        query('try{try{return 7u64;}finally{val late<-9u64;{}};}'+FINALLY_READ) + 'behave @print(result);',
+        0, '4\n', ''),
+    'query_finally_ignores_inner_callable_return': (IO +
+        query('try{ {{return;}};val late<-7u64;{}}'+FINALLY_READ) + 'behave @print(result);', 0, '4\n', ''),
+    'query_finally_checks_return_from_eager_defer_preparation': ('proc observe(x:u64)->void{}' +
+        query('try{defer observe(if(true){return 3u64;}else{1u64});val late<-7u64;{}}'+FINALLY_READ),
+        2, '', QUERY_EVIDENCE),
+    'query_rejects_nonvoid_finally': (query('try{}finally{7u64};return 11u64;'),
+        2, '', 'finally must complete with void or an explicit return'),
     'query_keeps_obligation_from_abrupt_condition': (IO +
         query('if({return 7u64;}){}else{};') + 'behave @print(result);', 0, '4\n', ''),
     'query_checks_arms_after_abrupt_condition': (query('if({return 7u64;}){val wrong:bool<-1u64;}else{};'),

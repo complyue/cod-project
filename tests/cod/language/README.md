@@ -1,6 +1,6 @@
 # CoD source compiler validation
 
-Reference revision: 464 · Recorded: 2026-11-18 America/Los_Angeles.
+Reference revision: 465 · Recorded: 2026-11-18 America/Los_Angeles.
 
 ## Design authority
 
@@ -143,7 +143,7 @@ D-21r15/H-375–H-378/P-333/P-337 preserves a callable’s selected interpretati
 
 Standalone double braces elaborate into an immediate ordinary anonymous callable with the enclosing func/proc permissions. Admitted scalar and complete callable value inputs have independent invocation-local storage. The current executable also transports exception bits through this path. Owner-qualified exception inputs remain to be implemented under [D-17](../../../design/ExceptionControl.md#exception-object-owners-and-release). Inner returns and cleanup affect that invocation; enclosing returns require an explicit outer return. A trailing expression supplies no result. Both defer-block spellings construct their contained full scope when cleanup reaches it. The checker and native emitter have no lexical full-scope fallback.
 
-Result inference distinguishes a binding's reference slot from independent capture eligibility and gives admitted value captures the invocation owner. Inferred full-scope queries validate source access and callable permissions without reading captures, requiring installed TLS bindings, realizing a callable or demanding executable callees. They inspect established nested signatures; ordinary annotated anonymous-callable signature queries retain their separate treatment. Unsupported source/evidence forms remain explicit proof gaps.
+Result inference distinguishes a binding's reference slot from independent capture eligibility and gives admitted value captures the invocation owner. Inferred full-scope queries validate source access and callable permissions without reading captures, requiring installed TLS bindings, realizing a callable or demanding executable callees. They inspect established nested signatures; ordinary annotated anonymous-callable signature queries retain their separate treatment. Query checking retains the binding evidence at explicit returns, throws, declared call failures and modeled intrinsic failures that reach `finally`. Nested guards consume matching exceptions and propagate remaining completions after their finalizers. Eager defer operands contribute their own exits before registration. An opaque callee's undeclared unchecked failures still require an independent effect proof.
 
 An established callable argument signature or enclosing callable return contract can supply a missing callable-valued result of an immediate full scope. For example, an argument expecting `func(u64)->const u64` can receive `{{ return identity; }}` where `identity` is generic. Generic argument contracts can use independent evidence from later operands. Type queries check the same full-scope body without materializing the result. An independently inferred scope result participates in ordinary overload selection. A receiving variable's annotation cannot supply a scope result.
 
