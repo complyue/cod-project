@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-18 — Coordinate DBMR file access across processes
+
+<a id="h-dbmr-access-modes-20261118"></a>
+**H-DBMR-ACCESS-MODES-20261118.** In the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-18 (America/Los_Angeles), the project user specified “是否写入文件，跟结果region是否只读，应是两个维度” and “不写文件，结果只读” as the only combination eligible for shared readonly access, and requested exclusion across processes. D-22r55/registry914 record one shared and three exclusive combinations under H-385’s result-only constness. The earlier fresh-publication contract is at `62602ae8e9a60bac0d6c428800f304accc8f43fe:design/ConstructionAndAcquisition.md`, “Publishing a newly created DBMR”. Contention behavior, backend protocol and source grammar remain open.
+
+<a id="k-dbmr-marker-20261118"></a>
+**K-DBMR-MARKER-20261118.** The project user in the same [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) asked to consider “注册维护进程pid，侦听地址等信息用于locker活性检测”. D-22r55 documents the candidate holder records, instance-aware probes, crash recovery and the distinction between liveness evidence and permission to write. The fresh-image verification cases incorporate mainline’s pause-before-root, competing-creator and retry feedback. P-595/P-596 record the candidate derivation and dependencies. No concrete marker format or platform implementation was selected.
+
 ## 2026-11-18 — Correct implementation defects under the confirmed design
 
 <a id="h-implementation-correction-20261118"></a>
