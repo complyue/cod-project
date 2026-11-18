@@ -5,6 +5,12 @@ import foundation_tests as runner
 
 IO = 'using symbol "std:io" @print;'
 BASE = 'func one()->const u64{return 1u64;}func two()->const u64{return 2u64;}'
+
+
+def query(body):
+    return 'val result<-make local typeof({{' + body + '}}){4u64};'
+
+
 runner.CASES = {
     'independent_scalar': (IO+'proc run()->u64{val n<-1u64;{{n<-2u64;}};return n;}behave @print(run());', 0, '1\n', ''),
     'local_return': (IO+'func run()->u64{ {{return 1u64;}};return 2u64;}behave @print(run());', 0, '2\n', ''),
@@ -33,6 +39,24 @@ runner.CASES = {
     'query_needs_no_installed_binding': (IO+'symbol @bias:u64;val result<-make local typeof({{return @bias;}}){8u64};behave @print(result);', 0, '8\n', ''),
     'query_established_nested_signature': (IO+'func unused(x:T)->u64 where T{return true;}val result<-make local typeof({{return unused(1u64);}}){8u64};behave @print(result);', 0, '8\n', ''),
     'query_tail_is_void': ('val result<-make local typeof({{7u64;}}){8u64};', 2, '', 'initializer does not satisfy local storage type'),
+    'query_range_checks_first_endpoint': (query('for(i in true..2){};return 7u64;'), 2, '', 'a range requires integer endpoints'),
+    'query_range_checks_last_endpoint': (query('for(i in 0..2f32){};return 7u64;'), 2, '', 'a range requires integer endpoints'),
+    'query_range_checks_endpoint_agreement': (query('for(i in 0u32..2u64){};return 7u64;'),
+        2, '', 'range endpoints with different integer types'),
+    'query_range_requires_index_evidence': (query('for(i in {return 8u64;}..{return 9u64;}){};'),
+        2, '', 'range index type is not established by an endpoint'),
+    'query_fold_requires_value_accumulator': (query('fold(i in 0..2, acc={}){};return 7u64;'),
+        2, '', 'non-value or abruptly completing operand'),
+    'query_fold_checks_empty_body': (query('fold(i in 0..0, acc=0u64){false};return 7u64;'),
+        2, '', 'fold body does not satisfy the accumulator type'),
+    'query_fold_rejects_narrowing': (query('fold(i in 0..2, acc=0u8){1u32};return 7u64;'),
+        2, '', 'fold body does not satisfy the accumulator type'),
+    'query_loop_accepts_lossless_fold_without_execution': (IO +
+        query('for(i in 0..2){behave @print(99);};return fold(i in 0u8..1u8, acc=0u64){i};') + 'behave @print(result);',
+        0, '4\n', ''),
+    'query_loop_keeps_endpoint_return': (IO + query('for(i in {return 8u64;}..2){};') + 'behave @print(result);', 0, '4\n', ''),
+    'query_fold_keeps_body_return': (IO + query('fold(i in 0..1, acc=0u64){return 8u64;};return 7u64;') + 'behave @print(result);',
+        0, '4\n', ''),
     'function_permissions': (IO+'func run()->void{ {{behave @print(1u64);}};}run();', 2, '', 'function cannot invoke a dynamic procedure'),
     'readonly_capture': ('proc run()->void{const val n<-1u64;{{n<-2u64;}};}run();', 2, '', 'readonly'),
     'capture_requires_initialization': ('proc run()->void{val n<-make local u64;{{n<-2u64;}};}run();', 2, '', 'before definite initialization'),

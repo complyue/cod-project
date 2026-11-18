@@ -767,6 +767,19 @@ class ScalarChecker {
   static void check_local_initializer(const Type &initial, const Type &type, const Location &at) {
     if (initial != Type::never && !transfers_bits(initial, type)) fail(at, "initializer does not satisfy local storage type");
   }
+  static Type range_index_type(const Type &first, const Type &last, const Location &at) {
+    if ((first != Type::never && !integral(first)) || (last != Type::never && !integral(last)))
+      fail(at, "a range requires integer endpoints");
+    if (first == Type::never && last == Type::never)
+      implementation_gap(at, "range index type is not established by an endpoint");
+    if (first != Type::never && last != Type::never && first != last)
+      implementation_gap(at, "range endpoints with different integer types");
+    return first == Type::never ? last : first;
+  }
+  static void check_fold_body(const Type &body, const Type &accumulator, const Location &at) {
+    if (body != Type::never && body != accumulator && !widens(body, accumulator))
+      fail(at, "fold body does not satisfy the accumulator type");
+  }
   void reference_destination(const CheckedOperation &view, const Location &at) const {
     if (view.slots.empty()) fail(at, "reference operation requires a binding slot");
     require_slots_live(view.slots, at, "reference binding's lexical scope has ended");
@@ -4286,8 +4299,10 @@ class ScalarChecker {
     case K::range_for: case K::fold: {
       const bool fold = expr.kind == K::fold;
       const auto first = child(0), last = child(1);
-      const auto index = first == Type::never ? last : first;
+      const auto index = state.required ? std::optional{range_index_type(*first, *last, expr.at)} :
+          first == Type::never ? last : first;
       const auto accumulator = fold ? child(2) : std::optional<Type>{Type::void_type};
+      if (fold && state.required) require_value(*accumulator, expr.at);
       auto iteration = state;
       const auto control_owner = EvidenceOwner::for_scope(expr);
       iteration.bindings[expr.text] = index; iteration.views[expr.text] = {true, true, true, control_owner, false, false, true, true};
@@ -4298,7 +4313,8 @@ class ScalarChecker {
         iteration.definitions.erase(expr.binding);
         iteration.owner_bindings.erase(expr.binding);
       }
-      type_evidence(*expr.children[fold ? 3 : 2], iteration);
+      const auto body = type_evidence(*expr.children[fold ? 3 : 2], iteration);
+      if (fold && state.required) check_fold_body(*body, *accumulator, expr.at);
       if (!fold && expr.children.size() == 4) {
         auto empty = state; type_evidence(*expr.children[3], empty);
         state = merge_evidence(std::move(state), empty);
@@ -6137,12 +6153,8 @@ class ScalarChecker {
     case K::range_for: case K::fold: {
       const bool fold = expr.kind == K::fold;
       const auto first = child(0), last = child(1);
-      if ((first != Type::never && !integral(first)) || (last != Type::never && !integral(last)))
-        fail(expr.at, "a range requires integer endpoints");
-      const auto index = first == Type::never ? last : first;
-      if (index == Type::never) implementation_gap(expr.at, "range index type is not established by an endpoint");
+      const auto index = range_index_type(first, last, expr.at);
       const bool completes = first != Type::never && last != Type::never;
-      if (completes && first != last) implementation_gap(expr.at, "range endpoints with different integer types");
       Type accumulator;
       if (fold) { accumulator = child(2); require_value(accumulator, expr.at); if (accumulator.kind == Type::procedure) note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)}); }
       const auto before = lexical_;
@@ -6189,9 +6201,7 @@ class ScalarChecker {
       }
       const auto body = child(fold ? 3 : 2, true, !fold);
       if (fold && body.kind == Type::procedure) note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
-      if (fold && body != Type::never && body != accumulator && !widens(body, accumulator)) {
-        fail(expr.at, "fold body does not satisfy the accumulator type");
-      }
+      if (fold) check_fold_body(body, accumulator, expr.at);
       leave_scope();
       if (repeat_possible) {
         active_loops_.pop_back();
