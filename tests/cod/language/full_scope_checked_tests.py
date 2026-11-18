@@ -10,6 +10,8 @@ PAYLOAD = ('func sample_error()->const NullPointerException{ptr absent:u64=null 
 FORWARD = 'proc forward(val e:NullPointerException)->void throws NullPointerException{throw e;}'
 DECLARED = 'proc declared()->void throws NullPointerException{}'
 ROOT = 'proc broad(val e:NullPointerException)->void throws Exception{throw e;}'
+TAKE = 'proc take(value:u64)->void{behave @print(value);}'
+OBSERVE = 'proc observe(value:u64)->void{behave @print(value);}'
 NPE = "checked exception 'NullPointerException' requires a covering catch or throws declaration"
 BROAD = "declared checked exception 'Exception' requires a covering catch or throws declaration"
 DEFER = 'checked failures involving deferred execution require coverage within the owning pass'
@@ -36,6 +38,35 @@ runner.CASES = {
                                          'val result<-make local typeof({ {{throw e;}};7u64 }){9u64};behave @print(result);', '9\n'),
     'throw_only_unchecked_query_validity': reject('val result<-make local typeof({{throw 7u64;}});',
                                                   'throw requires an intrinsic exception value'),
+    'throw_only_uses_argument_signature': run(
+        'val e<-sample_error();try{consume({{defer observe(7u64);observe(1u64);throw e;}},'
+        '{observe(98u64);2u64});{}}catch(caught:const NullPointerException){behave @print(caught.category);};',
+        '1\n7\n4\n', OBSERVE + 'proc consume(x:T,y:T)->void where T{behave @print(y);}'),
+    'throw_only_uses_callable_view_argument_signature': run(
+        'proc invoke=take;val e<-sample_error();try{invoke({{throw e;}});{}}'
+        'catch(caught:const NullPointerException){behave @print(caught.category);};', '4\n', TAKE),
+    'throw_only_supplies_no_callable_payload': run(
+        'val e<-sample_error();try{apply({{throw e;}});{}}'
+        'catch(caught:const NullPointerException){behave @print(caught.category);};', '4\n',
+        'proc apply(fn:func(u64)->u64)->void{behave @print(fn(7u64));}'),
+    'throw_only_uses_declared_result_signature': run(
+        'try{take(expose(sample_error()));{}}catch(caught:const NullPointerException){behave @print(caught.category);};',
+        '4\n', TAKE + 'func expose(val e:NullPointerException)->u64 throws NullPointerException;'
+        'func expose(val e:NullPointerException) throws NullPointerException{return {{throw e;}};}'),
+    'throw_only_argument_query_does_not_read_or_execute': run(
+        'val e<-make local NullPointerException;'
+        'val result<-make local typeof(select({{observe(98u64);throw e;}},1u64)){17u64};behave @print(result);',
+        '17\n', OBSERVE + 'func select(x:T,y:T)->const T where T{return y;}'),
+    'throw_only_scope_composes_through_nested_return': run(
+        'val e<-sample_error();try{take({{return {{throw e;}};}});{}}'
+        'catch(caught:const NullPointerException){behave @print(caught.category);};', '4\n', TAKE),
+    'throw_only_result_keeps_checked_obligation': reject(IO + TAKE + 'val e<-sample_error();take({{throw e;}});'),
+    'ordinary_void_scope_cannot_supply_argument': reject(TAKE + 'take({{7u64;}});',
+        'non-value or abruptly completing operand'),
+    'ambiguous_contract_cannot_type_throw_only_result': reject(
+        TAKE + 'proc take(value:bool)->void{}val e<-sample_error();'
+        'try{take({{throw e;}});{}}catch(caught:const NullPointerException){};',
+        'non-value or abruptly completing operand'),
     'query_checks_catch_category': (query('try{}catch(e:const u64){};return 7u64;'),
         2, '', 'catch requires a selected intrinsic exception type'),
     'query_rejects_repeated_catch_category': (query('try{}catch(e:const NullPointerException){}'

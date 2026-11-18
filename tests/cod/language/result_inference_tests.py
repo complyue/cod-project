@@ -36,6 +36,9 @@ runner.CASES = {
  'recursive_void_completion_without_termination_proof': ('proc f(){f();}proc g:proc()->void=f;',0,'',''),
  'unresolved_value_cannot_be_void': ('func f(flag:bool){if(flag){return f(flag);}else{};}',2,'','unproved callable result'),
  'throw_only_requires_contract': (MISSING+'func f(e:MissingReturnError){throw e;}',2,'','unproved callable result'),
+ 'throw_only_scope_default_cannot_anchor_recursion': (
+     MISSING+'func f(flag:bool,val e:MissingReturnError){if(flag){return f(flag,e);}'
+     'else{return {{throw e;}};};}',2,'','unproved callable result'),
  'unreachable_anchor_cannot_prove_cycle': ('func f(){return f();return 1u64;}',2,'','unproved callable result'),
  'dependent_return_must_satisfy_anchor': ('func f(flag:bool){if(flag){return 1u32;}else{return f(true)+1u64;};}',2,'','return type'),
  'ordinary_body_has_no_implicit_value': ('func f(){1u64}func g:func()->void=f;g();',0,'',''),
