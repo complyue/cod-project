@@ -1,8 +1,10 @@
 # CoD regional ownership: syntax, semantics and use
 
-Design revision: 124 · Recorded: 2026-11-17 · Status: design draft with scoped confirmed requirements.
+Design revision: 125 · Recorded: 2026-11-18 · Status: design draft with scoped confirmed requirements.
 
 ## Design authority
+
+- **Replacement of an occupied region owner.** [D-14-OWNER-REPLACEMENT](DesignAuthorityRegistry.md#d-14-owner-replacement), r125, covers [ordinary occupied holders](#replacing-an-occupied-region-owner). [H-OCCUPIED-OWNER-20261118](../CHANGELOG.md#h-occupied-owner-20261118) confirms replacement and static invalidation of views into the released instance. H-262/H-263, C-54/P-232/P-233 and D-17 E4/E5 supply named-source, surviving-view and completion rules. P-576–P-578 record the scoped rationale, prerequisites and invalidation rule. The candidate P-143/P-155 value path to charter §§3.3/4.1/4.3/6.3 makes the release point visible and keeps safe access checkable. Acceptance covers fresh and stale reads, failed preparation, conditional replacement and delayed use. The checker cost assessment and its proposed proof strategy are engineering estimates. Complete lowering, consumed-holder reuse and self-transfer remain separate scopes.
 
 - **Full-scope dependency continuity:** [K-FULL-SCOPE-IMPLEMENTATION-20261118](../CHANGELOG.md#k-full-scope-implementation-20261118) updates only the referenced r92 qualification. This document’s semantic revision, own qualification, acceptance and exclusions are unchanged.
 
@@ -10,7 +12,7 @@ Design revision: 124 · Recorded: 2026-11-17 · Status: design draft with scoped
 
 - **Full scopes are ordinary callable invocations:** [H-FULL-SCOPE-CALLABLE-20261117](../CHANGELOG.md#h-full-scope-callable-20261117)/[K-FULL-SCOPE-CALLABLE-20261117](../CHANGELOG.md#k-full-scope-callable-20261117), [D-17-FULL-SCOPE](DesignAuthorityRegistry.md#d-17-full-scope)/P-564–P-566, covers r123→124 in the explicit-full-scope interactions below. The user confirms ordinary capture, local return and independent cleanup everywhere; D-17 owns the source acceptance. Reuse C-63/C-65/C-73/C-75/C-84 and charter §§2/3.2–3.3/4.3/6.3/8/12 for one inspectable callable/lifetime model. Preserve actual owners, permissions, declared failures and D-16; no shared cells, lifetime extension or implicit value return. [H-FULL-SCOPE-IMPLEMENTATION-20261118](../CHANGELOG.md#h-full-scope-implementation-20261118) separately qualifies D-17’s bounded r92 full-scope profile, including immediate ref/ptr inputs; general escaping borrowed-view and declared-place capture mechanisms remain outside it. D-18's value-input profile retains its independent qualification. D-10 separately records the selected trailing callback surface; complete implementation/value-path qualification remains pending.
 
-- **Discussion-index continuity:** [K-DISCUSSION-SCAN-20261117](../CHANGELOG.md#k-discussion-scan-20261117) continues r122→123’s function-result summary from H-262/H-263/H-267 and D-17 E4/E5. C-54/P-143/P-155 and charter §§3.2–3.3/4.3/6.3/8 preserve explicit cleanup responsibility, consumed source names and lifetime-checked views. Existing acceptance and broader pending qualification remain; owner reassignment/reinitialization and mailbox recovery are still separate choices. No new ownership, syntax or physical contract follows.
+- **Discussion-index continuity:** [K-DISCUSSION-SCAN-20261117](../CHANGELOG.md#k-discussion-scan-20261117) continues r122→123’s function-result summary from H-262/H-263/H-267 and D-17 E4/E5. C-54/P-143/P-155 and charter §§3.2–3.3/4.3/6.3/8 preserve explicit cleanup responsibility, consumed source names and lifetime-checked views. Existing acceptance and broader pending qualification remain; reinitializing a consumed holder and mailbox recovery are still separate choices. No new ownership, syntax or physical contract follows.
 
 - **Generator invocation owner:** [H-604](../CHANGELOG.md#h-604)/[K-GENERATOR-HERE-20261117](../CHANGELOG.md#k-generator-here-20261117), [D-29-LENDING](DesignAuthorityRegistry.md#d-29-lending)/P-552–P-554, adds r122's scoped here clarification. In a generator yield contract, here denotes that invocation's lexical owner, fixed across the for; ordinary caller/local here retains its own lexical scope. C-65/C-96 → charter §§2/3.2–3.3/4.3/6.3/8/12 preserves explicit owner identity and bounded borrowing. D-29 owns acceptance and the source confirmation; ordinary return escape, same-owner/access/init rules, D-16 and D-18's existing qualification boundaries are unchanged. Complete generator proof/native/value-path qualification remains separate.
 
@@ -473,6 +475,35 @@ A transferable named region need not occupy optional storage. Explicit optional/
 
 Under this contract, every path reaching a use must retain a valid owner. If one path transfers and another retains it, an unconditional later access is invalid. Explicit optional/results remain useful when the business program needs a runtime outcome, including a returned packet after local send failure. Whether an unavailable binding can be reinitialized remains a separate choice. H-263 keeps pre-existing views usable while the new local owner remains alive and permits their access. Ending that ownership scope invalidates those views; sending the region out revokes sender access. A returned send-error owner does not automatically settle whether old revoked views become usable again.
 
+### Replacing an occupied region owner
+
+An ordinary writable `owned region p:Packet` can receive a newly constructed, distinct owning result with `p <- rhs`. If the RHS only borrows the old region, that region stays live throughout RHS evaluation and required cleanup. Successful delivery replaces the holder's responsibility and releases the old region exactly once. A failure before delivery leaves the old region and its borrows live. Ordinary RHS side effects still apply. If an operation in the RHS explicitly consumes p, D-17's consuming-entry rule applies at that operation. Failure after that entry cannot restore the consumed owner. Reinitializing the consumed holder is a separate question.
+
+```cod
+region Packet { sequence:u64; }
+
+proc advance() -> u64 {
+    owned region p:Packet <- make region Packet(4096u64 -> capacity) {
+        sequence <- 7u64;
+    };
+    ref before:u64 in p = p.sequence;
+    p <- make region Packet(4096u64 -> capacity) {
+        sequence <- before + 1u64;
+    };
+    ref after:u64 in p = p.sequence;
+    return after;     # 8
+    # Replacing the return above with "return before;" must reject.
+}
+```
+
+The two `in p` declarations select their actual owners when the respective references are established. A use of a reference must prove that the selected instance still lives on every path reaching that use. Release invalidates all views into that instance, including views forwarded through calls, stored in admitted captures or retained for a deferred action. A fresh borrow from the current p is valid. An independent bits snapshot obtained before release remains valid. A local transfer that keeps the **same** region alive still preserves access under H-263.
+
+If only one branch performs the replacement, an unconditional read of `before` after the join rejects. A read confined to a proven path on which the original region remains live can succeed. An earlier deferred action that uses `before` after replacement must also reject. This concerns the owner at the time of the deferred access, even when registration was valid. A loop backedge cannot equate different dynamic acquisitions merely because they execute the same `make` site. The allocator may even reuse the same address.
+
+**Implementation cost assessment.** The [checked representation](../cod/lang_checked_program.hh) already separates owner proof identities from executable handles. The [checker](../cod/lang_checked.hh) carries owner facts through storage and control flow. Its current `owner_alive` predicate recognizes external owners and active lexical scopes. An independently releasable region needs an additional lifetime fact. A bounded implementation can record which region instance the holder currently owns, attach that instance to selected borrows, and end its liveness at successful replacement. At each use, check that fact on all reaching paths. No scan of outstanding pointers, runtime generation field per reference, or traversal of regional relative edges is required. D-28's [shared owner information](RegionalAndLexicalStorageRefactor.md#shared-owner-information-from-checked-declarations) still governs runtime address resolution.
+
+Straight-line replacement adds modest proof work once ordinary owning expressions and cleanup are available. Integrating normal and exceptional completion, loop backedges, deferred accesses and call/capture evidence is the larger cost. Calls also need proof that a callee or callback cannot release a still-needed instance through another admitted access path. A sound initial checker can diagnose an unproved crossing while accepting fresh borrows and supported ordinary uses. In a loop, discard proof for a prior instance on a replacing backedge unless the proof distinguishes it from the current one. No unbounded sequence of static IDs is required. Validate the example, conditional and deferred rejection, surviving same-instance transfer, and exact resource accounting on success and failed construction. The [current compiler coverage](../tests/cod/language/README.md) and [owning-region fixtures](../tests/cod/language/owned_region_tests.py) distinguish available infrastructure from acceptance of this new operation.
+
 ### Local view validity after ownership transfer
 
 The source name and the storage reached by an existing view have different validity rules:
@@ -759,7 +790,7 @@ The local construction/edit/call/transfer/cleanup lifecycle is implemented. Furt
 | --- | --- | --- |
 | Pointer variables and parameters | H-271 fixes a ptr binding's owner at initialization; H-272 copies default bits arguments into callee-local targets. External borrowing requires owner generics. | H-273 confirms owner annotations; coordinate external const access, local temporary lifetimes and result provenance. |
 | Assignment and transfer | `=` rebinds references within a fixed owner; `<-` transfers bits/ownership. Both associate rightward and expose destination views: `=` preserves proven access and `<-` is readonly; owning moves use separate steps. | H-270/H-271 fixes result views and owner identity; H-293 requires an external destination owner and preserves read-only aliases. Indexed transfer syntax and general qualifier composition remain separate. |
-| Owner reassignment and optional outcomes | Fresh ordinary owners have a consumed state; local transfer preserves permitted views. | Occupied destinations, reinitialization and intrinsic owner-bearing optional/results need explicit contracts. They are not required to construct an ordinary region. |
+| Owner reassignment and optional outcomes | Fresh ordinary owners have a consumed state; local transfer preserves permitted views. | Occupied ordinary holders accept distinct owning results under the [replacement contract](#replacing-an-occupied-region-owner). Reinitializing consumed holders and intrinsic owner-bearing optional/results remain open. |
 | Mailbox handoff | Local send errors only, no delivery acknowledgment; failed send can return ownership. | Specify the intrinsic result/matching surface, receive ownership and revoked sender views. Validate one complete process-boundary path when implemented. |
 
 The library-pool example below already demonstrates allocator policy in CoD. It requires no language-level free-list, per-object owner or generation registry. New mechanisms need a reproduced limitation or a confirmed business requirement.
@@ -931,7 +962,7 @@ The function keyword guarantees independence from dynamic context, not mathemati
 | Local allocation and scope exit | make-created regions are locally owned until legitimately returned/transferred. Still-owned regions release once at lexical exit; forwarded owners are excluded from that cleanup. Allocation/failure semantics still need their own explicit contract. |
 | Caller-owned input region | An access parameter may allow content edits without transferring the owner's cleanup responsibility. Exiting the function must not free the caller's region. Returning an interior reference is allowed only while its caller-region provenance remains valid. |
 | Local reference escape | Returning only `T` into a region destroyed at function exit is rejected. Return the intrinsic whole-region resource instead, or allocate the result inside a supplied live region. No hidden lifetime extension or nullable dangling-reference state. |
-| Returned whole region | An explicit `return packet;` under an owning-result contract transfers the intrinsic region responsibility under D-17 E4/E5, without copying its contents. H-262 supplies the consumed named-source state; delivery follows successful required cleanup. Reinitialization, occupied destinations and mailbox recovery remain separate choices for functions and procedures alike. |
+| Returned whole region | An explicit `return packet;` under an owning-result contract transfers the intrinsic region responsibility under D-17 E4/E5, without copying its contents. H-262 supplies the consumed named-source state; delivery follows successful required cleanup. An occupied holder follows the ordinary replacement contract. Consumed-holder reinitialization and mailbox recovery remain separate choices for functions and procedures alike. |
 | Snapshot semantics | Nested functions may now change input-reachable data, so the earlier automatic read-only snapshot guarantee no longer holds. Keeping read-only inputs would require a separately specified parameter restriction; merely calling the code a function cannot supply it. |
 | Sequencing and optimization | Preserve source evaluation order around observable memory effects. Do not infer LLVM readonly/readnone, memoization, repeated-call elimination or reorderability from the function keyword. Existing inlining can expose actual loads/stores to LLVM; no new optimizer is required. |
 | Errors | Lexical cleanup releases owned storage; it does not undo earlier edits to a caller region. Failed effect initialization preserves the prior binding/owner, but does not promise rollback of graph edits made while evaluating its RHS. |
@@ -1139,9 +1170,9 @@ Symbolic bindings are separate from ordinary pointer destinations: `effect @x <-
 
 Procedure-valued effects install an existing value with `effect @p = procedure_value`, materialize a selected symbol family, or combine method definition/extension with installation. `effect @p;` installs without extension. Capture construction belongs to runtime materialization; module registration alone acquires no captured resource. Installation preserves the selected family/context and existing value captures without duplicating region ownership. They do not classify procedure descriptors as transferable owners or permit effect-arrow procedure binding. Typed effect installation, public owner transfer and captured replay retain separate checks.
 
-The concept is coherent, but these details must be chosen before lowering ordinary owner assignment:
+Ordinary owning assignment follows these boundaries.
 
-- **Occupied destination and self-transfer:** replacing a live owner needs a defined cleanup/borrow policy. For the first increment, rejecting occupied or self-owning destinations is a candidate; automatic release/replacement is another policy. Effect shadowing cannot be borrowed as ordinary replacement semantics.
+- An occupied ordinary holder accepts a distinct owning result under [the replacement rule](#replacing-an-occupied-region-owner). Direct self-transfer and reinitializing a consumed holder remain open. Scoped effect shadowing retains its own restoration rules.
 - **Expression result:** H-206 selects a const reference to the destination value, not another owner. H-207 requires explicit steps for ownership moves; the following sections specify the chain boundary. H-288 makes every scoped-effect result void; it supplies no assignment-chain view.
 - **Evaluation and failure:** select/validate the destination and evaluate the source once, preserve the established argument/conversion order, and ensure failure cannot lose or duplicate responsibility. The precise ownership-consumption point and local-error result must agree with the operation. Send can return ownership on local failure without reviving the consumed source implicitly.
 - **Source post-state and branches:** H-262 makes a transferred ordinary source unavailable at compile time, without an implicit NPE. Optional/result storage has separately specified presence semantics. Cross-process send also revokes sender views; local forwarding can preserve views only while the actual region remains accessible under its new owner.
@@ -1331,7 +1362,7 @@ Lean acceptance should cover a bits-field copy across owners, a read-only destin
 
 H-262 selects non-optional ordinary owners with a compiler-tracked consumed state. After an operation transfers ownership, the source declaration is unavailable on that path: reading, borrowing from or transferring it again is a compile error. Its type is not rewritten to an optional and no hidden null value is introduced. An optional/result is explicit when runtime absence or an operation outcome is part of the business model.
 
-A local transfer into an effect keeps the region alive under the dynamic owning scope. H-180/H-181's captured shadows and non-extraction rule remain unchanged. Consumption of the lexical name and validity of already obtained views are separate facts. H-263 preserves local views while the new owner remains alive and accessible; ending that ownership scope or sending the region away revokes access. Owner reinitialization, occupied destinations and revival after a failed-send return remain separate choices.
+A local transfer into an effect keeps the region alive under the dynamic owning scope. H-180/H-181's captured shadows and non-extraction rule remain unchanged. Consumption of the lexical name and validity of already obtained views are separate facts. H-263 preserves local views while the new owner remains alive and accessible; ending that ownership scope or sending the region away revokes access. Replacing an occupied holder releases its old region under [the replacement rule](#replacing-an-occupied-region-owner). Reinitialization of a consumed holder and revival after a failed-send return remain separate choices.
 
 The compiler must preserve the consumed fact across demanded calls and branch joins. An unconditional use requires valid ownership on every reaching path. H-264/H-267/E4–E5 fixes the first construction and call/result transfer points; more general path-correlation analysis remains separate. WPO does not imply that runtime branch choices or allocation identities are known in advance.
 

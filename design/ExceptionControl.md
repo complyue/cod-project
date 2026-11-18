@@ -1,8 +1,10 @@
 # CoD exception control and regional cleanup
 
-Design revision: 92 · Recorded: 2026-11-18 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; bounded full-scope elaboration profile confirmed; current implementation availability is recorded in the source capability reference.
+Design revision: 93 · Recorded: 2026-11-18 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; bounded full-scope elaboration profile confirmed; current implementation availability is recorded in the source capability reference.
 
 ## Design authority
+
+- **Checked failures of double braces.** [H-DOUBLE-BRACE-THROWS-20261118](../CHANGELOG.md#h-double-brace-throws-20261118) confirms the [standalone checked interface](#checked-failures-of-standalone-full-scopes) in r93 and the [contextual callback rule](SymbolicDynamicScope.md#trailing-callback-arguments). D-17-FULL-SCOPE/P-564–P-566 and C-63/P-235/P-236 connect one inspectable call boundary to charter §§3.2/6.3/8. H-313/H-525 preserve declared obligations. The bounded r92 implementation profile carries forward with the standalone rule and acceptance cases below. Wider callback lowering and deferred-pass mechanisms retain separate qualification.
 
 - **Qualified full-scope implementation:** [H-FULL-SCOPE-IMPLEMENTATION-20261118](../CHANGELOG.md#h-full-scope-implementation-20261118)/[K-FULL-SCOPE-IMPLEMENTATION-20261118](../CHANGELOG.md#k-full-scope-implementation-20261118) confirms the complete bounded r92 [ordinary-callable elaboration profile](#full-scope-implementation-profile), including immediate ref/ptr proof and transport, under [D-17-FULL-SCOPE](DesignAuthorityRegistry.md#d-17-full-scope)/P-564–P-566. Its confirmed C-63/C-65/C-73/C-75/C-84 → charter §§2/3.2–3.3/4.3/6.3/8/12 path connects one callable model to explicit input, owner, result and cleanup responsibility without lifetime extension. H-FULL-SCOPE-CALLABLE-20261117 remains the source baseline; H-BOUNDED-IMPLEMENTATION-ADOPTION-20261117 independently qualifies the stated dependencies. The profile’s constraints, acceptance, migration and exclusions below delimit delegation; current implementation availability is separate. General escaping borrowed views and new declared-place capture mechanisms retain D-18-BORROW’s pending scope. Semantic r92 is unchanged; this update records qualification.
 
@@ -403,6 +405,27 @@ A delayed block controls when its contained full-scope expression is reached. Th
 
 **Acceptance:** the four outcomes above; local explicit returns and independent inference; per-call capture independence versus permitted target/place updates; independent nested cleanup, exact owner release and failure propagation; no outer pending-result/catch/loop control access across the callable boundary; ordinary default/receiving scope lifetimes. Full-scope source semantics are selected. D-17-DEFER-CHECKS and D-18-VALUE-CAPTURE now have their bounded implementation/value-path qualifications; the bounded full-scope implementation profile below now has its own r92 qualification. Broader capture proofs and a permanent ABI retain their separate scopes.
 
+#### Checked failures of standalone full scopes
+
+A standalone `{{ ... }}` implicitly declares the checked obligations that can escape its invocation. Compute them statically under ordinary exception checking. Include explicit throws at their declared types, declared failures of calls, and checked operations such as a potentially null dereference. Apply local handling and ordinary completion rules first, including new failures from a handler or `finally`. An entirely handled failure adds no obligation. Unchecked errors can propagate without a checked declaration. The caller of the implicit callable must handle or declare each remaining obligation.
+
+```cod
+using "std:exceptions" NullPointerException;
+
+proc forward(val e:NullPointerException) -> void throws NullPointerException {
+    throw e;
+}
+
+proc sample(val e:NullPointerException) -> void {
+    try { {{ forward(e); }}; }
+    catch (caught:const NullPointerException) {}
+}
+```
+
+The call inside the braces contributes `throws NullPointerException` even though the block contains no literal `throw`. Replacing `forward(e)` with `throw e` gives the same interface. Moving the covering catch inside the block leaves its checked interface empty. Removing the only catch requires `sample` to declare the failure. An operand declared `Exception`, or a call declared `throws Exception`, contributes the general obligation even when its runtime value or implementation is known to be narrower. Nested standalone scopes compose through their immediate calls. Failures while preparing captures belong to the enclosing evaluation. Checked failures from a deferred action still need coverage within its owning defer pass.
+
+A [trailing callback](SymbolicDynamicScope.md#trailing-callback-arguments) already has a callable parameter signature. That signature sets its allowed checked failures. An explicit helper also keeps its own ordinary declaration requirement.
+
 ### Full-scope implementation profile
 
 [H-FULL-SCOPE-IMPLEMENTATION-20261118](../CHANGELOG.md#h-full-scope-implementation-20261118) qualifies this bounded r92 implementation profile and its value path. It implements the confirmed source model through ordinary callable facilities, preserving local returns and independent captures. Its value is one checked callable meaning shared by source validation, result inference, queries and native execution, reducing duplicated control and lifetime rules. The ordinary callable is a semantic boundary; a physical call or allocated view is optional.
@@ -433,7 +456,7 @@ proc local_reference_slot() -> u64 {
 }
 ```
 
-**Checking and queries.** Body validation, return inference and query-only inspection must agree on this boundary. An explicit inner return contributes to the implicit callable's result, not the enclosing callable's. A tail expression is not an implicit return. Expected-signature and missing-return handling follow D-24 and the ordinary callable rules. Queries may establish the result and capture requirements without invoking the body, reading captures, allocating inputs or registering cleanup. Func/proc permission, source well-formedness, readonly access, initialization and owner-escape checks still apply; the scope boundary grants no permission to accept an otherwise invalid source program.
+**Checking and queries.** At the immediate invocation apply the [standalone checked interface](#checked-failures-of-standalone-full-scopes), including failures of nested calls. Body validation, return inference and query-only inspection must agree on this boundary. An explicit inner return contributes to the implicit callable's result, not the enclosing callable's. A tail expression is not an implicit return. Expected-signature and missing-return handling follow D-24 and the ordinary callable rules. Queries may establish the result and capture requirements without invoking the body, reading captures, allocating inputs or registering cleanup. Func/proc permission, source well-formedness, readonly access, initialization and owner-escape checks still apply; the scope boundary grants no permission to accept an otherwise invalid source program.
 
 **Runtime and completion.** When the expression is reached, prepare ordinary inputs once, acquire the complete required independent values before exposing writable invocation locals, and invoke once. Failed preparation releases only its successfully acquired prefix under ordinary cleanup; it enters no partially prepared body and rolls back no completed outer effect. The body uses its own `return`/`if returning`, catch context, loop control and cleanup state. On success, prepare its ordinary result before destroying local dependencies and deliver only after its cleanup succeeds. On failure, propagate through the ordinary call boundary. Discarded results, local complete values and owned resources receive their usual exact cleanup. A reference to invocation-local storage cannot escape; an admitted returned callable may retain independent values or independently proved surviving borrows under D-18. No capture or `here` owner is extended merely because the call is immediate.
 

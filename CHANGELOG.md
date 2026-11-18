@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-11-18 — Specify checked failures for standalone and callback double braces
+
+<a id="h-double-brace-throws-20261118"></a>
+**H-DOUBLE-BRACE-THROWS-20261118 — Select both checked interfaces.** The current project user replied in [the design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-18 America/Los_Angeles, “独立 {{ ... }} 里面实际有哪些throw就认为它声明了 `throws ...`； 作为 callback 的 {{ ... }}} body，按 caller 的 callback 如何声明的 throws 去检查。” This confirms the standalone escaping-declared-obligation interpretation of the reviewed NPE example and the callback parameter’s expected contract. Explicit helper declarations, H-525’s general Exception obligations and checked deferred-pass coverage keep their existing rules.
+
+<a id="k-double-brace-throws-20261118"></a>
+**K-DOUBLE-BRACE-THROWS-20261118 — Apply the decision at both call boundaries.** D-17r92→93/D-10r203→204/registry876→877 updates D-17-FULL-SCOPE/P-564–P-566 and D-10-TRAILING-CALLBACK/P-567–P-569. Apply ordinary exception checking to calls, locally handled failures and enclosing call sites. Keep overload selection independent of callback body effects. The r92 bounded implementation profile continues with the confirmed standalone rule. Broader callback lowering remains pending. Prior scope is at `bce58d2eb9b074ae7b01c173c6b6370b6aa8d17c:design/ExceptionControl.md`, “Full-scope implementation profile”, and the same commit’s `design/SymbolicDynamicScope.md`, “Trailing callback arguments”.
+
+## 2026-11-18 — Release the displaced region on successful owning assignment
+
+<a id="h-occupied-owner-20261118"></a>
+**H-OCCUPIED-OWNER-20261118 — Allow occupied replacement with static invalidation.** In [the design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-18 America/Los_Angeles, the current project user accepted replacement and specified “旧region被release后，之前 `in` 它的引用全部失效，不能因为 `p` 仍指向有效region就错误认为之前的引用未outlive”. The question concerned assigning a distinct fresh region to an occupied ordinary holder after successful construction, with the original retained on non-consuming RHS failure. D-14r125/P-578 records this source contract. Consumed-holder reinitialization, self-transfer and the checker implementation were outside the decision.
+
+<a id="k-occupied-owner-20261118"></a>
+**K-OCCUPIED-OWNER-20261118 — Scope the proof and implementation cost.** D-14r124→125/registry875→876 relates the source rule to H-262/H-263, D-17 E4/E5 and D-28 shared owner information through P-576–P-578. The static feasibility assessment distinguishes fresh instances from a holder, allocation site or address, including on loop, exceptional and delayed paths. Prior alternatives are at `822a8b67c25fe1587314576e97fa90b80eb7cf6d:design/RegionalOwnership.md`, “Occupied destination and self-transfer”. No implementation or broader qualification is claimed.
+
 ## 2026-11-18 — Integrate conditional source decisions and capture evidence
 
 <a id="k-conditional-capture-integration-20261118"></a>
