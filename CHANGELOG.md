@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-18 — Qualify the bounded full-scope implementation profile
+
+<a id="h-full-scope-implementation-20261118"></a>
+**H-FULL-SCOPE-IMPLEMENTATION-20261118 — Approve r92.** Human/source: current project user in [the design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-18 America/Los_Angeles; exact time/personal identity unavailable. In response to the complete bounded r92 profile/value-rationale/acceptance question, the user says “批准 r92 。 下一个问题”. Confirms D-17-FULL-SCOPE/P-564–P-566’s implementation profile and value path, including immediate ref/ptr lifetime/transport, common checked callable meaning, query/result/native consistency, ordinary preparation/completion/cleanup, migration, acceptance and stated exclusions. Reviewed artifact: `e617cad669a4f0aaf91f550ec25f28471633f629:design/ExceptionControl.md`, Full-scope implementation profile under review; the same semantic r92 is present at `478276983eba5787abbfb027850091df82c211b2`. General stored/escaping borrowed-view and new declared-place capture proofs, full FIFO/aggregate/return-inspection, broader result/init/receiving/default/callback/module/generator mechanisms, pure/fractions and a permanent ABI remain excluded. The two earlier adoptions stay unchanged; approval does not claim implementation completion.
+
+<a id="k-full-scope-implementation-20261118"></a>
+**K-FULL-SCOPE-IMPLEMENTATION-20261118 — Record scoped qualification and close the review.** Registry871→872/source429→430 records the direct human approval and reconciles dependency summaries/links; D-17’s semantic r92 and all other semantic revisions are unchanged. C-63/C-65/C-73/C-75/C-84/P-564–P-566 retain the reviewed charter §§2/3.2–3.3/4.3/6.3/8/12 path: one callable model preserves visible input/owner/result/cleanup responsibility without hidden shared cells or lifetime extension. General D-18-BORROW and unrelated pending scopes remain separate. Correct the source reference’s stale same-drain-acceptance sentence against its own implemented r3 summary and K-BOUNDED-CAPTURE-DEFER-20261117; no additional implementation evidence is claimed. Preserve all human history, current source evidence and D-16. Baseline: `478276983eba5787abbfb027850091df82c211b2` at affected paths. Documentation only; no code/build/tests. The external backlog closes this adoption question and returns to source-design discussion.
+
 ## 2026-11-17 — Implement bounded capture inputs and defer source contexts
 
 <a id="k-bounded-capture-defer-20261117"></a>
