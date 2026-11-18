@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-17 — Prefer optional semicolons with actionable syntax warnings
+
+<a id="h-semicolon-ux-20261117"></a>
+**H-SEMICOLON-UX-20261117 — General syntax and ongoing UX principle.** Human/source: current project user in [the design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-17 America/Los_Angeles; exact time/personal identity unavailable. “CoD应该尽量允许省略 semicolon，但是容易误写意图的场景给出警告，提示不容易出岔子的写法。 这是大原则，corner case 情况可能细碎复杂，属于持续打磨ux的区域。” Selects permissive omission and actionable warnings as a general principle, with detailed cases developed incrementally. Does not select a complete newline/insertion algorithm or warning catalogue.
+
+<a id="k-semicolon-ux-20261117"></a>
+**K-SEMICOLON-UX-20261117 — Bound syntax UX without guessing intent.** D-10r201→202/registry863→864 records D-10-SEMICOLON-UX/P-570–P-572, candidate C-06/H-04/E-08 → charter §§8.1–8.3/9/12. Derives deterministic interpretation, distinct invalid-source errors, concrete suggested rewrites and low-noise ordinary omission; marks trailing-block/header/control-operand cases as ongoing refinement. Preserve current binding/evaluation, ordinary owner/effect checks, D-16 and unchanged D-18r113; no parser/native implementation or whole mechanism/value-path adoption. Baseline: `e54942db1978c265a76b3d20fafab52cbcd33e52` at affected paths. Documentation only; no build/tests.
+
 ## 2026-11-17 — Keep the registry preface focused on current authority
 
 <a id="k-current-registry-20261117"></a>

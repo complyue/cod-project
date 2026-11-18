@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 201 · Recorded: 2026-11-17 · Phase: language/application co-design.
+Design revision: 202 · Recorded: 2026-11-17 · Phase: language/application co-design.
 
 ## Design authority
+
+- **Semicolon omission and syntax UX:** [H-SEMICOLON-UX-20261117](../CHANGELOG.md#h-semicolon-ux-20261117)/[K-SEMICOLON-UX-20261117](../CHANGELOG.md#k-semicolon-ux-20261117), [D-10-SEMICOLON-UX](DesignAuthorityRegistry.md#d-10-semicolon-ux)/P-570–P-572, covers r201→202's general source/diagnostic principle below. The human selects permissive omission where practical and warnings with clearer alternatives for misleading valid spellings; corner cases are ongoing UX work. Candidate C-06 → charter §§8.1–8.3/9/12 supports readable source and actionable diagnostics without guessing intent. Preserve deterministic syntax, source meaning, owners/effects and D-16; exact newline/insertion grammar, warning heuristics and complete implementation/value-path qualification remain pending. Existing examples with explicit separators are not a universal mandatory-semicolon policy.
 
 - **Trailing ordinary callbacks:** [H-TRAILING-CALLBACK-20261117](../CHANGELOG.md#h-trailing-callback-20261117)/[K-FULL-SCOPE-CALLABLE-20261117](../CHANGELOG.md#k-full-scope-callable-20261117), [D-10-TRAILING-CALLBACK](DesignAuthorityRegistry.md#d-10-trailing-callback)/P-567–P-569, records the current r201 surface: an optional `=>` parameter header inside double braces, callback in the first declared slot, written positional arguments starting at slot two. This is an explicit exception to ordinary call binding, not a search for an arbitrary hole. Candidate C-36/C-73/C-84 → charter §§2/3.3/5.3/6.3/8/12 supports readable ordinary callable composition and inspectable parameter contracts. The section below states derived timing, typing and rejection criteria; source choices do not qualify the complete grammar/checker/native/value path, new capture permissions or D-18r113. Preserve D-16 and all ordinary-call/default rules outside this form.
 
@@ -846,6 +848,30 @@ A fact exists only on paths where the assertion succeeds. Catching its failure a
 
 **Acceptance:** both spellings; bool-only predicates; static success/failure; unresolved false predicates with optional diagnostic text and ordinary cleanup; once-only evaluation and retained effects; non-null ref use after success; rejection without a fact or after rebinding; no fact after a handled failure; no assertion-elision flag; unchanged owner/access/init, checked operand failures and numeric policy. Source inspection finds no assert handling in the current parser/checker, so this section is a plan, not implemented support. Complete grammar, proof coverage and diagnostic representation remain engineering work within the stated boundary.
 
+### Semicolon omission and syntax UX
+
+[H-SEMICOLON-UX-20261117](../CHANGELOG.md#h-semicolon-ux-20261117) establishes the general principle: **allow semicolon omission wherever practical, and warn when a valid spelling is easy to write with an unintended meaning.** Such a warning should explain the selected interpretation and suggest a concrete, less error-prone spelling. Fine-grained omission and diagnostic cases are ongoing language UX work; this principle does not require an exhaustive automatic-semicolon-insertion system before useful cases can be supported.
+
+Keep explicit semicolons available to make boundaries clear. Routine omission is not itself a reason to warn. A real syntax ambiguity or invalid program still needs an ordinary error; a warning cannot grant a missing type, owner, lifetime or effect permission. Parser interpretation is deterministic and does not retry a different statement split based on overload success, runtime behavior or a guess about the author's intention. Diagnostics do not change that interpretation. Existing opt-in warning-as-error policy remains applicable; no new mandatory diagnostic switch is selected.
+
+A current review case is the distinction between a trailing callback and a separate immediate full scope:
+
+```cod
+# Assume run has a defaulted niladic callback, so either intent is expressible.
+run()
+{{ work(); }}
+
+# Explicit boundary when two successive operations are intended:
+run();
+{{ work(); }}
+```
+
+Where the grammar attaches the first block as a callback, a suspicious presentation can warrant a warning that the block is passed to run and is invoked only under run's behavior; inserting `;` states the independent-scope intent. An intentionally formatted multiline callback must not warn merely because a newline precedes its block. Exact warning triggers and safe formatter output need focused examples and incremental refinement; indentation is not proof of intent.
+
+Other review cases include return/throw operands across lines, call/index/operator continuations, comments and blank lines, and separators in callback headers or receiving specifications. Preserve D-16's reserved fraction `//` and `#` line comments. No newline rule, header-terminator omission, precedence change, mandatory warning catalogue or formatting algorithm is selected by this general principle. In particular, the explicit `;` after a trailing callback's parameter header remains an unambiguous spelling; any omission needs a defined header/body boundary, not a parser guess.
+
+Acceptance of incremental grammar/diagnostic work should show both the admitted omission and its deterministic meaning, meaningful warnings with valid suggested rewrites for the targeted trap, and ordinary omission/multiline cases without unnecessary warnings. Preserve selected argument order, first-slot callback binding, local returns, captures and cleanup. Current compiler support must be reported separately; this source principle alone does not imply that every illustrated omission is already parsed or diagnosed.
+
 ### Trailing callback arguments
 
 [H-TRAILING-CALLBACK-20261117](../CHANGELOG.md#h-trailing-callback-20261117) selects a trailing callable body using double braces, with parameters introduced by an initial `=>` and terminated by `;`:
@@ -869,7 +895,7 @@ The callback is the **first declared parameter**, as in [Julia's do-notation](ht
 
 There is no search for a callback parameter later in the signature. A non-callable first parameter, an explicitly supplied value/default request for the first parameter, or another missing required argument rejects. A declared default on the first parameter is suppressed by this explicitly supplied callback. Defaults on remaining omitted slots retain their existing rules. Calls without a trailing block keep ordinary positional binding. The callback construction is outside the parenthesized argument list, so it does not violate that list's ban on a positional argument after a named argument. The bounded form supplies one trailing callback; use explicit named callable arguments for other callbacks.
 
-**Header and expected type.** `{{=> x, index; statements... }}` binds callback parameters in order. A header is distinct from executable body expressions; `=>` is recognized only in that leading position, and the semicolon ends the header. No header means zero parameters, not an implicit variadic or ignored-argument callback. Parameter names are local to the callback. The independently selected expected callable signature supplies each parameter's type, val/ref/ptr/init/place mode, owner/access constraints, func/proc kind, result contract and failure requirements. This is contextual declaration checking, not type assertion or a new operation on the callback's parameters. Any explicit ordinary parameter annotations must satisfy that contract; they cannot erase owner/access/init obligations. No default expressions are authored by this anonymous header.
+**Header and expected type.** `{{=> x, index; statements... }}` binds callback parameters in order. A header is distinct from executable body expressions; `=>` is recognized only in that leading position, and an explicit semicolon ends the header. The general semicolon-omission principle above applies to future refinement of this boundary; it does not yet select a replacement delimiter or a newline rule. No header means zero parameters, not an implicit variadic or ignored-argument callback. Parameter names are local to the callback. The independently selected expected callable signature supplies each parameter's type, val/ref/ptr/init/place mode, owner/access constraints, func/proc kind, result contract and failure requirements. This is contextual declaration checking, not type assertion or a new operation on the callback's parameters. Any explicit ordinary parameter annotations must satisfy that contract; they cannot erase owner/access/init obligations. No default expressions are authored by this anonymous header.
 
 The initial shorthand covers a single established fixed-arity callback signature, with a header naming all its parameters. It does not synthesize multiple methods for `typeof` a callable family, resolve a circular generic result, or reinterpret a pack as several fixed parameters. Richer signatures can use an ordinary explicitly declared callable where compatible; no new method-coverage, variance, pure or parameter-default policy follows. Structural callback results use the ordinary declared result schema and explicit named return form.
 
