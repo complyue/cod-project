@@ -23,8 +23,8 @@ proc null_recovery(ptr x:u64 in O,ptr y:u64 in O)->ptr u64 in O where {owner O}{
  func select=func(ptr h:func(u64)->const u64 in O)->ptr (func(u64)->const u64) in O where {owner O}{return h;};
  func captured=func[select](ptr h:func(u64)->const u64 in O)->ptr (func(u64)->const u64) in O where {owner O}{return select(h);};
  ptr q=walk_nullable(captured,f,40u64);observe(q(4u64));
- observe(9010u64);val total<-0u64;
- for(i in 0u64..10000u64){{ptr live=nullable_holder(f);total<-total+live(i);}};
+ ptr holder=f;ref total:u64=0u64;observe(9010u64);
+ for(i in 0u64..10000u64){{ptr live=nullable_holder(holder);total<-total+live(i);}};
  observe(9011u64);observe(total);
  ptr absent=f;absent=null;
  try{nullable_holder(absent)(5u64);{}}catch(e:const NullPointerException){observe(17u64);};

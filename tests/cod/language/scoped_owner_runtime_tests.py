@@ -9,7 +9,7 @@ old = '''func walk_owner(select:F,ref f:func(u64)->const u64 in O,n:u64)->const 
  if(n==0u64){func g=base;ptr p=select(f,g);return owner_read(f,p);}else{return walk_owner(select,f,n-1u64);};
 }'''
 new = '''func walk_owner(select:F,ref f:func(u64)->const u64 in O,n:u64) where {F,owner O}{
- if(n==0u64){return {{func g=base;ptr p=select(f,g);p(0u64)+owner_code(owner_tag(f,p))}};}else{return walk_owner(select,f,n-1u64);};
+ if(n==0u64){return {{func g=base;ptr p=select(f,g);return p(0u64)+owner_code(owner_tag(f,p));}};}else{return walk_owner(select,f,n-1u64);};
 }'''
 assert old in FIXTURE.source
 FIXTURE = FIXTURE.updated(source=FIXTURE.source.replace(old, new))
@@ -20,7 +20,9 @@ func owner_code(tag:bool)->u64{return 100u64;}
 func owner_code(tag:i64)->u64{return 200u64;}
 func scoped_query_factory(ref source:func(u64)->const u64 in O)->func()->u64 where {owner O}{
  return {{func local=base;
-  func inspect(){val query<-make local typeof(owner_tag(source,local)){0};return owner_code(query);};inspect}};
+  func inspect(){val query<-make local typeof(owner_tag(source,local)){0};return owner_code(query);};
+  return inspect;
+ }};
 }
 {{
  func plain=wrap(base);observe(9010u64);

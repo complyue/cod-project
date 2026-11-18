@@ -19,11 +19,12 @@ func walk_owner(select:F,ref f:func(u64)->const u64 in O,n:u64)->const u64 where
 {{
  func f=wrap(other);func g=base;
  visit_owner(f,g);observe(f(0u64));
- {{func h=other;visit_owner(f,h);}};
+ ptr live_f=f,live_g=g;
+ {{func h=other;visit_owner(live_f,h);}};
  f<-wrap(other);observe(9020u64);try{visit_owner(f,g);}catch(e:const OutOfMemoryError){observe(9021u64);};observe(f(0u64));
  observe(9030u64);try{copy_owner(f,g);}catch(e:const OutOfMemoryError){observe(9031u64);};observe(f(0u64));
  observe(9050u64);try{defer visit_owner(f,g);}catch(e:const OutOfMemoryError){observe(9051u64);};
- {{defer visit_owner(f,g);}};observe(f(0u64));
+ {{defer visit_owner(live_f,live_g);}};observe(f(0u64));
  func first=owner_first;func second=owner_second;
  observe(walk_owner(first,f,40u64));observe(walk_owner(second,f,40u64));
  observe(9010u64);val total<-0u64;

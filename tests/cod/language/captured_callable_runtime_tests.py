@@ -36,7 +36,7 @@ func retained()->func(u64)->const u64{
 {{func f=wrap(wrap(base));func g=f;f<-wrap(other);observe(g(1u64));observe(f(1u64));}};
 observe(9000u64);
 {{
-  func f=base;for(i in 0u64..80u64){{f<-wrap(f);}};
+  func f=base;for(i in 0u64..80u64){f<-wrap(f);};
   observe(9010u64);val total<-0u64;
   for(i in 0u64..10000u64){total<-total+f(i);};
   observe(9011u64);observe(total);
@@ -50,7 +50,7 @@ observe(9000u64);
   try{f<-g;{}}catch(e:const OutOfMemoryError){observe(9031u64);};
   observe(f(3u64));
   observe(9030u64);
-  try{f({{observe(9999u64);4u64}});{}}catch(e:const OutOfMemoryError){observe(9031u64);};
+  try{f({{observe(9999u64);return 4u64;}});{}}catch(e:const OutOfMemoryError){observe(9031u64);};
   observe(9040u64);
   try{apply(f,missing());{}}catch(e:const MissingReturnError){observe(9041u64);};
 }};
