@@ -736,6 +736,37 @@ class ScalarChecker {
   static void transfer_type(const Type &source, const Type &destination, const Location &at) {
     if (!transfers_value(source, destination)) fail(at, "bits transfer source does not satisfy destination type");
   }
+  static void require_value(const Type &type, const Location &at) {
+    if (!lexical_value_type(type)) implementation_gap(at, "non-value or abruptly completing operand");
+  }
+  static void check_initializer_type(const Expression &group, const Expression &declaration,
+      const Type &initial, const Type &type, std::optional<bool> borrowed) {
+    using K = Expression::Kind;
+    if (type == Type::null_ref) fail(declaration.at, "a null initializer requires an explicit target type");
+    if (initial == Type::never && !declaration.annotation && declaration.children.front()->kind != K::make_local) return;
+    require_value(type, group.at);
+    const auto &kind = group.declaration_kind;
+    const bool callable = kind == "func" || kind == "proc";
+    if (callable && (type.kind != Type::procedure || type.pure_callable != (kind == "func")))
+      fail(declaration.at, "callable declaration requires a matching func/proc value");
+    if (type.kind == Type::procedure && !callable && kind != "ptr")
+      implementation_gap(declaration.at, "callable storage uses func/proc values or ptr views");
+    if (initial == Type::never) return;
+    const bool value_matches = borrowed != true && transfers_value(initial, type);
+    const bool view_matches = borrowed != false && (initial == Type::null_ref || initial == type);
+    if (!value_matches && !view_matches) fail(declaration.at, "initializer does not satisfy declared " + kind + " type");
+  }
+  static void check_initializer_access(const Expression &declaration, bool source_read_only) {
+    if (declaration.annotation && !declaration.read_only && source_read_only)
+      fail(declaration.at, "readonly source cannot initialize a writable reference target");
+  }
+  static void check_initializer_owner(std::optional<bool> borrowed, bool mixed, bool mismatch, const Location &at) {
+    if (borrowed == false || mixed) implementation_gap(at, "fresh storage with an explicit external owner");
+    if (mismatch) fail(at, "reference initializer does not belong to the declared owner");
+  }
+  static void check_local_initializer(const Type &initial, const Type &type, const Location &at) {
+    if (initial != Type::never && !transfers_bits(initial, type)) fail(at, "initializer does not satisfy local storage type");
+  }
   void reference_destination(const CheckedOperation &view, const Location &at) const {
     if (view.slots.empty()) fail(at, "reference operation requires a binding slot");
     require_slots_live(view.slots, at, "reference binding's lexical scope has ended");
@@ -3963,6 +3994,28 @@ class ScalarChecker {
     state.value = type && type != Type::never ? view : ViewEvidence{};
     return type;
   }
+  struct LocalStorageEvidence {
+    std::optional<Type> type;
+    bool completes = true;
+  };
+  LocalStorageEvidence local_storage_evidence(const Expression &expr, TypeEvidenceState &state) const {
+    LocalStorageEvidence storage;
+    if (expr.annotation) storage.type = state.method
+        ? substitute(*expr.annotation, program_.methods[*state.method], state.substitutions, true)
+        : resolve_type(*expr.annotation);
+    else {
+      auto query = state; query.returns = nullptr;
+      storage.type = type_evidence(*expr.children.front(), query);
+    }
+    if (state.required && storage.type && storage.type->kind == Type::procedure)
+      implementation_gap(expr.at, "raw callable storage construction");
+    for (size_t i = expr.annotation ? 0 : 1; i < expr.children.size(); ++i) {
+      const auto initializer = type_evidence(*expr.children[i], state);
+      if (initializer == Type::never) storage.completes = false;
+      if (state.required && storage.type && initializer) check_local_initializer(*initializer, *storage.type, expr.at);
+    }
+    return storage;
+  }
   std::optional<Type> query_evidence(const Expression &expr, TypeEvidenceState &state, ViewEvidence &view,
                                      bool contextual, const Type *expected, std::vector<Type> *alternatives) const {
     using K = Expression::Kind;
@@ -4065,15 +4118,41 @@ class ScalarChecker {
           if (type_evidence(*declaration, state) == Type::never) completes = false;
           continue;
         }
+        const bool value = expr.declaration_kind == "val" || expr.declaration_kind == "func" || expr.declaration_kind == "proc";
+        if (state.required && value && !declaration->owner_name.empty())
+          fail(declaration->at, "val storage belongs to its lexical scope, not an external owner");
         const auto declared_owner = declaration->owner_name.empty() ? std::optional<EvidenceOwner>{} : owner_evidence(declaration->owner_name, state, declaration->at);
         const auto declared = declaration->annotation ? std::optional<Type>{annotation(*declaration->annotation)} : std::nullopt;
-        const auto initial = type_evidence(*declaration->children.front(), state, declared.has_value(),
+        const auto &initializer = *declaration->children.front();
+        std::optional<Type> initial, storage_type;
+        if (initializer.kind == K::make_local) {
+          // The raw storage type remains known if evaluating its initializer
+          // completes the callable before the declaration can finish.
+          const auto storage = local_storage_evidence(initializer, state);
+          storage_type = storage.type;
+          initial = storage.completes ? storage.type : std::optional<Type>{Type::never};
+          state.value = storage.completes ? ViewEvidence{false, false, {}} : ViewEvidence{};
+        } else initial = type_evidence(initializer, state, declared.has_value(),
             declared && declared->kind == Type::procedure ? &*declared : nullptr);
+        const auto type = declared ? declared : storage_type ? storage_type : initial;
         if (initial == Type::never) completes = false;
-        state.bindings[declaration->text] = declared ? declared : initial;
+        if (state.required) {
+          const auto borrowed = value || declaration->binding == "<-" ? std::optional{false} : state.value.view;
+          if (*initial != Type::never && declared_owner) {
+            const auto relation = compare_owners(state.value.owner, declared_owner, &state);
+            check_initializer_owner(borrowed, borrowed == true && state.value.mixed_view, relation == OwnerMatch::mismatch,
+                                    declaration->at);
+          }
+          check_initializer_type(expr, *declaration, *initial, *type, borrowed);
+          if (*initial != Type::never && borrowed == true)
+            check_initializer_access(*declaration, state.value.read_only.value_or(false));
+          if (expr.declaration_kind == "ref" && initializer.kind == K::make_local &&
+              initializer.children.size() == (initializer.annotation ? 0u : 1u))
+            fail(declaration->at, "ref requires definitely initialized target storage");
+        }
+        state.bindings[declaration->text] = type;
         state.definitions.erase(declaration->text);
         state.owner_bindings.erase(declaration->text);
-        const bool value = expr.declaration_kind == "val" || expr.declaration_kind == "func" || expr.declaration_kind == "proc";
         std::optional<bool> readonly = declaration->read_only || (value && expr.fixed_binding);
         if (!*readonly && !value && declaration->binding != "<-") {
           if (state.value.view.value_or(false)) readonly = state.value.read_only;
@@ -4101,17 +4180,8 @@ class ScalarChecker {
       return Type::void_type;
     }
     case K::make_local: {
-      std::optional<Type> type;
-      if (expr.annotation) type = annotation(*expr.annotation);
-      else {
-        auto query = state; query.returns = nullptr;
-        type = type_evidence(*expr.children.front(), query);
-      }
-      bool completes = true;
-      for (size_t i = expr.annotation ? 0 : 1; i < expr.children.size(); ++i)
-        if (type_evidence(*expr.children[i], state) == Type::never) completes = false;
-      if (!completes) return Type::never;
-      return type;
+      const auto storage = local_storage_evidence(expr, state);
+      return storage.completes ? storage.type : std::optional<Type>{Type::never};
     }
     case K::transfer: case K::rebind: {
       const auto type = child(0); view = state.value;
@@ -5680,9 +5750,6 @@ class ScalarChecker {
       operation.read_only = source.read_only;
       operation.fixed_binding = source.fixed_binding;
     };
-    const auto require_value = [&](const Type &type) {
-      if (!lexical_value_type(type)) implementation_gap(expr.at, "non-value or abruptly completing operand");
-    };
     const auto &method = instance ? program_.methods[instance->method].source : nullptr;
     if (instance && !(lexical_methods_.contains(method) && expr.text == method->name) &&
         !lexical_.lookup(expr.text) && module_names().values.contains(expr.text) &&
@@ -5898,7 +5965,7 @@ class ScalarChecker {
           completes = false;
         } else {
           arguments.push_back(argument);
-          require_value(argument);
+          require_value(argument, expr.at);
         }
         operation.arguments.push_back({mode, arguments.back()});
         if (mode == ArgumentMode::value && argument.kind == Type::procedure)
@@ -6077,7 +6144,7 @@ class ScalarChecker {
       const bool completes = first != Type::never && last != Type::never;
       if (completes && first != last) implementation_gap(expr.at, "range endpoints with different integer types");
       Type accumulator;
-      if (fold) { accumulator = child(2); require_value(accumulator); if (accumulator.kind == Type::procedure) note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)}); }
+      if (fold) { accumulator = child(2); require_value(accumulator, expr.at); if (accumulator.kind == Type::procedure) note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)}); }
       const auto before = lexical_;
       bool body_possible = completes, empty_possible = completes, repeat_possible = completes;
       const auto start = constant_integer(*expr.children[0], operations), end = constant_integer(*expr.children[1], operations);
@@ -6182,7 +6249,7 @@ class ScalarChecker {
           if (initialized) {
             const auto value_type = check(*initializer.children[value_index], instance, operations);
             completes = value_type != Type::never;
-            if (completes && !transfers_bits(value_type, initial_type)) fail(initializer.at, "initializer does not satisfy local storage type");
+            check_local_initializer(value_type, initial_type, initializer.at);
           }
           CheckedOperation allocation;
           allocation.type = completes ? initial_type : Type{Type::never};
@@ -6201,21 +6268,11 @@ class ScalarChecker {
         const auto &source = operations.at(&initializer);
         const bool borrowed = !copy && source.view;
         const bool mixed = borrowed && source.mixed_view;
-        if (completes && owner && (!borrowed || mixed)) implementation_gap(declaration->at, "fresh storage with an explicit external owner");
-        if (completes && owner && std::any_of(source.owners.begin(), source.owners.end(), [&](size_t actual) { return actual != *owner; }))
-          fail(declaration->at, "reference initializer does not belong to the declared owner");
+        if (completes && owner)
+          check_initializer_owner(borrowed, mixed, std::any_of(source.owners.begin(), source.owners.end(),
+              [&](size_t actual) { return actual != *owner; }), declaration->at);
         if ((!borrowed || mixed) && type.kind == Type::procedure) note_abrupt(declaration->at, {exception_id(ExceptionCategory::out_of_memory)});
-        if (type == Type::null_ref) fail(declaration->at, "a null initializer requires an explicit target type");
-        const bool untyped_exit = !completes && !declaration->annotation && initializer.kind != K::make_local;
-        if (!untyped_exit) {
-          require_value(type);
-          if (callable_value && (type.kind != Type::procedure || type.pure_callable != (expr.declaration_kind == "func")))
-            fail(declaration->at, "callable declaration requires a matching func/proc value");
-          if (type.kind == Type::procedure && !callable_value && expr.declaration_kind != "ptr")
-            implementation_gap(declaration->at, "callable storage uses func/proc values or ptr views");
-        }
-        if (completes && (borrowed ? initial_type != Type::null_ref && initial_type != type : !transfers_value(initial_type, type)))
-          fail(declaration->at, "initializer does not satisfy declared " + expr.declaration_kind + " type");
+        check_initializer_type(expr, *declaration, completes ? initial_type : Type{Type::never}, type, borrowed);
         if (borrowed && completes) {
           auto owners = source.owners;
           if (mixed) owners.insert(declaration_scope(declaration->text, declaration->at).id);
@@ -6229,8 +6286,7 @@ class ScalarChecker {
             require_initialized(source, initializer.at, declaration->text);
           }
         }
-        if (completes && borrowed && declaration->annotation && !declaration->read_only && source.read_only)
-          fail(declaration->at, "readonly source cannot initialize a writable reference target");
+        if (completes && borrowed) check_initializer_access(*declaration, source.read_only);
         if (!borrowed && !initialized && expr.declaration_kind == "ref")
           fail(declaration->at, "ref requires definitely initialized target storage");
         const bool read_only = declaration->read_only || (value && expr.fixed_binding) || (completes && borrowed && source.read_only);

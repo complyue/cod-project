@@ -1,6 +1,6 @@
 # CoD source compiler validation
 
-Reference revision: 450 · Recorded: 2026-11-18 America/Los_Angeles.
+Reference revision: 451 · Recorded: 2026-11-18 America/Los_Angeles.
 
 ## Design authority
 
@@ -162,6 +162,8 @@ Source preparation has a 128-level allowance for completed expression/type struc
 The compiler driver connects source discovery/checking to native emission explicitly. [lang_checked_program.hh](../../../cod/lang_checked_program.hh) supplies the shared checked operations, storage/input roles, method/value identities, retained declaration evidence and call/cleanup summaries. [lang_checked.hh](../../../cod/lang_checked.hh) owns mutable lexical state and source analysis; [lang_llvm.hh](../../../cod/lang_llvm.hh) consumes a const checked program without including that checker, module discovery or callable-flow analysis. LLVM-independent checked-body preparation combines the selected instances’ storage by lexical binding identity, validates their common input/capture/owner roles and remaps place facts while retaining each original checked context. General and specialized bodies preserve their respective storage order. The emitter uses those prepared facts directly; it does not reconstruct the storage mapping while generating instructions. For each demanded semantic method, the emitter derives one immutable native parameter layout from the checked inputs/owners, lexical captures, retained types, declaration context and complete callable result requirement. Function declarations, calls and body entry consume that same layout; complete parameter counts are checked at their boundaries. Result requirements are collected once from the method’s checked instances. The existing native parameter order and types remain private to this emitted artifact, independently of semantic type identity and checked storage roles. These are transient compiler components, not a persistent representation or source-level mechanism. Validation reports fingerprint all language headers, including shared artifact definitions, and native fixtures include their transitive fixture inputs.
 
 Before checking a callable body, the checker assembles the entry facts for owners, captures and parameters and derives their shared initialization facts once. Borrowed target presence, payload initialization and owner/access evidence remain independent. Body operations and cleanup consume the same entry facts.
+
+Type queries of immediate full scopes use the ordinary declaration checks for known initializer types, target access and explicit owner mismatches. Value initializers permit established lossless transfers, while borrowed targets require the exact type. Fresh local storage and null initializers retain their source requirements. The query establishes the scope's type without evaluating initializer effects or allocating its storage.
 
 A callable family containing one method with fixed inputs can cover its view without enumerating all input tuples. Each per-input domain must prepare to the fixed formal, including every associated declaration. Expected-result evidence and type-only lexical queries stay fixed per materialization; mutable analysis/emission hints cannot change the proof or callable identity. Distinct result/query contexts retain their own checked implementations.
 

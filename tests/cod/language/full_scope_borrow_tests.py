@@ -11,6 +11,12 @@ SELECT = (
 )
 VALUES = ('func one()->u64{return 1u64;}func two()->u64{return 2u64;}'
           'func wrap(val source:func()->u64)->func()->u64{return func[source]()->u64{return source();};}')
+
+
+def query(body):
+    return 'val queried<-make local typeof({{' + body + '}}){4u64};'
+
+
 runner.CASES = {
     'local_slot_and_deferred_target': (IO+'ref a:u64=1u64;ref b:u64=10u64;ref p:u64=a;'
         '{{p=b;defer{p<-20u64;};}};behave @print(p is a);behave @print(a+b);', 0, 'true\n21\n', ''),
@@ -46,6 +52,29 @@ runner.CASES = {
         '{{ptr local:u64=null in here;p=local;}};', 2, '', 'initializer-fixed owner'),
     'readonly_query_rejects_borrow_write': ('ref a:const u64=1u64;val result<-make local typeof({{a<-2u64;return 1u64;}}){4u64};',
         2, '', 'readonly'),
+    'query_checks_value_initializer': (query('val local:u64<-true;return 7u64;'),
+        2, '', 'initializer does not satisfy declared val type'),
+    'query_checks_local_storage_initializer': (query('val local<-make local u64{true};return 7u64;'),
+        2, '', 'initializer does not satisfy local storage type'),
+    'query_checks_reference_initializer_type': ('ref source:u8=1u8;' + query('ref local:u64=source;return 7u64;'),
+        2, '', 'initializer does not satisfy declared ref type'),
+    'query_checks_reference_initializer_access': ('ref source:const u64=1u64;' +
+        query('ref local:u64=source;return 7u64;'), 2, '', 'readonly source cannot initialize a writable reference target'),
+    'query_checks_reference_initializer_owner': ('func run(ref outer:u64 in O)->u64 where {owner O}{' +
+        query('val local<-1u64;ptr selected:u64 in O=local;return 7u64;') +
+        'return queried;}ref actual:u64=1u64;run(actual);', 2, '', 'reference initializer does not belong to the declared owner'),
+    'query_rejects_untyped_null_initializer': (query('ptr local=null in here;return 7u64;'),
+        2, '', 'a null initializer requires an explicit target type'),
+    'query_rejects_uninitialized_fresh_ref': (query('ref local:u64=make local u64;return 7u64;'),
+        2, '', 'ref requires definitely initialized target storage'),
+    'query_checks_init_without_execution': (IO +
+        query('val local:u64<-make local u64{behave @print(999u64);1u8};return local;') +
+        'behave @print(queried);', 0, '4\n', ''),
+    'query_keeps_local_return_in_initializer': (IO + query('val local<-make local u64{return 7u64;};') +
+        'behave @print(queried);', 0, '4\n', ''),
+    'query_accepts_existing_declared_owner': (IO + 'func run(ref outer:u64 in O)->u64 where {owner O}{' +
+        query('ptr selected:u64 in O=outer;return 7u64;') +
+        'return queried;}ref actual:u64=1u64;behave @print(run(actual));', 0, '4\n', ''),
     'query_does_not_read_uninitialized_target': (IO+'val source<-make local u64;ptr p:u64=source;'
         'val result<-make local typeof({{return p;}}){6u64};behave @print(result);', 0, '6\n', ''),
     'nested_query_retains_binding_evidence_only': (IO+'proc run()->void{val source<-make local u64;ptr p:u64=source;'
