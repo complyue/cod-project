@@ -180,7 +180,6 @@ class ScalarChecker {
   struct LoopState {
     size_t first, last;
     std::set<size_t> bindings, rebound, expired, payloads, payload_origins;
-    bool unknown_exception_payloads = false;
     std::map<size_t, CleanupEquations::Initialization> initialized = {};
   };
   std::map<const Expression *, LoopState> loop_states_;
@@ -485,20 +484,29 @@ class ScalarChecker {
     // Facts implied by the present and absent outcomes of the selected value.
     std::optional<PresenceBranches> presence_proof;
   };
-  struct QueryPayloadWrites {
+  struct QueryWrites {
     EvidencePlaces places;
     bool unknown = false;
     void record(const EvidencePlaces &written) {
       if (written.empty()) unknown = true;
       else places.insert(written.begin(), written.end());
     }
-    void merge(const QueryPayloadWrites &other) {
+    void merge(const QueryWrites &other) {
       places.insert(other.places.begin(), other.places.end());
       unknown |= other.unknown;
     }
     bool touches(const EvidencePlaces &selected) const {
       return unknown || std::ranges::any_of(selected, [&](const auto &place) { return places.contains(place); });
     }
+  };
+  struct TypeDeferredEffects {
+    QueryWrites payloads, slots;
+    std::set<size_t> outcomes;
+    bool opaque = false;
+  };
+  struct TypePreparedCall {
+    const Expression *expression;
+    TypeDeferredEffects effects{};
   };
   struct QuerySelections {
     using Observations = std::map<EvidenceSlot, PresenceBranches>;
@@ -523,7 +531,7 @@ class ScalarChecker {
     // The members retain one selected reference value in independent slots.
     // A write removes the affected slot from its group.
     std::set<EvidencePlaces> equal_selections;
-    QueryPayloadWrites payload_writes, deferred_writes;
+    QueryWrites payload_writes, deferred_writes;
     bool deferred_return = false;
 
     static EvidencePlaces join_places(EvidencePlaces left, const EvidencePlaces &right) {
@@ -980,7 +988,8 @@ class ScalarChecker {
     size_t deferred_queue = 0;
     bool has_deferred_action = false;
     std::set<const Expression *> delayed_controls;
-    const Expression *prepared_call = nullptr;
+    std::optional<TypePreparedCall> prepared_call;
+    bool preparing(const Expression &expr) const { return prepared_call && prepared_call->expression == &expr; }
     struct Returns {
       std::vector<Type> types;
       bool value_obligation = false;
@@ -1009,8 +1018,7 @@ class ScalarChecker {
       const Expression *entry;
       std::unique_ptr<TypeEvidenceState> declaration;
       bool may_replace;
-      bool may_rebind;
-      QueryPayloadWrites writes;
+      TypeDeferredEffects effects;
     };
     struct Alternative {
       size_t queue;
@@ -1038,14 +1046,13 @@ class ScalarChecker {
                                    {right.deferred_queue, right.selections.reach_condition()}});
       return entries.size();
     }
-    size_t push(const TypeEvidenceState &state, const Expression *entry, bool may_replace, bool may_rebind,
-                QueryPayloadWrites writes) {
+    size_t push(const TypeEvidenceState &state, const Expression *entry, bool may_replace, TypeDeferredEffects effects) {
       auto declaration = entry ? std::make_unique<TypeEvidenceState>(state) : nullptr;
       if (declaration) {
         declaration->exits = nullptr;
         declaration->deferred = nullptr;
       }
-      entries.emplace_back(Action{state.deferred_queue, entry, std::move(declaration), may_replace, may_rebind, std::move(writes)});
+      entries.emplace_back(Action{state.deferred_queue, entry, std::move(declaration), may_replace, std::move(effects)});
       return entries.size();
     }
   };
@@ -1613,11 +1620,11 @@ class ScalarChecker {
       if (binding.requires_initialized) require_initialized(source, at, "ref target");
     }
   }
-  void record_rebinding(size_t binding) {
+  void record_rebinding(size_t binding, bool deferred = false) {
     rebound_.insert(binding);
-    for (const auto *loop : active_loops_) loop_states_.at(loop).rebound.insert(binding);
+    if (!deferred) for (const auto *loop : active_loops_) loop_states_.at(loop).rebound.insert(binding);
   }
-  void rebind(const CheckedOperation &target, const CheckedOperation &source) {
+  void rebind(const CheckedOperation &target, const CheckedOperation &source, bool deferred = false) {
     const auto written = overlapping_slots(target.slots);
     std::vector<size_t> affected;
     for (const auto &[id, targets] : lexical_.targets)
@@ -1637,7 +1644,7 @@ class ScalarChecker {
         selected.constrain_initialization(selection_initialization(lexical_, id));
       }
       assign_targets(id, selected, selection_targets(source.targets, weak ? std::optional<size_t>{id} : std::nullopt));
-      if (!proving_) record_rebinding(id);
+      if (!proving_) record_rebinding(id, deferred);
     }
   }
   CheckedOperation current_selection(CheckedOperation view, const Location &at) const {
@@ -1692,7 +1699,7 @@ class ScalarChecker {
           possible_targets_.at(id).insert(source.targets.begin(), source.targets.end());
           possible_null_sources_.at(id).insert(source.null_sources.begin(), source.null_sources.end());
           target_dependencies_.at(id).insert(incoming.begin(), incoming.end());
-          record_rebinding(id);
+          record_rebinding(id, true);
         }
       }
       if (!proving_ || std::none_of(written.begin(), written.end(), [&](size_t id) { return bindings_->at(id).requires_initialized; })) return;
@@ -2116,8 +2123,7 @@ class ScalarChecker {
       const auto written = loop.payloads;
       for (size_t place = 0; place < storage_->size(); ++place) {
         if (storage(place).type.kind != Type::exception && storage(place).type != Type::boolean) continue;
-        if ((loop.unknown_exception_payloads && storage(place).type.kind == Type::exception && mutable_payload_target(place)) ||
-            std::any_of(written.begin(), written.end(), [&](size_t target) { return borrowed_payload_alias(target, place); }))
+        if (std::any_of(written.begin(), written.end(), [&](size_t target) { return borrowed_payload_alias(target, place); }))
           loop.payloads.insert(place);
       }
     }
@@ -2566,7 +2572,7 @@ class ScalarChecker {
               const auto &origins = views.at(input).origins;
               target_dependencies_.at(binding).insert(origins.begin(), origins.end());
             }
-            record_rebinding(binding);
+            record_rebinding(binding, prepared);
           }
         }
       }
@@ -2739,7 +2745,7 @@ class ScalarChecker {
         }
         const auto written = payload_targets(target);
         effects.payload_writes.insert(written.begin(), written.end());
-        record_payload_write(target);
+        if (!prepared) record_payload_write(target);
       }
       auto payloads = entry_payloads;
       if (prepared_slots) {
@@ -2747,7 +2753,6 @@ class ScalarChecker {
         // still need a payload/selection correlation proof.
         for (auto &[place, value] : payloads)
           if (mutable_payload_target(place)) value = exception_possibilities(storage(place).type);
-        if (!proving_) for (const auto *loop : active_loops_) loop_states_.at(loop).unknown_exception_payloads = true;
       } else {
         // Publish simultaneous postconditions after weakening other possible
         // aliases. Sequential strong writes would lose same-target alternatives.
@@ -2759,7 +2764,7 @@ class ScalarChecker {
           if (outcome != summary.payloads.end() && outcome->second.contains(i))
             value = outcome->second.at(i).substitute(exception_inputs);
           else if (!contract.const_views.empty() && contract.const_views[i]) continue;
-          write_exception_payloads(payloads, views[i], value, contract.const_views.empty() || !contract.const_views[i]);
+          write_exception_payloads(payloads, views[i], value, !prepared && (contract.const_views.empty() || !contract.const_views[i]));
           if (views[i].place) definite[*views[i].place].merge(value);
         }
         for (auto &[place, value] : definite) payloads[place] = std::move(value);
@@ -2772,10 +2777,24 @@ class ScalarChecker {
         CleanupEquations::BooleanValues definite;
         for (size_t i = 0; i < arguments.size(); ++i) {
           if (arguments[i] != Type::boolean || contract.owners.empty() || !contract.owners[i]) continue;
+          const bool readonly = !contract.const_views.empty() && contract.const_views[i];
           auto value = CleanupEquations::unknown_boolean();
           const auto outcome = summary.booleans.find(reason);
-          if (outcome != summary.booleans.end() && outcome->second.contains(i))
+          const bool reported = outcome != summary.booleans.end() && outcome->second.contains(i);
+          if (readonly && (!reported || !intersect(payload_targets(views[i]), effects.payload_writes).empty())) continue;
+          if (reported)
             value = instantiate_boolean(outcome->second.at(i), boolean_inputs, views, !summary.bindings.empty(), exception_inputs);
+          if (readonly) {
+            // A readonly postcondition refines the retained payload. Writes
+            // through other actuals supply their own post-state evidence.
+            const auto incoming = stored_boolean(views[i], entry_booleans);
+            CleanupEquations::BooleanValue refined;
+            for (const auto &[truth, clauses] : value)
+              if (const auto before = incoming.find(truth); before != incoming.end())
+                refined[truth] = CleanupEquations::conjoin_conditions(before->second, clauses);
+            if (refined.empty()) continue;
+            value = std::move(refined);
+          }
           write_boolean_payloads(booleans, views[i], value);
           if (views[i].place) CleanupEquations::merge_boolean(definite[*views[i].place], value);
         }
@@ -4966,6 +4985,56 @@ class ScalarChecker {
     reasons.erase(0);
     merge_type_exits(*state.exits, std::move(reasons), state);
   }
+  static void record_type_invocation(const Expression &expr, TypeEvidenceState &state, std::set<size_t> outcomes,
+                                     bool explicit_effects) {
+    if (state.preparing(expr)) {
+      auto &effects = state.prepared_call->effects;
+      effects.outcomes.merge(outcomes);
+      effects.opaque |= !explicit_effects;
+    } else if (state.exits) {
+      outcomes.erase(0);
+      merge_type_exits(*state.exits, std::move(outcomes), state);
+    }
+  }
+  template <typename Callable>
+  static void record_type_call(const Expression &expr, TypeEvidenceState &state, const Callable &callable,
+                               bool explicit_effects) {
+    if (state.preparing(expr) || state.exits)
+      record_type_invocation(expr, state, call_reasons(callable), explicit_effects);
+  }
+  bool explicit_type_call_effects(size_t method, const TypeEvidenceState &state, const std::vector<Type> &arguments) const {
+    // Within the admitted scalar function profile, only explicit borrowed
+    // arguments and caller slots can affect live caller storage.
+    const auto &source = *program_.methods[method].source;
+    if (source.kind != Form::Kind::function || !std::ranges::all_of(arguments, scalar_type)) return false;
+    const auto &environment = state.declaration && method == state.method ? *state.declaration : state;
+    if (!has_type_captures(method, environment)) return true;
+    const auto independent = [&](const Capture &capture) {
+      const auto type = environment.bindings.find(capture.name);
+      const auto view = environment.views.find(capture.name);
+      return type != environment.bindings.end() && type->second && scalar_type(*type->second) &&
+          view != environment.views.end() && view->second.value_capture == true;
+    };
+    const auto &free = free_bindings(source).captures;
+    return std::ranges::all_of(source.captures, independent) && std::ranges::all_of(free, [&](const Capture &capture) {
+      return (!environment.bindings.contains(capture.name) && !lexical_self(capture.name, environment.method)) || independent(capture);
+    });
+  }
+  static std::set<size_t> deferred_outcomes() {
+    std::set<size_t> outcomes{0, 2};
+    for (size_t category = 1; category < exception_categories.size(); ++category)
+      outcomes.insert(Completion::failure(category).reason);
+    return outcomes;
+  }
+  static void register_type_defer(TypeEvidenceState &state, const Expression *entry, bool may_replace,
+                                  TypeDeferredEffects effects) {
+    note_type_allocation(state);
+    state.has_deferred_action = true;
+    state.selections.deferred_writes.merge(effects.payloads);
+    state.selections.deferred_writes.unknown |= !effects.outcomes.empty() && effects.opaque;
+    state.selections.deferred_return |= may_replace;
+    if (state.deferred) state.deferred_queue = state.deferred->push(state, entry, may_replace, std::move(effects));
+  }
   static void note_type_failure(const TypeEvidenceState &state, const Type &failure) {
     if (!state.exits) return;
     std::set<size_t> reasons;
@@ -4992,12 +5061,16 @@ class ScalarChecker {
   }
   static void type_boolean_write(const Expression &expr, TypeEvidenceState &state, const EvidencePlaces &places,
                                  const std::optional<PresenceBranches> &proof = {}) {
-    if (&expr == state.prepared_call) state.selections.deferred_writes.record(places);
+    if (state.preparing(expr)) state.prepared_call->effects.payloads.record(places);
     else state.selections.write_boolean(places, proof);
+  }
+  static void type_slot_write(const Expression &expr, TypeEvidenceState &state, const EvidenceSelection &slot) {
+    if (state.preparing(expr)) state.prepared_call->effects.slots.record(slot.footprint);
+    else state.selections.assign(slot, {});
   }
   static void type_input_mutation(const Expression &expr, TypeEvidenceState &state, const Type &argument, const TargetEvidence &target,
                                   ArgumentMode mode, bool readonly, bool writable_slot = false) {
-    if (writable_slot && &expr != state.prepared_call) state.selections.assign(target.selection, {});
+    if (writable_slot) type_slot_write(expr, state, target.selection);
     if (argument == Type::boolean && mode != ArgumentMode::value && !readonly)
       type_boolean_write(expr, state, writable_slot ? EvidencePlaces{} : target.places);
   }
@@ -5021,7 +5094,7 @@ class ScalarChecker {
       state.deferred = nullptr;
     }
     const auto type = query_evidence(expr, state, view, target, contextual, expected, alternatives ? &independent : nullptr, expected_use, read);
-    const bool reads_result = read == EvidenceRead::payload && &expr != state.prepared_call;
+    const bool reads_result = read == EvidenceRead::payload && !state.preparing(expr);
     // Bare names still read their payload in statement position. A borrowed
     // result of a call, group or rebind is read only when the result is used.
     if ((reads_result || (read == EvidenceRead::discarded && expr.kind == K::name)) &&
@@ -5065,7 +5138,7 @@ class ScalarChecker {
   }
   static void check_type_deferred_argument(const TypeEvidenceState &state, const Expression &call, const Expression &operand,
                                            const ViewEvidence &view, ArgumentMode mode) {
-    if (!state.required || &call != state.prepared_call || mode == ArgumentMode::value || !view.owner) return;
+    if (!state.required || !state.preparing(call) || mode == ArgumentMode::value || !view.owner) return;
     for (const auto &[name, declaration] : state.local_declarations)
       if (type_loop_control(declaration) && *view.owner == EvidenceOwner::for_scope(*declaration))
         fail(operand.at, "deferred borrowed argument does not outlive its cleanup scope");
@@ -5275,19 +5348,23 @@ class ScalarChecker {
       }
       const auto &action = std::get<TypeDeferredFlow::Action>(entry);
       if (!action.entry) {
-        if (action.may_rebind) {
+        const auto &effects = action.effects;
+        if (effects.opaque || effects.slots.unknown) {
           const auto condition = state.selections.reach_condition();
           state.selections.forget();
           state.selections.retain_conditions(condition);
-        } else if (action.writes.unknown || !action.writes.places.empty())
-          state.selections.write_boolean(action.writes.unknown ? EvidencePlaces{} : action.writes.places, {});
+        } else {
+          if (!effects.slots.places.empty()) state.selections.assign({std::nullopt, effects.slots.places}, {});
+          if (effects.payloads.unknown || !effects.payloads.places.empty())
+            state.selections.write_boolean(effects.payloads.unknown ? EvidencePlaces{} : effects.payloads.places, {});
+        }
         if (guards_errors) {
-          // A prepared call or queue handler can finish with any opaque
-          // failure. If it produced a return, it may still carry that value.
-          for (size_t outcome = 0; outcome < 3 + exception_categories.size(); ++outcome) {
-            if (outcome == 1 || outcome == 3) continue;
-            if (action.may_replace) enqueue(action.earlier, true, outcome, state, {});
-            enqueue(action.earlier, returned, outcome, state, result);
+          const bool prepared = !effects.outcomes.empty();
+          for (const auto outcome : prepared ? effects.outcomes : deferred_outcomes()) {
+            // An ordinary call cannot consume a failure already pending.
+            const auto next_error = prepared && !outcome ? error : outcome;
+            if (action.may_replace) enqueue(action.earlier, true, next_error, state, {});
+            enqueue(action.earlier, returned, next_error, state, result);
           }
         } else {
           if (action.may_replace) enqueue(action.earlier, true, 0, state, {});
@@ -5302,7 +5379,7 @@ class ScalarChecker {
       invocation.selections = std::move(state.selections);
       invocation.selections.bindings = std::move(bindings);
       invocation.selections.value_places = std::move(places);
-      invocation.prepared_call = nullptr;
+      invocation.prepared_call.reset();
       // The declaration supplies names. The queue supplies the live values.
       auto completed = replay_type_defer(*action.entry, std::move(invocation), error);
       for (auto &path : completed.paths) {
@@ -5771,7 +5848,8 @@ class ScalarChecker {
       if (expr.kind == K::rebind) {
         target_facts = state.target;
         target_facts.selection = {};
-        if (&expr != state.prepared_call && (view.nullable || !destination.selection.footprint.empty())) {
+        if (state.preparing(expr)) type_slot_write(expr, state, destination.selection);
+        else if (view.nullable || !destination.selection.footprint.empty()) {
           const auto before = state.selections.writes;
           state.selections.assign(destination.selection, target_facts);
           if (destination.selection.slot && !destination.selection.footprint.empty()) {
@@ -5782,6 +5860,7 @@ class ScalarChecker {
           } else state.selections.forget_changed(target_facts, before);
         }
       }
+      if (state.preparing(expr)) record_type_invocation(expr, state, {0}, true);
       view.value_binding.reset(); view.fixed_binding.reset(); view.slot_read_only.reset();
       return type;
     }
@@ -5843,14 +5922,18 @@ class ScalarChecker {
       if (state.validating_body) {
         const auto &action = *expr.children.front();
         if (action.kind != K::block) {
-          const auto *const prepared = state.prepared_call;
-          state.prepared_call = &action;
+          auto outer_preparation = std::exchange(state.prepared_call, TypePreparedCall{&action});
           const auto preparation = type_evidence(action, state);
-          state.prepared_call = prepared;
+          auto effects = std::move(state.prepared_call->effects);
+          state.prepared_call = std::move(outer_preparation);
           if (preparation == Type::never) return Type::never;
+          if (effects.outcomes.empty()) {
+            effects.outcomes = deferred_outcomes();
+            effects.opaque = true;
+          }
+          register_type_defer(state, nullptr, false, std::move(effects));
+          return Type::void_type;
         }
-        note_type_allocation(state);
-        state.has_deferred_action = true;
         auto delayed = state;
         TypeEvidenceExits delayed_exits;
         delayed.exits = state.selections.tracking ? &delayed_exits : nullptr;
@@ -5861,15 +5944,15 @@ class ScalarChecker {
         delayed.selections.deferred_return = false;
         enter_type_defer(delayed);
         const auto delayed_entry = delayed.selections.writes;
-        bool may_rebind = action.kind != K::block;
-        QueryPayloadWrites writes;
+        bool may_replace = false;
+        TypeDeferredEffects effects;
         const auto include_writes = [&](const TypeEvidenceState &path) {
-          writes.merge(path.selections.payload_writes);
-          writes.merge(path.selections.deferred_writes);
-          may_rebind |= path.selections.writes != delayed_entry;
-          state.selections.deferred_return |= path.selections.deferred_return;
+          effects.payloads.merge(path.selections.payload_writes);
+          effects.payloads.merge(path.selections.deferred_writes);
+          effects.opaque |= path.selections.writes != delayed_entry;
+          may_replace |= path.selections.deferred_return;
         };
-        if (action.kind == K::block) type_evidence(action, delayed);
+        type_evidence(action, delayed);
         std::set<size_t> handled;
         for (size_t i = 1; i < expr.children.size(); ++i) {
           const auto &handler = *expr.children[i];
@@ -5879,18 +5962,12 @@ class ScalarChecker {
           include_writes(caught);
         }
         include_writes(delayed);
-        bool may_replace = false;
         for (const auto &path : delayed_exits.paths) {
           include_writes(path.state);
           may_replace |= path.returned();
         }
-        state.selections.deferred_writes.merge(writes);
-        state.selections.deferred_return |= may_replace;
-        if (state.deferred) {
-          const bool bodyless_catch = expr.binding == "fallback" && expr.children[1]->kind == K::handler;
-          state.deferred_queue = state.deferred->push(state,
-              action.kind == K::block && !bodyless_catch ? &expr : nullptr, may_replace, may_rebind, std::move(writes));
-        }
+        const bool bodyless_catch = expr.binding == "fallback" && expr.children[1]->kind == K::handler;
+        register_type_defer(state, bodyless_catch ? nullptr : &expr, may_replace, std::move(effects));
         return Type::void_type;
       }
       if (!state.returns || expr.children.front()->kind != K::block) {
@@ -6114,9 +6191,9 @@ class ScalarChecker {
       }
       [[fallthrough]];
     case K::unary: case K::call: case K::value_call: case K::behave: case K::perform: {
-      const bool invokes = &expr != state.prepared_call;
+      const bool invokes = !state.preparing(expr);
       std::optional<Type> target;
-      bool local = false, implicit = false;
+      bool local = false, implicit = false, independent_callee = false;
       if (expr.kind == K::behave || expr.kind == K::perform) {
         if (!state.complete) return {};
         if (state.validating_body && state.method && program_.methods[*state.method].source->kind == Form::Kind::function)
@@ -6130,6 +6207,7 @@ class ScalarChecker {
             exits = exits || argument == Type::never;
             if (state.required) print_result(expr, argument);
           }
+          if (!exits && !invokes) record_type_invocation(expr, state, call_reasons(std::set<size_t>{}), true);
           return exits ? Type::never : Type::void_type;
         }
         if (state.required) dynamic_procedure_type(program_.symbols[id], expr.at);
@@ -6138,6 +6216,12 @@ class ScalarChecker {
         const auto &callee = *expr.children.front();
         const bool scope_expectation = expected_use == ExpectedTypeUse::callable_result;
         implicit = callee.definition && callee.definition->implicit_scope;
+        if (!invokes && !implicit) {
+          const auto *source = &callee;
+          while (source->kind == K::grouped) source = source->children.front().get();
+          if (source->definition)
+            independent_callee = explicit_type_call_effects(lexical_method(source->definition.get(), state.method), state, {});
+        }
         target = implicit ?
             scope_callable_evidence(callee, state, scope_expectation ? expected : nullptr,
                                     scope_expectation && contextual && !state.required, target_facts) : child(0);
@@ -6246,7 +6330,8 @@ class ScalarChecker {
           for (size_t i = 0; i < operand_targets.size(); ++i)
             type_input_mutation(expr, state, arguments[i], operand_targets[i], argument_mode(*target, i),
                                 !target->const_views.empty() && target->const_views[i]);
-          if (invokes) note_type_call(state, *target);
+          const bool explicit_effects = independent_callee && std::ranges::all_of(arguments, scalar_type);
+          record_type_call(expr, state, *target, explicit_effects);
         }
         return *target->target;
       }
@@ -6270,7 +6355,10 @@ class ScalarChecker {
             const auto &parameter = method.input_parameters()[i];
             type_input_mutation(expr, state, arguments[i], operand_targets[i], argument_mode(parameter), parameter.read_only, reference);
           }
-          if (invokes) note_type_call(state, method);
+          record_type_call(expr, state, method, invokes ||
+              explicit_type_call_effects(id, family.declaration ? *family.declaration : state, arguments));
+          if (!invokes && reference)
+            state.prepared_call->effects.outcomes.insert(Completion::failure(exception_id(ExceptionCategory::null_pointer)).reason);
         }
         if (!reference && methods.methods.empty() && operand_targets.size() == 2)
           for (size_t i = 0; i < views.size(); ++i) {
@@ -6317,13 +6405,19 @@ class ScalarChecker {
           }
           if (arguments[0] != arguments[1]) fail(expr.at, "bits swap requires the exact same type");
         }
-        builtin_declarations(expr, arguments, Type::void_type, true, access, owners, &state);
+        const auto declared = builtin_declarations(expr, arguments, Type::void_type, true, access, owners, &state);
+        if (!invokes) {
+          if (reference) for (const auto &operand : operand_targets) type_slot_write(expr, state, operand.selection);
+          std::set<size_t> outcomes{0};
+          for (const auto category : declared) outcomes.insert(Completion::failure(category).reason);
+          record_type_invocation(expr, state, std::move(outcomes), true);
+        }
         return Type::void_type;
       }
       if (expr.text == "cause_at" && (expr.intrinsic || (!module_names().callables.contains(expr.text) && !has_declarations(expr.text)))) {
         if (state.required && (arguments.size() != 2 || arguments[0].kind != Type::exception || arguments[1] != Type::uint64))
           fail(expr.at, "cause_at requires an exception and a u64 index");
-        if (invokes) note_type_exit(state, Completion::failure(exception_id(ExceptionCategory::index_out_of_bounds)));
+        record_type_invocation(expr, state, {0, Completion::failure(exception_id(ExceptionCategory::index_out_of_bounds)).reason}, true);
         return exception_type(0);
       }
       if (!complete) return {};
@@ -6339,7 +6433,10 @@ class ScalarChecker {
             type_input_mutation(expr, state, arguments[i], operand_targets[i], argument_mode(parameter), parameter.read_only,
                                 caller_bindings(declaration));
           }
-          if (invokes) note_type_call(state, declaration);
+          record_type_call(expr, state, declaration, invokes ||
+              (declaration.source->kind == Form::Kind::function && std::ranges::all_of(arguments, scalar_type)));
+          if (!invokes && caller_bindings(declaration))
+            state.prepared_call->effects.outcomes.insert(Completion::failure(exception_id(ExceptionCategory::null_pointer)).reason);
           if (state.required) for (size_t i = 0; i < arguments.size(); ++i) {
             const auto mode = argument_mode(parameter_at(declaration, i));
             check_type_deferred_argument(state, expr, *expr.children[i], views[i], mode);
@@ -6361,10 +6458,10 @@ class ScalarChecker {
             target_facts.branches = PresenceBranches{test.when_false, test.when_true};
           }
           const auto failures = builtin_declarations(expr, arguments, types.result, false, access, owners, &state);
-          if (invokes) {
-            for (const auto category : failures) note_type_exit(state, Completion::failure(category));
-            if (types.failing) note_type_exit(state, {2, false});
-          }
+          std::set<size_t> outcomes{0};
+          for (const auto category : failures) outcomes.insert(Completion::failure(category).reason);
+          if (types.failing) outcomes.insert(2);
+          record_type_invocation(expr, state, std::move(outcomes), true);
         }
         return types.error.empty() ? std::optional<Type>{types.result} : std::nullopt;
       }
@@ -6374,11 +6471,12 @@ class ScalarChecker {
       for (const auto id : best) {
         const auto &method = program_.methods[id];
         for (size_t i = 0; i < operand_targets.size(); ++i) {
-          const auto &parameter = method.input_parameters()[i];
+          const auto &parameter = parameter_at(method, i);
           type_input_mutation(expr, state, arguments[i], operand_targets[i], argument_mode(parameter), parameter.read_only,
                               caller_bindings(method));
         }
-        if (invokes) note_type_call(state, method);
+        record_type_call(expr, state, method, invokes ||
+            explicit_type_call_effects(id, family.declaration ? *family.declaration : state, arguments));
         if (state.validating_body && state.method && program_.methods[*state.method].source->kind == Form::Kind::function &&
             method.source->kind == Form::Kind::procedure)
           fail(expr.at, "a function cannot invoke a procedure");
@@ -6390,10 +6488,13 @@ class ScalarChecker {
         }
         const auto type = infer_result(id, arguments, retained, family.declaration ? family.declaration : &state).contract;
         if (!type || nested_binder(method, *type->type) || (result && result != type->type)) return {};
-        if (state.exits && invokes) {
-          for (const auto &obligation : declaration_obligations(method, arguments, access, owners, &state))
-            note_type_failures(state, obligation.declaration->throws_types);
-        }
+        if (state.exits || !invokes)
+          for (const auto &obligation : declaration_obligations(method, arguments, access, owners, &state)) {
+            if (invokes) note_type_failures(state, obligation.declaration->throws_types);
+            else for (const auto &failure : obligation.declaration->throws_types)
+              for (const auto category : exception_possibilities(failure))
+                state.prepared_call->effects.outcomes.insert(Completion::failure(category).reason);
+          }
         const auto next = result_view(method, *type, owners);
         view = !result || view == next ? next : ViewEvidence{};
         result = type->type;
@@ -8043,7 +8144,8 @@ class ScalarChecker {
             const auto incoming = incoming_payloads();
             auto payloads = incoming;
             const auto left_exceptions = stored_exceptions(left, incoming), right_exceptions = stored_exceptions(right, incoming);
-            write_exception_payloads(payloads, left, right_exceptions); write_exception_payloads(payloads, right, left_exceptions);
+            write_exception_payloads(payloads, left, right_exceptions, false);
+            write_exception_payloads(payloads, right, left_exceptions, false);
             operation.invocation[0].payloads = payload_changes(incoming, payloads);
             if (left.type == Type::boolean) {
               auto booleans = incoming_booleans();
@@ -8055,7 +8157,6 @@ class ScalarChecker {
             const auto left_written = payload_targets(left), right_written = payload_targets(right);
             auto &written = operation.invocation[0].payload_writes;
             written.insert(left_written.begin(), left_written.end()); written.insert(right_written.begin(), right_written.end());
-            record_payload_write(left); record_payload_write(right);
           }
         }
         break;
@@ -8376,7 +8477,7 @@ class ScalarChecker {
       }
       const auto iteration_scope = next_scope_;
       if (repeat_possible) {
-        if (!proving_) loop_states_[&expr] = {iteration_scope, iteration_scope, before.bindings_available, {}, {}, {}, {}, false};
+        if (!proving_) loop_states_[&expr] = {iteration_scope, iteration_scope, before.bindings_available, {}, {}, {}, {}};
         auto &loop = loop_states_.at(&expr);
         refresh_targets(lexical_, true, &loop.rebound);
         if (proving_) {
@@ -8625,7 +8726,7 @@ class ScalarChecker {
           snapshot.selection_identity.reset();
           if (snapshot.initialization)
             snapshot.initialization = CleanupEquations::capture_initialization(*snapshot.initialization, initialization_frame());
-          rebind(target, snapshot);
+          rebind(target, snapshot, true);
           operation.invocation[0].selections = lexical_.selections;
           lexical_ = before;
           operation.type = destination;
@@ -8675,7 +8776,7 @@ class ScalarChecker {
         operation.targets.erase(null_target);
         const auto incoming = incoming_payloads();
         auto payloads = incoming;
-        write_exception_payloads(payloads, written_target, operations.at(expr.children[1].get()).exceptions);
+        write_exception_payloads(payloads, written_target, operations.at(expr.children[1].get()).exceptions, false);
         operation.invocation[0].payloads = payload_changes(incoming, payloads);
         if (destination == Type::boolean) {
           auto booleans = incoming_booleans();
@@ -8683,7 +8784,6 @@ class ScalarChecker {
           for (const auto place : payload_targets(target)) operation.invocation[0].booleans[place] = booleans.at(place);
         }
         operation.invocation[0].payload_writes = payload_targets(target);
-        record_payload_write(target);
         break;
       }
       if (destination.kind == Type::procedure) note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});

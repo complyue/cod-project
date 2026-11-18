@@ -46,7 +46,7 @@ runner.CASES = {
         + OUT('p') + OUT('q') + '};for(i in 0u64..1u64){p=x;defer (<=>)(p,q);};}};'
         + OUT('p') + OUT('q'), 0, '8\n7\n7\n8\n', ''),
     'repeated_mutation_has_no_saved_guard': (SWAP.replace('ptr a:', 'ref a:').replace('ptr b:', 'ref b:')
-        + SETUP + 'val y<-8u64;ptr q=y;for(i in 0u64..2u64){p=x;defer (<=>)(p,q);p=null;};', 2, '', 'proven non-null target'),
+        + SETUP + 'val y<-8u64;ptr q=y;for(i in 0u64..2u64){p=x;defer (<=>)(p,q);p=null;};', 2, '', 'non-null target'),
     'alias_read_cannot_hide_mutation': (SETUP + 'var selected->p;for(i in 0u64..2u64){selected;p=null;};', 2, '', 'requires a covering catch'),
 }
 runner.EXTRA_SOURCES = [Path(__file__)]

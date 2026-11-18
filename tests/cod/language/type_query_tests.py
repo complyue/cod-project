@@ -116,6 +116,22 @@ runner.CASES={
     'val present<-(input is not null);ref write:bool=present;{{defer{write<-flag;};}};'+GUARDED_RESULT),2,'',UNPROVED_TARGET),
  'projection_loses_borrowed_boolean_after_prepared_write':(saved_query(
     'val present<-(input is not null);ref write:bool=present;{{defer (<-)(write,flag);}};'+GUARDED_RESULT),2,'',UNPROVED_TARGET),
+ 'projection_keeps_observation_through_declared_readonly_defer':(saved_query(
+    'const val present<-{{val saved<-(input is not null);defer{return saved;};'
+    'for(i in 0..2){defer inspect_saved(saved);};return false;}};'+GUARDED_RESULT,
+    declarations='func inspect_saved(ref value:const bool in B)->void where {owner B};'),0,'9\n',''),
+ 'projection_keeps_prepared_write_on_its_original_target':(saved_query(
+    'const val present<-{{val saved<-(input is not null),other<-false;ref chosen:bool=other;'
+    'defer{return saved;};defer set_true(chosen);chosen=saved;return false;}};'+GUARDED_RESULT,
+    declarations='func set_true(ref value:bool in B)->void where {owner B}{value<-true;};'),0,'9\n',''),
+ 'projection_weakens_prepared_write_on_its_original_target':(saved_query(
+    'const val present<-{{val saved<-(input is not null),other<-false;ref chosen:bool=saved;'
+    'defer{return saved;};defer set_true(chosen);chosen=other;return false;}};'+GUARDED_RESULT,
+    declarations='func set_true(ref value:bool in B)->void where {owner B}{value<-true;};'),2,'',UNPROVED_TARGET),
+ 'projection_checks_overlap_of_readonly_and_writable_deferred_borrows':(saved_query(
+    'const val present<-{{val saved<-(input is not null);defer{return saved;};defer set_true(saved,saved);return false;}};'+
+    GUARDED_RESULT,declarations='func set_true(ref read:const bool in B,ref write:bool in B)->void where {owner B}{write<-true;};'),
+    2,'',UNPROVED_TARGET),
  'projection_reads_returned_boolean':(saved_query(
     'return if({{return input is not null;}}){input}else{7u64};'),0,'9\n',''),
  'projection_returns_observation_without_capturing_reference':(saved_query(

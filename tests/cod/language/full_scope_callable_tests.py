@@ -34,6 +34,22 @@ runner.CASES = {
         'if(present){return input;}else{return 7u64;};}'
         'ref item:u64=5u64;ptr absent:u64=null in here;behave @print(run(item));behave @print(run(absent));',
         0, '5\n7\n', ''),
+    'cleanup_readonly_borrow_preserves_boolean_observation': (IO +
+        'func inspect(ref value:const bool in B)->void where {owner B}{};'
+        'func run(ptr input:u64 in O)->u64 where {owner O}{const val present<-{{'
+        'val saved<-(input is not null);defer{return saved;};for(i in 0..2){defer inspect(saved);};return false;}};'
+        'if(present){return input;}else{return 7u64;};}'
+        'ref item:u64=5u64;ptr absent:u64=null in here;behave @print(run(item));behave @print(run(absent));',
+        0, '5\n7\n', ''),
+    'readonly_borrow_postcondition_refines_boolean_observation': (IO +
+        'using "std:exceptions" NullPointerException;'
+        'func ensure(ref value:const bool in B)->void throws NullPointerException where {owner B}{'
+        'if(!value){ptr missing:u64=null in here;missing;{};}else{};};'
+        'func run(ptr input:u64 in O,flag:bool)->u64 where {owner O}{val seen<-flag;'
+        'try{ensure(seen);}catch(problem:const NullPointerException){return 7u64;};'
+        'if(!seen){return input;}else{};return 7u64;}'
+        'ptr absent:u64=null in here;behave @print(run(absent,true));behave @print(run(absent,false));',
+        0, '7\n7\n', ''),
     'cleanup_local_return': (IO+'proc run()->u64{defer{{return 9u64;}};return 2u64;}behave @print(run());', 0, '2\n', ''),
     'cleanup_local_return_grouped': (IO+'proc run()->u64{defer{ {{return 9u64;}};};return 2u64;}behave @print(run());', 0, '2\n', ''),
     'delayed_capture': (IO+'proc run()->void{val n<-1u64;defer{{behave @print(n);}};n<-2u64;}run();', 0, '2\n', ''),
