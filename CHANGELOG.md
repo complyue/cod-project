@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-18 — Distinguish parked questions from the active discussion queue
+
+<a id="k-discussion-parked-20261118"></a>
+**K-DISCUSSION-PARKED-20261118.** Editorial follow-up to K-DISCUSSION-PRIORITIES-20261118 at registry917→918. The owner decision H-OCCUPIED-OWNER-20261118 excludes reinitialization after handoff and direct self-transfer. The DBMR decisions cover fresh publication, access modes, cooperating processes and provider retries. The discussion index parks the remaining owner and existing-image questions until a use case calls for a decision. Contract qualifications are unchanged.
+
 ## 2026-11-18 — Prioritize constructor and functor discussions
 
 <a id="k-discussion-priorities-20261118"></a>
