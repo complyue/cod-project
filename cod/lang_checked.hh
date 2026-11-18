@@ -2894,6 +2894,16 @@ class ScalarChecker {
         for (size_t i = 1; i < expr.children.size(); ++i) visit(*expr.children[i], bound, query);
         return;
       }
+      if (expr.kind == K::conditional) {
+        visit(*expr.children[0], bound, query);
+        auto otherwise = bound;
+        visit(*expr.children[1], bound, query);
+        visit(*expr.children[2], otherwise, query);
+        // Both arms start with the same bindings. After the join, declarations
+        // are syntactically visible; ordered checking proves availability.
+        bound.merge(otherwise);
+        return;
+      }
       if (expr.kind == K::range_for || expr.kind == K::fold) {
         const bool fold = expr.kind == K::fold;
         for (size_t i = 0; i < (fold ? 3 : 2); ++i) visit(*expr.children[i], bound, query);
