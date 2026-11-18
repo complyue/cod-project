@@ -1,8 +1,10 @@
 # Callable views, value captures and declared place aliases
 
-Design revision: 115 · Recorded: 2026-11-18 · Status: scoped callable contract; implementation boundaries recorded separately.
+Design revision: 118 · Recorded: 2026-11-18 · Status: scoped callable contract; implementation boundaries recorded separately.
 
 ## Design authority
+
+- **Here callables, under review.** [D-18-HERE](DesignAuthorityRegistry.md#d-18-here), r118, [design review](../CHANGELOG.md#k-here-callables-20261118), P-609/P-610. Charter §§3.3/4.3 and [D-12-LIFETIME](DesignAuthorityRegistry.md#d-12-lifetime) motivate direct access within natural lexical nesting. H-553, H-555 and H-FULL-SCOPE-CALLABLE-20261117 establish the comparison baseline. [Acceptance examples](#here-callables-and-direct-lexical-access) distinguish successive writes, slot rebinding, escape and symbolic replay. [H-SYMBOLIC-SNAPSHOT-ACTIVATION-20261118](../CHANGELOG.md#h-symbolic-snapshot-activation-20261118) fixes symbolic snapshot timing at definition activation. [H-HERE-MODULE-TOPLEVEL-20261118](../CHANGELOG.md#h-here-module-toplevel-20261118) includes executable module top levels in the here-callable forms. The broader change to lexical access and ordinary value captures remains under review.
 
 - **Exception input boundary.** [H-EXCEPTION-OBJECT-OWNER-20261118](../CHANGELOG.md#h-exception-object-owner-20261118) limits the r114/P-485–P-487 value-input qualification at r115 to independent scalars and complete callable values. [Exception references](ExceptionControl.md#exception-object-owners-and-release) carry the selected target and its actual owner. Preserving both serves C-65 under charter §§3.3/4.3. Exception-specific capture transport awaits owner and cleanup proof.
 
@@ -146,6 +148,80 @@ Omitted brackets infer required variables. An explicit list must include every r
 Captures distinguish independent values from explicit borrows. H-553 gives scalar val and complete callable values one snapshot/per-invocation-value rule. H-554 prohibits creating traditional closure storage with shared updatable lexical binding cells; dynamically shared variable state uses symbolic variables and an explicit statically tracked owner. H-555 also permits explicit lexical-owner references whose lifetime is statically proved. H-327/H-329's explicit place aliases retain their existing borrowed-place meaning: no implicit conversion into an ordinary value variable, and no hidden slot promotion. No capture promotes storage, freezes external targets, copies a regional graph or extends an owner lifetime. Functions remain independent of dynamic effects; procedure lexical captures remain separate from perform's captured symbolic values and behave/direct calls' current dynamic context.
 
 Parentheses group callable types. `-> func()->T with {...} throws E` declares the returned callback's exception, while `-> (func()->T with {...}) throws E` declares the factory's exception. Unbound with names reject; with does not declare a new owner.
+
+## Here callables and direct lexical access
+
+**Proposal under review.** An ordinary callable value may denote a selected definition/family in its module world. Its body can use its arguments, locals and accessible static definitions. Under this proposal it cannot retain an enclosing runtime variable, even an independent scalar. A factory that returns a predicate using its local threshold would need to pass that state explicitly, for example as a data receiver. Ordinary procedures may still reference symbolic effects. An ordinary function uses its own arguments and locals and has no access to enclosing runtime slots or dynamic effects. The current [value-capture contract](#value-snapshots-and-invocation-local-captures) admits the threshold factory.
+
+A `here` body has **direct lexical access**. An outer name still denotes its original declaration and slot. Shadowing works normally. Every invocation, including its required cleanup, must fit the lifetime of the **particular defining activation** and of each slot used. Recursion can have several live instances of the same declaration. An ordinary callable boundary cannot provide access to an enclosing activation it did not retain. Read, write, rebind, consume and dereference retain their ordinary type, access, initialization and lifetime requirements.
+
+```cod
+proc twice(here step:proc()->void) { step(); step(); }
+
+proc count() -> u64 {
+    val n <- 0u64;
+    twice() {{ n <- n + 1u64; }};
+    return n;  # 2 under this proposal.
+}
+```
+
+Both calls update the same n. Likewise `{{ p = other; }}` rebinds the enclosing mutable ref slot, and a later invocation uses the currently selected target. No second source binding or shared heap cell is constructed. The receiver of a `here` parameter can use a common invocation interface with a link to the supplied body's defining activation. Each body knows the slots it uses and how to resolve their owners. A single receiver can therefore invoke bodies from sites with different fixed owner counts. Such a link must remain valid across backing relocation. Inlining or passing just the needed access information is equivalent if observations agree.
+
+| Source form | Proposed lexical access and existing control obligations |
+| --- | --- |
+| Module top level | Each incorporated module, including the selected `__main__`, executes its top-level code with direct access to its own initialized lexical slots. Its prefix and `postpon` fragments share that module activation. A callable declared there keeps its own access rules. [Module scope and example](ModuleWorlds.md#here-callable-module-top-levels) |
+| Standalone or trailing `{{ ... }}` | Standalone executes immediately. A trailing body with outer-slot access requires a bounded receiver. Each invocation has its own locals, cleanup and local return. |
+| `for` body | The caller owns the body. Direct `return` targets the enclosing callable, `continue` supplies feedback and generator cleanup still runs. D-29 already specifies [direct lexical access](RangedForAndGenerators.md#lexical-scope-and-completion). |
+| `here` callback parameter | The supplied body's defining activation provides the slots. The receiving body can invoke it repeatedly. Under the proposed current-body-only restriction it cannot pass the parameter on, return it, or store it for later invocation elsewhere. Direct invocation of an ordinary context-free callable is also safe through this interface. |
+| `effect @sym(...) { ... }` body | A reached installation may invoke a method that needs lexical slots only while its particular defining activation is available. Module-world family registration alone supplies no live frame. A copied, restored or reinstalled symbolic binding cannot bypass this condition. |
+
+For an existing functor binding `limit`, the proposed `test(limit, x)` at a `here` parameter should observe the same slot as `test(x) {{=> n; return limit(n); }}`, including a permitted rebind between invocations. An ordinary escaping callable cannot implicitly bind the receiver. Effectful receiver expressions and independent receiver selection need a separate argument-preparation rule.
+
+The frame proof leaves two obligations. A region referenced through an outer slot may be released while that slot still exists; using a ref to the old instance must reject. Also, a write to an outer slot can invalidate a caller's flow facts. The checker must account for zero, one or repeated calls, including exceptional exits: it cannot assume that a callback initialized a slot, preserved a non-null refinement, or can consume the same owner twice. Access to an outer slot grants no release authority beyond its ordinary declaration. A conservative checker may reject an unproved use.
+
+### Symbolic snapshots at definition activation
+
+A procedure snapshots its required symbolic bindings when the running program activates its definition to produce a procedure value. Each fresh activation gets the bindings in effect at that event. Registering a definition in the module world supplies its identity and methods. Storing, passing, returning, installing or reinstalling an already produced value preserves its snapshot. A form such as `effect @sym(...) { ... }` can request activation and installation in one expression. Only the activation reads the bindings for replay. [Definition mentions and runtime views](#definition-mentions-and-runtime-view-construction)
+
+```cod
+symbol @rate:u64;
+symbol @selected:proc()->u64;
+
+proc read_rate() -> u64 { return @rate; }
+effect @rate <- 10u64;
+proc first = read_rate;         # Activate the named definition under 10.
+effect @rate <- 20u64;
+proc second = read_rate;        # Fresh activation under 20.
+proc saved = first;             # Preserve the first value.
+effect @rate <- 30u64;
+effect @selected = saved;
+val a <- perform @selected();   # 10
+val b <- behave @selected();    # 30
+effect @selected = second;
+val c <- perform @selected();   # 20
+```
+
+Both stored values above are ordinary procedures. Neither requires a link to an enclosing lexical slot. `perform` replays the selected value's snapshot, while `behave` and direct lexical procedure calls use the current dynamic bindings. A symbolic snapshot containing a ref retains its target and actual-owner dependency; storing the procedure grants no extra lifetime. A replay that needs a binding unavailable at activation cannot obtain it from a later installation. [Current symbolic call rules](SymbolicDynamicScope.md#captured-values-and-call-behavior)
+
+In a proposed here handler the lexical access and symbolic replay can both be observed:
+
+```cod
+symbol @rate:u64;
+symbol @quote:proc()->u64;
+
+proc example() -> u64 {
+    val fee <- 1u64;
+    effect @rate <- 10u64;
+    effect @quote() -> u64 { return fee + @rate; };
+    fee <- 2u64;
+    effect @rate <- 20u64;
+    return perform @quote();
+}
+```
+
+The handler definition activates under `@rate = 10`. Both invocation forms read the live lexical fee as 2. `perform @quote()` replays 10 and gives 12. Substituting `behave @quote()` gives 22. If an already installed binding is read with `@quote` and installed elsewhere, it preserves the same value and snapshot. A handler that needs a lexical frame may only be used within that frame's lifetime. How a later independent activation of a module-world family establishes any required lexical frame is part of the here-callable proposal. [Symbolic installation](SymbolicDynamicScope.md#callable-effects)
+
+Adoption would revise D-18 ordinary snapshot/borrow and definition-mention contracts, D-17 full-scope input semantics, D-10 trailing arguments and symbolic installation, and the corresponding D-12 vision examples. Existing compiler work prepares complete captures and invocation-local values. Migration would change capture checking, slot access, lowering and fixtures that currently require the opposite observable result. Typed invocation, local cleanup and generator control remain useful. D-07's [call-bounded parameter proposal](DomainLanguageDesign.md#one-callback-parameter-for-different-owner-counts) offers a narrower alternative that preserves ordinary retained values. No implementation of either alternative is qualified by this review.
 
 ## Value snapshots and invocation-local captures
 
@@ -329,6 +405,8 @@ Direct/behave procedure calls use current dynamic bindings; perform installs the
 Recursive calls are required for both functions and procedures. A blanket recursion rejection is not an acceptable endpoint. Call checking must account for cycles in the demanded program; successful finite source expansion is not a substitute for native recursion. The deferred const-function/TCO plan in [D-19](ConstFunctionsAndTailCalls.md) does not restrict procedure recursion. Material conflicts with that plan require human review.
 
 ## Definition mentions and runtime view construction
+
+For procedure replay, **definition activation** is the runtime event that constructs a value from a definition and snapshots its required symbolic bindings. The [two activations of read_rate](#symbolic-snapshots-at-definition-activation) distinguish this event from assigning or installing an existing value. [H-SYMBOLIC-SNAPSHOT-ACTIVATION-20261118](../CHANGELOG.md#h-symbolic-snapshot-activation-20261118)
 
 A name bound to a callable definition denotes that definition under ordinary lexical lookup. When its use requires a runtime callable view, construct a fresh view using the definition's established lexical context and the current required symbolic bindings. This rule applies to named functions and procedures, including mentions within their own bodies and explicit/inferred capture operands. CoD defines no special source-level "currently executing callable value" selected by a recursive name.
 

@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026-11-18 — Include executable module top levels as here callables
+
+<a id="h-here-module-toplevel-20261118"></a>
+**H-HERE-MODULE-TOPLEVEL-20261118.** On 2026-11-18 (America/Los_Angeles) the project user added in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), “"here callable" 还要加一类： module toplevels”. D-18r118/D-15r53/registry928 record this source classification under D-18-HERE. Existing startup ordering, module lifetime and application-wide shutdown supply its execution boundaries. The decision covers this form within the proposed redesign.
+
+## 2026-11-18 — Fix procedure replay snapshots at definition activation
+
+<a id="h-symbolic-snapshot-activation-20261118"></a>
+**H-SYMBOLIC-SNAPSHOT-ACTIVATION-20261118.** On 2026-11-18 (America/Los_Angeles) the project user clarified in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) that an ordinary stored proc can refer to symbolic effects and “installation time 跟 snapshot 应该无关，只在 definition activation 时刻发生”. D-18r117/registry927 record this timing under D-18-MENTION/H-481 and correct the installation-time alternative in K-HERE-CALLABLES-20261118. The broader lexical-access redesign remains pending.
+
+## 2026-11-18 — Review here callables and direct lexical access
+
+<a id="k-here-callables-20261118"></a>
+**K-HERE-CALLABLES-20261118.** In the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), the project user proposed “普通 callable 完全不允许 capture” and “不建 closure slot，而是直接访问 slots” for bounded here bodies. D-18r116/D-07r176/registry926 compare four source forms, repeated writes, symbolic replay and the migration from H-553 and H-FULL-SCOPE-CALLABLE-20261117. This is a redesign proposal.
+
+## 2026-11-18 — Assess callback parameters with different owner counts at different call sites
+
+<a id="k-callback-owner-arity-20261118"></a>
+**K-CALLBACK-OWNER-ARITY-20261118.** In the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), the project user clarified “特定 call site 是确定个数的，关键是接收 site 怎么处理不同 call site 不同个数owner的callable怎么传过来”. D-07r175/registry925 compares two calls to one consumer and records a candidate call-bounded parameter contract. The user requested feasibility analysis. This record does not approve the proposal.
+
+## 2026-11-18 — Review functor receiver access and callback escape
+
+<a id="k-functor-receiver-20261118"></a>
+**K-FUNCTOR-RECEIVER-20261118.** In the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), the project user specified “const引用只能调const的overload” and asked whether forwarding exposes the same receiver lifetime for a trailing callback and a directly supplied functor. D-07r174/registry924 records the proposed owner-preserving adaptation, a valid forwarding case and a rejected escape. The functor contract and its value path remain under discussion.
+
 ## 2026-11-18 — Close the ordinary sum constructor source design
 
 <a id="h-dctor-source-20261118"></a>
