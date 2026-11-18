@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-11-18 — Defer typed borrow support across exception wrapping
+
+<a id="k-cause-borrow-cost-20261118"></a>
+**K-CAUSE-BORROW-COST-20261118 — Separate owning-exception groundwork from local borrow support.** The project user in [the design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-18 America/Los_Angeles, agrees to “avoid automatically changing `original` from an `exception` into a `ref`” and requests deferral if the surviving typed borrow is substantial engineering work. D-17r115/registry904 defer implementation on the current compiler while preserving H-263/P-233. The assessment uses `b20e5203173777e8312a593bc45615811c02883e:cod/lang_checked.hh` (`owner_alive`) and the native exception layout and cause table in that tree. Incremental estimates assume an independently validated owning handoff and make no implementation or ABI qualification.
+
+## 2026-11-18 — Preserve typed inspection across a cause-owner handoff
+
+<a id="h-exception-cause-handoff-20261118"></a>
+**H-EXCEPTION-CAUSE-HANDOFF-20261118 — The wrapper takes the cause's owner.** The project user in [the design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-18 America/Los_Angeles, confirms “`original` 的ownership应该被传递给 `wrapped`” and requests alternatives for later reference access. D-17r114/registry903 apply H-262/H-263/P-233: consume the source binding, preserve a previously declared borrow where the same actual owner remains live and accessible. This latter rule is a continuity assessment from `0c0efbfde4dccb3f3397b6f961bd82bd9a12c848:design/DesignAuthorityRegistry.md`, H-263. The user did not request implicit conversion of the consumed binding or approve a checker implementation.
+
+## 2026-11-18 — Review mutually exclusive exception construction clauses
+
+<a id="k-make-cause-placement-20261118"></a>
+**K-MAKE-CAUSE-PLACEMENT-20261118 — Existing cause as the allocation owner.** The project user in [the design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-18 America/Los_Angeles, proposes that `in region ...` and `from cause` be mutually exclusive on normal make. D-17r113/D-22r50/registry902 evaluate the placement slot, same-owner cause, and handoff at publication. The position before braced fields and the named-holder versus temporary failure cases are the design review's proposed resolution. H-MAKE-EXCEPTION-20261118 at `952b2727bfc6794b3b774f25380aad3db457dc8e:design/ExceptionControl.md`, “Make exception expressions”, covers the published fresh forms. No backend or ABI approval follows.
+
 ## 2026-11-18 — Settle normal exception construction
 
 <a id="h-make-exception-20261118"></a>
