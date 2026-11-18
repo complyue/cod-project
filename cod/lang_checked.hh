@@ -146,8 +146,11 @@ class ScalarChecker {
   struct FreeBindings {
     std::vector<Capture> captures, queries, symbols;
     std::set<std::string> declarations;
+    std::vector<const Expression *> runtime_calls;
+    bool opaque_storage = false;
   };
   mutable std::map<const Form *, FreeBindings> free_bindings_;
+  mutable std::map<size_t, bool> closed_module_storage_;
   mutable std::map<const Form *, std::set<std::string>> definition_dependencies_;
   std::map<const Form *, std::set<std::string>> free_types_;
   std::map<const Form *, std::set<std::string>> enclosing_names_;
@@ -3733,6 +3736,19 @@ class ScalarChecker {
     };
     const std::function<void(const Expression &, std::set<std::string> &, bool)> visit = [&](const Expression &expr, auto &bound, bool query) {
       using K = Expression::Kind;
+      if (!query) switch (expr.kind) {
+      case K::call: case K::unary: case K::behave: case K::perform:
+        required.runtime_calls.push_back(&expr);
+        break;
+      case K::binary:
+        if (expr.text != "&&" && expr.text != "||") required.runtime_calls.push_back(&expr);
+        break;
+      case K::value_call: case K::symbol: case K::effect: case K::touch: case K::procedure_effect:
+      case K::effect_group: case K::allocate: case K::make_region: case K::region_binding: case K::capture_owner:
+        required.opaque_storage = true;
+        break;
+      default: break;
+      }
       if (expr.definition) {
         const auto &nested = *expr.definition;
         const auto &dependencies = free_bindings(nested);
@@ -5069,11 +5085,68 @@ class ScalarChecker {
     if (state.preparing(expr) || state.exits)
       record_type_invocation(expr, state, call_reasons(callable), explicit_effects);
   }
+  bool module_storage_is_closed(size_t root) const {
+    if (const auto cached = closed_module_storage_.find(root); cached != closed_module_storage_.end()) return cached->second;
+    std::set<size_t> visited;
+    std::vector<size_t> pending{root};
+    const auto prove = [&] {
+      while (!pending.empty()) {
+        const auto id = pending.back(); pending.pop_back();
+        if (!visited.insert(id).second) continue;
+        if (const auto cached = closed_module_storage_.find(id); cached != closed_module_storage_.end()) {
+          if (!cached->second) return false;
+          continue;
+        }
+        const auto &method = program_.methods.at(id);
+        const auto &source = *method.source;
+        if (!source.body || lexical_methods_.contains(&source)) return false;
+        if (source.kind == Form::Kind::function) continue;
+        const auto &uses = free_bindings(source);
+        if (uses.opaque_storage) return false;
+        const auto &names = modules_.at(method.module);
+        for (const auto *call : uses.runtime_calls) {
+          using K = Expression::Kind;
+          if (call->intrinsic) continue;
+          const auto &name = call->text;
+          if (uses.declarations.contains(name) || names.values.contains(name)) return false;
+          if (call->kind == K::behave || call->kind == K::perform) {
+            const auto symbol = names.symbols.find(name);
+            if (symbol == names.symbols.end() || !program_.symbols.at(symbol->second).intrinsic_print) return false;
+            continue;
+          }
+          const auto family = names.callables.find(name);
+          if (family == names.callables.end()) {
+            if (!eager_operation(name) && !swap_operation(name) && !identity_operation(name) && name != "cause_at")
+              return false;
+            continue;
+          }
+          // A body may select any applicable method in its interpretation.
+          // Close the whole family without demanding instances from a query.
+          const auto *methods = &program_.families.at(family->second).methods;
+          if (method.interpretation) {
+            const auto view = family_views_.find({family->second, method.interpretation});
+            if (view == family_views_.end() || !view->second.unproved.empty()) return false;
+            methods = &view->second.methods;
+          }
+          if (methods->empty()) return false;
+          pending.insert(pending.end(), methods->begin(), methods->end());
+        }
+      }
+      return true;
+    };
+    if (!prove()) {
+      closed_module_storage_.emplace(root, false);
+      return false;
+    }
+    for (const auto id : visited) closed_module_storage_.try_emplace(id, true);
+    return true;
+  }
   bool explicit_type_call_effects(size_t method, const TypeEvidenceState &state, const std::vector<Type> &arguments) const {
-    // Within the admitted scalar function profile, only explicit borrowed
-    // arguments and caller slots can affect live caller storage.
+    // The caller handles the effects reachable through explicit borrowed
+    // arguments and binding slots. Exclude hidden channels into its storage.
     const auto &source = *program_.methods[method].source;
-    if (source.kind != Form::Kind::function || !std::ranges::all_of(arguments, scalar_type)) return false;
+    if (!std::ranges::all_of(arguments, scalar_type)) return false;
+    if (source.kind != Form::Kind::function && !module_storage_is_closed(method)) return false;
     const auto &environment = state.declaration && method == state.method ? *state.declaration : state;
     if (!has_type_captures(method, environment)) return true;
     const auto independent = [&](const Capture &capture) {

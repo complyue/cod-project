@@ -377,6 +377,58 @@ runner.CASES={
  'deferred_exception_type_only':(IO+'using "std:exceptions" MissingReturnError;func missing()->const i64{}try{missing();{}}catch(e:const MissingReturnError){defer{{val x<-make local typeof(e.category){25u64};behave @print(x);}};};',0,'25\n','[-Wmissing-return]'),
  'initializer_still_captures':(IO+'func id(x:i64)->const i64{return x;}proc run()->void{func f=id;func nested[f]()->const i64{val x<-make local typeof(1){f(26)};return x;};behave @print(nested());}run();',0,'26\n',''),
 }
+
+def deferred_call_inspector(name, call, setup=''):
+    return ('proc '+name+'(ptr input:u64 in O,flag:bool)->u64 where {owner O}{'
+            'val answer<-make local typeof({{val guarded<-{{'+setup+'val observed<-false;'
+            'defer{return observed;};defer '+call+';defer (<-)(observed,input is not null);'
+            'return false;}};return if(guarded){input}else{7u64};}}){9u64};return answer;}')
+
+
+def deferred_call_projection(call, declarations, setup=''):
+    return IO+declarations+deferred_call_inspector('inspect', call, setup)+ABSENT+'behave @print(inspect(p,true));'
+
+
+PRINT_BRIDGE = ('using symbol "std:io" @print as @output;'
+                'proc helper(label:u64)->void{behave @output(label);}'
+                'proc report(label:u64)->void{helper(label);}')
+RECURSIVE_REPORT = ('proc report(n:u64)->void{if(n>0u64){report(n-1u64);}else{behave @print(n);};}')
+WRITE_OUTPUT = 'proc write(ref out:bool in B)->void where {owner B}{out<-true;}'
+OPAQUE_BRIDGE = ('proc @external(label:u64)->void{behave @print(label);};effect @external;'
+                 'proc helper(label:u64)->void{behave @external(label);}'
+                 'proc report(label:u64)->void{helper(label);}')
+
+runner.CASES.update({
+    'deferred_query_uses_transitive_intrinsic_effects':(
+        deferred_call_projection('report(4u64)', PRINT_BRIDGE),0,'9\n',''),
+    'deferred_query_closes_recursive_procedure_effects':(
+        deferred_call_projection('report(4u64)', RECURSIVE_REPORT),0,'9\n',''),
+    'deferred_query_preserves_disjoint_payload':(
+        deferred_call_projection('write(scratch)', WRITE_OUTPUT, 'val scratch<-false;'),0,'9\n',''),
+    'deferred_query_invalidates_overlapping_payload':(
+        deferred_call_projection('write(observed)', WRITE_OUTPUT),2,'',UNPROVED_TARGET),
+    'deferred_query_keeps_transitive_symbolic_effects_opaque':(
+        deferred_call_projection('report(4u64)', OPAQUE_BRIDGE),2,'',UNPROVED_TARGET),
+})
+
+PROCEDURE_LIBRARY = (IO+'proc helper(label:u64)->void{behave @print(label);}'
+                     'proc report(label:u64)->void{helper(label);}export helper;export report;')
+PROCEDURE_ADAPTER = ('import "library.cod" helper;proc @external(flag:bool)->void{};'
+                     'proc helper(flag:bool)->void{behave @external(flag);}'
+                     'export import "library.cod" report;using "library.cod" report as frozen;export frozen;')
+FROZEN_IMPORT = 'using "adapter.cod" frozen;'
+ADAPTED_IMPORT = 'using "adapter.cod" report;'
+FROZEN_INSPECTOR = deferred_call_inspector('inspect', 'frozen(4u64)')
+ADAPTED_INSPECTOR = deferred_call_inspector('inspect_adapted', 'report(4u64)')
+runner.CASES['deferred_query_keeps_frozen_procedure_dependencies'] = (
+    {'library.cod': PROCEDURE_LIBRARY, 'adapter.cod': PROCEDURE_ADAPTER,
+     'main.cod': deferred_call_projection('frozen(4u64)', FROZEN_IMPORT)},0,'9\n','')
+runner.CASES['deferred_query_distinguishes_adapted_procedure_dependencies'] = (
+    {'library.cod': PROCEDURE_LIBRARY, 'adapter.cod': PROCEDURE_ADAPTER,
+     'main.cod': IO+FROZEN_IMPORT+ADAPTED_IMPORT+FROZEN_INSPECTOR+ADAPTED_INSPECTOR+ABSENT+
+                 'behave @print(inspect(p,true));behave @print(inspect_adapted(p,true));'},
+    2,'',UNPROVED_TARGET)
+
 runner.CASE_ARGUMENTS={}
 runner.CASE_SHADOWS = {
     'initializer_runs_once': ['x'],
