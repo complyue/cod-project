@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-18 — Name the exception object and its owner together
+
+<a id="h-exception-holder-20261118"></a>
+**H-EXCEPTION-HOLDER-20261118 — Owning exception declarations and catches.** The project user in [the design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-18 America/Los_Angeles, selects “`owned exception e:SomeException` 既是一个 `Exception` 对象，也是它自身的 owner” and the explicit owning catch. D-17r106/registry895 apply H-EXCEPTION-WHOLE-OWNER-20261118 to object access, `in e`, borrowing and parameter handoff. The user suggests a possible abbreviated catch and requests comparison of variable/parameter modes. The readonly catch-tip contract still governs a ref received from `e.tip`. Shorthand and admission of borrowed throws are separate questions. Previous surface review at `3e76fb6b714c521e0a4badb4e003e98d4587925d:design/ExceptionControl.md`, “Caller spellings for the same owner”.
+
 ## 2026-11-18 — Compare spellings for one exception-scope handoff
 
 <a id="h-exception-whole-owner-20261118"></a>
