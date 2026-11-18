@@ -1,8 +1,10 @@
 # CoD regional ownership: syntax, semantics and use
 
-Design revision: 123 · Recorded: 2026-11-17 · Status: design draft with scoped confirmed requirements.
+Design revision: 124 · Recorded: 2026-11-17 · Status: design draft with scoped confirmed requirements.
 
 ## Design authority
+
+- **Full scopes are ordinary callable invocations:** [H-FULL-SCOPE-CALLABLE-20261117](../CHANGELOG.md#h-full-scope-callable-20261117)/[K-FULL-SCOPE-CALLABLE-20261117](../CHANGELOG.md#k-full-scope-callable-20261117), [D-17-FULL-SCOPE](DesignAuthorityRegistry.md#d-17-full-scope)/P-564–P-566, covers r123→124 in the explicit-full-scope interactions below. The user confirms ordinary capture, local return and independent cleanup everywhere; D-17 owns the source acceptance. Reuse C-63/C-65/C-73/C-75/C-84 and charter §§2/3.2–3.3/4.3/6.3/8/12 for one inspectable callable/lifetime model. Preserve actual owners, permissions, declared failures and D-16; no shared cells, lifetime extension or implicit value return. Complete checker/value-path and capture implementation qualification remain separate; D-18r113 stays unchanged. D-10 separately records the selected trailing callback surface; complete implementation/value-path qualification remains pending.
 
 - **Discussion-index continuity:** [K-DISCUSSION-SCAN-20261117](../CHANGELOG.md#k-discussion-scan-20261117) continues r122→123’s function-result summary from H-262/H-263/H-267 and D-17 E4/E5. C-54/P-143/P-155 and charter §§3.2–3.3/4.3/6.3/8 preserve explicit cleanup responsibility, consumed source names and lifetime-checked views. Existing acceptance and broader pending qualification remain; owner reassignment/reinitialization and mailbox recovery are still separate choices. No new ownership, syntax or physical contract follows.
 
@@ -157,7 +159,7 @@ Independent values have no owner association. Their receiving storage still belo
 
 H-440 selects `p is null` for null testing under the H-439 reference-identity rule; null remains a reserved literal. H-417 requires a unique statically provable owner even for a nullable ptr. H-418 requires that owner on the receiving declaration or the null literal: `ptr p:T = null` rejects. Accepted forms include `ptr p:T in O = null`, `ptr p:T = null in O` and `ptr p:T = null in here`. If both sides specify owners, the compiler must prove they are the same. Clearing a pointer to bare null uses that pointer's already established owner; it does not forget or change it. The owner must be established when the pointer is initialized. Owner/lifetime checks still reject expired targets; null testing never repairs invalid lifetime.
 
-`here` denotes the current full lexical lifetime scope under D-17: a callable invocation, module scope or explicit `{{ ... }}` scope. Ordinary `{ ... }` does not introduce a new owner. A named qualifier denotes an available region or generic owner already admitted by ordinary owner syntax, with the same static uniqueness/lifetime checks. Owner-qualified null supplies an absence value with an owner constraint; it does not allocate a target, create an owner or grant access to region allocation. The target type still comes from the receiving type contract.
+`here` denotes the current full lexical lifetime scope under D-17: a callable invocation, module scope or explicit `{{ ... }}` scope. H-FULL-SCOPE-CALLABLE-20261117 makes that explicit scope an ordinary implicit invocation: captured vals become local values, while captured references keep their original targets/owners. Ordinary `{ ... }` does not introduce a new owner. A named qualifier denotes an available region or generic owner already admitted by ordinary owner syntax, with the same static uniqueness/lifetime checks. Owner-qualified null supplies an absence value with an owner constraint; it does not allocate a target, create an owner or grant access to region allocation. The target type still comes from the receiving type contract.
 
 H-604 gives `here` a specific invocation-relative role in `yields ref T in here`: it names the selected generator invocation's lexical owner, bound once at entry and retained throughout that for. [D-29](RangedForAndGenerators.md#generator-invocation-owner) specifies the lifetime, views and cleanup consequences. The caller's own in here still names its own scope. This is neither an owner union nor a permission to return ordinary callee-local references after their owner ends; each recursive activation remains a distinct actual owner.
 
@@ -166,10 +168,10 @@ H-419 excludes `outer` and repeated-outer syntax. To refer to storage owned by a
 ```text
 proc local_views() -> void {
   ptr anchor:u64 = null in here;
-  val value:u64 <- 1u64;
+  ref value:u64 = 1u64;
   {{
     ptr p:u64 = anchor;  # Null, with anchor's enclosing-scope owner.
-    p = value;          # Same owner; target is now value.
+    p = value;          # Captured ref retains the enclosing target/owner.
     p = null;           # Preserve that established owner.
 
     ptr local_view:u64 = null in here; # This inner full scope's owner.

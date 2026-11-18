@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-11-17 — Unify full scopes with ordinary callable execution
+
+<a id="h-full-scope-callable-20261117"></a>
+**H-FULL-SCOPE-CALLABLE-20261117 — Ordinary callable equivalence everywhere.** Human/source: current project user in [the design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-17 America/Los_Angeles; exact time/personal identity unavailable. “是的，我决定 **full ordinary-callable equivalence everywhere, {{}} 中的 `return`** 总是做局部返回。” Accepts the presented A=1/B=2 ordinary value-capture/local-return cases and resolves H-FULL-SCOPE-DEFER-20261117's open control/capture boundary. D-17-FULL-SCOPE records the source contract; derived default/receiving/result/loop/owner consequences preserve ordinary invariants. This does not adopt the complete D-17-DEFER-CHECKS or frozen D-18r113 implementation/value paths.
+
+<a id="h-trailing-positional-20261117"></a>
+**H-TRAILING-POSITIONAL-20261117 — Initial binding choice, superseded below.** Same human/chat/date provenance. The user chose “Preserve ordinary positional binding (Recommended)” for a proposed trailing callback while its placement was still an arbitrary missing slot. H-TRAILING-CALLBACK-20261117 subsequently replaces this choice only for the selected first-slot trailing form. No intermediate implementation or complete syntax qualification was authorized.
+
+<a id="h-trailing-callback-20261117"></a>
+**H-TRAILING-CALLBACK-20261117 — First-slot ordinary callbacks.** Same human/chat/date provenance. The user extends the niladic proposal to parameterized callbacks, proposes “`{{=> arg1,arg2,...; ... }}`”, then explicitly chooses “那我们也要求callback声明为第一个参数，这点上与Julia保持一致”. After the concrete `apply(7u64) {{=> x; return x + 1u64; }}` example, the user selects “Insert callback first; written positions start at parameter 2 (Recommended)”, accepting result8 and superseding H-TRAILING-POSITIONAL's mapping for this form. D-10-TRAILING-CALLBACK records the illustrated surface and agent-derived ordinary typing/timing/cleanup boundaries; complete grammar, checker/native and value-path qualification is not inferred.
+
+<a id="k-full-scope-callable-20261117"></a>
+**K-FULL-SCOPE-CALLABLE-20261117 — Reconcile the selected callable boundaries.** Registry861→862/D-17r89→90/D-17-DEFER-CHECKS r2→3/D-10r200→201/D-14r123→124/D-15r48→49/D-21r28→29/D-22r41→42/D-24r8→9/D-29r14→15/source425→426. New scoped records P-564–P-569 distinguish selected source behavior from pending mechanisms. Preserve charter §§2/3.2–3.3/4.3/5.3/6.3/8/12, C-36/C-63/C-65/C-73/C-75/C-84, existing qualifications and exclusions. Correct caller-default explicit returns, temporary-receiving capture effects and an enclosing-owner example; record source implementation gaps honestly. Baseline: `03de0a66b05e54ba0fb919e86c1858cdc9c94484` at affected paths. D-16 and D-18r113 are byte-identical; no code/fixture edits, build or tests. Mainline's bounded checking and ordinary value-input reviews remain separate; this is not their adoption.
+
 ## 2026-11-17 — Keep review routing and registry records current
 
 <a id="k-review-routing-20261117"></a>

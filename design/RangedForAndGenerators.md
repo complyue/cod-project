@@ -1,8 +1,10 @@
 # Ranged for-loops and synchronous generators
 
-Design revision: 14 · Recorded: 2026-11-17 · Status: selected generator/feedback syntax and checked forwarding; remaining scope, effect proofs and transport pending.
+Design revision: 15 · Recorded: 2026-11-17 · Status: selected generator/feedback syntax and checked forwarding; remaining scope, effect proofs and transport pending.
 
 ## Design authority
+
+- **Full scopes are ordinary callable invocations:** [H-FULL-SCOPE-CALLABLE-20261117](../CHANGELOG.md#h-full-scope-callable-20261117)/[K-FULL-SCOPE-CALLABLE-20261117](../CHANGELOG.md#k-full-scope-callable-20261117), [D-17-FULL-SCOPE](DesignAuthorityRegistry.md#d-17-full-scope)/P-564–P-566, covers r14→15 in the explicit-full-scope interactions below. The user confirms ordinary capture, local return and independent cleanup everywhere; D-17 owns the source acceptance. Reuse C-63/C-65/C-73/C-75/C-84 and charter §§2/3.2–3.3/4.3/6.3/8/12 for one inspectable callable/lifetime model. Preserve actual owners, permissions, declared failures and D-16; no shared cells, lifetime extension or implicit value return. Complete checker/value-path and capture implementation qualification remain separate; D-18r113 stays unchanged. D-10 separately records the selected trailing callback surface; complete implementation/value-path qualification remains pending.
 
 - **Source and implementation scope:** [K-TRACKER-BOUNDARIES-20261117](../CHANGELOG.md#k-tracker-boundaries-20261117) continues r13→14's selected H-577–H-604 scopes under H-604's renewed derivation instruction. The remaining-work matrix below separates fixed source obligations from checker/native proofs and optional extensions; no new source rule or mechanism qualification follows. Existing C-96/C-65/C-84 and P-521–P-560 relations retain their recorded scope and candidate charter §§2/3.2–3.3/4.3/6.3/8/12 rationale. Preserve current invariants/acceptance, D-16 and unchanged D-18r113.
 
@@ -744,6 +746,20 @@ Starting with x equal to 1, the val yield contract supplies 1 and then 2; x ends
 Body checked failures still bypass generator catches, and fixed generator throws remains an obligation. Body return still targets its enclosing callable. H-589/H-590 cleanup composition, per-iteration effect restoration, H-600 fixed owners and deferred lifetime checks remain. Feedback can carry only ordinary admitted values/references; it cannot transport the caller's control entry or extend any owner lifetime.
 
 Select the generator method from ordinary inputs and established declarations before checking the body. No body-driven kind inference, overload tie-breaking, retry or proc-to-func adapter follows. Where a generator view is otherwise admitted, its contract retains the declared kind and full protocol; the body is checked at each for site. Complete view/nesting/effect/native proof remains work. Inlining and outlining must preserve lexical call eligibility, active dynamic bindings and actual completion targets; neither optimization qualifies a source program that violates them.
+
+## Full scopes inside a loop body
+
+H-FULL-SCOPE-CALLABLE-20261117 makes an explicit `{{ ... }}` an ordinary immediately invoked callable, even inside a caller-owned loop body. Its captures follow D-18, its return is local, and its cleanup completes before the outer body resumes. A direct loop-body return still targets the callable containing that loop; the implicit nested callable does not inherit that control privilege. Continue/feedback must target a loop in the same callable, and yield must belong to that callable's own generator contract. Ordinary nested calls cannot reach a caller's suspended yield.
+
+```cod
+# For a generator with u64 feedback:
+for val item <- source() {
+    continue {{ return item + 1u64; }};  # Outer continue sends the local result.
+}
+# By contrast, {{ continue item; }} cannot continue the outer loop.
+```
+
+The implicit callable retains the checking site's func/proc permissions; this grants no new proc effects inside func code. A captured yielded reference may access its selected live target under the established owner, but cannot retain a loop-control slot or outlive a handoff without the ordinary proof. A local return neither cancels the generator nor returns from the loop's surrounding callable. Failure escaping the implicit invocation reaches the loop body and then follows the existing generator-bypass/cleanup contract. The trailing ordinary callback syntax in D-10 is distinct from a generator body and inherits no special passthrough privileges.
 
 ## Signature and proof work remaining
 

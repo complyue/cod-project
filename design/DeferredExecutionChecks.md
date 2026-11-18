@@ -1,11 +1,11 @@
 # Static checks for deferred execution
 
-Design revision: 2 · Recorded: 2026-11-17 · Status: pending human whole-file/value-path review.
+Design revision: 3 · Recorded: 2026-11-17 · Status: pending human whole-file/value-path review.
 
 ## Design authority
 
-- **Current correction and review:** [H-FULL-SCOPE-DEFER-20261117](../CHANGELOG.md#h-full-scope-defer-20261117)/[K-FULL-SCOPE-DEFER-20261117](../CHANGELOG.md#k-full-scope-defer-20261117) confirms independent defer registration/draining in explicit full scopes and rejects the contrary boundary. This r2 remains pending whole-file/value-path review; the broader immediate-callable model’s capture/control consequences are unresolved below. The source correction is not adoption of r1 or r2.
-- **Registry and coverage:** [D-17-DEFER-CHECKS](DesignAuthorityRegistry.md#d-17-defer-checks), revision 2, this whole file. Candidate P-561–P-563; [K-798](../CHANGELOG.md#k-798) records the proposal. This document is not a delegated implementation contract before human confirmation.
+- **Current source decision and review:** [H-FULL-SCOPE-CALLABLE-20261117](../CHANGELOG.md#h-full-scope-callable-20261117)/[K-FULL-SCOPE-CALLABLE-20261117](../CHANGELOG.md#k-full-scope-callable-20261117) confirms full ordinary-callable equivalence everywhere, including ordinary captured values and local returns; explicit full scopes own independent defer sequences. This r3 remains pending whole-file/value-path review. The source decision does not adopt this complete checking mechanism or D-18r113.
+- **Registry and coverage:** [D-17-DEFER-CHECKS](DesignAuthorityRegistry.md#d-17-defer-checks), revision 3, this whole file. Candidate P-561–P-563; [K-798](../CHANGELOG.md#k-798) records the proposal. This document is not a delegated implementation contract before human confirmation.
 - **Candidate value path:** C-63 → C-10 through H-267-confirmed P-235 preserves explicit typed failure and cleanup responsibility. P-236 retains the bounded D-17 preservation baseline. Candidate P-561 connects this bounded source check through that existing value path to charter §§2/3.3/4.3/6.3/8/12: visible registration has a checkable execution context, valid helpers retain their own cleanup, and source errors are diagnosed before execution without adding runtime state.
 - **Human-confirmed baseline:** [H-552](../CHANGELOG.md#h-552) selects rejection of nested defer declarations; [H-356](../CHANGELOG.md#h-356) fixes eager call preparation versus delayed blocks; [H-371](../CHANGELOG.md#h-371) requires explicit scopes for deferred-block declarations/effects; [H-295](../CHANGELOG.md#h-295) makes typeof nonexecuting. These are source confirmations, not confirmation of this new bounded mechanism/value path.
 - **Dependencies and invariants:** P-562 requires D-10’s lookup/call permissions, D-17’s source contexts, D-14’s query/access/owner rules, D-18’s independent callable bodies, D-26’s diagnostics and D-16 compatibility. C-65 storage/lifetime rules are dependencies, not a new value grant. Preserve ordinary lexical lookup, func/proc permissions, actual owners, explicit returns, successful registration and intrinsic cleanup. Dependencies grant no new source permission.
@@ -51,7 +51,7 @@ Type inspection retains ordinary source, destination, storage, access and owner 
 
 Validate every incorporated source body, including unused methods, generic bodies and anonymous definitions, in checking-only and emission paths before accepting an executable artifact. Source well-formedness does not depend on a particular call, specialization or runtime branch being reached. Bodyless declarations have no invented execution body.
 
-A read-only source-structure pass may reuse the compiler’s scope validation. Its information includes the current cleanup scope and, when applicable, its enclosing deferred execution site. Explicit full scopes and callable bodies start independent cleanup contexts; leaving one restores the surrounding context. H-371 declaration/effect permissions and loop restrictions retain their own scope rules. Broader callable equivalence is not inferred from this context reset.
+A read-only source-structure pass may reuse the compiler’s scope validation. Its information includes the current cleanup scope and, when applicable, its enclosing deferred execution site. Explicit full scopes and callable bodies start independent cleanup contexts; leaving one restores the surrounding context. H-371 declaration/effect permissions and loop restrictions retain their own scope rules. The full-scope body is an ordinary callable body under H-FULL-SCOPE-CALLABLE-20261117; its implicit construction/capture remains checked in the enclosing context. This context check does not by itself implement ordinary captures or local control flow.
 
 At each defer declaration:
 
@@ -95,9 +95,11 @@ Positive cases preserve their source-order effects and ordinary ownership/covera
 
 Validate source rejection before execution and preserve legal native behavior in specialized and general modes. Active fixtures must enforce the selected restriction and retain meaningful legal helper/preparation counterparts. Their original observations remain available in immutable Git history; passing the older nested-registration prototype is not acceptance of this contract.
 
-## Immediate-callable model: unresolved interactions
+## Ordinary callable boundary
 
-The independent cleanup boundary is selected. Literal equivalence to an ordinary immediately invoked callable would also affect value captures and control targets. For example, writing an outer val from an ordinary captured-value callable changes an invocation local, and return targets that callable rather than its lexical caller. Establish whether those ordinary rules also apply to `{{ ... }}`, or whether the equivalence is limited to independent scope/cleanup with lexical access/control retained. Check return/if-returning, loop continue and generator yield/feedback against that decision. No broader capture/control change, implicit shared cell or lifetime extension is authorized here. This affected scope remains pending review; D-18r113 stays unchanged.
+[D-17's confirmed full-scope contract](ExceptionControl.md#full-scopes-as-immediate-ordinary-calls) governs captures and control as well as cleanup. `{{ ... }}` has independent invocation-local value inputs, local returns/return inspection and its own owner. No outer loop/yield or catch context crosses that ordinary callable boundary. The implicit callable construction is checked in the enclosing execution context; its body starts a fresh ordinary context. A standalone invocation occurs immediately when the expression is reached; surrounding delayed-block syntax still determines when that happens.
+
+Acceptance of this checker requires the correct cleanup-boundary distinction, not a new runtime callback representation. Broader control/capture lowering and its separately pending contracts must be reported honestly; a structural pass cannot claim to implement them. D-18r113 remains unchanged and unadopted. D-10 separately selects trailing callable arguments. Their construction stays in the enclosing context and their bodies are independent ordinary callables; this checker alone does not establish their implementation.
 
 ## Qualification boundary
 

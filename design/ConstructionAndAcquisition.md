@@ -1,8 +1,10 @@
 # CoD construction, bits ADTs and region acquisition
 
-Design revision: 41 · Recorded: 2026-11-17 · Status: discussion draft with confirmed requirements; logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
+Design revision: 42 · Recorded: 2026-11-17 · Status: discussion draft with confirmed requirements; logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
 
 ## Design authority
+
+- **Full scopes are ordinary callable invocations:** [H-FULL-SCOPE-CALLABLE-20261117](../CHANGELOG.md#h-full-scope-callable-20261117)/[K-FULL-SCOPE-CALLABLE-20261117](../CHANGELOG.md#k-full-scope-callable-20261117), [D-17-FULL-SCOPE](DesignAuthorityRegistry.md#d-17-full-scope)/P-564–P-566, covers r41→42 in the explicit-full-scope interactions below. The user confirms ordinary capture, local return and independent cleanup everywhere; D-17 owns the source acceptance. Reuse C-63/C-65/C-73/C-75/C-84 and charter §§2/3.2–3.3/4.3/6.3/8/12 for one inspectable callable/lifetime model. Preserve actual owners, permissions, declared failures and D-16; no shared cells, lifetime extension or implicit value return. Complete checker/value-path and capture implementation qualification remain separate; D-18r113 stays unchanged. D-10 separately records the selected trailing callback surface; complete implementation/value-path qualification remains pending.
 
 - **Bounded source review status:** [K-TRACKER-BOUNDARIES-20261117](../CHANGELOG.md#k-tracker-boundaries-20261117) records r40→41 under H-604's instruction to continue deriving straightforward consequences. The engineering-assessment section now distinguishes selected result/receiving/init/root rules from remaining proof/transport work and optional source extensions. Preserve H-571–H-599/H-601/H-602, C-65/C-72/C-95 and the existing scoped relationships/value rationale under charter §§2/3.3/4.3/6.3/8/12. No new variance, aggregate kind, modifier access, construction policy or qualification is selected; D-16 and D-18r113 remain unchanged.
 
@@ -107,7 +109,7 @@ The bounded source boundary is a fixed finite set of uniquely named output contr
 | Result position inside a func/proc type or typeof-origin contract | Retain the structural output metadata; this does not turn it into a callable input value. |
 | `return { expr -> label, ... };` | Map expressions to the declared/inferred outputs, once in source order. No local product object is implicitly moved. |
 | `{ receiving specification } := call();` | H-574/H-575’s explicit operations map fields to new or existing destinations, with optional same-name selectors and no arbitrary expressions. |
-| `{{ receiving specification }} := call();` | Temporary form equivalent to an ordinary full scope around the receiving operation. New bindings end with that scope; existing-destination writes remain. The spec admits no executable statements. |
+| `{{ receiving specification }} := call();` | Temporary form equivalent to an ordinary full scope around the receiving operation. New bindings end with that invocation; captured-value writes stay local, while ordinary borrowed target/place writes remain observable. The spec admits no executable statements. |
 | `return other_call();` with a compatible result contract | Recommended direct forwarding of the outputs and their obligations, retaining the outer invocation’s cleanup/replacement boundary. |
 | Discard an entire call result | Run the call and required component cleanup; discarding creates no group value. |
 | Variable, ordinary value parameter, ADT field, array/container element or region allocation of this structural type | Excluded from the proposed return-only scope, even if every component is bits. |
@@ -411,11 +413,13 @@ Single braces do not add a full lexical scope. Successful new bindings remain in
 
 ```cod
 # Temporary declaration: count ends with this operation's explicit full scope.
-# The update to the pre-existing total remains.
+# A captured ref preserves its selected live target.
+ref total:u64 = 0u64;
 {{ val count <-; total <- count; }} := inspect();
+# The target update remains; a val total would instead be updated only locally.
 ```
 
-The standalone double-brace form is equivalent to placing its single-brace receiving statement inside an ordinary explicit full scope: that scope covers producer evaluation, reception and required cleanup/effect restoration. Existing destinations still resolve from the preceding environment; new names are invisible to the producer and do not escape the operation. Successful writes to pre-existing destinations remain observable, without rollback. Ordinary full-scope lifetime/access checks forbid escaping a newly materialized target through another receiver or capture.
+The standalone double-brace form is equivalent to placing its single-brace receiving statement inside an ordinary explicit full scope: that scope covers producer evaluation, reception and required cleanup/effect restoration. Existing destinations still resolve from the preceding environment; new names are invisible to the producer and do not escape the operation. H-FULL-SCOPE-CALLABLE-20261117 applies ordinary capture rules to those destinations: scalar/callable value writes and independent reference-slot rebinding affect invocation locals; writes through a captured reference or admissible declared place remain observable, without rollback. Use single-brace reception in the enclosing scope to update an enclosing value holder directly. Temporary receiving does not create a special capture-by-place permission. Ordinary full-scope lifetime/access checks forbid escaping a newly materialized target through another receiver or capture.
 
 This syntax adds no arbitrary executable statements, callbacks or explicit defer declarations to the spec. To use the new variables in further code, write an ordinary explicit full scope containing the single-brace receiving statement and those subsequent statements. Existing-only reception needs no temporary names merely to rename fields. Generator headers reuse item mappings but retain D-29's separate repeated-handoff and control-lifetime obligations; this standalone temporary form does not decide their storage lifetime.
 
