@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 203 · Recorded: 2026-11-18 · Phase: language/application co-design.
+Design revision: 204 · Recorded: 2026-11-18 · Phase: language/application co-design.
 
 ## Design authority
+
+- **Trailing callback failure checking.** [H-DOUBLE-BRACE-THROWS-20261118](../CHANGELOG.md#h-double-brace-throws-20261118) confirms the checked interface in [D-10-TRAILING-CALLBACK](DesignAuthorityRegistry.md#d-10-trailing-callback), r204. P-567–P-569 connect a readable callback body to its independently selected signature under charter §§3.3/6.3/8. Check the body against the callback parameter’s declared failures, including an empty checked set. Selection and ordinary caller obligations remain fixed. Examples below give acceptance. Full trailing-callback implementation qualification remains pending.
 
 - **Parenthesized value expressions:** [H-PARENTHESIZED-VALUES-20261118](../CHANGELOG.md#h-parenthesized-values-20261118)/[K-PARENTHESIZED-VALUES-20261118](../CHANGELOG.md#k-parenthesized-values-20261118), [D-10-PARENS](DesignAuthorityRegistry.md#d-10-parens)/P-573–P-575, selects r203’s value-category expression parentheses and preference for unparenthesized operator idioms. Scalar bits projection, unparenthesized reference-result chaining and the delimiter distinction follow the confirmed choice; no C++ copying/moving, graph transfer, access upgrade or lifetime extension follows. Candidate C-06/C-41/C-65/C-72 → charter §§2/3.3/4.3/6.3/8/12 makes value-versus-target intent explicit while preserving readable composition. Acceptance and type-specific limits are below; complete grouping grammar/checker/value-path qualification and non-bits carrier details remain separate. D-16, ordinary evaluation and the r92 full-scope profile retain their stated boundaries.
 
@@ -900,6 +902,24 @@ The callback is the **first declared parameter**, as in [Julia's do-notation](ht
 There is no search for a callback parameter later in the signature. A non-callable first parameter, an explicitly supplied value/default request for the first parameter, or another missing required argument rejects. A declared default on the first parameter is suppressed by this explicitly supplied callback. Defaults on remaining omitted slots retain their existing rules. Calls without a trailing block keep ordinary positional binding. The callback construction is outside the parenthesized argument list, so it does not violate that list's ban on a positional argument after a named argument. The bounded form supplies one trailing callback; use explicit named callable arguments for other callbacks.
 
 **Header and expected type.** `{{=> x, index; statements... }}` binds callback parameters in order. A header is distinct from executable body expressions; `=>` is recognized only in that leading position, and an explicit semicolon ends the header. The general semicolon-omission principle above applies to future refinement of this boundary; it does not yet select a replacement delimiter or a newline rule. No header means zero parameters, not an implicit variadic or ignored-argument callback. Parameter names are local to the callback. The independently selected expected callable signature supplies each parameter's type, val/ref/ptr/init/place mode, owner/access constraints, func/proc kind, result contract and failure requirements. This is contextual declaration checking, not type assertion or a new operation on the callback's parameters. Any explicit ordinary parameter annotations must satisfy that contract; they cannot erase owner/access/init obligations. No default expressions are authored by this anonymous header.
+
+The selected callable **parameter type** supplies the callback's `throws` contract. Every checked obligation that escapes the callback body must be covered by it. The body may handle additional failures locally or use fewer than the signature permits. An outer catch around the call, or the receiving procedure's own `throws`, cannot grant the callback a larger interface. The procedure that invokes the callback handles or declares the callback signature's checked obligations as for any ordinary call.
+
+```cod
+using "std:exceptions" NullPointerException;
+
+proc invoke(body:proc()->void throws NullPointerException) -> void
+    throws NullPointerException { body(); }
+proc quiet(body:proc()->void) -> void { body(); }
+
+proc use(val e:NullPointerException) -> void throws NullPointerException {
+    invoke() {{ throw e; }};   # Accepted by invoke's callback signature.
+    quiet() {{ try { throw e; } catch (caught:const NullPointerException) {} }};
+    # quiet() {{ throw e; }};  # Rejected even though use declares this failure.
+}
+```
+
+A callback written at the call site therefore keeps its expected signature. Its body cannot widen that signature, rank overload candidates, or narrow the obligations of a call through that signature. Standalone double braces use the [inferred checked interface](ExceptionControl.md#checked-failures-of-standalone-full-scopes).
 
 The initial shorthand covers a single established fixed-arity callback signature, with a header naming all its parameters. It does not synthesize multiple methods for `typeof` a callable family, resolve a circular generic result, or reinterpret a pack as several fixed parameters. Richer signatures can use an ordinary explicitly declared callable where compatible; no new method-coverage, variance, pure or parameter-default policy follows. Structural callback results use the ordinary declared result schema and explicit named return form.
 
