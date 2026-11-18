@@ -4647,7 +4647,7 @@ class ScalarChecker {
     InputDomains domains;
     for (size_t i = 0; i < view.parameters.size(); ++i) {
       const auto &parameter = view.parameters[i];
-      const auto mode = view.argument_modes.empty() ? ArgumentMode::value : view.argument_modes[i];
+      const auto mode = argument_mode(view, i);
       std::vector<Type> domain;
       if (mode != ArgumentMode::value) {
         domain.push_back(parameter);
@@ -4721,17 +4721,19 @@ class ScalarChecker {
   static std::optional<Substitutions> factored_coverage_context(const CheckedMethod &method, const Type &view,
       const InputDomains &domains, const std::vector<Type> &retained) {
     if (variadic(method) || method.retained_types.size() != retained.size() ||
-        !method.input_owners().empty() || caller_bindings(method) ||
-        method.parameters.size() != domains.size() || !view.value_result || method.result.mode != ResultMode::value)
+        caller_bindings(method) || method.parameters.size() != domains.size())
       return {};
     auto context = type_context(method, retained);
     for (size_t i = 0; i < domains.size(); ++i) {
-      if (argument_mode(parameter_at(method, i)) != ArgumentMode::value ||
-          (!view.argument_modes.empty() && view.argument_modes[i] != ArgumentMode::value) ||
-          (!view.owners.empty() && view.owners[i]) || domains[i].empty()) return {};
-      // The complete callable input domain has one exact signature. Matching
-      // it in each checked tuple preserves any substitutions it supplies.
+      const auto mode = argument_mode(view, i);
+      if (argument_mode(parameter_at(method, i)) != mode || domains[i].empty()) return {};
+      // Complete callable signatures and borrowed target types stay exact.
+      // Whole-tuple checking still binds their types and proves their owners.
       if (view.parameters[i].kind == Type::procedure) continue;
+      if (mode != ArgumentMode::value) {
+        if (!scalar_type(view.parameters[i])) return {};
+        continue;
+      }
       const auto binding = binder(method, method.parameters[i]);
       const bool unresolved = binding && !context.at(*binding);
       if ((!unresolved && !scalar_type(coverage_formal(method, i, context))) ||
@@ -4742,7 +4744,7 @@ class ScalarChecker {
   }
   static bool fixed_preparation(const CheckedMethod &method, const Type &view, const InputDomains &domains,
                                 const std::vector<Type> &retained = {}) {
-    // Each admitted value prepares independently to the same fixed formal.
+    // Each input prepares independently to the same fixed formal.
     // Declaration evidence is fixed per materialization across these inputs.
     const auto context = factored_coverage_context(method, view, domains, retained);
     if (!context || std::any_of(context->begin(), context->end(), [](const auto &type) { return !type; })) return false;
@@ -4777,16 +4779,16 @@ class ScalarChecker {
       if (!context) return plan;
       contexts.push_back(std::move(*context));
     }
-    // The view fixes access throughout coverage. Qualifier differences can
-    // affect dominance when more candidates enter the lossless phase, even
-    // for fixed formals. Generic candidates can also distinguish the phases.
-    const bool phase_sensitive = std::any_of(contracts.begin(), contracts.end(), [&](const auto *contract) {
-      return !contract->type_parameters.empty() || !same_access(*contract, *contracts.front());
-    });
+    // Owner and access requirements can affect dominance when more candidates
+    // enter the lossless phase. Generic candidates can distinguish it too.
+    const bool phase_sensitive = !view.owners.empty() ||
+        std::any_of(contracts.begin(), contracts.end(), [&](const auto *contract) {
+          return !contract->type_parameters.empty() || !same_access(*contract, *contracts.front());
+        });
     CallableSelectionInputs selection;
     bool always_widens = false;
     for (size_t i = 0; i < domains.size(); ++i) {
-      if (view.parameters[i].kind == Type::procedure) continue;
+      if (argument_mode(view, i) != ArgumentMode::value || view.parameters[i].kind == Type::procedure) continue;
       const auto &formal = coverage_formal(*contracts.front(), i, contexts.front());
       bool same = scalar_type(formal);
       for (size_t j = 1; same && j < contracts.size(); ++j)
@@ -5346,7 +5348,7 @@ class ScalarChecker {
     std::vector<CheckedOperation> views;
     for (size_t i = offset; i < expr.children.size(); ++i) {
       const auto &parameter = contract.parameters[i - offset];
-      const auto mode = contract.argument_modes.empty() ? ArgumentMode::value : contract.argument_modes.at(i - offset);
+      const auto mode = argument_mode(contract, i - offset);
       const auto argument = check(*expr.children[i], instance, operations, mode == ArgumentMode::value, false,
                                   parameter.kind == Type::procedure ? &parameter : nullptr);
       if (mode == ArgumentMode::value && argument.kind == Type::procedure)

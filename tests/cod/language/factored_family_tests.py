@@ -176,6 +176,33 @@ runner.CASES['exact_callback_declaration_query'] = (
     IO + f'func choose(cb:{CALLBACK},{PARAMETERS})->u64;func inspect(value:{CALLBACK_VIEW})->u64;'
     'val mark<-make local typeof(inspect(choose)){7u64};behave @print(mark);', 0, '7\n', '')
 
+BORROWED_RESULT = (f'func choose(ref x:u64 in O,ref y:u64 in O,{PARAMETERS})->ref u64 in O'
+                   ' where {owner O}{return y;}')
+BORROWED_HOLDER = 'ref left:u64=1u64,right:u64=2u64;func held=choose;'
+WRITE_SELECTED = f'held(left,right,{ARGUMENTS})<-9u64;'
+runner.CASES['borrowed_result_with_scalar_inputs'] = (
+    IO + BORROWED_RESULT + BORROWED_HOLDER + WRITE_SELECTED +
+    'behave @print(left);behave @print(right);', 0, '1\n9\n', '')
+runner.CASES['borrowed_inputs_keep_actual_owner_check'] = (
+    BORROWED_RESULT + BORROWED_HOLDER +
+    '{{ref local:u64=3u64;held(left,local,' + ARGUMENTS + ');}};', 2, '', 'different actual owners')
+runner.CASES['borrowed_input_keeps_exact_target_type'] = (
+    BORROWED_RESULT + BORROWED_HOLDER + 'ref narrower:u32=2u32;held(left,narrower,' + ARGUMENTS + ');',
+    2, '', 'argument does not satisfy the callable view type')
+
+BORROWED_DECLARATION = (f'func choose(ref x:u64 in O,ref y:u64 in O,{parameters(first="u32")})->ref u64 in O'
+                        ' throws NullPointerException where {owner O};')
+runner.CASES['borrowed_declaration_keeps_checked_obligation'] = (
+    NPE + BORROWED_DECLARATION + BORROWED_RESULT + BORROWED_HOLDER + WRITE_SELECTED,
+    2, '', 'requires a covering catch or throws declaration')
+runner.CASES['borrowed_declaration_handled'] = (
+    IO + NPE + BORROWED_DECLARATION + BORROWED_RESULT + BORROWED_HOLDER +
+    'try{' + WRITE_SELECTED + '{}}catch(e:const NullPointerException){};behave @print(right);', 0, '9\n', '')
+runner.CASES['nullable_borrowed_input_with_scalar_inputs'] = (
+    IO + f'func choose(ptr x:u64 in O,{PARAMETERS})->bool where {{owner O}}{{return x is null;}}'
+    'ref left:u64=1u64;ptr absent:u64=null in here;func held=choose;'
+    f'behave @print(held(left,{ARGUMENTS}));behave @print(held(absent,{ARGUMENTS}));', 0, 'false\ntrue\n', '')
+
 runner.CASES['returned_complete_capture'] = (IO + BASE +
     'func wrap(callback:' + VIEW + ')->' + VIEW + '{return func[callback](' + PARAMETERS +
     ')->u64{return callback(' + NAMES + ')+1u64;};}func held=wrap(choose);' + CALL,

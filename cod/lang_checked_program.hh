@@ -47,6 +47,9 @@ inline ArgumentMode argument_mode(const Parameter &parameter) {
   if (parameter.declaration_kind == "ref") return ArgumentMode::borrowed_ref;
   return ArgumentMode::borrowed_read;
 }
+inline ArgumentMode argument_mode(const Type &view, size_t position) {
+  return view.argument_modes.empty() ? ArgumentMode::value : view.argument_modes.at(position);
+}
 inline Type exception_type(size_t category) { return {Type::exception, exception_categories.at(category).name, category}; }
 inline bool accepts_exception(const Type &source, const Type &target) {
   return source.kind == Type::exception && target.kind == Type::exception && (!target.identity || source == target);
@@ -364,7 +367,8 @@ struct CheckedCallable {
       if (arguments.size() != type.parameters.size()) throw std::logic_error("unchecked callable family invocation");
       for (size_t i = 0; i < arguments.size(); ++i) {
         const auto &argument = arguments[i];
-        if ((!scalar_type(argument) && argument.kind != Type::procedure) || !transfers_value(argument, type.parameters[i]))
+        if ((!scalar_type(argument) && argument.kind != Type::procedure) ||
+            !accepts_argument(argument, type.parameters[i], argument_mode(type, i)))
           throw std::logic_error("unchecked callable family invocation");
       }
     }
@@ -387,8 +391,7 @@ struct CheckedCallable {
       bool admitted = entry.first.size() == arguments.size();
       for (size_t i = 0; admitted && i < arguments.size(); ++i)
         admitted = entry.first[i] == arguments[i] ||
-            ((type.argument_modes.empty() || type.argument_modes[i] == ArgumentMode::value) &&
-             accepts_exception(entry.first[i], arguments[i]));
+            (argument_mode(type, i) == ArgumentMode::value && accepts_exception(entry.first[i], arguments[i]));
       if (admitted) result.push_back(entry);
     }
     if (result.empty()) throw std::logic_error("unchecked callable family invocation");

@@ -41,16 +41,20 @@ def symbolic(kind):
 
 
 def mixed_singleton_inputs():
-    # Four independent scalar domains yield 81 tuples. The borrowed input
-    # keeps this case on the ordinary tuple proof.
+    # Progressively narrow four formals so the 81 input tuples still require
+    # distinct coverage. The fixed positions must not add search depth.
+    varying = (0, 2, 5, 8)
     types = ['bool'] * 60
-    for position in (0, 2, 4, 5, 8):
+    for position in varying:
         types[position] = 'u64'
-    formals = ','.join(f'ref p{i}:{kind} in O' if i == 4 else f'p{i}:{kind}' for i, kind in enumerate(types))
-    source = (IO + 'ref selected:u64=0u64;'
-              f'func target({formals})->u64 where {{owner O}}'
-              '{if(p59){return p4+p0+p2+p5+p8;}else{return 0u64;};}'
-              'func held=target;')
+    types[4] = 'func(u64)->u64'
+    source = IO + 'func identity(x:u64)->u64{return x;}func selected=identity;'
+    signature = ','.join(types)
+    for narrowed in range(len(varying) + 1):
+        formals = ','.join(f'p{i}:u32' if i in varying[:narrowed] else f'p{i}:{kind}' for i, kind in enumerate(types))
+        source += (f'func target({formals})->u64{{if(p59){{return p4(p0+p2+p5+p8)+{narrowed}u64;}}'
+                   'else{return 0u64;};}')
+    source += f'func held:func({signature})->u64=target;'
     inputs = ['true'] * len(types)
     inputs[4] = 'selected'
     inputs[0], inputs[2], inputs[5], inputs[8] = '1u8', '2u32', '3u64', '4u8'
@@ -70,7 +74,7 @@ CASES = {
     'declaration_query_without_implementation': (queried('u8'), 'success', '7\n'),
     'symbolic_singleton_domain': (symbolic('u8'), 'success', '1\n'),
     'incompatible_result_rejected': (named('u64', 8, True), 'contract', ''),
-    'mixed_singleton_inputs': (mixed_singleton_inputs(), 'success', '10\n100\n0\n'),
+    'mixed_singleton_inputs': (mixed_singleton_inputs(), 'success', '12\n100\n0\n'),
 }
 
 
