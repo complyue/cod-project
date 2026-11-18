@@ -4015,6 +4015,30 @@ class ScalarChecker {
             either(a.fixed_binding, b.fixed_binding), a.slot_read_only == b.slot_read_only ? a.slot_read_only : std::nullopt,
             a.value_capture == b.value_capture ? a.value_capture : std::nullopt};
   }
+  static bool independent_scalar_conditional(const Type &type, std::optional<bool> yes_view,
+                                             std::optional<bool> no_view, bool mixed) {
+    return scalar_type(type) && yes_view && no_view && (mixed || *yes_view != *no_view);
+  }
+  static void require_conditional_owner(OwnerMatch relation, const Location &at) {
+    if (relation == OwnerMatch::mismatch) fail(at, "conditional reference result joins different owners");
+    if (relation == OwnerMatch::unknown) implementation_gap(at, "conditional reference result requires one provable owner");
+  }
+  struct ConditionalEvidence {
+    std::optional<Type> yes, no;
+    TypeEvidenceState yes_state, no_state;
+    bool independent() const {
+      return yes && yes == no && independent_scalar_conditional(*yes, yes_state.value.view, no_state.value.view,
+          yes_state.value.mixed_view || no_state.value.mixed_view);
+    }
+  };
+  ConditionalEvidence conditional_arms(const Expression &expr, const TypeEvidenceState &state, bool contextual,
+                                       const Type *expected, std::vector<Type> *alternatives,
+                                       ExpectedTypeUse expected_use, bool reached) const {
+    ConditionalEvidence arms{{}, {}, state, state};
+    arms.yes = type_evidence(*expr.children[1], arms.yes_state, contextual, expected, alternatives, expected_use, reached);
+    arms.no = type_evidence(*expr.children[2], arms.no_state, contextual, expected, alternatives, expected_use, reached);
+    return arms;
+  }
   static std::optional<EvidenceOwner> owner_evidence(const std::string &name, const TypeEvidenceState &state, const Location &at) {
     if (const auto found = state.owner_bindings.find(name); found != state.owner_bindings.end()) return found->second;
     if (state.required) fail(at, state.bindings.contains(name) ? "nearest binding '" + name + "' is not an owner" : "unknown owner '" + name + "'");
@@ -4401,10 +4425,15 @@ class ScalarChecker {
       const auto condition = child(0);
       if (state.returns && condition == Type::never) return Type::never;
       if (state.required && condition != Type::boolean && condition != Type::never) fail(expr.at, "condition requires bool");
-      auto yes_state = state, no_state = state;
-      const auto yes = type_evidence(*expr.children[1], yes_state, contextual, expected, alternatives, expected_use, condition != Type::never);
-      const auto no = type_evidence(*expr.children[2], no_state, contextual, expected, alternatives, expected_use, condition != Type::never);
+      auto arms = conditional_arms(expr, state, contextual, expected, alternatives, expected_use, condition != Type::never);
+      auto &[yes, no, yes_state, no_state] = arms;
       view = yes == Type::never ? no_state.value : no == Type::never ? yes_state.value : join_views(yes_state.value, no_state.value);
+      if (arms.independent()) view = {false, false, {}};
+      else if (yes && yes == no && scalar_type(*yes) && !view.mixed_view && view.view == true) {
+        const auto relation = compare_owners(yes_state.value.owner, no_state.value.owner, &state);
+        if (state.required) require_conditional_owner(relation, expr.at);
+        if (relation == OwnerMatch::satisfied) view.owner = yes_state.value.owner;
+      }
       state = condition == Type::never ? merge_evidence(std::move(yes_state), no_state) :
           merge_reaching_evidence(std::move(yes_state), std::move(no_state), yes == Type::never, no == Type::never);
       if (condition == Type::never) return Type::never;
@@ -6366,29 +6395,58 @@ class ScalarChecker {
       break;
     }
     case K::conditional: {
+      // When the joined scalar result needs a value, read a selected
+      // reference after that arm's cleanup has finished.
+      const bool value_join = read && !discard && [&] {
+        auto probe = evidence_state();
+        const auto condition = type_evidence(*expr.children[0], probe);
+        return condition != Type::never && conditional_arms(expr, probe, false, expected, nullptr, expected_use, true).independent();
+      }();
       const auto condition = child(0);
       if (condition != Type::boolean && condition != Type::never) fail(expr.at, "if condition requires bool");
       const auto before = lexical_;
       refine(*expr.children[0], true, operations);
-      const auto yes = check(*expr.children[1], instance, operations, read, discard, expected, expected_use);
-      const auto yes_state = lexical_;
+      const auto yes = check(*expr.children[1], instance, operations, read && !value_join, discard, expected, expected_use);
+      auto yes_state = lexical_;
       lexical_ = before;
       refine(*expr.children[0], false, operations);
-      const auto no = check(*expr.children[2], instance, operations, read, discard, expected, expected_use);
-      const auto no_state = lexical_;
+      const auto no = check(*expr.children[2], instance, operations, read && !value_join, discard, expected, expected_use);
+      auto no_state = lexical_;
+      auto &yes_fact = operations.at(expr.children[1].get()), &no_fact = operations.at(expr.children[2].get());
+      const bool independent = condition != Type::never && yes == no && independent_scalar_conditional(yes, yes_fact.view, no_fact.view,
+          yes_fact.mixed_view || no_fact.mixed_view);
+      if (value_join && !independent)
+        implementation_gap(expr.at, "scalar conditional classification changes during ordered checking");
+      if (independent) {
+        const auto project = [&](const Expression &arm, CheckedOperation &fact, LexicalState &state) {
+          if (!fact.view) return;
+          if (proving_ && validating_ && fact.targets.contains(null_target))
+            fail(arm.at, "conditional scalar value requires a proven non-null target");
+          if (read && !discard && !value_join) return;
+          lexical_ = std::move(state);
+          read_view(fact, arm.at, "conditional scalar result");
+          if (fact.type == Type::boolean && !fact.predicate) fact.predicate = stored_predicate(fact);
+          state = std::move(lexical_);
+        };
+        project(*expr.children[1], yes_fact, yes_state);
+        project(*expr.children[2], no_fact, no_state);
+      }
       join(yes_state, yes == Type::never, no_state, no == Type::never, expr.at);
       if (yes == Type::never) operation.type = no;
       else if (no == Type::never || yes == no) operation.type = yes;
       else if (yes == Type::null_ref && operations.at(expr.children[2].get()).view) operation.type = no;
       else if (no == Type::null_ref && operations.at(expr.children[1].get()).view) operation.type = yes;
       else implementation_gap(expr.at, "conditional join with different scalar result types");
-      const auto &yes_fact = operations.at(expr.children[1].get()), &no_fact = operations.at(expr.children[2].get());
       operation.exceptions = yes == Type::never ? no_fact.exceptions : yes_fact.exceptions;
       if (yes != Type::never && no != Type::never) operation.exceptions.merge(no_fact.exceptions);
       if (yes == Type::never) view(no_fact);
       else if (no == Type::never) view(yes_fact);
       else {
         operation.predicate = predicate(Predicate::Kind::alternatives, predicate_of(yes_fact), predicate_of(no_fact));
+        if (independent) {
+          operation.scalar_value_join = true;
+          break;
+        }
         operation.selection_identity = conditional_selection(operations.at(expr.children[0].get()), yes_fact, no_fact);
         operation.view = yes_fact.view || no_fact.view;
         operation.mixed_view = yes_fact.mixed_view || no_fact.mixed_view || yes_fact.view != no_fact.view;
@@ -6405,6 +6463,16 @@ class ScalarChecker {
         operation.origins.insert(no_fact.origins.begin(), no_fact.origins.end());
         operation.owners = yes_fact.owners;
         operation.owners.insert(no_fact.owners.begin(), no_fact.owners.end());
+        if (scalar_type(operation.type) && operation.view && !operation.mixed_view && operation.owners.size() > 1) {
+          const auto owner = *operation.owners.begin();
+          bool common = true;
+          for (const auto other : operation.owners) {
+            const auto relation = compare_owners(owner, other);
+            if (proving_ && validating_) require_conditional_owner(relation, expr.at);
+            common = common && relation == OwnerMatch::satisfied;
+          }
+          if (common) operation.owners = {owner};
+        }
         operation.initialization = CleanupEquations::Initialization{};
         if (yes_fact.view) operation.constrain_initialization(yes_fact.initialization);
         if (no_fact.view) operation.constrain_initialization(no_fact.initialization);

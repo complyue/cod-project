@@ -106,6 +106,7 @@ struct CheckedOperation {
     else initialization.reset();
   }
   bool mixed_view = false;
+  bool scalar_value_join = false;
   bool borrowed_result = false;
   BuiltinOperation builtin = BuiltinOperation::none;
   std::string builtin_name; // Selected eager operation, independent of source spelling.

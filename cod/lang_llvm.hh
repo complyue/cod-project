@@ -1322,6 +1322,20 @@ class LLVMEmission {
     }
     return value;
   }
+  llvm::Value *emit_conditional_bits(const Expression &conditional, const Expression &arm, bool discard) {
+    std::map<bool, std::vector<size_t>> alternatives;
+    for (size_t i = 0; i < contexts_.size(); ++i) {
+      const auto &fact = contexts_[i].at(&arm);
+      alternatives[contexts_[i].at(&conditional).scalar_value_join && fact.type != Type::never &&
+                    fact.view && !fact.mixed_view].push_back(i);
+    }
+    return contextual_value(arm, alternatives, "if.arm", [&](bool select_target) -> llvm::Value * {
+      if (!select_target) return emit_expression(arm, Projection::value, discard);
+      auto *address = emit_expression(arm, Projection::target);
+      if (!reachable()) return nullptr;
+      return discard ? empty_scalar() : b_.CreateLoad(scalar_, checked_address(address, arm, arm.at));
+    });
+  }
   llvm::Value *emit_checked_expression(const Expression &expr, Projection projection, bool discard) {
     const bool read = carries_value(projection);
     using K = Expression::Kind;
@@ -1450,7 +1464,9 @@ class LLVMEmission {
       std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> incoming;
       for (size_t i = 1; i < 3; ++i) {
         b_.SetInsertPoint(i == 1 ? yes : no);
-        auto *value = emit_expression(*expr.children[i], projection, discard);
+        const auto &arm = *expr.children[i];
+        auto *value = projection == Projection::value ? emit_conditional_bits(expr, arm, discard)
+                                                      : emit_expression(arm, projection, discard);
         if (reachable()) { incoming.emplace_back(value, b_.GetInsertBlock()); b_.CreateBr(join); }
       }
       b_.SetInsertPoint(join);
