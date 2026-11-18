@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-18 — Give cause and tip the direct Exception type
+
+<a id="h-exception-field-types-20261118"></a>
+**H-EXCEPTION-FIELD-TYPES-20261118 — Type the two readonly field reads.** The current project user proposed “e.cause 和 e.tip 类型都是直接的 `Exception` 就行吧” in [the design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-18 America/Los_Angeles. D-17r96 distinguishes the static type of each read from its readonly field access. H-515 governs the stored cause and H-CATCH-TIP-20261118 governs the handler’s incoming exception.
+
+<a id="k-exception-field-types-20261118"></a>
+**K-EXCEPTION-FIELD-TYPES-20261118 — Distinguish the two receivers.** D-17r95→96/registry881→882 applies D-17-RETHROW and D-17-CATCH-WRAPPERS to direct cause selection on the matched exception and on the retained incoming object. Current member checking and bounded indexed cause access are distinguished from the direct field design. Prior field contract at `e34c2fb4da36f908ea98faf7cd9cb868f0cabe85:design/ExceptionControl.md`, “The catch binding’s readonly tip field”.
+
 ## 2026-11-18 — Report the incoming exception from its catch
 
 <a id="h-catch-tip-20261118"></a>

@@ -1,8 +1,10 @@
 # CoD exception control and regional cleanup
 
-Design revision: 95 · Recorded: 2026-11-18 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; bounded full-scope elaboration profile confirmed; current implementation availability is recorded in the source capability reference.
+Design revision: 96 · Recorded: 2026-11-18 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; bounded full-scope elaboration profile confirmed; current implementation availability is recorded in the source capability reference.
 
 ## Design authority
+
+- **Exception-valued fields.** [H-EXCEPTION-FIELD-TYPES-20261118](../CHANGELOG.md#h-exception-field-types-20261118) covers the source types of `cause` and `tip` in r96 under D-17-RETHROW/P-464–P-466 and D-17-CATCH-WRAPPERS/P-470–P-472. H-515 preserves construction-only cause initialization. H-CATCH-TIP-20261118 supplies the binding-relative incoming exception. Charter §§3.2–3.3/6.3/8 link ordinary typed reporting to preserved identities and provenance. The chain example below distinguishes the two reads. Current compiler coverage is identified separately.
 
 - **Readonly access to the incoming exception.** [H-CATCH-TIP-20261118](../CHANGELOG.md#h-catch-tip-20261118) selects the readonly [catch-binding virtual field](#the-catch-bindings-readonly-tip-field) in [D-17-CATCH-WRAPPERS](DesignAuthorityRegistry.md#d-17-catch-wrappers), r95. C-36/C-63/C-65 and P-470–P-472 connect typed recovery with complete diagnostics under charter §§3.2–3.3/6.3/8. H-520–H-522 govern operand identity and plain propagation. Acceptance covers direct and wrapped arrivals, distinct catches of one underlying object, and passing the selected exception to a helper. Physical representation and general inspection APIs retain separate status.
 
@@ -166,6 +168,10 @@ Here SomeEx must resolve to an admitted constructible exception type; spelling a
 
 **Cause initialization.** The canonical cause field is not an ordinary constructor parameter: it cannot be supplied positionally, through a named argument or through a parameter default. A from clause on exception construction is its single source-visible initialization mechanism, including construction via make, constructor-form throw and rethrow. The cause becomes readonly at publication and cannot be rebound or mutated through an alias or assertion. A business payload containing another exception remains distinct from the reserved cause relationship. Absence of cause and its representation are separate; no pointer/null-owner ABI is selected here.
 
+The built-in `e.cause` field selects the **immediate cause of the exception value e**. It has static type `Exception`, as does [the readonly catch field `e.tip`](#the-catch-bindings-readonly-tip-field). `typeof(e.cause)` and `typeof(e.tip)` therefore agree. Reading either field preserves the selected exception’s identity. A cause can be absent when construction supplies none. The outcome of reading the direct field in that case is open. Every bound catch has a tip, including an unwrapped arrival. The source compiler currently exposes `e.cause_count` and `cause_at(e, 0u64)` for an existing first cause. Its [exception member checker](../cod/lang_checked.hh) still needs both direct field forms.
+
+For an incoming chain W2 → W1 → E → C, where E is the first application exception, an ordinary catch binds e to E. Then `e.cause` is C, `e.tip` is W2, and `e.tip.cause` is W1. Cause selection follows one link on the specified receiver. It does not perform the catch-local substitution that applies to `throw e;`.
+
 Evaluate constructor arguments in their normal specified order, then an explicit cause expression with the catch-local identity selection below, and construct the exception once with the resulting values and trace. Omitted rethrow cause resolves to the caught context's retained incoming tip under the rules below, not an ambient dynamically replaced exception. If operand preparation fails, no partially established requested exception is propagated and prior permitted effects are not rolled back. Constructor failure follows its ordinary failure path; it does not mutate either the supplied cause or another existing exception. General defaults/construction rules retain their own contract.
 
 **Implicit caught value.** A helper defined outside a catch cannot acquire an implicit cause merely because a catch calls it. Supply from explicitly there. Inside nested catches, use the nearest valid caught binding. A delayed action referring to an enclosing catch retains that value through the ordinary checked capture rules; it does not select whichever unrelated exception happens to be pending when it runs. Each invocation of a bodyless deferred catch has its own matched value and retained incoming tip. Its sibling attached finally has no implicit last-handled exception; it may use a different enclosing catch binding if one is valid, otherwise it needs an explicit cause. Missing required caught context is a compile-time error.
@@ -252,7 +258,7 @@ The model keeps two existing targets: the matched exception and the incoming out
 
 #### The catch binding’s readonly tip field
 
-For a bound catch parameter e, `e.tip` is an intrinsic readonly virtual field of type `const Exception`. It returns the outermost exception received by **that binding’s handler invocation**, with its existing creation trace and cause chain. For a direct, unwrapped arrival it returns the matched object itself. For an explicit standard-wrapper catch the binding already denotes the incoming wrapper, so both expressions denote that wrapper.
+For a bound catch parameter e, `e.tip` is an intrinsic readonly virtual field with static type `Exception`. Readonly describes the field access. It supplies an ordinary exception value for passing to a reporter. It returns the outermost exception received by **that binding’s handler invocation**, with its existing creation trace and cause chain. For a direct, unwrapped arrival it returns the matched object itself. For an explicit standard-wrapper catch the binding already denotes the incoming wrapper, so both expressions denote that wrapper.
 
 ```cod
 try { run(); }
