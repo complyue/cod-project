@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-11-18 — Use a nullable pointer for cause and a non-null reference for tip
+
+<a id="h-cause-ptr-tip-ref-20261118"></a>
+**H-CAUSE-PTR-TIP-REF-20261118 — Distinguish optional cause from guaranteed catch tip.** In [the design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-18 America/Los_Angeles the project user answered the absent-cause question with “e.cause 是  ptr ，e.tip 是 ref 就行了吧？” D-17r97 preserves Exception as the common readonly target type and supersedes H-EXCEPTION-FIELD-TYPES-20261118’s direct-value mode. No missing-cause bounds failure is introduced.
+
+<a id="h-cause-link-only-20261118"></a>
+**H-CAUSE-LINK-ONLY-20261118 — Inspect causes through the immediate link.** In the same design chat on 2026-11-18 the user proposed “我倾向于删掉 `cause_at()` 最多有一个cause”. D-17r97 retires the indexed intrinsic. Deeper history follows successive nullable links. Indexed bounds policy and deferred aggregates retain their separate contracts.
+
+<a id="k-cause-ptr-tip-ref-20261118"></a>
+**K-CAUSE-PTR-TIP-REF-20261118 — Apply ordinary null, owner and access rules.** Registry882→883/source434→435 records the field modes and indexed-inspection migration in D-17-RETHROW and D-17-CATCH-WRAPPERS. The example distinguishes reading a null link, guarding a payload read and reporting the incoming exception. H-518–H-523 catch selection and propagation, H-525 declared checkedness and indexed bounds policy retain their scopes. Prior direct-value rule at `ef9371d32238f73abddabf70bbc7eff0280834c5:design/ExceptionControl.md`, “Cause initialization” and “The catch binding’s readonly tip field”.
+
 ## 2026-11-18 — Give cause and tip the direct Exception type
 
 <a id="h-exception-field-types-20261118"></a>
