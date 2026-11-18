@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-17 — Keep the registry preface focused on current authority
+
+<a id="k-current-registry-20261117"></a>
+**K-CURRENT-REGISTRY-20261117 — Current authority and recoverable history.** Editorial continuity registry862→863 replaces the historical pre-audit journal with a compact current authority block under D-GOV and charter §§2/3.3/8/11/12. Every current contract/concept/relationship row, qualification, exclusion and prior changelog record is preserved. Historical payloads remain at `a35a4dda5a159913aa993b9b2b4521b611357cdc:design/DesignAuthorityRegistry.md` and their existing evidence locators. No source rule, mechanism qualification or review-file revision follows.
+
 ## 2026-11-17 — Unify full scopes with ordinary callable execution
 
 <a id="h-full-scope-callable-20261117"></a>
