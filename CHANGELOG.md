@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-18 — Best-effort reporting on memory exhaustion
+
+<a id="h-oom-best-effort-20261118"></a>
+**H-OOM-BEST-EFFORT-20261118.** The project user in [the design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-18 America/Los_Angeles, selected “实现简单为目标，尽量保留（允许损失）信息” with the existing static OOM reserve and delegated decisions under that principle. D-17r116 applies it to deferred reporting: register the action without a separate lossless-publication precondition, finish its pass, publish the complete aggregate when possible, and report an actual publication failure with bounded diagnostics and exact cleanup. This replaces the unconditional retention requirement under provider failure at `2c23ff50a50b70b8201ffdac4b61b7a8849b9e83:design/ExceptionControl.md`, “Region and members of UnhandledDeferError”. H-509/H-538/H-541 govern successful publication and H-516/H-517 govern the reserve. Registry905 and D-15r50 carry this boundary to module shutdown. The concrete fallback is a delegated design decision. The native representation remains unqualified.
+
 ## 2026-11-18 — Defer typed borrow support across exception wrapping
 
 <a id="k-cause-borrow-cost-20261118"></a>
