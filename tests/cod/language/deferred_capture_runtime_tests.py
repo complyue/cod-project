@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Measure immutable catch snapshots and inject failure in nested registration."""
+"""Measure immutable catch snapshots and failure in independent helper cleanup."""
 from pathlib import Path
 from native_test_support import run_native
 import exception_value_runtime_tests as fixture
@@ -17,11 +17,12 @@ func error()->const MissingReturnError {
 func chain(e:MissingReturnError)->const MissingReturnError {
   return try{throw e from e;}catch(e:const MissingReturnError){e};
 }
+proc observe_in_helper(value:T)->void where T{defer{behave @print(value.cause_count);};}
 proc snapshots()->void {
   val saved<-error();
   for(i in 0..4){
     saved<-chain(saved);
-    try{throw saved;}catch(e){defer{defer{behave @print(e.cause_count);};};};
+    try{throw saved;}catch(e){defer{observe_in_helper(e);};};
   };
 }
 snapshots();
@@ -31,7 +32,7 @@ snapshots();
 proc failing()->void {
   try{throw chain(error());}catch(e){
     defer{behave @print(e.cause_count);};
-    defer{behave @print(9001u64);defer{behave @print(e.cause_count);};};
+    defer{behave @print(9001u64);observe_in_helper(e);};
   };
 }
 try{failing();}catch(e:const OutOfMemoryError){behave @print(e.cause_count);behave @print(9002u64);};
@@ -54,7 +55,7 @@ static std::uint64_t created=0,released=0,failures=0,peak=0;
 static std::map<void *,std::uint64_t> live;
 static std::map<std::uint64_t,std::uint64_t> sizes;
 extern "C" void *cod_lang_defer_allocate(std::uint64_t bytes,std::uint64_t *status){
-  if(deny_record){++failures;assert(bytes==72);status[0]=1;return nullptr;}
+  if(deny_record){++failures;assert(bytes==16);status[0]=1;return nullptr;}
   auto *record=cod_record_allocate(bytes,status);assert(record && !live.contains(record));
   live.emplace(record,bytes);++sizes[bytes];++created;
   if(live.size()>peak)peak=live.size();
@@ -68,7 +69,7 @@ extern "C" void cod_lang_print_u64(std::uint64_t value){
 }
 extern "C" void cod_lang_exception_finish() noexcept {
   assert(!deny_record && live.empty() && created==released && created==13 && peak==4 && failures==1);
-  assert(sizes.size()==3 && sizes[16]==1 && sizes[72]==11 && sizes[128]==1);
+  assert(sizes.size()==3 && sizes[16]==5 && sizes[72]==7 && sizes[128]==1);
   cod_finish();
   std::printf("{\"records\":%llu,\"released\":%llu,\"peak\":%llu,\"failures\":%llu,\"zero_capture_bytes\":16,\"one_capture_bytes\":72,\"two_capture_bytes\":128}\n",
       (unsigned long long)created,(unsigned long long)released,(unsigned long long)peak,(unsigned long long)failures);

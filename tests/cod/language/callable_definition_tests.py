@@ -37,7 +37,7 @@ runner.CASES = {
     'definition_missing_symbol_at_use': (SYMBOLS+run('proc read()->u64{return @bias;};proc value=read;'),2,'','cannot prove an installed binding'),
     'unused_definition_body_checked': (run('func bad()->bool{return 1u64;};'),2,'','return type'),
     'explicit_capture_completeness': (BITS+run('func source=one;func read[]()->u64{return source();};'),2,'',"explicit capture list omits 'source'"),
-    'ordinary_cell_capture_rejected': (run('val source<-1u64;func read[source]()->u64{return source;};'),2,'','capture of ordinary lexical cells'),
+    'ordinary_value_capture': (run('val source<-1u64;func read[source]()->u64{return source;};'),0,'',''),
     'function_symbol_capture_rejected': (SYMBOLS+'func bad()->void{proc read()->u64{return @bias;};proc value=read;}bad();',2,'','a function cannot capture dynamic bindings'),
 }
 runner.CASES.update({

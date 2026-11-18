@@ -130,5 +130,11 @@ for mask in range(1, 15):
 runner.CASE_ARGUMENTS = {}
 runner.CASE_SHADOWS = {}
 runner.EXTRA_SOURCES = [Path(__file__)]
+
+from language_test_support import expect_source_rejections
+expect_source_rejections(runner, (
+    'nested_deferred_block',
+), 'currently draining scope')
+
 if __name__ == '__main__':
     raise SystemExit(runner.main())

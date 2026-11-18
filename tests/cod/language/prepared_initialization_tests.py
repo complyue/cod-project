@@ -88,5 +88,29 @@ for number,(initial,next_target,b_initialized,last) in enumerate(product(('a','b
 runner.CASE_ARGUMENTS={}
 runner.CASE_SHADOWS={name:[] for name in runner.CASES}
 runner.EXTRA_SOURCES=[Path(__file__)]
+
+from language_test_support import expect_source_rejections
+expect_source_rejections(runner, (
+    'nested_queue',
+    'nested_queue_bad_entry',
+    'deep_action',
+    'model_0',
+    'model_1',
+    'model_2',
+    'model_3',
+    'model_4',
+    'model_5',
+    'model_6',
+    'model_7',
+    'model_8',
+    'model_9',
+    'model_10',
+    'model_11',
+    'model_12',
+    'model_13',
+    'model_14',
+    'model_15',
+), 'currently draining scope')
+
 if __name__=='__main__':
     raise SystemExit(runner.main())

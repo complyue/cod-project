@@ -104,5 +104,11 @@ for index, selected in enumerate(({4}, {3,4}, {0,2,4,6})):
 runner.CASE_ARGUMENTS = {}
 runner.CASE_SHADOWS = {name: [] for name in runner.CASES}
 runner.EXTRA_SOURCES = [Path(exceptions.__file__), Path(__file__)]
+
+from language_test_support import expect_source_rejections
+expect_source_rejections(runner, (
+    'nested_cleanup',
+), 'currently draining scope')
+
 if __name__ == '__main__':
     raise SystemExit(runner.main())

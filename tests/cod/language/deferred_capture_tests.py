@@ -76,5 +76,15 @@ runner.CASE_SHADOWS = {
 }
 runner.EXTRA_SOURCES = [Path(__file__)]
 
+
+from language_test_support import expect_source_rejections
+expect_source_rejections(runner, (
+    'nested_registration',
+    'nested_prepared_call',
+    'nested_bare_rethrow',
+    'catch_inside_delayed_action',
+    'active_bare_throw_binding',
+), 'currently draining scope')
+
 if __name__ == "__main__":
     sys.exit(runner.main())

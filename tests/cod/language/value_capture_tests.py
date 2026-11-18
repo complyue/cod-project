@@ -1,0 +1,40 @@
+#!/usr/bin/env python3
+"""Independent ordinary capture inputs, snapshots, access and local ownership."""
+from pathlib import Path
+import foundation_tests as runner
+
+IO = 'using symbol "std:io" @print;'
+BASE = 'func one()->const u64{return 1u64;}func two()->const u64{return 2u64;}'
+WRAP = 'func wrap(f:func()->const u64)->func()->const u64{return func[f]()->const u64{return f();};}'
+runner.CASES = {
+    'scalar_invocation_locals': (IO+'val source<-0u64;func next=func[source]()->const u64{source<-source+1u64;return source;};behave @print(next());behave @print(next());behave @print(source);', 0, '1\n1\n0\n', ''),
+    'named_materialization_timing': (IO+'proc run()->void{val source<-1u64;func read[source]()->const u64{return source;};func a=read;source<-2u64;func b=read;behave @print(a());behave @print(b());behave @print(read());}run();', 0, '1\n2\n2\n', ''),
+    'inferred_value': (IO+'func factory(val seed:u64)->func()->const u64{return func()->const u64{seed<-seed+1u64;return seed;};}func next=factory(4u64);behave @print(next());behave @print(next());', 0, '5\n5\n', ''),
+    'generic_concrete_inputs': (IO+'func factory(val seed:T)->func()->const T where T{return func[seed]()->const T{return seed;};}behave @print(factory(7u8)());behave @print(factory(8u32)());behave @print(factory(9u64)());behave @print(factory(10)());behave @print(factory(true)());behave @print(factory(1f32)());behave @print(factory(2f64)());', 0, '7\n8\n9\n10\ntrue\n1\n2\n', ''),
+    'callable_replacement_independent': (IO+BASE+WRAP+'func saved=wrap(one);func change=func[saved]()->const u64{saved<-wrap(two);return saved();};behave @print(change());behave @print(change());behave @print(saved());', 0, '2\n2\n1\n', ''),
+    'local_place_write': (IO+'val source<-3u64;func read=func[source]()->const u64{var selected->source;selected<-9u64;return source;};behave @print(read());behave @print(read());behave @print(source);', 0, '9\n9\n3\n', ''),
+    'writable_scalar_borrow': (IO+'func change(ref target:u64 in O)->void where {owner O}{target<-target+1u64;}val source<-3u64;func read=func[source]()->const u64{change(source);return source;};behave @print(read());behave @print(read());behave @print(source);', 0, '4\n4\n3\n', ''),
+    'writable_callable_borrow': (IO+BASE+WRAP+'func change(ref target:func()->const u64 in O)->void where {owner O}{target<-wrap(two);}func saved=wrap(one);func read=func[saved]()->const u64{change(saved);return saved();};behave @print(read());behave @print(read());behave @print(saved());', 0, '2\n2\n1\n', ''),
+    'nested_retained_local': (IO+'func factory(val seed:u64)->func()->func()->const u64{return func[seed]()->func()->const u64{seed<-seed+1u64;return func[seed]()->const u64{return seed;};};}func outer=factory(4u64);func a=outer();func b=outer();behave @print(a());behave @print(b());', 0, '5\n5\n', ''),
+    'recursive_local_inputs': (IO+'func factory(val seed:u64)->func(u64)->const u64{func visit[seed](depth:u64)->const u64{seed<-seed+1u64;if(depth==0u64){return seed;}else{return visit(depth-1u64)+seed;};};return visit;}func read=factory(0u64);behave @print(read(3u64));behave @print(read(3u64));', 0, '10\n10\n', ''),
+    'stored_view_reentrancy': (IO+'symbol @again:proc(u64)->const u64;proc zero(depth:u64)->const u64{return 0u64;}proc factory(val seed:u64)->proc(u64)->const u64{return proc[seed](depth:u64)->const u64{seed<-seed+1u64;if(depth==0u64){return seed;}else{return behave @again(depth-1u64)+seed;};};}effect @again=zero;proc retained=factory(0u64);effect @again=retained;behave @print(behave @again(3u64));behave @print(behave @again(3u64));', 0, '4\n4\n', ''),
+    'direct_preparation_order': (IO+'proc run()->void{val source<-1u64;func read[source](ignored:u64)->const u64{return source;};behave @print(read({source<-2u64;0u64}));behave @print(read(0u64));}run();', 0, '1\n2\n', ''),
+    'direct_callable_preparation_order': (IO+BASE+WRAP+'proc run()->void{func source=wrap(one);func read[source](ignored:u64)->const u64{return source();};behave @print(read({source<-wrap(two);0u64}));behave @print(read(0u64));}run();', 0, '1\n2\n', ''),
+    'query_does_not_read_capture': (IO+'proc run()->void{val source<-make local u64;func read[source]()->const u64{return source;};val result<-make local typeof(read()){8u64};behave @print(result);}run();', 0, '8\n', ''),
+    'intrinsic_exception_snapshot': (IO+'using "std:exceptions" MissingReturnError;func missing()->const u64{}func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}val payload<-error();func read=func[payload]()->const u64{return payload.category;};behave @print(read());behave @print(read());', 0, '5\n5\n', '[-Wmissing-return]'),
+    'local_callable_place_borrow': (IO+BASE+WRAP+'func change(ref target:func()->const u64 in O)->void where {owner O}{target<-wrap(two);}func retained=wrap(one);func read=func[retained]()->const u64{var local->retained;change(local);return retained();};behave @print(read());behave @print(read());behave @print(retained());', 0, '2\n2\n1\n', ''),
+    'readonly_holder_calls_mutable_local': (IO+'val source<-1u64;const func read=func[source]()->const u64{source<-source+1u64;return source;};behave @print(read());behave @print(read());behave @print(source);', 0, '2\n2\n1\n', ''),
+    'deferred_local_replacement': (IO+BASE+WRAP+'func retained=wrap(one);func read=func[retained]()->const u64{defer{return retained();};retained<-wrap(two);return 9u64;};behave @print(read());behave @print(read());behave @print(retained());', 0, '2\n2\n1\n', ''),
+    'deferred_local_value_result': (IO+BASE+WRAP+'func retained=wrap(one);func produce=func[retained]()->func()->const u64{defer{retained<-wrap(two);return retained;};return retained;};func a=produce();func b=produce();behave @print(a());behave @print(b());behave @print(retained());', 0, '2\n2\n1\n', ''),
+    'readonly_scalar_write': ('const val source<-1u64;func read=func[source]()->const u64{source<-2u64;return source;};', 2, '', 'readonly'),
+    'readonly_scalar_borrow': ('func change(ref target:u64 in O)->void where {owner O}{target<-2u64;}const val source<-1u64;func read=func[source]()->const u64{change(source);return source;};', 2, '', 'readonly'),
+    'uninitialized_overwrite_first': ('val source<-make local u64;func read=func[source]()->const u64{source<-2u64;return source;};', 2, '', 'before definite initialization'),
+    'uninitialized_unused_explicit': ('val source<-make local u64;func read=func[source]()->const u64{return 2u64;};', 2, '', 'before definite initialization'),
+    'local_reference_escape': ('val source<-1u64;func read=func[source]()->ref u64 in here{return source;};', 2, '', 'owner'),
+    'entry_failure_does_not_initialize_deferred_output': (IO+'using "std:exceptions" OutOfMemoryError;using "std:exceptions" NullPointerException;'+BASE+WRAP+'proc run()->void{func retained=wrap(one);func write[retained](ptr output:u64 in O)->void throws NullPointerException where {owner O}{output<-7u64;retained<-wrap(two);};val output<-make local u64;defer catch(e:const NullPointerException){};defer catch(e:const OutOfMemoryError){behave @print(output);};try{defer write(output);}catch(e:const OutOfMemoryError){output<-9u64;{}};}run();', 2, '', 'initialization'),
+    'reference_capture_still_requires_proof': ('val source<-1u64;ref selected=source;func read=func[selected]()->const u64{return selected;};', 2, '', 'selected-target lifetime and transport proof'),
+    'declared_place_capture_still_requires_proof': ('val source<-1u64;var selected->source;func read=func[selected]()->const u64{return selected;};', 2, '', 'selected-place lifetime and transport proof'),
+}
+runner.EXTRA_SOURCES = [Path(__file__)]
+if __name__ == '__main__':
+    raise SystemExit(runner.main())

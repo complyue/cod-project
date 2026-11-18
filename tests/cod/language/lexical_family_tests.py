@@ -48,7 +48,7 @@ runner.CASES = {
         'func held=factory(1u64);behave @print(held(200u8));', 0, '400\n', ''),
     'unused_argument_instance_is_checked': ('func held:func(u64)->const u64=func(x:T)->const T where T{return 1u64;};held(1u64);', 2, '', 'return type'),
     'existing_value_not_retyped': ('func first=func()->u32{return 1u32;};func second:func()->u64=first;', 2, '', 'initializer does not satisfy'),
-    'lexical_cells_not_promoted': ('val x<-1u64;func held:func(u64)->u64=func[x](n:T)->u64 where T{return x;};', 2, '', 'capture of ordinary lexical cells'),
+    'ordinary_value_capture': ('val x<-1u64;func held:func(u64)->u64=func[x](n:T)->u64 where T{return x;};', 0, '', ''),
     'borrowed_result_retains_owner': (IO + 'func held=func(ref x:i64 in O)->ref i64 in O where {owner O}{return x;};'
         'val x<-1;held(x)<-7;behave @print(x);', 0, '7\n', ''),
     'dynamic_capture_covers_unused_inputs': (IO + 'symbol @a:u64,@b:u64,@q:proc(u64)->u64;proc pick(x:u64)->u64{return @a;}'

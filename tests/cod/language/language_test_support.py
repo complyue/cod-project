@@ -14,6 +14,15 @@ if MODE not in ("build", "built"):
 COD = ROOT / MODE / "bin" / ("cod.exe" if os.name == "nt" else "cod")
 
 
+def expect_source_rejections(fixture, names, diagnostic):
+    """Give explicitly identified invalid source cases their checking outcome."""
+    for name in names:
+        source, _, _, _ = fixture.CASES[name]
+        fixture.CASES[name] = (source, 2, '', diagnostic)
+        for field in ('CASE_SHADOWS', 'CASE_LOCATIONS'):
+            getattr(fixture, field, {}).pop(name, None)
+
+
 def shadow_diagnostics(stderr, expected):
     pattern = r"^.+:\d+:\d+: warning: declaration shadows outer binding '([^']+)' \[-Wshadow\]\n"
     names = re.findall(pattern, stderr, re.M)

@@ -88,4 +88,10 @@ runner.CASE_SHADOWS = {
     'known_target_failure_after_write': ['e'],
 }
 runner.EXTRA_SOURCES = [Path(fixture.__file__), Path(__file__)]
+
+from language_test_support import expect_source_rejections
+expect_source_rejections(runner, (
+    'nested_entry_write',
+), 'currently draining scope')
+
 if __name__ == '__main__': raise SystemExit(runner.main())

@@ -74,4 +74,11 @@ runner.CASE_SHADOWS = {
     'category_specific_finally': ['e'],
 }
 runner.EXTRA_SOURCES=[Path(__file__)]
+
+from language_test_support import expect_source_rejections
+expect_source_rejections(runner, (
+    'nested_registration_supplies_scope_fact',
+    'nested_registration_rebind_invalidates',
+), 'currently draining scope')
+
 if __name__=='__main__':raise SystemExit(runner.main())

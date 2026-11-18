@@ -56,5 +56,13 @@ checked('future_target',BASE+'select_future(payload);','func select_future(ref o
 runner.CASE_ARGUMENTS={}
 runner.CASE_SHADOWS={name:[] for name in runner.CASES}
 runner.EXTRA_SOURCES=[Path(__file__),Path(__file__).with_name('exception_projection_tests.py')]
+
+from language_test_support import expect_source_rejections
+expect_source_rejections(runner, (
+    'nested_registration_snapshot',
+    'nested_registration_borrow',
+    'deferred_return_snapshot',
+), 'currently draining scope')
+
 if __name__=='__main__':
     raise SystemExit(runner.main())

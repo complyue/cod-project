@@ -8,7 +8,7 @@ FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
 FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 func copy_later(ref target:Exception in O,ref source:const Exception in P)->void where {owner O,owner P}{target<-source;}
 func saved_cleanup_result(ref target:Exception in O)->const Exception where {owner O}{
- defer{defer{target<-null_value();{}};return target;};
+ defer{try{return target;}finally{target<-null_value();{}};};
  return null_value();
 }
 {{

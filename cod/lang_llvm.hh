@@ -1686,7 +1686,10 @@ class LLVMEmission {
       auto *values = function->getArg(call.captures_index());
       for (size_t c = 0; c < call.captures; ++c) {
         auto *captured = b_.CreateLoad(scalar_, b_.CreateGEP(scalar_, values, integer(c)));
-        b_.CreateStore(captured, storage_.at(frame.captures.at(c))); arguments_.push_back(captured);
+        // Writable locals acquire complete values below, after the incoming
+        // context is validated. Read-only observation borrows immutable data.
+        if (!prepared.writable_captures.contains(c)) b_.CreateStore(captured, storage_.at(frame.captures.at(c)));
+        arguments_.push_back(captured);
       }
     }
     for (size_t i = 0; i < call.retained; ++i) {
@@ -1719,7 +1722,24 @@ class LLVMEmission {
           integer(site(method.source->at)), null_pointer()));
       b_.SetInsertPoint(valid);
     }
+    std::optional<Control> initialization;
+    if (!prepared.writable_captures.empty()) {
+      initialization = Control{nullptr, block("inputs.failed")};
+      control_ = &*initialization;
+    }
+    for (const auto c : prepared.writable_captures) {
+      auto *place = storage_.at(frame.captures.at(c));
+      parameter_values_.push_back(place);
+      auto *value = arguments_.at(call.operands + c);
+      b_.CreateStore(copy_value(value, method.captures.at(c).at), place);
+    }
     full_scope({method.source->body.get()}, true, method.source->at, returns_value, Projection::value, true);
+    if (initialization) {
+      b_.SetInsertPoint(initialization->exit);
+      for (auto i = parameter_values_.rbegin(); i != parameter_values_.rend(); ++i) clear_value(*i);
+      b_.CreateBr(finish_);
+    }
+    control_ = nullptr;
     b_.SetInsertPoint(finish_);
     if (environments_) {
       auto *failed = block("return.discard"), *ready = block("return.ready");

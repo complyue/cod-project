@@ -13,6 +13,7 @@ using "std:exceptions" NullPointerException;
 using "std:exceptions" MissingReturnError;
 proc observe(x:u64)->void{behave @print(x);}
 func missing()->const u64{}
+proc swap_in_helper(ref left:u64 in O,ref right:u64 in P)->void where {owner O,owner P}{defer (<->)(left,right);}
 proc batch(n:u64)->void{
  val x<-11u64,y<-12u64,z<-13u64;
  defer{observe(x);observe(y);observe(z);};
@@ -30,7 +31,7 @@ proc per_iteration(n:u64)->void{
  observe(x);observe(y);
 }
 per_iteration(10000u64);observe(9000u64);
-{{val x<-1u64,y<-2u64;defer{observe(x);observe(y);};defer{defer (<->)(x,y);};}};
+{{val x<-1u64,y<-2u64;defer{observe(x);observe(y);};defer{swap_in_helper(x,y);};}};
 observe(9000u64);
 proc denied_registration()->void{
  val x<-1u64,y<-2u64,z<-3u64;ptr p=x,q=y;

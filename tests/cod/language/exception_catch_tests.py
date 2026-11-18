@@ -66,5 +66,17 @@ runner.CASES['explicit_cause_preserves_primary'] = (IO+ERROR+SIGNATURE+'{try{thr
 runner.CASE_ARGUMENTS = {}
 runner.CASE_SHADOWS = {name: [] for name in runner.CASES}
 runner.EXTRA_SOURCES = [Path(__file__),Path(__file__).with_name('exception_projection_tests.py')]
+
+from language_test_support import expect_source_rejections
+expect_source_rejections(runner, (
+    'nested_saved_rethrow',
+    'nested_saved_return',
+    'nested_helper',
+    'nested_current_rethrow',
+    'nested_current_rethrow_requires_cover',
+    'nested_current_return',
+    'nested_current_return_requires_cover',
+), 'currently draining scope')
+
 if __name__ == '__main__':
     raise SystemExit(runner.main())

@@ -127,5 +127,11 @@ runner.CASE_ARGUMENTS = {}
 runner.CASE_SHADOWS = {name: [] for name in runner.CASES}
 runner.EXTRA_SOURCES = [Path(__file__)]
 
+
+from language_test_support import expect_source_rejections
+expect_source_rejections(runner, (
+    'nested_cleanup',
+), 'currently draining scope')
+
 if __name__ == '__main__':
     raise SystemExit(runner.main())

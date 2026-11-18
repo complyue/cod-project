@@ -11,14 +11,15 @@ using "std:exceptions" OutOfMemoryError;
 using "std:exceptions" MissingReturnError;
 using "std:exceptions" NullPointerException;
 proc observe(x:u64)->void{behave @print(x);}
+proc register_during_helper()->void{observe(9001u64);defer observe(99u64);}
 proc retained(ptr x:u64 in O,ptr y:u64 in O)->ptr u64 in O where {owner O}{
   defer catch(e:const OutOfMemoryError){observe(1u64);observe(9002u64);};
-  defer{observe(9001u64);defer observe(99u64);};
+  defer register_during_helper();
   return x;
 }
 proc replacement(ptr x:u64 in O,ptr y:u64 in O)->ptr u64 in O where {owner O}{
   defer catch(e:const OutOfMemoryError){observe(2u64);observe(9002u64);return y;};
-  defer{observe(9001u64);defer observe(99u64);};
+  defer register_during_helper();
   return x;
 }
 proc absent(ptr x:u64 in O)->ptr u64 in O where {owner O}{

@@ -38,5 +38,14 @@ checked('branch_recovery_join',BASE+'{{defer catch(e:const MissingReturnError){i
 runner.CASE_ARGUMENTS={}
 runner.CASE_SHADOWS={name:[] for name in runner.CASES}
 runner.EXTRA_SOURCES=[Path(__file__),Path(fixture.__file__),Path(__file__).with_name('exception_projection_tests.py')]
+
+from language_test_support import expect_source_rejections
+expect_source_rejections(runner, (
+    'handler_prepared_call',
+    'handler_prepared_transfer',
+    'handler_delayed_block',
+    'nested_handler',
+), 'currently draining scope')
+
 if __name__=='__main__':
     raise SystemExit(runner.main())

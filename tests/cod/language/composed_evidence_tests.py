@@ -51,7 +51,7 @@ runner.CASES = {
  'inherited_callable_type_context':(IO+PICK+'func run(ref x:i64 in O,tag:T)->const i64 where {T,owner O}{return pick(x,{{func identity(v:T)->const T{return v;};identity(tag)}});}val x<-1;behave @print(run(x,false));behave @print(run(x,0));',0,'2\n12\n',''),
  'checked_callable_context_can_widen_throws':(IO+NPE+'func one()->const i64{return 1;}func choose(f:func()->const i64 throws NullPointerException,tag:i64)->const i64 throws NullPointerException{return f();}func choose(ref f:func()->const bool in O,tag:bool)->const i64 where {owner O}{return 9;}try{behave @print(choose(one,0));}catch(e:const NullPointerException){};',0,'1\n',''),
  'annotation_keeps_callable_view_type':(IO+NPE+'func one()->const i64{return 1;}func take(x:i64,f:func()->const i64 throws NullPointerException)->const i64 throws NullPointerException{return x+f();}func take(ref x:i64 in O,f:func()->const bool)->const i64 where {owner O}{return x;}val x<-1;try{behave @print(take(x,{{func f:func()->const i64 throws NullPointerException=one;f}}));}catch(e:const NullPointerException){};',0,'2\n',''),
- 'capture_validity_remains_checked':(PICK+'val x<-1;pick(x,{{func f=func[x]()->const bool{x;return false;};f()}});',2,'','capture of ordinary lexical cells'),
+ 'value_capture_with_evidence':(PICK+'val x<-1;pick(x,{{func f=func[x]()->const bool{x;return false;};f()}});',0,'',''),
  'shadowed_callable_does_not_supply_outer_signature':(PICK+'val x<-1;pick(x,{{func tag()->const bool{return false;};{{val tag<-0;tag()}}}});',2,'','different argument preparation contracts'),
  'concrete_exception_view_adapts_to_common_method':(IO+EXCEPTION+'func common(e:Exception)->const u64{return forward(e);}func f:func(MissingReturnError)->const u64=common;behave @print(f(error()));',0,'5\n','[-Wmissing-return]'),
  'callable_adapter_retains_common_dispatch':(IO+EXCEPTION+'func select(e:Exception)->const u64{return 1u64;}func select(e:MissingReturnError)->const u64{return 2u64;}func dispatch(e:T)->const u64 where T{return select(e);}func common(e:Exception)->const u64{return dispatch(e);}func f:func(MissingReturnError)->const u64=common;behave @print(f(error()));',0,'1\n','[-Wmissing-return]'),
@@ -62,6 +62,7 @@ runner.CASES = {
 }
 runner.CASE_ARGUMENTS = {}
 runner.CASE_SHADOWS = {
+    'value_capture_with_evidence': ['x', 'x'],
     'guarded_later_type': ['x', 'x'],
     'guarded_first_operand': ['x', 'x'],
     'handler_and_finalizer_effect_order': ['x', 'x'],

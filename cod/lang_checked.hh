@@ -256,7 +256,8 @@ class ScalarChecker {
       bool enclosing = false;
     };
     std::vector<CaptureReference> captures;
-    std::vector<Type> environment, retained;
+    std::vector<CheckedCaptureInput> environment;
+    std::vector<Type> retained;
     size_t query = 0;
   };
   std::map<size_t, DefinitionContext> definitions_;
@@ -1779,8 +1780,6 @@ class ScalarChecker {
         if (equality == OwnerMatch::mismatch) fail(expr.at, "arguments for one owner role have different actual owners");
       }
       if (!readonly && view.read_only) fail(expr.children[i + offset]->at, "readonly argument cannot supply a writable borrowed parameter");
-      if (!readonly) for (const auto place : view.targets) if (place != null_target && storage(place).captured)
-        implementation_gap(expr.children[i + offset]->at, "writable borrowing of a captured callable payload");
       if (arguments[i] != contract.parameters[i]) implementation_gap(expr.children[i + offset]->at, "borrowed exception upcasts");
     }
     operation.type = *contract.target;
@@ -3121,7 +3120,7 @@ class ScalarChecker {
       if (!compatible) fail(method.source->at, "implementation result does not satisfy callable declaration");
     }
   }
-  size_t demand(size_t method, std::vector<Type> arguments, const Location &at, const std::vector<Type> &environment = {},
+  size_t demand(size_t method, std::vector<Type> arguments, const Location &at, const std::vector<CheckedCaptureInput> &environment = {},
                 const std::vector<Type> &retained = {}, size_t query_environment = 0, const TypeEvidenceState *state = nullptr) {
     auto &definition = program_.methods[method];
     const auto declared = declared_results(definition, arguments);
@@ -3141,7 +3140,8 @@ class ScalarChecker {
     check_declared_results(definition, result, declared);
     definition.contextual_result = definition.contextual_result || supplied.has_value();
     const auto id = program_.instances.size();
-    auto context = arguments; context.insert(context.end(), environment.begin(), environment.end());
+    auto context = arguments;
+    for (const auto &capture : environment) context.push_back(capture.type);
     context.insert(context.end(), retained.begin(), retained.end());
     program_.instances.push_back({method, arguments, result, {}, false, {}, {}, {}, environment, std::move(context), retained, *substitutions, query_environment, {}});
     program_.instances.back().effects = initial_effects(definition, arguments);
@@ -3190,7 +3190,7 @@ class ScalarChecker {
     return selected;
   }
   size_t select_family(const std::vector<size_t> &family, const std::vector<Type> &arguments, const Location &at, const std::string &name,
-                       const std::vector<Type> &environment = {}, const std::vector<Type> &retained = {},
+                       const std::vector<CheckedCaptureInput> &environment = {}, const std::vector<Type> &retained = {},
                        const Access &access = {}, const Owners &owners = {}, size_t query_environment = 0) {
     return demand(select_method(family, arguments, at, name, retained, access, owners), arguments, at, environment, retained, query_environment);
   }
@@ -3201,7 +3201,7 @@ class ScalarChecker {
         ? "no applicable implementation for declared callable '" + expr.text + "'" : "unknown callable '" + expr.text + "'");
     const auto method = select_method(family.methods, arguments, expr.at, expr.text, family.retained_types(), access, owners);
     return demand(method, arguments, expr.at,
-        family.context ? family.context->environment : family.definition ? family.definition->environment : std::vector<Type>{},
+        family.context ? family.context->environment : family.definition ? family.definition->environment : std::vector<CheckedCaptureInput>{},
         family.retained_types(), family.context ? family.context->query_environment : family.definition ? family.definition->query : 0,
         family.declaration);
   }
@@ -4794,6 +4794,8 @@ class ScalarChecker {
     const auto &source = bindings_->at(*binding);
     if (source.alias || !source.selection.empty())
       implementation_gap(at, "capture of a declared place alias requires selected-place lifetime and transport proof");
+    if (!source.value_binding && !source.callable_value && !source.definition)
+      implementation_gap(at, "capture of a lexical reference requires selected-target lifetime and transport proof");
   }
   void define_callable(size_t method, const Location &at) {
     auto &definition = program_.methods[method];
@@ -4809,9 +4811,10 @@ class ScalarChecker {
       auto state = *evidence;
       const auto type = type_evidence(name, state);
       if (!type) implementation_gap(capture.at, "callable capture requires a proved concrete view type");
-      if (type->kind != Type::procedure || (binding && !bindings_->at(*binding).callable_value && !bindings_->at(*binding).definition))
-        implementation_gap(capture.at, "capture of ordinary lexical cells or non-callable values");
-      context.environment.push_back(*type);
+      if (!lexical_value_type(*type))
+        implementation_gap(capture.at, "capture requires an admitted independent value contract");
+      const auto access = evidence->views.find(capture.name);
+      context.environment.push_back({*type, access != evidence->views.end() && access->second.read_only.value_or(false)});
     }
     context.query = retain_query_environment(definition, {}, evidence.get());
     warn_captures(definition);
@@ -4848,8 +4851,8 @@ class ScalarChecker {
         require_value_capture_source(lexical_.lookup(capture.name), capture.at);
         value = named_value(name);
       }
-      if (value.type.kind != Type::procedure || (value.binding && !bindings_->at(*value.binding).callable_value))
-        implementation_gap(capture.at, "capture of ordinary lexical cells or non-callable values");
+      if (!lexical_value_type(value.type))
+        implementation_gap(capture.at, "capture requires an admitted independent value contract");
       captures.push_back(std::move(value));
     }
     return captures;
@@ -4866,8 +4869,8 @@ class ScalarChecker {
     const auto state = family.declaration ? *family.declaration : evidence_state(family.context != nullptr, &dependencies);
     const auto selection = select_callable(family.methods, expected, at, definition_site, &state);
     auto captures = capture_values(family, at);
-    std::vector<Type> environment;
-    for (const auto &capture : captures) environment.push_back(capture.type);
+    std::vector<CheckedCaptureInput> environment;
+    for (const auto &capture : captures) environment.push_back({capture.type, capture.read_only});
     warn_captures(definition);
     CheckedCallable value{selection.type};
     const auto query = family.context ? family.context->query_environment : family.definition ? family.definition->query
@@ -5973,8 +5976,6 @@ class ScalarChecker {
         break;
       }
       transfer_access(target.read_only, expr.at);
-      for (const auto place : target.targets) if (place != null_target && storage(place).captured)
-        implementation_gap(expr.at, "replacement of a captured callable payload");
       dereference(target, expr.at);
       const auto source = check(*expr.children[1], instance, operations, true, false, destination.kind == Type::procedure ? &destination : nullptr);
       if (source == Type::never) { operation.type = Type::never; break; }
@@ -6532,10 +6533,10 @@ class ScalarChecker {
       }
       for (size_t c = 0; c < instance.environment.size(); ++c) {
         const auto &capture = checking_method_->captures[c];
-        const auto id = declare(capture.name, instance.environment[c], false, true, capture.at, false);
+        const auto &input = instance.environment[c];
+        const auto id = declare(capture.name, input.type, input.read_only, true, capture.at, false);
         instance.frame.captures.push_back(id);
-        storage_->at(id).captured = true;
-        bindings_->back().callable_value = true;
+        bindings_->back().callable_value = input.type.kind == Type::procedure;
         initialize(id);
       }
       for (size_t p = 0; p < method.parameters.size(); ++p) {
@@ -6589,6 +6590,7 @@ class ScalarChecker {
         }
       AbruptFlow flow{1, {}}, outcomes{1, {}};
       abrupt_ = &flow;
+      const auto incoming = lexical_;
       CheckedOperation completed;
       completed.type = check(*method.body, &instance, instance.operations, true, true) == Type::never ? Type{Type::never} : Type{Type::void_type};
       const auto completion = finish_scope(completed, flow, &outcomes, 0, method.at).type;
@@ -6596,6 +6598,13 @@ class ScalarChecker {
         program_.warnings.push_back({Warning::missing_return, method.at, "callable may finish without an explicit return"});
       if (proving) {
         abrupt_ = nullptr;
+        // Complete capture preparation can fail before the body registers any
+        // cleanup or establishes output facts. Retain this incoming outcome
+        // for deferred invocation as well as ordinary calls, independently of
+        // whether a particular native body can elide the acquisition.
+        if (std::any_of(instance.environment.begin(), instance.environment.end(),
+              [](const auto &capture) { return capture.type.kind == Type::procedure; }))
+          observe_outcome(3 + exception_id(ExceptionCategory::out_of_memory), incoming);
         for (const auto requirement : outcomes.declared) note_declared(requirement);
         if (completion != Type::never && lexical_.live)
           observe_outcome(*instance.result.type == Type::void_type ? 0 : 3 + exception_id(ExceptionCategory::missing_return), lexical_);

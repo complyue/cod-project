@@ -1190,9 +1190,13 @@ class Parser {
     for (const auto &child : expr.children) normalize_assignment_calls(*child);
     if (expr.definition && expr.definition->body) normalize_assignment_calls(*expr.definition->body);
   }
-  static void validate_explicit_scopes(const Expression &expr, bool iteration = false, bool deferred = false) {
+  static void validate_explicit_scopes(const Expression &expr, bool iteration = false, bool deferred = false,
+                                       const Location *draining = nullptr) {
     using K = Expression::Kind;
-    if (expr.kind == K::block && expr.scoped) iteration = deferred = false;
+    if (expr.kind == K::block && expr.scoped) { iteration = deferred = false; draining = nullptr; }
+    if (expr.kind == K::deferred && draining)
+      fail(expr.at, "defer cannot register work into its currently draining scope\n" +
+          location_text(*draining) + ": note: enclosing deferred execution begins here");
     const bool declaration = expr.kind == K::pointer_group || expr.kind == K::region_binding ||
         expr.kind == K::alias || (expr.kind == K::callable && !expr.definition->name.empty());
     if (deferred && declaration)
@@ -1205,7 +1209,8 @@ class Parser {
       const bool loop_body = (expr.kind == K::range_for && i >= 2) ||
                             (expr.kind == K::fold && i == 3);
       const bool deferred_body = expr.kind == K::deferred && expr.children.front()->kind == K::block;
-      validate_explicit_scopes(*expr.children[i], loop_body || iteration, deferred_body || deferred);
+      validate_explicit_scopes(*expr.children[i], loop_body || iteration, deferred_body || deferred,
+          deferred_body ? &expr.at : draining);
     }
     // A callable body executes in its own call scope, independently of where
     // its value is constructed. Loops inside it still need explicit scopes.

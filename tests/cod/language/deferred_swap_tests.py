@@ -63,5 +63,11 @@ runner.CASE_SHADOWS = {
     'generic_recursive_mixed_dispatch': ['x', 'y', 'x', 'y'],
 }
 runner.EXTRA_SOURCES = [Path(__file__)]
+
+from language_test_support import expect_source_rejections
+expect_source_rejections(runner, (
+    'nested_registration',
+), 'currently draining scope')
+
 if __name__ == '__main__':
     raise SystemExit(runner.main())

@@ -51,5 +51,50 @@ runner.CASES['failed_registration_no_initialization']=(INIT+'val failure<-unchec
 runner.CASE_ARGUMENTS={}
 runner.CASE_SHADOWS={name:[] for name in runner.CASES}
 runner.EXTRA_SOURCES=[Path(__file__),Path(fixture.__file__),Path(fixture.fixture.__file__),Path(__file__).with_name('exception_projection_tests.py')]
+
+from language_test_support import expect_source_rejections
+expect_source_rejections(runner, (
+    'normal_body_queue',
+    'caught_queue',
+    'catch_partition',
+    'catch_both_branches',
+    'nested_intrinsic',
+    'nested_layers',
+    'nested_guarded',
+    'nested_failure_recovered',
+    'catch_before_finally_registration',
+    'catch_queue_after_finally_write',
+    'finally_registration',
+    'handler_swap',
+    'handler_rebind',
+    'handler_loop',
+    'handler_loop_else',
+    'body_and_handler_loops',
+    'handler_then_merged_loop',
+    'no_failure_skips_handler',
+    'handler_return_after_queue',
+    'borrowed_return_after_queue',
+    'no_failure_no_write',
+    'no_failure_no_write_covered',
+    'other_handler_queue',
+    'other_handler_queue_covered',
+    'body_queue_still_runs',
+    'body_queue_still_runs_covered',
+    'registration_order',
+    'registration_order_covered',
+    'zero_loop',
+    'zero_loop_covered',
+    'else_skipped',
+    'else_skipped_covered',
+    'optional_registration',
+    'optional_registration_covered',
+    'catch_all_recovers_registration_failure',
+    'catch_all_recovers_registration_failure_covered',
+    'finally_return_recovers_failed_registration',
+    'finally_return_recovers_failed_registration_covered',
+    'handler_initializes',
+    'failed_registration_no_initialization',
+), 'currently draining scope')
+
 if __name__=='__main__':
     raise SystemExit(runner.main())

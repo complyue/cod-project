@@ -21,7 +21,7 @@ runner.CASES={
  'unused_undetermined_outer':(IO+'func factory()->func()->const i64 where T{return func[]()->const i64{return 8;};}behave @print(factory()());',0,'8\n',''),
  'used_undetermined_outer':('func factory()->func()->const bool where T{return func[]()->const bool{val x:T<-1;return true;};}factory();',2,'','enclosing type parameter is not determined'),
  'retained_type_not_reinferred':(FACTORY+'func f:func(bool)->const bool=factory(1);',2,'','initializer does not satisfy declared func type'),
- 'normal_cells_not_promoted':('func factory(x:T)->func()->const T where T{return func[x]()->const T{return x;};}factory(1);',2,'','capture of ordinary lexical cells'),
+ 'reference_capture_requires_proof':('func factory(x:T)->func()->const T where T{return func[x]()->const T{return x;};}factory(1);',2,'','capture of a lexical reference'),
  'retained_callback_mismatch':(BASE+'func wrap(f:func(T)->const T)->func(bool)->const bool where T{return func[f](x:T)->const T{return f(x);};}wrap(inc);',2,'','no applicable method'),
  'retained_void_completion':(IO+'func empty()->const void{}func factory(f:func()->const T)->func()->const T where T{return func[f]()->const T{f();};}factory(empty)();',0,'',''),
 }

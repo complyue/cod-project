@@ -5,6 +5,7 @@ from native_test_support import run_native
 import selected_alias_runtime_tests as fixture
 FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
 FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
+func fill_in_helper(ref target:u64 in O)->void where {owner O}{defer{target<-44u64;};}
 proc cleanup_selected(flag:bool)->void{
  val x<-make local u64,y<-make local u64,z<-make local u64;
  ptr a=x,b=y;var p->if(flag){a}else{b};
@@ -17,7 +18,7 @@ proc cleanup_selected(flag:bool)->void{
  }};
  {{
   defer{observe(p);}finally{};
-  defer{defer{p<-44u64;};};
+  defer{fill_in_helper(p);};
  }};
  observe(9050u64);
  try{{defer{p<-99u64;};}}catch(e:const OutOfMemoryError){observe(9051u64);observe(p);};

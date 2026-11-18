@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-17 — Implement bounded capture inputs and defer source contexts
+
+<a id="k-bounded-capture-defer-20261117"></a>
+**K-BOUNDED-CAPTURE-DEFER-20261117 — Implement ordinary capture locals and deferred source contexts.** Source429/registry871 continues the confirmed D-18r114 ordinary value-input profile/P-485–P-487 and D-17-DEFER-CHECKS r3/P-561–P-563 under H-BOUNDED-IMPLEMENTATION-ADOPTION-20261117. Checked capture inputs preserve access and admitted concrete value contracts; writable invocation locals own complete values through ordinary acquisition, replacement and cleanup. Structural validation distinguishes eager preparation, delayed execution and independent callable scopes before emission. Migrate invalid same-drain fixtures to rejection and retain legal native helper/resource counterparts. The preserved C-65/C-73/C-75 and C-63 paths serve charter §§2/3.2–3.3/4.3/6.3/8/12; initialized snapshots, exact owners, completed RHS effects, source diagnostics and D-16 remain. Scoped source/native evidence includes injected entry/replacement failures and read-only input elision. This is implementation continuity, not human confirmation or full profile completion. Full ordinary-callable scope lowering, new borrowed/place capture transport, FIFO/aggregate/checked-pass and other recorded exclusions remain separate. Baseline: `e617cad669a4f0aaf91f550ec25f28471633f629` at the affected design, source-reference and compiler paths.
+
 ## 2026-11-17 — Include the immediate-borrow proof in full-scope review
 
 <a id="k-full-scope-immediate-borrow-20261117"></a>

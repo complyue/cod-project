@@ -65,5 +65,12 @@ runner.CASE_SHADOWS = {
     'registration_order': ['e'],
 }
 runner.EXTRA_SOURCES = [Path(fixture.__file__), Path(__file__)]
+
+from language_test_support import expect_source_rejections
+expect_source_rejections(runner, (
+    'nested_registration',
+    'nested_with_direct_capture',
+), 'currently draining scope')
+
 if __name__ == '__main__':
     raise SystemExit(runner.main())

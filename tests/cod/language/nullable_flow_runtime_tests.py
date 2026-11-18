@@ -9,9 +9,10 @@ func nullable_holder(ptr f:F in O)->ptr F in O where {F,owner O}{return f;}
 func walk_nullable(f:F,ptr value:T in O,n:u64)->ptr T in O where {F,T,owner O}{
  if(n==0u64){return f(value);}else{return walk_nullable(f,value,n-1u64);};
 }
+proc register_during_nullable_helper()->void{observe(9050u64);defer observe(9999u64);}
 proc null_recovery(ptr x:u64 in O,ptr y:u64 in O)->ptr u64 in O where {owner O}{
  defer catch(e:const OutOfMemoryError){observe(9051u64);return y;};
- defer{observe(9050u64);defer observe(9999u64);};
+ defer register_during_nullable_helper();
  return x;
 }
 {{

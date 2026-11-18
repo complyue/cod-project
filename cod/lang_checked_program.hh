@@ -134,7 +134,6 @@ struct CheckedStorage {
   size_t scope;
   bool read_only;
   bool borrowed = false;
-  bool captured = false;
   size_t binding = 0;
 };
 
@@ -259,6 +258,13 @@ struct CheckedFrame {
   std::map<size_t, size_t> owners;
   bool operator==(const CheckedFrame &) const = default;
 };
+// Ordinary captured values retain their source access contract independently
+// of their saved payload and the storage created for each invocation.
+struct CheckedCaptureInput {
+  Type type;
+  bool read_only = false;
+  bool operator==(const CheckedCaptureInput &) const = default;
+};
 struct CheckedInstance {
   size_t method;
   std::vector<Type> arguments;
@@ -268,7 +274,8 @@ struct CheckedInstance {
   std::vector<CheckedStorage> storage;
   std::vector<CheckedBinding> bindings;
   CallEffects effects;
-  std::vector<Type> environment, context, retained_types;
+  std::vector<CheckedCaptureInput> environment;
+  std::vector<Type> context, retained_types;
   std::vector<std::optional<Type>> substitutions;
   size_t query_environment = 0;
   CheckedFrame frame;
@@ -389,6 +396,9 @@ struct CheckedBody {
   };
   std::vector<CheckedStorage> storage;
   CheckedFrame frame;
+  // Conservative writable exposure of an invocation input. Unexposed saved
+  // payloads can be observed without acquiring another complete image.
+  std::set<size_t> writable_captures;
   std::vector<Context> contexts;
 };
 
@@ -420,6 +430,14 @@ inline CheckedBody checked_body(const CheckedProgram &program, const CheckedMeth
     bool unchanged = true;
     for (size_t i = 0; i < checked.storage.size(); ++i) unchanged = unchanged && remap(i) == i;
     auto &context = result.contexts.emplace_back(&checked, std::nullopt);
+    for (const auto &[expr, operation] : checked.operations) {
+      for (size_t a = 0; a < operation.arguments.size(); ++a) {
+        if (operation.arguments[a].mode == ArgumentMode::value) continue;
+        const auto &argument = checked.operations.at(expr->children.at(a).get());
+        for (size_t c = 0; c < checked.frame.captures.size(); ++c)
+          if (argument.targets.contains(checked.frame.captures[c])) result.writable_captures.insert(c);
+      }
+    }
     if (unchanged) continue;
     const auto optional = [&](std::optional<size_t> &place) { if (place) place = remap(*place); };
     const auto set = [&](std::set<size_t> &source) {

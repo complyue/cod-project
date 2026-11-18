@@ -7,13 +7,14 @@ import contextual_capture_tests as source
 FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__), Path(__file__).with_name('contextual_capture_tests.py'), Path(__file__).with_name('deferred_capture_tests.py'), Path(__file__).with_name('foundation_tests.py')])
 
 FIXTURE = FIXTURE.updated(source=FIXTURE.source + source.PICK + '''
+proc observe_in_helper(value:T)->void where T{defer{observe(value.category);};}
 proc contextual_records(tag:T)->void where T {
  func held=wrap(base);
  try{throw bound_error();}catch(e:const MissingReturnError){
    ref y=pick(tag,e);
    defer{observe(held(1u64));};
    observe(9070u64);
-   defer{defer{observe(y.category);};};
+   defer{observe_in_helper(y);};
    observe(9071u64);
    defer{observe(e.category);observe(y.category);};
    observe(9050u64);

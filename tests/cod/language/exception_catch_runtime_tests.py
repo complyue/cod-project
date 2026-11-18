@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Nested deferred catches retain distinct saved and arriving exception values."""
+"""Ordinary nested catches retain distinct saved and arriving exception values."""
 from pathlib import Path
 from native_test_support import run_native
 import exception_return_runtime_tests as fixture
@@ -9,11 +9,11 @@ FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 func caught_copy(input:Exception)->const Exception{try{throw input;}catch(e){return e;};}
 func catch_saved(input:const Exception,replacement:const Exception)->const Exception throws Exception{
  defer catch(last){return last;};
- defer catch(original){defer catch(current){throw original;};throw replacement;};
+ defer catch(original){try{throw replacement;}catch(current){throw original;};};
  throw input;
 }
 func catch_current(input:const Exception,replacement:const Exception)->const Exception throws Exception{
- defer catch(original){defer catch(current){return current;};throw replacement;};
+ defer catch(original){try{throw replacement;}catch(current){return current;};};
  throw input;
 }
 func catch_mutation(ref target:Exception in O,replacement:Exception)->const Exception where {owner O}{

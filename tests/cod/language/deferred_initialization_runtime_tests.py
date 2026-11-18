@@ -28,11 +28,14 @@ proc failed_action()->void {
   defer{observe(x);}catch(e:const MissingReturnError){observe(x);};
   defer{x<-43u64;missing();};
 }
+proc register_initialized(ref value:const u64 in O)->void where {owner O}{
+ try{defer{observe(value);};}catch(e:const OutOfMemoryError){observe(value);observe(9002u64);};
+}
 proc nested()->void {
   val x<-make local u64;
   defer{
     x<-44u64;observe(9001u64);
-    try{defer{observe(x);};}catch(e:const OutOfMemoryError){observe(x);observe(9002u64);};
+    register_initialized(x);
   };
 }
 normal();
