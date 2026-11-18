@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-18 — Assign DBMR contention handling to the native provider
+
+<a id="h-dbmr-contention-work-20261118"></a>
+**H-DBMR-CONTENTION-WORK-20261118.** The project user in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-18 (America/Los_Angeles) requested “退避重试策略和可调参数” as an implementation work item with local design during development. D-22r57/registry916 assign that work to the C region provider. The D-20r9 roadmap points implementers to the work item. Tuning, defaults and retry mechanics are delegated within the existing admission rules at `68d7b08671177888bf3e10fe4dfb4880b2b99bb9:design/ConstructionAndAcquisition.md`, “DBMR file effects and result access”.
+
 ## 2026-11-18 — Scope DBMR coordination to cooperating CoD processes
 
 <a id="h-dbmr-cooperating-processes-20261118"></a>
