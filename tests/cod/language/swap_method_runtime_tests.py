@@ -20,10 +20,10 @@ proc show_bool(x:bool)->void{observe(if(x){1u64}else{0u64});}
  val a<-false,b<-true,x<-1u64,y<-2u64;
  dispatch(a,b,3u64);show_bool(a);show_bool(b);
  dispatch(x,y,2u64);observe(x);observe(y);
- a<-false;b<-true;val c<-false;ptr p=a,q=b;
- {{defer (<->)(p,q);p=c;}};show_bool(a);show_bool(b);show_bool(p);
+ a<-false;b<-true;val c<-false;ptr p=a,q=b,replacement=c;
+ {{defer (<->)(p,q);p=replacement;}};show_bool(a);show_bool(b);show_bool(p);
  a<-false;b<-true;observe(9050u64);
- try{ {{defer (<->)(a,b);}};}catch(e:const OutOfMemoryError){observe(9051u64);};
+ try{ {{defer (<->)(p,q);}};}catch(e:const OutOfMemoryError){observe(9051u64);};
  show_bool(a);show_bool(b);
  func f=wrap(base);func g=wrap(other);f<->g;observe(f(1u64));observe(g(1u64));
  observe(9030u64);try{f<->g;}catch(e:const OutOfMemoryError){observe(9031u64);};
@@ -32,7 +32,8 @@ proc show_bool(x:bool)->void{observe(if(x){1u64}else{0u64});}
  observe(f(2u64));observe(g(2u64));
  observe(9062u64);try{f<->g;}catch(e:const OutOfMemoryError){observe(9061u64);};
  observe(f(2u64));observe(g(2u64));
- {{defer (<->)(f,g);f<-wrap(wrap(base));}};observe(f(3u64));observe(g(3u64));
+ ptr first=f,second=g;
+ {{defer (<->)(first,second);first<-wrap(wrap(base));}};observe(f(3u64));observe(g(3u64));
  observe(9010u64);dispatch(a,b,2u64);observe(9011u64);show_bool(a);
 }};
 observe(9000u64);
@@ -46,7 +47,7 @@ FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('static void track', '
   if(value==9061){assert(!copy_budget && images.size()==live_baseline);return;}
   assert(value!=9999);'''))
 FIXTURE = FIXTURE.updated(expected_values=list(FIXTURE.expected_values) + ['81', '81', '81', '1', '0', '1', '2',
-                          '81', '1', '0', '0', '0', '1',
+                          '81', '1', '0', '1', '0', '1',
                           '12', '2', '13', '3', '13', '3', '3', '3', '4', '5', '81', '81', '0'])
 FIXTURE = FIXTURE.updated(expected_shadows=[])
 if __name__ == '__main__':
