@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-18 — Scope DBMR coordination to cooperating CoD processes
+
+<a id="h-dbmr-cooperating-processes-20261118"></a>
+**H-DBMR-COOPERATING-PROCESSES-20261118.** The project user in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-18 (America/Los_Angeles) directed “暂时只处理CoD进程的协作读写，不用操作系统机制去防任意进程的访问”. D-22r56/registry915 limit the P-595/P-596 enforcement and acceptance scope accordingly. The four admission cases and holder-liveness rules at `fa08a342027ff8bb91efedecaa14bcc8b46319c7:design/ConstructionAndAcquisition.md`, “DBMR file effects and result access”, continue to apply. The default behavior of a conflicting request remains open.
+
 ## 2026-11-18 — Coordinate DBMR file access across processes
 
 <a id="h-dbmr-access-modes-20261118"></a>
