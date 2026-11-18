@@ -23,6 +23,12 @@ def saved_scope(body, before=''):
             'behave @print(inspect(item));behave @print(inspect(missing));')
 
 
+def borrowed_test_scope(body, before='', declaration='ref guard:const bool=observed;'):
+    return (IO+'func inspect(ptr input:u64 in O)->u64 where {owner O}{val observed<-(input is not null);'+
+            declaration+before+'return {{'+body+'}};}'+'ref item:u64=5u64;ptr missing:u64=null in here;'
+            'behave @print(inspect(item));behave @print(inspect(missing));')
+
+
 runner.CASES = {
     'local_slot_and_deferred_target': (IO+'ref a:u64=1u64;ref b:u64=10u64;ref p:u64=a;'
         '{{p=b;defer{p<-20u64;};}};behave @print(p is a);behave @print(a+b);', 0, 'true\n21\n', ''),
@@ -104,6 +110,17 @@ runner.CASES = {
         saved_scope('return if(present){input}else{7u64};', 'input=null in O;'), 2, '', 'checked exception'),
     'saved_boolean_does_not_prove_rebound_scope_input': (
         saved_scope('input=null in O;return if(present){input}else{7u64};'), 2, '', 'checked exception'),
+    'saved_boolean_in_readonly_borrowed_input': (
+        borrowed_test_scope('return if(guard){input}else{7u64};'), 0, '5\n7\n', ''),
+    'saved_boolean_in_nullable_borrowed_input': (borrowed_test_scope(
+        'return if(guard is not null&&guard){input}else{7u64};', declaration='ptr guard:const bool=observed;'),
+        0, '5\n7\n', ''),
+    'saved_boolean_copied_before_overlapping_borrow_write': (borrowed_test_scope(
+        'const val saved<-guard;writer<-true;return if(saved){input}else{7u64};',
+        'ref writer:bool=observed;'), 0, '5\n7\n', ''),
+    'saved_boolean_lost_after_overlapping_borrow_write': (borrowed_test_scope(
+        'writer<-true;return if(guard){input}else{7u64};', 'ref writer:bool=observed;'),
+        2, '', 'checked exception'),
     'escape_through_returned_callable_rejected': ('ref a:u64=1u64;func held={{return func[a]()->u64{return a;};}};',
         2, '', 'selected-target lifetime and transport proof'),
     'value_snapshot_survives_write_through_borrow': (IO+VALUES+'func original=wrap(one);ptr target=original;'

@@ -113,6 +113,31 @@ runner.CASES={
     'val present<-(input is not null);ref write:bool=present;{{defer{write<-flag;};}};'+GUARDED_RESULT),2,'',UNPROVED_TARGET),
  'projection_loses_borrowed_boolean_after_prepared_write':(saved_query(
     'val present<-(input is not null);ref write:bool=present;{{defer (<-)(write,flag);}};'+GUARDED_RESULT),2,'',UNPROVED_TARGET),
+ 'projection_reads_returned_boolean':(saved_query(
+    'return if({{return input is not null;}}){input}else{7u64};'),0,'9\n',''),
+ 'projection_returns_observation_without_capturing_reference':(saved_query(
+    'const val seen<-(input is not null);const val present<-{{return seen;}};'+GUARDED_RESULT),0,'9\n',''),
+ 'projection_returns_observation_through_inner_rebind':(saved_query(
+    'const val seen<-(input is not null);const val present<-{{input=null in O;return seen;}};'+GUARDED_RESULT),0,'9\n',''),
+ 'projection_joins_returned_boolean_outcomes':(saved_query(
+    'const val present<-{{if(flag){return input is not null;}else{return false;};}};'+GUARDED_RESULT),0,'9\n',''),
+ 'projection_checks_every_boolean_return_path':(saved_query(
+    'const val present<-{{if(flag){return input is not null;}else{return true;};}};'
+    'return if(present){input}else{7u64};'),2,'',UNPROVED_TARGET),
+ 'projection_keeps_return_snapshot_through_finally':(saved_query(
+    'const val present<-{{try{return input is not null;}finally{input=null in O;{}};}};'+GUARDED_RESULT),0,'9\n',''),
+ 'projection_rejects_boolean_from_rebound_inner_slot':(saved_query(
+    'const val present<-{{input=null in O;return input is null;}};'+GUARDED_RESULT),2,'',UNPROVED_TARGET),
+ 'projection_rechecks_rebound_caller_after_returned_boolean':(saved_query(
+    'const val present<-{{return input is not null;}};input=null in O;'+GUARDED_RESULT),2,'',UNPROVED_TARGET),
+ 'projection_reads_returned_same_owner_null_test':(saved_query(
+    'const val present<-{{return input is not null in O;}};'+GUARDED_RESULT),0,'9\n',''),
+ 'projection_rejects_returned_different_owner_null_test':(saved_query(
+    'const val present<-{{return input is not null in here;}};'+GUARDED_RESULT),2,'',UNPROVED_TARGET),
+ 'projection_rejects_direct_different_owner_null_test':(saved_query(
+    'return if(input is not null in here){input}else{7u64};'),2,'',UNPROVED_TARGET),
+ 'projection_loses_replaced_return_predicate_during_defer':(saved_query(
+    'const val present<-{{defer{return true;};return input is not null;}};'+GUARDED_RESULT),2,'',UNPROVED_TARGET),
  'arithmetic_without_division':(storage('3/0+4','9'),0,'9\n',''),
  'numeric_widening':(storage('3u8+4u64','9u64'),0,'9\n',''),
  'intrinsic_selected':(storage('intrinsic (+)(3u64,4u64)','9u64'),0,'9\n',''),
