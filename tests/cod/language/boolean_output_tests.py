@@ -100,6 +100,31 @@ for name, operator, before, after, check in (
 case('captured_null_keeps_read_unreachable', setup='ptr side:i64=null in O;ptr source:i64=null in O;',
      work='val ok<-{{defer{return side is not null;};defer (=)(side,source);source=p;return false;}};',
      output='0\n0\n0\n0\n')
+
+PICK_REFERENCE = 'ptr source:u64 in O=if(flag){input}else{peer};'
+GUARDED_REFERENCE_CALLS = (
+    'ref first:u64=5u64,second:u64=6u64;ptr absent:u64=null in here;'
+    + ''.join('behave @print(inspect('+args+'));'
+              for args in ('first,second,true','absent,second,true','first,second,false','absent,second,false'))
+)
+for name, initial, operator, before, after, repeat, succeeds in (
+    ('guarded_saved_assignment', 'null in O', '=', '', 'source=peer;', False, True),
+    ('guarded_live_swap', 'null in O', '<=>', '', '', False, True),
+    ('guarded_live_swap_after_slot_update', 'null in O', '<=>', 'source=peer;', 'source=if(flag){input}else{peer};', False, True),
+    ('repeated_guarded_live_swap', 'null in O', '<=>', '', '', True, True),
+    ('guard_reassigned_after_target_selection', 'null in O', '=', 'flag<-!flag;', '', False, False),
+    ('guarded_failed_registration_can_read_peer', 'peer', '=', '', '', False, False),
+):
+    registration = 'if(flag){defer ('+operator+')(side,source);{}}else{};'
+    if repeat:
+        registration = 'for(i in 0u64..3u64){'+registration+'};'
+    source = (IO+'func inspect(ptr input:u64 in O,ptr peer:u64 in O,flag:bool)->u64 where {owner O}{'
+              'val present<-{{ptr side:u64 in O='+initial+';'+PICK_REFERENCE+'defer{return side is not null;};'
+              +before+registration+after+'return false;}};return if(present){input}else{7u64};}'
+              +GUARDED_REFERENCE_CALLS)
+    runner.CASES[name] = (source, 0, '5\n7\n7\n7\n', '') if succeeds else (
+        source, 2, '', 'conditional scalar value requires a proven non-null target')
+
 case('deferred_return_payload', definitions='func echo(flag:bool)->bool{defer{return flag;};return true;}', setup='', work='', condition='echo(p is not null)')
 
 reject('constant_output', definitions=SET.replace('p is not null','true'))

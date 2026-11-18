@@ -1460,17 +1460,27 @@ class ScalarChecker {
     else if (operation.null_sources.empty()) operation.null_sources.insert(null_target);
     operation.place = targets.size() == 1 && !targets.contains(null_target) ? std::optional<size_t>{*targets.begin()} : std::nullopt;
   }
-  static CleanupEquations::Targets selection_targets(const std::set<size_t> &places, const std::set<size_t> &null_sources,
-                                                      std::optional<size_t> preserved = {}) {
+  static CleanupEquations::Targets selection_targets(const std::set<size_t> &places, const std::set<size_t> &null_sources) {
     CleanupEquations::Targets result{places, {}, {}};
-    if (preserved) result.entries.insert(*preserved);
     if (result.places.erase(null_target)) {
       if (null_sources.empty()) result.null_sources.insert(null_target);
       else result.null_sources = null_sources;
     }
     return result;
   }
-  void assign_targets(size_t binding, const CheckedOperation &source, std::optional<CleanupEquations::Targets> update = {}) {
+  CleanupEquations::Targets snapshot_selection(const CheckedOperation &source, const Location &at) {
+    auto selected = selection_targets(source.targets, source.null_sources);
+    if (proving_ && lexical_.live && selected.nullable() && (source.nullness || selected.places.size() > 1)) {
+      auto proof = snapshot_boolean(null_predicate(source), lexical_, at);
+      for (auto &[null, clauses] : proof) clauses = CleanupEquations::stable_input_conditions(clauses);
+      if (proof != selected.null_observations()) {
+        cleanup_.observe_reference(proof);
+        selected.nullness = std::move(proof);
+      }
+    }
+    return selected;
+  }
+  void assign_targets(size_t binding, const CheckedOperation &source, const CleanupEquations::Targets &update) {
     lexical_.targets[binding] = source.targets;
     lexical_.null_sources[binding] = source.null_sources;
     lexical_.owners[binding].insert(source.owners.begin(), source.owners.end());
@@ -1489,7 +1499,7 @@ class ScalarChecker {
       }
       lexical_.predicate_conditions = CleanupEquations::conjoin_conditions(lexical_.predicate_conditions, alternatives);
     }
-    assign_selection(lexical_, binding, update.value_or(selection_targets(source.targets, source.null_sources)));
+    assign_selection(lexical_, binding, update);
     assign_initialization(lexical_, binding, source.initialization);
     if (!proving_) {
       possible_targets_.at(binding).insert(source.targets.begin(), source.targets.end());
@@ -1656,15 +1666,18 @@ class ScalarChecker {
     rebound_.insert(binding);
     if (!deferred) for (const auto *loop : active_loops_) loop_states_.at(loop).rebound.insert(binding);
   }
-  void rebind(const CheckedOperation &target, const CheckedOperation &source, bool deferred = false) {
+  void rebind(const CheckedOperation &target, const CheckedOperation &source,
+              const CleanupEquations::Targets &snapshot, bool deferred = false) {
     const auto written = overlapping_slots(target.slots);
     std::vector<size_t> affected;
     for (const auto &[id, targets] : lexical_.targets)
       if (!intersect(written, physical_slots({id})).empty()) affected.push_back(id);
     for (const auto id : affected) {
       auto selected = source;
+      auto update = snapshot;
       const bool weak = target.slots.size() != 1 || !target.slots.contains(id);
       if (weak) {
+        update.entries.insert(id);
         selected.selection_identity = merge_selection_identities(source.selection_identity, lexical_.selection_identities.at(id));
         selected.binding.reset();
         selected.nullness.reset();
@@ -1675,7 +1688,7 @@ class ScalarChecker {
         selected.origins.insert(id);
         selected.constrain_initialization(selection_initialization(lexical_, id));
       }
-      assign_targets(id, selected, selection_targets(source.targets, source.null_sources, weak ? std::optional<size_t>{id} : std::nullopt));
+      assign_targets(id, selected, update);
       if (!proving_) record_rebinding(id, deferred);
     }
   }
@@ -3141,8 +3154,11 @@ class ScalarChecker {
         if (a.inputs & (std::uint64_t{1} << input)) {
           for (const auto &[scope, queue] : other.queues)
             if (facts.queues.at(scope) != queue)
-              facts.queues[scope] = cleanup_.join(cleanup_.known(facts.queues.at(scope), facts.initialized, a.uninitialized),
-                                                  cleanup_.known(queue, other.initialized, b.uninitialized));
+              facts.queues[scope] = cleanup_.join(
+                  cleanup_.known(facts.queues.at(scope), facts.initialized, a.uninitialized,
+                                 CleanupEquations::stable_input_conditions(left_paths)),
+                  cleanup_.known(queue, other.initialized, b.uninitialized,
+                                 CleanupEquations::stable_input_conditions(right_paths)));
           facts.initialized = intersect(facts.initialized, other.initialized);
           facts.present = intersect(facts.present, other.present);
           facts.selections.merge(other.selections);
@@ -3565,8 +3581,12 @@ class ScalarChecker {
         applied.resolve_conditions([&](size_t binding) -> std::optional<CleanupEquations::Targets> {
           if (deferred_action_) return state.selections.substitute({{}, {}, {binding}});
           const auto found = state.targets.find(binding);
-          return found == state.targets.end() ? std::nullopt :
-              std::optional{selection_targets(found->second, state.null_sources.at(binding))};
+          if (found == state.targets.end()) return {};
+          auto selected = selection_targets(found->second, state.null_sources.at(binding));
+          if (const auto recorded = state.selections.targets.find(binding);
+              recorded != state.selections.targets.end() && recorded->second.entries.empty())
+            selected.nullness = recorded->second.nullness;
+          return selected;
         }, deferred_action_);
         applied.transform_values([&](const auto &value) { return value.through(payloads, pending, true); },
             [&](const auto &value) { return value.through(payloads, pending, true, true); });
@@ -8227,7 +8247,11 @@ class ScalarChecker {
           check_rebind(right, left, expr.at);
           check_builtin_declarations(expr, arguments, operation, true, views);
           if (&expr == prepared_call_) prepare_reference_swap(left, right, operation, expr.at);
-          else if (!left.binding || left.binding != right.binding) { rebind(left, right); rebind(right, left); }
+          else if (!left.binding || left.binding != right.binding) {
+            const auto before_left = snapshot_selection(left, expr.at), before_right = snapshot_selection(right, expr.at);
+            rebind(left, right, before_right);
+            rebind(right, left, before_left);
+          }
         } else {
           check_bits_destinations();
           if (left.type != right.type) fail(expr.at, "bits swap requires the exact same type");
@@ -8618,7 +8642,8 @@ class ScalarChecker {
         retain_loop_initialization(loop_states_.at(&expr), body_state);
       if (repeat_possible && body != Type::never && lexical_.live) for (const auto input : inputs(lexical_.inputs)) {
         const auto &facts = lexical_.input_facts.at(input);
-        cleanup_.backedge(headers.at(input), cleanup_.known(facts.queues.at(cleanup_scope_), facts.initialized, lexical_.uninitialized));
+        cleanup_.backedge(headers.at(input), cleanup_.known(facts.queues.at(cleanup_scope_), facts.initialized,
+            lexical_.uninitialized, CleanupEquations::stable_input_conditions(path_conditions(lexical_))));
       }
       lexical_ = before;
       lexical_.live = lexical_.live && empty_possible;
@@ -8721,7 +8746,7 @@ class ScalarChecker {
             selected.targets.insert(*place);
             selected.owners.insert(storage(*place).scope);
           } else id = bind(declaration->text, type, selected.targets, read_only, false, expr.fixed_binding, declaration->at);
-          assign_targets(id, selected);
+          assign_targets(id, selected, snapshot_selection(selected, initializer.at));
           if (owner) lexical_.owners[id].insert(*owner);
         } else {
           place = declare(declaration->text, type, read_only, value, declaration->at);
@@ -8789,7 +8814,7 @@ class ScalarChecker {
           [&](size_t slot) { return bindings_->at(slot).callable_value; });
       if (!canonical) {
         bindings_->at(id).selection = slots;
-        assign_targets(id, source);
+        assign_targets(id, source, snapshot_selection(source, expr.at));
         operation.binding = id;
       }
       break;
@@ -8819,6 +8844,7 @@ class ScalarChecker {
         operation.arguments[1].type = selected.type;
         if (prepared) {
           require_borrow_lifetime(selected, expr.children[1]->at, true);
+          const auto targets = snapshot_selection(selected, expr.at);
           const auto before = lexical_;
           lexical_.selections = {};
           for (auto &[input, facts] : lexical_.input_facts) facts.selections = {};
@@ -8827,14 +8853,14 @@ class ScalarChecker {
           snapshot.selection_identity.reset();
           if (snapshot.initialization)
             snapshot.initialization = CleanupEquations::capture_initialization(*snapshot.initialization, initialization_frame());
-          rebind(target, snapshot, true);
+          rebind(target, snapshot, targets, true);
           operation.invocation[0].selections = lexical_.selections;
           lexical_ = before;
           operation.type = destination;
           break;
         }
         if (read && !discard) require_initialized(selected, expr.at, expr.children[0]->text);
-        rebind(target, selected);
+        rebind(target, selected, snapshot_selection(selected, expr.at));
         operation.type = destination;
         operation.targets = selected.targets;
         operation.place = selected.place;
@@ -9102,9 +9128,12 @@ class ScalarChecker {
           deferred_actions_with_checked_scopes_.contains(action);
       cleanup_.define(action, std::move(summary));
       note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
-      if (lexical_.live) for (const auto input : inputs(lexical_.inputs)) {
-        auto &queue = lexical_.input_facts.at(input).queues.at(cleanup_scope_);
-        queue = cleanup_.push(queue, action);
+      if (lexical_.live) {
+        const auto reaching = CleanupEquations::stable_input_conditions(path_conditions(lexical_));
+        for (const auto input : inputs(lexical_.inputs)) {
+          auto &queue = lexical_.input_facts.at(input).queues.at(cleanup_scope_);
+          queue = cleanup_.push(queue, action, reaching);
+        }
       }
       operation.type = Type::void_type;
       break;

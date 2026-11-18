@@ -212,254 +212,6 @@ struct Completion {
 class CleanupEquations {
   static_assert(exception_categories.size() < 64);
 public:
-  struct Targets {
-    // Physical cells only; absence cannot justify initializing a cell.
-    std::set<size_t> places;
-    // Immutable nullable inputs, or null_target for independent absence.
-    std::set<size_t> null_sources;
-    // Targets selected by these bindings on entry to the summarized sequence.
-    std::set<size_t> entries;
-    bool operator==(const Targets &) const = default;
-    bool nullable() const { return !null_sources.empty(); }
-    std::optional<size_t> single_entry() const {
-      if (entries.size() == 1 && places.empty() && !nullable()) return *entries.begin();
-      return {};
-    }
-    void merge(const Targets &other) {
-      places.insert(other.places.begin(), other.places.end());
-      null_sources.insert(other.null_sources.begin(), other.null_sources.end());
-      entries.insert(other.entries.begin(), other.entries.end());
-    }
-  };
-  struct InitializationInput {
-    size_t id;
-    // Absent means the incoming selection of this relation. A captured frame
-    // remains independent of slot mutations while nested relations compose.
-    std::optional<size_t> frame;
-    bool physical = false;
-    InitializationInput(size_t id, std::optional<size_t> frame = {}, bool physical = false) : id(id), frame(frame), physical(physical) {}
-    static InitializationInput payload(size_t place) { return {place, {}, true}; }
-    auto operator<=>(const InitializationInput &) const = default;
-  };
-  using Initialization = std::set<InitializationInput>;
-  static size_t action_frame(size_t action) { return action + 1; }
-  static Initialization capture_initialization(const Initialization &conditions, size_t frame) {
-    Initialization result;
-    for (auto input : conditions) { if (!input.physical && !input.frame) input.frame = frame; result.insert(input); }
-    return result;
-  }
-  static Initialization enter_initialization(const Initialization &conditions, size_t frame) {
-    Initialization result;
-    for (auto input : conditions) { if (input.frame == frame) input.frame.reset(); result.insert(input); }
-    return result;
-  }
-  // A selection fact describes the current target, so rebinding can invalidate it.
-  struct Selections {
-    std::set<size_t> initialized, invalidated;
-    // Sufficient entry-target initialization for a current selected target.
-    std::map<size_t, Initialization> initialized_if;
-    // Initialization of entry targets survives changes to the current selection.
-    std::set<size_t> entry_initialized, entry_nonnull;
-    // Actual branch conditions are separate from conditional callee guarantees.
-    std::set<size_t> null_inputs, nonnull_inputs;
-    bool possible = true;
-    std::map<size_t, Targets> targets;
-    bool operator==(const Selections &) const = default;
-    bool nonnull(size_t id) const {
-      if (const auto target = targets.find(id); target != targets.end())
-        return !target->second.nullable() && (!target->second.places.empty() || !target->second.entries.empty()) &&
-            std::all_of(target->second.entries.begin(), target->second.entries.end(), [&](size_t entry) { return entry_nonnull.contains(entry); });
-      return !invalidated.contains(id) && entry_nonnull.contains(id);
-    }
-    void initialize(size_t id) {
-      initialized.insert(id);
-      initialized_if.erase(id);
-      if (!invalidated.contains(id)) entry_initialized.insert(id);
-    }
-    std::optional<Initialization> initialization_requirements(size_t id) const {
-      if (initialized.contains(id)) return Initialization{};
-      if (const auto found = initialized_if.find(id); found != initialized_if.end()) return found->second;
-      if (!invalidated.contains(id)) return Initialization{id};
-      if (const auto found = targets.find(id); found != targets.end()) {
-        const auto &target = found->second;
-        if (target.places.empty() && target.entries.empty() && !target.nullable()) return {};
-        Initialization required(target.entries.begin(), target.entries.end());
-        for (const auto place : target.places) required.insert(InitializationInput::payload(place));
-        return required;
-      }
-      return {};
-    }
-    std::optional<Initialization> initialization_requirements(const Initialization &entries) const {
-      Initialization required;
-      for (const auto entry : entries) {
-        if (entry.frame || entry.physical) { required.insert(entry); continue; }
-        const auto condition = initialization_requirements(entry.id);
-        if (!condition) return {};
-        required.insert(condition->begin(), condition->end());
-      }
-      return required;
-    }
-    void enter_initialization(size_t frame) {
-      for (auto &[binding, conditions] : initialized_if)
-        conditions = CleanupEquations::enter_initialization(conditions, frame);
-    }
-    void forget_initialization(size_t id, bool physical = false) {
-      if (!physical) initialized.erase(id);
-      std::erase_if(initialized_if, [&](const auto &entry) {
-        return (!physical && entry.first == id) || std::any_of(entry.second.begin(), entry.second.end(),
-            [&](const auto &input) { return input.physical == physical && input.id == id; });
-      });
-    }
-    void refine(size_t id, bool null) {
-      // Null never reads a payload.
-      if (null) initialize(id);
-      if (!null && !invalidated.contains(id)) entry_nonnull.insert(id);
-      if (auto target = targets.find(id); target != targets.end()) {
-        if (!null && target->second.places.empty() && target->second.entries.size() == 1)
-          entry_nonnull.insert(*target->second.entries.begin());
-        auto &selected = target->second;
-        if (null) {
-          if (!selected.nullable() || !selected.entries.empty()) selected.null_sources.insert(null_target);
-          selected.places.clear();
-          selected.entries.clear();
-        } else if (!selected.places.empty() || !selected.entries.empty()) selected.null_sources.clear();
-      }
-    }
-    void test(size_t id, bool null) {
-      if (!invalidated.contains(id)) {
-        (null ? null_inputs : nonnull_inputs).insert(id);
-        if ((null ? nonnull_inputs : null_inputs).contains(id)) possible = false;
-      }
-      if (const auto target = targets.find(id); target != targets.end()) {
-        if (target->second.entries.empty() && (null ? !target->second.nullable() : target->second.places.empty())) possible = false;
-        if (target->second.places.empty() && target->second.entries.size() == 1 && (!null || !target->second.nullable())) {
-          const auto entry = *target->second.entries.begin();
-          (null ? null_inputs : nonnull_inputs).insert(entry);
-          if ((null ? nonnull_inputs : null_inputs).contains(entry)) possible = false;
-        }
-      }
-      refine(id, null);
-    }
-    void constrain(const Selections &next) {
-      possible = possible && next.possible;
-      for (const auto id : next.null_inputs) test(id, true);
-      for (const auto id : next.nonnull_inputs) test(id, false);
-    }
-    void invalidate(size_t id) { initialized.erase(id); initialized_if.erase(id); invalidated.insert(id); targets.erase(id); }
-    std::optional<Targets> substitute(const Targets &next) const {
-      Targets result{next.places, next.null_sources, {}};
-      for (const auto entry : next.entries) {
-        if (const auto previous = targets.find(entry); previous != targets.end()) result.merge(previous->second);
-        else if (invalidated.contains(entry)) return {};
-        else result.entries.insert(entry);
-      }
-      return result;
-    }
-    void assign(size_t id, Targets next) {
-      const auto selected = substitute(next);
-      invalidate(id);
-      if (selected) targets.emplace(id, *selected);
-    }
-    void resolve(std::set<size_t> &known) {
-      bool changed;
-      do {
-        changed = false;
-        for (const auto &[id, target] : targets) {
-          if (std::all_of(target.places.begin(), target.places.end(), [&](size_t place) { return known.contains(place); })) {
-            Initialization required(target.entries.begin(), target.entries.end());
-            std::erase_if(required, [&](const auto &entry) { return entry_initialized.contains(entry.id); });
-            if (required.empty()) changed = initialized.insert(id).second || changed;
-            else if (!initialized.contains(id)) {
-              const auto found = initialized_if.find(id);
-              if (found == initialized_if.end() || std::includes(found->second.begin(), found->second.end(), required.begin(), required.end()))
-                initialized_if[id] = std::move(required);
-            }
-          }
-          if (target.entries.empty() && !target.nullable() && target.places.size() == 1 && initialized.contains(id))
-            changed = known.insert(*target.places.begin()).second || changed;
-        }
-        for (const auto &[id, required] : initialized_if)
-          if (std::all_of(required.begin(), required.end(), [&](const auto &entry) {
-                return entry.physical ? known.contains(entry.id) : !entry.frame && entry_initialized.contains(entry.id);
-              }))
-            changed = initialized.insert(id).second || changed;
-      } while (changed);
-      for (const auto id : initialized) initialized_if.erase(id);
-    }
-    std::set<size_t> substitute_entries(const std::set<size_t> &entries, const std::set<size_t> &nonnull,
-                                        std::set<size_t> &known) const {
-      std::set<size_t> preserved;
-      for (const auto id : entries) {
-        if (const auto target = targets.find(id); target != targets.end()) {
-          if (!target->second.nullable() || nonnull.contains(id)) {
-            if (target->second.entries.empty() && target->second.places.size() == 1)
-              known.insert(*target->second.places.begin());
-            if (target->second.places.empty() && target->second.entries.size() == 1)
-              preserved.insert(*target->second.entries.begin());
-          }
-        } else if (!invalidated.contains(id)) preserved.insert(id);
-      }
-      return preserved;
-    }
-    void then(const Selections &next, std::set<size_t> &known) {
-      constrain(next);
-      auto before = *this;
-      for (const auto id : next.entry_nonnull) { before.refine(id, false); refine(id, false); }
-      const auto entries = before.substitute_entries(next.entry_initialized, next.entry_nonnull, known);
-      entry_initialized.insert(entries.begin(), entries.end());
-      for (const auto id : next.invalidated) invalidate(id);
-      for (const auto &[id, update] : next.targets) {
-        if (std::all_of(update.entries.begin(), update.entries.end(), [&](size_t entry) {
-              return before.initialized.contains(entry) || next.entry_initialized.contains(entry);
-            }) && std::all_of(update.places.begin(), update.places.end(), [&](size_t place) { return known.contains(place); }))
-          initialized.insert(id);
-        if (const auto target = before.substitute(update)) targets[id] = *target;
-      }
-      for (const auto &[id, required] : next.initialized_if) {
-        auto remaining = required;
-        std::erase_if(remaining, [&](const auto &entry) { return !entry.physical && !entry.frame && next.entry_initialized.contains(entry.id); });
-        auto incoming = before.initialization_requirements(remaining);
-        if (incoming) {
-          if (incoming->empty()) initialized.insert(id);
-          else initialized_if[id] = std::move(*incoming);
-        }
-      }
-      initialized.insert(next.initialized.begin(), next.initialized.end());
-      resolve(known);
-    }
-    void merge(const Selections &other) {
-      if (!other.possible) return;
-      if (!possible) { *this = other; return; }
-      const auto before = *this;
-      auto affected = invalidated;
-      affected.insert(other.invalidated.begin(), other.invalidated.end());
-      for (const auto id : affected) {
-        auto left = before.initialization_requirements(id);
-        const auto right = other.initialization_requirements(id);
-        initialized_if.erase(id);
-        if (left && right) {
-          left->insert(right->begin(), right->end());
-          if (!left->empty()) initialized_if[id] = std::move(*left);
-        }
-      }
-      std::erase_if(initialized, [&](size_t id) { return !other.initialized.contains(id); });
-      std::erase_if(entry_initialized, [&](size_t id) { return !other.entry_initialized.contains(id); });
-      std::erase_if(entry_nonnull, [&](size_t id) { return !other.entry_nonnull.contains(id); });
-      std::erase_if(null_inputs, [&](size_t id) { return !other.null_inputs.contains(id); });
-      std::erase_if(nonnull_inputs, [&](size_t id) { return !other.nonnull_inputs.contains(id); });
-      invalidated.insert(other.invalidated.begin(), other.invalidated.end());
-      for (auto it = targets.begin(); it != targets.end();) {
-        if (const auto next = other.targets.find(it->first); next != other.targets.end()) {
-          it->second.merge(next->second); ++it;
-        } else if (other.invalidated.contains(it->first)) it = targets.erase(it);
-        else { it->second.entries.insert(it->first); ++it; }
-      }
-      for (const auto &[id, target] : other.targets) if (!before.targets.contains(id) && !before.invalidated.contains(id)) {
-        auto merged = target; merged.entries.insert(id);
-        targets.emplace(id, std::move(merged));
-      }
-    }
-  };
   using BooleanPayload = std::pair<std::optional<size_t>, size_t>;
   using BindingSnapshot = std::pair<size_t, std::set<size_t>>;
   // Necessary path facts shared by value summaries and read obligations.
@@ -615,6 +367,20 @@ public:
     }
     return result;
   }
+  static bool unconditional(const ConditionClauses &clauses) {
+    return clauses.size() == 1 && *clauses.begin() == ConditionFacts{};
+  }
+  static ConditionClauses stable_input_conditions(const ConditionClauses &clauses) {
+    ConditionClauses result;
+    for (const auto &path : clauses) {
+      ConditionFacts stable;
+      stable.inputs = path.inputs;
+      stable.present = path.present;
+      stable.absent = path.absent;
+      add_condition(result, std::move(stable));
+    }
+    return result;
+  }
   static BooleanValue unknown_boolean() { return {{false, {ConditionFacts{}}}, {true, {ConditionFacts{}}}}; }
   static BooleanValue boolean_payload(size_t place, std::optional<size_t> action = {}) {
     BooleanValue result;
@@ -681,6 +447,285 @@ public:
     }
     return output;
   }
+  struct Targets {
+    // Physical cells only; absence cannot justify initializing a cell.
+    std::set<size_t> places;
+    // Immutable nullable inputs, or null_target for independent absence.
+    std::set<size_t> null_sources;
+    // Targets selected by these bindings on entry to the summarized sequence.
+    std::set<size_t> entries;
+    // Observations of direct alternatives expressed in immutable input facts.
+    // Entry selections contribute their own observations when substituted.
+    std::optional<BooleanValue> nullness{};
+    bool operator==(const Targets &) const = default;
+    bool nullable() const { return !null_sources.empty(); }
+    std::optional<size_t> single_entry() const {
+      if (entries.size() == 1 && places.empty() && !nullable()) return *entries.begin();
+      return {};
+    }
+    BooleanValue null_observations() const {
+      if (nullness) return *nullness;
+      BooleanValue result;
+      for (const auto source : null_sources) {
+        ConditionFacts absent;
+        if (source != null_target) absent.absent.insert(source);
+        add_condition(result[true], std::move(absent));
+      }
+      if (!places.empty()) {
+        ConditionFacts present;
+        if (places.size() == 1 && null_sources.contains(*places.begin()))
+          present.present.insert(*places.begin());
+        result[false].insert(std::move(present));
+      }
+      return result;
+    }
+    void merge(const Targets &other) {
+      if (nullness || other.nullness) {
+        auto proof = null_observations();
+        merge_boolean(proof, other.null_observations());
+        nullness = std::move(proof);
+      }
+      places.insert(other.places.begin(), other.places.end());
+      null_sources.insert(other.null_sources.begin(), other.null_sources.end());
+      entries.insert(other.entries.begin(), other.entries.end());
+    }
+  };
+  struct InitializationInput {
+    size_t id;
+    // Absent means the incoming selection of this relation. A captured frame
+    // remains independent of slot mutations while nested relations compose.
+    std::optional<size_t> frame;
+    bool physical = false;
+    InitializationInput(size_t id, std::optional<size_t> frame = {}, bool physical = false) : id(id), frame(frame), physical(physical) {}
+    static InitializationInput payload(size_t place) { return {place, {}, true}; }
+    auto operator<=>(const InitializationInput &) const = default;
+  };
+  using Initialization = std::set<InitializationInput>;
+  static size_t action_frame(size_t action) { return action + 1; }
+  static Initialization capture_initialization(const Initialization &conditions, size_t frame) {
+    Initialization result;
+    for (auto input : conditions) { if (!input.physical && !input.frame) input.frame = frame; result.insert(input); }
+    return result;
+  }
+  static Initialization enter_initialization(const Initialization &conditions, size_t frame) {
+    Initialization result;
+    for (auto input : conditions) { if (input.frame == frame) input.frame.reset(); result.insert(input); }
+    return result;
+  }
+  // A selection fact describes the current target, so rebinding can invalidate it.
+  struct Selections {
+    std::set<size_t> initialized, invalidated;
+    // Sufficient entry-target initialization for a current selected target.
+    std::map<size_t, Initialization> initialized_if;
+    // Initialization of entry targets survives changes to the current selection.
+    std::set<size_t> entry_initialized, entry_nonnull;
+    // Actual branch conditions are separate from conditional callee guarantees.
+    std::set<size_t> null_inputs, nonnull_inputs;
+    bool possible = true;
+    std::map<size_t, Targets> targets;
+    bool operator==(const Selections &) const = default;
+    bool nonnull(size_t id) const {
+      if (const auto target = targets.find(id); target != targets.end())
+        return !target->second.nullable() && (!target->second.places.empty() || !target->second.entries.empty()) &&
+            std::all_of(target->second.entries.begin(), target->second.entries.end(), [&](size_t entry) { return entry_nonnull.contains(entry); });
+      return !invalidated.contains(id) && entry_nonnull.contains(id);
+    }
+    void initialize(size_t id) {
+      initialized.insert(id);
+      initialized_if.erase(id);
+      if (!invalidated.contains(id)) entry_initialized.insert(id);
+    }
+    std::optional<Initialization> initialization_requirements(size_t id) const {
+      if (initialized.contains(id)) return Initialization{};
+      if (const auto found = initialized_if.find(id); found != initialized_if.end()) return found->second;
+      if (!invalidated.contains(id)) return Initialization{id};
+      if (const auto found = targets.find(id); found != targets.end()) {
+        const auto &target = found->second;
+        if (target.places.empty() && target.entries.empty() && !target.nullable()) return {};
+        Initialization required(target.entries.begin(), target.entries.end());
+        for (const auto place : target.places) required.insert(InitializationInput::payload(place));
+        return required;
+      }
+      return {};
+    }
+    std::optional<Initialization> initialization_requirements(const Initialization &entries) const {
+      Initialization required;
+      for (const auto entry : entries) {
+        if (entry.frame || entry.physical) { required.insert(entry); continue; }
+        const auto condition = initialization_requirements(entry.id);
+        if (!condition) return {};
+        required.insert(condition->begin(), condition->end());
+      }
+      return required;
+    }
+    void enter_initialization(size_t frame) {
+      for (auto &[binding, conditions] : initialized_if)
+        conditions = CleanupEquations::enter_initialization(conditions, frame);
+    }
+    void forget_initialization(size_t id, bool physical = false) {
+      if (!physical) initialized.erase(id);
+      std::erase_if(initialized_if, [&](const auto &entry) {
+        return (!physical && entry.first == id) || std::any_of(entry.second.begin(), entry.second.end(),
+            [&](const auto &input) { return input.physical == physical && input.id == id; });
+      });
+    }
+    void refine(size_t id, bool null) {
+      // Null never reads a payload.
+      if (null) initialize(id);
+      if (!null && !invalidated.contains(id)) entry_nonnull.insert(id);
+      if (auto target = targets.find(id); target != targets.end()) {
+        if (!null && target->second.places.empty() && target->second.entries.size() == 1)
+          entry_nonnull.insert(*target->second.entries.begin());
+        auto &selected = target->second;
+        if (null) {
+          if (!selected.nullable() || !selected.entries.empty()) {
+            selected.null_sources.insert(null_target);
+            selected.nullness.reset();
+          }
+          if (selected.nullness) selected.nullness->erase(false);
+          selected.places.clear();
+          selected.entries.clear();
+        } else if (!selected.places.empty() || !selected.entries.empty()) {
+          selected.null_sources.clear();
+          if (selected.nullness) selected.nullness->erase(true);
+        }
+      }
+    }
+    void test(size_t id, bool null) {
+      if (!invalidated.contains(id)) {
+        (null ? null_inputs : nonnull_inputs).insert(id);
+        if ((null ? nonnull_inputs : null_inputs).contains(id)) possible = false;
+      }
+      if (const auto target = targets.find(id); target != targets.end()) {
+        if (target->second.entries.empty() && (null ? !target->second.nullable() : target->second.places.empty())) possible = false;
+        if (target->second.places.empty() && target->second.entries.size() == 1 && (!null || !target->second.nullable())) {
+          const auto entry = *target->second.entries.begin();
+          (null ? null_inputs : nonnull_inputs).insert(entry);
+          if ((null ? nonnull_inputs : null_inputs).contains(entry)) possible = false;
+        }
+      }
+      refine(id, null);
+    }
+    void constrain(const Selections &next) {
+      possible = possible && next.possible;
+      for (const auto id : next.null_inputs) test(id, true);
+      for (const auto id : next.nonnull_inputs) test(id, false);
+    }
+    void invalidate(size_t id) { initialized.erase(id); initialized_if.erase(id); invalidated.insert(id); targets.erase(id); }
+    std::optional<Targets> substitute(const Targets &next) const {
+      Targets result{next.places, next.null_sources, {}, next.nullness};
+      for (const auto entry : next.entries) {
+        if (const auto previous = targets.find(entry); previous != targets.end()) result.merge(previous->second);
+        else if (invalidated.contains(entry)) return {};
+        else result.entries.insert(entry);
+      }
+      return result;
+    }
+    void assign(size_t id, Targets next) {
+      const auto selected = substitute(next);
+      invalidate(id);
+      if (selected) targets.emplace(id, *selected);
+    }
+    void resolve(std::set<size_t> &known) {
+      bool changed;
+      do {
+        changed = false;
+        for (const auto &[id, target] : targets) {
+          if (std::all_of(target.places.begin(), target.places.end(), [&](size_t place) { return known.contains(place); })) {
+            Initialization required(target.entries.begin(), target.entries.end());
+            std::erase_if(required, [&](const auto &entry) { return entry_initialized.contains(entry.id); });
+            if (required.empty()) changed = initialized.insert(id).second || changed;
+            else if (!initialized.contains(id)) {
+              const auto found = initialized_if.find(id);
+              if (found == initialized_if.end() || std::includes(found->second.begin(), found->second.end(), required.begin(), required.end()))
+                initialized_if[id] = std::move(required);
+            }
+          }
+          if (target.entries.empty() && !target.nullable() && target.places.size() == 1 && initialized.contains(id))
+            changed = known.insert(*target.places.begin()).second || changed;
+        }
+        for (const auto &[id, required] : initialized_if)
+          if (std::all_of(required.begin(), required.end(), [&](const auto &entry) {
+                return entry.physical ? known.contains(entry.id) : !entry.frame && entry_initialized.contains(entry.id);
+              }))
+            changed = initialized.insert(id).second || changed;
+      } while (changed);
+      for (const auto id : initialized) initialized_if.erase(id);
+    }
+    std::set<size_t> substitute_entries(const std::set<size_t> &entries, const std::set<size_t> &nonnull,
+                                        std::set<size_t> &known) const {
+      std::set<size_t> preserved;
+      for (const auto id : entries) {
+        if (const auto target = targets.find(id); target != targets.end()) {
+          if (!target->second.nullable() || nonnull.contains(id)) {
+            if (target->second.entries.empty() && target->second.places.size() == 1)
+              known.insert(*target->second.places.begin());
+            if (target->second.places.empty() && target->second.entries.size() == 1)
+              preserved.insert(*target->second.entries.begin());
+          }
+        } else if (!invalidated.contains(id)) preserved.insert(id);
+      }
+      return preserved;
+    }
+    void then(const Selections &next, std::set<size_t> &known) {
+      constrain(next);
+      auto before = *this;
+      for (const auto id : next.entry_nonnull) { before.refine(id, false); refine(id, false); }
+      const auto entries = before.substitute_entries(next.entry_initialized, next.entry_nonnull, known);
+      entry_initialized.insert(entries.begin(), entries.end());
+      for (const auto id : next.invalidated) invalidate(id);
+      for (const auto &[id, update] : next.targets) {
+        if (std::all_of(update.entries.begin(), update.entries.end(), [&](size_t entry) {
+              return before.initialized.contains(entry) || next.entry_initialized.contains(entry);
+            }) && std::all_of(update.places.begin(), update.places.end(), [&](size_t place) { return known.contains(place); }))
+          initialized.insert(id);
+        if (const auto target = before.substitute(update)) targets[id] = *target;
+      }
+      for (const auto &[id, required] : next.initialized_if) {
+        auto remaining = required;
+        std::erase_if(remaining, [&](const auto &entry) { return !entry.physical && !entry.frame && next.entry_initialized.contains(entry.id); });
+        auto incoming = before.initialization_requirements(remaining);
+        if (incoming) {
+          if (incoming->empty()) initialized.insert(id);
+          else initialized_if[id] = std::move(*incoming);
+        }
+      }
+      initialized.insert(next.initialized.begin(), next.initialized.end());
+      resolve(known);
+    }
+    void merge(const Selections &other) {
+      if (!other.possible) return;
+      if (!possible) { *this = other; return; }
+      const auto before = *this;
+      auto affected = invalidated;
+      affected.insert(other.invalidated.begin(), other.invalidated.end());
+      for (const auto id : affected) {
+        auto left = before.initialization_requirements(id);
+        const auto right = other.initialization_requirements(id);
+        initialized_if.erase(id);
+        if (left && right) {
+          left->insert(right->begin(), right->end());
+          if (!left->empty()) initialized_if[id] = std::move(*left);
+        }
+      }
+      std::erase_if(initialized, [&](size_t id) { return !other.initialized.contains(id); });
+      std::erase_if(entry_initialized, [&](size_t id) { return !other.entry_initialized.contains(id); });
+      std::erase_if(entry_nonnull, [&](size_t id) { return !other.entry_nonnull.contains(id); });
+      std::erase_if(null_inputs, [&](size_t id) { return !other.null_inputs.contains(id); });
+      std::erase_if(nonnull_inputs, [&](size_t id) { return !other.nonnull_inputs.contains(id); });
+      invalidated.insert(other.invalidated.begin(), other.invalidated.end());
+      for (auto it = targets.begin(); it != targets.end();) {
+        if (const auto next = other.targets.find(it->first); next != other.targets.end()) {
+          it->second.merge(next->second); ++it;
+        } else if (other.invalidated.contains(it->first)) it = targets.erase(it);
+        else { it->second.entries.insert(it->first); ++it; }
+      }
+      for (const auto &[id, target] : other.targets) if (!before.targets.contains(id) && !before.invalidated.contains(id)) {
+        auto merged = target; merged.entries.insert(id);
+        targets.emplace(id, std::move(merged));
+      }
+    }
+  };
   // Missing paths are necessary conditions: no entry means no write guarantee.
   using MissingInitialization = std::map<size_t, ConditionClauses>;
   static ConditionClauses missing_initialization(size_t place, const std::set<size_t> &initialized,
@@ -868,6 +913,8 @@ public:
     MissingInitialization uninitialized{};
     bool needs_checked_cleanup_proof = false;
     bool guarded_pending_failure = false;
+    // Necessary immutable input facts for reaching this queue completion.
+    ConditionClauses reaching{ConditionFacts{}};
     void enter_initialization(size_t frame) {
       selections.enter_initialization(frame);
       returned.enter_initialization(frame);
@@ -914,27 +961,18 @@ public:
           const auto observed = std::move(facts.conditions);
           facts.conditions = transform(observed);
           if (!facts.conditions.possible) continue;
-          std::optional<ConditionClauses> absence;
+          std::optional<ConditionClauses> selected_paths;
           for (const auto &term : observed.terms) {
             if (term.immutable || term.action || term.target != null_target) continue;
             const auto selected = resolve(term.binding);
-            if (!selected || !selected->entries.empty()) continue;
-            if (term.equal) {
-              if (!selected->nullable() || selected->null_sources.contains(null_target)) continue;
-              ConditionClauses alternatives;
-              for (const auto source : selected->null_sources) {
-                ConditionFacts absent;
-                absent.absent.insert(source);
-                add_condition(alternatives, std::move(absent));
-              }
-              absence = absence ? conjoin_conditions(*absence, alternatives) : std::move(alternatives);
-            } else if (selected->places.size() == 1 && selected->null_sources.contains(*selected->places.begin())) {
-              // The sole target comes from this immutable nullable input.
-              facts.present.insert(*selected->places.begin());
-            }
+            if (!selected || !selected->entries.empty() || (selected->places.empty() && !selected->nullable())) continue;
+            const auto proof = selected->null_observations();
+            const auto path = proof.find(term.equal);
+            const auto alternatives = path == proof.end() ? ConditionClauses{} : path->second;
+            selected_paths = selected_paths ? conjoin_conditions(*selected_paths, alternatives) : alternatives;
           }
-          if (!absence) add_condition(result, std::move(facts));
-          else for (auto path : *absence) {
+          if (!selected_paths) add_condition(result, std::move(facts));
+          else for (auto path : *selected_paths) {
             path.append(facts);
             add_condition(result, std::move(path));
           }
@@ -955,15 +993,37 @@ private:
     std::optional<size_t> action;
     std::set<size_t> initialized{};
     MissingInitialization uninitialized{};
+    ConditionClauses reaching{ConditionFacts{}};
   };
   std::vector<Queue> queues_{{}};
   std::vector<Action> actions_;
+  std::set<size_t> observed_inputs_, observed_references_;
   static constexpr size_t states = 2 * (3 + exception_categories.size());
   std::vector<size_t> reads_;
   using Relation = std::vector<std::map<size_t, Effects>>;
   std::vector<Relation> solved_;
+  static ConditionClauses intersect_reaching(const ConditionClauses &left, const ConditionClauses &right) {
+    if (unconditional(left)) return right;
+    if (unconditional(right)) return left;
+    return conjoin_conditions(left, right);
+  }
+  ConditionClauses queue_conditions(const ConditionClauses &clauses) const {
+    if (clauses.empty() || unconditional(clauses)) return clauses;
+    if (observed_inputs_.empty() && observed_references_.empty()) return {ConditionFacts{}};
+    ConditionClauses result;
+    for (auto path : clauses) {
+      std::erase_if(path.inputs, [&](const auto &input) { return !observed_inputs_.contains(input.first); });
+      std::erase_if(path.present, [&](size_t place) { return !observed_references_.contains(place); });
+      std::erase_if(path.absent, [&](size_t place) { return !observed_references_.contains(place); });
+      add_condition(result, std::move(path));
+      if (unconditional(result)) break;
+    }
+    return result;
+  }
   Effects compose(const Effects &first, const Effects &second) const {
     auto result = first;
+    result.reaching = intersect_reaching(first.reaching, second.reaching);
+    if (result.reaching.empty()) return result;
     result.symbols.insert(second.symbols.begin(), second.symbols.end());
     result.payload_writes.insert(second.payload_writes.begin(), second.payload_writes.end());
     result.present.insert(second.present.begin(), second.present.end());
@@ -993,10 +1053,12 @@ private:
     result.thrown = next.thrown;
     for (auto &[target, value] : next.payloads) result.payloads[target] = std::move(value);
     for (auto &[target, value] : next.booleans) result.booleans[target] = std::move(value);
+    if (!unconditional(result.reaching))
+      result.transform_conditions([&](const auto &clauses) { return conjoin_conditions(clauses, result.reaching); });
     return result;
   }
   static bool merge(std::map<size_t, Effects> &result, size_t completion, const Effects &effects) {
-    if (!effects.selections.possible) return false;
+    if (!effects.selections.possible || effects.reaching.empty()) return false;
     auto [found, inserted] = result.try_emplace(completion, effects);
     if (inserted) return true;
     auto &known = found->second;
@@ -1015,6 +1077,8 @@ private:
     const auto previous_guarded_failure = known.guarded_pending_failure;
     const auto previous_selections = known.selections;
     const auto previous_symbols = known.symbols;
+    const auto previous_reaching = known.reaching;
+    for (const auto &path : effects.reaching) add_condition(known.reaching, path);
     known.symbols.insert(effects.symbols.begin(), effects.symbols.end());
     known.payload_writes.insert(effects.payload_writes.begin(), effects.payload_writes.end());
     known.declared_failures.insert(effects.declared_failures.begin(), effects.declared_failures.end());
@@ -1046,9 +1110,19 @@ private:
         previous_returned != known.returned || previous_thrown != known.thrown || previous_unknown_thrown != known.unknown_thrown || previous_payloads != known.payloads ||
         previous_selections != known.selections || previous_symbols != known.symbols || previous_payload_writes != known.payload_writes ||
         previous_present != known.present || previous_booleans != known.booleans || previous_declared != known.declared_failures ||
-        previous_checked_cleanup != known.needs_checked_cleanup_proof || previous_guarded_failure != known.guarded_pending_failure;
+        previous_checked_cleanup != known.needs_checked_cleanup_proof || previous_guarded_failure != known.guarded_pending_failure ||
+        previous_reaching != known.reaching;
   }
 public:
+  void observe_reference(const BooleanValue &observations) {
+    bool changed = false;
+    for (const auto &[null, paths] : observations) for (const auto &path : paths) {
+      for (const auto &[input, value] : path.inputs) changed = observed_inputs_.insert(input).second || changed;
+      for (const auto place : path.present) changed = observed_references_.insert(place).second || changed;
+      for (const auto place : path.absent) changed = observed_references_.insert(place).second || changed;
+    }
+    if (changed) solved_.clear();
+  }
   static void merge_read(Reads &reads, size_t read, const ReadRequirement &before) {
     auto [found, inserted] = reads.emplace(read, before);
     if (!inserted) found->second.merge(before);
@@ -1069,16 +1143,17 @@ public:
   }
   size_t action() { solved_.clear(); actions_.push_back({}); return actions_.size() - 1; }
   void define(size_t id, Action action) { solved_.clear(); actions_.at(id) = std::move(action); }
-  size_t push(size_t previous, size_t action) {
-    solved_.clear(); queues_.push_back({{previous}, action}); return queues_.size() - 1;
+  size_t push(size_t previous, size_t action, const ConditionClauses &reaching) {
+    solved_.clear(); queues_.push_back({{previous}, action, {}, {}, reaching}); return queues_.size() - 1;
   }
   size_t join(size_t a, size_t b) {
     if (a == b) return a;
     solved_.clear(); queues_.push_back({{a, b}, {}}); return queues_.size() - 1;
   }
-  size_t known(size_t queue, const std::set<size_t> &initialized, const MissingInitialization &uninitialized) {
-    if (initialized.empty() && uninitialized.empty()) return queue;
-    solved_.clear(); queues_.push_back({{queue}, {}, initialized, uninitialized}); return queues_.size() - 1;
+  size_t known(size_t queue, const std::set<size_t> &initialized, const MissingInitialization &uninitialized,
+               const ConditionClauses &reaching) {
+    if (initialized.empty() && uninitialized.empty() && unconditional(reaching)) return queue;
+    solved_.clear(); queues_.push_back({{queue}, {}, initialized, uninitialized, reaching}); return queues_.size() - 1;
   }
   size_t append(size_t previous, size_t suffix) {
     if (!previous) return suffix;
@@ -1109,6 +1184,9 @@ public:
     if (solved_.empty()) {
       solved_.assign(queues_.size(), Relation(states));
       for (size_t state = 0; state < states; ++state) solved_[0][state].emplace(state, Effects{});
+      std::vector<ConditionClauses> reaching;
+      reaching.reserve(queues_.size());
+      for (const auto &queue : queues_) reaching.push_back(queue_conditions(queue.reaching));
       bool changed;
       do {
         changed = false;
@@ -1119,6 +1197,7 @@ public:
             if (!node.action) {
               Effects known{{}, node.initialized};
               known.uninitialized = node.uninitialized;
+              known.reaching = reaching[id];
               for (const auto previous : node.previous) for (const auto &[value, effects] : solved_[previous][state])
                 changed = merge(result, value, compose(known, effects)) || changed;
               continue;
@@ -1135,6 +1214,7 @@ public:
                     Completion{incoming.returned ? size_t{1} : size_t{0}, incoming.returned} : incoming;
               } else if (next.reason != 1) next.returned = next.returned || incoming.returned;
               auto effects = path.effects;
+              effects.reaching = intersect_reaching(effects.reaching, reaching[id]);
               // The single-pending-failure model cannot prove coverage of
               // checked failures produced by an action. Retain potential
               // guarded dispatch on the separate ordinary body failure too.
