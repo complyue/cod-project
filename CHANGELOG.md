@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-17 — Clarify replacement failure without rolling back RHS effects
+
+<a id="k-replacement-effects-20261117"></a>
+**K-REPLACEMENT-EFFECTS-20261117 — Preserve the retained destination and completed effects.** Agent clarification D-18r113→114/registry864→865/source426→427 under the existing D-14/D-23 evaluation and no-rollback contract, H-553's value-input semantics and C-65/C-73/C-75/P-485–P-487 → charter §§2/3.3/4.3/6.3/8/12. Failure of an outer replacement adds no partial commit; prior RHS writes/releases remain subject to ordinary cleanup. Success releases the post-RHS value in the retained destination exactly once. Add the three focused acceptance cases: inner replacement then RHS throw, inner replacement then outer preparation failure, and successful outer commit. Mainline independently agrees this is existing intent; engineering agreement is not human adoption. The user's “你感觉这里面有坑没有？” requests risk assessment and grants no qualification. D-18's bounded value-input review remains pending with unchanged scope/value path/exclusions; D-17-DEFER-CHECKS keeps semantic r3 with editorial review-reference changes only. Other affected design authority summaries remove obsolete frozen-review wording, preserving their semantic revisions/qualifications and the compact registry preface. Baseline: `6b5db0aefcdea70f841bbe7f0e689458abff008d` at affected paths, including the immutable r113 review text. D-16 and compiler/fixtures are unchanged; no code/build/tests.
+
 ## 2026-11-17 — Prefer optional semicolons with actionable syntax warnings
 
 <a id="h-semicolon-ux-20261117"></a>
