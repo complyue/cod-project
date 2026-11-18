@@ -1,8 +1,10 @@
 # CoD source compiler validation
 
-Reference revision: 436 · Recorded: 2026-11-18 America/Los_Angeles.
+Reference revision: 437 · Recorded: 2026-11-18 America/Los_Angeles.
 
 ## Design authority
+
+- **Exception object migration.** [H-EXCEPTION-OBJECT-OWNER-20261118](../../../CHANGELOG.md#h-exception-object-owner-20261118) selects [owner-qualified objects and payload transfer](../../../design/ExceptionControl.md#exception-object-owners-and-release). Current native carriers and fixtures exercise independent intrinsic-exception bits in catches, arguments, captures and results. Migration must exercise actual owner/identity preservation, payload lifetime and release across these paths, while retaining checked-failure and trace coverage. The implicit procedure owner and its native transport remain under review.
 
 - **Cause inspection migration.** [H-CAUSE-PTR-TIP-REF-20261118](../../../CHANGELOG.md#h-cause-ptr-tip-ref-20261118) and [H-CAUSE-LINK-ONLY-20261118](../../../CHANGELOG.md#h-cause-link-only-20261118) select readonly cause/tip views in [D-17](../../../design/ExceptionControl.md#exception-construction-throw-and-rethrow) and retire the public `cause_at` intrinsic. The checker and native path still expose indexed inspection. Migrate cause-chain fixtures to successive `.cause` reads and exercise index failures, deferred index timing and bounds opt-out on actual indexed operations as those become available. Preserve cause identity/trace and retained lifetime coverage. The existing indexed fixtures do not establish direct-field support.
 
@@ -439,7 +441,7 @@ Deferred recovery preserves a retained normal scope value or enclosing return. E
 
 The following capture/cleanup evidence describes the current compiler. Distinguish forbidden same-drain registrations from H-FULL-SCOPE-DEFER-20261117’s permitted independent full-scope/helper cleanup; existing tests do not establish enforcement of the revised checker or the selected full ordinary-callable semantics.
 
-Catch parameters are immutable exception bits. A delayed block that uses a caught value saves its own copy at registration, including the active exception for a bare rethrow. Repeated execution of one catch cannot overwrite an earlier registration's value. Nested registrations preserve those copies and their explicit causes. Unused caught values need no capture payload; ordinary mutable lexical values retain delayed reads. These copies grant no borrowed-storage or region lifetime extension.
+The current compiler implements catch parameters as immutable exception bits. A delayed block that uses a caught value saves its own copy at registration, including the active exception for a bare rethrow. Repeated execution of one catch cannot overwrite an earlier registration's value. Nested registrations preserve those copies and their explicit causes. Unused caught values need no capture payload; ordinary mutable lexical values retain delayed reads. These copies grant no borrowed-storage or region lifetime extension.
 
 A shared generic method may need different caught-value snapshots in different checked contexts. Each registration stores exactly its context's required caught bits; cleanup uses that record's capture layout. Local address selection preserves a caught snapshot in one context and an ordinary local target in another, including when both contexts otherwise use the same record layout. Nested registrations, aliases, nullness, causes and completion retain their checked behavior. Known specializations use their established layout directly. Runtime activations add records, not method implementations; lexical binding-role compatibility and existing owner/access/initialization requirements still apply.
 
