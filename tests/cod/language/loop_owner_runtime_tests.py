@@ -16,7 +16,8 @@ func loop_probe(ref input:const u64 in O,n:u64) where {owner O}{
 }
 func loop_factory(){
  for(index in 0u64..1u64){return {{
-  func inspect(){val query<-make local typeof(loop_tag(index,index)){true};return loop_code(query);};inspect
+  func inspect(){val query<-make local typeof(loop_tag(index,index)){true};return loop_code(query);};
+  return inspect;
  }};};
 }
 {{

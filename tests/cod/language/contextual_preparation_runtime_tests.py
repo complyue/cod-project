@@ -9,7 +9,7 @@ FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 func choose_mode(tag:bool,ref f:func(u64)->const u64 in O,x:u64)->const u64 where {owner O}{return f(x);}
 func choose_mode(tag:i64,f:func(u64)->const u64,x:u64)->const u64{return f(x);}
 func inspect(tag:T,ref f:func(u64)->const u64 in O,x:u64)->const u64 where {T,owner O}{return choose_mode(tag,f,x);}
-proc probe(tag:T,ref f:func(u64)->const u64 in O)->const u64 where {T,owner O}{return choose_mode(tag,f,{{observe(9100u64);1u64}});}
+proc probe(tag:T,ref f:func(u64)->const u64 in O)->const u64 where {T,owner O}{return choose_mode(tag,f,{{observe(9100u64);return 1u64;}});}
 proc report_mode(tag:bool,ref f:func(u64)->const u64 in O,x:u64)->void where {owner O}{observe(f(x));}
 proc report_mode(tag:i64,f:func(u64)->const u64,x:u64)->void{observe(f(x));}
 proc later(tag:T,ref f:func(u64)->const u64 in O)->void where {T,owner O}{defer report_mode(tag,f,23u64);f<-wrap(other);}

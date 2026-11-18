@@ -7,23 +7,23 @@ FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
 FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 proc finish_operand(f:func(u64)->const u64)->const u64{
  func invoke=apply;defer observe(20u64);
- return invoke(f,{{defer observe(21u64);return f(1u64);}});
+ return invoke(f,{defer observe(21u64);return f(1u64);});
 }
 proc failing_operand(ref f:func(u64)->const u64 in O)->const u64 where {owner O}{
  func invoke=apply;return invoke(f,{{observe(9999u64);return 7u64;}});
 }
 proc defer_operand(ref f:func(u64)->const u64 in O)->const u64 where {owner O}{
  func invoke=apply;defer observe(23u64);
- defer invoke(f,{{return f(2u64);}});return 0u64;
+ defer invoke(f,{return f(2u64);});return 0u64;
 }
 proc abort_registration(ref f:func(u64)->const u64 in O)->const u64 where {owner O}{
- func invoke=apply;defer invoke(f,{{return f(3u64);}});return 0u64;
+ func invoke=apply;defer invoke(f,{return f(3u64);});return 0u64;
 }
 func return_image(f:func(u64)->const u64)->func(u64)->const u64{
- func invoke=apply;invoke(f,{{return wrap(f);}});return base;
+ func invoke=apply;invoke(f,{return wrap(f);});return base;
 }
 func logical_image(f:func(u64)->const u64,flag:bool)->func(u64)->const u64{
- flag&&{{return wrap(f);}};return f;
+ flag&&{return wrap(f);};return f;
 }
 {{
  func f=wrap(base);observe(finish_operand(f));observe(defer_operand(f));
@@ -42,7 +42,7 @@ func pick_image(tag:i64,ptr f:func(u64)->const u64 in O)->func(u64)->const u64 w
 proc observe_application(f:func(u64)->const u64,x:u64)->void{observe(f(x));}
 proc schedule_image(tag:T,ref f:func(u64)->const u64 in O)->void throws NullPointerException where {T,owner O}{
  ptr p=f;p=null;proc invoke=observe_application;
- defer invoke({{pick_image(tag,p)}},{observe(9u64);5u64});
+ defer invoke({pick_image(tag,p)},{observe(9u64);5u64});
 }
 {{func f=wrap(base);try{schedule_image(false,f);}catch(e:const NullPointerException){observe(8u64);};try{schedule_image(0,f);}catch(e:const NullPointerException){};}};
 observe(9000u64);

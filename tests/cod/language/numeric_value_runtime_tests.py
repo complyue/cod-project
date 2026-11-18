@@ -16,7 +16,7 @@ FIXTURE = FIXTURE.updated(source=FIXTURE.source.replace('observe(9011u64);observ
     'if(real_total==49995000f64){}else{observe(9999u64);};observe(9011u64);observe(total);'))
 for original, widened in (
     ('f(2u64)', 'f(2u32)'), ('f(3u64)', 'f(3u32)'),
-    ('f({{observe(9999u64);4u64}})', 'f({{observe(9999u64);4u32}})'),
+    ('f({{observe(9999u64);return 4u64;}})', 'f({{observe(9999u64);return 4u32;}})'),
     ('defer f(5u64)', 'defer f(5u8)'), ('defer f(99u64)', 'defer f(99u8)'),
     ('replaced()(6u64)', 'replaced()(6u8)'), ('retained()(7u64)', 'retained()(7u8)'),
     ('copy_recovery()(8u64)', 'copy_recovery()(8u8)'),

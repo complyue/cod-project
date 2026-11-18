@@ -17,7 +17,7 @@ for original, replacement in (
     ('observe(9011u64);observe(total);',
      'if(real_total==49995000f64){}else{observe(9999u64);};observe(9011u64);observe(total);'),
     ('func missing()->const u64{}', 'func missing()->const u32{}'),
-    ('f({{observe(9999u64);4u64}})', 'apply(f,{{observe(9999u64);4u8}})'),
+    ('f({{observe(9999u64);return 4u64;}})', 'apply(f,{{observe(9999u64);return 4u8;}})'),
     ('defer f(5u64)', 'defer invoke(f,5u8)'),
     ('defer f(99u64)', 'defer invoke(f,99u8)'),
 ):

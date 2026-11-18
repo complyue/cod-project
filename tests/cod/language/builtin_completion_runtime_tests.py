@@ -8,16 +8,16 @@ FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
 FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 proc finish_builtin(ref f:func(u64)->const u64 in O)->u64 where {owner O}{
  defer observe(20u64);
- intrinsic (+)(apply(f,1u64),{{defer observe(21u64);return f(2u64);}});return 0u64;
+ intrinsic (+)(apply(f,1u64),{defer observe(21u64);return f(2u64);});return 0u64;
 }
 proc failing_builtin(ref f:func(u64)->const u64 in O)->u64 where {owner O}{
  intrinsic (+)(apply(f,1u64),{{observe(9999u64);return 7u64;}});return 0u64;
 }
 proc abort_builtin_registration(ref f:func(u64)->const u64 in O)->u64 where {owner O}{
- defer intrinsic (+)(f(1u64),{{return f(3u64);}});return 0u64;
+ defer intrinsic (+)(f(1u64),{return f(3u64);});return 0u64;
 }
 func return_builtin_image(f:func(u64)->const u64)->func(u64)->const u64{
- 1u64+{{return wrap(f);}};return base;
+ 1u64+{return wrap(f);};return base;
 }
 {{
  func f=wrap(base);observe(finish_builtin(f));
