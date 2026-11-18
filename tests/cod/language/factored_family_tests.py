@@ -108,6 +108,32 @@ runner.CASES['generic_phase_signature_query'] = (
     IO + phase_family(COUNT) + 'func inspect(value:' + VIEW + ')->u64;'
     'val mark<-make local typeof(inspect(choose)){7u64};behave @print(mark);', 0, '7\n', '')
 
+OTHER_ARITY = 'func choose(flag:bool)->u64{return 303u64;}'
+DISJOINT_PARAMETERS = parameters(first='bool', common='u32')
+DISJOINT_METHOD = 'func choose(' + DISJOINT_PARAMETERS + ')->bool{return true;}'
+DISJOINT_DECLARATIONS = 'func choose()->bool;func choose(' + DISJOINT_PARAMETERS + ')->bool;'
+runner.CASES['irrelevant_arity_preserves_wide_view'] = (
+    IO + BASE + OTHER_ARITY + HELD + CALL + 'behave @print(choose(false));',
+    0, f'{32000 + TOTAL}\n303\n', '')
+runner.CASES['disjoint_scalar_keeps_ordinary_direct_call'] = (
+    IO + DISJOINT_METHOD + BASE + HELD + CALL +
+    'behave @print(choose(false,' + ','.join(['1u32'] * (COUNT - 1)) + '));',
+    0, f'{32000 + TOTAL}\ntrue\n', '')
+compare_phase_selection('disjoint_method_keeps_widening_phase', OTHER_ARITY + DISJOINT_METHOD + phase_family(COUNT),
+    ['u64'] * COUNT, [
+        (['u8'] + ['u64'] * (COUNT - 1), 101),
+        (['u8', 'u8'] + ['u64'] * (COUNT - 2), 202),
+        (['u64'] * COUNT, 202),
+    ])
+runner.CASES['disjoint_declarations_preserve_inspection'] = (
+    IO + DISJOINT_DECLARATIONS + 'func choose(' + PARAMETERS + ')->u64;func inspect(value:' + VIEW + ')->u64;'
+    'val mark<-make local typeof(inspect(choose)){7u64};behave @print(mark);', 0, '7\n', '')
+runner.CASES['disjoint_contracts_preserve_symbolic_view'] = (
+    IO + 'symbol @choose:' + view(kind='proc') + ';' + family(kind='proc', name='@choose') +
+    (OTHER_ARITY + DISJOINT_METHOD).replace('func choose', 'proc @choose') +
+    'effect @choose;behave @print(behave @choose(' + ARGUMENTS + '));',
+    0, f'{32000 + TOTAL}\n', '')
+
 
 def qualified_phase_family(count):
     readonly = parameters(count, first='const u64')
@@ -230,6 +256,8 @@ PARTIAL = 'func choose(' + parameters(last='u32') + ')->u64 throws NullPointerEx
 IMPLEMENTATION = 'func choose(' + PARAMETERS + ')->u64{return n0+n15;}'
 runner.CASES['partial_declaration_required'] = (NPE + PARTIAL + IMPLEMENTATION + HELD,
     2, '', 'required checked exception')
+runner.CASES['disjoint_contracts_keep_overlapping_checked_obligation'] = (
+    NPE + DISJOINT_DECLARATIONS + PARTIAL + IMPLEMENTATION + HELD, 2, '', 'required checked exception')
 runner.CASES['partial_declaration_inferred'] = (IO + NPE + PARTIAL + IMPLEMENTATION + 'func held=choose;'
     'try{' + CALL + '{};}catch(e:const NullPointerException){};', 0, '17\n', '')
 runner.CASES['declaration_query_without_body'] = (IO + NPE + PARTIAL +

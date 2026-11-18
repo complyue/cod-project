@@ -4819,6 +4819,24 @@ class ScalarChecker {
     if (const auto binding = binder(method, type); binding && context.at(*binding)) return *context.at(*binding);
     return type;
   }
+  static bool disjoint_input_domain(const CheckedMethod &method, const InputDomains &domains,
+                                    const std::vector<Type> &retained) {
+    if (!accepts_arity(method, domains.size())) return true;
+    if (method.retained_types.size() != retained.size()) return false;
+    auto context = type_context(method, retained);
+    for (size_t i = 0; i < domains.size(); ++i) {
+      const auto &domain = domains[i];
+      if (domain.empty() || !scalar_type(domain.front())) continue;
+      const auto binding = binder(method, method.parameters[parameter_index(method, i)]);
+      if (binding && !context.at(*binding)) continue;
+      // Scalar inputs cannot bind nested parameters. An already bound formal
+      // can match only without changing its substitution.
+      if (std::none_of(domain.begin(), domain.end(), [&](const auto &actual) {
+        return bind_parameter(method, i, actual, context, true);
+      })) return true;
+    }
+    return false;
+  }
   static std::optional<Substitutions> factored_coverage_context(const CheckedMethod &method, const Type &view,
       const InputDomains &domains, const std::vector<Type> &retained) {
     if (variadic(method) || method.retained_types.size() != retained.size() ||
@@ -4873,6 +4891,9 @@ class ScalarChecker {
       if (method.family && !lexical_methods_.contains(method.source) && declarations.insert(*method.family).second)
         for (const auto &declaration : program_.families[*method.family].declarations) contracts.push_back(&declaration);
     }
+    // Remove only proven non-overlaps from the projection proof. The
+    // coverage callbacks still select and check against the original family.
+    std::erase_if(contracts, [&](const auto *contract) { return disjoint_input_domain(*contract, domains, retained); });
     if (contracts.empty()) return plan;
     std::vector<Substitutions> contexts;
     for (const auto *contract : contracts) {

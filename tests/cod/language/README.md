@@ -1,6 +1,6 @@
 # CoD source compiler validation
 
-Reference revision: 453 · Recorded: 2026-11-18 America/Los_Angeles.
+Reference revision: 454 · Recorded: 2026-11-18 America/Los_Angeles.
 
 ## Design authority
 
@@ -168,6 +168,8 @@ Type queries of immediate full scopes use the ordinary declaration checks for kn
 A callable family containing one method with fixed inputs can cover its view without enumerating all input tuples. Each per-input domain must prepare to the fixed formal, including every associated declaration. Expected-result evidence and type-only lexical queries stay fixed per materialization; mutable analysis/emission hints cannot change the proof or callable identity. Distinct result/query contexts retain their own checked implementations.
 
 One input plan can project a scalar coordinate when every candidate and applicable declaration has the same concrete formal there and every admitted actual type prepares independently to it. The planner resolves enclosing type bindings from the selected lexical context before comparing formals. Distinct formals and unresolved generic binder positions retain their original input types, including repeated binders. Access comes from the callable view for every checked combination. When generic candidates or differing parameter qualifiers can change dominance between exact and lossless matching, the plan checks both phases using a representative where any shared input forces widening. If a shared formal always requires widening, the single representative already covers that phase. Each remaining combination checks selection, generic substitutions, declared failures, result and body obligations.
+
+The projection proof excludes a contract whose arity or one established scalar parameter rules out every admitted input tuple, including lossless preparation. Ordinary selection, declared failures and result validation still use the full family for each checked tuple. This permits a wide view to share coverage even when the family contains other arities or scalar domains.
 
 The checked callable retains the distinguishing input positions and, when needed, the shared widening decision. Invocation and native conversions use all actual input types. Complete inferred signatures, declaration-only inspection and named or symbolic value construction share this plan. Source and native fixtures compare projected views against direct calls across both selection phases, repeated binders, mixed narrower inputs, module interpretations, delayed invocation and callee preparation before operand rebinding. The explicit native method set stays finite across supported widths and runtime recursion depths.
 
