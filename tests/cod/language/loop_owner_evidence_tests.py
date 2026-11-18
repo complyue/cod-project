@@ -9,6 +9,13 @@ TAG = ('func tag(ref a:const T in O,ref b:const T in O)->bool where {T,owner O}{
        'func tag(ref a:const T in O,ref b:const T in P)->i64 where {T,owner O,owner P}{return 0;}')
 CODE = 'func code(value:bool)->u64{return 1u64;}func code(value:i64)->u64{return 2u64;}'
 BASE = IO + TAG + CODE
+
+
+def through_iteration(body):
+    return BASE + ('func inspect(ref control:const i64 in O) where {owner O}{return {{' + body + '}};}'
+                   'func project(){for(i in 0..1){return inspect(i);};}' + OUT('code(project())'))
+
+
 runner.CASES = {
     'index_supplies_result': (BASE + 'func project(){for(i in 0..1){return tag(i,i);};}'
         + OUT('code(project())'), 0, '1\n', ''),
@@ -18,12 +25,9 @@ runner.CASES = {
         'for(i in 0..1){return tag(input,i);};}val slot<-4;' + OUT('code(project(slot))'), 0, '2\n', ''),
     'nested_controls_differ': (BASE + 'func project(){for(i in 0..1){for(j in 0..1){return tag(i,j);};};}'
         + OUT('code(project())'), 0, '2\n', ''),
-    'full_scope_local_differs': (BASE + 'func project(){for(i in 0..1){{val local<-1;return tag(i,local);}};}'
-        + OUT('code(project())'), 0, '2\n', ''),
-    'alias_preserves_control_owner': (BASE + 'func project(){for(i in 0..1){{ref selected=i;return tag(i,selected);}};}'
-        + OUT('code(project())'), 0, '1\n', ''),
-    'copied_control_has_local_owner': (BASE + 'func project(){for(i in 0..1){{val selected<-i;return tag(i,selected);}};}'
-        + OUT('code(project())'), 0, '2\n', ''),
+    'full_scope_local_differs': (through_iteration('val local<-1;return tag(control,local);'), 0, '2\n', ''),
+    'borrowed_control_keeps_owner': (through_iteration('ref selected=control;return tag(control,selected);'), 0, '1\n', ''),
+    'copied_control_has_local_owner': (through_iteration('val selected<-control;return tag(control,selected);'), 0, '2\n', ''),
     'fold_controls_share_owner': (BASE + 'func project(){fold(i in 0..1,sum=0){return tag(i,sum);};}'
         + OUT('code(project())'), 0, '1\n', ''),
     'heterogeneous_fold_controls_share_owner': (IO + CODE +
@@ -47,10 +51,10 @@ runner.CASES = {
     'anonymous_control_anchor': (BASE + 'func selected=func(){for(i in 0..1){return tag(i,i);};};'
         + OUT('code(selected())'), 0, '1\n', ''),
     'retained_control_query': (BASE + 'func factory(){for(i in 0..1){return {{'
-        'func inspect(){val value<-make local typeof(tag(i,i)){true};return value;};inspect}};};}'
+        'func inspect(){val value<-make local typeof(tag(i,i)){true};return value;};return inspect;}};};}'
         'func selected=factory();' + OUT('code(selected())'), 0, '1\n', ''),
     'retained_nested_control_query': (BASE + 'func factory(){for(i in 0..1){for(j in 0..1){return {{'
-        'func inspect(){val value<-make local typeof(tag(i,j)){0};return value;};inspect}};};};}'
+        'func inspect(){val value<-make local typeof(tag(i,j)){0};return value;};return inspect;}};};};}'
         'func selected=factory();' + OUT('code(selected())'), 0, '2\n', ''),
     'selected_borrow_preserves_owner': (BASE +
         'func first(ref a:const i64 in A,ref b:const i64 in B)->ref const i64 in A where {owner A,owner B}{return a;}'

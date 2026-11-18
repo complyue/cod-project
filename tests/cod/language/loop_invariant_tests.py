@@ -36,12 +36,15 @@ runner.CASES = {
     'nested_rebinding_invalidates_outer': (SETUP + 'for(i in 0u64..2u64){p;for(j in 0u64..1u64){p=null;};};', 2, '', 'requires a covering catch'),
     'swap_invalidates': (SETUP + 'ptr q:u64=null in here;for(i in 0u64..2u64){p;p<=>q;};', 2, '', 'requires a covering catch'),
     'caller_binding_method_invalidates': (SWAP + SETUP + 'ptr q:u64=null in here;for(i in 0u64..2u64){p;(<=>)(p,q);};', 2, '', 'requires a covering catch'),
-    'scope_cleanup_invalidates': (SETUP + 'for(i in 0u64..2u64){p;{{defer {p=null;};}};};', 2, '', 'requires a covering catch'),
+    'inner_cleanup_rebind_keeps_outer_target': (IO + SETUP + 'for(i in 0u64..2u64){' + OUT('p') +
+        '{{defer{p=null;};}};};', 0, '7\n7\n', ''),
     'finally_invalidates': (SETUP + 'for(i in 0u64..2u64){p;try{}finally{p=null;{}};};', 2, '', 'requires a covering catch'),
     'covered_rebinding_failure': (IO + NPE + SETUP + 'try{for(i in 0u64..2u64){' + OUT('p') + 'p=null;};}catch(e:const NullPointerException){' + OUT('4u64') + '};', 0, '7\n4\n', ''),
     'single_iteration_rebind': (IO + SETUP + 'for(i in 0u64..1u64){' + OUT('p') + 'p=null;};', 0, '7\n', ''),
     'single_iteration_deferred_guard': (IO + SWAP.replace('ptr a:', 'ref a:').replace('ptr b:', 'ref b:')
-        + SETUP + 'val y<-8u64;ptr q=y;{{for(i in 0u64..1u64){p=x;defer (<=>)(p,q);};}};' + OUT('p') + OUT('q'), 0, '8\n7\n', ''),
+        + 'ref x:u64=7u64;ptr p:u64=null in here;p=x;val y<-8u64;ptr q=y;{{defer{'
+        + OUT('p') + OUT('q') + '};for(i in 0u64..1u64){p=x;defer (<=>)(p,q);};}};'
+        + OUT('p') + OUT('q'), 0, '8\n7\n7\n8\n', ''),
     'repeated_mutation_has_no_saved_guard': (SWAP.replace('ptr a:', 'ref a:').replace('ptr b:', 'ref b:')
         + SETUP + 'val y<-8u64;ptr q=y;for(i in 0u64..2u64){p=x;defer (<=>)(p,q);p=null;};', 2, '', 'proven non-null target'),
     'alias_read_cannot_hide_mutation': (SETUP + 'var selected->p;for(i in 0u64..2u64){selected;p=null;};', 2, '', 'requires a covering catch'),
