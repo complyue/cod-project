@@ -1,17 +1,14 @@
 # Static checks for deferred execution
 
-Design revision: 3 · Recorded: 2026-11-17 · Status: pending human whole-file/value-path review.
+Design revision: 3 · Recorded: 2026-11-17 · Status: confirmed bounded static-check implementation contract and value path; implementation availability is separate.
 
 ## Design authority
 
-- **Current capture-review reference:** [K-REPLACEMENT-EFFECTS-20261117](../CHANGELOG.md#k-replacement-effects-20261117) keeps the separate D-18 value-input qualification current. This file changes only review references; its semantic revision, governing value paths, constraints and acceptance are unchanged. The registry owns the current review scope.
-
-- **Current source decision and review:** [H-FULL-SCOPE-CALLABLE-20261117](../CHANGELOG.md#h-full-scope-callable-20261117)/[K-FULL-SCOPE-CALLABLE-20261117](../CHANGELOG.md#k-full-scope-callable-20261117) confirms full ordinary-callable equivalence everywhere, including ordinary captured values and local returns; explicit full scopes own independent defer sequences. This r3 remains pending whole-file/value-path review. The source decision does not adopt this complete checking mechanism or the separate D-18 value-input contract.
-- **Registry and coverage:** [D-17-DEFER-CHECKS](DesignAuthorityRegistry.md#d-17-defer-checks), revision 3, this whole file. Candidate P-561–P-563; [K-798](../CHANGELOG.md#k-798) records the proposal. This document is not a delegated implementation contract before human confirmation.
-- **Candidate value path:** C-63 → C-10 through H-267-confirmed P-235 preserves explicit typed failure and cleanup responsibility. P-236 retains the bounded D-17 preservation baseline. Candidate P-561 connects this bounded source check through that existing value path to charter §§2/3.3/4.3/6.3/8/12: visible registration has a checkable execution context, valid helpers retain their own cleanup, and source errors are diagnosed before execution without adding runtime state.
-- **Human-confirmed baseline:** [H-552](../CHANGELOG.md#h-552) selects rejection of nested defer declarations; [H-356](../CHANGELOG.md#h-356) fixes eager call preparation versus delayed blocks; [H-371](../CHANGELOG.md#h-371) requires explicit scopes for deferred-block declarations/effects; [H-295](../CHANGELOG.md#h-295) makes typeof nonexecuting. These are source confirmations, not confirmation of this new bounded mechanism/value path.
-- **Dependencies and invariants:** P-562 requires D-10’s lookup/call permissions, D-17’s source contexts, D-14’s query/access/owner rules, D-18’s independent callable bodies, D-26’s diagnostics and D-16 compatibility. C-65 storage/lifetime rules are dependencies, not a new value grant. Preserve ordinary lexical lookup, func/proc permissions, actual owners, explicit returns, successful registration and intrinsic cleanup. Dependencies grant no new source permission.
-- **Acceptance and exclusions:** The boundary table, source-check contract and acceptance cases below govern qualification. P-563 excludes queue/FIFO/aggregate implementation, completed-pass checked coverage, return inspection, module scheduling, new capture/region storage and broader query admission. Existing qualifications and the separate D-18 value-input review remain unchanged. No prior human confirmation or continuity assessment qualifies this first proposal.
+- **Registry and qualification:** [D-17-DEFER-CHECKS](DesignAuthorityRegistry.md#d-17-defer-checks), semantic revision 3, this whole bounded contract and P-561–P-563 are confirmed by [H-BOUNDED-IMPLEMENTATION-ADOPTION-20261117](../CHANGELOG.md#h-bounded-implementation-adoption-20261117). [K-BOUNDED-IMPLEMENTATION-ADOPTION-20261117](../CHANGELOG.md#k-bounded-implementation-adoption-20261117) records authority/status updates without changing the reviewed behavior or acceptance.
+- **Value path:** C-63 → C-10 through H-267/P-235/P-236, with the confirmed bounded P-561 path to charter §§2/3.3/4.3/6.3/8/12. Visible registration and independent callable cleanup make resource responsibility statically checkable without runtime registration state.
+- **Human-confirmed baseline:** H-552 supplies the same-drain prohibition; H-FULL-SCOPE-CALLABLE-20261117 supplies ordinary callable full scopes; H-356 distinguishes eager call preparation from delayed blocks; H-371 preserves declaration/effect boundaries; H-295 makes typeof nonexecuting. The adoption covers the combined r3 checking contract, dependencies, acceptance and exclusions below.
+- **Dependencies and invariants:** P-562 requires ordinary lookup/call permissions, access/owner validity, independent callable bodies and honest source diagnostics. Preserve explicit returns, successful registrations, intrinsic cleanup and D-16. The separately qualified D-18 ordinary value-input profile does not supply new borrow proofs or full-scope control lowering by dependency alone.
+- **Acceptance and exclusions:** P-563 and the cases below bound the delegation. Complete FIFO/aggregate/checked-pass implementation, return inspection, module/generator scheduling, full-scope control/capture lowering, new capture/region storage and broader query admission remain independently scoped. Current compiler support is separate from qualification. Apply [AGENTS.md's semantic-fidelity rule](../AGENTS.md#semantic-fidelity-and-implementation-obstacles) when implementation encounters a material obstacle; do not replace the confirmed semantics with an implementation compromise.
 
 ## Source rule and execution boundaries
 
@@ -71,7 +68,7 @@ The check preserves intrinsic owner release and effect restoration. It establish
 
 | Approach | Consequence |
 | --- | --- |
-| Proposed source-context check with eager-preparation and callable boundaries | Preserves H-356 timing and independent helper cleanup while rejecting source declarations in deferred execution. No runtime state is added. |
+| Selected source-context check with eager-preparation and callable boundaries | Preserves H-356 timing and independent helper cleanup while rejecting source declarations in deferred execution. No runtime state is added. |
 | Treat every syntactic descendant of a defer token as delayed | Rejects ordinary eager-preparation registrations and loses H-356’s execution distinction. |
 | Give an explicit full scope its own registration/drain context | Selected cleanup boundary: preserves independent scope cleanup without appending to the outer draining sequence. |
 | Carry the outer prohibition through every explicit full scope | Rejects independent scope cleanup that the user explicitly requires. |
@@ -105,4 +102,4 @@ Acceptance of this checker requires the correct cleanup-boundary distinction, no
 
 ## Qualification boundary
 
-Whole-file review must cover the candidate value path, this structural source profile, its eager-preparation/callable/query boundaries, diagnostic obligations and acceptance. It does not qualify the independent queued-error/FIFO, checked-pass, return-inspection, aggregate, module-startup, generator or ordinary capture mechanisms. Compiler implementation of this bounded contract remains pending until that review is recorded in the registry.
+The qualified contract covers the stated value path, structural source profile, eager-preparation/callable/query boundaries, diagnostics and acceptance. It does not qualify independent queued-error/FIFO, checked-pass, return-inspection, aggregate, module-startup, generator or full ordinary-callable control/capture lowering. The D-18 ordinary value-input profile has its own bounded qualification. Implement within these contracts, preserve their exclusions and report current compiler availability accurately.
