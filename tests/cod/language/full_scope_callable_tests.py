@@ -5,6 +5,9 @@ import foundation_tests as runner
 
 IO = 'using symbol "std:io" @print;'
 BASE = 'func one()->const u64{return 1u64;}func two()->const u64{return 2u64;}'
+IDENTITY = 'func identity(x:T)->const T where T{return x;}'
+APPLY = 'func apply(f:func(T)->const T,x:T)->const T where T{return f(x);}'
+FIXED = 'func fixed(f:func(u64)->const u64,x:u64)->const u64{return f(x);}'
 
 
 def query(body):
@@ -27,9 +30,32 @@ runner.CASES = {
     'nested_cleanup': (IO+'proc run()->void{defer{behave @print(4u64);};{{defer{behave @print(3u64);};{{defer{behave @print(2u64);};behave @print(1u64);}};}};}run();', 0, '1\n2\n3\n4\n', ''),
     'argument_order': (IO+'func sum(val a:u64,val b:u64)->u64{return a+b;}proc run()->void{val n<-1u64;behave @print(sum({{n<-2u64;return n;}},n));behave @print(n);}run();', 0, '3\n1\n', ''),
     'generic_value_inputs': (IO+'func run(val x:T)->const T where T{return {{x<-x+x;return x;}};}behave @print(run(3u64));behave @print(run(4));behave @print(run(2f32));', 0, '6\n8\n4\n', ''),
+    'scope_callable_argument_from_later_operand': (IO + IDENTITY + APPLY +
+        'func run(x:T) where T{return apply({{return identity;}},x);}'
+        'behave @print(run(7u64));behave @print(run(true));', 0, '7\ntrue\n', ''),
+    'scope_callable_argument_from_view': (IO + IDENTITY + FIXED +
+        'func invoke=fixed;behave @print(invoke({{return identity;}},9u64));', 0, '9\n', ''),
+    'nested_scope_callable_argument': (IO + IDENTITY + FIXED +
+        'behave @print(fixed({{return {{return identity;}};}},13u64));', 0, '13\n', ''),
+    'scope_callable_argument_cleanup_order': (IO + IDENTITY + FIXED +
+        'proc observe(n:u64)->void{behave @print(n);}'
+        'behave @print(fixed({{defer observe(2u64);observe(1u64);return identity;}},{observe(3u64);17u64}));',
+        0, '1\n2\n3\n17\n', ''),
+    'scope_callable_argument_cannot_guess_overload': (IDENTITY +
+        'func choose(f:func(u64)->const u64)->u64{return f(7u64);}'
+        'func choose(f:func(bool)->const bool)->u64{return 8u64;}'
+        'choose({{return identity;}});', 2, '', 'unproved callable result'),
+    'scope_cannot_use_callable_receiver': (IDENTITY +
+        'func result:func(u64)->const u64={{return identity;}};', 2, '', 'unproved callable result'),
     'complete_value_input': (IO+BASE+'proc run()->void{func saved=one;{{saved<-two;behave @print(saved());}};behave @print(saved());}run();', 0, '2\n1\n', ''),
     'returned_complete_value': (IO+'func factory(val seed:u64)->func()->const u64{return {{seed<-seed+1u64;return func[seed]()->const u64{return seed;};}};}func saved=factory(4u64);behave @print(saved());behave @print(saved());', 0, '5\n5\n', ''),
     'query_has_no_effects': (IO+'proc run()->void{val n<-make local u64;val result<-make local typeof({{behave @print(n);return 7u64;}}){8u64};behave @print(result);}run();', 0, '8\n', ''),
+    'query_contextual_scope_argument_has_no_effects': (IO + IDENTITY + APPLY +
+        'val result<-make local typeof(apply({{behave @print(98u64);return identity;}},1u64)){15u64};'
+        'behave @print(result);', 0, '15\n', ''),
+    'query_validates_contextual_scope_argument': (IDENTITY + FIXED +
+        'const val frozen<-7u64;val result<-make local typeof(fixed({{frozen<-1u64;return identity;}},1u64));',
+        2, '', 'readonly'),
     'query_readonly_write': ('const val n<-1u64;val result<-make local typeof({{n<-2u64;return n;}}){3u64};', 2, '', 'readonly'),
     'query_function_effect': (IO+'func run()->void{val n<-make local typeof({{behave @print(1u64);return 2u64;}}){3u64};}run();', 2, '', 'function cannot invoke a dynamic procedure'),
     'query_function_direct_procedure': ('proc action()->void{}func run()->void{val n<-make local typeof({{action();return 2u64;}}){3u64};}run();', 2, '', 'function cannot invoke a procedure'),

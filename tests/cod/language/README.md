@@ -1,6 +1,6 @@
 # CoD source compiler validation
 
-Reference revision: 458 · Recorded: 2026-11-18 America/Los_Angeles.
+Reference revision: 459 · Recorded: 2026-11-18 America/Los_Angeles.
 
 ## Design authority
 
@@ -144,6 +144,8 @@ D-21r15/H-375–H-378/P-333/P-337 preserves a callable’s selected interpretati
 Standalone double braces elaborate into an immediate ordinary anonymous callable with the enclosing func/proc permissions. Admitted scalar and complete callable value inputs have independent invocation-local storage. The current executable also transports exception bits through this path. Owner-qualified exception inputs remain to be implemented under [D-17](../../../design/ExceptionControl.md#exception-object-owners-and-release). Inner returns and cleanup affect that invocation; enclosing returns require an explicit outer return. A trailing expression supplies no result. Both defer-block spellings construct their contained full scope when cleanup reaches it. The checker and native emitter have no lexical full-scope fallback.
 
 Result inference distinguishes a binding's reference slot from independent capture eligibility and gives admitted value captures the invocation owner. Inferred full-scope queries validate source access and callable permissions without reading captures, requiring installed TLS bindings, realizing a callable or demanding executable callees. They inspect established nested signatures; ordinary annotated anonymous-callable signature queries retain their separate treatment. Unsupported source/evidence forms remain explicit proof gaps.
+
+An established callable argument signature or enclosing callable return contract can supply a missing callable-valued result of an immediate full scope. For example, an argument expecting `func(u64)->const u64` can receive `{{ return identity; }}` where `identity` is generic. Generic argument contracts can use independent evidence from later operands. Type queries check the same full-scope body without materializing the result. An independently inferred scope result participates in ordinary overload selection. A receiving variable's annotation cannot supply a scope result.
 
 The [full-scope source checks](full_scope_callable_tests.py) cover local returns, tail-result rejection, ordinary missing-return behavior, independent values and owner-selected result inference, nested cleanup, argument order, complete values/results, delayed capture, function/access rejection and nonexecuting queries. The [native fixture](full_scope_runtime_tests.py) injects capture-construction/entry-prefix and result-preparation failures, verifies no body entry after failed preparation, preserves enclosing values and checks exact image/record release. Counts and bytes are observations, not an allocation mandate or ABI.
 

@@ -6,6 +6,8 @@ import foundation_tests as runner
 IO = 'using symbol "std:io" @print;'
 NPE = 'using "std:exceptions" NullPointerException;'
 MISSING = 'using "std:exceptions" MissingReturnError;'
+SCOPE_RESULT = ('func identity(x:T)->const T where T{return x;}'
+                'func expose(){return {{return identity;}};}behave @print(expose()(14u64));')
 runner.CASES = {
  'typed_initializer_widens_return': (IO+'func f:func()->u64=func(){return 1u32;};behave @print(f());',0,'1\n',''),
  'copied_identity_retains_result': (IO+'func f:func()->u64=func(){return 1u32;};func g=f;func tag(x:u64)->u64{return 64u64;}behave @print(tag(g()));',0,'64\n',''),
@@ -21,6 +23,8 @@ runner.CASES = {
  'nested_complete_results': (IO+'func f:func()->func()->u64=func(){return func(){return 2u32;};};func g=f();behave @print(g());',0,'2\n',''),
  'explicit_callable_return_supplies_context': (IO+'func factory()->func()->u64{return func(){return 3u32;};}func f=factory();behave @print(f());',0,'3\n',''),
  'declared_callable_return_supplies_context': (IO+'func factory()->func()->u64;func factory(){return func(){return 4u32;};}func f=factory();behave @print(f());',0,'4\n',''),
+ 'declared_return_supplies_full_scope_result': (
+     IO+'func expose()->func(u64)->const u64;'+SCOPE_RESULT,0,'14\n',''),
  'generic_outer_result_context': (IO+'func factory(x:T)->func()->const T where T{return func(){return 5u32;};}func a=factory(1u64);func b=factory(1f64);behave @print(a());behave @print(b());',0,'5\n5\n',''),
  'generic_type_only_expected_context': (IO+'func factory(x:T)->func()->const T where T{func f:func()->const T=func(){return 6u32;};return f;}func a=factory(1u64);func b=factory(1f64);behave @print(a());behave @print(b());',0,'6\n6\n',''),
  'generic_context_preserves_downstream_dispatch': (IO+'func factory(x:T)->func()->const T where T{return func(){return 7u32;};}func tag(x:u64)->u64{return 64u64;}func tag(x:f64)->u64{return 640u64;}func a=factory(1u64);func b=factory(1f64);behave @print(tag(a()));behave @print(tag(b()));',0,'64\n640\n',''),

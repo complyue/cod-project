@@ -300,6 +300,7 @@ struct CheckedInstance {
   std::vector<std::optional<Type>> substitutions;
   size_t query_environment = 0;
   CheckedFrame frame;
+  bool result_supplied = false;
 };
 struct CheckedMethod {
   const Form *source = nullptr;
