@@ -5,6 +5,11 @@ import foundation_tests as runner
 
 IO = 'using symbol "std:io" @print;'
 MISSING = 'using "std:exceptions" MissingReturnError;'
+GUARDED_RESULT = ('using "std:exceptions" NullPointerException;'
+    'func sample_error()->const NullPointerException{ptr absent:u64=null in here;'
+    'try{absent;{}}catch(caught:const NullPointerException){return caught;};return sample_error();}'
+    'proc run(flag:bool,val e:NullPointerException)')
+GUARDED_CALLS = 'behave @print(run(true,sample_error()));behave @print(run(false,sample_error()));'
 runner.CASES = {
  'self_literal_anchor': (IO+'func sum(n:u64){if(n==0u64){return 0u64;}else{};return n+sum(n-1u64);}behave @print(sum(30u64));',0,'465\n',''),
  'self_reverse_anchor': (IO+'func sum(n:u64){if(n!=0u64){return n+sum(n-1u64);}else{};return 0u64;}behave @print(sum(30u64));',0,'465\n',''),
@@ -26,6 +31,15 @@ runner.CASES = {
  'two_reaching_arms_still_require_availability': (
      'func f(flag:bool)->u64{if(flag){val remaining<-7u64;}else{};return remaining;}f(false);',
      2,'','not available on every reaching path'),
+ 'try_continuation_supplies_later_return_evidence': (IO+GUARDED_RESULT+
+     '{try{if(flag){throw e;}else{};val n<-4294967296u64;{}}'
+     'catch(c:const NullPointerException){return 7u32;};return n;}'+GUARDED_CALLS,
+     0,'7\n4294967296\n',''),
+ 'catch_continuation_supplies_later_return_evidence': (IO+GUARDED_RESULT+
+     '{try{if(flag){throw e;}else{return 7u32;};}'
+     'catch(c:const NullPointerException){val n<-4294967296u64;{}}'
+     'finally{val suffix<-2u64;};return n+suffix;}'+GUARDED_CALLS,
+     0,'4294967298\n7\n',''),
  'numeric_cross_join': (IO+'func f(flag:bool){if(flag){return 16777217u32;}else{return 1f32;};}func tag(x:f64)->u64{return 64u64;}behave @print(tag(f(true)));behave @print(f(true));behave @print(f(false));',0,'64\n16777217\n1\n',''),
  'numeric_reverse_join': (IO+'func f(flag:bool){if(flag){return 1f32;}else{return 16777217u32;};}func tag(x:f64)->u64{return 64u64;}behave @print(tag(f(false)));behave @print(f(false));',0,'64\n16777217\n',''),
  'join_preserves_earlier_overflow': (IO+'func f(flag:bool){if(flag){return 4294967295u32+1u32;}else{return 1u64;};}f(true);',70,'','u32 addition overflow'),

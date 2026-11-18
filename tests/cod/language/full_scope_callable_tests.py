@@ -8,6 +8,9 @@ BASE = 'func one()->const u64{return 1u64;}func two()->const u64{return 2u64;}'
 IDENTITY = 'func identity(x:T)->const T where T{return x;}'
 APPLY = 'func apply(f:func(T)->const T,x:T)->const T where T{return f(x);}'
 FIXED = 'func fixed(f:func(u64)->const u64,x:u64)->const u64{return f(x);}'
+GUARDED_QUERY = ('using "std:exceptions" NullPointerException;val e<-make local NullPointerException;')
+GUARDED_TRY = ('try{if(true){throw e;}else{};val n<-4294967296u64;{}}'
+               'catch(c:const NullPointerException){return 7u32;}')
 
 
 def query(body):
@@ -68,6 +71,14 @@ runner.CASES = {
     'query_uses_continuing_arm': (IO +
         query('if(true){return 1u32;}else{val remaining<-4294967296u64;};return remaining;') + 'behave @print(result);',
         0, '4\n', ''),
+    'query_uses_continuing_try_arm': (IO + GUARDED_QUERY + query(GUARDED_TRY+';return n;') +
+        'behave @print(result);', 0, '4\n', ''),
+    'query_uses_continuing_catch_after_finally': (IO + GUARDED_QUERY +
+        query('try{if(true){throw e;}else{return 7u32;};}'
+              'catch(c:const NullPointerException){val n<-4294967296u64;{}}'
+              'finally{val suffix<-2u64;};return n+suffix;') + 'behave @print(result);', 0, '4\n', ''),
+    'query_finally_cannot_use_normal_only_declaration': (GUARDED_QUERY +
+        query(GUARDED_TRY+'finally{n;};return n;'), 2, '', 'typeof requires a known declaration or operand type'),
     'query_keeps_obligation_from_abrupt_condition': (IO +
         query('if({return 7u64;}){}else{};') + 'behave @print(result);', 0, '4\n', ''),
     'query_checks_arms_after_abrupt_condition': (query('if({return 7u64;}){val wrong:bool<-1u64;}else{};'),

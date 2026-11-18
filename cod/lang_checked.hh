@@ -4052,6 +4052,11 @@ class ScalarChecker {
     left.complete = left.complete && right.complete;
     return left;
   }
+  static TypeEvidenceState merge_reaching_evidence(TypeEvidenceState left, TypeEvidenceState right,
+                                                   bool left_exits, bool right_exits) {
+    if (left_exits && !right_exits) return merge_evidence(std::move(right), left, true);
+    return merge_evidence(std::move(left), right, right_exits && !left_exits);
+  }
   // Evidence only: no reads, captures, demands, storage or cleanup equations are created here.
   // Operand hints defer validation to ordered checking; required typeof queries validate their bounded source forms here.
   std::optional<Type> type_evidence(const Expression &expr, TypeEvidenceState &state, bool contextual = false,
@@ -4340,11 +4345,8 @@ class ScalarChecker {
       const auto yes = type_evidence(*expr.children[1], yes_state, contextual, expected, alternatives, expected_use);
       const auto no = type_evidence(*expr.children[2], no_state, contextual, expected, alternatives, expected_use);
       view = yes == Type::never ? no_state.value : no == Type::never ? yes_state.value : join_views(yes_state.value, no_state.value);
-      const bool yes_exits = yes == Type::never, no_exits = no == Type::never;
-      if (condition != Type::never && yes_exits != no_exits)
-        state = yes_exits ? merge_evidence(std::move(no_state), yes_state, true)
-                          : merge_evidence(std::move(yes_state), no_state, true);
-      else state = merge_evidence(std::move(yes_state), no_state);
+      state = condition == Type::never ? merge_evidence(std::move(yes_state), no_state) :
+          merge_reaching_evidence(std::move(yes_state), std::move(no_state), yes == Type::never, no == Type::never);
       if (condition == Type::never) return Type::never;
       if (yes == Type::never) return no;
       if (no == Type::never || yes == no) return yes;
@@ -4374,11 +4376,30 @@ class ScalarChecker {
       view = state.value;
       const auto body_state = state;
       const auto catch_entry = merge_evidence(before, body_state);
+      const bool guarded = expr.kind == K::try_scope;
+      const bool has_finalizer = guarded && expr.children.size() > 1 && expr.children.back()->kind == K::block;
+      std::optional<TypeEvidenceState> finalizer_entry;
       std::set<size_t> handled;
       for (size_t i = 1; i < expr.children.size(); ++i) {
         const auto &handler = *expr.children[i];
         if (handler.kind == K::block) {
+          auto &entry = finalizer_entry ? *finalizer_entry : state;
+          const auto cleanup = type_evidence(handler, entry);
+          if (cleanup == Type::never || !finalizer_entry) {
+            if (finalizer_entry) state = std::move(*finalizer_entry);
+            if (cleanup == Type::never) result = Type::never;
+            break;
+          }
+          // Checking the finalizer uses every incoming completion. Apply its
+          // effects to the normal paths separately without recording returns twice.
+          const bool required = state.required;
+          auto *returns = state.returns;
+          TypeEvidenceState::Returns projected_returns;
+          state.required = false;
+          if (returns) state.returns = &projected_returns;
           if (type_evidence(handler, state) == Type::never) result = Type::never;
+          state.required = required;
+          state.returns = returns;
           break;
         }
         auto caught = catch_evidence(handler, catch_entry, handled);
@@ -4397,10 +4418,14 @@ class ScalarChecker {
         const auto caught_view = caught.value;
         if (const auto outer = catch_entry.views.find(handler.text); outer != catch_entry.views.end()) caught.views[handler.text] = outer->second;
         else caught.views.erase(handler.text);
-        view = result == Type::never ? caught_view : type == Type::never ? view : join_views(view, caught_view);
-        state = merge_evidence(std::move(state), caught);
-        if (result == Type::never) result = type;
-        else if (type != Type::never && type != result) result.reset();
+        const bool prior_exits = result == Type::never, catch_exits = type == Type::never;
+        view = prior_exits ? caught_view : catch_exits ? view : join_views(view, caught_view);
+        if (finalizer_entry) *finalizer_entry = merge_evidence(std::move(*finalizer_entry), caught);
+        else if (has_finalizer && prior_exits != catch_exits) finalizer_entry = merge_evidence(state, caught);
+        state = guarded ? merge_reaching_evidence(std::move(state), std::move(caught), prior_exits, catch_exits) :
+            merge_evidence(std::move(state), caught);
+        if (prior_exits) result = type;
+        else if (!catch_exits && type != result) result.reset();
       }
       if (expr.kind == K::deferred) { state = before; return Type::void_type; }
       return result;
