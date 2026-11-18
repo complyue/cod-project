@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-17 — Include the immediate-borrow proof in full-scope review
+
+<a id="k-full-scope-immediate-borrow-20261117"></a>
+**K-FULL-SCOPE-IMMEDIATE-BORROW-20261117 — Close the profile’s uncovered dependency.** Agent revision after mainline’s engineering review of `f355223e163bdf110989268f61a9b7755ab2184b`: D-17r91→92/registry869→870 explicitly includes immediate ref/ptr input lifetime and transport in D-17-FULL-SCOPE/P-564–P-566’s pending whole-profile review. The adopted D-18 value-input contract supplies no authority for borrowed_target acceptance. Reusing ordinary borrowed parameters can preserve selected target/null, local reference-slot rebinding, readonly access, actual owners and cleanup without a general escaping environment; D-28 resolution/shared-owner constraints are an explicit dependency. Add positive/rejection acceptance and the local-reference-slot example; preserve C-63/C-65/C-73/C-75/C-84’s candidate charter §§2/3.2–3.3/4.3/6.3/8/12 path, H-FULL-SCOPE-CALLABLE-20261117’s fixed source semantics, D-16 and all existing bounded qualifications. Mainline reports faithful implementation feasible without a new source choice; this is engineering evidence, not human approval. General escaping borrowed views and declared-place capture remain separately pending under D-18-BORROW. No local code/build/tests; historical r91 remains at the cited commit and affected paths.
+
 ## 2026-11-17 — Review ordinary-callable lowering for full scopes
 
 <a id="k-full-scope-lowering-review-20261117"></a>
