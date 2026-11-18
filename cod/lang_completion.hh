@@ -403,6 +403,17 @@ public:
     }
     return result;
   }
+  static ConditionClauses boolean_conditions(const ConditionClauses &clauses) {
+    ConditionClauses result;
+    for (const auto &path : clauses) {
+      ConditionFacts boolean;
+      boolean.inputs = path.inputs;
+      boolean.payloads = path.payloads;
+      add_reaching_condition(result, std::move(boolean));
+      if (unconditional(result)) break;
+    }
+    return result;
+  }
   static BooleanValue unknown_boolean() { return {{false, {ConditionFacts{}}}, {true, {ConditionFacts{}}}}; }
   static BooleanValue boolean_payload(size_t place, std::optional<size_t> action = {}) {
     BooleanValue result;
@@ -426,7 +437,8 @@ public:
     return transform_boolean_conditions(value, [&](auto known) { known.append(conditions); return known; });
   }
   template <typename Resolve>
-  static ConditionClauses substitute_boolean_payloads(const ConditionClauses &clauses, const Resolve &resolve, bool closed) {
+  static ConditionClauses substitute_boolean_payloads(const ConditionClauses &clauses, const Resolve &resolve, bool closed,
+                                                      bool boolean_only = false) {
     ConditionClauses output;
     for (const auto &facts : clauses) {
       auto retained = facts;
@@ -438,7 +450,7 @@ public:
         const auto *value = resolve(payload.second);
         if (!value) continue;
         if (const auto known = value->find(truth); known != value->end())
-          substituted = conjoin_conditions(substituted, known->second);
+          substituted = conjoin_conditions(substituted, boolean_only ? boolean_conditions(known->second) : known->second);
         else substituted.clear();
       }
       for (const auto &known : substituted) add_condition(output, known);
@@ -937,6 +949,8 @@ public:
     bool guarded_pending_failure = false;
     // Necessary immutable input facts for reaching this queue completion.
     ConditionClauses reaching{ConditionFacts{}};
+    // Necessary Boolean observations for this completion, relative to action entry.
+    ConditionClauses action_reaching{ConditionFacts{}};
     void enter_initialization(size_t frame) {
       selections.enter_initialization(frame);
       returned.enter_initialization(frame);
@@ -1059,6 +1073,14 @@ private:
     result.declared_failures.insert(second.declared_failures.begin(), second.declared_failures.end());
     result.needs_checked_cleanup_proof = first.needs_checked_cleanup_proof || second.needs_checked_cleanup_proof;
     result.guarded_pending_failure = first.guarded_pending_failure || second.guarded_pending_failure;
+    if (!unconditional(second.action_reaching)) {
+      const auto unknown = unknown_boolean();
+      const auto lifted = substitute_boolean_payloads(second.action_reaching, [&](size_t place) -> const BooleanValue * {
+        if (const auto found = first.booleans.find(place); found != first.booleans.end()) return &found->second;
+        return first.payload_writes.contains(place) ? &unknown : nullptr;
+      }, false, true);
+      result.action_reaching = intersect_reaching(first.action_reaching, lifted);
+    }
     auto next = second;
     next.returned.substitute(first.selections);
     next.resolve_conditions([&](size_t binding) { return first.selections.substitute({{}, {}, {binding}}); });
@@ -1107,7 +1129,9 @@ private:
     const auto previous_selections = known.selections;
     const auto previous_symbols = known.symbols;
     const auto previous_reaching = known.reaching;
+    const auto previous_action_reaching = known.action_reaching;
     for (const auto &path : effects.reaching) add_reaching_condition(known.reaching, path);
+    for (const auto &path : effects.action_reaching) add_reaching_condition(known.action_reaching, path);
     known.symbols.insert(effects.symbols.begin(), effects.symbols.end());
     known.payload_writes.insert(effects.payload_writes.begin(), effects.payload_writes.end());
     known.declared_failures.insert(effects.declared_failures.begin(), effects.declared_failures.end());
@@ -1140,7 +1164,7 @@ private:
         previous_selections != known.selections || previous_symbols != known.symbols || previous_payload_writes != known.payload_writes ||
         previous_present != known.present || previous_booleans != known.booleans || previous_declared != known.declared_failures ||
         previous_checked_cleanup != known.needs_checked_cleanup_proof || previous_guarded_failure != known.guarded_pending_failure ||
-        previous_reaching != known.reaching;
+        previous_reaching != known.reaching || previous_action_reaching != known.action_reaching;
   }
 public:
   void observe_reference(const BooleanValue &observations) {
@@ -1274,6 +1298,7 @@ public:
                 ? ExceptionFacts::arrival().restricted({incoming.reason - 3}) : ExceptionFacts{};
             invoked.transform_values([&](const auto &value) { return value.enter(*node.action, arrival); });
             invoked.transform_conditions([&](const auto &clauses) { return enter_conditions(clauses, *node.action); });
+            invoked.action_reaching = enter_conditions(invoked.action_reaching, *node.action);
             for (const auto &[value, previous] : require(node.previous.front(), intermediate))
               changed = merge(result.outcomes, value, compose(invoked, previous)) || changed;
           }

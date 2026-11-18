@@ -3557,14 +3557,6 @@ class ScalarChecker {
       if (path.exceptions.empty()) inputs.push_back(path.completion);
       else for (const auto category : path.exceptions.possibilities()) inputs.push_back({3 + category, path.completion.returned});
       for (const auto input : inputs) for (const auto &[encoded, effects] : cleanup_.apply(queue, input)) {
-        if (proving_ && validating_) {
-          const bool checked_body_failure = input.reason >= 3 &&
-              (exception_categories.at(input.reason - 3).checked || !flow.declared.empty());
-          const bool guards_checked_body = effects.guarded_pending_failure &&
-              (path.immediate_scope_failure || (checked_body_failure && checking_method_ && checking_method_->source->implicit_scope));
-          if (effects.needs_checked_cleanup_proof || guards_checked_body)
-            implementation_gap(path.at, "checked failures involving deferred execution require coverage within the owning pass");
-        }
         declared.insert(effects.declared_failures.begin(), effects.declared_failures.end());
         const auto completion = Completion::from(encoded);
         auto state = path.state;
@@ -3604,6 +3596,18 @@ class ScalarChecker {
           }
           return &found->second;
         };
+        if (effects.declared_failures.empty() && !CleanupEquations::unconditional(effects.action_reaching)) {
+          const auto reaching = CleanupEquations::substitute_boolean_payloads(effects.action_reaching, resolve_boolean, false, true);
+          if (CleanupEquations::conjoin_conditions(reaching, CleanupEquations::boolean_conditions(path_conditions(state))).empty()) continue;
+        }
+        if (proving_ && validating_) {
+          const bool checked_body_failure = input.reason >= 3 &&
+              (exception_categories.at(input.reason - 3).checked || !flow.declared.empty());
+          const bool guards_checked_body = effects.guarded_pending_failure &&
+              (path.immediate_scope_failure || (checked_body_failure && checking_method_ && checking_method_->source->implicit_scope));
+          if (effects.needs_checked_cleanup_proof || guards_checked_body)
+            implementation_gap(path.at, "checked failures involving deferred execution require coverage within the owning pass");
+        }
         applied.transform_conditions([&](const auto &clauses) {
           return CleanupEquations::substitute_boolean_payloads(clauses, resolve_boolean, true);
         });
@@ -9151,6 +9155,7 @@ class ScalarChecker {
             const auto queue = path.state.input_facts.at(input).queues.at(cleanup_scope_);
             const auto selected = std::uint64_t{1} << input;
             CleanupEquations::Effects effects{{}, path.state.input_facts.at(input).initialized, path.state.returned, path.state.input_facts.at(input).selections};
+            effects.action_reaching = CleanupEquations::boolean_conditions(path_conditions(path.state));
             for (const auto place : path.state.available) if (!effects.initialized.contains(place)) {
               auto missing = missing_initialization(path.state, place);
               if (missing != CleanupEquations::ConditionClauses{CleanupEquations::ConditionFacts{}})

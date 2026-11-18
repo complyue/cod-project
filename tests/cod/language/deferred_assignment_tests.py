@@ -61,6 +61,10 @@ for spelling in ('call', 'intrinsic'):
             +OUT('7')+'}catch(e){'+OUT('99')+'};',ERRORS),0,'7\n','[-Wmissing-return]'),
         'clear': (assignment_program('val a<-1;ptr p=a;',defer('=','p','null'),OUT('(p is null)')),0,'true\n',''),
         'restore': (assignment_program('val a<-7;ptr p:i64=null in here;',defer('=','p','a'),OUT('p')),0,'7\n',''),
+        'restore_observer_armed_before_registration': (IO+'proc run()->void{val a<-7;ptr p:i64=null in here;val ready<-true;'
+            'defer{if(ready){'+OUT('p')+'}else{};};'+defer('=','p','a')+'}run();',2,'',"checked exception 'NullPointerException'"),
+        'observer_disarmed_during_cleanup': (IO+'proc run()->void{ptr p:i64=null in here;val ready<-false;'
+            'defer{if(ready){'+OUT('p')+'}else{};};'+defer('<-','ready','false')+'ready<-true;}run();',0,'',''),
         'skipped': (IO+'ref a:i64=1;{{if(false){'+defer('<-','a','7')+'}else{};}};'+OUT('a'),0,'1\n',''),
         'loop_records': (IO+'ref a:i64=9;{{for(i in 0..3){'+defer('<-','a','i')+'};'+OUT('a')+'}};'+OUT('a'),0,'9\n0\n',''),
         'pending_return': (IO+'proc run()->i64{val a<-1;defer{'+OUT('a')+'};'+defer('<-','a','7')+'return a;}'+OUT('run()'),0,'7\n1\n',''),
