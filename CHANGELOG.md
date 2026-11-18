@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-18 — Select the cause before braced exception fields
+
+<a id="h-braced-cause-20261118"></a>
+**H-BRACED-CAUSE-20261118.** The project user in [the design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-18 America/Los_Angeles, confirms “`from cause` 只有写在 {} 之前一种语法，其它都从设计中删除。” D-17r117/D-22r51/registry907 settle braced constructing throw and normal make: evaluate a named or effectful cause once before reserving the object and running any fields. This supersedes the trailing braced spelling and its open admission question at `91ebd79938389b59fa23caf57ff34f36bb0493b2:design/ExceptionControl.md`, “Exception construction, throw and rethrow”. Parenthesized constructors and propagation forms are outside this syntax decision. H-EXCEPTION-CAUSE-HANDOFF-20261118 governs ownership on publication. No native implementation qualification follows.
+
+## 2026-11-18 — Type membership guards for abstract targets
+
+<a id="h-isa-20261118"></a>
+**H-ISA-20261118.** The project user in the [isa design discussion](codex://threads/01a1eeed-9421-7721-b2a0-67a830f3b5c5), recorded 2026-11-18 America/Los_Angeles, confirmed “`isa` 就按这个口径定” and specifically requested the successful ptr test’s non-null guarantee and invalidation of the old type proof after rebinding. D-10r205, “Type membership and branch refinement”, and registry906 record the source contract. P-587/P-588 record its proposed derivation and existing dependencies. Native representation and implementation qualification remain open.
+
 ## 2026-11-18 — Best-effort reporting on memory exhaustion
 
 <a id="h-oom-best-effort-20261118"></a>

@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 204 · Recorded: 2026-11-18 · Phase: language/application co-design.
+Design revision: 205 · Recorded: 2026-11-18 · Phase: language/application co-design.
 
 ## Design authority
+
+- **Type membership and branch refinement.** [H-ISA-20261118](../CHANGELOG.md#h-isa-20261118) confirms the [`isa` source rules](#type-membership-and-branch-refinement) at r205. [D-10-ISA](DesignAuthorityRegistry.md#d-10-isa), P-587/P-588, connects explicit typed intent and reference safety (C-10/C-65) to charter §§3.3/4.3/6.3/8.1. Acceptance covers a nullable target, early exit, rebinding and an independently retained reference. Owner, access and initialization checks still apply. Runtime evidence transport and compiler qualification remain open.
 
 - **Trailing callback failure checking.** [H-DOUBLE-BRACE-THROWS-20261118](../CHANGELOG.md#h-double-brace-throws-20261118) confirms the checked interface in [D-10-TRAILING-CALLBACK](DesignAuthorityRegistry.md#d-10-trailing-callback), r204. P-567–P-569 connect a readable callback body to its independently selected signature under charter §§3.3/6.3/8. Check the body against the callback parameter’s declared failures, including an empty checked set. Selection and ordinary caller obligations remain fixed. Examples below give acceptance. Full trailing-callback implementation qualification remains pending.
 
@@ -760,6 +762,37 @@ H-453 selects `expression : Type` for explicit conversion/type assertion. It is 
 
 Conversion produces a value through an admitted conversion; assertion checks whether an existing value/view satisfies the requested type. Once the assertion path is selected, it invokes no constructor, user conversion, payload copy, graph transfer or method-body probe to make the check pass. Its result retains the value or selected target, actual type identity, owner/locator and permitted lifetime/access. A narrowed reference view is not a new object. Ordinary initialization/passage rules still govern how the surrounding expression receives that result.
 
+#### Type membership and branch refinement
+
+`x isa T` is a built-in `bool` predicate. Resolve T statically, including a bound type parameter. Evaluate x once. Test its actual type, or the selected target’s type for a ref or ptr, against T using the same nominal membership and visible conformance relations as a [nonnumeric assertion](#nonnumeric-assertion-contract) in the selected fused world. An abstract T accepts its conforming instances. A mismatch yields false, including a statically provable mismatch such as `7u32 isa u64`. No numeric conversion takes place. Folding a known answer preserves operand effects and failures. An unresolved test requires sufficient runtime type evidence.
+
+For `ptr p:Entity in O`, null matches no target type. **A successful `p isa Node` proves both that p is non-null and that its selected target is a Node.** The compiler makes both facts available wherever control flow establishes that result. With Entity and Node declared as in the assertion example below:
+
+```cod
+func count_or_zero(ptr p:Entity in O) -> u64 where {const owner O} {
+    if (!(p isa Node)) { return 0u64; }
+    return p.count;
+}
+```
+
+A false result excludes Node for that selection. A nullable p might still be null or select another Entity. Inferring a particular alternative requires evidence that it is the only possibility on that path. At a join, a use requires the relevant facts on every reaching path.
+
+**Rebinding a ref or ptr slot invalidates the old target proof for subsequent reads of that slot.** This also applies when an intervening operation can rebind it through a declared place alias. A write to an ordinary payload field leaves the selection intact. A separately bound reference to the tested target keeps its own evidence for as long as its owner is live:
+
+```cod
+func previous_count(ptr p:Entity in O, ptr other:Entity in O) -> u64 where {owner O} {
+    if (p isa Node) {
+        ref saved:Node in O = p;
+        p = other;
+        # p.count would reject here: other may be null or select a different type.
+        return saved.count;
+    }
+    return 0u64;
+}
+```
+
+The guard preserves owner, access, initialization obligations and the declared binding mode. It grants no ownership transfer or lifetime extension. The predicate takes a type operand; `p is q` and `p is null` remain target-identity tests. The examples specify source acceptance. Compiler and native support are tracked separately.
+
 #### Nonnumeric assertion contract
 
 In this design example, both concrete types conform to Entity, and the source form is not a claim of parser support:
@@ -787,7 +820,7 @@ D-26's distinction between known mismatch and unavailable interpretation remains
 
 Callable, generic and aggregate targets use their own admitted compatibility rules; this operator does not create new covariance or structural conformance. A callable-view check cannot invoke a target as a probe, discard required origin signatures, invent an adapter/default capture or bypass native coverage. Detailed callable-view/type-context admission remains separate from H-467's failure classification. Runtime type-valued expression grammar/staging is also not selected by this decision.
 
-**Nullability boundary:** `p : ref Node in O` requires an already established non-null fact, for example from `assert p is not null`. The type assertion does not discharge that separate obligation by throwing on null. Without the fact, reject the requested ref view. An admitted nullable-target assertion preserves null when the destination accepts absence and owner/access constraints match; this supplies neither a payload-type witness nor a non-null fact. Non-null targets still undergo the requested membership check. No form invents an owner for unqualified null.
+**Nullability boundary:** `p : ref Node in O` requires an already established non-null fact, for example from `assert p is not null` or a [successful target membership test](#type-membership-and-branch-refinement) on the same selection. The type assertion does not discharge that separate obligation by throwing on null. Without the fact, reject the requested ref view. An admitted nullable-target assertion preserves null when the destination accepts absence and owner/access constraints match; this supplies neither a payload-type witness nor a non-null fact. Non-null targets still undergo the requested membership check. No form invents an owner for unqualified null.
 
 **Acceptance:** success preserves target identity/owner/access; static mismatch rejects and unresolved runtime mismatch is catchable without throws before dependent access. Preserve operand effects, stable selections across mutation/relocation, actual-type dispatch, init obligations, cleanup and argument/default phases. Include abstract targets, aliases versus homonyms, concrete numeric specializations, explicit non-null proof and sufficient versus unavailable evidence. Invalid owner/access/type syntax remains statically rejected. No compiler or native support is claimed.
 
