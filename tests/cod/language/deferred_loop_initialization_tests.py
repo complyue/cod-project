@@ -4,7 +4,6 @@ from pathlib import Path
 import selected_loop_initialization_tests as fixture
 
 runner=fixture.runner
-MODELS={name:value for name,value in runner.CASES.items() if name.startswith('model_')}
 IO,SETUP,READ,UPDATE=fixture.IO,fixture.SETUP,fixture.READ,fixture.UPDATE
 runner.CASES={}
 
@@ -12,7 +11,8 @@ runner.CASES={}
 def case(name,body=READ+UPDATE,setup=SETUP,before='',after='',definitions='',output='7\n7\n9\n',reject=False,diagnostic='initialization',loop=None,action=None):
     if loop is None:loop='for(i in 0u64..3u64){ '+body+' };'
     if action is None:action='defer{ '+loop+' };'
-    source=IO+definitions+'proc run()->void{'+setup+'try{ {{'+before+action+after+'{} }}; }catch(e:const NullPointerException){behave @print(99u64);};}run();'
+    source = (IO+definitions+'proc run()->void throws NullPointerException{'+setup+before+action+after+'}'
+              'try{run();}catch(e:const NullPointerException){behave @print(99u64);};')
     runner.CASES[name]=(source,2 if reject else 0,'' if reject else output,diagnostic if reject else '')
 
 
@@ -37,8 +37,15 @@ case('nested_loop',body='for(j in 0u64..2u64){'+READ+UPDATE+'};',output='7\n7\n9
 case('nested_missing_write',body='for(j in 0u64..2u64){'+READ+UPDATE.replace('c<-9u64;','')+'};',reject=True)
 case('nested_action',action='defer{defer{for(i in 0u64..3u64){'+READ+UPDATE+'};};};')
 case('finally_loop',action='defer{}finally{for(i in 0u64..3u64){'+READ+UPDATE+'};};')
-case('iteration_cleanup',body=READ+'{{defer{'+UPDATE+'{}};}};')
-case('iteration_cleanup_missing_write',body=READ+'{{defer{'+UPDATE.replace('c<-9u64;','')+'{}};}};',reject=True)
+
+def advance_target(write):
+    return ('proc advance(ptr observed:u64 in O,ptr pending:u64 in O,change:bool)->ptr u64 in O where {owner O}{'
+            'defer{if(change&&pending is not null){'+write+'return pending;}else{};};return observed;}')
+
+
+ITERATION = READ+'observed=advance(observed,c,selected is not a);if(selected is a){selected=b;{}}else{};'
+case('iteration_cleanup',body=ITERATION,definitions=advance_target('pending<-9u64;'))
+case('iteration_cleanup_missing_write',body=ITERATION,definitions=advance_target(''),reject=True)
 case('unrelated_cell_unwritten',body=READ+UPDATE+'behave @print(c);',reject=True)
 case('alias_rebinding',setup=SETUP+'var slot->observed;',body=READ+UPDATE.replace('observed=c','slot=c'))
 case('alias_missing_write',setup=SETUP+'var slot->observed;',body=READ+UPDATE.replace('c<-9u64;','').replace('observed=c','slot=c'),reject=True)
@@ -53,8 +60,15 @@ case('failed_write',definitions=FAIL,body=READ+'try{c<-fail();{}}catch(failure:c
 case('recovered_write',definitions=FAIL,body=READ+'try{c<-fail();{}}catch(failure:const NullPointerException){c<-9u64;{}};observed=c;',output='7\n9\n9\n')
 case('fold',loop='behave @print(fold(i in 0u64..3u64,total=0u64){'+UPDATE+'total+observed});',output='25\n')
 OBSERVE='proc observe(value:u64)->void{behave @print(value);}'
-case('prepared_value_snapshot',definitions=OBSERVE,body='{{defer observe(observed);c<-9u64;observed=c;}};',output='7\n9\n9\n')
-case('prepared_borrow_snapshot',definitions=OBSERVE.replace('value:u64','ref value:const u64 in O').replace('->void{','->void where {owner O}{'),body='{{defer observe(observed);c<-9u64;observed=c;}};',output='7\n9\n9\n')
+OBSERVE_BORROWED = 'proc observe(ref value:const u64 in O)->void where {owner O}{behave @print(value);}'
+OBSERVE_AND_ADVANCE = (
+    'proc inspect_next(ptr observed:u64 in O,ptr replacement:u64 in O)->ptr u64 in O where {owner O}{'
+    'if(observed is null||replacement is null){return observed;}else{};'
+    'defer observe(observed);replacement<-9u64;observed=replacement;return observed;}'
+)
+for kind, observe in (('value', OBSERVE), ('borrow', OBSERVE_BORROWED)):
+    case('prepared_'+kind+'_snapshot', definitions=observe+OBSERVE_AND_ADVANCE,
+         body='observed=inspect_next(observed,c);', output='7\n9\n9\n')
 
 COPY_SETUP='val a<-7u64,b<-8u64,c<-make local u64;ptr phase=a,p=a,q=a;'
 COPY_UPDATE='if(phase is a){phase=b;}else{c<-9u64;q=c;};'
@@ -80,17 +94,26 @@ copied('slot_join',setup=COPY_SETUP+'ptr other=a;',copy='{if(i==0u64){p}else{oth
 copied('slot_join_missing_write',setup=COPY_SETUP+'ptr other=a;',copy='{if(i==0u64){p}else{other}}=q;',read='behave @print(p);behave @print(other);',update=COPY_UPDATE.replace('c<-9u64;',''),reject=True)
 copied('borrowed_result',definitions='func choose(ptr x:u64 in O)->ptr u64 in O where {owner O}{return x;}',copy='p=choose(q);')
 copied('borrowed_result_missing_write',definitions='func choose(ptr x:u64 in O)->ptr u64 in O where {owner O}{return x;}',copy='p=choose(q);',update=COPY_UPDATE.replace('c<-9u64;',''),reject=True)
-copied('prepared_conditional',copy='{{defer (=)(p,q);q=c;}};',update='q=a;',output='7\n'*4)
-copied('prepared_readiness',setup=COPY_SETUP.replace('make local u64','9u64'),copy='{{defer (=)(p,q);q=c;}};',update='q=a;',output='7\n'*4)
-copied('prepared_changed_entry',copy='{{defer (=)(p,q);q=a;}};',update='',after='q=c;',reject=True)
-copied('prepared_written_entry',copy='{{defer (=)(p,q);q=a;}};',update='',after='c<-9u64;q=c;',output='7\n9\n7\n7\n')
-copied('prepared_weak_changed_entry',setup=COPY_SETUP+'ptr other=a;',copy='{{defer (=)({if(i==0u64){p}else{other}},q);q=a;}};',update='',after='q=c;',reject=True)
+CAPTURE = (
+    'func capture(ptr retained:u64 in O,ptr source:u64 in O,ptr replacement:u64 in O)->ptr u64 in O where {owner O}{'
+    'defer{return retained;};defer (=)(retained,source);source=replacement;return retained;}'
+)
+CAPTURE_WEAK = (
+    'func capture_weak(ptr source:u64 in O,ptr replacement:u64 in O,ptr left:u64 in O,ptr right:u64 in O,flag:bool)'
+    '->ptr u64 in O where {owner O}{defer{return if(flag){left}else{right};};'
+    'defer (=)({if(flag){left}else{right}},source);source=replacement;return source;}'
+)
+copied('prepared_conditional',definitions=CAPTURE,copy='p=capture(p,q,c);q=a;',update='',output='7\n'*4)
+copied('prepared_readiness',definitions=CAPTURE,setup=COPY_SETUP.replace('make local u64','9u64'),
+       copy='p=capture(p,q,c);q=a;',update='',output='7\n'*4)
+copied('prepared_changed_entry',definitions=CAPTURE,copy='p=capture(p,q,a);q=a;',update='',after='q=c;',reject=True)
+copied('prepared_written_entry',definitions=CAPTURE,copy='p=capture(p,q,a);q=a;',update='',after='c<-9u64;q=c;',output='7\n9\n7\n7\n')
+copied('prepared_weak_changed_entry',definitions=CAPTURE_WEAK,setup=COPY_SETUP+'ptr other=a;',
+       copy='{if(i==0u64){p}else{other}}=capture_weak(q,a,p,other,i==0u64);q=a;',update='',after='q=c;',reject=True)
 
-# Reuse the independent cell/binding interpreter's exact source and outcomes,
-# moving the complete loop into an invocation-time deferred action.
-for name,(source,code,output,diagnostic) in MODELS.items():
-    source=source.replace('for(i in 0u64..4u64){','{{defer{for(i in 0u64..4u64){').replace('};}catch(e:','};};}};}catch(e:')
-    runner.CASES[name]=(source,code,output,diagnostic)
+# Reuse the cell/binding model inputs and expected outcomes for delayed execution.
+for name, (setup, loop, output, reject) in fixture.MODELS.items():
+    case(name, setup=setup, loop=loop, output=output, reject=reject)
 
 runner.CASE_ARGUMENTS={}
 runner.CASE_SHADOWS={name:[] for name in runner.CASES}

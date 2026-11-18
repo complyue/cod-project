@@ -83,6 +83,7 @@ SCHEDULES=(
     ('read','swap','q_b','write'),
     ('read','swap','q_b'),
 )
+MODELS = {}
 for number,(schedule,q_b,b_initialized) in enumerate(product(SCHEDULES,(False,True),(False,True))):
     cells={'a':7,'b':8 if b_initialized else None};bindings={'p':'a','q':'b' if q_b else 'a'}
     values=[]
@@ -95,10 +96,15 @@ for number,(schedule,q_b,b_initialized) in enumerate(product(SCHEDULES,(False,Tr
             elif action=='q_b':bindings['q']='b'
             else:bindings['p'],bindings['q']=bindings['q'],bindings['p']
     spelling={'read':'behave @print(p);','write':'b<-9u64;','p_b':'p=b;','p_q':'p=q;','q_b':'q=b;','swap':'intrinsic (<=>)(p,q);'}
-    source=IO+'try{val a<-7u64,b<-'+('8u64' if b_initialized else 'make local u64')+';ptr p=a,q='+('b' if q_b else 'a')+';for(i in 0u64..4u64){'+''.join(spelling[x] for x in schedule)+'};}catch(e:const NullPointerException){behave @print(99u64);};'
-    case('model_'+str(number),source=source,reject=None in values,output=''.join(str(x)+'\n' for x in values))
+    setup = 'val a<-7u64,b<-' + ('8u64' if b_initialized else 'make local u64') + ';ptr p=a,q=' + ('b' if q_b else 'a') + ';'
+    loop = 'for(i in 0u64..4u64){' + ''.join(spelling[action] for action in schedule) + '};'
+    output = ''.join(str(value)+'\n' for value in values)
+    reject = None in values
+    MODELS['model_'+str(number)] = setup, loop, output, reject
+    source = IO+'try{'+setup+loop+'}catch(e:const NullPointerException){behave @print(99u64);};'
+    case('model_'+str(number),source=source,reject=reject,output=output)
     deferred=source.replace('0u64..4u64){','0u64..4u64){ {{defer{').replace('};}catch(e:','{} };}}; };}catch(e:')
-    case('deferred_model_'+str(number),source=deferred,reject=None in values,output=''.join(str(x)+'\n' for x in values))
+    case('deferred_model_'+str(number),source=deferred,reject=reject,output=output)
 
 for written in (False,True):
     bindings='ptr '+','.join('p'+str(i)+'=a' for i in range(8))+';'
