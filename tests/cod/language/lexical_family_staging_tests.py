@@ -19,7 +19,7 @@ func wrap(f:func(u64)->u64)->func(u64)->u64{
   return func[f](x:T)->u64 where T{return f(x);};
 }
 func held:func(u64)->u64=tag;
-for(i in 0u64..10u64){{held<-wrap(held);}};
+for(i in 0u64..10u64){held<-wrap(held);};
 behave @print(held(1u8));behave @print(held(1u64));
 '''
 

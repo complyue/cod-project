@@ -62,6 +62,35 @@ runner.CASES = {
         'func tag(e:MissingReturnError)->u64{return 7u64;}func tag(e:T)->u64 where T{return e.category;}'
         'func held:func(Exception)->u64=func(e:T)->u64 where T{return tag(e);};val e:Exception<-error();behave @print(held(e));', 0, '7\n', '[-Wmissing-return]'),
 }
+
+
+def wide_retained_factory(width, generic, repeated=False):
+    view = 'func(' + ','.join(['u64', 'u32'] + ['u64'] * (width - 2)) + ')->u64'
+    formals = ['first:U' if generic else 'first:u64', 'second:T' if generic else 'second:u32']
+    formals.extend(f'extra{i}:' + ('U' if repeated and i == 2 else 'u64') for i in range(2, width))
+    body = ('return tag(first)+tag(second);' if generic else
+            'val retained:T<-1u8;return tag(retained)+first+second;')
+    return ('func factory(sample:T)->' + view + ' where T{'
+            'return func[](' + ','.join(formals) + ')->u64' + (' where U' if generic else '') + '{' + body + '};}')
+
+
+for width in (16, 32):
+    for generic in (False, True):
+        source = IO + TAGS + wide_retained_factory(width, generic) + 'func a=factory(1u32);func b=factory(1f64);'
+        for holder, first, second in (('a', '1u8', '2u8'), ('a', '1u32', '2u32'),
+                                       ('b', '1u8', '2u32'), ('b', '1u32', '2u8')):
+            arguments = ','.join([first, second] + ['3u64'] * (width - 2))
+            source += f'behave @print({holder}({arguments}));'
+        expected = '40\n64\n172\n196\n' if generic else '35\n35\n167\n167\n'
+        runner.CASES[f'wide_retained_{"generic" if generic else "fixed"}_{width}'] = (source, 0, expected, '')
+
+runner.CASES['wide_retained_own_binder_still_requires_same_type'] = (
+    IO + TAGS + wide_retained_factory(16, True, repeated=True) + 'func held=factory(1f64);',
+    2, '', 'no applicable method')
+runner.CASES['wide_retained_input_rejects_narrowing'] = (
+    IO + TAGS + wide_retained_factory(16, True) + 'func held=factory(1u8);',
+    2, '', 'no applicable method')
+
 runner.CASE_ARGUMENTS = {}
 runner.CASE_SHADOWS = {
     'deferred_actual_input_snapshot': ['x', 'x', 'x', 'x', 'x', 'x', 'x'],
