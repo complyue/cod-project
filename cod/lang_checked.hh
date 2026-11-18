@@ -4657,29 +4657,47 @@ class ScalarChecker {
   template <typename Validate>
   static void cover_inputs(const Type &view, const Location &at, const InputPlan &plan, const Validate &validate) {
     std::vector<Type> arguments;
+    std::vector<size_t> varying;
+    arguments.reserve(plan.domains.size());
+    for (size_t i = 0; i < plan.domains.size(); ++i) {
+      const auto &domain = plan.domains[i];
+      if (domain.empty()) return;
+      arguments.push_back(domain.front());
+      if (domain.size() > 1) varying.push_back(i);
+    }
     size_t obligations = 0;
     const auto account = [&] {
       if (++obligations > family_coverage_limit)
         fail(at, "compiler resource limit: " + std::to_string(family_coverage_limit) +
             " callable family coverage steps while covering '" + type_name(view) + "'; coverage remains unproved");
     };
-    const std::function<void()> cover = [&] {
-      account();
-      if (arguments.size() != plan.domains.size()) {
-        for (const auto &type : plan.domains[arguments.size()]) {
-          arguments.push_back(type); cover(); arguments.pop_back();
+    // Fixed coordinates are present in each checked tuple. Only alternatives
+    // require traversal, so signature width does not consume search depth.
+    std::vector<size_t> next(varying.size());
+    size_t depth = 0;
+    account();
+    for (;;) {
+      if (depth == varying.size()) {
+        validate(arguments);
+        if (const auto &example = plan.widening_example) {
+          account();
+          auto widened = arguments;
+          widened.at(example->first) = example->second;
+          validate(widened);
         }
-        return;
+      } else {
+        const auto input = varying[depth];
+        if (next[depth] < plan.domains[input].size()) {
+          arguments[input] = plan.domains[input][next[depth]++];
+          account();
+          ++depth;
+          continue;
+        }
+        next[depth] = 0;
       }
-      validate(arguments);
-      if (const auto &example = plan.widening_example) {
-        account();
-        auto widened = arguments;
-        widened.at(example->first) = example->second;
-        validate(widened);
-      }
-    };
-    cover();
+      if (depth == 0) return;
+      --depth;
+    }
   }
   static const Type &coverage_formal(const CheckedMethod &method, size_t index, const Substitutions &context) {
     const auto &type = method.parameters[index];

@@ -40,6 +40,29 @@ def symbolic(kind):
             f'effect @target;behave @print(behave @target({arguments}));')
 
 
+def mixed_singleton_inputs():
+    # Four independent scalar domains yield 81 tuples. The complete callable
+    # input requires tuple checking without the fixed scalar projection.
+    types = ['bool'] * 60
+    for position in (0, 2, 5, 8):
+        types[position] = 'u64'
+    types[4] = 'func(u64)->u64'
+    formals = ','.join(f'p{i}:{kind}' for i, kind in enumerate(types))
+    signature = ','.join(types)
+    source = (IO + 'func identity(x:u64)->u64{return x;}'
+              'func selected:func(u64)->u64=identity;'
+              f'func target({formals})->u64{{if(p59){{return p4(p0+p2+p5+p8);}}else{{return 0u64;}};}}'
+              f'func held:func({signature})->u64=target;')
+    inputs = ['true'] * len(types)
+    inputs[4] = 'selected'
+    inputs[0], inputs[2], inputs[5], inputs[8] = '1u8', '2u32', '3u64', '4u8'
+    source += f'behave @print(held({",".join(inputs)}));'
+    inputs[0], inputs[2], inputs[5], inputs[8] = '10u64', '20u8', '30u32', '40u64'
+    source += f'behave @print(held({",".join(inputs)}));'
+    inputs[-1] = 'false'
+    return source + f'behave @print(held({",".join(inputs)}));'
+
+
 CASES = {
     'named_uniform_coverage': (named('u64', 8), 'success', '1\n'),
     'declaration_query_uniform_coverage': (queried('u64'), 'success', '7\n'),
@@ -49,6 +72,7 @@ CASES = {
     'declaration_query_without_implementation': (queried('u8'), 'success', '7\n'),
     'symbolic_singleton_domain': (symbolic('u8'), 'success', '1\n'),
     'incompatible_result_rejected': (named('u64', 8, True), 'contract', ''),
+    'mixed_singleton_inputs': (mixed_singleton_inputs(), 'success', '10\n100\n0\n'),
 }
 
 

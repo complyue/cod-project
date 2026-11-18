@@ -1,6 +1,6 @@
 # CoD source compiler validation
 
-Reference revision: 443 · Recorded: 2026-11-18 America/Los_Angeles.
+Reference revision: 444 · Recorded: 2026-11-18 America/Los_Angeles.
 
 ## Design authority
 
@@ -167,7 +167,7 @@ One input plan can project a scalar coordinate when every candidate and applicab
 
 The checked callable retains the distinguishing input positions and, when needed, the shared widening decision. Invocation and native conversions use all actual input types. Complete inferred signatures, declaration-only inspection and named or symbolic value construction share this plan. Source and native fixtures compare projected views against direct calls across both selection phases, repeated binders, mixed narrower inputs, module interpretations, delayed invocation and callee preparation before operand rebinding. The explicit native method set stays finite across supported widths and runtime recursion depths.
 
-The projection covers fixed-arity scalar value input domains with concrete, bound enclosing, or direct generic formals and matching parameter qualifiers. Returned views with the same public signature retain their distinct enclosing type evidence. Variadics, owner parameters, borrowed or caller-slot modes, non-scalar retained input types and unproved qualifier relationships use the existing tuple proof. The 4096-step allowance includes the widening representatives and reports unproved coverage with the active callable view. All arguments retain source-ordered effects and ordinary conversions. Shared scalar preparation establishes no unknown-layout input carrier, borrowed-input adaptation, receiving specification or permanent representation.
+The projection covers fixed-arity scalar value input domains with concrete, bound enclosing, or direct generic formals and matching parameter qualifiers. Returned views with the same public signature retain their distinct enclosing type evidence. Variadics, owner parameters, borrowed or caller-slot modes, non-scalar retained input types and unproved qualifier relationships use the existing tuple proof. Fixed coordinates remain in every checked tuple. Iterative traversal visits prefixes of varying coordinates, and the 4096-step allowance counts those visits and widening representatives. Exhaustion reports unproved coverage with the active callable view. All arguments retain source-ordered effects and ordinary conversions. Shared scalar preparation establishes no unknown-layout input carrier, borrowed-input adaptation, receiving specification or permanent representation.
 
 The source compiler implements primitive scalar values, bounded intrinsic-exception values and callable values with complete nested callable capture environments. LLVM-independent checking selects semantic methods and completes demanded value/call obligations before native emission. Proven calls select prepared specializations; general bodies retain independent local operation choices. Concrete methods reuse one native implementation. There is no legacy fallback.
 
