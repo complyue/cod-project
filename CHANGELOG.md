@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-18 — Select exception storage at construction
+
+<a id="h-exception-make-scope-20261118"></a>
+**H-EXCEPTION-MAKE-SCOPE-20261118 — Establish the exception-handling scope on demand.** The project user in [the design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), recorded 2026-11-18 America/Los_Angeles, specifies “`make SomeException ...` 的时候应该禁止指定owner，按需创建虚拟 exception handling scope”. D-17r100/D-22r47/registry888 distinguish mandatory implicit exception placement from named owner annotations on references and explicit allocation of ordinary payloads inside a catch. Prior scopes at `92a70ae57e29d4e8972fe90eef770dc602fe2d60:design/ExceptionControl.md`, “Exception object owners and release”, and the same commit’s `design/ConstructionAndAcquisition.md`, “Owner-directed construction”. Scope sharing across related or independent constructions and physical backing remain open.
+
 ## 2026-11-18 — Make exception objects owner-bound
 
 <a id="h-exception-object-owner-20261118"></a>
