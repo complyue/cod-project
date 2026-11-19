@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-19 — Plan a shared language specification repository
+
+<a id="h-lang-repository-20261119"></a>
+**H-LANG-REPOSITORY-20261119.** The project user specified “加一个 cod-lang ，用于 CoD 语言规格设计，让 cod-seed/cod 都专注于实现相关内容” and placed all planned repositories under `e-wrks` in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-19 (America/Los_Angeles). D-20-REPOSITORIES roadmap r12 and registry r962 extend H-TOOLCHAIN-REPOSITORIES-20261118 for the future split. Repository migration is deferred.
+
 ## 2026-11-19 — Callable results and deferred return inspection
 
 <a id="h-callable-tail-20261119"></a>
