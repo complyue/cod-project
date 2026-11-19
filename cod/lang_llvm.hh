@@ -82,6 +82,7 @@ class LLVMEmission {
     bool value_binding;
     llvm::Value *reference_slot = nullptr;
     llvm::AllocaInst *selected_place = nullptr;
+    llvm::Value *direct_place = nullptr;
   };
   std::vector<EmissionBinding> bindings_;
   std::map<size_t, llvm::Value *> owner_identities_;
@@ -152,6 +153,7 @@ class LLVMEmission {
       return binding.value_binding ? selected : b_.CreateLoad(b_.getPtrTy(), selected);
     }
     if (binding.reference_slot) return b_.CreateLoad(b_.getPtrTy(), binding.reference_slot);
+    if (binding.direct_place) return binding.direct_place;
     return storage_.at(*place);
   }
   llvm::Value *environment(llvm::Value *value) {
@@ -1742,7 +1744,13 @@ class LLVMEmission {
       const auto &input = frame.inputs[i];
       const auto place = input.place, binding = storage.at(place).binding;
       if (input.binding_slot) continue;
-      if (input.mode != ArgumentMode::value) { b_.CreateStore(view_address(arguments_[i]), bindings_.at(binding).reference_slot); continue; }
+      if (input.mode != ArgumentMode::value) {
+        auto *address = view_address(arguments_[i]);
+        auto &bound = bindings_.at(binding);
+        if (bound.value_binding) bound.direct_place = address;
+        else b_.CreateStore(address, bound.reference_slot);
+        continue;
+      }
       b_.CreateStore(arguments_[i], storage_.at(place));
       if (environments_) parameter_values_.push_back(storage_.at(place));
       if (auto *slot = bindings_.at(binding).reference_slot) b_.CreateStore(storage_.at(place), slot);

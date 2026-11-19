@@ -73,7 +73,7 @@ for spelling in ('call', 'intrinsic'):
         'null_destination_order': (IO+NPE+'ptr p:i64=null in here;try{ {{'+defer('<-','p','{'+OUT('99')+'7}')+'}};{}}catch(e:const NullPointerException){'+OUT('7')+'};',0,'7\n',''),
         'aborted_source': (IO+'proc run()->i64{val a<-1;defer{'+OUT('a')+'};'+defer('<-','a','{return 7;}')+'return 0;}'+OUT('run()'),0,'1\n7\n',''),
         'recursive_generic': (IO+'func fill(ref a:T in O,v:T,n:u64)->void where {T,owner O}{'+defer('<-','a','v')+'if(n>0u64){fill(a,v,n-1u64);}else{};}val x<-1,y<-2u64;fill(x,7,30u64);fill(y,8u64,40u64);'+OUT('x')+OUT('y'),0,'7\n8\n',''),
-        'not_initialized_at_registration': ('val a<-make local i64;{{'+defer('<-','a','7')+'a;}};',2,'','before definite initialization'),
+        'not_initialized_at_registration': ('val a<-make local i64;{{'+defer('<-','a','7')+'a;}};',2,'',"cannot prove initialization of 'a'"),
         'readonly': ('val a:const i64<-1;'+defer('<-','a','7'),2,'','readonly destination'),
         'fixed': ('val a<-1,b<-7;const ptr p=a;'+defer('=','p','b'),2,'','const reference binding'),
         'owner_mismatch': ('val a<-1;ptr p=a;{{val b<-7;'+defer('=','p','b')+'}};',2,'','initializer-fixed owner'),

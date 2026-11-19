@@ -3163,9 +3163,13 @@ class ScalarChecker {
           if (arguments[i].kind != Type::exception || contract.owners.empty() || !contract.owners[i]) continue;
           auto value = ExceptionFacts{exception_possibilities(arguments[i])};
           const auto outcome = summary.payloads.find(reason);
-          if (outcome != summary.payloads.end() && outcome->second.contains(i))
+          const bool writes = summary.written_inputs.contains(i);
+          // An empty outcome for an unchanged input carries no postcondition.
+          // Replacing the payload with it loses its provenance in later cleanup.
+          if (outcome != summary.payloads.end() && outcome->second.contains(i) &&
+              (writes || !outcome->second.at(i).empty()))
             value = outcome->second.at(i).substitute(exception_inputs);
-          else if (!summary.written_inputs.contains(i)) continue;
+          else if (!writes) continue;
           write_exception_payloads(payloads, views[i], value);
           if (views[i].place) definite[*views[i].place].merge(value);
         }
@@ -4998,9 +5002,9 @@ class ScalarChecker {
     state.retained = retained;
     state.full_scope_owner = 0;
     state.caught_exception.reset();
-    // Runtime value captures receive storage in this invocation. Query-only
-    // dependencies and reference inputs retain their external owner evidence.
-    for (const auto &capture : free_bindings(*method.source).captures)
+    // An ordinary retained value has invocation-local storage. A standalone
+    // here body has direct access to its supplying activation instead.
+    if (!method.source->implicit_scope) for (const auto &capture : free_bindings(*method.source).captures)
       if (const auto found = state.views.find(capture.name);
           found != state.views.end() && found->second.value_capture == true) {
         found->second.owner = EvidenceOwner{};
@@ -5046,14 +5050,15 @@ class ScalarChecker {
     for (size_t i = 0; i < method.parameters.size(); ++i) {
       const auto &parameter = method.input_parameters()[i];
       const bool value = parameter.owner.empty();
+      const bool live_value = method.scope_inputs && method.scope_inputs->live_values.contains(i);
       const bool independent = parameter.declaration_kind == "val" || (value && arguments[i].kind == Type::procedure);
       state.bindings[parameter.name] = arguments[i];
       state.definitions.erase(parameter.name);
       state.views[parameter.name] = {parameter.read_only || (parameter.declaration_kind == "val" && parameter.fixed_binding), true,
-                                    parameter.declaration_kind == "val",
+                                    live_value || parameter.declaration_kind == "val",
                                     value ? EvidenceOwner{} : state.owner_bindings.at(parameter.owner), false,
-                                    parameter.fixed_binding, parameter.read_only, independent,
-                                    argument_mode(parameter) == ArgumentMode::borrowed_ptr};
+                                    parameter.fixed_binding, parameter.read_only, independent || live_value,
+                                    !live_value && argument_mode(parameter) == ArgumentMode::borrowed_ptr};
     }
     return state;
   }
@@ -6377,7 +6382,7 @@ class ScalarChecker {
       const auto binding = state.bindings.find(capture.name);
       const auto view = state.views.find(capture.name);
       if (binding != state.bindings.end() && binding->second == Type::boolean && view != state.views.end() &&
-          view->second.value_capture != true && !view->second.read_only.value_or(false))
+          !view->second.read_only.value_or(false))
         writable_booleans.push_back(named_type_target(state, capture.name).places);
     }
     if (state.required) {
@@ -6415,9 +6420,9 @@ class ScalarChecker {
           if (view == body.views.end()) continue;
           const auto source = named_type_target(state, name);
           const EvidenceSlot local = std::pair{callee.definition.get(), name};
-          if (view->second.value_binding == true)
-            require_type_initialized(state, source, name, capture.at);
-          if (view->second.value_binding != true && source.selection.slot) {
+          if (view->second.value_binding == true) {
+            body.selections.value_places.emplace(name, source.places);
+          } else if (source.selection.slot) {
             // Entry observations outlive writes to the invocation's slots.
             for (const auto &slot : source.same_selected) {
               retain_witness(slot);
@@ -6425,14 +6430,11 @@ class ScalarChecker {
             }
             if (source.presence_proof) retain_observed(*source.presence_proof);
             body.selections.bind(name, local, source);
-            if (body.bindings.at(name) == Type::boolean) state.selections.read_boolean(source.places);
-            for (const auto &place : source.places)
-              if (const auto found = state.selections.booleans.find(place); found != state.selections.booleans.end())
-                imported_booleans.insert(*found);
-          } else if (body.bindings.at(name) == Type::boolean && view->second.value_binding == true) {
-            body.selections.value_places.emplace(name, EvidencePlaces{local});
-            if (const auto proof = state.selections.read_boolean(source.places)) imported_booleans.emplace(local, *proof);
           }
+          if (body.bindings.at(name) == Type::boolean) state.selections.read_boolean(source.places);
+          for (const auto &place : source.places)
+            if (const auto found = state.selections.booleans.find(place); found != state.selections.booleans.end())
+              imported_booleans.insert(*found);
         }
         // A captured Boolean can describe a caller slot that this body never
         // accessed, or that it later replaced in its local reference slot.
@@ -6456,7 +6458,7 @@ class ScalarChecker {
         for (const auto &capture : captures) {
           const auto binding = body.bindings.find(capture.name);
           if (binding != body.bindings.end() && binding->second && binding->second->kind == Type::procedure &&
-              body.views.at(capture.name).value_binding == true) {
+              state.definitions.contains(capture.name)) {
             note_type_allocation(state);
             break;
           }
@@ -8630,7 +8632,8 @@ class ScalarChecker {
     for (const auto id : profiles) {
       const auto &candidate = *program_.methods[id].scope_inputs;
       if (candidate.owner_names != inputs.owner_names || candidate.relations != inputs.relations ||
-          candidate.nonnull != inputs.nonnull || candidate.boolean_conditions != inputs.boolean_conditions ||
+          candidate.nonnull != inputs.nonnull || candidate.live_values != inputs.live_values ||
+          candidate.boolean_conditions != inputs.boolean_conditions ||
           candidate.reference_conditions != inputs.reference_conditions ||
           candidate.disjoint_input_targets != inputs.disjoint_input_targets ||
           candidate.parameters.size() != inputs.parameters.size()) continue;
@@ -8744,7 +8747,7 @@ class ScalarChecker {
     const auto &dependencies = definition_dependencies(*method.source);
     const auto state = evidence_state(false, &dependencies);
     const auto retained = definition_retained(method_id, state);
-    CheckedMethod::ScopeInputs inputs{method_id, {}, {}, {}, {}, {}, {}, {}, {}};
+    CheckedMethod::ScopeInputs inputs{method_id};
     operation.scope_operands.emplace();
     std::map<size_t, size_t> owner_roles;
     const auto owner_role = [&](size_t actual, const Location &at) {
@@ -8767,9 +8770,10 @@ class ScalarChecker {
       }
       if (source && (source->alias || !source->selection.empty()))
         implementation_gap(capture.at, "capture of a declared place alias requires selected-place lifetime and transport proof");
-      const bool independent = !source || source->value_binding || source->callable_value || source->definition;
+      const bool independent = !source || source->definition;
+      const bool live_value = !independent && (source->value_binding || source->callable_value);
       Parameter parameter; parameter.name = capture.name; parameter.at = capture.at;
-      parameter.declaration_kind = independent ? "val" : source->requires_initialized ? "ref" : "ptr";
+      parameter.declaration_kind = independent ? "val" : !live_value && source->requires_initialized ? "ref" : "ptr";
       parameter.fixed_binding = !independent && source->fixed;
       const auto &operand = scope_operand(method_id, capture);
       const auto type = check(operand, instance, operations, independent);
@@ -8788,6 +8792,7 @@ class ScalarChecker {
       const auto mode = argument_mode(parameter);
       prepare_borrow(view, mode, capture.at);
       inputs.nonnull.push_back(!independent && !view.targets.empty() && !view.targets.contains(null_target));
+      if (live_value) inputs.live_values.insert(arguments.size());
       inputs.parameters.push_back(std::move(parameter));
       operation.scope_operands->push_back(&operand);
       operation.arguments.push_back({mode, type});
@@ -10569,15 +10574,16 @@ class ScalarChecker {
       for (size_t p = 0; p < checking_method_->input_parameters().size(); ++p) {
         const auto &parameter = checking_method_->input_parameters()[p];
         const bool value = parameter.declaration_kind == "val";
+        const bool live_value = checking_method_->scope_inputs && checking_method_->scope_inputs->live_values.contains(p);
         const auto mode = argument_mode(parameter);
         const auto id = declare(parameter.name, instance.arguments[p], parameter.read_only || (value && parameter.fixed_binding),
-                                value, parameter.at, !checking_method_->scope_inputs, &entry);
+                                value || live_value, parameter.at, !checking_method_->scope_inputs, &entry);
         const auto binding = storage_->at(id).binding;
         instance.frame.inputs.push_back({id, mode, caller_bindings(*checking_method_)});
         bindings_->back().fixed = parameter.fixed_binding;
         bindings_->back().requires_initialized = parameter.declaration_kind == "ref";
-        bindings_->back().nullable = mode == ArgumentMode::borrowed_ptr;
-        bindings_->back().callable_value = instance.arguments[p].kind == Type::procedure && parameter.owner.empty();
+        bindings_->back().nullable = !live_value && mode == ArgumentMode::borrowed_ptr;
+        bindings_->back().callable_value = instance.arguments[p].kind == Type::procedure && (parameter.owner.empty() || live_value);
         if (!parameter.owner.empty()) {
           const auto owner = external_owners_.at(parameter.owner);
           instance.frame.owners.try_emplace(owner, p);

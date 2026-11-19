@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Immediate full-scope capture preparation, completion and exact cleanup."""
+"""Immediate full-scope live slot access, result failure and exact cleanup."""
 from pathlib import Path
 from native_test_support import NativeFixture, run_native
 
@@ -59,7 +59,7 @@ HARNESS = r'''
 static std::map<void *,std::uint64_t> images;
 static std::set<void *> records;
 static std::uint64_t acquisitions=0,released=0,failures=0,budget=0,bytes=0,peak=0;
-static std::uint64_t baseline_count=0,baseline_bytes=0,failed_attempts=0,completed_attempts=0;
+static std::uint64_t baseline_count=0,baseline_bytes=0,entry_budget=0,completed_attempts=0;
 static unsigned local_values=0;
 static bool active=false,entered=false,cleaned=false,result_failed=false;
 static bool deny(){if(budget && --budget==0){++failures;return true;}return false;}
@@ -87,10 +87,13 @@ extern "C" void cod_lang_defer_free(void *record){assert(records.erase(record)==
 extern "C" void cod_lang_print_u64(std::uint64_t value){
  if(value>10000 && value<10009){
   assert(!active && !budget && records.empty());active=true;entered=cleaned=false;local_values=0;
-  budget=value-10000;baseline_count=images.size();baseline_bytes=bytes;return;
+  budget=entry_budget=value-10000;baseline_count=images.size();baseline_bytes=bytes;return;
  }
- if(value==70000){assert(active && !entered);entered=true;budget=0;return;}
- if(value==70001){assert(active && !entered && !budget);++failed_attempts;return;}
+ if(value==70000){
+  assert(active && !entered && budget==entry_budget && images.size()==baseline_count && bytes==baseline_bytes);
+  entered=true;budget=0;return;
+ }
+ assert(value!=70001);
  if(value==80000){assert(active && entered && !cleaned);cleaned=true;local_values=3;return;}
  if(local_values){
   constexpr std::array<std::uint64_t,3> expected{2,1,9};
@@ -98,7 +101,7 @@ extern "C" void cod_lang_print_u64(std::uint64_t value){
  }
  if(value==20000){
   assert(active && records.empty() && images.size()==baseline_count && bytes==baseline_bytes);
-  assert(!local_values && entered==cleaned);if(entered)++completed_attempts;
+  assert(!local_values && entered && cleaned);++completed_attempts;
   active=false;budget=0;return;
  }
  if(value==30000){assert(!active);baseline_count=images.size();baseline_bytes=bytes;return;}
@@ -112,14 +115,14 @@ extern "C" void cod_lang_print_u64(std::uint64_t value){
 }
 extern "C" void cod_lang_exception_finish() noexcept{
  assert(!active && !budget && !local_values && records.empty() && images.empty() && bytes==0);
- assert(acquisitions==released && failed_attempts>=2 && completed_attempts>=1 && result_failed);
- assert(failures==failed_attempts+1);cod_finish();
- std::printf("{\"acquisitions\":%llu,\"released\":%llu,\"preparation_failures\":%llu,"
+ assert(acquisitions==released && completed_attempts==8 && result_failed);
+ assert(failures==1);cod_finish();
+ std::printf("{\"acquisitions\":%llu,\"released\":%llu,"
              "\"completed_attempts\":%llu,\"result_failures\":1,\"peak_bytes\":%llu}\n",
-  (unsigned long long)acquisitions,(unsigned long long)released,(unsigned long long)failed_attempts,
+  (unsigned long long)acquisitions,(unsigned long long)released,
   (unsigned long long)completed_attempts,(unsigned long long)peak);
 }
 '''
-FIXTURE = NativeFixture(SOURCE, WRAPPERS, HARNESS, ['1', '2', '1'] * 8 + ['1'], sources=(Path(__file__),))
+FIXTURE = NativeFixture(SOURCE, WRAPPERS, HARNESS, ['2', '1', '9'] * 8 + ['2'], sources=(Path(__file__),))
 if __name__ == '__main__':
     raise SystemExit(run_native(FIXTURE))

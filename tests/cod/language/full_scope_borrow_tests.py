@@ -152,8 +152,8 @@ runner.CASES = {
         0, '5\n7\n7\n', ''),
     'escape_through_returned_callable_rejected': ('ref a:u64=1u64;func held={{return func[a]()->u64{return a;};}};',
         2, '', 'selected-target lifetime and transport proof'),
-    'value_snapshot_survives_write_through_borrow': (IO+VALUES+'func original=wrap(one);ptr target=original;'
-        'behave @print({{target<-wrap(two);return original();}});behave @print(original());', 0, '1\n2\n', ''),
+    'live_holder_observes_write_through_borrow': (IO+VALUES+'func original=wrap(one);ptr target=original;'
+        'behave @print({{target<-wrap(two);return original();}});behave @print(original());', 0, '2\n2\n', ''),
     'generic_default_parameter_roles': (IO+VALUES+'func retain(input:T)->const T where T{return {{return input;}};}'
         'behave @print(retain(3u64));func saved=retain(one);behave @print(saved());behave @print(retain(8));', 0, '3\n1\n8\n', ''),
 }

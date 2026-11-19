@@ -18,7 +18,7 @@ runner.CASES = {
     "loop_bound_snapshot": (PRINT + 'val end<-3;for(i in 0..end){end<-0;behave @print(i);};', 0, "0\n1\n2\n", ""),
     "loop_empty_initialization": ('func f(n:i64)->const i64 {val x<-make local i64;for(i in 0..n){{x<-i;}};return x;} f(0);', 2, "", "before definite initialization"),
     "loop_partial_initialization": ('func f(n:i64)->const i64 {val x<-make local i64;for(i in 0..n){{if(i==0){x<-1;{}}else{};}}else{x<-0;};return x;} f(1);', 2, "", "before definite initialization"),
-    "loop_read_before_write": ('val x<-make local i64;for(i in 0..3){{x<-x+1;}};', 2, "", "before definite initialization"),
+    "loop_read_before_write": ('val x<-make local i64;for(i in 0..3){{x<-x+1;}};', 2, "", "cannot prove initialization of 'x'"),
     "loop_skipped_body_checked": ('for(i in 0..0){{val x<-make local i64;x;}};', 2, "", "before definite initialization"),
     "loop_skipped_else_checked": ('for(i in 0..1){}else{{val x<-make local i64;x;}};', 2, "", "before definite initialization"),
     "loop_direct_declaration": ('for(i in 0..2){val x<-i;};', 2, "", "nested per-iteration"),

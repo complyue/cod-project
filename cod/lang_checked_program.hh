@@ -340,6 +340,8 @@ struct CheckedMethod {
     std::map<std::string, size_t> owner_names;
     std::vector<std::vector<OwnerMatch>> relations;
     std::vector<bool> nonnull;
+    // These inputs use borrowed transport while retaining val/holder semantics.
+    std::set<size_t> live_values;
     // Entry observations use input ordinals until the body allocates local slots.
     std::set<std::pair<size_t, size_t>> disjoint_input_targets;
     CleanupEquations::BooleanValues boolean_conditions;
