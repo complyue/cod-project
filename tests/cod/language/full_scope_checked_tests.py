@@ -8,12 +8,12 @@ TYPES = 'using "std:exceptions" Exception;using "std:exceptions" NullPointerExce
 PAYLOAD = ('func sample_error()->const NullPointerException{ptr absent:u64=null in here;'
            'try{absent;{}}catch(caught:const NullPointerException){return caught;};return sample_error();}')
 FORWARD = 'proc forward(val e:NullPointerException)->void throws NullPointerException{throw e;}'
-DECLARED = 'proc declared()->void throws NullPointerException{}'
+DECLARED = 'proc declared()->void throws NullPointerException{return;}'
 STOP = ('using "std:exceptions" MissingReturnError;'
         'func stop(val e:MissingReturnError)->void{throw e;}')
 ROOT = 'proc broad(val e:NullPointerException)->void throws Exception{throw e;}'
-TAKE = 'proc take(value:u64)->void{behave @print(value);}'
-OBSERVE = 'proc observe(value:u64)->void{behave @print(value);}'
+TAKE = 'proc take(value:u64)->void{behave @print(value);return;}'
+OBSERVE = 'proc observe(value:u64)->void{behave @print(value);return;}'
 NPE = "checked exception 'NullPointerException' requires a covering catch or throws declaration"
 BROAD = "declared checked exception 'Exception' requires a covering catch or throws declaration"
 DEFER = 'checked failures involving deferred execution require coverage within the owning pass'
@@ -74,12 +74,12 @@ SAVED_EAGER_COPY = ('ptr held=selected;if(selected is not null){defer (<-)(selec
 SAVED_EAGER_OPPOSITE = (SAVED_OPPOSITE+'if(selected is not null){defer (<-)(selected,7u64);selected=opposite;'
                         'return selected;}else{return selected;};')
 WRITE_WHEN_PRESENT = 'if(p is not null){p<-7u64;{}}else{};'
-WRITER = 'proc fill(ptr p:u64 in O)->void where {owner O}{'+WRITE_WHEN_PRESENT+'}'
+WRITER = 'proc fill(ptr p:u64 in O)->void where {owner O}{'+WRITE_WHEN_PRESENT+'return;}'
 WRITER_WITH_LATER_OPERAND = WRITER.replace('in O)', 'in O,ignored:bool)')
 
 
 def guarded_reference(body):
-    return IO+'proc run(flag:bool)->void{val result<-{{'+body+'}};behave @print(result);}run(true);run(false);'
+    return IO+'proc run(flag:bool)->void{val result<-{{'+body+'}};behave @print(result);return;}run(true);run(false);'
 
 
 def queried_pick(body):
@@ -101,7 +101,7 @@ def queried_ref_read(declarations, body):
 def saved_selection_case(body, *, inspect=False, rejects=False, declarations='', diagnostic=UNWRITTEN_RESULT):
     invocation = query(SAVED_CALL, '') if inspect else 'val result<-{{'+SAVED_CALL+'}};'
     source = IO+TYPES+declarations+SAVED_SELECTION+body+'}proc run(flag:bool)->void{'+invocation
-    source += 'behave @print(result);}run(true);run(false);'
+    source += 'behave @print(result);return;}run(true);run(false);'
     return (source, 2, '', diagnostic) if rejects else (source, 0, '4\n4\n' if inspect else '7\n7\n', '')
 
 
@@ -119,7 +119,7 @@ EXPANDING_PICK = recursive_pick('return right;', 'return choose(left,right,n-1u6
 runner.CASES = {
     'local_read_with_known_capture': (IO+'val flag<-true;'+CONDITIONAL_READ, 0, '7\n', ''),
     'local_read_with_guarded_capture': (
-        IO+'proc run(flag:bool)->void{if(flag){'+CONDITIONAL_READ+'}else{};}run(true);run(false);', 0, '7\n', ''),
+        IO+'proc run(flag:bool)->void{if(flag){'+CONDITIONAL_READ+'}else{};return;}run(true);run(false);', 0, '7\n', ''),
     'local_read_with_unknown_capture': (
         IO+'proc run(flag:bool)->void{'+CONDITIONAL_READ+'}run(true);', 2, '', UNINITIALIZED_LOCAL),
     'local_read_with_late_true_capture': (
@@ -180,14 +180,14 @@ runner.CASES = {
     'throw_only_uses_argument_signature': run(
         'val e<-sample_error();try{consume({{defer observe(7u64);observe(1u64);throw e;}},'
         '{observe(98u64);2u64});{}}catch(caught:const NullPointerException){behave @print(caught.category);};',
-        '1\n7\n4\n', OBSERVE + 'proc consume(x:T,y:T)->void where T{behave @print(y);}'),
+        '1\n7\n4\n', OBSERVE + 'proc consume(x:T,y:T)->void where T{behave @print(y);return;}'),
     'throw_only_uses_callable_view_argument_signature': run(
         'proc invoke=take;val e<-sample_error();try{invoke({{throw e;}});{}}'
         'catch(caught:const NullPointerException){behave @print(caught.category);};', '4\n', TAKE),
     'throw_only_supplies_no_callable_payload': run(
         'val e<-sample_error();try{apply({{throw e;}});{}}'
         'catch(caught:const NullPointerException){behave @print(caught.category);};', '4\n',
-        'proc apply(fn:func(u64)->u64)->void{behave @print(fn(7u64));}'),
+        'proc apply(fn:func(u64)->u64)->void{behave @print(fn(7u64));return;}'),
     'throw_only_uses_declared_result_signature': run(
         'try{take(expose(sample_error()));{}}catch(caught:const NullPointerException){behave @print(caught.category);};',
         '4\n', TAKE + 'func expose(val e:NullPointerException)->u64 throws NullPointerException;'
@@ -200,7 +200,7 @@ runner.CASES = {
         'val e<-sample_error();try{take({{return {{throw e;}};}});{}}'
         'catch(caught:const NullPointerException){behave @print(caught.category);};', '4\n', TAKE),
     'throw_only_result_keeps_checked_obligation': reject(IO + TAKE + 'val e<-sample_error();take({{throw e;}});'),
-    'ordinary_void_scope_cannot_supply_argument': reject(TAKE + 'take({{7u64;}});',
+    'ordinary_void_scope_cannot_supply_argument': reject(IO + TAKE + 'take({{7u64:void;}});',
         'non-value or abruptly completing operand'),
     'ambiguous_contract_cannot_type_throw_only_result': reject(
         TAKE + 'proc take(value:bool)->void{}val e<-sample_error();'
@@ -231,11 +231,11 @@ runner.CASES = {
     'query_retains_initialization_of_selected_target': (
         IO+'proc run(flag:bool)->void{'+query(UNWRITTEN+'val other<-make local u64;'
         'ptr p=if(flag){local}else{other};p<-7u64;return p;', '')+
-        'behave @print(result);}run(true);', 0, '4\n', ''),
+        'behave @print(result);return;}run(true);', 0, '4\n', ''),
     'query_keeps_initialized_selection_across_reference_copy': (
         IO+'proc run(flag:bool)->void{'+query(UNWRITTEN+'val other<-make local u64;val ready<-1u64;'
         'ptr p=if(flag){local}else{other};p<-7u64;ptr retained=p;p=ready;return retained;', '')+
-        'behave @print(result);}run(true);', 0, '4\n', ''),
+        'behave @print(result);return;}run(true);', 0, '4\n', ''),
     'query_checks_a_target_from_a_borrowed_result_signature': (
         'func same(ptr x:u64 in O)->ptr u64 in O where {owner O};'+query(UNWRITTEN+
         'ptr p=same(local);try{return p;}catch(e:const NullPointerException){return 4u64;};'),
@@ -543,7 +543,7 @@ runner.CASES = {
               'finally{late;{}};return late;') + 'behave @print(result);',
         0, '4\n', ''),
     'nested_checked_calls': run('proc pass(val e:NullPointerException)->void throws NullPointerException'
-                                '{ {{ {{forward(e);}}; }}; }'
+                                '{ {{ {{forward(e);}}; }};return;}'
                                 'try{pass(sample_error());}catch(caught:const NullPointerException){behave @print(caught.category);};',
                                 '4\n', FORWARD),
     'checked_call_only_inside_scope': reject(DECLARED + '{{declared();}};'),
@@ -585,16 +585,16 @@ runner.CASES = {
     'eager_defer_preparation_uses_ordinary_catch': run('val flag<-true;val e<-sample_error();'
         'try{defer report({{if(flag){throw e;}else{return 7u64;};}});}'
         'catch(caught:const NullPointerException){behave @print(caught.category);};',
-        '4\n', 'proc report(value:u64)->void{behave @print(value);}'),
+        '4\n', 'proc report(value:u64)->void{behave @print(value);return;}'),
     'generic_checked_interface': run('proc run(val e:T)->void where T{'
-        'try{ {{throw e;}}; }catch(caught:const NullPointerException){behave @print(caught.category);};}'
+        'try{ {{throw e;}}; }catch(caught:const NullPointerException){behave @print(caught.category);};return;}'
         'run(sample_error());', '4\n'),
     'separate_scope_interfaces': (IO + TYPES + PAYLOAD +
         'using "std:exceptions" MissingReturnError;func missing()->u64{}'
         'func unchecked()->const MissingReturnError{try{missing();{}}catch(caught:const MissingReturnError)'
         '{return caught;};return unchecked();}'
-        'proc checked_path(val e:NullPointerException)->void throws NullPointerException{ {{throw e;}}; }'
-        'proc unchecked_path(val e:MissingReturnError)->void{ {{throw e;}}; }'
+        'proc checked_path(val e:NullPointerException)->void throws NullPointerException{ {{throw e;}}; return; }'
+        'proc unchecked_path(val e:MissingReturnError)->void{ {{throw e;}}; return; }'
         'try{checked_path(sample_error());}catch(checked:const NullPointerException){behave @print(checked.category);};'
         'try{unchecked_path(unchecked());}catch(failed:const MissingReturnError){behave @print(failed.category);};',
         0, '4\n5\n', '[-Wmissing-return]'),
@@ -603,14 +603,14 @@ runner.CASES = {
 for name, declaration, body, rejects in (
     ('writes_saved_target_on_void_completion', WRITER, 'defer fill(selected);return selected;', False),
     ('writes_saved_target_with_discarded_scalar_result',
-     WRITER.replace('->void', '->bool').replace(WRITE_WHEN_PRESENT, WRITE_WHEN_PRESENT+'return true;'),
+     WRITER.replace('->void', '->bool').replace('return;}', 'return true;}'),
      'defer fill(selected);return selected;', False),
     ('writes_saved_target_after_later_operand_rebind', WRITER_WITH_LATER_OPERAND,
      'ptr held=selected;defer fill(selected,{selected=backup;true});return held;', False),
     ('writes_saved_target_through_recursive_forwarding',
      WRITER.replace('proc fill(', 'proc write_value(')+
      'proc fill(ptr p:u64 in O,n:u64)->void where {owner O}{'
-     'if(n>0u64){fill(p,n-1u64);}else{write_value(p);};}',
+     'if(n>0u64){fill(p,n-1u64);}else{write_value(p);};return;}',
      'defer fill(selected,2u64);return selected;', False),
     ('keeps_a_rebound_target_unwritten', WRITER_WITH_LATER_OPERAND,
      SAVED_OPPOSITE+'defer fill(selected,{selected=opposite;true});return selected;', True),
@@ -632,9 +632,9 @@ runner.CASES['query_call_null_path_leaves_physical_storage_unwritten'] = (
 
 PAIR_INPUTS = 'proc fill(ptr p:u64 in O,ptr q:u64 in O,pick:bool)'
 WRITE_ONE = 'if(pick){'+WRITE_WHEN_PRESENT+'}else{'+WRITE_WHEN_PRESENT.replace('p', 'q')+'};'
-PAIR_WRITER = PAIR_INPUTS+'->void where {owner O}{'+WRITE_ONE+'}'
+PAIR_WRITER = PAIR_INPUTS+'->void where {owner O}{'+WRITE_ONE+'return;}'
 PERMUTE_INPUTS = ('proc forward(ptr p:u64 in O,ptr q:u64 in O,pick:bool,n:u64)->void where {owner O}'
-                  '{if(n>0u64){forward(q,p,pick,n-1u64);}else{fill(p,q,pick);};}')
+                  '{if(n>0u64){forward(q,p,pick,n-1u64);}else{fill(p,q,pick);};return;}')
 
 for name, declaration, body, rejects in (
     ('ordinary_shared_write', PAIR_WRITER, 'fill(selected,selected,flag);return selected;', False),
@@ -687,7 +687,7 @@ runner.CASES['query_repeated_defer_cannot_read_before_the_actions_run'] = saved_
     EARLY_LOOP_READ, inspect=True, rejects=True, declarations=PAIR_WRITER)
 
 PUT = ('proc put(ptr p:u64 in O,value:u64)->void where {owner O}'
-       '{if(p is not null){p<-value;{}}else{};}')
+       '{if(p is not null){p<-value;{}}else{};return;}')
 FALLIBLE_PREPARATION = (PAYLOAD+PUT+'proc prepare(flag:bool)->u64 throws NullPointerException'
                         '{if(flag){return 7u64;}else{throw sample_error();};}')
 HANDLER = 'catch(e:const NullPointerException)'

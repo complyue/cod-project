@@ -9,13 +9,14 @@ FIXTURE = FIXTURE.updated(source='''
 using symbol "std:io" @print;
 using "std:exceptions" NullPointerException;
 using "std:exceptions" OutOfMemoryError;
-proc observe(x:u64)->void{behave @print(x);}
+proc observe(x:u64)->void{behave @print(x);return;}
 proc body_null()->void {
   ptr p:u64=null in here;
   defer{observe(31u64);observe(9002u64);};observe(9001u64);
   try{observe(p);}catch(e:const NullPointerException){
     observe(e.category);observe(e.requested);observe(e.available);observe(e.cause_count);
   };
+  return;
 }
 proc deferred_null()->void throws NullPointerException {
   val a<-32u64;ptr p=a;
@@ -38,6 +39,7 @@ proc captured()->void {
     defer{if((q is null)){observe(37u64);}else{observe(q.category);};};
     q=null;{};
   };
+  return;
 }
 body_null();
 try{deferred_null();}catch(e:const NullPointerException){observe(4u64);};

@@ -9,7 +9,7 @@ ERROR = '''using "std:exceptions" Exception;
 using "std:exceptions" MissingReturnError;
 using "std:exceptions" NullPointerException;
 func missing()->u64{}
-func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}
+func error()->const MissingReturnError{try{missing():void;}catch(e:const MissingReturnError){return e;};}
 func null_error()->const NullPointerException{val x<-1;ptr p=x;p=null;try{p;{}}catch(e:const NullPointerException){return e;};}
 '''
 runner.CASES = {

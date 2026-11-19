@@ -14,6 +14,7 @@ proc captured()->void {
     const ptr alias=e,other=e;
     defer{observe(alias.category);observe(other.category);};
   };
+  return;
 }
 captured();
 """)

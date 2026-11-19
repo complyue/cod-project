@@ -11,7 +11,7 @@ runner.CASES={}
 def case(name,body=READ+UPDATE,setup=SETUP,before='',after='',definitions='',output='7\n7\n9\n',reject=False,diagnostic='initialization',loop=None,action=None):
     if loop is None:loop='for(i in 0u64..3u64){ '+body+' };'
     if action is None:action='defer{ '+loop+' };'
-    source = (IO+definitions+'proc run()->void throws NullPointerException{'+setup+before+action+after+'}'
+    source = (IO+definitions+'proc run()->void throws NullPointerException{'+setup+before+action+after+'return;}'
               'try{run();}catch(e:const NullPointerException){behave @print(99u64);};')
     runner.CASES[name]=(source,2 if reject else 0,'' if reject else output,diagnostic if reject else '')
 
@@ -59,8 +59,8 @@ case('handler_loop',definitions=FAIL,after='fail();',action='defer catch(incomin
 case('failed_write',definitions=FAIL,body=READ+'try{c<-fail();{}}catch(failure:const NullPointerException){};observed=c;',reject=True)
 case('recovered_write',definitions=FAIL,body=READ+'try{c<-fail();{}}catch(failure:const NullPointerException){c<-9u64;{}};observed=c;',output='7\n9\n9\n')
 case('fold',loop='behave @print(fold(i in 0u64..3u64,total=0u64){'+UPDATE+'total+observed});',output='25\n')
-OBSERVE='proc observe(value:u64)->void{behave @print(value);}'
-OBSERVE_BORROWED = 'proc observe(ref value:const u64 in O)->void where {owner O}{behave @print(value);}'
+OBSERVE='proc observe(value:u64)->void{behave @print(value);return;}'
+OBSERVE_BORROWED = 'proc observe(ref value:const u64 in O)->void where {owner O}{behave @print(value);return;}'
 OBSERVE_AND_ADVANCE = (
     'proc inspect_next(ptr observed:u64 in O,ptr replacement:u64 in O)->ptr u64 in O where {owner O}{'
     'if(observed is null||replacement is null){return observed;}else{};'

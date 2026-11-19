@@ -22,6 +22,7 @@ proc exercise(ref a:func(u64)->const u64 in O,ref b:func(u64)->const u64 in O)->
  {{defer (<=>)(a,b);}};
  observe(9011u64);
  observe(a(1u64));observe(b(1u64));
+ return;
 }
 {{
  func kept=wrap(base);

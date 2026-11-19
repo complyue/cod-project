@@ -18,6 +18,7 @@ proc declared_queries(callback:func(u64)->const u64)->void{
  val fourth<-make local typeof(declared_proc(query_effect,3u64)){35u64};
  observe(9011u64);
  if(first&&third){observe(second);observe(fourth);}else{};
+ return;
 }
 declared_queries(wrap(base));observe(9000u64);
 ''')

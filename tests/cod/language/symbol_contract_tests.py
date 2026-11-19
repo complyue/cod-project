@@ -25,11 +25,11 @@ runner.CASES = {
         'behave @print(outer());', 0, '13\n', ''),
     'print_identity_aliases': ('using symbol "std:io" @print as @first;using symbol "std:io" @print as @second;'
         'behave @first(1u64);perform @second(2u64);', 0, '1\n2\n', ''),
-    'caller_shadow_does_not_rebind': (IO + 'proc emit()->void{behave @print(14u64);}proc caller(print:u64)->void{emit();}caller(1u64);', 0, '14\n', ''),
-    'module_value_keeps_definition_context': (IO + 'proc emit()->void{behave @print(14u64);}proc caller(print:u64)->void{proc p=emit;p();}caller(1u64);', 0, '14\n', ''),
-    'lexical_definition_context': (IO + 'proc p=proc()->void{behave @print(15u64);};{{val print<-0u64;p();}};', 0, '15\n', ''),
+    'caller_shadow_does_not_rebind': (IO + 'proc emit()->void{behave @print(14u64);return;}proc caller(print:u64)->void{emit();return;}caller(1u64);', 0, '14\n', ''),
+    'module_value_keeps_definition_context': (IO + 'proc emit()->void{behave @print(14u64);return;}proc caller(print:u64)->void{proc p=emit;p();return;}caller(1u64);', 0, '14\n', ''),
+    'lexical_definition_context': (IO + 'proc p=proc()->void{behave @print(15u64);return;};{{val print<-0u64;p();}};', 0, '15\n', ''),
     'recursive_definition_context': (IO + 'proc outer()->void{proc p(n:u64)->void{'
-        'if(n==0u64){behave @print(16u64);}else{{{val print<-0u64;p(n-1u64);}}};};p(2u64);}outer();', 0, '16\n', ''),
+        'if(n==0u64){behave @print(16u64);}else{{{val print<-0u64;p(n-1u64);}}};return;};p(2u64);return;}outer();', 0, '16\n', ''),
     'queried_anonymous_result': (IO + SYMBOL + 'val x<-make local typeof((func(){return @gain;})()){17u64};behave @print(x);', 0, '17\n', ''),
     'queried_anonymous_shadow': (SYMBOL + 'func outer(gain:u64){val x<-make local typeof((func(){return @gain;})()){0u64};return x;}outer(1u64);',
         2, '', "nearest binding 'gain' is not a symbol"),

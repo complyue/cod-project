@@ -7,7 +7,7 @@ import contextual_capture_tests as source
 FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__), Path(__file__).with_name('contextual_capture_tests.py'), Path(__file__).with_name('deferred_capture_tests.py'), Path(__file__).with_name('foundation_tests.py')])
 
 FIXTURE = FIXTURE.updated(source=FIXTURE.source + source.PICK + '''
-proc observe_in_helper(value:T)->void where T{defer{observe(value.category);};}
+proc observe_in_helper(value:T)->void where T{defer{observe(value.category);};return;}
 proc contextual_records(tag:T)->void where T {
  func held=wrap(base);
  try{throw bound_error();}catch(e:const MissingReturnError){
@@ -20,6 +20,7 @@ proc contextual_records(tag:T)->void where T {
    observe(9050u64);
    try{defer{observe(y.category);};}catch(failure:const OutOfMemoryError){observe(9051u64);};
  };
+ return;
 }
 contextual_records(false);contextual_records(0);
 observe(9000u64);

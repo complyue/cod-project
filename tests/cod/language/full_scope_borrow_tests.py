@@ -14,7 +14,7 @@ VALUES = ('func one()->u64{return 1u64;}func two()->u64{return 2u64;}'
 CHECKED = NPE + ('func error()->const NullPointerException{ptr nil:u64=null in here;'
                  'try{nil;{}}catch(e:const NullPointerException){return e;};return error();}')
 SLOT_METHOD = 'proc (<=>)(ptr a:i64 in O,ptr b:i64 in O)->void'
-SLOT_BODY = ' where {owner O}{if(a is not null){ {{b=null;behave @print(a);}}; }else{};}'
+SLOT_BODY = ' where {owner O}{if(a is not null){ {{b=null;behave @print(a);}}; }else{};return;}'
 SLOT_CALLS = ('val x<-1,y<-7;ptr p=x,q=y;'
               'try{p<=>p;}catch(e:const NullPointerException){behave @print(8);};behave @print(p is null);'
               'p=x;try{p<=>q;}catch(e:const NullPointerException){behave @print(9);};'
@@ -48,7 +48,7 @@ runner.CASES = {
     'live_slot_and_deferred_write': (IO+'ref a:u64=1u64;ref b:u64=10u64;ref p:u64=a;'
         '{{p=b;defer{p<-20u64;};}};behave @print(p is b);behave @print(a+b);', 0, 'true\n21\n', ''),
     'nullable_slot_can_rebind': (IO+'ptr p:u64=null in here;ref b:u64=10u64;'
-        '{{behave @print(p is null);p=b;behave @print(p);p=null;}};behave @print(p is null);', 0, 'true\n10\ntrue\n', ''),
+        '{{behave @print(p is null);p=b;behave @print(p);p=null:void;}};behave @print(p is null);', 0, 'true\n10\ntrue\n', ''),
     'nonnull_ptr_can_rebind_to_null': (IO+'ref a:u64=2u64;ptr p:u64=a;'
         '{{behave @print(p);p=null;behave @print(p is null);}};behave @print(p is null);', 0, '2\ntrue\ntrue\n', ''),
     'nullable_read_infers_checked_failure': (NPE+'ptr p:u64=null in here;{{return p;}};', 2, '',
@@ -66,12 +66,12 @@ runner.CASES = {
     'same_actual_owner_in_forwarded_call': (IO+SELECT+'ref a:u64=1u64;ref b:u64=2u64;'
         'behave @print({{return select(a,b);}});', 0, '1\n', ''),
     'distinct_actual_owners_in_forwarded_call': (IO+SELECT+'proc show(ref outer:u64 in O)->void where {owner O}{'
-        'ref local:u64=1u64;behave @print({{return select(outer,local);}});}'
+        'ref local:u64=1u64;behave @print({{return select(outer,local);}});return;}'
         'ref a:u64=1u64;show(a);', 0, 'true\n', ''),
     'named_owner_keeps_same_role': (IO+'proc show(ref outer:u64 in O)->void where {owner O}{'
-        ' {{ptr p:u64 in O=null in O;p=outer;p<-9u64;}};}ref a:u64=1u64;show(a);behave @print(a);', 0, '9\n', ''),
+        ' {{ptr p:u64 in O=null in O;p=outer;p<-9u64;}};return;}ref a:u64=1u64;show(a);behave @print(a);', 0, '9\n', ''),
     'named_owner_without_captured_target': (IO+'proc show(ref unused:u64 in O)->void where {owner O}{'
-        ' {{ptr p:u64 in O=null in O;behave @print(p is null);}};}ref a:u64=1u64;show(a);', 0, 'true\n', ''),
+        ' {{ptr p:u64 in O=null in O;behave @print(p is null);}};return;}ref a:u64=1u64;show(a);', 0, 'true\n', ''),
     'fixed_slot_preserves_writable_target': (IO+'ref a:u64=1u64;const ptr p:u64=a;{{p<-5u64;}};behave @print(a);', 0, '5\n', ''),
     'fixed_slot_rebind_rejected': ('ref a:u64=1u64;const ptr p:u64=a;{{p=null;}};', 2, '', 'cannot rebind a const reference binding'),
     'readonly_target_write_rejected': ('ref a:const u64=1u64;{{a<-2u64;}};', 2, '', 'readonly'),
@@ -113,7 +113,7 @@ runner.CASES = {
         'val result<-make local typeof({{return p;}}){6u64};behave @print(result);', 0, '6\n', ''),
     'nested_query_retains_binding_evidence_only': (IO+'proc run()->void{val source<-make local u64;ptr p:u64=source;'
         'func inspect()->u64{val result<-make local typeof({{return p;}}){6u64};return result;};'
-        'behave @print(inspect());}run();', 0, '6\n', ''),
+        'behave @print(inspect());return;}run();', 0, '6\n', ''),
     'query_only_owner_is_not_transported': (IO+'func run(ref item:u64 in O)->bool where {owner O}{'
         'func inspect()->bool{val answer<-make local typeof({{return null in O is null;}}){true};return answer;};'
         'return inspect();}val source<-1u64;behave @print(run(source));', 0, 'true\n', ''),
@@ -166,7 +166,7 @@ runner.CASES = {
         'behave @print(retain(3u64));func saved=retain(one);behave @print(saved());behave @print(retain(8));', 0, '3\n1\n8\n', ''),
     'prepared_transfer_keeps_target_across_live_rebind': (IO+
         'proc run()->void{val a<-11u64,b<-22u64;ptr p=a;defer{behave @print(a);behave @print(b);};'
-        'defer (<-)(p,7u64);{{p=b;}};behave @print(p);}run();', 0, '22\n7\n22\n', ''),
+        'defer (<-)(p,7u64);{{p=b;}};behave @print(p);return;}run();', 0, '22\n7\n22\n', ''),
     'overlapping_supplier_binding_slots': (
         IO+NPE+SLOT_METHOD+' throws NullPointerException'+SLOT_BODY+SLOT_CALLS, 0, '8\ntrue\n1\nfalse\ntrue\n', ''),
     'overlapping_slots_keep_nullable_read_obligation': (
@@ -178,7 +178,7 @@ UNWRITTEN_REPLACEMENT = 'val a<-11u64;val b<-make local u64;ptr p=a;'
 for name, declarations, body, expected, diagnostic in (
     ('nested_rebind', '', READY_REPLACEMENT+'{{ {{p=b;}}; }};return p;', '22\n', ''),
     ('prepared_rebind_in_cleanup', '', READY_REPLACEMENT+'{{defer (=)(p,b);}};return p;', '22\n', ''),
-    ('discarded_rebind_does_not_read_payload', '', UNWRITTEN_REPLACEMENT+'ptr saved=p;{{p=b;}};return saved;', '11\n', ''),
+    ('discarded_rebind_does_not_read_payload', '', UNWRITTEN_REPLACEMENT+'ptr saved=p;{{p=b:void;}};return saved;', '11\n', ''),
     ('rebind_drops_old_readiness', '', UNWRITTEN_REPLACEMENT+'{{defer (<-)(p,7u64);p=b;}};return p;', '', 'initialization'),
     ('checked_failure_keeps_unwritten_target', CHECKED, UNWRITTEN_REPLACEMENT+
         'val e<-error();try{ {{p=b;throw e;}}; }catch(x:const NullPointerException){return p;};return p;', '', 'initialization'),
@@ -203,9 +203,9 @@ for name, body, expected, diagnostic in (
     ('declared_place_nested_names_share_slot', SELECTED_PLACE+
      'var other->selected;return {{ {{other=z;}};return selected;}};', '33\n33\n', ''),
     ('declared_place_initializes_selected_value', SELECTED_VALUE_PLACE+
-     '{{selected<-41u64;}};return selected;', '41\n41\n', ''),
+     '{{selected<-41u64:void;}};return selected;', '41\n41\n', ''),
     ('declared_place_does_not_initialize_unselected_value', SELECTED_VALUE_PLACE+
-     '{{selected<-41u64;}};return x;', '', 'initializ'),
+     '{{selected<-41u64:void;}};return x;', '', 'initializ'),
     ('declared_place_preserves_prepared_target', PLACE_REFERENCES+
      'var selected->p;{{defer (<-)(selected,8u64);p=y;}};return x+p;', '30\n', ''),
     ('declared_place_keeps_name_specific_const', PLACE_REFERENCES+
@@ -243,7 +243,7 @@ for name, body, expected, diagnostic in (
     ('declared_place_target_owner_is_not_place_owner',
      'var selected->p;{{var wrong in O->selected;}};return 1u64;', '', 'selected binding storage'),
     ('declared_place_preserves_external_target_owner',
-     'var selected->p;{{ptr local:u64 in O=null in O;selected=local;}};return if(p is null){3u64}else{8u64};',
+     'var selected->p;{{ptr local:u64 in O=null in O;selected=local:void;}};return if(p is null){3u64}else{8u64};',
      '3\n', ''),
 ):
     prefix = IO+'proc run(ptr p:u64 in O)->u64 where {owner O}{'

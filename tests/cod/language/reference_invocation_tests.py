@@ -4,7 +4,7 @@ from pathlib import Path
 import foundation_tests as runner
 
 IO = 'using symbol "std:io" @print;'
-OBS = IO + 'proc observe(x:i64)->void {behave @print(x);}'
+OBS = IO + 'proc observe(x:i64)->void {behave @print(x);return;}'
 EX = 'using "std:exceptions" MissingReturnError;func missing()->const i64 {}'
 SELECT_AFTER_CLEANUP = (
     'func select(ref first:i64 in O,ref next:i64 in O)->ref i64 in O where {owner O}'
@@ -21,7 +21,7 @@ runner.CASES = {
     'deferred_null_literal': ('defer (is)(null in here,null);', 0, '', ''),
     'registration_order': (OBS + '{{defer observe(3);ptr p:i64=null in here;defer (is)({observe(1);p},null);observe(2);}};', 0, '1\n2\n3\n', ''),
     'late_rebinding': (IO+'proc run()->void{val target<-make local i64;ptr p:i64=null in here;'
-        'defer{behave @print((p is null));};defer (is)(p,null);defer{p=target;};}run();',0,'false\n',''),
+        'defer{behave @print((p is null));};defer (is)(p,null);defer{p=target;};return;}run();',0,'false\n',''),
     'preparation_failure': (OBS + EX + '{{defer observe(3);ptr p:i64=null in here;'
         'try{defer (is)({observe(1);missing();p},null);}catch(e:const MissingReturnError){observe(2);};}};',
         0, '1\n2\n3\n', '[-Wmissing-return]'),
@@ -42,7 +42,7 @@ runner.CASES = {
         0, 'true\n', ''),
     'captured_callable_holder': (IO + 'func base()->i64{return 7;}func f=func[base]()->i64{return base();};'
         '{{ptr p=f;defer (is)(p,null);}};behave @print(f());', 0, '7\n', ''),
-    'local_proc_test': (OBS + 'proc f()->void{ptr p:i64=null in here;defer (is)(p,null);defer observe(1);}f();', 0, '1\n', ''),
+    'local_proc_test': (OBS + 'proc f()->void{ptr p:i64=null in here;defer (is)(p,null);defer observe(1);return;}f();', 0, '1\n', ''),
     'swap_saved_slots': (OBS + 'val x<-1,y<-2,z<-3;ptr p=x,q=y,r=z;'
         '{if(true){p}else{q}}<=>{observe(8);p=r;q};observe(p);observe(q);', 0, '8\n2\n3\n', ''),
     'swap_cleanup_before_invocation': (OBS+SELECT_AFTER_CLEANUP+'val x<-1,y<-2,z<-3;ptr p=x,q=y;'
@@ -52,7 +52,7 @@ runner.CASES = {
         0,'true\ntrue\n4\n',''),
     'fixed_reference_swap': ('ptr p=1;const ptr q=2;intrinsic (<=>)(p,q);', 2, '', 'cannot rebind a const reference binding'),
     'deferred_slot_swap': (OBS+'proc run()->void{ptr p=1,q=2;defer{observe(p);observe(q);};'
-        'defer intrinsic (<=>)(p,q);}run();',0,'2\n1\n',''),
+        'defer intrinsic (<=>)(p,q);return;}run();',0,'2\n1\n',''),
 }
 runner.CASE_ARGUMENTS = {}
 runner.CASE_SHADOWS = {

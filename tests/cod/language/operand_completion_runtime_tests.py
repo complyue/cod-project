@@ -39,10 +39,11 @@ FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 using "std:exceptions" NullPointerException;
 func pick_image(tag:bool,ptr f:func(u64)->const u64 in O)->ptr (func(u64)->const u64) in O where {owner O}{return f;}
 func pick_image(tag:i64,ptr f:func(u64)->const u64 in O)->func(u64)->const u64 where {owner O}{return wrap(base);}
-proc observe_application(f:func(u64)->const u64,x:u64)->void{observe(f(x));}
+proc observe_application(f:func(u64)->const u64,x:u64)->void{observe(f(x));return;}
 proc schedule_image(tag:T,ref f:func(u64)->const u64 in O)->void throws NullPointerException where {T,owner O}{
  ptr p=f;p=null;proc invoke=observe_application;
  defer invoke({pick_image(tag,p)},{observe(9u64);5u64});
+ return;
 }
 {{func f=wrap(base);try{schedule_image(false,f);}catch(e:const NullPointerException){observe(8u64);};try{schedule_image(0,f);}catch(e:const NullPointerException){};}};
 observe(9000u64);

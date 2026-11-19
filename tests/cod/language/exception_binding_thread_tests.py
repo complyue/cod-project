@@ -7,7 +7,7 @@ runner.SOURCE = '''
 using symbol "std:io" @print;
 using "std:exceptions" MissingReturnError;
 func missing()->u64{}
-func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}
+func error()->const MissingReturnError{try{missing():void;}catch(e:const MissingReturnError){return e;};}
 func chain(e:MissingReturnError)->const MissingReturnError{return try{throw e from e;}catch(x:const MissingReturnError){x};}
 symbol @context:MissingReturnError;
 symbol @selected:proc()->u64;

@@ -10,8 +10,8 @@ using symbol "std:io" @print;
 using "std:exceptions" OutOfMemoryError;
 using "std:exceptions" MissingReturnError;
 using "std:exceptions" NullPointerException;
-proc observe(x:u64)->void{behave @print(x);}
-proc register_during_helper()->void{observe(9001u64);defer observe(99u64);}
+proc observe(x:u64)->void{behave @print(x);return;}
+proc register_during_helper()->void{observe(9001u64);defer observe(99u64);return;}
 proc retained(ptr x:u64 in O,ptr y:u64 in O)->ptr u64 in O where {owner O}{
   defer catch(e:const OutOfMemoryError){observe(1u64);observe(9002u64);};
   defer register_during_helper();

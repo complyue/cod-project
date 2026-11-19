@@ -10,7 +10,7 @@ using symbol "std:io" @print;
 using "std:exceptions" NullPointerException;
 using "std:exceptions" OutOfMemoryError;
 using "std:exceptions" MissingReturnError;
-proc observe(x:u64)->void{behave @print(x);}
+proc observe(x:u64)->void{behave @print(x);return;}
 func missing()->const u64{}
 proc set(ptr x:u64 in O)->void throws NullPointerException where {owner O}{observe(9003u64);x<-71u64;}
 proc read(ptr x:u64 in O)->void throws NullPointerException where {owner O}{observe(x);}

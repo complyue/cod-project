@@ -16,6 +16,7 @@ proc selected_images(flag:bool)->void{
  observe(9030u64);
  try{({if(flag){a}else{b}}=g)<-f;{}}catch(e:const OutOfMemoryError){observe(9031u64);};
  observe(a(1u64));observe(b(1u64));observe(c(1u64));
+ return;
 }
 func selected_return(flag:bool)->const (func(u64)->const u64){
  func f=wrap(base);func g=wrap(other);ptr a=f,b=g;

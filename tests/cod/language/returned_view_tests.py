@@ -7,8 +7,8 @@ import foundation_tests as runner
 IO = 'using symbol "std:io" @print;\n'
 PRE = IO + 'using "std:exceptions" NullPointerException;\n'
 MISS = 'using "std:exceptions" MissingReturnError;func missing()->const i64{}\n'
-ERROR = MISS + 'func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}\n'
-WARN = 'callable may finish without an explicit return'
+ERROR = MISS + 'func error()->const MissingReturnError{try{missing():void;}catch(e:const MissingReturnError){return e;};}\n'
+WARN = 'callable may finish without a result'
 SELECT = 'func first(ptr x:i64 in O,ptr y:i64 in O)->ptr i64 in O where {owner O}{return x;}\n'
 SET = 'func set(ptr x:i64 in O)->ptr i64 in O throws NullPointerException where {owner O}{x<-81;return x;}\n'
 LOCALS = 'val a<-make local i64,b<-make local i64;ptr p=if(true){a}else{b};'
@@ -38,7 +38,7 @@ runner.CASES = {
     'recovery_preserves_saved_result': (PRE+MISS+'func f(ptr x:i64 in O,ptr y:i64 in O)->ptr i64 in O where {owner O}{defer catch(e:const MissingReturnError){};defer{missing();};return x;}val a<-97,b<-make local i64;try{behave @print(f(a,b));}catch(e:const NullPointerException){};',0,'97\n',WARN),
     'callee_completion_proof_gap': (PRE+MISS+'func f(ptr x:i64 in O,ptr y:i64 in O)->ptr i64 in O where {owner O}{defer catch(e:const MissingReturnError){return y;};defer{missing();};return x;}val a<-make local i64,b<-98;try{behave @print(f(a,b));}catch(e:const NullPointerException){};',2,'','before definite initialization'),
     'recovery_replaces_saved_result': (PRE+ERROR+'func f(ptr x:i64 in O,ptr y:i64 in O,e:MissingReturnError)->ptr i64 in O where {owner O}{defer catch(e:const MissingReturnError){return y;};defer{throw e;};return x;}val a<-make local i64,b<-98;try{behave @print(f(a,b,error()));}catch(e:const NullPointerException){};',0,'98\n',WARN),
-    'body_exception_recovery_result': (PRE+MISS+'func f(ptr x:i64 in O,ptr y:i64 in O)->ptr i64 in O where {owner O}{defer catch(e:const MissingReturnError){return y;};missing();}val a<-make local i64,b<-99;try{behave @print(f(a,b));}catch(e:const NullPointerException){};',0,'99\n',WARN),
+    'body_exception_recovery_result': (PRE+MISS+'func f(ptr x:i64 in O,ptr y:i64 in O)->ptr i64 in O where {owner O}{defer catch(e:const MissingReturnError){return y;};missing():void;}val a<-make local i64,b<-99;try{behave @print(f(a,b));}catch(e:const NullPointerException){};',0,'99\n',WARN),
     'literal_null_still_requires_handler': (PRE+'func f(ptr x:i64 in O)->ptr i64 in O where {owner O}{return null;}val a<-100;behave @print(f(a));',2,'','requires a covering catch'),
     'null_result_does_not_read_argument': (PRE+'func f(ptr x:i64 in O)->ptr i64 in O where {owner O}{return null;}val a<-make local i64;try{behave @print(f(a));}catch(e:const NullPointerException){behave @print(100);};',0,'100\n',''),
     'nonnullable_parameter_ptr_result': (IO+'func f(ref x:i64 in O)->ptr i64 in O where {owner O}{return x;}val a<-101;ref p=f(a);behave @print(p);',0,'101\n',''),

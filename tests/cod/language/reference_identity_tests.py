@@ -29,7 +29,7 @@ runner.CASES = {
  'right_return_operand': (IO+'func f()->i64{val x<-make local i64;x is {return 8;};return 0;}'+OUT('f()'),0,'8\n',''),
  'explicit_intrinsic_forms': (IO+BASE+OUT('(is)(p,q)')+OUT('(is not)(p,r)')+OUT('intrinsic (is)(p,q)')+OUT('intrinsic (is not)(p,r)'),0,'true\ntrue\ntrue\ntrue\n',''),
  'prepared_identity': (PAIR+'ptr a:i64=null in here;defer (is)(a,null);defer intrinsic (is not)(a,null);defer same(a,a);',0,'',''),
- 'prepared_call_owner_transport': (IO+'proc same(ptr x:i64 in O,ptr y:i64 in P)->void where {owner O,owner P}{'+OUT('x is y')+'}ptr a:i64=null in here;{{ptr b:i64=null in here;defer same(a,b);defer same(a,a);}};',0,'true\nfalse\n',''),
+ 'prepared_call_owner_transport': (IO+'proc same(ptr x:i64 in O,ptr y:i64 in P)->void where {owner O,owner P}{'+OUT('x is y')+'return;}ptr a:i64=null in here;{{ptr b:i64=null in here;defer same(a,b);defer same(a,a);}};',0,'true\nfalse\n',''),
  'deferred_block': (IO+BASE+'{{defer{'+OUT('p is q')+'};p=r;}};',0,'false\n',''),
  'null_refinement': (IO+'func f(ptr p:i64 in O)->i64 where {owner O}{if(p is not null){return p;}else{return 0;};}val x<-9;ptr p=x;'+OUT('f(p)')+'p=null;'+OUT('f(p)'),0,'9\n0\n',''),
  'null_refinement_symmetric': (IO+'func f(ptr p:i64 in O)->i64 where {owner O}{if(null is not p){return p;}else{return 0;};}val x<-9;'+OUT('f(x)'),0,'9\n',''),

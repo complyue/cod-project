@@ -6,8 +6,8 @@ import foundation_tests as runner
 IO = 'using symbol "std:io" @print;'
 X = 'symbol @x:u64;'
 READ = 'proc read()->u64{return @x;}'
-SHOW = 'proc show()->void{behave @print(@x);}'
-MISSING = 'using "std:exceptions" MissingReturnError;func missing()->u64{}func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}'
+SHOW = 'proc show()->void{behave @print(@x);return;}'
+MISSING = 'using "std:exceptions" MissingReturnError;func missing()->u64{}func error()->const MissingReturnError{try{missing():void;}catch(e:const MissingReturnError){return e;};}'
 runner.CASES = {
     'basic': (IO+X+'effect @x<-1u64;behave @print(@x);effect @x<-2u64;behave @print(@x);', 0, '1\n2\n', ''),
     'grouping_and_full_scope': (IO+X+'effect @x<-1u64;{effect @x<-2u64;};behave @print(@x);'
@@ -59,7 +59,7 @@ runner.CASES = {
     'empty_else_restores': (IO+X+SHOW+'effect @x<-1u64;for(i in 0u64..0u64){}else{effect @x<-2u64;show();defer show();};show();', 0, '2\n1\n1\n', ''),
     'fold_restores': (IO+X+SHOW+'effect @x<-1u64;behave @print(fold(i in 0u64..3u64,a=0u64){effect @x<-i+1u64;a+@x});show();', 0, '6\n1\n', ''),
     'branch_establishes_binding': (IO+X+'if(true){effect @x<-2u64;}else{effect @x<-3u64;};behave @print(@x);', 0, '2\n', ''),
-    'touch_dependency': (X+'proc f()->void{touch @x;}effect @x<-1u64;f();', 0, '', ''),
+    'touch_dependency': (X+'proc f()->void{touch @x;return;}effect @x<-1u64;f();', 0, '', ''),
     'locally_bound_callable': (IO+X+'proc p=proc()->u64{effect @x<-2u64;return @x;};behave @print(p());', 0, '2\n', ''),
     'unbound_read': (X+'@x;', 2, '', 'cannot prove an installed binding'),
     'unbound_call': (X+READ+'read();', 2, '', 'cannot prove an installed binding'),

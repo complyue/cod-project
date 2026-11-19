@@ -11,8 +11,8 @@ func highother({PARAMETERS})->u64{{return n0+n31+10u64;}}
 func highwrap(callback:{VIEW})->{VIEW}{{
  return func[callback]({PARAMETERS})->u64{{return callback({NAMES})+1u64;}};
 }}
-proc highshow({PARAMETERS})->void{{observe(n0+n31+@x);}}
-proc otherhighshow({PARAMETERS})->void{{observe(n0+n31+10u64);}}
+proc highshow({PARAMETERS})->void{{observe(n0+n31+@x);return;}}
+proc otherhighshow({PARAMETERS})->void{{observe(n0+n31+10u64);return;}}
 {{{{
  func held=highwrap(highwrap(highbase));func saved=held;held<-highother;
  observe(saved({ARGUMENTS}));observe(held({ARGUMENTS}));
@@ -27,7 +27,7 @@ proc otherhighshow({PARAMETERS})->void{{observe(n0+n31+10u64);}}
  try{{defer show({ARGUMENTS});}}catch(e:const OutOfMemoryError){{observe(9031u64);}};
  observe(9050u64);
  try{{defer show({ARGUMENTS});}}catch(e:const OutOfMemoryError){{observe(9051u64);}};
- defer show({ARGUMENTS});show<-otherhighshow;
+ defer show({ARGUMENTS});show<-otherhighshow:void;
 }}}};
 observe(9000u64);
 '''

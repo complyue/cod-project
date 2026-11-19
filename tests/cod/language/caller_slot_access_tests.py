@@ -12,7 +12,7 @@ runner.CASES={}
 
 
 def case(name,body='',setup=BASE,call='ro<=>other;',after=OUT,output='1\n7\n',reject=False,definition=None,diagnostic='permission preservation'):
-    source=IO+(HEAD+'{'+body+'}' if definition is None else definition)+setup+'try{ '+call+after+'}catch(e:const NullPointerException){behave @print(99);};'
+    source=IO+(HEAD+'{ '+body+'{};}' if definition is None else definition)+setup+'try{ '+call+after+'}catch(e:const NullPointerException){behave @print(99);};'
     runner.CASES[name]=(source,2 if reject else 0,'' if reject else output,diagnostic if reject else '')
 
 
@@ -28,9 +28,9 @@ case('readonly_physical_source_swap',body='intrinsic (<=>)(left,right);',setup=B
 case('restoration_cannot_hide_bad_write',body='ptr saved=left;left=right;left=saved;',setup=BASE.replace('ptr p=x,q=y;','ptr p=x;ptr q:const i64=y;'),reject=True)
 runner.CASES['prepared_keeps_binding_slots'] = (
     IO+HEAD+'{intrinsic (<=>)(left,right);}proc run()->void{'+BASE+
-    'defer{'+OUT+'};defer (<=>)(ro,other);p=z;}run();',0,'7\n9\n','')
+    'defer{'+OUT+'};defer (<=>)(ro,other);p=z;return;}run();',0,'7\n9\n','')
 runner.CASES['prepared_bad_source'] = (
-    IO+HEAD+'{left=right;}proc run()->void{'+BASE.replace('ptr p=x,q=y;','ptr p=x;ptr q:const i64=y;')+
+    IO+HEAD+'{left=right:void;}proc run()->void{'+BASE.replace('ptr p=x,q=y;','ptr p=x;ptr q:const i64=y;')+
     'defer (<=>)(ro,other);}run();',2,'','permission preservation')
 case('deferred_action_swap',body='defer intrinsic (<=>)(left,right);',output='7\n1\n')
 case('deferred_bad_write_restored',body='ptr saved=left;defer intrinsic (=)(left,saved);left=right;',setup=BASE.replace('ptr p=x,q=y;','ptr p=x;ptr q:const i64=y;'),reject=True)
@@ -57,7 +57,7 @@ case('signature_access_stays_exact',body='left=right;',call='(<=>)(p,q);',output
 INNER=HEAD.replace('i64','u64')+'{intrinsic (<=>)(left,right);}'
 WRAPPER='func bridge(ptr a:const u64 in O,ptr b:const u64 in O)->void where {owner O}{a<=>b;}'
 case('ordinary_helper_local_slots',definition=INNER+WRAPPER,setup=BASE.replace('1,','1u64,').replace('7,','7u64,').replace('9;','9u64;'),call='bridge(ro,other);')
-for body_name,body in [('swap','intrinsic (<=>)(left,right);'),('restore','ptr saved=left;left=right;left=saved;')]:
+for body_name,body in [('swap','intrinsic (<=>)(left,right);'),('restore','ptr saved=left;left=right;left=saved:void;')]:
     for readonly in (False,True):
         setup=BASE if not readonly else BASE.replace('ptr p=x,q=y;','ptr p=x;ptr q:const i64=y;')
         main=IO+'using "inner.cod" (<=>) as inner;'+HEAD+'{inner(left,right);}'+setup+'try{ro<=>other;'+OUT+'}catch(e:const NullPointerException){behave @print(99);};'
@@ -88,7 +88,7 @@ for number,(p_readonly,q_readonly,first,restore) in enumerate(product((False,Tru
     case('access_model_'+str(number),body=body,setup=setup,reject=not safe,output=''.join(str(values[t])+'\n' for t in targets))
 
 READONLY_LEFT = BASE.replace('ptr p=x,q=y;', 'ptr p:const i64=x;ptr q=y;')
-RESTORE_LEFT = '{ptr saved=left;left=right;left=saved;}'
+RESTORE_LEFT = '{ptr saved=left;left=right;left=saved:void;}'
 case('saved_target_cannot_restore_into_writable_slot', body='ptr saved=left;left=right;right=saved;',
      setup=READONLY_LEFT, reject=True)
 case('distinct_slots_with_same_target', definition=HEAD+RESTORE_LEFT,
@@ -99,8 +99,8 @@ runner.CASES['nested_restore_distinct_mixed_access'] = ({
                 'try{ro<=>other;'+OUT+'}catch(e:const NullPointerException){behave @print(99);};',
 }, 0, '1\n7\n', '')
 runner.CASES['prepared_restore_distinct_mixed_access'] = (
-    IO+HEAD+'{ptr saved=left;defer intrinsic (=)(left,saved);left=right;}'+'proc run()->void{'+READONLY_LEFT+
-    'defer{'+OUT+'};defer (<=>)(ro,other);p=z;}run();', 0, '9\n7\n', '')
+    IO+HEAD+'{ptr saved=left;defer intrinsic (=)(left,saved);left=right:void;}'+'proc run()->void{'+READONLY_LEFT+
+    'defer{'+OUT+'};defer (<=>)(ro,other);p=z;return;}run();', 0, '9\n7\n', '')
 
 runner.CASE_ARGUMENTS={}
 runner.CASE_SHADOWS={name:[] for name in runner.CASES}

@@ -12,12 +12,12 @@ import tempfile
 
 from language_test_support import DIRECTORY, ROOT, MODE, COD, shadow_diagnostics, diagnostic_matches
 PRELUDE = 'using symbol "std:io" @print;\n'
-OBSERVER = PRELUDE + 'proc observe(x:u64)->void { behave @print(x); }\n'
+OBSERVER = PRELUDE + 'proc observe(x:u64)->void { behave @print(x); return; }\n'
 CASES = {
     "scalars": (None, 0, "6\n3\n4\ntrue\n100\n1\n1\n2\n720\ntrue\nfalse\n7\nfalse\n4\n3\n3\n4\n4\n4\n3\n3\n5\n4\n-4\n-1\n100\n1\n", ""),
     "cleanup": (None, 0, "1\n2\n5\n4\n2\n1\n9\n1\n3\n5\n4\n3\n1\n9\n0\n1\n2\n3\n3\n7\n8\n6\n11\n10\nfalse\ntrue\n", ""),
     "failure": (None, 70, "2\n3\n1\n0\n", "uncaught MissingReturnError"),
-    "preparation_failure": (OBSERVER + 'proc missing()->const u64 { defer observe(3u64); {} }\nproc go()->void { defer observe(1u64); defer observe(missing()); observe(99u64); }\ngo();', 70, "3\n1\n", "uncaught MissingReturnError"),
+    "preparation_failure": (OBSERVER + 'proc missing()->const u64 { defer observe(3u64); {} }\nproc go()->void { defer observe(1u64); defer observe(missing()); observe(99u64); return; }\ngo();', 70, "3\n1\n", "uncaught MissingReturnError"),
     "overflow_cleanup": (OBSERVER + 'proc go()->const u64 { defer observe(9u64); return 18446744073709551615u64 + 1u64; }\ngo();', 70, "9\n", "u64 addition overflow"),
     "division_cleanup": (OBSERVER + 'proc go()->const i64 { defer observe(8u64); return 3 / 0; }\ngo();', 70, "8\n", "division by zero"),
     "signed_boundaries": (PRELUDE + 'behave @print(-9223372036854775808); behave @print(-9223372036854775808 % -1); behave @print(1f32);', 0, "-9223372036854775808\n0\n1\n", ""),
@@ -33,9 +33,9 @@ CASES = {
     "function_effect": (PRELUDE + 'func wrong()->void { behave @print(1u64); } wrong();', 2, "", "function cannot invoke a dynamic procedure"),
     "nearest_symbol": (PRELUDE + 'proc wrong(print:u64)->void { behave @print(1u64); } wrong(3u64);', 2, "", "nearest binding 'print' is not a symbol"),
     "nearest_callable": ('func f()->const u64 {return 1u64;} func g(f:u64)->const u64 {return f();} g(1u64);', 2, "", "nearest binding 'f' is not callable"),
-    "local_storage": ('proc go()->void { val x<-1u64; } go();', 0, "", ""),
+    "local_storage": ('proc go()->void { val x<-1u64; return; } go();', 0, "", ""),
     "unselected_throws_type": ('func f(x:T)->const T throws StaticallyUnknownTypeException where T { return x; } f(1u64);', 2, "", "throws contracts"),
-    "missing_return_error": ('func f()->const u64 { 3u64 } f();', 2, "", "treated as error"),
+    "missing_return_error": ('func f()->const u64 { 3u64:void; } f();', 2, "", "treated as error"),
     "empty": ("", 0, "", ""),
 }
 CASE_ARGUMENTS = {"missing_return_error": ["-Werror=missing-return"]}

@@ -7,7 +7,7 @@ IO = 'using symbol "std:io" @print;\n'
 NPE = 'using "std:exceptions" NullPointerException;\n'
 ERROR = '''using "std:exceptions" MissingReturnError;
 func missing()->const i64{}
-func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}
+func error()->const MissingReturnError{try{missing():void;}catch(e:const MissingReturnError){return e;};}
 '''
 WARN = '[-Wmissing-return]'
 EXCEPTIONS = NPE+ERROR+'''using "std:exceptions" Exception;
@@ -44,17 +44,17 @@ runner.CASES = {
     'callable_body_intrinsics_not_captures': (IO+'func f=func[](ref x:i64,ref y:i64)->const i64{intrinsic (<=>)(x,y);return x;};behave @print(f(1,9));',0,'9\n',''),
     'inferred_callable_swap_body': (IO+'func f=func(val x:i64,val y:i64)->const i64{x<->y;return x;};behave @print(f(1,10));',0,'10\n',''),
     'borrowed_bits_setters': (IO+NPE+'proc swap(ptr first:i64 in O,ptr second:i64 in P)->void throws NullPointerException '
-        'where {owner O,owner P}{first<->second;}ref x:i64=1;'
+        'where {owner O,owner P}{first<->second;return;}ref x:i64=1;'
         '{{val y<-2;try{swap(x,y);}catch(e:const NullPointerException){};behave @print(y);}};behave @print(x);',
         0,'1\n2\n',''),
-    'callee_slot_exchange_is_local': (IO+'proc swap(ref x:i64 in O,ref y:i64 in O)->void where {owner O}{x<=>y;x<-11;}val x<-1,y<-2;ptr p=x,q=y;swap(p,q);behave @print(p);behave @print(q);',0,'1\n11\n',''),
+    'callee_slot_exchange_is_local': (IO+'proc swap(ref x:i64 in O,ref y:i64 in O)->void where {owner O}{x<=>y;x<-11;return;}val x<-1,y<-2;ptr p=x,q=y;swap(p,q);behave @print(p);behave @print(q);',0,'1\n11\n',''),
     'borrowed_result_after_exchange': (IO+'func select(ref x:T in O,ref y:T in O)->ref T in O where {T,owner O}{x<=>y;return x;}val x<-1,y<-2;select(x,y)<-12;behave @print(x);behave @print(y);',0,'1\n12\n',''),
     'loop_invariants': (IO+'func run(n:i64)->const i64{val x<-1,y<-10;ref p=x,q=y;for(i in 0..n){p<=>q;p<-p+1;};return p*100+q;}behave @print(run(0));behave @print(run(1));behave @print(run(2));behave @print(run(5));',0,'110\n1101\n211\n1303\n',''),
     'nested_loop_alias_exchange': (IO+'val x<-1,y<-2;ref p=x,q=y;var a->p;for(i in 0..3){for(j in 0..3){a<=>q;};};behave @print(p);behave @print(q);',0,'2\n1\n',''),
     'recursive_bits': (IO+'func rotate(val x:T,val y:T,n:i64)->const T where T{if(n==0){return x;}else{x<->y;return rotate(x,y,n-1);};}behave @print(rotate(1,13,31));behave @print(rotate(false,true,30));',0,'13\nfalse\n',''),
     'deferred_exchange': (IO+'proc run()->void{val x<-1,y<-2;ptr p=x,q=y;'
         'defer{behave @print(x);behave @print(y);};defer{p<->q;};'
-        'defer{behave @print(p);behave @print(q);};defer{p<=>q;};}run();',0,'2\n1\n2\n1\n',''),
+        'defer{behave @print(p);behave @print(q);};defer{p<=>q;};return;}run();',0,'2\n1\n2\n1\n',''),
     'deferred_observation_order': (IO+'{{val x<-1,y<-2;ptr p=x,q=y;defer{behave @print(p);};defer{p<=>q;};}};',0,'2\n',''),
     'callable_holder_reference_exchange': (IO+'func one()->const i64{return 1;}func two()->const i64{return 2;}func a=one;func b=two;ptr p=a,q=b;p<=>q;behave @print(p());behave @print(q());',0,'2\n1\n',''),
     'exception_bits_and_causes': (IO+ERROR+'val first<-error();val second<-try{throw first from first;}catch(e:const MissingReturnError){e};first<->second;behave @print(first.cause_count);behave @print(second.cause_count);',0,'1\n0\n',WARN),
@@ -62,7 +62,7 @@ runner.CASES = {
     'exception_payload_after_operand_effects': (IO+EXCEPTIONS+'val a:Exception<-error(),b:Exception<-error();a<->{a<-absent();b};try{throw a;}catch(e:const Exception){behave @print(e.category);};try{throw b;}catch(e:const Exception){behave @print(e.category);};',0,'5\n4\n',WARN),
     'exception_swap_keeps_checked_obligation': (EXCEPTIONS+'val a:Exception<-error(),b:Exception<-error();a<->{a<-absent();b};throw b;',2,'','requires a covering catch'),
     'later_operand_initializes_first': (IO+'val x<-make local i64,y<-2;x<->{x<-14;y};behave @print(x);behave @print(y);',0,'2\n14\n',''),
-    'selected_initialization_exchanges': (IO+'proc run(flag:bool)->void{val x<-make local i64,y<-make local i64,z<-15;ptr p=if(flag){x}else{y},q=z;p<-16;p<=>q;behave @print(p);behave @print(q);}run(true);run(false);',0,'15\n16\n15\n16\n',''),
+    'selected_initialization_exchanges': (IO+'proc run(flag:bool)->void{val x<-make local i64,y<-make local i64,z<-15;ptr p=if(flag){x}else{y},q=z;p<-16;p<=>q;behave @print(p);behave @print(q);return;}run(true);run(false);',0,'15\n16\n15\n16\n',''),
     'reference_swap_invalidates_nonnull': ('val x<-1;ptr p=x,q:i64=null in here;p<=>q;p;',2,'','requires a covering catch'),
     'reference_swap_no_initialization': ('val x<-1,y<-make local i64;ptr p=x,q=y;p<=>q;p;',2,'','before definite initialization'),
     'ref_rejects_null': ('val x<-1;ref p=x;ptr q:i64=null in here;p<=>q;',2,'','ref requires a proven non-null target'),

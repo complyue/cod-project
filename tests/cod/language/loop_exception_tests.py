@@ -8,7 +8,7 @@ VALUE = 'val payload:Exception<-unchecked();'
 # Root coverage satisfies the declaration; initialization independently requires
 # proof that the concrete handler runs on every normal continuation.
 OBSERVE = ' {{val observed<-make local u64;try{throw payload;}catch(e:const MissingReturnError){observed<-e.category;{}}catch(e:const Exception){};behave @print(observed);}}; '
-WRITE = 'func write(ref target:Exception in O,value:Exception)->void where {owner O}{target<-value;}'
+WRITE = 'func write(ref target:Exception in O,value:Exception)->void where {owner O}{target<-value:void;}'
 READ = 'func read(ref target:const Exception in O)->void where {owner O}{}'
 runner.CASES = {}
 
@@ -33,8 +33,8 @@ safe('single_iteration_write', VALUE+'for(i in 0u64..1u64){'+OBSERVE+'payload<-c
 safe('empty_loop', VALUE+'for(i in 0u64..0u64){payload<-checked();};'+OBSERVE, '5\n')
 safe('nested_invariant', VALUE+'for(i in 0u64..2u64){for(j in 0u64..2u64){'+OBSERVE+'};};', '5\n'*4)
 safe('fold_invariant', VALUE+'fold(i in 0u64..2u64,total=0u64){'+OBSERVE+'total+1u64};')
-safe('dynamic_count', 'proc run(n:u64)->void{'+VALUE+'for(i in 0u64..n){'+OBSERVE+'};}run(0u64);run(2u64);')
-safe('generic_value', 'proc run(value:T,n:u64)->void where {T}{val current:T<-value;for(i in 0u64..n){try{throw current;}catch(e:const Exception){behave @print(e.category);};};}'+VALUE+'run(payload,2u64);')
+safe('dynamic_count', 'proc run(n:u64)->void{'+VALUE+'for(i in 0u64..n){'+OBSERVE+'};return;}run(0u64);run(2u64);')
+safe('generic_value', 'proc run(value:T,n:u64)->void where {T}{val current:T<-value;for(i in 0u64..n){try{throw current;}catch(e:const Exception){behave @print(e.category);};};return;}'+VALUE+'run(payload,2u64);')
 safe('strong_write_before_read', VALUE+'for(i in 0u64..2u64){payload<-unchecked();'+OBSERVE+'payload<-checked();};')
 safe('slot_rebind_preserves_old_payload', VALUE+'val other:Exception<-checked();ptr selected=payload;for(i in 0u64..2u64){selected=other;'+OBSERVE+'};')
 safe('per_iteration_cleanup_preserves_payload', VALUE+'for(i in 0u64..2u64){ {{defer{behave @print(payload.category);};}};'+OBSERVE+'};', '5\n'*4)

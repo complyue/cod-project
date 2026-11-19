@@ -11,12 +11,12 @@ using "std:exceptions" OutOfMemoryError;
 using "std:exceptions" MissingReturnError;
 using "std:exceptions" Exception;
 func missing()->u64{}
-func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}
+func error()->const MissingReturnError{try{missing():void;}catch(e:const MissingReturnError){return e;};}
 func chain(e:MissingReturnError,c:Exception)->const MissingReturnError{
  return try{throw e from c;}catch(x:const MissingReturnError){x};
 }
-proc observe(x:u64)->void{behave @print(x);}
-proc show(e:Exception)->void{observe(e.cause_count);}
+proc observe(x:u64)->void{behave @print(x);return;}
+proc show(e:Exception)->void{observe(e.cause_count);return;}
 symbol @saved:Exception;
 symbol @p:proc()->u64;
 proc depth()->u64{return @saved.cause_count;}

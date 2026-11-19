@@ -35,7 +35,7 @@ runner.CASES.update({
     'caught_snapshot_rebind': (IO+ERROR+'try{{try{throw unchecked();}catch(caught){defer{{ptr saved=caught;throw(saved=caught);}};};}}catch(e:const Exception){behave @print(e.category);};',0,'5\n',WARN),
     'const_owned_delayed': (IO+ERROR+'try{{const val saved:Exception<-unchecked();defer{throw saved;};}}catch(e:const Exception){behave @print(e.category);};',0,'5\n',WARN),
     'const_copy_delayed': (IO+ERROR+'try{{val payload:Exception<-unchecked();const val saved<-payload;defer{throw saved;};payload<-checked();}}catch(e:const Exception){behave @print(e.category);};',0,'5\n',WARN),
-    'readonly_path_is_not_immutable': (ERROR+'{{val payload:Exception<-unchecked();ptr view:const Exception=payload;defer{throw view;};payload<-checked();}};',2,'',COVER),
+    'readonly_path_is_not_immutable': (ERROR+'{{val payload:Exception<-unchecked();ptr view:const Exception=payload;defer{throw view;};payload<-checked():void;}};',2,'',COVER),
     'readonly_borrow_is_not_immutable': (ERROR+'func f(ref value:const Exception in O)->void where {owner O}{defer{throw value;};}',2,'',COVER),
     'assignment_still_has_no_slot': (ERROR+BASE+'(selected=payload)=payload;',2,'','reference operation requires a binding slot'),
 })

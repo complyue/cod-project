@@ -10,7 +10,7 @@ using "std:exceptions" Exception;
 using "std:exceptions" NullPointerException;
 func missing()->const i64 {}
 func error()->const MissingReturnError {
-  try{missing();}catch(e:const MissingReturnError){return e;};
+  try{missing():void;}catch(e:const MissingReturnError){return e;};
 }
 func chain(e:MissingReturnError)->const MissingReturnError {
   return try{throw e from e;}catch(e:const MissingReturnError){e};
@@ -36,7 +36,7 @@ runner.CASES = {
     "finally_snapshot": (ERROR + LOOP + '{defer{behave @print(e.cause_count);}finally{behave @print(e.cause_count);};};};', 0, "3\n3\n2\n2\n1\n1\n", WARN),
     "bodyless_finally_snapshot": (ERROR + LOOP + '{defer finally{behave @print(e.cause_count);};};};', 0, "3\n2\n1\n", WARN),
     "captured_replacement_return": (ERROR + 'proc f()->const MissingReturnError{try{throw chain(error());}catch(e:const MissingReturnError){defer{return e;};};return error();}behave @print(f().cause_count);', 0, "1\n", WARN),
-    "recursive_frame_snapshots": (ERROR + 'proc f(n:i64,e:MissingReturnError)->void{try{throw e;}catch(x){defer{behave @print(x.cause_count);};};if(n>0){f(n-1,chain(e));}else{};}f(2,error());', 0, "2\n1\n0\n", WARN),
+    "recursive_frame_snapshots": (ERROR + 'proc f(n:i64,e:MissingReturnError)->void{try{throw e;}catch(x){defer{behave @print(x.cause_count);};};if(n>0){f(n-1,chain(e));}else{};return;}f(2,error());', 0, "2\n1\n0\n", WARN),
     "generic_capture": (ERROR + 'proc f(x:T)->const T where T{try{throw error();}catch(e){defer{behave @print(e.category);behave @print(x);};};return x;}behave @print(f(2u64));behave @print(f(true));', 0, "5\n2\n2\n5\ntrue\ntrue\n", WARN),
     "captured_chain_survives_handler": (ERROR + 'try{throw chain(chain(error()));}catch(e){defer{behave @print(cause_at(e,0u64).cause_count);behave @print(e.cause_count);};};', 0, "1\n2\n", WARN),
     "caught_snapshot_readonly": (ERROR + 'try{throw error();}catch(e){defer{e<-error();};};', 2, "", "readonly destination"),

@@ -38,7 +38,7 @@ case('unprotected_registration', recover='throw registration;', reject=True)
 FAIL = 'func fail()->u64 throws NullPointerException{ptr absent:u64=null in here;return absent;}'
 case('failed_action_write', definitions=FAIL, write='try{p<-fail();{}}catch(failure:const NullPointerException){};', reject=True)
 case('failed_recovery_write', definitions=FAIL, recover='try{p<-fail();{}}catch(failure:const NullPointerException){};', reject=True)
-SET = 'func set(ptr x:u64 in O)->void throws NullPointerException where {owner O}{x<-7u64;}'
+SET = 'func set(ptr x:u64 in O)->void throws NullPointerException where {owner O}{x<-7u64;{}}'
 case('call_writes', definitions=SET, write='try{set(p);}catch(failure){p<-7u64;{}};', recover='try{set(p);}catch(failure){p<-7u64;{}};')
 case('generic_call_writes', definitions=SET.replace('u64','T').replace('x<-7T;','x<-value;').replace('in O)->','in O,value:T)->').replace('where {owner O}', 'where {T,owner O}'), write='try{set(p,7u64);}catch(failure){p<-7u64;{}};', recover='try{set(p,7u64);}catch(failure){p<-7u64;{}};')
 case('conditional_call_writes', definitions=SET.replace('in O)->', 'in O,flag:bool)->').replace('x<-7u64;', 'if(flag){x<-7u64;{}}else{};'), write='try{set(p,selected is null);}catch(failure){p<-7u64;{}};', recover='try{set(p,selected is null);}catch(failure){p<-7u64;{}};')

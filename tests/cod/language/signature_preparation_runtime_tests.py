@@ -8,11 +8,12 @@ FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 func identity_prepared(x:T)->const T where T{return x;}
 func apply_prepared(f:func(T)->const T,x:T)->const T where T{return f(x);}
 func missing_prepared()->const (func(u64)->const u64){}
-proc show_prepared(f:func(T)->const T,x:T)->void where T{observe(f(x)(1u64));}
+proc show_prepared(f:func(T)->const T,x:T)->void where T{observe(f(x)(1u64));return;}
 {{
  func f=wrap(base);func g=wrap(other);
  proc recur[f](ref p:func(u64)->const u64 in O,n:u64)->void where {owner O}{
   if(n==0u64){p<-wrap(f);{}}else{recur(p,n-1u64);};
+  return;
  };
  func read(ref p:func(u64)->const u64 in O,n:u64)->const u64 where {owner O}{
   if(n==0u64){return p(1u64);}else{return read(p,n-1u64);};

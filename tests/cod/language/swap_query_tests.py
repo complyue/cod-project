@@ -27,7 +27,7 @@ runner.CASES.update({
  'bits_method_body_not_demanded': ('func (<->)(ref a:T in O,ref b:T in P)->void where {T,owner O,owner P}{a<-true;}'+BASE+QUERY('p<->q'),0,'',''),
  'method_different_types': ('func (<=>)(ptr a:i64 in O,ptr b:bool in P)->void where {owner O,owner P}{}val x<-1,y<-true;ptr p=x,q=y;'+QUERY('p<=>q'),0,'',''),
  'declared_failure_not_raised': ('using "std:exceptions" NullPointerException;func (<=>)(ptr a:i64 in O,ptr b:i64 in O)->void throws NullPointerException where {owner O};'+BASE+QUERY('p<=>q'),0,'',''),
- 'procedure_not_invoked': (IO+'proc (<->)(ref a:i64 in O,ref b:i64 in P)->void where {owner O,owner P}{'+OUT('99')+'}func run()->i64{'+BASE+QUERY('p<->q')+'return result;}'+OUT('run()'),0,'9\n',''),
+ 'procedure_not_invoked': (IO+'proc (<->)(ref a:i64 in O,ref b:i64 in P)->void where {owner O,owner P}{'+OUT('99')+'return;}func run()->i64{'+BASE+QUERY('p<->q')+'return result;}'+OUT('run()'),0,'9\n',''),
  'operand_not_invoked': (IO+'proc target(ref a:i64 in O)->ref i64 in O where {owner O}{'+OUT('99')+'return a;}'+BASE+QUERY('target(x)<->target(y)')+OUT('x')+OUT('y'),0,'1\n7\n',''),
  'outer_query_no_capture': (IO+'func run()->i64{'+BASE+'func inner()->i64{'+QUERY('p<=>q')+'return result;};return inner();}'+OUT('run()'),0,'9\n',''),
  'generic_query': (IO+'func run(value:T)->i64 where T{val x<-value,y<-value;ptr p=x,q=y;'+QUERY('p<=>q')+'return result;}'+OUT('run(1)')+OUT('run(true)'),0,'9\n9\n',''),
@@ -67,7 +67,7 @@ for name,operation in [('infix','ro<=>other'),('explicit','(<=>)(ro,other)'),('s
 runner.CASES['readonly_alias_generic_context']=(IO+READONLY_METHOD+'func run(value:T)->i64 where T{val x<-value,y<-value;ptr p=x,q=y;ptr var ro:const->p;ptr var other:const->q;'+QUERY('ro<=>other')+'return result;}'+OUT('run(1)')+OUT('run(true)'),0,'9\n9\n','')
 runner.CASES['readonly_alias_retained_query']=(IO+READONLY_METHOD+'func outer()->i64{'+ALIASES+'func inner()->i64{'+QUERY('ro<=>other')+'return result;};return inner();}'+OUT('outer()'),0,'9\n','')
 runner.CASES['readonly_alias_procedure_query']=(IO+READONLY_METHOD.replace('func (<=>)','proc (<=>)').replace('lhs_view<-true;','behave @print(99);')+'func run()->i64{'+ALIASES+QUERY('ro<=>other')+'return result;}'+OUT('run()'),0,'9\n','')
-runner.CASES['query_does_not_supply_invocation_proof']=(READONLY_METHOD.replace('lhs_view<-true;','lhs_view=rhs_view;')+BASE.replace('ptr p=x,q=y;','ptr p=x;ptr q:const i64=y;')+'ptr var ro:const->p;ptr var other:const->q;'+QUERY('ro<=>other')+'ro<=>other;',2,'','permission preservation')
+runner.CASES['query_does_not_supply_invocation_proof']=(READONLY_METHOD.replace('lhs_view<-true;','lhs_view=rhs_view:void;')+BASE.replace('ptr p=x,q=y;','ptr p=x;ptr q:const i64=y;')+'ptr var ro:const->p;ptr var other:const->q;'+QUERY('ro<=>other')+'ro<=>other;',2,'','permission preservation')
 runner.CASES['readonly_alias_intrinsic_contract']=(READONLY_METHOD+ALIASES+QUERY('intrinsic (<=>)(ro,other)'),2,'','readonly source')
 runner.CASES['readonly_alias_declaration_has_no_method']=(READONLY_METHOD.replace('{lhs_view<-true;}',';')+ALIASES+QUERY('ro<=>other'),2,'','readonly source')
 runner.CASES['readonly_alias_fixed_slot']=(READONLY_METHOD+ALIASES.replace('ptr var ro','const ptr var ro')+QUERY('ro<=>other'),2,'','const reference binding')
@@ -75,7 +75,7 @@ runner.CASES['readonly_alias_owner_mismatch']=(READONLY_METHOD+'val x<-1;ptr p:c
 runner.CASES['readonly_alias_selected_family']=({'ops.cod':READONLY_METHOD+'export (<=>);','main.cod':IO+'using "ops.cod" (<=>) as exchange;'+ALIASES+QUERY('exchange(ro,other)')+OUT('result')},0,'9\n','')
 
 runner.CASES['readonly_method_query_has_no_write']=(READONLY_METHOD+ALIASES.replace('x<-1','x<-make local i64')+QUERY('ro<=>other')+'x;',2,'','before definite initialization')
-runner.CASES['query_does_not_supply_ref_preservation']=(READONLY_METHOD.replace('lhs_view<-true;','lhs_view=rhs_view;')+BASE.replace('ptr p=x,q=y;','ref p=x,q=y;')+'ref var ro:const->p;ref var other:const->q;'+QUERY('ro<=>other')+'ro<=>other;',0,'','')
+runner.CASES['query_does_not_supply_ref_preservation']=(READONLY_METHOD.replace('lhs_view<-true;','lhs_view=rhs_view:void;')+BASE.replace('ptr p=x,q=y;','ref p=x,q=y;')+'ref var ro:const->p;ref var other:const->q;'+QUERY('ro<=>other')+'ro<=>other;',0,'','')
 
 runner.CASE_ARGUMENTS = {}
 runner.CASE_SHADOWS = {}

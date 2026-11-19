@@ -241,7 +241,7 @@ runner.CASES['recursive_consumer'] = (IO + BASE +
     0, f'{32000 + TOTAL}\n{64000 + TOTAL}\n', '')
 
 SHOW = ''.join('proc show(' + parameters(first=first) + ')->void{behave @print(' + str(tag) +
-    'u64+' + '+'.join(f'n{i}' for i in range(COUNT)) + ');}' for first, tag in (('u32', 32000), ('u64', 64000)))
+    'u64+' + '+'.join(f'n{i}' for i in range(COUNT)) + ');return;}' for first, tag in (('u32', 32000), ('u64', 64000)))
 OTHER_SHOW = SHOW.replace('show(', 'other(').replace('32000u64', '33000u64').replace('64000u64', '65000u64')
 runner.CASES['deferred_prepared_callee'] = (IO + SHOW + OTHER_SHOW +
     'proc held:' + view(kind='proc', result='void') + '=show;defer held(' + ARGUMENTS + ');held<-other;behave @print(7u64);',

@@ -68,7 +68,8 @@ runner.CASES = {
 }
 for kind in ('func','proc'):
  runner.CASES[kind+'_initializer']=(IO+kind+' f:'+kind+'()->u64='+kind+'(){return 29u32;};behave @print(f());',0,'29\n','')
- runner.CASES[kind+'_void']=(kind+' f:'+kind+'()->void='+kind+'(){};f();',0,'','')
+runner.CASES['func_void']=('func f:func()->void=func(){};f();',0,'','')
+runner.CASES['proc_void']=('proc f:proc()->void=proc(){return;};f();',0,'','')
 runner.CASE_ARGUMENTS = {}
 runner.CASE_SHADOWS = {
     'receiving_value_is_not_result_evidence': ['x', 'x'],

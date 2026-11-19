@@ -6,7 +6,7 @@ import captured_callable_runtime_tests as fixture
 FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
 FIXTURE = FIXTURE.updated(source='using "std:exceptions" IndexOutOfBoundsError;using "std:exceptions" Exception;'+FIXTURE.source)
 FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
-func seed()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}
+func seed()->const MissingReturnError{try{missing():void;}catch(e:const MissingReturnError){return e;};}
 func read(e:Exception,i:u64)->u64{
  try{return cause_at(e,i).cause_count;}catch(x:const IndexOutOfBoundsError){return x.available;};
 }

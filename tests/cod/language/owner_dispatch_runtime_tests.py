@@ -5,10 +5,10 @@ from native_test_support import run_native
 import access_dispatch_runtime_tests as fixture
 FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
 FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
-proc visit_owner(ref f:func(u64)->const u64 in O,ref g:func(u64)->const u64 in O)->void where {owner O}{f<-wrap(g);}
-proc visit_owner(ref f:func(u64)->const u64 in O,ref g:func(u64)->const u64 in P)->void where {owner O,owner P}{observe(f(0u64));}
-proc copy_owner(ref f:func(u64)->const u64 in O,ref g:func(u64)->const u64 in O)->void where {owner O}{func c=f;observe(c(0u64));}
-proc copy_owner(ref f:func(u64)->const u64 in O,ref g:func(u64)->const u64 in P)->void where {owner O,owner P}{observe(9999u64);}
+proc visit_owner(ref f:func(u64)->const u64 in O,ref g:func(u64)->const u64 in O)->void where {owner O}{f<-wrap(g);return;}
+proc visit_owner(ref f:func(u64)->const u64 in O,ref g:func(u64)->const u64 in P)->void where {owner O,owner P}{observe(f(0u64));return;}
+proc copy_owner(ref f:func(u64)->const u64 in O,ref g:func(u64)->const u64 in O)->void where {owner O}{func c=f;observe(c(0u64));return;}
+proc copy_owner(ref f:func(u64)->const u64 in O,ref g:func(u64)->const u64 in P)->void where {owner O,owner P}{observe(9999u64);return;}
 func owner_first(ref f:func(u64)->const u64 in O,ref g:func(u64)->const u64 in P)->ref (func(u64)->const u64) in O where {owner O,owner P}{return f;}
 func owner_second(ref f:func(u64)->const u64 in O,ref g:func(u64)->const u64 in P)->ref (func(u64)->const u64) in P where {owner O,owner P}{return g;}
 func owner_read(ref f:func(u64)->const u64 in O,ref g:func(u64)->const u64 in O)->const u64 where {owner O}{return g(0u64)+100u64;}

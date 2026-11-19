@@ -10,7 +10,7 @@ using symbol "std:io" @print;
 using "std:exceptions" OutOfMemoryError;
 using "std:exceptions" MissingReturnError;
 func missing()->const u64{}
-proc observe(x:u64)->void{behave @print(x);}
+proc observe(x:u64)->void{behave @print(x);return;}
 proc normal()->void {
   val a<-11u64,b<-22u64;ptr p=a;
   defer{observe(p);};p=b;defer{p=a;};

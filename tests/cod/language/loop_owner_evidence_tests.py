@@ -61,7 +61,7 @@ runner.CASES = {
         'func project(){for(i in 0..1){for(j in 0..1){return tag(i,first(i,j));};};}'
         + OUT('code(project())'), 0, '1\n', ''),
     'deferred_inferred_value_snapshot': (BASE + 'func project(){for(i in 0..1){return tag(i,i);};}'
-        'proc show(value:bool)->void{behave @print(value);}{{defer show(project());}};', 0, 'true\n', ''),
+        'proc show(value:bool)->void{behave @print(value);return;}{{defer show(project());}};', 0, 'true\n', ''),
     'here_remains_full_scope': (IO + 'val outer<-1;ptr p:i64=null in here;'
         'for(i in 0..2){p=outer;p=null in here;behave @print((p is null));};'
         'for(j in 0..0){}else{p=outer;p=null in here;behave @print((p is null));};', 0, 'true\ntrue\ntrue\n', ''),

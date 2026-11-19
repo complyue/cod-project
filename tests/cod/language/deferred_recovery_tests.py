@@ -9,8 +9,8 @@ using "std:exceptions" MissingReturnError;
 using "std:exceptions" OutOfMemoryError;
 using "std:exceptions" NullPointerException;
 func missing()->const i64 {}
-func error()->const MissingReturnError {try{missing();}catch(e:const MissingReturnError){return e;};}
-proc observe(x:i64)->void{behave @print(x);}
+func error()->const MissingReturnError {try{missing():void;}catch(e:const MissingReturnError){return e;};}
+proc observe(x:i64)->void{behave @print(x);return;}
 '''
 WARN = '[-Wmissing-return]'
 runner.CASES = {
@@ -21,7 +21,7 @@ runner.CASES = {
     "recover_original_value": (PRELUDE + 'observe({{defer catch(e:const MissingReturnError){};defer missing();3}});', 0, '3\n', WARN),
     "value_before_any_failure": (PRELUDE + 'observe({{defer catch(e){};3}});', 0, '3\n', WARN),
     "missing_scope_value": (PRELUDE + 'observe({{defer catch(e){};defer missing();3}});', 2, '', 'scope recovery has no original value'),
-    "void_body_recovery": (PRELUDE + 'proc f()->void{defer catch(e:const MissingReturnError){observe(1);};missing();observe(99);}f();observe(2);', 0, '1\n2\n', WARN),
+    "void_body_recovery": (PRELUDE + 'proc f()->void{defer catch(e:const MissingReturnError){observe(1);return;};missing();observe(99);return;}f();observe(2);', 0, '1\n2\n', WARN),
     "explicit_handler_return": (PRELUDE + 'proc f()->const i64{defer observe(1);defer catch(e:const MissingReturnError){return 8;};missing();}observe(f());', 0, '1\n8\n', WARN),
     "handler_value_is_not_return": (PRELUDE + 'proc f()->const i64{defer catch(e:const MissingReturnError){8};missing();}f();', 70, '', 'uncaught MissingReturnError'),
     "handler_replaces_return": (PRELUDE + 'proc f()->const i64{defer catch(e:const MissingReturnError){return 8;};defer missing();return 3;}observe(f());', 0, '8\n', WARN),
@@ -36,7 +36,7 @@ runner.CASES = {
     "bare_rethrow": (PRELUDE + '{{defer catch(e:const MissingReturnError){observe(1);};defer catch(e:const MissingReturnError){throw;};missing();{}}};', 0, '1\n', WARN),
     "named_rethrow": (PRELUDE + '{{defer catch(e:const MissingReturnError){observe(1);};defer catch(e:const MissingReturnError){throw e;};missing();{}}};', 0, '1\n', WARN),
     "sibling_exclusion": (PRELUDE + '{{defer catch(e:const MissingReturnError){observe(1);};defer catch(e:const MissingReturnError){throw;}catch(e){observe(99);};missing();{}}};', 0, '1\n', WARN),
-    "conditional_registration": (PRELUDE + 'proc f(flag:bool)->void{if(flag){defer catch(e:const MissingReturnError){observe(1);};}else{};missing();}f(true);try{f(false);}catch(e:const MissingReturnError){observe(2);};', 0, '1\n2\n', WARN),
+    "conditional_registration": (PRELUDE + 'proc f(flag:bool)->void{if(flag){defer catch(e:const MissingReturnError){observe(1);return;};}else{};missing();return;}f(true);try{f(false);}catch(e:const MissingReturnError){observe(2);};', 0, '1\n2\n', WARN),
     "loop_handlers": (PRELUDE + '{{for(i in 0..3){defer{observe(2);}catch(e:const MissingReturnError){observe(1);};};missing();{}}};', 0, '1\n2\n2\n', WARN),
     "loop_zero": (PRELUDE + 'try{{for(i in 0..0){defer catch(e:const MissingReturnError){observe(99);};};missing();{}}}catch(e:const MissingReturnError){observe(1);};', 0, '1\n', WARN),
     "loop_explicit_scope": (PRELUDE + 'for(i in 0..3){{defer catch(e:const MissingReturnError){observe(1);};missing();{}}};observe(2);', 0, '1\n1\n1\n2\n', WARN),

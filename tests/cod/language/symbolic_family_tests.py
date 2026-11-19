@@ -35,9 +35,9 @@ runner.CASES = {
     'multiple_actual_arguments': (IO + 'symbol @f:proc(u64,u64)->u64;proc @f(x:T,y:T)->u64 where T{return 1u64;}proc @f(x:A,y:B)->u64 where {A,B}{return 7u64;}'
         'effect @f;behave @print(behave @f(1u8,2u32));behave @print(behave @f(1u8,2u8));', 0, '7\n1\n', ''),
     'scope_restores_complete_value': (IO + F + 'symbol @g:proc(u64)->u64;proc @g(x:T)->u64 where T{return 9u64;}effect @f;{{effect @f=g;behave @print(behave @f(1u8));}};behave @print(behave @f(1u8));', 0, '9\n7\n', ''),
-    'deferred_family_snapshot': (IO + 'symbol @f:proc(u64)->void;proc @f(x:u64)->void{behave @print(1u64);}proc @f(x:T)->void where T{behave @print(7u64);}'
-        'proc other(x:u64)->void{behave @print(9u64);}effect @f;defer behave @f(1u8);effect @f=other;', 0, '7\n', ''),
-    'deferred_argument_snapshot': (IO + 'symbol @f:proc(u64)->void;proc @f(x:T)->void where T{behave @print(x);}effect @f;val x<-3u8;defer behave @f(x);x<-4u8;', 0, '3\n', ''),
+    'deferred_family_snapshot': (IO + 'symbol @f:proc(u64)->void;proc @f(x:u64)->void{behave @print(1u64);return;}proc @f(x:T)->void where T{behave @print(7u64);return;}'
+        'proc other(x:u64)->void{behave @print(9u64);return;}effect @f;defer behave @f(1u8);effect @f=other;', 0, '7\n', ''),
+    'deferred_argument_snapshot': (IO + 'symbol @f:proc(u64)->void;proc @f(x:T)->void where T{behave @print(x);return;}effect @f;val x<-3u8;defer behave @f(x);x<-4u8;', 0, '3\n', ''),
     'callee_before_argument_effect': (IO + 'symbol @f:proc(u64)->u64;proc @f(x:T)->u64 where T{return 7u64;}proc other(x:u64)->u64{return 9u64;}'
         'effect @f;behave @print(behave @f({effect @f=other;1u8}));behave @print(behave @f(1u8));', 0, '7\n9\n', ''),
     'missing_domain_method': ('symbol @f:proc(u64)->u64;proc @f(x:u8)->u64{return 1u64;}effect @f;', 2, '', 'no applicable method'),

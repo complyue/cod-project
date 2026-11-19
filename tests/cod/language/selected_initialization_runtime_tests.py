@@ -9,7 +9,7 @@ FIXTURE = FIXTURE.updated(source='''
 using symbol "std:io" @print;
 using "std:exceptions" OutOfMemoryError;
 using "std:exceptions" NullPointerException;
-proc observe(x:u64)->void{behave @print(x);}
+proc observe(x:u64)->void{behave @print(x);return;}
 proc verify(first:bool,second:bool,fail:bool,conditional:bool)->void{
  val a<-make local u64,b<-make local u64;
  ptr p=if(first){a}else{b};ptr q=if(second){a}else{b};

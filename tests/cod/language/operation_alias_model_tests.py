@@ -22,7 +22,7 @@ for number, (kind, deferred, same_slot, alternate) in enumerate(product(
     body = 'val x<-1,y<-7,z<-9;ptr p=x,q=y;'
     call = 'exchange(p,'+('{p=z;'+second+'}' if alternate else second)+');'
     if deferred:
-        body += '{{defer '+call+'q=z;}};'
+        body += '{{defer '+call+'q=z:void;}};'
         targets['q'] = 'z'
     else:
         body += call

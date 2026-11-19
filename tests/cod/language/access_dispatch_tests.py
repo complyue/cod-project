@@ -44,7 +44,7 @@ runner.CASES={
  'borrowed_operator_observes_later_write':(IO+'func (+)(ref a:const i64 in O,ref b:const i64 in O)->const i64 where {owner O}{return intrinsic (+)(a,b);}val x<-3;ref observed:const i64=x;'+OBS('observed+{x<-9;x}'),0,'18\n',''),
  'shared_result_context':(IO+PAIR+'func writable(ref x:i64 in O)->ref i64 in O where {owner O}{return x;}func readonly(ref x:i64 in O)->ref const i64 in O where {owner O}{return x;}func run(f:F,ref x:i64 in O)->const i64 where {F,owner O}{ptr p=f(x);return choose(p);}val x<-7;func a=writable;func b=readonly;'+OBS('run(a,x)')+OBS('run(b,x)'),0,'1\n2\n',''),
  'recursive_access_context':(IO+PAIR+'func run(ref x:const i64 in O,n:i64)->const i64 where {owner O}{if(n==0){return choose(x);}else{return run(x,n-1);};}val x<-7;'+OBS('run(x,40)'),0,'2\n',''),
- 'deferred_selection':(IO+'proc show(ref x:i64 in O)->void where {owner O}{'+OBS('1')+'}proc show(ref x:const i64 in O)->void where {owner O}{'+OBS('2')+'}'+LOC+'{{defer show(x);defer show(observed);}};',0,'2\n1\n',''),
+ 'deferred_selection':(IO+'proc show(ref x:i64 in O)->void where {owner O}{'+OBS('1')+'return;}proc show(ref x:const i64 in O)->void where {owner O}{'+OBS('2')+'return;}'+LOC+'{{defer show(x);defer show(observed);}};',0,'2\n1\n',''),
  'inferred_local_readonly_view':(IO+PAIR+LOC+OBS('choose({ptr alias=observed;alias})'),0,'2\n',''),
  'annotated_alias_access':(IO+PAIR+'val x<-7;var alias:const i64->x;'+OBS('choose(alias)'),0,'2\n',''),
  'readonly_loop_controls':(IO+VAL+'for(i in 0..3){'+OBS('choose(i)')+'};',0,'2\n2\n2\n',''),

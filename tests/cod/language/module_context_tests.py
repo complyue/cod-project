@@ -106,13 +106,13 @@ runner.CASES = {
     }, 70, '2\n', 'division by zero'),
     'source_exception_alias_and_body_inference': ({
         'base.cod': 'using "std:exceptions" MissingReturnError as Problem;'
-            'func missing()->u64{}func make_error(){try{missing();}catch(e:const Problem){return e;};}func accept(e:Problem)->u64{return 4u64;}export make_error;export accept;export Problem;',
+            'func missing()->u64{}func make_error(){try{missing():void;}catch(e:const Problem){return e;};}func accept(e:Problem)->u64{return 4u64;}export make_error;export accept;export Problem;',
         'main.cod': IO + 'using "std:exceptions" OutOfMemoryError as Problem;using "base.cod" make_error;using "base.cod" accept;'
             'using "base.cod" Problem as SourceProblem;behave @print(accept(make_error()));',
     }, 2, '', 'inferred result mode for a non-scalar type'),
     'source_exception_signature': ({
         'base.cod': 'using "std:exceptions" MissingReturnError as Problem;'
-            'func missing()->u64{}func make_error()->const Problem{try{missing();}catch(e:const Problem){return e;};}func accept(e:Problem)->u64{return 4u64;}export make_error;export accept;export Problem;',
+            'func missing()->u64{}func make_error()->const Problem{try{missing():void;}catch(e:const Problem){return e;};}func accept(e:Problem)->u64{return 4u64;}export make_error;export accept;export Problem;',
         'main.cod': IO + 'using "std:exceptions" OutOfMemoryError as Problem;using "base.cod" make_error;using "base.cod" accept;'
             'using "base.cod" Problem as SourceProblem;behave @print(accept(make_error()));',
     }, 0, '4\n', '[-Wmissing-return]'),

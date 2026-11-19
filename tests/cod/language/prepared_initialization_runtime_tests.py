@@ -8,7 +8,7 @@ FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
 FIXTURE = FIXTURE.updated(source='''
 using symbol "std:io" @print;
 using "std:exceptions" OutOfMemoryError;
-proc observe(x:u64)->void{behave @print(x);}
+proc observe(x:u64)->void{behave @print(x);return;}
 proc verify(fail:bool)->void{
  val a<-87u64,b<-88u64,c<-make local u64;
  ptr p=a,q=a;

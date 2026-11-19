@@ -11,25 +11,29 @@ using symbol "std:io" @print;
 using "std:exceptions" OutOfMemoryError;
 using "std:exceptions" MissingReturnError;
 func missing()->const i64 {}
-proc observe(x:u64)->void{behave @print(x);}
+proc observe(x:u64)->void{behave @print(x);return;}
 proc normal()->void {
   val x<-make local u64;
   {{defer{observe(x);}finally{};defer{x<-41u64;};}};
   observe(x);
+  return;
 }
 proc failed_registration()->void {
   val x<-make local u64;
   defer{observe(x);}finally{observe(9002u64);};
   observe(9001u64);
   defer{x<-42u64;};
+  return;
 }
 proc failed_action()->void {
   val x<-make local u64;
   defer{observe(x);}catch(e:const MissingReturnError){observe(x);};
   defer{x<-43u64;missing();};
+  return;
 }
 proc register_initialized(ref value:const u64 in O)->void where {owner O}{
  try{defer{observe(value);};}catch(e:const OutOfMemoryError){observe(value);observe(9002u64);};
+ return;
 }
 proc nested()->void {
   val x<-make local u64;
@@ -37,6 +41,7 @@ proc nested()->void {
     x<-44u64;observe(9001u64);
     register_initialized(x);
   };
+  return;
 }
 normal();
 try{failed_registration();}catch(e:const OutOfMemoryError){observe(1u64);};

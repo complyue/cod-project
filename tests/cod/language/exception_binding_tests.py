@@ -5,7 +5,7 @@ import foundation_tests as runner
 
 IO = 'using symbol "std:io" @print;'
 TYPES = 'using "std:exceptions" MissingReturnError;using "std:exceptions" Exception;using "std:exceptions" NullPointerException;using "std:exceptions" OutOfMemoryError;'
-ERROR = 'func missing()->u64{}func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}'
+ERROR = 'func missing()->u64{}func error()->const MissingReturnError{try{missing():void;}catch(e:const MissingReturnError){return e;};}'
 CHAIN = 'func chain(e:MissingReturnError,c:MissingReturnError)->const MissingReturnError{return try{throw e from c;}catch(x:const MissingReturnError){x};}'
 NULL_ERROR = 'func npe()->const NullPointerException{ptr p:i64=null in here;return try{val v<-p;throw error();}catch(e:const NullPointerException){e};}'
 S = 'symbol @saved:MissingReturnError;'
@@ -22,7 +22,7 @@ runner.CASES = {
     'return_restore': (IO+TYPES+ERROR+CHAIN+S+'proc get()->const MissingReturnError{effect @saved<-chain(error(),error());return @saved;}'
         'effect @saved<-error();val kept<-get();behave @print(kept.cause_count);behave @print(@saved.cause_count);', 0, '1\n0\n', ''),
     'iteration_restore': (IO+TYPES+ERROR+CHAIN+S+'effect @saved<-error();for(i in 0u64..2u64){effect @saved<-chain(error(),error());behave @print(@saved.cause_count);};behave @print(@saved.cause_count);', 0, '1\n1\n0\n', ''),
-    'prepared_defer_snapshot': (IO+TYPES+ERROR+CHAIN+S+'proc show(e:MissingReturnError)->void{behave @print(e.cause_count);}'
+    'prepared_defer_snapshot': (IO+TYPES+ERROR+CHAIN+S+'proc show(e:MissingReturnError)->void{behave @print(e.cause_count);return;}'
         'effect @saved<-chain(error(),error());defer show(@saved);effect @saved<-error();', 0, '1\n', ''),
     'delayed_defer_current': (IO+TYPES+ERROR+CHAIN+S+'effect @saved<-chain(error(),error());defer{behave @print(@saved.cause_count);};effect @saved<-error();', 0, '0\n', ''),
     'cleanup_replaces_exception': (IO+TYPES+ERROR+CHAIN+S+'proc fail()->void{effect @saved<-chain(error(),error());defer{throw @saved;};throw error();}'
@@ -53,7 +53,7 @@ runner.CASES = {
     'checked_dynamic_body_rejects': (TYPES+'symbol @saved:NullPointerException;proc build()->void{proc fail=proc()->void{throw @saved;};}', 2, '', 'requires a covering catch or throws declaration'),
     'checked_defer_rejects': (TYPES+'symbol @saved:NullPointerException;proc fail()->void{defer{throw @saved;};}', 2, '', 'requires a covering catch or throws declaration'),
     'checked_declaration_accepts': (TYPES+'symbol @saved:NullPointerException;proc fail()->void throws NullPointerException{throw @saved;}', 0, '', ''),
-    'checked_catch_accepts': (TYPES+'symbol @saved:NullPointerException;proc fail()->void{try{throw @saved;}catch(e:const NullPointerException){};}', 0, '', ''),
+    'checked_catch_accepts': (TYPES+'symbol @saved:NullPointerException;proc fail()->void{try{throw @saved;}catch(e:const NullPointerException){};return;}', 0, '', ''),
     'checked_native_delivery': (IO+TYPES+ERROR+NULL_ERROR+'symbol @saved:NullPointerException;proc fail()->void throws NullPointerException{throw @saved;}'
         'effect @saved<-npe();try{fail();}catch(e:const NullPointerException){behave @print(e.category);};', 0, '4\n', ''),
     'checked_captured_delivery': (IO+TYPES+ERROR+NULL_ERROR+'symbol @saved:NullPointerException,@p:proc()->void throws NullPointerException;'

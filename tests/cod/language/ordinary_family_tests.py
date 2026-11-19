@@ -9,7 +9,7 @@ VIEW = 'func held:func(u64)->u64=select;'
 ERROR = '''using "std:exceptions" Exception;
 using "std:exceptions" MissingReturnError;
 func missing()->u64{}
-func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}
+func error()->const MissingReturnError{try{missing():void;}catch(e:const MissingReturnError){return e;};}
 '''
 EXHAUSTIVE = ERROR + ''.join(
     f'using "std:exceptions" {name};func select(e:{name})->u64{{return e.category;}}'
@@ -41,7 +41,7 @@ runner.CASES = {
         'val x<-1;held(x)<-7;behave @print(x);', 0, '7\n', ''),
     'generic_caller_preserves_evidence': (IO + F + VIEW + 'func relay(f:func(u64)->u64,x:T)->u64 where T{return f(x);}'
         'behave @print(relay(held,1u8));behave @print(relay(held,1u64));', 0, '7\n1\n', ''),
-    'deferred_snapshot': (IO + 'proc select(x:u64)->void{behave @print(1u64);}proc select(x:T)->void where T{behave @print(x);}'
+    'deferred_snapshot': (IO + 'proc select(x:u64)->void{behave @print(1u64);return;}proc select(x:T)->void where T{behave @print(x);return;}'
         'proc held:proc(u64)->void=select;val x<-7u8;defer held(x);x<-9u8;', 0, '7\n', ''),
     'complete_dynamic_capture': (IO + 'symbol @x:u64,@y:u64,@q:proc(u64)->u64;proc select(n:u64)->u64{return @x;}'
         'proc select(n:T)->u64 where T{return @y;}effect @x<-1u64;effect @y<-7u64;proc held:proc(u64)->u64=select;'

@@ -9,7 +9,7 @@ SETUP='val x<-1,y<-2,z<-3;ptr a=x,b=y,c=z;'
 SHOW='behave @print(a);behave @print(b);behave @print(c);'
 FUNCTIONS='func one()->const i64{return 1;}func two()->const i64{return 2;}func three()->const i64{return 3;}'
 def run(body,setup=SETUP,show=SHOW):
- return IO+'proc run(flag:bool)->void{'+setup+body+show+'}run(true);run(false);'
+ return IO+'proc run(flag:bool)->void{'+setup+body+show+'return;}run(true);run(false);'
 runner.CASES={
  'reference_selection':(run('var p->if(flag){a}else{b};p=z;'),0,'3\n2\n3\n1\n3\n3\n',''),
  'selection_stays_fixed':(run('var p->if(flag){a}else{b};flag<-!flag;p=z;'),0,'3\n2\n3\n1\n3\n3\n',''),
@@ -44,7 +44,7 @@ runner.CASES={
  'loop_local_alias':(run('for(i in 0..2){ {{var p->if(flag){a}else{b};p=z;flag<-!flag;}}; };'),0,'3\n3\n3\n3\n3\n3\n',''),
  'generic_borrowed_alias':(IO+'func run(ref x:T in O,ref y:T in O,flag:bool)->const T where {T,owner O}{var p->if(flag){x}else{y};return p;}val a<-16,b<-17,c<-false,d<-true;behave @print(run(a,b,true));behave @print(run(c,d,false));',0,'16\ntrue\n',''),
  'recursive_borrowed_alias':(IO+'func run(ref x:i64 in O,ref y:i64 in O,n:u64)->const i64 where {owner O}{var p->if(n%2u64==0u64){x}else{y};if(n==0u64){p<-18;return p;}else{return run(p,y,n-1u64);};}val x<-1,y<-2;behave @print(run(x,y,30u64));',0,'18\n',''),
- 'call_initializes_selected_alias':(IO+NPE+'proc set(ptr x:i64 in O)->void throws NullPointerException where {owner O}{x<-19;}proc run(flag:bool)->void{val x<-make local i64,y<-make local i64;ptr a=x,b=y;var p->if(flag){a}else{b};try{set(p);behave @print(p);}catch(e:const NullPointerException){};}run(true);run(false);',0,'19\n19\n',''),
+ 'call_initializes_selected_alias':(IO+NPE+'proc set(ptr x:i64 in O)->void throws NullPointerException where {owner O}{x<-19;return;}proc run(flag:bool)->void{val x<-make local i64,y<-make local i64;ptr a=x,b=y;var p->if(flag){a}else{b};try{set(p);behave @print(p);}catch(e:const NullPointerException){};return;}run(true);run(false);',0,'19\n19\n',''),
  'callable_value_alias':(run('var p->if(flag){f}else{g};behave @print(p());p<-three;behave @print(f());behave @print(g());',setup='func f=one;func g=two;',show='').replace(IO,IO+FUNCTIONS,1),0,'1\n3\n2\n2\n1\n3\n',''),
  'callable_pointer_alias':(run('var p->if(flag){a}else{b};p=h;behave @print(p());',setup='func f=one;func g=two;func h=three;ptr a=f,b=g;',show='').replace(IO,IO+FUNCTIONS,1),0,'3\n3\n',''),
  'explicit_callable_value_from_selected_place':(run('var p->if(flag){f}else{g};func snapshot=p;func h=func[snapshot]()->const i64{return snapshot();};p<-three;behave @print(h());behave @print(p());',setup='func f=one;func g=two;',show='').replace(IO,IO+FUNCTIONS,1),0,'1\n3\n2\n3\n',''),

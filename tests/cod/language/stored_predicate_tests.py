@@ -4,15 +4,15 @@ from pathlib import Path
 import foundation_tests as runner
 
 IO = 'using symbol "std:io" @print;using "std:exceptions" NullPointerException;'
-WRITE = 'func write(ref target:bool in O,value:bool)->void where {owner O}{target<-value;}'
-READ = 'func read(ref target:const bool in O)->void where {owner O}{target;}'
+WRITE = 'func write(ref target:bool in O,value:bool)->void where {owner O}{target<-value:void;}'
+READ = 'func read(ref target:const bool in O)->void where {owner O}{target;{};}'
 SAVED = 'val saved<-p is not null;'
 GUARD = 'if(saved){behave @print(p);}else{behave @print(0);};'
 runner.CASES = {}
 
 
 def program(body, prefix=''):
-    return IO+prefix+'proc choose(ptr p:i64 in O,ptr q:i64 in O)->void where {owner O}{'+body+'}'+\
+    return IO+prefix+'proc choose(ptr p:i64 in O,ptr q:i64 in O)->void where {owner O}{'+body+'return;}'+\
         'val x<-7,y<-11;ptr absent:i64=null in here;choose(x,y);choose(absent,y);choose(x,absent);choose(absent,absent);'
 
 
@@ -91,7 +91,7 @@ rejected('deferred_handler_write', SAVED+'defer{'+GUARD+'};'
          'defer catch(e:const MissingReturnError){saved<-true;};defer{missing();};',
          prefix='using "std:exceptions" MissingReturnError;func missing()->i64{}')
 rejected('prepared_slot_payload_write', SAVED+'val other<-false;ptr a=other,b=other;defer{'+GUARD+'};defer (<=>)(a,b);a=saved;',
-         prefix='func (<=>)(ref left:bool in O,ref right:bool in O)->void where {owner O}{left<-true;}')
+         prefix='func (<=>)(ref left:bool in O,ref right:bool in O)->void where {owner O}{left<-true:void;}')
 
 safe('loop_unchanged', SAVED+'for(i in 0u64..2u64){'+GUARD+'};', '7\n7\n0\n0\n7\n7\n0\n0\n')
 safe('loop_restored_test', 'val saved<-true;for(i in 0u64..2u64){saved<-p is not null;'+GUARD+'saved<-true;};', '7\n7\n0\n0\n7\n7\n0\n0\n')
@@ -100,9 +100,9 @@ safe('loop_saved_copy', 'val original<-p is not null;val saved<-original;for(i i
 safe('loop_single_iteration', SAVED+'for(i in 0u64..1u64){'+GUARD+'saved<-true;};')
 safe('loop_empty', SAVED+'for(i in 0u64..0u64){saved<-true;};'+GUARD)
 safe('loop_unrelated_slot_call', SAVED+'val first<-false,second<-false;ptr a=first,b=second;for(i in 0u64..2u64){ {{defer (<=>)(a,b);}};'+GUARD+'};',
-     '7\n7\n0\n0\n7\n7\n0\n0\n', prefix='func (<=>)(ref left:bool in O,ref right:bool in O)->void where {owner O}{left<-true;}')
+     '7\n7\n0\n0\n7\n7\n0\n0\n', prefix='func (<=>)(ref left:bool in O,ref right:bool in O)->void where {owner O}{left<-true:void;}')
 safe('loop_readonly_slot_call', SAVED+'ptr a=saved,b=saved;for(i in 0u64..2u64){ {{defer (<=>)(a,b);}};'+GUARD+'};',
-     '7\n7\n0\n0\n7\n7\n0\n0\n', prefix='func (<=>)(ref left:const bool in O,ref right:const bool in O)->void where {owner O}{left;right;}')
+     '7\n7\n0\n0\n7\n7\n0\n0\n', prefix='func (<=>)(ref left:const bool in O,ref right:const bool in O)->void where {owner O}{left;right;{};}')
 safe('loop_intrinsic_reference_swap', SAVED+'ptr a=saved,b=saved;for(i in 0u64..2u64){ {{defer intrinsic (<=>)(a,b);}};'+GUARD+'};',
      '7\n7\n0\n0\n7\n7\n0\n0\n')
 safe('loop_recursive_call_preserves_payload', SAVED+'ptr selected=saved;for(i in 0u64..2u64){ {{inspect(selected,3u64);}};'+GUARD+'};',
@@ -111,7 +111,7 @@ safe('loop_recursive_call_preserves_payload', SAVED+'ptr selected=saved;for(i in
 rejected('loop_prepared_write_changes_payload', SAVED+'ptr selected=saved;val incoming<-saved;'
          'for(i in 0u64..2u64){ {{defer (<-)(selected,incoming);}};'+GUARD+'incoming<-true;};')
 rejected('loop_rebound_slot_call', SAVED+'val first<-false,second<-false;ptr a=first,b=second;for(i in 0u64..3u64){'+GUARD+'{{defer (<=>)(a,b);}};a=saved;};',
-         prefix='func (<=>)(ref left:bool in O,ref right:bool in O)->void where {owner O}{left<-true;}')
+         prefix='func (<=>)(ref left:bool in O,ref right:bool in O)->void where {owner O}{left<-true:void;}')
 
 for name, mutation in {
     'write': 'saved<-true;',

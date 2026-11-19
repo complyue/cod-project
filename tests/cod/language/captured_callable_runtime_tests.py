@@ -10,7 +10,7 @@ FIXTURE = FIXTURE.updated(source='''
 using symbol "std:io" @print;
 using "std:exceptions" OutOfMemoryError;
 using "std:exceptions" MissingReturnError;
-proc observe(x:u64)->void{behave @print(x);}
+proc observe(x:u64)->void{behave @print(x);return;}
 func base(x:u64)->const u64{return x;}
 func other(x:u64)->const u64{return x+10u64;}
 func wrap(f:func(u64)->const u64)->func(u64)->const u64{
@@ -18,9 +18,9 @@ func wrap(f:func(u64)->const u64)->func(u64)->const u64{
 }
 func apply(f:func(u64)->const u64,x:u64)->const u64{return f(x);}
 func missing()->const u64{}
-proc one(x:u64)->void{observe(x);}
-proc two(x:u64)->void{observe(x+10u64);}
-proc wrapped(p:proc(u64)->void)->proc(u64)->void{return proc[p](x:u64)->void{p(x);};}
+proc one(x:u64)->void{observe(x);return;}
+proc two(x:u64)->void{observe(x+10u64);return;}
+proc wrapped(p:proc(u64)->void)->proc(u64)->void{return proc[p](x:u64)->void{p(x);return;};}
 func replaced()->func(u64)->const u64{defer{return wrap(other);};return wrap(base);}
 proc copy_recovery()->func(u64)->const u64{
   func f=wrap(base);func g=wrap(other);
@@ -57,7 +57,7 @@ observe(9000u64);
 observe(9000u64);
 {{
   proc f=wrapped(one);
-  {{defer f(5u64);observe(9050u64);try{defer f(99u64);}catch(e:const OutOfMemoryError){observe(9051u64);};f<-two;}};
+  {{defer f(5u64);observe(9050u64);try{defer f(99u64);}catch(e:const OutOfMemoryError){observe(9051u64);};f<-two:void;}};
 }};
 observe(9000u64);
 {{observe(replaced()(6u64));observe(retained()(7u64));observe(copy_recovery()(8u64));}};

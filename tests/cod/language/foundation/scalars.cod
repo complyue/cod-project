@@ -16,6 +16,7 @@ func relay(n:u64,x:T) -> const T where T {
 proc both(x:T,y:U) -> void where {T,U} {
   behave @print(x + x);
   behave @print(y + y);
+  return;
 }
 func wrapped(x:T) -> const u64 where T { return chosen(x); }
 behave @print(twice(3u64));

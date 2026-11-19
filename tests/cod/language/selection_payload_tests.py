@@ -5,7 +5,7 @@ import foundation_tests as runner
 from exception_projection_tests import ERROR, WARN
 
 IO = 'using symbol "std:io" @print;using "std:exceptions" NullPointerException;'
-SET = 'func set(ref out:bool in B,ptr p:T in O)->void where {T,owner B,owner O}{out<-p is not null;}'
+SET = 'func set(ref out:bool in B,ptr p:T in O)->void where {T,owner B,owner O}{out<-p is not null:void;}'
 CALLS = 'val x<-7,y<-11;ptr absent:i64=null in here;'+''.join(
     'behave @print(choose('+args+'));' for args in ('x,y','absent,y','x,absent','absent,absent'))
 runner.CASES = {}
@@ -38,12 +38,12 @@ case('copy_from_selected', '{{defer{ok<-input;};input=source;}};',
      setup='val ok<-false,source<-p is not null,other<-true;ref input=other;')
 case('borrow_from_selected', '{{defer{copy(ok,input);};input=source;}};',
      setup='val ok<-false,source<-p is not null,other<-true;ref input=other;',
-     definitions='func copy(ref out:bool in B,ref value:const bool in B)->void where {owner B}{out<-value;}')
+     definitions='func copy(ref out:bool in B,ref value:const bool in B)->void where {owner B}{out<-value:void;}')
 case('selected_read_write', '{{defer{output<-input;};input=source;output=ok;}};',
      setup='val ok<-false,source<-p is not null,other<-true;ref input=other,output=other;')
-case('two_actions_copy', '{{defer{ok<-input;};defer{set(output,p);};input=other;output=other;}};',
+case('two_actions_copy', '{{defer{ok<-input;};defer{set(output,p);};input=other;output=other:void;}};',
      setup='val ok<-false,other<-true;ref output=ok,input=ok;')
-case('two_actions_rebind_copy', '{{defer{ok<-input;};defer{input=other;{}};defer{set(output,p);};output=other;}};',
+case('two_actions_rebind_copy', '{{defer{ok<-input;};defer{input=other;{}};defer{set(output,p);};output=other:void;}};',
      setup='val ok<-false,other<-true;ref output=ok,input=ok;')
 case('repeated_write', '{{for(i in 0u64..3u64){defer{set(output,p);};};output=ok;}};')
 case('recursive_call', '{{defer{set(output,p,10u64);};output=ok;}};',
@@ -53,10 +53,10 @@ case('same_payload_alternatives', '{{defer{set(output,p);};output=if(q is null){
      setup='val ok<-p is not null,other<-p is not null;ref output=other;')
 
 reject('wrong_selected_value', '{{defer{set(output,q);};output=ok;}};')
-reject('write_to_other', '{{defer{set(output,p);};output=other;}};', setup='val ok<-true,other<-false;ref output=ok;')
+reject('write_to_other', '{{defer{set(output,p);};output=other:void;}};', setup='val ok<-true,other<-false;ref output=ok;')
 reject('write_to_other_after_rebind', '{{defer{output=other;set(output,p);};output=ok;}};', setup='val ok<-true,other<-false;ref output=other;')
 reject('later_overwrite', '{{defer{output<-true;};defer{set(output,p);};output=ok;}};')
-reject('selected_input_overwrite', '{{defer{ok<-input;};input=other;}};',
+reject('selected_input_overwrite', '{{defer{ok<-input;};input=other:void;}};',
        setup='val ok<-false,source<-p is not null,other<-true;ref input=source;')
 reject('pointer_rebound', '{{defer{set(output,p);};output=ok;}};p=q;')
 reject('copied_ref_keeps_old_target', 'ref saved=output;{{defer{set(saved,p);};output=ok;}};', setup='val ok<-true,other<-false;ref output=other;')
@@ -86,23 +86,23 @@ for first, (first_source, first_value) in enumerate(expressions):
 
 # A covering root handler discharges the declared obligation. Actual category
 # facts independently decide whether every normal path initializes the result.
-EXCEPTION_SET = 'func set(ref out:Exception in O,value:Exception)->void where {owner O}{out<-value;}'
+EXCEPTION_SET = 'func set(ref out:Exception in O,value:Exception)->void where {owner O}{out<-value:void;}'
 def exception_case(name, work, setup='val payload:Exception<-checked(),other:Exception<-checked();ref output=other;', good=True, helpers=''):
     source = 'using symbol "std:io" @print;'+ERROR+EXCEPTION_SET+helpers+'proc run()->i64{'+setup+work
     source += 'val result<-make local i64;try{throw payload;}catch(e:const MissingReturnError){result<-7;{}}catch(e:const Exception){};return result;}behave @print(run());'
     runner.CASES['exception_'+name] = (source, 0 if good else 2, '7\n' if good else '', WARN if good else 'before definite initialization')
 
-exception_case('selected_write', '{{defer{output<-unchecked();};output=payload;}};')
-exception_case('selected_call', '{{defer{set(output,unchecked());};output=payload;}};')
-exception_case('nested_scope', '{{defer{ {{defer{set(output,unchecked());};}}; };output=payload;}};')
-exception_case('selected_read', '{{defer{payload<-input;};input=other;}};',
+exception_case('selected_write', '{{defer{output<-unchecked();};output=payload:void;}};')
+exception_case('selected_call', '{{defer{set(output,unchecked());};output=payload:void;}};')
+exception_case('nested_scope', '{{defer{ {{defer{set(output,unchecked());};}}; };output=payload:void;}};')
+exception_case('selected_read', '{{defer{payload<-input;};input=other:void;}};',
                setup='val payload:Exception<-checked(),other:Exception<-unchecked();ref input=payload;')
-exception_case('two_actions', '{{defer{payload<-input;};defer{set(output,unchecked());};output=other;input=other;}};',
+exception_case('two_actions', '{{defer{payload<-input;};defer{set(output,unchecked());};output=other;input=other:void;}};',
                setup='val payload:Exception<-checked(),other:Exception<-checked();ref input=payload,output=payload;')
-exception_case('other_target', '{{defer{output<-unchecked();};output=other;}};', good=False)
-exception_case('later_overwrite', '{{defer{output<-checked();};defer{output<-unchecked();};output=payload;}};', good=False)
+exception_case('other_target', '{{defer{output<-unchecked();};output=other:void;}};', good=False)
+exception_case('later_overwrite', '{{defer{output<-checked();};defer{output<-unchecked();};output=payload:void;}};', good=False)
 exception_case('borrowed_alias_write', 'write_alias(payload,payload);', good=False,
-    helpers='func write_alias(ref left:Exception in O,ref right:Exception in P)->void where {owner O,owner P}{left<-unchecked();right<-checked();}')
+    helpers='func write_alias(ref left:Exception in O,ref right:Exception in P)->void where {owner O,owner P}{left<-unchecked();right<-checked():void;}')
 exception_case('borrowed_alias_cleanup', 'write_alias(payload,payload);', good=False,
     helpers='func write_alias(ref left:Exception in O,ref right:Exception in P)->void where {owner O,owner P}{defer{left<-unchecked();right<-checked();};}')
 for first in ('unchecked()', 'checked()'):
@@ -110,7 +110,7 @@ for first in ('unchecked()', 'checked()'):
         for destination in ('payload', 'other'):
             selected = first if destination == 'payload' else second
             exception_case('write_rebind_'+first[:-2]+'_'+second[:-2]+'_'+destination,
-                '{{defer{output<-'+first+';};defer{output='+destination+';{}};defer{output<-'+second+';};output=payload;}};',
+                '{{defer{output<-'+first+';};defer{output='+destination+';{}};defer{output<-'+second+';};output=payload:void;}};',
                 good=selected=='unchecked()')
 
 runner.CASE_ARGUMENTS = {}

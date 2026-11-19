@@ -20,6 +20,7 @@ proc selected_aliases(flag:bool)->void{
  func snapshot=v;
  func saved=func [snapshot](x:u64)->const u64{return snapshot(x);};
  v<-h;observe(saved(1u64));observe(v(1u64));
+ return;
 }
 selected_aliases(true);selected_aliases(false);observe(9000u64);
 ''')

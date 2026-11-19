@@ -16,7 +16,7 @@ runner.CASES={}
 def case(name,condition='selected is a',first='a<-7u64',second='b<-8u64',setup='',after='',read='selected',definitions='',reject=False,output='8\n8\n7\n7\n',local=LOCAL,body=None,diagnostic='initialization'):
     if body is None:
         body=WRITE.replace('CONDITION',condition).replace('FIRST',first).replace('SECOND',second)+after+'behave @print('+read+');'
-    source=IO+definitions+'proc run(flag:bool,other:bool)->void{'+local+'try{ '+setup+body+'}catch(e:const NullPointerException){behave @print(99u64);};}'+CALLS
+    source=IO+definitions+'proc run(flag:bool,other:bool)->void{'+local+'try{ '+setup+body+'}catch(e:const NullPointerException){behave @print(99u64);};return;}'+CALLS
     runner.CASES[name]=(source,2 if reject else 0,'' if reject else output,diagnostic if reject else '')
 
 
@@ -59,7 +59,7 @@ case('copied_condition',setup='val saved<-flag;ptr matched=if(saved){a}else{b};'
 case('conditional_selection_in_full_scope',setup=MATCHED_SELECTION,
      body='{{'+WRITE_READ_SELECTION+'}};',output='7\n'*4)
 case('conditional_selection_in_cleanup',setup=MATCHED_SELECTION,
-     body='{{defer{behave @print(matched);};selected<-7u64;}};',output='7\n'*4)
+     body='{{defer{behave @print(matched);};selected<-7u64:void;}};',output='7\n'*4)
 case('conditionally_selected_other_input',setup='ptr matched=if(other){a}else{b};',
      body=WRITE_READ_SELECTION,reject=True)
 case('opposite_conditional_selection',setup='ptr matched=if(flag){b}else{a};',
@@ -80,7 +80,7 @@ case('stored_boolean_decision',definitions=DECIDE,local=LOCAL_GATE,setup=MATCHED
 case('stored_boolean_in_full_scope',definitions=DECIDE,local=LOCAL_GATE,setup=MATCHED_GATE,
      body='{{'+WRITE_READ_SELECTION+'}};',output='7\n'*4)
 case('stored_boolean_in_cleanup',definitions=DECIDE,local=LOCAL_GATE,setup=MATCHED_GATE,
-     body='{{defer{behave @print(matched);};selected<-7u64;}};',output='7\n'*4)
+     body='{{defer{behave @print(matched);};selected<-7u64:void;}};',output='7\n'*4)
 case('stored_boolean_copy_survives_replacement',definitions=DECIDE,local=LOCAL_GATE,
      setup='val saved<-gate;gate<-!gate;'+MATCHED_GATE.replace('if(gate)', 'if(saved)'),
      body=WRITE_READ_SELECTION,output='7\n'*4)
@@ -93,7 +93,7 @@ case('stored_boolean_replacement',definitions=DECIDE,local=LOCAL_GATE,setup='gat
 case('stored_boolean_reference_write',definitions=DECIDE,local=LOCAL_GATE,
      setup='ref writable:bool=gate;writable<-!writable;'+MATCHED_GATE,
      body=WRITE_READ_SELECTION,reject=True)
-FLIP='proc flip(ref target:bool in O)->void where {owner O}{target<-!target;}'
+FLIP='proc flip(ref target:bool in O)->void where {owner O}{target<-!target;return;}'
 case('stored_boolean_call_write',definitions=DECIDE+FLIP,local=LOCAL_GATE,setup='flip(gate);'+MATCHED_GATE,
      body=WRITE_READ_SELECTION,reject=True)
 case('stored_boolean_replacement_in_loop',definitions=DECIDE,local=LOCAL_GATE,
@@ -122,15 +122,15 @@ for name,definition,condition,setup in (
 ):
     case(name,definitions=definition,condition=condition,setup=setup)
 
-STORE='proc compare(ptr output:bool in B,ptr left:const u64 in O,ptr right:const u64 in O)->void throws NullPointerException where {owner B,owner O}{output<-left is right;}'
+STORE='proc compare(ptr output:bool in B,ptr left:const u64 in O,ptr right:const u64 in O)->void throws NullPointerException where {owner B,owner O}{output<-left is right;return;}'
 case('boolean_writeback',definitions=STORE,setup='val equal<-false;compare(equal,selected,a);',condition='equal')
 case('changed_boolean_writeback',definitions=STORE,setup='val equal<-false;compare(equal,selected,a);equal<-true;',condition='equal',reject=True)
-FILL='proc fill(ptr selected:u64 in O,ptr first:u64 in O,ptr second:u64 in O)->void throws NullPointerException where {owner O}{if(selected is first){first<-7u64;{}}else{second<-8u64;{}};}'
+FILL='proc fill(ptr selected:u64 in O,ptr first:u64 in O,ptr second:u64 in O)->void throws NullPointerException where {owner O}{if(selected is first){first<-7u64;{}}else{second<-8u64;{}};return;}'
 case('callee_writes',definitions=FILL,body='fill(selected,a,b);behave @print(selected);')
-case('callee_read',definitions=FILL.replace('proc fill','func fill').replace('->void','->u64').replace('};}', '};return selected;}'),body='behave @print(fill(selected,a,b));')
+case('callee_read',definitions=FILL.replace('proc fill','func fill').replace('->void','->u64').replace('return;}', 'return selected;}'),body='behave @print(fill(selected,a,b));')
 case('prepared_call',definitions=FILL,body='{{defer fill(selected,a,b);}};behave @print(selected);')
-case('prepared_snapshot',definitions=FILL,setup='ptr saved=selected;',body='{{defer fill(selected,a,b);selected=c;}};behave @print(saved);')
-case('prepared_changed_read',definitions=FILL,body='{{defer fill(selected,a,b);selected=c;}};behave @print(selected);',reject=True)
+case('prepared_snapshot',definitions=FILL,setup='ptr saved=selected;',body='{{defer fill(selected,a,b);selected=c:void;}};behave @print(saved);')
+case('prepared_changed_read',definitions=FILL,body='{{defer fill(selected,a,b);selected=c:void;}};behave @print(selected);',reject=True)
 
 WORK=WRITE.replace('CONDITION','selected is a').replace('FIRST','a<-7u64').replace('SECOND','b<-8u64')
 case('deferred',body='{{defer{'+WORK+'};}};behave @print(selected);')

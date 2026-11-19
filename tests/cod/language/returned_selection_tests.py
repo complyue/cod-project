@@ -6,7 +6,7 @@ import foundation_tests as runner
 IO = 'using symbol "std:io" @print;using "std:exceptions" NullPointerException;'
 RELAY = 'func relay(ptr p:u64 in O)->ptr u64 in O where {owner O}{return p;}'
 PICK = 'func pick(ptr p:u64 in O,ptr q:u64 in O,choose:bool)->ptr u64 in O where {owner O}{if(choose){return p;}else{return q;}}'
-SETTER = 'proc set(ptr p:u64 in O,value:u64)->void throws NullPointerException where {owner O}{p<-value;}'
+SETTER = 'proc set(ptr p:u64 in O,value:u64)->void throws NullPointerException where {owner O}{p<-value;return;}'
 LOCAL = 'val a<-make local u64;val b<-make local u64;val c<-make local u64;ptr selected=if(flag){a}else{b};'
 CALLS = 'run(false,false);run(false,true);run(true,false);run(true,true);'
 runner.CASES = {}
@@ -14,7 +14,7 @@ runner.CASES = {}
 
 def case(name, setup='', write='relay(selected)<-7u64;', after='', read='selected', declaration=RELAY,
          reject=False, diagnostic='initialization', local=LOCAL):
-    source=IO+declaration+'proc run(flag:bool,other:bool)->void{'+local+'try{ '+setup+write+after+'behave @print('+read+');}catch(e:const NullPointerException){};}'+CALLS
+    source=IO+declaration+'proc run(flag:bool,other:bool)->void{'+local+'try{ '+setup+write+after+'behave @print('+read+');}catch(e:const NullPointerException){};return;}'+CALLS
     runner.CASES[name]=(source,2 if reject else 0,'' if reject else '7\n'*4,diagnostic if reject else '')
 
 

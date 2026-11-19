@@ -10,18 +10,18 @@ func pick(tag:i64,x:i64)->const i64{x<-x+10;return x;}
 '''
 RELAY = '''func relay(tag:T,ref x:i64 in O)->const i64 where {T,owner O}{return pick(tag,x);}
 '''
-SET = NPE + '''func initialize(tag:bool,ptr x:i64 in O)->void throws NullPointerException where {owner O}{x<-7;}
-func initialize(tag:i64,x:i64)->void{x;}
+SET = NPE + '''func initialize(tag:bool,ptr x:i64 in O)->void throws NullPointerException where {owner O}{x<-7:void;}
+func initialize(tag:i64,x:i64)->void{x;{}}
 func dispatch(tag:T,ptr x:i64 in O)->void throws NullPointerException where {T,owner O}{initialize(tag,x);}
 '''
 READ = '''proc marker()->const i64{behave @print(7);return 0;}
-proc read(tag:bool,ptr x:i64 in O,last:i64)->void where {owner O}{behave @print((x is null));}
-proc read(tag:i64,x:i64,last:i64)->void{behave @print(x);}
-proc visit(tag:T,ptr x:i64 in O)->void throws NullPointerException where {T,owner O}{read(tag,x,marker());}
+proc read(tag:bool,ptr x:i64 in O,last:i64)->void where {owner O}{behave @print((x is null));return;}
+proc read(tag:i64,x:i64,last:i64)->void{behave @print(x);return;}
+proc visit(tag:T,ptr x:i64 in O)->void throws NullPointerException where {T,owner O}{read(tag,x,marker());return;}
 '''
-DEFER = '''proc show(tag:bool,ref x:i64 in O)->void where {owner O}{behave @print(x);}
-proc show(tag:i64,x:i64)->void{behave @print(x);}
-proc later(tag:T,ref x:i64 in O)->void where {T,owner O}{defer show(tag,x);x<-9;}
+DEFER = '''proc show(tag:bool,ref x:i64 in O)->void where {owner O}{behave @print(x);return;}
+proc show(tag:i64,x:i64)->void{behave @print(x);return;}
+proc later(tag:T,ref x:i64 in O)->void where {T,owner O}{defer show(tag,x);x<-9;return;}
 '''
 runner.CASES = {
  'direct_borrow_and_copy':(IO+PICK+'val x<-1;behave @print(pick(false,x));behave @print(x);behave @print(pick(0,x));behave @print(x);',0,'2\n2\n12\n2\n',''),
@@ -34,7 +34,7 @@ runner.CASES = {
  'repeated_binder_prefix':(IO+'func take(tag:T,key:T,ref x:i64 in O)->const i64 where {T,owner O}{x<-7;return x;}func take(tag:bool,key:i64,x:i64)->const i64{return x+10;}val x<-1;behave @print(take(false,0,x));behave @print(take(false,true,x));behave @print(x);',0,'11\n7\n7\n',''),
  'generic_recursive_modes':(IO+PICK+'func loop(tag:T,ref x:i64 in O,n:i64)->const i64 where {T,owner O}{if(n==0){return x;}else{pick(tag,x);return loop(tag,x,n-1);};}val x<-1;behave @print(loop(false,x,30));behave @print(loop(0,x,40));',0,'31\n31\n',''),
  'deferred_late_borrow_and_saved_copy':(IO+DEFER+'val x<-1;later(false,x);x<-2;later(0,x);behave @print(x);',0,'9\n2\n9\n',''),
- 'loop_accumulated_preparations':(IO+DEFER+'proc enqueue(tag:T,ref x:i64 in O)->void where {T,owner O}{for(i in 0..3){defer show(tag,x);x<-x+1;};}val x<-1;enqueue(false,x);enqueue(0,x);',0,'4\n4\n4\n6\n5\n4\n',''),
+ 'loop_accumulated_preparations':(IO+DEFER+'proc enqueue(tag:T,ref x:i64 in O)->void where {T,owner O}{for(i in 0..3){defer show(tag,x);x<-x+1;};return;}val x<-1;enqueue(false,x);enqueue(0,x);',0,'4\n4\n4\n6\n5\n4\n',''),
  'borrowed_ptr_initialization':(IO+SET+'val x<-make local i64;try{dispatch(false,x);behave @print(x);}catch(e:const NullPointerException){behave @print(99);};',0,'7\n',''),
  'copied_input_needs_initialization':(SET+'val x<-make local i64;try{dispatch(0,x);}catch(e:const NullPointerException){};',2,'','cannot prove initialization'),
  'null_borrow_before_later_effect':(IO+NPE+READ+'val x<-1;ptr p=x;p=null;try{visit(false,p);}catch(e:const NullPointerException){behave @print(99);};',0,'7\ntrue\n',''),

@@ -7,14 +7,14 @@ import foundation_tests as runner
 IO = 'using symbol "std:io" @print;\n'
 PRE = IO + 'using "std:exceptions" NullPointerException;\n'
 INC = 'func inc(x:i64)->const i64{return x+1;}func dec(x:i64)->const i64{return x-1;}\n'
-PROC = 'proc one(x:i64)->void{behave @print(x+1);}proc two(x:i64)->void{behave @print(x+2);}\n'
+PROC = 'proc one(x:i64)->void{behave @print(x+1);return;}proc two(x:i64)->void{behave @print(x+2);return;}\n'
 MISS = 'using "std:exceptions" MissingReturnError;func missing()->const i64{}\n'
-WARN = 'callable may finish without an explicit return'
+WARN = 'callable may finish without a result'
 runner.CASES = {
     'module_function_value': (IO+INC+'func f=inc;behave @print(f(1));',0,'2\n',''),
     'anonymous_value': (IO+'func f=func(x:i64)->const i64{return x+2;};behave @print(f(2));',0,'4\n',''),
     'explicit_empty_capture': (IO+'func f=func[](x:i64)->const i64{return x+3;};behave @print(f(2));',0,'5\n',''),
-    'named_local_definition': (IO+'proc run()->void{func f(x:i64)->const i64{return x+4;};behave @print(f(2));}run();',0,'6\n',''),
+    'named_local_definition': (IO+'proc run()->void{func f(x:i64)->const i64{return x+4;};behave @print(f(2));return;}run();',0,'6\n',''),
     'independent_copy': (IO+INC+'func f=inc;func g=f;f<-dec;behave @print(g(10));behave @print(f(10));',0,'11\n9\n',''),
     'conditional_value': (IO+INC+'func f=if(false){inc}else{dec};behave @print(f(12));',0,'11\n',''),
     'value_expression_call': (IO+INC+'behave @print((if(true){inc}else{dec})(12));',0,'13\n',''),
@@ -34,9 +34,9 @@ runner.CASES = {
     'null_callee_precedes_operands': (PRE+INC+'proc arg()->const i64{behave @print(99);return 1;}func f=inc;ptr p=f;p=null;try{p(arg());{}}catch(e:const NullPointerException){behave @print(18);};',0,'18\n',''),
     'target_snapshot_before_operand': (IO+INC+'func f=inc;behave @print(f({f<-dec;20}));behave @print(f(20));',0,'21\n19\n',''),
     'procedure_value': (IO+PROC+'proc f=one;f(21);f<-two;f(21);',0,'22\n23\n',''),
-    'deferred_target_snapshot': (IO+PROC+'proc run()->void{proc f=one;defer{f(23);};defer f(23);f<-two;}run();',0,'24\n25\n',''),
+    'deferred_target_snapshot': (IO+PROC+'proc run()->void{proc f=one;defer{f(23);};defer f(23);f<-two;return;}run();',0,'24\n25\n',''),
     'deferred_expression_target': (IO+PROC+'{{defer (if(true){one}else{two})(25);}};',0,'26\n',''),
-    'deferred_operand_replacement': (IO+PROC+'proc run()->void{proc f=one;defer{f(27);};defer f({f<-two;27});}run();',0,'28\n29\n',''),
+    'deferred_operand_replacement': (IO+PROC+'proc run()->void{proc f=one;defer{f(27);};defer f({f<-two;27});return;}run();',0,'28\n29\n',''),
     'delayed_block_reads_current_value': (IO+PROC+'proc f=one;{{defer{f(29);};f<-two;}};',0,'31\n',''),
     'default_parameter_copy': (IO+INC+'func apply(f:func(i64)->const i64,x:i64)->const i64{f<-dec;return f(x);}func f=inc;behave @print(apply(f,32));behave @print(f(32));',0,'31\n33\n',''),
     'parameter_preparation_snapshot': (IO+INC+'func apply(f:func(i64)->const i64,x:i64)->const i64{return f(x);}'
@@ -49,7 +49,7 @@ runner.CASES = {
     'finally_return_replaces_value': (IO+INC+'func factory()->func(i64)->const i64{try{return inc;}finally{return dec;};}behave @print(factory()(40));',0,'39\n',''),
     'recursive_factory': (IO+INC+'func factory(n:i64)->func(i64)->const i64{if(n==0){return inc;}else{return factory(n-1);};}behave @print(factory(40)(40));',0,'41\n',''),
     'recursive_callable_parameter': (IO+INC+'func apply(f:func(i64)->const i64,n:i64)->const i64{return if(n==0){f(41)}else{apply(f,n-1)};}behave @print(apply(inc,40));',0,'42\n',''),
-    'recursive_local_callable': (IO+'proc run()->void{func factorial(n:i64)->const i64{return if(n==0){1}else{n*factorial(n-1)};};behave @print(factorial(5));}run();',0,'120\n',''),
+    'recursive_local_callable': (IO+'proc run()->void{func factorial(n:i64)->const i64{return if(n==0){1}else{n*factorial(n-1)};};behave @print(factorial(5));return;}run();',0,'120\n',''),
     'generic_callable_parameter': (IO+'func identity(x:T)->const T where T{return x;}func apply(f:F,x:T)->const T where {F,T}{return f(x);}func a:func(i64)->const i64=identity;func b:func(bool)->const bool=identity;behave @print(apply(a,43));behave @print(apply(b,true));',0,'43\ntrue\n',''),
     'generic_value_forwarding': (IO+INC+'func identity(x:T)->const T where T{return x;}func f=identity(inc);behave @print(f(43));behave @print(identity(44));',0,'44\n44\n',''),
     'overloaded_family_view': (IO+'func f(x:T)->const i64 where T{return 1;}func f(x:i64)->const i64{return 45;}func a:func(i64)->const i64=f;func b:func(bool)->const i64=f;behave @print(a(0));behave @print(b(false));',0,'45\n1\n',''),
@@ -62,14 +62,14 @@ runner.CASES = {
     'wrong_callable_category': (IO+PROC+'func f=one;',2,'','matching func/proc'),
     'function_cannot_call_procedure_value': (IO+PROC+'func wrong()->void{proc f=one;f(1);}',2,'','function cannot invoke a procedure'),
     'lexical_capture_not_promoted': (IO+'proc run()->void{val x<-1;func f=func[x]()->const i64{return x;};'
-        'x<-7;behave @print(f());behave @print(x);}run();',0,'1\n7\n',''),
+        'x<-7;behave @print(f());behave @print(x);return;}run();',0,'1\n7\n',''),
     'callable_not_numeric_bits': (INC+'func f=inc;f+f;',2,'','no applicable numeric operation'),
     'checked_view_declaration': (PRE+'func f(x:i64)->const i64 throws NullPointerException{return x;}func g=f;g(1);',2,'','requires a covering catch'),
     'checked_view_handler': (PRE+'func f(x:i64)->const i64 throws NullPointerException{return x;}func g=f;try{behave @print(g(47));}catch(e:const NullPointerException){};',0,'47\n',''),
     'checked_view_cannot_hide_throw': (PRE+'func f(x:i64)->const i64 throws NullPointerException{return x;}func g:func(i64)->const i64=f;',2,'','omits a required checked exception'),
     'voluntary_checked_view_contract': (PRE+INC+'func f:func(i64)->const i64 throws NullPointerException=inc;f(1);',2,'','requires a covering catch'),
-    'deferred_checked_view': (PRE+'proc f(x:i64)->void throws NullPointerException{behave @print(x);}'
-        'proc run()->void{proc g=f;defer catch(e:const NullPointerException){behave @print(-1);};defer g(48);}run();',
+    'deferred_checked_view': (PRE+'proc f(x:i64)->void throws NullPointerException{behave @print(x);return;}'
+        'proc run()->void{proc g=f;defer catch(e:const NullPointerException){behave @print(-1);};defer g(48);return;}run();',
         0,'48\n',''),
     'failure_retains_previous_holder': (IO+INC+MISS+'func failed()->func(i64)->const i64{missing();return dec;}func f=inc;try{f<-failed();{}}catch(e:const MissingReturnError){behave @print(f(48));};',0,'49\n',WARN),
     'generic_body_constructs_distinct_views': (IO+'func id(x:T)->const T where T{return x;}func adapt(sample:F)->const F where F{return id;}func a:func(i64)->const i64=id;func b:func(bool)->const bool=id;func fa=adapt(a);func fb=adapt(b);behave @print(fa(50));behave @print(fb(true));',0,'50\ntrue\n',''),
@@ -82,7 +82,7 @@ runner.CASES = {
         'func f=factory();behave @print(f(55));',0,'55\n',''),
     'receiving_type_cannot_infer_scope_result': ('func id(x:T)->const T where T{return x;}'
         'func f:func(i64)->const i64={{return id;}};',2,'','unproved callable result'),
-    'borrowed_callable_parameter': (IO+INC+'proc change(f:func(i64)->const i64 in O)->void where {owner O}{f<-dec;}func f=inc;change(f);behave @print(f(57));',0,'56\n',''),
+    'borrowed_callable_parameter': (IO+INC+'proc change(f:func(i64)->const i64 in O)->void where {owner O}{f<-dec;return;}func f=inc;change(f);behave @print(f(57));',0,'56\n',''),
     'borrowed_callable_result': (IO+INC+'func view(f:func(i64)->const i64 in O)->(func(i64)->const i64) in O where {owner O}{return f;}func f=inc;ptr p=view(f);f<-dec;behave @print(p(58));',0,'57\n',''),
     'borrowed_result_copy_is_independent': (IO+INC+'func view(f:func(i64)->const i64 in O)->(func(i64)->const i64) in O where {owner O}{return f;}func f=inc;func g=view(f);f<-dec;behave @print(g(57));',0,'58\n',''),
     'readonly_borrowed_holder': (INC+'proc change(f:const func(i64)->const i64 in O)->void where {owner O}{f<-dec;}',2,'','readonly destination'),

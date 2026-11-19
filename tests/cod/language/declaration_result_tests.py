@@ -14,7 +14,7 @@ runner.CASES = {
  'unanchored_contract_without_execution': ('func f(n:u64)->u64;func f(n:u64){return n+f(n-1u64);}func value=f;',0,'',''),
  'declaration_after_definition': (IO+'func f(x:u64){return x+1u64;}func f(x:u64)->u64;behave @print(f(1u64));',0,'2\n',''),
  'procedure_contract': (IO+'proc f(x:u64)->u64;proc f(x:u64){behave @print(x);return x+1u64;}behave @print(f(1u64));',0,'1\n2\n',''),
- 'void_contract': (IO+'proc f()->void;proc f(){behave @print(1u64);}f();',0,'1\n',''),
+ 'void_contract': (IO+'proc f()->void;proc f(){behave @print(1u64);return;}f();',0,'1\n',''),
  'declaration_widens_at_return': (IO+'func f()->u64;func f(){return 1u32;}func tag(x:u64)->u64{return 64u64;}behave @print(tag(f()));',0,'64\n',''),
  'incompatible_body': ('func f()->u64;func f(){return true;}',2,'','return type'),
  'incompatible_explicit_result': ('func f()->u64;func f()->bool{return true;}',2,'','does not satisfy callable declaration'),

@@ -14,7 +14,7 @@ runner.CASES = {
  'generic_distinct_results': (IO+'func (+)(x:u32,y:u32)->u64;func (+)(x:bool,y:bool)->bool;func (+)(x:T,y:T) where T{return x;}func tag(x:u64)->u64{return x;}behave @print(tag(1u32+2u32));behave @print(false+true);',0,'1\nfalse\n',''),
  'return_conversion_only': (IO+'func (+)(x:u32,y:u32)->u64;func (+)(x:u32,y:u32){return intrinsic (+)(x,y);}behave @print(1u32+2u32);',0,'3\n',''),
  'intermediate_overflow': ('func (+)(x:u32,y:u32)->u64;func (+)(x:u32,y:u32){return intrinsic (+)(x,y);}4294967295u32+1u32;',70,'','u32 addition overflow'),
- 'procedure_declaration': (IO+'proc (+)(x:bool,y:bool)->void;proc (+)(x:bool,y:bool){behave @print(x);behave @print(y);}false+true;',0,'false\ntrue\n',''),
+ 'procedure_declaration': (IO+'proc (+)(x:bool,y:bool)->void;proc (+)(x:bool,y:bool){behave @print(x);behave @print(y);return;}false+true;',0,'false\ntrue\n',''),
  'borrowed_declared_result': (IO+'func (+)(ref x:i64 in O,ref y:i64 in P)->ref i64 in O where {owner O,owner P};func (+)(ref x:i64 in A,ref y:i64 in B) where {owner A,owner B}{return x;}val x<-1,y<-2;x+y<-7;behave @print(x);',0,'7\n',''),
  'explicit_result_conflict': ('func (+)(x:bool,y:bool)->bool;func (+)(x:bool,y:bool)->u64{return 1u64;}',2,'','does not satisfy callable declaration'),
  'body_result_conflict': ('func (+)(x:bool,y:bool)->bool;func (+)(x:bool,y:bool){return 1u64;}',2,'','return type'),
@@ -49,7 +49,7 @@ runner.CASES = {
  'signed_minimum_throws': (NPE+'func (-)(x:i64)->i64 throws NullPointerException;-9223372036854775808;',2,'','requires a covering catch or throws'),
  'swap_method': (IO+SWAP+'func (<->)(x:i64 in P,y:i64 in Q) where {owner P,owner Q}{intrinsic (<->)(x,y);}val x<-1,y<-2;x<->y;behave @print(x);behave @print(y);',0,'2\n1\n',''),
  'swap_builtin': (IO+SWAP+'val x<-1,y<-2;x<->y;behave @print(x);behave @print(y);',0,'2\n1\n',''),
- 'deferred_swap_builtin': (IO+SWAP+'ref x:i64=1,y:i64=2;{{defer (<->)(x,y);x<-3;}};behave @print(x);behave @print(y);',0,'2\n3\n',''),
+ 'deferred_swap_builtin': (IO+SWAP+'ref x:i64=1,y:i64=2;{{defer (<->)(x,y);x<-3:void;}};behave @print(x);behave @print(y);',0,'2\n3\n',''),
  'swap_checked_obligation': (NPE+SWAP.replace(' where',' throws NullPointerException where')+'val x<-1,y<-2;x<->y;',2,'','requires a covering catch or throws'),
  'deferred_swap_checked_obligation': (NPE+SWAP.replace(' where',' throws NullPointerException where')+'val x<-1,y<-2;defer (<->)(x,y);',2,'','requires a covering catch or throws'),
  'swap_intrinsic_bypasses_declaration': (IO+SWAP.replace('func','proc')+'val x<-1,y<-2;intrinsic (<->)(x,y);behave @print(x);',0,'2\n',''),
@@ -67,7 +67,7 @@ for index, op in enumerate(('+', '-', '*', '/', '%', '==', '!=', '<', '>', '<=',
         ('first', '{return 7u64;},{observe(99u64);2u64}', '1\n7\n'),
         ('second', '{observe(2u64);1u64},{return 7u64;}', '2\n1\n7\n'),
     ):
-        program = IO+NPE+declaration+'proc observe(x:u64)->void{behave @print(x);}' + \
+        program = IO+NPE+declaration+'proc observe(x:u64)->void{behave @print(x);return;}' + \
             'proc f()->u64{defer observe(1u64);('+op+')('+operands+');return 0u64;}behave @print(f());'
         runner.CASES[f'aborted_binary_{index}_{position}'] = (program, 0, output, '')
 for op, argument, result in (('!', 'bool', 'bool'), ('-', 'i64', 'i64'), ('+', 'i64', 'i64')):

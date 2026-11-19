@@ -6,7 +6,7 @@ import foundation_tests as runner
 IO = 'using symbol "std:io" @print;'
 OUT = lambda value: 'behave @print('+value+');'
 def run(body):
-    return IO+'proc run(flag:bool)->void{'+body+'}run(true);run(false);'
+    return IO+'proc run(flag:bool)->void{'+body+'return;}run(true);run(false);'
 BASE = 'val x<-1,z<-3;'
 PICK = 'func pick(tag:bool,ref x:i64 in O)->ref i64 in O where {owner O}{return x;}func pick(tag:i64,ref x:i64 in O)->i64 where {owner O}{return x;}'
 NPE = 'using "std:exceptions" NullPointerException;'
@@ -47,7 +47,7 @@ runner.CASES = {
  'fixed_binding': (run(BASE+'const ref y=if(flag){x}else{7};y<-4;'+OUT('x')+OUT('y')),0,'1\n4\n1\n4\n',''),
  'readonly_target': (run('const val x<-1;ref y=if(flag){x}else{7};'+OUT('y')),0,'1\n7\n',''),
  'deferred_local_read': (run(BASE+'ref y=if(flag){x}else{7};defer{'+OUT('y')+'};x<-9;'),0,'1\n7\n',''),
- 'prepared_borrow': (IO+'proc show(ref value:const i64 in O)->void where {owner O}{'+OUT('value')+'}'+run(BASE+'ref y=if(flag){x}else{7};defer show(y);x<-9;').removeprefix(IO),0,'1\n7\n',''),
+ 'prepared_borrow': (IO+'proc show(ref value:const i64 in O)->void where {owner O}{'+OUT('value')+'return;}'+run(BASE+'ref y=if(flag){x}else{7};defer show(y);x<-9;').removeprefix(IO),0,'1\n7\n',''),
  'deferred_block_receiver': (run('defer{{val x<-1;ref y=if(flag){x}else{7};x<-9;'+OUT('y')+'}};'),0,'1\n7\n',''),
  'per_iteration': (run('ref sum:i64=0;for(i in 0..4){{ref x:i64=1,fallback:i64=7;'
      'ref y=if(flag){x}else{fallback};x<-9;sum<-sum+y;}};'+OUT('sum')),0,'36\n28\n',''),
@@ -90,7 +90,7 @@ runner.CASES = {
  'deferred_outer_owner_rejected': (run('ref x:i64=1;defer{{ref local:i64=7;ref y=if(flag){x}else{local};}};'),
      2,'','reference initializer joins different owners'),
  'scalar_representations': (IO+'func independent(value:T)->const T where T{return value;}func work(value:T,flag:bool)->const T where T{val local<-value;ref y=if(flag){local}else{independent(value)};return y;}'+OUT('work(false,false)')+OUT('work(true,true)')+OUT('work(7u8,false)')+OUT('work(8u32,true)')+OUT('work(1f32,false)')+OUT('work(2f64,true)'),0,'false\ntrue\n7\n8\n1\n2\n',''),
- 'exception_payload': (IO+MISSING+'using "std:exceptions" Exception;func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}func independent(value:Exception)->const Exception{return value;}proc work(flag:bool)->void{val original:Exception<-error();ref y=if(flag){original}else{independent(original)};'+OUT('y is original')+OUT('y.category')+'}work(true);work(false);',0,'true\n5\nfalse\n5\n','[-Wmissing-return]'),
+ 'exception_payload': (IO+MISSING+'using "std:exceptions" Exception;func error()->const MissingReturnError{try{missing():void;}catch(e:const MissingReturnError){return e;};}func independent(value:Exception)->const Exception{return value;}proc work(flag:bool)->void{val original:Exception<-error();ref y=if(flag){original}else{independent(original)};'+OUT('y is original')+OUT('y.category')+'return;}work(true);work(false);',0,'true\n5\nfalse\n5\n','[-Wmissing-return]'),
  'callable_mixture': (IO+'func base()->u64{return 1u64;}func value=base;ptr p=if(true){value}else{base};'+OUT('p()')+OUT('p is value'),0,'1\ntrue\n',''),
  'different_owners': ('ref x:i64=1;{{ref local:i64=7;ref y=if(true){x}else{local};}};',
      2,'','reference initializer joins different owners'),

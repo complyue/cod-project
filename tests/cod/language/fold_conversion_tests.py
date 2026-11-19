@@ -38,12 +38,12 @@ runner.CASES.update({
     'readonly_updated_accumulator': (IO + 'func f(x:f64)->u8 {return if(x==0f64){2u8}else{5u8};}'
         'behave @print(fold(i in 0..3,a=0f64){f(a)});', 0, '5\n', ''),
     'empty_range': (IO + 'behave @print(fold(i in 3..3,a=9f64){behave @print(99);7u8});', 0, '9\n', ''),
-    'body_scope_cleanup': (IO + 'proc observe(x:f64)->void {behave @print(x);}'
+    'body_scope_cleanup': (IO + 'proc observe(x:f64)->void {behave @print(x);return;}'
         'behave @print(fold(i in 0..2,a=0f64){{defer observe(a);return 7u8;}});', 0, '0\n7\n7\n', ''),
-    'deferred_snapshots': (IO + 'proc observe(x:f64)->void {behave @print(x);}'
+    'deferred_snapshots': (IO + 'proc observe(x:f64)->void {behave @print(x);return;}'
         '{{behave @print(fold(i in 0..2,a=0f64){defer observe(a);7u8});}};', 0, '7\n7\n0\n', ''),
-    'body_failure': (IO + 'proc observe(x:f64)->void {behave @print(x);}'
-        'func bad()->u8 {} {{defer observe(9f64);fold(i in 0..2,a=0f64){defer observe(a);bad()};}};',
+    'body_failure': (IO + 'proc observe(x:f64)->void {behave @print(x);return;}'
+        'func bad()->u8 {} {{defer observe(9f64);(fold(i in 0..2,a=0f64){defer observe(a);bad()}):void;}};',
         70, '0\n9\n', 'uncaught MissingReturnError'),
     'body_return': (IO + 'func f()->f64 {return fold(i in 0..2,a=0f64){if(i==0){7u8}else{return a;}};}'
         'behave @print(f());', 0, '7\n', ''),

@@ -29,17 +29,17 @@ for name in ('protected_registration','protected_conditional_write','protected_c
 # Unknown runtime choices cover every target; caller aliases determine whether
 # the selected write guarantees initialization of the observed input.
 from itertools import product
-SELECTOR='func write_choice(ptr a:u64 in O,ptr b:u64 in O,ptr c:u64 in O,first:bool,second:bool)->void throws NullPointerException where {owner O}{ptr selected=if(first){a}else{if(second){b}else{c}};selected<-7u64;}'
+SELECTOR='func write_choice(ptr a:u64 in O,ptr b:u64 in O,ptr c:u64 in O,first:bool,second:bool)->void throws NullPointerException where {owner O}{ptr selected=if(first){a}else{if(second){b}else{c}};selected<-7u64;{}}'
 for aliases in product(range(3),repeat=3):
     names=('left','right','third')
     actual=','.join(names[index] for index in aliases)
     safe=len(set(aliases))==1
     source=fixture.fixture.IO+SELECTOR+'proc run(first:bool,second:bool)->void{val left<-make local u64,right<-make local u64,third<-make local u64;'
-    source+='try{write_choice('+actual+',first,second);behave @print('+names[aliases[0]]+');}catch(e:const NullPointerException){behave @print(99u64);};}'+fixture.fixture.CALLS
+    source+='try{write_choice('+actual+',first,second);behave @print('+names[aliases[0]]+');}catch(e:const NullPointerException){behave @print(99u64);};return;}'+fixture.fixture.CALLS
     runner.CASES['origin_alias_model_'+''.join(map(str,aliases))]=(source,0 if safe else 2,'7\n7\n7\n7\n' if safe else '', '' if safe else 'initialization')
 
-WRITER='func write_choice(ptr a:u64 in O,ptr b:u64 in O,flag:bool)->void throws NullPointerException where {owner O}{ptr selected=if(flag){a}else{b};selected<-7u64;}'
-OBSERVER='proc run(flag:bool)->void{val left<-make local u64,right<-make local u64;try{CALL;behave @print(left);}catch(e:const NullPointerException){behave @print(99u64);};}run(false);run(true);'
+WRITER='func write_choice(ptr a:u64 in O,ptr b:u64 in O,flag:bool)->void throws NullPointerException where {owner O}{ptr selected=if(flag){a}else{b};selected<-7u64;{}}'
+OBSERVER='proc run(flag:bool)->void{val left<-make local u64,right<-make local u64;try{CALL;behave @print(left);}catch(e:const NullPointerException){behave @print(99u64);};return;}run(false);run(true);'
 for name,definition,call,rejected in (
     ('aliased_output',WRITER,'write_choice(left,left,flag)',False),
     ('distinct_output',WRITER,'write_choice(left,right,flag)',True),

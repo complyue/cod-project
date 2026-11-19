@@ -7,7 +7,7 @@ runner.SOURCE = runner.SOURCE.replace('symbol @context:u64;', '''symbol @context
 using "std:exceptions" Exception;
 using "std:exceptions" MissingReturnError;
 func missing()->u64{}
-func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}
+func error()->const MissingReturnError{try{missing():void;}catch(e:const MissingReturnError){return e;};}
 val argument:Exception<-error();
 symbol @selected:proc(Exception)->u64;
 proc @selected(v:MissingReturnError)->u64{return @context;}

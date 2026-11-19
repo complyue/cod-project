@@ -9,7 +9,7 @@ runner.CASES = {}
 
 
 def program(body, prefix='', parameters='ptr p:i64 in O,ptr q:i64 in O', owners='owner O'):
-    return IO+prefix+'proc choose('+parameters+')->void where {'+owners+'}{ '+body+' }'+CALLS
+    return IO+prefix+'proc choose('+parameters+')->void where {'+owners+'}{ '+body+' return;}'+CALLS
 
 
 def guard(condition, target='p'):
@@ -56,8 +56,8 @@ safe('left_rebind_keeps_right_target', 'ptr empty:i64=null in O;'+guard('{q=p;em
 safe('payload_change', 'val same<-p is q;if(p is not null&&same){p<-23;behave @print(q);}else{behave @print(0);};', '23\n0\n0\n0\n0\n')
 safe('loop_stable', 'val same<-p is q;for(i in 0u64..2u64){'+guard('p is not null&&same', 'q')+'};', '7\n7\n0\n0\n0\n0\n0\n0\n0\n0\n')
 runner.CASES['cleanup_preserves'] = (IO+'proc choose(ref p:i64 in O,ref q:i64 in O)->void where {owner O}{val same<-p is q;{{defer{q<-q;};}};'+
-    guard('p is not null&&same','q')+'}val x<-7,y<-11;choose(x,x);choose(x,y);', 0, '7\n0\n', '')
-runner.CASES['nonnull_ref'] = (IO+'proc choose(ptr p:i64 in O,ref q:i64 in O)->void where {owner O}{'+guard('p is q')+'}'+
+    guard('p is not null&&same','q')+'return;}val x<-7,y<-11;choose(x,x);choose(x,y);', 0, '7\n0\n', '')
+runner.CASES['nonnull_ref'] = (IO+'proc choose(ptr p:i64 in O,ref q:i64 in O)->void where {owner O}{'+guard('p is q')+'return;}'+
     'val x<-7,y<-11;ptr absent:i64=null in here;choose(x,x);choose(x,y);choose(absent,x);', 0, '7\n0\n0\n', '')
 
 for name, mutation in {

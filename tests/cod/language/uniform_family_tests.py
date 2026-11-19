@@ -41,7 +41,7 @@ runner.CASES = {
         'func held=wrap(wrap(base));' + CALL, 0, '35\n', ''),
     'prepared_callee_before_operand_rebind': (IO + BASE + BASE.replace('base(', 'other(').replace('n0+n31', 'n0+n31+10u64') +
         HELD + CALL.replace('1u8,', '{held<-other;1u8},', 1) + CALL, 0, '33\n43\n', ''),
-    'deferred_prepared_call': (IO + f'proc show({PARAMETERS})->void{{behave @print(n0+n31);}}'
+    'deferred_prepared_call': (IO + f'proc show({PARAMETERS})->void{{behave @print(n0+n31);return;}}'
         f'proc held:proc({INPUTS})->void=show;defer held({ARGUMENTS});behave @print(1u64);', 0, '1\n33\n', ''),
     'complete_dynamic_replay': (IO + 'symbol @bias:u64;' +
         f'proc @source({PARAMETERS})->u64{{return n0+n31+@bias;}}'
@@ -51,7 +51,7 @@ runner.CASES = {
         BASE.replace('->u64{', '->u64 throws StaticallyUnknownTypeException{') + HELD,
         2, '', 'required checked exception'),
     'checked_deferred_call': (IO + 'using "std:exceptions" StaticallyUnknownTypeException;' +
-        f'proc show({PARAMETERS})->void throws StaticallyUnknownTypeException{{behave @print(n0+n31);}}'
+        f'proc show({PARAMETERS})->void throws StaticallyUnknownTypeException{{behave @print(n0+n31);return;}}'
         f'proc held:proc({INPUTS})->void throws StaticallyUnknownTypeException=show;'
         f'{{{{defer catch(e:const StaticallyUnknownTypeException){{}}finally{{behave @print(7u64);}};defer held({ARGUMENTS});}}}};',
         0, '33\n7\n', ''),

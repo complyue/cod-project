@@ -11,9 +11,9 @@ using symbol "std:io" @print;
 using "std:exceptions" OutOfMemoryError;
 using "std:exceptions" NullPointerException;
 using "std:exceptions" MissingReturnError;
-proc observe(x:u64)->void{behave @print(x);}
+proc observe(x:u64)->void{behave @print(x);return;}
 func missing()->const u64{}
-proc swap_in_helper(ref left:u64 in O,ref right:u64 in P)->void where {owner O,owner P}{defer (<->)(left,right);}
+proc swap_in_helper(ref left:u64 in O,ref right:u64 in P)->void where {owner O,owner P}{defer (<->)(left,right);return;}
 proc batch(n:u64)->void{
  val x<-11u64,y<-12u64,z<-13u64;
  defer{observe(x);observe(y);observe(z);};
@@ -21,6 +21,7 @@ proc batch(n:u64)->void{
   if(i%2u64==0u64){defer (<->)(x,y);}else{defer (<->)(y,z);};
  };
  x<-21u64;
+ return;
 }
 batch(0u64);observe(9000u64);
 batch(3u64);observe(9000u64);
@@ -29,6 +30,7 @@ proc per_iteration(n:u64)->void{
  val x<-1u64,y<-2u64;
  for(i in 0u64..n){{defer intrinsic (<->)(x,y);}};
  observe(x);observe(y);
+ return;
 }
 per_iteration(10000u64);observe(9000u64);
 {{val x<-1u64,y<-2u64;defer{observe(x);observe(y);};defer{swap_in_helper(x,y);};}};
@@ -43,6 +45,7 @@ proc denied_registration()->void{
   observe(x);observe(y);observe(p);
  }};
  observe(x);observe(y);observe(p);
+ return;
 }
 denied_registration();observe(9000u64);
 proc null_preparation()->void{
@@ -51,6 +54,7 @@ proc null_preparation()->void{
  try{defer (<->)(p,{observe(75u64);x});}
  catch(e:const NullPointerException){observe(9041u64);};
  observe(x);
+ return;
 }
 null_preparation();observe(9000u64);
 proc partial_batch(n:u64)->void{
@@ -58,6 +62,7 @@ proc partial_batch(n:u64)->void{
  defer{observe(x);observe(y);};
  observe(9060u64);
  for(i in 0u64..n){defer (<->)(x,y);};
+ return;
 }
 try{partial_batch(1000u64);}catch(e:const OutOfMemoryError){observe(9061u64);};
 observe(9000u64);

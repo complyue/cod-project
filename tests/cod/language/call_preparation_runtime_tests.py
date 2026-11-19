@@ -8,7 +8,7 @@ from generic_catch_tests import IO, ERRORS
 FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__), Path(__file__).with_name('foundation_tests.py'), Path(__file__).with_name('generic_catch_tests.py')])
 FIXTURE = FIXTURE.updated(source=IO + ERRORS + '''
 using "std:exceptions" OutOfMemoryError;
-proc observe(x:u64)->void{behave @print(x);}
+proc observe(x:u64)->void{behave @print(x);return;}
 func number()->const u64{return 41u64;}
 func wrap(f:func()->const u64)->func()->const u64{return func[f]()->const u64{return f();};}
 func make_callback()->const func()->const u64{return wrap(number);}
@@ -18,8 +18,8 @@ func apply(make_value:func()->const U,read:func(T)->const u64)->const u64 where 
 func wrap_error(f:func(Exception)->const u64)->func(Exception)->const u64{
  return func[f](e:Exception)->const u64{return f(e);};
 }
-proc sink(e:Exception,f:func()->const u64)->void{observe(e.category);observe(f());}
-proc late(e:Exception,f:func()->const u64,n:i64)->void{observe(99u64);}
+proc sink(e:Exception,f:func()->const u64)->void{observe(e.category);observe(f());return;}
+proc late(e:Exception,f:func()->const u64,n:i64)->void{observe(99u64);return;}
 observe(9300u64);
 observe(apply(missing_error,read_error));observe(apply(make_callback,read_callback));
 observe(9301u64);

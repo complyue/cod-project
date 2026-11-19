@@ -19,7 +19,7 @@ func image_bound(f:func(u64)->const u64)->const (func(u64)->const u64){
  for(i in 0u64..{return wrap(f);}){};return base;
 }
 func bound_error()->const MissingReturnError{
- try{missing();}catch(e:const MissingReturnError){return e;};
+ try{missing():void;}catch(e:const MissingReturnError){return e;};
 }
 proc throw_bound(ref f:func(u64)->const u64 in O)->void where {owner O}{
  func saved=f;for(i in 0u64..{throw bound_error();}){observe(9999u64);}else{observe(9999u64);};

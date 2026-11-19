@@ -6,7 +6,7 @@ import foundation_tests as runner
 IO = 'using symbol "std:io" @print;\n'
 BASE = 'func base(x:i64)->const i64{return x;}func other(x:i64)->const i64{return x+10;}\n'
 WRAP = 'func wrap(f:func(i64)->const i64)->func(i64)->const i64{return func[f](x:i64)->const i64{return f(x)+1;};}\n'
-PROC = 'proc one(x:i64)->void{behave @print(x);}proc two(x:i64)->void{behave @print(x+10);}\n'
+PROC = 'proc one(x:i64)->void{behave @print(x);return;}proc two(x:i64)->void{behave @print(x+10);return;}\n'
 runner.CASES = {
     'explicit_capture': (IO+BASE+'func f=base;func g=func[f](x:i64)->const i64{return f(x)+1;};behave @print(g(1));',0,'2\n',''),
     'inferred_capture': (IO+BASE+'func f=base;func g=func(x:i64)->const i64{return f(x)+2;};behave @print(g(1));',0,'3\n',''),
@@ -17,19 +17,19 @@ runner.CASES = {
     'runtime_growing_recursion': (IO+BASE+WRAP+'func grow(f:func(i64)->const i64,n:i64)->func(i64)->const i64{if(n==0){return f;}else{return grow(wrap(f),n-1);};}behave @print(grow(base,30)(2));',0,'32\n',''),
     'selected_target_before_argument': (IO+BASE+WRAP+'func f=wrap(base);behave @print(f({{f<-wrap(other);6}}));behave @print(f(6));',0,'7\n17\n',''),
     'prepared_parameter_before_argument': (IO+BASE+WRAP+'func apply(f:func(i64)->const i64,x:i64)->const i64{return f(x);}func f=wrap(base);behave @print(apply(f,{{f<-wrap(other);7}}));',0,'8\n',''),
-    'deferred_procedure_snapshot': (IO+PROC+'proc f=one;proc g=proc[f](x:i64)->void{f(x);};{{defer g(9);g<-two;f<-two;}};',0,'9\n',''),
+    'deferred_procedure_snapshot': (IO+PROC+'proc f=one;proc g=proc[f](x:i64)->void{f(x);return;};{{defer g(9);g<-two;f<-two:void;}};',0,'9\n',''),
     'scope_result': (IO+BASE+WRAP+'func f={{func inner=wrap(base);inner}};behave @print(f(9));',0,'10\n',''),
     'finally_result_snapshot': (IO+BASE+WRAP+'func f=wrap(base);func g=try{f}finally{f<-wrap(other);{}};behave @print(g(10));',0,'11\n',''),
     'return_replacement': (IO+BASE+WRAP+'func factory()->func(i64)->const i64{defer{return wrap(other);};return wrap(base);}behave @print(factory()(1));',0,'12\n',''),
     'generic_capture_type': (IO+'func id(x:T)->const T where T{return x;}func wrap(f:F)->const F where F{return func[f](x:i64)->const i64{return f(x);};}func f:func(i64)->const i64=id;behave @print(wrap(f)(13));',0,'13\n',''),
-    'named_recursive_capture': (IO+BASE+'proc run()->void{func f=base;func recurse[f](n:i64)->const i64{return if(n==0){f(14)}else{recurse(n-1)};};behave @print(recurse(20));}run();',0,'14\n',''),
+    'named_recursive_capture': (IO+BASE+'proc run()->void{func f=base;func recurse[f](n:i64)->const i64{return if(n==0){f(14)}else{recurse(n-1)};};behave @print(recurse(20));return;}run();',0,'14\n',''),
     'transitive_capture': (IO+BASE+'func f=base;func factory=func()->func(i64)->const i64{return func(x:i64)->const i64{return f(x);};};behave @print(factory()(15));',0,'15\n',''),
     'explicit_module_method_capture': (IO+BASE+'func f=func[base](x:i64)->const i64{return base(x);};behave @print(f(16));',0,'16\n',''),
     'capture_types_share_generic_body': (IO+'func number()->const i64{return 1;}func truth()->const bool{return true;}func inspect(f:F)->func()->const bool where F{return func[f]()->const bool{f();return true;};}behave @print(inspect(number)());behave @print(inspect(truth)());',0,'true\ntrue\n',''),
-    'local_shadow_capture': (IO+BASE+'proc run()->void{func base=other;func f=func(x:i64)->const i64{return base(x);};behave @print(f(8));}run();',0,'18\n',''),
+    'local_shadow_capture': (IO+BASE+'proc run()->void{func base=other;func f=func(x:i64)->const i64{return base(x);};behave @print(f(8));return;}run();',0,'18\n',''),
     'nested_scope_shadow': (IO+BASE+'func f=base;func g=func[f](x:i64)->const i64{0;{{func f=other;f(x);}};return f(x);};behave @print(g(19));',0,'19\n',''),
     'default_parameter_replacement': (IO+BASE+WRAP+'func apply(f:func(i64)->const i64,x:i64)->const i64{f<-wrap(other);return f(x);}func f=wrap(base);behave @print(apply(f,9));behave @print(f(9));',0,'20\n10\n',''),
-    'borrowed_holder_replacement': (IO+BASE+WRAP+'proc change(f:func(i64)->const i64 in O)->void where {owner O}{f<-wrap(other);}func f=wrap(base);change(f);behave @print(f(10));',0,'21\n',''),
+    'borrowed_holder_replacement': (IO+BASE+WRAP+'proc change(f:func(i64)->const i64 in O)->void where {owner O}{f<-wrap(other);return;}func f=wrap(base);change(f);behave @print(f(10));',0,'21\n',''),
     'nullable_captured_holder': (IO+BASE+WRAP+'using "std:exceptions" NullPointerException;func f=wrap(base);ptr p=f;p=null;try{p(1);{}}catch(e:const NullPointerException){behave @print(22);};',0,'22\n',''),
     'captured_checked_failure': (IO+'using "std:exceptions" NullPointerException;func failing()->const i64 throws NullPointerException{ptr p:i64=null in here;return p;}func f=failing;func g=func[f]()->const i64 throws NullPointerException{return f();};try{g();{}}catch(e:const NullPointerException){behave @print(23);};',0,'23\n',''),
     'copy_failure_preserves_initialization_boundary': (IO+BASE+WRAP+'using "std:exceptions" OutOfMemoryError;val x<-make local i64;func f=wrap(base);try{func g=f;x<-1;{}}catch(e:const OutOfMemoryError){behave @print(x);};',2,'','before definite initialization'),

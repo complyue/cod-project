@@ -21,8 +21,8 @@ FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
  try{func failed=read;}catch(e:const OutOfMemoryError){observe(9021u64);};
  observe(9030u64);
  try{read({{observe(9999u64);return 0u64;}});{}}catch(e:const OutOfMemoryError){observe(9031u64);};
- proc later[source](x:u64)->void{observe(source(x));};
- {{defer later(4u64);source<-wrap(base);}};
+ proc later[source](x:u64)->void{observe(source(x));return;};
+ {{defer later(4u64);source<-wrap(base):void;}};
  observe(source(5u64));
  source<-wrap(base);
  observe(9050u64);

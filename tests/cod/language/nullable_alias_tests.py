@@ -61,7 +61,7 @@ for name, change, rejected in (
     ('copy_guard_same_bounds', 'selected=if(other){item}else{null in here};', True),
 ):
     source=IO+REF+'proc run(flag:bool,other:bool)->void{val item<-7u64;ptr selected=if(flag){item}else{null in here};ptr saved=selected;'+change
-    source+='if(saved is not null){behave @print(read(selected));}else{behave @print(8u64);};}'
+    source+='if(saved is not null){behave @print(read(selected));}else{behave @print(8u64);};return;}'
     source+='run(true,false);run(false,true);'
     runner.CASES[name]=(source,2 if rejected else 0,'' if rejected else '7\n8\n','proven non-null' if rejected else '')
 
@@ -75,7 +75,7 @@ for name, copy, early, mutation, separate, rejected in (
     first=base.FIRST.replace('classify(payload)','classify(observed)').replace('target<-','output<-')
     tail=TAIL.replace('target<-','output<-')
     helper='proc fill(ptr output:u64 in O,ptr check:u64 in O,payload:Exception,present:bool)->void throws NullPointerException where {owner O}{'
-    helper+=setup+'defer{'+early+first+mutation+tail+'behave @print(check);};}'
+    helper+=setup+'defer{'+early+first+mutation+tail+'behave @print(check);};return;}'
     body=base.LOCAL+('val other<-make local u64;' if separate else '')
     body+='try{fill(target,'+('other' if separate else 'target')+',payload,present);}catch(e:const NullPointerException){};'
     base.case(name,body=body,declarations=fixture.CLASSIFY+helper,signature='payload:Exception,present:bool',arguments=ARGUMENTS,
@@ -91,7 +91,7 @@ for name, saved, before_drain, rejected in (
 ):
     source = IO+PRESENCE+'proc run(present:bool,other:bool)->void{val payload<-1u64;val destination<-make local u64;'
     source += 'ptr source=if(present){payload}else{null in here};ptr saved='+saved+';ptr output=destination;'
-    source += '{{'+SINGLE_ACTION+before_drain+'}};behave @print(destination);}run(true,false);run(false,true);'
+    source += '{{'+SINGLE_ACTION+before_drain+'}};behave @print(destination);return;}run(true,false);run(false,true);'
     runner.CASES[name] = (source, 2 if rejected else 0, '' if rejected else '7\n8\n',
                           'before definite initialization' if rejected else '')
 

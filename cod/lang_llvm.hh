@@ -1104,7 +1104,7 @@ class LLVMEmission {
     return load(result);
   }
   void call_scope(const std::vector<const Expression *> &expressions, const Location &at,
-                  llvm::Value *returns_value = nullptr, const Type *feedback = nullptr) {
+                  llvm::Value *requires_return = nullptr, const Type *feedback = nullptr) {
     auto *outer_temporaries = temporaries_;
     Scope scope{scope_, block("scope.cleanup"), slot(b_.getPtrTy(), "defer.head"), {}, {}};
     if (environments_) scope.values.values = parameter_values_;
@@ -1127,9 +1127,9 @@ class LLVMEmission {
     if (reachable()) b_.CreateBr(scope.cleanup);
     drain(scope); release_values(scope.values); restore_effects(effects);
     scope_ = scope.parent; control_ = control.parent; temporaries_ = outer_temporaries;
-    if (returns_value) {
+    if (requires_return) {
       auto *missing = block("return.missing");
-      b_.CreateCondBr(b_.CreateAnd(returns_value, b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(0))), missing, finish_);
+      b_.CreateCondBr(b_.CreateAnd(requires_return, b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(0))), missing, finish_);
       b_.SetInsertPoint(missing);
       save_abrupt(outcome(empty_scalar(), integer(exception_id(ExceptionCategory::missing_return)), integer(site(at)), null_pointer()));
     }
@@ -1762,6 +1762,15 @@ class LLVMEmission {
       if (expr.kind == K::transfer) return read ? b_.CreateLoad(scalar_, address) : address;
       return !read ? address : discard ? empty_scalar() : b_.CreateLoad(scalar_, checked_address(address, expr, expr.at));
     }
+    case K::return_tail: {
+      std::map<bool, std::vector<size_t>> completion;
+      for (size_t i = 0; i < contexts_.size(); ++i)
+        completion[contexts_[i].at(&expr).type == Type::void_type].push_back(i);
+      if (completion.size() > 1)
+        return contextual_value(expr, completion, "tail", [&](bool) { return emit_expression(expr, projection, discard); });
+      if (fact.type == Type::void_type) return emit_expression(*expr.children.front(), Projection::value, true);
+      [[fallthrough]];
+    }
     case K::return_value: case K::break_value: case K::continue_value: {
       llvm::Value *value = empty_scalar();
       if (!expr.children.empty()) {
@@ -2005,20 +2014,22 @@ class LLVMEmission {
     }
     if (call.declaration_context)
       query_environment_ = function->getArg(call.query_index());
-    llvm::Value *returns_value = nullptr;
+    llvm::Value *requires_return = nullptr;
+    const auto needs_return = [&](size_t id) {
+      return method.source->completion_requires_return(*program_->instances[id].result.type);
+    };
     if (instance) {
-      if (*program_->instances[*instance].result.type != Type::void_type) returns_value = b_.getTrue();
+      if (needs_return(*instance)) requires_return = b_.getTrue();
     }
     else {
-      const bool all_return = std::all_of(method.instances.begin(), method.instances.end(),
-          [&](size_t id) { return *program_->instances[id].result.type != Type::void_type; });
-      if (all_return) returns_value = b_.getTrue();
+      const bool all_return = std::ranges::all_of(method.instances, needs_return);
+      if (all_return) requires_return = b_.getTrue();
       llvm::Value *admitted = b_.getFalse();
       for (const auto id : method.instances) {
         auto *context = matches_context(program_->instances[id]);
         admitted = b_.CreateOr(admitted, context);
-        if (!all_return && *program_->instances[id].result.type != Type::void_type)
-          returns_value = returns_value ? b_.CreateOr(returns_value, context) : context;
+        if (!all_return && needs_return(id))
+          requires_return = requires_return ? b_.CreateOr(requires_return, context) : context;
       }
       auto *valid = block("arguments.valid"), *invalid = block("arguments.invalid");
       b_.CreateCondBr(admitted, valid, invalid);
@@ -2039,7 +2050,7 @@ class LLVMEmission {
       auto *value = arguments_.at(call.operands + c);
       b_.CreateStore(copy_value(value, method.captures.at(c).at), place);
     }
-    call_scope({method.source->body.get()}, method.source->at, call.here_group ? nullptr : returns_value,
+    call_scope({method.source->body.get()}, method.source->at, requires_return,
         call.here_group ? &*layout.result.type : nullptr);
     if (initialization) {
       b_.SetInsertPoint(initialization->exit);

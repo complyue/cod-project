@@ -14,13 +14,15 @@ proc fail_selected(tag:T,ref f:func(u64)->const u64 in O)->void where {T,owner O
  try{apply(copy_selected(tag,f),{observe(9999u64);1u64});{}}catch(e:const OutOfMemoryError){observe(9031u64);};
  observe(9040u64);
  try{apply(copy_selected(tag,f),missing());{}}catch(e:const MissingReturnError){observe(9041u64);};
+ return;
 }
-proc discard_selected(tag:T,ref f:func(u64)->const u64 in O)->void where {T,owner O}{defer choose_result(tag,f);}
+proc discard_selected(tag:T,ref f:func(u64)->const u64 in O)->void where {T,owner O}{defer choose_result(tag,f);return;}
 func repeat_selected(tag:T,ref f:func(u64)->const u64 in O)->const u64 where {T,owner O}{
  val sum<-0u64;for(i in 0u64..100u64){sum<-sum+choose_result(tag,f)(i);};return sum;
 }
 proc later_selected(tag:T,ref f:func(u64)->const u64 in O)->void where {T,owner O}{
  defer apply(copy_selected(tag,f),20u64);f<-wrap(other);
+ return;
 }
 {{
  func f=wrap(base);func a=copy_selected(false,f);func b=copy_selected(0,f);f<-wrap(other);

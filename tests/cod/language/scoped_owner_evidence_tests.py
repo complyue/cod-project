@@ -66,7 +66,7 @@ runner.CASES = {
     'declared_result_owner_still_checked': (TAG +
         'func bad(ref input:i64 in O)->ref i64 in O where {owner O}{return {{val inner<-4;inner}};}'
         'val slot<-3;bad(slot);', 2, '', 'owner'),
-    'readonly_borrow_still_rejects': (TAG + 'const val slot<-3;{{val inner<-4;tag(slot,inner);}};', 2, '', 'readonly argument'),
+    'readonly_borrow_still_rejects': (TAG + 'const val slot<-3;{{val inner<-4;tag(slot,inner);{}}};', 2, '', 'readonly argument'),
     'query_declarations_remain_separate': ('val result<-make local typeof({val inner<-1;inner});', 2, '', 'typeof for this expression form'),
 }
 runner.CASE_ARGUMENTS = {}

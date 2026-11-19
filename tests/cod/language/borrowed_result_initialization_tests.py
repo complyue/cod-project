@@ -6,14 +6,14 @@ import foundation_tests as runner
 
 IO='using symbol "std:io" @print;using "std:exceptions" NullPointerException;using "std:exceptions" OutOfMemoryError;'
 HEAD='func select(ptr source:u64 in O,ptr spare:u64 in O)->ptr u64 in O throws NullPointerException where {owner O}'
-LOOP='ptr output=source,current=source;for(i in 0u64..3u64){ {{defer (=)(output,current);current=spare;}};current=source;};'
+LOOP='ptr output=source,current=source;for(i in 0u64..3u64){ {{defer (=)(output,current);current=spare:void;}};current=source;};'
 SELECT=HEAD+'{'+LOOP+'return output;}'
 SETUP='val a<-7u64,b<-8u64,c<-make local u64;'
 runner.CASES={}
 
 
 def case(name,definition=SELECT,call='select(a,c)',setup=SETUP,after='',output='7\n',reject=False,diagnostic='initialization',receive='ptr result=',read='behave @print(result);'):
-    source=IO+definition+'proc run()->void{'+setup+'try{ '+receive+call+';'+after+read+'}catch(e:const NullPointerException){behave @print(99u64);};}run();'
+    source=IO+definition+'proc run()->void{'+setup+'try{ '+receive+call+';'+after+read+'}catch(e:const NullPointerException){behave @print(99u64);};return;}run();'
     runner.CASES[name]=(source,2 if reject else 0,'' if reject else output,diagnostic if reject else '')
 
 
@@ -77,7 +77,7 @@ case('ref_return_then_write',definition=REF,call='select(a,b)',output='9\n')
 case('later_operand_rebind',setup=SETUP+'ptr input=a;',call='select(input,{input=c;c})')
 case('later_operand_bad_snapshot',setup=SETUP+'ptr input=c;',call='select(input,{input=a;a})',reject=True)
 USE=('proc ptr_use(ptr selected:u64 in O)->void where {owner O}'
-     '{if(selected is not null){behave @print(selected);}else{};}')
+     '{if(selected is not null){behave @print(selected);}else{};return;}')
 DEFERRED_SELECTION=SELECT.replace(' throws NullPointerException','')+USE
 DEFERRED_TARGETS=SETUP+'ptr initialized=a,unwritten=c;'
 case('helper_in_deferred_frame', definition=DEFERRED_SELECTION, setup=DEFERRED_TARGETS,

@@ -13,7 +13,7 @@ LOCAL = 'val target<-make local u64;'
 PRINT = 'behave @print(target);'
 FIRST = 'if(flag){target<-7u64;{}}else{};'
 SECOND = 'if(!flag){target<-8u64;{}}else{};'
-SET = 'proc set(ptr destination:u64 in O,flag:bool)->void throws NullPointerException where {owner O}{if(flag){destination<-7u64;{}}else{};}'
+SET = 'proc set(ptr destination:u64 in O,flag:bool)->void throws NullPointerException where {owner O}{if(flag){destination<-7u64;{}}else{};return;}'
 OUTPUT = LOCAL+'ptr output=target;'
 FIRST_OUTPUT = FIRST.replace('target<-', 'output<-')
 SECOND_OUTPUT = SECOND.replace('target<-', 'output<-')
@@ -22,7 +22,7 @@ runner.CASES = {}
 
 
 def case(name, body, declarations='', output='7\n8\n', reject=False, warning='', signature='flag:bool', arguments=('true', 'false')):
-    source = IO+declarations+'proc run('+signature+')->void{'+body+'}'
+    source = IO+declarations+'proc run('+signature+')->void{'+body+'return;}'
     source += ''.join('run('+argument+');' for argument in arguments)
     runner.CASES[name] = (source, 2 if reject else 0, '' if reject else output,
                           'initialization' if reject else warning)
@@ -48,9 +48,9 @@ case('loop_zero', LOCAL+'for(i in 0u64..0u64){'+FIRST+SECOND+'};'+PRINT, reject=
 
 for name, declarations, first, second in (
     ('calls', SET, 'set(target,flag)', 'set(target,!flag)'),
-    ('forwarded', SET+'proc forward(ptr output:u64 in O,choice:bool)->void throws NullPointerException where {owner O}{set(output,choice);}', 'forward(target,flag)', 'forward(target,!flag)'),
+    ('forwarded', SET+'proc forward(ptr output:u64 in O,choice:bool)->void throws NullPointerException where {owner O}{set(output,choice);return;}', 'forward(target,flag)', 'forward(target,!flag)'),
     ('generic', SET.replace('destination:u64','destination:T').replace('flag:bool','flag:bool,value:T').replace('where {owner O}', 'where {T,owner O}').replace('7u64','value'), 'set(target,flag,7u64)', 'set(target,!flag,7u64)'),
-    ('recursive', 'proc set(ptr destination:u64 in O,flag:bool,n:u64)->void throws NullPointerException where {owner O}{if(n>0u64){set(destination,flag,n-1u64);}else{if(flag){destination<-7u64;{}}else{};};}', 'set(target,flag,8u64)', 'set(target,!flag,8u64)'),
+    ('recursive', 'proc set(ptr destination:u64 in O,flag:bool,n:u64)->void throws NullPointerException where {owner O}{if(n>0u64){set(destination,flag,n-1u64);}else{if(flag){destination<-7u64;{}}else{};};return;}', 'set(target,flag,8u64)', 'set(target,!flag,8u64)'),
 ):
     case(name, LOCAL+'try{'+first+';'+second+';'+PRINT+'}catch(e:const NullPointerException){};', NULL+declarations, output='7\n7\n')
 case('callable', LOCAL+'proc action=set;try{action(target,flag);action(target,!flag);'+PRINT+'}catch(e:const NullPointerException){};', NULL+SET, output='7\n7\n')

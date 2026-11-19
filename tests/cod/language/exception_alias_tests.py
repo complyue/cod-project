@@ -5,11 +5,11 @@ import foundation_tests as runner
 
 IO = 'using symbol "std:io" @print;'
 TYPES = 'using "std:exceptions" Exception;using "std:exceptions" MissingReturnError;using "std:exceptions" NullPointerException;'
-ERROR = TYPES+'func missing()->u64{}func unchecked()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}'
+ERROR = TYPES+'func missing()->u64{}func unchecked()->const MissingReturnError{try{missing():void;}catch(e:const MissingReturnError){return e;};}'
 ERROR += 'func checked()->const NullPointerException{ptr p:u64=null in here;try{p;{}}catch(e:const NullPointerException){return e;};return checked();}'
 WARN = '[-Wmissing-return]'
 COVER = 'requires a covering catch or throws declaration'
-HELPER = 'func replace(ref target:Exception in O,value:NullPointerException)->void where {owner O}{target<-value;}'
+HELPER = 'func replace(ref target:Exception in O,value:NullPointerException)->void where {owner O}{target<-value:void;}'
 runner.CASES = {}
 for owners, roles in [('same', ('O', 'O', 'owner O')), ('independent', ('O', 'P', 'owner O,owner P'))]:
     left, right, where = roles

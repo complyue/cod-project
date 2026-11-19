@@ -29,7 +29,7 @@ for name, setup, value in [
     ('readonly_view', VALUE+'ref selected:const Exception=payload;', 'selected'),
     ('pointer_view', VALUE+'ptr selected=payload;', 'selected'),
     ('assignment_result', VALUE+'ref selected=payload;', '(selected=payload)'),
-    ('selected_cleanup', 'val payload:Exception<-checked(),other:Exception<-unchecked();ref selected=other;{{defer{selected<-unchecked();};selected=payload;}};', 'payload'),
+    ('selected_cleanup', 'val payload:Exception<-checked(),other:Exception<-unchecked();ref selected=other;{{defer{selected<-unchecked();};selected=payload:void;}};', 'payload'),
 ]:
     reject(name, setup+'throw '+value+';')
     accept(name+'_covered', setup+covered('throw '+value+';'))

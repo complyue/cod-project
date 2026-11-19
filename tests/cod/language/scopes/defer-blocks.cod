@@ -2,7 +2,7 @@ using symbol "std:io" @print;
 using "std:exceptions" InvalidCapacityError;
 region symbol @arena;
 symbol @level:u64;
-proc bad() -> void { effect @arena <- region(0u64); }
+proc bad() -> void { effect @arena <- region(0u64); return; }
 proc run(mode:u64) -> const u64 {
   val value:u64 <- 1u64;
   defer { {{ val local:u64 <- 9u64; effect @level <- local; behave @print(@level); }}; behave @print(value); };

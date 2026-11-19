@@ -15,6 +15,7 @@ proc swap_images(flag:bool)->void{
  observe(9050u64);
  try{defer (<=>)(p,q);}catch(e:const OutOfMemoryError){observe(9051u64);};
  observe(p(1u64));observe(q(1u64));observe(r(1u64));
+ return;
 }
 swap_images(true);observe(9000u64);
 swap_images(false);observe(9000u64);

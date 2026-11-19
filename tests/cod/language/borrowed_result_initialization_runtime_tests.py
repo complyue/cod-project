@@ -9,7 +9,7 @@ FIXTURE = FIXTURE.updated(source='''
 using symbol "std:io" @print;
 using "std:exceptions" OutOfMemoryError;
 using "std:exceptions" NullPointerException;
-proc observe(x:u64)->void{behave @print(x);}
+proc observe(x:u64)->void{behave @print(x);return;}
 proc select(ptr source:u64 in O,ptr spare:u64 in O,fail:bool)->ptr u64 in O where {owner O}{
  ptr output=source,current=source;
  for(i in 0u64..3u64){
@@ -17,7 +17,7 @@ proc select(ptr source:u64 in O,ptr spare:u64 in O,fail:bool)->ptr u64 in O wher
    if(fail){observe(9001u64);}else{};
    try{defer (=)(output,current);}
    catch(e:const OutOfMemoryError){observe(9002u64);output=current;{}};
-   current=spare;
+   current=spare:void;
   }};
   current=source;
  };

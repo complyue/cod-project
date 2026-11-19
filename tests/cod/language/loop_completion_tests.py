@@ -22,7 +22,7 @@ cases={
  'body_declaration_still_forbidden':('func f()->const i64{for(i in 0..{return 12;}){val x<-1;};return 0;}f();',2,'','nested per-iteration'),
  'else_declaration_still_forbidden':('func f()->const i64{for(i in 0..{return 12;}){}else{val x<-1;};return 0;}f();',2,'','nested per-iteration'),
  'index_still_absent_from_else':('func f()->const i64{for(i in 0..{return 12;}){}else{i;};return 0;}f();',2,'','unknown scalar value'),
- 'header_write_survives_throw':(OBS+EX+'proc f()->void{val x<-make local i64;try{for(i in {x<-13;0}..{throw error();}){x<-99;}else{x<-98;};}catch(e:const MissingReturnError){observe(x);};}f();',0,'13\n','[-Wmissing-return]'),
+ 'header_write_survives_throw':(OBS+EX+'proc f()->void{val x<-make local i64;try{for(i in {x<-13;0}..{throw error();}){x<-99;}else{x<-98;};}catch(e:const MissingReturnError){observe(x);};return;}f();',0,'13\n','[-Wmissing-return]'),
  'unentered_body_does_not_initialize':(EX+'func f()->const i64{val x<-make local i64;try{for(i in 0..{throw error();}){x<-1;}else{x<-2;};}catch(e:const MissingReturnError){};return x;}f();',2,'','before definite initialization'),
  'bound_null_read_precedes_return':(OBS+NPE+'proc f()->const i64{ptr p:i64=null in here;try{for(i in p..{return 14;}){};}catch(e:const NullPointerException){observe(15);};return 16;}behave @print(f());',0,'15\n16\n',''),
  'bound_null_read_obligation_remains':(NPE+'func f(ptr p:i64 in O)->const i64 where {owner O}{for(i in p..{return 16;}){};return 0;}',2,'','requires a covering catch'),

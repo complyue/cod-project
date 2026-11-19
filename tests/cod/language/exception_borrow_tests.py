@@ -5,12 +5,12 @@ import foundation_tests as runner
 
 IO = 'using symbol "std:io" @print;'
 TYPES = 'using "std:exceptions" Exception;using "std:exceptions" MissingReturnError;using "std:exceptions" NullPointerException;'
-ERROR = TYPES+'func missing()->u64{}func missing_value()->const MissingReturnError{try{missing();}catch(caught:const MissingReturnError){return caught;};}'
+ERROR = TYPES+'func missing()->u64{}func missing_value()->const MissingReturnError{try{missing():void;}catch(caught:const MissingReturnError){return caught;};}'
 ERROR += 'func null_value()->const NullPointerException{ptr absent:u64=null in here;try{absent;{}}catch(caught:const NullPointerException){return caught;};return null_value();}'
 READ = 'func category(ref input:const Exception in O)->u64 where {owner O}{return input.category;}'
 IDENTITY = 'func identity(ref input:Exception in O)->ref Exception in O where {owner O}{return input;}'
 POINTER = 'func identity(ptr input:Exception in O)->ptr Exception in O where {owner O}{return input;}'
-WRITE = 'proc write(ptr target:Exception in O,value:Exception)->void throws NullPointerException where {owner O}{target<-value;}'
+WRITE = 'proc write(ptr target:Exception in O,value:Exception)->void throws NullPointerException where {owner O}{target<-value;return;}'
 PAIR = 'func pair(ref left:const T in A,ref right:const T in B)->u64 where {T,owner A,owner B};'
 PAIR_BODY = 'func pair(ref left:const Exception in A,ref right:const Exception in B)->u64 where {owner A,owner B}{return left.category+right.category;}'
 OUT = lambda text: 'behave @print('+text+');'
@@ -26,7 +26,7 @@ runner.CASES = {
  'writer_initializes': (IO+ERROR+WRITE+'proc writer=write;val unread<-make local Exception;try{writer(unread,missing_value());'+OUT('unread.category')+'}catch(caught:const NullPointerException){};',0,'5\n',''),
  'later_argument_mutates_borrow': (IO+ERROR+'func read(ref input:const Exception in O,ignored:bool)->u64 where {owner O}{return input.category;}func held=read;val common:Exception<-missing_value();'+OUT('held(common,{common<-null_value();true})'),0,'4\n',''),
  'selected_address_precedes_rebind': (IO+ERROR+'func read(ptr input:const Exception in O,ignored:bool)->u64 throws NullPointerException where {owner O}{return input.category;}func held=read;val first:Exception<-missing_value(),second:Exception<-null_value();ptr handle=first;try{'+OUT('held(handle,{handle=second;true})')+'}catch(caught:const NullPointerException){};',0,'5\n',''),
- 'deferred_snapshot_and_live_borrow': (IO+ERROR+'proc show(snapshot:Exception,ref live:const Exception in O)->void where {owner O}{'+OUT('snapshot.category')+OUT('live.category')+'}proc held=show;val common:Exception<-missing_value();{{defer held(common,common);common<-null_value();}};',0,'5\n4\n',''),
+ 'deferred_snapshot_and_live_borrow': (IO+ERROR+'proc show(snapshot:Exception,ref live:const Exception in O)->void where {owner O}{'+OUT('snapshot.category')+OUT('live.category')+'return;}proc held=show;val common:Exception<-missing_value();{{defer held(common,common);common<-null_value():void;}};',0,'5\n4\n',''),
  'repeated_target_type_declaration': (IO+ERROR+PAIR+PAIR_BODY+'func held=pair;val first:Exception<-missing_value(),second:Exception<-null_value();'+OUT('held(first,second)'),0,'9\n',''),
  'exact_borrowed_method_dominates_generic': (IO+ERROR+'func choose(ref left:const T in A,ref right:const T in B)->u64 where {T,owner A,owner B}{return 1u64;}func choose(ref left:const Exception in A,ref right:const Exception in B)->u64 where {owner A,owner B}{return 2u64;}val first:Exception<-missing_value(),second:Exception<-null_value();'+OUT('choose(first,second)'),0,'2\n',''),
  'symbolic_borrowed_method_dominates_generic': (IO+ERROR+'proc @choose(ref left:const Exception in A,ref right:const Exception in B)->u64 where {owner A,owner B}{return 2u64;}proc @choose(ref left:const T in A,ref right:const T in B)->u64 where {T,owner A,owner B}{return 1u64;}effect @choose;val first:Exception<-missing_value(),second:Exception<-null_value();'+OUT('behave @choose(first,second)'),0,'2\n',''),

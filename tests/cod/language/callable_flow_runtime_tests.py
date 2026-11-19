@@ -6,16 +6,16 @@ import borrowed_callable_runtime_tests as fixture
 FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
 FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 using "std:exceptions" NullPointerException;
-proc set_target(ptr x:u64 in O)->void throws NullPointerException where {owner O}{x<-7u64;}
-proc ignore_target(ptr x:u64 in O)->void throws NullPointerException where {owner O}{}
+proc set_target(ptr x:u64 in O)->void throws NullPointerException where {owner O}{x<-7u64;return;}
+proc ignore_target(ptr x:u64 in O)->void throws NullPointerException where {owner O}{return;}
 func wrap_writer(f:F)->const F where F{
- return proc[f](ptr x:u64 in O)->void throws NullPointerException where {owner O}{f(x);};
+ return proc[f](ptr x:u64 in O)->void throws NullPointerException where {owner O}{f(x);return;};
 }
 proc walk_writer(f:F,ptr x:u64 in O,n:u64)->void throws NullPointerException where {F,owner O}{
- if(n==0u64){f(x);}else{walk_writer(f,x,n-1u64);};
+ if(n==0u64){f(x);}else{walk_writer(f,x,n-1u64);};return;
 }
 proc checked_target(f:F,ptr target:u64 in O)->void where {F,owner O}{
- try{f(target);}catch(e:const NullPointerException){observe(9999u64);};
+ try{f(target);}catch(e:const NullPointerException){observe(9999u64);};return;
 }
 {{
  proc unused=ignore_target;proc selected=set_target;

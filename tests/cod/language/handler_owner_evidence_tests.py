@@ -6,7 +6,7 @@ import foundation_tests as runner
 IO = 'using symbol "std:io" @print;'
 TYPES = 'using "std:exceptions" MissingReturnError;using "std:exceptions" Exception;'
 ERROR = ('func missing()->i64{}func error()->const MissingReturnError{'
-         'try{missing();}catch(created:const MissingReturnError){return created;};}')
+         'try{missing():void;}catch(created:const MissingReturnError){return created;};}')
 TAG = ('func tag(ref a:const A in O,ref b:const B in O)->bool where {A,B,owner O}{return true;}'
        'func tag(ref a:const A in O,ref b:const B in P)->i64 where {A,B,owner O,owner P}{return 0;}')
 CODE = 'func code(value:bool)->u64{return 1u64;}func code(value:i64)->u64{return 2u64;}'

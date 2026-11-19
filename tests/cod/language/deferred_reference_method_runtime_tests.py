@@ -7,7 +7,7 @@ FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
 FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 using "std:exceptions" NullPointerException;
 func (<=>)(ref a:u64 in O,ref b:u64 in O)->void where {owner O}{intrinsic (<=>)(a,b);}
-proc (<=>)(a:i64 in O,b:i64 in O)->void where {owner O}{behave @print(a);behave @print(b);}
+proc (<=>)(a:i64 in O,b:i64 in O)->void where {owner O}{behave @print(a);behave @print(b);return;}
 {{
   func kept=wrap(base);
   val x<-1u64,y<-7u64,z<-9u64;ptr p=x,q=y;
@@ -21,7 +21,7 @@ proc (<=>)(a:i64 in O,b:i64 in O)->void where {owner O}{behave @print(a);behave 
   for(i in 0u64..30u64){defer (<=>)(p,q);};
   defer{observe(p);observe(q);};
   defer (<=>)(p,q);
-  q=z;
+  q=z:void;
 }};
 {{
   val b<-7;ptr r:i64=null in here,s=b;

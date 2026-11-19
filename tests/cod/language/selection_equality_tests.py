@@ -8,7 +8,7 @@ LOCAL = 'val a<-make local u64,b<-make local u64,c<-make local u64;ptr p=if(flag
 CALLS = 'run(false,false);run(false,true);run(true,false);run(true,true);'
 SAME = 'func same(ptr x:const u64 in O,ptr y:const u64 in O)->bool where {owner O}{return x is y;}'
 RELAY = 'func relay(ptr x:u64 in O)->ptr u64 in O where {owner O}{return x;}'
-WRITER = 'proc write_read(ptr x:u64 in O,ptr y:const u64 in O)->void throws NullPointerException where {owner O}{x<-7u64;behave @print(y);}'
+WRITER = 'proc write_read(ptr x:u64 in O,ptr y:const u64 in O)->void throws NullPointerException where {owner O}{x<-7u64;behave @print(y);return;}'
 runner.CASES = {}
 
 
@@ -16,7 +16,7 @@ def case(name, setup='', condition='p is q', work='p<-7u64;', read='q', definiti
          reject=False, output='7\n0\n0\n7\n', diagnostic='initialization', body=None, local=LOCAL):
     if body is None:
         body = 'if('+condition+'){'+work+'behave @print('+read+');}else{behave @print(0u64);};'
-    source = IO+definitions+'proc run(flag:bool,other:bool)->void{'+local+'try{ '+setup+body+'}catch(e:const NullPointerException){behave @print(99u64);};}'+CALLS
+    source = IO+definitions+'proc run(flag:bool,other:bool)->void{'+local+'try{ '+setup+body+'}catch(e:const NullPointerException){behave @print(99u64);};return;}'+CALLS
     runner.CASES[name] = (source, 2 if reject else 0, '' if reject else output, diagnostic if reject else '')
 
 
@@ -74,7 +74,7 @@ case('prepared_call_arguments', definitions=WRITER, setup='q=p;', body='{{defer 
 case('delayed_guard', body='{{defer{if(p is q){p<-7u64;behave @print(q);}else{behave @print(0u64);};};}};')
 case('loop_guard', body='for(i in 0u64..2u64){if(p is q){p<-7u64;behave @print(q);}else{behave @print(0u64);};};', output='7\n7\n0\n0\n0\n0\n7\n7\n')
 
-OUTPUT = 'func set(ref out:bool in B,ptr x:const u64 in O,ptr y:const u64 in O)->void where {owner B,owner O}{out<-x is y;}'
+OUTPUT = 'func set(ref out:bool in B,ptr x:const u64 in O,ptr y:const u64 in O)->void where {owner B,owner O}{out<-x is y:void;}'
 case('borrowed_output', definitions=OUTPUT, setup='val equal<-false;set(equal,p,q);', condition='equal')
 case('deferred_borrowed_output', definitions=OUTPUT, setup='val equal<-false;{{defer set(equal,p,q);}};', condition='equal')
 case('output_keeps_snapshot', definitions=OUTPUT, setup='val equal<-false;ptr saved=q;set(equal,p,q);q=c;', condition='equal', read='saved')

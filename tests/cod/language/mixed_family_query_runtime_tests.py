@@ -17,6 +17,7 @@ proc mixed_queries(callback:func(u64)->const u64)->void{
  observe(9011u64);
  if(third){observe(first);observe(second);}else{};
  observe(callback(1u64));
+ return;
 }
 mixed_queries(wrap(base));observe(9000u64);
 ''')

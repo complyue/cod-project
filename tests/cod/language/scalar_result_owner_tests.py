@@ -6,8 +6,8 @@ import foundation_tests as runner
 IO = 'using symbol "std:io" @print;'
 NPE = 'using "std:exceptions" NullPointerException;'
 ERROR = 'using "std:exceptions" MissingReturnError;func missing()->const i64{}'
-OWNER_PICK = '''proc pick(ptr x:i64 in O,ptr y:i64 in O)->void where {owner O}{behave @print(1);}
-proc pick(x:i64 in O,y:i64 in P)->void where {owner O,owner P}{behave @print(2);}'''
+OWNER_PICK = '''proc pick(ptr x:i64 in O,ptr y:i64 in O)->void where {owner O}{behave @print(1);return;}
+proc pick(x:i64 in O,y:i64 in P)->void where {owner O,owner P}{behave @print(2);return;}'''
 runner.CASES = {
  'bare_scalar_snapshot': (IO+'func get(x:i64 in O)->i64 where {owner O}{defer{x<-9;};return x;}val x<-1;val n<-get(x);behave @print(n);behave @print(x);',0,'1\n9\n',''),
  'explicit_val_snapshot': (IO+'func get(x:i64 in O)->val i64 where {owner O}{defer{x<-9;};return x;}val x<-1;ref r=get(x);x<-8;behave @print(r);behave @print(x);',0,'1\n8\n',''),
@@ -55,9 +55,9 @@ runner.CASES = {
  'null_does_not_initialize_payload': (NPE+'val x<-make local i64;ptr p:i64=null in here;p=x;try{p;{}}catch(e:const NullPointerException){};',2,'','initialization'),
  'different_live_owners_rejected': ('func f(x:i64 in O,y:i64 in P,flag:bool)->void where {owner O,owner P}{ref r=if(flag){x}else{y};}',2,'','joins different owners'),
  'qualified_null_return_mismatch': ('func f(x:i64 in O,y:i64 in P)->ptr i64 in O where {owner O,owner P}{return null in P;}',2,'','declared external owner'),
- 'named_null_owner_guides_preparation': (IO+OWNER_PICK+'proc run(x:i64 in O)->void where {owner O}{pick({ptr p:i64=null in O;p},x);}val x<-1;run(x);',0,'1\n',''),
+ 'named_null_owner_guides_preparation': (IO+OWNER_PICK+'proc run(x:i64 in O)->void where {owner O}{pick({ptr p:i64=null in O;p},x);return;}val x<-1;run(x);',0,'1\n',''),
  'here_owner_guides_preparation': (IO+OWNER_PICK+'val x<-1;pick({ptr p:i64=null in here;p},x);',0,'1\n',''),
- 'declaration_owner_guides_preparation': (IO+OWNER_PICK+'proc run(x:i64 in O)->void where {owner O}{pick({ptr p:i64 in O=null;p},x);}val x<-1;run(x);',0,'1\n',''),
+ 'declaration_owner_guides_preparation': (IO+OWNER_PICK+'proc run(x:i64 in O)->void where {owner O}{pick({ptr p:i64 in O=null;p},x);return;}val x<-1;run(x);',0,'1\n',''),
  'qualified_null_type_query_is_not_a_read': (IO+'func run(x:i64 in O)->bool where {owner O}{val b<-make local typeof(((null in O) is null)){true};return b;}val x<-1;behave @print(run(x));',0,'true\n',''),
  'type_query_checks_null_owner': ('val b<-make local typeof(((null in Missing) is null)){true};',2,'','unknown owner'),
  'bare_value_cleanup_replacement': (IO+'func get()->i64{defer{return 8;};return 1;}behave @print(get());',0,'8\n',''),

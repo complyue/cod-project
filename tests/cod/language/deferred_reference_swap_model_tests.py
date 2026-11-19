@@ -22,7 +22,7 @@ for number, (schedule, q, r) in enumerate(product(SCHEDULES, ('null','a','b','c'
         operation = '<=>' if action == 'swap' else '='
         source += 'defer intrinsic ('+operation+')('+left+','+right+');'
         registered.append((action,left,right if action == 'swap' else bindings[right]))
-    source += 'q='+q+';r='+r+';}};'
+    source += 'q='+q+';r='+r+':void;}};'
     bindings['q'], bindings['r'] = q, r
     for action, left, right in reversed(registered):
         if action == 'swap': bindings[left], bindings[right] = bindings[right], bindings[left]

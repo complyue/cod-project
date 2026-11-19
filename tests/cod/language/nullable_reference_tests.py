@@ -6,7 +6,7 @@ import foundation_tests as runner
 
 IO = 'using symbol "std:io" @print;\n'
 PRE = IO + 'using "std:exceptions" NullPointerException;\n'
-ERROR = PRE + 'func error()->const NullPointerException{ptr p:i64=null in here;try{p;}catch(e:const NullPointerException){return e;};}\n'
+ERROR = PRE + 'func error()->const NullPointerException{ptr p:i64=null in here;try{p;{}}catch(e:const NullPointerException){return e;};}\n'
 LOCAL_NULL_RESULT = (
     'func leak(ref anchor:i64 in O)->ptr i64 in O where {owner O}'
     '{ptr local:i64=null in here;return local;}val a<-1;'
@@ -35,12 +35,12 @@ runner.CASES = {
     'rebind_value_obligation': ('val a<-1;ptr p=a;val copy<-(p=null);', 2, '', 'requires a covering catch or throws'),
     'rebind_value_catch': (PRE + 'val a<-1;ptr p=a;try{val copy<-(p=null);behave @print(copy);}catch(e:const NullPointerException){behave @print((p is null));};', 0, 'true\n', ''),
     'null_rhs_does_not_cancel_selected_write': (IO + 'val a<-1;ptr p=a;p<-{p=null;5};behave @print(a);behave @print((p is null));', 0, '5\ntrue\n', ''),
-    'branch_null_test': (IO + 'proc f(flag:bool)->void{val a<-6;ptr p=if(flag){a}else{null};if((p is null)){behave @print(0);}else{ref q=p;behave @print(q);};}f(true);f(false);', 0, '6\n0\n', ''),
-    'negated_null_test': (IO + 'proc f(flag:bool)->void{val a<-7;ptr p=if(flag){null}else{a};if(!(p is null)){ref q=p;behave @print(q);}else{behave @print(0);};}f(true);f(false);', 0, '0\n7\n', ''),
-    'and_short_circuit': (IO + 'proc f(flag:bool)->void{val a<-8;ptr p=if(flag){a}else{null};behave @print(!(p is null)&&p==8);}f(true);f(false);', 0, 'true\nfalse\n', ''),
-    'or_short_circuit': (IO + 'proc f(flag:bool)->void{val a<-8;ptr p=if(flag){a}else{null};behave @print((p is null)||p==8);}f(true);f(false);', 0, 'true\ntrue\n', ''),
-    'and_condition_refinement': (IO + 'proc f(flag:bool)->void{val a<-9;ptr p=if(flag){a}else{null};if(!(p is null)&&flag){behave @print(p);}else{};}f(true);f(false);', 0, '9\n', ''),
-    'or_condition_refinement': (IO + 'proc f(flag:bool)->void{val a<-10;ptr p=if(flag){a}else{null};if((p is null)||!flag){}else{behave @print(p);};}f(true);f(false);', 0, '10\n', ''),
+    'branch_null_test': (IO + 'proc f(flag:bool)->void{val a<-6;ptr p=if(flag){a}else{null};if((p is null)){behave @print(0);}else{ref q=p;behave @print(q);};return;}f(true);f(false);', 0, '6\n0\n', ''),
+    'negated_null_test': (IO + 'proc f(flag:bool)->void{val a<-7;ptr p=if(flag){null}else{a};if(!(p is null)){ref q=p;behave @print(q);}else{behave @print(0);};return;}f(true);f(false);', 0, '0\n7\n', ''),
+    'and_short_circuit': (IO + 'proc f(flag:bool)->void{val a<-8;ptr p=if(flag){a}else{null};behave @print(!(p is null)&&p==8);return;}f(true);f(false);', 0, 'true\nfalse\n', ''),
+    'or_short_circuit': (IO + 'proc f(flag:bool)->void{val a<-8;ptr p=if(flag){a}else{null};behave @print((p is null)||p==8);return;}f(true);f(false);', 0, 'true\ntrue\n', ''),
+    'and_condition_refinement': (IO + 'proc f(flag:bool)->void{val a<-9;ptr p=if(flag){a}else{null};if(!(p is null)&&flag){behave @print(p);}else{};return;}f(true);f(false);', 0, '9\n', ''),
+    'or_condition_refinement': (IO + 'proc f(flag:bool)->void{val a<-10;ptr p=if(flag){a}else{null};if((p is null)||!flag){}else{behave @print(p);};return;}f(true);f(false);', 0, '10\n', ''),
     'mutation_invalidates_test': (IO + 'val a<-1;ptr p=a;if(!(p is null)){p=null;behave @print(p);}else{};', 2, '', 'requires a covering catch or throws'),
     'test_selection_before_cleanup': (PRE+'val a<-1;ptr p=a;if('+SELECTED_BEFORE_CLEANUP+'){'
         'try{behave @print(p);}catch(e:const NullPointerException){behave @print(4);};}else{};',0,'4\n',''),
@@ -70,29 +70,29 @@ runner.CASES = {
     'loop_nullable_paths': (PRE + 'val a<-16;ptr p=a;for(i in 0..2){try{behave @print(p);}catch(e:const NullPointerException){behave @print(4);};p=null;};', 0, '16\n4\n', ''),
     'loop_test_refinement': (IO + 'val a<-17;ptr p=a;for(i in 0..2){if(!(p is null)){behave @print(p);}else{behave @print(0);};p=null;};', 0, '17\n0\n', ''),
     'null_is_not_uninitialized': (PRE + 'val a<-make local i64;ptr p=if(true){a}else{null};try{p;}catch(e:const NullPointerException){0};', 2, '', 'before definite initialization'),
-    'nullable_write_initializes_only_normal_path': (PRE + 'proc f(flag:bool)->void{val a<-make local i64;ptr p=if(flag){a}else{null};try{p<-18;behave @print(a);}catch(e:const NullPointerException){behave @print(4);};}f(true);f(false);', 0, '18\n4\n', ''),
+    'nullable_write_initializes_only_normal_path': (PRE + 'proc f(flag:bool)->void{val a<-make local i64;ptr p=if(flag){a}else{null};try{p<-18;behave @print(a);}catch(e:const NullPointerException){behave @print(4);};return;}f(true);f(false);', 0, '18\n4\n', ''),
     'write_failure_does_not_initialize': (PRE + 'val a<-make local i64;ptr p:i64=null in here;try{p<-1;{}}catch(e:const NullPointerException){};a;', 2, '', 'before definite initialization'),
     'immediate_callable_obligation': (PRE + 'proc f()->void{ptr p:i64=null in here;p;}try{f();}catch(e:const NullPointerException){};', 2, '', 'requires a covering catch or throws'),
     'declared_propagation': (PRE + 'func f()->const i64 throws NullPointerException{ptr p:i64=null in here;return p;}try{behave @print(f());}catch(e:const NullPointerException){behave @print(4);};', 0, '4\n', ''),
     'default_parameter_copy': (IO + 'func f(ptr p:i64)->const bool{return (p is null);}behave @print(f(1));', 0, 'false\n', ''),
-    'copy_argument_npe': (PRE + 'proc f(x:i64)->void{behave @print(99);}ptr p:i64=null in here;try{f(p);}catch(e:const NullPointerException){behave @print(4);};', 0, '4\n', ''),
+    'copy_argument_npe': (PRE + 'proc f(x:i64)->void{behave @print(99);return;}ptr p:i64=null in here;try{f(p);}catch(e:const NullPointerException){behave @print(4);};', 0, '4\n', ''),
     'generic_nullable_local': (IO + 'func f(x:T)->const bool where T{ptr p:T=null in here;return (p is null);}behave @print(f(1u64));behave @print(f(false));', 0, 'true\ntrue\n', ''),
     'deferred_null_read': (PRE+'proc run()->void{val a<-1;ptr p=a;'
         'defer catch(e:const NullPointerException){behave @print(4);};'
-        'defer{behave @print(p);};p=null;}run();',0,'4\n',''),
+        'defer{behave @print(p);};p=null;return;}run();',0,'4\n',''),
     'deferred_read_requires_coverage': ('{{val a<-1;ptr p=a;defer{p;};p=null;}};', 2, '', 'requires a covering catch or throws'),
     'deferred_null_test': (IO + '{{val a<-1;ptr p=a;defer{behave @print((p is null));};p=null;}};', 0, 'true\n', ''),
     'deferred_target_preserves_owner': (IO+'proc run()->void{ptr p:i64=null in here;val a<-19;'
-        'defer{if(p is not null){behave @print(p);}else{};};defer{p=a;};}run();',0,'19\n',''),
+        'defer{if(p is not null){behave @print(p);}else{};};defer{p=a;};return;}run();',0,'19\n',''),
     'deferred_bodyless_recovery': (PRE+'func f()->const i64{ptr p:i64=null in here;'
         'defer catch(e:const NullPointerException){return 20;};defer{p;};return 0;}behave @print(f());',0,'20\n',''),
     'deferred_remaining_actions': (PRE+'proc run()->void{ptr p:i64=null in here;'
         'defer catch(e:const NullPointerException){behave @print(4);};'
-        'defer{behave @print(21);};defer{p;};}run();',0,'21\n4\n',''),
-    'prepared_argument_failure': (PRE + 'proc f(x:i64)->void{behave @print(99);}try{{ptr p:i64=null in here;defer{behave @print(22);};defer f(p);}}catch(e:const NullPointerException){behave @print(4);};', 0, '22\n4\n', ''),
+        'defer{behave @print(21);};defer{p;};return;}run();',0,'21\n4\n',''),
+    'prepared_argument_failure': (PRE + 'proc f(x:i64)->void{behave @print(99);return;}try{{ptr p:i64=null in here;defer{behave @print(22);};defer f(p);}}catch(e:const NullPointerException){behave @print(4);};', 0, '22\n4\n', ''),
     'finally_nullable_read': (PRE + 'ptr p:i64=null in here;try{try{}finally{behave @print(p);};}catch(e:const NullPointerException){behave @print(4);};', 0, '4\n', ''),
     'npe_value_roundtrip': (ERROR + 'val e<-error();behave @print(e.category);behave @print(e.cause_count);', 0, '4\n0\n', ''),
-    'captured_nullable_exception_alias': (PRE + 'proc f()->void{ptr p:i64=null in here;try{p;{}}catch(e:const NullPointerException){ptr q=e;defer{behave @print((q is null));};q=null;{};};}f();', 0, 'true\n', ''),
+    'captured_nullable_exception_alias': (PRE + 'proc f()->void{ptr p:i64=null in here;try{p;{}}catch(e:const NullPointerException){ptr q=e;defer{behave @print((q is null));};q=null;{};};return;}f();', 0, 'true\n', ''),
     'captured_nullable_alias_read': (PRE + 'proc f()->void throws NullPointerException{ptr p:i64=null in here;try{p;{}}catch(e:const NullPointerException){ptr q=e;defer{behave @print(q.category);};q=null;{};};}try{f();}catch(e:const NullPointerException){behave @print(4);};', 0, '4\n', ''),
     'deferred_null_test': ('ptr p:i64=null in here;defer (is)(p,null);', 0, '', ''),
 }

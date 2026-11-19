@@ -10,8 +10,8 @@ func pick(x:i64,tag:i64)->const i64{x<-x+10;return x;}
 '''
 RELAY = '''func relay(ref x:i64 in O,tag:T)->const i64 where {T,owner O}{return pick(x,tag);}
 '''
-READ = '''proc read(ptr x:i64 in O,tag:bool)->void where {owner O}{behave @print((x is null));}
-proc read(x:i64,tag:i64)->void{behave @print(x);}
+READ = '''proc read(ptr x:i64 in O,tag:bool)->void where {owner O}{behave @print((x is null));return;}
+proc read(x:i64,tag:i64)->void{behave @print(x);return;}
 proc flag()->const bool{behave @print(7);return false;}
 proc number()->const i64{behave @print(8);return 0;}
 '''
@@ -36,7 +36,7 @@ runner.CASES = {
  'null_borrow_allows_later_effect':(IO+NPE+READ+'val x<-1;ptr p=x;p=null;read(p,flag());',0,'7\ntrue\n',''),
  'null_copy_skips_later_effect':(IO+NPE+READ+'val x<-1;ptr p=x;p=null;try{read(p,number());}catch(e:const NullPointerException){behave @print(9);};',0,'9\n',''),
  'no_runtime_type_probe':(IO+PICK+'proc tag()->const bool{behave @print(8);return false;}val x<-1;{{defer{behave @print(9);};pick({intrinsic (/)(1,0);x},tag());}};',70,'9\n','division by zero'),
- 'deferred_late_read_and_snapshot':(IO+'proc show(ref x:i64 in O,tag:bool)->void where {owner O}{behave @print(x);}proc show(x:i64,tag:i64)->void{behave @print(x);}{{val x<-1;defer show(x,false);defer show(x,0);x<-9;}};',0,'1\n9\n',''),
+ 'deferred_late_read_and_snapshot':(IO+'proc show(ref x:i64 in O,tag:bool)->void where {owner O}{behave @print(x);return;}proc show(x:i64,tag:i64)->void{behave @print(x);return;}{{val x<-1;defer show(x,false);defer show(x,0);x<-9:void;}};',0,'1\n9\n',''),
  'borrow_operator_and_builtin':(IO+OP+'val x<-1;behave @print(x+2);behave @print(x);behave @print(1u8+2u64);behave @print(1f64+2f64);',0,'3\n3\n3\n3\n',''),
  'operator_preserves_read_order':(IO+OP+'val x<-1;behave @print(x+(x<-3));behave @print(x);',0,'6\n6\n',''),
  'operator_scope_cleanup':(IO+OP+'val x<-1;behave @print({{defer{x<-5;};x}}+2);behave @print(x);',0,'7\n7\n',''),
@@ -46,14 +46,14 @@ runner.CASES = {
  'operator_fallback_uses_later_type':(IO+'func (+)(ptr x:u8 in O,y:u8)->const bool where {owner O}{return (x is null);}val x<-1u8;ptr p=x;p=null;behave @print(p+2u8);',0,'true\n',''),
  'operator_fallback_null_skips_later_effect':(IO+NPE+'func (+)(ptr x:u8 in O,y:u8)->const bool where {owner O}{return (x is null);}proc later()->const u64{behave @print(99);return 2u64;}val x<-1u8;ptr p=x;p=null;try{p+later();{}}catch(e:const NullPointerException){behave @print(7);};',0,'7\n',''),
  'operator_borrow_read_is_early':(IO+NPE+'func (+)(x:i64 in O,y:i64)->const i64 where {owner O}{return x;}proc later()->const i64{behave @print(99);return 2;}val x<-1;ptr p=x;p=null;try{p+later();{}}catch(e:const NullPointerException){behave @print(7);};',0,'7\n',''),
- 'deferred_borrowed_operator':(IO+'proc (+)(ref x:i64 in O,y:i64)->void where {owner O}{behave @print(intrinsic (+)(x,y));}{{val x<-1;defer (+)(x,2);x<-9;}};',0,'11\n',''),
+ 'deferred_borrowed_operator':(IO+'proc (+)(ref x:i64 in O,y:i64)->void where {owner O}{behave @print(intrinsic (+)(x,y));return;}{{val x<-1;defer (+)(x,2);x<-9:void;}};',0,'11\n',''),
  'borrowed_unary_operator':(IO+'func (!)(ref x:i64 in O)->const bool where {owner O}{x<-9;return true;}val x<-1;behave @print(!x);behave @print(x);behave @print(!false);',0,'true\n9\ntrue\n',''),
  'readonly_operator_uses_builtin':(IO+OP+'const val x<-1;behave @print(x+2);',0,'3\n',''),
  'borrowed_operator_checks_fresh_value':(OP+'1+2;',2,'','borrowed arguments require existing target views'),
  'borrowed_operator_checks_owner':(OP+'{{val x<-1;x}}+2;',2,'','owner has ended'),
  'borrowed_operator_checks_ref_null':(NPE+OP+'func test(ptr x:i64 in O)->const i64 throws NullPointerException where {owner O}{return x+2;}',2,'','ref argument requires a proven non-null target'),
  'guarded_operand_type':(IO+PICK+'val x<-1;behave @print(pick(x,try{false}catch(e){false}));',0,'2\n',''),
- 'unknown_binding_effects_do_not_use_outer_name':(PICK+'val x<-1,tag<-0;{{pick({try{val tag<-false;}catch(e){};x},tag);}};',2,'','different argument preparation contracts'),
+ 'unknown_binding_effects_do_not_use_outer_name':(PICK+'val x<-1,tag<-0;{{pick({try{val tag<-false;}catch(e){};x},tag);{}}};',2,'','different argument preparation contracts'),
  'ambiguous_passing_modes_remain_ambiguous':('func pick(ref x:i64 in O,y:T)->const i64 where {T,owner O}{return x;}func pick(x:T,y:i64)->const i64 where T{return y;}val x<-1;pick(x,2);',2,'','ambiguous methods'),
  'declared_type_does_not_hide_bad_initializer':(PICK+'val x<-1;pick(x,{{val tag:bool<-0;tag}});',2,'','initializer does not satisfy'),
  'signature_does_not_hide_bad_body':(PICK+'func tag()->const bool{return 0;}val x<-1;pick(x,tag());',2,'','return type'),

@@ -1,5 +1,5 @@
 using symbol "std:io" @print;
-proc observe(x:u64) -> void { behave @print(x); }
+proc observe(x:u64) -> void { behave @print(x); return; }
 proc prepare(x:u64) -> const u64 { observe(x); return x; }
 proc ordered(flag:bool) -> const u64 {
   defer observe(prepare(1u64));
@@ -17,6 +17,7 @@ proc early() -> const u64 {
 }
 proc nested() -> void {
   defer observe({ defer observe(10u64); 11u64 });
+  return;
 }
 proc noisy() -> const bool { observe(99u64); return true; }
 behave @print(ordered(true));

@@ -17,6 +17,7 @@ proc verify_choice(first:bool,second:bool)->void{
  ptr selected=choose(left,right,fallback);
  try{if(selected is null){left<-85u64;observe(right);}else{observe(86u64);};}
  catch(failure:const NullPointerException){observe(99u64);};
+ return;
 }
 verify_choice(false,false);verify_choice(false,true);
 verify_choice(true,false);verify_choice(true,true);

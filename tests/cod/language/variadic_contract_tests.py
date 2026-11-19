@@ -67,7 +67,7 @@ runner.CASES = {
  'operator_builtin_bad_contract': ('func (+)(rest:i64...)->bool;2+3;',2,'','does not satisfy callable declaration'),
  'operator_method_contract': (IO+'func (+)(rest:bool...)->bool;func (+)(x:bool,y:bool){return x||y;}behave @print(false+true);',0,'true\n',''),
  'intrinsic_bypasses_contract': (IO+'func (+)(rest:i64...)->bool;behave @print(intrinsic (+)(2,3));',0,'5\n',''),
- 'deferred_fixed_call_snapshot': (IO+'proc show(rest:u64...)->void;proc show(x:u64,y:u64){behave @print(x);behave @print(y);}val x<-1u64;{{defer show(x,2u64);x<-7u64;}};',0,'1\n2\n',''),
+ 'deferred_fixed_call_snapshot': (IO+'proc show(rest:u64...)->void;proc show(x:u64,y:u64){behave @print(x);behave @print(y);return;}val x<-1u64;{{defer show(x,2u64);x<-7u64:void;}};',0,'1\n2\n',''),
  'deferred_checked_promise': (NPE+'proc show(rest:u64...)->void throws NullPointerException;proc show(x:u64,y:u64){}defer show(1u64,2u64);',2,'','requires a covering catch or throws'),
  'nonfinal_pack_rejected': ('func f(rest:u64...,last:u64)->u64;',2,'','only the last parameter can be variadic'),
  'executable_pack_boundary': ('func f(rest:u64...)->u64{return 1u64;}',2,'','implementation gap: variadic method bodies'),

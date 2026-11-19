@@ -26,7 +26,7 @@ func relay(f:func(T)->const T,x:T,n:u64)->const T where T{
 }
 func empty()->const void{}
 func number()->const i64{return 1;}
-func finish(f:func()->const T)->const T where T{f();}
+func finish(f:func()->const T)->const T where T{f():void;}
 behave @print(relay(first,10,30u64));behave @print(relay(second,10,30u64));
 behave @print(relay(wrap(first),10,30u64));behave @print(relay(truth,true,30u64));
 finish(empty);try{finish(number);{}}catch(e:const MissingReturnError){behave @print(99);};
@@ -48,7 +48,7 @@ def main():
             command=[str(COD),'--run',str(source),'--emit-llvm',str(ir)]
             if general:command.append('--no-specialize')
             run=subprocess.run(command,cwd=ROOT,capture_output=True,text=True,timeout=60)
-            warning='callable may finish without an explicit return'
+            warning='callable may finish without a result'
             record(mode+'/native',run.returncode==0 and run.stdout=='11\n12\n12\ntrue\n99\n'
                    and warning in run.stderr and 'error:' not in run.stderr,
                    command=command,exit=run.returncode,stdout=run.stdout,stderr=run.stderr)

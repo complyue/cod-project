@@ -13,7 +13,7 @@ def cases():
     ):
         typed = f'{kind} pending:{annotation}{assignment}'
         untyped = f'{kind} pending' + ' ' * (len(annotation) + 1) + assignment
-        prefix = IO + 'proc observe(value:u64)->void{behave @print(value);}proc finish()->u64{defer observe(1u64);'
+        prefix = IO + 'proc observe(value:u64)->void{behave @print(value);return;}proc finish()->u64{defer observe(1u64);'
         suffix = '{{defer observe(2u64);return 7u64;}};observe(99u64);}observe(finish());'
         yield kind, prefix + typed + suffix, prefix + untyped + suffix, '2\n1\n7\n'
     for name, prefix, annotation, suffix, expected in (

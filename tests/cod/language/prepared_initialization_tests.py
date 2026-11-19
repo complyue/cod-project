@@ -43,7 +43,7 @@ WEAK = (
     '->void throws NullPointerException where {owner O}'
     '{val prepared<-false;'
     'defer{if(prepared){behave @print(first);behave @print(second);}else{};};'
-    'defer (=)({if(select_first){first}else{second}},src);src=spare;prepared<-true;}'
+    'defer (=)({if(select_first){first}else{second}},src);src=spare;prepared<-true;return;}'
 )
 
 
@@ -53,7 +53,7 @@ def case(name, body=READ + COPY, setup=SETUP, after='', definitions=STAGE, outpu
         action = 'defer{for(i in 0u64..4u64){ ' + body + ' };};'
     source = (
         IO + definitions + 'proc run()->void throws NullPointerException{' + setup + action + after
-        + '}try{run();}catch(e:const NullPointerException){behave @print(99u64);};'
+        + 'return;}try{run();}catch(e:const NullPointerException){behave @print(99u64);};'
     )
     runner.CASES[name] = (source, 2, '', diagnostic) if reject else (source, 0, output, '')
 
@@ -77,7 +77,7 @@ case('nested_action_bad_entry', definitions=STAGE + NESTED, body=READ + 'p=stage
      after='q=c;', reject=True)
 NESTED_SCOPE = (
     '{{ptr local=a;defer{behave @print(local);};'
-    'defer (=)(local,q);q=spare;}};q=a;'
+    'defer (=)(local,q);q=spare:void;}};q=a;'
 )
 NESTED_SETUP = 'ref a:u64=7u64;val b<-8u64,c<-make local u64;ptr p=a,q=a,spare=c;'
 case('nested_queue', definitions='', setup=NESTED_SETUP, body=NESTED_SCOPE)
@@ -97,7 +97,7 @@ case('recovered_registration', definitions=RECOVER, body=READ + RECOVERED_COPY)
 case('recovered_registration_bad_entry', definitions=RECOVER, body=READ + RECOVERED_COPY, after='q=c;', reject=True)
 case('unrelated_uninitialized_cell', body=READ + COPY + 'behave @print(c);', reject=True)
 case('null_snapshot', after='q=null;', output='7\n99\n')
-case('call_after_invocation', definitions=STAGE + 'proc observe(x:u64)->void{behave @print(x);}',
+case('call_after_invocation', definitions=STAGE + 'proc observe(x:u64)->void{behave @print(x);return;}',
      body=COPY + 'observe(p);')
 
 CALL_BODY = (
@@ -105,15 +105,15 @@ CALL_BODY = (
     'for(i in 0u64..3u64){output=stage(output,current,spare);current=source;behave @print(output);};'
 )
 CALL_HEAD = 'proc invoke(ptr source:u64 in O,ptr spare:u64 in O)->void throws NullPointerException where {owner O}'
-INVOKE = STAGE + CALL_HEAD + '{' + CALL_BODY + '}'
+INVOKE = STAGE + CALL_HEAD + '{' + CALL_BODY + 'return;}'
 GENERIC = INVOKE.replace('source:u64', 'source:T').replace('spare:u64', 'spare:T').replace('where {owner O}', 'where {T,owner O}')
 RECURSIVE = (
     STAGE + CALL_HEAD.replace('spare:u64 in O)', 'spare:u64 in O,n:u64)')
-    + '{if(n==0u64){' + CALL_BODY + '}else{invoke(source,spare,n-1u64);};}'
+    + '{if(n==0u64){' + CALL_BODY + '}else{invoke(source,spare,n-1u64);};return;}'
 )
 DISPATCH = (
     'proc dispatch(f:F,ptr source:u64 in O,ptr spare:u64 in O)->void throws NullPointerException where {F,owner O}'
-    '{f(source,spare);}'
+    '{f(source,spare);return;}'
 )
 case('call_entry', definitions=INVOKE, action='invoke(a,c);', output='7\n' * 3)
 case('call_bad_entry', definitions=INVOKE, action='invoke(c,a);', reject=True)

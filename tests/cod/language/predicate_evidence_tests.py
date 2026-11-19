@@ -36,7 +36,7 @@ runner.CASES = {
     'rebind_after_test': (source('!((p is null)||{p=null;false})', 'p'), 2, '', NPE),
     'alias_rebind_after_test': (source('!((p is null)||{alias=null;false})', 'p', setup='var alias->p;'), 2, '', NPE),
     'swap_after_test': (source('!((p is null)||{p<=>q;false})', 'p'), 2, '', NPE),
-    'caller_slot_method_after_test': (source('!((p is null)||{p<=>q;false})', 'p', prefix='func (<=>)(ptr a:i64 in O,ptr b:i64 in O)->void where {owner O}{a=null;}'), 2, '', NPE),
+    'caller_slot_method_after_test': (source('!((p is null)||{p<=>q;false})', 'p', prefix='func (<=>)(ptr a:i64 in O,ptr b:i64 in O)->void where {owner O}{a=null:void;}'), 2, '', NPE),
     'payload_write_preserves_test': (source('{p is not null} && {p<-9;true}', 'p'), 0, '9\n0\n9\n0\n', ''),
     'full_scope_cleanup_rebind': (source('{{defer{p=null;{}};p is not null}}', 'p'), 2, '', NPE),
     'finally_rebind': (source('try{p is not null}finally{p=null;{}}', 'p'), 2, '', NPE),
@@ -49,8 +49,8 @@ runner.CASES = {
     'stored_boolean': (source('saved', 'p', setup='val saved<-p is not null;'), 0, '7\n0\n7\n0\n', ''),
     'callee_boolean_preserves_relation': (source('test(p)', 'p', prefix='func test(ptr a:i64 in O)->bool where {owner O}{return a is not null;}'), 0, '7\n0\n7\n0\n', ''),
     'selected_method_has_no_builtin_proof': (source('!((p is null)||(q is null))', prefix='func (!)(a:bool)->bool{return a;}'), 2, '', NPE),
-    'deferred_block_guard': (PRE + 'proc choose(ptr p:i64 in O,ptr q:i64 in O)->void where {owner O}{defer{if(!((p is null)||(q is null))){' + OUT('p+q') + '}else{' + OUT('0') + '};};}val x<-7,y<-11;ptr absent:i64=null in here;choose(x,y);choose(absent,y);', 0, '18\n0\n', ''),
-    'loop_guard': (PRE + 'proc choose(ptr p:i64 in O,ptr q:i64 in O)->void where {owner O}{for(i in 0..2){if(!((p is null)||(q is null))){' + OUT('p+q') + '}else{' + OUT('0') + '};p=null;};}val x<-7,y<-11;choose(x,y);', 0, '18\n0\n', ''),
+    'deferred_block_guard': (PRE + 'proc choose(ptr p:i64 in O,ptr q:i64 in O)->void where {owner O}{defer{if(!((p is null)||(q is null))){' + OUT('p+q') + '}else{' + OUT('0') + '};};return;}val x<-7,y<-11;ptr absent:i64=null in here;choose(x,y);choose(absent,y);', 0, '18\n0\n', ''),
+    'loop_guard': (PRE + 'proc choose(ptr p:i64 in O,ptr q:i64 in O)->void where {owner O}{for(i in 0..2){if(!((p is null)||(q is null))){' + OUT('p+q') + '}else{' + OUT('0') + '};p=null;};return;}val x<-7,y<-11;choose(x,y);', 0, '18\n0\n', ''),
     'readonly_target_stays_readonly': (PRE + 'func choose(ptr p:const i64 in O)->void where {owner O}{if({p is not null}){p<-9;}else{};}val x<-7;choose(x);', 2, '', 'readonly destination'),
 }
 

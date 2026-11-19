@@ -6,7 +6,7 @@ import foundation_tests as runner
 
 PRINT = 'using symbol "std:io" @print;\n'
 TYPES = 'using "std:exceptions" MissingReturnError; using "std:exceptions" OutOfMemoryError; using "std:exceptions" Exception; using "std:exceptions" NullPointerException;\n'
-ERROR = PRINT + TYPES + 'func missing()->const i64 {} func error()->const MissingReturnError {try{missing();}catch(e:const MissingReturnError){return e;};}\n'
+ERROR = PRINT + TYPES + 'func missing()->const i64 {} func error()->const MissingReturnError {try{missing():void;}catch(e:const MissingReturnError){return e;};}\n'
 WARN = '[-Wmissing-return]'
 runner.CASES = {
     "try_destination": (PRINT + 'val x<-1; { try{x}finally{} } <-2;behave @print(x);', 0, "2\n", ""),
@@ -24,7 +24,7 @@ runner.CASES = {
     "exception_overload": (ERROR + 'func pick(e:Exception)->const i64{return 1;}func pick(e:MissingReturnError)->const i64{return 2;}behave @print(pick(error()));val common:Exception<-error();behave @print(pick(common));', 0, "2\n1\n", WARN),
     "exception_overlap_relation": (ERROR + 'func pick(x:Exception,y:Exception)->const i64{return 1;}func pick(x:T,y:T)->const i64 where T{return 2;}pick(error(),error());', 2, "", "ambiguous methods"),
     "cause_name_reserved": (PRINT + 'func cause_at(x:u64,y:u64)->const u64{return x+y;}behave @print(cause_at(2u64,3u64));', 2, "", "reserved keyword 'cause_at'"),
-    "exception_prepared_defer": (ERROR + 'proc observe(e:Exception)->void{behave @print(e.category);}{{defer observe(error());}};', 0, "5\n", WARN),
+    "exception_prepared_defer": (ERROR + 'proc observe(e:Exception)->void{behave @print(e.category);return;}{{defer observe(error());}};', 0, "5\n", WARN),
     "explicit_chain": (ERROR + 'val first<-error(),second<-error();val chained<-try{throw first from second;}catch(e:const MissingReturnError){e};behave @print(first.cause_count);behave @print(chained.cause_count);behave @print(cause_at(chained,0u64).category);behave @print(cause_at(chained,0u64).site==second.site);', 0, "0\n1\n5\ntrue\n", WARN),
     "retained_chain": (ERROR + 'func chain(e:MissingReturnError,cause:MissingReturnError)->const MissingReturnError {return try{throw e from cause;}catch(x:const MissingReturnError){x};}val e<-error();val saved<-chain(e,chain(e,e));behave @print(saved.cause_count);behave @print(cause_at(saved,1u64).category);', 0, "2\n5\n", WARN),
     "no_automatic_chain": (ERROR + 'val first<-error(),second<-error();try{try{throw first;}finally{throw second;}}catch(e){behave @print(e.cause_count);};', 0, "0\n", WARN),

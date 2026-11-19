@@ -23,6 +23,7 @@ proc cleanup_selected(flag:bool)->void{
  observe(9050u64);
  try{{defer{p<-99u64;};}}catch(e:const OutOfMemoryError){observe(9051u64);observe(p);};
  {{for(i in 0u64..100u64){defer{p<-45u64;};};}};observe(p);
+ return;
 }
 cleanup_selected(true);cleanup_selected(false);observe(9000u64);
 ''')

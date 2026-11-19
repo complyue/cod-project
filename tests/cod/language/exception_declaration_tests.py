@@ -5,7 +5,7 @@ import foundation_tests as runner
 
 IO = 'using symbol "std:io" @print;'
 TYPES = 'using "std:exceptions" Exception;using "std:exceptions" NullPointerException;using "std:exceptions" MissingReturnError;'
-ERROR = TYPES+'func missing()->u64{}func missing_value()->const MissingReturnError{try{missing();}catch(caught:const MissingReturnError){return caught;};}'
+ERROR = TYPES+'func missing()->u64{}func missing_value()->const MissingReturnError{try{missing():void;}catch(caught:const MissingReturnError){return caught;};}'
 ERROR += 'func null_value()->const NullPointerException{ptr absent:u64=null in here;try{absent;{}}catch(caught:const NullPointerException){return caught;};return null_value();}'
 PAIR = 'func f(a:T,b:T)->bool where T;'
 BODY = 'func f(a:Exception,b:Exception)->bool{return true;}'
@@ -45,7 +45,7 @@ runner.CASES = {
  'borrowed_common_target_equality': (TYPES+'func f(ref a:const T in A,ref b:const T in B)->bool where {T,owner A,owner B};func f(ref a:const Exception in A,ref b:const Exception in B)->bool where {owner A,owner B}{return true;}',0,'',''),
  'borrowed_unrelated_result': (IO+ERROR+'func f(a:T,b:T,ref slot:i64 in O)->ref i64 in O where {T,owner O};func f(a:Exception,b:Exception,ref slot:i64 in O)->ref i64 in O where {owner O}{return slot;}val target<-3;f(missing_value(),null_value(),target)<-7;'+OUT('target'),0,'7\n',''),
  'variadic_categories': (IO+ERROR+'func f(rest:T...)->bool where T;func f(a:Exception,b:Exception,c:Exception)->bool{return true;}'+OUT('f(missing_value(),null_value(),missing_value())'),0,'true\n',''),
- 'deferred_snapshot': (IO+ERROR+'proc show(a:T,b:T)->void where T;proc show(a:Exception,b:Exception)->void{'+OUT('a.category')+OUT('b.category')+'}val left:Exception<-missing_value(),right:Exception<-null_value();{{defer show(left,right);left<-right;}};',0,'5\n4\n',''),
+ 'deferred_snapshot': (IO+ERROR+'proc show(a:T,b:T)->void where T;proc show(a:Exception,b:Exception)->void{'+OUT('a.category')+OUT('b.category')+'return;}val left:Exception<-missing_value(),right:Exception<-null_value();{{defer show(left,right);left<-right:void;}};',0,'5\n4\n',''),
  'deferred_disjoint_failure': (ERROR+FAILURE+'{{defer f(null_value());}};',0,'',''),
  'deferred_failure_required': (ERROR+FAILURE+'defer f(missing_value());',2,'','requires a covering catch or throws'),
  'operator_overlap': (IO+ERROR+'func (+)(a:T,b:T)->bool where T;func (+)(a:Exception,b:Exception)->bool{return true;}'+OUT('missing_value()+null_value()'),0,'true\n',''),

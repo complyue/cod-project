@@ -29,7 +29,7 @@ for number, (schedule, alias, nullable) in enumerate(product(SCHEDULES, (False,T
             body += 'intrinsic (<=>)('+left+','+right+');'
             a,b = parameters[left],parameters[right]
             bindings[a],bindings[b] = bindings[b],bindings[a]
-    source = PRELUDE+'func (<=>)(ptr a:i64 in O,ptr b:i64 in O)->void where {owner O}{'+body+'}'
+    source = PRELUDE+'func (<=>)(ptr a:i64 in O,ptr b:i64 in O)->void where {owner O}{'+body+'{}}'
     source += 'val x<-1,y<-7;ptr p=x,q='+('null in here' if nullable else 'y')+';'
     # A standalone null initializer needs a target type.
     if nullable: source = source.replace('q=null in here','q:i64=null in here')

@@ -89,7 +89,7 @@ case('mutual_result', definitions=MUTUAL.replace('return if', 'if(n>0u64){return
 case('recursive_independent_result', definitions=JOIN.replace(')->ptr', ',n:u64)->ptr').replace('return if', 'if(n>0u64){return choose(x,y,fallback,n-1u64);}else{};return if').replace('x is y', 'true'), setup='val fallback<-9u64;ptr selected=choose(p,q,fallback,8u64);', reject=True)
 case('callable_result', definitions=JOIN, setup='val fallback<-9u64;func call=choose;ptr selected=call(p,q,fallback);')
 case('declared_failure', definitions='using "std:exceptions" Exception;'+JOIN.replace('in O where', 'in O throws Exception where'), setup='val fallback<-9u64;ptr selected=choose(p,q,fallback);', reject=True, diagnostic='declared checked exception')
-case('borrowed_boolean_output', definitions='func absent(ref ready:bool in B,ptr candidate:const u64 in O)->void where {owner B,owner O}{ready<-candidate is null;}', setup=SELECT+'val ready<-false;absent(ready,selected);', condition='ready')
+case('borrowed_boolean_output', definitions='func absent(ref ready:bool in B,ptr candidate:const u64 in O)->void where {owner B,owner O}{ready<-candidate is null:void;}', setup=SELECT+'val ready<-false;absent(ready,selected);', condition='ready')
 
 runner.CASES['empty_recursive_result_keeps_declared_failure'] = (
     'using "std:exceptions" Exception;'
@@ -106,7 +106,7 @@ for name, write, after, rejected in (
 ):
     source = fixture.IO+'proc run(flag:bool)->void{val target<-make local u64;'
     source += 'ptr selected=if(flag){'+write+'null in here}else{target};'+after
-    source += 'if(selected is null){behave @print(target);}else{behave @print(0u64);};}run(false);run(true);'
+    source += 'if(selected is null){behave @print(target);}else{behave @print(0u64);};return;}run(false);run(true);'
     runner.CASES[name] = (source, 2 if rejected else 0, '' if rejected else '0\n7\n', 'initialization' if rejected else '')
 
 runner.CASE_ARGUMENTS = {}

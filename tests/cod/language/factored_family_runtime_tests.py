@@ -6,7 +6,7 @@ import uniform_family_runtime_tests as fixture
 from factored_family_tests import COUNT, PARAMETERS, NAMES, ARGUMENTS, VIEW, family, phase_family
 
 SHOW = ''.join('proc factored_show(' + PARAMETERS.replace('n0:u64', 'n0:' + first) +
-    ')->void{observe(' + str(tag) + 'u64+' + '+'.join(f'n{i}' for i in range(COUNT)) + '+@x);}'
+    ')->void{observe(' + str(tag) + 'u64+' + '+'.join(f'n{i}' for i in range(COUNT)) + '+@x);return;}'
     for first, tag in (('u32', 32000), ('u64', 64000)))
 PHASE_METHODS = phase_family(COUNT).replace('func choose(', 'func phase_choose(')
 PHASE_EXACT = ','.join(['1u8'] + ['2u64'] * (COUNT - 1))
@@ -16,7 +16,7 @@ func factored_wrap(callback:{VIEW})->{VIEW}{{
  return func[callback]({PARAMETERS})->u64{{return callback({NAMES})+1u64;}};
 }}
 {SHOW}
-proc factored_other_show({PARAMETERS})->void{{observe(99u64);}}
+proc factored_other_show({PARAMETERS})->void{{observe(99u64);return;}}
 {{{{
  func held=factored_wrap(factored_wrap(factored_choose));func saved=held;held<-factored_other;
  observe(saved({ARGUMENTS}));observe(held({ARGUMENTS}));
@@ -33,7 +33,7 @@ proc factored_other_show({PARAMETERS})->void{{observe(99u64);}}
  try{{defer show({ARGUMENTS});}}catch(e:const OutOfMemoryError){{observe(9031u64);}};
  observe(9050u64);
  try{{defer show({ARGUMENTS});}}catch(e:const OutOfMemoryError){{observe(9051u64);}};
- defer show({ARGUMENTS});show<-factored_other_show;
+ defer show({ARGUMENTS});show<-factored_other_show:void;
 }}}};
 observe(9000u64);
 '''

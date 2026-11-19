@@ -13,7 +13,7 @@ runner.CASES={}
 
 def case(name,body=READ+UPDATE,setup=SETUP,definitions='',output='7\n7\n9\n',reject=False,diagnostic='initialization',source=None):
     if source is None:
-        source=IO+definitions+'proc run()->void{try{'+setup+'for(i in 0u64..3u64){ '+body+' };}catch(e:const NullPointerException){behave @print(99u64);};}run();'
+        source=IO+definitions+'proc run()->void{try{'+setup+'for(i in 0u64..3u64){ '+body+' };}catch(e:const NullPointerException){behave @print(99u64);};return;}run();'
     runner.CASES[name]=(source,2 if reject else 0,'' if reject else output,diagnostic if reject else '')
 
 
@@ -46,19 +46,19 @@ case('registration_without_write',body=READ+'{{try{defer{c<-9u64;};}catch(e:cons
 FAIL='func fail()->u64 throws NullPointerException{ptr absent:u64=null in here;return absent;}'
 case('failed_write',definitions=FAIL,body=READ+'try{c<-fail();{}}catch(failure:const NullPointerException){};observed=c;',reject=True)
 case('recovered_write',definitions=FAIL,body=READ+'try{c<-fail();{}}catch(failure:const NullPointerException){c<-9u64;{}};observed=c;',output='7\n9\n9\n')
-SET='proc set(ptr x:u64 in O)->void throws NullPointerException where {owner O}{x<-9u64;}'
+SET='proc set(ptr x:u64 in O)->void throws NullPointerException where {owner O}{x<-9u64;return;}'
 case('callee_write',definitions=SET,body=READ+'set(c);observed=c;',output='7\n9\n9\n')
 case('prepared_write',definitions=SET,body=READ+'{{defer set(c);}};observed=c;',output='7\n9\n9\n')
 SWAP='func (<=>)(ptr x:u64 in O,ptr y:u64 in O)->void where {owner O}{intrinsic (<=>)(x,y);}'
 case('caller_slot_backedge',definitions=SWAP,setup=SETUP+'ptr other=c;',body=READ+'c<-9u64;observed<=>other;',output='7\n9\n7\n')
 case('caller_slot_missing_write',definitions=SWAP,setup=SETUP+'ptr other=c;',body=READ+'observed<=>other;',reject=True)
-case('delayed_read_changed_target',body='{{defer{'+READ+'};observed=c;}};',reject=True)
-case('delayed_read_written_target',body='{{defer{'+READ+'};c<-9u64;observed=c;}};',output='9\n'*3)
-OBSERVE='proc observe(value:u64)->void{behave @print(value);}'
-case('prepared_value_snapshot',definitions=OBSERVE,body='{{defer observe(observed);c<-9u64;observed=c;}};',output='7\n9\n9\n')
-case('prepared_borrow_snapshot',definitions=OBSERVE.replace('value:u64','ref value:const u64 in O').replace('->void{','->void where {owner O}{'),body='{{defer observe(observed);c<-9u64;observed=c;}};',output='7\n9\n9\n')
+case('delayed_read_changed_target',body='{{defer{'+READ+'};observed=c:void;}};',reject=True)
+case('delayed_read_written_target',body='{{defer{'+READ+'};c<-9u64;observed=c:void;}};',output='9\n'*3)
+OBSERVE='proc observe(value:u64)->void{behave @print(value);return;}'
+case('prepared_value_snapshot',definitions=OBSERVE,body='{{defer observe(observed);c<-9u64;observed=c:void;}};',output='7\n9\n9\n')
+case('prepared_borrow_snapshot',definitions=OBSERVE.replace('value:u64','ref value:const u64 in O').replace('->void{','->void where {owner O}{'),body='{{defer observe(observed);c<-9u64;observed=c:void;}};',output='7\n9\n9\n')
 
-case('dynamic_count',source=IO+'proc run(n:u64)->void{try{'+SETUP+'for(i in 0u64..n){'+READ+UPDATE+'}else{behave @print(0u64);};}catch(e:const NullPointerException){behave @print(99u64);};}run(0u64);run(1u64);run(3u64);',output='0\n7\n7\n7\n9\n')
+case('dynamic_count',source=IO+'proc run(n:u64)->void{try{'+SETUP+'for(i in 0u64..n){'+READ+UPDATE+'}else{behave @print(0u64);};}catch(e:const NullPointerException){behave @print(99u64);};return;}run(0u64);run(1u64);run(3u64);',output='0\n7\n7\n7\n9\n')
 case('fold',source=IO+'try{'+SETUP+'behave @print(fold(i in 0u64..3u64,total=0u64){'+UPDATE+'total+observed});}catch(e:const NullPointerException){behave @print(99u64);};',output='25\n')
 
 for name,initial,write,after,reject in (
@@ -68,7 +68,7 @@ for name,initial,write,after,reject in (
     ('conditional_cleanup_changed_entry','a','c<-9u64;','observed=c;',True),
     ('conditional_cleanup_early_read','a','observed=c;behave @print(observed);c<-9u64;','',True),
 ):
-    source=IO+'proc run(flag:bool)->void{try{'+SETUP.replace('observed=a','observed='+initial)+'{{defer{if(flag){'+write+'observed=c;{}}else{};};'+after+'}};'+READ+'}catch(e:const NullPointerException){behave @print(99u64);};}run(false);run(true);'
+    source=IO+'proc run(flag:bool)->void{try{'+SETUP.replace('observed=a','observed='+initial)+'{{defer{if(flag){'+write+'observed=c;{}}else{};};'+after+'}};'+READ+'}catch(e:const NullPointerException){behave @print(99u64);};return;}run(false);run(true);'
     case(name,source=source,reject=reject,output='7\n9\n')
 
 # This interpreter models cells and binding assignments directly. Delayed

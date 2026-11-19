@@ -202,7 +202,7 @@ static void printUsage(const char *prog_name) {
             << "  -Werror=unit-conversion       Reject ambiguous unit conversion paths\n"
             << "  -Werror=multi-alias-extension Reject overload declarations through multiple aliases\n"
             << "  -Werror=shadow                Reject lexical binding shadowing\n"
-            << "  -Werror=missing-return        Reject reachable value-callable fallthrough\n"
+            << "  -Werror=missing-return        Reject reachable fallthrough when a return is required\n"
             << "  -h, --help          Show this help message\n"
             << "  --no-cache          Disable build cache\n"
             << "  --force-rebuild     Force rebuild (ignore cache)\n"

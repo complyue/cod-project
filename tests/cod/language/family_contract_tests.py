@@ -6,7 +6,7 @@ import foundation_tests as runner
 IO = 'using symbol "std:io" @print;'
 NPE = 'using "std:exceptions" NullPointerException;'
 ERROR = IO + NPE + 'using "std:exceptions" Exception;using "std:exceptions" MissingReturnError;'
-ERROR += 'func missing()->u64{}func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}'
+ERROR += 'func missing()->u64{}func error()->const MissingReturnError{try{missing():void;}catch(e:const MissingReturnError){return e;};}'
 ERROR += 'func null_error()->const NullPointerException{val x<-1;ptr p=x;p=null;try{p;{}}catch(e:const NullPointerException){return e;};}'
 F = 'symbol @f:proc(Exception)->u64;proc @f(e:MissingReturnError)->u64{return 7u64;}proc @f(e:T)->u64 where T{return e.category;}'
 runner.CASES = {
@@ -17,7 +17,7 @@ runner.CASES = {
     'common_exception_through_holder': (ERROR + F + 'effect @f;proc p=@f;val e:Exception<-error();behave @print(p(e));e<-null_error();behave @print(p(e));', 0, '7\n4\n', ''),
     'common_exception_joint_identity': (ERROR + 'symbol @f:proc(Exception,Exception)->u64;proc @f(a:T,b:T)->u64 where T{return 1u64;}proc @f(a:A,b:B)->u64 where {A,B}{return 7u64;}'
         'effect @f;val a:Exception<-error(),b:Exception<-null_error();behave @print(behave @f(a,b));b<-a;behave @print(behave @f(a,b));', 0, '7\n1\n', ''),
-    'common_exception_deferred_snapshot': (ERROR + 'symbol @f:proc(Exception)->void;proc @f(e:MissingReturnError)->void{behave @print(7u64);}proc @f(e:T)->void where T{behave @print(e.category);}'
+    'common_exception_deferred_snapshot': (ERROR + 'symbol @f:proc(Exception)->void;proc @f(e:MissingReturnError)->void{behave @print(7u64);return;}proc @f(e:T)->void where T{behave @print(e.category);return;}'
         'effect @f;val e:Exception<-error();defer behave @f(e);e<-null_error();defer{behave @f(e);};', 0, '4\n7\n', ''),
     'common_exception_complete_capture': (ERROR + 'symbol @x:u64,@y:u64,@f:proc(Exception)->u64;proc @f(e:MissingReturnError)->u64{return @x;}proc @f(e:T)->u64 where T{return @y;}'
         'effect @x<-1u64;effect @y<-7u64;effect @f;effect @x<-2u64;effect @y<-8u64;val e:Exception<-null_error();behave @print(perform @f(e));e<-error();behave @print(perform @f(e));behave @print(behave @f(e));', 0, '7\n1\n2\n', ''),
@@ -40,11 +40,11 @@ runner.CASES = {
     'independent_owner_roles': (IO + 'proc @pick(ref x:i64 in A,ref y:i64 in B)->ref i64 in B where {owner A,owner B}{return y;}effect @pick;ref source:i64=1;behave @pick(source,source)<-3;{{val y<-2;behave @pick(source,y)<-7;behave @print(y);}};behave @print(source);', 0, '7\n3\n', ''),
     'owner_dependent_selection_unproved': ('proc @pick(ref x:i64 in A,ref y:i64 in B)->u64 where {owner A,owner B}{return 1u64;}proc @pick(ref x:i64 in O,ref y:i64 in O)->u64 where {owner O}{return 7u64;}effect @pick;', 2, '', 'unproved owner equality'),
     'borrowed_nullable_return': (IO + 'proc @id(ptr x:i64 in O)->ptr i64 in O where {owner O}{return x;}effect @id;ptr p:i64=null in here;behave @print(((behave @id(p)) is null));', 0, 'true\n', ''),
-    'borrowed_writer_initializes': (IO + NPE + 'proc @set(ptr x:i64 in O)->void throws NullPointerException where {owner O}{x<-7;}effect @set;val x<-make local i64;try{behave @set(x);behave @print(x);}catch(e:const NullPointerException){};', 0, '7\n', ''),
+    'borrowed_writer_initializes': (IO + NPE + 'proc @set(ptr x:i64 in O)->void throws NullPointerException where {owner O}{x<-7;return;}effect @set;val x<-make local i64;try{behave @set(x);behave @print(x);}catch(e:const NullPointerException){};', 0, '7\n', ''),
     'borrowed_reader_requires_initialization': ('proc @read(ref x:i64 in O)->i64 where {owner O}{return x;}effect @read;val x<-make local i64;behave @read(x);', 2, '', 'before definite initialization'),
     'borrowed_address_before_argument_effect': (IO + NPE + 'proc @read(ptr x:i64 in O,unused:i64)->i64 throws NullPointerException where {owner O}{return x;}effect @read;val x<-1,y<-7;ptr p=x;try{behave @print(behave @read(p,{p=y;0}));}catch(e:const NullPointerException){};', 0, '1\n', ''),
-    'borrowed_deferred_late_payload': (IO + 'symbol @bias:i64;proc @show(ref x:i64 in O)->void where {owner O}{behave @print(x+@bias);}effect @bias<-1;effect @show;val x<-2;defer perform @show(x);x<-7;effect @bias<-9;', 0, '8\n', ''),
-    'borrowed_callable_holder_write': (IO + 'func one()->u64{return 1u64;}func two()->u64{return 7u64;}proc @replace(ref f:func()->u64 in O)->void where {owner O}{f<-two;}'
+    'borrowed_deferred_late_payload': (IO + 'symbol @bias:i64;proc @show(ref x:i64 in O)->void where {owner O}{behave @print(x+@bias);return;}effect @bias<-1;effect @show;val x<-2;defer perform @show(x);x<-7;effect @bias<-9;', 0, '8\n', ''),
+    'borrowed_callable_holder_write': (IO + 'func one()->u64{return 1u64;}func two()->u64{return 7u64;}proc @replace(ref f:func()->u64 in O)->void where {owner O}{f<-two;return;}'
         'effect @replace;func held=one;behave @replace(held);behave @print(held());', 0, '7\n', ''),
 }
 for name, (source, status, output, diagnostic) in list(runner.CASES.items()):

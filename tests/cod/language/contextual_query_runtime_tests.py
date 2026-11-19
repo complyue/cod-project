@@ -11,6 +11,7 @@ proc contextual_queries(f:func(u64)->const u64)->void{
  val x<-make local typeof(query_apply(unproved,true)){true};
  val y<-make local typeof(query_apply(f,3u64)){32u64};
  observe(9011u64);if(x){observe(y);}else{};
+ return;
 }
 proc query_later()->const u64{observe(33u64);return 1u64;}
 {{

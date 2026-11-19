@@ -10,7 +10,7 @@ OUT = lambda value: 'behave @print('+value+');'
 BASE = 'val x<-1,y<-7,z<-9;ptr p=x,q=y;'
 PTR = 'func (<=>)(ptr a:i64 in O,ptr b:i64 in O)->void where {owner O}{intrinsic (<=>)(a,b);}'
 REF = PTR.replace('ptr a:', 'ref a:').replace('ptr b:', 'ref b:')
-READ = 'proc (<=>)(a:i64 in O,b:i64 in O)->void where {owner O}{'+OUT('a')+OUT('b')+'}'
+READ = 'proc (<=>)(a:i64 in O,b:i64 in O)->void where {owner O}{'+OUT('a')+OUT('b')+'return;}'
 CALL = 'defer (<=>)(p,q);'
 PAIR = OUT('p') + OUT('q')
 EMPTY_TARGETS = 'val x<-1,y<-make local i64,z<-make local i64;ptr p=x,q=y;'
@@ -23,7 +23,7 @@ SELECT_AFTER_CLEANUP = (
 def queued(body, observe='', setup=BASE):
     # Observe the same invocation's slots after its later registrations run.
     observer = 'defer{' + observe + '};' if observe else ''
-    return '{{' + setup + observer + body + '}};'
+    return '{{' + setup + observer + body + ' {};}};'
 
 
 def guarded_observation(body):
@@ -31,20 +31,21 @@ def guarded_observation(body):
 
 
 def local_checked_method(body, kind='func', handler=''):
+    result = 'return;' if kind == 'proc' else ''
     return (kind + ' (<=>)(ptr a:i64 in O,ptr b:i64 in O)->void where {owner O}{'
-            'try{' + body + '{}}catch(e:const NullPointerException){' + handler + '};}')
+            'try{' + body + '{}}catch(e:const NullPointerException){' + handler + '};' + result + '}')
 
 
 def handled_pass(body, observe):
     return ('proc run()->void{' + BASE + 'defer catch(e:const NullPointerException){'
-            + observe + '};' + body + '}run();')
+            + observe + 'return;};' + body + 'return;}run();')
 
 
 def entry_write_program(method_body, before_exit, setup='', parameters='', arguments=''):
     return (IO + NPE + local_checked_method(method_body) + 'proc run(' + parameters + ')->void{'
             'ref first:i64=1;val y<-make local i64,z<-make local i64;ptr second=y,late=z;'
-            + setup + '{{ptr p=first,q=second;' + CALL + before_exit + '}};'
-            + OUT('z') + '}run(' + arguments + ');')
+            + setup + '{{ptr p=first,q=second;' + CALL + before_exit + '{};}};'
+            + OUT('z') + 'return;}run(' + arguments + ');')
 
 
 runner.CASES = {
@@ -71,7 +72,7 @@ runner.CASES = {
  'ref_cleanup_restore': (IO+NPE+REF+queued(CALL+'defer (=)(q,z);q=null;',guarded_observation(OUT('p'))),0,'9\n',''),
  'read_late_null': (IO+NPE+READ+handled_pass(CALL+'p=null;',OUT('8')),0,'8\n',''),
  'read_late_null_requires_owning_pass': (IO+NPE+READ+'{{'+BASE+
-     'defer catch(e:const NullPointerException){'+OUT('8')+'};'+CALL+'p=null;}};',
+     'defer catch(e:const NullPointerException){'+OUT('8')+'};'+CALL+'p=null:void;}};',
      2,'','checked failures involving deferred execution require coverage within the owning pass'),
  'read_null_registration': (IO+NPE+READ+queued('p=null;try{'+CALL+'p=z;{}}catch(e:const NullPointerException){'+OUT('8')+'};'),0,'8\n',''),
  'read_late_uninitialized': (IO+READ+queued(CALL+'q=empty;',setup=BASE+'val empty<-make local i64;'),2,'','cannot prove initialization'),
@@ -87,7 +88,7 @@ runner.CASES = {
      '{ptr local=selected;return local;}'+BASE+'defer (<=>)(borrow(p),q);',2,'','requires a binding slot'),
  'fixed_slot': (PTR+'val x<-1,y<-7;const ptr p=x;ptr q=y;'+CALL,2,'','const reference binding'),
  'ref_permission': (PTR+'val x<-1,y<-7;ref p=x,q=y;'+CALL,0,'',''),
- 'late_tls': (IO+'symbol @amount:i64;proc (<=>)(ptr a:i64 in O,ptr b:i64 in O)->void where {owner O}{'+OUT('@amount')+'}'+BASE+'effect @amount<-1;{{'+CALL+'effect @amount<-7;}};',0,'7\n',''),
+ 'late_tls': (IO+'symbol @amount:i64;proc (<=>)(ptr a:i64 in O,ptr b:i64 in O)->void where {owner O}{'+OUT('@amount')+'return;}'+BASE+'effect @amount<-1;{{'+CALL+'effect @amount<-7;}};',0,'7\n',''),
 }
 for name, body, result, output, diagnostic in (
  ('write_then_rebind','a<-3;a=b;', 'p;{}', '', 'initialization'),
@@ -109,16 +110,16 @@ runner.CASES['ambiguous_entry_does_not_write_both_targets'] = (
 
 for order in ('method_first','builtin_first'):
     calls = 'run(1,7);run(false,true);' if order=='method_first' else 'run(false,true);run(1,7);'
-    source=IO+READ+'proc run(a:T,b:T)->void where T{val x<-a,y<-b;ptr p=x,q=y;{{'+CALL+'}};}'+calls
+    source=IO+READ+'proc run(a:T,b:T)->void where T{val x<-a,y<-b;ptr p=x,q=y;{{'+CALL+'}};return;}'+calls
     runner.CASES['mixed_context_'+order]=(source,0,'1\n7\n','')
 runner.CASES.update({
  'method_failure_after_rebind': (IO+NPE+'func (<=>)(ptr a:i64 in O,ptr b:i64 in O)->void throws NullPointerException '
-     'where {owner O}{a=null;b;}'+handled_pass(CALL+'q=null;',OUT('(p is null)')),0,'true\n',''),
+     'where {owner O}{a=null;b;{};}'+handled_pass(CALL+'q=null;',OUT('(p is null)')),0,'true\n',''),
  'method_ref_recursion': (IO+'func (<=>)(ref a:i64 in O,ref b:i64 in O)->void where {owner O}'
      '{if(a<b){intrinsic (<=>)(a,b);defer (<=>)(a,b);}else{};}'+queued(CALL,PAIR),0,'7\n1\n',''),
  'const_targets': (IO+REF.replace('a:i64','a:const i64').replace('b:i64','b:const i64')+
      queued(CALL,OUT('p'),setup='val x:const i64<-1,y:const i64<-7;ptr p=x,q=y;'),0,'7\n',''),
- 'separate_owners': (IO+'func (<=>)(ptr a:i64 in O,ptr b:bool in P)->void where {owner O,owner P}{a=null;b=null;}'
+ 'separate_owners': (IO+'func (<=>)(ptr a:i64 in O,ptr b:bool in P)->void where {owner O,owner P}{a=null;b=null:void;}'
      'val x<-1;ref outer=x;'+queued(CALL,OUT('(q is null)')+OUT('(p is null)'),setup='val y<-true;ptr p=outer,q=y;'),
      0,'true\ntrue\n',''),
  'different_owner_rebind_rejected': ('func (<=>)(ptr a:i64 in O,ptr b:i64 in P)->void where {owner O,owner P}{a=b;}val x<-1;ptr p=x;{{val y<-7;ptr q=y;'+CALL+'}};',2,'','initializer-fixed owner'),
@@ -128,7 +129,7 @@ runner.CASES.update({
 })
 runner.CASES['failed_initializer_registration'] = (IO+READ+queued(CALL+'q=empty;defer (<-)(empty,9);',
     setup=BASE+'val empty<-make local i64;'),2,'','cannot prove initialization')
-errors = NPE+'using "std:exceptions" MissingReturnError;using "std:exceptions" Exception;func missing()->i64{}func missing_error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}func null_error()->const NullPointerException{ptr p:i64=null in here;try{p;{}}catch(e:const NullPointerException){return e;};}'
+errors = NPE+'using "std:exceptions" MissingReturnError;using "std:exceptions" Exception;func missing()->i64{}func missing_error()->const MissingReturnError{try{missing():void;}catch(e:const MissingReturnError){return e;};}func null_error()->const NullPointerException{ptr p:i64=null in here;try{p;{}}catch(e:const NullPointerException){return e;};}'
 runner.CASES['exception_targets'] = (IO+errors+REF.replace('a:i64','a:Exception').replace('b:i64','b:Exception')+
     queued(CALL,OUT('p.category==y.category')+OUT('q.category==x.category'),
            'val x:Exception<-missing_error(),y:Exception<-null_error();ptr p=x,q=y;'),

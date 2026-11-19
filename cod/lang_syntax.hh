@@ -291,7 +291,7 @@ struct Expression {
                     block, grouped, conditional, field, range_for, fold, allocate, index, null_ref,
                     try_scope, handler, raise, return_value, deferred, make_region, touch, effect_group, transfer, procedure_effect,
                     pointer_group, pointer, make_local, rebind, region_binding, callable, alias, capture_owner,
-                    here_body, named_argument, break_value, continue_value, typed_expression };
+                    here_body, named_argument, break_value, continue_value, typed_expression, return_tail };
   Kind kind;
   Location at;
   std::string text;
@@ -393,6 +393,12 @@ struct Form {
   std::optional<Type> index_type;
   std::optional<Type> parent_type;
   Expr body;
+
+  bool requires_explicit_return() const { return kind == Kind::procedure && !implicit_scope && !supplied_scope; }
+  bool returns_tail_value() const { return !supplied_group && (kind == Kind::function || implicit_scope || supplied_scope); }
+  bool completion_requires_return(const Type &result) const {
+    return !supplied_group && (requires_explicit_return() || result != Type::void_type);
+  }
 };
 
 inline bool swap_operation(std::string_view op) { return op == "<=>" || op == "<->"; }
@@ -1456,6 +1462,19 @@ class Parser {
     for (const auto &child : expr.children) normalize_assignment_calls(*child);
     if (expr.definition && expr.definition->body) normalize_assignment_calls(*expr.definition->body);
   }
+  static void normalize_return_tail(Form &form) {
+    using K = Expression::Kind;
+    if (!form.returns_tail_value()) return;
+    auto &body = *form.body;
+    if (body.kind == K::block && body.children.empty()) return;
+    auto &result = body.kind == K::block ? body.children.back() : form.body;
+    if (result->kind == K::return_value) return;
+    auto tail = std::make_unique<Expression>();
+    tail->kind = K::return_tail;
+    tail->at = result->at;
+    tail->children.push_back(std::move(result));
+    result = std::move(tail);
+  }
   static void normalize_full_scopes(Expression &expr, Form::Kind callable_kind) {
     using K = Expression::Kind;
     const bool delayed_scope = expr.kind == K::deferred && expr.children.front()->kind == K::block &&
@@ -1502,8 +1521,10 @@ class Parser {
     const auto nested_kind = expr.kind == K::block && expr.scoped && callable_kind != Form::Kind::function
         ? Form::Kind::procedure : callable_kind;
     for (const auto &child : expr.children) normalize_full_scopes(*child, nested_kind);
-    if (expr.definition && expr.definition->body)
+    if (expr.definition && expr.definition->body) {
       normalize_full_scopes(*expr.definition->body, expr.definition->kind);
+      normalize_return_tail(*expr.definition);
+    }
     if (delayed_scope) {
       // Keep block-defer preparation delayed after its full scope becomes a call.
       auto body = std::make_unique<Expression>();
@@ -1518,6 +1539,7 @@ class Parser {
     definition->implicit_scope = true;
     definition->body = std::make_unique<Expression>(std::move(expr));
     definition->body->scoped = false;
+    normalize_return_tail(*definition);
     expr = Expression{};
     expr.kind = K::value_call; expr.at = definition->at;
     auto callable = std::make_unique<Expression>();
@@ -1764,6 +1786,7 @@ public:
       validate_explicit_scopes(*form->body);
       normalize_assignment_calls(*form->body);
       normalize_full_scopes(*form->body, form->kind);
+      normalize_return_tail(*form);
     }
     return forms;
   }

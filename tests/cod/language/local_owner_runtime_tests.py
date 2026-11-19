@@ -6,11 +6,11 @@ import borrowed_call_runtime_tests as fixture
 
 FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
 FIXTURE = FIXTURE.updated(source=FIXTURE.source.replace(
- 'proc show(x:u64 in O)->void where {owner O}{observe(x);}',
- 'proc show(x:u64 in O)->void where {owner O}{ref p:u64 in O=x;observe(p);}'))
+ 'proc show(x:u64 in O)->void where {owner O}{observe(x);return;}',
+ 'proc show(x:u64 in O)->void where {owner O}{ref p:u64 in O=x;observe(p);return;}'))
 FIXTURE = FIXTURE.updated(source=FIXTURE.source.replace(
- 'proc set(x:u64 in O)->void where {owner O}{x<-33u64;}',
- 'proc set(x:u64 in O)->void where {owner O}{ptr p:u64 in O=null;p=x;p<-33u64;}'))
+ 'proc set(x:u64 in O)->void where {owner O}{x<-33u64;return;}',
+ 'proc set(x:u64 in O)->void where {owner O}{ptr p:u64 in O=null;p=x;p<-33u64;return;}'))
 FIXTURE = FIXTURE.updated(source=FIXTURE.source.replace(
  'throws NullPointerException where {owner O}{observe(x);}',
  'throws NullPointerException where {owner O}{ptr p:u64 in O=x;observe(p);}'))

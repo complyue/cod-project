@@ -13,9 +13,9 @@ using "std:exceptions" MissingReturnError;
 using "std:exceptions" NullPointerException;
 using "std:exceptions" UnsoundRuntimeTypingError;
 func missing()->u64{}
-func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}
+func error()->const MissingReturnError{try{missing():void;}catch(e:const MissingReturnError){return e;};}
 func null_error()->const NullPointerException{val x<-1;ptr p=x;p=null;try{p;{}}catch(e:const NullPointerException){return e;};}
-proc observe(x:u64)->void{behave @print(x);}
+proc observe(x:u64)->void{behave @print(x);return;}
 func one()->u64{return 1u64;}
 func wrap(f:func()->u64)->func()->u64{return func[f]()->u64{return f();};}
 symbol @bias:u64,@select:proc(Exception)->u64;
@@ -24,7 +24,7 @@ proc @select(e:T)->u64 where T{return @bias+e.category;}
 proc @apply(f:func()->u64,n:u64)->u64{return f();}
 proc @use(f:func()->u64,ref x:u64 in O)->void where {owner O}{observe(f()+x);}
 proc @update(e:Exception,ptr x:u64 in O)->void throws NullPointerException where {owner O}{x<-1u64;}
-proc @update(e:MissingReturnError,ptr x:u64 in O)->void throws NullPointerException where {owner O}{x<-7u64;}
+proc @update(e:MissingReturnError,ptr x:u64 in O)->void throws NullPointerException where {owner O}{x<-7u64;return;}
 effect @bias<-1u64;
 val first:Exception<-error(),second:Exception<-null_error();
 {{

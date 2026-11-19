@@ -30,7 +30,7 @@ for distinct_roles in (False, True):
         parameters = 'ptr p:i64 in P,ptr q:i64 in Q' if distinct_roles else 'ptr p:i64 in O,ptr q:i64 in O'
         owners = 'owner P,owner Q' if distinct_roles else 'owner O'
         source = 'using symbol "std:io" @print;proc choose('+parameters+')->void where {'+owners+'}{'
-        source += 'if('+condition+'){behave @print(q);}else{behave @print(0);};}'
+        source += 'if('+condition+'){behave @print(q);}else{behave @print(0);};return;}'
         source += 'val x<-7,y<-11;ptr absent:i64=null in here;'
         source += ''.join('choose('+p+','+q+');' for (p, _), (q, _) in samples[:9])
         if distinct_roles:

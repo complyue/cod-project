@@ -7,7 +7,7 @@ import foundation_tests as runner
 IO = 'using symbol "std:io" @print;\n'
 ERRORS = IO + '''using "std:exceptions" MissingReturnError;
 func missing()->const i64{}
-func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}
+func error()->const MissingReturnError{try{missing():void;}catch(e:const MissingReturnError){return e;};}
 '''
 WARN = '[-Wmissing-return]'
 CLEANUP_SELECT = (
@@ -48,23 +48,23 @@ runner.CASES = {
     'readonly_rebind_escalation': ('val a<-1;const val b<-2;ptr p=a;p=b;', 2, '', 'readonly source cannot rebind a writable reference target'),
     'readonly_assignment_view': ('val a<-1,b<-2;ptr p:const i64=a;(p=b)<-3;', 2, '', 'readonly destination'),
     'const_binding_rebind': ('val a<-1,b<-2;const ptr p=a;p=b;', 2, '', 'cannot rebind a const reference binding'),
-    'branch_rebind': (IO + 'proc f(flag:bool)->void{val a<-1,b<-2;ptr p=a;if(flag){p=b;}else{p=a;};p<-5;behave @print(a);behave @print(b);}f(true);f(false);', 0, '1\n5\n5\n2\n', ''),
-    'branch_reference_selection': (IO + 'proc f(flag:bool)->void{val a<-1,b<-2;const ptr p=if(flag){a}else{b};p<-6;behave @print(a);behave @print(b);}f(true);f(false);', 0, '6\n2\n1\n6\n', ''),
-    'selected_destination': (IO + 'proc f(flag:bool)->void{val a<-1,b<-2;{if(flag){a}else{b}}<-7;behave @print(a);behave @print(b);}f(true);f(false);', 0, '7\n2\n1\n7\n', ''),
+    'branch_rebind': (IO + 'proc f(flag:bool)->void{val a<-1,b<-2;ptr p=a;if(flag){p=b;}else{p=a;};p<-5;behave @print(a);behave @print(b);return;}f(true);f(false);', 0, '1\n5\n5\n2\n', ''),
+    'branch_reference_selection': (IO + 'proc f(flag:bool)->void{val a<-1,b<-2;const ptr p=if(flag){a}else{b};p<-6;behave @print(a);behave @print(b);return;}f(true);f(false);', 0, '6\n2\n1\n6\n', ''),
+    'selected_destination': (IO + 'proc f(flag:bool)->void{val a<-1,b<-2;{if(flag){a}else{b}}<-7;behave @print(a);behave @print(b);return;}f(true);f(false);', 0, '7\n2\n1\n7\n', ''),
     'selected_destination_before_rhs': (IO + 'val a<-1,b<-2,c<-3;ptr p=a;({if(true){p}else{b}})<-{p=c;8};behave @print(a);behave @print(b);behave @print(p);', 0, '8\n2\n3\n', ''),
     'branch_uninitialized_target': ('proc f(flag:bool)->void{val a<-1,b<-make local i64;ptr p=a;if(flag){p=b;{}}else{};p;}', 2, '', 'before definite initialization'),
-    'selected_write_then_read': (IO + 'proc f(flag:bool)->void{val a<-make local i64,b<-make local i64;ptr p=if(flag){a}else{b};p<-7;behave @print(p);}f(true);f(false);', 0, '7\n7\n', ''),
-    'selected_initialized_ref': (IO + 'proc f(flag:bool)->void{val a<-make local i64,b<-make local i64;ptr p=if(flag){a}else{b};p<-8;const ref q=p;p=if(flag){b}else{a};behave @print(q);}f(true);f(false);', 0, '8\n8\n', ''),
+    'selected_write_then_read': (IO + 'proc f(flag:bool)->void{val a<-make local i64,b<-make local i64;ptr p=if(flag){a}else{b};p<-7;behave @print(p);return;}f(true);f(false);', 0, '7\n7\n', ''),
+    'selected_initialized_ref': (IO + 'proc f(flag:bool)->void{val a<-make local i64,b<-make local i64;ptr p=if(flag){a}else{b};p<-8;const ref q=p;p=if(flag){b}else{a};behave @print(q);return;}f(true);f(false);', 0, '8\n8\n', ''),
     'same_target_set_rhs_mutation': ('proc f(flag:bool)->void{val a<-make local i64,b<-make local i64;ptr p=if(flag){a}else{b};p<-{p=if(flag){b}else{a};1};p;}', 2, '', 'before definite initialization'),
-    'stable_selected_target_loop': (IO + 'proc f(flag:bool)->void{val a<-make local i64,b<-make local i64;ptr p=if(flag){a}else{b};p<-9;for(i in 0..2){behave @print(p);};}f(true);f(false);', 0, '9\n9\n9\n9\n', ''),
-    'selected_target_cleanup': (IO + 'proc f(flag:bool)->void{val a<-make local i64,b<-make local i64;ptr p=if(flag){a}else{b};p<-10;defer{behave @print(p);};}f(true);f(false);', 0, '10\n10\n', ''),
+    'stable_selected_target_loop': (IO + 'proc f(flag:bool)->void{val a<-make local i64,b<-make local i64;ptr p=if(flag){a}else{b};p<-9;for(i in 0..2){behave @print(p);};return;}f(true);f(false);', 0, '9\n9\n9\n9\n', ''),
+    'selected_target_cleanup': (IO + 'proc f(flag:bool)->void{val a<-make local i64,b<-make local i64;ptr p=if(flag){a}else{b};p<-10;defer{behave @print(p);};return;}f(true);f(false);', 0, '10\n10\n', ''),
     'selected_write_not_all_targets': ('proc f(flag:bool)->void{val a<-make local i64,b<-make local i64;ptr p=if(flag){a}else{b};p<-1;a;}', 2, '', 'before definite initialization'),
     'selected_owner_conflict': ('ref a:i64=1;{{val b<-2;ptr p=if(true){a}else{b};}};', 2, '', 'joins different owners'),
     'selected_readonly': ('val a<-1;const val b<-2;ptr p=if(true){a}else{b};p<-3;', 2, '', 'readonly destination'),
     'mixed_value_view_receiver': (IO + 'proc work(flag:bool)->void{val a<-1;ptr p=if(flag){a}else{2};'
-        'a<-3;behave @print((p is a));behave @print(p);p<-4;behave @print(a);}work(true);work(false);',
+        'a<-3;behave @print((p is a));behave @print(p);p<-4;behave @print(a);return;}work(true);work(false);',
         0, 'false\n1\n3\nfalse\n2\n3\n', ''),
-    'loop_alternates': (IO + 'proc f(n:i64)->void{val a<-0,b<-0;ptr p=a;for(i in 0..n){p<-p+1;p=if(i%2==0){b}else{a};};behave @print(a);behave @print(b);behave @print(p);}f(5);f(0);', 0, '3\n2\n2\n0\n0\n0\n', ''),
+    'loop_alternates': (IO + 'proc f(n:i64)->void{val a<-0,b<-0;ptr p=a;for(i in 0..n){p<-p+1;p=if(i%2==0){b}else{a};};behave @print(a);behave @print(b);behave @print(p);return;}f(5);f(0);', 0, '3\n2\n2\n0\n0\n0\n', ''),
     'loop_alias_snapshot': (IO + 'val a<-1,b<-2;ptr p=a;const ptr q=p;for(i in 0..3){p=b;q<-q+1;};behave @print(a);behave @print(p);', 0, '4\n2\n', ''),
     'loop_invalid_later_target': ('val a<-1,b<-make local i64;ptr p=a;for(i in 0..2){p;p=b;};', 2, '', 'before definite initialization'),
     'single_iteration_target': (IO + 'val a<-1,b<-make local i64;ptr p=a;for(i in 0..1){behave @print(p);p=b;};p<-3;behave @print(b);', 0, '1\n3\n', ''),
@@ -75,7 +75,7 @@ runner.CASES = {
     'deferred_target_changes': (IO + '{{val a<-1,b<-2;ptr p=a;defer{behave @print(p);};defer{p=b;};}};', 0, '2\n', ''),
     'post_cleanup_target': (IO + CLEANUP_SELECT + 'val a<-1,b<-2;ptr p=a;p=select(p,b);behave @print(p);', 0, '2\n', ''),
     'deferred_target_write': (IO + '{{val a<-1,b<-2;ptr p=a;defer{behave @print(a);behave @print(b);};defer{p=b;p<-3;};}};', 0, '1\n3\n', ''),
-    'late_uninitialized_target': ('{{val a<-1,b<-make local i64;ptr p=a;defer{p;};p=b;}};', 2, '', 'cannot prove initialization'),
+    'late_uninitialized_target': ('{{val a<-1,b<-make local i64;ptr p=a;defer{p;};p=b:void;}};', 2, '', 'cannot prove initialization'),
     'late_target_initialized': (IO + '{{val a<-1,b<-make local i64;ptr p=a;defer{behave @print(p);};p=b;b<-4;}};', 0, '4\n', ''),
     'later_declared_target': (IO + '{{val a<-1;ptr p=a;defer{behave @print(p);};val b<-2;p=b;}};', 0, '2\n', ''),
     'future_target_in_earlier_scope': (IO + 'val a<-1;ptr p=a;{{defer{behave @print(p);};}};val b<-2;p=b;behave @print(p);', 0, '1\n2\n', ''),
@@ -95,7 +95,7 @@ runner.CASES = {
     'finally_rebind': (IO + 'val a<-1,b<-2;ptr p=a;try{}finally{p=b;{}};behave @print(p);', 0, '2\n', ''),
     'ended_binding_live_target_write': (IO + BORROW_TARGET + 'val a<-1;borrow(a)<-12;behave @print(a);', 0, '12\n', ''),
     'ended_binding_rebind': (BORROW_TARGET + 'val a<-1,b<-2;borrow(a)=b;', 2, '', 'binding slot'),
-    'selected_target_before_failure': (ERRORS + 'proc f(flag:bool)->void{val a<-make local i64,b<-make local i64;ptr p=if(flag){a}else{b};try{p<-13;missing();{}}catch(e:const MissingReturnError){behave @print(p);};}f(true);f(false);', 0, '13\n13\n', WARN),
+    'selected_target_before_failure': (ERRORS + 'proc f(flag:bool)->void{val a<-make local i64,b<-make local i64;ptr p=if(flag){a}else{b};try{p<-13;missing();{}}catch(e:const MissingReturnError){behave @print(p);};return;}f(true);f(false);', 0, '13\n13\n', WARN),
     'selected_target_after_failure': (ERRORS + 'proc f(flag:bool)->void{val a<-make local i64,b<-make local i64;ptr p=if(flag){a}else{b};try{missing();p<-13;{}}catch(e:const MissingReturnError){behave @print(p);};}', 2, '', 'before definite initialization'),
     'destination_selected_before_own_cleanup': (IO + KEEP_TARGET + 'val a<-make local i64,b<-make local i64;ptr p=a;'
         'retain(p,b)<-{p=b;14};behave @print(a);', 0, '14\n', ''),

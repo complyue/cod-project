@@ -8,7 +8,7 @@ FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
 FIXTURE = FIXTURE.updated(source='''
 using symbol "std:io" @print;
 using "std:exceptions" OutOfMemoryError;
-proc observe(x:u64)->void{behave @print(x);}
+proc observe(x:u64)->void{behave @print(x);return;}
 symbol @x:u64,@y:u64,@f:proc(u64)->u64;
 proc @f(n:u64)->u64{return @x;}
 proc @f(n:T)->u64 where T{return @y;}

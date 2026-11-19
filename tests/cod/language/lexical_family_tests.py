@@ -31,7 +31,7 @@ runner.CASES = {
     'named_recursive_fixed_capture': (IO + TAGS + 'func factory(f:func(u64)->u64)->func(u64,u64)->u64{'
         'func recur[f](x:u64,n:u64)->u64{if(n==0u64){return f(x);}else{return recur(x,n-1u64);};};return recur;}'
         'func classifier:func(u64)->u64=tag;func held=factory(classifier);behave @print(held(1u8,20u64));behave @print(held(1u64,30u64));', 0, '64\n64\n', ''),
-    'named_generic_definition_without_view': ('proc run()->void{func id(x:T)->const T where T{return x;};}run();', 0, '', ''),
+    'named_generic_definition_without_view': ('proc run()->void{func id(x:T)->const T where T{return x;};return;}run();', 0, '', ''),
     'named_open_view_remains_unproved': ('proc run()->void{func id(x:T)->const T where T{return x;};func value=id;}run();', 2, '', 'require an explicit concrete view type'),
     'retained_and_own_types': (IO + TAGS + 'func factory(sample:T)->func(u64)->u64 where T{'
         'return func[](x:U)->u64 where U{val retained:T<-1u8;return tag(retained)+tag(x);};}'
@@ -41,7 +41,7 @@ runner.CASES = {
     'nested_retained_context': (IO + TAGS + 'func factory(sample:T)->func()->func(u64)->u64 where T{return func[]()->func(u64)->u64{'
         'return func[](x:U)->u64 where U{val retained:T<-1u8;return tag(retained)+tag(x);};};}'
         'func held=factory(1f64)();behave @print(held(1u8));', 0, '172\n', ''),
-    'deferred_actual_input_snapshot': (IO + TAGS + 'proc held:proc(u64)->void=proc(x:T)->void where T{behave @print(tag(x));};'
+    'deferred_actual_input_snapshot': (IO + TAGS + 'proc held:proc(u64)->void=proc(x:T)->void where T{behave @print(tag(x));return;};'
         'val x<-1u8;defer held(x);x<-2u8;defer held(1u64);', 0, '64\n8\n', ''),
     'inner_arithmetic_keeps_actual_type': ('func held:func(u64)->u64=func(x:T)->u64 where T{return x+x;};held(200u8);', 70, '', 'u8 addition overflow'),
     'retained_arithmetic_uses_fixed_type': (IO + 'func factory(sample:T)->func(T)->const T where T{return func[](x:T)->const T{return x+x;};}'
@@ -58,7 +58,7 @@ runner.CASES = {
     'unused_dynamic_capture_required': ('symbol @a:u64,@b:u64;proc pick(x:u64)->u64{return @a;}proc pick(x:T)->u64 where T{return @b;}'
         'effect @a<-1u64;proc held:proc(u64)->u64=proc(x:T)->u64 where T{return pick(x);};', 2, '', 'cannot prove an installed binding'),
     'common_exception_actual_identity': (IO + 'using "std:exceptions" Exception;using "std:exceptions" MissingReturnError;'
-        'func missing()->u64{}func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}'
+        'func missing()->u64{}func error()->const MissingReturnError{try{missing():void;}catch(e:const MissingReturnError){return e;};}'
         'func tag(e:MissingReturnError)->u64{return 7u64;}func tag(e:T)->u64 where T{return e.category;}'
         'func held:func(Exception)->u64=func(e:T)->u64 where T{return tag(e);};val e:Exception<-error();behave @print(held(e));', 0, '7\n', '[-Wmissing-return]'),
 }

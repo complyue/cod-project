@@ -4,11 +4,11 @@ from pathlib import Path
 import foundation_tests as runner
 
 PRE='using symbol "std:io" @print;using "std:exceptions" NullPointerException;\n'
-METHODS='proc set(ptr x:i64 in O)->void throws NullPointerException where {owner O}{x<-7;}proc other(ptr x:i64 in O)->void throws NullPointerException where {owner O}{x<-8;}proc ignore(ptr x:i64 in O)->void throws NullPointerException where {owner O}{}\n'
+METHODS='proc set(ptr x:i64 in O)->void throws NullPointerException where {owner O}{x<-7;return;}proc other(ptr x:i64 in O)->void throws NullPointerException where {owner O}{x<-8;return;}proc ignore(ptr x:i64 in O)->void throws NullPointerException where {owner O}{return;}\n'
 BASE=PRE+METHODS+'proc unrelated=ignore;proc selected=set;val x<-make local i64;\n'
 DEFERRED = BASE.replace(' throws NullPointerException', '').replace(
-    '{x<-7;}', '{if(x is not null){x<-7;{}}else{};}').replace(
-    '{x<-8;}', '{if(x is not null){x<-8;{}}else{};}')
+    '{x<-7;return;}', '{if(x is not null){x<-7;{}}else{};return;}').replace(
+    '{x<-8;return;}', '{if(x is not null){x<-8;{}}else{};return;}')
 OBS='behave @print(x);'
 TRY=lambda body:'try{'+body+'}catch(e:const NullPointerException){};'
 runner.CASES={
@@ -22,20 +22,20 @@ runner.CASES={
  'selected_nonwriter':(BASE+TRY('unrelated(x);'+OBS),2,'','before definite initialization'),
  'mixed_implementations_rejected':(BASE+'proc chosen=if(false){selected}else{unrelated};'+TRY('chosen(x);'+OBS),2,'','before definite initialization'),
  'selected_read_obligation':(PRE+METHODS+'proc read(ptr x:i64 in O)->void throws NullPointerException where {owner O}{x;{}}proc selected=read;val x<-make local i64;'+TRY('selected(x);'),2,'','cannot prove initialization'),
- 'generic_argument':(BASE+'proc invoke(f:F,ptr x:i64 in O)->void throws NullPointerException where {F,owner O}{f(x);}'+TRY('invoke(selected,x);'+OBS),0,'7\n',''),
- 'recursive_argument':(BASE+'proc invoke(f:F,ptr x:i64 in O,n:i64)->void throws NullPointerException where {F,owner O}{if(n==0){f(x);}else{invoke(f,x,n-1);};}'+TRY('invoke(selected,x,40);'+OBS),0,'7\n',''),
- 'mutual_argument':(BASE+'proc invoke(f:F,ptr x:i64 in O,n:i64)->void throws NullPointerException where {F,owner O}{if(n==0){f(x);}else{relay(f,x,n-1);};}proc relay(f:F,ptr x:i64 in O,n:i64)->void throws NullPointerException where {F,owner O}{invoke(f,x,n);}'+TRY('invoke(selected,x,40);'+OBS),0,'7\n',''),
- 'captured_argument':(BASE+'proc wrap=proc[selected](ptr y:i64 in O)->void throws NullPointerException where {owner O}{selected(y);};'+TRY('wrap(x);'+OBS),0,'7\n',''),
- 'capture_from_named_definition':(BASE+'proc wrap=proc[set](ptr y:i64 in O)->void throws NullPointerException where {owner O}{set(y);};'+TRY('wrap(x);'+OBS),0,'7\n',''),
+ 'generic_argument':(BASE+'proc invoke(f:F,ptr x:i64 in O)->void throws NullPointerException where {F,owner O}{f(x);return;}'+TRY('invoke(selected,x);'+OBS),0,'7\n',''),
+ 'recursive_argument':(BASE+'proc invoke(f:F,ptr x:i64 in O,n:i64)->void throws NullPointerException where {F,owner O}{if(n==0){f(x);}else{invoke(f,x,n-1);};return;}'+TRY('invoke(selected,x,40);'+OBS),0,'7\n',''),
+ 'mutual_argument':(BASE+'proc invoke(f:F,ptr x:i64 in O,n:i64)->void throws NullPointerException where {F,owner O}{if(n==0){f(x);}else{relay(f,x,n-1);};return;}proc relay(f:F,ptr x:i64 in O,n:i64)->void throws NullPointerException where {F,owner O}{invoke(f,x,n);return;}'+TRY('invoke(selected,x,40);'+OBS),0,'7\n',''),
+ 'captured_argument':(BASE+'proc wrap=proc[selected](ptr y:i64 in O)->void throws NullPointerException where {owner O}{selected(y);return;};'+TRY('wrap(x);'+OBS),0,'7\n',''),
+ 'capture_from_named_definition':(BASE+'proc wrap=proc[set](ptr y:i64 in O)->void throws NullPointerException where {owner O}{set(y);return;};'+TRY('wrap(x);'+OBS),0,'7\n',''),
  'returned_argument':(BASE+'func identity(f:F)->const F where F{return f;}proc chosen=identity(selected);'+TRY('chosen(x);'+OBS),0,'7\n',''),
  'recursive_return':(BASE+'func identity(f:F,n:i64)->const F where F{if(n==0){return f;}else{return identity(f,n-1);};}proc chosen=identity(selected,40);'+TRY('chosen(x);'+OBS),0,'7\n',''),
- 'returned_capture':(BASE+'func wrap(f:F)->const F where F{return proc[f](ptr y:i64 in O)->void throws NullPointerException where {owner O}{f(y);};}proc chosen=wrap(selected);'+TRY('chosen(x);'+OBS),0,'7\n',''),
- 'nested_captures':(BASE+'func wrap(f:F)->const F where F{return proc[f](ptr y:i64 in O)->void throws NullPointerException where {owner O}{f(y);};}proc chosen=wrap(wrap(selected));'+TRY('chosen(x);'+OBS),0,'7\n',''),
- 'growing_captures':(BASE+'func wrap(f:F)->const F where F{return proc[f](ptr y:i64 in O)->void throws NullPointerException where {owner O}{f(y);};}for(i in 0..20){{selected<-wrap(selected);}};'+TRY('selected(x);'+OBS),0,'7\n',''),
+ 'returned_capture':(BASE+'func wrap(f:F)->const F where F{return proc[f](ptr y:i64 in O)->void throws NullPointerException where {owner O}{f(y);return;};}proc chosen=wrap(selected);'+TRY('chosen(x);'+OBS),0,'7\n',''),
+ 'nested_captures':(BASE+'func wrap(f:F)->const F where F{return proc[f](ptr y:i64 in O)->void throws NullPointerException where {owner O}{f(y);return;};}proc chosen=wrap(wrap(selected));'+TRY('chosen(x);'+OBS),0,'7\n',''),
+ 'growing_captures':(BASE+'func wrap(f:F)->const F where F{return proc[f](ptr y:i64 in O)->void throws NullPointerException where {owner O}{f(y);return;};}for(i in 0..20){{selected<-wrap(selected):void;}};'+TRY('selected(x);'+OBS),0,'7\n',''),
  'deferred_selection':(DEFERRED+'ptr output=x;{{defer selected(output);}};'+OBS,0,'7\n',''),
- 'deferred_higher_order':(BASE+'proc invoke(f:F,ptr x:i64 in O)->void throws NullPointerException where {F,owner O}{defer f(x);}'+TRY('invoke(selected,x);'+OBS),0,'7\n',''),
+ 'deferred_higher_order':(BASE+'proc invoke(f:F,ptr x:i64 in O)->void throws NullPointerException where {F,owner O}{defer f(x);return;}'+TRY('invoke(selected,x);'+OBS),0,'7\n',''),
  'delayed_selection':(DEFERRED+'ptr output=x;{{defer{selected(output);};}};'+OBS,0,'7\n',''),
- 'borrowed_holder_replacement':(BASE+'proc install(ref f:F in O,replacement:F)->void where {F,owner O}{f<-replacement;}proc next=other;install(selected,next);'+TRY('selected(x);'+OBS),0,'8\n',''),
+ 'borrowed_holder_replacement':(BASE+'proc install(ref f:F in O,replacement:F)->void where {F,owner O}{f<-replacement;return;}proc next=other;install(selected,next);'+TRY('selected(x);'+OBS),0,'8\n',''),
  'borrowed_nonwriter_replacement_rejected':(BASE+'proc install(ref f:F in O,replacement:F)->void where {F,owner O}{f<-replacement;}install(selected,unrelated);'+TRY('selected(x);'+OBS),2,'','before definite initialization'),
  'returned_holder_replacement_rejected':(BASE+'func holder(ref f:F in O)->ref F in O where {F,owner O}{return f;}holder(selected)<-unrelated;'+TRY('selected(x);'+OBS),2,'','before definite initialization'),
  'pointer_retarget_rejected':(BASE+'ptr p=selected;p=unrelated;'+TRY('p(x);'+OBS),2,'','before definite initialization'),

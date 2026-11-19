@@ -12,18 +12,19 @@ using "std:exceptions" MissingReturnError;
 using "std:exceptions" OutOfMemoryError;
 func missing()->const i64 {}
 func error()->const MissingReturnError {
-  try{missing();}catch(e:const MissingReturnError){return e;};
+  try{missing():void;}catch(e:const MissingReturnError){return e;};
 }
 func chain(e:MissingReturnError)->const MissingReturnError {
   return try{throw e from e;}catch(e:const MissingReturnError){e};
 }
-proc observe_in_helper(value:T)->void where T{defer{behave @print(value.cause_count);};}
+proc observe_in_helper(value:T)->void where T{defer{behave @print(value.cause_count);};return;}
 proc snapshots()->void {
   val saved<-error();
   for(i in 0..4){
     saved<-chain(saved);
     try{throw saved;}catch(e){defer{observe_in_helper(e);};};
   };
+  return;
 }
 snapshots();
 {{try{throw error();}catch(e){defer{behave @print(10u64);};};}};
@@ -34,6 +35,7 @@ proc failing()->void {
     defer{behave @print(e.cause_count);};
     defer{behave @print(9001u64);observe_in_helper(e);};
   };
+  return;
 }
 try{failing();}catch(e:const OutOfMemoryError){behave @print(e.cause_count);behave @print(9002u64);};
 ''')

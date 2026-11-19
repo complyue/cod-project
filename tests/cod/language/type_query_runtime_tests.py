@@ -12,6 +12,7 @@ proc type_queries(f:func(u64)->const u64)->void{
  val y<-make local typeof(unproved(true)){true};
  observe(9011u64);
  observe(x);if(y){observe(30u64);}else{};
+ return;
 }
 proc query_catch()->void{
  try{throw bound_error();}catch(e:const MissingReturnError){
@@ -19,6 +20,7 @@ proc query_catch()->void{
   defer{{val x<-make local typeof(e.category){31u64};observe(x);}};
   observe(9081u64);
  };
+ return;
 }
 type_queries(wrap(base));query_catch();observe(9000u64);
 ''')

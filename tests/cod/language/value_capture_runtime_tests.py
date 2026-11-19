@@ -7,7 +7,7 @@ SOURCE = '''
 using symbol "std:io" @print;
 using "std:exceptions" OutOfMemoryError;
 using "std:exceptions" MissingReturnError;
-proc observe(x:u64)->void{behave @print(x);}
+proc observe(x:u64)->void{behave @print(x);return;}
 func one()->const u64{return 1u64;}
 func two()->const u64{return 2u64;}
 func three()->const u64{return 3u64;}
@@ -16,13 +16,13 @@ func wrap(f:func()->const u64)->func()->const u64{return func[f]()->const u64{re
 proc prefix_step(val failure:u64)->void{
  func left=wrap(one);func right=wrap(two);
  proc action=proc[left,right](ref output:u64 in O)->void where {owner O}{
-  observe(70000u64);output<-1u64;left<-wrap(two);right<-wrap(one);
+  observe(70000u64);output<-1u64;left<-wrap(two);right<-wrap(one);return;
  };
  val output<-0u64;
  observe(10000u64+failure);
  try{action(output);}catch(e:const OutOfMemoryError){};
  if(output==0u64){observe(70001u64);}else{observe(70002u64);};
- observe(20000u64);observe(left());observe(right());
+ observe(20000u64);observe(left());observe(right());return;
 }
 for(index in 1u64..13u64){prefix_step(index);};
 proc boundary(val scenario:u64)->void{
@@ -32,9 +32,9 @@ proc boundary(val scenario:u64)->void{
    left<-{left<-right;observe(40000u64+scenario);if(scenario==1u64){missing();{}}else{};last};{}
   }catch(e:const MissingReturnError){observe(left());}
    catch(e:const OutOfMemoryError){observe(left());};
-  observe(left());
+  observe(left());return;
  };
- action();observe(50000u64);observe(left());observe(right());observe(last());
+ action();observe(50000u64);observe(left());observe(right());observe(last());return;
 }
 boundary(1u64);boundary(2u64);boundary(3u64);
 proc return_preparation()->void{
@@ -46,7 +46,7 @@ proc return_preparation()->void{
  };
  observe(60000u64);
  try{produce(true);{}}catch(e:const OutOfMemoryError){observe(60002u64);};
- observe(retained());observe(produce(false)());
+ observe(retained());observe(produce(false)());return;
 }
 return_preparation();
 proc readonly_observation()->void{
@@ -54,7 +54,7 @@ proc readonly_observation()->void{
  func read=func[retained]()->const u64{return retained();};
  observe(30000u64);
  for(index in 0u64..100u64){read();};
- observe(30001u64);observe(read());
+ observe(30001u64);observe(read());return;
 }
 readonly_observation();
 '''

@@ -6,7 +6,7 @@ from native_test_support import NativeFixture, run_native
 SOURCE = '''
 using symbol "std:io" @print;
 using "std:exceptions" OutOfMemoryError;
-proc observe(value:u64)->void{behave @print(value);}
+proc observe(value:u64)->void{behave @print(value);return;}
 func one()->const u64{return 1u64;}
 func two()->const u64{return 2u64;}
 func wrap(value:func()->const u64)->func()->const u64{
@@ -19,10 +19,11 @@ proc attempt(val failure:u64)->void{
   {{
    observe(70000u64);
    defer{observe(80000u64);observe(left());observe(right());observe(seed);};
-   left<-wrap(two);right<-wrap(one);seed<-9u64;
+   left<-wrap(two);right<-wrap(one);seed<-9u64:void;
   }};
  }catch(e:const OutOfMemoryError){observe(70001u64);};
  observe(left());observe(right());observe(seed);observe(20000u64);
+ return;
 }
 for(index in 1u64..9u64){attempt(index);};
 proc result_failure()->void{
@@ -32,6 +33,7 @@ proc result_failure()->void{
   observe(99999u64);
  }catch(e:const OutOfMemoryError){observe(30002u64);};
  observe(original());observe(30003u64);
+ return;
 }
 result_failure();
 '''

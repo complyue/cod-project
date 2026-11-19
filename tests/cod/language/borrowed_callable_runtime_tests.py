@@ -6,7 +6,7 @@ import captured_callable_runtime_tests as fixture
 FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
 FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 func borrow_holder(ref f:func(u64)->const u64 in O)->ref (func(u64)->const u64) in O where {owner O}{return f;}
-proc replace_borrowed(ref f:func(u64)->const u64 in O,ref g:func(u64)->const u64 in P)->void where {owner O,owner P}{f<-g;}
+proc replace_borrowed(ref f:func(u64)->const u64 in O,ref g:func(u64)->const u64 in P)->void where {owner O,owner P}{f<-g;return;}
 func walk_borrow(select:F,ref f:func(u64)->const u64 in O,n:u64)->ref (func(u64)->const u64) in O where {F,owner O}{
  if(n==0u64){return select(f);}else{return walk_borrow(select,f,n-1u64);};
 }
@@ -20,9 +20,9 @@ func walk_borrow(select:F,ref f:func(u64)->const u64 in O,n:u64)->ref (func(u64)
  observe(9030u64);try{captured({observe(9999u64);f});{}}catch(e:const OutOfMemoryError){observe(9031u64);};
  observe(9050u64);try{defer writer(f,g);}catch(e:const OutOfMemoryError){observe(9051u64);};
  f<-wrap(base);ptr write_target=f,source_target=g;
- {{defer writer(write_target,source_target);write_target<-wrap(wrap(base));}};observe(f(4u64));
+ {{defer writer(write_target,source_target);write_target<-wrap(wrap(base)):void;}};observe(f(4u64));
  ptr holder=f;ref total:u64=0u64;observe(9010u64);
- for(i in 0u64..10000u64){{ptr live=select(holder);total<-total+live(i);}};
+ for(i in 0u64..10000u64){{ptr live=select(holder);total<-total+live(i):void;}};
  observe(9011u64);observe(total);
  observe(walk_borrow(select,f,40u64)(5u64));
 }};

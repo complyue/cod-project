@@ -12,6 +12,7 @@ func repeated(ptr lhs:T in A,ptr rhs:T in B,n:u64)->bool where {T,owner A,owner 
 }
 proc identity_later(ptr lhs:u64 in A,ptr rhs:u64 in B)->void where {owner A,owner B}{
  if(lhs is rhs){observe(1u64);}else{observe(0u64);};
+ return;
 }
 {{
  func kept=wrap(base);

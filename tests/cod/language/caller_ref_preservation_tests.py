@@ -11,7 +11,7 @@ DIAGNOSTIC = 'caller ref preservation'
 
 
 def method(body):
-    return 'func (<=>)(ptr a:i64 in O,ptr b:i64 in O)->void where {owner O}{' + body + '}'
+    return 'func (<=>)(ptr a:i64 in O,ptr b:i64 in O)->void where {owner O}{' + body + '{}}'
 
 
 def history_result(history):

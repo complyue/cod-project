@@ -61,7 +61,7 @@ for name, change, rejected in (
 ):
     relay=RELAY.replace('Exception','u64')
     source=fixture.IO+relay+fixture.REF+'proc run(flag:bool,other:bool)->void{val item<-7u64;ptr selected=if(flag){item}else{null in here};ptr saved=relay(selected);'+change
-    source+='if(saved is not null){behave @print(read(selected));}else{behave @print(8u64);};}'
+    source+='if(saved is not null){behave @print(read(selected));}else{behave @print(8u64);};return;}'
     source+='run(true,false);run(false,true);'
     runner.CASES[name]=(source,2 if rejected else 0,'' if rejected else '7\n8\n','proven non-null' if rejected else '')
 
@@ -70,7 +70,7 @@ for name, operand, declaration, rejected in (
     ('raw_result_guard_rebound', 'selected,{selected=null;0u64}', RELAY.replace('Exception','u64').replace('in O)', 'in O,ignored:u64)'), True),
 ):
     source=fixture.IO+declaration+fixture.REF+'proc run(flag:bool)->void{val item<-7u64;ptr selected=if(flag){item}else{null in here};'
-    source+='if(relay('+operand+') is not null){behave @print(read(selected));}else{behave @print(8u64);};}'
+    source+='if(relay('+operand+') is not null){behave @print(read(selected));}else{behave @print(8u64);};return;}'
     source+='run(true);run(false);'
     runner.CASES[name]=(source,2 if rejected else 0,'' if rejected else '7\n8\n','proven non-null' if rejected else '')
 

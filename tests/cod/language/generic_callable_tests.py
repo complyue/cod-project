@@ -23,7 +23,7 @@ runner.CASES={
  'reject_distinct_callback_inputs':('func first(x:i64,y:bool)->const i64{return x;}func use(f:func(T,T)->const T)->const i64 where T{return 0;}use(first);',2,'','no applicable method'),
  'const_parameter_contract':(IO+'func read(x:const i64)->const i64{return x;}func use(f:func(const T)->const T,x:T)->const T where T{return f(x);}behave @print(use(read,9));',0,'9\n',''),
  'const_parameter_not_erased':('func read(x:const i64)->const i64{return x;}'+APPLY+'apply(read,1);',2,'','callable view contract'),
- 'procedure_parameter':(IO+'proc emit(x:i64)->void{behave @print(x);}proc use(f:proc(T)->void,x:T)->void where T{f(x);}use(emit,10);',0,'10\n',''),
+ 'procedure_parameter':(IO+'proc emit(x:i64)->void{behave @print(x);return;}proc use(f:proc(T)->void,x:T)->void where T{f(x);return;}use(emit,10);',0,'10\n',''),
  'callable_category_not_erased':(IO+'proc emit(x:i64)->const i64{behave @print(x);return x;}'+APPLY+'apply(emit,1);',2,'','callable view contract'),
  'checked_throws_contract':(IO+EX+'func f(x:i64)->const i64 throws NullPointerException{return x;}func use(f:func(T)->const T throws NullPointerException,x:T)->const T throws NullPointerException where T{return f(x);}try{behave @print(use(f,11));}catch(e:const NullPointerException){};',0,'11\n',''),
  'throws_contract_not_erased':(EX+'func f(x:i64)->const i64 throws NullPointerException{return x;}'+APPLY+'apply(f,1);',2,'','required checked exception'),
@@ -37,7 +37,7 @@ runner.CASES={
  'recursive_higher_order':(IO+BASE+'func recurse(f:func(T)->const T,x:T,n:i64)->const T where T{if(n==0){return f(x);}else{return recurse(f,x,n-1);};}behave @print(recurse(inc,14,60));behave @print(recurse(yes,true,20));',0,'15\ntrue\n',''),
  'void_result_is_determined':(IO+'func empty()->const void{}func read(f:func()->const T)->const T where T{return f();}read(empty);behave @print(16);',0,'16\n',''),
  'void_result_normal_completion':(IO+'func empty()->const void{}func finish(f:func()->const T)->const T where T{f();}finish(empty);behave @print(17);',0,'17\n',''),
- 'mixed_void_and_value_completion':(IO+EX+'func empty()->const void{}func number()->const i64{return 1;}func finish(f:func()->const T)->const T where T{f();}finish(empty);try{finish(number);{}}catch(e:const MissingReturnError){behave @print(18);};',0,'18\n','callable may finish without an explicit return'),
+ 'mixed_void_and_value_completion':(IO+EX+'func empty()->const void{}func number()->const i64{return 1;}func finish(f:func()->const T)->const T where T{f():void;}finish(empty);try{finish(number);{}}catch(e:const MissingReturnError){behave @print(18);};',0,'18\n','callable may finish without a result'),
  'void_does_not_equal_unbound':('func factory(f:func()->const U)->const T where {T,U}{}func empty()->const void{}factory(empty);',2,'','type parameter is not determined'),
 }
 
@@ -51,7 +51,7 @@ runner.CASES.update({
  'nested_common_exception_generic':(EX+'func f(e:Exception)->const u64{return e.category;}func use(f:func(T)->const u64)->const i64 where T{return 0;}use(f);',0,'',''),
  'alpha_equivalent_independent_binders':('func pick(f:func(T,U)->const T)->const i64 where {T,U}{return 0;}func pick(f:func(B,A)->const B)->const i64 where {A,B}{return 1;}',2,'','duplicate method signature'),
  'deferred_generic_result':(IO+'func empty()->const void{}func number()->const i64{return 20;}func finish(f:func()->const T)->const T where T{defer{return f();};}finish(empty);behave @print(finish(number));',0,'20\n',''),
- 'captured_value_missing_return':(IO+EX+'func number()->const i64{return 1;}func wrap(f:func()->const i64)->func()->const i64{return func[f]()->const i64{return f();};}func empty()->const void{}func finish(f:func()->const T)->const T where T{f();}finish(empty);try{finish(wrap(number));{}}catch(e:const MissingReturnError){behave @print(21);};',0,'21\n','callable may finish without an explicit return'),
+ 'captured_value_missing_return':(IO+EX+'func number()->const i64{return 1;}func wrap(f:func()->const i64)->func()->const i64{return func[f]()->const i64{return f();};}func empty()->const void{}func finish(f:func()->const T)->const T where T{f():void;}finish(empty);try{finish(wrap(number));{}}catch(e:const MissingReturnError){behave @print(21);};',0,'21\n','callable may finish without a result'),
 })
 runner.CASE_SHADOWS = {
     'checked_throws_contract': ['f'],

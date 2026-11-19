@@ -7,14 +7,14 @@ PRE = 'using symbol "std:io" @print;using "std:exceptions" NullPointerException;
 VALUES = 'func seven()->i64{return 7;}func one()->i64{return 1;}'
 
 def program(signature, body, use):
-    return PRE+VALUES+'proc run()->void{func a=seven;func b=one;'+signature+'{a();b();'+body+'};'+use+'}run();'
+    return PRE+VALUES+'proc run()->void{func a=seven;func b=one;'+signature+'{a();b();'+body+'};'+use+'return;}run();'
 
 PTR = 'func f[a,b](ptr x:i64 in O,ptr y:i64 in O)->ptr i64 in O where {owner O}'
 SET = 'func f[a,b](ptr x:i64 in O,ptr y:i64 in O)->ptr i64 in O throws NullPointerException where {owner O}'
 READ = 'func f[a,b](ptr x:i64 in O,ptr y:i64 in O)->i64 throws NullPointerException where {owner O}'
 TRY = 'catch(e:const NullPointerException){};'
 WRITER = 'proc f[a,b](ptr x:i64 in O)->void throws NullPointerException where {owner O}'
-PLAIN_WRITER = 'proc plain(ptr x:i64 in O)->void throws NullPointerException where {owner O}{x<-5;}'
+PLAIN_WRITER = 'proc plain(ptr x:i64 in O)->void throws NullPointerException where {owner O}{x<-5;return;}'
 PLAIN_SELECT = 'func plain(ptr x:i64 in O,ptr y:i64 in O)->ptr i64 in O where {owner O}{return x;}'
 runner.CASES = {
  'selected_write_and_return':(program(SET,'x<-a();return x;','val x<-make local i64,y<-make local i64;try{behave @print(f(x,y));}'+TRY),0,'7\n',''),
@@ -40,10 +40,10 @@ runner.CASES = {
      'return y;','val x<-make local i64;{{val y<-9;try{behave @print(f(x,y));}'+TRY+'}};'),0,'9\n',''),
  'copied_callable_preserves_summary':(program(SET,'y<-a();return y;','func copy=f;val x<-make local i64,y<-make local i64;try{behave @print(copy(x,y));}'+TRY),0,'7\n',''),
  'prepared_deferred_writer':(program('proc f[a,b](ptr x:i64 in O)->void throws NullPointerException where {owner O}',
-     'x<-a();','val x<-make local i64;try{ {{defer f(x);}};behave @print(x);}'+TRY),0,'7\n',''),
- 'different_capture_counts_share_write_summary':(program(WRITER,'x<-a();',
+     'x<-a();return;','val x<-make local i64;try{ {{defer f(x);}};behave @print(x);}'+TRY),0,'7\n',''),
+ 'different_capture_counts_share_write_summary':(program(WRITER,'x<-a();return;',
      'val x<-make local i64;proc writer=plain;for(i in 0..2){try{writer(x);behave @print(x);}'+TRY+'writer<-f;};')+PLAIN_WRITER,0,'5\n7\n',''),
- 'nonwriting_capture_alternative_rejected':(program(WRITER,'',
+ 'nonwriting_capture_alternative_rejected':(program(WRITER,'return;',
      'val x<-make local i64;proc writer=plain;for(i in 0..2){try{writer(x);behave @print(x);}'+TRY+'writer<-f;};')+PLAIN_WRITER,2,'','before definite initialization'),
  'different_capture_counts_share_return_summary':(program(PTR,'return y;',
      'val x<-8,y<-9;func select=plain;for(i in 0..2){try{behave @print(select(x,y));}'+TRY+'select<-f;};')+PLAIN_SELECT,0,'8\n9\n',''),

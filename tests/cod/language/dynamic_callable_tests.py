@@ -6,7 +6,7 @@ import foundation_tests as runner
 IO = 'using symbol "std:io" @print;'
 X = 'symbol @x:u64;proc read()->u64{return @x;}'
 P = 'symbol @p:proc()->u64;'
-MISSING = 'using "std:exceptions" MissingReturnError;func missing()->u64{}func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}'
+MISSING = 'using "std:exceptions" MissingReturnError;func missing()->u64{}func error()->const MissingReturnError{try{missing():void;}catch(e:const MissingReturnError){return e;};}'
 runner.CASES = {
     'current_and_replay': (IO+X+P+'effect @x<-1u64;proc local=read;effect @p=local;effect @x<-2u64;'
         'behave @print(local());behave @print(behave @p());behave @print(perform @p());behave @print(@x);', 0, '2\n2\n1\n2\n', ''),
@@ -47,11 +47,11 @@ runner.CASES = {
         'effect @x<-3u64;effect @p=read;behave @print(perform @p());', 0, '3\n', ''),
     'iteration_restoration': (IO+X+P+'effect @x<-1u64;effect @p=read;for(i in 0u64..3u64){'
         'effect @x<-i+2u64;effect @p=read;behave @print(perform @p());};behave @print(perform @p());', 0, '2\n3\n4\n1\n', ''),
-    'defer_callee_snapshot': (IO+X+'symbol @p:proc()->void;proc show()->void{behave @print(@x);}'
+    'defer_callee_snapshot': (IO+X+'symbol @p:proc()->void;proc show()->void{behave @print(@x);return;}'
         'effect @x<-1u64;effect @p=show;defer perform @p();defer behave @p();effect @x<-2u64;effect @p=show;', 0, '2\n1\n', ''),
-    'defer_after_iteration': (IO+X+'symbol @p:proc()->void;proc show()->void{behave @print(@x);}'
+    'defer_after_iteration': (IO+X+'symbol @p:proc()->void;proc show()->void{behave @print(@x);return;}'
         'effect @x<-1u64;for(i in 0u64..3u64){effect @x<-i+2u64;effect @p=show;defer perform @p();};', 0, '4\n3\n2\n', ''),
-    'delayed_block_reads_final_callee': (IO+X+'symbol @p:proc()->void;proc show()->void{behave @print(@x);}'
+    'delayed_block_reads_final_callee': (IO+X+'symbol @p:proc()->void;proc show()->void{behave @print(@x);return;}'
         'effect @x<-1u64;effect @p=show;defer {perform @p();};effect @x<-2u64;effect @p=show;', 0, '2\n', ''),
     'callee_selected_before_operand_effect': (IO+X+'symbol @p:proc(u64)->u64;proc a(v:u64)->u64{return @x+v;}'
         'effect @x<-1u64;effect @p=a;behave @print(perform @p({effect @x<-2u64;effect @p=a;10u64}));'

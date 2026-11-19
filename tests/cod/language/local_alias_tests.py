@@ -7,7 +7,7 @@ import foundation_tests as runner
 IO = 'using symbol "std:io" @print;\n'
 ERRORS = IO + '''using "std:exceptions" MissingReturnError;
 func missing()->const i64{}
-func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}
+func error()->const MissingReturnError{try{missing():void;}catch(e:const MissingReturnError){return e;};}
 '''
 WARN = '[-Wmissing-return]'
 runner.CASES = {
@@ -40,9 +40,9 @@ runner.CASES = {
     'outer_owner_survives': (IO + 'val x<-1;const ptr p={{x}};p<-12;behave @print(x);', 0, '12\n', ''),
     'source_effect_once': (IO + 'val x<-1;const ptr p={behave @print(20);x};p<-2;behave @print(x);', 0, '20\n2\n', ''),
     'view_cleanup_does_not_read': (IO + 'val x<-make local i64;const ptr p={{defer behave @print(21);x}};p<-3;behave @print(x);', 0, '21\n3\n', ''),
-    'same_place_conditional': (IO + 'proc f(flag:bool)->void{val x<-make local i64;const ptr a=x,b=x;const ptr p=if(flag){a}else{b};p<-4;behave @print(x);}f(true);f(false);', 0, '4\n4\n', ''),
+    'same_place_conditional': (IO + 'proc f(flag:bool)->void{val x<-make local i64;const ptr a=x,b=x;const ptr p=if(flag){a}else{b};p<-4;behave @print(x);return;}f(true);f(false);', 0, '4\n4\n', ''),
     'selected_target': (IO + 'val x<-1,y<-2;const ptr p=if(true){x}else{y};behave @print(p);', 0, '1\n', ''),
-    'alias_branch_initialization': (IO + 'proc f(flag:bool)->void{val x<-make local i64;const ptr p=x;if(flag){p<-5;}else{x<-6;};behave @print(p);}f(true);f(false);', 0, '5\n6\n', ''),
+    'alias_branch_initialization': (IO + 'proc f(flag:bool)->void{val x<-make local i64;const ptr p=x;if(flag){p<-5;}else{x<-6;};behave @print(p);return;}f(true);f(false);', 0, '5\n6\n', ''),
     'alias_branch_missing_write': ('proc f(flag:bool)->void{val x<-make local i64;const ptr p=x;if(flag){p<-5;{}}else{};x;}', 2, '', 'before definite initialization'),
     'alias_loop_write': (IO + 'val x<-make local i64;const ptr p=x;for(i in 0..1){p<-i;};behave @print(x);', 0, '0\n', ''),
     'alias_loop_control_capture': ('for(i in 0..1){{{const ptr p=i;defer{p;};}}};', 2, '', 'cannot capture loop-control binding'),
@@ -61,7 +61,7 @@ runner.CASES = {
     'alias_then_catch_storage': (ERRORS + 'val x<-1;const ptr p=x;try{missing();{}}catch(e:const MissingReturnError){behave @print(e.category);};', 0, '5\n', WARN),
     'caught_alias_snapshot': (ERRORS + '{{for(i in 0..2){try{missing();{}}catch(e:const MissingReturnError){{{const ptr p=e;defer{behave @print(p.category);};}}};};}};', 0, '5\n5\n', WARN),
     'caught_alias_expired': (ERRORS + 'try{throw error();}catch(e:const MissingReturnError){const ptr p=e;{};};p;', 2, '', "lexical owner has ended"),
-    'mutable_exception_alias': (ERRORS + 'val e<-error();const ptr p=e;{{defer{behave @print(p.category);};p<-error();}};', 0, '5\n', WARN),
+    'mutable_exception_alias': (ERRORS + 'val e<-error();const ptr p=e;{{defer{behave @print(p.category);};p<-error():void;}};', 0, '5\n', WARN),
     'rethrow_alias': (ERRORS + 'try{try{missing();{}}catch(e:const MissingReturnError){const ptr p=e;throw p;};}catch(e:const MissingReturnError){behave @print(e.category);};', 0, '5\n', WARN),
 }
 runner.CASE_SHADOWS = {

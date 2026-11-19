@@ -10,8 +10,8 @@ FIXTURE = FIXTURE.updated(source='''
 using symbol "std:io" @print;
 using "std:exceptions" OutOfMemoryError;
 using "std:exceptions" MissingReturnError;
-proc observe(x:u64)->void{behave @print(x);}
-proc register_during_helper()->void{observe(9001u64);defer observe(99u64);}
+proc observe(x:u64)->void{behave @print(x);return;}
+proc register_during_helper()->void{observe(9001u64);defer observe(99u64);return;}
 proc retained()->const u64 {
   defer catch(e:const OutOfMemoryError){observe(1u64);observe(9002u64);};
   defer register_during_helper();

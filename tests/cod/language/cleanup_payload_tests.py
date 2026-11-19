@@ -4,8 +4,8 @@ from pathlib import Path
 import foundation_tests as runner
 from exception_projection_tests import IO, ERROR, WARN, COVER
 
-COPY='func set(ref target:Exception in O,incoming:Exception)->void where {owner O}{target<-incoming;}'
-BORROW='func copy(ref target:Exception in O,ref incoming:const Exception in P)->void where {owner O,owner P}{target<-incoming;}'
+COPY='func set(ref target:Exception in O,incoming:Exception)->void where {owner O}{target<-incoming:void;}'
+BORROW='func copy(ref target:Exception in O,ref incoming:const Exception in P)->void where {owner O,owner P}{target<-incoming:void;}'
 BASE='val payload:Exception<-checked(),item:Exception<-checked();'
 runner.CASES={}
 def safe(name,body,helpers='',target='payload',output='5\n'):
@@ -18,10 +18,10 @@ safe('block',BASE+'{{defer{payload<-unchecked();{}};}};')
 safe('prepared',BASE+'{{defer set(payload,unchecked());}};')
 safe('prepared_builtin',BASE+'{{defer (<-)(payload,unchecked());}};')
 safe('prepared_intrinsic',BASE+'{{defer intrinsic (<-)(payload,unchecked());}};')
-safe('copied_registration_value',BASE+'item<-unchecked();{{defer set(payload,item);item<-checked();}};')
-safe('borrowed_invocation_value',BASE+'{{defer copy(payload,item);item<-unchecked();}};')
-safe('borrowed_selected_address',BASE+'val other:Exception<-checked();ptr selected=item;{{defer copy(payload,selected);selected=other;item<-unchecked();}};')
-checked('block_current_binding_join',BASE+'val other:Exception<-unchecked();ptr selected=item;{{defer{copy(payload,selected);};selected=other;}};',output='5\n')
+safe('copied_registration_value',BASE+'item<-unchecked();{{defer set(payload,item);item<-checked():void;}};')
+safe('borrowed_invocation_value',BASE+'{{defer copy(payload,item);item<-unchecked():void;}};')
+safe('borrowed_selected_address',BASE+'val other:Exception<-checked();ptr selected=item;{{defer copy(payload,selected);selected=other;item<-unchecked():void;}};')
+checked('block_current_binding_join',BASE+'val other:Exception<-unchecked();ptr selected=item;{{defer{copy(payload,selected);};selected=other:void;}};',output='5\n')
 safe('prepared_lifo',BASE+'{{defer set(payload,unchecked());defer set(payload,checked());}};')
 safe('block_lifo',BASE+'{{defer{payload<-unchecked();{}};defer{payload<-checked();{}};}};')
 safe('mixed_lifo',BASE+'{{defer copy(payload,item);defer{item<-unchecked();{}};}};')
@@ -42,17 +42,17 @@ safe('recursive_prepared',BASE+'{{defer recursive(payload,unchecked(),10u64);}};
 safe('recursive_block',BASE+'recursive(payload,unchecked(),10u64);','func recursive(ref target:Exception in O,value:Exception,n:u64)->void where {owner O}{defer set(target,value);if(n!=0u64){recursive(target,value,n-1u64);}else{};}')
 safe('loop_queue',BASE+'val failure<-unchecked();{{for(i in 0u64..3u64){defer set(payload,failure);};}};')
 safe('callable_prepared',BASE+'func writer=set;{{defer writer(payload,unchecked());}};')
-safe('symbolic_prepared',BASE+'{{defer behave @writer(payload,unchecked());}};','proc @writer(ref target:Exception in O,value:Exception)->void where {owner O}{target<-value;}effect @writer;')
+safe('symbolic_prepared',BASE+'{{defer behave @writer(payload,unchecked());}};','proc @writer(ref target:Exception in O,value:Exception)->void where {owner O}{target<-value;return;}effect @writer;')
 safe('empty_cleanup_preserves',BASE+'payload<-unchecked();{{defer{};}};')
 safe('registration_does_not_write',BASE+'payload<-unchecked();{{defer set(payload,checked());try{throw payload;}catch(e:const Exception){behave @print(8);};}};payload<-unchecked();',output='8\n5\n')
 safe('prepared_swap',BASE+'item<-unchecked();{{defer (<->)(payload,item);}};')
 safe('block_swap',BASE+'item<-unchecked();{{defer{payload<->item;};}};')
-checked('copied_checked_snapshot',BASE+'{{defer set(payload,item);item<-unchecked();}};')
-checked('borrowed_late_checked',BASE+'item<-unchecked();{{defer copy(payload,item);item<-checked();}};')
+checked('copied_checked_snapshot',BASE+'{{defer set(payload,item);item<-unchecked():void;}};')
+checked('borrowed_late_checked',BASE+'item<-unchecked();{{defer copy(payload,item);item<-checked():void;}};')
 checked('later_cleanup_replaces',BASE+'{{defer{payload<-checked();{}};defer set(payload,unchecked());}};')
 checked('conditional_identity',BASE+'{{if(false){defer set(payload,unchecked());}else{};}};')
 checked('zero_iteration',BASE+'{{for(i in 0u64..0u64){defer set(payload,unchecked());};}};')
-checked('future_target',BASE+'select_future(payload);','func select_future(ref output:Exception in O)->void where {owner O}{val first:Exception<-checked();ptr selected=first;defer{output<-first;{}};defer{selected<-unchecked();{}};val future:Exception<-checked();selected=future;}')
+checked('future_target',BASE+'select_future(payload);','func select_future(ref output:Exception in O)->void where {owner O}{val first:Exception<-checked();ptr selected=first;defer{output<-first;{}};defer{selected<-unchecked();{}};val future:Exception<-checked();selected=future:void;}')
 runner.CASE_ARGUMENTS={}
 runner.CASE_SHADOWS={name:[] for name in runner.CASES}
 runner.EXTRA_SOURCES=[Path(__file__),Path(__file__).with_name('exception_projection_tests.py')]

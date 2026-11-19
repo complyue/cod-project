@@ -93,7 +93,7 @@ safe('later_argument_keeps_snapshot', definitions=LATER, setup='ptr saved=p;', c
 ALTERNATIVES = CHECK+SIGNATURE.replace('has','other')+'{return !(a is null);}'
 safe('all_callable_alternatives', definitions=ALTERNATIVES, setup='func f=if(q is null){has}else{other};', condition='f(p)')
 reject('one_callable_lacks_guarantee', definitions=CHECK+SIGNATURE.replace('has','other')+'{return true;}', setup='func f=if(q is null){has}else{other};', condition='f(p)')
-SLOT = 'func (<=>)(ptr left:i64 in O,ptr right:i64 in O)->void where {owner O}{left=null;}'
+SLOT = 'func (<=>)(ptr left:i64 in O,ptr right:i64 in O)->void where {owner O}{left=null:void;}'
 safe('slot_preserves_input_snapshot', definitions=CHECK+SLOT, setup='ptr saved=p;', condition='{val ok<-has(p);p<=>q;ok}', yes='saved')
 reject('slot_replacement_not_proven', definitions=CHECK+SLOT, condition='{val ok<-has(p);p<=>q;ok}')
 safe('helper_slot_preserves_input', definitions=SLOT+SIGNATURE+'{val ok<-a is not null;a<=>a;return ok;}')

@@ -5,7 +5,7 @@ import foundation_tests as runner
 
 IO = 'using symbol "std:io" @print;'
 TYPES = 'using "std:exceptions" Exception;using "std:exceptions" NullPointerException;using "std:exceptions" MissingReturnError;'
-ERROR = TYPES+'func missing()->u64{}func missing_value()->const MissingReturnError{try{missing();}catch(caught:const MissingReturnError){return caught;};}'
+ERROR = TYPES+'func missing()->u64{}func missing_value()->const MissingReturnError{try{missing():void;}catch(caught:const MissingReturnError){return caught;};}'
 DECL = 'func f(input:T)->const T where T;'
 GAP = 'declared result type parameter is not determined'
 OUT = lambda text: 'behave @print('+text+');'

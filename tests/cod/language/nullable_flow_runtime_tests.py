@@ -9,7 +9,7 @@ func nullable_holder(ptr f:F in O)->ptr F in O where {F,owner O}{return f;}
 func walk_nullable(f:F,ptr value:T in O,n:u64)->ptr T in O where {F,T,owner O}{
  if(n==0u64){return f(value);}else{return walk_nullable(f,value,n-1u64);};
 }
-proc register_during_nullable_helper()->void{observe(9050u64);defer observe(9999u64);}
+proc register_during_nullable_helper()->void{observe(9050u64);defer observe(9999u64);return;}
 proc null_recovery(ptr x:u64 in O,ptr y:u64 in O)->ptr u64 in O where {owner O}{
  defer catch(e:const OutOfMemoryError){observe(9051u64);return y;};
  defer register_during_nullable_helper();
@@ -24,7 +24,7 @@ proc null_recovery(ptr x:u64 in O,ptr y:u64 in O)->ptr u64 in O where {owner O}{
  func captured=func[select](ptr h:func(u64)->const u64 in O)->ptr (func(u64)->const u64) in O where {owner O}{return select(h);};
  ptr q=walk_nullable(captured,f,40u64);observe(q(4u64));
  ptr holder=f;ref total:u64=0u64;observe(9010u64);
- for(i in 0u64..10000u64){{ptr live=nullable_holder(holder);total<-total+live(i);}};
+ for(i in 0u64..10000u64){{ptr live=nullable_holder(holder);total<-total+live(i):void;}};
  observe(9011u64);observe(total);
  ptr absent=f;absent=null;
  try{nullable_holder(absent)(5u64);{}}catch(e:const NullPointerException){observe(17u64);};

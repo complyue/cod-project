@@ -8,14 +8,14 @@ FIXTURE=fixture.FIXTURE.updated(source='''
 using symbol "std:io" @print;
 using "std:exceptions" OutOfMemoryError;
 using "std:exceptions" NullPointerException;
-proc observe(value:u64)->void{behave @print(value);}
+proc observe(value:u64)->void{behave @print(value);return;}
 func (<=>)(ptr left:const u64 in O,ptr right:const u64 in O)->void where {owner O}{
  intrinsic (<=>)(left,right);
 }
 val x<-1u64,y<-7u64,z<-9u64;
 ptr p=x,q=y;ptr var ro:const->p;ptr var other:const->q;
 try{
- {{defer (<=>)(ro,other);p=z;}};
+ {{defer (<=>)(ro,other);p=z:void;}};
  observe(p);observe(q);
  p=x;q=y;
  observe(9001u64);

@@ -34,12 +34,12 @@ BORROWED_TAIL = fixture.TAIL.replace('target<-', 'destination<-')
 case('deferred_block', body=BORROWED_TARGET+'{{defer{'+BORROWED_FIRST+BORROWED_TAIL+'};}};'+fixture.PRINT)
 case('separate_actions', body=BORROWED_TARGET+'{{defer{'+BORROWED_TAIL+'};defer{'+BORROWED_FIRST+'};}};'+fixture.PRINT)
 case('finally', body=fixture.LOCAL+'try{'+fixture.FIRST+'}finally{'+fixture.TAIL+'};'+fixture.PRINT)
-WRITEBACK = 'proc publish(ref output:bool in O,ptr value:const Exception in E)->void where {owner O,owner E}{output<-classify(value);}'
+WRITEBACK = 'proc publish(ref output:bool in O,ptr value:const Exception in E)->void where {owner O,owner E}{output<-classify(value);return;}'
 READY = fixture.FIRST.replace('classify(payload)', 'ready')
 case('writeback', declarations=CLASSIFY+WRITEBACK, body=fixture.LOCAL+'val ready<-false;try{publish(ready,payload);'+READY+fixture.TAIL+fixture.PRINT+'}catch(e:const NullPointerException){};')
 case('prepared_writeback', declarations=CLASSIFY+WRITEBACK, body=fixture.LOCAL+'val ready<-false;ref output=ready;ptr input=payload;try{ {{defer publish(output,input);}};'+READY+fixture.TAIL+fixture.PRINT+'}catch(e:const NullPointerException){};')
-case('prepared_selection_snapshot', declarations=CLASSIFY+WRITEBACK, body=fixture.LOCAL+'val ready<-false;ref output=ready;ptr selected=payload;try{ {{defer publish(output,selected);selected=null;}};'+READY+fixture.TAIL+fixture.PRINT+'}catch(e:const NullPointerException){};')
-case('prepared_payload_mutation', declarations=CLASSIFY+WRITEBACK, body=fixture.LOCAL+'val ready<-false;ref output=ready;ptr input=payload;try{ {{defer publish(output,input);input<-unchecked();}};'+READY+fixture.TAIL+fixture.PRINT+'}catch(e:const NullPointerException){};', output='7\n7\n')
+case('prepared_selection_snapshot', declarations=CLASSIFY+WRITEBACK, body=fixture.LOCAL+'val ready<-false;ref output=ready;ptr selected=payload;try{ {{defer publish(output,selected);selected=null:void;}};'+READY+fixture.TAIL+fixture.PRINT+'}catch(e:const NullPointerException){};')
+case('prepared_payload_mutation', declarations=CLASSIFY+WRITEBACK, body=fixture.LOCAL+'val ready<-false;ref output=ready;ptr input=payload;try{ {{defer publish(output,input);input<-unchecked():void;}};'+READY+fixture.TAIL+fixture.PRINT+'}catch(e:const NullPointerException){};', output='7\n7\n')
 case('failed_registration', declarations=CLASSIFY+WRITEBACK, body=fixture.LOCAL+'val ready<-false;ref output=ready;ptr input=payload;try{ {{defer publish(output,input);}};}catch(e:const Exception){};'+READY+fixture.TAIL+fixture.PRINT, reject=True)
 case('declared_obligation', declarations=CLASSIFY.replace('->bool where', '->bool throws Exception where'), reject=True, diagnostic='declared checked exception')
 case('payload_initialization', body='val payload<-make local Exception;classify(payload);', signature='', arguments=('',), reject=True)
@@ -63,7 +63,7 @@ for name, before, first, second, rejected in (
 ):
     source = fixture.IO+'using "std:exceptions" NullPointerException;'+PRESENT
     source += 'proc run(ptr p:u64 in O,ptr q:u64 in O)->void where {owner O}{'+fixture.LOCAL+before
-    source += 'if('+first+'){target<-7u64;{}}else{};if('+second+'){target<-8u64;{}}else{};'+fixture.PRINT+'}'
+    source += 'if('+first+'){target<-7u64;{}}else{};if('+second+'){target<-8u64;{}}else{};'+fixture.PRINT+'return;}'
     source += 'val item<-'+('make local u64' if name=='presence_uninitialized_payload' else '1u64')+';ptr absent:u64=null in here;run(item,absent);run(absent,item);'
     runner.CASES[name] = (source, 2 if rejected else 0, '' if rejected else '7\n8\n', 'initialization' if rejected else '')
 

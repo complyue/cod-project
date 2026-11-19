@@ -4,9 +4,10 @@ from pathlib import Path
 import foundation_tests as runner
 
 IO = 'using symbol "std:io" @print;using "std:exceptions" NullPointerException;'
-SET = 'func set(ref out:bool in B,ptr p:i64 in O)->void where {owner B,owner O}{out<-p is not null;}'
-COPY = 'func copy(ref out:bool in B,flag:bool)->void where {owner B}{out<-flag;}'
-BORROW = 'func copy(ref out:bool in B,ref flag:const bool in C)->void where {owner B,owner C}{out<-flag;}'
+SET = 'func set(ref out:bool in B,ptr p:i64 in O)->void where {owner B,owner O}{out<-p is not null;{};}'
+COPY = 'func copy(ref out:bool in B,flag:bool)->void where {owner B}{out<-flag;{};}'
+BORROW = 'func copy(ref out:bool in B,ref flag:const bool in C)->void where {owner B,owner C}{out<-flag;{};}'
+SYMBOLIC_SET = SET.replace('func set', 'proc @set').removesuffix('{};}')+'return;}effect @set;'
 CALLS = 'val x<-7,y<-11;ptr absent:i64=null in here;'+''.join(
     'behave @print(choose('+args+'));' for args in ('x,y','absent,y','x,absent','absent,absent'))
 VALUE_OUTPUT = 'val ok<-false;'
@@ -43,8 +44,8 @@ case('mutual', definitions='func set(ref out:bool in B,ptr p:i64 in O,n:u64)->vo
 case('callable', work='func write=set;write(ok,p);')
 case('captured_callable', work='func write=set;func use[write](ref out:bool in B,ptr target:i64 in P)->void where {owner B,owner P}{write(out,target);};use(ok,p);')
 case('higher_order', definitions=SET+'func apply(f:F,ref out:bool in B,ptr target:i64 in P)->void where {F,owner B,owner P}{f(out,target);}', work='apply(set,ok,p);')
-case('current_symbol', definitions=SET.replace('func set','proc @set')+'effect @set;', work='behave @set(ok,p);')
-case('captured_symbol', definitions=SET.replace('func set','proc @set')+'effect @set;', work='perform @set(ok,p);')
+case('current_symbol', definitions=SYMBOLIC_SET, work='behave @set(ok,p);')
+case('captured_symbol', definitions=SYMBOLIC_SET, work='perform @set(ok,p);')
 case('callable_alternatives', definitions=SET+SET.replace('set(','other(').replace('p is not null','!(p is null)'), work='func write=if(q is null){set}else{other};write(ok,p);')
 case('output_copy', work='set(ok,p);val saved<-ok;ok<-true;', condition='saved')
 case('output_alias', setup='val ok<-false;ref output=ok;', work='set(output,p);')
@@ -53,7 +54,7 @@ case('ordered_pointer_snapshot', definitions=SET.replace(')->void',',ignored:boo
 case('ordered_value_snapshot', definitions=COPY.replace(')->void',',ignored:bool)->void'), setup='val ok<-false,source<-p is not null;', work='copy(ok,source,{source<-true;true});')
 case('ordered_borrow_entry', definitions=BORROW.replace(')->void',',ignored:bool)->void'), setup='val ok<-false,source<-true;', work='copy(ok,source,{source<-p is not null;true});')
 case('alias_same_input_output', definitions=BORROW, setup='val ok<-p is not null;', work='copy(ok,ok);')
-case('failure_postcondition', definitions=SET.replace(')->void',',ptr other:i64 in O)->void throws NullPointerException').replace('out<-p is not null;', 'out<-p is not null;other;{}'), work='try{set(ok,p,q);}catch(e:const NullPointerException){};')
+case('failure_postcondition', definitions=SET.replace(')->void',',ptr other:i64 in O)->void throws NullPointerException').replace('out<-p is not null;', 'out<-p is not null;other;'), work='try{set(ok,p,q);}catch(e:const NullPointerException){};')
 case('loop_call', work='for(i in 0u64..3u64){set(ok,p);};')
 
 MAYBE = 'func maybe(ref out:bool in B,flag:bool,change:bool)->void where {owner B}{if(change){out<-flag;{}}else{};}'
@@ -68,7 +69,7 @@ for choice in ('true', 'false', 'q is not null'):
 case('recursive_preserve_or_write', definitions=MAYBE.replace('change:bool', 'change:bool,n:u64').replace(
     'if(change)', 'if(n>0u64){maybe(out,flag,change,n-1u64);}else{};if(change)'),
     setup='val ok<-p is not null;', work='maybe(ok,p is not null,q is not null,20u64);')
-case('branch_alias_preserve', definitions='func maybe(ref out:bool in B,ref other:bool in B,flag:bool,change:bool)->void where {owner B}{ref target=if(change){out}else{other};target<-flag;}',
+case('branch_alias_preserve', definitions='func maybe(ref out:bool in B,ref other:bool in B,flag:bool,change:bool)->void where {owner B}{ref target=if(change){out}else{other};target<-flag:void;}',
     setup='val ok<-p is not null,other<-p is not null;', work='maybe(ok,other,p is not null,q is not null);')
 
 case('prepared_call', setup=BORROWED_OUTPUT, work='{{defer set(ok,p);}};')
@@ -78,11 +79,11 @@ case('nested_deferred_block', work='{{defer{defer{ok<-p is not null;};};}};')
 case('prepared_copy', setup=BORROWED_OUTPUT, definitions=COPY, work='{{defer copy(ok,p is not null);}};')
 case('prepared_transfer', setup=BORROWED_OUTPUT, work='{{defer (<-)(ok,p is not null);}};')
 case('prepared_swap', setup=BORROWED_OUTPUT+'val source<-p is not null;', work='{{defer (<->)(ok,source);}};')
-case('prepared_value_snapshot', definitions=COPY, setup=BORROWED_OUTPUT+'val source<-p is not null;', work='{{defer copy(ok,source);source<-true;}};')
-case('prepared_borrow_entry', definitions=BORROW, setup=BORROWED_OUTPUT+'val source<-true;', work='{{defer copy(ok,source);source<-p is not null;}};')
-case('prepared_target_snapshot', setup='ref ok:bool=false,other:bool=true;ref output=ok;', work='{{defer set(output,p);output=other;}};')
+case('prepared_value_snapshot', definitions=COPY, setup=BORROWED_OUTPUT+'val source<-p is not null;', work='{{defer copy(ok,source);source<-true:void;}};')
+case('prepared_borrow_entry', definitions=BORROW, setup=BORROWED_OUTPUT+'val source<-true;', work='{{defer copy(ok,source);source<-p is not null:void;}};')
+case('prepared_target_snapshot', setup='ref ok:bool=false,other:bool=true;ref output=ok;', work='{{defer set(output,p);output=other:void;}};')
 case('rebound_target_direct', setup='val ok<-false,other<-true;ref output=other;', work='output=ok;set(output,p);')
-case('deferred_target_checked', setup='ref ok:bool=false,other:bool=true;ref output=other;', work='{{defer{set(output,p);};output=ok;}};', yes='try{p}catch(e:const NullPointerException){-1}')
+case('deferred_target_checked', setup='ref ok:bool=false,other:bool=true;ref output=other;', work='{{defer{set(output,p);};output=ok:void;}};', yes='try{p}catch(e:const NullPointerException){-1}')
 case('ordered_cleanup', setup=BORROWED_OUTPUT, work='{{defer{ok<-p is not null;};defer{ok<-true;};}};')
 case('cleanup_copy_chain', setup=BORROWED_OUTPUT+'val source<-false;', work='{{defer{ok<-source;};defer{source<-p is not null;};}};')
 case('cleanup_prepared_chain', definitions=COPY+BORROW.replace('copy(','borrow('), setup=BORROWED_OUTPUT+'val source<-false;', work='{{defer borrow(ok,source);defer copy(source,p is not null);}};')
@@ -90,7 +91,7 @@ case('cleanup_input_snapshot', definitions=COPY, setup=BORROWED_OUTPUT+'val sour
 case('prepared_loop', setup=BORROWED_OUTPUT, work='for(i in 0u64..3u64){ {{defer set(ok,p);}};};')
 case('repeated_cleanup', setup=BORROWED_OUTPUT, work='{{for(i in 0u64..3u64){defer set(ok,p);};}};')
 case('repeated_block_cleanup', setup=BORROWED_OUTPUT, work='{{for(i in 0u64..3u64){defer{ok<-p is not null;};};}};')
-case('cleanup_saved_pointer', setup=BORROWED_OUTPUT+'ptr saved=p;', work='{{defer set(ok,p);p=q;}};', yes='saved')
+case('cleanup_saved_pointer', setup=BORROWED_OUTPUT+'ptr saved=p;', work='{{defer set(ok,p);p=q:void;}};', yes='saved')
 for name, operator, before, after, check in (
     ('saved_assignment_source', '=', 'p', 'q', case),
     ('independent_saved_assignment_source', '=', 'q', 'p', reject),
@@ -135,7 +136,7 @@ for placement, setup in (
     ('early', PICK_REFERENCE+registrations),
     ('late', registrations+PICK_REFERENCE),
 ):
-    source = (IO+'proc work(label:u64)->void{behave @print(label);}'
+    source = (IO+'proc work(label:u64)->void{behave @print(label);return;}'
               'proc inspect(ptr input:u64 in O,ptr peer:u64 in O,flag:bool'+guard_parameters+')->u64 where {owner O}{'
               'val present<-{{ptr side:u64=null in O;defer{return side is not null;};'
               +setup+'if(flag){defer (<=>)(side,source);{}}else{};'
@@ -155,7 +156,7 @@ reject('changed_output', work='set(ok,p);ok<-true;')
 reject('unknown_output_alternative', definitions=SET.replace('out<-p is not null;', 'if(p is null){out<-true;}else{out<-p is not null;};'))
 reject('borrowed_result_replaced', definitions='func set(ref out:bool in B,ptr p:i64 in O)->ref bool in B where {owner B,owner O}{out<-p is not null;defer{out<-true;};return out;}', work='', condition='set(ok,p)')
 reject('ordered_borrow_overwrite', definitions=BORROW.replace(')->void',',ignored:bool)->void'), setup='val ok<-false,source<-p is not null;', work='copy(ok,source,{source<-true;true});')
-reject('callee_alias_overwrite', definitions='func set(ref out:bool in B,ref alias:bool in B,ptr p:i64 in O)->void where {owner B,owner O}{out<-p is not null;alias<-true;}', work='set(ok,ok,p);')
+reject('callee_alias_overwrite', definitions='func set(ref out:bool in B,ref alias:bool in B,ptr p:i64 in O)->void where {owner B,owner O}{out<-p is not null;alias<-true:void;}', work='set(ok,ok,p);')
 reject('caller_alias_overwrite', setup='val ok<-false;ref alias=ok;', work='set(ok,p);alias<-true;')
 reject('callable_unknown_alternative', definitions=SET+SET.replace('set(','other(').replace('p is not null','true'), work='func write=if(q is null){set}else{other};write(ok,p);')
 reject('declared_failure', definitions=SET.replace(')->void',')->void throws NullPointerException'))
@@ -163,10 +164,10 @@ reject('cleanup_overwrite', setup=BORROWED_OUTPUT, work='{{defer{ok<-true;};defe
 reject('source_pointer_rebound_after_cleanup', setup=BORROWED_OUTPUT, work='{{defer set(ok,p);}};p=q;')
 case('cleanup_local_pointer_rebind', setup=BORROWED_OUTPUT+'ptr saved=p;',
      work='{{defer{p=q;{}};defer set(ok,p);}};', yes='saved')
-reject('prepared_borrow_overwrite', definitions=BORROW, setup=BORROWED_OUTPUT+'val source<-p is not null;', work='{{defer copy(ok,source);source<-true;}};')
-reject('deferred_borrow_overwrite', setup=BORROWED_OUTPUT+'val source<-p is not null;', work='{{defer{ok<-source;};source<-true;}};')
+reject('prepared_borrow_overwrite', definitions=BORROW, setup=BORROWED_OUTPUT+'val source<-p is not null;', work='{{defer copy(ok,source);source<-true:void;}};')
+reject('deferred_borrow_overwrite', setup=BORROWED_OUTPUT+'val source<-p is not null;', work='{{defer{ok<-source;};source<-true:void;}};')
 reject('cleanup_bad_chain', setup=BORROWED_OUTPUT+'val source<-p is not null;', work='{{defer{ok<-source;};defer{source<-true;};}};')
-case('deferred_rebound_target', setup='ref ok:bool=false,other:bool=true;ref output=other;', work='{{defer{set(output,p);};output=ok;}};')
+case('deferred_rebound_target', setup='ref ok:bool=false,other:bool=true;ref output=other;', work='{{defer{set(output,p);};output=ok:void;}};')
 reject('repeated_cleanup_bad', setup=BORROWED_OUTPUT, work='{{for(i in 0u64..3u64){defer set(ok,q);};}};')
 case('initialization_independent', setup='val x<-make local i64;ptr target=x;val ok<-false;', work='set(ok,target);', yes='target', diagnostic='before definite initialization')
 case('readonly_output', setup='const val ok<-false;', diagnostic='readonly argument')
@@ -176,7 +177,7 @@ states = [(True, True), (False, True), (True, False), (False, False)]
 for mask in range(1, 15):
     terms = ['('+('a' if a else '!a')+'&&'+('b' if b else '!b')+')'
              for i, (a, b) in enumerate(states) if mask & (1 << i)]
-    definitions = 'func set(ref out:bool in B,a:bool,b:bool)->void where {owner B}{out<-'+'||'.join(terms)+';}'
+    definitions = 'func set(ref out:bool in B,a:bool,b:bool)->void where {owner B}{out<-'+'||'.join(terms)+':void;}'
     for target, name, payload in ((0, 'p', 7), (1, 'q', 11)):
         valid = all(state[target] for i, state in enumerate(states) if mask & (1 << i))
         output = ''.join(str(payload if mask & (1 << i) else 0)+'\n' for i in range(4))

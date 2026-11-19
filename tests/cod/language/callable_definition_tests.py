@@ -7,7 +7,7 @@ IO = 'using symbol "std:io" @print;'
 BITS = 'func one()->u64{return 1u64;}func two()->u64{return 2u64;}'
 SYMBOLS = 'symbol @bias:u64;symbol @invoke:proc()->u64;'
 def run(body):
-    return 'proc demo()->void{' + body + '}demo();'
+    return 'proc demo()->void{' + body + 'return;}demo();'
 def observe(value):
     return 'behave @print(' + value + ');'
 def perform(value):
@@ -21,7 +21,7 @@ runner.CASES = {
     'inferred_lexical_dependency': (IO+BITS+run('func source=one;func read()->u64{return source();};func a=read;source<-two;func b=read;'+observe('a()')+observe('b()')),0,'1\n2\n',''),
     'definition_bound_shadow': (IO+BITS+run('func source=one;func read[source]()->u64{return source();};{{func source=two;func value=read;'+observe('value()')+observe('read()')+'}};'),0,'1\n1\n',''),
     'direct_target_prepared_before_operand': (IO+BITS+run('func source=one;func read[source](ignored:u64)->u64{return source();};'+observe('read({{source<-two;0u64}})')+observe('read(0u64)')),0,'1\n2\n',''),
-    'deferred_target_snapshot': (IO+BITS+run('func source=one;proc read[source]()->void{'+observe('source()')+'};{{defer read();source<-two;}};read();'),0,'1\n2\n',''),
+    'deferred_target_snapshot': (IO+BITS+run('func source=one;proc read[source]()->void{'+observe('source()')+'return;};{{defer read();source<-two:void;}};read();'),0,'1\n2\n',''),
     'captured_definition_refreshes': (IO+BITS+run('func source=one;func first[source]()->u64{return source();};func second[first]()->u64{return first();};func a=second;source<-two;func b=second;'+observe('a()')+observe('b()')),0,'1\n2\n',''),
     'escaped_recursive_environment': (IO+BITS+'func factory(source:func()->u64)->func(u64)->u64{func recur[source](n:u64)->u64{if(n==0u64){return source();}else{};func next=recur;return next(n-1u64);};return recur;}func escaped=factory(one);'+observe('escaped(4u64)'),0,'1\n',''),
     'recursive_symbolic_refresh': (IO+'symbol @bias:u64;symbol @call:proc(u64)->u64;proc factory()->u64{effect @bias<-10u64;proc recur(n:u64)->u64{if(n==0u64){return @bias;}else{};effect @bias<-20u64;proc next=recur;effect @call=next;return perform @call(0u64);};effect @call=recur;return perform @call(1u64);}'+observe('factory()'),0,'20\n',''),
@@ -29,7 +29,7 @@ runner.CASES = {
     'nested_self_definition_capture': (IO+BITS+'func factory(source:func()->u64)->func(u64)->u64{func recur[source](n:u64)->u64{if(n==0u64){return source();}else{};func step[recur]()->u64{return recur(0u64);};return step();};return recur;}func escaped=factory(one);'+observe('escaped(1u64)'),0,'1\n',''),
     'forwarded_self_definition': (IO+BITS+'func apply(fn:func(u64)->u64)->u64{return fn(0u64);}func factory(source:func()->u64)->func(u64)->u64{func recur[source](n:u64)->u64{if(n==0u64){return source();}else{return apply(recur);};};return recur;}func escaped=factory(two);'+observe('escaped(1u64)'),0,'2\n',''),
     'local_generic_definition': (IO+run('func identity(x:T)->const T where T{return x;};func value:func(u64)->const u64=identity;'+observe('identity(true)')+observe('value(7u64)')),0,'true\n7\n',''),
-    'retained_generic_definition': (IO+'proc outer(x:T)->void where T{func identity(y:T)->const T{return y;};func value=identity;'+observe('value(x)')+'}outer(7u64);outer(true);',0,'7\ntrue\n',''),
+    'retained_generic_definition': (IO+'proc outer(x:T)->void where T{func identity(y:T)->const T{return y;};func value=identity;'+observe('value(x)')+'return;}outer(7u64);outer(true);',0,'7\ntrue\n',''),
     'inferred_result_context': (IO+BITS+run('func source=one;func read[source](){return source();};{{func source=func()->bool{return true;};func value=read;'+observe('value()')+'}};'),0,'1\n',''),
     'type_query_without_capture': (IO+SYMBOLS+run('proc read()->u64{return @bias;};val value<-make local typeof(read()){7u64};'+observe('value')),0,'7\n',''),
     'self_parameter_shadow': (IO+BITS+'func factory()->func(func()->u64)->u64{func recur(recur:func()->u64)->u64{return recur();};return recur;}func value=factory();'+observe('value(two)'),0,'2\n',''),

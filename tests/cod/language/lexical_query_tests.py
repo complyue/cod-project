@@ -39,8 +39,8 @@ runner.CASES={
  'outer_owner_differs_from_current_scope':(IO+CLASSIFY+OWNERS+'func outer()->func()->const i64{val a<-1;return func()->const i64{val b<-1;val z<-make local typeof(owners(a,b));return classify(z);};}behave @print(outer()());',0,'1\n',''),
  'outer_owner_relation_survives_nesting':(IO+CLASSIFY+OWNERS+'func outer()->func()->const i64{val a<-1;return {{val b<-2;func middle()->const i64{func inner()->const i64{val z<-make local typeof(owners(a,b));return classify(z);};return inner();};return middle;}};}behave @print(outer()());',0,'1\n',''),
  'module_lexical_query':(IO+'val x<-make local i64;func f=func()->const i64{val y<-make local typeof(x){14};return y;};behave @print(f());',0,'14\n',''),
- 'query_only_catch_value':(IO+'using "std:exceptions" NullPointerException;proc outer()->void{ptr p:i64=null in here;try{p;{}}catch(e:const NullPointerException){func inner()->const u64{val y<-make local typeof(e.category){15u64};return y;};behave @print(inner());};}outer();',0,'15\n',''),
- 'query_only_loop_control':(IO+'proc outer()->void{for(i in 0u64..2u64){ {{func inner()->const u64{val y<-make local typeof(i){16u64};return y;};behave @print(inner());}}; };}outer();',0,'16\n16\n',''),
+ 'query_only_catch_value':(IO+'using "std:exceptions" NullPointerException;proc outer()->void{ptr p:i64=null in here;try{p;{}}catch(e:const NullPointerException){func inner()->const u64{val y<-make local typeof(e.category){15u64};return y;};behave @print(inner());};return;}outer();',0,'15\n',''),
+ 'query_only_loop_control':(IO+'proc outer()->void{for(i in 0u64..2u64){ {{func inner()->const u64{val y<-make local typeof(i){16u64};return y;};behave @print(inner());}}; };return;}outer();',0,'16\n16\n',''),
  'initializer_keeps_runtime_capture':(IO+'func id(x:i64)->const i64{return x;}func outer()->const i64{func f=id;val x<-1;func inner()->const i64{val y<-make local typeof(x){f(17)};return y;};return inner();}behave @print(outer());',0,'17\n',''),
 }
 

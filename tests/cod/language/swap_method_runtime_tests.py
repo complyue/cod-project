@@ -8,20 +8,22 @@ FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
 FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 proc (<->)(x:bool in O,y:bool in P)->void where {owner O,owner P}{
  intrinsic (<->)(x,y);observe(81u64);
+ return;
 }
 func (<->)(x:func(u64)->const u64 in O,y:func(u64)->const u64 in P)->void where {owner O,owner P}{
- func saved=x;x<-y;y<-saved;
+ func saved=x;x<-y;y<-saved:void;
 }
 proc dispatch(ref x:T in O,ref y:T in P,n:u64)->void where {T,owner O,owner P}{
  if(n==0u64){return;}else{x<->y;dispatch(x,y,n-1u64);};
+ return;
 }
-proc show_bool(x:bool)->void{observe(if(x){1u64}else{0u64});}
+proc show_bool(x:bool)->void{observe(if(x){1u64}else{0u64});return;}
 {{
  val a<-false,b<-true,x<-1u64,y<-2u64;
  dispatch(a,b,3u64);show_bool(a);show_bool(b);
  dispatch(x,y,2u64);observe(x);observe(y);
  a<-false;b<-true;val c<-false;ptr p=a,q=b,replacement=c;
- {{defer (<->)(p,q);p=replacement;}};show_bool(a);show_bool(b);show_bool(p);
+ {{defer (<->)(p,q);p=replacement:void;}};show_bool(a);show_bool(b);show_bool(p);
  a<-false;b<-true;observe(9050u64);
  try{ {{defer (<->)(p,q);}};}catch(e:const OutOfMemoryError){observe(9051u64);};
  show_bool(a);show_bool(b);
@@ -33,7 +35,7 @@ proc show_bool(x:bool)->void{observe(if(x){1u64}else{0u64});}
  observe(9062u64);try{f<->g;}catch(e:const OutOfMemoryError){observe(9061u64);};
  observe(f(2u64));observe(g(2u64));
  ptr first=f,second=g;
- {{defer (<->)(first,second);first<-wrap(wrap(base));}};observe(f(3u64));observe(g(3u64));
+ {{defer (<->)(first,second);first<-wrap(wrap(base)):void;}};observe(f(3u64));observe(g(3u64));
  observe(9010u64);dispatch(a,b,2u64);observe(9011u64);show_bool(a);
 }};
 observe(9000u64);

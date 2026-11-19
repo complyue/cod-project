@@ -35,7 +35,7 @@ checked('finally_replaces_with_checked', 'func keep(item:Exception)->const Excep
 safe('deferred_result', 'func keep(item:const Exception)->const Exception{defer{return item;};return checked();}', VALUE, 'keep(payload)')
 safe('deferred_copied_snapshot', 'func keep(item:Exception)->const Exception{const val saved<-item;defer{return saved;};item<-checked();return item;}', VALUE, 'keep(payload)')
 checked('deferred_checked_replacement', 'func keep(item:Exception)->const Exception{defer{return checked();};return item;}', VALUE, 'keep(payload)')
-safe('deferred_recovery', 'func keep()->const Exception{defer catch(e:const MissingReturnError){return e;};missing();}', '', 'keep()')
+safe('deferred_recovery', 'func keep()->const Exception{defer catch(e:const MissingReturnError){return e;};missing():void;}', '', 'keep()')
 safe('interrupted_return_recovers', 'func keep(item:Exception)->const Exception{defer catch(e:const NullPointerException){};defer{throw checked();};return item;}', VALUE, 'keep(payload)')
 safe('readonly_call', 'func keep(ref item:const Exception in O)->const Exception where {owner O}{return item;}', VALUE, 'keep(payload)')
 PAIR = 'func keep(ref item:Exception in O,ref other:Exception in P)->const Exception where {owner O,owner P}'

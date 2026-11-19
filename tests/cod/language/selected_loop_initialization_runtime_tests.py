@@ -7,7 +7,7 @@ from deferred_initialization_runtime_tests import FIXTURE as ALLOCATION
 PRELUDE = '''
 using symbol "std:io" @print;
 using "std:exceptions" OutOfMemoryError;
-proc observe(value:u64)->void{behave @print(value);}
+proc observe(value:u64)->void{behave @print(value);return;}
 
 proc advance_iteration(ptr selected:u64 in O,ptr first:const u64 in O,ptr next:u64 in O,fail:bool)
     ->ptr u64 in O where {owner O}{
@@ -33,6 +33,7 @@ LOOP = '''
  observe(selected);
 '''
 CALLS = '''
+ return;
 }
 verify(false);
 verify(true);

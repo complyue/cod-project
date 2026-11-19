@@ -12,13 +12,13 @@ FIRST = 'if(classify(payload)){target<-7u64;{}}else{};'
 TAIL = 'try{throw payload;}catch(e:const MissingReturnError){}catch(e:const Exception){target<-8u64;{}};'
 PRINT = 'behave @print(target);'
 OUTPUT = '7\n8\n'
-WRITEBACK = 'proc publish(ptr output:bool in O,value:Exception)->void throws NullPointerException where {owner O}{output<-classify(value);}'
+WRITEBACK = 'proc publish(ptr output:bool in O,value:Exception)->void throws NullPointerException where {owner O}{output<-classify(value);return;}'
 runner.CASES = {}
 
 
 def case(name, body=LOCAL+FIRST+TAIL+PRINT, declarations=CLASSIFY, output=OUTPUT, reject=False,
          diagnostic='initialization', signature='payload:Exception', arguments=('unchecked()', 'checked()')):
-    source = IO+exceptions.ERROR+declarations+'proc run('+signature+')->void{'+body+'}'
+    source = IO+exceptions.ERROR+declarations+'proc run('+signature+')->void{'+body+'return;}'
     source += ''.join('run('+argument+');' for argument in arguments)
     runner.CASES[name] = (source, 2 if reject else 0, '' if reject else output,
                           diagnostic if reject else exceptions.WARN)
@@ -61,10 +61,10 @@ case('exceptional_finally_prefix', body=LOCAL+'try{try{missing();if(flag){target
 READY = FIRST.replace('classify(payload)','ready')
 case('writeback', declarations=CLASSIFY+WRITEBACK, body=LOCAL+'val ready<-false;try{publish(ready,payload);'+READY+TAIL+PRINT+'}catch(e:const NullPointerException){};')
 case('prepared_writeback', declarations=CLASSIFY+WRITEBACK, body=LOCAL+'val ready<-false;try{ {{defer publish(ready,payload);}};'+READY+TAIL+PRINT+'}catch(e:const NullPointerException){};')
-case('prepared_value_snapshot', declarations=CLASSIFY+WRITEBACK, body=LOCAL+'val ready<-false,saved:Exception<-payload;try{ {{defer publish(ready,payload);payload<-unchecked();}};'+READY+TAIL.replace('throw payload','throw saved')+PRINT+'}catch(e:const NullPointerException){};')
-case('prepared_value_changed', declarations=CLASSIFY+WRITEBACK, body=LOCAL+'val ready<-false;try{ {{defer publish(ready,payload);payload<-unchecked();}};'+READY+TAIL+PRINT+'}catch(e:const NullPointerException){};', reject=True)
+case('prepared_value_snapshot', declarations=CLASSIFY+WRITEBACK, body=LOCAL+'val ready<-false,saved:Exception<-payload;try{ {{defer publish(ready,payload);payload<-unchecked():void;}};'+READY+TAIL.replace('throw payload','throw saved')+PRINT+'}catch(e:const NullPointerException){};')
+case('prepared_value_changed', declarations=CLASSIFY+WRITEBACK, body=LOCAL+'val ready<-false;try{ {{defer publish(ready,payload);payload<-unchecked():void;}};'+READY+TAIL+PRINT+'}catch(e:const NullPointerException){};', reject=True)
 BORROWED = WRITEBACK.replace('value:Exception','ref value:const Exception in B').replace('owner O}', 'owner O,owner B}')
-case('prepared_borrowed_value', declarations=CLASSIFY+BORROWED, body=LOCAL+'val ready<-false;try{ {{defer publish(ready,payload);payload<-unchecked();}};'+READY+TAIL+PRINT+'}catch(e:const NullPointerException){};', output='7\n7\n')
+case('prepared_borrowed_value', declarations=CLASSIFY+BORROWED, body=LOCAL+'val ready<-false;try{ {{defer publish(ready,payload);payload<-unchecked():void;}};'+READY+TAIL+PRINT+'}catch(e:const NullPointerException){};', output='7\n7\n')
 case('failed_registration', declarations=CLASSIFY+WRITEBACK, body=LOCAL+'val ready<-false;try{ {{defer publish(ready,payload);}}; }catch(e:const Exception){};'+READY+TAIL+PRINT, reject=True)
 case('late_copied_operand', declarations=CLASSIFY.replace('value:Exception','value:Exception,ignored:bool'), body=LOCAL+FIRST.replace('classify(payload)','classify(payload,{payload<-unchecked();true})')+TAIL+PRINT, reject=True)
 case('late_borrowed_operand', declarations=CLASSIFY.replace('value:Exception','ref value:const Exception in O,ignored:bool').replace('->bool{','->bool where {owner O}{'), body=LOCAL+FIRST.replace('classify(payload)','classify(payload,{payload<-unchecked();true})')+TAIL+PRINT, output='7\n7\n')

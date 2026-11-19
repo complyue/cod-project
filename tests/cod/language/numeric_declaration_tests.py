@@ -33,7 +33,7 @@ runner.CASES = {
  'query_has_no_failure': (IO+NPE+FAILURE+'val result<-make local typeof(f(1u32)){7f64};behave @print(result);',0,'7\n',''),
  'deferred_failure': (NPE+FAILURE+'defer f(1u32);',2,'','requires a covering catch or throws'),
  'deferred_failure_executes': (IO+NPE+'func f(x:u32)->f64 throws NullPointerException;func f(x:f64)->f64 throws NullPointerException{ptr missing:f64=null in here;return missing;}try{ {{defer f(1u32);}}; }catch(e:const NullPointerException){behave @print(7u64);};',0,'7\n',''),
- 'deferred_snapshot': (IO+'proc show(x:u32)->void;proc show(x:f64)->void{behave @print(x);}val input<-16777217u32;{{defer show(input);input<-1u32;}};',0,'16777217\n',''),
+ 'deferred_snapshot': (IO+'proc show(x:u32)->void;proc show(x:f64)->void{behave @print(x);return;}val input<-16777217u32;{{defer show(input);input<-1u32:void;}};',0,'16777217\n',''),
  'method_kind': ('proc f(x:u32)->f64;'+METHOD+'f(1u32);',2,'','implementation kind does not satisfy callable declaration'),
  'method_throws': (NPE+DECL+'func f(x:f64)->f64 throws NullPointerException{return x;}try{f(1u32);{}}catch(e:const NullPointerException){};',2,'','implementation exposes a checked exception'),
  'complete_view_result': (IO+DECL+METHOD+'func selected:func(u32)->f64=f;behave @print(selected(7u8));',0,'7\n',''),

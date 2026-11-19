@@ -19,11 +19,11 @@ runner.CASES = {
     'unrelated_rebinding': (IO + SETUP + 'ptr q=x;for(i in 0u64..2u64){q=null;' + OUT('p') + 'q=x;};', 0, '7\n7\n', ''),
     'nested_invariant': (IO + SETUP + 'ptr q=x;for(i in 0u64..2u64){for(j in 0u64..2u64){q=null;' + OUT('p') + 'q=x;};};', 0, '7\n' * 4, ''),
     'fold_invariant': (IO + SETUP + OUT('fold(i in 0u64..3u64,total=0u64){total+p}'), 0, '21\n', ''),
-    'dynamic_count_and_else': (IO + 'proc run(n:u64)->void{' + SETUP + 'for(i in 0u64..n){' + OUT('p') + '}else{' + OUT('9u64') + '};}run(0u64);run(2u64);', 0, '9\n7\n7\n', ''),
-    'incoming_guard_is_invariant': (IO + 'proc run(ptr p:const u64 in O,n:u64)->void where {owner O}{if(p is null){}else{for(i in 0u64..n){' + OUT('p') + '};};}'
+    'dynamic_count_and_else': (IO + 'proc run(n:u64)->void{' + SETUP + 'for(i in 0u64..n){' + OUT('p') + '}else{' + OUT('9u64') + '};return;}run(0u64);run(2u64);', 0, '9\n7\n7\n', ''),
+    'incoming_guard_is_invariant': (IO + 'proc run(ptr p:const u64 in O,n:u64)->void where {owner O}{if(p is null){}else{for(i in 0u64..n){' + OUT('p') + '};};return;}'
         'val x<-7u64;ptr empty:const u64=null in here;run(x,2u64);run(empty,2u64);', 0, '7\n7\n', ''),
-    'prepared_value_snapshot': (IO + 'proc observe(value:u64)->void{' + OUT('value') + '}' + SETUP + 'for(i in 0u64..2u64){defer observe(p);};p=null;', 0, '7\n7\n', ''),
-    'prepared_borrow_retains_target': (IO + 'proc observe(ref value:const u64 in O)->void where {owner O}{' + OUT('value') + '}' + SETUP
+    'prepared_value_snapshot': (IO + 'proc observe(value:u64)->void{' + OUT('value') + 'return;}' + SETUP + 'for(i in 0u64..2u64){defer observe(p);};p=null;', 0, '7\n7\n', ''),
+    'prepared_borrow_retains_target': (IO + 'proc observe(ref value:const u64 in O)->void where {owner O}{' + OUT('value') + 'return;}' + SETUP
         + 'for(i in 0u64..2u64){defer observe(p);};p=null;', 0, '7\n7\n', ''),
     'invariant_callable_target': (IO + 'func value()->u64{return 7u64;}func held=value;ptr p:func()->u64=null in here;p=held;'
         'for(i in 0u64..2u64){' + OUT('p()') + '};', 0, '7\n7\n', ''),

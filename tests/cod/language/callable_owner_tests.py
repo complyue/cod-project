@@ -47,8 +47,8 @@ runner.CASES = {
         'func selected=first;selected<-generic;val slot<-7;' + OUT(f'selected({ARGS})'), 0, '7\n', ''),
     'query_uses_symbolic_proof': (IO + VALUE + 'func apply(f:F)->i64 where F{return 0;}'
         'val result<-make local typeof(apply(value)){9};' + OUT('result'), 0, '9\n', ''),
-    'deferred_borrows_read_current_payload': (IO + f'proc show({PARAMS})->void where {{{ROLES}}}{{behave @print(p0);}}'
-        'proc selected=show;val slot<-7;{{' + f'defer selected({ARGS});slot<-8;' + '}};', 0, '8\n', ''),
+    'deferred_borrows_read_current_payload': (IO + f'proc show({PARAMS})->void where {{{ROLES}}}{{behave @print(p0);return;}}'
+        'proc selected=show;val slot<-7;{{' + f'defer selected({ARGS});slot<-8:void;' + '}};', 0, '8\n', ''),
     'symbolic_capture_and_current': (IO + 'symbol @bias:i64;'
         f'proc @selected({PARAMS})->i64 where {{{ROLES}}}{{return p0+@bias;}}'
         'effect @bias<-1;effect @selected;effect @bias<-2;val slot<-7;'

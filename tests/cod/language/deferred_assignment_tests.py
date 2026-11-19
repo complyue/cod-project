@@ -17,7 +17,7 @@ OUT = lambda value: 'behave @print('+value+');'
 
 def assignment_program(setup, work, observation, declarations=''):
     body = observe_after_cleanup(work, observation)
-    return IO+declarations+'proc run()->void{'+setup+body+'}run();'
+    return IO+declarations+'proc run()->void{'+setup+body+'return;}run();'
 
 
 runner.CASES = {}
@@ -51,7 +51,7 @@ for spelling in ('call', 'intrinsic'):
         'initialize_then_rebind': (assignment_program('val a<-1,b<-make local i64;ptr p=a;',
             defer('=','p','b')+defer('<-','b','7'),OUT('p')),0,'7\n',''),
         'guarded_late_read': (IO+'proc run()->void{val a<-make local i64;val ready<-false;'
-            'defer{if(ready){'+OUT('a')+'}else{};}finally{};'+defer('<-','a','7')+'ready<-true;}run();',0,'7\n',''),
+            'defer{if(ready){'+OUT('a')+'}else{};}finally{};'+defer('<-','a','7')+'ready<-true;return;}run();',0,'7\n',''),
         'registration_failure_read': (IO+'val a<-make local i64;defer{'+OUT('a')+'};'+defer('<-','a','7'),2,'','cannot prove initialization'),
         'caught_registration_failure': (IO+'using "std:exceptions" OutOfMemoryError;val a<-make local i64;try{ {{'+defer('<-','a','7')+'}};{}}catch(e:const OutOfMemoryError){};'+OUT('a'),2,'','before definite initialization'),
         'ref_source_uninitialized': ('val a<-1,b<-make local i64;ref p=a;'+defer('=','p','b'),2,'','before definite initialization'),
@@ -64,7 +64,7 @@ for spelling in ('call', 'intrinsic'):
         'restore_observer_armed_before_registration': (IO+'proc run()->void{val a<-7;ptr p:i64=null in here;val ready<-true;'
             'defer{if(ready){'+OUT('p')+'}else{};};'+defer('=','p','a')+'}run();',2,'',"checked exception 'NullPointerException'"),
         'observer_disarmed_during_cleanup': (IO+'proc run()->void{ptr p:i64=null in here;val ready<-false;'
-            'defer{if(ready){'+OUT('p')+'}else{};};'+defer('<-','ready','false')+'ready<-true;}run();',0,'',''),
+            'defer{if(ready){'+OUT('p')+'}else{};};'+defer('<-','ready','false')+'ready<-true;return;}run();',0,'',''),
         'skipped': (IO+'ref a:i64=1;{{if(false){'+defer('<-','a','7')+'}else{};}};'+OUT('a'),0,'1\n',''),
         'loop_records': (IO+'ref a:i64=9;{{for(i in 0..3){'+defer('<-','a','i')+'};'+OUT('a')+'}};'+OUT('a'),0,'9\n0\n',''),
         'pending_return': (IO+'proc run()->i64{val a<-1;defer{'+OUT('a')+'};'+defer('<-','a','7')+'return a;}'+OUT('run()'),0,'7\n1\n',''),

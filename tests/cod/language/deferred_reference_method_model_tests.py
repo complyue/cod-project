@@ -19,9 +19,9 @@ for number, (schedule, alias, late, count) in enumerate(product(SCHEDULES, (Fals
     parameters = {'a':'p','b':'p' if alias else 'q'}
     body = ''.join(left+'=null;' if action=='clear' else left+'='+right+';' if action=='set'
                    else 'intrinsic (<=>)('+left+','+right+');' for action,left,right in schedule)
-    source = PRELUDE+'func (<=>)(ptr a:i64 in O,ptr b:i64 in O)->void where {owner O}{'+body+'}'
+    source = PRELUDE+'func (<=>)(ptr a:i64 in O,ptr b:i64 in O)->void where {owner O}{'+body+'{}}'
     source += 'val x<-1,y<-7,z<-9;ptr p=x,q=y;{{'
-    source += ('defer (<=>)(p,'+('p' if alias else 'q')+');')*count+'q='+late+';}};'
+    source += ('defer (<=>)(p,'+('p' if alias else 'q')+');')*count+'q='+late+':void;}};'
     bindings['q']=late
     for _ in range(count):
         for action,left,right in schedule:

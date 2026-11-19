@@ -33,6 +33,7 @@ proc cleanup_targets(flag:bool)->void{
  {{defer{p=null;};}};try{observe(p);}catch(e:const NullPointerException){observe(57u64);};
  p=if(flag){gated}else{null};{{defer{if((p is null)){}else{p<-58u64;{}};};}};
  try{observe(p);}catch(e:const NullPointerException){observe(59u64);};
+ return;
 }
 cleanup_targets(true);cleanup_targets(false);observe(9000u64);
 ''')

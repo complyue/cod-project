@@ -5,7 +5,7 @@ from native_test_support import NativeFixture, run_native
 
 SOURCE = '''
 using symbol "std:io" @print;
-proc observe(value:u64)->void{behave @print(value);}
+proc observe(value:u64)->void{behave @print(value);return;}
 func one()->const u64{return 1u64;}
 func wrap(value:func()->const u64)->func()->const u64{
  return func[value]()->const u64{return value();};
@@ -26,6 +26,7 @@ proc stored()->void{
  for(index in 0u64..100u64){view();duplicate();};
  observe(20003u64);
  observe(view());observe(duplicate());
+ return;
 }
 stored();
 proc direct(retained:const func()->const u64)->void{
@@ -35,6 +36,7 @@ proc direct(retained:const func()->const u64)->void{
  for(index in 0u64..100u64){read(0u64);};
  observe(20004u64);
  observe(read(1u64));
+ return;
 }
 direct(wrap(one));
 '''

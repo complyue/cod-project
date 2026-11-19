@@ -7,7 +7,7 @@ IO = 'using symbol "std:io" @print;'
 NPE = 'using "std:exceptions" NullPointerException;'
 MISSING = ('using "std:exceptions" MissingReturnError;using "std:exceptions" Exception;'
            'func missing()->u64{}'
-           'func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}')
+           'func error()->const MissingReturnError{try{missing():void;}catch(e:const MissingReturnError){return e;};}')
 runner.CASES = {}
 
 
@@ -30,7 +30,7 @@ for count in (8, 64, 256):
         read = chain(count, reverse, borrow, 'void', 'NEXT(item);', 'item;{}', suffix)
         runner.CASES['read_'+key] = (IO+NPE+read+'val value<-17u64;'+caught('node_0(value);behave @print(value);'), 0, '17\n', '')
         runner.CASES['uninitialized_read_'+key] = (NPE+read+'val value<-make local u64;'+caught('node_0(value);'), 2, '', 'cannot prove initialization')
-        write = chain(count, reverse, borrow, 'void', 'NEXT(item);', 'item<-23u64;', suffix)
+        write = chain(count, reverse, borrow, 'void', 'NEXT(item);', 'item<-23u64:void;', suffix)
         runner.CASES['write_'+key] = (IO+NPE+write+'val value<-make local u64;'+caught('node_0(value);behave @print(value);'), 0, '23\n', '')
 
 for reverse in (False, True):

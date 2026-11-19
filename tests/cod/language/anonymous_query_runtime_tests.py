@@ -11,6 +11,7 @@ proc anonymous_queries(f:func(u64)->const u64)->void{
  val y<-make local typeof(query_apply(func(x:T)->const T where T{return x+x;},true)){true};
  val z<-make local typeof((proc [f]()->const u64{observe(99u64);return f(1u64);})()){35u64};
  observe(9011u64);if(y){observe(x);}else{};observe(z);
+ return;
 }
 {{func f=wrap(base);anonymous_queries(f);observe(f(1u64));}};
 observe(9000u64);

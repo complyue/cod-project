@@ -4,8 +4,8 @@ from pathlib import Path
 import foundation_tests as runner
 
 IO = 'using symbol "std:io" @print;'
-OBS = IO+'proc observe(x:i64)->void{behave @print(x);}'
-EX = 'using "std:exceptions" MissingReturnError;func missing()->i64{}func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}'
+OBS = IO+'proc observe(x:i64)->void{behave @print(x);return;}'
+EX = 'using "std:exceptions" MissingReturnError;func missing()->i64{}func error()->const MissingReturnError{try{missing():void;}catch(e:const MissingReturnError){return e;};}'
 NPE = 'using "std:exceptions" NullPointerException;'
 runner.CASES = {}
 for spelling in ('operator', 'call', 'intrinsic'):

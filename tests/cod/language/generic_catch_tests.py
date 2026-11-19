@@ -8,11 +8,11 @@ TYPES = 'using "std:exceptions" MissingReturnError;using "std:exceptions" NullPo
 ERRORS = TYPES + '''
 func missing()->const i64{}
 func missing_error()->const MissingReturnError{
-  try{missing();}catch(e:const MissingReturnError){return e;};
+  try{missing():void;}catch(e:const MissingReturnError){return e;};
 }
 func null_error()->const NullPointerException{
   ptr p:i64=null in here;
-  try{p+0;}catch(e:const NullPointerException){return e;};
+  try{p+0:void;}catch(e:const NullPointerException){return e;};
 }
 '''
 WARN = '[-Wmissing-return]'
@@ -29,7 +29,7 @@ runner.CASES = {
     'retained_copy_and_replacement': (IO + ERRORS + 'func factory(sample:T)->func(Exception)->const i64 where T{return func[](e:Exception)->const i64{try{throw e;}catch(x:const T){return 1;}catch(x){return 0;};};}func a=factory(missing_error());func saved=a;a<-factory(null_error());val m:Exception<-missing_error();behave @print(saved(m));behave @print(a(m));', 0, '1\n0\n', WARN),
     'deferred_recovery_return': (IO + ERRORS + 'func recover(e:T)->const i64 where T{defer catch(x:const T){return 42;}finally{};defer{throw e;};return 1;}behave @print(recover(missing_error()));behave @print(recover(null_error()));', 0, '42\n42\n', WARN),
     'deferred_recovery_preserves_return': (IO + ERRORS + 'func recover(e:T)->const i64 where T{defer catch(x:const T){}finally{};defer{throw e;};return 7;}behave @print(recover(missing_error()));behave @print(recover(null_error()));', 0, '7\n7\n', WARN),
-    'caught_snapshot_in_defer': (IO + ERRORS + 'proc probe(e:T)->void where T{try{throw e;}catch(x:const T){defer{behave @print(x.category);};};}probe(missing_error());probe(null_error());', 0, '5\n4\n', WARN),
+    'caught_snapshot_in_defer': (IO + ERRORS + 'proc probe(e:T)->void where T{try{throw e;}catch(x:const T){defer{behave @print(x.category);};};return;}probe(missing_error());probe(null_error());', 0, '5\n4\n', WARN),
     'handler_initializes_storage': (IO + ERRORS + 'func probe(e:T)->const i64 where T{val result<-make local i64;try{throw e;}catch(x:const T){result<-9;{}};return result;}behave @print(probe(missing_error()));behave @print(probe(null_error()));', 0, '9\n9\n', WARN),
     'generic_rethrow_sibling_exclusion': (IO + ERRORS + 'func probe(e:T)->const i64 where T{try{try{throw e;}catch(x:const T){throw;}catch(x){return 99;};}catch(x:const T){return 8;};}behave @print(probe(missing_error()));behave @print(probe(null_error()));', 0, '8\n8\n', WARN),
     'generic_name_shadows_exception_alias': (IO + ERRORS + 'func probe(e:MissingReturnError)->const u64 where MissingReturnError{try{throw e;}catch(x:const MissingReturnError){return x.category;};}behave @print(probe(null_error()));', 0, '4\n', WARN),

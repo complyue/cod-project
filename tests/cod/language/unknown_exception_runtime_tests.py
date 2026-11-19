@@ -17,7 +17,7 @@ func unknown_value()->const StaticallyUnknownTypeException{
  try{unknown_boundary();}catch(e:const StaticallyUnknownTypeException){return e;};
 }
 func missing_value()->const MissingReturnError{
- try{missing();}catch(e:const MissingReturnError){return e;};
+ try{missing():void;}catch(e:const MissingReturnError){return e;};
 }
 func bounce(e:T)->const T where T{try{throw e;}catch(x:const T){return x;};}
 func relay_exception(e:Exception)->void throws Exception{throw e;}

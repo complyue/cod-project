@@ -5,7 +5,7 @@ import sys
 import foundation_tests as runner
 
 PRINT = 'using symbol "std:io" @print;\n'
-OBSERVE = PRINT + 'proc observe(x:i64)->void {behave @print(x);}\n'
+OBSERVE = PRINT + 'proc observe(x:i64)->void {behave @print(x);return;}\n'
 BAD = OBSERVE + 'func bad()->const i64 {}\n'
 runner.CASES = {
     "finally_value": (OBSERVE + 'behave @print(try{4}finally{observe(7);});', 0, "7\n4\n", ""),
@@ -18,7 +18,7 @@ runner.CASES = {
     "generic_completion": (PRINT + 'proc f(x:T)->const T where T {defer{behave @print(x);}finally{};try{return x;}finally{x<-x+x;{}}} behave @print(f(3u32));behave @print(f(1.5f32));', 0, "6\n3\n3\n1.5\n", ""),
     "generic_replacement": (PRINT + 'func f(x:T)->const T where T {try{return x;}finally{return x+x;}} behave @print(f(3u64));behave @print(f(1.5f32));', 0, "6\n3\n", ""),
     "finally_registration": (OBSERVE + '{{defer observe(1);try{defer observe(2);observe(3);}finally{defer observe(4);observe(5);};observe(6);}};', 0, "3\n5\n6\n4\n2\n1\n", ""),
-    "deferred_late_read": (OBSERVE + '{{val n<-1;defer observe(n);defer{observe(n);};n<-2;}};', 0, "2\n1\n", ""),
+    "deferred_late_read": (OBSERVE + '{{val n<-1;defer observe(n);defer{observe(n);};n<-2:void;}};', 0, "2\n1\n", ""),
     "deferred_return_snapshot": (OBSERVE + 'proc f()->const i64{val n<-1;defer{observe(n);};defer{n<-2;};return n;} behave @print(f());', 0, "2\n1\n", ""),
     "deferred_return": (OBSERVE + 'proc f()->const i64{defer observe(1);defer{return 2;};return 3;} behave @print(f());', 0, "1\n2\n", ""),
     "deferred_fallthrough_return": (OBSERVE + 'proc f()->const i64{defer{return 2;};} behave @print(f());', 0, "2\n", ""),

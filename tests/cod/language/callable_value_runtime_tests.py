@@ -10,7 +10,7 @@ FIXTURE = FIXTURE.updated(source='''
 using symbol "std:io" @print;
 using "std:exceptions" OutOfMemoryError;
 using "std:exceptions" MissingReturnError;
-proc observe(x:u64)->void{behave @print(x);}
+proc observe(x:u64)->void{behave @print(x);return;}
 proc one(x:u64)->void{observe(x+1u64);}
 proc two(x:u64)->void{observe(x+2u64);}
 func missing()->const u64{}

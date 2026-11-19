@@ -5,7 +5,7 @@ import foundation_tests as runner
 
 IO = 'using symbol "std:io" @print;'
 NPE = 'using "std:exceptions" NullPointerException;'
-OBS = IO+'proc observe(x:u64)->void{behave @print(x);}'
+OBS = IO+'proc observe(x:u64)->void{behave @print(x);return;}'
 ERROR = NPE+'func error()->const NullPointerException{ptr p:u64=null in here;try{p;{}}catch(e:const NullPointerException){return e;};}'
 runner.CASES = {}
 for kind in ('var', 'val var', 'ref var', 'ptr var', 'const var'):

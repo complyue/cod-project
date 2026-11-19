@@ -10,12 +10,13 @@ FIXTURE = FIXTURE.updated(source='''
 using symbol "std:io" @print;
 using "std:exceptions" OutOfMemoryError;
 using "std:exceptions" MissingReturnError;
-proc observe(x:u64)->void{behave @print(x);}
+proc observe(x:u64)->void{behave @print(x);return;}
 func empty()->const void{}
 func number()->const u64{return 41u64;}
 func wrap(f:func()->const u64)->func()->const u64{
   return func[f]()->const u64{return f();};
 }
+proc finish(f:func()->const void)->const void{defer observe(1u64);f();return;}
 proc finish(f:func()->const T)->const T where T{defer observe(1u64);f();}
 func recover(f:func()->const T)->const T where T{defer{return f();};}
 finish(empty);

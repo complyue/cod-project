@@ -9,13 +9,14 @@ using "std:exceptions" OutOfMemoryError;
 using "std:exceptions" MissingReturnError;
 func missing()->const i64 {}
 func error()->const MissingReturnError {
-  try{missing();}catch(e:const MissingReturnError){return e;};
+  try{missing():void;}catch(e:const MissingReturnError){return e;};
 }
-proc observe(x:u64)->void{behave @print(x);}
+proc observe(x:u64)->void{behave @print(x);return;}
 proc records()->void {
   defer observe(1u64);
   behave @print(9001u64);
   defer observe(99u64);
+  return;
 }
 try{records();}catch(e:const OutOfMemoryError){
   behave @print(e.category);

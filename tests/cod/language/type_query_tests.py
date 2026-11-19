@@ -126,14 +126,14 @@ runner.CASES={
  'projection_keeps_prepared_write_on_its_original_target':(saved_query(
     'const val present<-{{val saved<-(input is not null),other<-false;ref chosen:bool=other;'
     'defer{return saved;};defer set_true(chosen);chosen=saved;return false;}};'+GUARDED_RESULT,
-    declarations='func set_true(ref value:bool in B)->void where {owner B}{value<-true;};'),0,'9\n',''),
+    declarations='func set_true(ref value:bool in B)->void where {owner B}{value<-true:void;};'),0,'9\n',''),
  'projection_weakens_prepared_write_on_its_original_target':(saved_query(
     'const val present<-{{val saved<-(input is not null),other<-false;ref chosen:bool=saved;'
     'defer{return saved;};defer set_true(chosen);chosen=other;return false;}};'+GUARDED_RESULT,
-    declarations='func set_true(ref value:bool in B)->void where {owner B}{value<-true;};'),2,'',UNPROVED_TARGET),
+    declarations='func set_true(ref value:bool in B)->void where {owner B}{value<-true:void;};'),2,'',UNPROVED_TARGET),
  'projection_checks_overlap_of_readonly_and_writable_deferred_borrows':(saved_query(
     'const val present<-{{val saved<-(input is not null);defer{return saved;};defer set_true(saved,saved);return false;}};'+
-    GUARDED_RESULT,declarations='func set_true(ref read:const bool in B,ref write:bool in B)->void where {owner B}{write<-true;};'),
+    GUARDED_RESULT,declarations='func set_true(ref read:const bool in B,ref write:bool in B)->void where {owner B}{write<-true:void;};'),
     2,'',UNPROVED_TARGET),
  'projection_keeps_prepared_transfer_observation_after_input_rebinding':(saved_query(
     SAVE_TARGET+'const val present<-{{val saved<-false;defer{return saved;};defer (<-)(saved,input is not null);'
@@ -360,7 +360,7 @@ runner.CASES={
  'borrow_respects_owner':('func get(ref x:i64 in O,ref y:i64 in O)->const i64 where {owner O}{return x;}val x<-1;{{val y<-2;val z<-make local typeof(get(x,y));}};',2,'','different actual owners'),
  'body_inference_without_payload_read':('func f(x:i64){return x;}val x<-make local typeof(f(1));',0,'',''),
  'query_cannot_declare_runtime_storage':('val x<-make local typeof({val y<-1;y});',2,'','typeof for this expression form'),
- 'outer_query_does_not_capture':('func id(x:i64)->const i64{return x;}proc run()->void{func f=id;func nested()->const i64{val x<-make local typeof(f(1)){2};return x;};nested();}run();',0,'',''),
+ 'outer_query_does_not_capture':('func id(x:i64)->const i64{return x;}proc run()->void{func f=id;func nested()->const i64{val x<-make local typeof(f(1)){2};return x;};nested();return;}run();',0,'',''),
  'mixed_identity_view':('val a<-1;val b<-make local typeof(((if(true){a}else{1}) is null));',2,'','reference identity requires existing target views'),
  'mixed_borrowed_view':('func f(ref x:i64 in O)->const i64 where {owner O}{return x;}val a<-1;val b<-make local typeof(f(if(true){a}else{1}));',2,'','existing view'),
  'callable_arity':(ID+'func f:func(i64)->const i64=id;val x<-make local typeof(f(1,2));',2,'','callable argument count'),
@@ -382,7 +382,7 @@ runner.CASES={
             'func discard(ref n:const u64 in O)->void where {owner O}{};'),
     2,'','deferred borrowed argument does not outlive its cleanup scope'),
  'deferred_exception_type_only':(IO+'using "std:exceptions" MissingReturnError;func missing()->const i64{}try{missing();{}}catch(e:const MissingReturnError){defer{{val x<-make local typeof(e.category){25u64};behave @print(x);}};};',0,'25\n','[-Wmissing-return]'),
- 'initializer_still_captures':(IO+'func id(x:i64)->const i64{return x;}proc run()->void{func f=id;func nested[f]()->const i64{val x<-make local typeof(1){f(26)};return x;};behave @print(nested());}run();',0,'26\n',''),
+ 'initializer_still_captures':(IO+'func id(x:i64)->const i64{return x;}proc run()->void{func f=id;func nested[f]()->const i64{val x<-make local typeof(1){f(26)};return x;};behave @print(nested());return;}run();',0,'26\n',''),
 }
 
 def deferred_call_inspector(name, call, setup=''):
@@ -397,13 +397,13 @@ def deferred_call_projection(call, declarations, setup=''):
 
 
 PRINT_BRIDGE = ('using symbol "std:io" @print as @output;'
-                'proc helper(label:u64)->void{behave @output(label);}'
-                'proc report(label:u64)->void{helper(label);}')
-RECURSIVE_REPORT = ('proc report(n:u64)->void{if(n>0u64){report(n-1u64);}else{behave @print(n);};}')
-WRITE_OUTPUT = 'proc write(ref out:bool in B)->void where {owner B}{out<-true;}'
+                'proc helper(label:u64)->void{behave @output(label);return;}'
+                'proc report(label:u64)->void{helper(label);return;}')
+RECURSIVE_REPORT = ('proc report(n:u64)->void{if(n>0u64){report(n-1u64);}else{behave @print(n);};return;}')
+WRITE_OUTPUT = 'proc write(ref out:bool in B)->void where {owner B}{out<-true;return;}'
 OPAQUE_BRIDGE = ('proc @external(label:u64)->void{behave @print(label);};effect @external;'
                  'proc helper(label:u64)->void{behave @external(label);}'
-                 'proc report(label:u64)->void{helper(label);}')
+                 'proc report(label:u64)->void{helper(label);return;}')
 
 runner.CASES.update({
     'deferred_query_uses_transitive_intrinsic_effects':(
@@ -418,10 +418,10 @@ runner.CASES.update({
         deferred_call_projection('report(4u64)', OPAQUE_BRIDGE),2,'',UNPROVED_TARGET),
 })
 
-PROCEDURE_LIBRARY = (IO+'proc helper(label:u64)->void{behave @print(label);}'
-                     'proc report(label:u64)->void{helper(label);}export helper;export report;')
-PROCEDURE_ADAPTER = ('import "library.cod" helper;proc @external(flag:bool)->void{};'
-                     'proc helper(flag:bool)->void{behave @external(flag);}'
+PROCEDURE_LIBRARY = (IO+'proc helper(label:u64)->void{behave @print(label);return;}'
+                     'proc report(label:u64)->void{helper(label);return;}export helper;export report;')
+PROCEDURE_ADAPTER = ('import "library.cod" helper;proc @external(flag:bool)->void{return;};'
+                     'proc helper(flag:bool)->void{behave @external(flag);return;}'
                      'export import "library.cod" report;using "library.cod" report as frozen;export frozen;')
 FROZEN_IMPORT = 'using "adapter.cod" frozen;'
 ADAPTED_IMPORT = 'using "adapter.cod" report;'

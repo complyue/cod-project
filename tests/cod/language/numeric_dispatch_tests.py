@@ -5,7 +5,7 @@ import foundation_tests as runner
 
 IO = 'using symbol "std:io" @print;'
 NPE = 'using "std:exceptions" NullPointerException;'
-ERROR = 'using "std:exceptions" MissingReturnError;using "std:exceptions" Exception;func missing()->const u64{}func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}'
+ERROR = 'using "std:exceptions" MissingReturnError;using "std:exceptions" Exception;func missing()->const u64{}func error()->const MissingReturnError{try{missing():void;}catch(e:const MissingReturnError){return e;};}'
 OWNERS = 'func pick(x:u32,ref a:const i64 in O,ref b:const i64 in O)->u64 where {owner O}{return 1u64;}func pick(x:u64,ref a:const i64 in A,ref b:const i64 in B)->u64 where {owner A,owner B}{return 2u64;}'
 TYPES = ('u8','u32','u64','i64','f32','f64')
 LITERALS = dict(zip(TYPES,('1u8','1u32','1u64','1','1f32','1f64')))
@@ -51,8 +51,8 @@ runner.CASES.update({
  'proc_effects_remain_ordered': (IO+'proc value(x:u64)->u64{behave @print(x);return x;}proc first(x:i64,y:u64)->i64{behave @print(3u64);return x;}behave @print(first(1u32,value(2u8)));',0,'2\n3\n1\n',''),
  'function_cannot_choose_widened_proc': ('proc f(x:u64)->u64{return x;}func g()->u64{return f(1u8);}',2,'','function cannot invoke a procedure'),
  'borrowed_result_keeps_owner': (IO+'func f(x:f64,ref y:i64 in O)->ref i64 in O where {owner O}{return y;}val y<-3;ref z=f(1u32,y);z<-7;behave @print(y);',0,'7\n',''),
- 'deferred_snapshot': (IO+'proc show(x:f64)->void{behave @print(x);}val x<-16777217u32;{{defer show(x);x<-1u32;}};',0,'16777217\n',''),
- 'deferred_borrow_stays_late': (IO+'proc show(x:f64,ref y:f32 in O)->void where {owner O}{behave @print(x);behave @print(y);}val x<-1u32,y<-2f32;{{defer show(x,y);x<-3u32;y<-4f32;}};',0,'1\n4\n',''),
+ 'deferred_snapshot': (IO+'proc show(x:f64)->void{behave @print(x);return;}val x<-16777217u32;{{defer show(x);x<-1u32:void;}};',0,'16777217\n',''),
+ 'deferred_borrow_stays_late': (IO+'proc show(x:f64,ref y:f32 in O)->void where {owner O}{behave @print(x);behave @print(y);return;}val x<-1u32,y<-2f32;{{defer show(x,y);x<-3u32;y<-4f32:void;}};',0,'1\n4\n',''),
  'checked_failure_contract': (NPE+'func f(x:f64)->f64 throws NullPointerException{return x;}f(1u32);',2,'','requires a covering catch or throws'),
  'checked_failure_caught': (IO+NPE+'func f(x:f64)->f64 throws NullPointerException{ptr p:f64=null in here;return p;}try{f(1u32);{}}catch(e:const NullPointerException){behave @print(7u64);};',0,'7\n',''),
  'type_query_does_not_read': (IO+'func f(x:f64)->u64{return 7u64;}val x<-make local u32;val y<-make local typeof(f(x)){9u64};behave @print(y);',0,'9\n',''),

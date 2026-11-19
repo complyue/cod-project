@@ -1,5 +1,5 @@
 using symbol "std:io" @print;
-proc observe(x:u64) -> void { behave @print(x); }
+proc observe(x:u64) -> void { behave @print(x); return; }
 func update(x:u64) -> const u64 { x <- x + 1u64; return x; }
 func explicit(const ptr x:u64) -> const u64 { x <- 9u64; return x; }
 func first(x:u64,y:u64) -> const u64 { return x; }
@@ -54,6 +54,6 @@ val n <- 1u8, wide:u32 <- n, { wide <- wide + 2u32; };
 behave @print(wide);
 {{
   defer observe(original);
-  original <- 13u64;
+  original <- 13u64:void;
 }};
 behave @print(original);

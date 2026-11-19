@@ -8,12 +8,12 @@ FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
 FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 using "std:exceptions" Exception;
 using "std:exceptions" NullPointerException;
-func missing_value()->const MissingReturnError{try{missing();}catch(caught:const MissingReturnError){return caught;};}
+func missing_value()->const MissingReturnError{try{missing():void;}catch(caught:const MissingReturnError){return caught;};}
 func null_value()->const NullPointerException{ptr absent:u64=null in here;try{absent;{}}catch(caught:const NullPointerException){return caught;};return null_value();}
 func category(ref input:const Exception in O)->u64 where {owner O}{return input.category;}
 func identity(ref input:Exception in O)->ref Exception in O where {owner O}{return input;}
-proc overwrite(ptr target:Exception in O,value:Exception)->void throws NullPointerException where {owner O}{target<-value;}
-proc show(snapshot:Exception,ref live:const Exception in O)->void where {owner O}{observe(snapshot.category);observe(live.category);}
+proc overwrite(ptr target:Exception in O,value:Exception)->void throws NullPointerException where {owner O}{target<-value;return;}
+proc show(snapshot:Exception,ref live:const Exception in O)->void where {owner O}{observe(snapshot.category);observe(live.category);return;}
 {{
  val common:Exception<-missing_value();
  func held=category;func select=identity;
@@ -34,7 +34,7 @@ proc show(snapshot:Exception,ref live:const Exception in O)->void where {owner O
  proc writer=overwrite;
  try{writer(common,missing_value());observe(common.category);}catch(caught:const NullPointerException){};
  proc display=show;
- {{defer display(common,common);select(common)<-null_value();}};
+ {{defer display(common,common);select(common)<-null_value():void;}};
  observe(common.category);
  val chain:Exception<-try{throw missing_value() from null_value();}catch(caught:const MissingReturnError){caught};
  observe(captured(chain));observe(chain.cause_count);observe(cause_at(chain,0u64).category);

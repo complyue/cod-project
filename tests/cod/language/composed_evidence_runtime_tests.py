@@ -14,7 +14,7 @@ FIXTURE = FIXTURE.updated(source=FIXTURE.source.replace('defer report_mode(f,tag
 FIXTURE = FIXTURE.updated(expected_values=(*FIXTURE.expected_values[:FIXTURE.expected_values.index('9100')], '9102', *FIXTURE.expected_values[FIXTURE.expected_values.index('9100'):]))
 FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 using "std:exceptions" Exception;
-func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}
+func error()->const MissingReturnError{try{missing():void;}catch(e:const MissingReturnError){return e;};}
 func exception_forward(e:T)->const u64 where T{return e.category;}
 func common(e:Exception)->const u64{return exception_forward(e);}
 proc common_proc(e:Exception)->void{observe(exception_forward(e));}

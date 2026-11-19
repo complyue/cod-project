@@ -32,7 +32,7 @@ runner.CASES.update({
  'retained_transfer_conversion':(IO+'func factory(x:T)->func()->const T where T{return func[]()->const T{val y<-make local T;y<-3u8;return y;};}behave @print(factory(1)());behave @print(factory(1.0f64)());',0,'3\n3\n',''),
  'same_view_distinct_retained_types':(IO+'func pick(x:i64)->const i64{return 1;}func pick(x:f64)->const i64{return 2;}func factory(x:T)->func()->const i64 where T{return func[]()->const i64{val y:T<-1u8;return pick(y);};}func wrap(f:func()->const i64)->func()->const i64{return func[f]()->const i64{return f();};}func a=factory(1);func b=factory(1.0f64);func c=a;a<-b;behave @print(c());behave @print(a());func d=wrap(c);c<-b;behave @print(d());',0,'1\n2\n1\n',''),
  'copied_and_returned_context':(IO+FACTORY+'func pass(f:F)->const F where F{return f;}func a=factory(1);func b=pass(a);a<-factory(2);behave @print(b(9));',0,'9\n',''),
- 'deferred_context':(IO+BASE+'proc factory(f:func(T)->const T)->proc(T)->void where T{return proc[f](x:T)->void{behave @print(f(x));};}{{proc a=factory(inc);proc b=factory(yes);defer a(10);defer b(true);}};',0,'true\n11\n',''),
+ 'deferred_context':(IO+BASE+'proc factory(f:func(T)->const T)->proc(T)->void where T{return proc[f](x:T)->void{behave @print(f(x));return;};}{{proc a=factory(inc);proc b=factory(yes);defer a(10);defer b(true);}};',0,'true\n11\n',''),
  'generic_name_shadows_exception':('using "std:exceptions" Exception;func factory(x:Exception)->func(Exception)->const Exception where Exception{return func[](y:Exception)->const Exception{return y;};}factory(1)(2);',0,'',''),
 })
 runner.EXTRA_SOURCES=[Path(__file__)]

@@ -11,6 +11,7 @@ proc lexical_queries(f:func(u64)->const u64)->void{
  func nested=func()->func()->const u64{return func()->const u64{val x<-make local typeof(f(1u64)){37u64};return x;};};
  observe(q());observe(nested()());
  observe(9011u64);
+ return;
 }
 func mixed_query(f:func(u64)->const u64,tag:T)->func(u64)->const u64 where T{
  return func(x:u64)->const u64{val unused<-make local typeof(tag);return f(x);};
@@ -21,6 +22,7 @@ proc caught_query_context()->void{
   defer{{func q=func()->const u64{val x<-make local typeof(e.category){38u64};return x;};observe(q());}};
   observe(9091u64);
  };
+ return;
 }
 proc recursive_name_queries(f:func(u64)->const u64)->void{
  observe(9010u64);
@@ -30,6 +32,7 @@ proc recursive_name_queries(f:func(u64)->const u64)->void{
  };
  observe(recur(1u64));
  observe(9011u64);
+ return;
 }
 {{
  func f=wrap(base);lexical_queries(f);recursive_name_queries(f);

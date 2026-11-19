@@ -9,6 +9,7 @@ FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 func same(ptr left:const u64 in O,ptr right:const u64 in O)->bool where {owner O}{return left is right;}
 proc fill(ptr destination:u64 in O,ptr observed:const u64 in O)->void throws NullPointerException where {owner O}{
  destination<-85u64;observe(observed);
+ return;
 }
 proc verify_choice(first:bool,second:bool)->void{
  val first_target<-make local u64,second_target<-make local u64;
@@ -16,6 +17,7 @@ proc verify_choice(first:bool,second:bool)->void{
  ptr right=if(second){first_target}else{second_target};
  try{if(same(left,right)){fill(left,right);}else{observe(86u64);};}
  catch(failure:const NullPointerException){observe(99u64);};
+ return;
 }
 verify_choice(false,false);verify_choice(false,true);
 verify_choice(true,false);verify_choice(true,true);

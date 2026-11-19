@@ -15,7 +15,7 @@ runner.CASES={}
 
 
 def case(name,body=FIRST+SECOND+READ,setup='',definitions='',reject=False,output='7\n8\n8\n7\n',local=LOCAL,diagnostic='initialization'):
-    source=IO+definitions+'proc run(flag:bool,other:bool)->void{'+local+'try{ '+setup+body+'}catch(e:const NullPointerException){behave @print(99u64);};}'+CALLS
+    source=IO+definitions+'proc run(flag:bool,other:bool)->void{'+local+'try{ '+setup+body+'}catch(e:const NullPointerException){behave @print(99u64);};return;}'+CALLS
     runner.CASES[name]=(source,2 if reject else 0,'' if reject else output,diagnostic if reject else '')
 
 
@@ -75,9 +75,9 @@ for name,definition,first,second,setup,reject in (
 ):
     case(name,FIRST.replace('p is q',first)+SECOND.replace('p is not q',second)+READ,setup=setup,definitions=definition,reject=reject)
 
-SET='proc set_equal(ptr output:u64 in O,ptr left:const u64 in O,ptr right:const u64 in O)->void throws NullPointerException where {owner O}{if(left is right){output<-7u64;{}}else{};}'
+SET='proc set_equal(ptr output:u64 in O,ptr left:const u64 in O,ptr right:const u64 in O)->void throws NullPointerException where {owner O}{if(left is right){output<-7u64;{}}else{};return;}'
 DIFFERENT=SET.replace('set_equal','set_different').replace('left is right','left is not right').replace('7u64','8u64')
-case('borrowed_output','fill(result,p,q);'+READ,definitions=SET.replace('set_equal','fill').replace('}else{};}','}else{};if(left is not right){output<-8u64;{}}else{};}'))
+case('borrowed_output','fill(result,p,q);'+READ,definitions=SET.replace('set_equal','fill').replace('return;}','if(left is not right){output<-8u64;{}}else{};return;}'))
 case('complementary_calls','set_equal(result,p,q);set_different(result,p,q);'+READ,definitions=SET+DIFFERENT)
 case('changed_call_selection','set_equal(result,p,q);q=p;set_different(result,p,q);'+READ,definitions=SET+DIFFERENT,reject=True)
 case('prepared_calls','{{defer set_equal(result,p,q);defer set_different(result,p,q);}};'+READ,definitions=SET+DIFFERENT)
@@ -102,7 +102,7 @@ for left,right in [('eq','ne'),('chain','not_chain'),('ne','other'),('different'
     values=[8 if gn(*args) else 7 if fn(*args) else None for args in product(range(3),repeat=3)]
     local='val a<-make local u64,b<-make local u64,c<-make local u64,result<-make local u64;'
     local+=''.join('ptr '+name+'=if('+index+'==0u64){a}else{if('+index+'==1u64){b}else{c}};' for name,index in [('p','first'),('q','second'),('r','third')])
-    source=IO+'proc model(first:u64,second:u64,third:u64)->void{'+local+FIRST.replace('p is q',first)+SECOND.replace('p is not q',second)+READ+'}'
+    source=IO+'proc model(first:u64,second:u64,third:u64)->void{'+local+FIRST.replace('p is q',first)+SECOND.replace('p is not q',second)+READ+'return;}'
     source+=''.join('model('+','.join(str(n)+'u64' for n in args)+');' for args in product(range(3),repeat=3))
     reject=None in values
     runner.CASES['model_'+left+'_'+right]=(source,2 if reject else 0,'' if reject else ''.join(str(v)+'\n' for v in values),'initialization' if reject else '')

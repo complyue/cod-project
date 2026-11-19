@@ -8,11 +8,11 @@ IO = 'using symbol "std:io" @print;'
 NPE = 'using "std:exceptions" NullPointerException;'
 ERROR = 'using "std:exceptions" MissingReturnError;func missing()->const i64{}'
 EXCEPTIONS = ERROR + NPE + '''using "std:exceptions" Exception;
-func error()->const MissingReturnError{try{missing();}catch(e:const MissingReturnError){return e;};}
-func absent()->const NullPointerException{ptr p:i64=null in here;try{p;}catch(e:const NullPointerException){return e;};}
+func error()->const MissingReturnError{try{missing():void;}catch(e:const MissingReturnError){return e;};}
+func absent()->const NullPointerException{ptr p:i64=null in here;try{p;{}}catch(e:const NullPointerException){return e;};}
 '''
 WARN = '[-Wmissing-return]'
-METHOD = 'proc (<->)(x:bool in O,y:bool in P)->void where {owner O,owner P}{intrinsic (<->)(x,y);behave @print(9);}'
+METHOD = 'proc (<->)(x:bool in O,y:bool in P)->void where {owner O,owner P}{intrinsic (<->)(x,y);behave @print(9);return;}'
 OUT = lambda value: 'behave @print(' + value + ');'
 TARGETS = 'ref x:i64=1,y:i64=2;'
 SLOTS = 'val x<-1,y<-2,z<-3;ptr p=x,q=y;'
@@ -26,7 +26,7 @@ BORROWED_RESULT_OWNER = 'borrowed result does not retain its declared external o
 
 
 def swap_program(setup, work, observation=PAIR, definitions=''):
-    return IO + definitions + 'proc run()->void{' + setup + observe_after_cleanup(work, observation) + '}run();'
+    return IO + definitions + 'proc run()->void{' + setup + observe_after_cleanup(work, observation) + 'return;}run();'
 
 
 runner.CASES = {
@@ -53,29 +53,29 @@ runner.CASES = {
      0, '3\n1\n2\n', ''),
  'selected_alias_retains_its_target': (IO + 'proc run(flag:bool)->void{' + SLOTS +
      'ptr var selected->if(flag){p}else{q};'
-     + observe_after_cleanup('defer (<->)(selected,z);selected=z;', TRIPLE) + '}run(true);run(false);',
+     + observe_after_cleanup('defer (<->)(selected,z);selected=z;', TRIPLE) + 'return;}run(true);run(false);',
      0, '3\n2\n1\n1\n3\n2\n', ''),
  'different_target_owners': (IO + 'ref x:i64=1;{{val y<-2;defer{' + OUT('y') + '};defer (<->)(x,y);}};' + OUT('x'),
      0, '1\n2\n', ''),
  'selected_targets_across_owners': (IO + 'proc run(flag:bool)->void{ref x:i64=1;'
      '{{val y<-2,z<-3;defer{' + OUT('y') + OUT('z') + '};'
-     'if(flag){defer (<->)(x,z);}else{defer (<->)(y,z);};defer{z<-4;};}};' + OUT('x') + '}run(true);run(false);',
+     'if(flag){defer (<->)(x,z);}else{defer (<->)(y,z);};defer{z<-4;};}};' + OUT('x') + 'return;}run(true);run(false);',
      0, '2\n1\n4\n4\n2\n1\n', ''),
  'fixed_bindings_writable_payloads': (IO+'const ptr p=1,q=2;{{defer (<->)(p,q);}};behave @print(p);behave @print(q);',0,'2\n1\n',''),
  'borrowed_targets_outlive_call': (IO+'func swap(ref x:T in O,ref y:T in P)->void where {T,owner O,owner P}{defer (<->)(x,y);}val x<-1,y<-2;swap(x,y);behave @print(x);behave @print(y);',0,'2\n1\n',''),
- 'borrowed_read_promises_propagate': (IO+NPE+'proc swap(ptr x:i64 in O,ptr y:i64 in P)->void throws NullPointerException where {owner O,owner P}{defer (<->)(x,y);}val x<-1,y<-2;try{swap(x,y);}catch(e:const NullPointerException){};behave @print(x);behave @print(y);',0,'2\n1\n',''),
+ 'borrowed_read_promises_propagate': (IO+NPE+'proc swap(ptr x:i64 in O,ptr y:i64 in P)->void throws NullPointerException where {owner O,owner P}{defer (<->)(x,y);return;}val x<-1,y<-2;try{swap(x,y);}catch(e:const NullPointerException){};behave @print(x);behave @print(y);',0,'2\n1\n',''),
  'nested_registration': (swap_program(TARGETS, 'defer{ {{defer (<->)(x,y);}};};'),
      0, '2\n1\n', ''),
  'return_snapshot_preserved': (IO+'proc run()->const i64{val x<-1,y<-2;defer{behave @print(x);};defer (<->)(x,y);return x;}behave @print(run());',0,'2\n1\n',''),
  'borrowed_return_observes_swapped_payload': (IO+'func run(ref x:i64 in O,ref y:i64 in O)->ref i64 in O where {owner O}{defer (<->)(x,y);return x;}val x<-1,y<-2;behave @print(run(x,y));behave @print(y);',0,'2\n1\n',''),
  'pending_exception_and_remaining_cleanup': (IO + ERROR + 'proc run()->void{val x<-1,y<-2;'
-     'defer{' + OUT('y') + '};defer catch(e:const MissingReturnError){' + OUT('x') + '};'
-     'defer (<->)(x,y);missing();}run();', 0, '2\n1\n', WARN),
+     'defer{' + OUT('y') + '};defer catch(e:const MissingReturnError){' + OUT('x') + 'return;};'
+     'defer (<->)(x,y);missing();return;}run();', 0, '2\n1\n', WARN),
  'loop_accumulates_distinct_addresses': (swap_program('val x<-1,y<-2,z<-3;ptr p=x;',
      'for(i in 0..3){defer (<->)(p,z);p=y;};', TRIPLE), 0, '3\n2\n1\n', ''),
  'per_iteration_scope': (IO + TARGETS + 'for(i in 0..3){ {{defer (<->)(x,y);}};};' + PAIR,
      0, '2\n1\n', ''),
- 'generic_recursive_mixed_dispatch': (IO+METHOD+'proc run(ref x:T in O,ref y:T in P,n:i64)->void where {T,owner O,owner P}{if(n>0){defer (<->)(x,y);run(x,y,n-1);}else{};}val x<-1,y<-2,a<-false,b<-true;run(x,y,3);run(a,b,2);behave @print(x);behave @print(a);',0,'9\n9\n2\nfalse\n',''),
+ 'generic_recursive_mixed_dispatch': (IO+METHOD+'proc run(ref x:T in O,ref y:T in P,n:i64)->void where {T,owner O,owner P}{if(n>0){defer (<->)(x,y);run(x,y,n-1);}else{};return;}val x<-1,y<-2,a<-false,b<-true;run(x,y,3);run(a,b,2);behave @print(x);behave @print(a);',0,'9\n9\n2\nfalse\n',''),
  'zero_loop_registers_nothing': (IO+'val x<-1,y<-2;for(i in 0..0){defer (<->)(x,y);};behave @print(x);',0,'1\n',''),
  'exception_categories_not_exchanged_at_registration': (swap_program('val a:Exception<-error(),b:Exception<-absent();',
      'defer (<->)(a,b);try{throw a;}catch(e:const Exception){' + OUT('1') + '};',
@@ -88,7 +88,7 @@ runner.CASES = {
  'later_operand_failure_registers_nothing': (IO+ERROR+'val x<-1,y<-2;try{defer (<->)(x,{x<-3;missing();y});}catch(e:const MissingReturnError){};behave @print(x);behave @print(y);',0,'3\n2\n',WARN),
  'operand_return_registers_nothing': (IO+'proc run()->void{val x<-1,y<-2;defer{behave @print(x);};defer (<->)({return;x},{behave @print(9);y});}run();',0,'1\n',''),
  'uninitialized_at_registration': ('val x<-make local i64,y<-2;defer (<->)(x,y);x<-3;',2,'','before definite initialization'),
- 'borrowed_uninitialized_at_registration': (NPE+'proc swap(ptr x:i64 in O,ptr y:i64 in P)->void throws NullPointerException where {owner O,owner P}{defer (<->)(x,y);}val x<-make local i64,y<-2;try{swap(x,y);}catch(e:const NullPointerException){};',2,'','cannot prove initialization'),
+ 'borrowed_uninitialized_at_registration': (NPE+'proc swap(ptr x:i64 in O,ptr y:i64 in P)->void throws NullPointerException where {owner O,owner P}{defer (<->)(x,y);return;}val x<-make local i64,y<-2;try{swap(x,y);}catch(e:const NullPointerException){};',2,'','cannot prove initialization'),
  'expired_target': ('val y<-1;proc leak(ref target:i64 in O)->ref i64 in O where {owner O}'
      '{ref local:i64=2;return local;}defer (<->)(leak(y),y);', 2, '', BORROWED_RESULT_OWNER),
  'expired_selected_alternative': ('val y<-1;proc leak(ref target:i64 in O,flag:bool)->ref i64 in O where {owner O}'

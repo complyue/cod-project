@@ -8,7 +8,7 @@ FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
 FIXTURE = FIXTURE.updated(source='''
 func real(x:f64)->f64{return x;}
 func forward(ref f:func(u64)->const u64 in O,x:u64)->u64 where {owner O}{return f(x);}
-proc invoke(p:proc(u64)->void,x:u64)->void{p(x);}
+proc invoke(p:proc(u64)->void,x:u64)->void{p(x);return;}
 ''' + FIXTURE.source)
 for original, replacement in (
     ('val total<-0u64;', 'val total<-0u64;val real_total<-0f64;'),
