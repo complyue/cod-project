@@ -1,8 +1,10 @@
 # Collections and builtin containers
 
-Design revision 3 · 2026-11-18 · Source design draft
+Design revision 4 · 2026-11-19 · Source design draft
 
 ## Design authority
+
+- **Labelled visitation.** [H-GENERATOR-RECEPTION-20261119](../CHANGELOG.md#h-generator-reception-20261119) applies D-29-GENERALIZED-FOR to the r4 array example under P-590. Compare both headers after exchanging the order of the index and item declarations. Collection qualification and per-member owner proofs retain their existing scope.
 
 - **Traversal UX.** [K-GENERALIZED-FOR-20261118](../CHANGELOG.md#k-generalized-for-20261118) relates the D-30r3 examples under P-589/P-590 to D-18-HERE-BREAK and D-29-LENDING. Charter §§4.3/8.1 motivate visible custody and early exit at the call site. Acceptance distinguishes skip, stop and take while preserving each actual member owner. The general interface and per-call owner proof retain their draft status.
 
@@ -27,7 +29,7 @@ The first profile is an ordered, indexed collection. A collection supplies the o
 
 | Proposed call | Effect on membership | What the caller receives |
 | --- | --- | --- |
-| `visit(xs) {=> index, item; ... }` | Visits the current elements in collection order. Membership stays intact, including when the callback throws. | The collection’s index and its declared read access to the element. For an owning element this is a readonly target view covered for the callback invocation. |
+| `visit(xs) (index, item) => { ... }` | Visits the current elements in collection order. Membership stays intact, including when the callback throws. | The collection’s index and its declared read access to the element. For an owning element this is a readonly target view covered for the callback invocation. |
 | `take_at(xs, i)` | Removes the selected element from a writable collection. | An independent bits result for a bits element, or the original owning holder for an independently owned resource. |
 | `drain(xs)` in a `for` header | Removes the next element at each handoff. Unvisited elements stay in the collection if execution leaves the loop early. | One result per iteration, under the same element-transfer contract as removal. |
 
@@ -47,7 +49,7 @@ A visit passes the callback as the first parameter under the ordinary trailing-c
 For this draft, `visit` and each observer invocation finish void. Assume `is_noise`, `report` and `requires_attention` accept a readonly member. The caller can express filtering and short-circuiting without adding a stop flag to the collection API:
 
 ```cod
-visit(batch.exceptions) {=> index, member;
+visit(batch.exceptions) (index, member) => {
     if (is_noise(member)) { continue; } else {};
     report(index, member);
     if (requires_attention(member)) { break; } else {};
@@ -56,14 +58,21 @@ visit(batch.exceptions) {=> index, member;
 
 A skipped member stays in the batch. The first member requiring attention is reported, then the visit ends and the caller resumes after it. Later members are untouched. An empty batch invokes no observer. A search written in an enclosing bool-returning procedure could instead `return true;` on a match, and return false after a visit that finds none. Double braces remain available when the author wants a local callback return and ordinary callback exception handling.
 
-For independent member regions A and B, the same observer can borrow A on its first invocation and B on its second. Each invocation needs its own actual owner proof. The proposed `visit` needs this even if the callback never exits early. Expressing this as a single ref-yield component with owner O would require O to denote both A and B during one generator invocation, which violates the fixed-owner rule. For a generator-compatible visiting overload on a regional array of u64, `for { val index <-; ref item:const u64 =; } := visit(xs) { ... }` and `visit(xs) {=> index, item; ... };` can borrow the same readonly items from the same owner. Both leave the collection intact. The header assumes those declared labels and a readonly item target. [Generalized for-loops](RangedForAndGenerators.md#generalized-for-loops)
+For independent member regions A and B, the same observer can borrow A on its first invocation and B on its second. Each invocation needs its own actual owner proof. The proposed `visit` needs this even if the callback never exits early. Expressing this as a single ref-yield component with owner O would require O to denote both A and B during one generator invocation, which violates the fixed-owner rule.
+
+For a generator-compatible visiting overload on a regional array, suppose each handoff supplies the labels `index` and `item`, with a readonly u64 item in the array’s owner. Both call sites select these labels explicitly. Swapping their order in the declared schema leaves each receiving operation unchanged. The second spelling uses the same spec in its parenthesized header. [Shared receiving header](RangedForAndGenerators.md#one-receiving-header-for-both-call-forms)
+
+```cod
+for { val index <-; ref item:const u64 =; } := visit(xs) { report(index, item); }
+visit(xs) ({ val index <-; ref item:const u64 =; }) => { report(index, item); };
+```
 
 A visit relies on three facts. The collection remains available for traversal, the selected entry retains its release responsibility, and the observer may read the selected target while its actual owner is live. Each callback entry binds the owner of that particular target, including when one compiled callback body visits several regions. An index selects the entry at that step. Compaction can change a surviving element’s index while preserving its owner.
 
 The structural mutation exclusion follows the collection wherever the callback can reach it. For example, suppose `remove_first()` can call `take_at` on the same collection through a second handle:
 
 ```cod
-visit(batch.exceptions) {{=> index, member;
+visit(batch.exceptions) (index, member) => {{
     remove_first();          # Reject while this collection is being visited.
     report(index, member);
 }};

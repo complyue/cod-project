@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 213 · Recorded: 2026-11-18 · Phase: language/application co-design.
+Design revision: 216 · Recorded: 2026-11-19 · Phase: language/application co-design.
 
 ## Design authority
+
+- **Generator/argument spelling.** [K-GENERATOR-YIELD-FORMAL-20261118](../CHANGELOG.md#k-generator-yield-formal-20261118) records the D-29r17 proposal in the r214 feature overview. D-29-GENERALIZED-FOR/P-623–P-624 and D-10-TRAILING-CALLBACK govern selection, first-slot binding, labels and cleanup. Compare the two call syntaxes with one selected method. [H-GENERATOR-RECEPTION-20261119](../CHANGELOG.md#h-generator-reception-20261119) confirms the first formal and the [shared receiving header](RangedForAndGenerators.md#one-receiving-header-for-both-call-forms) at D-29r18/D-10r215. Check fresh and existing controls at every invocation. [H-HERE-HEADER-20261119](../CHANGELOG.md#h-here-header-20261119) confirms the parenthesized spelling at r216.
 
 - **Language feature overview.** [K-GENERALIZED-FOR-20261118](../CHANGELOG.md#k-generalized-for-20261118) updates D-10r213 for the feature overview. D-29-GENERALIZED-FOR/P-623–P-624 owns equivalent call forms. D-10-TRAILING-CALLBACK/P-567–P-569 supplies the binding rules. H-HERE-ORIGIN-HANDOFF-20261118, H-HERE-BREAK-CONTINUE-20261118 and D-29-EFFECTS explain synchronous caller-owned work under charter §§3.2/6.1/8.1. The [generalized for-loop examples](RangedForAndGenerators.md#generalized-for-loops) compare live writes, feedback and control targets within the existing source contracts. Collection conformance and lowering remain separately scoped.
 
@@ -938,13 +940,13 @@ run();
 
 Where the grammar attaches the first block as a callback, a suspicious presentation can warrant a warning that the block is passed to run and is invoked only under run's behavior; inserting `;` states the independent-scope intent. An intentionally formatted multiline callback must not warn merely because a newline precedes its block. Exact warning triggers and safe formatter output need focused examples and incremental refinement; indentation is not proof of intent.
 
-Other review cases include return/throw operands across lines, call/index/operator continuations, comments and blank lines, and separators in callback headers or receiving specifications. Preserve D-16's reserved fraction `//` and `#` line comments. No newline rule, header-terminator omission, precedence change, mandatory warning catalogue or formatting algorithm is selected by this general principle. In particular, the explicit `;` after a trailing callback's parameter header remains an unambiguous spelling; any omission needs a defined header/body boundary, not a parser guess.
+Other review cases include return/throw operands across lines, call/index/operator continuations, comments, blank lines and separators inside braced receiving specifications. Preserve D-16’s reserved fraction `//` and `#` line comments. A trailing callback header ends at `) =>`. The braces that follow determine its control destinations.
 
 Acceptance of incremental grammar/diagnostic work should show both the admitted omission and its deterministic meaning, meaningful warnings with valid suggested rewrites for the targeted trap, and ordinary omission/multiline cases without unnecessary warnings. Preserve selected argument order, first-slot callback binding, local returns, captures and cleanup. Current compiler support must be reported separately; this source principle alone does not imply that every illustrated omission is already parsed or diagnosed.
 
 ### Trailing callback arguments
 
-A generator declaration with `yields` supplies the implicit first here parameter for a single-brace call. Apply the slot-one rules below to that protocol, keeping the written ordinary parameters, names and defaults in their original positions. A callback-first generator-compatible declaration exposes the same body to a `for` header. [Generalized for-loops](RangedForAndGenerators.md#generalized-for-loops)
+A generator declaration with `yields` introduces a first here parameter named `yield`. A `for` body or a trailing single-brace group supplies it. Apply the slot-one rules below to that protocol, keeping the written ordinary parameters, names and defaults in their original positions. A callback-first generator-compatible declaration exposes the same body to a `for` header. [Generalized for-loops](RangedForAndGenerators.md#generalized-for-loops)
 
 
 A [single-brace here body](CallableStorageAndHereAccess.md#single-brace-bodies-for-a-here-callable) sends an outward return or escaping exception to its lexical supplier. Write the trailing group directly after the call. Within the group, `continue expr;` supplies feedback to the current body invocation. A `break expr;` supplies the whole originating call’s result, even if another function invoked the forwarded formal.
@@ -957,10 +959,10 @@ A first parameter declared as a [here callable](CallableStorageAndHereAccess.md#
 proc apply(here body(x:u64) -> u64, value:u64) -> u64 {
     return body(value);
 }
-apply(7u64) {{=> x;
+apply(7u64) (x) => {{
     return x + 1u64;
 }};                                      # 8.
-apply(7u64 -> value) {{=> x;
+apply(7u64 -> value) (x) => {{
     return x + 1u64;
 }};                                      # Same binding.
 
@@ -972,7 +974,7 @@ The callback is the **first declared parameter**, as in [Julia's do-notation](ht
 
 There is no search for a callback parameter later in the signature. A non-callable first parameter, an explicitly supplied value/default request for the first parameter, or another missing required argument rejects. A declared default on the first parameter is suppressed by this explicitly supplied callback. Defaults on remaining omitted slots retain their existing rules. Calls without a trailing block keep ordinary positional binding. The callback construction is outside the parenthesized argument list, so it does not violate that list's ban on a positional argument after a named argument. The bounded form supplies one trailing callback; use explicit named callable arguments for other callbacks.
 
-**Header and expected type.** `{{=> x, index; statements... }}` binds callback parameters in order. A header is distinct from executable body expressions; `=>` is recognized only in that leading position, and an explicit semicolon ends the header. The general semicolon-omission principle above applies to future refinement of this boundary; it does not yet select a replacement delimiter or a newline rule. No header means zero parameters, not an implicit variadic or ignored-argument callback. Parameter names are local to the callback. The independently selected expected callable signature supplies each parameter's type, val/ref/ptr/init/place mode, owner/access constraints, func/proc kind, result contract and failure requirements. This is contextual declaration checking, not type assertion or a new operation on the callback's parameters. Any explicit ordinary parameter annotations must satisfy that contract; they cannot erase owner/access/init obligations. No default expressions are authored by this anonymous header.
+**Header and expected type.** `(x, index) => { ... }` binds fresh positional parameters of an ordered signature. `(x, index) => {{ ... }}` uses the same header with local callback return. Ordinary annotations can be written in either header. A niladic body may omit the parameter list and arrow. Header parsing uses the closing parenthesis and arrow. The independently selected expected callable signature supplies each parameter's type, val/ref/ptr/init/place mode, owner/access constraints, func/proc kind, result contract and failure requirements. This is contextual declaration checking, not type assertion or a new operation on the callback's parameters. Any explicit ordinary parameter annotations must satisfy that contract; they cannot erase owner/access/init obligations. No default expressions are authored by this anonymous header. For a generator-compatible single-brace here call, the [shared receiving header](RangedForAndGenerators.md#one-receiving-header-for-both-call-forms) accepts the same fresh controls, existing destinations and labelled projections as the corresponding for loop.
 
 The selected callable **parameter type** supplies the callback's `throws` contract. Every checked obligation that escapes the callback body must be covered by it. The body may handle additional failures locally or use fewer than the signature permits. An outer catch around the call, or the receiving procedure's own `throws`, cannot grant the callback a larger interface. The procedure that invokes the callback handles or declares the callback signature's checked obligations as for any ordinary call.
 
@@ -992,7 +994,7 @@ proc use(val e:NullPointerException) -> void throws NullPointerException {
 
 A callback written at the call site therefore keeps its expected signature. Its body cannot widen that signature, rank overload candidates, or narrow the obligations of a call through that signature. Standalone double braces use the [inferred checked interface](ExceptionControl.md#checked-failures-of-standalone-full-scopes).
 
-The initial shorthand covers a single established fixed-arity callback signature, with a header naming all its parameters. It does not synthesize multiple methods for `typeof` a callable family, resolve a circular generic result, or reinterpret a pack as several fixed parameters. Richer signatures can use an ordinary explicitly declared callable where compatible; no new method-coverage, variance, pure or parameter-default policy follows. Structural callback results use the ordinary declared result schema and explicit named return form.
+The initial shorthand covers a single established fixed-arity callback signature, with an ordered header naming its parameters or a braced receiving spec selecting fields from an established labelled protocol. It does not synthesize multiple methods for `typeof` a callable family, resolve a circular generic result, or reinterpret a pack as several fixed parameters. Richer signatures can use an ordinary explicitly declared callable where compatible; no new method-coverage, variance, pure or parameter-default policy follows. Structural callback results use the ordinary declared result schema and explicit named return form.
 
 **Selection and evaluation.** Bind/check the candidate declaration shapes and independently available written-argument evidence before checking the callback body against one established expected signature. Header arity is syntactic evidence, but do not trial-check its return expressions, outer-slot uses or effects to choose between incompatible expected signatures. If that information leaves ambiguity, reject and require an explicit callable contract or named adapter. Body checking cannot retroactively repair overload selection. A literal written in a func retains func permissions. A proc-authored here body may do procedural work.
 
@@ -1623,9 +1625,9 @@ The SNN owns the neuron equations, AP/rate interpretation, training rules and da
 
 ### Generalized for-loops
 
-A library can provide one traversal and let each caller use either `for val n <- ascending() { ... }` or `ascending() {=> n; ... };`. Both select the same generator, enter the caller’s live lexical scope in the same order and deliver the same feedback. Inside the library, the traversal may call `yield(item)` or an explicit first here parameter such as `step(item)` with the same protocol. Changing the selected generator can change the visit order or membership effects under either spelling. [Ascending and descending in both call forms](RangedForAndGenerators.md#generalized-for-loops)
+A library can provide one traversal and let each caller use either `for val n <- ascending() { ... }` or `ascending() (n) => { ... };`. Both select the same generator, enter the caller’s live lexical scope in the same order and deliver the same feedback. In the declaration, `yields` introduces a first here parameter named `yield`; `yield(item)` calls it. A written first here parameter such as `step` carries the same protocol. There is one method for the two call spellings. Changing the selected generator can change the visit order or membership effects under either spelling. [Ascending and descending in both call forms](RangedForAndGenerators.md#generalized-for-loops)
 
-For the proposed collection interface, `visit(xs) {=> index, item; ... };` exposes a readonly item for each visit. In a void visit, `continue;` finishes the current observation and `break;` ends the whole visit. The collection stays intact in both cases. A library function with a non-void result can also let the caller supply that result with `break value;`. [Collection examples](CollectionsAndBuiltinContainers.md#observation-and-owner-scope)
+For the proposed collection interface, `visit(xs) (index, item) => { ... };` exposes a readonly item for each visit. In a void visit, `continue;` finishes the current observation and `break;` ends the whole visit. The collection stays intact in both cases. A library function with a non-void result can also let the caller supply that result with `break value;`. [Collection examples](CollectionsAndBuiltinContainers.md#observation-and-owner-scope)
 
 ## Validation and unresolved contract scope
 

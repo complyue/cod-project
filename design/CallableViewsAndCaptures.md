@@ -1,8 +1,10 @@
 # Function values, here callables and declared place aliases
 
-Design revision: 128 · Recorded: 2026-11-18 · Status: scoped callable contract; implementation boundaries recorded separately.
+Design revision: 131 · Recorded: 2026-11-19 · Status: scoped callable contract; implementation boundaries recorded separately.
 
 ## Design authority
+
+- **Here callable forms.** H-HERE-FUNCTOR-20261118 includes the receiver-bound functor. [K-GENERATOR-YIELD-FORMAL-20261118](../CHANGELOG.md#k-generator-yield-formal-20261118) groups for-loop bodies and here calls under the same parameter at r130. [Here callable forms](#forms-of-here-callable), D-18-HERE and D-29-GENERALIZED-FOR/P-623–P-624 cover the source inventory. Keep the existing lexical use bound, receiver owner and per-form control rules. [H-GENERATOR-RECEPTION-20261119](../CHANGELOG.md#h-generator-reception-20261119) continues this inventory at r131. D-29 checks that an immediate full scope can invoke the enclosing lexical here parameter with its original consumer.
 
 - **Here body control.** [H-HERE-BREAK-CONTINUE-20261118](../CHANGELOG.md#h-here-break-continue-20261118) covers this r128 summary and D-18-HERE-BREAK/P-621–P-622 at storage r10. Results reach the same source destination through direct and forwarded calls. The [examples](CallableStorageAndHereAccess.md#break-and-continue-in-a-single-brace-here-body) check feedback, early call completion and supplier return. Mainline owns native transport.
 
@@ -136,16 +138,21 @@ proc count() -> u64 {
 
 Both calls update the same n. Likewise `{{ p = other; }}` rebinds the enclosing mutable ref slot, and a later invocation uses the currently selected target. No second source binding or shared heap cell is constructed. The receiver of a `here` parameter can use a common invocation interface with a link to the supplied body's defining activation. Each body knows the slots it uses and how to resolve their owners. A single receiver can therefore invoke bodies from sites with different fixed owner counts. Such a link must remain valid across backing relocation. Inlining or passing just the needed access information is equivalent if observations agree.
 
+<a id="six-forms-of-here-callable"></a>
+
+### Forms of here callable
+
+The source inventory has five families when a `for` body and a single-brace here call are counted together. A block literal describes how the body is written. A here-parameter call describes how a receiver invokes or forwards it. A single expression can use both. The two callable value kinds remain `func` and `here`.
+
 | Source form | Lexical access and control obligations |
 | --- | --- |
-| Module top level | Each incorporated module, including the selected `__main__`, executes its top-level code with direct access to its own initialized lexical slots. Its prefix and `postpon` fragments share that module activation. A callable declared there keeps its own access rules. [Module scope and example](ModuleWorlds.md#here-callable-module-top-levels) |
-| Standalone or trailing `{{ ... }}` | Standalone executes immediately. A trailing body with outer-slot access requires a bounded receiver. Each invocation has its own locals, cleanup and local return. |
-| `for` body | The caller owns the body. Direct `return` targets the enclosing callable, `continue` supplies feedback and generator cleanup still runs. D-29 already specifies [direct lexical access](RangedForAndGenerators.md#lexical-scope-and-completion). |
-| Single-brace here argument | A `continue` supplies the current body invocation’s result. A `break` supplies the result of the receiving call to which the group was attached. A `return` exits the lexical supplier. |
-| `here` callback parameter | The supplied body's defining activation provides the slots. The receiving body can invoke it repeatedly. It can forward the same body to another func’s compatible here formal for that nested call. Storing or returning the body for later use rejects. Invoking the formal hands control to the original supplier’s lexical scope, even after forwarding through another func. A proc-authored literal may do procedural work there. Function-authored literals retain func permissions. |
+| Block literal | Standalone `{{ ... }}` invokes immediately. At a here parameter, `{{ ... }}` has its own return and cleanup. A trailing `{ ... }` has supplier-directed return and exception propagation, `continue` for invocation feedback and `break` for the originating call. |
+| Here-parameter call, including a `for` body | The supplied body uses its particular defining activation. A receiver may invoke it repeatedly or forward it synchronously to a compatible here formal. The `for` header receives each handoff under its declared modes. In the equivalent single-brace here call, `continue` sends feedback, `break` ends the original call and `return` targets the lexical supplier. [Generator elaboration](RangedForAndGenerators.md#a-generator-declaration-introduces-a-here-parameter-named-yield) |
 | `effect @sym(...) { ... }` body | A reached installation may invoke a method that needs lexical slots only while its particular defining activation is available. Module-world family registration alone supplies no live frame. Scoped replay and restoration must prove those slots live. |
+| Module top level | Each incorporated module, including the selected `__main__`, executes its top-level code with direct access to its own initialized lexical slots. Its prefix and `postpon` fragments share that module activation. A callable declared there keeps its own access rules. [Module scope and example](ModuleWorlds.md#here-callable-module-top-levels) |
+| Functor used as a here callable | A data receiver with a compatible `()` overload can supply a synchronous here argument. Invocation uses the receiver under its actual owner and access permissions. The bounded callable may be forwarded to another compatible here formal while the receiver remains live. The receiver itself keeps its ordinary data type and storage eligibility. |
 
-For an existing functor binding `limit`, the proposed `test(limit, x)` at a `here` parameter should observe the same slot as `test(x) {{=> n; return limit(n); }}`, including a permitted rebind between invocations. An ordinary escaping callable cannot implicitly bind the receiver. Effectful receiver expressions and independent receiver selection need a separate argument-preparation rule.
+In `test(limit, 12u64)`, the functor supplies the predicate and the literal supplies the scalar input. Returning or storing the receiver-bound here callable for later execution rejects. Storing the underlying receiver data follows its own type and owner rules. The [functor examples](DomainLanguageDesign.md#functor-receivers-and-callback-arguments) track when a mutable receiver is selected.
 
 The frame proof leaves two obligations. A region referenced through an outer slot may be released while that slot still exists; using a ref to the old instance must reject. Also, a write to an outer slot can invalidate a caller's flow facts. The checker must account for zero, one or repeated calls, including exceptional exits: it cannot assume that a callback initialized a slot, preserved a non-null refinement, or can consume the same owner twice. Access to an outer slot grants no release authority beyond its ordinary declaration. A conservative checker may reject an unproved use.
 
