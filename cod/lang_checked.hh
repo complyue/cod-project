@@ -95,9 +95,9 @@ class ScalarChecker {
     std::map<size_t, size_t> families;
     std::set<size_t> selected_symbols;
     std::set<std::string> selected_callables, values;
-    std::map<std::string, Type> exception_types;
+    std::map<std::string, Type> types;
     struct Resource {
-      enum class Kind { symbol, callable, exception } kind;
+      enum class Kind { symbol, callable, type } kind;
       size_t symbol = 0;
       std::optional<size_t> family;
       Type type;
@@ -1672,7 +1672,7 @@ class ScalarChecker {
         (checking_method_ && (enclosing_names_[checking_method_->source].contains(name) ||
          lexical_self(name, checking_instance_->method) || module_names().values.contains(name))) ||
         module_names().callables.contains(name) || module_names().symbols.contains(name) ||
-        module_names().exception_types.contains(name);
+        module_names().types.contains(name);
     if (outer && warned_shadow_.emplace(at.file, at.line, at.column, name).second)
       program_.warnings.push_back({Warning::shadow, at, "declaration shadows outer binding '" + name + "'"});
   }
@@ -4334,7 +4334,8 @@ class ScalarChecker {
       if (partial) return type;
       implementation_gap(method->source->at, "type parameter is not determined by the arguments");
     }
-    if (type.kind == Type::named) if (const auto found = module_names().exception_types.find(type.name); found != module_names().exception_types.end()) return found->second;
+    if (type.kind == Type::named && !type.target)
+      if (const auto found = module_names().types.find(type.name); found != module_names().types.end()) return found->second;
     if (type.kind == Type::procedure) {
       for (auto &parameter : type.parameters) parameter = resolve_type(std::move(parameter), method, bindings, partial);
       // Throws declarations are resolved independently of argument inference.
@@ -14121,8 +14122,8 @@ class ScalarChecker {
       }
       if (receiver_import) module_names().selected_symbols.erase(resource.symbol);
       else module_names().selected_symbols.insert(resource.symbol);
-    } else if (resource.kind == Resource::Kind::exception) {
-      const auto [alias, inserted] = module_names().exception_types.emplace(form.alias, resource.type);
+    } else if (resource.kind == Resource::Kind::type) {
+      const auto [alias, inserted] = module_names().types.emplace(form.alias, resource.type);
       if (!inserted && alias->second != resource.type) fail(form.at, "conflicting type alias '" + form.alias + "'");
     } else {
       if (importing) resource.family = import_family(*resource.family, form.at);
@@ -14146,8 +14147,8 @@ class ScalarChecker {
         if (const auto family = module_names().families.find(resource.symbol); family != module_names().families.end()) resource.family = family->second;
       } else if (const auto found = module_names().callables.find(form->name); found != module_names().callables.end()) {
         resource.kind = Resource::Kind::callable; resource.family = found->second;
-      } else if (const auto found = module_names().exception_types.find(form->name); found != module_names().exception_types.end()) {
-        resource.kind = Resource::Kind::exception; resource.type = found->second;
+      } else if (const auto found = module_names().types.find(form->name); found != module_names().types.end()) {
+        resource.kind = Resource::Kind::type; resource.type = found->second;
       } else fail(form->at, "unknown exported resource '" + form->name + "'");
       publish(form->name, resource, form->at);
     }
@@ -14225,6 +14226,64 @@ class ScalarChecker {
     plan_entry_installations();
   }
 
+  void register_schemas(const SourceModule &source) {
+    const auto first = program_.schemas.size();
+    for (const auto &form : source.forms) {
+      const bool product = form->kind == Form::Kind::data;
+      if (!product && form->kind != Form::Kind::region_definition) continue;
+      if (form->parent_type) implementation_gap(form->at, "data declarations with a parent type");
+      const Type type{product ? Type::product : Type::region_schema, form->name, program_.schemas.size()};
+      if (!module_names().types.emplace(form->name, type).second)
+        fail(form->at, "duplicate type binding '" + form->name + "'");
+      program_.schemas.push_back({form.get(), {}, product});
+    }
+    const auto count = program_.schemas.size() - first;
+    if (!count) return;
+    auto schemas = std::span(program_.schemas).subspan(first);
+    for (auto &schema : schemas) {
+      std::set<std::string> names;
+      for (const auto &field : schema.source->parameters) {
+        if (!names.insert(field.name).second)
+          fail(field.at, "duplicate field '" + field.name + "' in '" + schema.source->name + "'");
+        const auto storage = place_kind(field.declaration_kind.empty() || field.declaration_kind == "val",
+                                        field.declaration_kind == "ref");
+        auto type = resolve_type(field.type);
+        if (type.kind == Type::region_schema) fail(field.at, "a region schema does not name a field payload type");
+        if (!scalar_type(type) && type.kind != Type::product)
+          implementation_gap(field.at, "field representation for type '" + type_name(type) + "'");
+        schema.bits &= storage == PlaceKind::value;
+        schema.fields.push_back({&field, std::move(type), storage});
+      }
+    }
+
+    // Only inline payloads require the target layout. A stored reference can
+    // name its own product or another product still being checked.
+    std::vector<size_t> pending(count);
+    std::vector<std::vector<size_t>> dependents(count);
+    std::deque<size_t> ready;
+    for (size_t i = 0; i < count; ++i) {
+      for (const auto &field : schemas[i].fields) {
+        if (field.storage != PlaceKind::value || field.type.kind != Type::product) continue;
+        if (!program_.schemas[field.type.identity].bits)
+          implementation_gap(field.source->at, "inline field with a reference-bearing product");
+        if (field.type.identity >= first) {
+          ++pending[i];
+          dependents[field.type.identity - first].push_back(i);
+        }
+      }
+      if (!pending[i]) ready.push_back(i);
+    }
+    while (!ready.empty()) {
+      const auto resolved = ready.front();
+      ready.pop_front();
+      for (const auto dependent : dependents[resolved])
+        if (!--pending[dependent]) ready.push_back(dependent);
+    }
+    for (size_t i = 0; i < count; ++i)
+      if (pending[i])
+        fail(schemas[i].source->at, "inline fields of '" + schemas[i].source->name + "' have no finite layout");
+  }
+
   void register_module(const SourceModule &source, std::optional<size_t> &print_symbol,
                        std::optional<Location> &unsupported_here) {
     const auto &forms = source.forms;
@@ -14235,19 +14294,22 @@ class ScalarChecker {
       if ((form->kind != Form::Kind::using_resource && form->kind != Form::Kind::import_resource) || form->path != "std:exceptions" || form->using_symbol) continue;
       const auto found = std::find_if(exception_categories.begin(), exception_categories.end(), [&](const ExceptionDescriptor &entry) { return form->name == entry.name; });
       if (found == exception_categories.end()) fail(form->at, "unknown intrinsic exception selection '" + form->name + "'");
-      if (!module_names().exception_types.emplace(form->alias, exception_type(exception_id(found->category))).second) fail(form->at, "duplicate exception type selection");
+      const auto type = exception_type(exception_id(found->category));
+      if (!module_names().types.emplace(form->alias, type).second) fail(form->at, "duplicate exception type selection");
       if (form->exporting) {
         ModuleNames::Resource resource{};
-        resource.kind = ModuleNames::Resource::Kind::exception;
-        resource.type = exception_type(exception_id(found->category));
+        resource.kind = ModuleNames::Resource::Kind::type;
+        resource.type = type;
         publish(form->alias, resource, form->at);
       }
       program_.exception_values = true;
     }
+    register_schemas(source);
     std::vector<const Form *> definitions;
     for (const auto &form : forms) {
       if (source.dependencies.contains(form.get())) continue;
-      if (form->kind == Form::Kind::expression || form->kind == Form::Kind::export_resource) continue;
+      if (form->kind == Form::Kind::expression || form->kind == Form::Kind::export_resource ||
+          form->kind == Form::Kind::data || form->kind == Form::Kind::region_definition) continue;
       if ((form->kind == Form::Kind::using_resource || form->kind == Form::Kind::import_resource) && form->path == "std:exceptions" && !form->using_symbol) continue;
       if (form->kind == Form::Kind::using_resource && form->using_symbol && form->path == "std:io" && form->name == "print") {
         if (!print_symbol) {
@@ -14259,7 +14321,7 @@ class ScalarChecker {
       }
       if (form->kind == Form::Kind::symbol) {
         if (form->symbol_owner) implementation_gap(form->at, "regional symbol ownership contracts");
-        if (module_names().exception_types.contains(form->name)) implementation_gap(form->at, "same-scope type and symbol declarations");
+        if (module_names().types.contains(form->name)) implementation_gap(form->at, "same-scope type and symbol declarations");
         const auto type = resolve_type(*form->result_type);
         CheckedMethod contract; contract.source = form.get();
         signature_type(contract, type, form->at);
@@ -14388,7 +14450,7 @@ class ScalarChecker {
       std::optional<size_t> symbol;
       if (form->symbolic) {
         if (here) implementation_gap(here->at, "here signatures of symbolic callable families");
-        if (module_names().exception_types.contains(form->name)) implementation_gap(form->at, "same-scope type and symbol declarations");
+        if (module_names().types.contains(form->name)) implementation_gap(form->at, "same-scope type and symbol declarations");
         if (const auto found = module_names().symbols.find(form->name); found != module_names().symbols.end()) symbol = found->second;
         else {
           if (!prepared.type_parameters.empty() || !prepared.result.type)
@@ -14460,7 +14522,7 @@ class ScalarChecker {
           implementation_gap(program_.families[module_names().callables.at(name)].at, "same-scope callable and symbol declarations");
         fail(program_.families[module_names().callables.at(name)].at, "callable conflicts with symbol '" + name + "'");
       }
-    for (const auto &[name, type] : module_names().exception_types)
+    for (const auto &[name, type] : module_names().types)
       if (module_names().symbols.contains(name) || module_names().callables.contains(name))
         implementation_gap({source.path.string()}, "same-scope type and callable/symbol bindings");
     for (const auto &[family, aliases] : module_names().extensions) if (aliases.size() > 1) {

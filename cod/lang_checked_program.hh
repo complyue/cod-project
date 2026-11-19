@@ -236,6 +236,17 @@ inline std::string place_kind_name(PlaceKind kind) {
   throw std::logic_error("unknown storage place kind");
 }
 
+struct CheckedSchema {
+  struct Field {
+    const Parameter *source;
+    Type type;
+    PlaceKind storage;
+  };
+  const Form *source;
+  std::vector<Field> fields;
+  bool bits;
+};
+
 struct CheckedBinding {
   Type type;
   bool read_only;
@@ -607,6 +618,7 @@ struct CheckedFamily {
 
 struct CheckedProgram {
   struct Initializer { size_t module; const Expression *expression; };
+  std::vector<CheckedSchema> schemas;
   std::vector<CheckedSymbol> symbols;
   std::deque<CheckedFamily> families;
   std::vector<QueryEnvironment> query_environments{{}};

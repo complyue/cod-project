@@ -187,7 +187,7 @@ enum class ArgumentMode { value, borrowed_read, borrowed_ref, borrowed_ptr };
 
 struct Type {
   enum Kind { integer, uint8, uint32, uint64, boolean, void_type, procedure, float32, float64,
-              named, unit, quantity, region, regional, array, reference, null_ref, abstract_type, arguments, parameter,
+              named, unit, quantity, product, region_schema, region, regional, array, reference, null_ref, abstract_type, arguments, parameter,
               exception, never };
   Kind kind;
   std::string name;
@@ -293,7 +293,7 @@ inline std::string type_name(const Type &type) {
   case Type::float64: return "f64";
   case Type::quantity: return type_name(*type.target) + "(" + type.name + ")";
   case Type::unit: return type.name;
-  case Type::named: case Type::regional: case Type::array:
+  case Type::named: case Type::product: case Type::region_schema: case Type::regional: case Type::array:
   case Type::abstract_type: return type.name;
   case Type::region: return std::string(type.owned ? "owned " : "") + "region" +
                            (type.target ? " :" + type_name(*type.target) : "");

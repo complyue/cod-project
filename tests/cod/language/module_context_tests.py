@@ -164,6 +164,32 @@ runner.CASES = {
         'vocab.cod': 'symbol @Name:u64;export @Name;',
         'main.cod': 'using "base.cod" Name;symbol from "vocab.cod" @Name;',
     }, 2, '', 'same-scope type and callable/symbol'),
+    'schema_types_keep_selected_identity': ({
+        'scalar.cod': 'data Item {value:u64;}export Item;',
+        'linked.cod': 'data Item {ptr next:Item;}export Item;',
+        'facade.cod': 'export import "scalar.cod" Item as Value;',
+        'main.cod': IO + 'using "scalar.cod" Item as Value;using "facade.cod" Value;'
+            'using "linked.cod" Item as Linked;data Wrapper {value:Value;}'
+            'region State {payload:Wrapper;ptr root:Linked;}behave @print(19u64);',
+    }, 0, '19\n', ''),
+    'inline_schema_layout_uses_forward_types': (
+        'data Outer {inner:Inner;}data Inner {val first:u64; second:bool;}'
+        'data Left {ref right:Right;}data Right {ptr left:Left;}'
+        'region Roots {record:Outer;ptr edge:Left;}', 0, '', '',
+    ),
+    'recursive_inline_schema_layout_rejects': (
+        'data Left {right:Right;}data Right {left:Left;}', 2, '', 'have no finite layout',
+    ),
+    'selected_reference_bearing_type_cannot_supply_inline_bits': ({
+        'base.cod': 'data Item {ptr next:Item;}export Item;',
+        'main.cod': 'using "base.cod" Item as Renamed;region State {item:Renamed;}',
+    }, 2, '', 'inline field with a reference-bearing product'),
+    'duplicate_root_field_rejects': (
+        'region State {value:u64; ptr value:u64;}', 2, '', "duplicate field 'value'",
+    ),
+    'region_schema_cannot_supply_a_reference_target_type': (
+        'region State {count:u64;}data Record {ptr value:State;}', 2, '', 'a region schema does not name a field payload type',
+    ),
     'receiver_declaration_cannot_extend_using': ({
         'base.cod': BASE,
         'main.cod': 'using "base.cod" score;func score(x:u64)->u64;',
