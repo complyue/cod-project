@@ -17,6 +17,14 @@ for source in TYPES:
             '' if accepted else 'argument does not satisfy the callable view type')
 
 runner.CASES.update({
+ 'primitive_places_keep_type_through_borrow_and_deferred_write': (IO+
+    'proc write(ref target:T in O,replacement:T)->void where {T,owner O}{defer (<-)(target,replacement);return;}'
+    'func borrow(ref target:T in O)->ref T in O where {T,owner O}{return target;}'
+    'val byte<-7u8, wide<-17u32, rate<-0.5f32, precise<-1.5f64, flag<-false;'
+    'write(borrow(byte),247u8);write(borrow(wide),4294967291u32);'
+    'write(borrow(rate),1.25f32);write(borrow(precise),2.5f64);write(borrow(flag),true);'
+    'behave @print(byte);behave @print(wide);behave @print(rate);behave @print(precise);behave @print(flag);'
+    'behave @print((borrow(byte) is byte));',0,'247\n4294967291\n1.25\n2.5\ntrue\ntrue\n',''),
  'cross_type_sum': (IO+'behave @print(16777217u32+1f32);behave @print(1f32+16777217u32);',0,'16777218\n16777218\n',''),
  'cross_type_precision': (IO+'behave @print(16777217u32==16777216f32);behave @print(16777217u32>16777216f32);behave @print(16777216f32<16777217u32);',0,'false\ntrue\ntrue\n',''),
  'cross_type_multiply_divide': (IO+'behave @print(3u32*0.5f32);behave @print(3u32/2f32);behave @print(5f32-3u32);',0,'1.5\n1.5\n2\n',''),

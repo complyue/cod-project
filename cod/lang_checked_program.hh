@@ -653,6 +653,7 @@ struct CheckedBody {
     }
   };
   std::vector<CheckedStorage> storage;
+  std::vector<std::set<Type::Kind>> storage_types;
   CheckedFrame frame;
   // Conservative writable exposure of an invocation input. Unexposed saved
   // payloads can be observed without acquiring another complete image.
@@ -670,7 +671,13 @@ inline CheckedBody checked_body(const CheckedProgram &program, const CheckedMeth
   for (const auto id : instances) {
     const auto &checked = program.instances[id];
     const auto retain = [&](const CheckedStorage &place) {
-      if (places.emplace(place.binding, result.storage.size()).second) result.storage.push_back(place);
+      const auto [entry, inserted] = places.emplace(place.binding, result.storage.size());
+      if (inserted) {
+        result.storage.push_back(place);
+        result.storage_types.emplace_back();
+      }
+      result.storage[entry->second].borrowed &= place.borrowed;
+      result.storage_types[entry->second].insert(place.type.kind);
     };
     for (const auto &input : checked.frame.inputs) retain(checked.storage.at(input.place));
     for (const auto capture : checked.frame.captures) retain(checked.storage.at(capture));
