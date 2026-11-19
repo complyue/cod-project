@@ -41,10 +41,18 @@ DEFER_READ_LOCAL = 'defer{behave @print(local);}'
 GUARDED_WRITES = ('val a<-make local u64,b<-make local u64;'
                   'if(flag){a<-7u64;{}}else{b<-8u64;{}};')
 SELECT_WRITTEN = 'ptr p=if(flag){a}else{b};'
+PICK = 'func choose(ptr left:T in O,ptr right:T in O)->ptr T in O where {T,owner O}'
+PICK_QUERY = (UNWRITTEN+'val ready<-8u64;ptr chosen=choose(local,ready);'
+              'try{return chosen;}catch(e:const NullPointerException){return 99u64;};')
+UNWRITTEN_RESULT = "read of 'chosen' before definite initialization"
 
 
 def guarded_reference(body):
     return IO+'proc run(flag:bool)->void{val result<-{{'+body+'}};behave @print(result);}run(true);run(false);'
+
+
+def queried_pick(body):
+    return IO+PICK+'{'+body+'}'+query(PICK_QUERY)+'behave @print(result);'
 
 
 runner.CASES = {
@@ -171,6 +179,30 @@ runner.CASES = {
         'func same(ptr x:u64 in O)->ptr u64 in O where {owner O};'+query(UNWRITTEN+
         'ptr p=same(local);try{return p;}catch(e:const NullPointerException){return 4u64;};'),
         2, '', "read of 'p' before definite initialization"),
+    'query_proves_the_target_returned_by_a_generic_method': (
+        queried_pick('return right;'), 0, '4\n', ''),
+    'query_rejects_unwritten_target_returned_by_a_generic_method': (
+        queried_pick('return left;'), 2, '', UNWRITTEN_RESULT),
+    'query_proves_replacement_borrowed_target_from_finally': (
+        queried_pick('try{return left;}finally{return right;};'), 0, '4\n', ''),
+    'query_proves_replacement_borrowed_target_from_defer': (
+        queried_pick('defer{return right;};return left;'), 0, '4\n', ''),
+    'query_rejects_replacement_borrowed_target_from_defer': (
+        queried_pick('defer{return left;};return right;'), 2, '', UNWRITTEN_RESULT),
+    'query_retains_saved_borrowed_target_across_cleanup_rebind': (
+        queried_pick('ptr selected=right;defer{selected=left;};return selected;'), 0, '4\n', ''),
+    'query_composes_borrowed_targets_through_generic_forwarding': (
+        PICK.replace('choose', 'forward')+'{return right;}'+queried_pick('return forward(left,right);'),
+        0, '4\n', ''),
+    'query_falls_back_when_ref_result_can_be_null': (
+        PICK.replace('->ptr T', '->ref T')+'{ptr absent:T=null in O;return absent;}'+query(PICK_QUERY),
+        2, '', UNWRITTEN_RESULT),
+    'query_falls_back_for_readonly_target_in_writable_result': (
+        PICK.replace('ptr right:T', 'ptr right:const T')+'{return right;}'+query(PICK_QUERY),
+        2, '', UNWRITTEN_RESULT),
+    'query_inspects_borrowed_signature_without_validating_generic_body': (
+        IO+PICK+'{return 7u64;}'+UNWRITTEN+'val ready<-8u64;'
+        'val result<-make local typeof(choose(local,ready)){4u64};behave @print(result);', 0, '4\n', ''),
     'query_checks_prepared_bits_swap_at_registration': (
         query(UNWRITTEN+'val ready<-3u64;defer (<->)(local,ready);local<-7u64;return local;'),
         2, '', "read of 'left swap target' before definite initialization"),
