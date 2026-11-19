@@ -507,6 +507,49 @@ runner.CASES = {
         'func compare(here step()->u64)->bool{return step()==7u64;}'
         'proc run()->u64{val result<-make local typeof(compare(){return false;}){true};return 7u64;}run();',
         2,'','return type does not satisfy the implicit callable result'),
+    'query_here_receiver_double_brace_has_local_return': (IO+
+        'func compare(here step(n:u64)->u64,input:u64)->bool{return step(input)==7u64;}'
+        'proc run()->bool{val result<-make local typeof(compare(7u64)(n)=>{{behave @print(90u64);return n;}}){true};'
+        'return result;}behave @print(run());',0,'true\n',''),
+    'query_here_receiver_double_brace_checks_declared_failures': (IO+'using "std:exceptions" NullPointerException;'+
+        'proc may_fail()->void throws NullPointerException{return;}'
+        'func admits(here step()->u64 throws NullPointerException)->u64 throws NullPointerException{return step();}'
+        'func recovers(here step()->u64)->u64{return step();}'
+        'proc run()->void{val first<-make local typeof(admits(){{may_fail();return 1u64;}}){11u64};'
+        'val second<-make local typeof(recovers(){{try{may_fail();}catch(e:const NullPointerException){};return 1u64;}}){12u64};'
+        'behave @print(first);behave @print(second);return;}run();',0,'11\n12\n',''),
+    'query_here_receiver_double_brace_rejects_failure_covered_only_by_receiver': (
+        'using "std:exceptions" NullPointerException;proc may_fail()->void throws NullPointerException{return;}'
+        'func receive(here step()->u64)->u64 throws NullPointerException{return step();}'
+        'proc run()->void{val v<-make local typeof(receive(){{may_fail();return 1u64;}}){2u64};return;}run();',
+        2,'',"checked exception 'NullPointerException' requires a covering catch or throws declaration"),
+    'query_here_receiver_double_brace_preserves_root_failure_contract': (IO+'using "std:exceptions" Exception;'+
+        'proc broad()->void throws Exception{return;}'
+        'func admits(here step()->u64 throws Exception)->u64 throws Exception{return step();}'
+        'func recovers(here step()->u64)->u64{return step();}'
+        'proc run()->void{val first<-make local typeof(admits(){{broad();return 1u64;}}){11u64};'
+        'val second<-make local typeof(recovers(){{try{broad();}catch(e:const Exception){};return 1u64;}}){12u64};'
+        'behave @print(first);behave @print(second);return;}run();',0,'11\n12\n',''),
+    'query_here_receiver_double_brace_does_not_discharge_root_via_finally': (
+        'using "std:exceptions" Exception;proc broad()->void throws Exception{return;}'
+        'func receive(here step()->u64)->u64{return step();}'
+        'proc run()->void{val v<-make local typeof(receive(){{try{broad();}finally{return 1u64;};}}){2u64};return;}run();',
+        2,'',"declared checked exception 'Exception' requires a covering catch or throws declaration"),
+    'query_here_receiver_double_brace_ignores_unreachable_root_failure': (IO+
+        'using "std:exceptions" Exception;using "std:exceptions" NullPointerException;'
+        'proc broad()->void throws Exception{return;}func receive(here step()->u64)->u64{return step();}'
+        'proc run()->void{val v<-make local typeof(receive(){{return 1u64;try{broad();}catch(e:const NullPointerException){};}}){7u64};'
+        'behave @print(v);return;}run();',0,'7\n',''),
+    'supplied_scope_explicit_root_returns_to_receiver_catch': (IO+'using "std:exceptions" Exception;'+
+        'proc broad()->void throws Exception{ptr p:u64=null in here;p;return;}'
+        'func handle(here step()->u64 throws Exception)->u64{try{return step();}catch(e:const Exception){return 9u64;};}'
+        'proc run()->void{behave @print(handle(){{broad();return 7u64;}});return;}run();',0,'9\n',''),
+    'supplied_scope_narrow_catches_do_not_cover_declared_root': (
+        'using "std:exceptions" Exception;using "std:exceptions" NullPointerException;'
+        'using "std:exceptions" StaticallyUnknownTypeException;'
+        'func handle(here step()->u64 throws Exception)->u64{try{return step();}'
+        'catch(a:const NullPointerException){return 8u64;}catch(b:const StaticallyUnknownTypeException){return 9u64;};}'
+        'handle(){{return 7u64;}};',2,'',"declared checked exception 'Exception' requires a covering catch or throws declaration"),
     'generator_void_feedback_rejects_explicit_operand': (
         'func generate() yields u64{yield(1u64);}func action()->void{}'
         'for val v<-generate(){continue action();};',2,'','void here feedback requires bare continue'),

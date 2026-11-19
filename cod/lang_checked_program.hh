@@ -401,6 +401,7 @@ struct CheckedHereContract {
   Component result;
   std::optional<std::vector<Component>> feedback;
   std::set<size_t> throws_categories;
+  bool throws_root = false;
   bool operator==(const CheckedHereContract &) const = default;
 };
 struct CheckedHereTarget {

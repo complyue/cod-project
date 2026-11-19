@@ -1165,6 +1165,8 @@ class ScalarChecker {
       Type feedback, receiving;
     };
     std::optional<HereControl> here_control;
+    // Required callback queries track declaration coverage independently of concrete outcomes.
+    std::optional<bool> root_failure_covered;
     struct ReturnObservation {
       std::optional<bool> present;
       std::optional<TargetEvidence> borrowed;
@@ -4652,6 +4654,7 @@ class ScalarChecker {
     for (const auto &failure : source.throws_types) {
       const auto type = resolve_type(failure, &receiver);
       if (type.kind != Type::exception) implementation_gap(formal.at, "here throws contracts require selected intrinsic exception types");
+      contract.throws_root |= !type.identity;
       const auto categories = exception_possibilities(type);
       contract.throws_categories.insert(categories.begin(), categories.end());
     }
@@ -4828,7 +4831,8 @@ class ScalarChecker {
       return true;
     };
     const auto same_contract = [&](const auto &self, const CheckedHereContract &left, const CheckedHereContract &right) -> bool {
-      if (left.here.size() != right.here.size() || left.labelled != right.labelled || left.throws_categories != right.throws_categories ||
+      if (left.here.size() != right.here.size() || left.labelled != right.labelled ||
+          left.throws_categories != right.throws_categories || left.throws_root != right.throws_root ||
           !same_components(left.inputs, right.inputs) || !same(left.result, right.result) ||
           left.feedback.has_value() != right.feedback.has_value() || (left.feedback && !same_components(*left.feedback, *right.feedback))) return false;
       for (size_t i = 0; i < left.here.size(); ++i) if (!self(self, left.here[i], right.here[i])) return false;
@@ -6050,8 +6054,15 @@ class ScalarChecker {
   template <typename Callable>
   static void record_type_call(const Expression &expr, TypeEvidenceState &state, const Callable &callable,
                                bool explicit_effects) {
-    if (state.preparing(expr) || state.exits)
+    if (state.preparing(expr) || state.exits) {
+      if (state.root_failure_covered == false && declares_root(callable.throws_types))
+        require_type_root_failure(state, expr.at);
       record_type_invocation(expr, state, call_reasons(callable), explicit_effects);
+    }
+  }
+  static void require_type_root_failure(const TypeEvidenceState &state, const Location &at) {
+    if (state.root_failure_covered == false && state.exits && state.checks_reaching_paths())
+      fail(at, "declared checked exception 'Exception' requires a covering catch or throws declaration; coverage by narrower catches is unproved");
   }
   bool module_storage_is_closed(size_t root) const {
     if (const auto cached = closed_module_storage_.find(root); cached != closed_module_storage_.end()) return cached->second;
@@ -6995,6 +7006,7 @@ class ScalarChecker {
       const auto declaration = result_context(id, &state);
       auto body = body_evidence(id, {}, *retained, declaration);
       body.required = body.validating_body = true;
+      body.root_failure_covered = state.root_failure_covered;
       if (!state.selections.initialization_reachable)
         body.initialization = TypeEvidenceState::InitializationCheck::suppressed;
       else if (proving_ && validating_ && state.initialization == TypeEvidenceState::InitializationCheck::unevaluated)
@@ -7280,14 +7292,15 @@ class ScalarChecker {
     if (!completes) complete_here_arguments(receiver, arguments, operands);
     const auto &signature = receiver.here.front();
     const auto &supplied = *expr.children.back();
-    if (!signature.here.empty() || !supplied.definition || !supplied.definition->supplied_group)
+    if (!signature.here.empty() || !supplied.definition)
       implementation_gap(supplied.at, "type inspection of this supplied here body");
-    if (supplied.definition->body->inspects_return())
+    const bool group = supplied.definition->supplied_group;
+    if (group && supplied.definition->body->inspects_return())
       implementation_gap(supplied.at, "return inspection in a queried here group");
     const auto contract = here_value_signature(receiver, signature, *match(receiver, arguments, {}, true), supplied.at);
     const auto receiving = require_result(selected, arguments, {}, expr.at, &state).contract.value();
     if (receiving.borrowed() || (receiving.type != Type::void_type && !scalar_type(*receiving.type)) || !contract.owners.empty())
-      implementation_gap(supplied.at, "type inspection of a here group with a borrowed or non-scalar contract");
+      implementation_gap(supplied.at, "type inspection of a here body with a borrowed or non-scalar contract");
     if (supplied.receiving->from_for && receiving.type != Type::void_type)
       fail(supplied.at, "a generator loop requires a receiver with a void result");
 
@@ -7298,11 +7311,21 @@ class ScalarChecker {
     auto body = result_context(id, &state);
     body.method = id;
     body.required = body.validating_body = true;
-    body.full_scope_owner = state.full_scope_owner;
-    body.here_control = TypeEvidenceState::HereControl{*contract.target, *receiving.type};
-    body.invocation_result = state.invocation_result;
-    if (!body.invocation_result && checking_instance_ && state.method == checking_instance_->method && !checking_instance_->result.borrowed())
-      body.invocation_result = checking_instance_->result.type;
+    TypeEvidenceExits callback_exits;
+    if (group) {
+      body.full_scope_owner = state.full_scope_owner;
+      body.here_control = TypeEvidenceState::HereControl{*contract.target, *receiving.type};
+      body.invocation_result = state.invocation_result;
+      if (!body.invocation_result && checking_instance_ && state.method == checking_instance_->method && !checking_instance_->result.borrowed())
+        body.invocation_result = checking_instance_->result.type;
+    } else {
+      body.full_scope_owner = EvidenceOwner::for_scope(supplied);
+      body.invocation_result = *contract.target;
+      body.exits = &callback_exits;
+      body.root_failure_covered = signature.throws_root;
+      body.selections.tracking = true;
+      body.selections.observation_decisions = std::make_shared<ObservationDecisions>();
+    }
     for (size_t i = 0; i < supplied.definition->parameters.size(); ++i) {
       const auto &parameter = supplied.definition->parameters[i];
       const auto field = reception.selected[i];
@@ -7319,11 +7342,18 @@ class ScalarChecker {
       body.owner_bindings.erase(parameter.name);
       body.views[parameter.name] = {readonly, true, true, body.full_scope_owner, false, parameter.fixed_binding, readonly, true};
     }
-    const auto read = *contract.target == Type::void_type ? EvidenceRead::discarded : EvidenceRead::payload;
+    const auto read = !group || *contract.target == Type::void_type ? EvidenceRead::discarded : EvidenceRead::payload;
     const auto feedback = *type_evidence(*supplied.definition->body, body, false, nullptr, nullptr,
                                          ExpectedTypeUse::materialization, true, read);
-    if (*contract.target != Type::void_type && feedback != Type::never && !transfers_value(feedback, *contract.target))
+    if (group && *contract.target != Type::void_type && feedback != Type::never && !transfers_value(feedback, *contract.target))
       fail(supplied.at, "here body fallthrough requires feedback of type '" + type_name(*contract.target) + "'");
+    for (const auto &path : callback_exits.paths) for (const auto reason : path.reasons) {
+      const Completion completion{reason};
+      if (!completion.exception()) continue;
+      const auto category = reason - 3;
+      if (exception_categories[category].checked && !signature.throws_categories.contains(category))
+        fail(supplied.at, "checked exception '" + std::string(exception_categories[category].name) + "' requires a covering catch or throws declaration");
+    }
     return completes ? *receiving.type : Type{Type::never};
   }
   std::optional<Type> query_evidence(const Expression &expr, TypeEvidenceState &state, ViewEvidence &view, TargetEvidence &target_facts,
@@ -7333,6 +7363,8 @@ class ScalarChecker {
     if (state.here_control && (expr.kind == K::deferred || expr.kind == K::make_local || expr.kind == K::make_region ||
         expr.kind == K::allocate || (expr.kind != K::return_test && expr.owner_name == "here")))
       implementation_gap(expr.at, "supplier-owned allocation, owner selection or defer from a here group");
+    if (state.root_failure_covered.has_value() && expr.kind == K::deferred)
+      implementation_gap(expr.at, "deferred completion in a queried here callback");
     if (pipeline_expression(expr)) {
       if (state.required) implementation_gap(expr.at, "pipeline role checking and bounded here bindings");
       return {};
@@ -7919,8 +7951,14 @@ class ScalarChecker {
       const bool track_exits = guarded && ((state.required && (has_finalizer || outer)) || state.selections.tracking);
       TypeEvidenceExits body_exits, outgoing;
       if (track_exits) state.exits = &body_exits;
+      if (guarded && state.root_failure_covered == false)
+        state.root_failure_covered = std::ranges::any_of(std::span(expr.children).subspan(1), [&](const auto &handler) {
+          return handler->kind != K::block && (!handler->annotation || evidence_annotation(*handler->annotation, before) == exception_type(0));
+        });
       auto result = type_evidence(*expr.children.front(), state, contextual, expected, alternatives, expected_use, true, read);
       state.exits = outer;
+      state.root_failure_covered = before.root_failure_covered;
+      for (auto &path : body_exits.paths) path.state.root_failure_covered = before.root_failure_covered;
       view = state.value;
       target_facts = state.target;
       if (track_exits && read == EvidenceRead::payload && result && result->kind == Type::procedure)
@@ -8520,6 +8558,8 @@ class ScalarChecker {
         if (!type || nested_binder(method, *type->type) || (result && result != type->type)) return {};
         if (state.exits || !invokes)
           for (const auto &obligation : declaration_obligations(method, arguments, access, owners, &state)) {
+            if (state.root_failure_covered == false && declares_root(obligation.declaration->throws_types))
+              require_type_root_failure(state, expr.at);
             if (invokes) note_type_failures(state, obligation.declaration->throws_types);
             else for (const auto &failure : obligation.declaration->throws_types)
               for (const auto category : exception_possibilities(failure))
@@ -8654,7 +8694,10 @@ class ScalarChecker {
           fail(item.at, "throw requires an intrinsic exception value");
       }
       if (completes && expr.children.size() == 2) note_type_allocation(state);
-      if (completes && category) note_type_failure(state, *category);
+      if (completes && category) {
+        if (category->kind == Type::exception && !category->identity) require_type_root_failure(state, expr.at);
+        note_type_failure(state, *category);
+      }
       return Type::never;
     }
     case K::callable: {
@@ -9602,7 +9645,8 @@ class ScalarChecker {
     }
     for (const auto id : profiles) {
       const auto &method = program_.methods[id];
-      if (method.result != result || method.throws_categories != throws_categories || method.here_group != group) continue;
+      if (method.result != result || method.throws_categories != throws_categories || method.throws_types != failures ||
+          method.here_group != group) continue;
       const auto &candidate = *method.scope_inputs;
       if (candidate.owner_names != inputs.owner_names || candidate.relations != inputs.relations ||
           candidate.lexical_here != inputs.lexical_here ||
@@ -10031,7 +10075,8 @@ class ScalarChecker {
     if (result != Type::void_type && !scalar_type(result))
       implementation_gap(at, "here invocation requires an independently established scalar or void result");
     type.target = std::make_shared<Type>(result);
-    for (const auto category : here.throws_categories) type.throws_types.push_back(exception_type(category));
+    if (here.throws_root) type.throws_types.push_back(exception_type(0));
+    else for (const auto category : here.throws_categories) type.throws_types.push_back(exception_type(category));
     return type;
   }
   void retain_lexical_here(CheckedMethod::ScopeInputs &inputs, std::vector<size_t> &sources,
@@ -10271,7 +10316,8 @@ class ScalarChecker {
       implementation_gap(at, "a prepared producer requires one consumer and no unbound ordinary arguments");
     const auto &accepted = expected.here.front();
     require_prepared_consumer_owners(offered, accepted, at);
-    if (method.throws_categories != expected.throws_categories || !same_here_labels(offered, accepted) ||
+    if (method.throws_categories != expected.throws_categories || declares_root(method.throws_types) != expected.throws_root ||
+        !same_here_labels(offered, accepted) ||
         here_invocation_type(method, instance.substitutions, at) != here_value_signature(receiver, accepted, bindings, at))
       fail(at, "prepared producer does not match the selected here contract");
   }
