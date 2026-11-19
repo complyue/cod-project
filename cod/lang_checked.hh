@@ -1870,10 +1870,15 @@ class ScalarChecker {
   ExceptionFacts stored_exceptions(const CheckedOperation &view) const {
     return stored_exceptions(view, lexical_.exceptions);
   }
-  bool borrowed_payload_alias(size_t written, size_t other) const {
-    return storage(written).borrowed && storage(other).borrowed &&
-        storage(written).type == storage(other).type &&
-        compare_owners(storage(written).scope, storage(other).scope) != OwnerMatch::mismatch;
+  bool payload_targets_may_share(size_t left, size_t right) const {
+    if (left == null_target || right == null_target) return false;
+    if (left == right) return true;
+    const auto &a = storage(left), &b = storage(right);
+    if (!a.borrowed || !b.borrowed || a.type != b.type ||
+        compare_owners(a.scope, b.scope) == OwnerMatch::mismatch) return false;
+    return !checking_method_ || !checking_method_->scope_inputs ||
+        !checking_method_->scope_inputs->disjoint_input_targets.contains(
+            std::minmax(input_ordinal(left), input_ordinal(right)));
   }
   void record_payload_write(const CheckedOperation &target, bool deferred = false) {
     if (proving_) return;
@@ -1899,7 +1904,7 @@ class ScalarChecker {
     written.erase(null_target);
     for (const auto place : lexical_.available)
       if (std::any_of(target.targets.begin(), target.targets.end(), [&](size_t other) {
-            return other != null_target && borrowed_payload_alias(other, place);
+            return payload_targets_may_share(other, place);
           })) written.insert(place);
     return written;
   }
@@ -2176,7 +2181,7 @@ class ScalarChecker {
     const auto written = writes.places;
     for (size_t place = 0; place < storage_->size(); ++place)
       if (storage(place).borrowed && std::any_of(written.begin(), written.end(), [&](size_t target) {
-            return borrowed_payload_alias(target, place);
+            return payload_targets_may_share(target, place);
           })) writes.places.insert(place);
   }
   void solve_targets() {
@@ -7784,6 +7789,7 @@ class ScalarChecker {
       if (candidate.owner_names != inputs.owner_names || candidate.relations != inputs.relations ||
           candidate.nonnull != inputs.nonnull || candidate.boolean_conditions != inputs.boolean_conditions ||
           candidate.reference_conditions != inputs.reference_conditions ||
+          candidate.disjoint_input_targets != inputs.disjoint_input_targets ||
           candidate.parameters.size() != inputs.parameters.size()) continue;
       if (std::equal(candidate.parameters.begin(), candidate.parameters.end(), inputs.parameters.begin(),
           [](const auto &a, const auto &b) {
@@ -7819,6 +7825,22 @@ class ScalarChecker {
   }
   void scope_input_observations(CheckedMethod::ScopeInputs &inputs, const std::vector<CheckedOperation> &views,
                                 const Location &at) {
+    // Deferred selection bounds are complete after target discovery.
+    if (proving_ || !delayed_) for (size_t i = 0; i < views.size(); ++i) {
+      const auto &a = views[i];
+      if (inputs.parameters[i].owner.empty() || a.targets.empty()) continue;
+      for (size_t j = i + 1; j < views.size(); ++j) {
+        const auto &b = views[j];
+        if (inputs.parameters[j].owner.empty() || b.targets.empty() || a.type != b.type ||
+            compare_owners(*a.owners.begin(), *b.owners.begin()) == OwnerMatch::mismatch) continue;
+        const bool may_share = std::ranges::any_of(a.targets, [&](size_t left) {
+          return std::ranges::any_of(b.targets, [&](size_t right) {
+            return payload_targets_may_share(left, right);
+          });
+        });
+        if (!may_share) inputs.disjoint_input_targets.emplace(i, j);
+      }
+    }
     std::map<size_t, CleanupEquations::BindingSnapshot> selections;
     std::map<size_t, size_t> identities;
     for (size_t p = 0; p < views.size(); ++p) {
@@ -7879,7 +7901,7 @@ class ScalarChecker {
     const auto &dependencies = definition_dependencies(*method.source);
     const auto state = evidence_state(false, &dependencies);
     const auto retained = definition_retained(method_id, state);
-    CheckedMethod::ScopeInputs inputs{method_id, {}, {}, {}, {}, {}, {}, {}};
+    CheckedMethod::ScopeInputs inputs{method_id, {}, {}, {}, {}, {}, {}, {}, {}};
     operation.scope_operands.emplace();
     std::map<size_t, size_t> owner_roles;
     const auto owner_role = [&](size_t actual, const Location &at) {

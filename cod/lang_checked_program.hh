@@ -341,6 +341,7 @@ struct CheckedMethod {
     std::vector<std::vector<OwnerMatch>> relations;
     std::vector<bool> nonnull;
     // Entry observations use input ordinals until the body allocates local slots.
+    std::set<std::pair<size_t, size_t>> disjoint_input_targets;
     CleanupEquations::BooleanValues boolean_conditions;
     CleanupEquations::ConditionClauses reference_conditions;
   };

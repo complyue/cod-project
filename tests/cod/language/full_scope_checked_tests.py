@@ -60,8 +60,17 @@ runner.CASES = {
     'local_read_precedes_write_to_shared_target': (
         IO+BORROWED_BOOLEAN+'ref peer=on;{{flag=next;defer{peer<-false;};'+DEFER_CONDITIONAL_READ+'}};',
         0, '7\n', ''),
+    'local_read_follows_body_write_to_distinct_target': (
+        IO+BORROWED_BOOLEAN+'ref peer=off;{{'+DEFER_CONDITIONAL_READ+'flag=next;peer<-false;}};',
+        0, '7\n', ''),
+    'local_read_follows_deferred_write_to_distinct_target': (
+        IO+BORROWED_BOOLEAN+'ref peer=off;{{flag=next;'+DEFER_CONDITIONAL_READ+'defer{peer<-false;};}};',
+        0, '7\n', ''),
     'local_read_observes_earlier_write_to_shared_target': (
         IO+BORROWED_BOOLEAN+'ref peer=on;{{flag=next;'+DEFER_CONDITIONAL_READ+'defer{peer<-false;};}};',
+        2, '', UNINITIALIZED_LOCAL),
+    'local_read_observes_targets_shared_after_registration': (
+        IO+BORROWED_BOOLEAN+'ref peer=off;{{'+DEFER_CONDITIONAL_READ+'defer{peer<-false;};flag=next;peer=next;}};',
         2, '', UNINITIALIZED_LOCAL),
     'throw_only_typed': run('val e<-sample_error();try{ {{throw e;}}; }'
                             'catch(caught:const NullPointerException){behave @print(caught.category);};', '4\n'),
