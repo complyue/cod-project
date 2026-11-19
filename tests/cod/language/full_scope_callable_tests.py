@@ -491,6 +491,22 @@ runner.CASES = {
         'func receive(here body(x:u64)->u64,input:u64)->u64{return body(input);}'
         'func run()->u64{return receive({return 21u64;})(n)=>{false};}run();',
         2,'','here body fallthrough requires feedback of type'),
+    'query_here_receiver_checks_named_arguments_without_execution': (IO+
+        'proc mark()->u64{behave @print(90u64);return 1u64;}'
+        'proc apply(here body(x:u64)->u64,value:u64,choose:bool)->u64{behave @print(91u64);return body(value);}'
+        'proc run()->void{val result<-make local typeof(apply(true->choose,mark()->value)(n)=>{behave @print(92u64);n+1u64}){7u64};'
+        'behave @print(result);return;}run();',0,'7\n',''),
+    'query_here_receiver_distinguishes_break_and_feedback_types': (IO+
+        'func compare(here step()->u64)->bool{return step()==7u64;}'
+        'val result<-make local typeof(compare(){if(true){break false;}else{continue 7u64;};}){true};'
+        'behave @print(result);',0,'true\n',''),
+    'query_here_receiver_rejects_wrong_feedback_type': (
+        'func compare(here step()->u64)->bool{return step()==7u64;}'
+        'val result<-make local typeof(compare(){continue false;}){true};',2,'',"continue requires 'u64'"),
+    'query_here_receiver_checks_supplier_return_type': (
+        'func compare(here step()->u64)->bool{return step()==7u64;}'
+        'proc run()->u64{val result<-make local typeof(compare(){return false;}){true};return 7u64;}run();',
+        2,'','return type does not satisfy the implicit callable result'),
     'generator_void_feedback_rejects_explicit_operand': (
         'func generate() yields u64{yield(1u64);}func action()->void{}'
         'for val v<-generate(){continue action();};',2,'','void here feedback requires bare continue'),

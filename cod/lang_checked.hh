@@ -1161,6 +1161,10 @@ class ScalarChecker {
     std::optional<Type> caught_exception;
     std::optional<Type> invocation_result;
     std::optional<EvidenceOwner> invocation_result_owner;
+    struct HereControl {
+      Type feedback, receiving;
+    };
+    std::optional<HereControl> here_control;
     struct ReturnObservation {
       std::optional<bool> present;
       std::optional<TargetEvidence> borrowed;
@@ -7179,10 +7183,156 @@ class ScalarChecker {
       if (!bound.values[slot]) fail(call.at, "missing yielded label '" + contract.inputs[slot].label + "'");
     return bound;
   }
+  struct HereCallBinding {
+    std::vector<size_t> candidates, slots;
+    std::vector<ArgumentMode> modes;
+    size_t here_count = 0;
+  };
+  HereCallBinding bind_here_call(const Expression &expr, const NamedFamily &family) const {
+    const auto supplied = expr.has_here_body();
+    const auto bind_written = [&](const CheckedMethod &method) -> std::optional<std::vector<size_t>> {
+      const auto parameters = method.input_parameters();
+      std::vector<size_t> slots;
+      std::set<size_t> occupied;
+      const auto ordinary = std::span<const Expr>{expr.children}.subspan(method.here.size() - supplied, parameters.size());
+      for (const auto &operand : ordinary) {
+        size_t slot = slots.size();
+        if (operand->kind == Expression::Kind::named_argument) {
+          const auto found = std::ranges::find(parameters, operand->text, &Parameter::name);
+          if (found == parameters.end()) return {};
+          slot = std::distance(parameters.begin(), found);
+        }
+        if (!occupied.insert(slot).second) return {};
+        slots.push_back(slot);
+      }
+      return slots;
+    };
+    HereCallBinding binding;
+    bool same_arity = false;
+    for (const auto id : family.methods) {
+      const auto &method = program_.methods[id];
+      if (method.here.empty() || method.here.size() + method.parameters.size() != expr.children.size()) continue;
+      same_arity = true;
+      auto bound = bind_written(method);
+      if (!bound) continue;
+      if (!binding.candidates.empty() && (binding.here_count != method.here.size() || binding.slots != *bound))
+        implementation_gap(expr.at, "overloads with different here argument bindings");
+      binding.slots = std::move(*bound);
+      binding.here_count = method.here.size();
+      std::vector<ArgumentMode> candidate_modes;
+      for (const auto &parameter : method.input_parameters()) candidate_modes.push_back(argument_mode(parameter));
+      if (!binding.candidates.empty() && binding.modes != candidate_modes)
+        implementation_gap(expr.at, "here receiver overloads with different ordinary argument preparation");
+      binding.modes = std::move(candidate_modes);
+      binding.candidates.push_back(id);
+    }
+    if (binding.candidates.empty() && same_arity) fail(expr.at, "written arguments must bind distinct ordinary parameters of the here receiver");
+    if (binding.candidates.empty()) fail(expr.at, "no receiver with a matching first here parameter for '" + expr.text + "'");
+    return binding;
+  }
+  static const Expression &here_ordinary_operand(const Expression &written) {
+    if (written.kind != Expression::Kind::named_argument) return written;
+    if (written.children.empty()) implementation_gap(written.at, "default arguments to a here receiver");
+    return *written.children.front();
+  }
+  void complete_here_arguments(const CheckedMethod &receiver, std::vector<Type> &arguments,
+                               const std::vector<const Expression *> &operands) const {
+    const std::vector<std::optional<Type>> evidence(arguments.begin(), arguments.end());
+    const auto partial = *match_evidence(receiver, evidence, {}, true);
+    for (size_t i = 0; i < arguments.size(); ++i) {
+      if (arguments[i] != Type::never) continue;
+      if (argument_mode(receiver.input_parameters()[i]) != ArgumentMode::value)
+        implementation_gap(operands[i]->at, "owner evidence for an abruptly completing borrowed operand");
+      arguments[i] = substitute(receiver.parameters[i], receiver, partial, true);
+      if (!scalar_type(arguments[i]))
+        implementation_gap(operands[i]->at, "cannot establish a scalar parameter type for an abruptly completing operand");
+    }
+  }
+  Type query_here_call(const Expression &expr, TypeEvidenceState &state) const {
+    if (!expr.has_here_body() || expr.kind != Expression::Kind::call || expr.intrinsic ||
+        active_here(expr.text, &state) || state.preparing(expr) || state.exits || state.checks_initialization())
+      implementation_gap(expr.at, "type inspection of this call receiving a here argument");
+    const auto family = named_family(expr.text, &state);
+    if (family.declaration || state.here_control)
+      implementation_gap(expr.at, "type inspection of a lexical here receiver or nested supplied group");
+    const auto binding = bind_here_call(expr, family);
+    if (binding.here_count != 1 || std::ranges::any_of(binding.modes, [](auto mode) { return mode != ArgumentMode::value; }))
+      implementation_gap(expr.at, "type inspection of a here call with additional here or borrowed arguments");
+    if (forwarded_here_operand(expr, &state)) fail(expr.at, "the first here parameter has both a forwarded and a trailing argument");
+
+    std::vector<Type> arguments(binding.slots.size());
+    std::vector<const Expression *> operands(arguments.size());
+    Access access(arguments.size());
+    bool completes = true;
+    for (size_t i = 0; i < arguments.size(); ++i) {
+      const auto &operand = here_ordinary_operand(*expr.children[i]);
+      const auto type = *type_evidence(operand, state, false, nullptr, nullptr, ExpectedTypeUse::materialization, completes);
+      if (type == Type::never) completes = false;
+      else if (!scalar_type(type)) implementation_gap(operand.at, "here receiver ordinary arguments require scalar inputs");
+      arguments[binding.slots[i]] = type;
+      operands[binding.slots[i]] = &operand;
+      if (type != Type::never) access[binding.slots[i]] = state.value.read_only;
+    }
+    const auto selected = select_method(binding.candidates, arguments, expr.at, expr.text, {}, access, {}, &state, true, true);
+    const auto &receiver = program_.methods[selected];
+    if (state.method && program_.methods[*state.method].source->kind == Form::Kind::function &&
+        receiver.source->kind != Form::Kind::function) fail(expr.at, "a function cannot invoke a procedure");
+    if (!completes) complete_here_arguments(receiver, arguments, operands);
+    const auto &signature = receiver.here.front();
+    const auto &supplied = *expr.children.back();
+    if (!signature.here.empty() || !supplied.definition || !supplied.definition->supplied_group)
+      implementation_gap(supplied.at, "type inspection of this supplied here body");
+    if (supplied.definition->body->inspects_return())
+      implementation_gap(supplied.at, "return inspection in a queried here group");
+    const auto contract = here_value_signature(receiver, signature, *match(receiver, arguments, {}, true), supplied.at);
+    const auto receiving = require_result(selected, arguments, {}, expr.at, &state).contract.value();
+    if (receiving.borrowed() || (receiving.type != Type::void_type && !scalar_type(*receiving.type)) || !contract.owners.empty())
+      implementation_gap(supplied.at, "type inspection of a here group with a borrowed or non-scalar contract");
+    if (supplied.receiving->from_for && receiving.type != Type::void_type)
+      fail(supplied.at, "a generator loop requires a receiver with a void result");
+
+    const auto reception = bind_here_reception(supplied, signature);
+    const auto id = lexical_method(supplied.definition.get(), state.method);
+    if (!program_.methods[id].type_parameters.empty())
+      implementation_gap(supplied.at, "retained generic parameters in a supplied here body");
+    auto body = result_context(id, &state);
+    body.method = id;
+    body.required = body.validating_body = true;
+    body.full_scope_owner = state.full_scope_owner;
+    body.here_control = TypeEvidenceState::HereControl{*contract.target, *receiving.type};
+    body.invocation_result = state.invocation_result;
+    if (!body.invocation_result && checking_instance_ && state.method == checking_instance_->method && !checking_instance_->result.borrowed())
+      body.invocation_result = checking_instance_->result.type;
+    for (size_t i = 0; i < supplied.definition->parameters.size(); ++i) {
+      const auto &parameter = supplied.definition->parameters[i];
+      const auto field = reception.selected[i];
+      const auto &type = contract.parameters[field];
+      const bool readonly = !contract.const_views.empty() && contract.const_views[field];
+      if (!parameter.owner.empty() || (!parameter.declaration_kind.empty() && parameter.declaration_kind != "val"))
+        implementation_gap(parameter.at, "type inspection of this here receiving declaration");
+      if (parameter.type != Type::void_type && evidence_annotation(parameter.type, state) != type)
+        fail(parameter.at, "here body header type does not match the selected contract");
+      if ((parameter.type != Type::void_type || parameter.read_only) && parameter.read_only != readonly)
+        fail(parameter.at, "here body header access does not match the selected contract");
+      body.bindings[parameter.name] = type;
+      body.definitions.erase(parameter.name);
+      body.owner_bindings.erase(parameter.name);
+      body.views[parameter.name] = {readonly, true, true, body.full_scope_owner, false, parameter.fixed_binding, readonly, true};
+    }
+    const auto read = *contract.target == Type::void_type ? EvidenceRead::discarded : EvidenceRead::payload;
+    const auto feedback = *type_evidence(*supplied.definition->body, body, false, nullptr, nullptr,
+                                         ExpectedTypeUse::materialization, true, read);
+    if (*contract.target != Type::void_type && feedback != Type::never && !transfers_value(feedback, *contract.target))
+      fail(supplied.at, "here body fallthrough requires feedback of type '" + type_name(*contract.target) + "'");
+    return completes ? *receiving.type : Type{Type::never};
+  }
   std::optional<Type> query_evidence(const Expression &expr, TypeEvidenceState &state, ViewEvidence &view, TargetEvidence &target_facts,
                                      bool contextual, const Type *expected, std::vector<Type> *alternatives,
                                      ExpectedTypeUse expected_use, EvidenceRead read) const {
     using K = Expression::Kind;
+    if (state.here_control && (expr.kind == K::deferred || expr.kind == K::make_local || expr.kind == K::make_region ||
+        expr.kind == K::allocate || (expr.kind != K::return_test && expr.owner_name == "here")))
+      implementation_gap(expr.at, "supplier-owned allocation, owner selection or defer from a here group");
     if (pipeline_expression(expr)) {
       if (state.required) implementation_gap(expr.at, "pipeline role checking and bounded here bindings");
       return {};
@@ -7192,8 +7342,7 @@ class ScalarChecker {
       return {};
     }
     if (expr.has_here_body() || forwarded_here_operand(expr, &state) || takes_prepared_here(expr, &state)) {
-      if (state.required) implementation_gap(expr.at, "type inspection of a call receiving a here argument");
-      return {};
+      return state.required ? std::optional{query_here_call(expr, state)} : std::nullopt;
     }
     if (const auto here = expr.kind == K::call && !expr.intrinsic ? here_evidence(expr.text, state, expr.at) : std::nullopt; here) {
       const auto &signature = here->signature;
@@ -8411,8 +8560,21 @@ class ScalarChecker {
       if (state.required && type && type->kind == Type::exception) check_exception_field(expr);
       return type && type->kind == Type::exception ? std::optional<Type>{Type::uint64} : std::nullopt;
     }
+    case K::break_value: case K::continue_value: {
+      if (!state.here_control) { state.complete = false; return {}; }
+      const bool breaking = expr.kind == K::break_value;
+      const auto &contract = breaking ? state.here_control->receiving : state.here_control->feedback;
+      if (contract == Type::void_type && !expr.children.empty())
+        fail(expr.at, breaking ? "void receiving calls require bare break" : "void here feedback requires bare continue");
+      const auto value = expr.children.empty() ? std::optional{Type{Type::void_type}} : child(0);
+      if (value && *value != Type::never && !transfers_value(*value, contract))
+        fail(expr.at, std::string(breaking ? "break" : "continue") + " requires '" + type_name(contract) + "'");
+      return Type::never;
+    }
     case K::return_tail: case K::return_value: {
       const bool tail = expr.kind == K::return_tail;
+      if (!tail && state.here_control && !state.invocation_result)
+        implementation_gap(expr.at, "supplier result evidence for a return in a queried here group");
       if (tail && !state.checks_reaching_paths())
         return child(0, false, false, EvidenceRead::discarded) == Type::never ? Type{Type::never} : Type{Type::void_type};
       const auto *expected_return = state.invocation_result ? &*state.invocation_result : nullptr;
@@ -10200,51 +10362,10 @@ class ScalarChecker {
     const auto family = named_family(expr.text);
     if (family.context || family.definition)
       implementation_gap(expr.at, "supplying here arguments to lexical receiver definitions");
-    const auto written_count = expr.children.size() - supplied;
-    const auto bind_written = [&](const CheckedMethod &method, size_t first_ordinary) -> std::optional<std::vector<size_t>> {
-      const auto parameters = method.input_parameters();
-      std::vector<size_t> slots;
-      std::set<size_t> occupied;
-      const auto ordinary = std::span<const Expr>{expr.children}.subspan(first_ordinary, parameters.size());
-      for (const auto &operand : ordinary) {
-        size_t slot = slots.size();
-        if (operand->kind == Expression::Kind::named_argument) {
-          const auto found = std::ranges::find(parameters, operand->text, &Parameter::name);
-          if (found == parameters.end()) return {};
-          slot = std::distance(parameters.begin(), found);
-        }
-        if (!occupied.insert(slot).second) return {};
-        slots.push_back(slot);
-      }
-      return slots;
-    };
-    std::vector<size_t> candidates;
-    std::optional<std::vector<size_t>> slots;
-    size_t here_count = 0;
-    std::vector<ArgumentMode> modes;
-    bool same_arity = false;
-    for (const auto id : family.methods) {
-      const auto &method = program_.methods[id];
-      if (method.here.empty() || method.here.size() + method.parameters.size() != expr.children.size()) continue;
-      same_arity = true;
-      auto bound = bind_written(method, method.here.size() - supplied);
-      if (!bound) continue;
-      if (slots && (here_count != method.here.size() || *slots != *bound))
-        implementation_gap(expr.at, "overloads with different here argument bindings");
-      slots = std::move(bound);
-      here_count = method.here.size();
-      std::vector<ArgumentMode> candidate_modes;
-      for (const auto &parameter : method.input_parameters()) candidate_modes.push_back(argument_mode(parameter));
-      if (!candidates.empty() && modes != candidate_modes)
-        implementation_gap(expr.at, "here receiver overloads with different ordinary argument preparation");
-      modes = std::move(candidate_modes);
-      candidates.push_back(id);
-    }
-    if (candidates.empty() && same_arity) fail(expr.at, "written arguments must bind distinct ordinary parameters of the here receiver");
-    if (candidates.empty()) fail(expr.at, "no receiver with a matching first here parameter for '" + expr.text + "'");
+    auto [candidates, slots, modes, here_count] = bind_here_call(expr, family);
     if (supplied && here_count == 1 && forwards_here(expr)) fail(expr.at, "the first here parameter has both a forwarded and a trailing argument");
     const auto explicit_here = here_count - supplied;
-    const auto count = written_count - explicit_here;
+    const auto count = slots.size();
     const auto written = std::span<const Expr>{expr.children}.subspan(explicit_here, count);
     std::vector<CheckedHereTarget> targets(here_count);
     operation.here_arguments.resize(here_count);
@@ -10271,11 +10392,8 @@ class ScalarChecker {
     std::vector<CheckedOperation> views(count);
     bool completes = true;
     for (size_t i = 0; i < count; ++i) {
-      const auto &source = *written[i];
-      const bool named = source.kind == Expression::Kind::named_argument;
-      if (named && source.children.empty()) implementation_gap(source.at, "default arguments to a here receiver");
-      const auto &operand = named ? *source.children.front() : source;
-      const auto slot = slots->at(i);
+      const auto &operand = here_ordinary_operand(*written[i]);
+      const auto slot = slots[i];
       const auto mode = modes.at(slot);
       const auto type = check(operand, supplier, operations, mode == ArgumentMode::value, false, nullptr, expected_type_use(mode));
       if (type == Type::never) completes = false;
@@ -10286,7 +10404,7 @@ class ScalarChecker {
       operation.arguments[slot] = {mode, type};
       operands[slot] = &operand;
     }
-    if (!std::ranges::is_sorted(*slots)) operation.argument_evaluation_order = std::move(*slots);
+    if (!std::ranges::is_sorted(slots)) operation.argument_evaluation_order = std::move(slots);
     const auto selected = select_method(candidates, arguments, expr.at, expr.text, {}, access_of(views), owners_of(views), nullptr, true, true);
     const auto &receiver = program_.methods[selected];
     if (checking_method_ && checking_method_->source->kind == Form::Kind::function && receiver.source->kind != Form::Kind::function)
@@ -10294,16 +10412,7 @@ class ScalarChecker {
     if (!completes) {
       // A never operand has no runtime payload. Its declared parameter must
       // still be determined before checking the supplied body.
-      const std::vector<std::optional<Type>> evidence(arguments.begin(), arguments.end());
-      const auto partial = *match_evidence(receiver, evidence, {}, true);
-      for (size_t i = 0; i < count; ++i) {
-        if (arguments[i] != Type::never) continue;
-        if (modes[i] != ArgumentMode::value)
-          implementation_gap(operands[i]->at, "owner evidence for an abruptly completing borrowed operand");
-        arguments[i] = substitute(receiver.parameters[i], receiver, partial, true);
-        if (!scalar_type(arguments[i]))
-          implementation_gap(operands[i]->at, "cannot establish a scalar parameter type for an abruptly completing operand");
-      }
+      complete_here_arguments(receiver, arguments, operands);
       const auto prepared = prepared_types(receiver, arguments, {});
       for (size_t i = 0; i < count; ++i) operation.arguments[i].type = prepared[i];
     }
