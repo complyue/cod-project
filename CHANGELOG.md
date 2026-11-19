@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-19 — Merge data constructors as methods of their type’s constructor family
+
+<a id="h-dctor-family-merge-20261119"></a>
+**H-DCTOR-FAMILY-MERGE-20261119.** In the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-19 (America/Los_Angeles), the project user extended H-FUNCTOR-PUBLICATION-20261119 to constructors and clarified “dctor都是type constructor overload family 的method”. D-07r199/D-15r58 and registry r976 apply the receiving-world merge to the parent type’s constructor overload family. Named dctor selection and the per-dctor braced initialization rule retain their H-DCTOR-SOURCE-20261118 scope.
+
 ## 2026-11-19 — Publish and merge call operators with the receiver type
 
 <a id="h-functor-publication-20261119"></a>

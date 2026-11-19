@@ -1,6 +1,6 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 198
+Discussion revision: 199
 
 Recorded: 2026-11-19
 
@@ -22,7 +22,7 @@ Phase: coordinated language/SNN design, implementation planning and validation.
 
 - **Functor receivers.** D-07-FUNCTORS relates C-10/C-65/C-73 to explicit operation and receiver lifetime under charter §§3.3/4.3. Respect the target access required by the selected call operator and reject unproved owner lifetimes. P-605/P-606 cover the review of preparation and overload selection.
 
-- **Named sum constructors.** [D-07-SUM-CONSTRUCTORS](DesignAuthorityRegistry.md#d-07-sum-constructors), r173 DL-01, records the [source decision](../CHANGELOG.md#h-dctor-source-20261118). C-10/C-65/C-72 and charter §§4.3/8.1 connect readable alternatives, owner-qualified construction and definite field initialization. Acceptance covers nullable membership, successful and failed initializers, staged constructor-free cycles, distinct regional slot and target identities, and [two module worlds](#publishing-and-selecting-data-constructors). Native layout and proofs, and invoking an overload on reserved storage, remain separate.
+- **Named sum constructors.** [D-07-SUM-CONSTRUCTORS](DesignAuthorityRegistry.md#d-07-sum-constructors), r173 DL-01, records the [source decision](../CHANGELOG.md#h-dctor-source-20261118). C-10/C-65/C-72 and charter §§4.3/8.1 connect readable alternatives, owner-qualified construction and definite field initialization. Acceptance covers nullable membership, successful and failed initializers, staged constructor-free cycles, distinct regional slot and target identities, and [make-site selection](#publishing-and-selecting-data-constructors). At r199 [H-DCTOR-FAMILY-MERGE-20261119](../CHANGELOG.md#h-dctor-family-merge-20261119) confirms that dctors are methods of their nominal type’s constructor overload family. [D-07-DCTOR-PUBLICATION](DesignAuthorityRegistry.md#d-07-dctor-publication) covers composition of adapter contributions and rejection of conflicting definitions. Native layout and proofs, and invoking an overload on reserved storage, remain separate.
 
 - **Native integration.** [D-07](DesignAuthorityRegistry.md#d-07) r169, DL-11, follows [D-20-NATIVE-C](DesignAuthorityRegistry.md#d-20-native-c) and [H-NATIVE-C-INTERFACE-20261118](../CHANGELOG.md#h-native-c-interface-20261118). C-79/C-80 and charter §§4.3/6.3 connect typed external operations to checked CoD lifetimes. DL-11 supplies the caller, failure and release acceptance cases. Provider registration and the concrete ABI remain open.
 
@@ -209,7 +209,7 @@ Neither nominal abstract inheritance nor an explicit data conformance declaratio
 
 Generic argument matching and generic subtyping must remain distinct. The intended root method can constrain a parameter R by `R <: NodeStore` and receive region :R; this does not automatically establish `region :ArenaRoot <: region :NodeStore` as a mutable-value conversion. The generic bound/header syntax is still proposed. Similar constraints apply to array element types, const access and owning qualifiers; <: cannot erase ownership or permission differences.
 
-Sum alternatives and abstract descendants serve different roles. A nominal data sum declares a fixed set of alternatives suitable for exhaustive matching. An abstract family may acquire nominal abstract descendants and explicitly conforming data types in other modules; neither current set is an implicit closed sum. The defining sum determines alternative identity. A selected module world may extend a constructor’s initializer family. Future GADT constructors may refine indices of the declared data family; subtype syntax alone does not define those refinements or permit unchecked casts.
+Sum alternatives and abstract descendants serve different roles. A nominal data sum declares a fixed set of alternatives suitable for exhaustive matching. An abstract family may acquire nominal abstract descendants and explicitly conforming data types in other modules; neither current set is an implicit closed sum. The defining sum determines alternative identity. A selected module world may add initializer overloads for an existing data constructor to the parent type’s constructor overload family. Future GADT constructors may refine indices of the declared data family; subtype syntax alone does not define those refinements or permit unchecked casts.
 
 Storage classification is independent of nominal declaration identity. H-563 excludes callable-view values from regions; H-567/H-568 confines whole-payload transfer to pure bits and rejects C++ object copying/moving semantics. D-22 reviews return-only structural result signatures and named mapping to independent lexical variables. This candidate introduces no first-class aggregate or stored field and leaves ordinary ADT field permissions unchanged; callable-bearing named ADTs remain a separate unapproved extension. H-383/H-384 admits recursively finite bits ADTs to lexical or regional storage; stored references, ownership carriers, managed environments and implicit cleanup exclude that category. H-478/D-28-ADT extends placement to same-owner pointer-bearing lexical graphs while retaining the same nominal ADT. Full native layouts/initialization coverage remain outstanding; regional instances still use relative edges and C++ regional types remain region-only. The `data` keyword alone does not establish bits eligibility, immutability or GC. [D-22](ConstructionAndAcquisition.md#confirmed-requirements) records the confirmed boundary and its incomplete implementation. Ordinary references borrow, const non-bits references restrict holder writes without freezing aliases, and owned remains an intrinsic resource responsibility. User data containing owned-region fields, including through variants/generic instantiation, remains forbidden by H-196. Builtin resource optional/results are a separate intrinsic facility.
 
@@ -225,11 +225,11 @@ Lean acceptance must show one data identity with head-only conformance declarati
 
 #### Constructor and call-operator method families
 
-The source operation selects the method family before overload resolution. One nominal data type can provide both, even with identical explicit argument lists.
+A nominal data type owns its constructor overload family. Each data constructor (dctor) is a method of that family. The type can also provide a call-operator family. The source operation selects the family before overload resolution, even when the explicit argument lists coincide.
 
 | Expression | Method family | Instance at entry | Result |
 | --- | --- | --- | --- |
-| `make Accepted(7u64) in batch` | Initializers of the selected data constructor | The destination supplies its owner and the selected fields as initialization places. | A reference to the initialized instance on success. |
+| `make Accepted(7u64) in batch` | Constructor family of `Receipt`, selecting its `Accepted` dctor | The destination supplies its owner and the selected fields as initialization places. | A reference to the initialized instance on success. |
 | `r(7u64)` for `r:Receipt in batch` | Call operators for the data receiver | The receiver supplies a reference to an initialized instance with its actual owner and access. | The selected method’s ordinary result. |
 
 Adding a call operator leaves the initializer count of every constructor unchanged. A constructor overload alone cannot make a data value callable. See [named sum constructors](#named-sum-constructors) for the field contract and [functor receivers](#functor-receivers-and-callback-arguments) for receiver access and here arguments.
@@ -260,7 +260,7 @@ The selected alternative’s fields enter the ctor as individual initialization 
 
 The object under construction has no initialized instance receiver anywhere in the ctor body or its deferred cleanup, including after the last field write. A destination address passed by the compiler grants only the source-level field permissions. The ctor follows ordinary argument evaluation, lexical scope, effects and cleanup. Every normal exit must establish that all fields of the selected alternative are ready after cleanup. Only then does `make` deliver the reference. An escaping failure delivers no completed result. Bare and value-bearing returns targeting the ctor are forbidden, including from its deferred actions. A nested callable or standalone `{{ ... }}` owns its own returns.
 
-Check for the presence of constructor overloads **per alternative, before testing applicability**. With the declaration above, `make Accepted in batch { id <- 0u64; prior = null; }` rejects and `make Accepted() in batch` reports a missing applicable overload. A `proc` initializer still counts when the call site only permits a `func`. Skipped has no initializer overload, so its empty block supplies a complete payload. An initializer-free alternative with required fields must initialize each on every normally completing path. For a sum, reserve a named alternative under the [sum construction rule](#sum-object-construction-and-reference-storage). A constructor-backed alternative needs its initializer before it can become an ordinary readable result.
+Within the type’s merged constructor family, check for user-declared initializer overloads **for the named dctor, before testing applicability**. With the declaration above, `make Accepted in batch { id <- 0u64; prior = null; }` rejects and `make Accepted() in batch` reports a missing applicable overload. A `proc` initializer still counts when the call site only permits a `func`. Skipped has no initializer overload, so its empty block supplies a complete payload. An initializer-free alternative with required fields must initialize each on every normally completing path. For a sum, reserve a named alternative under the [sum construction rule](#sum-object-construction-and-reference-storage). A constructor-backed alternative needs its initializer before it can become an ordinary readable result.
 
 #### Sum object construction and reference storage
 
@@ -300,15 +300,15 @@ Before the first binding write, `edge is null` would read an uninitialized slot.
 
 #### Publishing and selecting data constructors
 
-Exporting a nominal sum type publishes every data constructor of that type. A constructor is one selection unit: its alternative identity travels with its entire initializer overload family in the publishing world, including an empty family. The same unit applies to export, using, import and re-export. Selecting a constructor cannot filter by initializer signature. Its nominal identity determines `r isa Accepted`; overloads determine which initializer can run for `make Accepted(...)`.
+Exporting a nominal sum type publishes its constructor overload family. Every named alternative, including one with zero initializer overloads, has a dctor identity in that family. Selecting a dctor by name brings all its visible initializer overloads. The same identity determines `r isa Accepted` and which entries of the constructor family are eligible for `make Accepted(...)`. A product’s name identifies its sole dctor.
 
-Only overloads visible in the module world of the `make` site count toward the [constructor’s initialization rules](#named-sum-constructors). An overload confined to a parallel world has no effect even if both worlds enter the same program.
+The receiving module [merges contributions from each selected view of the same nominal type](ModuleWorlds.md#merging-type-owned-method-families). The `make` site uses the resulting family. Equal explicit parameter signatures on distinct dctors, such as `Accepted(u64)` and `Skipped(u64)`, coexist because the construction expression names the dctor. Two independent conflicting definitions of `Skipped(u64)` reject the module composition even without a `make Skipped` expression. An overload confined to a parallel world has no effect.
 
 The constructor selector goes after the existing module source and type name:
 
 ```cod
 using  "model.cod" Receipt {Accepted};          # Select Receipt and the complete Accepted constructor.
-import "model.cod" Receipt {Accepted, Skipped}; # Explicitly import both constructor families.
+import "model.cod" Receipt {Accepted, Skipped}; # Explicitly import both named dctors with their overloads.
 import "model.cod" Receipt {..};                # Explicitly import all Receipt constructors.
 ```
 
@@ -329,6 +329,17 @@ ref first:Receipt in batch = make Skipped in batch {};
 # A different client using the Skipped constructor from audited.cod:
 ref next:Receipt in batch = make Skipped(7u64) in batch;
 # make Skipped in batch {} rejects here, even though Skipped has no fields.
+
+# ranges.cod contributes a different overload for that same dctor.
+import "model.cod" Receipt {Skipped};
+func Skipped(first:u64, last:u64) { assert first <= last; }
+export Receipt;
+
+# app.cod selects both views of Receipt.
+using  "audited.cod" Receipt {Skipped};
+import "ranges.cod" Receipt {Skipped};
+ref one:Receipt in batch = make Skipped(7u64) in batch;
+ref span:Receipt in batch = make Skipped(7u64, 9u64) in batch;
 ```
 
 A constructor list makes the listed names explicit. For `using "model.cod" Receipt {Accepted};`, ordinary public-source fallback can still find Skipped at lower priority. That implicit selection grants no extension permission. Selecting a subset leaves the full set of alternatives intact for type checking and coverage diagnostics.
