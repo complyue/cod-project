@@ -2286,16 +2286,19 @@ class ScalarChecker {
     for (const auto input : inputs(lexical_.inputs)) lexical_.input_facts[input].initialized.insert(id);
     refresh_input_facts(lexical_);
   }
-  std::optional<CleanupEquations::ConditionFacts> selected_target(const CheckedOperation &view, size_t place, bool equal) const {
-    if (!view.selection_identity || place == null_target || !view.targets.contains(place)) return {};
+  std::optional<CleanupEquations::ConditionFacts> selected_target(size_t selection, size_t place, bool equal) const {
+    if (place == null_target) return {};
     CleanupEquations::ConditionFacts facts;
     if (storage(place).borrowed) {
       const auto incoming = incoming_selections_.find(place);
       if (incoming == incoming_selections_.end()) return {};
-      if (equal) facts.same_selections.insert({*view.selection_identity, incoming->second});
-      else facts.different_selections.emplace(*view.selection_identity, incoming->second);
-    } else facts.conditions.add({{}, *view.selection_identity, place, equal, true});
+      if (equal) facts.same_selections.insert({selection, incoming->second});
+      else facts.different_selections.emplace(selection, incoming->second);
+    } else facts.conditions.add({{}, selection, place, equal, true});
     return facts;
+  }
+  std::optional<CleanupEquations::ConditionFacts> selected_target(const CheckedOperation &view, size_t place, bool equal) const {
+    return view.selection_identity && view.targets.contains(place) ? selected_target(*view.selection_identity, place, equal) : std::nullopt;
   }
   CleanupEquations::ConditionClauses selection_bounds(const CheckedOperation &view) const {
     CleanupEquations::ConditionClauses bounds;
@@ -2325,11 +2328,16 @@ class ScalarChecker {
     for (const auto input : inputs(state.inputs)) state.input_facts[input].selections.initialize(id);
     refresh_input_facts(state);
   }
-  static std::optional<CleanupEquations::Initialization> selection_initialization(const LexicalState &state, size_t id) {
+  std::optional<CleanupEquations::Initialization> selection_initialization(const LexicalState &state, size_t id) const {
     const auto &targets = state.targets.at(id);
+    const auto selection = state.selection_identities.find(id);
     if (state.selections.initialized.contains(id) ||
         std::all_of(targets.begin(), targets.end(), [&](size_t place) {
-          return place == null_target || state.initialized.contains(place);
+          if (place == null_target || state.initialized.contains(place)) return true;
+          if (!proving_) return false;
+          const auto selected = selection == state.selection_identities.end()
+              ? std::nullopt : selected_target(selection->second, place, true);
+          return missing_initialization(state, place, selected).empty();
         })) return CleanupEquations::Initialization{};
     return state.selections.initialization_requirements(id);
   }
@@ -3160,9 +3168,11 @@ class ScalarChecker {
   static CleanupEquations::ConditionClauses path_conditions(const LexicalState &state) {
     return CleanupEquations::conjoin_conditions(state.predicate_conditions, {path_facts(state)});
   }
-  static CleanupEquations::ConditionClauses missing_initialization(const LexicalState &state, size_t place) {
-    return CleanupEquations::conjoin_conditions(path_conditions(state),
+  static CleanupEquations::ConditionClauses missing_initialization(const LexicalState &state, size_t place,
+      const std::optional<CleanupEquations::ConditionFacts> &selected = {}) {
+    auto missing = CleanupEquations::conjoin_conditions(path_conditions(state),
         CleanupEquations::missing_initialization(place, state.initialized, state.uninitialized));
+    return selected ? CleanupEquations::conjoin_conditions(missing, {*selected}) : missing;
   }
   static bool conditional_read(const CleanupEquations::ReadRequirement &read) {
     return read.when != CleanupEquations::ConditionClauses{CleanupEquations::ConditionFacts{}};
@@ -3181,8 +3191,7 @@ class ScalarChecker {
           (!selection || !lexical_.input_facts.at(input).selections.initialized.contains(*selection))) missing |= std::uint64_t{1} << input;
     if (!missing) return;
     CleanupEquations::ReadRequirement before{lexical_.initialized, selection};
-    before.when = missing_initialization(lexical_, place);
-    if (target) before.when = CleanupEquations::conjoin_conditions(before.when, {*target});
+    before.when = missing_initialization(lexical_, place, target);
     before.uninitialized = lexical_.uninitialized;
     if (before.when.empty()) return;
     if (!storage(place).borrowed) {

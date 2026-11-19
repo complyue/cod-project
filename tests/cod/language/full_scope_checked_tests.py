@@ -38,6 +38,13 @@ BORROWED_BOOLEAN = 'val off<-false,on<-true;ref flag=off;ref next=on;'
 DEFER_CONDITIONAL_READ = 'defer{'+CONDITIONAL_READ+'};'
 UNWRITTEN = 'val local<-make local u64;'
 DEFER_READ_LOCAL = 'defer{behave @print(local);}'
+GUARDED_WRITES = ('val a<-make local u64,b<-make local u64;'
+                  'if(flag){a<-7u64;{}}else{b<-8u64;{}};')
+SELECT_WRITTEN = 'ptr p=if(flag){a}else{b};'
+
+
+def guarded_reference(body):
+    return IO+'proc run(flag:bool)->void{val result<-{{'+body+'}};behave @print(result);}run(true);run(false);'
 
 
 runner.CASES = {
@@ -80,6 +87,19 @@ runner.CASES = {
     'local_read_observes_shared_target_when_writer_rebinds_before_write': (
         IO+'val off<-false,on<-true;ref flag=on;ref peer=off;{{'+DEFER_CONDITIONAL_READ+
         'defer{peer<-false;};defer{peer=flag;};}};', 2, '', UNINITIALIZED_LOCAL),
+    'local_read_consumes_conditionally_initialized_target': (
+        guarded_reference(GUARDED_WRITES+SELECT_WRITTEN+'return p;'), 0, '7\n8\n', ''),
+    'local_read_rejects_opposite_conditional_target': (
+        guarded_reference(GUARDED_WRITES+'ptr p=if(flag){b}else{a};return p;'),
+        2, '', "read of 'p' before definite initialization"),
+    'local_read_keeps_initialized_selection_across_rebind': (
+        guarded_reference(GUARDED_WRITES+SELECT_WRITTEN+
+            'val other<-make local u64;ptr saved=p;p=other;return saved;'), 0, '7\n8\n', ''),
+    'local_read_nested_after_conditional_target_initialization': (
+        guarded_reference(GUARDED_WRITES+SELECT_WRITTEN+'return {{return p;}};'), 0, '7\n8\n', ''),
+    'local_read_during_cleanup_after_conditional_target_initialization': (
+        guarded_reference(GUARDED_WRITES+SELECT_WRITTEN+'defer{behave @print(p);};return 11u64;'),
+        0, '7\n11\n8\n11\n', ''),
     'throw_only_typed': run('val e<-sample_error();try{ {{throw e;}}; }'
                             'catch(caught:const NullPointerException){behave @print(caught.category);};', '4\n'),
     'throw_only_void_result': reject('val e<-sample_error();val result<-make local typeof({{throw e;}}){7u64};',
