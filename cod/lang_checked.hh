@@ -164,7 +164,7 @@ class ScalarChecker {
   };
   std::map<OpenPipeline, size_t> open_pipeline_ids_;
   std::vector<OpenPipeline> open_pipelines_;
-  std::map<std::tuple<const Expression *, size_t, size_t, size_t, bool>,
+  std::map<std::tuple<const Expression *, size_t, size_t, std::vector<std::string>, bool, bool>,
            const Expression *> terminal_bodies_;
   struct FreeBindings {
     std::vector<Capture> captures, queries, symbols;
@@ -7212,73 +7212,113 @@ class ScalarChecker {
       if (!bound.values[slot]) fail(call.at, "missing yielded label '" + contract.inputs[slot].label + "'");
     return bound;
   }
-  struct HereCallBinding {
+  struct WrittenCallBinding {
     std::vector<size_t> candidates, slots;
     std::vector<ArgumentMode> modes;
     size_t here_count = 0;
   };
-  HereCallBinding bind_here_call(const Expression &expr, const NamedFamily &family,
-                                 std::span<const Expr> operands, size_t connected_here) const {
-    const auto bind_written = [&](const CheckedMethod &method) -> std::optional<std::vector<size_t>> {
-      const auto parameters = method.input_parameters();
-      std::vector<size_t> slots;
-      std::set<size_t> occupied;
-      const auto ordinary = operands.subspan(method.here.size() - connected_here, parameters.size());
-      for (const auto &operand : ordinary) {
-        size_t slot = slots.size();
-        if (operand->kind == Expression::Kind::named_argument) {
-          const auto found = std::ranges::find(parameters, operand->text, &Parameter::name);
-          if (found == parameters.end()) return {};
-          slot = std::distance(parameters.begin(), found);
-        }
-        if (!occupied.insert(slot).second) return {};
-        slots.push_back(slot);
-      }
-      return slots;
-    };
-    HereCallBinding binding;
+  static std::optional<std::vector<size_t>> bind_written_arguments(std::span<const Expr> operands,
+      std::span<const Parameter> parameters) {
+    std::vector<size_t> slots;
+    std::set<size_t> occupied;
+    bool reordered = false;
+    for (const auto &operand : operands) {
+      size_t slot = slots.size();
+      if (operand->kind == Expression::Kind::named_argument) {
+        const auto found = std::ranges::find(parameters, operand->text, &Parameter::name);
+        if (found == parameters.end()) return {};
+        slot = std::distance(parameters.begin(), found);
+        reordered |= slot != slots.size();
+      } else if (reordered) return {};
+      if (!occupied.insert(slot).second) return {};
+      slots.push_back(slot);
+    }
+    return slots;
+  }
+  WrittenCallBinding bind_written_call(const Expression &expr, const NamedFamily &family,
+      std::span<const Expr> operands, std::optional<size_t> connected_here) const {
+    WrittenCallBinding binding;
     bool same_arity = false;
     for (const auto id : family.methods) {
       const auto &method = program_.methods[id];
-      if (method.here.empty() || method.here.size() < connected_here ||
-          method.here.size() + method.parameters.size() != operands.size() + connected_here) continue;
+      if (connected_here ? method.here.empty() || method.here.size() < *connected_here
+                         : !method.here.empty() || variadic(method)) continue;
+      const auto explicit_here = method.here.size() - connected_here.value_or(0);
+      if (explicit_here + method.input_parameters().size() != operands.size()) continue;
       same_arity = true;
-      auto bound = bind_written(method);
+      const auto ordinary = operands.subspan(explicit_here);
+      auto bound = bind_written_arguments(ordinary, method.input_parameters());
       if (!bound) continue;
       if (!binding.candidates.empty() && (binding.here_count != method.here.size() || binding.slots != *bound))
-        implementation_gap(expr.at, "overloads with different here argument bindings");
+        implementation_gap(expr.at, connected_here ? "overloads with different here argument bindings"
+                                                    : "overloads with different named argument bindings");
       binding.slots = std::move(*bound);
       binding.here_count = method.here.size();
       std::vector<ArgumentMode> candidate_modes;
       for (const auto &parameter : method.input_parameters()) candidate_modes.push_back(argument_mode(parameter));
       if (!binding.candidates.empty() && binding.modes != candidate_modes)
-        implementation_gap(expr.at, "here receiver overloads with different ordinary argument preparation");
+        implementation_gap(expr.at, connected_here ? "here receiver overloads with different ordinary argument preparation"
+                                                    : "named receiver overloads with different ordinary argument preparation");
       binding.modes = std::move(candidate_modes);
       binding.candidates.push_back(id);
     }
-    if (binding.candidates.empty() && same_arity) fail(expr.at, "written arguments must bind distinct ordinary parameters of the here receiver");
-    if (binding.candidates.empty()) fail(expr.at, "no receiver with a matching first here parameter for '" + expr.text + "'");
+    if (binding.candidates.empty() && same_arity)
+      fail(expr.at, connected_here ? "written arguments must bind distinct ordinary parameters of the here receiver"
+                                  : "written arguments must bind distinct ordinary parameters of the callable");
+    if (binding.candidates.empty()) {
+      if (connected_here) fail(expr.at, "no receiver with a matching first here parameter for '" + expr.text + "'");
+      implementation_gap(expr.at, "named calls without a full fixed-arity argument list");
+    }
     return binding;
   }
-  static const Expression &here_ordinary_operand(const Expression &written) {
+  static const Expression &written_ordinary_operand(const Expression &written) {
     if (written.kind != Expression::Kind::named_argument) return written;
-    if (written.children.empty()) implementation_gap(written.at, "default arguments to a here receiver");
+    if (written.children.empty()) implementation_gap(written.at, "default arguments in written calls");
     return *written.children.front();
   }
   static void schedule_ordinary_operands(CheckedOperation &operation, const std::vector<size_t> &slots) {
     for (const auto slot : slots) operation.operand_preparation.push_back({CheckedOperation::OperandPreparation::Kind::ordinary, slot});
   }
-  CheckedOperation check_here_ordinary_operand(const Expression &operand, ArgumentMode mode, CheckedInstance *instance,
+  CheckedOperation check_written_scalar_operand(const Expression &operand, ArgumentMode mode, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations) {
     const auto type = check(operand, instance, operations, mode == ArgumentMode::value, false, nullptr, expected_type_use(mode));
     const auto &view = operations.at(&operand);
     if (type != Type::never) {
-      if (!scalar_type(type)) implementation_gap(operand.at, "here receiver ordinary arguments require scalar inputs");
+      if (!scalar_type(type)) implementation_gap(operand.at, "written argument preparation requires scalar inputs");
       prepare_borrow(view, mode, operand.at);
     }
     return view;
   }
-  void complete_here_arguments(const CheckedMethod &receiver, std::vector<Type> &arguments,
+  void check_complete_named_call(const Expression &expr, CheckedInstance *supplier,
+      std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation, bool read, bool discard) {
+    const auto family = named_family(expr.text);
+    if (family.context || family.definition || &expr == prepared_call_)
+      implementation_gap(expr.at, "a named argument list for a lexical or deferred callable");
+    if (family.methods.empty()) fail(expr.at, "unknown callable '" + expr.text + "'");
+    const auto binding = bind_written_call(expr, family, expr.children, std::nullopt);
+    const auto count = binding.slots.size();
+    auto &operands = operation.argument_sources.emplace(count);
+    schedule_ordinary_operands(operation, binding.slots);
+    operation.arguments.resize(count);
+    std::vector<Type> arguments(count);
+    std::vector<CheckedOperation> views(count);
+    bool completes = true;
+    for (size_t i = 0; i < count; ++i) {
+      const auto &operand = written_ordinary_operand(*expr.children[i]);
+      if (operand.spread) implementation_gap(operand.at, "spread arguments in a fixed-arity named call");
+      const auto slot = binding.slots[i];
+      operands[slot] = &operand;
+      views[slot] = check_written_scalar_operand(operand, binding.modes[slot], supplier, operations);
+      arguments[slot] = views[slot].type;
+      operation.arguments[slot] = {binding.modes[slot], arguments[slot]};
+      completes = completes && arguments[slot] != Type::never;
+    }
+    const auto method = select_method(binding.candidates, arguments, expr.at, expr.text, {}, access_of(views), owners_of(views));
+    if (!completes) complete_written_arguments(program_.methods[method], arguments, operands);
+    const auto callee = demand(method, arguments, expr.at, {}, {}, 0, family.declaration);
+    finish_named_call(expr, arguments, views, operation, read, discard, completes, callee);
+  }
+  void complete_written_arguments(const CheckedMethod &receiver, std::vector<Type> &arguments,
                                const std::vector<const Expression *> &operands) const {
     const std::vector<std::optional<Type>> evidence(arguments.begin(), arguments.end());
     const auto partial = *match_evidence(receiver, evidence, {}, true);
@@ -7298,7 +7338,7 @@ class ScalarChecker {
     const auto family = named_family(expr.text, &state);
     if (family.declaration || state.here_control)
       implementation_gap(expr.at, "type inspection of a lexical here receiver or nested supplied group");
-    const auto binding = bind_here_call(expr, family, std::span<const Expr>{expr.children}.first(expr.children.size() - 1), true);
+    const auto binding = bind_written_call(expr, family, std::span<const Expr>{expr.children}.first(expr.children.size() - 1), 1);
     if (binding.here_count != 1)
       implementation_gap(expr.at, "type inspection of a call with additional here arguments");
     if (forwarded_here_operand(expr, &state)) fail(expr.at, "the first here parameter has both a forwarded and a trailing argument");
@@ -7309,14 +7349,14 @@ class ScalarChecker {
     Owners owners(arguments.size());
     bool completes = true;
     for (size_t i = 0; i < arguments.size(); ++i) {
-      const auto &operand = here_ordinary_operand(*expr.children[i]);
+      const auto &operand = written_ordinary_operand(*expr.children[i]);
       const auto slot = binding.slots[i];
       const auto mode = binding.modes[slot];
       const auto read = mode == ArgumentMode::value ? EvidenceRead::payload : EvidenceRead::target;
       const auto type = *type_evidence(operand, state, false, nullptr, nullptr, expected_type_use(mode), completes, read);
       if (type == Type::never) completes = false;
       else {
-        if (!scalar_type(type)) implementation_gap(operand.at, "here receiver ordinary arguments require scalar inputs");
+        if (!scalar_type(type)) implementation_gap(operand.at, "written argument preparation requires scalar inputs");
         if (mode != ArgumentMode::value && (state.value.view != true || state.value.mixed_view || !state.value.owner))
           implementation_gap(operand.at, "borrowed here receiver argument requires an existing view with an established owner");
         access[slot] = state.value.read_only;
@@ -7329,7 +7369,7 @@ class ScalarChecker {
     const auto &receiver = program_.methods[selected];
     if (state.method && program_.methods[*state.method].source->kind == Form::Kind::function &&
         receiver.source->kind != Form::Kind::function) fail(expr.at, "a function cannot invoke a procedure");
-    if (!completes) complete_here_arguments(receiver, arguments, operands);
+    if (!completes) complete_written_arguments(receiver, arguments, operands);
     const auto &signature = receiver.here.front();
     const auto &supplied = *expr.children.back();
     if (!signature.here.empty() || !supplied.definition)
@@ -10340,8 +10380,10 @@ class ScalarChecker {
   const Expression &terminal_here_body(const Expression &site, const Expression &sink, const CheckedHereContract &signature,
                                         const Type &feedback, CheckedInstance *supplier) {
     using K = Expression::Kind;
-    if (signature.labelled) implementation_gap(sink.at, "named terminal calls with labelled handoffs");
-    const auto key = std::tuple{&site, module_, interpretation_, signature.inputs.size(), feedback != Type::void_type};
+    std::vector<std::string> labels;
+    labels.reserve(signature.inputs.size());
+    for (const auto &input : signature.inputs) labels.push_back(input.label);
+    const auto key = std::tuple{&site, module_, interpretation_, std::move(labels), signature.labelled, feedback != Type::void_type};
     if (const auto found = terminal_bodies_.find(key); found != terminal_bodies_.end()) return *found->second;
     const auto node = [&](K kind, std::string text = {}) {
       auto expr = std::make_unique<Expression>();
@@ -10349,7 +10391,8 @@ class ScalarChecker {
       return expr;
     };
     auto supplied = node(K::here_body);
-    supplied->receiving = std::make_shared<ReceivingHeader>(ReceivingHeader{ReceivingHeader::Shape::ordered, {}});
+    const auto shape = signature.labelled ? ReceivingHeader::Shape::labelled : ReceivingHeader::Shape::ordered;
+    supplied->receiving = std::make_shared<ReceivingHeader>(ReceivingHeader{shape, {}});
     supplied->definition = std::make_shared<Form>();
     auto &definition = *supplied->definition;
     definition.kind = supplier ? program_.methods[supplier->method].source->kind : Form::Kind::procedure;
@@ -10360,9 +10403,16 @@ class ScalarChecker {
       auto name = "$here.terminal." + std::to_string(i);
       ReceivingItem item{};
       item.name = name; item.at = sink.at;
+      item.selector = signature.inputs[i].label;
       supplied->receiving->items.push_back(std::move(item));
       definition.parameters.push_back(Parameter{name, Type::void_type, sink.at, false, {}});
-      invoke->children.push_back(node(K::name, std::move(name)));
+      auto argument = node(K::name, std::move(name));
+      if (signature.labelled) {
+        auto labelled = node(K::named_argument, signature.inputs[i].label);
+        labelled->children.push_back(std::move(argument));
+        argument = std::move(labelled);
+      }
+      invoke->children.push_back(std::move(argument));
     }
     definition.body = node(K::block);
     if (feedback == Type::void_type) definition.body->children.push_back(std::move(invoke));
@@ -10409,7 +10459,7 @@ class ScalarChecker {
     if (processor && family.methods.empty())
       implementation_gap(expr.at, "pipeline operand without an established direct processor role");
     if (family.methods.empty()) fail(expr.at, "no producer with a matching consumer for '" + expr.text + "'");
-    const auto [candidates, slots, modes, here_count] = bind_here_call(expr, family, expr.children, processor ? 2 : 1);
+    const auto [candidates, slots, modes, here_count] = bind_written_call(expr, family, expr.children, processor ? 2 : 1);
     PreparedHereCall prepared{};
     auto &operands = prepared.operation.argument_sources.emplace(slots.size());
     auto &arguments = prepared.arguments;
@@ -10417,10 +10467,10 @@ class ScalarChecker {
     arguments.resize(slots.size());
     views.resize(slots.size());
     for (size_t i = 0; i < expr.children.size(); ++i) {
-      const auto &operand = here_ordinary_operand(*expr.children[i]);
+      const auto &operand = written_ordinary_operand(*expr.children[i]);
       const auto slot = slots[i];
       operands[slot] = &operand;
-      views[slot] = check_here_ordinary_operand(operand, modes[slot], instance, operations);
+      views[slot] = check_written_scalar_operand(operand, modes[slot], instance, operations);
       arguments[slot] = views[slot].type;
       prepared.completes = prepared.completes && arguments[slot] != Type::never;
     }
@@ -10428,7 +10478,7 @@ class ScalarChecker {
     const auto selected = select_method(candidates, arguments, expr.at, expr.text, {}, access_of(views), owners_of(views), nullptr, true, true);
     prepared.method = selected;
     const auto &method = program_.methods[selected];
-    if (!prepared.completes) complete_here_arguments(method, arguments, operands);
+    if (!prepared.completes) complete_written_arguments(method, arguments, operands);
     const auto types = prepared_types(method, arguments, {});
     for (size_t i = 0; i < slots.size(); ++i) prepared.operation.arguments.push_back({modes[i], types[i]});
     return prepared;
@@ -10678,7 +10728,7 @@ class ScalarChecker {
       });
       if (family.methods.empty()) implementation_gap(expr.at, "pipeline endpoint without an established direct producer role");
     }
-    const auto [candidates, slots, modes, here_count] = bind_here_call(target, family, operands_written, supplied);
+    const auto [candidates, slots, modes, here_count] = bind_written_call(target, family, operands_written, size_t{supplied});
     if (supplied && here_count == 1 && forwards_here(expr)) fail(expr.at, "the first here parameter has both a forwarded and a trailing argument");
     const auto explicit_here = here_count - supplied;
     const auto count = slots.size();
@@ -10693,7 +10743,7 @@ class ScalarChecker {
     }
     schedule_ordinary_operands(operation, slots);
     auto &operands = operation.argument_sources.emplace(count);
-    for (size_t i = 0; i < count; ++i) operands[slots[i]] = &here_ordinary_operand(*written[i]);
+    for (size_t i = 0; i < count; ++i) operands[slots[i]] = &written_ordinary_operand(*written[i]);
     operation.arguments.resize(count);
     std::vector<Type> arguments(count);
     std::vector<CheckedOperation> views(count);
@@ -10701,7 +10751,7 @@ class ScalarChecker {
     for (const auto [kind, slot] : operation.operand_preparation) {
       if (kind == PreparationKind::ordinary) {
         const auto mode = modes[slot];
-        views[slot] = check_here_ordinary_operand(*operands[slot], mode, supplier, operations);
+        views[slot] = check_written_scalar_operand(*operands[slot], mode, supplier, operations);
         arguments[slot] = views[slot].type;
         operation.arguments[slot] = {mode, arguments[slot]};
         completes = completes && arguments[slot] != Type::never;
@@ -10729,7 +10779,7 @@ class ScalarChecker {
     if (!completes) {
       // A never operand has no runtime payload. Its declared parameter must
       // still be determined before checking the supplied body.
-      complete_here_arguments(receiver, arguments, operands);
+      complete_written_arguments(receiver, arguments, operands);
       const auto prepared = prepared_types(receiver, arguments, {});
       for (size_t i = 0; i < count; ++i) operation.arguments[i].type = prepared[i];
     }
@@ -11897,6 +11947,11 @@ class ScalarChecker {
       }
       if (expr.intrinsic && !eager && expr.text != "cause_at")
         implementation_gap(expr.at, "explicit intrinsic has no implemented builtin '" + expr.text + "'");
+      if (expr.kind == K::call && !expr.intrinsic && std::ranges::any_of(expr.children,
+          [](const auto &operand) { return operand->kind == K::named_argument; })) {
+        check_complete_named_call(expr, instance, operations, operation, read, discard);
+        break;
+      }
       std::vector<Type> arguments;
       std::vector<CheckedOperation> views;
       bool completes = true;

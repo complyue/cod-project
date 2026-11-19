@@ -755,8 +755,8 @@ class Parser {
     const bool follows_call = allow_supplied_body && close < tokens_.size() &&
         (is("{", close + 1 - cursor_) || here_header(close + 1 - cursor_));
     const bool labelled_yield = labelled_yield_ && expr.kind == Expression::Kind::call && expr.text == "yield";
-    const bool named = (accepts_supplied_body(expr) && follows_call) || labelled_yield;
-    bool saw_label = false;
+    const bool named = (expr.kind == Expression::Kind::call && !expr.intrinsic) ||
+        (accepts_supplied_body(expr) && follows_call) || labelled_yield;
     expect("(");
     if (!take(")")) {
       do {
@@ -769,14 +769,12 @@ class Parser {
             argument->spread = take("...");
           }
           if (named && take("->")) {
-            saw_label = true;
             auto selected = make(Expression::Kind::named_argument, ordinary_name());
             if (argument) selected->children.push_back(std::move(argument));
             else if (labelled_yield) fail(selected->at, "a labelled yield operand cannot request a default");
             argument = std::move(selected);
-          } else if (saw_label || labelled_yield) {
-            fail(argument->at, labelled_yield ? "a labelled yield requires a label for every operand" :
-                                                "positional arguments must precede named arguments");
+          } else if (labelled_yield) {
+            fail(argument->at, "a labelled yield requires a label for every operand");
           }
           expr.children.push_back(std::move(argument));
         }

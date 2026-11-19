@@ -541,6 +541,26 @@ runner.CASES = {
         'func first(here input() yields u64) yields u64 -> bool{for val item<-input(){yield(item):void;};}'
         'func second(here input() yields u64) yields u64{for val item<-input(){yield(item);};}'
         'for val item<-rows !> first |> second{};',2,'','prepared producer does not match the selected here contract'),
+    'pipeline_terminal_forwards_labelled_borrows_and_boolean_feedback': (IO+
+        'func offers(line:const u64 in P) yields {id:u64;ref cell:const u64 in P;} -> bool where {owner P}{'
+        'if(!yield(7u64->id,line->cell)){return;}else{};yield(80u64->id,line->cell):void;}'
+        'proc audit(ref cell:const u64 in A,id:u64)->bool where {owner A}{'
+        'behave @print(id);behave @print(cell);return false;}'
+        'val entry_line<-76u64;offers(entry_line) $> audit;audit <$ offers(entry_line);',0,'7\n76\n7\n76\n',''),
+    'pipeline_terminal_uses_the_labels_of_each_selected_source': (IO+
+        'func rows(n:u32) yields {id:u32;}{yield(n->id);}'
+        'func rows(n:u64) yields {code:u64;}{yield(n->code);}'
+        'proc audit(id:u32)->void{behave @print(id+10u32);return;}'
+        'proc audit(code:u64)->void{behave @print(code+20u64);return;}'
+        'proc drive(n:T)->void where {T}{rows(n) $> audit;return;}drive(7u32);drive(8u64);',0,'17\n28\n',''),
+    'named_scalar_call_prepares_written_order_and_allows_an_in_position_label': (IO+
+        'proc trace(n:u64)->u64{behave @print(n);return n;}'
+        'proc apply(left:u64,right:u64)->void{behave @print(10u64*left+right);return;}'
+        'apply(trace(2u64)->right,trace(1u64)->left);apply(trace(3u64)->left,trace(4u64));',
+        0,'2\n1\n12\n3\n4\n34\n',''),
+    'named_scalar_call_rejects_a_positional_operand_after_reordering': (
+        'proc apply(left:u64,right:u64)->void{return;}apply(2u64->right,1u64);',
+        2,'','written arguments must bind distinct ordinary parameters of the callable'),
     'lexical_pipeline_reuses_stages_with_independent_sources_and_bound_sink': (IO+
         'proc mark(n:u64)->u64{behave @print(n);return n;}'
         'func rows(day:u64) yields u64{yield(day);}'
