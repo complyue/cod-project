@@ -28,16 +28,19 @@ case('saved_before_rebinding', declarations=CLASSIFY.replace('{try{','{ptr saved
 case('checked_before_rebinding', declarations=CLASSIFY.replace('{try{','{try{try{').replace('return false;};}','return false;};}finally{value=null;{}};}'))
 case('independent_input', declarations=CLASSIFY, body=fixture.LOCAL+fixture.FIRST.replace('classify(payload)','classify(other)')+fixture.TAIL+fixture.PRINT, signature='payload:Exception,other:Exception', arguments=('unchecked(),checked()',), reject=True)
 case('late_selection_rebind', declarations=CLASSIFY.replace('in O)', 'in O,ignored:bool)'), body=fixture.LOCAL+'ptr selected=payload;'+fixture.FIRST.replace('classify(payload)','classify(selected,{selected=null;true})')+fixture.TAIL+fixture.PRINT)
-case('deferred_block', body=fixture.LOCAL+'{{defer{'+fixture.FIRST+fixture.TAIL+'};}};'+fixture.PRINT)
-case('separate_actions', body=fixture.LOCAL+'{{defer{'+fixture.TAIL+'};defer{'+fixture.FIRST+'};}};'+fixture.PRINT)
+BORROWED_TARGET = fixture.LOCAL+'ptr destination=target;'
+BORROWED_FIRST = fixture.FIRST.replace('target<-', 'destination<-')
+BORROWED_TAIL = fixture.TAIL.replace('target<-', 'destination<-')
+case('deferred_block', body=BORROWED_TARGET+'{{defer{'+BORROWED_FIRST+BORROWED_TAIL+'};}};'+fixture.PRINT)
+case('separate_actions', body=BORROWED_TARGET+'{{defer{'+BORROWED_TAIL+'};defer{'+BORROWED_FIRST+'};}};'+fixture.PRINT)
 case('finally', body=fixture.LOCAL+'try{'+fixture.FIRST+'}finally{'+fixture.TAIL+'};'+fixture.PRINT)
-WRITEBACK = 'proc publish(ptr output:bool in O,ptr value:const Exception in E)->void throws NullPointerException where {owner O,owner E}{output<-classify(value);}'
+WRITEBACK = 'proc publish(ref output:bool in O,ptr value:const Exception in E)->void where {owner O,owner E}{output<-classify(value);}'
 READY = fixture.FIRST.replace('classify(payload)', 'ready')
 case('writeback', declarations=CLASSIFY+WRITEBACK, body=fixture.LOCAL+'val ready<-false;try{publish(ready,payload);'+READY+fixture.TAIL+fixture.PRINT+'}catch(e:const NullPointerException){};')
-case('prepared_writeback', declarations=CLASSIFY+WRITEBACK, body=fixture.LOCAL+'val ready<-false;try{ {{defer publish(ready,payload);}};'+READY+fixture.TAIL+fixture.PRINT+'}catch(e:const NullPointerException){};')
-case('prepared_selection_snapshot', declarations=CLASSIFY+WRITEBACK, body=fixture.LOCAL+'val ready<-false;ptr selected=payload;try{ {{defer publish(ready,selected);selected=null;}};'+READY+fixture.TAIL+fixture.PRINT+'}catch(e:const NullPointerException){};')
-case('prepared_payload_mutation', declarations=CLASSIFY+WRITEBACK, body=fixture.LOCAL+'val ready<-false;try{ {{defer publish(ready,payload);payload<-unchecked();}};'+READY+fixture.TAIL+fixture.PRINT+'}catch(e:const NullPointerException){};', output='7\n7\n')
-case('failed_registration', declarations=CLASSIFY+WRITEBACK, body=fixture.LOCAL+'val ready<-false;try{ {{defer publish(ready,payload);}};}catch(e:const Exception){};'+READY+fixture.TAIL+fixture.PRINT, reject=True)
+case('prepared_writeback', declarations=CLASSIFY+WRITEBACK, body=fixture.LOCAL+'val ready<-false;ref output=ready;ptr input=payload;try{ {{defer publish(output,input);}};'+READY+fixture.TAIL+fixture.PRINT+'}catch(e:const NullPointerException){};')
+case('prepared_selection_snapshot', declarations=CLASSIFY+WRITEBACK, body=fixture.LOCAL+'val ready<-false;ref output=ready;ptr selected=payload;try{ {{defer publish(output,selected);selected=null;}};'+READY+fixture.TAIL+fixture.PRINT+'}catch(e:const NullPointerException){};')
+case('prepared_payload_mutation', declarations=CLASSIFY+WRITEBACK, body=fixture.LOCAL+'val ready<-false;ref output=ready;ptr input=payload;try{ {{defer publish(output,input);input<-unchecked();}};'+READY+fixture.TAIL+fixture.PRINT+'}catch(e:const NullPointerException){};', output='7\n7\n')
+case('failed_registration', declarations=CLASSIFY+WRITEBACK, body=fixture.LOCAL+'val ready<-false;ref output=ready;ptr input=payload;try{ {{defer publish(output,input);}};}catch(e:const Exception){};'+READY+fixture.TAIL+fixture.PRINT, reject=True)
 case('declared_obligation', declarations=CLASSIFY.replace('->bool where', '->bool throws Exception where'), reject=True, diagnostic='declared checked exception')
 case('payload_initialization', body='val payload<-make local Exception;classify(payload);', signature='', arguments=('',), reject=True)
 SELECT = 'ptr selected=if(present){payload}else{null in here};'

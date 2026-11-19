@@ -7,6 +7,14 @@ import foundation_tests as runner
 IO = 'using symbol "std:io" @print;\n'
 PRE = IO + 'using "std:exceptions" NullPointerException;\n'
 ERROR = PRE + 'func error()->const NullPointerException{ptr p:i64=null in here;try{p;}catch(e:const NullPointerException){return e;};}\n'
+LOCAL_NULL_RESULT = (
+    'func leak(ref anchor:i64 in O)->ptr i64 in O where {owner O}'
+    '{ptr local:i64=null in here;return local;}val a<-1;'
+)
+WRONG_RESULT_OWNER = 'borrowed result does not retain its declared external owner'
+SELECTED_BEFORE_CLEANUP = '!(try{p}finally{p=null;{}} is null)'
+
+
 runner.CASES = {
     'literal_test': (IO + 'ptr p:i64=null in here;behave @print((p is null));behave @print(((null in here) is null));', 0, 'true\ntrue\n', ''),
     'null_needs_type': ('ptr p=null in here;', 2, '', 'explicit target type'),
@@ -34,8 +42,10 @@ runner.CASES = {
     'and_condition_refinement': (IO + 'proc f(flag:bool)->void{val a<-9;ptr p=if(flag){a}else{null};if(!(p is null)&&flag){behave @print(p);}else{};}f(true);f(false);', 0, '9\n', ''),
     'or_condition_refinement': (IO + 'proc f(flag:bool)->void{val a<-10;ptr p=if(flag){a}else{null};if((p is null)||!flag){}else{behave @print(p);};}f(true);f(false);', 0, '10\n', ''),
     'mutation_invalidates_test': (IO + 'val a<-1;ptr p=a;if(!(p is null)){p=null;behave @print(p);}else{};', 2, '', 'requires a covering catch or throws'),
-    'test_selection_before_cleanup': (PRE + 'val a<-1;ptr p=a;if(!(({{defer{p=null;};p}}) is null)){try{behave @print(p);}catch(e:const NullPointerException){behave @print(4);};}else{};', 0, '4\n', ''),
-    'test_selection_requires_new_proof': (IO + 'val a<-1;ptr p=a;if(!(({{defer{p=null;};p}}) is null)){behave @print(p);}else{};', 2, '', 'requires a covering catch or throws'),
+    'test_selection_before_cleanup': (PRE+'val a<-1;ptr p=a;if('+SELECTED_BEFORE_CLEANUP+'){'
+        'try{behave @print(p);}catch(e:const NullPointerException){behave @print(4);};}else{};',0,'4\n',''),
+    'test_selection_requires_new_proof': (IO+'val a<-1;ptr p=a;if('+SELECTED_BEFORE_CLEANUP+'){behave @print(p);}else{};',
+        2,'','requires a covering catch or throws'),
     'test_operand_once': (IO + 'ptr p:i64=null in here;behave @print((({behave @print(11);p}) is null));', 0, '11\ntrue\n', ''),
     'ref_nullable_rejected': ('val a<-1;ptr p=if(true){a}else{null};ref q=p;', 2, '', 'proven non-null target'),
     'ref_null_rebind_rejected': ('val a<-1;ref p=a;p=null;', 2, '', 'proven non-null target'),
@@ -48,9 +58,10 @@ runner.CASES = {
     'owned_null_alias_keeps_owner': ('val a<-1;ptr p=a;p=null;ptr q=p;{{val b<-2;q=b;}};', 2, '', 'initializer-fixed owner'),
     'owned_null_assignment_view': ('val a<-1;ptr p=a;ptr q=(p=null);{{val b<-2;q=b;}};', 2, '', 'initializer-fixed owner'),
     'null_alias_cannot_rehome_view': ('{{val a<-1;ptr p=a;p=null;}};ptr q:i64=null in here;{{val a<-2;ptr p=a;p=null;q=p;}};(q is null);', 2, '', 'initializer-fixed owner'),
-    'owned_null_view_cannot_escape': ('ptr q={{val a<-1;ptr p=a;p=null;p}};', 2, '', 'lexical owner has ended'),
-    'owned_null_test_after_scope': ('(({{val a<-1;ptr p=a;p=null;p}}) is null);', 2, '', 'lexical owner has ended'),
-    'owned_null_write_after_scope': ('({{val a<-1;ptr p=a;p=null;p}})<-2;', 2, '', 'lexical owner has ended'),
+    'owned_null_view_cannot_escape': (LOCAL_NULL_RESULT+'ptr q=leak(a);',2,'',WRONG_RESULT_OWNER),
+    'owned_null_test_after_scope': (LOCAL_NULL_RESULT+'(leak(a) is null);',2,'',WRONG_RESULT_OWNER),
+    'owned_null_write_after_scope': (PRE+LOCAL_NULL_RESULT+'try{leak(a)<-2;{}}catch(e:const NullPointerException){};',
+        2,'',WRONG_RESULT_OWNER),
     'null_cannot_acquire_inner_owner': ('ptr p:i64=null in here;{{val a<-1;p=a;p=null;}};(p is null);', 2, '', 'initializer-fixed owner'),
     'null_test_does_not_allow_owner_change': (IO + 'ptr p:i64=null in here;behave @print((p is null));{{val a<-13;p=a;behave @print(p);p=null;}};', 2, '', 'initializer-fixed owner'),
     'loop_cannot_change_owner': ('ptr p:i64=null in here;for(i in 0..2){ {{val a<-1;p=a;p=null;}};};', 2, '', 'initializer-fixed owner'),
@@ -66,12 +77,18 @@ runner.CASES = {
     'default_parameter_copy': (IO + 'func f(ptr p:i64)->const bool{return (p is null);}behave @print(f(1));', 0, 'false\n', ''),
     'copy_argument_npe': (PRE + 'proc f(x:i64)->void{behave @print(99);}ptr p:i64=null in here;try{f(p);}catch(e:const NullPointerException){behave @print(4);};', 0, '4\n', ''),
     'generic_nullable_local': (IO + 'func f(x:T)->const bool where T{ptr p:T=null in here;return (p is null);}behave @print(f(1u64));behave @print(f(false));', 0, 'true\ntrue\n', ''),
-    'deferred_null_read': (PRE + 'try{{val a<-1;ptr p=a;defer{behave @print(p);};p=null;{}}}catch(e:const NullPointerException){behave @print(4);};', 0, '4\n', ''),
+    'deferred_null_read': (PRE+'proc run()->void{val a<-1;ptr p=a;'
+        'defer catch(e:const NullPointerException){behave @print(4);};'
+        'defer{behave @print(p);};p=null;}run();',0,'4\n',''),
     'deferred_read_requires_coverage': ('{{val a<-1;ptr p=a;defer{p;};p=null;}};', 2, '', 'requires a covering catch or throws'),
     'deferred_null_test': (IO + '{{val a<-1;ptr p=a;defer{behave @print((p is null));};p=null;}};', 0, 'true\n', ''),
-    'deferred_target_preserves_owner': (PRE + 'ptr p:i64=null in here;val a<-19;{{defer{p=a;};}};if(!(p is null)){behave @print(p);}else{};', 0, '19\n', ''),
-    'deferred_bodyless_recovery': (PRE + 'func f()->const i64{ptr p:i64=null in here;defer catch(e:const NullPointerException){return 20;};return p;}behave @print(f());', 0, '20\n', ''),
-    'deferred_remaining_actions': (PRE + 'try{{ptr p:i64=null in here;defer{behave @print(21);};defer{p;};}}catch(e:const NullPointerException){behave @print(4);};', 0, '21\n4\n', ''),
+    'deferred_target_preserves_owner': (IO+'proc run()->void{ptr p:i64=null in here;val a<-19;'
+        'defer{if(p is not null){behave @print(p);}else{};};defer{p=a;};}run();',0,'19\n',''),
+    'deferred_bodyless_recovery': (PRE+'func f()->const i64{ptr p:i64=null in here;'
+        'defer catch(e:const NullPointerException){return 20;};defer{p;};return 0;}behave @print(f());',0,'20\n',''),
+    'deferred_remaining_actions': (PRE+'proc run()->void{ptr p:i64=null in here;'
+        'defer catch(e:const NullPointerException){behave @print(4);};'
+        'defer{behave @print(21);};defer{p;};}run();',0,'21\n4\n',''),
     'prepared_argument_failure': (PRE + 'proc f(x:i64)->void{behave @print(99);}try{{ptr p:i64=null in here;defer{behave @print(22);};defer f(p);}}catch(e:const NullPointerException){behave @print(4);};', 0, '22\n4\n', ''),
     'finally_nullable_read': (PRE + 'ptr p:i64=null in here;try{try{}finally{behave @print(p);};}catch(e:const NullPointerException){behave @print(4);};', 0, '4\n', ''),
     'npe_value_roundtrip': (ERROR + 'val e<-error();behave @print(e.category);behave @print(e.cause_count);', 0, '4\n0\n', ''),

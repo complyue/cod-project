@@ -26,8 +26,12 @@ case('readonly_physical_source_noop',setup=BASE.replace('ptr p=x,q=y;','ptr p=x;
 case('readonly_physical_source_rebind',body='left=right;',setup=BASE.replace('ptr p=x,q=y;','ptr p=x;ptr q:const i64=y;'),reject=True)
 case('readonly_physical_source_swap',body='intrinsic (<=>)(left,right);',setup=BASE.replace('ptr p=x,q=y;','ptr p=x;ptr q:const i64=y;'),reject=True)
 case('restoration_cannot_hide_bad_write',body='ptr saved=left;left=right;left=saved;',setup=BASE.replace('ptr p=x,q=y;','ptr p=x;ptr q:const i64=y;'),reject=True)
-case('prepared_keeps_binding_slots',body='intrinsic (<=>)(left,right);',call='{{defer (<=>)(ro,other);p=z;}};',output='7\n9\n')
-case('prepared_bad_source',body='left=right;',setup=BASE.replace('ptr p=x,q=y;','ptr p=x;ptr q:const i64=y;'),call='{{defer (<=>)(ro,other);}};',reject=True)
+runner.CASES['prepared_keeps_binding_slots'] = (
+    IO+HEAD+'{intrinsic (<=>)(left,right);}proc run()->void{'+BASE+
+    'defer{'+OUT+'};defer (<=>)(ro,other);p=z;}run();',0,'7\n9\n','')
+runner.CASES['prepared_bad_source'] = (
+    IO+HEAD+'{left=right;}proc run()->void{'+BASE.replace('ptr p=x,q=y;','ptr p=x;ptr q:const i64=y;')+
+    'defer (<=>)(ro,other);}run();',2,'','permission preservation')
 case('deferred_action_swap',body='defer intrinsic (<=>)(left,right);',output='7\n1\n')
 case('deferred_bad_write_restored',body='ptr saved=left;defer intrinsic (=)(left,saved);left=right;',setup=BASE.replace('ptr p=x,q=y;','ptr p=x;ptr q:const i64=y;'),reject=True)
 case('delayed_body_swap',body='defer{intrinsic (<=>)(left,right);};',output='7\n1\n')
@@ -35,7 +39,9 @@ case('readonly_alias_cannot_write_payload',body='left<-3;',reject=True,diagnosti
 case('fixed_alias',setup=BASE.replace('ptr var ro:const->p;','const ptr var ro:const->p;'),reject=True,diagnostic='const reference binding')
 case('fixed_physical_binding',setup=BASE.replace('ptr p=x,q=y;','const ptr p=x;ptr q=y;'),reject=True,diagnostic='const reference binding')
 case('missing_initialization_unchanged',setup=BASE.replace('x<-1','x<-make local i64'),reject=True,diagnostic='initialization')
-case('owner_mismatch',setup='val x<-1;ptr p:const i64=x;ptr var ro:const->p;',call='{{val y<-7;ptr q:const i64=y;ptr var other:const->q;ro<=>other;}};',after='{}',reject=True,diagnostic='owner')
+case('owner_mismatch', setup='val x<-1;ptr p:const i64=x;',
+     call='{{val y<-7;ptr q:const i64=y;ptr var ro:const->p;ptr var other:const->q;ro<=>other;}};',
+     after='{}', reject=True, diagnostic='owner')
 GENERIC=HEAD.replace('i64','T').replace('where {owner O}','where {T,owner O}')
 case('generic_alias_swap',definition=GENERIC+'{intrinsic (<=>)(left,right);}',output='7\n1\n')
 case('null_input',body='intrinsic (<=>)(left,right);',setup=BASE+'q=null;',output='99\n')
