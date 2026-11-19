@@ -71,6 +71,43 @@ runner.CASES = {
         'using "std:exceptions" NullPointerException;ptr w:Window=null in here;'
         'try{behave @print(w.minimum);}catch(e:const NullPointerException){behave @print(9u64);};',
         0, "9\n", ""),
+    "borrowed_product_and_projected_results": (PRELUDE + PRODUCT +
+        'data Policy {window:Window;}'
+        'func identity(ref item:T in O)->ref T in O where {T,owner O}{return item;}'
+        'func floor(ref rule:Policy in O)->ref u64 in O where {owner O}{return rule.window.minimum;}'
+        'func select(ref rule:Policy in O)->ref u64 in O where {owner O}{return floor(identity(rule));}'
+        'ptr policy=make Policy;policy.window.minimum<-20u64;policy.window.maximum<-30u64;'
+        'ref current=identity(policy);ref retained=select(current);retained<-21u64;'
+        'behave @print(policy.window.minimum);behave @print((retained is policy.window.minimum));'
+        'behave @print((current is policy));', 0, "21\ntrue\ntrue\n", ""),
+    "borrowed_product_defer_keeps_selected_input": (PRELUDE +
+        'data Settings {enabled:bool;limit:u64;}'
+        'proc configure(ref target:Settings in O) where {owner O}{target.enabled<-true;target.limit<-33u64;return;}'
+        'proc run()->void{ref a=make Settings {enabled<-false;limit<-5u64;};'
+        'ref b=make Settings {enabled<-false;limit<-6u64;};ptr current=a;'
+        'defer{behave @print(a.enabled);behave @print(a.limit);behave @print(b.enabled);behave @print(b.limit);};'
+        'defer configure(current);current=b;return;}run();', 0, "true\n33\nfalse\n6\n", ""),
+    "borrowed_product_checks_complete_input": (PRODUCT +
+        'proc borrow(ref target:Window in O) where {owner O}{return;}'
+        'ptr window=make Window;window.minimum<-20u64;borrow(window);', 2, "", "read of 'maximum' before definite initialization"),
+    "borrowed_product_write_updates_caller_boolean_proof": (
+        'data Settings {enabled:bool;}'
+        'proc arm(ref target:Settings in O) where {owner O}{target.enabled<-true;return;}'
+        'ref state=make Settings {enabled<-false;};val unread<-make local u64;arm(state);'
+        'if(state.enabled){unread;{}}else{};', 2, "", "read of 'unread' before definite initialization"),
+    "const_product_owner_keeps_writable_target_access": (PRELUDE + PRODUCT +
+        'proc update(ref target:Window in O) where {const owner O}{target.minimum<-7u64;return;}'
+        'func inspect(target:const Window in O)->u64 where {const owner O}{return target.minimum;}'
+        'ref window=make Window {minimum<-5u64;maximum<-6u64;};update(window);behave @print(inspect(window));',
+        0, "7\n", ""),
+    "const_product_owner_cannot_escalate_at_call": (PRODUCT +
+        'proc update(ref target:Window in O) where {owner O}{target.minimum<-7u64;return;}'
+        'proc appoint(ref target:Window in O) where {const owner O}{update(target);return;}'
+        'ref window=make Window {minimum<-5u64;maximum<-6u64;};appoint(window);',
+        2, "", "const owner cannot supply allocation access"),
+    "readonly_product_parameters_require_const_owner": (PRODUCT +
+        'func inspect(target:const Window in O)->u64 where {owner O}{return target.minimum;}',
+        2, "", "readonly product inputs require 'const owner O'"),
 }
 runner.CASE_ARGUMENTS = {"shadow_error": ["-Werror=shadow"], "unrelated_warning_error": ["-Werror=missing-return"]}
 runner.EXTRA_SOURCES = [Path(__file__)]

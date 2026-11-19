@@ -206,6 +206,8 @@ class ScalarChecker {
   size_t next_boolean_observation_ = 0;
   std::map<std::tuple<BooleanDecision::Origin, size_t, size_t, size_t>, size_t> conditional_selections_;
   std::map<size_t, size_t> incoming_selections_;
+  std::vector<size_t> input_field_places_;
+  std::map<size_t, size_t> input_field_roots_;
   std::set<size_t> rebound_;
   std::map<std::string, size_t> external_owners_;
   struct PayloadWrites {
@@ -268,6 +270,10 @@ class ScalarChecker {
 
   bool external_owner(size_t owner) const {
     return std::any_of(external_owners_.begin(), external_owners_.end(), [&](const auto &entry) { return entry.second == owner; });
+  }
+  bool const_owner(size_t owner) const {
+    return checking_method_ && external_owner(owner) &&
+        checking_method_->input_owners().at(null_target - 1 - owner).read_only;
   }
   bool owner_alive(size_t owner) const {
     return external_owner(owner) ||
@@ -2176,6 +2182,9 @@ class ScalarChecker {
     const auto &a = storage(left), &b = storage(right);
     if (!a.borrowed || !b.borrowed || a.type != b.type ||
         compare_owners(a.scope, b.scope) == OwnerMatch::mismatch) return false;
+    const auto left_root = input_field_roots_.find(left), right_root = input_field_roots_.find(right);
+    if (left_root != input_field_roots_.end() && right_root != input_field_roots_.end() &&
+        left_root->second == right_root->second) return false;
     return !checking_method_ || !checking_method_->scope_inputs ||
         !checking_method_->scope_inputs->disjoint_input_targets.contains(
             std::minmax(input_ordinal(left), input_ordinal(right)));
@@ -2621,11 +2630,17 @@ class ScalarChecker {
       found->second.before.merge(before);
     }
   }
+  size_t input_place(size_t ordinal) const {
+    const auto &inputs = checking_instance_->frame.inputs;
+    return ordinal < inputs.size() ? inputs[ordinal].place : input_field_places_.at(ordinal - inputs.size());
+  }
   size_t input_ordinal(size_t place) const {
     if (place == null_target) return null_target;
     const auto &inputs = checking_instance_->frame.inputs;
     for (size_t i = 0; i < inputs.size(); ++i)
       if (inputs[i].place == place && inputs[i].mode != ArgumentMode::value) return i;
+    const auto field = std::ranges::find(input_field_places_, place);
+    if (field != input_field_places_.end()) return inputs.size() + std::distance(input_field_places_.begin(), field);
     throw std::logic_error("call summary refers to non-input storage");
   }
   std::set<size_t> input_ordinals(const std::set<size_t> &places) const {
@@ -2667,16 +2682,22 @@ class ScalarChecker {
         if (condition.physical && storage(condition.id).borrowed)
           initialized_inputs->insert(CleanupEquations::InitializationInput::payload(input_ordinal(condition.id)));
         else {
-          const auto &inputs = checking_instance_->frame.inputs;
-          const auto found = std::find_if(inputs.begin(), inputs.end(), [&](const auto &input) {
-            return !condition.physical && !condition.frame && storage(input.place).borrowed && storage(input.place).binding == condition.id;
-          });
-          if (found == inputs.end()) { initialized_inputs.reset(); break; }
-          initialized_inputs->insert(CleanupEquations::InitializationInput::payload(std::distance(inputs.begin(), found)));
+          const auto physical = condition.id < bindings_->size() && !condition.physical && !condition.frame
+              ? borrowed_binding_place(condition.id) : std::nullopt;
+          if (!physical) { initialized_inputs.reset(); break; }
+          initialized_inputs->insert(CleanupEquations::InitializationInput::payload(input_ordinal(*physical)));
         }
       }
     }
     return initialized_inputs;
+  }
+  std::optional<size_t> borrowed_binding_place(size_t binding) const {
+    const auto &inputs = checking_instance_->frame.inputs;
+    for (size_t i = 0; i < inputs.size() + input_field_places_.size(); ++i) {
+      const auto place = input_place(i);
+      if (storage(place).borrowed && storage(place).binding == binding) return place;
+    }
+    return {};
   }
   static std::optional<CleanupEquations::Initialization> instantiate_initialization(
       const std::optional<CleanupEquations::Initialization> &conditions, const std::vector<CheckedOperation> &views) {
@@ -2850,21 +2871,26 @@ class ScalarChecker {
     if (const auto binding = current_binding(view); binding && (!prepared || !rebound_.contains(*binding)))
       selections.initialize(*binding);
   }
-  static CallEffects initial_effects(const CheckedMethod &method, const std::vector<Type> &arguments) {
+  CallEffects initial_effects(const CheckedMethod &method, const std::vector<Type> &arguments) const {
     CallEffects effects;
     std::set<size_t> borrowed;
     for (size_t p = 0; p < method.input_parameters().size(); ++p)
       if (!method.input_parameters()[p].owner.empty()) borrowed.insert(p);
+    const auto fields = product_inputs(arguments, method.source->at);
+    for (size_t p = 0; p < fields.size(); ++p) borrowed.insert(arguments.size() + p);
     for (const auto reason : call_reasons(method)) {
       effects.initialized[reason] = borrowed;
       effects.present[reason] = borrowed;
     }
     // Value possibilities grow from no observed return, independently of
     // the optimistic initialization/presence guarantees above.
+    const auto input_type = [&](size_t p) -> const Type & {
+      return p < arguments.size() ? arguments[p] : fields[p - arguments.size()].description->type;
+    };
     for (const auto reason : call_reasons(method)) for (const auto parameter : borrowed)
-      if (arguments[parameter] == Type::boolean) effects.booleans[reason][parameter] = effects.returned.boolean;
+      if (input_type(parameter) == Type::boolean) effects.booleans[reason][parameter] = effects.returned.boolean;
     for (const auto reason : call_reasons(method)) for (const auto parameter : borrowed)
-      if (arguments[parameter].kind == Type::exception)
+      if (input_type(parameter).kind == Type::exception)
         effects.payloads[reason].try_emplace(parameter);
     if (caller_bindings(method)) for (const auto reason : call_reasons(method))
       for (size_t p = 0; p < arguments.size(); ++p) {
@@ -3179,8 +3205,25 @@ class ScalarChecker {
   }
   void finish_call(const Expression &expr, const Type &contract, const CallEffects &summary,
       const std::set<size_t> &reasons, const std::vector<Type> &arguments,
-      const std::vector<CheckedOperation> &views, CheckedOperation &operation, bool read, bool discard,
+      const std::vector<CheckedOperation> &operands, CheckedOperation &operation, bool read, bool discard,
       size_t offset = 0, bool immediate_scope = false) {
+    const auto fields = product_inputs(arguments, expr.at);
+    std::vector<CheckedOperation> projected;
+    if (!fields.empty()) {
+      projected = operands;
+      for (const auto &field : fields)
+        projected.push_back(project_product(projected.at(field.parent), field.field, expr.at, true));
+    }
+    const auto &views = fields.empty() ? operands : projected;
+    const auto borrowed_input = [&](size_t i) {
+      return i >= arguments.size() || (!contract.owners.empty() && contract.owners[i]);
+    };
+    const auto readonly_input = [&](size_t i) {
+      return i < arguments.size() ? !contract.const_views.empty() && contract.const_views[i] : views[i].read_only;
+    };
+    const auto input_type = [&](size_t i) -> const Type & {
+      return i < arguments.size() ? arguments[i] : views[i].type;
+    };
     std::vector<ExceptionFacts> exception_inputs;
     const bool prepared = &expr == prepared_call_;
     const bool prepared_slots = prepared && !summary.bindings.empty();
@@ -3191,17 +3234,17 @@ class ScalarChecker {
     const bool boolean_call = *contract.target == Type::boolean || !summary.booleans.empty() || conditional_call;
     const auto entry_booleans = !boolean_call ? CleanupEquations::BooleanValues{} :
         prepared ? incoming_booleans() : current_booleans(lexical_, expr.at);
-    std::vector<CleanupEquations::BooleanValue> boolean_inputs(arguments.size());
-    for (size_t i = 0; i < arguments.size(); ++i) if (boolean_call && arguments[i] == Type::boolean) {
-      const bool borrowed = !contract.owners.empty() && contract.owners[i];
+    std::vector<CleanupEquations::BooleanValue> boolean_inputs(views.size());
+    for (size_t i = 0; i < views.size(); ++i) if (boolean_call && input_type(i) == Type::boolean) {
+      const bool borrowed = borrowed_input(i);
       boolean_inputs[i] = borrowed ? prepared_slots ? CleanupEquations::unknown_boolean() : stored_boolean(views[i], entry_booleans)
           : snapshot_boolean(predicate_of(views[i]), lexical_, expr.at);
     }
     if (contract.target->kind == Type::exception || !summary.payloads.empty() || boolean_call) {
-      exception_inputs.reserve(arguments.size());
-      for (size_t i = 0; i < arguments.size(); ++i) {
-        const bool borrowed = !contract.owners.empty() && contract.owners[i];
-        exception_inputs.push_back(borrowed ? prepared_slots ? ExceptionFacts{exception_possibilities(arguments[i])}
+      exception_inputs.reserve(views.size());
+      for (size_t i = 0; i < views.size(); ++i) {
+        const bool borrowed = borrowed_input(i);
+        exception_inputs.push_back(borrowed ? prepared_slots ? ExceptionFacts{exception_possibilities(input_type(i))}
             : stored_exceptions(views[i], entry_payloads) : views[i].exceptions);
       }
     }
@@ -3213,6 +3256,8 @@ class ScalarChecker {
       const auto &view = views[i];
       if (view.owners.size() != 1) fail(operation.argument(expr, i + offset).at, "borrowed argument requires one statically provable owner");
       const auto owner = *view.owners.begin();
+      if (operation.callable_call && const_owner(owner))
+        implementation_gap(expr.at, "const owner access through a callable value");
       require_borrow_lifetime(view, operation.argument(expr, i + offset).at, &expr == prepared_call_);
       if (const auto [found, inserted] = owners.emplace(role, owner); !inserted) {
         const auto equality = compare_owners(found->second, owner);
@@ -3275,7 +3320,7 @@ class ScalarChecker {
       effects.resolve_initialization();
     }
     if (immediate_scope && !summary.bindings.empty()) invocation_bindings(summary, views, operation, prepared_slots, true);
-    if (proving_ && operation.callee && !immediate_scope && summary.bindings.empty()) {
+    if (proving_ && operation.callee && fields.empty() && !immediate_scope && summary.bindings.empty()) {
       // Per-formal summaries can lose complementary writes when a call
       // forwards or permutes its inputs. Reuse the finite source proof for
       // the shared storage, keeping the native failure and read obligations.
@@ -3314,7 +3359,7 @@ class ScalarChecker {
     }
     std::set<size_t> written_targets;
     for (const auto i : summary.written_inputs) {
-      if (!contract.const_views.empty() && contract.const_views[i]) continue;
+      if (readonly_input(i)) continue;
       auto target = views.at(i);
       if (prepared_slots) {
         target.targets.clear();
@@ -3340,9 +3385,9 @@ class ScalarChecker {
         // Publish simultaneous postconditions after weakening other possible
         // aliases. Sequential strong writes would lose same-target alternatives.
         std::map<size_t, ExceptionFacts> definite;
-        for (size_t i = 0; i < arguments.size(); ++i) {
-          if (arguments[i].kind != Type::exception || contract.owners.empty() || !contract.owners[i]) continue;
-          auto value = ExceptionFacts{exception_possibilities(arguments[i])};
+        for (size_t i = 0; i < views.size(); ++i) {
+          if (input_type(i).kind != Type::exception || !borrowed_input(i)) continue;
+          auto value = ExceptionFacts{exception_possibilities(input_type(i))};
           const auto outcome = summary.payloads.find(reason);
           const bool writes = summary.written_inputs.contains(i);
           // An empty outcome for an unchanged input carries no postcondition.
@@ -3362,9 +3407,9 @@ class ScalarChecker {
         for (auto &[place, value] : booleans) if (effects.payload_writes.contains(place)) value = CleanupEquations::unknown_boolean();
       } else {
         CleanupEquations::BooleanValues definite;
-        for (size_t i = 0; i < arguments.size(); ++i) {
-          if (arguments[i] != Type::boolean || contract.owners.empty() || !contract.owners[i]) continue;
-          const bool readonly = !summary.written_inputs.contains(i) || (!contract.const_views.empty() && contract.const_views[i]);
+        for (size_t i = 0; i < views.size(); ++i) {
+          if (input_type(i) != Type::boolean || !borrowed_input(i)) continue;
+          const bool readonly = !summary.written_inputs.contains(i) || readonly_input(i);
           auto value = CleanupEquations::unknown_boolean();
           const auto outcome = summary.booleans.find(reason);
           const bool reported = outcome != summary.booleans.end() && outcome->second.contains(i);
@@ -3504,7 +3549,10 @@ class ScalarChecker {
       operation.selection_identity = exact && identities.size() == 1 ? *identities.begin() : new_selection_identity(std::move(sources));
       if (!prepared && nullable_result) operation.nullness = instantiate_boolean(summary.returned.nullness, boolean_inputs, views,
                                                                                   has_invocation_time_slots, exception_inputs);
-      if (read && !discard && &expr != prepared_call_) read_view(operation, expr.at, "borrowed result");
+      if (read && !discard && &expr != prepared_call_) {
+        if (operation.type.kind == Type::product) implementation_gap(expr.at, "reading a whole product as an independent value");
+        read_view(operation, expr.at, "borrowed result");
+      }
       if (!prepared) operation.predicate = stored_predicate(operation);
     }
   }
@@ -4624,8 +4672,10 @@ class ScalarChecker {
         ((type.target && nested_binder(method, *type.target)) ||
          std::any_of(type.parameters.begin(), type.parameters.end(), [&](const auto &p) { return nested_binder(method, p); }));
   }
-  static void signature_type(const CheckedMethod &method, const Type &type, const Location &at, bool result = false) {
+  static void signature_type(const CheckedMethod &method, const Type &type, const Location &at, bool result = false,
+                             bool borrowed_product = false) {
     if (bits_type(type) || binder(method, type) || (result && type == Type::void_type)) return;
+    if (borrowed_product && type.kind == Type::product) return;
     if (type.kind == Type::procedure && type.target) {
       if (type.variadic || !type.capture_owners.empty() || !type.capture_regions.empty() ||
           (type.owners.empty() && std::any_of(type.nullable_views.begin(), type.nullable_views.end(), [](bool v) { return v; })))
@@ -5043,6 +5093,19 @@ class ScalarChecker {
     const auto &supplied = program_.query_environments[query_environment].result;
     const auto result = supplied ? ResultEvidence{supplied, ResultOrigin::supplied} :
         require_result(method, arguments, retained, at, state);
+    check_product_owner_roles(definition, arguments);
+    for (size_t i = 0; i < arguments.size(); ++i) if (arguments[i].kind == Type::product) {
+      const auto &parameter = parameter_at(definition, i);
+      const auto mode = argument_mode(parameter);
+      if (mode == ArgumentMode::value || mode == ArgumentMode::borrowed_ptr ||
+          definition.scope_inputs || definition.source->symbolic || caller_bindings(definition))
+        implementation_gap(at, "product parameters require a readable target in an ordinary direct call");
+      product_schema(arguments[i], at);
+    }
+    if (result.contract->type->kind == Type::product) {
+      if (!result.contract->borrowed()) implementation_gap(at, "whole-product value results");
+      product_schema(*result.contract->type, at);
+    }
     check_declared_results(definition, *result.contract, declared);
     definition.contextual_result = definition.contextual_result || supplied.has_value();
     const auto id = program_.instances.size();
@@ -5187,6 +5250,16 @@ class ScalarChecker {
     if (checking_method_ && checking_method_->source->kind == Form::Kind::function && definition.kind == Form::Kind::procedure)
       fail(expr.at, "a function cannot invoke a procedure");
     if (!completes) { operation.type = Type::never; return; }
+    for (const auto &owner : method.input_owners()) if (!owner.read_only) {
+      bool supplied = false, writable = false;
+      for (size_t i = 0; i < views.size(); ++i) if (parameter_at(method, i).owner == owner.name) {
+        if (const auto actual = one_owner(views[i])) {
+          supplied = true;
+          writable |= !const_owner(*actual);
+        }
+      }
+      if (supplied && !writable) fail(expr.at, "const owner cannot supply allocation access for '" + owner.name + "'");
+    }
     const auto contract = callable_type(program_.methods[target.method], target.arguments, target.result,
         access_of(views), owners_of(views), &arguments);
     auto reasons = direct_call_reasons(contract, effects);
@@ -5761,6 +5834,67 @@ class ScalarChecker {
   }
   static bool readonly_field(const CheckedSchema::Field &field) {
     return field.source->read_only || field.source->fixed_binding;
+  }
+  static void check_product_owner_roles(const CheckedMethod &method, const std::vector<Type> &types) {
+    if (std::ranges::none_of(types, [](const auto &type) { return type.kind == Type::product; })) return;
+    for (const auto &owner : method.input_owners()) if (!owner.read_only) {
+      bool product = false, writable = false;
+      for (size_t i = 0; i < types.size(); ++i) {
+        const auto &parameter = parameter_at(method, i);
+        if (parameter.owner != owner.name) continue;
+        product |= types[i].kind == Type::product;
+        writable |= !parameter.read_only;
+      }
+      if (product && !writable) fail(owner.at, "readonly product inputs require 'const owner " + owner.name + "'");
+    }
+  }
+  struct ProductInput {
+    size_t parent, field;
+    const CheckedSchema::Field *description;
+  };
+  std::vector<ProductInput> product_inputs(const std::vector<Type> &arguments, const Location &at) const {
+    std::vector<ProductInput> fields;
+    for (size_t i = 0; i < arguments.size() + fields.size(); ++i) {
+      const auto &type = i < arguments.size() ? arguments[i] : fields[i - arguments.size()].description->type;
+      if (type.kind != Type::product) continue;
+      const auto &schema = product_schema(type, at);
+      for (size_t field = 0; field < schema.fields.size(); ++field) {
+        if (fields.size() == 4096) fail(at, "compiler resource limit: too many borrowed product fields");
+        fields.push_back({i, field, &schema.fields[field]});
+      }
+    }
+    return fields;
+  }
+  CheckedOperation project_product(const CheckedOperation &parent, size_t index, const Location &at,
+                                    bool preserve_null = false) const {
+    const auto &schema = product_schema(parent.type, at);
+    const auto &field = schema.fields.at(index);
+    std::set<size_t> places;
+    for (const auto place : parent.targets) {
+      if (place == null_target) {
+        if (preserve_null) places.insert(place);
+        continue;
+      }
+      if (storage(place).fields.size() != schema.fields.size())
+        implementation_gap(at, "product target with unproved field storage");
+      places.insert(storage(place).fields[index]);
+    }
+    CheckedOperation result;
+    select_targets(result, places);
+    if (places.contains(null_target)) result.null_sources = parent.null_sources;
+    result.type = field.type;
+    result.operand_type = parent.type;
+    result.product_field = index;
+    result.view = true;
+    result.owners = parent.owners;
+    result.read_only = parent.read_only || readonly_field(field);
+    result.initialization = parent.initialization;
+    if (result.place) {
+      const auto binding = storage(*result.place).binding;
+      if (const auto found = lexical_.selection_identities.find(binding); found != lexical_.selection_identities.end())
+        result.selection_identity = found->second;
+    }
+    return result;
   }
   static std::vector<size_t> product_initializers(const CheckedSchema &schema, const Expression &expr) {
     std::set<size_t> initialized;
@@ -6931,6 +7065,7 @@ class ScalarChecker {
   std::optional<TypeCallSummary> prove_type_call(size_t id, const std::vector<Type> &arguments,
       const std::vector<Type> &retained, const ResultContract &contract, const TypeEvidenceState &supplied,
       const TypeCallInputs &inputs) const {
+    if (std::ranges::any_of(arguments, [](const auto &type) { return type.kind == Type::product; })) return {};
     if (auto *proofs = type_call_proofs_) {
       const auto index = type_call_obligation(id, arguments, retained, contract, supplied, inputs);
       if (!index) return {};
@@ -9500,6 +9635,8 @@ class ScalarChecker {
       const std::vector<Type> &prepared, const ResultContract &result, const Type &view, const Location &at) const {
     if (caller_bindings(method))
       implementation_gap(at, "caller-binding method values require an unproved callable slot contract");
+    if (std::ranges::any_of(method.input_owners(), [](const auto &owner) { return owner.read_only; }))
+      implementation_gap(at, "callable values with const owner requirements");
     for (size_t i = 0; i < actual.size(); ++i)
       if (!view.argument_modes.empty() && view.argument_modes[i] != ArgumentMode::value && prepared[i] != actual[i])
         implementation_gap(at, "unproved callable family borrowed target adaptation");
@@ -9876,7 +10013,8 @@ class ScalarChecker {
           candidate.reference_conditions != inputs.reference_conditions ||
           candidate.disjoint_input_targets != inputs.disjoint_input_targets ||
           candidate.parameters.size() != inputs.parameters.size()) continue;
-      if (std::equal(candidate.parameters.begin(), candidate.parameters.end(), inputs.parameters.begin(),
+      if (std::ranges::equal(candidate.owners, inputs.owners, {}, &OwnerParameter::read_only, &OwnerParameter::read_only) &&
+          std::equal(candidate.parameters.begin(), candidate.parameters.end(), inputs.parameters.begin(),
           [](const auto &a, const auto &b) {
             return a.name == b.name && a.owner == b.owner && a.declaration_kind == b.declaration_kind &&
                 a.fixed_binding == b.fixed_binding && a.read_only == b.read_only;
@@ -9906,7 +10044,7 @@ class ScalarChecker {
     const auto role = std::distance(owners.begin(), found);
     if (found == owners.end()) {
       owners.push_back(actual);
-      inputs.owners.push_back({"$scope.owner." + std::to_string(role), {}, at});
+      inputs.owners.push_back({"$scope.owner." + std::to_string(role), {}, at, false, const_owner(actual)});
     }
     return role;
   }
@@ -10390,10 +10528,10 @@ class ScalarChecker {
     inputs.here_reception = bind_here_reception(body, signature);
     inputs.nonnull.resize(parameters.size(), false);
     inputs.here_input_owners = owners.size();
-    const auto add_owner = [&](const Location &at) {
-      inputs.owners.push_back({"$scope.owner." + std::to_string(inputs.owners.size()), {}, at});
+    const auto add_owner = [&](const Location &at, bool read_only) {
+      inputs.owners.push_back({"$scope.owner." + std::to_string(inputs.owners.size()), {}, at, false, read_only});
     };
-    for (size_t i = 0; i < owners.size(); ++i) add_owner(body.at);
+    for (const auto actual : owners) add_owner(body.at, actual && const_owner(*actual));
     std::vector<Type> arguments;
     arguments.reserve(parameters.size());
     for (size_t i = 0; i < parameters.size(); ++i) {
@@ -10417,7 +10555,7 @@ class ScalarChecker {
       const auto found = std::ranges::find(owners, std::optional{actual});
       const auto role = std::distance(owners.begin(), found);
       if (found == owners.end()) {
-        add_owner(at);
+        add_owner(at, const_owner(actual));
         owners.push_back(actual);
         supplied.owners.push_back(actual);
       }
@@ -12502,7 +12640,7 @@ class ScalarChecker {
           completes = false;
         } else {
           arguments.push_back(argument);
-          require_value(argument, expr.at);
+          if (mode == ArgumentMode::value || argument.kind != Type::product) require_value(argument, expr.at);
         }
         operation.arguments.push_back({mode, arguments.back()});
         if (mode == ArgumentMode::value && argument.kind == Type::procedure)
@@ -13275,8 +13413,11 @@ class ScalarChecker {
       const auto type = resolve_local_type(*expr.annotation, instance, expr.at, true);
       const auto &schema = product_schema(type, expr.at);
       if (read && !discard) implementation_gap(expr.at, "reading a whole product as an independent value");
-      if (!expr.owner_name.empty() && expr.owner_name != "here" && named_owner(expr.owner_name, expr.at) != cleanup_scope_)
-        implementation_gap(expr.at, "product construction outside the current lexical owner");
+      if (!expr.owner_name.empty() && expr.owner_name != "here") {
+        const auto owner = named_owner(expr.owner_name, expr.at);
+        if (const_owner(owner)) fail(expr.at, "const owner cannot allocate product storage");
+        if (owner != cleanup_scope_) implementation_gap(expr.at, "product construction outside the current lexical owner");
+      }
       const auto order = product_initializers(schema, expr);
       const auto root = reserve_product(type, expr.at);
       operation.type = operation.operand_type = type;
@@ -13338,19 +13479,7 @@ class ScalarChecker {
       if (read && field.type.kind == Type::product) implementation_gap(expr.at, "reading a whole product as an independent value");
       require_live_view(parent, expr.at);
       dereference(parent, expr.at);
-      std::set<size_t> fields;
-      for (const auto place : parent.targets) if (place != null_target) {
-        if (storage(place).fields.size() != schema.fields.size())
-          implementation_gap(expr.at, "product target with unproved field storage");
-        fields.insert(storage(place).fields[index]);
-      }
-      select_targets(operation, fields);
-      operation.type = field.type;
-      operation.operand_type = source;
-      operation.product_field = index;
-      operation.view = true;
-      operation.owners = parent.owners;
-      operation.read_only = parent.read_only || readonly_field(field);
+      operation = project_product(parent, index, expr.at);
       if (read) {
         require_initialized(operation, expr.at, expr.text);
         operation.predicate = stored_predicate(operation);
@@ -13707,7 +13836,8 @@ class ScalarChecker {
     next_finalizer_input_ = 2 * CleanupEquations::deferred_return_offset;
     cleanup_scope_ = 0; next_scope_ = 1;
     next_target_version_ = 0;
-    next_selection_identity_ = 0; selection_sources_.clear(); incoming_selections_.clear(); return_selection_actions_.clear();
+    next_selection_identity_ = 0; selection_sources_.clear(); incoming_selections_.clear();
+    input_field_places_.clear(); input_field_roots_.clear(); return_selection_actions_.clear();
     next_boolean_observation_ = 0; conditional_selections_.clear();
   }
 
@@ -13766,8 +13896,9 @@ class ScalarChecker {
     std::set<size_t> known;
     for (const auto id : state.initialized) if (storage(id).borrowed) known.insert(input_ordinal(id));
     CleanupEquations::MissingInitialization missing;
-    for (size_t p = 0; p < checking_instance_->frame.inputs.size(); ++p) {
-      const auto place = checking_instance_->frame.inputs[p].place;
+    const auto input_count = checking_instance_->frame.inputs.size() + input_field_places_.size();
+    for (size_t p = 0; p < input_count; ++p) {
+      const auto place = input_place(p);
       if (!storage(place).borrowed || known.contains(p)) continue;
       auto clauses = external_conditions(missing_initialization(state, place));
       if (clauses.empty()) known.insert(p);
@@ -13780,8 +13911,8 @@ class ScalarChecker {
     const auto present = input_ordinals(state.present);
     const auto [presence, first_presence] = observed_.present.emplace(reason, present);
     if (!first_presence) presence->second = intersect(presence->second, present);
-    for (size_t p = 0; p < checking_instance_->frame.inputs.size(); ++p) {
-      const auto place = checking_instance_->frame.inputs[p].place;
+    for (size_t p = 0; p < input_count; ++p) {
+      const auto place = input_place(p);
       if (storage(place).borrowed && storage(place).type == Type::boolean) {
         const auto proof = state.predicates.find(place);
         auto value = snapshot_boolean(proof == state.predicates.end() ? nullptr : proof->second, state, checking_method_->source->at);
@@ -13847,6 +13978,43 @@ class ScalarChecker {
       if (!requirement.before.nonnull && std::ranges::any_of(requirement.inputs,
             [&](size_t input) { return state.inputs.contains(input); }))
         if (const auto place = cleanup_.read_target(read)) observe_read(*place, requirement.before);
+  }
+  void seed_boolean_input(size_t place, size_t ordinal) {
+    auto proof = std::make_shared<Predicate>();
+    proof->kind = Predicate::Kind::presence;
+    for (const bool value : {false, true}) {
+      CleanupEquations::ConditionFacts facts; facts.inputs.emplace(ordinal, value);
+      proof->results[value].insert(std::move(facts));
+    }
+    lexical_.predicates[place] = std::move(proof);
+  }
+  void bind_product_inputs(const CheckedInstance &instance, const Location &at, LexicalState::InputFacts &entry) {
+    const auto fields = product_inputs(instance.arguments, at);
+    for (const auto &[parent, index, description] : fields) {
+      const auto container = input_place(parent);
+      const auto owner = storage(container).scope;
+      const auto name = "$input.field." + std::to_string(storage_->size()) + "." + description->source->name;
+      const auto place = declare(name, description->type, storage(container).read_only || readonly_field(*description),
+                                 true, at, false, &entry);
+      auto &field = storage_->at(place);
+      field.scope = owner;
+      field.borrowed = field.subobject = true;
+      auto &fields_in_storage = storage_->at(container).fields;
+      if (index != fields_in_storage.size()) throw std::logic_error("product input fields out of order");
+      fields_in_storage.push_back(place);
+      std::erase(scope_storage_[0], place);
+      lexical_.owners[field.binding] = {owner};
+      const auto ordinal = instance.frame.inputs.size() + input_field_places_.size();
+      const auto selection = lexical_.selection_identities.at(field.binding);
+      selection_sources_.at(selection) = {ordinal};
+      incoming_selections_.emplace(place, selection);
+      input_field_places_.push_back(place);
+      const auto parent_root = input_field_roots_.find(container);
+      input_field_roots_.emplace(place, parent_root == input_field_roots_.end() ? container : parent_root->second);
+      entry.initialized.insert(place);
+      entry.present.insert(place);
+      if (field.type == Type::boolean) seed_boolean_input(place, ordinal);
+    }
   }
   CallEffects check_instance(size_t i, bool distinct_bindings = false) {
     checking_context_ = i + 1;
@@ -13927,16 +14095,9 @@ class ScalarChecker {
         if (mode != ArgumentMode::borrowed_ptr || (live_value && method.supplied_scope)) entry.initialized.insert(id);
         if (instance.arguments[p].kind == Type::exception)
           entry.exceptions.emplace(id, ExceptionFacts::input(p, exception_possibilities(instance.arguments[p])));
-        if (instance.arguments[p] == Type::boolean) {
-          auto proof = std::make_shared<Predicate>();
-          proof->kind = Predicate::Kind::presence;
-          for (const bool value : {false, true}) {
-            CleanupEquations::ConditionFacts facts; facts.inputs.emplace(p, value);
-            proof->results[value].insert(std::move(facts));
-          }
-          lexical_.predicates[id] = std::move(proof);
-        }
+        if (instance.arguments[p] == Type::boolean) seed_boolean_input(id, p);
       }
+      bind_product_inputs(instance, method.at, entry);
       if (checking_method_->scope_inputs) {
         for (const auto &[name, access] : checking_method_->scope_inputs->place_access) {
           const auto input = storage(instance.frame.inputs.at(access.input).place).binding;
@@ -14639,7 +14800,7 @@ class ScalarChecker {
       if (prepared.result.type && !prepared.result.borrowed() && *prepared.result.type != Type::void_type && prepared.result.type->kind != Type::procedure && !scalar_type(*prepared.result.type)) {
         if (!form->result_const) implementation_gap(form->at, "default result mode for non-scalar or generic types");
       }
-      if (prepared.result.type) signature_type(prepared, *prepared.result.type, form->at, true);
+      if (prepared.result.type) signature_type(prepared, *prepared.result.type, form->at, true, prepared.result.borrowed());
       for (const auto &type : form->throws_types) {
         const auto resolved = resolve_type(type);
         if (resolved.kind != Type::exception) implementation_gap(form->at, "throws contracts require selected intrinsic exception types");
@@ -14657,8 +14818,11 @@ class ScalarChecker {
         if (parameter.variadic && form->body) implementation_gap(parameter.at, "variadic method bodies");
         if (parameter.automatic_conversion) implementation_gap(parameter.at, "automatic parameter conversion contract");
         prepared.parameters.push_back(resolve_signature(parameter.type));
-        signature_type(prepared, prepared.parameters.back(), parameter.at);
+        const auto mode = argument_mode(parameter);
+        signature_type(prepared, prepared.parameters.back(), parameter.at, false,
+                       mode == ArgumentMode::borrowed_ref || mode == ArgumentMode::borrowed_read);
       }
+      check_product_owner_roles(prepared, prepared.parameters);
       for (const auto &parameter : form->type_parameters)
         if (parameter.bound) implementation_gap(parameter.at, "bounded type parameters");
       std::optional<size_t> symbol;

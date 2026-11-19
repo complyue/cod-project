@@ -387,7 +387,12 @@ struct ReceivingHeader {
   bool from_for = false;
 };
 struct TypeParameter { std::string name; std::optional<Type> bound; Location at; };
-struct OwnerParameter { std::string name; std::optional<Type> root; Location at; bool explicit_parameter = false; };
+struct OwnerParameter {
+  std::string name;
+  std::optional<Type> root;
+  Location at;
+  bool explicit_parameter = false, read_only = false;
+};
 struct SymbolOwner { std::string name; Type root; Location at; };
 struct UnitSelection { std::string source, local; Location at; };
 struct SymbolMapping {
@@ -914,11 +919,12 @@ class Parser {
   void generic_clause(Form &form) {
     const bool grouped = take("{");
     do {
-      if (is("region") || is("owner")) {
+      if (is("region") || is("owner") || (is("const") && is("owner", 1))) {
+        const bool read_only = take("const");
         const bool regional = take("region");
         if (!regional) expect("owner");
         auto owner = ordinary_name();
-        OwnerParameter parameter{owner.text, {}, owner.at};
+        OwnerParameter parameter{owner.text, {}, owner.at, false, read_only};
         if (regional) { type_separator(); parameter.root = parse_type(); }
         form.owner_parameters.push_back(std::move(parameter));
       } else {
