@@ -146,7 +146,7 @@ inline std::vector<Token> tokenize(const std::string &source, const std::string 
     if (cursor + 1 < source.size()) {
       const auto pair = source.substr(cursor, 2);
       if (pair == "->" || pair == "==" || pair == "!=" || pair == "<=" || pair == ">=" ||
-          pair == "&&" || pair == "||" || pair == "<-" || pair == "<:" || pair == "..") {
+          pair == "&&" || pair == "||" || pair == "<-" || pair == "<:" || pair == ".." || pair == "=>") {
         punctuation = pair;
         advance();
       }
@@ -285,11 +285,13 @@ inline std::string type_name(const Type &type) {
 }
 
 struct Form;
+struct ReceivingHeader;
 struct Expression {
   enum class Kind { integer, real, boolean, name, symbol, unary, binary, call, value_call, perform, behave, effect,
                     block, grouped, conditional, field, range_for, fold, allocate, index, null_ref,
                     try_scope, handler, raise, return_value, deferred, make_region, touch, effect_group, transfer, procedure_effect,
-                    pointer_group, pointer, make_local, rebind, region_binding, callable, alias, capture_owner };
+                    pointer_group, pointer, make_local, rebind, region_binding, callable, alias, capture_owner,
+                    here_body, named_argument, break_value, continue_value };
   Kind kind;
   Location at;
   std::string text;
@@ -305,9 +307,13 @@ struct Expression {
   bool scoped = false;
   std::string declaration_kind = {};
   std::string owner_name = {};
+  std::shared_ptr<ReceivingHeader> receiving = {};
+  // A supplied body is stored after the written operands. It binds slot one.
+  bool has_here_body() const { return !children.empty() && children.back()->kind == Kind::here_body; }
 };
 using Expr = std::unique_ptr<Expression>;
 
+struct HereSignature;
 struct Parameter {
   std::string name;
   Type type;
@@ -319,6 +325,29 @@ struct Parameter {
   bool read_only = false;
   std::string declaration_kind = {};
   bool fixed_binding = false;
+  std::shared_ptr<HereSignature> here = {};
+};
+struct HereSignature {
+  std::vector<Parameter> parameters;
+  // A labelled protocol has no positional field ordering.
+  bool labelled = false;
+  Type result = Type::void_type;
+  std::string result_kind, result_owner;
+  bool result_const = false;
+  std::optional<std::vector<Parameter>> feedback_fields;
+  std::vector<Type> throws_types;
+};
+struct ReceivingItem {
+  std::string name;
+  Location at;
+  std::string declaration_kind, owner, operation, selector;
+  std::optional<Type> annotation;
+  bool fixed_binding = false, read_only = false;
+};
+struct ReceivingHeader {
+  enum class Shape { ordered, single, labelled } shape;
+  std::vector<ReceivingItem> items;
+  bool from_for = false;
 };
 struct TypeParameter { std::string name; std::optional<Type> bound; Location at; };
 struct OwnerParameter { std::string name; std::optional<Type> root; Location at; bool explicit_parameter = false; };
@@ -405,6 +434,9 @@ class Parser {
   static constexpr size_t recursion_limit = 1024;
   size_t recursion_ = 0;
   std::map<const Expression *, size_t> depths_;
+  std::vector<size_t> right_paren_;
+  bool parsing_handoff_ = false;
+  bool labelled_yield_ = false;
 
   struct ParseEntry {
     size_t &depth;
@@ -436,6 +468,17 @@ class Parser {
     }
     return result;
   }
+  static size_t parameter_depth(const Parameter &parameter) {
+    auto depth = type_depth(parameter.type, parameter.at);
+    if (const auto &here = parameter.here) {
+      depth = std::max(depth, 1 + type_depth(here->result, parameter.at));
+      for (const auto &input : here->parameters) depth = std::max(depth, 1 + parameter_depth(input));
+      for (const auto &failure : here->throws_types) depth = std::max(depth, 1 + type_depth(failure, parameter.at));
+      if (here->feedback_fields) for (const auto &field : *here->feedback_fields)
+        depth = std::max(depth, 1 + type_depth(field.type, field.at));
+    }
+    return depth;
+  }
   Expr finish(Expr expression) {
     // Cache only complete nodes. Check incremental left/postfix trees before
     // recursive consumers or destruction can encounter an excessive depth.
@@ -453,10 +496,12 @@ class Parser {
       for (const auto &child : node->children) depth = std::max(depth, depths_.at(child.get()) + 1);
       const auto include_type = [&](const Type &type) { depth = std::max(depth, type_depth(type, node->at) + 1); };
       if (node->annotation) include_type(*node->annotation);
+      if (node->receiving) for (const auto &item : node->receiving->items)
+        if (item.annotation) include_type(*item.annotation);
       if (node->definition) {
         const auto &definition = *node->definition;
         if (definition.body) depth = std::max(depth, depths_.at(definition.body.get()) + 1);
-        for (const auto &parameter : definition.parameters) include_type(parameter.type);
+        for (const auto &parameter : definition.parameters) depth = std::max(depth, parameter_depth(parameter) + 1);
         for (const auto &parameter : definition.type_parameters) if (parameter.bound) include_type(*parameter.bound);
         for (const auto &parameter : definition.owner_parameters) if (parameter.root) include_type(*parameter.root);
         for (const auto &failure : definition.throws_types) include_type(failure);
@@ -485,6 +530,16 @@ class Parser {
   Token expect(const std::string &text) {
     if (!is(text)) fail(peek().at, "expected '" + text + "'");
     return tokens_[cursor_++];
+  }
+  bool here_header(size_t ahead = 0) const {
+    if (!is("(", ahead)) return false;
+    const auto close = right_paren_[cursor_ + ahead];
+    return close < tokens_.size() && is("=>", close + 1 - cursor_);
+  }
+  static bool accepts_supplied_body(const Expression &expr) {
+    using K = Expression::Kind;
+    return !expr.intrinsic && (expr.kind == K::call || expr.kind == K::value_call ||
+        expr.kind == K::perform || expr.kind == K::behave);
   }
   Token name(TokenKind kind) {
     if (peek().kind != kind)
@@ -637,14 +692,33 @@ class Parser {
     return field;
   }
   void arguments(Expression &expr) {
+    const auto close = right_paren_[cursor_];
+    const bool follows_call = close < tokens_.size() &&
+        (is("{", close + 1 - cursor_) || here_header(close + 1 - cursor_));
+    const bool labelled_yield = labelled_yield_ && expr.kind == Expression::Kind::call && expr.text == "yield";
+    const bool named = (accepts_supplied_body(expr) && follows_call) || labelled_yield;
+    bool saw_label = false;
     expect("(");
     if (!take(")")) {
       do {
         if (expr.kind == Expression::Kind::call && expr.text == "setfield" && expr.children.size() == 1)
           expr.children.push_back(make(Expression::Kind::name, field_name()));
         else {
-          auto argument = expression();
-          argument->spread = take("...");
+          Expr argument;
+          if (!named || !is("->")) {
+            argument = expression(0, true, !named);
+            argument->spread = take("...");
+          }
+          if (named && take("->")) {
+            saw_label = true;
+            auto selected = make(Expression::Kind::named_argument, ordinary_name());
+            if (argument) selected->children.push_back(std::move(argument));
+            else if (labelled_yield) fail(selected->at, "a labelled yield operand cannot request a default");
+            argument = std::move(selected);
+          } else if (saw_label || labelled_yield) {
+            fail(argument->at, labelled_yield ? "a labelled yield requires a label for every operand" :
+                                                "positional arguments must precede named arguments");
+          }
           expr.children.push_back(std::move(argument));
         }
       } while (take(","));
@@ -672,6 +746,103 @@ class Parser {
       return region_annotation(owned, &read_only);
     }
     return parse_type();
+  }
+  Parameter parameter_declaration() {
+    const bool fixed_binding = take("const");
+    const bool owned_region = take("owned");
+    const bool regional = take("region");
+    if (owned_region && !regional) fail(peek().at, "owned requires a region declaration");
+    std::string mode;
+    if (!regional && (is("ptr") || is("ref") || is("val"))) mode = tokens_[cursor_++].text;
+    auto param = value_name();
+    Parameter parameter{param.text, Type::void_type, param.at, false, {}};
+    parameter.fixed_binding = fixed_binding;
+    if (regional) parameter.type = region_annotation(owned_region, &parameter.read_only);
+    else {
+      type_separator();
+      parameter.read_only = take("const");
+      parameter.type = parse_type(&parameter);
+    }
+    parameter.declaration_kind = mode;
+    if (take("in")) parameter.owner = ordinary_name().text;
+    if (mode == "val" && !parameter.owner.empty()) fail(param.at, "a val parameter has callee-local bits storage, not an external owner");
+    if (parameter.type == Type::void_type) fail(param.at, "a parameter must have a value type");
+    parameter.variadic = take("...");
+    return parameter;
+  }
+  static void result_kind(const std::string &mode, const std::string &owner, const Location &at) {
+    if (mode == "val" && !owner.empty())
+      fail(at, "a val result has no owner association; use ref T in O for a borrowed result");
+    if ((mode == "ref" || mode == "ptr") && owner.empty())
+      fail(at, "a ref/ptr result requires an explicit external owner: use in O");
+  }
+  std::vector<Parameter> protocol_fields() {
+    expect("{");
+    std::vector<Parameter> fields;
+    std::set<std::string> labels;
+    while (!take("}")) {
+      auto field = parameter_declaration();
+      if (field.variadic) fail(field.at, "a protocol field cannot be variadic");
+      if (!labels.insert(field.name).second) fail(field.at, "duplicate protocol label '" + field.name + "'");
+      fields.push_back(std::move(field));
+      if (!is("}")) expect(";");
+      else take(";");
+    }
+    return fields;
+  }
+  void here_result(HereSignature &signature, const Location &at) {
+    if (is("{")) signature.feedback_fields = protocol_fields();
+    else {
+      signature.result = signature_type(signature.result_const, signature.result_kind);
+      if (take("in")) signature.result_owner = ordinary_name().text;
+      result_kind(signature.result_kind, signature.result_owner, at);
+    }
+  }
+  Parameter here_parameter() {
+    const ParseEntry entry(recursion_, peek().at, "a here signature");
+    expect("here");
+    const auto param = value_name();
+    Parameter parameter{param.text, Type::void_type, param.at, false, {}};
+    auto &signature = *(parameter.here = std::make_shared<HereSignature>());
+    expect("(");
+    if (!take(")")) {
+      do {
+        if (is("here") && !is(":", 1)) {
+          if (!signature.parameters.empty()) fail(peek().at, "a here callable must be the first parameter");
+          signature.parameters.push_back(here_parameter());
+        } else signature.parameters.push_back(parameter_declaration());
+      } while (take(","));
+      expect(")");
+    }
+    expect("->");
+    here_result(signature, param.at);
+    if (take("throws")) signature.throws_types.push_back(parse_type());
+    if (is("...")) fail(peek().at, "a here parameter cannot be variadic");
+    return parameter;
+  }
+  void generator_contract(Form &form) {
+    const auto token = expect("yields");
+    if (std::ranges::any_of(form.parameters, [](const auto &parameter) { return parameter.name == "yield"; }))
+      fail(token.at, "yields introduces the first parameter 'yield', which is already declared");
+    if (!form.parameters.empty() && form.parameters.front().here)
+      fail(token.at, "yields supplies the first here parameter");
+    Parameter yield{"yield", Type::void_type, token.at, false, {}};
+    auto &signature = *(yield.here = std::make_shared<HereSignature>());
+    signature.labelled = is("{");
+    if (signature.labelled) {
+      signature.parameters = protocol_fields();
+      if (signature.parameters.empty()) fail(token.at, "a yields clause requires a value component");
+    } else {
+      Parameter output{"", Type::void_type, peek().at, false, {}};
+      output.type = signature_type(output.read_only, output.declaration_kind);
+      if (output.type == Type::void_type) fail(output.at, "a yields clause requires a value component");
+      if (take("in")) output.owner = ordinary_name().text;
+      result_kind(output.declaration_kind, output.owner, output.at);
+      signature.parameters.push_back(std::move(output));
+    }
+    if (take("->")) here_result(signature, token.at);
+    form.parameters.insert(form.parameters.begin(), std::move(yield));
+    form.result_type = Type::void_type;
   }
   void generic_clause(Form &form) {
     const bool grouped = take("{");
@@ -720,28 +891,10 @@ class Parser {
     if (parameter_list) {
       if (!take(")")) {
         do {
-          const bool fixed_binding = take("const");
-          const bool owned_region = take("owned");
-          const bool regional = take("region");
-          if (owned_region && !regional) fail(peek().at, "owned requires a region declaration");
-          std::string mode;
-          if (!regional && (is("ptr") || is("ref") || is("val"))) mode = tokens_[cursor_++].text;
-          auto param = value_name();
-          Parameter parameter{param.text, Type::void_type, param.at, false, {}};
-          parameter.fixed_binding = fixed_binding;
-          if (regional) {
-            parameter.type = region_annotation(owned_region, &parameter.read_only);
-          } else {
-            type_separator();
-            parameter.read_only = take("const");
-            parameter.type = parse_type(&parameter);
-          }
-          parameter.declaration_kind = mode;
-          if (take("in")) parameter.owner = ordinary_name().text;
-          if (mode == "val" && !parameter.owner.empty()) fail(param.at, "a val parameter has callee-local bits storage, not an external owner");
-          if (parameter.type == Type::void_type) fail(param.at, "a parameter must have a value type");
-          parameter.variadic = take("...");
-          form.parameters.push_back(std::move(parameter));
+          if (is("here") && !is(":", 1)) {
+            if (!form.parameters.empty()) fail(peek().at, "a here callable must be the first parameter");
+            form.parameters.push_back(here_parameter());
+          } else form.parameters.push_back(parameter_declaration());
         } while (take(","));
         expect(")");
       }
@@ -750,14 +903,12 @@ class Parser {
     }
     const bool preceding_where = take("where");
     if (preceding_where) generic_clause(form);
-    if (take("->")) {
+    if (is("yields")) generator_contract(form);
+    else if (take("->")) {
       form.result_type = signature_type(form.result_const, form.result_kind);
       if (take("in")) form.result_owner = ordinary_name().text;
     }
-    if (form.result_kind == "val" && !form.result_owner.empty())
-      fail(form.at, "a val result has no owner association; use ref T in O for a borrowed result");
-    if ((form.result_kind == "ref" || form.result_kind == "ptr") && form.result_owner.empty())
-      fail(form.at, "a ref/ptr result requires an explicit external owner: use in O");
+    result_kind(form.result_kind, form.result_owner, form.at);
     if (take("throws")) form.throws_types.push_back(parse_type());
     if (take("where")) {
       if (preceding_where) fail(form.at, "a callable declares its generic parameters in one where clause");
@@ -798,7 +949,13 @@ class Parser {
       fail(form.at, "a callable declaration requires an explicit result type");
     if (declaration && form.conversion)
       fail(form.at, "a conversion requires an implemented function method");
-    if (!declaration) { form.body = block(); if (!inline_effect && !expression_form) take(";"); }
+    if (!declaration) {
+      const auto previous = std::exchange(labelled_yield_, !form.parameters.empty() && form.parameters.front().here &&
+          form.parameters.front().name == "yield" && form.parameters.front().here->labelled);
+      form.body = block();
+      labelled_yield_ = previous;
+      if (!inline_effect && !expression_form) take(";");
+    }
     if (inline_effect && (!form.symbolic || declaration || function))
       fail(form.at, "effect proc requires a symbolic procedure definition");
   }
@@ -807,7 +964,95 @@ class Parser {
     return (is("func", prefix) || is("proc", prefix)) && tokens_[cursor_ + prefix + 1].kind == TokenKind::identifier &&
            (is("=", prefix + 2) || is(":", prefix + 2));
   }
-  Expr primary() {
+  ReceivingItem receiving_item(bool operation_required, bool labelled) {
+    const bool fixed = take("const");
+    std::string kind;
+    if (is("val") || is("ref") || is("ptr") || is("func")) kind = tokens_[cursor_++].text;
+    const auto name = value_name();
+    ReceivingItem item{name.text, name.at, std::move(kind), {}, {}, {}, {}, fixed};
+    if (take(":")) {
+      item.read_only = take("const");
+      if (!item.read_only || (!is("=") && !is("<-") && !is(",") && !is(")") && !is("in")))
+        item.annotation = parse_type();
+    }
+    if (take("in")) item.owner = ordinary_name().text;
+    if (is("=") || is("<-")) item.operation = tokens_[cursor_++].text;
+    else if (operation_required) fail(peek().at, "a receiving destination requires '=' or '<-'");
+    if (!item.operation.empty()) {
+      if (item.declaration_kind == "val" && item.operation != "<-")
+        fail(item.at, "val initialization requires '<-', not '='");
+      if (item.declaration_kind == "ref" && item.operation != "=")
+        fail(item.at, "ref initialization requires '='");
+      if (item.declaration_kind.empty() && (item.fixed_binding || item.annotation || item.read_only || !item.owner.empty()))
+        fail(item.at, "an existing receiving destination cannot have a declaration annotation");
+    }
+    if (labelled) item.selector = is(";") || is("}") ? item.name : ordinary_name().text;
+    return item;
+  }
+  void labelled_receiving(ReceivingHeader &header) {
+    header.shape = ReceivingHeader::Shape::labelled;
+    expect("{");
+    while (!take("}")) {
+      header.items.push_back(receiving_item(true, true));
+      expect(";");
+    }
+  }
+  static void validate_receivers(const ReceivingHeader &header) {
+    std::map<std::string, bool> names;
+    for (const auto &item : header.items) {
+      const bool fresh = item.operation.empty() || !item.declaration_kind.empty();
+      if (const auto [found, inserted] = names.emplace(item.name, fresh); !inserted && (fresh || found->second))
+        fail(item.at, "conflicting receiving destination '" + item.name + "'");
+    }
+  }
+  void attach_body(Expression &call, ReceivingHeader header) {
+    using K = Expression::Kind;
+    if (call.has_here_body()) fail(peek().at, "a call can supply only one trailing here body");
+    validate_receivers(header);
+    auto supplied = make(K::here_body, peek());
+    supplied->receiving = std::make_shared<ReceivingHeader>(std::move(header));
+    if (is("=>", 1) || (is("{", 1) && is("=>", 2)))
+      fail(peek().at, "write the receiving header as '(...) => ' before the here body");
+    const bool previous = std::exchange(parsing_handoff_, true);
+    auto body = block();
+    parsing_handoff_ = previous;
+    if (!supplied->receiving->from_for) supplied->scoped = std::exchange(body->scoped, false);
+    supplied->children.push_back(std::move(body));
+    call.children.push_back(finish(std::move(supplied)));
+    // The call was complete before its trailing operand was added.
+    depths_.erase(&call);
+  }
+  void trailing_body(Expression &call) {
+    ReceivingHeader header{ReceivingHeader::Shape::ordered, {}};
+    if (take("(")) {
+      if (is("{")) labelled_receiving(header);
+      else if (!is(")")) {
+        header.items.push_back(receiving_item(false, false));
+        if (!header.items.front().operation.empty()) header.shape = ReceivingHeader::Shape::single;
+        else while (take(",")) {
+          auto item = receiving_item(false, false);
+          if (!item.operation.empty()) fail(item.at, "an explicit receiving operation requires a single destination or a labelled spec");
+          header.items.push_back(std::move(item));
+        }
+      }
+      expect(")");
+      expect("=>");
+    }
+    attach_body(call, std::move(header));
+  }
+  Expr generator_for(const Location &at) {
+    ReceivingHeader header{ReceivingHeader::Shape::single, {}, true};
+    if (is("{")) {
+      labelled_receiving(header);
+      expect(":");
+      expect("=");
+    } else header.items.push_back(receiving_item(true, false));
+    auto producer = expression(0, false);
+    if (!accepts_supplied_body(*producer)) fail(at, "a generator for loop requires a producer call");
+    attach_body(*producer, std::move(header));
+    return producer;
+  }
+  Expr primary(bool attach, bool owner_projection) {
     auto token = peek();
     if (callable_binding()) {
       const bool fixed_binding = take("const");
@@ -924,6 +1169,12 @@ class Parser {
       if (!is(";") && !is("}")) expr->children.push_back(expression());
       return expr;
     }
+    if (parsing_handoff_ && (is("break") || is("continue"))) {
+      ++cursor_;
+      auto expr = make(token.text == "break" ? Expression::Kind::break_value : Expression::Kind::continue_value, token);
+      if (!is(";") && !is("}")) expr->children.push_back(expression());
+      return expr;
+    }
     if (take("alloc")) {
       const bool symbolic = peek().kind == TokenKind::symbol;
       auto owner = make(symbolic ? Expression::Kind::symbol : Expression::Kind::name,
@@ -936,6 +1187,7 @@ class Parser {
     if (is("for") || is("fold")) {
       const bool fold = take("fold");
       if (!fold) expect("for");
+      if (!fold && !is("(")) return generator_for(token.at);
       expect("(");
       auto expr = make(fold ? Expression::Kind::fold : Expression::Kind::range_for,
                        value_name());
@@ -1071,7 +1323,7 @@ class Parser {
     if (take("-") || take("!") || take("not")) {
       auto expr = make(Expression::Kind::unary, token);
       if (expr->text == "not") expr->text = "!";
-      expr->children.push_back(expression(7));
+      expr->children.push_back(expression(7, attach, owner_projection));
       return expr;
     }
     if (token.kind == TokenKind::integer) {
@@ -1102,14 +1354,17 @@ class Parser {
     }
     fail(token.at, "expected an expression; symbolic writes require 'effect'");
   }
-  Expr expression(int minimum = 0) {
+  Expr expression(int minimum = 0, bool attach = true, bool owner_projection = true) {
     const ParseEntry entry(recursion_, peek().at, "an expression");
-    return finish(expression_impl(minimum));
+    return finish(expression_impl(minimum, attach, owner_projection));
   }
-  Expr expression_impl(int minimum) {
-    auto left = primary();
+  Expr expression_impl(int minimum, bool attach, bool owner_projection) {
+    auto left = primary(attach, owner_projection);
     while (true) {
-      if (is("(")) {
+      if (attach && accepts_supplied_body(*left) && (is("{") || here_header())) {
+        trailing_body(*left);
+        left = finish(std::move(left));
+      } else if (is("(")) {
         auto call = make(Expression::Kind::value_call, peek());
         call->children.push_back(std::move(left));
         arguments(*call);
@@ -1118,7 +1373,7 @@ class Parser {
         auto member = make(Expression::Kind::field, name(TokenKind::identifier));
         member->children.push_back(std::move(left));
         left = finish(std::move(member));
-      } else if (take("->")) {
+      } else if (owner_projection && take("->")) {
         auto owner = make(Expression::Kind::capture_owner, ordinary_name());
         owner->children.push_back(std::move(left));
         left = finish(std::move(owner));
@@ -1135,13 +1390,13 @@ class Parser {
       if (op.text == "is" && take("not")) op.text = "is not";
       auto binary = make(Expression::Kind::binary, op);
       binary->children.push_back(std::move(left));
-      binary->children.push_back(expression(binary_precedence(op.text) + 1));
+      binary->children.push_back(expression(binary_precedence(op.text) + 1, attach, owner_projection));
       left = finish(std::move(binary));
     }
     if (minimum == 0 && swap_operation(peek().text)) {
       auto swap = make(Expression::Kind::call, tokens_[cursor_++]);
       swap->children.push_back(std::move(left));
-      swap->children.push_back(expression(1));
+      swap->children.push_back(expression(1, attach, owner_projection));
       if (swap_operation(peek().text)) fail(peek().at, "swap operators cannot be chained");
       return swap;
     }
@@ -1149,19 +1404,19 @@ class Parser {
       auto assignment = make(Expression::Kind::call, tokens_[cursor_++]);
       assignment->text = "[]" + assignment->text;
       assignment->children = std::move(left->children);
-      assignment->children.push_back(expression());
+      assignment->children.push_back(expression(0, attach, owner_projection));
       return assignment;
     }
     if (minimum == 0 && is("<-")) {
       auto transfer = make(Expression::Kind::transfer, expect("<-"));
       transfer->children.push_back(std::move(left));
-      transfer->children.push_back(expression());
+      transfer->children.push_back(expression(0, attach, owner_projection));
       return transfer;
     }
     if (minimum == 0 && is("=")) {
       auto rebind = make(Expression::Kind::rebind, expect("="));
       rebind->children.push_back(std::move(left));
-      rebind->children.push_back(expression());
+      rebind->children.push_back(expression(0, attach, owner_projection));
       return rebind;
     }
     return left;
@@ -1187,7 +1442,7 @@ class Parser {
 
   static void normalize_assignment_calls(Expression &expr) {
     using K = Expression::Kind;
-    if (expr.kind == K::call && (expr.text == "=" || expr.text == "<-")) {
+    if (expr.kind == K::call && !expr.has_here_body() && (expr.text == "=" || expr.text == "<-")) {
       if (expr.children.size() != 2) fail(expr.at, "assignment requires a destination and a source");
       expr.kind = expr.text == "=" ? K::rebind : K::transfer;
     }
@@ -1223,9 +1478,19 @@ class Parser {
     expr.children.push_back(std::move(callable));
   }
   static void validate_explicit_scopes(const Expression &expr, bool iteration = false, bool deferred = false,
-                                       const Location *draining = nullptr) {
+                                       const Location *draining = nullptr, const ReceivingHeader *handoff = nullptr) {
     using K = Expression::Kind;
-    if (expr.kind == K::block && expr.scoped) { iteration = deferred = false; draining = nullptr; }
+    if ((expr.kind == K::block || expr.kind == K::here_body) && expr.scoped) {
+      iteration = deferred = false;
+      draining = nullptr;
+      handoff = nullptr;
+    }
+    if (expr.kind == K::here_body && !expr.scoped) handoff = expr.receiving.get();
+    if (expr.kind == K::break_value || expr.kind == K::continue_value) {
+      if (!handoff) fail(expr.at, "'" + expr.text + "' requires an active single-brace here body");
+      if (handoff->from_for && expr.kind == K::break_value && !expr.children.empty())
+        fail(expr.at, "a generator for loop requires bare 'break'");
+    }
     if (expr.kind == K::deferred && draining)
       fail(expr.at, "defer cannot register work into its currently draining scope\n" +
           location_text(*draining) + ": note: enclosing deferred execution begins here");
@@ -1237,12 +1502,14 @@ class Parser {
       fail(expr.at, "effect installation in a deferred block requires a nested explicit {{ ... }} scope");
     if (iteration && declaration)
       fail(expr.at, "a loop-body variable declaration requires a nested per-iteration {{ ... }} scope");
+    if (handoff && declaration)
+      fail(expr.at, "a here-body variable declaration requires a nested explicit {{ ... }} scope");
     for (size_t i = 0; i < expr.children.size(); ++i) {
       const bool loop_body = (expr.kind == K::range_for && i >= 2) ||
                             (expr.kind == K::fold && i == 3);
       const bool deferred_body = expr.kind == K::deferred && expr.children.front()->kind == K::block;
       validate_explicit_scopes(*expr.children[i], loop_body || iteration, deferred_body || deferred,
-          deferred_body ? &expr.at : draining);
+          deferred_body ? &expr.at : draining, loop_body || deferred_body ? nullptr : handoff);
     }
     // A callable body executes in its own call scope, independently of where
     // its value is constructed. Loops inside it still need explicit scopes.
@@ -1251,7 +1518,17 @@ class Parser {
   }
 
 public:
-  Parser(const std::string &source, const std::string &file) : tokens_(tokenize(source, file)) {}
+  Parser(const std::string &source, const std::string &file)
+      : tokens_(tokenize(source, file)), right_paren_(tokens_.size(), tokens_.size()) {
+    std::vector<size_t> open;
+    for (size_t i = 0; i < tokens_.size(); ++i) if (tokens_[i].kind == TokenKind::punctuation) {
+      if (tokens_[i].text == "(") open.push_back(i);
+      if (tokens_[i].text == ")" && !open.empty()) {
+        right_paren_[open.back()] = i;
+        open.pop_back();
+      }
+    }
+  }
 
   std::vector<std::unique_ptr<Form>> parse() {
     std::vector<std::unique_ptr<Form>> forms;

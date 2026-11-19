@@ -11396,6 +11396,8 @@ class ScalarChecker {
     std::map<const Form *, const Form *> parents;
     std::map<const Form *, size_t> method_ids;
     const std::function<void(const Expression &, const Form *)> collect = [&](const Expression &expr, const Form *parent) {
+      if (expr.kind == Expression::Kind::here_body)
+        implementation_gap(expr.at, "checking and native invocation of a supplied here body");
       if (expr.definition) {
         if (expr.kind == Expression::Kind::procedure_effect) {
           if (parent) implementation_gap(expr.at, "symbolic family definitions inside callable bodies");
@@ -11409,6 +11411,8 @@ class ScalarChecker {
     for (const auto &form : forms) if (form->body)
       collect(*form->body, form->kind == Form::Kind::expression ? nullptr : form.get());
     for (const auto *form : definitions) {
+      for (const auto &parameter : form->parameters)
+        if (parameter.here) implementation_gap(parameter.at, "checking and native invocation of a here parameter");
       std::string operation = form->operation ? form->name : "";
       if (!form->symbolic && !lexical_methods_.contains(form))
         if (const auto family = module_names().callables.find(form->name); family != module_names().callables.end())
