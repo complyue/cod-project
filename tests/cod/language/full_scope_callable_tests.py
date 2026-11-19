@@ -59,6 +59,24 @@ runner.CASES = {
         'proc relay(here body()->void)->void{defer behave @print(42u64);'
         'try{body();}finally{behave @print(41u64);return;};}'
         'proc run()->u64{relay(){return 7u64;};return 0u64;}behave @print(run());',0,'41\n42\n7\n',''),
+    'here_group_local_finally_cancels_return_before_catch': (IO+
+        'using "std:exceptions" MissingReturnError;func missing()->u64{}'
+        'func relay(here body()->void)->void{body();}'
+        'proc run()->u64{relay(){try{try{return 7u64;}finally{missing():void;};}'
+        'catch(e:const MissingReturnError){};};return 9u64;}behave @print(run());',
+        0,'9\n','[-Wmissing-return]'),
+    'here_group_cancelled_return_contributes_no_supplier_exit': (IO+
+        'using "std:exceptions" MissingReturnError;func missing()->u64{}'
+        'func error()->const MissingReturnError{try{missing():void;}catch(e:const MissingReturnError){return e;};}'
+        'func relay(here body()->void)->void{body();}'
+        'proc run()->u64{val n<-make local u64;defer{if returning (){behave @print(n);}};'
+        'relay(){try{try{return 7u64;}finally{throw error();};}catch(e){};};n<-9u64;return n;}'
+        'behave @print(run());',0,'9\n9\n','[-Wmissing-return]'),
+    'here_group_local_finally_cancels_break_before_catch': (IO+
+        'using "std:exceptions" MissingReturnError;func missing()->u64{}'
+        'func relay(here body()->void)->u64{body();4u64}'
+        'proc run()->u64{return relay(){try{try{break 7u64;}finally{missing():void;};}'
+        'catch(e:const MissingReturnError){};};}behave @print(run());',0,'4\n','[-Wmissing-return]'),
     'here_group_checked_failure_bypasses_receiver_catch': (IO+'using "std:exceptions" NullPointerException;'+
         'func fail_now()->void throws NullPointerException{ptr p:u64=null in here;p;{};}'
         'proc relay(here body()->void throws NullPointerException)->void{try{body();}'

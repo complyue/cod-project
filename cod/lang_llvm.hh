@@ -937,7 +937,16 @@ class LLVMEmission {
     release_value(pending.value);
     b_.CreateBr(done);
     b_.SetInsertPoint(done);
-    preserve_transfer(pending.transfer);
+    auto *transfer = pending.transfer;
+    if (boundary == CleanupBoundary::ordinary_finally && here_destination_) {
+      // A failure in the supplying group's own finally cancels its pending
+      // outward transfer. Receiver cleanup keeps the destination for delivery.
+      auto *replaced = b_.CreateAnd(b_.CreateICmpEQ(pending.kind, b_.getInt8(3)),
+                                   b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(2)));
+      auto *local = b_.CreateICmpEQ(transfer, here_destination_);
+      transfer = b_.CreateSelect(b_.CreateAnd(replaced, local), null_pointer(), transfer);
+    }
+    preserve_transfer(transfer);
   }
   void drain(Scope &scope) {
     b_.SetInsertPoint(scope.cleanup);

@@ -215,6 +215,7 @@ class ScalarChecker {
     Location at;
     Completion completion{2, false};
     bool immediate_scope_failure = false;
+    std::optional<HereExit> here_exit{};
   };
   struct AbruptFlow { size_t depth; std::vector<AbruptPath> paths; std::set<size_t> declared{}; };
   AbruptFlow *abrupt_ = nullptr;
@@ -3746,12 +3747,14 @@ class ScalarChecker {
     return captured;
   }
   void note_abrupt(const Location &at, ExceptionFacts exceptions = {}, Completion completion = {2, false},
-                   bool immediate_scope_failure = false) {
+                   bool immediate_scope_failure = false, std::optional<HereExit> here_exit = {}) {
     if (!lexical_.live) return;
     const auto categories = exceptions.possibilities();
     if (!categories.empty()) completion.reason = 3 + *categories.begin();
     if (!abrupt_) {
       if (!proving_) return;
+      if (here_exit == HereExit::return_supplier) observed_.returns_from_supplier = true;
+      if (here_exit == HereExit::break_call) observed_.breaks_here_call = true;
       for (const auto category : categories) if (exception_categories.at(category).checked) {
         if (checking_method_ && (checking_method_->source->implicit_scope || checking_method_->here_group))
           observed_.scope_checked_failures.insert(category);
@@ -3762,7 +3765,10 @@ class ScalarChecker {
     }
     auto state = lexical_;
     while (state.scopes.size() > abrupt_->depth) retire_scope(state);
-    abrupt_->paths.push_back({std::move(state), std::move(exceptions), at, completion, immediate_scope_failure});
+    abrupt_->paths.push_back({std::move(state), std::move(exceptions), at, completion, immediate_scope_failure, here_exit});
+  }
+  void forward_abrupt(const AbruptPath &path) {
+    note_abrupt(path.at, path.exceptions, path.completion, path.immediate_scope_failure, path.here_exit);
   }
   static bool declares_root(const std::vector<Type> &types) {
     return std::any_of(types.begin(), types.end(), [](const Type &type) { return type.kind == Type::exception && !type.identity; });
@@ -4130,7 +4136,7 @@ class ScalarChecker {
           normal_type = type;
           normals.push_back(std::move(state));
         } else {
-          exits.push_back({std::move(state), std::move(failure), path.at, completion, path.immediate_scope_failure});
+          exits.push_back({std::move(state), std::move(failure), path.at, completion, path.immediate_scope_failure, path.here_exit});
         }
       }
     }
@@ -4138,7 +4144,7 @@ class ScalarChecker {
     for (const auto requirement : declared) note_declared(requirement);
     for (const auto &path : exits) {
       lexical_ = path.state;
-      note_abrupt(path.at, path.exceptions, path.completion, path.immediate_scope_failure);
+      forward_abrupt(path);
     }
     lexical_ = body;
     if (normals.empty()) { lexical_.live = false; result.type = Type::never; }
@@ -9907,13 +9913,13 @@ class ScalarChecker {
           lexical_ = std::move(state);
           auto completion = replacement.completion;
           completion.returned = returned;
-          note_abrupt(replacement.at, replacement.exceptions, completion, replacement.immediate_scope_failure);
+          note_abrupt(replacement.at, replacement.exceptions, completion, replacement.immediate_scope_failure, replacement.here_exit);
         }
       }
       for (const auto &entry : pending) {
         if (cleanup == Type::never || !resume(entry, final_state, true)) continue;
         if (entry.abrupt)
-          note_abrupt(entry.abrupt->at, entry.abrupt->exceptions, entry.abrupt->completion, entry.abrupt->immediate_scope_failure);
+          forward_abrupt(*entry.abrupt);
         else continuations.push_back(lexical_);
       }
       if (continuations.empty()) {
@@ -9925,7 +9931,7 @@ class ScalarChecker {
       for (const auto *paths : {&outgoing.paths, &control_inputs}) for (const auto &path : *paths) {
         lexical_ = path.state;
         refresh_input_facts(lexical_);
-        note_abrupt(path.at, path.exceptions, path.completion, path.immediate_scope_failure);
+        forward_abrupt(path);
       }
       continuations = normals;
       lexical_ = body_state;
@@ -10942,10 +10948,7 @@ class ScalarChecker {
         operation.type = Type::never;
         operation.operand_type = *expected;
         operation.here_exit = breaking ? HereExit::break_call : HereExit::return_supplier;
-        if (lexical_.live && proving_ && value != Type::never) {
-          (breaking ? observed_.breaks_here_call : observed_.returns_from_supplier) = true;
-          note_abrupt(expr.at);
-        }
+        if (value != Type::never) note_abrupt(expr.at, {}, {2, false}, false, operation.here_exit);
         break;
       }
       const auto &contract = instance->result;
@@ -11668,7 +11671,7 @@ class ScalarChecker {
         for (const auto &path : outcomes.paths) {
           observe_outcome(path.completion.reason == 1 ? 0 : path.completion.reason, path.state);
           lexical_ = path.state; abrupt_ = nullptr;
-          note_abrupt(path.at, path.exceptions, path.completion);
+          forward_abrupt(path);
         }
         lexical_ = normal;
       }
