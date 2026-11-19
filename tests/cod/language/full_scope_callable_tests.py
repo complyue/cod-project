@@ -20,6 +20,30 @@ def query(body):
 
 
 runner.CASES = {
+    'supplied_scope_forwarding_preserves_live_slot': (IO+
+        'func relay(here body(n:u64)->u64,n:u64)->u64{return body(n);}'
+        'func outer(here body(n:u64)->u64,n:u64)->u64{return relay(body,n);}'
+        'proc run()->void{val base<-20u64;behave @print(outer(7u64)(n)=>{{return base+n;}});}run();',0,'27\n',''),
+    'supplied_scope_per_invocation_cleanup': (IO+
+        'func twice(here body(n:u64)->void)->void{body(2u64);body(7u64);}'
+        'proc run()->void{val total<-1u64;twice()(n)=>{{defer{total<-total+10u64;};total<-total+n;}};'
+        'behave @print(total);}run();',0,'30\n',''),
+    'supplied_scope_distinct_recursive_activations': (IO+
+        'func once(here body()->void)->void{body();}'
+        'proc visit(depth:u64)->void{val n<-depth;once(){{if(n>0u64){visit(n-1u64);}else{};behave @print(n);}};}visit(3u64);',
+        0,'0\n1\n2\n3\n',''),
+    'supplied_scope_named_operands_evaluate_in_written_order': (IO+
+        'proc mark(n:u64)->u64{behave @print(n);return n;}'
+        'func ordered(here body(n:u64)->u64,left:u64,right:u64)->u64{return body(left*10u64+right);}'
+        'proc run()->void{behave @print(ordered(mark(2u64)->right,mark(1u64)->left)(n)=>{{behave @print(9u64);return n;}});}run();',
+        0,'2\n1\n9\n12\n',''),
+    'supplied_scope_checked_failure_returns_to_receiver': (IO+'using "std:exceptions" NullPointerException;'+
+        'func retry(here body()->u64 throws NullPointerException)->u64{'
+        'try{return body();}catch(e:const NullPointerException){return 51u64;};return 0u64;}'
+        'proc run()->void{behave @print(retry(){{ptr x:u64=null in here;return x;}});}run();',0,'51\n',''),
+    'supplied_scope_cannot_use_lexical_here_as_scalar_operand': (
+        'func body(here step(n:u64)->u64)->u64{return step(1u64);}'
+        'func invoke(here body(n:u64)->u64)->u64{return body(body);}',2,'','a here argument can only be invoked or forwarded'),
     'live_scalar_slot': (IO+'proc run()->u64{val n<-1u64;{{n<-2u64;}};return n;}behave @print(run());', 0, '2\n', ''),
     'local_return': (IO+'func run()->u64{ {{return 1u64;}};return 2u64;}behave @print(run());', 0, '2\n', ''),
     'explicit_result': (IO+'func run()->u64{return {{return 7u64;}};}behave @print(run());', 0, '7\n', ''),

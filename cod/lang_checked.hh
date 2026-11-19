@@ -1451,7 +1451,7 @@ class ScalarChecker {
   }
   bool symbol_shadowed(const std::string &name, const TypeEvidenceState &state) const {
     return state.bindings.contains(name) || state.owner_bindings.contains(name) ||
-        state.symbol_shadows.contains(name) || lexical_self(name, state.method);
+        state.symbol_shadows.contains(name) || lexical_self(name, state.method) || active_here(name, &state);
   }
   size_t resolve_symbol(const std::string &name, const Location &at, bool local,
                         std::optional<size_t> method = {}) const {
@@ -4356,6 +4356,9 @@ class ScalarChecker {
     const ModuleLookup lookup(module_, method.module), context(interpretation_, method.interpretation);
     const auto &source = *method.source;
     const auto &free = free_bindings(source).captures;
+    for (const auto *names : {&free, &source.captures, &free_bindings(source).queries}) for (const auto &name : *names)
+      if (active_here(name.name))
+        implementation_gap(name.at, "access to a here formal from a nested callable scope");
     const auto required = [&](const Capture &capture) {
       return lexical_.lookup(capture.name).has_value() ||
           lexical_self(capture.name, checking_instance_ ? std::optional<size_t>{checking_instance_->method} : std::nullopt) ||
@@ -4505,6 +4508,7 @@ class ScalarChecker {
     return substitutions;
   }
   std::optional<Substitutions> declaration_match(const CheckedMethod &method, const std::vector<Type> &arguments) const {
+    if (method.here) return {};
     auto substitutions = match(method, arguments, {}, true);
     if (substitutions && variadic(method) && nested_binder(method, substitute(method.parameters.back(), method, *substitutions, true)))
       implementation_gap(method.source->at, "variadic element type is not determined by the inputs");
@@ -4564,14 +4568,15 @@ class ScalarChecker {
   }
   MethodCandidates method_candidates(const std::vector<size_t> &family, const std::vector<std::optional<Type>> &arguments,
                                      const std::vector<Type> &retained, const Access &access, const Owners &owners,
-                                     const TypeEvidenceState *state = nullptr, bool allow_widening = true) const {
+                                     const TypeEvidenceState *state = nullptr, bool allow_widening = true,
+                                     bool has_here = false) const {
     MethodCandidates result;
     const bool complete = std::all_of(arguments.begin(), arguments.end(), [](const auto &type) { return type && type != Type::never; });
     for (const bool widening : {false, true}) {
       if (widening && !allow_widening) break;
       for (const auto id : family) {
         const auto &method = program_.methods[id];
-        if (method.parameters.size() != arguments.size()) continue;
+        if (method.parameters.size() != arguments.size() || method.here.has_value() != has_here) continue;
         auto substitutions = match_evidence(method, arguments, retained, widening);
         if (!substitutions) continue;
         result.type_match = true;
@@ -4589,9 +4594,10 @@ class ScalarChecker {
   }
   MethodCandidates method_candidates(const std::vector<size_t> &family, const std::vector<Type> &arguments,
                                      const std::vector<Type> &retained, const Access &access, const Owners &owners,
-                                     const TypeEvidenceState *state = nullptr, bool allow_widening = true) const {
+                                     const TypeEvidenceState *state = nullptr, bool allow_widening = true,
+                                     bool has_here = false) const {
     return method_candidates(family, std::vector<std::optional<Type>>{arguments.begin(), arguments.end()},
-        retained, access, owners, state, allow_widening);
+        retained, access, owners, state, allow_widening, has_here);
   }
   static Type rigid_type(const CheckedMethod &method, const Type &type) {
     if (const auto index = binder(method, type)) return {Type::parameter, {}, *index + 1};
@@ -4835,8 +4841,8 @@ class ScalarChecker {
   }
   size_t select_method(const std::vector<size_t> &family, const std::vector<Type> &arguments, const Location &at, const std::string &name,
                        const std::vector<Type> &retained = {}, const Access &access = {}, const Owners &owners = {},
-                       const TypeEvidenceState *state = nullptr, bool allow_widening = true) const {
-    const auto candidates = method_candidates(family, arguments, retained, access, owners, state, allow_widening);
+                       const TypeEvidenceState *state = nullptr, bool allow_widening = true, bool has_here = false) const {
+    const auto candidates = method_candidates(family, arguments, retained, access, owners, state, allow_widening, has_here);
     const auto best = most_specific(candidates.methods, access, owners, state, candidates.widening);
     if (best.empty()) {
       if (candidates.access_match) fail(at, "arguments for one owner role have different actual owners");
@@ -4873,8 +4879,8 @@ class ScalarChecker {
   }
   void finish_named_call(const Expression &expr, const std::vector<Type> &arguments,
                          const std::vector<CheckedOperation> &views, CheckedOperation &operation,
-                         bool read, bool discard, bool completes = true) {
-    operation.callee = select(expr, arguments, access_of(views), owners_of(views));
+                         bool read, bool discard, bool completes = true, std::optional<size_t> selected = {}) {
+    operation.callee = selected ? *selected : select(expr, arguments, access_of(views), owners_of(views));
     const auto &target = program_.instances[*operation.callee];
     const auto &method = program_.methods[target.method];
     const auto &definition = *method.source;
@@ -6794,6 +6800,27 @@ class ScalarChecker {
                                      bool contextual, const Type *expected, std::vector<Type> *alternatives,
                                      ExpectedTypeUse expected_use, EvidenceRead read) const {
     using K = Expression::Kind;
+    if (expr.kind == K::name && active_here(expr.text, &state)) {
+      if (state.required) fail(expr.at, "a here argument can only be invoked or forwarded");
+      return {};
+    }
+    if (expr.has_here_body() || forwards_here(expr, &state)) {
+      if (state.required) implementation_gap(expr.at, "type inspection of a call receiving a here argument");
+      return {};
+    }
+    if (expr.kind == K::call && !expr.intrinsic && active_here(expr.text, &state)) {
+      const auto contract = here_invocation_type(program_.methods[*state.method], state.substitutions, expr.at);
+      if (expr.children.size() != contract.parameters.size()) fail(expr.at, "here invocation argument count does not match its contract");
+      bool completes = true;
+      for (size_t i = 0; i < expr.children.size(); ++i) {
+        const auto argument = type_evidence(*expr.children[i], state, false, nullptr, nullptr, ExpectedTypeUse::materialization, completes);
+        if (state.required && argument && *argument != Type::never && !accepts_argument(*argument, contract.parameters[i], ArgumentMode::value))
+          fail(expr.children[i]->at, "argument does not satisfy the here contract");
+        completes = completes && argument != Type::never;
+      }
+      if (completes) record_type_call(expr, state, contract, true);
+      return completes ? *contract.target : Type{Type::never};
+    }
     const auto child = [&](size_t i, bool context = false, bool reached = true, EvidenceRead use = EvidenceRead::payload) {
       return type_evidence(*expr.children.at(i), state, context, nullptr, nullptr, ExpectedTypeUse::materialization, reached, use);
     };
@@ -8876,6 +8903,8 @@ class ScalarChecker {
   }
   CheckedOperation materialize_definition(const NamedFamily &family, const Type *expected, const Location &at, bool definition_site = false) {
     if (family.methods.empty()) fail(at, "no applicable implementation for declared callable value");
+    if (std::ranges::any_of(family.methods, [&](size_t id) { return program_.methods[id].here.has_value(); }))
+      implementation_gap(at, "function views containing a here parameter");
     auto &definition = program_.methods[family.methods.front()];
     if (lexical_methods_.contains(definition.source)) resolve_captures(definition);
     if (definition.family) {
@@ -8944,10 +8973,17 @@ class ScalarChecker {
     scope_operand_names_.emplace(key, &stored);
     return stored;
   }
-  size_t scope_profile(CheckedMethod::ScopeInputs inputs) {
+  size_t scope_profile(CheckedMethod::ScopeInputs inputs, ResultContract result = {}, std::vector<Type> failures = {}) {
     auto &profiles = scope_profiles_[inputs.lexical_method];
+    std::set<size_t> throws_categories;
+    for (const auto &failure : failures) {
+      const auto categories = exception_possibilities(failure);
+      throws_categories.insert(categories.begin(), categories.end());
+    }
     for (const auto id : profiles) {
-      const auto &candidate = *program_.methods[id].scope_inputs;
+      const auto &method = program_.methods[id];
+      if (method.result != result || method.throws_categories != throws_categories) continue;
+      const auto &candidate = *method.scope_inputs;
       if (candidate.owner_names != inputs.owner_names || candidate.relations != inputs.relations ||
           candidate.nonnull != inputs.nonnull || candidate.live_values != inputs.live_values ||
           candidate.live_bindings != inputs.live_bindings ||
@@ -8965,6 +9001,9 @@ class ScalarChecker {
     }
     auto method = program_.methods[inputs.lexical_method];
     method.instances.clear(); method.captures.clear();
+    method.result = std::move(result);
+    method.throws_categories = std::move(throws_categories);
+    method.throws_types = std::move(failures);
     for (auto &parameter : inputs.parameters) {
       const auto name = "$scope.input." + std::to_string(method.parameters.size());
       parameter.type = Type{Type::named, name};
@@ -8976,6 +9015,22 @@ class ScalarChecker {
     program_.methods.push_back(std::move(method));
     profiles.push_back(id);
     return id;
+  }
+  size_t scope_owner_role(CheckedMethod::ScopeInputs &inputs, std::vector<size_t> &owners, size_t actual, const Location &at) const {
+    if (lexical_.live && !owner_alive(actual)) fail(at, "full-scope input owner has ended");
+    const auto found = std::ranges::find(owners, actual);
+    const auto role = std::distance(owners.begin(), found);
+    if (found == owners.end()) {
+      owners.push_back(actual);
+      inputs.owners.push_back({"$scope.owner." + std::to_string(role), {}, at});
+    }
+    return role;
+  }
+  void scope_owner_relations(CheckedMethod::ScopeInputs &inputs, const std::vector<size_t> &owners) const {
+    for (const auto a : owners) {
+      auto &relations = inputs.relations.emplace_back();
+      for (const auto b : owners) relations.push_back(compare_owners(a, b));
+    }
   }
   static std::set<std::set<size_t>> selection_groups(const std::map<size_t, size_t> &selected,
                                                      const CleanupEquations::ConditionClauses &conditions) {
@@ -9073,17 +9128,11 @@ class ScalarChecker {
     const auto &dependencies = definition_dependencies(*method.source);
     const auto state = evidence_state(false, &dependencies);
     const auto retained = definition_retained(method_id, state);
-    CheckedMethod::ScopeInputs inputs{method_id};
-    operation.scope_operands.emplace();
-    std::map<size_t, size_t> owner_roles;
+    CheckedMethod::ScopeInputs inputs{};
+    inputs.lexical_method = method_id;
+    operation.argument_sources.emplace();
     const auto owner_role = [&](size_t actual, const Location &at) {
-      if (lexical_.live && !owner_alive(actual)) fail(at, "full-scope input owner has ended");
-      const auto [role, inserted] = owner_roles.emplace(actual, owner_roles.size());
-      if (inserted) {
-        operation.scope_owners.push_back(actual);
-        inputs.owners.push_back({"$scope.owner." + std::to_string(role->second), {}, at});
-      }
-      return role->second;
+      return scope_owner_role(inputs, operation.scope_owners, actual, at);
     };
     std::vector<Type> arguments;
     std::vector<CheckedOperation> views;
@@ -9139,15 +9188,12 @@ class ScalarChecker {
       if (live_value) inputs.live_values.insert(arguments.size());
       if (live_binding) inputs.live_bindings.insert(arguments.size());
       inputs.parameters.push_back(std::move(parameter));
-      operation.scope_operands->push_back(&operand);
+      operation.argument_sources->push_back(&operand);
       operation.arguments.push_back({mode, type, live_binding});
       arguments.push_back(type);
       views.push_back(view);
     }
-    for (const auto a : operation.scope_owners) {
-      auto &relations = inputs.relations.emplace_back();
-      for (const auto b : operation.scope_owners) relations.push_back(compare_owners(a, b));
-    }
+    scope_owner_relations(inputs, operation.scope_owners);
     scope_input_observations(inputs, views, expr.at);
     const auto profile = scope_profile(std::move(inputs));
     std::optional<ResultContract> supplied;
@@ -9168,11 +9214,11 @@ class ScalarChecker {
   }
   void check_value_call(const Expression &expr, const Type &contract, size_t offset, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation, bool read, bool discard) {
-    note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
+    if (!operation.invokes_here) note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
     if (checking_method_ && checking_method_->source->kind == Form::Kind::function && !contract.pure_callable)
       fail(expr.at, "a function cannot invoke a procedure");
     if (expr.children.size() - offset != contract.parameters.size()) fail(expr.at, "callable argument count does not match its view");
-    operation.callable_call = true; operation.operand_type = contract;
+    operation.callable_call = !operation.invokes_here; operation.operand_type = contract;
     if (offset) operation.arguments.push_back({ArgumentMode::value, contract});
     bool completes = true;
     std::vector<Type> arguments;
@@ -9190,16 +9236,207 @@ class ScalarChecker {
       }
       arguments.push_back(argument); views.push_back(operations.at(expr.children[i].get()));
       if (argument != Type::never) prepare_borrow(views.back(), mode, expr.children[i]->at);
-      operation.arguments.push_back({mode, argument == Type::never ? parameter : argument});
+      operation.arguments.push_back({mode, operation.invokes_here || argument == Type::never ? parameter : argument});
     }
     if (!completes) { operation.type = Type::never; return; }
     if (checking_context_ < callable_choices_.size())
       if (const auto found = callable_choices_[checking_context_].find(&expr); found != callable_choices_[checking_context_].end())
         operation.callable_choices = found->second;
-    auto effects = callable_effects(contract, arguments, operation.callable_choices);
+    auto effects = callable_effects(contract, arguments,
+        operation.invokes_here ? std::optional{std::set<size_t>{}} : operation.callable_choices);
     if (expr.kind == Expression::Kind::perform) effects.symbols.clear();
     finish_call(expr, contract, effects, call_reasons(contract), arguments, views,
                 operation, read, discard, offset);
+  }
+  bool active_here(const std::string &name, const TypeEvidenceState *state = nullptr) const {
+    const auto *method = state ? (state->method ? &program_.methods[*state->method] : nullptr) : checking_method_;
+    return method && method->here && method->source->parameters.front().name == name &&
+           !(state ? state->bindings.contains(name) || state->definitions.contains(name) : lexical_.lookup(name).has_value());
+  }
+  bool forwards_here(const Expression &expr, const TypeEvidenceState *state = nullptr) const {
+    return expr.kind == Expression::Kind::call && !expr.intrinsic && !active_here(expr.text, state) && !expr.children.empty() &&
+           expr.children.front()->kind == Expression::Kind::name && active_here(expr.children.front()->text, state);
+  }
+  // Reuse the ordinary call equations for independent arguments and outcomes.
+  // The here capability itself stays outside the language's value carriers.
+  Type here_invocation_type(const CheckedMethod &receiver, const Substitutions &bindings, const Location &at) const {
+    const auto &here = *receiver.here;
+    if (here.labelled || here.feedback || here.result.owner)
+      implementation_gap(at, "labelled or borrowed here invocation contracts");
+    const ModuleLookup lookup(module_, receiver.module);
+    Type type{Type::procedure};
+    type.pure_callable = type.value_result = true;
+    for (const auto &component : here.inputs) {
+      const auto parameter = substitute(component.type, receiver, bindings, true);
+      if (component.mode != ArgumentMode::value || !scalar_type(parameter))
+        implementation_gap(at, "here invocation requires independently established scalar inputs");
+      type.parameters.push_back(parameter);
+      type.const_views.push_back(component.read_only);
+    }
+    if (std::ranges::none_of(type.const_views, [](bool read_only) { return read_only; })) type.const_views.clear();
+    const auto result = substitute(here.result.type, receiver, bindings, true);
+    if (result != Type::void_type && !scalar_type(result))
+      implementation_gap(at, "here invocation requires an independently established scalar or void result");
+    type.target = std::make_shared<Type>(result);
+    for (const auto category : here.throws_categories) type.throws_types.push_back(exception_type(category));
+    return type;
+  }
+  CheckedOperation::SuppliedHere demand_supplied_here(const Expression &body, const Type &contract, CheckedInstance *supplier,
+      std::map<const Expression *, CheckedOperation> &operations) {
+    if (!body.definition) implementation_gap(body.at, "single-brace or receiving-pattern here body execution");
+    const auto &definition = *body.definition;
+    const auto &parameters = definition.parameters;
+    if (parameters.size() != contract.parameters.size()) fail(body.at, "here body header arity does not match the selected contract");
+    for (size_t i = 0; i < parameters.size(); ++i) {
+      const auto &parameter = parameters[i];
+      if (parameter.declaration_kind == "ref" || parameter.declaration_kind == "ptr" || !parameter.owner.empty())
+        fail(parameter.at, "here body header requires an independent value parameter under the selected contract");
+      if (parameter.type != Type::void_type) {
+        const auto declared = supplier ? substitute(parameter.type, program_.methods[supplier->method], supplier->substitutions)
+                                       : resolve_type(parameter.type);
+        if (declared != contract.parameters[i]) fail(parameter.at, "here body header type does not match the selected contract");
+      }
+      const auto readonly = !contract.const_views.empty() && contract.const_views[i];
+      if ((parameter.type != Type::void_type || parameter.read_only) && parameter.read_only != readonly)
+        fail(parameter.at, "here body header access does not match the selected contract");
+    }
+    const auto base = lexical_method(&definition);
+    if (!program_.methods[base].type_parameters.empty())
+      implementation_gap(body.at, "retained generic parameters in a supplied here body");
+    CheckedMethod::ScopeInputs inputs{};
+    inputs.lexical_method = base;
+    inputs.parameters = parameters;
+    inputs.nonnull.resize(parameters.size(), false);
+    for (size_t i = 0; i < parameters.size(); ++i) {
+      inputs.parameters[i].declaration_kind = "val";
+      inputs.parameters[i].read_only = !contract.const_views.empty() && contract.const_views[i];
+    }
+    auto arguments = contract.parameters;
+    CheckedOperation::SuppliedHere supplied{};
+    const auto &dependencies = free_bindings(definition);
+    std::map<std::string, Capture> dependencies_by_name;
+    for (const auto *names : {&dependencies.captures, &dependencies.queries}) for (const auto &name : *names)
+      dependencies_by_name.try_emplace(name.name, name);
+    for (const auto &[name, capture] : dependencies_by_name) {
+      if (active_here(name)) implementation_gap(capture.at, "nested access to a here formal from a supplied body");
+      const auto binding = lexical_.lookup(name);
+      if (!binding) continue;
+      const auto &source = bindings_->at(*binding);
+      if (!source.value_binding || source.alias || !source.selection.empty() || !numeric(source.type))
+        implementation_gap(capture.at, "here access requires a local numeric val slot with stable storage");
+      const auto &operand = scope_operand(base, capture);
+      const auto type = check(operand, supplier, operations, false);
+      const auto view = operations.at(&operand);
+      if (view.targets.size() != 1 || view.owners.size() != 1 || !view.place || storage(*view.place).borrowed)
+        implementation_gap(capture.at, "here access requires a local numeric val slot with stable storage");
+      // A receiver may enter the body zero or several times. A live numeric
+      // val stays initialized, and its value is always read from that slot.
+      if (validating_ && proving_ && lexical_.live && !view.initialized_target() &&
+          !missing_initialization(lexical_, *view.place, selected_target(view, *view.place, true)).empty())
+        implementation_gap(capture.at, "here access to a slot without definite initialization at supply");
+      const auto role = scope_owner_role(inputs, supplied.owners, *view.owners.begin(), capture.at);
+      Parameter input{name, type, capture.at, false, {}};
+      input.declaration_kind = "ptr";
+      input.owner = inputs.owners.at(role).name;
+      input.read_only = view.read_only;
+      input.fixed_binding = view.fixed_binding;
+      const auto ordinal = arguments.size();
+      inputs.live_values.insert(ordinal);
+      inputs.place_owners[ordinal].insert(role);
+      inputs.nonnull.push_back(true);
+      inputs.parameters.push_back(std::move(input));
+      arguments.push_back(type);
+      supplied.places.push_back(&operand);
+    }
+    scope_owner_relations(inputs, supplied.owners);
+    const auto profile = scope_profile(std::move(inputs), ResultContract{*contract.target}, contract.throws_types);
+    supplied.instance = demand(profile, std::move(arguments), body.at);
+    return supplied;
+  }
+  void check_here_receiver(const Expression &expr, CheckedInstance *supplier,
+      std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation, bool read, bool discard) {
+    if (expr.kind != Expression::Kind::call || expr.intrinsic || &expr == prepared_call_)
+      implementation_gap(expr.at, "here supply through computed, symbolic or deferred calls");
+    if (active_here(expr.text)) implementation_gap(expr.at, "supplying a body to a here formal");
+    const auto supplied = expr.has_here_body();
+    const auto forward = forwards_here(expr);
+    if (supplied && forward) fail(expr.at, "the first here parameter has both a forwarded and a trailing argument");
+    const auto family = named_family(expr.text);
+    if (family.context || family.definition)
+      implementation_gap(expr.at, "supplying here arguments to lexical receiver definitions");
+    const auto count = expr.children.size() - supplied - forward;
+    const auto written = std::span<const Expr>{expr.children}.subspan(forward, count);
+    const auto bind_written = [&](const CheckedMethod &method) -> std::optional<std::vector<size_t>> {
+      const auto parameters = method.input_parameters();
+      std::vector<size_t> slots;
+      std::set<size_t> occupied;
+      for (const auto &operand : written) {
+        size_t slot = slots.size();
+        if (operand->kind == Expression::Kind::named_argument) {
+          const auto found = std::ranges::find(parameters, operand->text, &Parameter::name);
+          if (found == parameters.end()) return {};
+          slot = std::distance(parameters.begin(), found);
+        }
+        if (!occupied.insert(slot).second) return {};
+        slots.push_back(slot);
+      }
+      return slots;
+    };
+    std::vector<size_t> candidates;
+    std::optional<std::vector<size_t>> slots;
+    bool same_arity = false;
+    for (const auto id : family.methods) {
+      const auto &method = program_.methods[id];
+      if (!method.here || method.parameters.size() != count) continue;
+      same_arity = true;
+      auto bound = bind_written(method);
+      if (!bound) continue;
+      if (slots && *slots != *bound) implementation_gap(expr.at, "overloads with different named here argument bindings");
+      slots = std::move(bound);
+      if (std::ranges::any_of(method.input_parameters(), [](const auto &parameter) { return argument_mode(parameter) != ArgumentMode::value; }))
+        implementation_gap(expr.at, "here receiver selection with borrowed ordinary parameters");
+      candidates.push_back(id);
+    }
+    if (candidates.empty() && same_arity) fail(expr.at, "written arguments must bind distinct ordinary parameters of the here receiver");
+    if (candidates.empty()) fail(expr.at, "no receiver with a matching first here parameter for '" + expr.text + "'");
+    auto &operands = operation.argument_sources.emplace();
+    operands.resize(count);
+    operation.arguments.resize(count);
+    std::vector<Type> arguments(count);
+    std::vector<CheckedOperation> views(count);
+    for (size_t i = 0; i < count; ++i) {
+      const auto &source = *written[i];
+      const bool named = source.kind == Expression::Kind::named_argument;
+      if (named && source.children.empty()) implementation_gap(source.at, "default arguments to a here receiver");
+      const auto &operand = named ? *source.children.front() : source;
+      const auto slot = slots->at(i);
+      const auto type = check(operand, supplier, operations);
+      if (type == Type::never) implementation_gap(operand.at, "abrupt ordinary arguments to a here receiver");
+      if (!scalar_type(type)) implementation_gap(operand.at, "here receiver ordinary arguments require scalar values");
+      arguments[slot] = type;
+      views[slot] = operations.at(&operand);
+      operation.arguments[slot] = {ArgumentMode::value, type};
+      operands[slot] = &operand;
+    }
+    if (!std::ranges::is_sorted(*slots)) operation.argument_evaluation_order = std::move(*slots);
+    const auto selected = select_method(candidates, arguments, expr.at, expr.text, {}, access_of(views), owners_of(views), nullptr, true, true);
+    const auto &receiver = program_.methods[selected];
+    if (checking_method_ && checking_method_->source->kind == Form::Kind::function && receiver.source->kind != Form::Kind::function)
+      fail(expr.at, "a function cannot invoke a procedure");
+    const auto contract = here_invocation_type(receiver, *match(receiver, arguments, {}, true), expr.at);
+    const auto callee = demand(selected, arguments, expr.at);
+    if (forward) {
+      const auto incoming = here_invocation_type(*checking_method_, supplier->substitutions, expr.at);
+      if (incoming != contract) fail(expr.at, "forwarded here argument does not match the selected contract");
+      operation.forwards_here = true;
+    } else {
+      auto body = demand_supplied_here(*expr.children.back(), contract, supplier, operations);
+      const auto &effects = read_effects(body.instance);
+      if (validating_ && !effects.symbols.empty())
+        implementation_gap(expr.at, "dynamic binding requirements at a here invocation");
+      operation.supplied_here = std::move(body);
+    }
+    finish_named_call(expr, arguments, views, operation, read, discard, true, callee);
   }
   CheckedOperation check_guarded(const Expression &expr, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, bool read = true, bool discard = false, const Type *expected = nullptr,
@@ -9521,6 +9758,21 @@ class ScalarChecker {
              const Type *expected = nullptr, ExpectedTypeUse expected_use = ExpectedTypeUse::materialization) {
     using K = Expression::Kind;
     CheckedOperation operation;
+    if (expr.spread) implementation_gap(expr.at, "spread arguments");
+    if (expr.has_here_body() || forwards_here(expr)) {
+      check_here_receiver(expr, instance, operations, operation, read, discard);
+      return operations.insert_or_assign(&expr, std::move(operation)).first->second.type;
+    }
+    if (active_here(expr.text)) {
+      if (expr.kind == K::name) fail(expr.at, "a here argument can only be invoked or forwarded");
+      if (expr.kind == K::call && !expr.intrinsic) {
+        if (&expr == prepared_call_) implementation_gap(expr.at, "prepared deferred here invocation");
+        operation.invokes_here = true;
+        const auto contract = here_invocation_type(*checking_method_, instance->substitutions, expr.at);
+        check_value_call(expr, contract, 0, instance, operations, operation, read, discard);
+        return operations.insert_or_assign(&expr, std::move(operation)).first->second.type;
+      }
+    }
     const auto child = [&](size_t i, bool read_value = true, bool discarded = false) { return check(*expr.children.at(i), instance, operations, read_value, discarded); };
     const auto view = [&](const CheckedOperation &source) {
       operation.predicate = predicate_of(source);
@@ -9546,7 +9798,6 @@ class ScalarChecker {
         !lexical_.lookup(expr.text) && module_names().values.contains(expr.text) &&
         (expr.kind == K::name || expr.kind == K::call || expr.kind == K::perform || expr.kind == K::behave))
       implementation_gap(expr.at, "module-local binding lookup and capture in callable bodies");
-    if (expr.spread) implementation_gap(expr.at, "spread arguments");
     if ((expr.kind == K::binary || expr.kind == K::call) && identity_operation(expr.text)) {
       if (expr.children.size() != 2) fail(expr.at, "reference identity requires two reference views");
       const auto left_type = child(0, false), right_type = child(1, false);
@@ -9801,7 +10052,7 @@ class ScalarChecker {
     }
     case K::symbol: case K::procedure_effect: case K::effect: case K::touch: {
       operation.symbol = resolve_symbol(expr.text, expr.at,
-          lexical_.lookup(expr.text).has_value() || query_environment().symbol_shadows.contains(expr.text),
+          lexical_.lookup(expr.text).has_value() || active_here(expr.text) || query_environment().symbol_shadows.contains(expr.text),
           instance ? std::optional<size_t>{instance->method} : std::nullopt);
       const auto &symbol = program_.symbols[*operation.symbol];
       if (!symbol.type || !lexical_value_type(*symbol.type))
@@ -9849,7 +10100,7 @@ class ScalarChecker {
     }
     case K::behave: case K::perform: {
       operation.symbol = resolve_symbol(expr.text, expr.at,
-          lexical_.lookup(expr.text).has_value() || query_environment().symbol_shadows.contains(expr.text),
+          lexical_.lookup(expr.text).has_value() || active_here(expr.text) || query_environment().symbol_shadows.contains(expr.text),
           instance ? std::optional<size_t>{instance->method} : std::nullopt);
       if (method && method->kind == Form::Kind::function) fail(expr.at, "a function cannot invoke a dynamic procedure");
       const auto &symbol = program_.symbols[*operation.symbol];
@@ -10963,7 +11214,7 @@ class ScalarChecker {
           }
           if (nonnull || mode != ArgumentMode::borrowed_ptr) entry.present.insert(id);
         }
-        if (mode != ArgumentMode::borrowed_ptr) entry.initialized.insert(id);
+        if (mode != ArgumentMode::borrowed_ptr || (live_value && method.supplied_scope)) entry.initialized.insert(id);
         if (instance.arguments[p].kind == Type::exception)
           entry.exceptions.emplace(id, ExceptionFacts::input(p, exception_possibilities(instance.arguments[p])));
         if (instance.arguments[p] == Type::boolean) {
@@ -11447,7 +11698,7 @@ class ScalarChecker {
   }
 
   void register_module(const SourceModule &source, std::optional<size_t> &print_symbol,
-                       std::optional<Location> &supplied_here, std::optional<Location> &declared_here) {
+                       std::optional<Location> &unsupported_here) {
     const auto &forms = source.forms;
     for (const auto &form : forms)
       if (const auto dependency = source.dependencies.find(form.get()); dependency != source.dependencies.end())
@@ -11496,8 +11747,8 @@ class ScalarChecker {
     std::map<const Form *, const Form *> parents;
     std::map<const Form *, size_t> method_ids;
     const std::function<void(const Expression &, const Form *)> collect = [&](const Expression &expr, const Form *parent) {
-      if (expr.kind == Expression::Kind::here_body) {
-        if (!supplied_here) supplied_here = expr.at;
+      if (expr.kind == Expression::Kind::here_body && !expr.definition) {
+        if (!unsupported_here) unsupported_here = expr.at;
         return;
       }
       if (expr.definition) {
@@ -11514,7 +11765,6 @@ class ScalarChecker {
       collect(*form->body, form->kind == Form::Kind::expression ? nullptr : form.get());
     for (const auto *form : definitions) {
       const auto *here = !form->parameters.empty() && form->parameters.front().here ? &form->parameters.front() : nullptr;
-      if (here && !declared_here) declared_here = here->at;
       std::string operation = form->operation ? form->name : "";
       if (!form->symbolic && !lexical_methods_.contains(form))
         if (const auto family = module_names().callables.find(form->name); family != module_names().callables.end())
@@ -11580,6 +11830,7 @@ class ScalarChecker {
       if (here) names.insert(here->name);
       for (const auto &parameter : prepared.input_parameters()) {
         if (!names.insert(parameter.name).second) fail(parameter.at, "duplicate parameter name");
+        if (form->supplied_scope) continue; // The selected receiver supplies this signature.
         if (!parameter.owner.empty() && !owners.contains(parameter.owner)) fail(parameter.at, "unknown parameter owner '" + parameter.owner + "'");
         if (parameter.variadic && form->body) implementation_gap(parameter.at, "variadic method bodies");
         if (parameter.automatic_conversion) implementation_gap(parameter.at, "automatic parameter conversion contract");
@@ -11678,16 +11929,15 @@ public:
   CheckedProgram check(const SourceProgram &source) {
     modules_.resize(source.modules.size());
     std::optional<size_t> print_symbol;
-    std::optional<Location> supplied_here, declared_here;
+    std::optional<Location> unsupported_here;
     for (const auto module : source.construction_order) {
       const ModuleLookup lookup(module_, module);
-      register_module(source.modules[module], print_symbol, supplied_here, declared_here);
+      register_module(source.modules[module], print_symbol, unsupported_here);
     }
-    if (declared_here) for (const auto &method : program_.methods)
+    for (const auto &method : program_.methods)
       if (method.here && method.result.type && method.type_parameters.empty())
         check_declared_results(method, method.result, declared_results(method, method.parameters));
-    if (supplied_here) implementation_gap(*supplied_here, "checking and native invocation of a supplied here body");
-    if (declared_here) implementation_gap(*declared_here, "checking and native invocation of a here parameter");
+    if (unsupported_here) implementation_gap(*unsupported_here, "single-brace or receiving-pattern here body execution");
     prepare_interpretations();
     plan_initialization(source);
     for (size_t i = 0; i < program_.methods.size(); ++i) {

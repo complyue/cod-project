@@ -115,16 +115,26 @@ struct CheckedOperation {
   // Destination calls select every address before checking entry-read promises.
   bool destination_arguments = false;
   std::vector<CheckedArgument> arguments;
-  // An immediate scope's operands are compiler-generated names. The source
-  // children describe its callable body, not its transport.
-  std::optional<std::vector<const Expression *>> scope_operands;
+  // Checked operand sources can differ from the children of the source call.
+  std::optional<std::vector<const Expression *>> argument_sources;
+  // When source operands bind out of order, prepare them in written order.
+  std::vector<size_t> argument_evaluation_order;
   std::vector<size_t> scope_owners;
   size_t argument_count(const Expression &expr) const {
-    return scope_operands ? scope_operands->size() : expr.children.size();
+    return argument_sources ? argument_sources->size() : expr.children.size();
   }
   const Expression &argument(const Expression &expr, size_t i) const {
-    return scope_operands ? *scope_operands->at(i) : *expr.children.at(i);
+    return argument_sources ? *argument_sources->at(i) : *expr.children.at(i);
   }
+  struct SuppliedHere {
+    size_t instance;
+    std::vector<const Expression *> places;
+    std::vector<size_t> owners;
+    auto operator<=>(const SuppliedHere &) const = default;
+  };
+  std::optional<SuppliedHere> supplied_here;
+  bool forwards_here = false;
+  bool invokes_here = false;
   // Possible borrowed callable targets at invocation, after slot selection.
   std::vector<std::set<size_t>> callable_argument_targets;
   std::set<size_t> nullable_arguments;

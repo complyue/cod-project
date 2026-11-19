@@ -380,6 +380,7 @@ struct Form {
   std::vector<Capture> captures;
   bool explicit_captures = false;
   bool implicit_scope = false;
+  bool supplied_scope = false;
   std::vector<TypeParameter> type_parameters;
   std::vector<Type> throws_types;
   std::vector<OwnerParameter> owner_parameters;
@@ -1453,7 +1454,26 @@ class Parser {
     using K = Expression::Kind;
     const bool delayed_scope = expr.kind == K::deferred && expr.children.front()->kind == K::block &&
         expr.children.front()->scoped;
-    for (const auto &child : expr.children) normalize_full_scopes(*child, callable_kind);
+    if (expr.kind == K::here_body && expr.scoped && expr.receiving->shape == ReceivingHeader::Shape::ordered) {
+      auto definition = std::make_shared<Form>();
+      definition->kind = callable_kind == Form::Kind::procedure ? Form::Kind::procedure : Form::Kind::function;
+      definition->at = expr.at;
+      definition->supplied_scope = true;
+      for (const auto &item : expr.receiving->items) {
+        Parameter parameter{item.name, item.annotation.value_or(Type{Type::void_type}), item.at, false, {}};
+        parameter.declaration_kind = item.declaration_kind;
+        parameter.owner = item.owner;
+        parameter.read_only = item.read_only;
+        parameter.fixed_binding = item.fixed_binding;
+        definition->parameters.push_back(std::move(parameter));
+      }
+      definition->body = std::move(expr.children.front());
+      expr.children.clear();
+      expr.definition = std::move(definition);
+    }
+    const auto nested_kind = expr.kind == K::block && expr.scoped && callable_kind != Form::Kind::function
+        ? Form::Kind::procedure : callable_kind;
+    for (const auto &child : expr.children) normalize_full_scopes(*child, nested_kind);
     if (expr.definition && expr.definition->body)
       normalize_full_scopes(*expr.definition->body, expr.definition->kind);
     if (delayed_scope) {
@@ -1465,7 +1485,7 @@ class Parser {
     }
     if (expr.kind != K::block || !expr.scoped) return;
     auto definition = std::make_shared<Form>();
-    definition->kind = callable_kind;
+    definition->kind = callable_kind == Form::Kind::function ? Form::Kind::function : Form::Kind::procedure;
     definition->at = expr.at;
     definition->implicit_scope = true;
     definition->body = std::make_unique<Expression>(std::move(expr));
@@ -1715,7 +1735,7 @@ public:
     for (const auto &form : forms) if (form->body) {
       validate_explicit_scopes(*form->body);
       normalize_assignment_calls(*form->body);
-      normalize_full_scopes(*form->body, form->kind == Form::Kind::function ? Form::Kind::function : Form::Kind::procedure);
+      normalize_full_scopes(*form->body, form->kind);
     }
     return forms;
   }
