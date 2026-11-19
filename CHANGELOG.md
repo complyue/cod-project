@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-18 — Generalized for-loops and collection visits
+
+<a id="k-generalized-for-20261118"></a>
+**K-GENERALIZED-FOR-20261118.** On 2026-11-18 (America/Los_Angeles) the project user requested a language-feature section in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) and clarified “多个不同generator实现不同语义，不管通过 for-loop 调用，还是通过 here-call 调用，都能等效的吧”. D-29r16/D-10r213/D-30r3/storage r11 and registry r939 record the same-generator, two-call-forms direction and examples. The design derives bare break for void traversals from H-HERE-BREAK-CONTINUE-20261118, preserves H-600 fixed borrowed owners, and distinguishes inspection from removal. Candidate relationships P-623/P-624 and detailed implementation qualification remain separate. Prior control baseline: `63359f5137556415ed45a1f70562ee987722b942:design/CallableStorageAndHereAccess.md`, “Break and continue in a single-brace here body”.
+
 ## 2026-11-18 — Give here-body feedback to continue and the original call result to break
 
 <a id="h-here-break-continue-20261118"></a>

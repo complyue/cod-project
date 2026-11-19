@@ -1,8 +1,10 @@
 # Callable storage and direct lexical access
 
-Design revision: 10 · 2026-11-18 · Confirmed source contract
+Design revision: 11 · 2026-11-18 · Confirmed source contract
 
 ## Design authority
+
+[K-GENERALIZED-FOR-20261118](../CHANGELOG.md#k-generalized-for-20261118) updates r11’s trailing-group dependency. D-29-GENERALIZED-FOR/P-623–P-624 owns the generator call forms and paired acceptance. D-18 preserves the existing lexical, control and nonescape contract.
 
 [H-CALLABLE-MODEL-20261118](../CHANGELOG.md#h-callable-model-20261118) confirms r9 for [D-18-HERE-STORAGE](DesignAuthorityRegistry.md#d-18-here-storage), D-18-HERE, FUNC-VALUES, HERE-PARAM, HERE-GROUP and HERE-BREAK. P-609–P-612/P-615–P-622 connect charter §§3.2–3.3/4.3/6.1, C-65/C-73 and D-12-LIFETIME to explicit state ownership and the lexical origin of procedural work. [D-10](SymbolicDynamicScope.md#definition-installed-effectful-procedures) governs symbolic replay, [D-17](ExceptionControl.md#full-scopes-as-immediate-ordinary-calls) governs local completion and [D-29](RangedForAndGenerators.md#lexical-scope-and-completion) governs the precedent for protected body exits.
 
@@ -144,7 +146,7 @@ A function taking a here callable may run caller-supplied effects. Optimizers mu
 
 ### Single-brace bodies for a here callable
 
-Write `visit() { ... }` to supply a group in its author’s lexical context. The receiving declaration carries the `here` keyword. Calling or forwarding the here parameter keeps track of both the body and its original control destinations. With `visit() {{ ... }}`, the supplied block has its own callable return and ordinary callback exception contract. Consider the same library definition with both spellings, assuming an installed @send that can throw RetryableException:
+Write `visit() { ... }` to supply a group in its author’s lexical context. An ordinary receiver declares the parameter with `here`. A matching generator declares its body protocol with `yields`. Calling or forwarding the here parameter keeps track of both the body and its original control destinations. With `visit() {{ ... }}`, the supplied block has its own callable return and ordinary callback exception contract. Consider the same library definition with both spellings, assuming an installed @send that can throw RetryableException:
 
 ```cod
 func retry_once(here attempt() -> void throws RetryableException)
@@ -178,7 +180,7 @@ Here the outward return belongs to first_match. After a match, visit’s finally
 | --- | --- |
 | Storage and defer | No new full-scope owner. `here` names the supplier’s existing lexical owner. A direct `defer` registers in the supplier’s nearest full scope each time the group runs. A delayed borrow must survive to that scope’s drain. A header name is bound for its invocation; a saved bits argument can outlive that binding, a borrow of an expired receiver slot cannot. |
 | Normal result | For a non-void formal, use the ordinary group expression’s result on every normally completing path, as with generator feedback. A caller-targeted return or throw produces no value for step(). For instance, `{ 3u64 }` can supply 3 to a u64 formal; `{ return 3u64; }` exits the enclosing callable. For a void formal, discard the normal expression result. An explicit `continue` supplies feedback under the formal’s result contract. A `break` supplies the result of the call to which the body was attached. |
-| Parsing | Reserve the trailing group for an explicit here parameter. Use ordinary slot-one binding, including a leading `{=> x; ... }` if parameterized. A `for` header’s body brace belongs to the loop. In expression position, `visit(); { ... }` separates a completed call and a group. Parsing must not attach a brace by trial overload resolution. |
+| Parsing | A trailing group supplies the first here parameter, either explicit or exposed by the selected generator protocol. [Generalized for-loops](RangedForAndGenerators.md#generalized-for-loops) Use ordinary slot-one binding, including a leading `{=> x; ... }` if parameterized. A `for` header’s body brace belongs to the loop. In expression position, `visit(); { ... }` separates a completed call and a group. Parsing must not attach a brace by trial overload resolution. |
 
 For a u64-valued formal, let `plus_one` return `body() + 1u64`. Each line below can be the sole statement in a different u64-returning supplier.
 

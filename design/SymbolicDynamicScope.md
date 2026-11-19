@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 212 · Recorded: 2026-11-18 · Phase: language/application co-design.
+Design revision: 213 · Recorded: 2026-11-18 · Phase: language/application co-design.
 
 ## Design authority
+
+- **Language feature overview.** [K-GENERALIZED-FOR-20261118](../CHANGELOG.md#k-generalized-for-20261118) updates D-10r213 for the feature overview. D-29-GENERALIZED-FOR/P-623–P-624 owns equivalent call forms. D-10-TRAILING-CALLBACK/P-567–P-569 supplies the binding rules. H-HERE-ORIGIN-HANDOFF-20261118, H-HERE-BREAK-CONTINUE-20261118 and D-29-EFFECTS explain synchronous caller-owned work under charter §§3.2/6.1/8.1. The [generalized for-loop examples](RangedForAndGenerators.md#generalized-for-loops) compare live writes, feedback and control targets within the existing source contracts. Collection conformance and lowering remain separately scoped.
 
 - **Trailing single braces.** [H-HERE-BREAK-CONTINUE-20261118](../CHANGELOG.md#h-here-break-continue-20261118), D-10r212, D-18-HERE-GROUP/P-619–P-620 and D-18-HERE-BREAK/P-621–P-622. Unprefixed trailing groups use separate destinations for body feedback, early completion of the supplying call expression and lexical return. The [forwarding example](CallableStorageAndHereAccess.md#break-and-continue-in-a-single-brace-here-body) checks each operand against its destination.
 
@@ -942,6 +944,9 @@ Acceptance of incremental grammar/diagnostic work should show both the admitted 
 
 ### Trailing callback arguments
 
+A generator declaration with `yields` supplies the implicit first here parameter for a single-brace call. Apply the slot-one rules below to that protocol, keeping the written ordinary parameters, names and defaults in their original positions. A callback-first generator-compatible declaration exposes the same body to a `for` header. [Generalized for-loops](RangedForAndGenerators.md#generalized-for-loops)
+
+
 A [single-brace here body](CallableStorageAndHereAccess.md#single-brace-bodies-for-a-here-callable) sends an outward return or escaping exception to its lexical supplier. Write the trailing group directly after the call. Within the group, `continue expr;` supplies feedback to the current body invocation. A `break expr;` supplies the whole originating call’s result, even if another function invoked the forwarded formal.
 
 A first parameter declared as a [here callable](CallableStorageAndHereAccess.md#an-effect-in-a-here-callback) accepts either brace form. Forwarding to another synchronous here formal preserves the supplied body, its authority and its control destinations.
@@ -1615,6 +1620,12 @@ Proposed acceptance separates typed mail from region transfer. First check that 
 | Native primitive boundary | Reuse runtime facilities and eventually compile numerical kernels | Same contract under reference and native interpretations |
 
 The SNN owns the neuron equations, AP/rate interpretation, training rules and data layout choices. The language owns identity, callable/effect semantics, types, lifetimes and execution meaning. An application-specific neuron or slot class does not need to become a built-in language construct.
+
+### Generalized for-loops
+
+A library can provide one traversal and let each caller use either `for val n <- ascending() { ... }` or `ascending() {=> n; ... };`. Both select the same generator, enter the caller’s live lexical scope in the same order and deliver the same feedback. Inside the library, the traversal may call `yield(item)` or an explicit first here parameter such as `step(item)` with the same protocol. Changing the selected generator can change the visit order or membership effects under either spelling. [Ascending and descending in both call forms](RangedForAndGenerators.md#generalized-for-loops)
+
+For the proposed collection interface, `visit(xs) {=> index, item; ... };` exposes a readonly item for each visit. In a void visit, `continue;` finishes the current observation and `break;` ends the whole visit. The collection stays intact in both cases. A library function with a non-void result can also let the caller supply that result with `break value;`. [Collection examples](CollectionsAndBuiltinContainers.md#observation-and-owner-scope)
 
 ## Validation and unresolved contract scope
 

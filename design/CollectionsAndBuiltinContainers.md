@@ -1,13 +1,15 @@
 # Collections and builtin containers
 
-Design revision 2 · 2026-11-18 · Source design draft
+Design revision 3 · 2026-11-18 · Source design draft
 
 ## Design authority
+
+- **Traversal UX.** [K-GENERALIZED-FOR-20261118](../CHANGELOG.md#k-generalized-for-20261118) relates the D-30r3 examples under P-589/P-590 to D-18-HERE-BREAK and D-29-LENDING. Charter §§4.3/8.1 motivate visible custody and early exit at the call site. Acceptance distinguishes skip, stop and take while preserving each actual member owner. The general interface and per-call owner proof retain their draft status.
 
 - [D-30](DesignAuthorityRegistry.md#d-30) covers the CoD builtin container inventory and the proposed collection operations for read-only visitation, indexed removal and consuming traversal. The user placed these operations at collection scope. The names, method contracts and general owning loop header are proposals. [Scope and evidence](../CHANGELOG.md#k-collection-interfaces-20261118)
 - Candidate P-589 derives from C-10/C-54/C-65. A caller can tell when it is inspecting an element and when it takes responsibility for that element. P-590 depends on CoD’s existing index domains, target access, owner and generator rules. [Charter §§3.3, 4.1, 4.3 and 8.1](RegionalSemanticPlatformCharter.md)
 - The confirmed instance is the exception aggregate’s independently owned members and read-only enumeration. Its confirmation covers that instance. General collection conformance, operation names, storage layout, native lowering and ABI remain unqualified. [H-DEFER-MEMBER-TAKE-20261118](../CHANGELOG.md#h-defer-member-take-20261118)
-- Revision 2 makes the r1 visitor mutation rule explicit for indirect calls and gives acceptance cases for owner identity after compaction. The proposed operation contracts retain their pending status. [Engineering review](../CHANGELOG.md#k-collection-visitor-proof-20261118)
+- The visitor mutation rule applies to indirect calls. Acceptance checks owner identity after compaction. The proposed operation contracts retain their pending status. [Engineering review](../CHANGELOG.md#k-collection-visitor-proof-20261118)
 
 ## Builtin containers and related forms
 
@@ -25,7 +27,7 @@ The first profile is an ordered, indexed collection. A collection supplies the o
 
 | Proposed call | Effect on membership | What the caller receives |
 | --- | --- | --- |
-| `visit(xs) {{=> index, item; ... }}` | Visits the current elements in collection order. Membership stays intact, including when the callback throws. | The collection’s index and its declared read access to the element. For an owning element this is a readonly target view covered for the callback invocation. |
+| `visit(xs) {=> index, item; ... }` | Visits the current elements in collection order. Membership stays intact, including when the callback throws. | The collection’s index and its declared read access to the element. For an owning element this is a readonly target view covered for the callback invocation. |
 | `take_at(xs, i)` | Removes the selected element from a writable collection. | An independent bits result for a bits element, or the original owning holder for an independently owned resource. |
 | `drain(xs)` in a `for` header | Removes the next element at each handoff. Unvisited elements stay in the collection if execution leaves the loop early. | One result per iteration, under the same element-transfer contract as removal. |
 
@@ -42,6 +44,20 @@ for val remaining <- drain(samples) {
 
 A visit passes the callback as the first parameter under the ordinary trailing-callback rules. Each callback call that borrows an owning element binds the actual owner of that element for that call. This permits one visit to inspect objects from several regions. A reference derived from the callback argument requires a live, statically provable owner at every later use. Conflicting structural mutation during a visit rejects. A callback failure preserves completed user effects. [Trailing callback arguments](SymbolicDynamicScope.md#trailing-callback-arguments)
 
+For this draft, `visit` and each observer invocation finish void. Assume `is_noise`, `report` and `requires_attention` accept a readonly member. The caller can express filtering and short-circuiting without adding a stop flag to the collection API:
+
+```cod
+visit(batch.exceptions) {=> index, member;
+    if (is_noise(member)) { continue; } else {};
+    report(index, member);
+    if (requires_attention(member)) { break; } else {};
+};
+```
+
+A skipped member stays in the batch. The first member requiring attention is reported, then the visit ends and the caller resumes after it. Later members are untouched. An empty batch invokes no observer. A search written in an enclosing bool-returning procedure could instead `return true;` on a match, and return false after a visit that finds none. Double braces remain available when the author wants a local callback return and ordinary callback exception handling.
+
+For independent member regions A and B, the same observer can borrow A on its first invocation and B on its second. Each invocation needs its own actual owner proof. The proposed `visit` needs this even if the callback never exits early. Expressing this as a single ref-yield component with owner O would require O to denote both A and B during one generator invocation, which violates the fixed-owner rule. For a generator-compatible visiting overload on a regional array of u64, `for { val index <-; ref item:const u64 =; } := visit(xs) { ... }` and `visit(xs) {=> index, item; ... };` can borrow the same readonly items from the same owner. Both leave the collection intact. The header assumes those declared labels and a readonly item target. [Generalized for-loops](RangedForAndGenerators.md#generalized-for-loops)
+
 A visit relies on three facts. The collection remains available for traversal, the selected entry retains its release responsibility, and the observer may read the selected target while its actual owner is live. Each callback entry binds the owner of that particular target, including when one compiled callback body visits several regions. An index selects the entry at that step. Compaction can change a surviving element’s index while preserving its owner.
 
 The structural mutation exclusion follows the collection wherever the callback can reach it. For example, suppose `remove_first()` can call `take_at` on the same collection through a second handle:
@@ -53,7 +69,7 @@ visit(batch.exceptions) {{=> index, member;
 }};
 ```
 
-The same rule applies to a captured callable that can drain this collection. Removing from a provably distinct collection is compatible with this visit, subject to its ordinary access rules.
+The same rule applies to a helper or a forwarded here body that can drain this collection. Removing from a provably distinct collection is compatible with this visit, subject to its ordinary access rules.
 
 A borrowed generator yield requires one fixed owner for that output over the invocation. Per-call binding in a visitor preserves that rule. The generator contract separately governs a consuming loop’s body, early return and required cleanup. [Borrowed yields](RangedForAndGenerators.md#one-fixed-owner-per-borrowed-yield-component) · [For headers](RangedForAndGenerators.md#for-headers)
 
@@ -61,7 +77,7 @@ A borrowed generator yield requires one fixed owner for that output over the inv
 
 `take_at` evaluates the collection and index once, in written order. The index must belong to the collection’s declared domain. With bounds checking enabled, an out-of-range index raises `IndexOutOfBoundsError` before removal. In a densely indexed sequence the length decreases by one and later indices shift down. The surviving elements keep their relative order. A successful owning handoff preserves the selected target, its region and its access permissions. Ordinary consumption and cleanup apply even when a subsequent consumer throws. [Index domains](ScalarUnitsAndIndexTypes.md#the-requirement) · [Bounds policy](DesignAuthorityRegistry.md#d-17-bounds)
 
-`drain` needs structural write access for the traversal. Each handoff commits one removal. The body can inspect, forward or release the received element. If the body returns or throws, the collection still holds the unvisited suffix and receives ordinary cleanup from its holder. Separate structural mutations during the drain reject. Ordered implementations can advance a head cursor. The contract specifies order and custody independently of compaction or complexity guarantees.
+`drain` needs structural write access for the traversal. Each handoff commits one removal. The body can inspect, forward or release the received element. If the body returns or throws, the collection still holds the unvisited suffix and receives ordinary cleanup from its holder. For example, returning from the enclosing callable on the second handoff commits the first two removals. Each delivered owning holder is transferred or released by the ordinary rules. The remaining suffix is still present. A matching single-brace call to this same drain commits exactly the same removals at the same handoffs, including when a bare break ends the traversal. An owning element needs a receiving contract that carries its release obligation in both spellings. Separate structural mutations during the drain reject. Ordered implementations can advance a head cursor. The contract specifies order and custody independently of compaction or complexity guarantees.
 
 ## First owning instance
 
