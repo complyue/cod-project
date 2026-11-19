@@ -5,6 +5,11 @@
 <a id="h-hlvm-candidate-20261120"></a>
 **H-HLVM-CANDIDATE-20261120.** In the project chat, the project user proposed `hlvm-basic` for running BASIC source or saving a DBMR to run later, with the prerequisite “要等 CoD 基本的 lexer/parser 已经通了的情况下再推进”, then asked to record the idea in a planning document. The [application note](applications/README.md#deferred-application-hlvm-basic) applies the executor and editable program graph from [*Algebraic Effects Is All You Need*](papers/AlgebraicEffectsIsAllYouNeed.md) to BASIC. It does not change the compiler roadmap or authorize implementation.
 
+## 2026-11-19 — Update finite reference component coverage
+
+<a id="k-required-reference-components-20261119"></a>
+**K-REQUIRED-REFERENCE-COMPONENTS-20261119.** D-28r38→39 and registry r991→992 update the [lexical product coverage reference](design/RegionalAndLexicalStorageRefactor.md#lexical-adts-as-part-of-the-complete-model) under [H-562](#h-562). The checked finite component preserves the confirmed distinction between identity and readiness under C-65/C-72 and charter §§3.3/6.3/12. Layout, call transport and complete proof qualification retain their recorded scope. Prior coverage wording at `1b0a13dfc09f68bbdc0381f02d1e2e06a79516a3:design/RegionalAndLexicalStorageRefactor.md`.
+
 ## 2026-11-19 — Update the lexical product coverage reference
 
 <a id="k-lexical-reference-field-coverage-20261119"></a>

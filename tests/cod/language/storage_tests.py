@@ -195,6 +195,31 @@ runner.CASES = {
         'proc run()->void{val source<-13u64;ptr item=make Entry;'
         'defer{behave @print(item.selected);}catch(e:const OutOfMemoryError){return;};'
         'defer (=)(item.selected,source);return;}run();', 0, "13\n", ""),
+    "required_reference_component_becomes_readable_after_its_last_edge": (PRELUDE +
+        'data Node {count:u64;ref next:Node;}ptr a=make Node;ptr b=make Node;'
+        'a.count<-13u64;b.count<-19u64;a.next=b;b.next=a;ref ready=a;'
+        'behave @print(ready.next.count);behave @print((ready.next.next is ready));', 0, "19\ntrue\n", ""),
+    "required_reference_component_rejects_missing_reachable_payload": (
+        'data Node {count:u64;ref next:Node;}ptr a=make Node;ptr b=make Node;'
+        'a.count<-13u64;a.next=b;b.next=a;ref ready=a;',
+        2, "", "read of 'count' before definite initialization"),
+    "required_reference_component_rejects_missing_reachable_slot": (
+        'data Node {count:u64;ref next:Node;}ptr a=make Node;ptr b=make Node;'
+        'a.count<-13u64;b.count<-19u64;a.next=b;ref ready=a;',
+        2, "", "read of 'next' before definite initialization"),
+    "required_component_checks_later_rebinding_of_a_readable_object": (
+        'data Node {count:u64;ref next:Node;}ptr a=make Node;ptr b=make Node;ptr loose=make Node;'
+        'a.count<-13u64;b.count<-19u64;a.next=b;b.next=a;ref ready=a;ready.next=loose;',
+        2, "", "before definite initialization"),
+    "required_reference_component_completed_on_both_reaching_paths": (PRELUDE +
+        'data Node {count:u64;ref next:Node;}proc run(flag:bool)->void{'
+        'ptr a=make Node;ptr b=make Node;a.count<-13u64;b.count<-19u64;a.next=b;'
+        'if(flag){b.next=a;{}}else{b.next=b;{}};ref ready=a;'
+        'behave @print(ready.next.next.count);return;}run(true);run(false);', 0, "13\n19\n", ""),
+    "required_reference_component_checks_a_scalar_referent_at_publication": (
+        'data Entry {ref selected:u64;}val target<-make local u64;'
+        'ptr item=make Entry;item.selected=target;ref ready=item;',
+        2, "", "read of 'selected target' before definite initialization"),
 }
 runner.CASE_ARGUMENTS = {"shadow_error": ["-Werror=shadow"], "unrelated_warning_error": ["-Werror=missing-return"]}
 runner.EXTRA_SOURCES = [Path(__file__)]

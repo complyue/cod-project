@@ -1960,7 +1960,8 @@ class ScalarChecker {
       if (scope > cleanup) fail(at, "deferred reference binding does not outlive its cleanup scope");
     }
   }
-  void check_rebind(const CheckedOperation &target, const CheckedOperation &source, const Location &at) {
+  void check_rebind(const CheckedOperation &target, const CheckedOperation &source, const Location &at,
+                    bool allow_first_binding = false) {
     reference_destination(target, at);
     if (!source.view || source.mixed_view) implementation_gap(at, "rebinding from a fresh value without an existing target");
     rebind_type(target.type, source.type, at);
@@ -1974,7 +1975,11 @@ class ScalarChecker {
       if (physical.contains(id) && owners.size() > 1) fail(at, "reference rebinding cannot change the initializer-fixed owner");
       if (binding.requires_initialized && proving_ && validating_ && lexical_.live && source.targets.contains(null_target))
         fail(at, "ref requires a proven non-null target");
-      if (binding.requires_initialized) require_initialized(source, at, "ref target");
+      // Any possible earlier target makes this a rebind of a potentially
+      // readable object. A fresh embedded slot can establish the edge first.
+      const bool first_binding = allow_first_binding && binding.embedded_slot &&
+          physical.contains(id) && lexical_.targets.at(id).empty();
+      if (binding.requires_initialized && !first_binding) require_initialized(source, at, "ref target");
     }
   }
   void record_rebinding(size_t binding, bool deferred = false) {
@@ -3644,23 +3649,49 @@ class ScalarChecker {
   static bool conditional_read(const CleanupEquations::ReadRequirement &read) {
     return read.when != CleanupEquations::ConditionClauses{CleanupEquations::ConditionFacts{}};
   }
+  void require_product_initialized(size_t root, const Location &at,
+                                   const std::optional<CleanupEquations::ConditionFacts> &selected) {
+    if (!proving_ || !lexical_.live) return;
+    if (selected && CleanupEquations::conjoin_conditions(path_conditions(lexical_), {*selected}).empty()) return;
+    std::set<size_t> visited{root};
+    std::vector<size_t> pending{root};
+    const auto enqueue = [&](size_t place) {
+      if (visited.insert(place).second) pending.push_back(place);
+    };
+    while (!pending.empty()) {
+      const auto product = pending.back();
+      pending.pop_back();
+      const auto &object = storage(product);
+      const auto &schema = product_schema(object.type, at);
+      for (size_t index = 0; index < object.fields.size(); ++index) {
+        const auto place = object.fields[index];
+        const auto &field = schema.fields[index];
+        const auto &name = field.source->name;
+        if (field.storage == PlaceKind::value && !storage(place).fields.empty()) {
+          enqueue(place);
+          continue;
+        }
+        require_initialized(place, at, name, {}, selected);
+        if (field.storage != PlaceKind::reference) continue;
+        const auto slot = storage(place).binding;
+        const auto targets = lexical_.targets.find(slot);
+        if (targets == lexical_.targets.end() || targets->second.empty() || targets->second.contains(null_target)) {
+          if (validating_) implementation_gap(at, "required field '" + name + "' has no proved non-null target");
+          continue;
+        }
+        for (const auto target : targets->second) {
+          if (storage(target).fields.empty()) require_initialized(target, at, name + " target", {}, selected);
+          else enqueue(target);
+        }
+      }
+    }
+  }
   void require_initialized(const CheckedOperation &view, const Location &at, const std::string &name) {
     if (view.initialized_target()) return;
     for (const auto place : view.targets) {
-      if (place != null_target && !storage(place).fields.empty()) {
-        const auto selected = selected_target(view, place, true);
-        std::vector<size_t> pending = storage(place).fields;
-        while (!pending.empty()) {
-          const auto field = pending.back();
-          pending.pop_back();
-          const auto &subobject = storage(field);
-          if (subobject.fields.empty())
-            require_initialized(field, at, subobject.name.substr(subobject.name.rfind('.') + 1), {}, selected);
-          else pending.insert(pending.end(), subobject.fields.begin(), subobject.fields.end());
-        }
-        continue;
-      }
-      require_initialized(place, at, name, current_binding(view), selected_target(view, place, true));
+      const auto selected = selected_target(view, place, true);
+      if (place != null_target && !storage(place).fields.empty()) require_product_initialized(place, at, selected);
+      else require_initialized(place, at, name, current_binding(view), selected);
     }
   }
   void require_initialized(size_t place, const Location &at, const std::string &name, std::optional<size_t> selection = {},
@@ -13306,7 +13337,7 @@ class ScalarChecker {
         if (prepared) require_deferred_slots(target, expr.at);
         if (child(1, false) == Type::never) { operation.type = Type::never; break; }
         const auto &selected = operations.at(expr.children[1].get());
-        check_rebind(target, selected, expr.at);
+        check_rebind(target, selected, expr.at, !prepared && !delayed_);
         operation.arguments[1].type = selected.type;
         if (prepared) {
           require_borrow_lifetime(selected, expr.children[1]->at, true);
