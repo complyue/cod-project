@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-20 — Defer HLVM applications until the basic CoD frontend works
+
+<a id="h-hlvm-candidate-20261120"></a>
+**H-HLVM-CANDIDATE-20261120.** In the project chat, the project user proposed `hlvm-basic` for running BASIC source or saving a DBMR to run later, with the prerequisite “要等 CoD 基本的 lexer/parser 已经通了的情况下再推进”, then asked to record the idea in a planning document. The [application note](applications/README.md#deferred-application-hlvm-basic) applies the executor and editable program graph from [*Algebraic Effects Is All You Need*](papers/AlgebraicEffectsIsAllYouNeed.md) to BASIC. It does not change the compiler roadmap or authorize implementation.
+
 ## 2026-11-19 — Confirm the storage-helper migration
 
 <a id="h-storage-helper-confirmation-20261119"></a>
