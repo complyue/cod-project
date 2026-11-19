@@ -433,6 +433,12 @@ struct CheckedMethod {
     std::map<std::string, size_t> owner_names;
     std::vector<std::vector<OwnerMatch>> relations;
     std::vector<bool> nonnull;
+    struct HereReception {
+      size_t offered;
+      std::vector<size_t> selected;
+      auto operator<=>(const HereReception &) const = default;
+    };
+    std::optional<HereReception> here_reception;
     // The entry receives these owners at each handoff. Remaining owners and
     // live places come from the supplier's activation.
     size_t here_input_owners = 0;

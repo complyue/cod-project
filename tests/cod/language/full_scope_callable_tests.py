@@ -283,6 +283,73 @@ runner.CASES = {
     'borrowed_handoff_rejects_mutation_through_readonly_control': (
         'proc inspect(source:const u64 in O) yields ref const u64 in O where {owner O}{yield(source);return;}'
         'val target<-3u64;for ref item=inspect(target){item<-4u64;};',2,'','readonly'),
+    'labelled_handoff_orders_offers_and_selects_readonly_fields': (IO+
+        'proc mark(n:u64)->u64{behave @print(n);return n;}'
+        'proc scan(line:const u64 in O) yields {id:u64; ref cell:const u64 in O; audit:u64;} -> bool where {owner O}{'
+        'if(!yield(mark(24u64)->id,mark(8u64)->audit,line->cell)){return;}else{};'
+        'yield(mark(42u64)->id,line->cell,mark(9u64)->audit);return;}'
+        'proc run()->void{val line<-75u64;'
+        'for {ref payload=cell;val number<-id;} := scan(line){behave @print(payload);behave @print(number);continue false;};'
+        'scan(line)({val number<-id;ref payload=cell;})=>{behave @print(payload);behave @print(number);false};return;}run();',
+        0,'24\n8\n75\n24\n24\n8\n75\n24\n',''),
+    'labelled_handoff_projects_two_owners_and_a_snapshot': (IO+
+        'proc scan(ref left:u64 in A,ref right:u64 in B) yields {ref z:u64 in A;ref a:u64 in B;} where {owner A,owner B}{'
+        'yield(left->z,right->a);return;}'
+        'val x<-51u64;{{val y<-72u64;'
+        'for {ref first=z;val previous<-z;ref other=a;} := scan(x,y){first<-other;other<-previous;};'
+        'behave @print(x);behave @print(y);}};',0,'72\n51\n',''),
+    'labelled_handoff_empty_header_preserves_offers': (IO+
+        'proc mark(n:u64)->u64{behave @print(n);return n;}'
+        'proc scan() yields {second:u64;first:u64;} -> bool{'
+        'if(yield(mark(2u64)->second,mark(1u64)->first)){behave @print(3u64);}else{};return;}'
+        'scan()({})=>{true};',0,'2\n1\n3\n',''),
+    'labelled_handoff_type_query_does_not_offer': (IO+
+        'func scan() yields {value:u64;flag:bool;} -> bool{'
+        'val proof<-make local typeof(yield(99u64->value,true->flag)){false};'
+        'if(proof){yield(true->flag,88u64->value):void;}else{};}'
+        'proc run()->void{for {val n<-value;} := scan(){behave @print(n);continue true;};behave @print(7u64);return;}run();',
+        0,'7\n',''),
+    'labelled_handoff_single_field_uses_shorthand': (IO+
+        'func scan() yields {id:u64;}{yield(25u64->id);}'
+        'proc run()->void{for val n<-scan(){behave @print(n);};scan()(n)=>{behave @print(n);};return;}run();',
+        0,'25\n25\n',''),
+    'labelled_handoff_checked_failure_bypasses_producer_catch': (IO+'using "std:exceptions" NullPointerException;'+
+        'func fail_now()->void throws NullPointerException{ptr p:u64=null in here;p;{};}'
+        'proc scan() yields {id:u64;flag:bool;} -> bool{try{yield(true->flag,24u64->id):void;}'
+        'catch(e:const NullPointerException){behave @print(80u64);}finally{behave @print(81u64);};return;}'
+        'proc run()->void{try{for {val number<-id;} := scan(){behave @print(number);fail_now();true};}'
+        'catch(e:const NullPointerException){behave @print(82u64);};return;}run();',0,'24\n81\n82\n',''),
+    'labelled_handoff_requires_all_labels': (
+        'proc scan() yields {id:u64;flag:bool;}{yield(24u64->id);return;}scan()({})=>{};',
+        2,'',"missing yielded label 'flag'"),
+    'labelled_handoff_rejects_duplicate_labels': (
+        'proc scan() yields {id:u64;flag:bool;}{yield(24u64->id,25u64->id,true->flag);return;}scan()({})=>{};',
+        2,'',"duplicate yielded label 'id'"),
+    'labelled_handoff_rejects_unknown_offer_label': (
+        'proc scan() yields {id:u64;}{yield(24u64->unknown);return;}scan()({})=>{};',
+        2,'',"unknown yielded label 'unknown'"),
+    'labelled_handoff_rejects_positional_offers': (
+        'proc scan() yields {id:u64;}{yield(24u64);return;}scan()({})=>{};',
+        2,'','a labelled yield requires a label for every operand'),
+    'labelled_handoff_rejects_unknown_receiving_label': (
+        'proc scan() yields {id:u64;}{yield(24u64->id);return;}scan()({val n<-other;})=>{};',
+        2,'',"unknown receiving label 'other'"),
+    'labelled_handoff_rejects_positional_multi_field_reception': (
+        'proc scan() yields {id:u64;flag:bool;}{yield(24u64->id,true->flag);return;}scan()(n,b)=>{};',
+        2,'','a multi-field here contract requires a labelled receiving header'),
+    'labelled_handoff_rejects_an_unproved_offer_owner': (
+        'proc scan(ref left:u64 in A,ref right:u64 in B) yields {id:u64;ref line:u64 in A;} where {owner A,owner B}{'
+        'yield(24u64->id,right->line);return;}'
+        'val left<-1u64;{{val right<-2u64;for {} := scan(left,right){};return;}};',
+        2,'','borrowed here input requires an unproved fixed owner equality'),
+    'labelled_handoff_rejects_a_distinct_offer_owner': (
+        'proc scan(ref storage:u64 in O) yields {id:u64;ref line:u64 in O;} where {owner O}{'
+        'val scratch<-3u64;yield(24u64->id,scratch->line);return;}'
+        'val storage<-1u64;for {} := scan(storage){};',
+        2,'','borrowed here input has a different actual owner'),
+    'labelled_handoff_rejects_mutation_of_readonly_selection': (
+        'proc scan(line:const u64 in O) yields {id:u64;ref cell:const u64 in O;} where {owner O}{yield(24u64->id,line->cell);return;}'
+        'val line<-1u64;for {ref selected=cell;} := scan(line){selected<-2u64;};',2,'','readonly'),
     'generator_void_feedback_rejects_explicit_operand': (
         'func generate() yields u64{yield(1u64);}func action()->void{}'
         'for val v<-generate(){continue action();};',2,'','void here feedback requires bare continue'),

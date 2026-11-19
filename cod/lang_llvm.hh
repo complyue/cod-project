@@ -1995,8 +1995,9 @@ class LLVMEmission {
     const auto &method = program_->methods.at(instance.method);
     const auto &layout = call_layouts_.at(instance.method);
     const auto &inputs = *method.scope_inputs;
-    const auto written = method.source->parameters.size();
-    const auto places = layout.operands - written;
+    const auto &reception = inputs.here_reception.value();
+    const auto offered = reception.offered;
+    const auto places = layout.operands - reception.selected.size();
     const auto handed_owners = inputs.here_input_owners;
     if (layout.captures || layout.retained || layout.declaration_context || layout.destination || layout.accepts_here)
       throw std::logic_error("unexpected parameter role in supplied here body");
@@ -2007,17 +2008,17 @@ class LLVMEmission {
     fields.insert(fields.end(), places, scalar_);
     fields.insert(fields.end(), layout.owners - handed_owners, b_.getPtrTy());
     auto *activation = llvm::StructType::get(context_, fields);
-    std::vector<llvm::Type *> parameters(written, scalar_);
+    std::vector<llvm::Type *> parameters(offered, scalar_);
     parameters.insert(parameters.end(), handed_owners, b_.getPtrTy());
     parameters.push_back(b_.getPtrTy());
     auto *entry = llvm::Function::Create(llvm::FunctionType::get(outcome_, parameters, false),
         llvm::GlobalValue::InternalLinkage, "cod.here.entry." + std::to_string(id), module_);
     here_entries_.emplace(id, HereEntry{entry, activation, layout.here_group});
     llvm::IRBuilder<> body(llvm::BasicBlock::Create(context_, "entry", entry));
-    auto *borrowed = entry->getArg(written + handed_owners);
+    auto *borrowed = entry->getArg(offered + handed_owners);
     std::vector<llvm::Value *> prepared;
-    for (size_t i = 0; i < written; ++i) {
-      llvm::Value *value = entry->getArg(i);
+    for (size_t i = 0; i < reception.selected.size(); ++i) {
+      llvm::Value *value = entry->getArg(reception.selected[i]);
       if (inputs.here_snapshots.contains(i)) {
         auto *address = body.CreateIntToPtr(body.CreateExtractValue(value, 0), body.getPtrTy());
         value = body.CreateLoad(scalar_, address);
@@ -2028,7 +2029,7 @@ class LLVMEmission {
       prepared.push_back(body.CreateLoad(scalar_, body.CreateStructGEP(activation, borrowed, layout.here_group + i)));
     for (const auto &[owner, input] : instance.frame.owners) {
       const auto role = null_target - 1 - owner;
-      if (role < handed_owners) prepared.push_back(entry->getArg(written + role));
+      if (role < handed_owners) prepared.push_back(entry->getArg(offered + role));
       else {
         const auto field = layout.here_group + places + role - handed_owners;
         prepared.push_back(body.CreateLoad(b_.getPtrTy(), body.CreateStructGEP(activation, borrowed, field)));

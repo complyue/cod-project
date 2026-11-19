@@ -7121,6 +7121,28 @@ class ScalarChecker {
     return expr.kind == K::processor_composition || expr.kind == K::pipeline || expr.kind == K::here_binding ||
            (expr.kind == K::call && pipeline_operator(expr.text));
   }
+  struct BoundHereOperands {
+    std::vector<const Expression *> values;
+    std::vector<size_t> written_order;
+  };
+  static BoundHereOperands bind_here_operands(const Expression &call, const CheckedHereContract &contract) {
+    using K = Expression::Kind;
+    BoundHereOperands bound;
+    bound.values.resize(contract.inputs.size());
+    for (const auto &source : call.children) {
+      if (source->kind != K::named_argument || source->children.size() != 1)
+        fail(source->at, "a labelled here invocation requires an expression for each yielded label");
+      const auto field = std::ranges::find(contract.inputs, source->text, &CheckedHereContract::Component::label);
+      if (field == contract.inputs.end()) fail(source->at, "unknown yielded label '" + source->text + "'");
+      const auto slot = std::distance(contract.inputs.begin(), field);
+      if (bound.values[slot]) fail(source->at, "duplicate yielded label '" + source->text + "'");
+      bound.values[slot] = source->children.front().get();
+      bound.written_order.push_back(slot);
+    }
+    for (size_t slot = 0; slot < bound.values.size(); ++slot)
+      if (!bound.values[slot]) fail(call.at, "missing yielded label '" + contract.inputs[slot].label + "'");
+    return bound;
+  }
   std::optional<Type> query_evidence(const Expression &expr, TypeEvidenceState &state, ViewEvidence &view, TargetEvidence &target_facts,
                                      bool contextual, const Type *expected, std::vector<Type> *alternatives,
                                      ExpectedTypeUse expected_use, EvidenceRead read) const {
@@ -7140,12 +7162,15 @@ class ScalarChecker {
     if (expr.kind == K::call && !expr.intrinsic && active_here(expr.text, &state)) {
       const auto &method = program_.methods[*state.method];
       const auto contract = here_invocation_type(method, state.substitutions, expr.at);
-      if (expr.children.size() != contract.parameters.size()) fail(expr.at, "here invocation argument count does not match its contract");
+      std::optional<BoundHereOperands> bound;
+      if (method.here->labelled) bound = bind_here_operands(expr, *method.here);
+      else if (expr.children.size() != contract.parameters.size()) fail(expr.at, "here invocation argument count does not match its contract");
       if (state.preparing(expr)) implementation_gap(expr.at, "prepared deferred here invocation");
-      std::vector<TargetEvidence> targets;
+      std::vector<TargetEvidence> targets(contract.parameters.size());
       bool completes = true;
-      for (size_t i = 0; i < expr.children.size(); ++i) {
-        const auto &operand = *expr.children[i];
+      for (size_t written = 0; written < targets.size(); ++written) {
+        const auto i = bound ? bound->written_order[written] : written;
+        const auto &operand = bound ? *bound->values[i] : *expr.children[i];
         const auto mode = argument_mode(contract, i);
         const auto use = mode == ArgumentMode::value ? EvidenceRead::payload : EvidenceRead::target;
         const auto argument = type_evidence(operand, state, false, nullptr, nullptr, expected_type_use(mode), completes, use);
@@ -7168,7 +7193,7 @@ class ScalarChecker {
             if (completes) prepare_type_readable_argument(state, operand, state.value, state.target, mode);
           }
         }
-        targets.push_back(std::move(state.target));
+        targets[i] = std::move(state.target);
         completes = completes && argument != Type::never;
       }
       if (completes) {
@@ -9387,6 +9412,7 @@ class ScalarChecker {
       if (method.result != result || method.throws_categories != throws_categories || method.here_group != group) continue;
       const auto &candidate = *method.scope_inputs;
       if (candidate.owner_names != inputs.owner_names || candidate.relations != inputs.relations ||
+          candidate.here_reception != inputs.here_reception ||
           candidate.here_input_owners != inputs.here_input_owners || candidate.here_snapshots != inputs.here_snapshots ||
           candidate.nonnull != inputs.nonnull || candidate.live_values != inputs.live_values ||
           candidate.live_bindings != inputs.live_bindings ||
@@ -9624,32 +9650,42 @@ class ScalarChecker {
       note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
     if (checking_method_ && checking_method_->source->kind == Form::Kind::function && !contract.pure_callable)
       fail(expr.at, "a function cannot invoke a procedure");
-    if (expr.children.size() - offset != contract.parameters.size()) fail(expr.at, "callable argument count does not match its view");
+    if (operation.invokes_here && checking_method_->here->labelled) {
+      auto bound = bind_here_operands(expr, *checking_method_->here);
+      operation.argument_sources = std::move(bound.values);
+      if (!std::ranges::is_sorted(bound.written_order)) operation.argument_evaluation_order = std::move(bound.written_order);
+    }
+    const auto count = operation.argument_count(expr);
+    if (count - offset != contract.parameters.size()) fail(expr.at, "callable argument count does not match its view");
     operation.callable_call = !operation.invokes_here; operation.operand_type = contract;
-    if (offset) operation.arguments.push_back({ArgumentMode::value, contract});
+    operation.arguments.resize(count);
+    if (offset) operation.arguments[0] = {ArgumentMode::value, contract};
     bool completes = true;
-    std::vector<Type> arguments;
-    std::vector<CheckedOperation> views;
-    for (size_t i = offset; i < expr.children.size(); ++i) {
+    std::vector<Type> arguments(count - offset);
+    std::vector<CheckedOperation> views(count - offset);
+    for (size_t written = offset; written < count; ++written) {
+      const auto i = operation.argument_evaluation_order.empty() ? written : operation.argument_evaluation_order[written];
+      const auto &operand = operation.argument(expr, i);
       const auto &parameter = contract.parameters[i - offset];
       const auto mode = argument_mode(contract, i - offset);
-      const auto argument = check(*expr.children[i], instance, operations, mode == ArgumentMode::value, false,
+      const auto argument = check(operand, instance, operations, mode == ArgumentMode::value, false,
                                   &parameter, expected_type_use(mode));
       if (mode == ArgumentMode::value && argument.kind == Type::procedure)
-        note_abrupt(expr.children[i]->at, {exception_id(ExceptionCategory::out_of_memory)});
+        note_abrupt(operand.at, {exception_id(ExceptionCategory::out_of_memory)});
       completes = completes && argument != Type::never;
       if (argument != Type::never && !accepts_argument(argument, parameter, mode)) {
-        fail(expr.children[i]->at, "argument does not satisfy the callable view type");
+        fail(operand.at, "argument does not satisfy the callable view type");
       }
-      arguments.push_back(argument); views.push_back(operations.at(expr.children[i].get()));
-      if (argument != Type::never) prepare_borrow(views.back(), mode, expr.children[i]->at);
-      operation.arguments.push_back({mode, operation.invokes_here || argument == Type::never ? parameter : argument});
+      arguments[i - offset] = argument;
+      auto &view = views[i - offset] = operations.at(&operand);
+      if (argument != Type::never) prepare_borrow(view, mode, operand.at);
+      operation.arguments[i] = {mode, operation.invokes_here || argument == Type::never ? parameter : argument};
     }
     if (!completes) { operation.type = Type::never; return; }
     if (operation.invokes_here && validating_ && proving_ && lexical_.live)
       for (size_t i = 0; i < views.size(); ++i) {
         if (const auto role = checking_method_->here->inputs[i].owner; role)
-          require_here_owner(one_owner(views[i]), here_formal_owner(*role), expr.children[i + offset]->at);
+          require_here_owner(one_owner(views[i]), here_formal_owner(*role), operation.argument(expr, i + offset).at);
       }
     auto [effects, closed] = callable_effects(contract, arguments,
         operation.invokes_here ? std::optional{std::set<size_t>{}} : operation.callable_choices);
@@ -9703,8 +9739,8 @@ class ScalarChecker {
   // The here capability itself stays outside the language's value carriers.
   Type here_invocation_type(const CheckedMethod &receiver, const Substitutions &bindings, const Location &at) const {
     const auto &here = *receiver.here;
-    if (here.labelled || here.feedback || here.result.owner)
-      implementation_gap(at, "labelled or borrowed here invocation contracts");
+    if (here.feedback || here.result.owner)
+      implementation_gap(at, "labelled or borrowed here feedback contracts");
     const ModuleLookup lookup(module_, receiver.module);
     Type type{Type::procedure};
     type.pure_callable = type.value_result = true;
@@ -9731,8 +9767,26 @@ class ScalarChecker {
     for (const auto category : here.throws_categories) type.throws_types.push_back(exception_type(category));
     return type;
   }
+  static CheckedMethod::ScopeInputs::HereReception bind_here_reception(const Expression &body, const CheckedHereContract &contract) {
+    const auto &header = *body.receiving;
+    CheckedMethod::ScopeInputs::HereReception reception{contract.inputs.size(), {}};
+    if (header.shape == ReceivingHeader::Shape::labelled) {
+      if (!contract.labelled) fail(body.at, "a labelled receiving header requires a labelled here contract");
+      for (const auto &item : header.items) {
+        const auto field = std::ranges::find(contract.inputs, item.selector, &CheckedHereContract::Component::label);
+        if (field == contract.inputs.end()) fail(item.at, "unknown receiving label '" + item.selector + "'");
+        reception.selected.push_back(std::distance(contract.inputs.begin(), field));
+      }
+    } else {
+      if (contract.labelled && contract.inputs.size() != 1)
+        fail(body.at, "a multi-field here contract requires a labelled receiving header");
+      if (header.items.size() != contract.inputs.size()) fail(body.at, "here body header arity does not match the selected contract");
+      for (size_t i = 0; i < header.items.size(); ++i) reception.selected.push_back(i);
+    }
+    return reception;
+  }
   std::pair<CheckedOperation::SuppliedHere, std::optional<size_t>> demand_supplied_here(const Expression &body, const Type &contract,
-      std::vector<std::optional<size_t>> owners, const ResultContract &receiving,
+      const CheckedHereContract &signature, std::vector<std::optional<size_t>> owners, const ResultContract &receiving,
       CheckedInstance *supplier, std::map<const Expression *, CheckedOperation> &operations) {
     if (!body.definition) implementation_gap(body.at, "this receiving pattern for a here body");
     const auto &definition = *body.definition;
@@ -9749,23 +9803,27 @@ class ScalarChecker {
       group->binds_return_payload = definition.body->inspects_return(true);
     }
     const auto &parameters = definition.parameters;
-    if (parameters.size() != contract.parameters.size()) fail(body.at, "here body header arity does not match the selected contract");
     const auto base = lexical_method(&definition);
     if (!program_.methods[base].type_parameters.empty())
       implementation_gap(body.at, "retained generic parameters in a supplied here body");
     CheckedMethod::ScopeInputs inputs{};
     inputs.lexical_method = base;
     inputs.parameters = parameters;
+    inputs.here_reception = bind_here_reception(body, signature);
     inputs.nonnull.resize(parameters.size(), false);
     inputs.here_input_owners = owners.size();
     const auto add_owner = [&](const Location &at) {
       inputs.owners.push_back({"$scope.owner." + std::to_string(inputs.owners.size()), {}, at});
     };
     for (size_t i = 0; i < owners.size(); ++i) add_owner(body.at);
+    std::vector<Type> arguments;
+    arguments.reserve(parameters.size());
     for (size_t i = 0; i < parameters.size(); ++i) {
       const auto &parameter = parameters[i];
       const auto &item = body.receiving->items[i];
-      const auto mode = argument_mode(contract, i);
+      const auto field = inputs.here_reception->selected[i];
+      const auto &type = contract.parameters[field];
+      const auto mode = argument_mode(contract, field);
       const bool receives_value = parameter.declaration_kind == "val" || item.operation == "<-";
       const bool borrowed = mode != ArgumentMode::value;
       const bool binds_ref = borrowed && !receives_value;
@@ -9777,19 +9835,19 @@ class ScalarChecker {
       if (parameter.type != Type::void_type) {
         const auto declared = supplier ? substitute(parameter.type, program_.methods[supplier->method], supplier->substitutions)
                                        : resolve_type(parameter.type);
-        if (declared != contract.parameters[i]) fail(parameter.at, "here body header type does not match the selected contract");
+        if (declared != type) fail(parameter.at, "here body header type does not match the selected contract");
       }
-      const auto readonly = !contract.const_views.empty() && contract.const_views[i];
+      const auto readonly = !contract.const_views.empty() && contract.const_views[field];
       if (!snapshot && (parameter.type != Type::void_type || parameter.read_only) &&
           parameter.read_only != readonly && !(binds_ref && parameter.read_only))
         fail(parameter.at, "here body header access does not match the selected contract");
       auto &input = inputs.parameters[i];
       input.declaration_kind = binds_ref ? "ref" : "val";
       input.read_only = parameter.read_only || (!snapshot && readonly);
-      if (binds_ref) input.owner = inputs.owners.at(contract.owners[i] - 1).name;
+      if (binds_ref) input.owner = inputs.owners.at(contract.owners[field] - 1).name;
       if (snapshot) inputs.here_snapshots.insert(i);
+      arguments.push_back(type);
     }
-    auto arguments = contract.parameters;
     CheckedOperation::SuppliedHere supplied{};
     const auto capture_owner = [&](size_t actual, const Location &at) {
       if (lexical_.live && !owner_alive(actual)) fail(at, "here access requires a live supplier owner");
@@ -9962,13 +10020,18 @@ class ScalarChecker {
     if (checking_method_ && checking_method_->source->kind == Form::Kind::function && receiver.source->kind != Form::Kind::function)
       fail(expr.at, "a function cannot invoke a procedure");
     const auto contract = here_invocation_type(receiver, *match(receiver, arguments, {}, true), expr.at);
+    const auto &signature = *receiver.here;
     std::vector<std::optional<size_t>> owners;
     for (const auto i : here_owner_inputs(contract))
-      owners.push_back(here_receiver_owner(receiver, *receiver.here->inputs[i].owner, views, expr.at));
+      owners.push_back(here_receiver_owner(receiver, *signature.inputs[i].owner, views, expr.at));
     auto callee = demand(selected, arguments, expr.at);
     if (forward) {
       const auto incoming = here_invocation_type(*checking_method_, supplier->substitutions, expr.at);
-      if (incoming != contract) fail(expr.at, "forwarded here argument does not match the selected contract");
+      const auto &incoming_signature = *checking_method_->here;
+      if (incoming != contract || incoming_signature.labelled != signature.labelled ||
+          !std::ranges::equal(incoming_signature.inputs, signature.inputs, {},
+              &CheckedHereContract::Component::label, &CheckedHereContract::Component::label))
+        fail(expr.at, "forwarded here argument does not match the selected contract");
       const auto owner_inputs = here_owner_inputs(incoming);
       for (size_t i = 0; i < owner_inputs.size(); ++i) {
         if (!owners[i]) fail(expr.at, "forwarded here argument cannot use the new receiver's invocation owner");
@@ -9982,7 +10045,7 @@ class ScalarChecker {
       finish_named_call(expr, arguments, views, operation, read, discard, true, callee);
       return;
     }
-    auto [body, returning] = demand_supplied_here(*expr.children.back(), contract, std::move(owners),
+    auto [body, returning] = demand_supplied_here(*expr.children.back(), contract, signature, std::move(owners),
         program_.instances[callee].result, supplier, operations);
     const auto finish_here = [&](CheckedOperation &call, const CheckedOperation::SuppliedHere &body) {
       const auto receiver = demand_here_receiver(selected, body.instance, arguments, expr.at);
