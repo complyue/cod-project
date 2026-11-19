@@ -1,8 +1,10 @@
 # CoD exception control and regional cleanup
 
-Design revision: 121 · Recorded: 2026-11-19 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; full-scope control and live lexical input contracts; current implementation availability is recorded in the source capability reference.
+Design revision: 124 · Recorded: 2026-11-19 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; full-scope control and live lexical input contracts; current implementation availability is recorded in the source capability reference.
 
 ## Design authority
+
+- **Case completion.** [H-CASE-FALLBACK-20261119](../CHANGELOG.md#h-case-fallback-20261119) and [D-07-CASE](DomainLanguageDesign.md#case-expressions-and-branch-local-variables) require the compiler to check for a final unguarded fallback in a value-producing case. The fallback can explicitly throw an application failure under ordinary D-17 rules. D-17r124 retains existing callable-return and cleanup contracts.
 
 - **Lexical yield in a full scope.** [H-GENERATOR-RECEPTION-20261119](../CHANGELOG.md#h-generator-reception-20261119) updates [D-17-FULL-SCOPE](DesignAuthorityRegistry.md#d-17-full-scope) at r121. D-18-HERE and D-29-GENERALIZED-FOR distinguish calling a lexically available here parameter from the full scope’s own return and cleanup. Check the two exits in the [nested generator example](RangedForAndGenerators.md#a-generator-declaration-introduces-a-here-parameter-named-yield). P-564–P-566 and the existing exception contracts continue for their covered scopes.
 

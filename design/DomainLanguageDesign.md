@@ -1,12 +1,14 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 178
+Discussion revision: 186
 
-Recorded: 2026-11-18
+Recorded: 2026-11-19
 
 Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
+
+- **Case expressions and branch-local variables.** [D-07-CASE](DesignAuthorityRegistry.md#d-07-case) r186 specifies the [source rules and examples](#case-expressions-and-branch-local-variables). [H-CASE-CONTRACT-20261119](../CHANGELOG.md#h-case-contract-20261119) covers selection and lexical control. [H-CASE-FALLBACK-20261119](../CHANGELOG.md#h-case-fallback-20261119) requires an explicit final fallback for a value-producing case. P-625/P-626 connect observable selection, binding, effect order and result delivery to C-10/C-65/C-72 and charter §§3.1–3.3/4.3/8.1. Check single evaluation, effects on a miss or fallthrough, owner validity, nested control, cleanup, a partial void case, and missing, guarded or escaping fallbacks. Rich coverage diagnostics follow the [compiler-stage policy](../applications/cod-booter/README.md#diagnostics-by-compiler-stage). Representation, new mutation operations and new owner proofs are outside scope.
 
 - **Functor classification.** [H-HERE-FUNCTOR-20261118](../CHANGELOG.md#h-here-functor-20261118) records the receiver-bound functor in [D-18’s here-callable inventory](CallableViewsAndCaptures.md#forms-of-here-callable). D-07-FUNCTORS r178/P-605–P-606 uses the bounded lifetime rule to preserve receiver ownership and access. Accept the two argument bindings in DL-01 under the matching predicate contract. Selection timing, competing overloads and implementation qualification remain open.
 
@@ -125,7 +127,7 @@ The sixteen topics contain confirmed local propositions and open implementation/
 
 **Question:** What does the language define and preserve: domain types and values, method/program graphs, ontology relations, or which initial subset of them?
 
-- Preserve strict branded identity under H-125 and independent compile-time UoM identities under H-128; structural layout alone does not establish equivalence. Discuss sum constructors and product fields, recursive types, pattern matching/exhaustiveness, equality and admissible regional fields. Keep semantic type identity separate from physical layout.
+- Preserve strict branded identity under H-125 and independent compile-time UoM identities under H-128; structural layout alone does not establish equivalence. Use the named sum constructors and [case contract](#case-expressions-and-branch-local-variables) for ordinary alternatives and advisory coverage. Recursive types, equality and admissible regional fields retain their own scopes. Keep semantic type identity separate from physical layout.
 - Distinguish ordinary ADTs from indexed GADTs. Specify the initial role of type parameters, kind checking, inference and type equivalence without silently treating the full long-term type theory as already selected.
 - Decide which ontology relations and constraints are first-class, what is explicitly asserted versus inferred, and how independently defined domain concepts can be mapped. Similar field layouts do not establish conceptual equivalence.
 - Explain how domain signatures can be loaded and checked without requiring every domain constructor to become a fixed host-language enum. Distinguish published definitions from parser/solver scratch state.
@@ -312,9 +314,108 @@ ref next:Receipt in batch = make Skipped(7u64) in batch;
 # make Skipped in batch {} rejects here, even though Skipped has no fields.
 ```
 
-A constructor list makes the listed names explicit. For `using "model.cod" Receipt {Accepted};`, ordinary public-source fallback can still find Skipped at lower priority. That implicit selection grants no extension permission. Selecting a subset leaves the full set of alternatives intact for type checking and exhaustiveness.
+A constructor list makes the listed names explicit. For `using "model.cod" Receipt {Accepted};`, ordinary public-source fallback can still find Skipped at lower priority. That implicit selection grants no extension permission. Selecting a subset leaves the full set of alternatives intact for type checking and coverage diagnostics.
 
 Haskell 2010 spells the analogous import `import Model (Receipt(Accepted))` or `import Model (Receipt(..))`. Within explicit lists, bare `Receipt` selects the type alone. Haskell’s wildcard also covers exported record field names. CoD uses its ordinary `export Receipt;` to publish all constructors and their overloads. [Haskell 2010 Report, §§5.2–5.3](https://www.haskell.org/onlinereport/haskell2010/haskellch5.html)
+
+#### Case expressions and branch-local variables
+
+The source form is `case subject of { (pattern) | guard -> { body }; ... }`. A guard is optional. Parentheses delimit the arm header and preserve the subject’s established result mode. Parentheses written around the subject itself follow ordinary expression rules. Ordinary statements may appear between arms. The arrow after the pattern and optional guard identifies an arm at this level. Parenthesized expressions inside statements, and arrows inside nested constructs, retain their ordinary grammar. After `->`, single braces group statements in the enclosing callable and double braces invoke a full scope. An empty header `()` and a wildcard `(_)` accept any subject without binding it, including a null pointer. A written bare `|` before `->` supplies no predicate. Thus `() | -> {{ ... }}` is a catch-all with a local return. With `() | ready() -> {{ ... }}`, call ready once when reached and enter the body only if it returns true. A trailing here argument uses `=>` and has its own handoff contract. The seed [expression grammar](../cod/lang_syntax.hh) provides `if` with `else`. General case expressions await seed compiler implementation. Haskell’s case expressions supply the precedent for constructor patterns, source order and guards over pattern-bound names. [Haskell 2010 §3.13](https://www.haskell.org/onlinereport/haskell2010/haskellch3.html#x8-460003.13)
+
+Using the Receipt declaration above, suppose `latest` is writable storage independent of the receipt fields. In this example `audit(n)` records n and returns bool.
+
+```cod
+proc classify(ptr r:Receipt in O, latest:u64 in O) -> u64 where {owner O} {
+    return case r of {
+        (null) -> { 0u64 };
+        (Accepted { val n <- id; latest <- id; }) | audit(n) -> { n };
+        (Accepted) -> { latest };
+        (_) -> { 0u64 };
+    };
+}
+```
+
+**Entry order.** Evaluate the subject once. An independent bits value retains its bits. A borrowed subject retains its selected target, actual owner and locator. Rebinding the source variable cannot redirect this selection. Try headers in source order. A constructor test uses the identity and active alternative established by `isa`. Overload selection, initializer arguments and their effects play no part. Only after the test succeeds may the spec receive fields of that alternative. Check the spec as a group using ordinary field-label, initialization, owner/access and overlap rules, then evaluate the optional Boolean guard once. A pattern miss or a false guard skips that body and resumes at the next source item. An ordinary statement reached between arms executes under the enclosing lexical permissions. An unguarded match or true guard enters the body once. Normal body completion finishes the entire case immediately. An executed `fallthrough;` leaves the arm and resumes at the next source item. Each later header runs its own test, reception and guard if reached.
+
+**Branch-local variables and effects.** A declaration in the spec introduces a branch-local variable. Its name is visible to this guard and body, and remains unavailable to statements between arms, sibling arms and code after the case. Simultaneous receiving items resolve their inputs and existing destinations in the preceding environment. Reusing the same local spelling in a sibling introduces a fresh binding. As with loop controls, a header can introduce its pattern bindings with either body spelling. A single-brace arm body forbids direct variable declarations, including through nested ordinary groups. A double-brace body may declare new variables local to that invocation. Its new declarations become visible in ordinary source order inside the body; the guard cannot see them. The arm has direct access to its enclosing lexical context, with the enclosing callable’s ordinary effect permissions and control destinations. Single braces supply no independent callable, cleanup scope, or implicit storage owner. Ordinary exits end the branch bindings. Escaping references, including deferred uses, need their own lifetime proof.
+
+A constructor mismatch in the example skips both reception and `audit`. If Accepted carries id 7 and `audit(7u64)` logs a rejection and returns false, reception has already written 7 to `latest`. The log and the write persist. The next Accepted arm can read the current outer slot. A guard or receiving operation that raises propagates the failure with its ordinary checked obligations. The compiler must preserve the observable order and frequency of attempted operations. A programmer who wants a write conditional on the guard puts the write in the body.
+
+**Fields and live references.** `(Accepted)` tests only the tag. `(Accepted { val n <- id; ptr previous = prior; })` also fetches the id bits and binds the independent nullable reference slot to the selected prior target in its actual owner. A null prior is a valid received value. Omitted fields need no payload read. A readiness proof for the tag alone cannot authorize reading unfinished fields. A branch-local ref to an inline field needs the containing target and the field’s active alternative to remain valid at each use. A saved independent reference to another object retains that object’s own lifetime requirements. A guard may rebind an outer slot or call a procedure; use normal flow invalidation if it changes a necessary fact. The match supplies no snapshot of a graph. Further discrimination of a field can already be written as a nested case. The baseline uses an inner case for nested matching. It specifies no recursively nested field-pattern shorthand.
+
+**Types, assertions and coverage.** Typed heads such as `(ref n:Node in O)` test a present target’s membership under the existing nominal/conformance rules, then bind it with the proven owner and access. A null or nonmember can proceed to the next arm. A receiver annotation inside a constructor’s field spec has its ordinary declaration/receiving meaning. Readiness, owner, readonly or lifetime violations are static errors. For a value subject, `(val n:u8)` can match an actual u8. It performs no narrowing conversion on a u64. For scalar alternatives, built-in Boolean and fixed-width integer literals use typed value matching. Numeric pattern extensions preserve unit and fraction type identity and the independent D-16 conversion rules.
+
+An explicit `x : T` in the subject, guard or body is an ordinary expression. For example, inside an arm receiving an abstract Entity ref, `ref n = x : Node in O;` may raise TypeAssertionFailedError. A proved impossible assertion rejects statically. Nullable-to-ref requires a prior non-null fact. For example, given a nullable Entity slot p, `p isa Node` as a guard tests membership and establishes non-nullness on success. A later rebind of p requires fresh evidence for that slot. An ordinary numeric `x : u8` retains the specialization-based conversion and potential-loss rules. A failed `assert predicate;` raises AssertionFailedError under its own contract. None of these exceptions implicitly retries matching. [Type tests and assertions](SymbolicDynamicScope.md#expression-type-conversion-and-assertion)
+
+**Coverage diagnostics.** A void case may be partial, including over an open abstract type. A value-producing case requires the explicit fallback below. Both can benefit from diagnostics about omitted constructors or null, guards that can decline, and shadowed arms. A partial import leaves the declared sum intact. The [compiler-wide diagnostic policy](../applications/cod-booter/README.md#diagnostics-by-compiler-stage) assigns additional coverage analysis to the CoD-written compiler. Definite initialization, owner validity and sound field access remain mandatory.
+
+Join normal arm results under the [conditional result rules](ConstructionAndAcquisition.md#conditional-results). A single-brace `return` exits the enclosing callable. A double-brace `return v;` supplies this arm’s result after its own cleanup, and execution continues with the case’s consumer. A value-producing double-brace body needs an explicit local return under [ordinary full-scope rules](ExceptionControl.md#full-scopes-as-immediate-ordinary-calls); a tail expression alone supplies no implicit value. Do not return a reference to that invocation’s fresh storage. A reference to a sufficiently long-lived outer target retains its ordinary owner. An early case break also supplies a result. Paths that leave by an enclosing return, throw or arm fallthrough contribute no result to the join.
+
+**Required fallback for a value-producing case.** Require a final unguarded wildcard arm `(_) -> { ... }`. The existing empty catch-all `()` is equivalent, including its empty-guard spelling `() | ->`. Either arm body spelling is available. A guard with a predicate can decline and cannot satisfy this requirement. Apply the same structural check when every declared constructor or both Boolean literals appear earlier. The compiler needs no proof about arbitrary predicates or completeness of a hierarchy.
+
+The fallback must deliver the common result on normal completion, for example by a single-brace tail, `break value;`, or double-brace local return. It may also leave by an ordinary nonlocal exit such as an explicit throw. Reject a `fallthrough;` targeting the end of this value case from its final arm. A fallthrough in an inner case belongs to that inner case. Existing type, lifetime, callable-return and checked failure rules apply. A void case can reach the end normally without a fallback.
+
+```cod
+proc fee(expedited:bool) -> u64 {
+    return case expedited of {
+        (true) -> { 5u64 };
+        (_) -> { 0u64 };
+    };
+}
+```
+
+The return statement consumes the u64 result. Removing the last arm rejects fee. Replacing its header with `(_) | ready() ->` or its body with `{ fallthrough; }` also rejects. Calling `fee(false);` and discarding its successful result leaves the case contract intact. Likewise, a case with a u64 result used directly as an expression statement needs a fallback. In a void use such as `case expedited of { (true) -> { send_notice(); }; };`, assuming send_notice returns void, false simply reaches the following statement.
+
+**Statements between arms and fallthrough.** The case walks its contents in source order until an arm completes it or control leaves through an ordinary exit. A pattern miss, a false guard and a body executing `fallthrough;` all resume with the first item after that arm. Each intervening statement executes once on a path that reaches it. An arm that completes normally skips the rest of the case, even when the arm produces void. A fallthrough path contributes no value to the case result.
+
+```cod
+# receipt is a nullable Receipt. The procedures below record or process it.
+case receipt of {
+    (null) -> { note_missing(); fallthrough; };
+    count_attempt();
+    (Accepted { val n <- id; }) | can_ship(n) -> { ship(n); };
+    log_fallback();
+    () -> { manual_review(); };
+};
+```
+
+| Subject and guard | Calls in order |
+| --- | --- |
+| null | `note_missing()`, `count_attempt()`, `log_fallback()`, `manual_review()` |
+| Accepted with id 7, guard true | `count_attempt()`, `can_ship(7)`, `ship(7)` |
+| Accepted with id 7, guard false | `count_attempt()`, `can_ship(7)`, `log_fallback()`, `manual_review()` |
+| Skipped | `count_attempt()`, `log_fallback()`, `manual_review()` |
+
+Each header establishes its own bindings and refinements. In the example `n` exists for the Accepted guard and body. Both intervening statements can also run with a null receipt, so neither may use `n` or assume an Accepted receipt. A statement may change outer state read by the next guard. If it throws, ordinary exception propagation applies at that statement.
+
+Only an arm body can execute `fallthrough;`. A guard or an ordinary statement between arms cannot use it. In a single-brace body an ordinary nested `if` may choose the transfer on one path. Other paths can still complete the case. A nested case handles its own arms. A helper or independently nested full-scope callable cannot transfer to its caller’s arm. The model needs no following arm as a jump destination. A final arm may fall through to the end of a void case. The required value fallback must complete or leave through an ordinary exit.
+
+A directly attached `-> {{ ... }}` arm runs its full-scope cleanup on exit. A local `return v;` supplies the completed arm’s result. An explicit `fallthrough;` requests continued scanning after cleanup succeeds. For example, `() -> {{ defer audit(); fallthrough; }};` runs audit before the intervening statement. An escaping cleanup exception follows ordinary propagation. A local cleanup that explicitly returns and successfully delivers a replacement result completes this arm under the ordinary full-scope rule. A fallthrough request alone sets no callable return value. Independently nested full scopes and separately called helpers retain their own control boundaries.
+
+**Case scope for break and continue.** On entry to the case body, the case shadows both outer control destinations. It supplies a break destination for the case expression and blocks lookup of an outer continue destination. Resolve the construct that owns the statement lexically before checking its operand. This is a contextual source restriction. A loop or supplied single-brace here body nested in an arm establishes its own break and continue destinations under the [existing here control rules](CallableStorageAndHereAccess.md#break-and-continue-in-a-single-brace-here-body). An ordinary nested `if` introduces neither.
+
+```cod
+# items() and parts(n) are generators with void feedback.
+for val n <- items() {
+    val score <- case n of {
+        (0u64) -> { break 10u64; };
+        () -> {
+            for val part <- parts(n) {
+                if (part == 0u64) { continue; }
+                observe(part);
+            }
+            if (n == 1u64) { break 20u64; }
+            30u64
+        };
+    };
+    consume(score);
+    continue;
+}
+```
+
+For n equal to zero, `consume(10u64)` runs in the current outer iteration. For n equal to one, the nested traversal runs and `consume(20u64)` follows. Placing either `continue;` or `continue value;` directly in either arm is a source error, even when the enclosing loop accepts the corresponding feedback. The inner continue belongs to parts, and the final continue belongs to items. The same boundary applies to ordinary statements between arms. A nested case establishes its own boundary. Forwarding or inlining a here body preserves its original control destinations.
+
+In a single-brace arm, `break v;` can finish the case from any ordinary nested statement group. Evaluate v once and join this result with the other value-producing case paths under the ordinary conditional result rules, including mode, owner and lifetime. A bare `break;` is a void completion. A value/void mismatch rejects at the chosen case, even if an outer target could accept the exit. Throwing during operand evaluation follows ordinary exception control. Run cleanup for scopes actually exited before delivering the result. The enclosing callable’s return and deferred actions keep their ordinary destinations. A break in an ordinary statement between arms likewise completes the case. Case completion itself registers no return in the enclosing callable. Fallthrough requires an active arm and resumes the scan. Double-brace arms retain their local return and the specific fallthrough permission above. There is no general transfer across an independently invoked full scope.
 
 #### Functor receivers and callback arguments
 

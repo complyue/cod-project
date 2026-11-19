@@ -1,5 +1,45 @@
 # Changelog
 
+## 2026-11-19 — Require a wildcard fallback for value-producing cases
+
+<a id="h-case-fallback-20261119"></a>
+**H-CASE-FALLBACK-20261119.** The project user specified “静态要求有 (_) -> { ... } 兜底，让程序作者静态满足” in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-19 (America/Los_Angeles) while discussing value-case exhaustion. D-07r186, D-17r124, registry r955 and P-625/P-626 close K-CASE-COMPLETION-20261119. A final unguarded catch-all supplies the result or explicitly exits. The existing empty header is equivalent. Partial void cases retain advisory coverage. This supersedes the candidate runtime error at `f8e67dfcac92c446f3e0c29c7e42dee060f4c823:design/DomainLanguageDesign.md`, “Reaching the end of the case”.
+
+## 2026-11-19 — Review static value-case completion
+
+<a id="k-case-completion-20261119"></a>
+**K-CASE-COMPLETION-20261119.** The project user asked in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) whether a value-less end can always be rejected statically. D-07r185, D-17r123 and registry r954 reopen only the exhaustion policy from `8e32cdda8ae87052d8ddb865940494ecd70b66ce:design/DomainLanguageDesign.md`, “Reaching the end of the case”. The static proposal rejects unproved completion and keeps partial void cases. The candidate runtime error has no current implementation authority.
+
+## 2026-11-19 — Identify the consumer of a case result
+
+<a id="k-case-consumer-20261119"></a>
+**K-CASE-CONSUMER-20261119.** The user identified `return` as the consumer in `return case ...;`. D-07r184/registry r953 distinguish that use from discarding a successful call result and from evaluating a case directly as an expression statement. This editorial continuation preserves the result join and exhaustion rule at `a8d73fae00f7cd2458174c854dbdfb566d17bc3b:design/DomainLanguageDesign.md`, “Reaching the end of the case”.
+
+## 2026-11-19 — Confirm case expressions and lexical control
+
+<a id="h-case-contract-20261119"></a>
+**H-CASE-CONTRACT-20261119.** The project user answered “同意。 case-of 整体上还有没有什么quirks？ 没有的话可以确认了，提交推送同步” in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-19 (America/Los_Angeles), approving the case break/continue boundary and authorizing final confirmation after review. H-CASE-LEXICAL, H-CASE-ARMS, H-CASE-FLOW and H-CASE-EXITS below supply the earlier decisions. The review found no conflicting source requirement. D-07r183, registry r952 and P-625/P-626 cover the bounded case contract and its value path. The previously proposed void/value exhaustion rule is included. The design review assigned the name CaseMatchError under the existing unchecked naming convention, indexed in D-17r122. Compiler implementation, extended diagnostic analysis in the seed and recursive field-pattern shorthand are outside this checkpoint.
+
+## 2026-11-19 — Confirm cleanup on fallthrough from a full-scope arm
+
+<a id="h-case-exits-20261119"></a>
+**H-CASE-EXITS-20261119.** The project user replied “认同” to the direct double-brace arm fallthrough and cleanup rule in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-19 (America/Los_Angeles). The user then proposed early single-brace `break xxx;`, a case scope shadowing outer loop destinations, and asked whether case-level continue should be prohibited. D-07r182 and registry r951 distinguish the confirmed full-scope rule from the proposed case exit contract.
+
+## 2026-11-19 — Define source-ordered case execution
+
+<a id="h-case-flow-20261119"></a>
+**H-CASE-FLOW-20261119.** The project user specified in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-19 (America/Los_Angeles) that “在 `->` branch 之间还允许有代码，fallthrough 只是继续执行后续代码，下个 branch 仍要判断” and “只有 arm branch 内部允许 fallthrough，如果不fallthrough，就会提前完成整个 `case ... of`”. D-07r181 and registry r950 record source order, intervening statements and normal arm completion. The result on exhaustion and transfer across a direct double-brace arm’s callable boundary are outside this confirmation.
+
+## 2026-11-19 — Set case coverage and arm-scope boundaries
+
+<a id="h-case-arms-20261119"></a>
+**H-CASE-ARMS-20261119.** The project user specified in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-19 (America/Los_Angeles) that “diagnostics 尽量提示就可以，不做严格保障” for case coverage, especially over open abstract types. The user requested `() | -> {{ ... }}`, body-local declarations only in the full scope, and “其中的 `return` 用于结束分支”. D-07r180 and registry r949 record those decisions. D-17’s local callable return and cleanup supply the full-scope contract. The runtime no-match outcome and fallthrough target remain proposals.
+
+## 2026-11-19 — Explore case matching with branch-local variables
+
+<a id="h-case-lexical-20261119"></a>
+**H-CASE-LEXICAL-20261119.** The project user requested Haskell-like `case ... of`, branch-local variables, guards, type assertions and a comparison with Go fallthrough in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-19 (America/Los_Angeles). The user specified “放开授权 "direct lexical access" ，即使分支最终不匹配，也允许 side-effects”. D-07r179 records that scoped decision. The remaining matching and control proposal is under discussion. Constructor baseline: `584391fbe09cac9d745050964a61ca9dbbe9b315:design/DomainLanguageDesign.md`, “Named sum constructors”.
+
 ## 2026-11-19 — Assign diagnostic work across compiler stages
 
 <a id="h-compiler-diagnostics-20261119"></a>
