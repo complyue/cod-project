@@ -87,6 +87,15 @@ runner.CASES = {
         'proc run(flag:bool)->u64{defer{try{if(flag){return 7u64;}else{};}finally{forward(){'
         'if returning (){behave @print(1u64);}else{behave @print(2u64);}};};return 9u64;};}'
         'behave @print(run(true));behave @print(run(false));',0,'1\n7\n2\n9\n',''),
+    'forwarded_group_binds_prepared_supplier_bits': (IO+
+        'func relay(here body()->void)->void{body();}func forward(here body()->void)->void{relay(body);}'
+        'proc run()->u64{defer{forward(){if returning (val saved:u64){behave @print(saved);}};};return 7u32;}'
+        'behave @print(run());',0,'7\n7\n',''),
+    'group_finally_binds_protected_return_separately_from_feedback': (IO+
+        'func relay(here body()->u32)->void{body():void;}'
+        'proc run()->u64{defer{relay(){try{return 21u64;}finally{'
+        'if returning (val saved:u64){behave @print(saved);return 25u64;}};1u32};};return 7u64;}'
+        'behave @print(run());',0,'21\n25\n',''),
     'group_finally_observes_supplier_return_without_observing_feedback': (IO+
         'func relay(here body(taken:bool)->void,flag:bool)->void{body(flag);}'
         'proc run(flag:bool)->u64{defer{relay(flag)(taken)=>{try{if(taken){return 7u64;}else{continue;};}finally{'

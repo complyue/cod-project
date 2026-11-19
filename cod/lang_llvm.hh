@@ -387,9 +387,17 @@ class LLVMEmission {
     if (!suspended_return_.present) throw std::logic_error("return inspection has no suspended completion");
     return b_.CreateOr(suspended_return_.present, load(completion_.has_return));
   }
+  llvm::StructType *here_return_header() {
+    return llvm::StructType::get(context_, {here_transfer_, scalar_});
+  }
+  llvm::Value *protected_return_value() {
+    auto *packet = b_.CreateLoad(outcome_, b_.CreateStructGEP(here_transfer_, here_destination_, 1));
+    return b_.CreateExtractValue(packet, 0);
+  }
   llvm::Value *observed_return_value() {
     if (!suspended_return_.value) throw std::logic_error("return binding has no suspended result");
-    return b_.CreateSelect(load(completion_.has_return), load(completion_.value), suspended_return_.value);
+    auto *prepared = here_destination_ ? protected_return_value() : load(completion_.value);
+    return b_.CreateSelect(load(completion_.has_return), prepared, suspended_return_.value);
   }
   void fail_path(ExceptionCategory category, const Location &at, llvm::Value *fatal = nullptr) {
     save_abrupt(outcome(empty_scalar(), integer(exception_id(category)), integer(site(at)), fatal ? fatal : null_pointer()));
@@ -577,6 +585,11 @@ class LLVMEmission {
     auto *value = b_.CreateInsertValue(llvm::UndefValue::get(here_), invoke, 0);
     if (!entry.group && body.places.empty() && body.owners.empty()) return b_.CreateInsertValue(value, null_pointer(), 1);
     auto *activation = slot(entry.activation, "here.activation");
+    const auto &method = program_->methods[program_->instances[body.instance].method];
+    if (method.here_group && method.here_group->binds_return_payload) {
+      b_.CreateStore(llvm::Constant::getNullValue(here_transfer_), activation);
+      b_.CreateStore(observed_return_value(), b_.CreateStructGEP(here_return_header(), activation, 1));
+    }
     for (size_t i = 0; i < body.places.size(); ++i) {
       const auto &place = *body.places[i];
       auto *address = emit_expression(place, Projection::target);
@@ -944,9 +957,11 @@ class LLVMEmission {
     Control action{control_, block("cleanup.completed")};
     control_ = &action;
     const auto outer_return = suspended_return_;
+    auto *prepared = pending.value;
+    if (here_destination_) prepared = outer_return.value ? protected_return_value() : nullptr;
     suspended_return_ = {
         outer_return.present ? b_.CreateOr(outer_return.present, pending.has_return) : pending.has_return,
-        outer_return.value ? b_.CreateSelect(pending.has_return, pending.value, outer_return.value) : pending.value};
+        outer_return.value ? b_.CreateSelect(pending.has_return, prepared, outer_return.value) : prepared};
     emit();
     suspended_return_ = outer_return;
     if (reachable()) b_.CreateBr(action.exit);
@@ -1963,10 +1978,10 @@ class LLVMEmission {
     const auto handed_owners = inputs.here_input_owners;
     if (layout.captures || layout.retained || layout.declaration_context || layout.destination || layout.accepts_here)
       throw std::logic_error("unexpected parameter role in supplied here body");
-    // The first field is the transfer record, so its address also identifies
-    // the originating call activation across every forwarding receiver.
+    // The activation starts with the transfer record. Its address identifies
+    // the originating call across every forwarding receiver.
     std::vector<llvm::Type *> fields;
-    if (layout.here_group) fields.push_back(here_transfer_);
+    if (method.here_group) fields.push_back(method.here_group->binds_return_payload ? here_return_header() : here_transfer_);
     fields.insert(fields.end(), places, scalar_);
     fields.insert(fields.end(), layout.owners - handed_owners, b_.getPtrTy());
     auto *activation = llvm::StructType::get(context_, fields);
@@ -2079,6 +2094,8 @@ class LLVMEmission {
     if (call.here_group) here_destination_ = function->getArg(call.here_index());
     if (method.here_group && method.here_group->supplier_return.has_value())
       suspended_return_.present = b_.getInt1(*method.here_group->supplier_return);
+    if (method.here_group && method.here_group->binds_return_payload)
+      suspended_return_.value = b_.CreateLoad(scalar_, b_.CreateStructGEP(here_return_header(), here_destination_, 1));
     contexts_.clear();
     for (const auto &context : prepared.contexts) contexts_.push_back({&context.operations(), context.instance});
     if (call.captures) {

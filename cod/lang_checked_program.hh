@@ -413,6 +413,7 @@ struct CheckedMethod {
     std::optional<Type> supplier;
     Type receiving_call;
     std::optional<bool> supplier_return;
+    bool binds_return_payload = false;
     bool operator==(const HereGroupResults &) const = default;
   };
   std::optional<HereGroupResults> here_group;

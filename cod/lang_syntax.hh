@@ -310,7 +310,7 @@ struct Expression {
   std::shared_ptr<ReceivingHeader> receiving = {};
   // A supplied body is stored after the written operands. It binds slot one.
   bool has_here_body() const { return !children.empty() && children.back()->kind == Kind::here_body; }
-  bool inspects_return() const;
+  bool inspects_return(bool binds_payload = false) const;
 };
 using Expr = std::unique_ptr<Expression>;
 
@@ -402,10 +402,10 @@ struct Form {
   }
 };
 
-inline bool Expression::inspects_return() const {
-  if (kind == Kind::return_test) return true;
-  if (definition && definition->supplied_group && definition->body->inspects_return()) return true;
-  return std::ranges::any_of(children, [](const auto &child) { return child->inspects_return(); });
+inline bool Expression::inspects_return(bool binds_payload) const {
+  if (kind == Kind::return_test) return !binds_payload || !binding.empty();
+  if (definition && definition->supplied_group && definition->body->inspects_return(binds_payload)) return true;
+  return std::ranges::any_of(children, [&](const auto &child) { return child->inspects_return(binds_payload); });
 }
 
 inline bool swap_operation(std::string_view op) { return op == "<=>" || op == "<->"; }

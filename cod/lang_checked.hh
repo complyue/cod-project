@@ -5659,7 +5659,12 @@ class ScalarChecker {
   }
   ScalarReturnPattern scalar_return_pattern(const Expression &pattern, const TypeEvidenceState &state) const {
     const auto annotation = pattern.annotation ? std::optional{evidence_annotation(*pattern.annotation, state)} : std::nullopt;
-    const bool borrowed = state.borrowed_return || (state.method && program_.methods[*state.method].result.borrowed());
+    bool borrowed = state.borrowed_return != nullptr;
+    if (state.method) {
+      const auto &method = program_.methods[*state.method];
+      if (method.here_group) return scalar_return_pattern(pattern, annotation, method.here_group->supplier, false, state.required);
+      borrowed |= method.result.borrowed();
+    }
     return scalar_return_pattern(pattern, annotation, state.invocation_result, borrowed, state.required);
   }
   struct ConditionalEvidence {
@@ -9571,6 +9576,7 @@ class ScalarChecker {
         implementation_gap(body.at, "single-brace here completion with a non-scalar supplier or receiving result");
       group = CheckedMethod::HereGroupResults{supplier ? supplier->result.type : std::nullopt, *receiving.type, {}};
       if (definition.body->inspects_return()) group->supplier_return = false;
+      group->binds_return_payload = definition.body->inspects_return(true);
     }
     const auto &parameters = definition.parameters;
     if (parameters.size() != contract.parameters.size()) fail(body.at, "here body header arity does not match the selected contract");
@@ -10306,11 +10312,11 @@ class ScalarChecker {
       operation.predicate = constant_predicate(operation.integer);
       break;
     case K::return_test: {
-      if (checking_method_->here_group && !expr.binding.empty())
-        implementation_gap(expr.at, "return payload inspection through a supplied here group");
       const auto annotation = expr.annotation ?
           std::optional{substitute(*expr.annotation, *checking_method_, instance->substitutions, true)} : std::nullopt;
-      const auto pattern = scalar_return_pattern(expr, annotation, instance->result.type, instance->result.borrowed(), true);
+      const auto &group = checking_method_->here_group;
+      const auto &inspected = group ? group->supplier : instance->result.type;
+      const auto pattern = scalar_return_pattern(expr, annotation, inspected, !group && instance->result.borrowed(), true);
       operation.type = Type::boolean;
       operation.operand_type = pattern.binding.value_or(Type::void_type);
       operation.return_pattern_matches = pattern.matches;
