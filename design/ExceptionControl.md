@@ -1,10 +1,10 @@
 # CoD exception control and regional cleanup
 
-Design revision: 124 · Recorded: 2026-11-19 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; full-scope control and live lexical input contracts; current implementation availability is recorded in the source capability reference.
+Design revision: 126 · Recorded: 2026-11-19 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; full-scope control and live lexical input contracts; current implementation availability is recorded in the source capability reference.
 
 ## Design authority
 
-- **Case completion.** [H-CASE-FALLBACK-20261119](../CHANGELOG.md#h-case-fallback-20261119) and [D-07-CASE](DomainLanguageDesign.md#case-expressions-and-branch-local-variables) require the compiler to check for a final unguarded fallback in a value-producing case. The fallback can explicitly throw an application failure under ordinary D-17 rules. D-17r124 retains existing callable-return and cleanup contracts.
+- **Case completion.** [H-CASE-COVERAGE-20261119](../CHANGELOG.md#h-case-coverage-20261119) and [D-07-CASE](DomainLanguageDesign.md#case-expressions-and-branch-local-variables) permit proven value-case coverage or an explicit fallback. [H-CASE-THROW-20261119](../CHANGELOG.md#h-case-throw-20261119) confirms `() -> throw;` constructs a fresh unchecked UnexpectedCaseError at the written arm with no implicit cause. In `() -> { throw; };`, a lexically available catch supplies its incoming tip. D-17r126 preserves ordinary construction, propagation and cleanup.
 
 - **Lexical yield in a full scope.** [H-GENERATOR-RECEPTION-20261119](../CHANGELOG.md#h-generator-reception-20261119) updates [D-17-FULL-SCOPE](DesignAuthorityRegistry.md#d-17-full-scope) at r121. D-18-HERE and D-29-GENERALIZED-FOR distinguish calling a lexically available here parameter from the full scope’s own return and cleanup. Check the two exits in the [nested generator example](RangedForAndGenerators.md#a-generator-declaration-introduces-a-here-parameter-named-yield). P-564–P-566 and the existing exception contracts continue for their covered scopes.
 
@@ -115,6 +115,7 @@ For currently implemented categories, the [compiler descriptors](../cod/lang_exc
 | RegionCapacityExceededError | Unchecked | Category/vocabulary; source regional construction remains outside the current compiler slice |
 | InvalidCapacityError | Unchecked | Category/vocabulary; source regional construction remains outside the current compiler slice |
 | IndexOutOfBoundsError | Unchecked | Bounds checks for indexed access. Cause-link absence uses ordinary pointer rules. |
+| UnexpectedCaseError | Unchecked, freshly constructed by an explicit throwing catch-all arm | Design only |
 | MissingReturnError | Unchecked | Required-value fallthrough |
 | RethrownException | Checked standard wrapper; requires a checked cause | Design only; constructor, trace and ownership integration unimplemented |
 | RethrownError | Unchecked standard wrapper; requires an unchecked cause | Design only; constructor, trace and ownership integration unimplemented |

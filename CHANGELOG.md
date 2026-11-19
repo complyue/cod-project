@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-19 — Confirm the explicit throwing case fallback
+
+<a id="h-case-throw-20261119"></a>
+**H-CASE-THROW-20261119.** The project user answered “确认” in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-19 (America/Los_Angeles), following the comparison of `() -> throw;` and `() -> { throw; };`. D-07r188, D-17r126 and registry r957 record the explicit construction of unchecked UnexpectedCaseError in the first form and propagation of the lexical catch tip in the second. The static value-case completion rule is recorded with H-CASE-COVERAGE-20261119 below. Seed implementation is separate.
+
+## 2026-11-19 — Permit statically exhaustive cases and delimit arm headers
+
+<a id="h-case-coverage-20261119"></a>
+**H-CASE-COVERAGE-20261119.** The project user specified “能够静态证明 exhaustiveness 的还是不要求吧，比如 bool，sum type 确实匹配全了的情况” and identified arm headers as direct items of a case body in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-19 (America/Los_Angeles). D-07r187, D-17r125 and registry r956 narrow H-CASE-FALLBACK-20261119 at `37be4579412a856866f4fddfde5a7c04e76a6bc5:design/DomainLanguageDesign.md`. A value case needs a catch-all when completion is unproved. The user also proposed `() -> throw;` for an explicit UnexpectedCaseError. Its distinction from ordinary bare throw is recorded for review.
+
 ## 2026-11-19 — Require a wildcard fallback for value-producing cases
 
 <a id="h-case-fallback-20261119"></a>
