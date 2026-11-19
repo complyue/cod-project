@@ -59,6 +59,13 @@ runner.CASES = {
         'proc relay(here body()->void)->void{defer behave @print(42u64);'
         'try{body();}finally{behave @print(41u64);return;};}'
         'proc run()->u64{relay(){return 7u64;};return 0u64;}behave @print(run());',0,'41\n42\n7\n',''),
+    'return_inspection_calls_known_forwarded_group': (IO+
+        'func relay(here body()->void)->void{body();}'
+        'func forward(here body()->void)->void{relay(body);}'
+        'proc run()->void{defer{if returning (){forward(){};behave @print(6u64);}};return;}run();',0,'6\n',''),
+    'return_inspection_calls_group_with_protected_return': (IO+
+        'proc relay(here body()->void)->void{try{body();}finally{behave @print(4u64);return;};}'
+        'proc run()->u64{defer{if returning (){relay(){return 9u64;};}};return 1u64;}behave @print(run());',0,'4\n9\n',''),
     'here_group_local_finally_cancels_return_before_catch': (IO+
         'using "std:exceptions" MissingReturnError;func missing()->u64{}'
         'func relay(here body()->void)->void{body();}'

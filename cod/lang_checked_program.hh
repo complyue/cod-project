@@ -261,6 +261,7 @@ struct CallEffects {
   std::set<size_t> scope_checked_failures;
   bool breaks_here_call = false;
   bool returns_from_supplier = false;
+  bool propagates_here_transfer = false;
   bool protected_defer_failure = false;
 };
 enum class OwnerMatch { satisfied, unknown, mismatch };
@@ -400,6 +401,8 @@ struct CheckedMethod {
   std::vector<size_t> retained_types;
   std::optional<size_t> parent;
   std::optional<CheckedHereContract> here;
+  // Concrete callback supplied to a receiver or forwarded to it by its caller.
+  std::optional<size_t> here_argument_instance;
   struct HereGroupResults {
     std::optional<Type> supplier;
     Type receiving_call;

@@ -203,10 +203,15 @@ struct ExceptionFacts {
 enum class CleanupBoundary { ordinary_finally, deferred };
 
 struct Completion {
-  // Normal, enclosing return, terminal numeric failure, or an intrinsic category.
+  static constexpr size_t protected_transfer = 3 + exception_categories.size();
+  // Normal, enclosing return, terminal numeric failure, an intrinsic
+  // category, or a protected completion targeting a here supplier.
   size_t reason = 0;
   bool returned = false;
   static Completion failure(size_t category) { return {3 + category, false}; }
+  bool exception() const { return reason >= 3 && reason < protected_transfer; }
+  bool failed() const { return reason == 2 || exception(); }
+  bool protected_here() const { return reason == protected_transfer; }
   size_t index() const { return 2 * reason + returned; }
   static Completion from(size_t index) { return {index / 2, bool(index % 2)}; }
 };
@@ -215,7 +220,7 @@ class CleanupEquations {
 public:
   static constexpr size_t deferred_return_offset = exception_categories.size() + 1;
   static size_t deferred_input(Completion completion, bool guarded, bool observes_return) {
-    const auto arrival = !guarded || completion.reason < 2 ? 0 :
+    const auto arrival = !guarded || !completion.failed() ? 0 :
         completion.reason == 2 ? exception_categories.size() : completion.reason - 3;
     return arrival + (observes_return && completion.returned ? deferred_return_offset : 0);
   }
@@ -1096,7 +1101,7 @@ private:
   std::vector<Queue> queues_{{}};
   std::vector<Action> actions_;
   std::set<size_t> observed_inputs_, observed_references_;
-  static constexpr size_t states = 2 * (3 + exception_categories.size());
+  static constexpr size_t states = 2 * (Completion::protected_transfer + 1);
   std::vector<std::optional<size_t>> reads_;
   using Outcomes = std::map<size_t, Effects>;
   using QueueState = std::pair<size_t, size_t>;
@@ -1365,26 +1370,26 @@ public:
           if (path.input != selected) continue;
           auto next = path.completion;
           if (!next.reason) {
-            next = action.guarded && incoming.reason >= 2 ?
+            next = action.guarded && incoming.failed() ?
                 Completion{incoming.returned ? size_t{1} : size_t{0}, incoming.returned} : incoming;
           } else if (next.reason != 1) next.returned = next.returned || incoming.returned;
+          if (incoming.protected_here() && !next.failed()) next.reason = incoming.reason;
           auto effects = path.effects;
           effects.reaching = intersect_reaching(effects.reaching, conditions->second);
           // The single-pending-failure model cannot prove coverage of
           // checked failures produced by an action. Retain potential
           // guarded dispatch on the separate ordinary body failure too.
-          const auto output = path.completion.reason;
           if (action.enforce_checked_boundary &&
-              ((output >= 3 && exception_categories.at(output - 3).checked) || !effects.declared_failures.empty()))
+              ((path.completion.exception() && exception_categories.at(path.completion.reason - 3).checked) || !effects.declared_failures.empty()))
             effects.needs_checked_cleanup_proof = true;
-          if (action.guarded && incoming.reason >= 2) effects.guarded_pending_failure = true;
+          if (action.guarded && incoming.failed()) effects.guarded_pending_failure = true;
           effects.observes_return |= action.observes_return;
-          effects.raises_deferred_failure |= output >= 2;
-          if (next.reason < 3) effects.thrown.clear();
+          effects.raises_deferred_failure |= path.completion.failed();
+          if (!next.exception()) effects.thrown.clear();
           for (const auto &[intermediate, nested] : require(path.queue, next.index())) {
             auto invoked = compose(effects, nested);
             invoked.enter_initialization(action_frame(*node.action));
-            const auto arrival = incoming.reason >= 3
+            const auto arrival = incoming.exception()
                 ? ExceptionFacts::arrival().restricted({incoming.reason - 3}) : ExceptionFacts{};
             invoked.transform_values([&](const auto &value) { return value.enter(*node.action, arrival); });
             invoked.transform_conditions([&](const auto &clauses) { return enter_conditions(clauses, *node.action); });

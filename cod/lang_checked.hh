@@ -154,6 +154,7 @@ class ScalarChecker {
   std::map<const Form *, size_t> lexical_methods_;
   std::map<std::pair<size_t, std::string>, const Expression *> scope_operand_names_;
   std::map<size_t, std::vector<size_t>> scope_profiles_;
+  std::map<std::pair<size_t, size_t>, size_t> here_receiver_profiles_;
   struct FreeBindings {
     std::vector<Capture> captures, queries, symbols;
     std::set<std::string> declarations;
@@ -216,6 +217,7 @@ class ScalarChecker {
     Completion completion{2, false};
     bool immediate_scope_failure = false;
     std::optional<HereExit> here_exit{};
+    bool receiver_transfer_pending = false;
   };
   struct AbruptFlow { size_t depth; std::vector<AbruptPath> paths; std::set<size_t> declared{}; };
   AbruptFlow *abrupt_ = nullptr;
@@ -3309,13 +3311,20 @@ class ScalarChecker {
         refine_arguments(reason);
       };
       const auto before = lexical_;
+      std::optional<LexicalState> here_break;
       for (const auto &[reason, effects] : operation.invocation) if (reason) {
         lexical_ = before; apply_invocation(reason, effects);
-        const bool scope_failure = immediate_scope && reason >= 3 &&
+        const auto completion = Completion{reason, false};
+        const bool scope_failure = immediate_scope && completion.exception() &&
             (exception_categories.at(reason - 3).checked || declares_root(contract.throws_types));
-        note_abrupt(expr.at, reason >= 3 ? std::set<size_t>{reason - 3} : std::set<size_t>{}, {reason, false}, scope_failure);
+        if (completion.protected_here() && operation.supplied_here) {
+          if (deliver_here_completion(expr, operation)) here_break = lexical_;
+        }
+        else note_abrupt(expr.at, completion.exception() ? std::set<size_t>{reason - 3} : std::set<size_t>{},
+                         completion, scope_failure);
       }
       lexical_ = before; apply_invocation(0, operation.invocation.at(0));
+      if (here_break) { const auto normal = lexical_; join(normal, false, *here_break, false, expr.at); }
     }
     const auto result_owner = contract.owners.empty() ? 0 : contract.owners.back();
     if (!prepared && !result_owner && operation.type == Type::boolean) {
@@ -3747,7 +3756,8 @@ class ScalarChecker {
     return captured;
   }
   void note_abrupt(const Location &at, ExceptionFacts exceptions = {}, Completion completion = {2, false},
-                   bool immediate_scope_failure = false, std::optional<HereExit> here_exit = {}) {
+                   bool immediate_scope_failure = false, std::optional<HereExit> here_exit = {},
+                   bool receiver_transfer_pending = false) {
     if (!lexical_.live) return;
     const auto categories = exceptions.possibilities();
     if (!categories.empty()) completion.reason = 3 + *categories.begin();
@@ -3765,10 +3775,12 @@ class ScalarChecker {
     }
     auto state = lexical_;
     while (state.scopes.size() > abrupt_->depth) retire_scope(state);
-    abrupt_->paths.push_back({std::move(state), std::move(exceptions), at, completion, immediate_scope_failure, here_exit});
+    abrupt_->paths.push_back({std::move(state), std::move(exceptions), at, completion, immediate_scope_failure, here_exit,
+                             receiver_transfer_pending});
   }
   void forward_abrupt(const AbruptPath &path) {
-    note_abrupt(path.at, path.exceptions, path.completion, path.immediate_scope_failure, path.here_exit);
+    note_abrupt(path.at, path.exceptions, path.completion, path.immediate_scope_failure, path.here_exit,
+                path.receiver_transfer_pending);
   }
   static bool declares_root(const std::vector<Type> &types) {
     return std::any_of(types.begin(), types.end(), [](const Type &type) { return type.kind == Type::exception && !type.identity; });
@@ -4042,7 +4054,7 @@ class ScalarChecker {
       if (proving_ && checking_method_ && checking_method_->here && !observed_.protected_defer_failure && cleanup_.has_actions(queue)) {
         const auto &outcomes = cleanup_.apply(queue, Completion{});
         observed_.protected_defer_failure = std::ranges::any_of(outcomes, [](const auto &outcome) {
-          return Completion::from(outcome.first).reason >= 2;
+          return Completion::from(outcome.first).failed();
         });
       }
       std::vector<Completion> inputs;
@@ -4058,8 +4070,8 @@ class ScalarChecker {
         state.exceptions = path.state.input_facts.at(origin).exceptions;
         for (auto &[read, requirement] : state.requirements)
           requirement.inputs = intersect(requirement.inputs, state.inputs);
-        auto pending = input.reason >= 3 ? path.exceptions.restricted({input.reason - 3}) : ExceptionFacts{};
-        if (input.reason >= 3 && pending.empty()) pending = {input.reason - 3};
+        auto pending = input.exception() ? path.exceptions.restricted({input.reason - 3}) : ExceptionFacts{};
+        if (input.exception() && pending.empty()) pending = {input.reason - 3};
         auto payloads = state.exceptions;
         // Empty provisional value summaries do not establish non-returning
         // behavior. Only a substituted, explicit failure relation can exclude
@@ -4105,12 +4117,12 @@ class ScalarChecker {
           if (CleanupEquations::conjoin_conditions(reaching, CleanupEquations::boolean_conditions(path_conditions(state))).empty()) continue;
         }
         const bool needs_deferred_delivery = effects.raises_deferred_failure ||
-            (input.reason >= 2 && effects.guarded_pending_failure);
+            (input.failed() && effects.guarded_pending_failure);
         if (proving_) observed_.requires_deferred_failure_delivery |= needs_deferred_delivery;
         if (proving_ && validating_) {
           if (effects.observes_return && needs_deferred_delivery)
             implementation_gap(path.at, "return inspection requires independent deferred failure delivery on this path");
-          const bool checked_body_failure = input.reason >= 3 &&
+          const bool checked_body_failure = input.exception() &&
               (exception_categories.at(input.reason - 3).checked || !flow.declared.empty());
           const bool guards_checked_body = effects.guarded_pending_failure &&
               (path.immediate_scope_failure || (checked_body_failure && checking_method_ && checking_method_->source->implicit_scope));
@@ -4120,8 +4132,8 @@ class ScalarChecker {
         applied.transform_conditions([&](const auto &clauses) {
           return CleanupEquations::substitute_boolean_payloads(clauses, resolve_boolean, true);
         });
-        auto failure = completion.reason >= 3 ? applied.thrown.restricted({completion.reason - 3}) : ExceptionFacts{};
-        if (completion.reason >= 3 && failure.empty()) {
+        auto failure = completion.exception() ? applied.thrown.restricted({completion.reason - 3}) : ExceptionFacts{};
+        if (completion.exception() && failure.empty()) {
           if (!effects.unknown_thrown) continue;
           failure = {completion.reason - 3};
         }
@@ -4139,7 +4151,10 @@ class ScalarChecker {
           normal_type = type;
           normals.push_back(std::move(state));
         } else {
-          exits.push_back({std::move(state), std::move(failure), path.at, completion, path.immediate_scope_failure, path.here_exit});
+          const bool retained = path.receiver_transfer_pending || (input.protected_here() && checking_method_ && checking_method_->here);
+          exits.push_back({std::move(state), std::move(failure), path.at, completion, path.immediate_scope_failure,
+                           completion.protected_here() ? path.here_exit : std::nullopt,
+                           completion.failed() && retained});
         }
       }
     }
@@ -5001,6 +5016,8 @@ class ScalarChecker {
         const bool checked = reason >= 3 && exception_categories.at(reason - 3).checked;
         return reason >= 2 && !checked && !effects.escaping_failures.contains(reason);
       });
+      if (effects.propagates_here_transfer && (operation.forwards_here || operation.supplied_here))
+        reasons.insert(Completion::protected_transfer);
     }
     finish_call(expr, contract, effects, reasons, arguments, views, operation, read, discard);
   }
@@ -9394,7 +9411,21 @@ class ScalarChecker {
     auto effects = callable_effects(contract, arguments,
         operation.invokes_here ? std::optional{std::set<size_t>{}} : operation.callable_choices);
     if (expr.kind == Expression::Kind::perform) effects.symbols.clear();
-    finish_call(expr, contract, effects, call_reasons(contract), arguments, views,
+    auto reasons = call_reasons(contract);
+    if (operation.invokes_here && proving_ && checking_method_->here_argument_instance) {
+      const auto callback = *checking_method_->here_argument_instance;
+      const auto &body = read_effects(callback);
+      const bool protected_here = program_.methods[program_.instances[callback].method].here_group.has_value();
+      if (lexical_.live && body.requires_deferred_failure_delivery) observed_.requires_deferred_failure_delivery = true;
+      if (protected_here || !body.requires_deferred_failure_delivery) std::erase_if(reasons, [&](size_t reason) {
+        const auto completion = Completion{reason};
+        const bool checked = completion.exception() && exception_categories.at(reason - 3).checked;
+        return completion.failed() && !checked && (protected_here || !body.escaping_failures.contains(reason));
+      });
+      if (protected_here && (body.propagates_here_transfer || !body.escaping_failures.empty() || body.requires_deferred_failure_delivery))
+        reasons.insert(Completion::protected_transfer);
+    }
+    finish_call(expr, contract, effects, reasons, arguments, views,
                 operation, read, discard, offset);
   }
   bool active_here(const std::string &name, const TypeEvidenceState *state = nullptr) const {
@@ -9568,6 +9599,33 @@ class ScalarChecker {
     supplied.instance = demand(profile, std::move(arguments), body.at);
     return supplied;
   }
+  size_t demand_here_receiver(size_t receiver, size_t callback, const std::vector<Type> &arguments, const Location &at) {
+    const auto key = std::pair{receiver, callback};
+    const auto [profile, inserted] = here_receiver_profiles_.try_emplace(key, program_.methods.size());
+    if (inserted) {
+      auto method = program_.methods[receiver];
+      method.instances.clear();
+      method.here_argument_instance = callback;
+      program_.methods.push_back(std::move(method));
+    }
+    return demand(profile->second, arguments, at);
+  }
+  bool deliver_here_completion(const Expression &expr, const CheckedOperation &operation) {
+    const auto &body = read_effects(operation.supplied_here->instance);
+    const auto receiver = lexical_;
+    for (const auto reason : body.escaping_failures) {
+      const auto completion = Completion{reason};
+      note_abrupt(expr.at, completion.exception() ? std::set<size_t>{reason - 3} : std::set<size_t>{}, completion);
+    }
+    if (body.returns_from_supplier) {
+      lexical_.returned = {};
+      if (checking_instance_ && checking_instance_->result.type == Type::boolean)
+        lexical_.returned.boolean = CleanupEquations::unknown_boolean();
+      note_abrupt(expr.at, {}, {1, true});
+    }
+    lexical_ = receiver;
+    return body.breaks_here_call;
+  }
   void check_here_receiver(const Expression &expr, CheckedInstance *supplier,
       std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation, bool read, bool discard) {
     if (expr.kind != Expression::Kind::call || expr.intrinsic || &expr == prepared_call_)
@@ -9648,7 +9706,7 @@ class ScalarChecker {
     std::vector<std::optional<size_t>> owners;
     for (const auto i : here_owner_inputs(contract))
       owners.push_back(here_receiver_owner(receiver, *receiver.here->inputs[i].owner, views, expr.at));
-    const auto callee = demand(selected, arguments, expr.at);
+    auto callee = demand(selected, arguments, expr.at);
     bool may_break = false;
     if (forward) {
       const auto incoming = here_invocation_type(*checking_method_, supplier->substitutions, expr.at);
@@ -9659,10 +9717,13 @@ class ScalarChecker {
         require_here_owner(owners[i], here_formal_owner(*checking_method_->here->inputs[owner_inputs[i]].owner), expr.at);
       }
       operation.forwards_here = true;
+      if (checking_method_->here_argument_instance)
+        callee = demand_here_receiver(selected, *checking_method_->here_argument_instance, arguments, expr.at);
       if (proving_ && lexical_.live && read_effects(callee).protected_defer_failure)
         observed_.protected_defer_failure = true;
     } else {
       auto body = demand_supplied_here(*expr.children.back(), contract, std::move(owners), program_.instances[callee].result, supplier, operations);
+      callee = demand_here_receiver(selected, body.instance, arguments, expr.at);
       const auto &effects = read_effects(body.instance);
       if (validating_ && !effects.symbols.empty())
         implementation_gap(expr.at, "dynamic binding requirements at a here invocation");
@@ -9673,13 +9734,6 @@ class ScalarChecker {
         for (const auto failure : effects.scope_checked_failures) {
           if (failure) note_abrupt(expr.at, {failure});
           else note_declared(declared_requirement(expr));
-        }
-        if (effects.returns_from_supplier) {
-          const auto normal = std::exchange(lexical_.returned, {});
-          if (supplier && supplier->result.type == Type::boolean)
-            lexical_.returned.boolean = CleanupEquations::unknown_boolean();
-          note_abrupt(expr.at, {}, {1, true});
-          lexical_.returned = normal;
         }
       }
       operation.supplied_here = std::move(body);
@@ -9737,11 +9791,13 @@ class ScalarChecker {
       std::vector<LexicalState> entries;
       ExceptionFacts categories;
       std::map<size_t, CompletionInputs> category_inputs;
+      bool resumes_protected_transfer = false;
       for (auto &path : incoming.paths) {
         auto selected = type.identity ? path.exceptions.restricted({type.identity}) : path.exceptions;
         if (selected.empty()) continue;
         auto entry = path.state; entry.exception_conditions.insert(selected);
         entries.push_back(std::move(entry));
+        resumes_protected_transfer |= path.receiver_transfer_pending;
         categories.merge(selected);
         for (const auto category : selected.possibilities())
           category_inputs[category].insert(path.state.inputs.begin(), path.state.inputs.end());
@@ -9779,10 +9835,19 @@ class ScalarChecker {
           views.push_back(&operations.at(handler.children.front().get()));
           const auto &values = operations.at(handler.children.front().get()).exceptions;
           result_exceptions.merge(values);
+          if (resumes_protected_transfer && lexical_.live)
+            control_inputs.push_back({lexical_, {}, handler.at, {Completion::protected_transfer}});
         }
       }
       if (!entries.empty()) {
         outgoing.paths.insert(outgoing.paths.end(), handler_exits.paths.begin(), handler_exits.paths.end());
+        if (resumes_protected_transfer) for (auto path : handler_exits.paths) {
+          // A receiver catch can recover its local failure while the
+          // supplier's transfer still has to leave the receiver.
+          if (path.completion.failed()) path.receiver_transfer_pending = true;
+          else path.completion.reason = Completion::protected_transfer;
+          (path.exceptions.empty() ? control_inputs : outgoing.paths).push_back(std::move(path));
+        }
         outgoing.declared.insert(handler_exits.declared.begin(), handler_exits.declared.end());
       }
     }
@@ -9913,22 +9978,27 @@ class ScalarChecker {
 
       for (const auto &replacement : final_exits.paths) {
         const bool retain = expr.kind == Expression::Kind::deferred && replacement.completion.reason != 1;
-        std::map<bool, LexicalState> outcomes;
+        using Outcome = std::tuple<size_t, bool, bool>;
+        std::map<Outcome, LexicalState> outcomes;
         for (const auto &entry : pending) {
           if (!resume(entry, replacement.state, retain)) continue;
           const bool returned = replacement.completion.returned || (retain && entry.returned());
-          const auto [found, fresh] = outcomes.try_emplace(returned, lexical_);
+          const bool carries_transfer = entry.abrupt && checking_method_ && checking_method_->here &&
+              (entry.abrupt->completion.protected_here() || entry.abrupt->receiver_transfer_pending);
+          const bool displaced = carries_transfer && replacement.completion.failed();
+          const auto reason = carries_transfer && !displaced ? Completion::protected_transfer : replacement.completion.reason;
+          const auto [found, fresh] = outcomes.try_emplace(Outcome{reason, returned, displaced}, lexical_);
           if (!fresh) {
             const auto resumed = lexical_;
             join(found->second, false, resumed, false, replacement.at);
             found->second = lexical_;
           }
         }
-        for (auto &[returned, state] : outcomes) {
+        for (auto &[outcome, state] : outcomes) {
+          const auto [reason, returned, displaced] = outcome;
           lexical_ = std::move(state);
-          auto completion = replacement.completion;
-          completion.returned = returned;
-          note_abrupt(replacement.at, replacement.exceptions, completion, replacement.immediate_scope_failure, replacement.here_exit);
+          note_abrupt(replacement.at, replacement.exceptions, {reason, returned}, replacement.immediate_scope_failure,
+                      replacement.here_exit, displaced || replacement.receiver_transfer_pending);
         }
       }
       for (const auto &entry : pending) {
@@ -10963,7 +11033,7 @@ class ScalarChecker {
         operation.type = Type::never;
         operation.operand_type = *expected;
         operation.here_exit = breaking ? HereExit::break_call : HereExit::return_supplier;
-        if (value != Type::never) note_abrupt(expr.at, {}, {2, false}, false, operation.here_exit);
+        if (value != Type::never) note_abrupt(expr.at, {}, {Completion::protected_transfer}, false, operation.here_exit);
         break;
       }
       const auto &contract = instance->result;
@@ -11420,7 +11490,9 @@ class ScalarChecker {
     });
   }
   void observe_outcome(size_t reason, const LexicalState &state) {
-    if (reason >= 2) observed_.escaping_failures.insert(reason);
+    const auto completion = Completion{reason};
+    if (completion.failed()) observed_.escaping_failures.insert(reason);
+    if (completion.protected_here()) observed_.propagates_here_transfer = true;
     std::set<size_t> known;
     for (const auto id : state.initialized) if (storage(id).borrowed) known.insert(input_ordinal(id));
     CleanupEquations::MissingInitialization missing;
@@ -11777,6 +11849,10 @@ class ScalarChecker {
       if (known.breaks_here_call != effects.breaks_here_call || known.returns_from_supplier != effects.returns_from_supplier) {
         known.breaks_here_call = effects.breaks_here_call;
         known.returns_from_supplier = effects.returns_from_supplier;
+        changed = true;
+      }
+      if (effects.propagates_here_transfer && !known.propagates_here_transfer) {
+        known.propagates_here_transfer = true;
         changed = true;
       }
       if (known.protected_defer_failure != effects.protected_defer_failure) {

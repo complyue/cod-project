@@ -2129,10 +2129,11 @@ public:
       emitted_methods[id] = true;
       pending_methods.push_back(id);
     };
-    // Full-scope profiles can be created by provisional or restricted proofs.
+    // Scoped profiles can be created by provisional or restricted proofs.
     // Emit them when the final operations need their executable body.
     for (size_t i = 0; i < program.methods.size(); ++i)
-      if (!program.methods[i].scope_inputs && !program.methods[i].instances.empty()) retain_method(i);
+      if (!program.methods[i].scope_inputs && !program.methods[i].here_argument_instance && !program.methods[i].instances.empty())
+        retain_method(i);
     std::set<size_t> used_symbols;
     std::set<size_t> here_instances;
     const auto collect_operations = [&](const auto &operations) {
