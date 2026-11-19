@@ -1154,7 +1154,10 @@ class ScalarChecker {
     std::optional<Type> caught_exception;
     std::optional<Type> invocation_result;
     std::optional<EvidenceOwner> invocation_result_owner;
-    std::optional<bool> pending_return;
+    struct ReturnObservation {
+      std::optional<bool> present;
+      std::optional<TargetEvidence> borrowed;
+    } observed_return;
     const ResultContract *borrowed_return = nullptr;
     bool tracks_target_places() const { return checks_initialization() || borrowed_return; }
     bool supplied_invocation_result = false;
@@ -1186,12 +1189,16 @@ class ScalarChecker {
   struct TypeBorrowedReturn {
     std::map<EvidenceSlot, ObservationPaths> targets;
     QuerySelections::Uninitialized uninitialized;
+    ObservationPaths absent;
     const Expression *saved_selection = nullptr;
     bool operator==(const TypeBorrowedReturn &) const = default;
 
     static TypeBorrowedReturn capture(const TargetEvidence &target, const QuerySelections &flow) {
       TypeBorrowedReturn result;
-      auto reaching = flow.outcome(flow.selection_outcomes(target), true);
+      const auto selection = flow.selection_outcomes(target);
+      result.absent = flow.outcome(selection, false);
+      result.absent.presence.clear();
+      auto reaching = flow.outcome(selection, true);
       if (!reaching) return result;
       reaching.presence.clear();
       const bool initialized = flow.selection_initialized(target);
@@ -1210,7 +1217,31 @@ class ScalarChecker {
     void merge(const TypeBorrowedReturn &other) {
       for (const auto &[place, reaching] : other.targets) targets[place].join(reaching);
       for (const auto &[place, missing] : other.uninitialized) uninitialized[place].join(missing);
+      absent.join(other.absent);
       if (saved_selection != other.saved_selection) saved_selection = nullptr;
+    }
+    TargetEvidence observe(const QuerySelections &flow) const {
+      const auto reaching = flow.reach_condition();
+      TargetEvidence selected;
+      PresenceBranches presence{{}, absent};
+      presence.when_false.conjoin(reaching);
+      selected.initialized = true;
+      for (const auto &[place, bound] : targets) {
+        auto present = bound;
+        present.conjoin(reaching);
+        if (!present) continue;
+        selected.places.insert(place);
+        presence.when_true.join(present);
+        if (const auto missing = uninitialized.find(place); missing != uninitialized.end()) {
+          present.conjoin(missing->second);
+          selected.initialized &= !flow.may_read_uninitialized(place, present);
+        }
+      }
+      if (presence.when_true && !presence.when_false) selected.presence = TargetPresence::present;
+      if (!presence.when_true && presence.when_false) selected.presence = TargetPresence::absent;
+      if (presence.when_true || presence.when_false) selected.presence_proof = std::move(presence);
+      if (saved_selection) selected.same_selected.insert(saved_selection);
+      return selected;
     }
     void initialize(const QuerySelections &flow) {
       if (saved_selection && flow.initialized_selections.contains(saved_selection)) {
@@ -1219,6 +1250,7 @@ class ScalarChecker {
       }
     }
     void restrict_to(const ObservationPaths &reaching) {
+      absent.conjoin(reaching);
       for (auto *paths : {&targets, &uninitialized}) {
         for (auto &[place, condition] : *paths) condition.conjoin(reaching);
         std::erase_if(*paths, [](const auto &entry) { return !entry.second; });
@@ -1226,6 +1258,7 @@ class ScalarChecker {
       if (uninitialized.empty()) saved_selection = nullptr;
     }
     void forget_observations(size_t first) {
+      absent.forget_observations(first);
       for (auto *paths : {&targets, &uninitialized})
         for (auto &[place, condition] : *paths) condition.forget_observations(first);
     }
@@ -5308,6 +5341,7 @@ class ScalarChecker {
     state.retained = retained;
     state.full_scope_owner = 0;
     state.invocation_result_owner.reset();
+    state.observed_return = {};
     state.caught_exception.reset();
     // An ordinary retained value has invocation-local storage. A standalone
     // here body has direct access to its supplying activation instead.
@@ -5805,8 +5839,12 @@ class ScalarChecker {
       if (yes.selections.tracking) {
         if (value) yes.selections.value_places.emplace(name, EvidencePlaces{&condition});
         else {
-          TargetEvidence selected;
-          if (reference) selected.presence = TargetPresence::present;
+          auto selected = pattern.matches != OwnerMatch::mismatch && state.observed_return.borrowed ?
+              *state.observed_return.borrowed : TargetEvidence{};
+          if (reference) {
+            selected.presence = TargetPresence::present;
+            selected.initialized = true;
+          }
           yes.selections.bind(name, &condition, std::move(selected));
         }
       }
@@ -5848,7 +5886,15 @@ class ScalarChecker {
       if (inserted || different) unavailable(name);
     }
     if (right_exits) return left;
-    if (left.pending_return != right.pending_return) left.pending_return.reset();
+    auto &observed = left.observed_return;
+    const auto &other_observed = right.observed_return;
+    if (observed.present == false) observed.borrowed = other_observed.borrowed;
+    else if (other_observed.present != false) {
+      if (observed.borrowed && other_observed.borrowed)
+        observed.borrowed = join_targets(std::move(*observed.borrowed), *other_observed.borrowed);
+      else observed.borrowed.reset();
+    }
+    if (observed.present != other_observed.present) observed.present.reset();
     for (auto &[name, declaration] : left.local_declarations) {
       if (const auto other = right.local_declarations.find(name);
           other == right.local_declarations.end() || !declaration || other->second != declaration) {
@@ -6298,17 +6344,22 @@ class ScalarChecker {
   static void forward_type_exit(TypeEvidenceExits &outgoing, TypeEvidenceExits::Path &path) {
     merge_type_exits(outgoing, std::move(path.reasons), path.state, std::move(path.result), path.retained_return);
   }
+  static void observe_type_return(TypeEvidenceState &state, const TypeReturned *result) {
+    state.observed_return.present = result != nullptr;
+    state.observed_return.borrowed = result && result->borrowed ?
+        std::optional{result->borrowed->observe(state.selections)} : std::nullopt;
+  }
   std::optional<Type> complete_type_finalizer(const Expression &handler, TypeEvidenceExits::Path &pending,
                                               TypeEvidenceExits &outgoing, CleanupBoundary boundary) const {
     TypeEvidenceExits exits;
-    const auto inherited = pending.state.pending_return;
-    if (pending.returned()) pending.state.pending_return = true;
+    const auto inherited = pending.state.observed_return;
+    if (pending.returned() && handler.inspects_return()) observe_type_return(pending.state, &pending.result);
     pending.state.exits = &exits;
     const auto type = type_evidence(handler, pending.state);
     pending.state.exits = nullptr;
-    pending.state.pending_return = inherited;
+    pending.state.observed_return = inherited;
     for (auto &path : exits.paths) {
-      path.state.pending_return = inherited;
+      path.state.observed_return = inherited;
       if (boundary == CleanupBoundary::deferred && !path.returned() && pending.returned()) {
         path.retained_return = true;
         path.result = pending.result;
@@ -6317,11 +6368,12 @@ class ScalarChecker {
     }
     return pending.state.selections.initialization_reachable ? type : std::optional<Type>{Type::never};
   }
-  TypeEvidenceExits replay_type_defer(const Expression &entry, TypeEvidenceState state, size_t pending_error, bool returned) const {
+  TypeEvidenceExits replay_type_defer(const Expression &entry, TypeEvidenceState state, size_t pending_error,
+                                     const TypeReturned *pending) const {
     using K = Expression::Kind;
     TypeEvidenceExits incoming, outgoing;
     enter_type_defer(state);
-    state.pending_return = returned;
+    observe_type_return(state, pending);
     state.exits = &incoming;
     // The current lowering enters any guarded deferred entry with its pending
     // failure. Model this until native cleanup separates the error queue.
@@ -6532,7 +6584,7 @@ class ScalarChecker {
       invocation.prepared_call.reset();
       invocation.deferred = nullptr;
       // The declaration supplies names. The queue supplies the live values.
-      auto completed = replay_type_defer(*action.entry, std::move(invocation), error, returned);
+      auto completed = replay_type_defer(*action.entry, std::move(invocation), error, returned ? &result : nullptr);
       for (auto &path : completed.paths) {
         const bool replacement = path.returned();
         const auto &proof = replacement ? path.result : result;
@@ -7182,9 +7234,9 @@ class ScalarChecker {
       return Type::boolean;
     case K::return_test: {
       const auto pattern = return_pattern_evidence(expr, state);
-      if (pattern.matches == OwnerMatch::mismatch || state.pending_return == false)
+      if (pattern.matches == OwnerMatch::mismatch || state.observed_return.present == false)
         target_facts.branches = PresenceBranches::constant(false);
-      else if (pattern.matches == OwnerMatch::satisfied && state.pending_return == true)
+      else if (pattern.matches == OwnerMatch::satisfied && state.observed_return.present == true)
         target_facts.branches = PresenceBranches::constant(true);
       return Type::boolean;
     }
@@ -7717,7 +7769,7 @@ class ScalarChecker {
           if (result != Type::never) incoming = joined;
           for (const auto &path : outgoing.paths) {
             auto suspended = path.state;
-            if (path.returned() && finalizer->inspects_return()) suspended.pending_return = true;
+            if (path.returned() && finalizer->inspects_return()) observe_type_return(suspended, &path.result);
             incoming = incoming ? merge_evidence(std::move(*incoming), suspended) : std::move(suspended);
           }
           // An abandoned normal path contributes lexical declarations only.
@@ -8325,7 +8377,8 @@ class ScalarChecker {
           const auto &contract = *state.borrowed_return;
           const auto owner = state.owner_bindings.at(contract.owner);
           const bool valid_owner = compare_owners(state.value.owner, owner, &state) == OwnerMatch::satisfied;
-          if (contract.nullable() && result == Type::null_ref && (valid_owner || !state.value.owner)) returned.borrowed.emplace();
+          if (contract.nullable() && result == Type::null_ref && (valid_owner || !state.value.owner))
+            returned.borrowed = TypeBorrowedReturn::capture(state.target, state.selections);
           else if (result == contract.type && state.value.view == true && !state.value.mixed_view && valid_owner &&
                    (contract.read_only || state.value.read_only == false) &&
                    (contract.nullable() || !state.value.nullable || state.target.presence == TargetPresence::present) &&

@@ -19,13 +19,34 @@ UNPROVED_TARGET='conditional scalar value requires a proven non-null target'
 CONDITIONAL_TARGET='ptr selected:u64 in O=if(flag){input}else{null in O};'
 GUARDED_INPUT='return if(selected is not null){input}else{7u64};'
 CORRELATED_RESULT='const val present<-{{if(flag){return input is not null;}else{return true;};}};'
+INIT_PREPARED_PTR='if returning (ptr saved){if(saved is not null){saved<-9u64;{}}else{}}'
+DEFER_INIT_PREPARED_PTR='defer{'+INIT_PREPARED_PTR+'};'
 def storage(query, value, prefix=''):
     return IO+prefix+'val result<-make local typeof('+query+'){'+value+'};behave @print(result);'
 def saved_query(body, setup='', declarations=''):
     return (IO+declarations+'func inspect(ptr input:u64 in O,flag:bool)->u64 where {owner O}{'+setup+
             'val answer<-make local typeof({{'+body+'}}){9u64};return answer;}'+
             ABSENT+'behave @print(inspect(p,true));')
+def borrowed_return_query(body):
+    return (IO+'func prepare(ptr first:u64 in O,ptr other:u64 in O)->ptr u64 in O where {owner O}{'+body+'}'
+            'func demonstrate()->u64{val proof<-make local typeof({{'
+            'val left<-make local u64,right<-make local u64;ptr received=prepare(left,right);'
+            'if(received is not null){return received;}else{return 0u64;};'
+            '}}){17u64};return proof;}behave @print(demonstrate());')
 runner.CASES={
+ 'query_recognizes_write_through_prepared_return':(
+    borrowed_return_query(DEFER_INIT_PREPARED_PTR+'return first;'),0,'17\n',''),
+ 'query_does_not_attach_old_write_to_replacement':(
+    borrowed_return_query('defer{return other;};'+DEFER_INIT_PREPARED_PTR+'return first;'),2,'','initialization'),
+ 'query_initializes_replacement_through_matching_arm':(
+    borrowed_return_query(DEFER_INIT_PREPARED_PTR+'defer{return other;};return first;'),0,'17\n',''),
+ 'query_recognizes_write_to_finally_suspended_target':(
+    borrowed_return_query('defer{try{return other;}finally{'+INIT_PREPARED_PTR+'};};return first;'),0,'17\n',''),
+ 'query_pattern_slot_rebind_keeps_original_target':(
+    borrowed_return_query('defer{if returning (ptr saved){saved=other;'
+                          'if(saved is not null){saved<-9u64;{}}else{}}};return first;'),2,'','initialization'),
+ 'query_write_prepares_either_return_target':(
+    borrowed_return_query(DEFER_INIT_PREPARED_PTR+'return if(first is null){other}else{first};'),0,'17\n',''),
  'literal_i64':(storage('3','8'),0,'8\n',''),
  'literal_u8':(storage('3u8','8u8'),0,'8\n',''),
  'literal_u32':(storage('3u32','8u32'),0,'8\n',''),
