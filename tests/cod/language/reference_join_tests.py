@@ -34,8 +34,9 @@ case('reverse_conjunction', condition='flag&&selected is null', output='0\n0\n0\
 case('disjunction', condition='selected is null||flag', reject=True)
 case('nested_selection', setup='ptr selected=if(flag){'+CHOICE+'}else{if(q is p){null in here}else{b}};')
 case('nested_independent_selection', setup='ptr selected=if(flag){'+CHOICE+'}else{null in here};', reject=True)
-case('scoped_result', setup='ptr absent:u64=null in here;ptr selected={{if(p is q){absent}else{a}}};')
-case('finally_result', setup='ptr selected=try{'+CHOICE+'}finally{{}};')
+case('scoped_result', setup='ptr absent:u64=null in here,fallback=a;'
+     'val ready<-{{return (if(p is q){absent}else{fallback}) is null;}};', condition='ready')
+case('finally_result', setup='ptr selected=try{'+CHOICE+'}finally{};')
 case('finally_keeps_old_target', setup='ptr saved=q;ptr selected=try{'+CHOICE+'}finally{q=c;{}};', read='saved')
 case('finally_changed_target', setup='ptr selected=try{'+CHOICE+'}finally{q=c;{}};', reject=True)
 HANDLED = 'ptr absent:u64=null in here;ptr selected=try{if(p is q){absent;{}}else{};a}catch(e:const NullPointerException){absent};'
@@ -44,24 +45,33 @@ case('handler_saved_target', setup='ptr saved=q;'+HANDLED+'q=c;', read='saved')
 case('handler_changed_target', setup=HANDLED+'q=c;', reject=True)
 case('handler_independent_failure', setup=HANDLED.replace('if(p is q)', 'if(flag)'), reject=True)
 case('handler_nonnull_result', setup=HANDLED.replace(';a}catch', ';absent}catch').replace('Exception){absent};', 'Exception){a};'), condition='selected is not null')
-case('deferred_guard', setup=SELECT, body='{{defer{if(selected is null){p<-7u64;behave @print(q);}else{behave @print(0u64);};};}};')
-case('deferred_result_change', setup=SELECT, body='{{defer{if(selected is null){p<-7u64;behave @print(q);}else{behave @print(0u64);};};selected=null;{} }};', reject=True)
-DEFERRED = '{{defer{if(selected is null){p<-7u64;behave @print(q);}else{behave @print(0u64);};};AFTER{} }};'
-case('deferred_changed_target', body=DEFERRED.replace('AFTER', 'q=c;'), reject=True)
-case('deferred_changed_source', body=DEFERRED.replace('AFTER', 'p=c;'), reject=True)
-case('deferred_other_action_changes_target', body=DEFERRED.replace('AFTER', 'defer{q=c;{}};'), reject=True)
-case('deferred_saved_target', setup='ptr saved=q;'+SELECT, body=DEFERRED.replace('AFTER', 'q=c;').replace('@print(q)', '@print(saved)'))
-case('deferred_no_write', body=DEFERRED.replace('AFTER', '').replace('p<-7u64;', ''), reject=True)
-case('deferred_raw_join', setup='ptr absent:u64=null in here;', body=DEFERRED.replace('AFTER', '').replace('selected is null', '(if(p is q){absent}else{a}) is null'))
-case('deferred_rebinds_to_source', body=DEFERRED.replace('AFTER', 'q=p;'))
-case('deferred_rebinds_to_target', body=DEFERRED.replace('AFTER', 'p=q;'))
-case('deferred_rebinds_both', body=DEFERRED.replace('AFTER', 'p=c;q=c;'))
-case('deferred_weak_change', setup=SELECT+'var slot->if(flag){p}else{q};', body=DEFERRED.replace('AFTER', 'slot=c;'), reject=True)
-case('deferred_rebind_before_write', body=DEFERRED.replace('AFTER', '').replace('p<-7u64;', 'p=c;p<-7u64;'), reject=True)
-case('deferred_failed_write', definitions='func fail()->u64 throws NullPointerException{ptr absent:u64=null in here;return absent;}', body=DEFERRED.replace('AFTER', '').replace('p<-7u64;', 'try{p<-fail();{}}catch(e:const NullPointerException){};'), reject=True)
-case('prior_action_registration_can_fail', body=DEFERRED.replace('p<-7u64;', '').replace('AFTER', 'defer{p<-7u64;};'), reject=True)
-case('prior_action_handles_registration_failure', definitions='using "std:exceptions" OutOfMemoryError;', body=DEFERRED.replace('p<-7u64;', '').replace('};AFTER', '}catch(allocation:const OutOfMemoryError){};AFTER').replace('AFTER', 'defer{p<-7u64;};'))
-case('failed_registration', definitions='using "std:exceptions" OutOfMemoryError;', work='try{ {{defer{p<-7u64;};}};}catch(e:const OutOfMemoryError){};', reject=True)
+OBSERVE_JOIN = 'if(selected is null){p<-7u64;behave @print(q);}else{behave @print(0u64);};'
+DEFERRED = 'defer{' + OBSERVE_JOIN + '};'
+case('deferred_guard', body=DEFERRED)
+case('deferred_result_change', body=DEFERRED + 'selected=null;{}', reject=True)
+case('deferred_changed_target', body=DEFERRED + 'q=c;{}', reject=True)
+case('deferred_changed_source', body=DEFERRED + 'p=c;{}', reject=True)
+case('deferred_other_action_changes_target', body=DEFERRED + 'defer{q=c;};', reject=True)
+case('deferred_saved_target', setup='ptr saved=q;' + SELECT,
+     body=DEFERRED.replace('@print(q)', '@print(saved)') + 'q=c;{}')
+case('deferred_no_write', body=DEFERRED.replace('p<-7u64;', ''), reject=True)
+case('deferred_raw_join', setup='ptr absent:u64=null in here;',
+     body=DEFERRED.replace('selected is null', '(if(p is q){absent}else{a}) is null'))
+case('deferred_rebinds_to_source', body=DEFERRED + 'q=p;{}')
+case('deferred_rebinds_to_target', body=DEFERRED + 'p=q;{}')
+case('deferred_rebinds_both', body=DEFERRED + 'p=c;q=c;{}')
+case('deferred_weak_change', setup=SELECT + 'var slot->if(flag){p}else{q};',
+     body=DEFERRED + 'slot=c;{}', reject=True)
+case('deferred_rebind_before_write', body=DEFERRED.replace('p<-7u64;', 'p=c;p<-7u64;'), reject=True)
+case('deferred_failed_write', definitions='func fail()->u64 throws NullPointerException{ptr absent:u64=null in here;return absent;}',
+     body=DEFERRED.replace('p<-7u64;', 'try{p<-fail();{}}catch(e:const NullPointerException){};'), reject=True)
+READ_AFTER_WRITE = OBSERVE_JOIN.replace('p<-7u64;', '')
+case('prior_action_registration_can_fail', body='defer{' + READ_AFTER_WRITE + '};defer{p<-7u64;};', reject=True)
+case('prior_action_handles_registration_failure',
+     body='val prepared<-false;defer{if(prepared){' + READ_AFTER_WRITE +
+          '}else{};};defer{p<-7u64;};prepared<-true;{}')
+case('failed_registration', definitions='using "std:exceptions" OutOfMemoryError;',
+     work='ptr destination=p;try{ {{defer{destination<-7u64;};}};}catch(e:const OutOfMemoryError){};', reject=True)
 case('loop_guard', setup=SELECT, body='for(i in 0u64..2u64){if(selected is null){p<-7u64;behave @print(q);}else{behave @print(0u64);};};', output='7\n7\n0\n0\n0\n0\n7\n7\n')
 case('loop_changes_result', setup=SELECT+'for(i in 0u64..2u64){selected=null;};', reject=True)
 case('read_before_write', work='behave @print(q);p<-7u64;', reject=True)
