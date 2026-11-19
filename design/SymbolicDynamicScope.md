@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 223 · Recorded: 2026-11-19 · Phase: language/application co-design.
+Design revision: 224 · Recorded: 2026-11-19 · Phase: language/application co-design.
 
 ## Design authority
+
+- **Typed DBMR programs.** [D-10](DesignAuthorityRegistry.md#d-10) and [K-TYPED-DBMR-PROGRAM-OVERVIEW-20261119](../CHANGELOG.md#k-typed-dbmr-program-overview-20261119) record the r224 feature overview. C-01/C-02/C-05 and charter §§2–3/5.4/6–8 connect typed business graphs, environment-specific execution and relocatable publication. The example checks that the persistent vocabulary excludes an inconsistent shipment destination and retains the existing checking, ownership and publication boundaries. This scope describes a research workload and grants no implementation authority.
 
 - **Explicit call intent.** [H-CALL-INTENT-20261119](../CHANGELOG.md#h-call-intent-20261119) covers D-10-ARGUMENTS and D-10-TRAILING-CALLBACK at r223. P-405/P-406 relate visible argument destinations to C-10/C-57 and charter §§3.3/8.1. Check crossed functor matches, one distinguishing label followed by an ordinary positional value, reordered labels and first-here selection. Preserve written evaluation order, default phases, owners and the requirement for one applicable best method.
 
@@ -1646,6 +1648,7 @@ Proposed acceptance separates typed mail from region transfer. First check that 
 | Procedure source selection versus `mixin` | Reuse a source definition or instantiate its body in a new lexical/dynamic context | Four combinations with `perform`/`behave`, checked against their actual binding paths |
 | Scalar types, products, sums and exhaustive matching | Describe parameters, state alternatives and explicit outcomes | Type-correct construction and rejected invalid cases |
 | A small checked GADT program core | Keep input/output/effect relationships in inspectable program data | Correct type indexes through pure and effectful operations; no full theorem solver required |
+| Typed DBMR data and programs | Let a CoD program consume data or another program and produce data or an executable program | Check the root type and dependencies of each published region, and check a program revision before execution |
 | Functions versus procedures | Separate explicit-input computation/memory access from dynamically bound operations | Lexical/symbolic procedure naming, preserved captures on installation and transitive effect checking |
 | Expressions and `void` | Compose value-producing and effectful computation consistently | Explicit scope results, sequencing, effect-only writes and no meaningful-result use of `void` |
 | `effect`, `perform`, `behave` | Supply current execution context or replay captured values deliberately | Nested scopes, capture, mutation and restoration traces |
@@ -1654,6 +1657,16 @@ Proposed acceptance separates typed mail from region transfer. First check that 
 | Native primitive boundary | Reuse runtime facilities and eventually compile numerical kernels | Same contract under reference and native interpretations |
 
 The SNN owns the neuron equations, AP/rate interpretation, training rules and data layout choices. The language owns identity, callable/effect semantics, types, lifetimes and execution meaning. An application-specific neuron or slot class does not need to become a built-in language construct.
+
+### Typed DBMR programs and domain vocabularies
+
+Source data, a domain-specific language (DSL) application, and its result can each be a typed disk-backed memory region (DBMR). A CoD program can take a checked program graph as input and construct an executable successor as output. The output must satisfy its program type and publication checks. Execution also needs the matching executor and authority to use its effects. [Program input and output example](../papers/AlgebraicEffectsIsAllYouNeed.md#1-a-program-that-takes-a-program-as-its-input)
+
+Long-lived data-definition packages define the input and result roots used by independent readers and writers. A moderately stable native executor and its generation tools share a typed DSL vocabulary. A business change expressed by that vocabulary, such as a new warehouse preference, typically changes only the application DBMR. A new operation can require executor and generator updates. A change to a published result type follows its package compatibility rules. [Executor and package example](../papers/AlgebraicEffectsIsAllYouNeed.md#2-one-executor-one-dsl)
+
+A DSL designer can make a specific illegal state unrepresentable in the persistent sum type. In the paper’s fulfillment policy, `TryWarehouse` records a warehouse and the next policy to try if reservation fails. On success, the executor ships from the warehouse in that same node. The constructors provide no field in which a generator or graph editor could name a different shipping warehouse. The reservation handler still has to report the reservation outcome faithfully. [Warehouse example](../papers/AlgebraicEffectsIsAllYouNeed.md#making-invalid-states-unrepresentable-in-the-stored-program)
+
+Effect handlers supply the environment-specific interpretation of operations such as reservation. The same published application can run with a live handler or a test handler under the applicable effect contract. Regional relocatability lets compatible processes map the same graph at different addresses while preserving its internal references. The paper and its Python model illustrate the artifact cycle. [The compiler roadmap](../applications/cod-booter/README.md#checked-dbmr-program-revisions) records the CoD acceptance work and measurements still to do.
 
 ### Generalized for-loops
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-19 — Document the typed DBMR program cycle
+
+<a id="k-typed-dbmr-program-overview-20261119"></a>
+**K-TYPED-DBMR-PROGRAM-OVERVIEW-20261119.** The [paper chat handoff](codex://threads/01a1f43c-861a-7e91-b95e-94da08688a83) reports the project user's documentation request. D-10r223→224 and D-20 roadmap r12→13 illustrate existing charter §§2–3/5.4/6–8/10/12 through a typed warehouse policy, checked source and graph editing, and same-session native execution. The registry records research and acceptance scope. Schemas, mechanisms, implementation and performance remain open. Previous document revisions and the paper are at `7aa76999935e530c3e5c0564e752513775872bfa`.
+
 ## 2026-11-19 — Qualify the composite synchronous pipeline for implementation
 
 <a id="h-pipeline-composite-contract-20261119"></a>
