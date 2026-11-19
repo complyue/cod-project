@@ -1,39 +1,28 @@
-# Callable views, value captures and declared place aliases
+# Function values, here callables and declared place aliases
 
-Design revision: 118 · Recorded: 2026-11-18 · Status: scoped callable contract; implementation boundaries recorded separately.
+Design revision: 127 · Recorded: 2026-11-18 · Status: scoped callable contract; implementation boundaries recorded separately.
 
 ## Design authority
 
-- **Here callables, under review.** [D-18-HERE](DesignAuthorityRegistry.md#d-18-here), r118, [design review](../CHANGELOG.md#k-here-callables-20261118), P-609/P-610. Charter §§3.3/4.3 and [D-12-LIFETIME](DesignAuthorityRegistry.md#d-12-lifetime) motivate direct access within natural lexical nesting. H-553, H-555 and H-FULL-SCOPE-CALLABLE-20261117 establish the comparison baseline. [Acceptance examples](#here-callables-and-direct-lexical-access) distinguish successive writes, slot rebinding, escape and symbolic replay. [H-SYMBOLIC-SNAPSHOT-ACTIVATION-20261118](../CHANGELOG.md#h-symbolic-snapshot-activation-20261118) fixes symbolic snapshot timing at definition activation. [H-HERE-MODULE-TOPLEVEL-20261118](../CHANGELOG.md#h-here-module-toplevel-20261118) includes executable module top levels in the here-callable forms. The broader change to lexical access and ordinary value captures remains under review.
-
-- **Exception input boundary.** [H-EXCEPTION-OBJECT-OWNER-20261118](../CHANGELOG.md#h-exception-object-owner-20261118) limits the r114/P-485–P-487 value-input qualification at r115 to independent scalars and complete callable values. [Exception references](ExceptionControl.md#exception-object-owners-and-release) carry the selected target and its actual owner. Preserving both serves C-65 under charter §§3.3/4.3. Exception-specific capture transport awaits owner and cleanup proof.
-
-- **Invocation-owner evidence continuity:** [K-FULL-SCOPE-VALUE-BOUNDARY-20261118](../CHANGELOG.md#k-full-scope-value-boundary-20261118) continues the confirmed r114 value-input contract/P-485–P-487: result inference gives admitted runtime value captures their invocation-local owner, while type-only dependencies retain their declaration evidence. The checked slot category remains distinct from independent capture eligibility, preserving ordinary default reference parameters and complete callable inputs. C-65/C-73/C-75, charter §§2/3.2–3.3/4.3/6.3/8/12, actual owners/access, failure cleanup, all exclusions and D-16 are unchanged. Current proof/support limits remain in the source reference; this selects no new capture mechanism.
-
-- **Current implementation continuity:** [K-READONLY-CAPTURE-COST-20261118](../CHANGELOG.md#k-readonly-capture-cost-20261118) continues [K-BOUNDED-CAPTURE-DEFER-20261117](../CHANGELOG.md#k-bounded-capture-defer-20261117) within the surviving independent-input qualification: readonly-input acquisition elision, separate cost measurements and scalar-capture method sharing retain ordinary value ownership and failure handling. The [source capability reference](../tests/cod/language/README.md) distinguishes implemented observations from remaining acceptance and independently scoped mechanisms.
-- **Registry and confirmed baseline:** [D-18](DesignAuthorityRegistry.md#d-18) is authoritative for the recorded capture/value/native-boundary scope under H-327–H-335/H-337–H-344/H-349/H-350 and C-65/C-73/C-75/P-293–P-303. H-342 qualifies dedicated complete lexical callable values, nested captures and caller destinations; H-344 permits runtime-sized scope-owned backing. H-417 requires one statically provable owner for each ref/ptr. These qualifications continue; they do not approve every descendant or physical mechanism.
-- **Ordinary value-input qualification:** [H-BOUNDED-IMPLEMENTATION-ADOPTION-20261117](../CHANGELOG.md#h-bounded-implementation-adoption-20261117) confirms the r114 baseline for the [ordinary value-input implementation contract](#ordinary-value-input-implementation-contract), its C-65/C-73/C-75 value path and P-485–P-487 with the stated acceptance/exclusions. [K-BOUNDED-IMPLEMENTATION-ADOPTION-20261117](../CHANGELOG.md#k-bounded-implementation-adoption-20261117) updates qualification without changing the reviewed semantics. H-553's independent snapshots/invocation locals and K-REPLACEMENT-EFFECTS-20261117's retained-destination/no-rollback clarification govern the profile. Other independently qualified or pending scopes retain their status; no compiler capability is claimed by adoption.
-- **Value rationale:** C-65 keeps selected storage, access and lifetimes explicit; C-73 applies one capture model to named and anonymous callables; C-75 distinguishes a declared place from an independent value. Through P-294/P-295/P-297/P-298 and the confirmed bounded P-485 path, these serve charter §§2/3.2–3.3/4.3/6.3/8/12: shared program descriptions must not create shared mutable invocation state, source identities must retain their meaning, and native execution must preserve checked ownership and observable behavior. P-299–P-303 continues the independently qualified callable/native boundary. Dependency edges alone grant no qualification.
-- **Governing invariants and acceptance:** preserve exact types and declared access, initialized value reads, definition-bound identities and materialization timing, actual borrowed owners, independent complete nested values, recursion, caller destinations and normal/exceptional cleanup. Exercise both selection paths, snapshots and local writes, owner/access/lifetime rejection, nullable invocation, construction/invocation cost and compilation scale. The bounded review below specifies additional acceptance. No hidden shared cells, lexical-frame promotion, source-lifetime extension, regional callable payload, general object copying/moving, implicit graph transfer or independently managed user heap lifetime. D-01 relocation, D-15 module/TLS separation and D-16 remain unchanged.
-- **Separate source and mechanism scopes:** H-553–H-557 records the value/explicit-lifetime model; [D-18-BORROW](DesignAuthorityRegistry.md#d-18-borrow)/P-488–P-490 retains separately pending new lexical-reference and declared-place capture proofs/transport. H-327/H-329's declared-place meaning remains binding. [D-18-ALIAS-TERMS](DesignAuthorityRegistry.md#d-18-alias-terms)/H-558 requires the glossary below, without exclusivity or lifetime privileges. [D-18-LEXICAL-STORAGE](DesignAuthorityRegistry.md#d-18-lexical-storage)/H-563 excludes callable views from regions; H-567/H-568 preserves dedicated callable construction separately from bits transfer and explicit graph transfer. Callable-bearing ADTs/anonymous data remain in D-22's review.
-- **Dependency contracts:** D-14 owns storage, permissions and initialization; D-10 owns current/captured symbolic behavior and functions' effect exclusion; D-17 owns completion and declared checked obligations; D-23/D-24 owns established results and independent inference; D-21/D-26 owns actual-type selection and finite native coverage. H-366–H-369/P-327 preserves callable parameter access alongside actual input identity. H-481 fixes ordinary definition lookup and fresh materialization; stored values retain their selected environments. H-482/H-561 supplies selected reference-symbol source/owner rules, while full proof/physical/value paths and runtime support remain separately pending. H-457's named-argument boundary, H-459–H-462's type-bound defaults/complete origin coverage and D18-Q-result-discrimination retain their own parser, evidence and representation boundaries. Their separate qualification is not expanded by the value-input adoption.
-- **Current implementation and continuity:** [K-718](../CHANGELOG.md#k-718) and [K-746](../CHANGELOG.md#k-746) continue the recorded receiving, evidence-retention and capture/value scope; [K-782](../CHANGELOG.md#k-782) rejects declared-place captures where lifetime/transport proof is missing, preserving explicit independent callable construction. This is a compiler coverage limit, not a language prohibition. The [source capability reference](../tests/cod/language/README.md) owns current supported paths, diagnostics and validation commands. A supported-source reference experiment informs feasibility only; neither experiments nor passing fixtures supply human confirmation or broader qualification.
+- [D-18](DesignAuthorityRegistry.md#d-18), [D-18-HERE](DesignAuthorityRegistry.md#d-18-here) and [D-18-HERE-STORAGE](DesignAuthorityRegistry.md#d-18-here-storage). [H-CALLABLE-MODEL-20261118](../CHANGELOG.md#h-callable-model-20261118) confirms r127 and storage r9 for capture-free functions, synchronous here calls, both brace forms and activation identity. P-609–P-612/P-615–P-622 derive from C-65/C-73, D-12-LIFETIME and charter §§3.2–3.3/4.3/6.1. Reusable code and caller-owned state have independently checkable lifetimes. See [callable storage and direct lexical access](CallableStorageAndHereAccess.md) for acceptance across recursion, repeated invocation, forwarding, owner invalidation and cleanup. Mainline owns lowering and verification.
+- H-481 preserves definition identity. H-563 covers lexical storage. H-558 governs the alias glossary. H-567/H-568 distinguish callable preparation from bits or graph transfer. H-459–H-462 preserve type-bound defaults and multi-method coverage. D-10 owns dynamic binding and symbolic replay. D-17 owns full-scope completion. D-21/D-26 own dispatch and native coverage. D-28 owns current owner-plus-locator resolution.
+- Independently qualified reference/access, placement and declared-place contracts continue. D-18-VALUE-CAPTURE and D-18-BORROW supply no implementation authority for an ordinary function environment. The changed input model also applies to D-17 full scopes and D-10 trailing callbacks and caller-context defaults. Regional callable storage, lifetime extension and a permanent native ABI are outside the contract.
 
 ## Language model: no closure abstraction
 
-CoD does not define a closure abstraction. It defines callable definitions, materialized callable views, value captures and explicit owner-bounded borrows. A broad computer-science usage may call any callable with an environment a closure; that terminology must not introduce an additional CoD mechanism. In particular there is no closure-owned mutable variable cell, shared retained invocation frame or automatic extension of a lexical variable's lifetime.
+CoD has no closure abstraction. A storable function selects code. A here body accesses the lexical slots in its particular defining activation and can run only while those slots and their owners are valid.
 
 Compiler implementations must preserve source-visible distinctions: independent value storage, a reference's target, an explicit var alias's selected place, and a symbolic identity's dynamically installed value. Natural lexical nesting supplies ordinary lifetimes. Access that exceeds that nesting must be expressed through the formally specified, statically checked dynamic-scope/owner contracts; capture, heap allocation and code sharing are not escape hatches. Existing explicit region ownership transfer remains its own contract. See the [vision principle](GlobalVariablesDoneRight.md#explicit-lifetimes-without-closures).
 
 ## Callable views have lexical storage
 
-H-563 makes the placement boundary explicit: a CoD callable-view value, including its complete captured environment, belongs to lexical-scope storage and must not be stored in a region. Lexical storage may be optimized into registers, stack storage or scope-owned backing; those implementation choices do not change its logical lifetime. The prohibition applies even to an empty-capture view or a representation that happens to fit in a machine word.
+Function-value holders have lexical storage (H-563). The compiler can use registers, stack slots or lexical backing. Even an entry address that fits in one word cannot be placed in a regional field or array.
 
 A regional aggregate or array cannot evade this boundary by embedding a callable-view value directly, through another compound value or through a generic instantiation. Same-owner field references cannot make a lexical callable target regional. Storage eligibility is a type/owner contract, not a special permission inferred because one runtime value is null or has no captures. H-565/H-566 reviews whether callable-bearing ADTs should be admitted specifically in lexical storage; this does not reopen the regional prohibition or automatically qualify such aggregate fields.
 
-Procedure-valued symbolic bindings keep their established selection, capture and scoped replay behavior. Their runtime binding records are not a regional home for the complete view/environment and cannot extend its lexical or borrowed-owner lifetimes. A module lifetime is a full lexical scope. Likewise, program/type/definition descriptions in regional semantic graphs are not executable callable-view values; a definition mention materializes a view only where the callable contract requires one.
+A definition-installed symbolic procedure has an internal scoped replay record. Its lifetime is checked through restoration. Module scope is a full lexical scope. A regional semantic graph may describe a definition without storing a callable value.
 
-Acceptance must reject regional construction/storage of a callable view, including empty captures, nested carriers and generic instances. Existing lexical callable parameters/results/captures retain their independent complete environments and checked external borrows. No new regional carrier, graph serialization permission or lifetime extension follows.
+Acceptance rejects regional storage through nested and generic carriers as well as direct fields. Lexical function holders can receive independent selections. A here value can only be invoked or forwarded synchronously.
 
 ## Copying, moving and graph transfer
 
@@ -44,7 +33,7 @@ Keep the actual operations distinct:
 - Bits transfer reads an initialized valid payload and initializes/writes a destination under its declared rules; it does not transfer object identity or consume the source.
 - Reference binding selects an existing target and preserves its actual owner/access. It does not duplicate the pointee or make a declared place alias of the source reference slot.
 - Ownership transfer changes responsibility for an existing region resource under the consuming contract; it does not move or copy regional objects.
-- Callable-view construction, capture, parameter preparation and result construction follow their dedicated complete-environment contracts. Their existing independent-value behavior remains; it is not a general whole-object copying permission for callable-bearing ADTs. References to callable “copies” elsewhere in this contract describe that dedicated semantic construction, not C++ copy construction or an opaque byte-copy license.
+- Preparing a function value preserves its selected implementation and typed interface. Here calls borrow direct lexical access. Scoped symbolic replay has its own preparation and lifetime rules.
 - Graph transfer is explicit construction/mapping into a destination graph according to the applicable library contract. It preserves or transforms sharing/cycles as that contract specifies; CoD supplies no automatic default graph copier or mover.
 
 Compiler-level loads/stores, byte copying, register movement and native C++ utility operations may implement admitted behavior. They cannot establish source-level operation eligibility. In particular, relocating backing while preserving the same logical owner is distinct from graph transfer to another owner. [D-22](ConstructionAndAcquisition.md#storage-eligibility-and-payload-transfer) records aggregate consequences; ordinary capture/cleanup/owner obligations remain unchanged.
@@ -96,7 +85,7 @@ A declared place alias selects existing storage once. It creates no holder, allo
 
 `in owner` checks the storage's actual owner. For `val var`, this annotates the aliased place, not an owner-qualified independent val type; the ban on `val T in O` remains. Declaration-leading `const` restricts the selected binding/storage through the alias; type-leading `const` restricts its target and every derived access path. These dimensions are independent under D-14; other writable aliases can still change the storage. Existing `=`, `<-`, `<=>` and `<->` rules apply through either name. Selecting an array element or field path fixes that storage location, rather than re-evaluating the selection later.
 
-Declared place aliases can name ordinary variables, regional fields and addressable array elements. Whole-region holders, TLS bindings, temporaries and non-addressable logical container elements do not supply this alias form. Selecting a field through a dynamic region resource does not alias its TLS binding. Capturing an explicit alias preserves its once-selected place and the place's actual owner dependency; it creates neither a new shared slot nor a longer lifetime. Copying its value into an ordinary binding before capture explicitly requests value semantics instead. A lexical-place alias is admitted only when every use is statically within that place's owner lifetime.
+Declared place aliases can name ordinary variables, regional fields and addressable array elements. Whole-region holders, TLS bindings, temporaries and non-addressable logical container elements do not supply this alias form. Selecting a field through a dynamic region resource does not alias its TLS binding. A here body using a declared place alias accesses that once-selected place under its actual owner. A lexical-place alias is admitted only when every use is statically within that place's owner lifetime.
 
 ### Compiler rule: target sharing is not binding-slot aliasing
 
@@ -117,63 +106,41 @@ If x and y happen to select the same target, the writes naturally alias that tar
 
 Selecting `var element -> items[index]` evaluates the selection once. Later index changes or rebinding items do not select a different element. Backing movement follows the selected owner's current resolution information; logical target removal/reuse still needs the container's validity contract. An alias neither pins native addresses nor extends storage lifetime. It need not read a payload merely to name an admitted uninitialized place; later reads/writes retain ordinary definite-initialization rules.
 
-Ordinary parameter passing and result reception obey their declared value/borrow contracts. Passing a var alias does not automatically pass its binding slot as an out parameter; assignment-family destination parameters expose slots only under their explicit D-14 contract. Builtin assignment results expose target views, never the lhs slot. Callable value copies retain independent complete values; sharing immutable code or optimized backing must preserve that independence. Capture of an explicit alias retains the place, while ordinary ref/ptr capture retains the selected target. These distinctions must survive inference, generic specialization, inlining and optimization. No runtime alias registry or ban on legitimate target sharing follows.
+Ordinary parameter passing and result reception obey their declared value/borrow contracts. Passing a var alias does not automatically pass its binding slot as an out parameter; assignment-family destination parameters expose slots only under their explicit D-14 contract. Builtin assignment results expose target views, never the lhs slot. Callable value copies retain independent complete values; sharing immutable code or optimized backing must preserve that independence. A here body accesses the live slot designated by the declared place alias. An explicit ref/ptr argument follows its own parameter contract. These distinctions must survive inference, generic specialization, inlining and optimization. No runtime alias registry or ban on legitimate target sharing follows.
 
-**Two owner roles matter for reference-slot aliases.** In `ref p:T in O`, O owns the target; p's binding slot ordinarily belongs to the current lexical invocation. `var a -> p` names that local slot, so retaining a requires the slot owner as well as the target dependencies of its uses. An alias annotation `var a in O -> p` cannot relabel that local slot as region O storage. A callable capturing ordinary p may outlive the helper when O belongs to a still-live caller; a callable capturing a may not outlive the helper's slot. An alias directly selecting a field in O instead depends on that field's actual owner, irrespective of where the alias name was declared. This prevents an explicit alias from laundering a short-lived binding through a long-lived referent.
+**Two owner roles matter for reference-slot aliases.** In `ref p:T in O`, O owns the target; p's binding slot ordinarily belongs to the current lexical invocation. `var a -> p` names that local slot, so retaining a requires the slot owner as well as the target dependencies of its uses. An alias annotation `var a in O -> p` cannot relabel that local slot as region O storage. A here body accessing either local spelling is bounded by the helper activation. An ordinary reference result may outlive the helper if the caller independently proves O live. An alias directly selecting a field in O instead depends on that field's actual owner, irrespective of where the alias name was declared. This prevents an explicit alias from laundering a short-lived binding through a long-lived referent.
 
 ## Callable owners and captures
 
-| Syntax | Meaning |
-| --- | --- |
-| `where {region state:Counter}` | Declare a formal regional owner and its required field shape. |
-| `func()->const u64 with {region state}` | Associate a callable with that actual owner. |
-| `func [ticks] () -> const u64 { return ticks; }` | Declare the complete body capture list. |
-| `func () -> const u64 { return ticks; }` | Infer required body captures. |
-
-```text
-data Stream { id:u64; }
-region Counter { ticks:u64; }
-function reader(ref stream:Stream in state)
-    where {region state:Counter}
-    -> func()->const u64 with {region state} {
-    val var ticks:u64 in state -> state.ticks;
-    return func [ticks] () -> const u64 { return ticks; };
-}
-```
-
-The stream argument supplies its actual region owner; a separate region parameter is unnecessary. The declared place alias names the regional scalar place, so the callback can outlive the factory call while that region remains live and observes later writes to ticks. Its local spelling creates no factory-local holder to retain. Named and anonymous functions/procedures share these capture rules.
-
-Omitted brackets infer required variables. An explicit list must include every required capture: missing entries error, unused entries warn. Every listed capture remains retained, even if unused. Every borrowed-owner dependency must appear in with before any unused warning is considered; an independent scalar value has no dependency on its source storage owner. Every with-listed owner must actually be captured; the list is not a conservative lifetime upper bound.
-
-Captures distinguish independent values from explicit borrows. H-553 gives scalar val and complete callable values one snapshot/per-invocation-value rule. H-554 prohibits creating traditional closure storage with shared updatable lexical binding cells; dynamically shared variable state uses symbolic variables and an explicit statically tracked owner. H-555 also permits explicit lexical-owner references whose lifetime is statically proved. H-327/H-329's explicit place aliases retain their existing borrowed-place meaning: no implicit conversion into an ordinary value variable, and no hidden slot promotion. No capture promotes storage, freezes external targets, copies a regional graph or extends an owner lifetime. Functions remain independent of dynamic effects; procedure lexical captures remain separate from perform's captured symbolic values and behave/direct calls' current dynamic context.
-
-Parentheses group callable types. `-> func()->T with {...} throws E` declares the returned callback's exception, while `-> (func()->T with {...}) throws E` declares the factory's exception. Unbound with names reject; with does not declare a new owner.
+An ordinary named or anonymous function can use its parameters, locals and static definitions. Referencing an enclosing runtime variable in its body rejects, including through an explicit capture list, a declared place alias or another lexical function holder. Pass runtime data explicitly or invoke a here body while its supplier is live. A function type can independently describe owners for explicit borrowed parameters or results and for origin-bound defaults.
 
 ## Here callables and direct lexical access
 
-**Proposal under review.** An ordinary callable value may denote a selected definition/family in its module world. Its body can use its arguments, locals and accessible static definitions. Under this proposal it cannot retain an enclosing runtime variable, even an independent scalar. A factory that returns a predicate using its local threshold would need to pass that state explicitly, for example as a data receiver. Ordinary procedures may still reference symbolic effects. An ordinary function uses its own arguments and locals and has no access to enclosing runtime slots or dynamic effects. The current [value-capture contract](#value-snapshots-and-invocation-local-captures) admits the threshold factory.
+The [callable storage contract](CallableStorageAndHereAccess.md) covers argument preparation, defaults, symbolic installation, result delivery and cleanup. A func can invoke a here parameter supplied in a proc context under the lexical permissions of that body.
+
+A storable function value denotes its selected definition or family under the statically checked signature. A factory can return a static predicate. A predicate referring to the factory’s local threshold rejects even if the threshold is readonly and would fit in a register.
 
 A `here` body has **direct lexical access**. An outer name still denotes its original declaration and slot. Shadowing works normally. Every invocation, including its required cleanup, must fit the lifetime of the **particular defining activation** and of each slot used. Recursion can have several live instances of the same declaration. An ordinary callable boundary cannot provide access to an enclosing activation it did not retain. Read, write, rebind, consume and dereference retain their ordinary type, access, initialization and lifetime requirements.
 
 ```cod
-proc twice(here step:proc()->void) { step(); step(); }
+func twice(here step() -> void) { step(); step(); }
 
 proc count() -> u64 {
     val n <- 0u64;
     twice() {{ n <- n + 1u64; }};
-    return n;  # 2 under this proposal.
+    return n;  # 2.
 }
 ```
 
 Both calls update the same n. Likewise `{{ p = other; }}` rebinds the enclosing mutable ref slot, and a later invocation uses the currently selected target. No second source binding or shared heap cell is constructed. The receiver of a `here` parameter can use a common invocation interface with a link to the supplied body's defining activation. Each body knows the slots it uses and how to resolve their owners. A single receiver can therefore invoke bodies from sites with different fixed owner counts. Such a link must remain valid across backing relocation. Inlining or passing just the needed access information is equivalent if observations agree.
 
-| Source form | Proposed lexical access and existing control obligations |
+| Source form | Lexical access and control obligations |
 | --- | --- |
 | Module top level | Each incorporated module, including the selected `__main__`, executes its top-level code with direct access to its own initialized lexical slots. Its prefix and `postpon` fragments share that module activation. A callable declared there keeps its own access rules. [Module scope and example](ModuleWorlds.md#here-callable-module-top-levels) |
 | Standalone or trailing `{{ ... }}` | Standalone executes immediately. A trailing body with outer-slot access requires a bounded receiver. Each invocation has its own locals, cleanup and local return. |
 | `for` body | The caller owns the body. Direct `return` targets the enclosing callable, `continue` supplies feedback and generator cleanup still runs. D-29 already specifies [direct lexical access](RangedForAndGenerators.md#lexical-scope-and-completion). |
-| `here` callback parameter | The supplied body's defining activation provides the slots. The receiving body can invoke it repeatedly. Under the proposed current-body-only restriction it cannot pass the parameter on, return it, or store it for later invocation elsewhere. Direct invocation of an ordinary context-free callable is also safe through this interface. |
-| `effect @sym(...) { ... }` body | A reached installation may invoke a method that needs lexical slots only while its particular defining activation is available. Module-world family registration alone supplies no live frame. A copied, restored or reinstalled symbolic binding cannot bypass this condition. |
+| `here` callback parameter | The supplied body's defining activation provides the slots. The receiving body can invoke it repeatedly. It can forward the same body to another func’s compatible here formal for that nested call. Storing or returning the body for later use rejects. Invoking the formal hands control to the original supplier’s lexical scope, even after forwarding through another func. A proc-authored literal may do procedural work there. Function-authored literals retain func permissions. |
+| `effect @sym(...) { ... }` body | A reached installation may invoke a method that needs lexical slots only while its particular defining activation is available. Module-world family registration alone supplies no live frame. Scoped replay and restoration must prove those slots live. |
 
 For an existing functor binding `limit`, the proposed `test(limit, x)` at a `here` parameter should observe the same slot as `test(x) {{=> n; return limit(n); }}`, including a permitted rebind between invocations. An ordinary escaping callable cannot implicitly bind the receiver. Effectful receiver expressions and independent receiver selection need a separate argument-preparation rule.
 
@@ -181,283 +148,61 @@ The frame proof leaves two obligations. A region referenced through an outer slo
 
 ### Symbolic snapshots at definition activation
 
-A procedure snapshots its required symbolic bindings when the running program activates its definition to produce a procedure value. Each fresh activation gets the bindings in effect at that event. Registering a definition in the module world supplies its identity and methods. Storing, passing, returning, installing or reinstalling an already produced value preserves its snapshot. A form such as `effect @sym(...) { ... }` can request activation and installation in one expression. Only the activation reads the bindings for replay. [Definition mentions and runtime views](#definition-mentions-and-runtime-view-construction)
-
-```cod
-symbol @rate:u64;
-symbol @selected:proc()->u64;
-
-proc read_rate() -> u64 { return @rate; }
-effect @rate <- 10u64;
-proc first = read_rate;         # Activate the named definition under 10.
-effect @rate <- 20u64;
-proc second = read_rate;        # Fresh activation under 20.
-proc saved = first;             # Preserve the first value.
-effect @rate <- 30u64;
-effect @selected = saved;
-val a <- perform @selected();   # 10
-val b <- behave @selected();    # 30
-effect @selected = second;
-val c <- perform @selected();   # 20
-```
-
-Both stored values above are ordinary procedures. Neither requires a link to an enclosing lexical slot. `perform` replays the selected value's snapshot, while `behave` and direct lexical procedure calls use the current dynamic bindings. A symbolic snapshot containing a ref retains its target and actual-owner dependency; storing the procedure grants no extra lifetime. A replay that needs a binding unavailable at activation cannot obtain it from a later installation. [Current symbolic call rules](SymbolicDynamicScope.md#captured-values-and-call-behavior)
-
-In a proposed here handler the lexical access and symbolic replay can both be observed:
+Definition activation snapshots the required symbolic bindings. Registering static method information supplies no runtime snapshot. Under the restricted design, activation of an effectful definition supplies an internal record for scoped installation. Only `perform` and `behave` invoke that handler. Standalone extraction or assignment installation cannot request a second snapshot. [Restricted handler operations](SymbolicDynamicScope.md#definition-installed-effectful-procedures)
 
 ```cod
 symbol @rate:u64;
 symbol @quote:proc()->u64;
-
-proc example() -> u64 {
-    val fee <- 1u64;
-    effect @rate <- 10u64;
-    effect @quote() -> u64 { return fee + @rate; };
-    fee <- 2u64;
-    effect @rate <- 20u64;
-    return perform @quote();
-}
+val fee <- 1u64;
+effect @rate <- 10u64;
+effect @quote() -> u64 { return fee + @rate; };
+fee <- 2u64;
+effect @rate <- 20u64;
+val replayed <- perform @quote();   # 12
+val current <- behave @quote();     # 22
 ```
 
-The handler definition activates under `@rate = 10`. Both invocation forms read the live lexical fee as 2. `perform @quote()` replays 10 and gives 12. Substituting `behave @quote()` gives 22. If an already installed binding is read with `@quote` and installed elsewhere, it preserves the same value and snapshot. A handler that needs a lexical frame may only be used within that frame's lifetime. How a later independent activation of a module-world family establishes any required lexical frame is part of the here-callable proposal. [Symbolic installation](SymbolicDynamicScope.md#callable-effects)
+The definition activates with @rate equal to 10. Both invocations read the live lexical fee as 2. Unwind restores the previous binding and its existing replay record. A here handler's borrowed slots and any regional targets still need valid owners. [Definition mentions](#definition-mentions-and-runtime-view-construction) describes the separately confirmed baseline for first-class callable values. Ordinary function values have no symbolic replay record.
 
-Adoption would revise D-18 ordinary snapshot/borrow and definition-mention contracts, D-17 full-scope input semantics, D-10 trailing arguments and symbolic installation, and the corresponding D-12 vision examples. Existing compiler work prepares complete captures and invocation-local values. Migration would change capture checking, slot access, lowering and fixtures that currently require the opposite observable result. Typed invocation, local cleanup and generator control remain useful. D-07's [call-bounded parameter proposal](DomainLanguageDesign.md#one-callback-parameter-for-different-owner-counts) offers a narrower alternative that preserves ordinary retained values. No implementation of either alternative is qualified by this review.
+Use the [compiler migration criteria](CallableStorageAndHereAccess.md#implementation-impact-and-verification) for query, flow and native paths.
 
-## Value snapshots and invocation-local captures
+<a id="value-snapshots-and-invocation-local-captures"></a>
+<a id="ordinary-value-input-implementation-contract"></a>
+<a id="explicit-borrowed-captures-and-shared-state"></a>
+<a id="capture-acceptance-and-remaining-scope"></a>
 
-H-553 confirms the implicit-value-parameter model. Materializing a callable view evaluates and retains each admitted value capture as an independent snapshot. Each invocation initializes an independent local binding from that retained snapshot, with the captured name's declared type, mode and access qualifiers. Explicit var aliases instead retain their selected place under the separate alias contract; their spelling is not an ordinary value binding. Captures are hidden inputs to invocation, not additional public parameters or overload-selection evidence. There is no source-level currently-executing-callable value or writable alias to the retained capture record.
+## Outer slots and explicit arguments
 
-| Captured source | Retained information | Meaning inside an invocation |
-| --- | --- | --- |
-| Ordinary scalar val | Independent initialized bits | A fresh invocation-local val; permitted writes affect only this invocation. |
-| Complete func/proc value | Complete selected callable and nested environment | An independent local callable value; replacement or writable borrowing acts on that local value. |
-| Explicit ref/ptr in O | Selected target, actual owner, type/access and null state | A local reference binding to the selected target; rebinding is local, target writes obey the borrowed view. |
-| Explicit var alias | Selected place and its actual owner/access contract | An alias to that same live place; writes/rebinding affect it, without a new retained binding cell. |
-
-This adds no general by-value regional/ADT graph category. Scalar types retain their exact numeric/UoM/validity rules, with no capture conversion or canonicalization. Complete callables remain their distinct intrinsic lexical value category. Copies of borrowed references do not copy their targets. Implicit and explicit capture lists choose the same semantics; list completeness and unused-entry rules remain.
+An explicitly passed value parameter receives its ordinary local storage. An outer name in a here body denotes the original slot on every invocation. The difference is observable even for a scalar. A read of a mutable ref slot sees its current binding. Any earlier reference still designates its own target and actual owner. The checker tracks both owner invalidation and the effects of writes through forwarding and unwind.
 
 ```cod
-proc make_value() -> proc()->u64 {
-    val v <- 1u64;
-    return proc [v]()->u64 {
-        val before <- v;
-        v <- 2u64;
-        return before;
-    };
-}
-proc f = make_value();
-f();  # 1
-f();  # 1: a new invocation-local v, initialized from the saved 1.
-```
-
-The original v may end with make_value: no reference to its cell was captured. Replacing the source variable after view materialization does not change the snapshot. Changing an invocation-local v does not change that snapshot, another invocation, or another copy of the callable. Complete callable replacement follows exactly the same rule:
-
-```cod
-proc make_switch() -> proc()->u64 {
-    proc current = proc()->u64 { return 1u64; };
-    proc replacement = proc()->u64 { return 2u64; };
-    return proc [current, replacement]()->u64 {
-        val before <- current();
-        current <- replacement;
-        return before;
-    };
-}
-proc s = make_switch();
-s();  # 1
-s();  # 1: replacement changed the first invocation's local current only.
-```
-
-**Timing and initialization.** The snapshot is taken when a runtime view is materialized, not when a named definition is registered and not when the stored view is invoked. Copying/adapting an existing view retains its snapshots; mentioning a definition follows H-481's fresh-view rule in its definition-bound context. Type-only queries neither read capture payloads nor allocate a view. Every snapshotted value must be initialized at materialization, even if the body will overwrite it before its first read or an explicit list entry is unused. Copying a ptr's owner/locator is not a pointee read: the ptr may be null or select uninitialized storage under D-14; ref retains its ordinary non-null/initialized-target requirements. Capturing a place alias also does not itself read that place's payload. Subsequent target/alias reads require ordinary definite initialization; there is no implicit init/out responsibility or exemption. A nested view materialized after local mutation snapshots that current local value; returning the new view by value can preserve that new snapshot without retaining the invocation's cell.
-
-**Const, declared place aliases and local identity.** The captured name retains its declared readonly restrictions in the implicit parameter; capture does not silently make const val mutable. A separately declared writable local copy remains permitted under ordinary value-copy rules. A non-const val/callable capture remains writable inside the invocation. A readonly holder of the outer callable may still invoke it: mutation of invocation-local copies does not replace that holder or its retained snapshot, nor make regional target access pure. Local declared place aliases/writable borrowed parameters can refer to a mutable invocation-local capture with its actual invocation owner. A reference to that local cannot outlive that owner. This is separate from retaining an explicitly borrowed external target. Replacing a local captured callable follows the retained-destination and completed-effect boundary below: prepare the new complete value before releasing the destination's then-current value. It never updates the saved environment.
-
-**Nested calls and recursion.** Repeated, recursive or reentrant invocations of the same stored view receive independent locals from its saved values. Ordinary definition mentions can materialize a fresh view using the current permitted lexical dependencies; no recursion-specific lookup selects a mutable saved environment. Copying a view during an invocation copies that selected view's saved values, while a new inner view can capture the invocation's current local values. Existing definition/value identity, effect permissions and scope rules remain.
-
-**Allocation and soundness.** Use ordinary value-parameter/materialization semantics for ownership of the required storage. Retained snapshots belong to their callable value's owning storage; invocation locals belong to that invocation. Register, stack, lexical backing and permitted copy elimination are implementation choices. Internal references must remain valid until their specified last use, and normal/exceptional cleanup must release owned backing without leaking lexical storage or regions. Borrowed owners are not kept alive by copying a capture. H-553 treats OOM as an exceptional allocation outcome, not a reason to introduce readonly callable captures, persistent mutation or a weaker header-only copy. No allocation on every invocation, permanent ABI, shared mutable capture cell, regional copy/move or allocator protocol is mandated.
-
-### Ordinary value-input implementation contract
-
-**Qualification.** [H-BOUNDED-IMPLEMENTATION-ADOPTION-20261117](../CHANGELOG.md#h-bounded-implementation-adoption-20261117) covers the surviving independent inputs below. [H-EXCEPTION-OBJECT-OWNER-20261118](../CHANGELOG.md#h-exception-object-owner-20261118) supersedes independent exception inputs. This bounded implementation contract and value path delegates the ordinary value-input profile below, preserving the separate statuses of all other scopes in this file. New borrow proofs, aggregate mechanisms and physical protocols outside this profile are not included.
-
-The admitted independent inputs are initialized ordinary scalars and complete func/proc values. A generic instance must establish such a concrete value contract. Numeric/UoM identity and validity and complete nested callable dependencies remain exact. An exception input is a reference to an owner-bound object. Capturing or deferring its use preserves the selected identity and requires its owner to survive each use. No new scalar type, fraction support, arbitrary compound payload transfer or outside-catalog value interpretation is introduced.
-
-A capture's declaration identity, type, value mode and access must reach checking and lowering intact. Ordinary value capture retains a value snapshot; it does not retain the source variable's cell. Each invocation receives independent local value semantics. Inferred and explicit capture lists, named and anonymous definitions, direct calls and stored views use this same distinction. Explicit declared-place sources remain places, and ordinary ref/ptr sources remain selected references; neither can enter this profile by being flattened to a callable payload or machine word. Their wider capture mechanisms remain separately scoped. An explicit ordinary func/proc value constructed from a selected payload is a value input under its existing contract.
-
-Materialization snapshots the current values through definition-bound identities. Ordinary view construction, stored-view passage and fresh definition mentions retain their existing timing. Direct definition calls prepare hidden capture inputs through the established ordered preparation boundary; later operand effects cannot replace an already selected input. Type-only inspection reads no capture payload and constructs no view. Saved scalar values must be initialized even when overwritten before use or explicitly retained unused. Complete callable inputs retain all independently established owner dependencies inside their environments; value independence does not extend those owners.
-
-Inside an invocation, permitted local writes, dedicated callable replacement, local declared-place aliases and writable helper borrows affect that invocation's locals. They do not alter saved snapshots, the factory's cells or another invocation. Const/read-only access remains as declared. A reference to a local capture cannot escape the invocation owner, while a new complete callable value may retain its own admitted value snapshots. Recursive/reentrant activations remain independent and reuse suitable prepared native bodies. Current/perform symbolic contexts retain their established distinction; this profile adds no symbolic declaration, owner source or purity rule.
-
-Storage ownership must match those lifetimes. A replaceable complete callable local must own the complete value it may release; a borrowed header into a saved nested image is insufficient. Reuse ordinary value construction, replacement and release responsibilities wherever applicable. Successfully prepared input values and locals stay valid for all admitted body, return and deferred uses. Failure during input/local preparation prevents unsafe body access and releases the discarded owned acquisitions exactly once, without rolling back completed source effects. Replacement retains the destination selected before RHS evaluation. Preparation of the incoming complete value must succeed before this operation releases or replaces the value then held in that destination. On failure, this operation performs no partial commit of its attempted replacement; it does not restore a payload saved before RHS evaluation or undo an inner replacement. On success, release the destination's current post-RHS value exactly once before installing the prepared replacement. Ordinary cleanup and effect restoration retain their own contracts. Normal return, failed return preparation, recovery and exception cleanup release every abandoned complete value without releasing a retained snapshot, leaking backing or extending a borrowed owner. This profile neither qualifies new D-17 FIFO/aggregate behavior nor changes already scoped completion rules.
-
-For example, assume current, replacement and another are independently owned compatible callable values returning 1, 2 and 3 respectively, and might_fail may throw WorkError:
-
-```cod
-try {
-    current <- {
-        current <- replacement;
-        might_fail();
-        another
-    };
-} catch (e:const WorkError) {
-    assert current() == 2u64;
+func add_one(x:u64) -> u64 { return x + 1u64; }
+func choose() -> func(u64)->u64 { return add_one; }
+proc run() -> u64 {
+    val n <- 4u64;
+    func f = choose();
+    {{ n <- f(n); }};
+    return n;                           # 5
 }
 ```
 
-The single braces preserve ordinary grouping and the selected destination. If might_fail throws, the successful inner replacement remains in current, subject to any subsequent ordinary cleanup/write; the outer replacement contributes no final write. If RHS evaluation succeeds but preparation of the outer complete value fails, the same no-partial-commit rule applies. If the outer operation succeeds, it releases the value then held in current (2) and installs another (3), without releasing the already replaced original (1) again. Double braces would introduce a different ordinary callable/capture boundary and are not equivalent here. This reuses [D-23's destination/effect boundary](ScalarCallResults.md#evaluation-cleanup-and-assignment-results) and [D-14's assignment evaluation rules](RegionalOwnership.md#transfer-results-and-chaining); it introduces no transactional rollback or new compound-assignment policy.
-
-Implementation choices must satisfy the behavior rather than define it. Internal frame descriptors, checked metadata, storage layouts, copy elision and reuse of already owned private temporary backing may reuse existing facilities without a permanent ABI promise. Sharing code or immutable backing cannot create shared writable cells. Prove elision for the admitted path instead of removing mutation guards on borrowed image headers. Measure construction, dedicated value duplication and invocation separately; retain a demonstrated read-only invocation path without image/registration allocation introduced solely to observe unchanged captures. There is no prescribed allocation on every invocation, allocation count for mutable cases, payload-size maximum or new allocator protocol. OOM is an exceptional outcome with valid cleanup, not an alternative source value model.
-
-| Acceptance | Required observation |
-| --- | --- |
-| Ordinary scalar and complete callable inputs | The examples above return 1 on each call; writes/replacement affect only the current invocation. All already admitted concrete input types retain their exact value contracts. |
-| Materialization, source replacement and view passage | Independent views retain the values selected at their own materialization; passing/copying an existing view preserves its snapshots. Later namesakes cannot substitute another declaration. |
-| Qualifiers and explicit places | Readonly captures reject forbidden writes; writable local captures admit existing operations. Declared-place captures keep their selected-place requirement and report an implementation gap until proved; explicit ordinary value construction remains distinct. |
-| Local helpers, recursion and reentrancy | Writable borrowing reaches only the current local. Repeated/recursive/reentrant calls do not change saved values or each other's locals; increasing runtime depth adds no native methods. |
-| Nested result and borrowed escape | An admitted newly constructed inner callable retains the current local value after the invocation ends. A reference to the invocation's local storage cannot escape that owner. Existing nested borrowed dependencies remain live by their own proofs. |
-| Initial reads, ordered preparation and queries | Uninitialized snapshots reject, including unused entries and overwrite-first bodies. Prepared inputs survive later operand effects; queries cause no capture reads, construction or runtime effects. |
-| Partial preparation and replacement failures | Inject failure at successive nonempty value acquisitions and replacement. Discarded owned acquisitions release once; saved snapshots stay callable, caller contexts restore and remaining cleanup follows its existing contract. Completed RHS effects are not rolled back. Cover inner replacement followed by RHS throw, inner replacement followed by outer preparation failure, and successful outer commit releasing the post-RHS destination value exactly once. |
-| Native representation and cost | A stored-view path and a direct-definition path both execute in shared/general and specialized modes, with stable method inventories. Track live image/record counts and bytes through success and failure; demonstrate a read-only invocation path without additional capture-input allocations. |
-
-The qualified profile preserves its C-65/C-73/C-75 → charter value path and all acceptance obligations above. Follow [AGENTS.md's semantic-fidelity rule](../AGENTS.md#semantic-fidelity-and-implementation-obstacles): an actual technical obstacle requires design-level discussion before weakening confirmed behavior; existing-code conflicts require disclosed rework and migration to the current semantics. New lexical-reference and declared-place capture proofs, owner-bearing symbolic capture, callable-bearing compounds, generic aggregate result classification, pure/TCO policy, growable-owner transport, full-scope control lowering and a permanent native/persistent ABI remain outside this qualification. Existing independent qualifications and explicit implementation gaps continue.
-
-## Explicit borrowed captures and shared state
-
-H-554 requires shared mutable captured-variable state to be explicit through dynamic-scoped symbolic variables backed by a tracked owner. D-10 supplies `ref symbol @value:u64 in @region_owner` and H-561's `ref symbol @value:u64 in O where {owner O}`. The latter may borrow a proved lexical or ordinary regional owner without first installing a region symbol; every active/saved/captured use must fit that owner's lifetime. Capturing a symbol retains its value or selected reference according to its declaration; it does not retain the mutable TLS binding cell. perform replay, behave/current invocation and scoped restoration keep their existing meanings. Writing an admitted reference target is an explicit shared-state operation. Rebinding an invocation-local captured reference or a scoped TLS effect does not rewrite another view's retained capture.
-
-H-555 admits `in O` references when O is an explicitly established lexical owner as well as a region, provided all uses are statically proved not to outlive O. This includes a callable value retaining such a reference. No owner or ordinary lexical binding is promoted. Each ref/ptr still has one provable actual owner; several captures may have different separately identified owners. The resulting view's lifetime must satisfy every borrowed dependency. The `with {owner O}` association uses an existing generic/lexical owner; `with {region r}` retains its regional shape contract. Neither form declares a new owner.
-
-```cod
-proc reader(ref x:u64 in O) where {owner O}
-    -> proc()->u64 with {owner O} {
-    return proc [x]()->u64 with {owner O} { return x; };
-}
-
-proc within_owner() {
-    val n <- 1u64;
-    proc read = reader(n);
-    n <- 2u64;
-    read();  # 2: a borrowed target, not a copied scalar payload.
-}
-```
-
-Returning read from reader is valid: x's owner belongs to its caller and remains live. Returning a view that borrows a local n from within_owner would reject when that n's owner ends. Non-escape therefore means not escaping the actual owner, not a blanket ban on returning callbacks from helper calls. Type adaptation, storing/copying a view, nested captures, recursion, deferred use and symbolic replay/restoration cannot erase that dependency. An unknown lifetime proof rejects conservatively; no runtime extension or hidden owning handle repairs it.
-
-An ordinary ref/ptr snapshot fixes its selected target and initializes a local reference binding on each invocation. An explicit var alias instead retains its selected place. For an alias of a ref/ptr field, later field rebinding is observed; for an alias of a scalar field, later bits writes are observed. To freeze the scalar bits or selected reference, first initialize an ordinary val/ref/ptr binding and capture that binding. Neither reading a ref nor naming an alias authorizes graph copying, a new shared cell or lifetime extension. D-10's owner-qualified symbolic references express dynamically scoped shared variable state; ordinary object/field borrowing remains valid. Const, nullability, definite initialization, target identity and owner-plus-locator resolution remain ordinary constraints.
-
-### Capture acceptance and remaining scope
-
-Accept independent scalar/complete-callable snapshots, repeated calls with fresh locals, const-preserving access, mutable local replacement and writable borrowing, nested post-write value snapshots, ordinary definition-versus-view timing, and explicit regional/lexical borrows whose owner outlives every use. Reject uninitialized snapshots, readonly escalation, omitted required owner dependencies, unknown/multiple owners for one reference, view/alias/effect restoration escaping a lexical owner, and any implicit promotion to a shared mutable closure cell. Cover source-holder replacement, copies, recursion/reentrancy, active invocation protection, normal/exceptional release and no backing/region leaks. D-10 owns symbolic declaration/installation constraints; D-14 owns ordinary storage and D-28 owner/locator transport.
-
-Current compiler coverage is recorded separately. Scalar/reference captures and mutation of invocation-local captured callable values require implementation work; existing complete-value copying alone does not establish those paths. The ordinary value-input implementation contract above is qualified; implementation availability remains a separate evidence question. New borrowed snapshot/place transport and broader value-path qualification remain separately scoped. Future pure-callable rules, arbitrary regional graph copying and general runtime lifetime tracking are not selected here.
+A stored function cannot enclose n. A synchronous here callback can update n twice and the supplier sees both writes. Attempting to publish, return, or store that callback for later invocation rejects. A declared place alias remains usable under the lifetime of its selected storage. Shared state across dynamic scopes follows the explicit symbolic binding contract.
 
 ## Owner projection
 
-`cb -> state` borrows the region named state in cb's visible with-type, retaining the captured permissions. A helper accepting `func()->const u64 with {region r}` projects `cb -> r`; the factory's former name state is not exposed through that parameter. Multiple names map explicitly to actual regions, independently of declaration or allocation order.
-
-In the H-457 named-argument design, write `use((cb -> state))` for a positional projected owner, and `use((cb -> state) -> arena)` to pass that owner to named parameter arena. A bare `use(cb -> state)` instead names parameter state and supplies cb; a missing matching name rejects rather than reverting to projection. The parentheses preserve this borrowed region's category, identity and permissions; scalar grouping-to-val rules do not apply to a region. This is the selected argument-syntax direction, with compiler migration still outstanding.
-
-Projection permits ordinary region helpers and root-field access. It cannot consume ownership, obtain writable access from a readonly association or outlive the region. Each owner association is a logical environment slot; WPO may eliminate its physical storage when the actual region is statically fixed. No separate lookup service or RTTI is required.
+A function has no hidden body owner to project. An owner required by an explicit parameter, result or type-bound default must satisfy its own declared contract. A here receiver cannot extract an arbitrary owner from the supplied body or extend that owner's lifetime by forwarding the body.
 
 ## Runtime callable contract
 
-A callable view preserves its selected family dispatcher, module interpretation, view contract and required runtime environment. Several methods are permitted; actual argument types choose the applicable method. Existing native body-selection adapters are implementation infrastructure, not proof of family dispatch across abstract argument/result types. Direct method selection is valid when equivalent for all admitted alternatives. The family architecture and WPO coverage are tracked in [D-21](AheadOfTimeExecutionPreparation.md).
+The static view establishes parameter access and passing modes, results, declared failures, and applicable methods in the selected module world. Actual type evidence still participates in dispatch. A `typeof origin` parameter covers all required origin methods and uses the origin's named arguments and defaults. Dependencies of a definition-bound default are checked when applicable. They belong to the type contract, independently of which function entry a holder selects.
 
-H-459 restricts default-expression authorship to named callable declarations. A callable parameter annotation may use `typeof named_callable` to retain the declaration's named/default contract and its original definition environment. Inline callable types and anonymous callable expressions cannot introduce fresh defaults. An ordinary structural callable type with no default contract requires its arguments; target knowledge cannot implicitly recover erased defaults. Caller-context defaults still run at the actual invocation site with definition-resolved symbolic identities. The inherited default's runtime dependencies must remain available without extending owners. H-460 permits other compatible callable identities: the named origin supplies the public names/defaults, and the target supplies its body with parameters mapped by slot. H-461 makes the default expression and its definition-context association part of the callable type contract; adapting a target does not add default-provider captures to that value. Evaluate the retained expression only when omitted, in the prescribed context and phase, with valid owner/locator and access evidence. This type/evaluation-context dependency remains distinct from the target's ordinary complete body environment; neither may outlive its permitted owners. H-462 retains all signatures of a multi-method named origin; detailed overload/default selection, exact callable-type equality/erasure and physical context evidence remain under review in D-10. No arbitrary adapter, extra owner retention, eager default snapshot or new type/provider ABI is selected.
+A lexical function holder can be passed independently, returned to a caller destination, or replaced by `<-`. Preparing a callee or argument fixes the selected value before later arguments can replace its source holder. An explicitly borrowed holder observes updates under its ordinary access contract. Keep destination selection, readiness, cleanup on failure, exceptional exits and selected method evidence intact. A ptr to a holder retains ordinary nullable-target checks. The `is` operator compares designated storage under D-28. Equal machine entries do not establish equal holder identity.
 
-For `f:typeof origin`, H-462 requires complete implementation of the origin's selected method-signature contract, even if the receiving body currently uses only one overload. A caller-local named family may adapt available implementations. Extra target methods are permitted only when required calls retain valid, unambiguous selection and compatible results/effects/owners; compatible generic methods may provide coverage without one source/native body per origin signature. Origin names/default expressions remain type-contract information. [D-10](SymbolicDynamicScope.md#named-arguments-defaults-and-complete-binding) supplies the acceptance and local-family grammar boundary; this adds no general same-scope variable redefinition or native ABI.
-
-Family selection uses the callable view's declared parameter target-access qualifiers together with actual argument type evidence. A readonly borrowed parameter remains readonly when supplied from writable storage; a writable borrowed parameter requires writable caller access. Value inputs receive independent local storage with the view's declared access. Actual type identity remains available for method selection before value conversion. The selected method must satisfy the view's passing, access, result, owner and exception contracts. Owner equalities retain their ordinary proof requirements.
-
-Module method registration constructs semantic information and does not capture runtime TLS. Runtime callable materialization creates the complete environment; reinstallation retains the existing value/captures. The definition-mention rule below applies equally inside recursion. Lexical slots, named retained owners, nullable views, copies/replacement and captured/current invocation retain their qualified constraints. Per-family capture construction and abstract evidence must satisfy those constraints rather than introducing implicit owner extension or regional callable storage.
-
-Method calls and callable-value calls separate operand preparation from invocation. Preparation retains the selected code, declared passing modes and ordered conversions. Invocation revalidates the prepared views and supplies the current procedure environment, or the explicitly requested captured environment. Symbolic builtins use the same boundary; their observable action occurs only at invocation. Native callable target protection and prepared-value cleanup retain their existing failure behavior. Scope-owned deferred registration and dispatch remain implementation work.
-
-Target access remains separate from holder binding permissions and pure behavior. Acceptance must cover independent place-alias access permissions, readonly captures, const-holder use, copy-failure preservation and bounded invocation cost.
-
-The ABI belongs to one statically linked CoD binary image. Compiler-generated typed adapters connect a callable view to its implementation and captured environment while preserving that implementation's module world. Native dependencies retain the system CRT contract. Cross-process code references, persisted callable views, dynamic code loading and general RTTI are outside this increment.
-
-Callable view payloads and their environments have lexical lifetime owners. Their physical backing may be stack or heap; runtime-sized environments are supported. The owning scope must release its allocations on normal and exceptional exit. Allocation failure follows the existing unchecked OutOfMemoryError contract. They cannot appear in regional fields or arrays and are not bits payloads eligible for arbitrary transfer. Regions remain relocatable; a regional ADT and its methods provide the business-level equivalent of a functor without storing a native code address in regional data.
-
-Non-null variables use func/proc and have val semantics; nullable references to callable payloads use ptr. Definitions establish callable identities/methods; callable variable declarations construct lexical values:
-
-```text
-func read = reader(state);
-func copied = read;
-copied <- another;
-proc update = updater(state);
-ptr optional:func()->const u64 with {region state} = null;
-```
-
-The initializer is evaluated once. A fresh callable result constructs its complete payload and environment into caller-provided lexical storage. At the internal ABI boundary, a callable-returning function/procedure receives a hidden destination pointer; a forwarding call may pass that destination onward. Merely returning a header pointing into an expired callee environment is invalid. Captured regions remain borrowed and retain their original lifetimes and access permissions.
-
-Declaration and nested value capture copy the complete selected callable value, including its environment. Each invocation initializes its local captured callable values from the retained snapshots under H-553; local replacement does not update those snapshots. A wrapper retains an independent callable snapshot; replacing the original later does not change that snapshot. Explicitly aliased places, referenced targets and regions inside either environment remain borrowed, so permitted changes to those places/targets stay observable. Rebinding an ordinary source reference does not retarget its saved reference value. No regional object is copied and no lifetime is extended.
-
-A default callable parameter has an independent callee-local target, following D-14's default parameter ownership. Its value is prepared at that argument's evaluation boundary, before later arguments can replace the source holder. An explicit `in O` parameter borrows external callable storage instead. A callable value result constructs an independent complete value; an explicitly borrowed result retains its declared external owner. Fresh images with no outstanding borrowed access may transfer into their destination without copying. Allocation failure and later-argument failure must release prepared values without altering the source holder or extending captured-region lifetimes.
-
-`destination <- source` replaces a compatible callable value in existing lexical storage, preserving type/owner checks. Ordinary `destination = source` cannot rebind a func/proc variable. A ptr instead refers to callable storage and uses ordinary nullable-reference rebinding/lifetime rules. Its invocation reads the currently stored callable value. typeof is compile-time only; H-440 uses is null for absence testing, while actual nullable-target access retains checked NPE. H-439 is compares selected storage identity, not code or captured-payload equality; complete independent value copies remain distinct storage.
-
-[D-28](RegionalAndLexicalStorageRefactor.md#captures-tls-native-interfaces-and-persistence) reviews complete environments and caller destinations under growable lexical backing. Environment-relative coordinates, lexical slot locators and borrowed target references remain distinct. The hidden destination denotes the selected caller storage; a future lowering must preserve it if that owner's backing can grow during construction. The existing native destination-pointer path alone supplies no such proof. H-437/[D-28-OWNERS](RegionalAndLexicalStorageRefactor.md#shared-owner-information-from-checked-declarations) requires parameter, result and admitted capture transport to reuse shared actual-owner information while retaining each selected target. Recursive activations keep distinct owner instances where required; shared metadata does not promote lexical cells or extend borrowed owners; H-555 admits explicitly owned lexical references only with a non-escape proof. These integration obligations preserve complete-value copies, prepared snapshots, borrowed-region lifetimes and the ban on implicit lexical-cell promotion and shared captured binding slots; physical anchor/destination protocols remain pending.
-
-At the implementation level, the complete callable representation must remain valid under its admitted storage relocation: it contains no pointers into its own prior storage or an expired factory frame. Nested callable environments are included by value. This is an intrinsic lexical value category, not a general bits type that may enter regional fields/arrays. The adapter computes environment access from the current payload address; a copied header pointing to a previous lexical environment does not satisfy this contract.
-
-Direct/behave procedure calls use current dynamic bindings; perform installs the selected procedure's captured symbolic values for its execution scope. Native representation must not merge bodies, module contexts or captured snapshots merely because signatures match.
-
-Recursive calls are required for both functions and procedures. A blanket recursion rejection is not an acceptable endpoint. Call checking must account for cycles in the demanded program; successful finite source expansion is not a substitute for native recursion. The deferred const-function/TCO plan in [D-19](ConstFunctionsAndTailCalls.md) does not restrict procedure recursion. Material conflicts with that plan require human review.
+For a statically selected single method a native entry address can suffice. A compiler-generated entry may dispatch among methods or adapt the known signature. A direct call can eliminate the handle altogether. Here calls require access to the right activation across recursion, backing growth, repeated use and synchronous forwarding. [Implementation latitude and acceptance](CallableStorageAndHereAccess.md#what-an-invocation-needs)
 
 ## Definition mentions and runtime view construction
 
-For procedure replay, **definition activation** is the runtime event that constructs a value from a definition and snapshots its required symbolic bindings. The [two activations of read_rate](#symbolic-snapshots-at-definition-activation) distinguish this event from assigning or installing an existing value. [H-SYMBOLIC-SNAPSHOT-ACTIVATION-20261118](../CHANGELOG.md#h-symbolic-snapshot-activation-20261118)
-
-A name bound to a callable definition denotes that definition under ordinary lexical lookup. When its use requires a runtime callable view, construct a fresh view using the definition's established lexical context and the current required symbolic bindings. This rule applies to named functions and procedures, including mentions within their own bodies and explicit/inferred capture operands. CoD defines no special source-level "currently executing callable value" selected by a recursive name.
-
-Names bound to stored callable values or parameters retain ordinary value semantics. Reading/copying such a value preserves its complete selected environment; adapting its view type or reinstalling it does not recapture from its definition. Borrowed access still selects the existing target. Nearest-binding shadowing remains effective: a parameter named f can denote a stored value even inside a callable definition also named f. Bare registered symbol identities and @symbol TLS reads retain D-10's existing distinction; this rule does not turn symbol objects into ordinary callable-definition name aliases.
-
-```cod
-symbol @bias:u64;
-proc read() -> u64 { return @bias; }
-
-effect @bias <- 10u64;
-proc a = read;      # New view: captures 10.
-effect @bias <- 20u64;
-proc b = read;      # New view: captures 20.
-proc c = a;         # Complete value copy: preserves 10.
-```
-
-The same timing applies to a recursive definition mention:
-
-```cod
-symbol @bias:u64;
-symbol @call:proc(u64)->u64;
-
-proc demo() -> u64 {
-    effect @bias <- 10u64;
-    proc recur(n:u64) -> u64 {
-        if (n == 0u64) { return @bias; } else {};
-        effect @bias <- 20u64;
-        proc again = recur;          # New view captures the current 20.
-        effect @call = again;
-        return perform @call(0u64);
-    };
-    effect @call = recur;            # Initial view captures 10.
-    return perform @call(1u64);      # Required result: 20.
-}
-```
-
-These examples specify the required semantics; current implementation coverage is recorded in the [source capability reference](../tests/cod/language/README.md). The inner binding does not mutate the initial view's stored snapshot. perform installs the selected view's captures, while ordinary/behave invocation uses current symbolic bindings under D-10.
-
-Direct definition calls do not require an intermediate view merely because they mention the definition. Type-only queries retain their nonexecuting behavior: they establish type/context evidence without evaluating captures or allocating a view. A recursive definition reference is not itself a recursively embedded runtime environment; the enclosing definition body is not executed to construct its view. Required dependencies still follow ordinary capture analysis and complete-value rules.
-
-Lexical captures keep their definition-bound identities and admitted environment. In an escaped callable, the retained lexical environment supplies those dependencies; a fresh view cannot search the caller's local names, retain an expired factory cell, promote ordinary lexical cells or extend a borrowed owner's lifetime. Stored nested callable dependencies are copied as values; regional dependencies retain their established borrowed meaning. The current-symbolic-binding rule does not grant functions dynamic effects, relax explicit capture-list completeness, or bypass owner/access/initialization checks. Inherited default expressions retain their separate type-bound origin and evaluation rules.
-
-Fresh construction specifies an independent complete value when one is required. It does not prescribe a heap allocation for every mention, a physical image layout or a new native body per view. Storage/copy elimination must preserve capture timing, required effects, selected targets, lifetime and cleanup under the existing optimization contract.
-
-Acceptance requires the following composed cases:
-
-- Repeated definition materialization captures 10 then 20; copying/adapting/reinstalling the first value preserves 10, and perform/current invocation retains its established distinction.
-- The recursive example returns 20; forwarding a definition mention as a callable argument and capturing it in a nested callable use the same construction rule.
-- Direct recursion and type-only queries preserve lexical definition identity without manufacturing a runtime self value or capture effects.
-- An escaped callable retains valid lexical dependencies, with no caller-name substitution; a value parameter or local shadow follows ordinary lookup and copy semantics.
-- Missing required captures, invalid owner/access/lifetime, uninitialized payload reads and forbidden function effects reject; construction/copy failure follows ordinary cleanup without extending owners.
+A definition name retains its lexical meaning through recursion and type queries. In a value position a func supplies the selected code under the established contract. A name denoting an existing function holder reads its current selection. A direct named procedure call uses current symbolic bindings. Only definition activation prepares a symbolic handler's replay record. `perform` uses its saved bindings and `behave` the current bindings. Both use the live lexical slots of the correct handler activation. A type query performs none of these runtime operations.
 
 ## LLVM compilation scale
 
@@ -471,7 +216,7 @@ Code sharing must preserve selected semantic views, concrete types, actual owner
 
 Current supported and missing behavior, implementation entry points and validation commands are maintained in the [source capability reference](../tests/cod/language/README.md). Language requirements in this document remain subject to their recorded qualification; examples specify acceptance targets, not evidence that every target is implemented.
 
-H-417 closes the reference-owner alternative question: each ref/ptr needs one statically provable owner, inferred from initialization if omitted. A selected callable or returned-view join with unresolved distinct owners rejects; runtime selection of targets within one established owner remains permitted. This is per-reference uniqueness, not a requirement that every captured reference share one owner. D18-Q-result-discrimination remains a separate representation question. Complete values, checked captures, caller destinations, recursion, owner/access/lifetime proofs and cleanup are required within each qualified scope. Broader family, stage and coverage obligations belong to D-21/D-26; they do not approve a permanent callable ABI.
+H-417 requires one statically provable owner per reference. A here site may use several distinct references, each with its own proven owner. Concrete result discrimination remains a separate representation question.
 
 ### D18-Q-result-discrimination — behavior confirmed; representation pending-human
 
@@ -481,6 +226,6 @@ Concrete evidence must survive parameters/results, stored and nullable reference
 
 ## Examples and validation
 
-The [callable fixtures](../tests/cod/language/closures/) specify composed acceptance scenarios: independent nested values, captures and current contexts, recursion, selected bodies, caller destinations, nullable views and cleanup. Current runnable coverage is maintained in the [source reference](../tests/cod/language/README.md); fixture presence alone establishes no implementation support.
+Acceptance covers static function selection, type-origin defaults, recursion with overlapping activations, invalidation of a borrowed owner, slot rebinding, nullable invocation and cleanup. [Source capability reference](../tests/cod/language/README.md)
 
 Measure construction, copy and invocation costs, compilation scale, region release and failure recovery on the supported paths. Reject incompatible kind, owner, access and lifetime; do not infer whole-document qualification from passing examples.

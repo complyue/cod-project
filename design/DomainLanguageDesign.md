@@ -1,12 +1,14 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 176
+Discussion revision: 177
 
 Recorded: 2026-11-18
 
 Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
+
+- **Callback lifetime.** [H-CALLABLE-MODEL-20261118](../CHANGELOG.md#h-callable-model-20261118) selects D-18-HERE for the synchronous cases in DL-01. The explicit wrapper is the acceptance baseline. P-605–P-608 cover the separate functor review. Data-to-here shorthand and overload preference remain open.
 
 - **Related callable redesign.** r176 links the D-07r174/r175 functor and bounded-parameter alternatives to [D-18-HERE](CallableViewsAndCaptures.md#here-callables-and-direct-lexical-access) under [K-HERE-CALLABLES-20261118](../CHANGELOG.md#k-here-callables-20261118). D-18r116 owns the proposed live-slot semantics and its separate qualification review.
 
@@ -316,7 +318,7 @@ Haskell 2010 spells the analogous import `import Model (Receipt(Accepted))` or `
 
 #### Functor receivers and callback arguments
 
-The examples below explore a functor bound into an ordinary callable view. The [here-callable proposal](CallableViewsAndCaptures.md#here-callables-and-direct-lexical-access) instead restricts the receiver-dependent adaptation to a bounded use and observes a named receiver's live slot. The alternatives differ when that slot is rebound or the adapted callable is returned.
+A call-operator method can use an explicit data receiver. At a here formal the caller can write a bounded body using its live receiver slot. Implicit receiver adaptation is a separate UX choice.
 
 A proposed call-operator method takes the receiver as its first parameter. Its target access is an ordinary overload constraint. A readonly target admits only methods callable through readonly access. A writable target can use either access mode. When two applicable methods differ only in receiver target access, the writable match is exact for a writable receiver. Other arguments, owner constraints, callable kind and checked failures retain their ordinary rules.
 
@@ -330,52 +332,19 @@ func (())(self:const Threshold in O, x:u64) -> bool where {const owner O} {
 
 A method may instead declare `self:Threshold in O` when it needs writable target access. A caller with `ref limit:const Threshold in O` cannot supply that access. A caller with `const ref limit:Threshold in O` has a fixed reference slot and a writable target. The owner's allocation permission is independent of both.
 
-At a callable-typed argument, the proposed `test(limit, 12u64)` binds an ordinary receiver reference once to the selected call-operator family in the argument's module world. Check the resulting view against the expected callable contract. For this receiver the trailing callback `test(12u64) {{=> x; return limit(x); }}` captures the same target with the same access. Both retain its actual owner and locator. Rebinding the source reference later leaves the selected target intact. Subsequent writes to that target are visible under the ordinary access rules. The two forms still follow their respective argument evaluation order.
+The explicit form uses the ordinary call operator at each invocation.
 
 ```cod
-func test(pred:func(u64)->bool with {owner O}, x:u64)
-    -> bool where {const owner O} {
-    return pred(x);
-}
-
-func relay(pred:func(u64)->bool with {owner O})
-    -> func(u64)->bool with {owner O} where {const owner O} {
-    return pred;
-}
-
-func escapes() -> func(u64)->bool {
-    ref limit:Threshold in here = make Threshold in here { minimum <- 10u64; };
-    return relay(limit);  # Reject: the returned view would outlive this target.
-    # Using the following return instead rejects for the same reason:
-    # return relay() {{=> x; return limit(x); }};
-}
+func test(here pred(x:u64) -> bool, x:u64) -> bool { return pred(x); }
+# limit is a live Threshold reference in the supplier.
+test(12u64) {{=> x; return limit(x); }};
 ```
 
-Here `with {owner O}` on the callback identifies its borrowed receiver dependency. The callback parameter has its own lexical storage. A helper can invoke it, forward it to another helper, or return it to a still-covered destination as in `relay`. Each onward use must preserve the actual owner and satisfy its lifetime. Returning it from `escapes`, retaining it past release or replacement of that owner, storing a callable view in regional payload, or passing it through an interface that loses the required dependency rejects. An opaque callee needs a sufficient declared contract. [Ordinary callable capture rules](CallableViewsAndCaptures.md#callable-owners-and-captures) and [trailing callback binding](SymbolicDynamicScope.md#trailing-callback-arguments) govern the explicit form as well.
+An ordinary function cannot retain a runtime receiver. The open shorthand `test(limit, 12u64)` could supply the same here body for a named binding. For a computed receiver such as `choose_limit()`, evaluating it once can select a different target and run different effects from evaluating it at each invocation. Specify preparation and the preference between direct data and adapted arguments before accepting the shorthand.
 
 #### One callback parameter for different owner counts
 
-Each source call site has a statically determined set of borrowed owner roles. The receiving declaration must accept different counts from different call sites. Consider an explicitly call-bounded parameter. Here `scoped` illustrates the contract under review.
-
-```cod
-func test(scoped pred:func(u64)->bool, x:u64) -> bool {
-    return pred(x);
-}
-
-# lo, hi and excluded are ordinary readonly u64 references in three distinct live owners A, B and C.
-test(12u64) {{=> x; return x >= lo; }};
-test(12u64) {{=> x; return x >= lo && x <= hi && x != excluded; }};
-```
-
-The first call constructs a view that borrows A. The second borrows A, B and C. A predicate that captures only scalar values borrows none. In this parameter context the checker would infer the exact associations from ordinary captures and the dependencies of any captured views. Every ref still has one actual owner. A functor supplied directly would use its receiver's association in the same way. An exact three-owner `with` cannot serve as a maximum arity for the one-owner call. Supplying two unused owners would violate the existing capture contract. Explicit associations remain available when the receiver needs to project a particular owner.
-
-The caller proves that every captured instance stays live while the call can use the view, including argument preparation after materialization, nested calls and cleanup on either exit. The receiving body checks one interface: it may invoke the parameter or forward it to another checked call-bounded parameter. A local view or nested callback derived from the parameter inherits the restriction. Returning or publishing that view, projecting a hidden owner, or exporting a borrow with no independently established result owner rejects. Outputs with separately proved lifetimes follow ordinary rules. The constraint applies to every implementation reachable through the interface. Opaque code needs a sufficient contract.
-
-Non-escape alone is insufficient. Suppose a procedure takes the callback and an `owned region p:Packet`, replaces p, then invokes the callback. When the callback captures `p.sequence` by reference, successful replacement releases precisely the instance the callback will dereference. Reject that call. A different live region of the same Packet type presents no such conflict if the checker can prove the identities distinct and account for other invalidating effects. A conservative checker can reject an unproved overlap. Ordinary target writes do not release an owner. [Owner replacement](RegionalOwnership.md#replacing-an-occupied-region-owner)
-
-One possible lowering gives each concrete callback an invocation entry that understands its environment. Both entries present the same argument and result convention to `test`. Preparing, retaining and releasing each complete callable value must also respect its particular layout and independent-value semantics. The receiver body needs no positional array of owner arguments, count-based dispatch, or per-call-site native clone. Alternatively, a compiler can generate a specialized receiver body for each statically established callback layout, subject to the same source checks. That can reuse layout-specific invocation at the cost of replicating receiver code. Neither strategy needs specialization per runtime owner identity. The [current native invocation path](../cod/lang_llvm.hh) reads captures using the selected method's layout, and one [signature-checking path](../cod/lang_checked.hh) explicitly diagnoses owner-bearing callable types as unsupported. Accepting this proposal would require checking transitive non-escape and owner invalidation as well as adapting invocation. This is a feasibility assessment, not an implementation qualification.
-
-The narrower proposal adds this behavior only for parameters promising call-bounded use. A helper that returns a callback with named dependencies can use the exact `with` interface in `relay` above. Returning a callback with an arbitrary hidden set would need a separate rule relating its result to its input.
+The same here signature accepts bodies using zero, one or several separately proved owners. Each body uses its own declaration sites and particular supplying activation. The receiving function can invoke it or forward it synchronously. A later use through a released target rejects even if its former slot now holds another live owner. See [the callable contract](CallableStorageAndHereAccess.md#what-an-invocation-needs) for recursion, relocation and a shared invocation interface.
 
 #### Standalone callable declarations
 

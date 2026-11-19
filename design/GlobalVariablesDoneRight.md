@@ -2,9 +2,11 @@
 
 *显式组合，动态上下文 · Explicit composition and dynamic context*
 
-Design revision 33 · 2026-11-17
+Design revision 34 · 2026-11-18
 
 ## Design authority
+
+- **Direct lexical access.** [H-CALLABLE-MODEL-20261118](../CHANGELOG.md#h-callable-model-20261118), D-12-LIFETIME/P-491–P-493 and D-18-HERE. The explicit lifetime principle applies to recursive and forwarded here bodies. Accept updates within the supplying activation and reject escape. Native layout belongs to the compiler.
 
 - **Discussion-index continuity:** [K-DISCUSSION-SCAN-20261117](../CHANGELOG.md#k-discussion-scan-20261117) continues r32→33’s packet-source summary from H-262/H-263 and D-14/D-17 E4. Preserve C-52/C-54/P-131–P-135’s candidate Actor path and charter §§3.2–3.3/4.3/6.3/8: consumed names, live local views and transport responsibility are distinct. The existing acceptance/exclusions stand; mailbox result/queue policy and complete operational qualification remain pending. No new transport or source rule is selected.
 
@@ -29,15 +31,15 @@ Design revision 33 · 2026-11-17
 
 ## Explicit lifetimes, without closures
 
-**CoD has no closure abstraction.** Callable definitions and callable views remain distinct; a view may retain independent captured values and explicitly borrowed places/targets with statically checked owners. It provides no hidden shared mutable variable cells and never extends the lifetime of a source variable, lexical frame or borrowed region. This principle is part of the vision, not an optional implementation preference.
+**CoD has no closure abstraction.** An ordinary function value selects capture-free code. A here body can use the original lexical slots for the duration of its supplying activation. Neither can extend a lexical lifetime.
 
-Lexical scopes naturally provide well-nested lifetimes. Independent value copies may outlive their source because they occupy separately owned storage, not because the source lifetime was extended. Each invocation receives independent local copies of ordinary value captures. Explicit `in O` references and `var a -> slot` aliases may borrow lexical storage when all uses are statically proved to remain within its owner lifetime. A helper can return a view borrowing its caller's live owner; it cannot return a view borrowing storage whose owner ends with that helper.
+Lexical scopes give direct access its well-nested lifetime. The compiler proves the lifetime of each slot and of its current target separately. Forwarding a here body through nested synchronous calls preserves both obligations. Ordinary arguments and explicit owner transfers follow their own contracts.
 
 Shared mutable variable state across dynamic call contexts must use explicit, formally specified and statically checked dynamic scoping, with a tracked owner such as `in @region_owner` or H-561's declaration-scoped `in O where {owner O}` supplied by the installed target. The latter admits proved lexical and ordinary regional owners without installing an owning-region symbol. Capturing or replaying a symbolic reference preserves the selected target and actual owner, not an immortal TLS slot. Hidden saved bindings and restoration are subject to the same lifetime proof. Merely assigning a value to a symbolic binding cannot legitimize a dangling reference. D-10 owns supported declaration/installation forms; lexical-owner borrowing alone does not introduce local symbol declarations or a new owner-binding syntax.
 
 **Declared place aliasing is explicit; runtime object-identity aliasing through independent ref/ptr slots is allowed without an alias declaration. CoD introduces no implicit variable-slot aliasing.** “Compile-time aliasing” may denote the declared source-contract layer; it does not require the selected address to be known at compile time. An explicit `var a -> items[i]` may select its place at runtime. Runtime target equality may be statically proved in particular cases, but need not be; owner/access/lifetime rules still govern every use. Unique owners and readonly access do not establish exclusive access or disjoint targets. Optimization must preserve legitimate target and place overlap. The [alias glossary](CallableViewsAndCaptures.md#alias-terminology) is authoritative: compiler-facing discussions, documentation, comments, diagnostics and interface names must state declared place aliasing, runtime target aliasing or name/identity aliasing; unqualified alias/aliasing is not a substitute.
 
-**Compiler developer rule:** resist importing traditional closure and variable-slot aliasing semantics. `var v -> some_slot` explicitly names an existing place. Ordinary ref/ptr bindings can share a target while retaining independent binding slots; copying or capturing such a reference must not secretly share its source slot. Ordinary value captures, callable copies, parameter passing and returns follow their own value/borrow contracts. Assignment-family destination parameters expose slots only under their explicit contract. Equal pointers, shared native code and an optimizer's common storage are not source-level permission to merge variable identities.
+**Compiler developer rule.** Keep declaration identity, slot and selected target distinct. A here body can directly rebind the supplier’s mutable ref slot. An independent ref parameter has its own binding. A storable function cannot retain either slot. Resist promoting a frame or introducing a hidden mutable cell to accept an escaping body.
 
 Do not repair an invalid escape by boxing a lexical variable, retaining a frame, reference-counting a hidden shared cell or extending a whole lexical owner. Heap backing for valid scope-owned values is permitted, as are stack/register allocation and copy elimination that preserve observable behavior. Physical allocation or delayed allocator reuse does not change logical scope exit. Internal references must remain valid and owned backing must be released on normal and exceptional paths. OOM is an exceptional allocation outcome, not a reason to substitute shared mutable captures for value semantics.
 

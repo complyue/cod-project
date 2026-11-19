@@ -1,5 +1,62 @@
 # Changelog
 
+## 2026-11-18 — Confirm capture-free functions and activation-bounded here callables
+
+<a id="h-callable-model-20261118"></a>
+**H-CALLABLE-MODEL-20261118.** On 2026-11-18 (America/Los_Angeles), the project user confirmed the discussed model in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50): “那就按此决定”, “没有capture”, and “技术细节以开发主线判断为准”. D-18r127/storage r9 fixes capture-free storable func values, synchronous here values with direct access to the supplying activation, and the two brace forms including local break feedback. P-609–P-612/P-615–P-622 link those source guarantees to explicit lexical lifetime, control and effect origin. The current source rule supersedes ordinary lexical snapshot/borrow environments under H-342/H-553/H-555, D-18r114 and the input portion of D-17r92. Preserve local double-brace completion, named type-default contexts, placement, symbol replay and ordinary arguments. The user authorizes retiring incompatible compiler work and delegates native representation to mainline. Functor argument preparation, native ABI and pure functions are outside this confirmation.
+
+<a id="k-callable-contract-alignment-20261118"></a>
+**K-CALLABLE-CONTRACT-ALIGNMENT-20261118.** Following H-CALLABLE-MODEL-20261118, the design chat applied D-18r127/storage r9 to D-07r177, D-10r211, D-12r34, D-17r120, deferred checks r4, D-21r31, D-28r36 and registry r937. Continue established selection, typed defaults, local completion, eager deferred-call preparation, owner resolution and symbolic replay. Replace conflicting lexical input and holder contracts. The prior design baseline is `c6b2bde9f85ba5361b06b691efa9e28faa421ad3:design/CallableViewsAndCaptures.md`.
+
+## 2026-11-18 — Return break feedback to the body invocation and name the callable value kinds
+
+<a id="h-here-body-result-20261118"></a>
+**H-HERE-BODY-RESULT-20261118.** On 2026-11-18 (America/Los_Angeles) the project user corrected K-HERE-BREAK-20261118 in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50): “break 7; 让 body() 返回 7,最终返回108。” D-18-HERE-BREAK at storage review r8/registry936 records normal completion of the body invocation. The receiving function resumes and runs its remaining code.
+
+<a id="h-callable-value-kinds-20261118"></a>
+**H-CALLABLE-VALUE-KINDS-20261118.** In the same [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-18 (America/Los_Angeles), the project user specified “CoD 最终只有 `here` 和 `func` 两种 callable value” and added “trailing { ... } 我感觉不需要 `here` 关键词好些”. D-18r126/D-10r210/storage review r8 use here alone in the declaration and plain trailing braces at the use site. H-HERE-CALLABLE-FORWARD-20261118 supplies the bounded-use rule. The source decision excludes proc holders; remaining implementation work is unqualified.
+
+## 2026-11-18 — Assess break with a result for a here-body call
+
+<a id="k-here-break-20261118"></a>
+**K-HERE-BREAK-20261118.** On 2026-11-18 (America/Los_Angeles) the project user asked the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) to consider “here { ...; break xxx; ... } 控制直接返回 plus_one()”. Storage review r7/D-18r125/registry935 compare giving the original receiving call an early result with normal body completion and supplier return. Lexical targeting through forwarding, cleanup and init obligations are design proposals.
+
+## 2026-11-18 — Assess single-brace here arguments with caller-targeted exits
+
+<a id="k-here-group-20261118"></a>
+**K-HERE-GROUP-20261118.** On 2026-11-18 (America/Los_Angeles), the project user proposed in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) a here argument with “`{ ... }` 语法的不建专门 scope，直接透穿 `return`/`throw`”. Storage review r6/D-10r209/D-18r124/registry934 compare it with the confirmed double-brace and generator rules, including a retry contract, forwarding and cleanup. The user requested deriving the details from generators. The assessment recommends one formal admitting both forms, preserving invocation-specific effect restoration and caller-owned defer. Adoption and implementation qualification remain open.
+
+## 2026-11-18 — Forward one here callable through synchronous function calls
+
+<a id="k-here-callable-parameter-20261118"></a>
+**K-HERE-CALLABLE-PARAMETER-20261118.** The project user proposed in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) “只有 proc 内的 {{ ... }} 可以创建 ‘here proc’ 传给 func” and “都叫 ‘here callable’”. D-10r208/D-18r123/storage review r5/registry933 examine that lexical authority, one source formal and ordinary callback exception handling. Declaration punctuation, native transport and future pure behavior are outside this proposal.
+
+<a id="h-here-callable-forward-20261118"></a>
+**H-HERE-CALLABLE-FORWARD-20261118.** On 2026-11-18 (America/Los_Angeles) the project user clarified in the same [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) “不允许保存下来外逃，只允许在当前scope调用；也允许传递给其它 func 作为 ‘here callable’ 使用”. D-18-HERE-PARAM records this source scope at storage review r5. A nested func can receive the same body with the same bounded contract. The decision replaces the direct-use-only draft in K-HERE-CALLABLES-20261118; it supplies no ordinary procedure value or native ABI.
+
+<a id="h-here-origin-handoff-20261118"></a>
+**H-HERE-ORIGIN-HANDOFF-20261118.** On 2026-11-18 (America/Los_Angeles) the project user specified in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) “跟 generator 调用 for-loop-body 差不多，就认为是把控制传递回给原本的 scope”. D-18-HERE-PARAM records this lexical handoff through forwarding, with D-29-EFFECTS as its precedent. H-FULL-SCOPE-CALLABLE-20261117 and the existing callback throws contract supply block-local completion.
+
+## 2026-11-18 — Assess function-only callable values
+
+<a id="k-function-only-callable-values-20261118"></a>
+**K-FUNCTION-ONLY-CALLABLE-VALUES-20261118.** In the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-18 (America/Los_Angeles), the project user requested feasibility analysis of “callable view/value 只能是function，不支持proc” and clarified “已有的测试不代表不可舍弃的业务价值”. D-18r122/storage review r4/registry932 compare the loss of retained procedural callbacks with direct definitions, symbolic operations and a bounded procedural body for synchronous library calls. This assesses a broader change than H-EFFECT-CONSUMER-CALL-20261118; adoption and any implementation migration remain open.
+
+## 2026-11-18 — Call symbolic-effect consumers by definition
+
+<a id="h-effect-consumer-call-20261118"></a>
+**H-EFFECT-CONSUMER-CALL-20261118.** On 2026-11-18 (America/Los_Angeles) the project user clarified H-EFFECTFUL-PROC-INSTALL-20261118 in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50): “鼓励容易静态分析的直接 by-definition 调用，所以reject `later();` 属于常规操作”. D-10r207/D-18r121/storage review r3/registry931 retain direct lexical calls under H-185/H-189 and reject ordinary callable-value invocation hiding perform/behave. This does not settle an unused holder declaration or a dedicated handoff for a trailing here body.
+
+## 2026-11-18 — Restrict installation and invocation of effectful procedures
+
+<a id="h-effectful-proc-install-20261118"></a>
+**H-EFFECTFUL-PROC-INSTALL-20261118.** On 2026-11-18 (America/Los_Angeles) the project user directed the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) to reconsider effectful procedures under “只允许定义安装，不允许赋值安装，也不允许取为callable去传递，只允许通过 perform/behave 调用”. D-10r206/D-18r120/D-21r30/storage review r2/registry930 record that source restriction. H-SYMBOLIC-SNAPSHOT-ACTIVATION-20261118 still fixes handler snapshot timing. Ordinary consumers, here callbacks and composed-family activation remain under review.
+
+## 2026-11-18 — Assess callable storage, lexical slot access and indirect replay
+
+<a id="k-callable-storage-review-20261118"></a>
+**K-CALLABLE-STORAGE-REVIEW-20261118.** At the project user's request in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), the r1 storage assessment compares D-18r119/registry929 with checkpoint `c6b2bde9f85ba5361b06b691efa9e28faa421ad3:design/CallableViewsAndCaptures.md`. Mainline reports a lexically independent bridge replaying a nested handler's saved scalar after factory exit in both native modes. The live-slot counterpart exposes a transitive frame dependency. Admission and proof of bounded local snapshots remain under review.
+
 ## 2026-11-18 — Include executable module top levels as here callables
 
 <a id="h-here-module-toplevel-20261118"></a>
