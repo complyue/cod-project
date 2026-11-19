@@ -5266,7 +5266,7 @@ class ScalarChecker {
     result_probe_ = id;
     const auto completion = type_evidence(*method.source->body, state);
     result_probe_ = previous;
-    if (!returns.value_obligation && completion != Type::never && state.complete)
+    if (!returns.value_obligation && (completion || !returns.unresolved) && completion != Type::never && state.complete)
       returns.types.push_back(Type::void_type);
     if (method.source->implicit_scope && completion == Type::never && state.complete &&
         returns.types.empty() && !returns.value_obligation && !returns.unresolved &&
@@ -6899,7 +6899,7 @@ class ScalarChecker {
       if (!state.validating_body) switch (expr.kind) {
       case K::integer: case K::real: case K::boolean: case K::null_ref: case K::name: case K::symbol:
       case K::unary: case K::binary: case K::call: case K::value_call: case K::behave: case K::perform: case K::field:
-      case K::conditional: case K::block: case K::grouped: case K::transfer: case K::rebind: break;
+      case K::conditional: case K::block: case K::grouped: case K::transfer: case K::rebind: case K::typed_expression: break;
       case K::callable:
         if (expr.definition->name.empty()) break;
         [[fallthrough]];
@@ -6989,6 +6989,16 @@ class ScalarChecker {
       if (result == GroupResult::value && type->kind == Type::procedure && source.view == true)
         note_type_allocation(state);
       return type;
+    }
+    case K::typed_expression: {
+      if (*expr.annotation != Type::void_type) implementation_gap(expr.at, "non-void expression conversion or assertion");
+      const auto operand = child(0, false, true, EvidenceRead::target);
+      if (!operand) {
+        if (state.returns) state.returns->unresolved = true;
+        return {};
+      }
+      if (state.required && operand == Type::null_ref) fail(expr.at, "explicit discard requires an independently typed operand");
+      return operand == Type::never ? Type{Type::never} : Type{Type::void_type};
     }
     case K::block: {
       std::optional<Type> result = Type::void_type;
@@ -10287,6 +10297,15 @@ class ScalarChecker {
       } else operation.predicate = predicate_of(source);
       if (result == GroupResult::value && operation.type.kind == Type::procedure && source.view)
         note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
+      break;
+    }
+    case K::typed_expression: {
+      if (*expr.annotation != Type::void_type) implementation_gap(expr.at, "non-void expression conversion or assertion");
+      const auto &operand = *expr.children.front();
+      const auto type = check(operand, instance, operations, false);
+      if (type == Type::null_ref) fail(expr.at, "explicit discard requires an independently typed operand");
+      require_live_view(operations.at(&operand), operand.at);
+      operation.type = type == Type::never ? Type{Type::never} : Type{Type::void_type};
       break;
     }
     case K::conditional: {

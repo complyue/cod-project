@@ -291,7 +291,7 @@ struct Expression {
                     block, grouped, conditional, field, range_for, fold, allocate, index, null_ref,
                     try_scope, handler, raise, return_value, deferred, make_region, touch, effect_group, transfer, procedure_effect,
                     pointer_group, pointer, make_local, rebind, region_binding, callable, alias, capture_owner,
-                    here_body, named_argument, break_value, continue_value };
+                    here_body, named_argument, break_value, continue_value, typed_expression };
   Kind kind;
   Location at;
   std::string text;
@@ -1356,9 +1356,14 @@ class Parser {
     }
     fail(token.at, "expected an expression; symbolic writes require 'effect'");
   }
-  Expr expression(int minimum = 0, bool attach = true, bool owner_projection = true) {
+  Expr expression(int minimum = 0, bool attach = true, bool owner_projection = true, bool type_suffix = true) {
     const ParseEntry entry(recursion_, peek().at, "an expression");
-    return finish(expression_impl(minimum, attach, owner_projection));
+    auto operand = expression_impl(minimum, attach, owner_projection);
+    if (minimum != 0 || !type_suffix || !is(":")) return finish(std::move(operand));
+    auto typed = make(Expression::Kind::typed_expression, expect(":"));
+    typed->children.push_back(finish(std::move(operand)));
+    typed->annotation = parse_type();
+    return finish(std::move(typed));
   }
   Expr expression_impl(int minimum, bool attach, bool owner_projection) {
     auto left = primary(attach, owner_projection);
@@ -1406,19 +1411,19 @@ class Parser {
       auto assignment = make(Expression::Kind::call, tokens_[cursor_++]);
       assignment->text = "[]" + assignment->text;
       assignment->children = std::move(left->children);
-      assignment->children.push_back(expression(0, attach, owner_projection));
+      assignment->children.push_back(expression(0, attach, owner_projection, false));
       return assignment;
     }
     if (minimum == 0 && is("<-")) {
       auto transfer = make(Expression::Kind::transfer, expect("<-"));
       transfer->children.push_back(std::move(left));
-      transfer->children.push_back(expression(0, attach, owner_projection));
+      transfer->children.push_back(expression(0, attach, owner_projection, false));
       return transfer;
     }
     if (minimum == 0 && is("=")) {
       auto rebind = make(Expression::Kind::rebind, expect("="));
       rebind->children.push_back(std::move(left));
-      rebind->children.push_back(expression(0, attach, owner_projection));
+      rebind->children.push_back(expression(0, attach, owner_projection, false));
       return rebind;
     }
     return left;

@@ -1582,6 +1582,16 @@ class LLVMEmission {
         return reachable() && snapshot_callable && !discard ? copy_temporary(value, expr.at) : value;
       });
     }
+    case K::typed_expression: {
+      const auto &operand = *expr.children.front();
+      std::map<Projection, std::vector<size_t>> alternatives;
+      for (size_t i = 0; i < contexts_.size(); ++i)
+        alternatives[result_source(contexts_[i].at(&operand))].push_back(i);
+      return contextual_value(expr, alternatives, "discard", [&](Projection source) -> llvm::Value * {
+        emit_expression(operand, source);
+        return reachable() ? empty_scalar() : nullptr;
+      });
+    }
     case K::callable: return empty_scalar();
     case K::null_ref: return null_pointer();
     case K::symbol: return b_.CreateLoad(scalar_, symbols_.at(*fact.symbol), "effect.current");

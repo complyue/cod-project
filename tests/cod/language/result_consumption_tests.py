@@ -40,6 +40,26 @@ runner.CASES = {
  'finally_replacement_return':(IO+PICK+'func read(tag:T,ref x:i64 in O)->const i64 where {T,owner O}{try{return 0;}finally{return pick(tag,x);};}val x<-1;behave @print(read(false,x));x<-1;behave @print(read(0,x));',0,'2\n1\n',''),
  'borrowed_null_checks_before_later_operand':(IO+NPE+NULL+'proc consume(x:i64,y:i64)->void{behave @print(x);}proc run(tag:T,ptr x:i64 in O)->void throws NullPointerException where {T,owner O}{consume(pick(tag,x),{behave @print(99);0});}val x<-1;ptr p=x;p=null;try{run(false,p);}catch(e:const NullPointerException){behave @print(8);};try{run(0,p);}catch(e:const NullPointerException){behave @print(8);};',0,'8\n99\n7\n',''),
  'discarded_null_result_is_not_read':(IO+NULL+'proc run(tag:T,ptr x:i64 in O)->void where {T,owner O}{pick(tag,x);behave @print(8);}val x<-1;ptr p=x;p=null;run(false,p);run(0,p);',0,'8\n8\n',''),
+ 'explicit_discard_preserves_selected_result_category':(IO+
+   'func choose(flag:bool,ptr item:u64 in O)->ptr u64 in O where {owner O}{return item;}'
+   'func choose(tag:i64,ptr item:u64 in O)->u64 where {owner O}{return 7u64;}'
+   'func drop(tag:T,ptr source:u64 in O)->void where {T,owner O}{choose(tag,source):void;return;}'
+   'ptr absent:u64=null in here;absent:void;drop(false,absent);drop(0,absent);behave @print(8u64);',0,'8\n',''),
+ 'explicit_discard_evaluates_once_and_preserves_failure_cleanup':(IO+NPE+
+   'proc mark(n:u64)->u64{behave @print(n);return n;}'
+   'proc fail_now()->u64 throws NullPointerException{defer behave @print(3u64);ptr missing:u64=null in here;return missing;}'
+   'mark(1u64)+mark(2u64):void;try{fail_now():void;}catch(e:const NullPointerException){behave @print(4u64);};',0,'1\n2\n3\n4\n',''),
+ 'explicit_discard_does_not_supply_a_circular_result':(
+   'func loop(){loop():void;}loop();',2,'','unproved callable result'),
+ 'explicit_discard_accepts_an_independent_recursive_anchor':(IO+
+   'func count(n:u64){if(n>0u64){count(n-1u64):void;}else{};return n;}behave @print(count(3u64));',0,'3\n',''),
+ 'explicit_discard_requires_a_valid_operand_join':(
+   '(if(true){true}else{17u64}):void;',2,'','conditional join'),
+ 'explicit_discard_preserves_nested_value_projection':(
+   'val pending<-make local u64;(pending):void;',2,'','initialization'),
+ 'explicit_discard_preserves_typed_query_nonexecution':(IO+
+   'proc work()->u64{behave @print(9u64);return 1u64;}'
+   'val answer<-make local typeof({work():void;7u64}){13u64};behave @print(answer);',0,'13\n',''),
  'deferred_discarded_result_is_not_read':(IO+NULL+'proc run(tag:T,ptr x:i64 in O)->void where {T,owner O}{defer pick(tag,x);behave @print(8);}val x<-1;ptr p=x;p=null;run(false,p);run(0,p);',0,'8\n8\n',''),
  'uninitialized_borrow_still_rejected':(NPE+NULL+'func read(tag:T,ptr x:i64 in O)->const i64 throws NullPointerException where {T,owner O}{return pick(tag,x);}val x<-make local i64;try{read(false,x);read(0,x);{}}catch(e:const NullPointerException){};',2,'','cannot prove initialization'),
  'nullable_borrow_still_requires_handler':(NPE+NULL+'func read(tag:T,ptr x:i64 in O)->const i64 where {T,owner O}{return pick(tag,x);}val x<-1;read(false,x);read(0,x);',2,'','requires a covering catch'),
