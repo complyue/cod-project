@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-19 — Document callable containers as choice producers
+
+<a id="k-enumerative-choice-20261119"></a>
+**K-ENUMERATIVE-CHOICE-20261119.** The project user requested a dedicated language-feature section (“值得在语言特性文档专门放个章节阐述”) in the design side chat on 2026-11-19 (America/Los_Angeles). D-10r220→221 and registry r963→964 illustrate H-GENERATOR-RECEPTION-20261119 and H-FUNCTOR-ARGUMENT-20261119 with a bound receiver and nested search. At the user’s request the section compares observable answers and consumption with Haskell lists. The example preserves traversal order, control targets, effects and owner requirements. The functor declaration spelling and compiler support retain their existing scope. Prior overview at `bfbba6afaa890f89653250212dba89e5eca37ef9:design/SymbolicDynamicScope.md`, “Generalized for-loops”.
+
 ## 2026-11-19 — Apply ordinary argument preparation to a directly supplied functor
 
 <a id="h-functor-argument-20261119"></a>

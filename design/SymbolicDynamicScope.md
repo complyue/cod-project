@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 220 · Recorded: 2026-11-19 · Phase: language/application co-design.
+Design revision: 221 · Recorded: 2026-11-19 · Phase: language/application co-design.
 
 ## Design authority
+
+- **Callable containers as choice producers.** [K-ENUMERATIVE-CHOICE-20261119](../CHANGELOG.md#k-enumerative-choice-20261119) continues the D-10 feature overview at r221 under D-29-GENERALIZED-FOR/P-623–P-624 and D-07-FUNCTORS. C-96/C-65 link caller-controlled traversal and owner validity to charter §§3.2/4.3/6.1. Compare both call spellings, the filtered route sequence and the target of an early exit. The Haskell list comparison checks order, duplicate answers and how consumption is bounded. The operator spelling and native admission retain their respective design scopes.
 
 [H-CALLABLE-TAIL-20261119](../CHANGELOG.md#h-callable-tail-20261119) applies the [callable result rules](CallableResultInference.md#results-of-proc-func-and-here-bodies) to calls, discards and double-brace callbacks at r220. An explicit procedure exit and a local callback tail each supply evidence to their own invocation.
 
@@ -1650,6 +1652,69 @@ The SNN owns the neuron equations, AP/rate interpretation, training rules and da
 A library can provide one traversal and let each caller use either `for val n <- ascending() { ... }` or `ascending() (n) => { ... };`. Both select the same generator, enter the caller’s live lexical scope in the same order and deliver the same feedback. In the declaration, `yields` introduces a first here parameter named `yield`; `yield(item)` calls it. A written first here parameter such as `step` carries the same protocol. There is one method for the two call spellings. Changing the selected generator can change the visit order or membership effects under either spelling. [Ascending and descending in both call forms](RangedForAndGenerators.md#generalized-for-loops)
 
 For the proposed collection interface, `visit(xs) (index, item) => { ... };` exposes a readonly item for each visit. In a void visit, `continue;` finishes the current observation and `break;` ends the whole visit. The collection stays intact in both cases. A library function with a non-void result can also let the caller supply that result with `break value;`. [Collection examples](CollectionsAndBuiltinContainers.md#observation-and-owner-scope)
+
+### Callable containers and enumerative nondeterminism
+
+A container can model a choice among zero or more answers by offering each candidate to a caller-supplied body. The producer controls which candidates it offers and in what order. The caller decides what to do with each one. This models *enumerative nondeterminism*. Several answers can be possible even when their visit order is completely predictable. Repeated handoffs remain observable.
+
+For example, a container of two station IDs can offer both through its call operator. The two definitions below are alternative spellings of one traversal. They use the [proposed functor declaration syntax](DomainLanguageDesign.md#functor-receivers-and-callback-arguments).
+
+```cod
+data Stops { first:u64; second:u64; }
+
+func (())(self:const Stops in O) yields u64 where {const owner O} {
+    yield(self.first);
+    yield(self.second);
+}
+
+# Equivalently, write this definition in place of the one above.
+func (())(self:const Stops in O, here emit(id:u64) -> void)
+    -> void where {const owner O} {
+    emit(self.first);
+    emit(self.second);
+}
+```
+
+In `starts()`, the expression `starts` supplies `self`. Count the caller-visible parameters after binding that receiver. The first is the `here` parameter for the consumer. Both `for val id <- starts() { record_stop(id); }` and `starts() (id) => { record_stop(id); };` record the same two stops in order. A container author can also expose the same generator protocol through a named operation. [Generator declaration and call equivalence](RangedForAndGenerators.md#generalized-for-loops)
+
+Suppose `starts` offers 10 and 20, and `ends` offers 20 and 30. This procedure body enumerates candidate routes and records each one whose endpoints differ.
+
+```cod
+for val origin <- starts() {
+    for val destination <- ends() {
+        if (origin == destination) { continue; }
+        record_route(origin, destination);
+    }
+}
+return;
+```
+
+The recorded routes are `(10, 20)`, `(10, 30)` and `(20, 30)`, in that order. Each outer candidate starts a fresh inner traversal. An empty inner traversal contributes zero routes. In a search procedure, `return true;` at the first accepted route exits both loops through their required cleanup. A bare `break;` at the same site ends only the current inner traversal. Completed writes and calls such as `record_route` keep their effects when search continues. A search that needs to undo a speculative update must arrange that explicitly.
+
+The example yields independent scalar values. For a borrowed yield, each component has one statically established owner throughout the traversal. A collection of independently owned objects can expose an ordinary visitor with an owner bound separately for each callback invocation, as in the proposed collection interface. [Fixed yield owners](RangedForAndGenerators.md#one-fixed-owner-per-borrowed-yield-component) · [Per-member visitation](CollectionsAndBuiltinContainers.md#observation-and-owner-scope)
+
+#### Comparison with Haskell lists
+
+Haskell represents an enumeration of alternatives as a list. The list comprehension and the CoD traversal agree on the route order for these inputs.
+
+```haskell
+routes starts ends = [(a, b) | a <- starts, b <- ends, a /= b]
+
+routes [10, 20] [20, 30]  -- [(10,20), (10,30), (20,30)]
+```
+
+The list monad explains how choices compose. Given `next :: a -> [b]`, `xs >>= next` enumerates the answers of `next x` for each successive `x` in `xs`. The corresponding CoD pattern is to call the next producer inside the current consumer. The inner traversal can depend on the outer candidate, for example by visiting only the destinations reachable from the current station. [Haskell 2010 Report, §3.11 on list comprehensions](https://www.haskell.org/onlinereport/haskell2010/haskellch3.html) · [Standard Prelude, list monad instance](https://www.haskell.org/onlinereport/haskell2010/haskellch9.html)
+
+| Choice operation | Haskell list | CoD traversal |
+| --- | --- | --- |
+| Offer zero or one answer | `[]` or `[x]` | Finish without a handoff, or call `yield(x)` once. |
+| Compose and filter | Nested generators and a Boolean guard | Nested producer calls and a conditional in the consumer. |
+| Observe a prefix | `take 1 (routes starts ends)` demands at most the first answer. | The body can act on the first answer and exit with its lexical `break` or `return`. |
+| Keep the answers | A lazy list is a value its caller can retain and consume later. | Each handoff invokes the live body synchronously. A caller that wants a retained collection builds it explicitly under the usual ownership rules. |
+
+For the finite, ordered producers above, collecting the CoD handoffs reproduces the Haskell list, including duplicate routes if the inputs repeat. For an unbounded inner enumeration, depth-first traversal in either example can spend all its time on the first origin. In CoD the consumer can also perform observable work at each handoff, such as booking a seat. Skipping a later candidate leaves an earlier booking in effect.
+
+Within the Haskell list monad, `return x` gives `[x]`. In the CoD producer, `yield(x)` offers that single candidate and resumes when the consumer finishes normally. Haskell’s `Functor []` supplies `fmap` for mapping elements, its `Monad []` supplies choice composition, and a CoD functor supplies an overloaded call operation. [List instances in the Standard Prelude](https://www.haskell.org/onlinereport/haskell2010/haskellch9.html)
 
 ## Validation and unresolved contract scope
 
