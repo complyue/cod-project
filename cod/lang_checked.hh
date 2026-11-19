@@ -857,6 +857,23 @@ class ScalarChecker {
       const auto written = [&](const EvidenceSlot &slot) {
         return may_overlap(footprints.at(slot), selection.footprint);
       };
+      std::map<EvidenceSlot, EvidencePlaces> updated_targets;
+      if (!selected.places.empty() || known == TargetPresence::absent) {
+        for (const auto &[slot, footprint] : footprints) {
+          if (!written(slot)) continue;
+          const bool definite = selection.slot == slot ||
+              (selection.footprint.size() == 1 && selection.footprint.contains(slot));
+          if (definite) updated_targets.emplace(slot, selected.places);
+          else {
+            // A write through a selected place may leave another slot intact.
+            const EvidenceSelection previous{slot, footprint};
+            auto places_before = places(previous);
+            if (places_before.empty() && presence(previous) != TargetPresence::absent) continue;
+            places_before.insert(selected.places.begin(), selected.places.end());
+            updated_targets.emplace(slot, std::move(places_before));
+          }
+        }
+      }
       std::erase_if(facts, [&](const auto &fact) {
         return fact.second != known && written(fact.first);
       });
@@ -864,13 +881,10 @@ class ScalarChecker {
       std::erase_if(reference_observations, [&](const auto &entry) { return written(entry.first); });
       preserve_observations(written, selected.presence_proof);
       std::erase_if(targets, [&](const auto &target) { return written(target.first); });
+      targets.merge(updated_targets);
       std::erase_if(initialized_selections, written);
       remove_selected(written);
       std::erase_if(selected.same_selected, written);
-      if (!selected.places.empty() || known == TargetPresence::absent) {
-        if (selection.footprint.size() == 1) targets[*selection.footprint.begin()] = selected.places;
-        if (selection.slot) targets[*selection.slot] = std::move(selected.places);
-      }
       if (known != TargetPresence::unknown) {
         if (selection.footprint.size() == 1) facts[*selection.footprint.begin()] = known;
         if (selection.slot) facts[*selection.slot] = known;
@@ -1614,7 +1628,7 @@ class ScalarChecker {
     if (source_declaration) warn_shadow(name, at);
     const auto id = bindings_->size();
     bindings_->push_back({type, read_only, value_binding, fixed});
-    bindings_->back().scope = scope.id;
+    bindings_->back().place_owners.insert(scope.id);
     bindings_->back().alias = alias;
     if (!alias) {
       lexical_.targets[id] = targets;
@@ -1839,12 +1853,13 @@ class ScalarChecker {
     }
   }
   void require_deferred_slots(const CheckedOperation &view, const Location &at) const {
-    for (const auto id : physical_slots(view.slots)) {
+    const auto cleanup = std::find_if(lexical_.scopes.begin(), lexical_.scopes.end(), [&](const auto &entry) {
+      return entry.id == cleanup_scope_;
+    });
+    for (const auto id : physical_slots(view.slots)) for (const auto owner : bindings_->at(id).place_owners) {
+      if (external_owner(owner)) continue;
       const auto scope = std::find_if(lexical_.scopes.begin(), lexical_.scopes.end(), [&](const auto &entry) {
-        return entry.id == bindings_->at(id).scope;
-      });
-      const auto cleanup = std::find_if(lexical_.scopes.begin(), lexical_.scopes.end(), [&](const auto &entry) {
-        return entry.id == cleanup_scope_;
+        return entry.id == owner;
       });
       if (scope > cleanup) fail(at, "deferred reference binding does not outlive its cleanup scope");
     }
@@ -2902,13 +2917,12 @@ class ScalarChecker {
       // Payload guarantees concern entry targets. Current selections are
       // established only after the binding updates have been substituted.
       if (!immediate_scope) effects.selections.initialized.clear();
+      std::set<size_t> initialized_outputs;
       for (const auto &[parameter, targets] : outcome->second) {
         const auto &destination = views.at(parameter);
         const auto written = overlapping_slots(destination.slots);
         const bool unchanged = immediate_scope && exact_binding_selection(targets, parameter, destination);
-        if (immediate_scope && !unchanged)
-          for (const auto binding : written) effects.selections.initialized.erase(binding);
-        if (targets.initialized && destination.binding) effects.selections.initialized.insert(*destination.binding);
+        if (targets.initialized && destination.binding) initialized_outputs.insert(*destination.binding);
         if (unchanged) continue;
         CleanupEquations::Targets selected;
         for (const auto input : targets.targets) {
@@ -2937,6 +2951,10 @@ class ScalarChecker {
         }
         for (const auto &[binding, current] : lexical_.targets) {
           if (intersect(written, physical_slots({binding})).empty()) continue;
+          if (immediate_scope) {
+            effects.selections.initialized.erase(binding);
+            effects.selections.initialized_if.erase(binding);
+          }
           auto update = selected;
           if (destination.slots.size() != 1 || !destination.slots.contains(binding)) update.entries.insert(binding);
           effects.selections.targets[binding].merge(update);
@@ -2964,6 +2982,7 @@ class ScalarChecker {
           }
         }
       }
+      effects.selections.initialized.insert(initialized_outputs.begin(), initialized_outputs.end());
     }
   }
   void prepare_borrow(const CheckedOperation &view, ArgumentMode mode, const Location &at) {
@@ -4232,7 +4251,7 @@ class ScalarChecker {
       }
       if (expr.kind == K::alias) {
         for (const auto &child : expr.children) visit(*child, bound, query);
-        if (!expr.owner_name.empty()) use(expr.owner_name, expr.at, bound, query);
+        if (!expr.owner_name.empty() && expr.owner_name != "here") use(expr.owner_name, expr.at, bound, query);
         bound.insert(expr.text);
         required.declarations.insert(expr.text);
         return;
@@ -5030,7 +5049,7 @@ class ScalarChecker {
     const auto owner = [&](const EvidenceOwner &original) {
       return EvidenceOwner::retained(owners.try_emplace(original, owners.size()).first->second);
     };
-    for (auto &[name, view] : context.views) if (view.owner) view.owner = owner(*view.owner);
+    for (auto &[name, view] : context.views) view.map_owners(owner);
     for (auto &[name, id] : context.owner_bindings) id = owner(id);
     for (const auto &[original, id] : owners) {
       context.external_owners.insert(EvidenceOwner::retained(id));
@@ -5055,6 +5074,8 @@ class ScalarChecker {
       if (const auto found = state.views.find(capture.name);
           found != state.views.end() && found->second.value_capture == true) {
         found->second.owner = EvidenceOwner{};
+        found->second.place_owners = {EvidenceOwner{}};
+        found->second.storage_kind = PlaceKind::value;
         found->second.view = found->second.value_binding = true;
         found->second.fixed_binding = false;
         found->second.slot_read_only = found->second.read_only;
@@ -5077,15 +5098,16 @@ class ScalarChecker {
       for (const auto &parameter : profile.parameters)
         if (!parameter.owner.empty() && state.views.contains(parameter.name))
           retain(parameter.owner, state.views.at(parameter.name).owner);
+      for (const auto &[name, access] : profile.place_access)
+        if (state.views.contains(name)) retain(profile.parameters[access.input].owner, state.views.at(name).owner);
       for (const auto &[name, role] : profile.owner_names)
         if (context.owner_bindings.contains(name))
           retain(profile.owners[role].name, context.owner_bindings.at(name));
-      for (auto &[name, view] : state.views)
-        if (view.owner && forwarded.contains(*view.owner)) view.owner = forwarded.at(*view.owner);
+      const auto translate = [&](EvidenceOwner owner) { return forwarded.contains(owner) ? forwarded.at(owner) : owner; };
+      for (auto &[name, view] : state.views) view.map_owners(translate);
       for (auto &[name, owner] : state.owner_bindings)
         if (forwarded.contains(owner)) owner = forwarded.at(owner);
       for (const auto &[pair, relation] : context.owner_relations) {
-        const auto translate = [&](EvidenceOwner owner) { return forwarded.contains(owner) ? forwarded.at(owner) : owner; };
         state.owner_relations[{translate(pair.first), translate(pair.second)}] = relation;
       }
       for (const auto &[name, role] : profile.owner_names)
@@ -5106,6 +5128,20 @@ class ScalarChecker {
                                     value ? EvidenceOwner{} : state.owner_bindings.at(parameter.owner), false,
                                     parameter.fixed_binding, parameter.read_only, independent || live_value,
                                     !live_value && argument_mode(parameter) == ArgumentMode::borrowed_ptr};
+      auto &view = state.views.at(parameter.name);
+      view.storage_kind = place_kind(*view.value_binding, parameter.declaration_kind == "ref");
+      if (const auto &profile = method.scope_inputs; profile && profile->place_owners.contains(i)) {
+        for (const auto role : profile->place_owners.at(i)) view.place_owners.insert(EvidenceOwner::parameter(role));
+      } else if (state.full_scope_owner) view.place_owners.insert(*state.full_scope_owner);
+    }
+    if (method.scope_inputs) for (const auto &[name, access] : method.scope_inputs->place_access) {
+      auto view = state.views.at(method.input_parameters()[access.input].name);
+      view.read_only = access.read_only;
+      view.fixed_binding = access.fixed || view.fixed_binding.value_or(false);
+      view.value_capture = false;
+      state.bindings[name] = arguments[access.input];
+      state.definitions.erase(name);
+      state.views.insert_or_assign(name, std::move(view));
     }
     return state;
   }
@@ -5358,10 +5394,18 @@ class ScalarChecker {
       return x && y ? std::optional<bool>{false} : std::nullopt;
     };
     const auto owner = a.view == false ? b.owner : b.view == false ? a.owner : a.owner == b.owner ? a.owner : std::nullopt;
-    return {either(a.read_only, b.read_only), either(a.view, b.view), a.value_binding == b.value_binding ? a.value_binding : std::nullopt,
-            owner, a.mixed_view || b.mixed_view || a.view != b.view,
-            either(a.fixed_binding, b.fixed_binding), a.slot_read_only == b.slot_read_only ? a.slot_read_only : std::nullopt,
-            a.value_capture == b.value_capture ? a.value_capture : std::nullopt, a.nullable || b.nullable};
+    ViewEvidence result{either(a.read_only, b.read_only), either(a.view, b.view),
+                        a.value_binding == b.value_binding ? a.value_binding : std::nullopt,
+                        owner, a.mixed_view || b.mixed_view || a.view != b.view,
+                        either(a.fixed_binding, b.fixed_binding), a.slot_read_only == b.slot_read_only ? a.slot_read_only : std::nullopt,
+                        a.value_capture == b.value_capture ? a.value_capture : std::nullopt, a.nullable || b.nullable};
+    if (!a.place_owners.empty() && !b.place_owners.empty()) {
+      result.place_owners = a.place_owners;
+      result.place_owners.insert(b.place_owners.begin(), b.place_owners.end());
+    }
+    if (a.storage_kind && b.storage_kind)
+      result.storage_kind = a.storage_kind == b.storage_kind ? *a.storage_kind : PlaceKind::mixed;
+    return result;
   }
   enum class GroupResult { value, nullable_target, unsupported };
   static GroupResult group_result(const Type &type, bool view, bool nullable, bool mixed) {
@@ -5858,6 +5902,8 @@ class ScalarChecker {
     caught.owner_bindings.erase(handler.text);
     caught.selections.remove_binding(handler.text);
     caught.views[handler.text] = {true, true, true, EvidenceOwner::for_scope(handler), false, false, true, true};
+    caught.views.at(handler.text).place_owners.insert(EvidenceOwner::for_scope(handler));
+    caught.views.at(handler.text).storage_kind = PlaceKind::value;
     return caught;
   }
   static void restore_type_binding(TypeEvidenceState &state, const TypeEvidenceState &entry, const std::string &name) {
@@ -6497,9 +6543,11 @@ class ScalarChecker {
       }
       PresenceSlotMap exported_slots;
       std::map<EvidenceSlot, EvidenceSelection> live_bindings;
+      EvidencePlaces live_value_places;
       if (body.selections.tracking) {
         PresenceSlotMap imported_slots;
         QuerySelections::Observations imported_booleans;
+        std::map<EvidenceSlot, EvidenceSlot> local_place_slots;
         const auto retain_witness = [&](const EvidenceSlot &slot) {
           body.selections.footprints.try_emplace(slot, EvidencePlaces{slot});
           body.selections.entry_selections.insert(slot);
@@ -6518,15 +6566,29 @@ class ScalarChecker {
           const EvidenceSlot local = std::pair{callee.definition.get(), name};
           if (view->second.value_binding == true) {
             body.selections.value_places.emplace(name, source.places);
-          } else if (source.selection.slot) {
-            // Entry observations outlive writes to the invocation's slots.
-            for (const auto &slot : source.same_selected) {
-              retain_witness(slot);
-              imported_slots[slot].insert(local);
+            if (const auto &place = source.selection.slot; place && state.checks_initialization()) {
+              if (live_value_places.insert(*place).second) {
+                auto selected = source;
+                selected.initialized = state.selections.selection_initialized(source);
+                body.selections.save_selection(*place, std::move(selected));
+              }
+              body.selections.bindings.emplace(name, EvidenceSelection{*place, {*place}});
             }
-            if (source.presence_proof) retain_observed(*source.presence_proof);
-            body.selections.bind(name, local, source);
-            live_bindings.emplace(local, source.selection);
+          } else if (source.selection.slot) {
+            const auto [place, inserted] = local_place_slots.try_emplace(*source.selection.slot, local);
+            if (inserted) {
+              // Entry observations outlive writes to the invocation's slots.
+              for (const auto &slot : source.same_selected) {
+                retain_witness(slot);
+                imported_slots[slot].insert(local);
+              }
+              if (source.presence_proof) retain_observed(*source.presence_proof);
+              body.selections.bind(name, local, source);
+              live_bindings.emplace(local, source.selection);
+            } else {
+              const auto &slot = place->second;
+              body.selections.bindings.emplace(name, EvidenceSelection{slot, {slot}});
+            }
           }
           if (body.bindings.at(name) == Type::boolean) state.selections.read_boolean(source.places);
           for (const auto &place : source.places)
@@ -6591,7 +6653,12 @@ class ScalarChecker {
         std::optional<PresenceBranches> boolean_returns = PresenceBranches{{}, {}};
         for (const auto &outcome : completed.paths) {
           auto caller = state;
-          if (state.checks_initialization()) project_type_initialization(caller, outcome.state, first_local_observation);
+          if (state.checks_initialization()) {
+            project_type_initialization(caller, outcome.state, first_local_observation);
+            for (const auto &place : live_value_places)
+              if (outcome.state.selections.initialized_selections.contains(place))
+                caller.selections.initialized_selections.insert(place);
+          }
           const auto exported = project_scope_bindings(caller.selections, outcome.state.selections, live_bindings,
                                                         exported_slots, first_local_observation);
           for (auto reason : outcome.reasons) {
@@ -6843,6 +6910,8 @@ class ScalarChecker {
         if (!value && declaration->binding != "<-" && state.value.mixed_view && owner != state.full_scope_owner) owner.reset();
         state.views[declaration->text] = {readonly, true, value, owner, false, expr.fixed_binding, readonly, value,
                                          expr.declaration_kind == "ptr"};
+        if (state.full_scope_owner) state.views.at(declaration->text).place_owners.insert(*state.full_scope_owner);
+        state.views.at(declaration->text).storage_kind = place_kind(value, expr.declaration_kind == "ref");
         state.selections.remove_binding(declaration->text);
         EvidencePlaces places;
         if (state.selections.tracking && completes && (type == Type::boolean || state.tracks_target_places())) {
@@ -6875,21 +6944,42 @@ class ScalarChecker {
     case K::alias: {
       const auto type = child(0, false, true, EvidenceRead::target);
       if (type == Type::never) return Type::never;
+      auto selected = state.value;
+      if (state.required) {
+        if (selected.view == false || type == Type::null_ref) fail(expr.at, "alias requires an existing storage place");
+        if (!selected.value_binding || selected.mixed_view) implementation_gap(expr.at, "alias of a non-binding storage place");
+        if (selected.storage_kind == PlaceKind::mixed) implementation_gap(expr.at, "alias selection with different storage kinds");
+        if (!expr.declaration_kind.empty()) {
+          if (!selected.storage_kind) implementation_gap(expr.at, "declared place alias requires an established storage kind");
+          const auto kind = place_kind_name(*selected.storage_kind);
+          if (kind != expr.declaration_kind) fail(expr.at, "alias kind must match the selected " + kind + " storage");
+        }
+        if (expr.annotation && type != evidence_annotation(*expr.annotation, state))
+          fail(expr.at, "alias annotation requires the exact selected type");
+        if (expr.annotation && !expr.read_only && selected.read_only == true)
+          fail(expr.at, "readonly source cannot supply a writable alias target");
+        if (!expr.owner_name.empty()) {
+          const auto owner = expr.owner_name == "here" ? state.full_scope_owner :
+              owner_evidence(expr.owner_name, state, expr.at);
+          if (selected.place_owners.empty() || std::ranges::any_of(selected.place_owners, [&](const auto &place) {
+                return compare_owners(owner, place, &state) != OwnerMatch::satisfied;
+              })) fail(expr.at, "alias owner must match the selected binding storage, not its target owner");
+        }
+      }
       state.bindings[expr.text] = type;
       state.local_declarations[expr.text] = &expr;
       state.definitions.erase(expr.text);
       state.owner_bindings.erase(expr.text);
-      auto selected = state.value;
-      if (state.required && selected.nullable && !selected.value_binding)
-        implementation_gap(expr.at, "declared place alias of a non-binding storage place");
       if (expr.read_only || (expr.fixed_binding && selected.value_binding.value_or(false))) selected.read_only = true;
-      else if (expr.fixed_binding && !selected.value_binding) selected.read_only.reset();
       if (expr.fixed_binding) selected.fixed_binding = true;
       state.views[expr.text] = selected;
       state.views[expr.text].value_capture = false;
       state.selections.remove_binding(expr.text);
-      if ((type == Type::boolean || state.tracks_target_places()) && selected.value_binding == true && !state.target.places.empty())
+      if ((type == Type::boolean || state.tracks_target_places()) && selected.value_binding == true && !state.target.places.empty()) {
         state.selections.value_places.emplace(expr.text, state.target.places);
+        if (!state.target.selection.slot && state.target.places.size() > 1)
+          state.selections.bind(expr.text, &expr, state.target);
+      }
       if (selected.nullable || !state.target.selection.footprint.empty())
         state.selections.declare_place(expr.text, &expr, state.target);
       return Type::void_type;
@@ -6977,6 +7067,8 @@ class ScalarChecker {
       }
       if (state.preparing(expr)) record_type_invocation(expr, state, {0}, true);
       view.value_binding.reset(); view.fixed_binding.reset(); view.slot_read_only.reset();
+      view.place_owners.clear();
+      view.storage_kind.reset();
       return type;
     }
     case K::conditional: {
@@ -7231,12 +7323,16 @@ class ScalarChecker {
       if (reach.repeat && !iteration.repeated_observations) iteration.repeated_observations = first_iteration_observation;
       const auto control_owner = EvidenceOwner::for_scope(expr);
       iteration.bindings[expr.text] = index; iteration.views[expr.text] = {true, true, true, control_owner, false, false, true, true};
+      iteration.views.at(expr.text).place_owners.insert(control_owner);
+      iteration.views.at(expr.text).storage_kind = PlaceKind::value;
       iteration.local_declarations[expr.text] = &expr;
       iteration.definitions.erase(expr.text);
       iteration.owner_bindings.erase(expr.text);
       iteration.selections.remove_binding(expr.text);
       if (fold) {
         iteration.bindings[expr.binding] = accumulator; iteration.views[expr.binding] = {true, true, true, control_owner, false, false, true, true};
+        iteration.views.at(expr.binding).place_owners.insert(control_owner);
+        iteration.views.at(expr.binding).storage_kind = PlaceKind::value;
         iteration.local_declarations[expr.binding] = &expr;
         iteration.definitions.erase(expr.binding);
         iteration.owner_bindings.erase(expr.binding);
@@ -7886,6 +7982,9 @@ class ScalarChecker {
       state.views[name] = {binding.read_only, true, binding.value_binding, owner, false, fixed, slot_read_only,
                            !binding.alias && binding.selection.empty() && (binding.value_binding || binding.callable_value),
                            binding.nullable};
+      for (const auto slot : physical_selection)
+        for (const auto owner : bindings_->at(slot).place_owners) state.views.at(name).place_owners.insert(owner);
+      state.views.at(name).storage_kind = binding.kind();
       if (!track_selection || binding.owner_binding || physical_selection.empty()) return;
       const auto places = [&](size_t slot) {
         EvidencePlaces result;
@@ -8035,7 +8134,10 @@ class ScalarChecker {
       }
     }
     std::set<EvidenceOwner> owners;
-    for (const auto &[name, view] : state.views) if (view.owner) owners.insert(*view.owner);
+    for (const auto &[name, view] : state.views) {
+      if (view.owner) owners.insert(*view.owner);
+      owners.insert(view.place_owners.begin(), view.place_owners.end());
+    }
     for (const auto &[name, owner] : state.owner_bindings) owners.insert(owner);
     for (const auto &[name, owner] : external_owners_) if (owners.contains(owner)) state.external_owners.insert(owner);
     for (const auto owner : owners) for (const auto other : owners)
@@ -8071,7 +8173,7 @@ class ScalarChecker {
       if (found == state.bindings.end() || !found->second)
         implementation_gap(query.at, "typeof requires a known lexical declaration with a proved result contract");
       auto view = state.views.at(query.name);
-      if (view.owner) view.owner = retained_owner(*view.owner);
+      view.map_owners(retained_owner);
       std::optional<EvidenceOwner> owner;
       if (const auto named = state.owner_bindings.find(query.name); named != state.owner_bindings.end())
         owner = retained_owner(named->second);
@@ -8750,6 +8852,7 @@ class ScalarChecker {
       if (candidate.owner_names != inputs.owner_names || candidate.relations != inputs.relations ||
           candidate.nonnull != inputs.nonnull || candidate.live_values != inputs.live_values ||
           candidate.live_bindings != inputs.live_bindings ||
+          candidate.place_access != inputs.place_access || candidate.place_owners != inputs.place_owners ||
           candidate.overlapping_input_bindings != inputs.overlapping_input_bindings ||
           candidate.boolean_conditions != inputs.boolean_conditions ||
           candidate.reference_conditions != inputs.reference_conditions ||
@@ -8885,6 +8988,7 @@ class ScalarChecker {
     };
     std::vector<Type> arguments;
     std::vector<CheckedOperation> views;
+    std::map<size_t, size_t> place_inputs;
     for (const auto &capture : method.captures) {
       const auto binding = lexical_.lookup(capture.name);
       const auto *source = binding ? &bindings_->at(*binding) : nullptr;
@@ -8892,25 +8996,41 @@ class ScalarChecker {
         inputs.owner_names.emplace(capture.name, owner_role(named_owner(capture.name, capture.at), capture.at));
         continue;
       }
-      if (source && (source->alias || !source->selection.empty()))
-        implementation_gap(capture.at, "capture of a declared place alias requires selected-place lifetime and transport proof");
       const bool independent = !source || source->definition;
       const bool live_value = !independent && (source->value_binding || source->callable_value);
       const bool live_binding = !independent && !live_value;
+      const bool declared_place = !independent && (source->alias || !source->selection.empty());
       Parameter parameter; parameter.name = capture.name; parameter.at = capture.at;
       parameter.declaration_kind = independent ? "val" : !live_value && source->requires_initialized ? "ref" : "ptr";
-      parameter.fixed_binding = !independent && source->fixed;
       const auto &operand = scope_operand(method_id, capture);
       const auto type = check(operand, instance, operations, independent);
-      const auto &view = operations.at(&operand);
+      auto view = operations.at(&operand);
       if (!lexical_value_type(type))
         implementation_gap(capture.at, "full-scope input requires an admitted target or independent value type");
       parameter.read_only = view.read_only;
       if (!independent) {
+        const auto [input, inserted] = place_inputs.try_emplace(*view.binding, arguments.size());
+        const auto ordinal = input->second;
+        if (declared_place)
+          inputs.place_access.emplace(capture.name, CheckedMethod::ScopeInputs::PlaceAccess{ordinal, view.read_only, view.fixed_binding});
+        if (!inserted) {
+          if (!declared_place) inputs.parameters[ordinal].name = capture.name;
+          continue;
+        }
+        if (declared_place) parameter.name = "$scope.place." + std::to_string(ordinal);
         if (view.owners.size() != 1)
           implementation_gap(capture.at, "full-scope reference input requires one statically provable owner");
         require_borrow_lifetime(view, capture.at, false);
         parameter.owner = inputs.owners[owner_role(*view.owners.begin(), capture.at)].name;
+        const auto slots = physical_slots(view.slots);
+        parameter.read_only = std::ranges::all_of(slots, [&](size_t slot) { return bindings_->at(slot).read_only; });
+        parameter.fixed_binding = std::ranges::any_of(slots, [&](size_t slot) { return bindings_->at(slot).fixed; });
+        for (const auto slot : slots) for (const auto owner : bindings_->at(slot).place_owners) {
+          if (lexical_.live && !owner_alive(owner)) fail(capture.at, "selected storage place's lexical owner has ended");
+          inputs.place_owners[ordinal].insert(owner_role(owner, capture.at));
+        }
+        // The outlined body applies each lexical name's access restrictions.
+        view.read_only = parameter.read_only;
       } else if (type.kind == Type::procedure) {
         note_abrupt(capture.at, {exception_id(ExceptionCategory::out_of_memory)});
       }
@@ -9989,7 +10109,8 @@ class ScalarChecker {
       break;
     }
     case K::alias: {
-      const auto owner = expr.owner_name.empty() ? std::optional<size_t>{} : named_owner(expr.owner_name, expr.at);
+      const auto owner = expr.owner_name.empty() ? std::optional<size_t>{} :
+          std::optional<size_t>{expr.owner_name == "here" ? cleanup_scope_ : named_owner(expr.owner_name, expr.at)};
       const auto type = child(0, false);
       const auto declared = expr.annotation ? std::optional{resolve_local_type(*expr.annotation, instance, expr.at)} : std::nullopt;
       if (type == Type::never) {
@@ -10003,16 +10124,14 @@ class ScalarChecker {
       source = selection_state(std::move(source), expr.at);
       const auto slots = physical_slots(source.slots);
       const auto selected = bindings_->at(*slots.begin());
-      const auto kind_of = [](const CheckedBinding &binding) -> std::string {
-        return binding.value_binding ? "val" : binding.requires_initialized ? "ref" : "ptr";
-      };
-      const auto kind = kind_of(selected);
       for (const auto slot : slots) {
         const auto &binding = bindings_->at(slot);
-        if (!expr.declaration_kind.empty() && expr.declaration_kind != kind_of(binding))
-          fail(expr.at, "alias kind must match the selected " + kind_of(binding) + " storage");
-        if (kind_of(binding) != kind) implementation_gap(expr.at, "alias selection with different storage kinds");
-        if (owner && *owner != binding.scope) fail(expr.at, "alias owner must match the selected binding storage, not its target owner");
+        if (!expr.declaration_kind.empty() && expr.declaration_kind != place_kind_name(binding.kind()))
+          fail(expr.at, "alias kind must match the selected " + place_kind_name(binding.kind()) + " storage");
+        if (binding.kind() != selected.kind()) implementation_gap(expr.at, "alias selection with different storage kinds");
+        if (owner && std::ranges::any_of(binding.place_owners, [&](size_t place_owner) {
+              return compare_owners(*owner, place_owner) != OwnerMatch::satisfied;
+            })) fail(expr.at, "alias owner must match the selected binding storage, not its target owner");
       }
       if (source.owners.size() != 1) fail(expr.at, "alias selection requires one statically provable target owner");
       if (declared && *declared != type)
@@ -10719,6 +10838,11 @@ class ScalarChecker {
                                 value || live_value, parameter.at, !checking_method_->scope_inputs, &entry);
         const auto binding = storage_->at(id).binding;
         instance.frame.inputs.push_back({id, mode, live_binding || caller_bindings(*checking_method_)});
+        if (const auto &profile = checking_method_->scope_inputs; profile && profile->place_owners.contains(p)) {
+          auto &owners = bindings_->at(binding).place_owners;
+          owners.clear();
+          for (const auto role : profile->place_owners.at(p)) owners.insert(null_target - 1 - role);
+        }
         bindings_->back().fixed = parameter.fixed_binding;
         bindings_->back().requires_initialized = parameter.declaration_kind == "ref";
         bindings_->back().nullable = !live_value && mode == ArgumentMode::borrowed_ptr;
@@ -10754,6 +10878,16 @@ class ScalarChecker {
         }
       }
       if (checking_method_->scope_inputs) {
+        for (const auto &[name, access] : checking_method_->scope_inputs->place_access) {
+          const auto input = storage(instance.frame.inputs.at(access.input).place).binding;
+          const auto canonical = bindings_->at(input);
+          const auto &at = checking_method_->input_parameters().at(access.input).at;
+          const auto binding = bind(name, canonical.type, {}, access.read_only, canonical.value_binding,
+                                    access.fixed, at, input, false, &entry);
+          bindings_->at(binding).requires_initialized = canonical.requires_initialized;
+          bindings_->at(binding).nullable = canonical.nullable;
+          bindings_->at(binding).callable_value = canonical.callable_value;
+        }
         for (const auto &owner : checking_method_->input_owners())
           instance.frame.owners.try_emplace(external_owners_.at(owner.name), null_target);
         for (const auto [a, b] : checking_method_->scope_inputs->overlapping_input_bindings) {

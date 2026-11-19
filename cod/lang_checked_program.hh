@@ -153,6 +153,20 @@ struct CheckedStorage {
   size_t binding = 0;
 };
 
+enum class PlaceKind { value, reference, pointer, mixed };
+inline PlaceKind place_kind(bool value, bool exact_reference) {
+  return value ? PlaceKind::value : exact_reference ? PlaceKind::reference : PlaceKind::pointer;
+}
+inline std::string place_kind_name(PlaceKind kind) {
+  switch (kind) {
+  case PlaceKind::value: return "val";
+  case PlaceKind::reference: return "ref";
+  case PlaceKind::pointer: return "ptr";
+  case PlaceKind::mixed: return "mixed";
+  }
+  throw std::logic_error("unknown storage place kind");
+}
+
 struct CheckedBinding {
   Type type;
   bool read_only;
@@ -163,7 +177,8 @@ struct CheckedBinding {
   bool callable_value = false;
   // A definition has lexical identity but no runtime value slot.
   std::optional<size_t> definition = {};
-  size_t scope = 0;
+  // A reference slot has its own lifetime, separate from its selected target.
+  std::set<size_t> place_owners = {};
   // A fixed alias carries access restrictions and uses its selection's proof state.
   std::optional<size_t> alias = {};
   // A selected alias keeps one physical slot from this finite set for its whole lifetime.
@@ -171,6 +186,7 @@ struct CheckedBinding {
   // Caller-slot inputs can denote the same binding in an activation.
   std::set<size_t> overlaps = {};
   bool nullable = false;
+  PlaceKind kind() const { return place_kind(value_binding, requires_initialized); }
 };
 
 // Substitutions are checking obligations, not semantic methods or activation records.
@@ -249,6 +265,14 @@ struct ViewEvidence {
   // Independent capture eligibility is distinct from the binding-slot category.
   std::optional<bool> value_capture = {};
   bool nullable = false;
+  std::set<EvidenceOwner> place_owners = {};
+  std::optional<PlaceKind> storage_kind = {};
+  template <typename Map> void map_owners(Map map) {
+    if (owner) owner = map(*owner);
+    std::set<EvidenceOwner> mapped;
+    for (const auto place : place_owners) mapped.insert(map(place));
+    place_owners = std::move(mapped);
+  }
   bool operator==(const ViewEvidence &) const = default;
 };
 struct QueryBinding {
@@ -334,6 +358,11 @@ struct CheckedMethod {
   std::vector<size_t> retained_types;
   std::optional<size_t> parent;
   struct ScopeInputs {
+    struct PlaceAccess {
+      size_t input;
+      bool read_only, fixed;
+      bool operator==(const PlaceAccess &) const = default;
+    };
     size_t lexical_method;
     std::vector<Parameter> parameters;
     std::vector<OwnerParameter> owners;
@@ -344,6 +373,9 @@ struct CheckedMethod {
     std::set<size_t> live_values;
     // A reference input carries the supplier's binding slot.
     std::set<size_t> live_bindings;
+    // Several lexical names can designate one transported place.
+    std::map<std::string, PlaceAccess> place_access;
+    std::map<size_t, std::set<size_t>> place_owners;
     std::set<std::pair<size_t, size_t>> overlapping_input_bindings;
     // Entry observations use input ordinals until the body allocates local slots.
     std::set<std::pair<size_t, size_t>> disjoint_input_targets;

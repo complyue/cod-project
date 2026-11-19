@@ -189,6 +189,69 @@ for name, declarations, body, expected, diagnostic in (
     runner.CASES[name] = (IO+declarations+'proc run()->u64{'+body+'}behave @print(run());', status, expected, diagnostic)
     runner.CASES['query_'+name] = (IO+declarations+query(body)+'behave @print(queried);', status,
                                   '' if diagnostic else '4\n', diagnostic)
+
+PLACE_REFERENCES = 'val x<-11u64,y<-22u64;ptr p=x;'
+SELECTED_PLACE = 'val x<-11u64,y<-22u64,z<-33u64;ptr p=x,q=y;var selected->if(flag){p}else{q};'
+SELECTED_VALUE_PLACE = 'val x<-make local u64,y<-make local u64;var selected->if(flag){x}else{y};'
+OVERLAPPING_PLACES = ('val x<-11u64,y<-22u64,z<-make local u64;ptr p=x,q=y;var selected->if(flag){p}else{q};'
+                      'var other->if(other_flag){p}else{q};')
+for name, body, expected, diagnostic in (
+    ('declared_place_shares_reference_slot', PLACE_REFERENCES+'var selected->p;return {{selected=y;return p;}};',
+     '22\n', ''),
+    ('declared_place_preserves_selected_reference_slot', SELECTED_PLACE+
+     'flag<-!flag;{{selected=z;}};return p+q*100u64;', '2233\n3311\n', ''),
+    ('declared_place_nested_names_share_slot', SELECTED_PLACE+
+     'var other->selected;return {{ {{other=z;}};return selected;}};', '33\n33\n', ''),
+    ('declared_place_initializes_selected_value', SELECTED_VALUE_PLACE+
+     '{{selected<-41u64;}};return selected;', '41\n41\n', ''),
+    ('declared_place_does_not_initialize_unselected_value', SELECTED_VALUE_PLACE+
+     '{{selected<-41u64;}};return x;', '', 'initializ'),
+    ('declared_place_preserves_prepared_target', PLACE_REFERENCES+
+     'var selected->p;{{defer (<-)(selected,8u64);p=y;}};return x+p;', '30\n', ''),
+    ('declared_place_keeps_name_specific_const', PLACE_REFERENCES+
+     'const var selected->p;return {{selected<-9u64;p=y;return selected+x;}};', '31\n', ''),
+    ('declared_place_const_binding_rejects_rebind', PLACE_REFERENCES+
+     'const var selected->p;{{selected=y;}};return p;', '', 'const reference binding'),
+    ('declared_place_cannot_relax_slot_target_access',
+     'val x<-11u64;const val y<-22u64;ptr p=x;var selected:const->p;{{selected=y;}};return p;',
+     '', 'readonly source'),
+    ('declared_place_inner_owner', 'return {{val x<-11u64;var selected in here->x;return selected;}};', '11\n', ''),
+    ('declared_place_keeps_default_parameter_kind',
+     'return {{ptr var selected->flag;return if(selected){11u64}else{22u64};}};', '11\n22\n', ''),
+    ('declared_place_owner_survives_scope_call', PLACE_REFERENCES+
+     'var selected->p;{{var wrong in here->selected;}};return p;', '', 'selected binding storage'),
+    ('declared_place_weak_rebind_cannot_hide_unwritten_target',
+     SELECTED_PLACE.replace('z<-33u64', 'z<-make local u64')+'{{selected=z;}};return p;', '', 'initializ'),
+    ('declared_place_prepared_write_does_not_initialize_rebound_target',
+     OVERLAPPING_PLACES+'{{defer (<-)(selected,8u64);other=z;}};return selected;',
+     '', 'initializ'),
+):
+    if 'other_flag' in body:
+        prefix = IO+'proc run(flag:bool,other_flag:bool)->u64{'
+        calls = 'behave @print(run(true,true));'
+    else:
+        prefix = IO+'proc run(flag:bool)->u64{'
+        calls = 'behave @print(run(true));'
+        if 'flag' in body:
+            calls += 'behave @print(run(false));'
+    status = 2 if diagnostic else 0
+    runner.CASES[name] = (prefix+body+'}'+calls, status, expected, diagnostic)
+    runner.CASES['query_'+name] = (prefix+query(body)+'return queried;}'+calls, status,
+                                  '' if diagnostic else '4\n' * (2 if 'flag' in body else 1), diagnostic)
+
+for name, body, expected, diagnostic in (
+    ('declared_place_target_owner_is_not_place_owner',
+     'var selected->p;{{var wrong in O->selected;}};return 1u64;', '', 'selected binding storage'),
+    ('declared_place_preserves_external_target_owner',
+     'var selected->p;{{ptr local:u64 in O=null in O;selected=local;}};return if(p is null){3u64}else{8u64};',
+     '3\n', ''),
+):
+    prefix = IO+'proc run(ptr p:u64 in O)->u64 where {owner O}{'
+    calls = '}val x<-1u64;behave @print(run(x));'
+    status = 2 if diagnostic else 0
+    runner.CASES[name] = (prefix+body+calls, status, expected, diagnostic)
+    runner.CASES['query_'+name] = (prefix+query(body)+'return queried;'+calls, status, '' if diagnostic else '4\n', diagnostic)
+
 runner.EXTRA_SOURCES = [Path(__file__)]
 if __name__ == '__main__':
     raise SystemExit(runner.main())
