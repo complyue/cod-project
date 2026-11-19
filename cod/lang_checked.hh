@@ -10298,30 +10298,57 @@ class ScalarChecker {
     if (family.context || family.definition)
       implementation_gap(expr.at, "preparing a lexical producer definition");
     std::vector<size_t> candidates;
+    std::vector<ArgumentMode> modes;
     for (const auto id : family.methods) {
       const auto &method = program_.methods[id];
       if (method.here.size() != 1 || !method.here.front().here.empty() || method.parameters.size() != expr.children.size()) continue;
-      if (!method.input_owners().empty() ||
-          std::ranges::any_of(method.input_parameters(), [](const auto &parameter) { return argument_mode(parameter) != ArgumentMode::value; }))
-        implementation_gap(expr.at, "prepared producer operands with external owners");
+      std::vector<ArgumentMode> candidate_modes;
+      for (const auto &parameter : method.input_parameters()) candidate_modes.push_back(argument_mode(parameter));
+      if (!candidates.empty() && modes != candidate_modes)
+        implementation_gap(expr.at, "prepared producer overloads with different ordinary argument preparation");
+      modes = std::move(candidate_modes);
       candidates.push_back(id);
     }
     if (candidates.empty()) fail(expr.at, "no producer with a matching consumer for '" + expr.text + "'");
     CheckedOperation prepared;
     std::vector<Type> arguments;
-    for (const auto &operand : expr.children) {
-      const auto type = check(*operand, instance, operations);
-      if (!scalar_type(type)) implementation_gap(operand->at, "prepared producer arguments require scalar values");
+    std::vector<CheckedOperation> views;
+    for (size_t i = 0; i < expr.children.size(); ++i) {
+      const auto &operand = *expr.children[i];
+      const auto mode = modes[i];
+      const auto type = check(operand, instance, operations, mode == ArgumentMode::value, false, nullptr, expected_type_use(mode));
+      if (!scalar_type(type)) implementation_gap(operand.at, "prepared producer arguments require scalar payload types");
       arguments.push_back(type);
+      views.push_back(operations.at(&operand));
+      prepare_borrow(views.back(), mode, operand.at);
     }
-    const auto selected = select_method(candidates, arguments, expr.at, expr.text, {}, {}, {}, nullptr, true, true);
-    if (declares_root(program_.methods[selected].throws_types))
+    const auto selected = select_method(candidates, arguments, expr.at, expr.text, {}, access_of(views), owners_of(views), nullptr, true, true);
+    const auto &method = program_.methods[selected];
+    if (declares_root(method.throws_types))
       implementation_gap(expr.at, "a declared Exception root on a prepared producer");
     const auto source = demand(selected, arguments, expr.at);
     const auto &target = program_.instances[source];
     if (target.result.type != Type::void_type)
       fail(expr.at, "a prepared producer must complete with void");
-    for (const auto &argument : target.arguments) prepared.arguments.push_back({ArgumentMode::value, argument});
+    std::map<std::string, size_t> actual_owners;
+    for (size_t i = 0; i < target.arguments.size(); ++i) {
+      const auto &parameter = method.input_parameters()[i];
+      if (modes[i] != ArgumentMode::value) {
+        if (!parameter.read_only || modes[i] == ArgumentMode::borrowed_ptr)
+          implementation_gap(expr.children[i]->at, "prepared producer requires a readonly, initialized borrowed operand");
+        const auto actual = one_owner(views[i]);
+        if (!actual) implementation_gap(expr.children[i]->at, "prepared producer requires an established actual owner");
+        require_borrow_lifetime(views[i], expr.children[i]->at, false);
+        actual_owners.try_emplace(parameter.owner, *actual);
+      }
+      prepared.arguments.push_back({modes[i], target.arguments[i]});
+    }
+    auto &binding = prepared.prepared_producer.emplace(CheckedOperation::PreparedProducer{source, {}});
+    for (const auto &owner : method.input_owners()) {
+      const auto actual = actual_owners.find(owner.name);
+      if (actual == actual_owners.end()) implementation_gap(expr.at, "prepared producer owner has no borrowed operand");
+      binding.owners.push_back(actual->second);
+    }
     prepared.type = Type::void_type;
     operations.insert_or_assign(&expr, std::move(prepared));
     return source;
@@ -10330,26 +10357,36 @@ class ScalarChecker {
     return left.labelled == right.labelled && std::ranges::equal(left.inputs, right.inputs, {},
         &CheckedHereContract::Component::label, &CheckedHereContract::Component::label);
   }
-  static void require_prepared_consumer_owners(const CheckedHereContract &offered, const CheckedHereContract &accepted,
-                                               const Location &at) {
-    const auto external = [](const auto &field) { return field.owner.value_or(0) != 0; };
-    if (std::ranges::any_of(offered.inputs, external) || std::ranges::any_of(accepted.inputs, external))
-      implementation_gap(at, "prepared producer contracts with externally established owners");
+  void require_prepared_consumer_owners(const CheckedHereContract &offered, const CheckedHereContract &accepted,
+      const auto &source_owner, const CheckedMethod &receiver, const std::vector<CheckedOperation> &views, const Location &at) const {
+    for (size_t i = 0; i < offered.inputs.size(); ++i) if (const auto source_role = offered.inputs[i].owner) {
+      const auto receiving_role = accepted.inputs[i].owner.value();
+      if (!*source_role || !receiving_role) {
+        if (*source_role != receiving_role)
+          fail(at, "prepared producer handoff owner does not match the selected contract");
+        continue;
+      }
+      const auto actual = here_receiver_owner(receiver, receiving_role, views, at);
+      require_here_owner(source_owner(*source_role), *actual, at);
+    }
   }
-  void require_prepared_source(size_t source, const CheckedMethod &receiver, const Substitutions &bindings,
-                               const CheckedHereContract &expected, const Location &at) const {
-    const auto &instance = program_.instances[source];
+  void require_prepared_source(const CheckedOperation::PreparedProducer &source, const CheckedMethod &receiver,
+      const Substitutions &bindings, const CheckedHereContract &expected, const std::vector<CheckedOperation> &views,
+      const Location &at) const {
+    const auto &instance = program_.instances[source.instance];
     const auto &method = program_.methods[instance.method];
     const auto &offered = method.here.front();
     if (expected.here.size() != 1 || !expected.inputs.empty() || expected.result.type != Type::void_type ||
         expected.result.owner || expected.feedback || !expected.here.front().here.empty())
       implementation_gap(at, "a prepared producer requires one consumer and no unbound ordinary arguments");
     const auto &accepted = expected.here.front();
-    require_prepared_consumer_owners(offered, accepted, at);
     if (method.throws_categories != expected.throws_categories || declares_root(method.throws_types) != expected.throws_root ||
         !same_here_labels(offered, accepted) ||
         here_invocation_type(method, instance.substitutions, at) != here_value_signature(receiver, accepted, bindings, at))
       fail(at, "prepared producer does not match the selected here contract");
+    if (lexical_.live && std::ranges::any_of(source.owners, [&](auto owner) { return !owner_alive(owner); }))
+      fail(at, "prepared producer operand owner has ended");
+    require_prepared_consumer_owners(offered, accepted, [&](size_t role) { return source.owners.at(role - 1); }, receiver, views, at);
   }
   bool deliver_here_completion(const Expression &expr, const CheckedOperation &operation) {
     const auto &body = read_effects(operation.supplied_here->instance);
@@ -10499,7 +10536,7 @@ class ScalarChecker {
       const auto &at = expr.children[i]->at;
       const auto &input = operation.here_arguments[formal];
       if (input.source) {
-        require_prepared_source(targets[formal].source.value(), receiver, bindings, signature, at);
+        require_prepared_source(operations.at(input.source).prepared_producer.value(), receiver, bindings, signature, views, at);
         continue;
       }
       const auto slot = input.lexical.value();
@@ -10508,11 +10545,11 @@ class ScalarChecker {
       if (signature.here.size() == 1 && incoming_signature.here.size() == 1 && incoming_signature.inputs.empty() && signature.inputs.empty()) {
         const auto &offered = incoming_signature.here.front();
         const auto &accepted = signature.here.front();
-        require_prepared_consumer_owners(offered, accepted, at);
         if (incoming != here_invocation_type(receiver, bindings, at, formal) || !offered.here.empty() || !accepted.here.empty() ||
             !same_here_labels(offered, accepted) ||
             here_value_signature(*checking_method_, offered, supplier->substitutions, at) != here_value_signature(receiver, accepted, bindings, at))
           fail(at, "forwarded producer does not match the selected here contract");
+        require_prepared_consumer_owners(offered, accepted, [&](size_t role) { return here_formal_owner(role); }, receiver, views, at);
         continue;
       }
       if (!signature.here.empty() || !incoming_signature.here.empty() || !same_here_labels(incoming_signature, signature) ||

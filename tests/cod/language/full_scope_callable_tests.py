@@ -447,6 +447,37 @@ runner.CASES = {
         'func origin(value:u64) yields ref const u64 in here{val slot<-value;yield(slot);}'
         'func stage(here input() yields ref const u64 in here) yields u64{for ref item=input(){yield(item+1u64);};}'
         'proc run()->void{for val n<-stage(origin(24u64)){behave @print(n);};return;}run();',0,'25\n',''),
+    'prepared_here_source_retains_borrow_and_owner_through_forwarding': (IO+
+        'proc rows(day:u64,source:const u64 in Ledger) yields {id:u64;ref line:const u64 in Ledger;} -> bool where {owner Ledger}{'
+        'if(!yield(day->id,source->line)){return;}else{};yield(42u64->id,source->line);return;}'
+        'proc stage(here input() yields {id:u64;ref line:const u64 in S;} -> bool,witness:const u64 in S,enabled:bool) '
+        'yields {id:u64;ref line:const u64 in S;} -> bool where {owner S}{'
+        'if(!enabled){return;}else{};for {val n<-id;ref item=line;} := input(){continue yield(item->line,n->id);};return;}'
+        'proc relay(here upstream() yields {ref line:const u64 in O;id:u64;} -> bool,witness:const u64 in O,enabled:bool) '
+        'yields {ref line:const u64 in O;id:u64;} -> bool where {owner O}{'
+        'for {val n<-id;ref item=line;} := stage(upstream,witness,enabled){continue yield(n->id,item->line);};return;}'
+        'proc run()->void{val first<-75u64;val second<-99u64;ref selected=first;'
+        'for {val n<-id;ref item=line;} := relay(rows(24u64,selected),first,{selected=second;first<-76u64;true}){'
+        'behave @print(n);behave @print(item);behave @print(item is first);continue false;};'
+        'behave @print(selected);return;}run();',0,'24\n76\ntrue\n99\n',''),
+    'prepared_here_source_rejects_a_different_borrowed_owner': (
+        'func rows(source:const u64 in P) yields ref const u64 in P where {owner P}{yield(source);}'
+        'proc consume(here src() yields ref const u64 in O,witness:const u64 in O)->void where {owner O}{return;}'
+        'proc run()->void{val outside<-1u64;{{val inside<-2u64;consume(rows(outside),inside);return;}};return;}run();',
+        2,'','borrowed here input has a different actual owner from its contract'),
+    'prepared_here_source_retains_two_distinct_ordinary_owners': (IO+
+        'proc rows(line:const u64 in P,id:const u64 in Q) yields {id:u64;ref line:const u64 in P;} where {owner P,owner Q}{'
+        'yield(id->id,line->line);return;}'
+        'proc stage(here source() yields {id:u64;ref line:const u64 in O;},witness:const u64 in O) '
+        'yields {id:u64;ref line:const u64 in O;} where {owner O}{'
+        'for {val n<-id;ref item=line;} := source(){yield(item->line,n->id);};return;}'
+        'proc run()->void{val outside<-70u64;{{val inside<-24u64;'
+        'for {val n<-id;ref item=line;} := stage(rows(outside,inside),outside){behave @print(n);behave @print(item);};'
+        'return;}};return;}run();',0,'24\n70\n',''),
+    'prepared_here_source_distinguishes_its_owner_from_an_external_owner': (
+        'func rows() yields ref const u64 in here{val local_value<-1u64;yield(local_value);}'
+        'proc consume(here src() yields ref const u64 in O,witness:const u64 in O)->void where {owner O}{return;}'
+        'val n<-2u64;consume(rows(),n);',2,'','prepared producer handoff owner does not match the selected contract'),
     'prepared_here_source_propagates_outer_return_through_cleanups': (IO+
         'proc rows(day:u64) yields u64{defer behave @print(31u64);yield(day);behave @print(80u64);return;}'
         'proc stage(here src() yields u64) yields u64{defer behave @print(32u64);for val n<-src(){yield(n);};return;}'

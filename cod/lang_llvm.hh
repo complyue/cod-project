@@ -1434,18 +1434,35 @@ class LLVMEmission {
     arguments.insert(arguments.end(), captured.begin(), captured.end());
     return arguments;
   }
+  llvm::StructType *prepared_producer_layout(size_t operands, size_t owners) {
+    std::vector<llvm::Type *> fields(operands, scalar_);
+    fields.insert(fields.end(), owners, b_.getPtrTy());
+    return llvm::StructType::get(context_, fields);
+  }
   llvm::Value *prepare_source(const Expression &expr) {
-    const auto operands = prepare_arguments(expr);
-    if (!reachable()) return nullptr;
-    llvm::Value *activation = null_pointer();
-    if (!operands.empty()) {
-      auto *storage = llvm::ArrayType::get(scalar_, operands.size());
-      activation = slot(storage, "here.source.operands");
-      for (size_t i = 0; i < operands.size(); ++i)
-        b_.CreateStore(operands[i], b_.CreateConstGEP2_64(storage, activation, 0, i));
-    }
-    // The opening call selects the checked entry for its actual consumer.
-    return b_.CreateInsertValue(llvm::Constant::getNullValue(here_), activation, 1);
+    std::map<CheckedOperation::PreparedProducer, std::vector<size_t>> producers;
+    for (size_t i = 0; i < contexts_.size(); ++i)
+      producers[contexts_[i].at(&expr).prepared_producer.value()].push_back(i);
+    return contextual_value(expr, producers, "here.producer", [&](const auto &producer) -> llvm::Value * {
+      const auto operands = prepare_arguments(expr);
+      if (!reachable()) return nullptr;
+      const auto method = program_->instances[producer.instance].method;
+      const auto &owners = input_frame(method).owners;
+      llvm::Value *activation = null_pointer();
+      if (!operands.empty() || !owners.empty()) {
+        auto *storage = prepared_producer_layout(operands.size(), owners.size());
+        activation = slot(storage, "here.source.operands");
+        for (size_t i = 0; i < operands.size(); ++i)
+          b_.CreateStore(operands[i], b_.CreateStructGEP(storage, activation, i));
+        auto i = operands.size();
+        for (const auto &[owner, input] : owners) {
+          const auto actual = producer.owners.at(null_target - 1 - owner);
+          b_.CreateStore(owner_identity(actual, expr.at), b_.CreateStructGEP(storage, activation, i++));
+        }
+      }
+      // The opening call selects the checked entry for its actual consumer.
+      return b_.CreateInsertValue(llvm::Constant::getNullValue(here_), activation, 1);
+    }, here_);
   }
   std::vector<llvm::Value *> prepare_here_arguments(const Expression &expr) {
     const auto &fact = contexts_.front().at(&expr);
@@ -2059,17 +2076,19 @@ class LLVMEmission {
   void declare_prepared_source(size_t id) {
     const auto &instance = program_->instances.at(id);
     const auto &layout = call_layouts_.at(instance.method);
-    if (layout.owners || layout.captures || layout.retained || layout.declaration_context || layout.destination ||
+    if (layout.captures || layout.retained || layout.declaration_context || layout.destination ||
         layout.here_formals != 1 || layout.lexical_here || layout.here_group)
       throw std::logic_error("unexpected parameter role in prepared producer");
     auto *entry = llvm::Function::Create(llvm::FunctionType::get(outcome_, {here_, b_.getPtrTy()}, false),
         llvm::GlobalValue::InternalLinkage, "cod.here.source." + std::to_string(id), module_);
     prepared_source_entries_.emplace(id, entry);
     llvm::IRBuilder<> body(llvm::BasicBlock::Create(context_, "entry", entry));
-    auto *storage = llvm::ArrayType::get(scalar_, layout.operands);
+    auto *storage = prepared_producer_layout(layout.operands, layout.owners);
     std::vector<llvm::Value *> arguments;
     for (size_t i = 0; i < layout.operands; ++i)
-      arguments.push_back(body.CreateLoad(scalar_, body.CreateConstGEP2_64(storage, entry->getArg(1), 0, i)));
+      arguments.push_back(body.CreateLoad(scalar_, body.CreateStructGEP(storage, entry->getArg(1), i)));
+    for (size_t i = 0; i < layout.owners; ++i)
+      arguments.push_back(body.CreateLoad(b_.getPtrTy(), body.CreateStructGEP(storage, entry->getArg(1), layout.operands + i)));
     arguments.push_back(entry->getArg(0));
     auto *target = specialize_ ? specialized_.at(id) : general_.at(instance.method);
     body.CreateRet(body.CreateCall(target, arguments));

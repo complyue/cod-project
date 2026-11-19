@@ -134,6 +134,12 @@ struct CheckedOperation {
   // When source operands bind out of order, prepare them in written order.
   std::vector<size_t> argument_evaluation_order;
   std::vector<size_t> scope_owners;
+  struct PreparedProducer {
+    size_t instance;
+    std::vector<size_t> owners; // Actual owners in the producer's declared owner order.
+    auto operator<=>(const PreparedProducer &) const = default;
+  };
+  std::optional<PreparedProducer> prepared_producer;
   size_t argument_count(const Expression &expr) const {
     return argument_sources ? argument_sources->size() : expr.children.size();
   }
