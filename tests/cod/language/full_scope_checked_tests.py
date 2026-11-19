@@ -34,6 +34,8 @@ def query(body):
 CONDITIONAL_READ = (' {{val local<-make local u64;'
                     'if(flag){local<-7u64;{}}else{};behave @print(local);}}; ')
 UNINITIALIZED_LOCAL = "read of 'local' before definite initialization"
+BORROWED_BOOLEAN = 'val off<-false,on<-true;ref flag=off;ref next=on;'
+DEFER_CONDITIONAL_READ = 'defer{'+CONDITIONAL_READ+'};'
 
 
 runner.CASES = {
@@ -50,6 +52,17 @@ runner.CASES = {
         IO+'val flag<-false;defer{'+CONDITIONAL_READ+'};defer{flag<-true;};', 2, '', UNINITIALIZED_LOCAL),
     'local_read_uses_its_own_storage': (
         IO+'val local<-7u64;val flag<-false;'+CONDITIONAL_READ, 2, '', UNINITIALIZED_LOCAL),
+    'local_read_uses_rebound_borrowed_target': (
+        IO+BORROWED_BOOLEAN+'{{'+DEFER_CONDITIONAL_READ+'flag=next;}};', 0, '7\n', ''),
+    'local_read_rejects_false_rebound_target': (
+        IO+'val off<-false,on<-true;ref flag=on;ref next=off;{{'+DEFER_CONDITIONAL_READ+'flag=next;}};',
+        2, '', UNINITIALIZED_LOCAL),
+    'local_read_precedes_write_to_shared_target': (
+        IO+BORROWED_BOOLEAN+'ref peer=on;{{flag=next;defer{peer<-false;};'+DEFER_CONDITIONAL_READ+'}};',
+        0, '7\n', ''),
+    'local_read_observes_earlier_write_to_shared_target': (
+        IO+BORROWED_BOOLEAN+'ref peer=on;{{flag=next;'+DEFER_CONDITIONAL_READ+'defer{peer<-false;};}};',
+        2, '', UNINITIALIZED_LOCAL),
     'throw_only_typed': run('val e<-sample_error();try{ {{throw e;}}; }'
                             'catch(caught:const NullPointerException){behave @print(caught.category);};', '4\n'),
     'throw_only_void_result': reject('val e<-sample_error();val result<-make local typeof({{throw e;}}){7u64};',

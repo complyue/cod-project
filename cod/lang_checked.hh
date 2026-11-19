@@ -1838,21 +1838,23 @@ class ScalarChecker {
       return SelectionCondition{deferred_action_, *entry, target, equal};
     return {};
   }
-  std::optional<SelectionCondition> payload_condition(const CheckedOperation &view, size_t place) const {
-    if (!deferred_action_ || !view.targets.contains(place) || view.place ||
-        std::any_of(view.targets.begin(), view.targets.end(), [&](size_t id) { return id != null_target && storage(id).borrowed; })) return {};
+  std::optional<SelectionCondition> selected_payload_condition(const CheckedOperation &view, size_t place) const {
+    if (!deferred_action_ || !view.targets.contains(place) || view.place) return {};
     const auto binding = current_binding(view);
     return binding ? deferred_selection_condition(*binding, place, true) : std::nullopt;
   }
   template <typename Value, typename Merge, typename Guard> Value updated_payload(const CheckedOperation &target,
       size_t place, const Value &before, const Value &value, const Merge &merge, const Guard &guard) const {
     if (target.place == place) return value;
-    if (const auto selected = payload_condition(target, place)) {
-      auto inverse = *selected; inverse.equal = false;
-      auto result = guard(before, SelectionConditions{{inverse}});
-      merge(result, guard(value, SelectionConditions{{*selected}}));
-      return result;
-    }
+    // A selected input identifies the payload to read. A write through a
+    // borrowed target can also change storage reached by other formal inputs.
+    if (std::none_of(target.targets.begin(), target.targets.end(), [&](size_t id) { return id != null_target && storage(id).borrowed; }))
+      if (const auto selected = selected_payload_condition(target, place)) {
+        auto inverse = *selected; inverse.equal = false;
+        auto result = guard(before, SelectionConditions{{inverse}});
+        merge(result, guard(value, SelectionConditions{{*selected}}));
+        return result;
+      }
     auto result = before; merge(result, value); return result;
   }
   ExceptionFacts stored_exceptions(const CheckedOperation &view, const std::map<size_t, ExceptionFacts> &values) const {
@@ -1860,7 +1862,7 @@ class ScalarChecker {
     if (view.type.kind != Type::exception) return result;
     for (const auto place : view.targets) if (place != null_target) {
       auto categories = stored_exceptions(place, view.type, values);
-      if (const auto selected = payload_condition(view, place)) categories = categories.guarded({{*selected}});
+      if (const auto selected = selected_payload_condition(view, place)) categories = categories.guarded({{*selected}});
       result.merge(categories);
     }
     return result;
@@ -1924,7 +1926,7 @@ class ScalarChecker {
       const auto found = lexical_.predicates.find(place);
       if (found == lexical_.predicates.end()) return {};
       auto proof = found->second;
-      if (const auto selected = payload_condition(view, place)) proof = guard_predicate(proof, {{*selected}});
+      if (const auto selected = selected_payload_condition(view, place)) proof = guard_predicate(proof, {{*selected}});
       result = result ? predicate(Predicate::Kind::alternatives, result, proof) : proof;
     }
     return result;
@@ -2018,7 +2020,7 @@ class ScalarChecker {
     for (const auto place : view.targets) if (place != null_target) {
       const auto found = values.find(place);
       auto value = found == values.end() ? CleanupEquations::unknown_boolean() : found->second;
-      if (const auto selected = payload_condition(view, place)) value = CleanupEquations::guard_boolean(value, {{*selected}});
+      if (const auto selected = selected_payload_condition(view, place)) value = CleanupEquations::guard_boolean(value, {{*selected}});
       CleanupEquations::merge_boolean(result, value);
     }
     return result;
