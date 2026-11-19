@@ -1,8 +1,10 @@
 # Collections and builtin containers
 
-Design revision 4 · 2026-11-19 · Source design draft
+Design revision 5 · 2026-11-19 · Source design draft
 
 ## Design authority
+
+[H-ORDINARY-NAMES-20261119](../CHANGELOG.md#h-ordinary-names-20261119) covers the library fold and builtin array operations at r5 under [D-10-ORDINARY-NAMES](DesignAuthorityRegistry.md#d-10-ordinary-names).
 
 - **Labelled visitation.** [H-GENERATOR-RECEPTION-20261119](../CHANGELOG.md#h-generator-reception-20261119) applies D-29-GENERALIZED-FOR to the r4 array example under P-590. Compare both headers after exchanging the order of the index and item declarations. Collection qualification and per-member owner proofs retain their existing scope.
 
@@ -17,11 +19,31 @@ Design revision 4 · 2026-11-19 · Source design draft
 
 | Form | Element and owner model | Design and source status |
 | --- | --- | --- |
-| Named regional array, e.g. `array Rates[u32(Neuron)]:f32;` | The declaration fixes the index domain and element type. An allocated array has a runtime length and an actual region owner. A view of an addressable element depends on that owner. | The seed parser and source fixtures cover the illustrated scalar array, allocation, `len`, indexed access and `ref_at`. A runtime length alone says nothing about support for insert, removal or growth. [Parser](../cod/lang_syntax.hh) · [Regional array fixture](../tests/cod/language/region-arrays.cod) |
+| Named regional array, e.g. `array Rates[u32(Neuron)]:f32;` | The declaration fixes the index domain and element type. An allocated array has a runtime length and an actual region owner. A view of an addressable element depends on that owner. | The seed fixture exercises the scalar array, length, indexed bits and a borrowed element using its current source spellings. A runtime length alone says nothing about support for insert, removal or growth. [Parser](../cod/lang_syntax.hh) · [Regional array fixture](../tests/cod/language/region-arrays.cod) |
 | `UnhandledDeferError.exceptions` | Ordered builtin collection with one independently owning `exception` holder per residual error. The aggregate owns the collection. Each element owns its own region. | D-17 confirms the specialized collection, read-only enumeration and single-member transfer. Generic method spellings and native implementation remain open. [Exception contract](ExceptionControl.md#region-and-members-of-unhandleddefererror) |
 | Variadic parameter `rest:T...` | A call supplies one logical pack. The element passing mode and owner constraints come from the parameter. | D-10 owns argument expansion and forwarding. An array can supply the pack through `values...`. Pack indexing or expansion grants no structural mutation of the source. [Runtime-array expansion](SymbolicDynamicScope.md#runtime-array-expansion-and-one-variadic-parameter) |
 
 Concrete map, set, list, queue and general resizable-sequence types remain open for CoD. The seed’s C++ support library already has regional containers with native allocation, iteration and serialization contracts. A CoD builtin needs its own element modes, owner rules, access, order, failure behavior and supported operations. [Native regional containers](MemoryRegionAndRegionalTypes.md#specialized-container-types) · [Native container exception safety](ExceptionSafety.md#container-exception-safety)
+
+## Fold and array access
+
+An ordinary library `fold` takes a synchronous `here` step as its first parameter. A half-open range overload can be written entirely in CoD.
+
+```cod
+func fold(here step(acc:u64, item:u64) -> u64,
+          first:u64, past:u64, seed:u64) -> u64 {
+    val acc <- seed;
+    for (i in first .. past) { acc <- step(acc, i); };
+    return acc;
+}
+
+val total <- fold(0u64, 4u64, 10u64) (acc, i) => { acc + i };
+val empty <- fold(4u64, 4u64, 10u64) (acc, i) => { acc + i };
+```
+
+The results are 16 and 10. The written bounds and seed are evaluated once in that order. An empty input performs no step and still type-checks the supplied body. The step result must satisfy the accumulator contract, including applicable lossless conversions and owner/access evidence for a borrowed accumulator. An overload accepting a compatible producer visits in that producer’s order and honors its feedback contract. A single-brace step can `continue value` to deliver the next accumulator, `break value` to complete the fold call or `return value` from its lexical supplier. A double-brace callback has its own return target. All exits retain the applicable cleanup obligations.
+
+For a writable `array Counts[u32]:u64` in a live owner, the builtin selection in `ref cell = counts[i]` borrows that element. After `counts[i] <- 9u64`, `cell` reads 9. In contrast, `val saved <- counts[i]` retains the bits read at reception. A readonly array supplies at most a readonly view. Preserve bounds checks, nominal index domains and once-only evaluation. A custom getter returning a val or a packed collection with only an indexed writer supplies no borrow of its internal storage. A library needing a specifically named borrow can publish an ordinary function returning `ref T in O`. The standard array element count comes from the visible `len` family.
 
 ## Proposed common operations
 

@@ -1,8 +1,10 @@
 # Regional and lexical storage: reference-model refactoring
 
-Design revision: 36 · Recorded: 2026-11-18 · Status: one-ADT placement and scoped storage semantics selected; complete layout, encoding, backend and implementation contracts remain under review.
+Design revision: 37 · Recorded: 2026-11-18 · Status: one-ADT placement and scoped storage semantics selected; complete layout, encoding, backend and implementation contracts remain under review.
 
 ## Design authority
+
+[H-MAKE-LEXICAL-DEFAULT-20261119](../CHANGELOG.md#h-make-lexical-default-20261119) updates P-352/P-418 for [one ADT across placements](#lexical-adts-as-part-of-the-complete-model) at r37. [D-22-MAKE-OWNER](DesignAuthorityRegistry.md#d-22-make-owner) supplies the current full lexical scope for an ordinary `make` with no contextual owner. Same-owner edges, layout, readiness and all escaping borrows still require their ordinary proofs.
 
 - **Callable dependency.** [H-CALLABLE-MODEL-20261118](../CHANGELOG.md#h-callable-model-20261118) updates this document’s lexical input examples under D-28-OWNERS/H-437. Preserve actual owner and registration/cleanup timing. A here use must fit its supplying activation, even if execution is deferred. Native transport is delegated.
 
@@ -425,7 +427,7 @@ The following source consequences follow H-478 and the existing owner, field, di
 | --- | --- | --- |
 | Type identity and conformance | Node denotes the same nominal data type in both placements; generic T and nominal assertions retain that identity. | Complete view types still carry owner, access, mode and nullability. Same nominal identity does not equate distinct owners or storage layouts. |
 | Semantic method selection | Use the same declarations and ordinary type/constraint rules for either placement. Layout-dependent native access is an implementation choice beneath the selected method. | Placement is not a new implicit overload dimension or public NodeLex/NodeRegion type. Existing explicit owner/capability constraints still apply. |
-| Construction | `make Node in O` uses the actual selected owner and its allocation access/path. Both direct bits fields and same-owner reference slots belong to that owner. | Const owner cannot allocate. A callee's own scope is not a substitute for the requested caller owner; construction does not grant resource ownership. With no contextual destination, non-bits construction still requires an explicit owner, which may be `in here`. |
+| Construction | `make Node in O` uses the actual selected owner and its allocation access/path. Both direct bits fields and same-owner reference slots belong to that owner. | Const owner cannot allocate. A callee's own scope is not a substitute for the requested caller owner; construction does not grant resource ownership. With no contextual destination, ordinary `make` selects the current full scope for lexically eligible data. An explicit `in here` selects that same owner. |
 | Field access and slot aliases | Decode using the containing object's placement, even when the local name or alias lives elsewhere. Preserve a selected slot's encoding when forwarding it. | Never infer target layout from the scope of the receiving variable or reinterpret offset words as independent bits. |
 | Reference assignment and view transport | Preserve logical target/owner and encode for the destination view/slot. The compiler retains or shares sufficient layout/owner evidence across calls and returns. | Same-owner checks remain; an identical native integer is not an interchangeable reference representation. |
 | Bits transfer | Read/write admitted direct bits fields using their ordinary type/conversion rules. Their enclosing ADT may itself be non-bits. | No whole-object byte copy, padding copy, new numeric conversion or fraction validity assumption. |
@@ -599,7 +601,7 @@ Aliases share the target relationship, not independent copies of a permanent ini
 
 ```text
 # Semantic flow example.
-val n:u64 <- make local u64;
+val n:u64 <- make u64;
 ptr p:u64 = n;                # Target identity exists; payload is unreadable.
 val same <- p is n;           # Identity-only observation.
 # val early <- p;             # Rejected before initialization.

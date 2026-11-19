@@ -1,8 +1,12 @@
 # CoD regional ownership: syntax, semantics and use
 
-Design revision: 127 · Recorded: 2026-11-19 · Status: design draft with scoped confirmed requirements.
+Design revision: 129 · Recorded: 2026-11-19 · Status: design draft with scoped confirmed requirements.
 
 ## Design authority
+
+[H-ORDINARY-NAMES-20261119](../CHANGELOG.md#h-ordinary-names-20261119) covers array element borrowing, writes, region queries and placement at r129 under [D-10-ORDINARY-NAMES](DesignAuthorityRegistry.md#d-10-ordinary-names).
+
+[D-22-MAKE-OWNER](DesignAuthorityRegistry.md#d-22-make-owner) and [H-MAKE-LEXICAL-DEFAULT-20261119](../CHANGELOG.md#h-make-lexical-default-20261119) govern the r128 [local bits examples](#local-bits-storage-and-initialization). P-352 selects the contextual owner or the current full scope. Explicit reservation, independent bits transfer, and binding a live target retain their distinct initialization facts.
 
 - **Reinitializing a region holder and direct self-assignment.** [D-14-OWNER-REUSE](DesignAuthorityRegistry.md#d-14-owner-reuse), r126, records the [source decision](../CHANGELOG.md#h-owner-reuse-20261118). The [assignment cases](#reinitialization-and-direct-self-assignment) extend D-14-OWNER-REPLACEMENT using H-262/H-263 and D-17 consuming-entry and delivery rules. P-597/P-598 connect explicit cleanup responsibility and actual-instance liveness to charter §§3.3/4.3. Acceptance covers live, consumed and mixed paths, failed RHS delivery, surviving borrows and invalid self-assignment. This scope covers ordinary writable named region holders. Native qualification remains open.
 
@@ -65,7 +69,7 @@ H-567/H-568 forbids inferring C++ object copying/moving from these declarations 
 
 H-309 confirms `ptr next:Node` as the declaration shape for a stored pointer field. It also directs ordinary variables toward ref or ptr declarations, eliminating let/var-style variable declarations. H-311 separately permits direct bits fields with val or no modifier. For reference declarations, ref must reject reads before initialization at compile time; dereferencing ptr may produce a null-pointer exception. H-313 accepts the coordinated checked-NPE and val increment; native evidence and remaining source boundaries are recorded separately.
 
-Ordinary declarations use ref/ptr for reference bindings and val for independent bits storage. An object view is annotated with its target type, such as Node, with owner annotations where needed. Allocation and ref_at return such views directly. Dedicated region declarations and symbolic effects retain their separate resource/binding contracts. Let/var declarations and reference type constructors have no compatibility parser path.
+Ordinary declarations use ref/ptr for reference bindings and val for independent bits storage. An object view is annotated with its target type, such as Node, with owner annotations where needed. Ordinary construction and builtin indexing of an addressable array element supply such views. Dedicated region declarations and symbolic effects retain their separate resource/binding contracts. Let/var declarations and reference type constructors have no compatibility parser path.
 
 ### Separate initialization, absence and access
 
@@ -151,7 +155,7 @@ borrowed <- 4;
 function copied(val x:i64) -> i64 { x <- 9; return x; }
 ```
 
-Fresh val declaration initialization materializes independent lexical bits; `make local` can explicitly supply the new storage, including delayed initialization. Reads still require definite initialization. H-272/H-273's omitted-parameter behavior remains: default bits parameters target callee-local storage; externally borrowed parameters require their owner annotation. Val parameters cannot name an external owner. Val is not a new overload-selection dimension or permission to allocate non-bits regional objects on the stack. Ordinary scalar results follow H-413/H-414: bare T is val, T in O is ref T in O, and explicit ref/ptr retains its view contract.
+Fresh val declaration initialization materializes independent lexical bits; `make T` can explicitly reserve the new storage, including delayed initialization. Reads still require definite initialization. H-272/H-273's omitted-parameter behavior remains: default bits parameters target callee-local storage; externally borrowed parameters require their owner annotation. Val parameters cannot name an external owner. Val is not a new overload-selection dimension or permission to allocate non-bits regional objects on the stack. Ordinary scalar results follow H-413/H-414: bare T is val, T in O is ref T in O, and explicit ref/ptr retains its view contract.
 
 A reference to local val storage cannot escape that scope or be stored in a regional object. Future fraction val storage uses D-16's fixed bits with its nonzero-denominator validity requirement; no implicit zero initialization, layout, widening, canonicalization or fraction execution follows. Typed local storage and initialized reference targets remain separate from the nullable-pointer contract.
 
@@ -427,7 +431,7 @@ LLVM promotion may remove unobservable local storage; source-level owner identit
 
 ### Fixed pointer bindings
 
-`const ptr a = expression, b = expression, { ... };` declares a group of non-rebindable bindings. Each initializer establishes its target once; the optional final initialization block can write target contents but cannot rebind a declared name. `const ptr n = make local i64; n <- 3;` is valid: allocating a target and initializing its bits are separate events.
+`const ptr a = expression, b = expression, { ... };` declares a group of non-rebindable bindings. Each initializer establishes its target once; the optional final initialization block can write target contents but cannot rebind a declared name. `const ptr n = make i64; n <- 3;` is valid: allocating a target and initializing its bits are separate events.
 
 The prefix qualifies the pointer binding, not its referent. A writable referent stays writable; a readonly source view stays readonly. `ptr alias = fixed` creates a separate, rebindable alias with the same owner and target access. Ordinary function/procedure parameters likewise have their own local binding unless the operation explicitly denotes the caller's binding. `=` and `<=>` reject a const-ptr destination, including explicit intrinsic calls and overload invocation. No method can bypass this by receiving the actual caller binding. `<-` and `<->` may edit writable target storage. The qualifier is checked at compile time and introduces no runtime wrapper or const-based overload family.
 
@@ -444,7 +448,7 @@ Initialization before a possibly empty loop is an accepted workaround under H-29
 H-304 confirms an optional range `for ... else` branch that executes only when the body runs zero times:
 
 ```text
-ptr result = make local i64;
+ptr result = make i64;
 for (i in first .. last) {
   result <- i;
 } else {
@@ -455,7 +459,7 @@ for (i in first .. last) {
 
 For the existing finite range loop, this is a small bounded extension: evaluate the bounds once, branch on the initial range test, and reuse normal branch joins and lexical cleanup. The nonempty path contributes the body's initialization facts; the empty path contributes the else block's facts. A read after the loop requires initialization on every normally completing alternative. Neither bounds failure nor a body exception invokes the else block. No runtime initialization flag or iteration counter is needed. A read before the first body write still rejects.
 
-Range `for` has a void result and an else branch without the loop index. [D-17’s loop scoping rules](ExceptionControl.md#loop-scoping-rules) govern declarations, effect resources and deferred work in both body and else. `fold` already has an explicit zero-iteration accumulator; `fold ... else` is rejected; a future extension would require a separate result contract. Break/continue and future loop forms are outside this bounded assessment. The parser, LLVM control-flow construction, initialization join and lexical dependency scan must preserve these distinct branch and lifetime responsibilities. Focused acceptance covers empty/nonempty dynamic ranges, partial initialization, exceptions and once-only bounds evaluation. This is independent of general loop-carried alias analysis.
+Range `for` has a void result and an else branch without the loop index. [D-17’s loop scoping rules](ExceptionControl.md#loop-scoping-rules) govern declarations, effect resources and deferred work in both body and else. A library fold returns its seed on empty input. Break/continue and future loop forms are outside this bounded assessment. The parser, LLVM control-flow construction, initialization join and lexical dependency scan must preserve these distinct branch and lifetime responsibilities. Focused acceptance covers empty/nonempty dynamic ranges, partial initialization, exceptions and once-only bounds evaluation. This is independent of general loop-carried alias analysis.
 
 The branch means **zero body executions only**; it is not an exhaustion callback. The construct yields void regardless of either block's final expression. Dynamic bindings installed by either block restore on that block's exit. Both source blocks are checked even when constant bounds make one unreachable; only feasible, normally completing paths contribute post-loop initialization facts.
 
@@ -549,7 +553,7 @@ H-431 retains D-17 E4: argument evaluation/conversion precedes entry; after entr
 
 ### Construction-to-installation walkthrough
 
-The H-264 construction contract, expressed with the H-307 declaration surface, is `owned region packet:Packet <- make region Packet(bytes -> capacity) { sequence <- initial };`: capacity may be a runtime expression, the root initializes directly inside the new region, and the result transfers ownership into the declaration. D-17 governs construction cleanup and unchecked allocation/capacity failures; current source support is limited as recorded in the source capability reference. The extended walkthrough below expresses the target qualifier/field-transfer surface; executable examples use both field `<-` and the explicit setfield intrinsic for bits edits. Wider const/resource combinations remain separate from the validated make/call/result lifecycle.
+The H-264 construction contract, expressed with the H-307 declaration surface, is `owned region packet:Packet <- make region Packet(bytes -> capacity) { sequence <- initial };`: capacity may be a runtime expression, the root initializes directly inside the new region, and the result transfers ownership into the declaration. D-17 governs construction cleanup and unchecked allocation/capacity failures; current source support is limited as recorded in the source capability reference. The extended walkthrough below expresses the target qualifier/field-transfer surface; bits edits use field `<-`, and ref/ptr edge replacement uses `=`. Wider const/resource combinations remain separate from the validated make/call/result lifecycle.
 
 ```text
 region Packet { sequence:u64; }
@@ -638,7 +642,7 @@ The user-storage boundary remains stack plus regions. Temporary local values/ref
 
 ### Reuse is not whole-region release
 
-A minimal typed pool can allocate stable slots once, then update their fields or associated SoA arrays and maintain a free-slot list/index structure. Returning a slot changes library membership. Acquiring it again uses existing storage; native region occupation need not increase. No regional object is moved and no per-object system `free` occurs. Scalar/index typing, regional views, deref, store and setfield provide these primitives. The native example below validates this bounded use, including function-based allocation-policy updates.
+A minimal typed pool can allocate stable slots once, then update their fields or associated SoA arrays and maintain a free-slot list/index structure. Returning a slot changes library membership. Acquiring it again uses existing storage; native region occupation need not increase. No regional object is moved and no per-object system `free` occurs. Typed indices, borrowed element views and field and indexed writes supply these operations. The native example below validates this bounded use, including function-based allocation-policy updates.
 
 There are two different validity questions:
 
@@ -833,7 +837,7 @@ A cross-pool composition example places Pool and Single layouts in separate effe
 function copy_into(destination:SlotStore, to:Slot,
                    source:SlotStore, from:Slot) -> i64 {
   ref target = cell(destination, to);
-  store(target, read(source, from));
+  target <- read(source, from);
   target
 }
 ```
@@ -915,7 +919,7 @@ Useful semantic boundaries for the proposed expression:
 - `make` allocates and initializes a whole region. Procedures/module execution can perform such operations; H-197 permits them in functions as well. Allocation does not by itself require reading a user dynamic variable.
 - Root initialization and any supported nested allocation happen in the new region. Until successful completion, no usable owning result is exposed. A supported failed construction path releases its unfinished region and leaves a preceding dynamic binding unchanged.
 - Its result is the new whole-region resource. Binding that result must not make a second copy of its lifetime responsibility.
-- `alloc` remains the separate operation for object placement inside an existing region. The prototype accepts `alloc @arena ...` in a procedure context and `alloc arena ...` through a named lexical borrow, including inside functions. Neither placement form creates or transfers the enclosing region. Internal slot/free-list policy remains user code.
+- Use `make T(args) in arena` to place an object or named array inside an existing region. The result borrows that owner. Symbolic owner access follows the ordinary callable permissions. The library owns any slot or free-list policy.
 - Complex graph initialization must eventually define how initializer code addresses the new region, how root constructor procedures participate, and how errors leave it. These questions do not justify adding an artificial dynamic owner that must later be extracted. The simple field initializer does not decide a general constructor-body ABI.
 
 H-196 requires the whole-region wrapper to remain intrinsic. The `region r:Root` declaration exposes the user-defined root identity without making the owning wrapper user-defined. A possible source alias would have to preserve the intrinsic type and permissions; it cannot be a user-defined nominal product/sum with an owner field. General type aliases and additional construction forms remain open; H-264 supplies the first typed owning declaration and make spelling.
@@ -925,9 +929,9 @@ H-196 requires the whole-region wrapper to remain intrinsic. The `region r:Root`
 For editing, a procedure can accept an existing object reference without owning the region:
 
 ```text
-proc set_sequence(packet:Packet, value:const u64) -> void {
-  setfield(packet, sequence, value);
-  {}
+proc set_sequence(packet:Packet in O, value:const u64) -> void where {owner O} {
+  packet.sequence <- value;
+  return;
 }
 ```
 
@@ -992,7 +996,7 @@ The function keyword guarantees independence from dynamic context, not mathemati
 
 Same-region pointer rules continue to reject storing a reference to a short-lived local region inside another region's graph. Allowing edits inside a function does not grant cross-region pointer storage, user-defined owner containers, per-object destruction or native heap allocation for user objects. Object-pool algorithms remain ordinary region-internal code.
 
-The compiler separates function-context checks from memory operations. The implemented increment permits store, setfield and function overloads that mutate explicit regional arguments; it preserves rejection of symbolic reads/writes, perform/behave and procedure calls. Bare region locals/parameters/results borrow an already held region. Functions can allocate data and arrays into that explicit input using alloc followed by its lexical name. Returned regional views retain the same owner. Typed make and explicit owning results additionally create and transfer whole-region responsibility under D-17 E4/E5. Mailbox transport remains unavailable. Concrete data products use the regional path, and returned views remain dependent on their existing owners. Field writes accept an explicit record reference or an already dereferenced borrowed record view; both use the same checked native address and field encoding. This does not add per-object allocation, copy/move, lifetime extension or a new pointer representation.
+The compiler separates function-context checks from memory operations. The language permits payload writes, field rebinding and function overloads that mutate explicit regional arguments; it preserves rejection of symbolic reads/writes, perform/behave and procedure calls. Bare region locals/parameters/results borrow an already held region. Functions can allocate data and arrays into that explicit input using `make T(args) in arena`. Returned regional views retain the same owner. Typed make and explicit owning results additionally create and transfer whole-region responsibility under D-17 E4/E5. Mailbox transport remains unavailable. Concrete data products use the regional path, and returned views remain dependent on their existing owners. Field writes accept an explicit record reference or an already dereferenced borrowed record view; both use the same checked native address and field encoding. This does not add per-object allocation, copy/move, lifetime extension or a new pointer representation.
 
 ### Whole-region access and ownership requirements
 
@@ -1029,14 +1033,14 @@ H-203 fixes the permitted stored edge independently of physical layout: a field 
 
 ### Local bits storage and initialization
 
-H-292 confirms that a fresh bits result used to initialize a ptr is materialized in the enclosing lexical scope. The explicit source form is `make local T { expression }`. For an expression of type i64, the following are equivalent:
+H-292 confirms that a fresh bits result used to initialize a ptr is materialized in the enclosing lexical scope. With no contextual owner the explicit form is `make T { expression }`. Write `make T in here { expression }` to name that owner. For an expression of type i64, the following are equivalent:
 
 ```text
 ptr n = 3 + b;
-ptr n = make local i64 { 3 + b };
+ptr n = make i64 { 3 + b };
 ```
 
-These are alternative declarations, not two declarations of n in one scope. The implicit form infers the computed result type; it does not force every scalar to i64 or select a new numeric conversion. The initializer is evaluated once. The resulting bits storage belongs to the scope enclosing make local, not merely to the initializer's braces. No source-visible owning-bits wrapper or native heap allocation is required.
+These are alternative declarations, not two declarations of n in one scope. The implicit form infers the computed result type; it does not force every scalar to i64 or select a new numeric conversion. The initializer is evaluated once. The enclosing full lexical scope owns the target in these examples. The initializer braces create no lifetime owner for it. No source-visible owning-bits wrapper or native heap allocation is required.
 
 Initializing from existing storage remains borrowing:
 
@@ -1050,18 +1054,18 @@ H-478 selects owner-qualified lexical construction for the same pointer-bearing 
 
 #### Individual value initializers and declaration-group blocks
 
-H-296 distinguishes two source positions. A block attached directly to make local supplies the initial bits value of that one allocation. A block introduced after the final comma belongs to the entire ptr declaration group; it executes after the individual declarations, and its result is ignored.
+H-296 distinguishes two source positions. A block attached directly to the scalar `make T` expression supplies the initial bits value of that one allocation. A block introduced after the final comma belongs to the entire ptr declaration group; it executes after the individual declarations, and its result is ignored.
 
 ```text
 # One allocation initialized from the block's bits result.
-ptr n = make local typeof(b) { b };
+ptr n = make typeof(b) { b };
 
 # One declaration followed by an explicit group initialization block.
-ptr n = make local typeof(b), { n <- b };
+ptr n = make typeof(b), { n <- b };
 
 # A group may combine individual value initialization and explicit writes.
-ptr a = make local i64 { 1 },
-    b = make local i64,
+ptr a = make i64 { 1 },
+    b = make i64,
     { b <- a + 1 };
 ```
 
@@ -1078,17 +1082,17 @@ The H-294 transfer initializer uses the comma-separated group form:
 ```text
 ptr n <- b;
 # Equivalent allocation and transfer:
-ptr n = make local typeof(b), { n <- b };
+ptr n = make typeof(b), { n <- b };
 ```
 
-This constructs independent local bits storage, then applies the ordinary transfer contract. In contrast, `ptr n = b` borrows existing storage. A bits copy from read-only access may create independent writable storage; it does not make an alias of the original target writable. Non-bits data still requires an explicitly supplied regional allocation destination and cannot use make local as a graph-copy fallback.
+This constructs independent local bits storage, then applies the ordinary transfer contract. In contrast, `ptr n = b` borrows existing storage. A bits copy from read-only access may create independent writable storage; it does not make an alias of the original target writable. Constructing an eligible non-bits object with `make` selects its actual owner under the [ordinary placement rule](ConstructionAndAcquisition.md#owner-directed-construction). Transferring an existing graph requires the appropriate explicit operation.
 
 H-292's arithmetic shorthand keeps its individual value initializer:
 
 ```text
 ptr n = 3 + b;
 # For an i64 expression result:
-ptr n = make local i64 { 3 + b };
+ptr n = make i64 { 3 + b };
 ```
 
 H-295 makes typeof a compile-time operation with no runtime execution. `typeof(b)` does not evaluate b, allocate its value or invoke its procedures. Runtime initialization evaluates the source once; this supplies no RTTI or general runtime reflection mechanism. A known type can be queried even when its storage has not yet been initialized: the query does not read that payload. Broader typeof applicability and type-query forms remain separate from this local-initializer contract.
@@ -1098,8 +1102,8 @@ H-295 makes typeof a compile-time operation with no runtime execution. `typeof(b
 H-297 permits a group to finish with allocated but uninitialized slots:
 
 ```text
-ptr a = make local i64,
-    b = make local i64,
+ptr a = make i64,
+    b = make i64,
     { a <- 1 };
 
 # Reading b here is a compile error.
@@ -1122,7 +1126,7 @@ The resulting obligations are:
 | Case | Required semantic distinction |
 | --- | --- |
 | A bits parameter and another alias may reach the caller's slot | A default parameter has its own callee-local copy. An explicit external-owner parameter retains the original slot and observes permitted intervening writes. |
-| A literal or `a + b` initializes a ptr with a fresh scalar | Enclosing lexical-scope bits storage, equivalent to make local with the inferred type; no arbitrary extension of an existing borrow. |
+| A literal or `a + b` initializes a ptr with a fresh scalar | Enclosing lexical-scope bits storage, equivalent here to `make T { expression }` with the inferred bits type; no arbitrary extension of an existing borrow. |
 | A function returns a scalar | Bare i64 or explicit val i64 supplies independent bits; i64 in O means ref i64 in O. Val i64 in O rejects. An explicit borrowed result cannot expose callee-local storage; a value result may copy its initialized bits. |
 
 Independent scalar results can be lowered without preserving callee stack addresses; this does not select a permanent ABI. H-292 gives fresh scalar ptr initializers enclosing-scope storage; existing borrowed results retain their source owner and cannot escape it. An owned i64 is not required merely to return a computed scalar.
@@ -1227,7 +1231,7 @@ function (=)(lhs:i64 in O, rhs:i64 in O) -> i64 in O where {owner O} {
 
 The ordinary call can select this method; its explicit intrinsic call performs the checked builtin rebind rather than recursively selecting the same method. Argument evaluation remains ordered and occurs once. Types, fixed owners, access permissions, lifetime and definite initialization are checked as usual. The builtin result retains its normal contract: reference `=` preserves destination access, while bits `<-` yields a readonly destination view. A writable-lhs/const-rhs method can delegate after independently obtaining a writable target; it cannot delegate an invalid readonly-to-writable rebind.
 
-The form also applies to existing eager arithmetic and named intrinsics, such as `intrinsic (+)(a, b)` or `intrinsic (len)(values)`. It does not create a callable identity, runtime dispatch facility, unchecked pointer operation or conversion method. A missing builtin implementation rejects rather than falling back to a user method. In particular there is no builtin graph-transfer `<-` or indexed `([]=)` contract. Existing numerical widening and UoM identity checks remain; D-16 fraction execution is deferred. Explicit builtin selection does not make dynamic-context access legal inside a function.
+Explicit checked builtin delegation applies to eager arithmetic and queries, such as `intrinsic (+)(a, b)` or `intrinsic (len)(values)`. The public `len(values)` uses ordinary family lookup. Explicit delegation uses the checked builtin without creating a second public callable family. A missing builtin implementation rejects rather than falling back to a user method. In particular there is no builtin graph-transfer `<-` or indexed `([]=)` contract. Existing numerical widening and UoM identity checks remain; D-16 fraction execution is deferred. Explicit builtin selection does not make dynamic-context access legal inside a function.
 
 ### Const-qualified reference-assignment methods
 

@@ -1,8 +1,10 @@
 # CoD exception control and regional cleanup
 
-Design revision: 127 · Recorded: 2026-11-19 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; full-scope control and live lexical input contracts; current implementation availability is recorded in the source capability reference.
+Design revision: 128 · Recorded: 2026-11-19 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; full-scope control and live lexical input contracts; current implementation availability is recorded in the source capability reference.
 
 ## Design authority
+
+[H-ORDINARY-NAMES-20261119](../CHANGELOG.md#h-ordinary-names-20261119) covers the loop-control lifetime examples at r128, continuing the existing defer and bounds contracts under [D-10-ORDINARY-NAMES](DesignAuthorityRegistry.md#d-10-ordinary-names).
 
 - **Return inspection during defer execution.** [H-DEFER-RETURNING-20261119](../CHANGELOG.md#h-defer-returning-20261119) limits [D-17-RETURN-STATE](DesignAuthorityRegistry.md#d-17-return-state) r127 to an executing deferred entry of the callable owning the return. [D-24-TAIL](DesignAuthorityRegistry.md#d-24-tail) supplies explicit proc returns and func/full-scope here result preparation. P-482–P-484/P-631–P-632 preserve lexical control, cleanup order and actual owners. Check ordinary body and finally rejection, delayed body and attached handler acceptance, inner invocations, successful value tails and no-payload markers. Representation and compiler support are separate.
 
@@ -1267,11 +1269,11 @@ Putting `{{ ... }}` around the whole loop forms a cleanup batch. Putting it insi
 
 ### Loop-control snapshots and borrowing
 
-A delayed defer block cannot capture loop-control variables, including the index and fold accumulator. `defer consume(i)` saves the current bits argument through ordinary call preparation; `defer { consume(i); }` is invalid. There is no implicit final-value capture, lexical boxing or lifetime extension. A borrowed argument saves the selected reference rather than a deep copy, so its owner must outlive eventual invocation. Call syntax does not make borrowing loop-control storage or iteration-owned resources valid for an outer deferred action.
+A delayed defer block cannot retain a loop index past its lifetime. A library fold step parameter follows its own invocation lifetime. `defer consume(i)` saves the current bits argument through ordinary call preparation; `defer { consume(i); }` is invalid. There is no implicit final-value capture, lexical boxing or lifetime extension. A borrowed argument saves the selected reference rather than a deep copy, so its owner must outlive eventual invocation. Call syntax does not make borrowing loop-control storage or iteration-owned resources valid for an outer deferred action.
 
 ### Zero-iteration else
 
-Range `for ... else` executes its else branch only when the body executes zero times, not on exhaustion. The else branch follows the same rules: direct variable declarations are forbidden; its effects restore and fresh effect regions release at branch exit; direct defer registers to the enclosing full scope. A nested explicit `{{ ... }}` permits local declarations and local deferred work. The loop index is unavailable in else. Once-only bound evaluation, initialization joins and fold's initial accumulator are unchanged. This contract does not add `fold ... else`, break/continue or new loop forms.
+Range `for ... else` executes its else branch only when the body executes zero times, not on exhaustion. The else branch follows the same rules: direct variable declarations are forbidden; its effects restore and fresh effect regions release at branch exit; direct defer registers to the enclosing full scope. A nested explicit `{{ ... }}` permits local declarations and local deferred work. The loop index is unavailable in else. Bound evaluation and initialization joins follow the range loop contract. A library fold supplies its own seed on empty input.
 
 ### Acceptance
 

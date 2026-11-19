@@ -1,8 +1,10 @@
 # Ranged for-loops and synchronous generators
 
-Design revision: 20 · Recorded: 2026-11-19 · Status: selected generator/feedback syntax and checked forwarding; remaining scope, effect proofs and transport pending.
+Design revision: 21 · Recorded: 2026-11-19 · Status: selected generator/feedback syntax and checked forwarding; remaining scope, effect proofs and transport pending.
 
 ## Design authority
+
+[H-ORDINARY-NAMES-20261119](../CHANGELOG.md#h-ordinary-names-20261119) covers the distinction between a range loop and a library fold step at r21 within [D-10-ORDINARY-NAMES](DesignAuthorityRegistry.md#d-10-ordinary-names).
 
 [H-CALLABLE-TAIL-20261119](../CHANGELOG.md#h-callable-tail-20261119) applies the [callable result rules](CallableResultInference.md#results-of-proc-func-and-here-bodies) at r20 to the generator’s fixed void result. Check both spellings of a producer with non-void feedback and the same caller-owned body.
 
@@ -556,7 +558,7 @@ The syntax rule does not change normal fallthrough: a void-feedback body may fin
 
 Continue does not set either the generator's final-return record or the surrounding callable's return record. It supplies only body feedback. `if returning` therefore cannot treat continue as a return instruction. Pending feedback is delivered only after required body-local cleanup succeeds; an overriding outer return or escaping failure supplies no normal yield result. Generator-local returns cannot replace a body transfer targeting the caller; cleanup failures contribute to the whole for operation as specified below. Eligibility and proof of other cleanup-originating control transfers remain separately scoped.
 
-Nested loops use the innermost lexical loop target; do not skip an inner loop merely because an outer generator accepts the operand type. A separate ordinary callable cannot continue its caller's loop. No labelled continue syntax or new value-bearing continuation for existing range/fold loops is selected here. A deferred action that can run after the body/yield lifetime cannot retain a continuation into that expired invocation.
+Nested loops use the innermost lexical loop target; do not skip an inner loop merely because an outer generator accepts the operand type. A separate ordinary callable cannot continue its caller's loop. The builtin range loop retains its own continuation rules. A library fold step uses ordinary here-call control destinations. A deferred action that can run after the body/yield lifetime cannot retain a continuation into that expired invocation.
 
 ### Multiple feedback fields
 

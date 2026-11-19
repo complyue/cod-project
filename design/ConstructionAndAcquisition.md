@@ -1,8 +1,12 @@
 # CoD construction, bits ADTs and region acquisition
 
-Design revision: 63 · Recorded: 2026-11-19 · Status: DBMR design confirmed (modes, publication and image completion); logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
+Design revision: 65 · Recorded: 2026-11-19 · Status: DBMR design confirmed (modes, publication and image completion); logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
 
 ## Design authority
+
+[H-ORDINARY-NAMES-20261119](../CHANGELOG.md#h-ordinary-names-20261119) covers placement of existing object and named-array constructions at r65 under [D-10-ORDINARY-NAMES](DesignAuthorityRegistry.md#d-10-ordinary-names).
+
+[D-22-MAKE-OWNER](DesignAuthorityRegistry.md#d-22-make-owner) records the ordinary allocation spelling at r64 under [H-MAKE-LEXICAL-DEFAULT-20261119](../CHANGELOG.md#h-make-lexical-default-20261119) and P-352. An explicit constructor exposes creation of a target with an actual owner. Verify owner selection with and without a receiving owner, explicit `in here`, and conflicting or readonly owners. Constructor dispatch, bits classification and storage transport retain their existing contracts.
 
 - **Scope of ordinary ADT reservation.** [D-22-RESERVATION](DesignAuthorityRegistry.md#d-22-reservation), r60 in the reservation section, retains H-562’s product and readiness rules. [H-DCTOR-SOURCE-20261118](../CHANGELOG.md#h-dctor-source-20261118) selects [constructor-target reservation and regional ref/ptr slot allocation](DomainLanguageDesign.md#sum-object-construction-and-reference-storage). C-65/C-72 and charter §§4.3/8.1 require an explicit target owner and checkable readiness. Acceptance distinguishes an uninitialized binding, a null binding, a reserved alternative and a completed object. Native verification is separate.
 
@@ -552,11 +556,13 @@ The proposed compiler check for the confirmed construction behavior carries the 
 | Exception type T | Use [`make exception T(...)` or `make exception T { ... }`](ExceptionControl.md#make-exception-expressions) to receive a complete owning result normally. The optional `in region (bytes -> capacity)` configures a fresh region. In `make exception T from cause { ... }`, evaluate the cause once and construct the fields in its region. Combining the clauses rejects. Ordinary `make T [in o]` rejects for an exception subtype. |
 | Explicit `make T in r` for ordinary data | Use r only if it supplies the required placement/capability. Reject a conflicting receiver owner before runtime evaluation. H-384 confirms explicit selection and mismatch rejection; H-438 supplies the generic owner allocation-access rule. |
 | Ordinary data, omitted owner, receiver has one unique owner and suitable allocation access | Construct there. A field may supply its containing owner to an explicitly written nested make. H-386 accepts this contextual inference. |
-| Ordinary data, omitted owner, no destination | Bits use the current full lexical scope. Non-bits still require an explicit actual owner when none is supplied by context; H-478 admits `in here` as well as a regional destination. No TLS fallback, hidden region or automatic owner choice follows. H-386's explicitness boundary remains; missing capability never causes a hidden allocator or fallback. |
+| Ordinary data, omitted owner, no contextual target owner | Use the current full lexical scope (`here`) for any lexically eligible type, including a nominal sum with same-owner reference fields. The selected scope must outlive every use. |
 | Ordinary data, receiver selects a const owner | Reject construction in that owner, including a fresh readonly result or otherwise admitted implicit target materialization. Do not silently choose another owner. |
 | Ordinary data, receiver selects a non-const owner | H-438 permits construction using that actual owner; retain placement, policy, capacity, initialization and failure checks. |
 | Initializer retains a reference result | Check actual owner/access. A non-bits graph is never implicitly copied; independent bits materialization and readonly reference reception remain distinct below. |
 | Ref/ptr field initialized without explicit make | Independent bits may materialize a target under the proposed owner-directed construction rule. Reference results retain their target and access; readonly-to-writable binding rejects without allocation fallback. Regional materialization remains under review. |
+
+An explicit `in here` selects the current full lexical scope and must agree with any required owner. Omission uses the context first. A required owner that is ambiguous, inaccessible or readonly cannot be bypassed by allocating locally. The construction form is `make`; `local` remains available as an ordinary identifier.
 
 Illustrative candidate source, not current parser acceptance:
 
@@ -568,6 +574,22 @@ owned region arena:Root <- make region Root(bytes -> capacity) { ... };
 ```
 
 Completed construction must preserve initializer order and effects and publish only a valid initialized result. Bare typed reservation has the separate identity-only contract below. Existing D-17 failed acquisition cleanup does not promise rollback of effects or arbitrary reservations in an already-live region. Nested constructor naming/access, partial construction and allocator-policy interaction require review before implementing an uncovered case. Explicit owner spelling cannot bypass readonly allocation checks or same-owner stored edges.
+
+### Sum instances and independent bits
+
+```cod
+data Decision = Backorder {} | ShipFrom { warehouse:u64; };
+data Plan = Done {} | Again { ref next:Plan; };
+
+ref shipped:Decision = make ShipFrom { warehouse <- 2u64; };
+ref end:Plan = make Done {};
+# archive is a writable region with a direct Decision root named disposition.
+archive.disposition <- shipped;
+```
+
+Both declarations construct an instance in the current full scope. The assignment transfers the initialized Decision tag and payload into archive's own storage. The result survives release of the lexical owner. The transfer requires every alternative of Decision to be pure bits. Plan has a reference-bearing alternative, so even its fieldless Done case supplies no whole-value transfer for Plan. A new Plan under another owner requires a separate construction or an explicit graph-transfer operation.
+
+For a fresh sum instance, select its dctor with `make`. An explicit receiving owner, as in `ref answer:Decision in archive = make Backorder {};`, supplies the allocation destination. Testing `answer isa Backorder` only inspects the active alternative. A constructor overload may use its destination owner even when its fields contain only bits. A bare dctor call has no independent value-construction contract in the current language. First-class aggregate value expressions and result transport have their own design scope. [Sum construction](DomainLanguageDesign.md#sum-object-construction-and-reference-storage)
 
 ## Region construction and named root initializers
 
@@ -830,6 +852,8 @@ D-16 fractions remain fixed valid bits with nonzero denominators. Storage repres
 ## Source migration
 
 H-386 selects one coordinated cutover after this design and the required representation integration are qualified. Use one semantic construction model: ordinary `make T [in o]` is distinct from whole-region `make region Root(...)`; a receiving variable’s `owned` qualifier cannot silently select allocation.
+
+Use `make T(args) in arena` for placement in an existing writable region. Where `T` is a sum, name the selected data constructor. A named array keeps its length and fill inputs, for example `make Rates(4u64, 0.5f32) in @arena`. The result borrows the same owner, including for an empty array. Preserve the existing constructor, array size, capacity and failure checks. A function can pass a named lexical borrow as the owner under its ordinary permissions.
 
 Migrate live fixtures, generated programs and examples together, and diagnose unsupported spellings with an actionable replacement. There is no compatibility period or permanent parallel syntax. This direction does not settle aggregate ABI or DBMR protocols.
 

@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-19 — Return traversal and storage names to ordinary lookup
+
+<a id="h-ordinary-names-20261119"></a>
+**H-ORDINARY-NAMES-20261119.** In the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), the project user approved removing special treatment for `fold/let/regional/alloc/len/used_bytes/capacity_bytes`, explicitly retained `touch`, and requested removal of `store`, `ref_at` and `setfield` unless they serve a distinct purpose. Array element borrowing, indexed transfer, field payload writes and edge rebinding cover the builtin operations. D-10-ORDINARY-NAMES (r227), D-30r5 and registry r989 record the source scope and its application to D-07r200, D-14r129, D-17r128, D-22r65 and D-29r21. The existing seed reservations and migration baseline are at `21283f0a56ee0a4734138e0e3859818bdc43ad12:cod/lang_syntax.hh`. Wider library interfaces and native implementation have separate scope.
+
+## 2026-11-19 — Use the lexical owner by default for ordinary construction
+
+<a id="h-make-lexical-default-20261119"></a>
+**H-MAKE-LEXICAL-DEFAULT-20261119.** In the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), the project user agreed to “drop `local`” and requested that `in here` be omissible. D-22r64/D-14r128/D-28r37/D-10r226 and registry r988 record the ordinary `make` spelling. P-352 retains H-386's contextual owner priority and replaces its explicit-owner requirement for lexically eligible non-bits construction without a contextual owner. H-292 bits materialization, H-478 placement and H-DCTOR-SOURCE-20261118 construction remain in force. No new owner-free constructor or aggregate return contract was selected. Previous scope at `21283f0a56ee0a4734138e0e3859818bdc43ad12:design/ConstructionAndAcquisition.md`.
+
 ## 2026-11-19 — Write the warehouse paper's appendix in CoD
 
 <a id="k-warehouse-cod-source-20261119"></a>
