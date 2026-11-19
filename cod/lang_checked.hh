@@ -71,8 +71,13 @@ class ScalarChecker {
   // Context zero is module initialization; other contexts are instance IDs + 1.
   mutable std::map<size_t, std::set<size_t>> effect_dependents_;
   mutable std::set<size_t> callable_effect_consumers_;
-  const CallEffects &read_effects(size_t instance) const {
+  // Physical binding distinctness refines the proof for the same checked body.
+  std::map<size_t, CallEffects> distinct_binding_effects_;
+  const CallEffects &read_effects(size_t instance, bool distinct_bindings = false) const {
     effect_dependents_[instance].insert(checking_context_);
+    if (distinct_bindings)
+      if (const auto found = distinct_binding_effects_.find(instance); found != distinct_binding_effects_.end())
+        return found->second;
     return program_.instances[instance].effects;
   }
   struct ModuleNames {
@@ -4266,6 +4271,9 @@ class ScalarChecker {
                                   std::move(context), retained, *substitutions, query_environment, {},
                                   result.origin == ResultOrigin::supplied});
     program_.instances.back().effects = initial_effects(definition, arguments);
+    if (caller_bindings(definition) && arguments.size() == 2 && arguments[0] == arguments[1] &&
+        definition.input_parameters()[0].read_only == definition.input_parameters()[1].read_only)
+      distinct_binding_effects_.emplace(id, program_.instances.back().effects);
     definition.instances.push_back(id);
     return id;
   }
@@ -4338,16 +4346,24 @@ class ScalarChecker {
     const auto &method = program_.methods[target.method];
     const auto &definition = *method.source;
     const auto &parameters = method.input_parameters();
+    const bool uses_caller_bindings = caller_bindings(method);
     if (std::any_of(operation.arguments.begin(), operation.arguments.end(), [&](const auto &argument) {
-          return argument.binding_slot != caller_bindings(method);
+          return argument.binding_slot != uses_caller_bindings;
         })) implementation_gap(expr.at, "selected method requires unproved slot preparation adaptation");
-    if (caller_bindings(method)) {
+    bool distinct_bindings = false;
+    if (uses_caller_bindings && views.size() == 2) {
+      const auto left = overlapping_slots(views[0].slots);
+      const auto right = physical_slots(views[1].slots);
+      distinct_bindings = !left.empty() && !right.empty() && intersect(left, right).empty();
+    }
+    const auto &effects = read_effects(*operation.callee, distinct_bindings);
+    if (uses_caller_bindings) {
       for (size_t i = 0; i < views.size(); ++i) {
         if (&expr == prepared_call_) require_deferred_slots(views[i], expr.at);
         for (const auto slot : physical_slots(views[i].slots)) {
           const auto &binding = bindings_->at(slot);
           if (binding.read_only != parameters[i].read_only && proving_ && validating_) {
-            const auto &sources = read_effects(*operation.callee).binding_sources;
+            const auto &sources = effects.binding_sources;
             const auto found = sources.find(i);
             const bool preserved = found != sources.end() && !found->second.empty() &&
                 std::all_of(found->second.begin(), found->second.end(), [&](size_t input) {
@@ -4360,7 +4376,7 @@ class ScalarChecker {
             if (!preserved) implementation_gap(expr.at, "caller-binding target permission preservation remains unproved");
           }
           if (binding.requires_initialized && argument_mode(parameters[i]) != ArgumentMode::borrowed_ref && proving_ && validating_) {
-            const auto &sources = read_effects(*operation.callee).binding_sources;
+            const auto &sources = effects.binding_sources;
             const auto found = sources.find(i);
             const bool preserved = found != sources.end() && !found->second.empty() &&
                 std::all_of(found->second.begin(), found->second.end(), [&](size_t input) {
@@ -4391,7 +4407,7 @@ class ScalarChecker {
     if (!completes) { operation.type = Type::never; return; }
     const auto contract = callable_type(program_.methods[target.method], target.arguments, target.result,
         access_of(views), owners_of(views), &arguments);
-    finish_call(expr, contract, read_effects(*operation.callee), call_reasons(contract), arguments, views, operation, read, discard);
+    finish_call(expr, contract, effects, call_reasons(contract), arguments, views, operation, read, discard);
   }
   struct EagerTypes {
     Type result, operand;
@@ -9557,7 +9573,7 @@ class ScalarChecker {
       if ((requirement.inputs & state.inputs) && !requirement.before.nonnull)
         observe_read(cleanup_.binding(read), requirement.before);
   }
-  CallEffects check_instance(size_t i) {
+  CallEffects check_instance(size_t i, bool distinct_bindings = false) {
     checking_context_ = i + 1;
     auto &instance = program_.instances[i];
     checking_instance_ = &instance;
@@ -9676,7 +9692,7 @@ class ScalarChecker {
           lexical_.predicates[instance.frame.inputs.at(input).place] = boolean_predicate(proof);
         }
       }
-      if (caller_bindings(*checking_method_)) for (const auto &a : instance.frame.inputs)
+      if (!distinct_bindings && caller_bindings(*checking_method_)) for (const auto &a : instance.frame.inputs)
         for (const auto &b : instance.frame.inputs) {
           const auto left = storage(a.place).binding, right = storage(b.place).binding;
           if (left != right && bindings_->at(left).type == bindings_->at(right).type &&
@@ -9821,8 +9837,13 @@ class ScalarChecker {
       if (!context) check_entry();
       else {
         const auto instance = context - 1;
+        bool distinct_changed = false;
+        if (auto it = distinct_binding_effects_.find(instance); it != distinct_binding_effects_.end()) {
+          const auto effects = check_instance(instance, true);
+          distinct_changed = merge_effects(it->second, effects, reads);
+        }
         const auto effects = check_instance(instance);
-        if (merge_effects(program_.instances[instance].effects, effects, reads))
+        if (merge_effects(program_.instances[instance].effects, effects, reads) || distinct_changed)
           for (const auto dependent : effect_dependents_[instance]) enqueue(dependent);
       }
       // New obligations must establish their write guarantees before any read
@@ -10324,6 +10345,7 @@ public:
     for (;;) {
       effect_dependents_.clear(); callable_effect_consumers_.clear();
       for (auto &instance : program_.instances) instance.effects = initial_effects(program_.methods[instance.method], instance.arguments);
+      for (auto &[id, effects] : distinct_binding_effects_) effects = program_.instances[id].effects;
       close_effects(false);
       if (!close_effects(true)) continue;
       auto choices = reaching_callables();
@@ -10333,6 +10355,12 @@ public:
     validating_ = true;
     check_entry();
     for (size_t i = 0; i < program_.instances.size(); ++i) {
+      if (const auto it = distinct_binding_effects_.find(i); it != distinct_binding_effects_.end()) {
+        const auto effects = check_instance(i, true);
+        auto known = it->second;
+        if (merge_effects(known, effects, false) || merge_effects(known, effects, true))
+          throw std::logic_error("distinct binding call effects changed after validation");
+      }
       const auto effects = check_instance(i);
       auto known = program_.instances[i].effects;
       if (merge_effects(known, effects, false) || merge_effects(known, effects, true))

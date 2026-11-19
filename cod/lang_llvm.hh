@@ -1847,19 +1847,35 @@ public:
     if (program.exception_values) fields.push_back(exception_);
     if (environments_) { environment_field_ = fields.size(); fields.push_back(b_.getPtrTy()); }
     scalar_->setBody(fields);
+    std::vector<bool> emitted_methods(program.methods.size());
+    std::vector<size_t> pending_methods;
+    const auto retain_method = [&](size_t id) {
+      if (emitted_methods[id]) return;
+      emitted_methods[id] = true;
+      pending_methods.push_back(id);
+    };
+    // Full-scope profiles can be created by provisional or restricted proofs.
+    // Emit them when the final operations need their executable body.
+    for (size_t i = 0; i < program.methods.size(); ++i)
+      if (!program.methods[i].scope_inputs && !program.methods[i].instances.empty()) retain_method(i);
     std::set<size_t> used_symbols;
-    const auto collect_symbols = [&](const auto &operations) {
+    const auto collect_operations = [&](const auto &operations) {
       for (const auto &[expr, operation] : operations) {
+        if (operation.callee) retain_method(program.instances[*operation.callee].method);
         const bool installation = expr->kind == Expression::Kind::effect || expr->kind == Expression::Kind::procedure_effect;
         if (operation.symbol && (expr->kind == Expression::Kind::symbol || (installation && operation.publishes_effect) || operation.callable_call))
           used_symbols.insert(*operation.symbol);
       }
     };
-    collect_symbols(program.entry);
-    for (const auto &instance : program.instances) collect_symbols(instance.operations);
+    collect_operations(program.entry);
     for (const auto &value : program.callables) {
+      for (const auto instance : value.implementations()) retain_method(program.instances[instance].method);
       const auto symbols = program.captured_symbols(value);
       used_symbols.insert(symbols.begin(), symbols.end());
+    }
+    for (size_t i = 0; i < pending_methods.size(); ++i) {
+      const auto &method = program.methods[pending_methods[i]];
+      for (const auto id : method.instances) collect_operations(program.instances[id].operations);
     }
     for (size_t i = 0; i < program.symbols.size(); ++i) {
       const auto &symbol = program.symbols[i];
@@ -1883,7 +1899,8 @@ public:
     module_.setTargetTriple(triple); module_.setDataLayout(target->getDataLayoutString());
     call_layouts_.resize(program.methods.size());
     for (size_t i = 0; i < program.methods.size(); ++i) {
-      const auto &method = program.methods[i]; if (method.instances.empty()) continue;
+      if (!emitted_methods[i]) continue;
+      const auto &method = program.methods[i];
       const auto &frame = input_frame(i);
       const bool destination = std::any_of(method.instances.begin(), method.instances.end(), [&](size_t id) {
         const auto &result = program.instances[id].result;
@@ -1894,7 +1911,8 @@ public:
     }
     general_.resize(program.methods.size()); specialized_.resize(program.instances.size());
     for (size_t i = 0; i < program.methods.size(); ++i) {
-      const auto &method = program.methods[i]; if (method.instances.empty()) continue;
+      if (!emitted_methods[i]) continue;
+      const auto &method = program.methods[i];
       const auto &layout = call_layouts_[i];
       const auto prefix = "cod.method." + std::to_string(method.definition) + "." + method.source->name +
           (i == method.definition ? std::string{} : ".interpretation." + std::to_string(i));
@@ -1913,7 +1931,8 @@ public:
       }
     }
     for (size_t i = 0; i < program.methods.size(); ++i) {
-      const auto &method = program.methods[i]; if (method.instances.empty()) continue;
+      if (!emitted_methods[i]) continue;
+      const auto &method = program.methods[i];
       const auto first = method.instances.front();
       if (specialized_[first] == general_[i]) {
         body(general_[i], method, first);

@@ -12,6 +12,23 @@ from callable_value_staging_tests import inventory
 from caller_ref_preservation_tests import IO, NPE, RECURSIVE, COUNTERS, SHOW
 
 
+SCOPE_PROOF = IO + """
+proc (<=>)(ptr left:const i64 in O, ptr right:const i64 in O) -> void where {owner O} {
+    ptr saved = left;
+    if (right is not null) {
+        left = null;
+        {{ if (right is not null) { behave @print(7); } else {}; }};
+    } else {};
+    left = saved;
+}
+val x <- 1, y <- 7;
+ptr p = x, q = y;
+ptr var first:const -> p;
+ptr var second:const -> q;
+first <=> second;
+"""
+
+
 def main():
     results = []
     def record(name, passed, **details):
@@ -43,6 +60,17 @@ def main():
             checked = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, timeout=60)
             record(mode + '/inspection_does_not_execute', checked.returncode == 0 and not checked.stdout and not checked.stderr,
                    command=command, exit=checked.returncode, stdout=checked.stdout, stderr=checked.stderr)
+            entry = scratch / 'scope-proof.cod'
+            ir = scratch / f'scope-proof-{mode}.ll'
+            entry.write_text(SCOPE_PROOF)
+            command = [str(COD), '--run', str(entry), '--emit-llvm', str(ir)]
+            if general:
+                command.append('--no-specialize')
+            run = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, timeout=60)
+            methods = inventory(ir.read_text()) if ir.exists() else {}
+            record(mode + '/only_executable_scope_emitted',
+                   run.returncode == 0 and run.stdout == '7\n' and not run.stderr and len(methods) == 2,
+                   command=command, exit=run.returncode, stdout=run.stdout, stderr=run.stderr, methods=list(methods))
     passed = sum(row['passed'] for row in results)
     if report := os.environ.get('COD_LANGUAGE_REPORT'):
         sources = [ROOT / 'cod/main.cc', *sorted((ROOT / 'cod').glob('lang_*.hh')), Path(__file__),

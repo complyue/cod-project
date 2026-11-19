@@ -85,11 +85,22 @@ for number,(p_readonly,q_readonly,first,restore) in enumerate(product((False,Tru
     if restore:targets[0]=0
     setup='val x<-1,y<-7;ptr p'+(':const i64' if p_readonly else '')+'=x;ptr q'+(':const i64' if q_readonly else '')+'=y;ptr var ro:const->p;ptr var other:const->q;'
     values=[1,7]
-    # Restoring left can conservatively attribute its original readonly source
-    # to a possibly overlapping right slot. Distinct-argument access inference
-    # for that safe case still needs an alias-conditioned summary.
-    unproved=p_readonly and not q_readonly and first and restore
-    case('access_model_'+str(number),body=body,setup=setup,reject=not safe or unproved,output=''.join(str(values[t])+'\n' for t in targets))
+    case('access_model_'+str(number),body=body,setup=setup,reject=not safe,output=''.join(str(values[t])+'\n' for t in targets))
+
+READONLY_LEFT = BASE.replace('ptr p=x,q=y;', 'ptr p:const i64=x;ptr q=y;')
+RESTORE_LEFT = '{ptr saved=left;left=right;left=saved;}'
+case('saved_target_cannot_restore_into_writable_slot', body='ptr saved=left;left=right;right=saved;',
+     setup=READONLY_LEFT, reject=True)
+case('distinct_slots_with_same_target', definition=HEAD+RESTORE_LEFT,
+     setup=READONLY_LEFT.replace('ptr q=y;', 'ptr q=x;'), output='1\n1\n')
+runner.CASES['nested_restore_distinct_mixed_access'] = ({
+    'inner.cod': HEAD+RESTORE_LEFT+'export (<=>);',
+    'main.cod': IO+'using "inner.cod" (<=>) as inner;'+HEAD+'{inner(left,right);}'+READONLY_LEFT+
+                'try{ro<=>other;'+OUT+'}catch(e:const NullPointerException){behave @print(99);};',
+}, 0, '1\n7\n', '')
+runner.CASES['prepared_restore_distinct_mixed_access'] = (
+    IO+HEAD+'{ptr saved=left;defer intrinsic (=)(left,saved);left=right;}'+'proc run()->void{'+READONLY_LEFT+
+    'defer{'+OUT+'};defer (<=>)(ro,other);p=z;}run();', 0, '9\n7\n', '')
 
 runner.CASE_ARGUMENTS={}
 runner.CASE_SHADOWS={name:[] for name in runner.CASES}
