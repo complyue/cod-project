@@ -1,8 +1,10 @@
 # Callable storage and direct lexical access
 
-Design revision: 14 · 2026-11-19 · Confirmed source contract
+Design revision: 15 · 2026-11-19 · Confirmed source contract
 
 ## Design authority
+
+[H-FUNCTOR-ARGUMENT-20261119](../CHANGELOG.md#h-functor-argument-20261119) applies ordinary argument preparation at r15 under D-18-HERE-STORAGE/P-611–P-612. The functor and any synchronous forward retain the selected receiver’s identity, access and lifetime. A later rebind of its source slot leaves that identity intact.
 
 [H-CALLABLE-TAIL-20261119](../CHANGELOG.md#h-callable-tail-20261119) and [H-DEFER-RETURNING-20261119](../CHANGELOG.md#h-defer-returning-20261119) continue D-18-HERE-STORAGE at r14 for result ownership and deferred inspection. Compare the two brace forms and an independent full scope nested in a defer.
 
@@ -16,7 +18,7 @@ Design revision: 14 · 2026-11-19 · Confirmed source contract
 
 [H-HERE-BREAK-CONTINUE-20261118](../CHANGELOG.md#h-here-break-continue-20261118) confirms the two typed exits in r10 under [D-18-HERE-BREAK](DesignAuthorityRegistry.md#d-18-here-break), P-621/P-622. The block spelling identifies the originating call and keeps the result and cleanup destination explicit through forwarding. The table and forwarding case below are source acceptance criteria.
 
-Acceptance covers function selection without an enclosing activation, direct slot writes, synchronous forwarding across different owner counts, both brace forms, early feedback, reentrancy, cleanup and rejection of escape. Native layout, inlining and migration strategy are delegated to mainline. Functor receiver preparation and name-only activation of mixed symbolic families remain separate questions.
+Acceptance covers function selection without an enclosing activation, direct slot writes, synchronous forwarding across different owner counts, both brace forms, early feedback, reentrancy, cleanup and rejection of escape. Native layout, inlining and migration strategy are delegated to mainline. Name-only activation of mixed symbolic families remains a separate question.
 
 ## Callable value kinds
 
@@ -255,7 +257,7 @@ A delivered `break` counts as successful completion of the original call. Every 
 | Prepare deferred work | In a scope with `func f = first;`, `defer f();`, `defer { f(); }` and then `f <- second;`, normal drain calls second and then first. The block resolves the live slot at exit. The plain call retains the value it prepared at registration. Any saved here access must fit the actual drain, including partial startup and shutdown. [Deferred execution](ExceptionControl.md#deferred-work-and-explicit-scopes) |
 | Write through direct lexical access | A here body can change the outer scalar, rebind its mutable ref slot, consume an owner or invalidate a caller's type/nullability refinement. Check zero, one and repeated invocations on normal and exceptional paths. A callback that consumes its outer owner once cannot be silently run twice. A callee that may skip the callback cannot establish definite initialization merely by accepting it. |
 | Return or receive | Ordinary callable results may be constructed into the caller's lexical destination, including structural fields. Prepare a replacement completely before publication. Unwind partial preparation, discarded fields and abandoned results exactly once. A new holder does not extend any borrowed target, here activation or default-provider owner. A here entry cannot be smuggled out through a result field, nested procedure snapshot or symbolic binding. [Result reception](ConstructionAndAcquisition.md#structural-result-types--return-only-proposal) |
-| Prepare a functor | A named receiver at a here parameter can be defined to read the same live ref slot as the explicit wrapper. If another operation rebinds it within its owner, the next invocation observes the new target. Preparing `choose_limit()` raises a separate timing question. Re-evaluating it on each invocation can repeat a business effect. Recommend evaluating an explicit receiver expression once at its argument position and keeping its result only if valid through the call. Argument binding to slot one and written argument evaluation order remain distinct. [Functor receiver proposal](DomainLanguageDesign.md#functor-receivers-and-callback-arguments) |
+| Prepare a functor | Select the target once when evaluating the argument. Invocations read that target’s current fields. A subsequent rebind of the source reference affects an explicit callback that reads the reference at invocation. A computed receiver is evaluated once even if the callee never invokes the predicate. [Functor arguments](DomainLanguageDesign.md#functor-receivers-and-callback-arguments) |
 
 Direct forwarding requires a visible, compatible here formal. Passing `body` to an ordinary function-value parameter, hiding it in a returned function or registering it for use after the supplying call rejects. A helper may catch a declared failure or propagate it under its own throws contract. A recursive forwarding edge has the same nesting and cleanup rule per activation. The checker must include mutations and possible repeated invocations in the caller’s flow analysis; dropping the association at an intermediate func would make a later owner release unsound. Reusing the original checked entry and activation link is sufficient for forwarding. A new nested literal has its own lexical site: direct forwarding alone grants no right to capture a here formal into an escaping callable.
 

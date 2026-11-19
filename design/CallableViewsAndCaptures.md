@@ -1,8 +1,10 @@
 # Function values, here callables and declared place aliases
 
-Design revision: 132 · Recorded: 2026-11-19 · Status: scoped callable contract; implementation boundaries recorded separately.
+Design revision: 133 · Recorded: 2026-11-19 · Status: scoped callable contract; implementation boundaries recorded separately.
 
 ## Design authority
+
+[H-FUNCTOR-ARGUMENT-20261119](../CHANGELOG.md#h-functor-argument-20261119) continues D-18-HERE at r133 for receiver selection in the [existing here-callable inventory](#forms-of-here-callable). Apply the actual owner and access checks to the target selected at argument preparation, including during synchronous forwarding.
 
 [H-CALLABLE-TAIL-20261119](../CHANGELOG.md#h-callable-tail-20261119) continues the result and cleanup references at r132. D-18 retains direct lexical access, invocation lifetimes and control destinations.
 
@@ -154,7 +156,7 @@ The source inventory has five families when a `for` body and a single-brace here
 | Module top level | Each incorporated module, including the selected `__main__`, executes its top-level code with direct access to its own initialized lexical slots. Its prefix and `postpon` fragments share that module activation. A callable declared there keeps its own access rules. [Module scope and example](ModuleWorlds.md#here-callable-module-top-levels) |
 | Functor used as a here callable | A data receiver with a compatible `()` overload can supply a synchronous here argument. Invocation uses the receiver under its actual owner and access permissions. The bounded callable may be forwarded to another compatible here formal while the receiver remains live. The receiver itself keeps its ordinary data type and storage eligibility. |
 
-In `test(limit, 12u64)`, the functor supplies the predicate and the literal supplies the scalar input. Returning or storing the receiver-bound here callable for later execution rejects. Storing the underlying receiver data follows its own type and owner rules. The [functor examples](DomainLanguageDesign.md#functor-receivers-and-callback-arguments) track when a mutable receiver is selected.
+In `test(limit, 12u64)`, the functor supplies the predicate and the literal supplies the scalar input. Returning or storing the receiver-bound here callable for later execution rejects. Storing the underlying receiver data follows its own type and owner rules. The [functor examples](DomainLanguageDesign.md#functor-receivers-and-callback-arguments) show the difference between selecting the receiver at its written argument position and reading a lexical reference inside a supplied body.
 
 The frame proof leaves two obligations. A region referenced through an outer slot may be released while that slot still exists; using a ref to the old instance must reject. Also, a write to an outer slot can invalidate a caller's flow facts. The checker must account for zero, one or repeated calls, including exceptional exits: it cannot assume that a callback initialized a slot, preserved a non-null refinement, or can consume the same owner twice. Access to an outer slot grants no release authority beyond its ordinary declaration. A conservative checker may reject an unproved use.
 
