@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 217 · Recorded: 2026-11-19 · Phase: language/application co-design.
+Design revision: 219 · Recorded: 2026-11-19 · Phase: language/application co-design.
 
 ## Design authority
+
+- **Discard and void.** [D-10-DISCARD](DesignAuthorityRegistry.md#d-10-discard), r219, records [H-DISCARD-CLEANUP-20261119](../CHANGELOG.md#h-discard-cleanup-20261119). Cleanup obligations survive every discard. H-104/C-41 and D-24 supply the expression-oriented and inferred-result baseline. P-629/P-630 connect visible result use with owner responsibility under charter §§3.2–3.3/4.3/8.1. [H-VOID-DISCARD-20261119](../CHANGELOG.md#h-void-discard-20261119) confirms [explicit discard of an independently typed operand](#void-inference-and-explicit-discard). Check an ignored scalar, a nullable borrow, a discarded owning temporary, a producer failure and incompatible conditional arms. No change to recursive inference or checked failures is authorized.
 
 - **Generator/argument spelling.** [K-GENERATOR-YIELD-FORMAL-20261118](../CHANGELOG.md#k-generator-yield-formal-20261118) records the D-29r17 proposal in the r214 feature overview. D-29-GENERALIZED-FOR/P-623–P-624 and D-10-TRAILING-CALLBACK govern selection, first-slot binding, labels and cleanup. Compare the two call syntaxes with one selected method. [H-GENERATOR-RECEPTION-20261119](../CHANGELOG.md#h-generator-reception-20261119) confirms the first formal and the [shared receiving header](RangedForAndGenerators.md#one-receiving-header-for-both-call-forms) at D-29r18/D-10r215. Check fresh and existing controls at every invocation. [H-HERE-HEADER-20261119](../CHANGELOG.md#h-here-header-20261119) confirms the parenthesized spelling. [K-HEADER-PROSE-20261119](../CHANGELOG.md#k-header-prose-20261119) continues r216 at r217 for the examples below.
 
@@ -791,9 +793,27 @@ H-448 separately settles the builtin bounds policy through [D-17](ExceptionContr
 
 ### Expression type conversion and assertion
 
-H-453 selects `expression : Type` for explicit conversion/type assertion. It is not a named-argument separator; declaration annotations retain their own grammar. H-468/H-471 chooses the operation from its concrete types at semantic specialization. A pure numeric value-to-value pair uses [H-466 numeric conversion](ScalarUnitsAndIndexTypes.md#explicit-numeric-conversion-and-loss-warnings): warn unless losslessness is proven, permit opt-in errors, and insert no runtime conversion enforcement; actual loss/unrepresentability is undefined behavior. Other admitted type assertions follow H-467/H-470: resolve provable success/failure at compile time and check unresolved membership at runtime, throwing an unchecked mismatch. Numeric warnings and bounds-check opt-out do not disable those checks. A numeric payload inside a ref/ptr, unit-bearing type or other nominal contract does not erase that contract or turn the whole operation into a pure numeric value conversion.
+H-453 selects `expression : Type` for explicit conversion/type assertion. It is not a named-argument separator; declaration annotations retain their own grammar. A void target requests [explicit discard](#void-inference-and-explicit-discard). For other targets H-468/H-471 chooses the operation from its concrete types at semantic specialization. A pure numeric value-to-value pair uses [H-466 numeric conversion](ScalarUnitsAndIndexTypes.md#explicit-numeric-conversion-and-loss-warnings): warn unless losslessness is proven, permit opt-in errors, and insert no runtime conversion enforcement; actual loss/unrepresentability is undefined behavior. Other admitted type assertions follow H-467/H-470: resolve provable success/failure at compile time and check unresolved membership at runtime, throwing an unchecked mismatch. Numeric warnings and bounds-check opt-out do not disable those checks. A numeric payload inside a ref/ptr, unit-bearing type or other nominal contract does not erase that contract or turn the whole operation into a pure numeric value conversion.
 
 Conversion produces a value through an admitted conversion; assertion checks whether an existing value/view satisfies the requested type. Once the assertion path is selected, it invokes no constructor, user conversion, payload copy, graph transfer or method-body probe to make the check pass. Its result retains the value or selected target, actual type identity, owner/locator and permitted lifetime/access. A narrowed reference view is not a new object. Ordinary initialization/passage rules still govern how the surrounding expression receives that result.
+
+#### Void inference and explicit discard
+
+A callable can declare or infer void. A normally completing body with no value-producing return supplies [void inference evidence](CallableResultInference.md#completion-without-a-value). A use can independently discard a typed result. For example, calling a u64 function for its effects leaves the function’s result contract u64. The surrounding callable can still infer void. A throw or an outward return delivers no payload at the expression it leaves.
+
+**Cleanup survives every discard.** Ordinary evaluation and ownership rules determine which obligations exist and who carries them on each path. Discarding a fresh owning result requires its ordinary cleanup exactly once. Discarding a borrowed view adds no referent read and leaves the owner’s release responsibility with its existing holder. Producer, partial-construction and cleanup failures follow their own contracts. This applies equally to implicit discard, omitted result fields and explicit `: void`. [Discarded compound outputs](ConstructionAndAcquisition.md#receiving-specifications)
+
+**Explicit `expr : void`.** Establish the operand’s contract, evaluate it once on the ordinary execution path and discard its result. On success the whole expression has type void. This use of the colon requests discard and requires no runtime membership test, numeric conversion or user-defined conversion. The operation preserves effects, checked failures and the cleanup rule above. Applying it to an already void expression preserves that expression’s behavior.
+
+```cod
+func sample() -> u64 { return 7u64; }
+proc tick() {
+    sample() : void;
+    return;
+}
+```
+
+Here sample returns u64. The explicit bare return in tick supplies void result evidence. The call and its discard execute before that return. A receiver ignoring `sample()` likewise leaves sample’s signature intact. The operand must already be well typed: an outer discard cannot repair an unresolved overload, invalid owner or an incompatible normal-result join. Paths can explicitly discard at the point where their own results are established, as in `if (flag) { true : void } else { 17u64 : void }`. The existing [void generator feedback rule](RangedForAndGenerators.md#void-feedback-is-discarded-result-context) separately permits independently valid terminal alternatives of unlike types in that designated context.
 
 #### Type membership and branch refinement
 

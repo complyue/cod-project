@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-19 — Confirm explicit discard of a typed result
+
+<a id="h-void-discard-20261119"></a>
+**H-VOID-DISCARD-20261119.** The project user answered “表述确认” to the typed-operand discard and cleanup rule and clarified that the procedure’s final expression supplies no return evidence in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-19 (America/Los_Angeles). D-10r219, registry r959 and P-629/P-630 record the bounded source contract. The procedure example now uses an explicit bare return. Ordinary function tail results are a separate proposal.
+
+## 2026-11-19 — Preserve cleanup responsibility when discarding a result
+
+<a id="h-discard-cleanup-20261119"></a>
+**H-DISCARD-CLEANUP-20261119.** The project user proposed `xxx : void` to discard a typed result and specified “cleanup职责永远不被discard” in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-19 (America/Los_Angeles). D-10r218 and registry r958 record the cleanup invariant for explicit and implicit discard. H-104 and D-24 supply the existing expression and inference rules. Explicit discard syntax and the boundary with contextual discard remain under discussion.
+
 ## 2026-11-19 — Confirm the explicit throwing case fallback
 
 <a id="h-case-throw-20261119"></a>
