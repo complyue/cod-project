@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-19 — Write the warehouse paper's appendix in CoD
+
+<a id="k-warehouse-cod-source-20261119"></a>
+**K-WAREHOUSE-COD-SOURCE-20261119.** The project user requested original CoD source, using planned facilities where needed, in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50). The appendix replaces the Python fixture at `7aa76999935e530c3e5c0564e752513775872bfa:papers/AlgebraicEffectsIsAllYouNeed.md`. D-10r224→225, D-20 roadmap r13→14 and registry r986→987 continue the research and acceptance scope of [K-TYPED-DBMR-PROGRAM-OVERVIEW-20261119](#k-typed-dbmr-program-overview-20261119). The expected decisions and effect trace follow from the CoD listing. Native execution and edit latency still require measurement.
+
 ## 2026-11-19 — Document the typed DBMR program cycle
 
 <a id="k-typed-dbmr-program-overview-20261119"></a>

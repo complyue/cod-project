@@ -4,7 +4,7 @@ Working paper for author review · revised 19 November 2026
 
 ## Abstract
 
-In CoD, the source data, the program that processes it, and the resulting data can each be a disk-backed memory region (DBMR). The interesting case occurs when the input is itself a program and the result can be executed. We call this *semantic homoiconicity*: ordinary CoD programs can inspect, construct and transform the typed program graphs that CoD checks and executes. A programmer can express the original computation with procedures, branches and functional composition. A second programmer can change the same computation through a typed graph edit. Algebraic effects give a published program operations whose answers determine its control flow and whose interpretation can change between runs. The architecture separates long-lived data type packages, a moderately stable native DSL executor and its authoring tools, and frequently revised application graphs. A DSL designer can encode a business invariant in the type of the persistent program itself, so a generator, a graph editor and an executor share the same rule. We edit an inventory policy's fallback branch as data, run the new policy in the same session and query its decisions with an independent tool. A small executable model demonstrates this cycle for a closed language fragment. The CoD research agenda is to give the full cycle a checked source correspondence, approach native throughput in steady execution, and approach the edit-to-result latency of interactive languages. Relocatable storage makes the graphs shareable across processes.
+In CoD, the source data, the program that processes it, and the resulting data can each be a disk-backed memory region (DBMR). The interesting case occurs when the input is itself a program and the result can be executed. We call this *semantic homoiconicity*: ordinary CoD programs can inspect, construct and transform the typed program graphs that CoD checks and executes. A programmer can express the original computation with procedures, branches and functional composition. A second programmer can change the same computation through a typed graph edit. Algebraic effects give a published program operations whose answers determine its control flow and whose interpretation can change between runs. The architecture separates long-lived data type packages, a moderately stable native DSL executor and its authoring tools, and frequently revised application graphs. A DSL designer can encode a business invariant in the type of the persistent program itself, so a generator, a graph editor and an executor share the same rule. The appendix expresses this cycle in planned CoD source. An editor redirects an inventory policy's fallback branch, the same session executes the published successor, and an independent client queries its decisions. The CoD research agenda is to give the full cycle a checked source correspondence, approach native throughput in steady execution, and approach the edit-to-result latency of interactive languages. Relocatable storage makes the graphs shareable across processes.
 
 ## 1. A program that takes a program as its input
 
@@ -77,7 +77,7 @@ The same application can use functional composition for the incoming orders and 
 
 ```cod
 for { val id <- order_id; val sku <-; } := orders !> due_today |> by_priority {
-    record_decision(output, id, route(id, sku));
+    append_decision(output, id, route(id, sku));
 }
 ```
 
@@ -96,14 +96,13 @@ A library has another way to produce a publishable program. An overload of proce
 
 The editor `E` selects the reservation at A and redirects its *decline* edge to the existing backorder outcome. An operator editing text could instead remove the second `if` from `route`. In each case, the important review question is the same: *does A's success still return A, and is B now unreachable after A declines?* A text edit may omit the unreachable B node entirely. A graph edit may preserve that node and its identity for other uses. The two root computations still agree on which requests they can make.
 
-An ordinary CoD procedure could express the edit as follows. The named operations are illustrative typed library interfaces. The draft destination has its own writable owner. The graph transfer establishes draft-owned nodes and preserves sharing before either destination lookup runs.
+The single-purpose editor below receives the private draft after the caller has transferred the graph from the published base. Both lookups search that same writable region. The [stored editor](#the-stored-editor) takes its lookup keys from an edit-program DBMR and shows where transfer and validation occur.
 
 ```cod
-proc suspend_backup(base:const RouteProgram in P, draft:RouteProgram in D)
-    where {const owner P, owner D} {
-    transfer_policy_graph(base, draft);
-    ref primary = unique_reservation(draft, 1u64);
-    ref backorder = unique_backorder(draft);
+proc suspend_backup(region draft:RouteProgram) throws Exception {
+    ref backorder = unique_finish(draft, 0u64);
+    ref primary = unique_ask(draft, 1u64);
+    assert primary isa Ask;
     primary.on_decline = backorder;
     return;
 }
@@ -149,7 +148,7 @@ Relocatability supports this workflow by letting multiple workers map a publishe
 
 ## 7. What we can show, and what to measure
 
-The executable model in the appendix runs a stored editor on a stored policy, executes the resulting policy, and runs a stored query on both outputs. The change affects order 42 alone. Backorders rise from one to two and reservation requests fall from five to three. A separate client reads the revised decisions and publishes a new decision batch containing orders 42 and 43 for the backorder desk. That client uses only the Decisions schema and ordinary image I/O. Allocation, editing and reporting run as distinct Python entry points in one process over a small file format. These results exercise the artifact cycle. Source correspondence, production DBMR support and CoD execution speed need separate evidence.
+The [CoD listing](#appendix-the-warehouse-revision-in-cod) specifies the expected result for the three orders in §4. Order 42 alone changes destination. Starting both runs from the same inventory gives one backorder under the original policy and two under the revision. Reservation requests fall from five to three. A separate client reads the revised decisions and publishes orders 42 and 43 for the backorder desk. These are acceptance expectations derived from the program. Source correspondence, DBMR execution and performance still need validation on the CoD toolchain.
 
 **Semantic acceptance for CoD.** Start from the ordinary source in §3. Export its checked program DBMR, inspect the reachable operations using CoD, apply the edit from §4 and execute both revisions. Independently edit the text and compare the resulting reachable operations, decisions and ordered effect traces. Check both Boolean outcomes, a handler failure, empty orders, a shared successor and reopening at another mapping base. Reject a stale-base edit and a result with the wrong program root. A failed edit must leave the previous policy executable. Changing the inventory handler alone must retain the policy identity.
 
@@ -171,157 +170,216 @@ Tagged instructions with executable interpretation have precedents in defunction
 
 The merchant changes a business rule by running a program whose input **and output are programs**. The merchant then applies the result to the original orders. The backorder desk uses the same Decisions package to publish its own batch. The policy author needs a new app revision, the desk needs its data types, and the executor can serve both policy revisions. This is what persistent program-as-data buys the people doing the work. If one checked app revision can run immediately after an edit and specialize for repeated execution, “compiled or interpreted?” becomes a question about when to compile that revision. The answer can change during the life of a single application.
 
-## Appendix. Executable artifact-cycle model
+## Appendix. The warehouse revision in CoD
 
-Run the following block with Python 3. It creates temporary binary files for each published revision. The small schemas use little-endian unsigned integers. Program edges are indices within their own image. The edit resolves nodes by operation and domain argument. Each executor accepts only its declared program and data schemas. The single-process fixture uses fresh filenames, write-once outputs and a private inventory per allocation run. Production DBMR layout, concurrency, native lowering and source projection are outside this model.
+These listings use the planned CoD language. The allocation, editing and reporting programs each have a typed DBMR as input and produce a fresh typed DBMR. The session at the end runs all three. The named file readers, graph-transfer and validation routines, row iterators and trace helpers are example package interfaces. Their contracts are given where used. The listings specify expected behavior for a future CoD run.
 
-```python
-from pathlib import Path
-from struct import Struct
-from tempfile import TemporaryDirectory
+### The policy and its executor
 
-HEADER = Struct("<4sII")          # format, schema, number of records
-ROW = Struct("<4I")               # tag and three fields
-ORDERS, ALLOC_APP, EDIT_APP, REPORT_APP, DECISIONS, SUMMARY = range(1, 7)
-STOCK, ORDER, ASK, CHOICE, REDIRECT_NO, COUNT, RESULT, TOTAL = range(1, 9)
+The policy in §§3–5 has two instructions. `Ask` performs one reservation and branches on its reply. `Finish` returns a destination. Here both continuations are reference fields in the policy's own region. Section 2 gives the smaller vocabulary a DSL author can use when a successful reservation must always determine the shipping warehouse.
 
+```cod
+data RouteNode =
+    Ask { warehouse:u64; ref on_accept:RouteNode; ref on_decline:RouteNode; }
+  | Finish { destination:u64; };
 
-def publish(path, schema, rows):
-    payload = b"".join(ROW.pack(*row) for row in rows)
-    with path.open("xb") as writer:
-        writer.write(HEADER.pack(b"REG1", schema, len(rows)) + payload)
+region RouteProgram { ref entry:RouteNode; }
 
+proc original_policy() -> owned region :RouteProgram {
+    return make region p:RouteProgram(4096u64 -> capacity) {
+        ref ship_a = make Finish in p { destination <- 1u64; };
+        ref ship_b = make Finish in p { destination <- 2u64; };
+        ref backorder = make Finish in p { destination <- 0u64; };
+        ref backup = make Ask in p {
+            warehouse <- 2u64; on_accept = ship_b; on_decline = backorder;
+        };
+        entry = make Ask in p {
+            warehouse <- 1u64; on_accept = ship_a; on_decline = backup;
+        };
+    };
+}
 
-def read(path, schema):
-    data = path.read_bytes()
-    magic, actual, size = HEADER.unpack_from(data)
-    if (magic, actual, len(data)) != (b"REG1", schema, HEADER.size + size * ROW.size):
-        raise ValueError("incompatible image")
-    return list(ROW.iter_unpack(data[HEADER.size:]))
+symbol @reserve_one:proc(order_id:u64, sku:u64, warehouse:u64)->bool;
 
-
-def policy(path):
-    nodes = read(path, ALLOC_APP)
-    if not nodes:
-        raise ValueError("missing policy root")
-    for i, (op, arg, yes, no) in enumerate(nodes):
-        if op == ASK and arg > 0 and i < yes < len(nodes) and i < no < len(nodes):
-            continue              # this fixture numbers successors after parents
-        if op != CHOICE or (yes, no) != (0, 0):
-            raise ValueError("invalid instruction or edge")
-    return nodes
-
-
-def exactly_one(indices):
-    first, = indices
-    return first
-
-
-def edit(app, base, output):
-    (instruction,) = read(app, EDIT_APP)
-    op, warehouse, outcome, reserved = instruction
-    if op != REDIRECT_NO or reserved:
-        raise ValueError("unknown edit")
-    nodes = policy(base)
-    src = exactly_one(i for i, n in enumerate(nodes) if n[:2] == (ASK, warehouse))
-    dst = exactly_one(i for i, n in enumerate(nodes) if n[:2] == (CHOICE, outcome))
-    if dst <= src:
-        raise ValueError("edge violates forward layout")
-    tag, arg, yes, _ = nodes[src]
-    nodes[src] = (tag, arg, yes, dst)
-    publish(output, ALLOC_APP, nodes)
-
-
-def simulate_inventory(stock):
-    def reserve(order, sku, warehouse):
-        key = (warehouse, sku)
-        if stock.get(key, 0) == 0:
-            return False
-        stock[key] -= 1
-        return True
-    return reserve
-
-
-def allocate(app, inputs, output, install):
-    nodes = policy(app)
-    stock, orders = {}, []
-    for tag, a, b, c in read(inputs, ORDERS):
-        if tag == STOCK:
-            stock[a, b] = c
-        elif tag == ORDER:
-            orders.append((a, b))
-        else:
-            raise ValueError("unknown input")
-    reserve = install(stock)
-    results, trace = [], []
-    for order, sku in orders:
-        pc = 0
-        while True:
-            tag, arg, yes, no = nodes[pc]
-            if tag == CHOICE:
-                results.append((RESULT, order, arg, 0))
-                break
-            reply = reserve(order, sku, arg)
-            trace.append((order, arg, reply))
-            pc = yes if reply else no
-    publish(output, DECISIONS, results)
-    return trace
-
-
-def decisions(path):               # client of the result schema alone
-    items = []
-    for tag, order, destination, reserved in read(path, DECISIONS):
-        if tag != RESULT or reserved:
-            raise ValueError("invalid decision record")
-        items.append((order, destination))
-    return items
-
-
-def report(app, inputs, output):
-    ((op, selected, b, c),) = read(app, REPORT_APP)
-    if op != COUNT or b or c:
-        raise ValueError("unknown report")
-    count = sum(destination == selected for _, destination in decisions(inputs))
-    publish(output, SUMMARY, [(TOTAL, count, 0, 0)])
-
-
-with TemporaryDirectory() as tmp:
-    root = Path(tmp)
-    d, p0, e, p1, q, r0, r1, s0, s1 = [
-        root / name for name in "D P0 E P1 Q R0 R1 S0 S1".split()
-    ]
-    publish(d, ORDERS, [(STOCK, 1, 7, 1), (STOCK, 2, 7, 1)]
-            + [(ORDER, order, 7, 0) for order in (41, 42, 43)])
-    publish(p0, ALLOC_APP, [(ASK, 1, 2, 1), (ASK, 2, 3, 4),
-                            (CHOICE, 1, 0, 0), (CHOICE, 2, 0, 0),
-                            (CHOICE, 0, 0, 0)])
-    publish(e, EDIT_APP, [(REDIRECT_NO, 1, 0, 0)])
-    publish(q, REPORT_APP, [(COUNT, 0, 0, 0)])
-    originals = d.read_bytes(), p0.read_bytes()
-
-    t0 = allocate(p0, d, r0, simulate_inventory)
-    edit(e, p0, p1)
-    t1 = allocate(p1, d, r1, simulate_inventory)
-    report(q, r0, s0)
-    report(q, r1, s1)
-
-    assert originals == (d.read_bytes(), p0.read_bytes())
-    assert decisions(r0) == [(41, 1), (42, 2), (43, 0)]
-    assert decisions(r1) == [(41, 1), (42, 0), (43, 0)]
-    assert t0 == [(41, 1, True), (42, 1, False), (42, 2, True),
-                  (43, 1, False), (43, 2, False)]
-    assert t1 == [(41, 1, True), (42, 1, False), (43, 1, False)]
-    assert read(s0, SUMMARY) == [(TOTAL, 1, 0, 0)]
-    assert read(s1, SUMMARY) == [(TOTAL, 2, 0, 0)]
-    desk = root / "backorder-desk"
-    publish(desk, DECISIONS, [(RESULT, order, dst, 0)
-                              for order, dst in decisions(r1) if dst == 0])
-    assert decisions(desk) == [(42, 0), (43, 0)]
-    try:
-        edit(e, d, root / "bad")
-    except ValueError:
-        assert not (root / "bad").exists()
-    else:
-        raise AssertionError("orders accepted as a program")
-    print("backorders 1 -> 2; reservation requests 5 -> 3; changed order 42")
+proc evaluate(n:const RouteNode in P, id:u64, sku:u64) -> u64
+    where {const owner P} {
+    return case n of {
+        (Finish { val dest <- destination; }) -> { dest };
+        (Ask { val w <- warehouse;
+               ref yes:const RouteNode = on_accept;
+               ref no:const RouteNode = on_decline; }) -> {
+            if (behave @reserve_one(id, sku, w)) { return evaluate(yes, id, sku); }
+            evaluate(no, id, sku)
+        };
+    };
+}
 ```
+
+`original_policy()` constructs the graph explicitly. The source-correspondence check in §7 starts separately from the ordinary `route` procedure in §3 and compares its exported graph with this one. Only `evaluate` invokes the reservation effect. If the handler throws, the call unwinds before either continuation runs.
+
+### The stored editor
+
+The editor DSL has one operation. Its two operands select a reservation by warehouse and a terminal by destination. The report DSL below likewise has one operation. In each case the root schema identifies the operation, and the selected executor supplies its meaning.
+
+```cod
+region RedirectDecline { warehouse:u64; destination:u64; }
+region CountDestination { destination:u64; }
+region Summary { count:u64; }
+
+proc edit(region instruction:const RedirectDecline, region base:const RouteProgram)
+    -> owned region :RouteProgram throws Exception {
+    owned region draft <- fork_route(base);
+    ref target = unique_finish(draft, instruction.destination);
+    ref request = unique_ask(draft, instruction.warehouse);
+    assert request isa Ask;
+    request.on_decline = target;
+    validate_revision(base, draft);
+    return draft;
+}
+```
+
+`fork_route` uses explicit graph transfer from the pinned base into a fresh writable owner and preserves sharing. Both lookups search the draft and require exactly one matching node. Both returned references belong to the draft. The single `=` changes the decline edge there. Validation checks the expected base revision, root, edges, effect contract and dependencies before the result is eligible for publication. A failed lookup or validation exits without returning the draft to the publisher. The original policy remains available.
+
+### Allocation and independent reporting
+
+The Orders package defines `Order` and `Orders`. The Decisions package defines `Decision` and `Decisions`. Their `orders_in` and `decisions_in` generators follow the regional list in order and yield the two indicated scalar fields per row. A typed reader checks the list and its root before exposing it. In this fixture every order is for SKU 7. The input includes the starting stock at warehouses A and B.
+
+```cod
+data Order { id:u64; sku:u64; ptr next:Order; }
+region Orders { stock_a:u64; stock_b:u64; ptr first:Order; }
+
+data Decision { id:u64; destination:u64; ptr next:Decision; }
+region Decisions { ptr first:Decision; ptr last:Decision; }
+
+proc empty_decisions() -> owned region :Decisions {
+    return make region Decisions(4096u64 -> capacity) { first = null; last = null; };
+}
+
+proc append_decision(region batch:Decisions, order_id:u64, dest:u64) {
+    ref row = make Decision in batch { id <- order_id; destination <- dest; next = null; };
+    ptr tail = batch.last;
+    if (tail is null) { batch.first = row; } else { tail.next = row; }
+    batch.last = row;
+    return;
+}
+
+data Reply { order_id:u64; sku:u64; warehouse:u64; filled:bool; ptr next:Reply; }
+region RequestLog { ptr first:Reply; ptr last:Reply; }
+
+proc allocate(region policy:const RouteProgram, region input:const Orders,
+              region trace:RequestLog) -> owned region :Decisions {
+    val left_a <- input.stock_a;
+    val left_b <- input.stock_b;
+    effect @reserve_one(order_id:u64, sku:u64, warehouse:u64) -> bool {
+        assert sku == 7u64;
+        val filled <- false;
+        if (warehouse == 1u64) {
+            if (left_a > 0u64) { left_a <- left_a - 1u64; filled <- true; }
+        } else {
+            assert warehouse == 2u64;
+            if (left_b > 0u64) { left_b <- left_b - 1u64; filled <- true; }
+        }
+        record_reply(trace, order_id, sku, warehouse, filled);
+        return filled;
+    };
+
+    owned region batch <- empty_decisions();
+    for { val id <-; val sku <-; } := orders_in(input) {
+        append_decision(batch, id, evaluate(policy.entry, id, sku));
+    }
+    return batch;
+}
+
+proc report(region query:const CountDestination, region rows:const Decisions)
+    -> owned region :Summary {
+    val total <- 0u64;
+    for { val dest <- destination; } := decisions_in(rows) {
+        if (dest == query.destination) { total <- total + 1u64; }
+    }
+    return make region Summary(4096u64 -> capacity) { count <- total; };
+}
+
+proc desk_batch(region rows:const Decisions) -> owned region :Decisions {
+    owned region desk <- empty_decisions();
+    for { val id <-; val dest <- destination; } := decisions_in(rows) {
+        if (dest == 0u64) { append_decision(desk, id, dest); }
+    }
+    return desk;
+}
+```
+
+Each `allocate` invocation starts with fresh lexical stock counters. Its definition-installed handler can update them during that invocation. `RequestLog` is a fixture-owned region whose `record_reply` appends the four scalar fields in call order. The desk client imports the Decisions package. It reads the published result and constructs its own rows under a new owner, using only order IDs and destinations.
+
+### One session, two policy revisions
+
+The fixture directory starts empty. Each `open_...` routine validates a published image against the named schema and returns an owned readonly mapping. `publish` consumes the private region and installs the complete image under a fresh filename. [DBMR construction and publication](../design/ConstructionAndAcquisition.md#publishing-a-newly-created-dbmr)
+
+```cod
+proc sample_orders() -> owned region :Orders {
+    return make region d:Orders(4096u64 -> capacity) {
+        stock_a <- 1u64;
+        stock_b <- 1u64;
+        ref third = make Order in d { id <- 43u64; sku <- 7u64; next = null; };
+        ref second = make Order in d { id <- 42u64; sku <- 7u64; next = third; };
+        first = make Order in d { id <- 41u64; sku <- 7u64; next = second; };
+    };
+}
+
+proc compare_revisions() throws Exception {
+    publish(sample_orders(), "orders.dbmr");
+    publish(original_policy(), "policy-0.dbmr");
+    publish(make region RedirectDecline(4096u64 -> capacity) {
+        warehouse <- 1u64; destination <- 0u64;
+    }, "edit.dbmr");
+    publish(make region CountDestination(4096u64 -> capacity) {
+        destination <- 0u64;
+    }, "query.dbmr");
+
+    owned region inputs <- open_orders("orders.dbmr");
+    owned region before <- open_route("policy-0.dbmr");
+    owned region change <- open_editor("edit.dbmr");
+    owned region query <- open_query("query.dbmr");
+    owned region trace0 <- empty_log();
+    owned region trace1 <- empty_log();
+
+    publish(allocate(before, inputs, trace0), "decisions-0.dbmr");
+    publish(edit(change, before), "policy-1.dbmr");
+    owned region after <- open_route("policy-1.dbmr");
+    publish(allocate(after, inputs, trace1), "decisions-1.dbmr");
+
+    owned region old_rows <- open_decisions("decisions-0.dbmr");
+    owned region new_rows <- open_decisions("decisions-1.dbmr");
+    publish(report(query, old_rows), "summary-0.dbmr");
+    publish(report(query, new_rows), "summary-1.dbmr");
+    publish(desk_batch(new_rows), "desk.dbmr");
+
+    owned region old_summary <- open_summary("summary-0.dbmr");
+    owned region new_summary <- open_summary("summary-1.dbmr");
+    owned region desk <- open_decisions("desk.dbmr");
+    assert old_summary.count == 1u64;
+    assert new_summary.count == 2u64;
+    assert destination_for(old_rows, 41u64) == 1u64;
+    assert destination_for(new_rows, 41u64) == 1u64;
+    assert destination_for(old_rows, 42u64) == 2u64;
+    assert destination_for(new_rows, 42u64) == 0u64;
+    assert destination_for(old_rows, 43u64) == 0u64;
+    assert destination_for(new_rows, 43u64) == 0u64;
+    assert row_count(desk) == 2u64;
+    assert destination_for(desk, 42u64) == 0u64;
+    assert destination_for(desk, 43u64) == 0u64;
+    assert reply_count(trace0) == 5u64;
+    assert reply_count(trace1) == 3u64;
+    # reply_is(log, index, order_id, sku, warehouse, filled)
+    assert reply_is(trace0, 0u64, 41u64, 7u64, 1u64, true);
+    assert reply_is(trace0, 1u64, 42u64, 7u64, 1u64, false);
+    assert reply_is(trace0, 2u64, 42u64, 7u64, 2u64, true);
+    assert reply_is(trace0, 3u64, 43u64, 7u64, 1u64, false);
+    assert reply_is(trace0, 4u64, 43u64, 7u64, 2u64, false);
+    assert reply_is(trace1, 0u64, 41u64, 7u64, 1u64, true);
+    assert reply_is(trace1, 1u64, 42u64, 7u64, 1u64, false);
+    assert reply_is(trace1, 2u64, 43u64, 7u64, 1u64, false);
+    return;
+}
+```
+
+A wrong-root check uses the same inputs. Calling `open_route("orders.dbmr")` must fail before the editor can publish a successor. The two valid policy images can still be opened and run.

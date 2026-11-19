@@ -1,10 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 224 · Recorded: 2026-11-19 · Phase: language/application co-design.
+Design revision: 225 · Recorded: 2026-11-19 · Phase: language/application co-design.
 
 ## Design authority
 
-- **Typed DBMR programs.** [D-10](DesignAuthorityRegistry.md#d-10) and [K-TYPED-DBMR-PROGRAM-OVERVIEW-20261119](../CHANGELOG.md#k-typed-dbmr-program-overview-20261119) record the r224 feature overview. C-01/C-02/C-05 and charter §§2–3/5.4/6–8 connect typed business graphs, environment-specific execution and relocatable publication. The example checks that the persistent vocabulary excludes an inconsistent shipment destination and retains the existing checking, ownership and publication boundaries. This scope describes a research workload and grants no implementation authority.
+- **Typed DBMR programs.** [D-10](DesignAuthorityRegistry.md#d-10) and [K-TYPED-DBMR-PROGRAM-OVERVIEW-20261119](../CHANGELOG.md#k-typed-dbmr-program-overview-20261119) record the feature overview. At r225 the example is specified in planned CoD source. [Continuity](../CHANGELOG.md#k-warehouse-cod-source-20261119). C-01/C-02/C-05 and charter §§2–3/5.4/6–8 connect typed business graphs, environment-specific execution and relocatable publication. The example checks that the persistent vocabulary excludes an inconsistent shipment destination and retains the existing checking, ownership and publication boundaries. This scope describes a research workload and grants no implementation authority.
 
 - **Explicit call intent.** [H-CALL-INTENT-20261119](../CHANGELOG.md#h-call-intent-20261119) covers D-10-ARGUMENTS and D-10-TRAILING-CALLBACK at r223. P-405/P-406 relate visible argument destinations to C-10/C-57 and charter §§3.3/8.1. Check crossed functor matches, one distinguishing label followed by an ordinary positional value, reordered labels and first-here selection. Preserve written evaluation order, default phases, owners and the requirement for one applicable best method.
 
@@ -1666,7 +1666,7 @@ Long-lived data-definition packages define the input and result roots used by in
 
 A DSL designer can make a specific illegal state unrepresentable in the persistent sum type. In the paper’s fulfillment policy, `TryWarehouse` records a warehouse and the next policy to try if reservation fails. On success, the executor ships from the warehouse in that same node. The constructors provide no field in which a generator or graph editor could name a different shipping warehouse. The reservation handler still has to report the reservation outcome faithfully. [Warehouse example](../papers/AlgebraicEffectsIsAllYouNeed.md#making-invalid-states-unrepresentable-in-the-stored-program)
 
-Effect handlers supply the environment-specific interpretation of operations such as reservation. The same published application can run with a live handler or a test handler under the applicable effect contract. Regional relocatability lets compatible processes map the same graph at different addresses while preserving its internal references. The paper and its Python model illustrate the artifact cycle. [The compiler roadmap](../applications/cod-booter/README.md#checked-dbmr-program-revisions) records the CoD acceptance work and measurements still to do.
+Effect handlers supply the environment-specific interpretation of operations such as reservation. The same published application can run with a live handler or a test handler under the applicable effect contract. Regional relocatability lets compatible processes map the same graph at different addresses while preserving its internal references. The [CoD appendix](../papers/AlgebraicEffectsIsAllYouNeed.md#appendix-the-warehouse-revision-in-cod) specifies the edit, execution and independent client with expected results. [The compiler roadmap](../applications/cod-booter/README.md#checked-dbmr-program-revisions) records the CoD acceptance work and measurements still to do.
 
 ### Generalized for-loops
 
