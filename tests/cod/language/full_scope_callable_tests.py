@@ -78,6 +78,39 @@ runner.CASES = {
     'return_owner_filter_rejects_nearest_non_owner': (
         'proc run(requested:u64)->u64{defer{if returning (in requested){}};return 7u64;}run(1u64);',
         2,'',"nearest binding 'requested' is not an owner"),
+    'return_reference_pattern_keeps_the_selected_target': (IO+
+        'proc run(ref left:u64 in O,ref right:u64 in O,which:bool)->ref u64 in O where {owner O}{'
+        'defer{if returning (saved:u64 in O){behave @print(saved);}};'
+        'if(which){return left;}else{return right;};}'
+        'val a<-7u64,b<-8u64;behave @print(run(a,b,true));behave @print(run(a,b,false));',0,'7\n7\n8\n8\n',''),
+    'rebinding_the_reference_pattern_keeps_the_prepared_return': (IO+
+        'proc run(ref source:u64 in O,ref other:u64 in O)->ref u64 in O where {owner O}{'
+        'defer{if returning (ref saved){saved<-9u64;saved=other;behave @print(saved);}};return source;}'
+        'val a<-7u64,b<-8u64;behave @print(run(a,b));behave @print(a);',0,'8\n9\n9\n',''),
+    'return_pointer_pattern_preserves_null_and_mode': (IO+
+        'proc run(ref source:u64 in O,absent:bool)->ptr u64 in O where {owner O}{defer{'
+        'if returning (ref wrong:u64 in O){behave @print(1u64);}'
+        'else if returning (ptr saved:u64 in O){behave @print((saved is null));}};'
+        'if(absent){return null;}else{return source;};}'
+        'val a<-7u64;run(a,true):void;run(a,false):void;',0,'true\nfalse\n',''),
+    'return_reference_pattern_compares_actual_owner_roles': (IO+
+        'proc run(ref source:u64 in A,ref other:u64 in B)->ref u64 in A where {owner A,owner B}{'
+        'defer{if returning (ref saved:u64 in B){behave @print(saved);}else if returning (){behave @print(9u64);}};return source;}'
+        'proc split(ref source:u64 in O)->void where {owner O}{val local<-6u64;run(source,local):void;return;}'
+        'val a<-7u64,b<-8u64;run(a,b):void;split(a);',0,'7\n9\n',''),
+    'return_reference_pattern_observes_replacement_in_finally': (IO+
+        'proc run(ref source:u64 in O,ref other:u64 in O)->ref u64 in O where {owner O}{'
+        'defer{try{return other;}finally{if returning (ref saved){behave @print(saved);}};};return source;}'
+        'val a<-7u64,b<-8u64;behave @print(run(a,b));',0,'8\n8\n',''),
+    'return_reference_pattern_filters_access_before_branch_execution': (IO+
+        'proc run(ref source:const u64 in O)->ref const u64 in O where {owner O}{'
+        'defer{if returning (ref writable:u64 in O){writable<-1u64;{}}'
+        'else if returning (ref saved:const u64){behave @print(saved);}};return source;}'
+        'val a<-7u64;behave @print(run(a));',0,'7\n7\n',''),
+    'return_pointer_pattern_does_not_initialize_its_payload': (IO+
+        'proc run(ptr source:u64 in O)->ptr u64 in O where {owner O}{'
+        'defer{if returning (ptr saved){if(saved is not null){behave @print(saved);}else{};}};return source;}'
+        'val a<-make local u64;run(a):void;',2,'','initialization'),
     'return_inspection_uses_closed_indirect_call_outcomes': (IO+IDENTITY+
         'proc run(f:func(u64)->const u64)->u64{defer{if returning (){return f(7u64);}};return 1u64;}'
         'behave @print(run(identity));',0,'7\n',''),

@@ -5673,6 +5673,21 @@ class ScalarChecker {
     std::optional<Type> binding;
     OwnerMatch matches = OwnerMatch::satisfied;
   };
+  static ResultMode return_pattern_mode(const Expression &pattern) {
+    if (pattern.declaration_kind == "ptr") return ResultMode::borrowed_ptr;
+    if (pattern.declaration_kind == "ref" ||
+        (pattern.declaration_kind.empty() && !pattern.owner_name.empty())) return ResultMode::borrowed_ref;
+    return ResultMode::value;
+  }
+  static ReturnPatternEvidence borrowed_return_pattern(const Expression &pattern, const std::optional<Type> &annotation,
+      const std::optional<Type> &result, const ResultContract &contract, OwnerMatch match, bool required) {
+    if (required && annotation == Type::void_type) fail(pattern.at, "cannot bind a void return");
+    auto binding = annotation ? annotation : result;
+    if (binding == Type::void_type) binding = Type::never;
+    if (return_pattern_mode(pattern) != contract.mode || (result && annotation && result != annotation) ||
+        (annotation && !pattern.read_only && contract.read_only)) match = OwnerMatch::mismatch;
+    return {binding, match};
+  }
   static bool bindable_return_value(const Type &type) {
     return scalar_type(type) || (type.kind == Type::procedure && type.pure_callable);
   }
@@ -5699,13 +5714,21 @@ class ScalarChecker {
       return {{}, match};
     }
     const auto annotation = pattern.annotation ? std::optional{evidence_annotation(*pattern.annotation, state)} : std::nullopt;
-    bool borrowed = state.borrowed_return != nullptr;
+    const auto *contract = state.borrowed_return;
     if (state.method) {
       const auto &method = program_.methods[*state.method];
       if (method.here_group) return value_return_pattern(pattern, annotation, method.here_group->supplier, false, state.required);
-      borrowed |= method.result.borrowed();
+      if (!contract) contract = &method.result;
     }
-    return value_return_pattern(pattern, annotation, state.invocation_result, borrowed, state.required);
+    if (return_pattern_mode(pattern) != ResultMode::value) {
+      auto match = OwnerMatch::satisfied;
+      if (!pattern.owner_name.empty()) {
+        const auto owner = pattern.owner_name == "here" ? state.full_scope_owner : owner_evidence(pattern.owner_name, state, pattern.at);
+        match = state.invocation_result_owner ? compare_owners(state.invocation_result_owner, owner, &state) : OwnerMatch::mismatch;
+      }
+      return borrowed_return_pattern(pattern, annotation, state.invocation_result, contract ? *contract : ResultContract{}, match, state.required);
+    }
+    return value_return_pattern(pattern, annotation, state.invocation_result, contract && contract->borrowed(), state.required);
   }
   struct ConditionalEvidence {
     std::optional<Type> yes, no;
@@ -5734,17 +5757,38 @@ class ScalarChecker {
     if (binds) {
       auto &yes = arms.yes_state;
       const auto &name = condition.binding;
-      const bool readonly = condition.read_only || condition.fixed_binding;
-      yes.bindings[name] = return_pattern_evidence(condition, state).binding;
+      const auto mode = return_pattern_mode(condition);
+      const bool value = mode == ResultMode::value;
+      const bool reference = mode == ResultMode::borrowed_ref;
+      const auto pattern = return_pattern_evidence(condition, state);
+      const auto *contract = state.borrowed_return;
+      if (!contract && state.method) contract = &program_.methods[*state.method].result;
+      const bool readonly = condition.read_only || (value && condition.fixed_binding) ||
+          (!value && pattern.matches != OwnerMatch::mismatch && contract && contract->read_only);
+      yes.bindings[name] = pattern.binding;
       yes.local_declarations[name] = &condition;
       yes.definitions.erase(name);
       yes.owner_bindings.erase(name);
       yes.selections.remove_binding(name);
       const auto owner = EvidenceOwner::for_scope(condition);
-      yes.views[name] = {readonly, true, true, owner, false, condition.fixed_binding, readonly, true};
+      auto target_owner = value ? std::optional{owner} : state.invocation_result_owner;
+      if (!value && pattern.matches == OwnerMatch::mismatch) {
+        if (!condition.owner_name.empty() && condition.owner_name != "here")
+          target_owner = owner_evidence(condition.owner_name, state, condition.at);
+        else if (!target_owner || condition.owner_name == "here") target_owner = state.full_scope_owner;
+      }
+      yes.views[name] = {readonly, true, value, target_owner, false, condition.fixed_binding, readonly, value,
+                         mode == ResultMode::borrowed_ptr};
       yes.views.at(name).place_owners.insert(owner);
-      yes.views.at(name).storage_kind = PlaceKind::value;
-      if (yes.selections.tracking) yes.selections.value_places.emplace(name, EvidencePlaces{&condition});
+      yes.views.at(name).storage_kind = place_kind(value, reference);
+      if (yes.selections.tracking) {
+        if (value) yes.selections.value_places.emplace(name, EvidencePlaces{&condition});
+        else {
+          TargetEvidence selected;
+          if (reference) selected.presence = TargetPresence::present;
+          yes.selections.bind(name, &condition, std::move(selected));
+        }
+      }
       if (state.exits) yes.exits = &matching_exits;
     }
     arms.yes = type_evidence(*expr.children[1], arms.yes_state, contextual, expected, return_test ? nullptr : alternatives,
@@ -10377,6 +10421,20 @@ class ScalarChecker {
       const auto annotation = expr.annotation ?
           std::optional{substitute(*expr.annotation, *checking_method_, instance->substitutions, true)} : std::nullopt;
       const auto &inspected = group ? group->supplier : instance->result.type;
+      if (!group && return_pattern_mode(expr) != ResultMode::value) {
+        const auto result_owner = instance->result.borrowed() ?
+            std::optional{external_owners_.at(instance->result.owner)} : std::nullopt;
+        const auto expected_owner = expr.owner_name.empty() ? result_owner :
+            std::optional{expr.owner_name == "here" ? cleanup_scope_ : named_owner(expr.owner_name, expr.at)};
+        const auto match = result_owner && expected_owner ? compare_owners(*result_owner, *expected_owner) : OwnerMatch::mismatch;
+        const auto pattern = borrowed_return_pattern(expr, annotation, inspected, instance->result, match, true);
+        operation.operand_type = pattern.binding.value_or(Type::never);
+        operation.return_filter.can_match = pattern.matches != OwnerMatch::mismatch;
+        if (pattern.matches == OwnerMatch::unknown)
+          operation.return_filter.owner_comparison = std::pair{*result_owner, *expected_owner};
+        operation.owners.insert(operation.return_filter.can_match ? *result_owner : expected_owner.value_or(cleanup_scope_));
+        break;
+      }
       const auto pattern = value_return_pattern(expr, annotation, inspected, !group && instance->result.borrowed(), true);
       operation.operand_type = pattern.binding.value_or(Type::void_type);
       operation.return_filter.can_match = pattern.matches != OwnerMatch::mismatch;
@@ -10715,7 +10773,10 @@ class ScalarChecker {
         auto probe = evidence_state();
         if (return_test && instance) {
           probe.invocation_result = instance->result.type;
-          if (instance->result.borrowed()) probe.invocation_result_owner = external_owners_.at(instance->result.owner);
+          if (instance->result.borrowed()) {
+            probe.borrowed_return = &instance->result;
+            probe.invocation_result_owner = external_owners_.at(instance->result.owner);
+          }
         }
         const auto condition = type_evidence(test, probe);
         if (return_test && probe.target.branches && !probe.target.branches->at(true)) return false;
@@ -10729,21 +10790,44 @@ class ScalarChecker {
       if (binds_return) {
         auto &pattern = operations.at(&test);
         lexical_.scopes.push_back({next_scope_++, {}});
-        const auto id = declare(test.binding, pattern.operand_type, test.read_only || test.fixed_binding, true, test.at);
-        lexical_.scopes.back().declarations = false;
-        auto &binding = bindings_->at(storage(id).binding);
-        binding.fixed = test.fixed_binding;
-        binding.callable_value = pattern.operand_type.kind == Type::procedure;
-        if (binding.callable_value && proving_ && lexical_.live && !capture_free_callables(observed_callables(test))) {
-          // Check the prepared value on the cleanup path that actually matches.
-          const auto read = read_obligation({}, {test.at,
-              "micro-dispatch implementation gap: return pattern needs proof of a capture-free function value; this is not a language restriction"});
-          CleanupEquations::ReadRequirement proof;
-          proof.when = path_conditions(lexical_);
-          add_requirement(lexical_, read, lexical_.inputs, proof);
+        const auto mode = return_pattern_mode(test);
+        if (mode != ResultMode::value) {
+          const bool nullable = mode == ResultMode::borrowed_ptr;
+          const auto owner = *pattern.owners.begin();
+          std::set<size_t> targets;
+          // External selections in this lowering come from borrowed input places.
+          // The arm binding keeps a distinct selection identity.
+          if (pattern.return_filter.can_match) for (const auto &input : instance->frame.inputs) {
+            const auto &candidate = storage(input.place);
+            if (candidate.borrowed && candidate.scope == owner && candidate.type == pattern.operand_type)
+              targets.insert(input.place);
+          }
+          if (nullable) targets.insert(null_target);
+          const bool readonly = test.read_only || (pattern.return_filter.can_match && instance->result.read_only);
+          const auto id = bind(test.binding, pattern.operand_type, targets, readonly, false, test.fixed_binding, test.at);
+          lexical_.owners[id].insert(owner);
+          bindings_->at(id).nullable = nullable;
+          bindings_->at(id).requires_initialized = !nullable;
+          // Ref preparation already proved the selected payload initialized.
+          if (!nullable) initialize_selection(lexical_, id);
+          pattern.binding = id;
+        } else {
+          const auto id = declare(test.binding, pattern.operand_type, test.read_only || test.fixed_binding, true, test.at);
+          auto &binding = bindings_->at(storage(id).binding);
+          binding.fixed = test.fixed_binding;
+          binding.callable_value = pattern.operand_type.kind == Type::procedure;
+          if (binding.callable_value && proving_ && lexical_.live && !capture_free_callables(observed_callables(test))) {
+            // Check the prepared value on the cleanup path that actually matches.
+            const auto read = read_obligation({}, {test.at,
+                "micro-dispatch implementation gap: return pattern needs proof of a capture-free function value; this is not a language restriction"});
+            CleanupEquations::ReadRequirement proof;
+            proof.when = path_conditions(lexical_);
+            add_requirement(lexical_, read, lexical_.inputs, proof);
+          }
+          initialize(id);
+          pattern.place = id;
         }
-        initialize(id);
-        pattern.place = id;
+        lexical_.scopes.back().declarations = false;
       }
       const auto checked_yes = check(*expr.children[1], instance, operations, read && !value_join, discard, expected, expected_use);
       const auto yes = return_test && !operations.at(&test).return_filter.can_match ? Type{Type::never} : checked_yes;
