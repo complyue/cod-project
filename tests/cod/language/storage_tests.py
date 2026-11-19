@@ -108,6 +108,54 @@ runner.CASES = {
     "readonly_product_parameters_require_const_owner": (PRODUCT +
         'func inspect(target:const Window in O)->u64 where {owner O}{return target.minimum;}',
         2, "", "readonly product inputs require 'const owner O'"),
+    "nullable_product_argument_reads_only_a_present_field": (PRELUDE + PRODUCT +
+        'func inspect(ptr window:const Window in O)->u64 where {const owner O}{'
+        'if(window is null){return 9u64;}else{};return window.minimum;}'
+        'ptr absent:Window=null in here;ptr reserved=make Window;reserved.minimum<-7u64;'
+        'behave @print(inspect(absent));behave @print(inspect(reserved));', 0, "9\n7\n", ""),
+    "nullable_product_argument_requires_the_read_field": (PRODUCT +
+        'func inspect(ptr window:const Window in O)->u64 where {const owner O}{'
+        'if(window is null){return 9u64;}else{};return window.maximum;}'
+        'ptr reserved=make Window;reserved.minimum<-7u64;inspect(reserved);',
+        2, "", "for deferred or borrowed read"),
+    "nullable_product_result_preserves_the_projected_target": (PRELUDE + PRODUCT +
+        'func floor(ptr window:Window in O)->ptr u64 in O where {owner O}{'
+        'if(window is null){return null in O;}else{};return window.minimum;}'
+        'ptr absent:Window=null in here;ptr present=make Window {minimum<-3u64;maximum<-11u64;};'
+        'ptr missing=floor(absent);ptr minimum=floor(present);'
+        'behave @print((missing is null));behave @print((minimum is present.minimum));', 0, "true\ntrue\n", ""),
+    "nullable_product_call_preserves_partial_initialization": (PRELUDE + PRODUCT +
+        'proc establish(ptr window:Window in O) where {owner O}{'
+        'if(window is null){return;}else{};window.minimum<-17u64;return;}'
+        'ptr reserved=make Window;establish(reserved);behave @print(reserved.minimum);', 0, "17\n", ""),
+    "nullable_product_defer_retains_its_selected_target": (PRELUDE +
+        'using "std:exceptions" OutOfMemoryError;data Counter {count:u64;}'
+        'proc establish(ptr target:Counter in O) where {owner O}{'
+        'if(target is null){return;}else{};target.count<-27u64;return;}'
+        'proc run()->void{ptr reserved=make Counter;ptr selection=reserved;'
+        'defer{behave @print(reserved.count);}catch(e:const OutOfMemoryError){return;};'
+        'defer establish(selection);selection=null;return;}run();', 0, "27\n", ""),
+    "nullable_product_failed_call_does_not_initialize_later_fields": (
+        'using "std:exceptions" NullPointerException;data Counter {count:u64;}'
+        'proc establish(ptr first:Counter in O,ptr second:Counter in O) throws NullPointerException where {owner O}{'
+        'first.count<-1u64;second.count<-2u64;return;}'
+        'ptr absent:Counter=null in here;ptr reserved=make Counter;'
+        'try{establish(absent,reserved);}catch(e:const NullPointerException){};reserved.count;',
+        2, "", "read of 'count' before definite initialization"),
+    "product_call_initializes_the_dynamically_selected_field": (PRELUDE +
+        'data Counter {count:u64;}'
+        'proc establish(ptr target:Counter in O) where {owner O}{'
+        'if(target is null){return;}else{};target.count<-17u64;return;}'
+        'proc run(flag:bool)->void{ptr first=make Counter;ptr second=make Counter;'
+        'ptr chosen=if(flag){first}else{second};establish(chosen);behave @print(chosen.count);return;}'
+        'run(true);run(false);', 0, "17\n17\n", ""),
+    "product_field_proof_does_not_follow_pointer_rebinding": (
+        'data Counter {count:u64;}'
+        'proc establish(ptr target:Counter in O) where {owner O}{'
+        'if(target is null){return;}else{};target.count<-17u64;return;}'
+        'proc run(flag:bool)->void{ptr first=make Counter;ptr second=make Counter;'
+        'ptr chosen=if(flag){first}else{second};establish(chosen);chosen=second;chosen.count;return;}run(false);',
+        2, "", "read of 'count' before definite initialization"),
 }
 runner.CASE_ARGUMENTS = {"shadow_error": ["-Werror=shadow"], "unrelated_warning_error": ["-Werror=missing-return"]}
 runner.EXTRA_SOURCES = [Path(__file__)]

@@ -206,6 +206,7 @@ class ScalarChecker {
   size_t next_boolean_observation_ = 0;
   std::map<std::tuple<BooleanDecision::Origin, size_t, size_t, size_t>, size_t> conditional_selections_;
   std::map<size_t, size_t> incoming_selections_;
+  std::map<std::pair<size_t, size_t>, size_t> product_selections_;
   std::vector<size_t> input_field_places_;
   std::map<size_t, size_t> input_field_roots_;
   std::set<size_t> rebound_;
@@ -5097,9 +5098,8 @@ class ScalarChecker {
     for (size_t i = 0; i < arguments.size(); ++i) if (arguments[i].kind == Type::product) {
       const auto &parameter = parameter_at(definition, i);
       const auto mode = argument_mode(parameter);
-      if (mode == ArgumentMode::value || mode == ArgumentMode::borrowed_ptr ||
-          definition.scope_inputs || definition.source->symbolic || caller_bindings(definition))
-        implementation_gap(at, "product parameters require a readable target in an ordinary direct call");
+      if (mode == ArgumentMode::value || definition.scope_inputs || definition.source->symbolic || caller_bindings(definition))
+        implementation_gap(at, "product parameters require a borrowed target in an ordinary direct call");
       product_schema(arguments[i], at);
     }
     if (result.contract->type->kind == Type::product) {
@@ -5849,7 +5849,7 @@ class ScalarChecker {
     }
   }
   struct ProductInput {
-    size_t parent, field;
+    size_t root, parent, field;
     const CheckedSchema::Field *description;
   };
   std::vector<ProductInput> product_inputs(const std::vector<Type> &arguments, const Location &at) const {
@@ -5858,15 +5858,16 @@ class ScalarChecker {
       const auto &type = i < arguments.size() ? arguments[i] : fields[i - arguments.size()].description->type;
       if (type.kind != Type::product) continue;
       const auto &schema = product_schema(type, at);
+      const auto root = i < arguments.size() ? i : fields[i - arguments.size()].root;
       for (size_t field = 0; field < schema.fields.size(); ++field) {
         if (fields.size() == 4096) fail(at, "compiler resource limit: too many borrowed product fields");
-        fields.push_back({i, field, &schema.fields[field]});
+        fields.push_back({root, i, field, &schema.fields[field]});
       }
     }
     return fields;
   }
   CheckedOperation project_product(const CheckedOperation &parent, size_t index, const Location &at,
-                                    bool preserve_null = false) const {
+                                    bool preserve_null = false) {
     const auto &schema = product_schema(parent.type, at);
     const auto &field = schema.fields.at(index);
     std::set<size_t> places;
@@ -5881,7 +5882,10 @@ class ScalarChecker {
     }
     CheckedOperation result;
     select_targets(result, places);
-    if (places.contains(null_target)) result.null_sources = parent.null_sources;
+    if (places.contains(null_target)) {
+      result.null_sources = parent.null_sources;
+      result.nullness = parent.nullness;
+    }
     result.type = field.type;
     result.operand_type = parent.type;
     result.product_field = index;
@@ -5893,6 +5897,17 @@ class ScalarChecker {
       const auto binding = storage(*result.place).binding;
       if (const auto found = lexical_.selection_identities.find(binding); found != lexical_.selection_identities.end())
         result.selection_identity = found->second;
+    } else if (parent.selection_identity && !places.empty()) {
+      // A prepared call and a later field access can refer to the same
+      // selected field even when its containing address remains dynamic.
+      const auto [found, inserted] = product_selections_.try_emplace({*parent.selection_identity, index});
+      if (inserted) {
+        std::set<size_t> sources;
+        for (const auto source : selection_sources_.at(*parent.selection_identity))
+          sources.insert(source == null_target ? null_target : input_ordinal(storage(input_place(source)).fields.at(index)));
+        found->second = new_selection_identity(std::move(sources));
+      }
+      result.selection_identity = found->second;
     }
     return result;
   }
@@ -13836,7 +13851,7 @@ class ScalarChecker {
     next_finalizer_input_ = 2 * CleanupEquations::deferred_return_offset;
     cleanup_scope_ = 0; next_scope_ = 1;
     next_target_version_ = 0;
-    next_selection_identity_ = 0; selection_sources_.clear(); incoming_selections_.clear();
+    next_selection_identity_ = 0; selection_sources_.clear(); incoming_selections_.clear(); product_selections_.clear();
     input_field_places_.clear(); input_field_roots_.clear(); return_selection_actions_.clear();
     next_boolean_observation_ = 0; conditional_selections_.clear();
   }
@@ -13990,7 +14005,7 @@ class ScalarChecker {
   }
   void bind_product_inputs(const CheckedInstance &instance, const Location &at, LexicalState::InputFacts &entry) {
     const auto fields = product_inputs(instance.arguments, at);
-    for (const auto &[parent, index, description] : fields) {
+    for (const auto &[root, parent, index, description] : fields) {
       const auto container = input_place(parent);
       const auto owner = storage(container).scope;
       const auto name = "$input.field." + std::to_string(storage_->size()) + "." + description->source->name;
@@ -14009,10 +14024,11 @@ class ScalarChecker {
       selection_sources_.at(selection) = {ordinal};
       incoming_selections_.emplace(place, selection);
       input_field_places_.push_back(place);
-      const auto parent_root = input_field_roots_.find(container);
-      input_field_roots_.emplace(place, parent_root == input_field_roots_.end() ? container : parent_root->second);
-      entry.initialized.insert(place);
-      entry.present.insert(place);
+      input_field_roots_.emplace(place, input_place(root));
+      if (instance.frame.inputs[root].mode != ArgumentMode::borrowed_ptr) {
+        entry.initialized.insert(place);
+        entry.present.insert(place);
+      }
       if (field.type == Type::boolean) seed_boolean_input(place, ordinal);
     }
   }
@@ -14819,8 +14835,7 @@ class ScalarChecker {
         if (parameter.automatic_conversion) implementation_gap(parameter.at, "automatic parameter conversion contract");
         prepared.parameters.push_back(resolve_signature(parameter.type));
         const auto mode = argument_mode(parameter);
-        signature_type(prepared, prepared.parameters.back(), parameter.at, false,
-                       mode == ArgumentMode::borrowed_ref || mode == ArgumentMode::borrowed_read);
+        signature_type(prepared, prepared.parameters.back(), parameter.at, false, mode != ArgumentMode::value);
       }
       check_product_owner_roles(prepared, prepared.parameters);
       for (const auto &parameter : form->type_parameters)
