@@ -37,7 +37,7 @@ safe('assignment_value', 'val saved<-false;if(saved<-p is not null){behave @prin
 safe('rebound_view', 'val saved<-false,other<-p is not null;ptr selected=saved;if(selected=other){behave @print(p);}else{behave @print(0);};')
 safe('negation', 'val saved<-p is null;if(!saved){behave @print(p);}else{behave @print(0);};')
 safe('conjunction', 'val first<-p is not null,second<-q is not null,saved<-first&&second;'+GUARD, '7\n0\n0\n0\n')
-safe('block_copy', 'val original<-p is not null;val saved<-{{original}};'+GUARD)
+safe('block_copy', 'val original<-p is not null;val saved<-{{return original;}};'+GUARD)
 safe('same_value_alternatives', 'val first<-p is not null,second<-!(p is null);ref saved=if(q is null){first}else{second};'+GUARD)
 safe('same_branch_writes', 'val saved<-false;if(q is null){saved<-p is not null;}else{saved<-!(p is null);};'+GUARD)
 safe('unrelated_branch', SAVED+'if(q is null){}else{};'+GUARD)
@@ -53,7 +53,8 @@ safe('finally_preserves', SAVED+'try{}finally{q=null;{}};'+GUARD)
 safe('finally_writes_proof', 'val saved<-false;try{}finally{saved<-p is not null;{}};'+GUARD)
 safe('cleanup_preserves', SAVED+'{{defer{q=null;{}};}};'+GUARD)
 safe('prepared_read_preserves', SAVED+'{{defer read(saved);}};'+GUARD, prefix=READ)
-safe('cleanup_snapshot', 'val original<-p is not null;val saved<-{{defer{original<-true;{}};original}};'+GUARD)
+safe('cleanup_snapshot', 'ref original:bool=p is not null;val saved<-{{defer{original<-true;};return original;}};'
+     'behave @print(original);'+GUARD, 'true\n7\ntrue\n0\ntrue\n7\ntrue\n0\n')
 safe('finally_snapshot', 'val original<-p is not null;val saved<-try{original}finally{original<-true;{}};'+GUARD)
 safe('caught_alternatives', 'val saved<-false;try{q;saved<-p is not null;}catch(e:const NullPointerException){saved<-!(p is null);};'+GUARD)
 
@@ -68,24 +69,28 @@ for name, mutation in {
     'swap_unknown': 'val other<-true;saved<->other;',
     'finally_write': 'try{}finally{saved<-true;{}};',
     'catch_write': 'try{q;{}}catch(e:const NullPointerException){saved<-true;{}};',
-    'cleanup_write': '{{defer{saved<-true;{}};}};',
-    'prepared_write': '{{defer (<-)(saved,true);}};',
-    'prepared_call': '{{defer write(saved,true);}};',
-    'prepared_swap': 'val other<-true;{{defer (<->)(saved,other);}};',
     'nested_cleanup': '{{defer{defer{saved<-true;{}};};}};',
     'pointer_rebind': 'p=null;',
     'pointer_alias_rebind': 'var alias->p;alias=null;',
     'pointer_swap': 'p<=>q;',
-    'pointer_cleanup_rebind': '{{defer{p=null;{}};}};',
 }.items():
     rejected(name, SAVED+mutation+GUARD, prefix=WRITE)
+
+BORROWED_SAVED = SAVED+'ptr destination=saved;'
+rejected('cleanup_write', BORROWED_SAVED+'{{defer{destination<-true;};}};'+GUARD)
+rejected('prepared_write', BORROWED_SAVED+'{{defer (<-)(destination,true);}};'+GUARD)
+rejected('prepared_call', BORROWED_SAVED+'{{defer write(destination,true);}};'+GUARD, prefix=WRITE)
+rejected('prepared_swap', BORROWED_SAVED+'ref other:bool=true;{{defer (<->)(destination,other);}};'+GUARD)
+rejected('pointer_cleanup_rebind', SAVED+'defer{'+GUARD+'};defer{p=null;};')
 
 rejected('readonly_alias_mutated', 'val original<-p is not null;ref saved:const bool=original;write(original,true);'+GUARD, prefix=WRITE)
 rejected('unknown_target_alternative', SAVED+'val other<-true;ref selected=if(q is null){saved}else{other};'+GUARD.replace('if(saved)', 'if(selected)'))
 rejected('snapshot_after_mutation', SAVED+'saved<-true;val copy<-saved;'+GUARD.replace('if(saved)', 'if(copy)'))
 rejected('deferred_reads_invocation_state', SAVED+'defer{'+GUARD+'};saved<-true;')
-rejected('deferred_handler_write', SAVED+'{{defer catch(e:const NullPointerException){saved<-true;{}};q;{}}};'+GUARD)
-rejected('prepared_slot_payload_write', SAVED+'val other<-false;ptr a=other,b=other;{{defer (<=>)(a,b);a=saved;}};'+GUARD,
+rejected('deferred_handler_write', SAVED+'defer{'+GUARD+'};'
+         'defer catch(e:const MissingReturnError){saved<-true;};defer{missing();};',
+         prefix='using "std:exceptions" MissingReturnError;func missing()->i64{}')
+rejected('prepared_slot_payload_write', SAVED+'val other<-false;ptr a=other,b=other;defer{'+GUARD+'};defer (<=>)(a,b);a=saved;',
          prefix='func (<=>)(ref left:bool in O,ref right:bool in O)->void where {owner O}{left<-true;}')
 
 safe('loop_unchanged', SAVED+'for(i in 0u64..2u64){'+GUARD+'};', '7\n7\n0\n0\n7\n7\n0\n0\n')
@@ -114,12 +119,15 @@ for name, mutation in {
     'rebound_write': 'selected<-true;selected=saved;',
     'rebound_call': 'write(selected,true);selected=saved;',
     'call': 'write(saved,true);',
-    'cleanup': '{{defer{saved<-true;{}};}};',
-    'prepared_call': '{{defer write(saved,true);}};',
     'finally': 'try{}finally{saved<-true;{}};',
     'pointer_rebind': 'p=null;',
 }.items():
     rejected('loop_'+name, SAVED+'val incoming<-p is not null,other<-false;ptr selected=other;for(i in 0u64..3u64){'+GUARD+mutation+'};', prefix=WRITE)
+
+rejected('loop_cleanup', BORROWED_SAVED+
+         'for(i in 0u64..3u64){'+GUARD+'{{defer{destination<-true;};}};};')
+rejected('loop_prepared_call', BORROWED_SAVED+
+         'for(i in 0u64..3u64){'+GUARD+'{{defer write(destination,true);}};};', prefix=WRITE)
 
 for name, write in (('direct', 'other<-true;'), ('call', 'write(other,true);'), ('cleanup', '{{defer{other<-true;{}};}};')):
     runner.CASES['borrowed_alias_'+name] = (IO+WRITE+
@@ -128,7 +136,9 @@ for name, write in (('direct', 'other<-true;'), ('call', 'write(other,true);'), 
 
 runner.CASES['uninitialized_target'] = (IO+'val x<-make local i64;ptr p=x;'+SAVED+GUARD, 2, '', 'before definite initialization')
 runner.CASES['readonly_target'] = (IO+'val x<-7;ptr p:const i64=x;'+SAVED+'if(saved){p<-9;}else{};', 2, '', 'readonly destination')
-runner.CASES['expired_target'] = (IO+'ptr p={{val x<-7;x}};'+SAVED+GUARD, 2, '', 'owner has ended')
+runner.CASES['expired_target'] = (IO+'func keep(ref input:i64 in O)->ref i64 in O where {owner O}'
+    '{ref local:i64=7;return local;}val x<-7;ptr p=keep(x);'+SAVED+GUARD,
+    2, '', 'borrowed result does not retain its declared external owner')
 
 runner.CASE_ARGUMENTS = {}
 runner.CASE_SHADOWS = {name: [] for name in runner.CASES}
