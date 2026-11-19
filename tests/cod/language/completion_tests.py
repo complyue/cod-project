@@ -45,6 +45,17 @@ runner.CASES = {
         'explicit();fallthrough();iterated();', 0, "1\n6\n3\n", ""),
     "return_inspection_value_tail": (OBSERVE +
         'func f(){defer{if returning (){return 8;}};7}observe(f());', 0, "8\n", ""),
+    "return_inspection_calls_concrete_procedure": (OBSERVE +
+        'proc f()->void{defer{if returning (){observe(9);}};return;}f();', 0, "9\n", ""),
+    "return_inspection_calls_mutually_recursive_functions": (
+        'func first(again:bool)->void{if(again){second(false);}else{};}'
+        'func second(again:bool)->void{if(again){first(false);}else{};}'
+        'proc f()->void{defer{if returning (){first(true);second(true);}};return;}f();', 0, "", ""),
+    "return_inspection_calls_helper_with_local_recovery": (BAD +
+        'using "std:exceptions" MissingReturnError;'
+        'func handled()->void{try{bad():void;}catch(e:const MissingReturnError){};}'
+        'proc f()->i64{defer{if returning (){handled();return 9;}};return 2;}observe(f());',
+        0, "9\n", "[-Wmissing-return]"),
     "return_inspection_recovers_failed_preparation": (BAD +
         'proc f()->i64{defer{if returning (){return 99;}else{return 8;}};return bad();}observe(f());',
         0, "8\n", "[-Wmissing-return]"),

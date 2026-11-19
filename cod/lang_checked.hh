@@ -4104,8 +4104,11 @@ class ScalarChecker {
           const auto reaching = CleanupEquations::substitute_boolean_payloads(effects.action_reaching, resolve_boolean, false, true);
           if (CleanupEquations::conjoin_conditions(reaching, CleanupEquations::boolean_conditions(path_conditions(state))).empty()) continue;
         }
+        const bool needs_deferred_delivery = effects.raises_deferred_failure ||
+            (input.reason >= 2 && effects.guarded_pending_failure);
+        if (proving_) observed_.requires_deferred_failure_delivery |= needs_deferred_delivery;
         if (proving_ && validating_) {
-          if (effects.observes_return && (effects.raises_deferred_failure || (input.reason >= 2 && effects.guarded_pending_failure)))
+          if (effects.observes_return && needs_deferred_delivery)
             implementation_gap(path.at, "return inspection requires independent deferred failure delivery on this path");
           const bool checked_body_failure = input.reason >= 3 &&
               (exception_categories.at(input.reason - 3).checked || !flow.declared.empty());
@@ -4987,7 +4990,19 @@ class ScalarChecker {
     if (!completes) { operation.type = Type::never; return; }
     const auto contract = callable_type(program_.methods[target.method], target.arguments, target.result,
         access_of(views), owners_of(views), &arguments);
-    finish_call(expr, contract, effects, call_reasons(contract), arguments, views, operation, read, discard);
+    auto reasons = call_reasons(contract);
+    if (proving_) {
+      // The declaration supplies checked obligations even when the concrete
+      // body only completes normally. Executable unchecked failures grow
+      // from the completed paths of concrete callees.
+      if (effects.requires_deferred_failure_delivery) {
+        if (lexical_.live) observed_.requires_deferred_failure_delivery = true;
+      } else std::erase_if(reasons, [&](size_t reason) {
+        const bool checked = reason >= 3 && exception_categories.at(reason - 3).checked;
+        return reason >= 2 && !checked && !effects.escaping_failures.contains(reason);
+      });
+    }
+    finish_call(expr, contract, effects, reasons, arguments, views, operation, read, discard);
   }
   struct EagerTypes {
     Type result, operand;
@@ -11405,6 +11420,7 @@ class ScalarChecker {
     });
   }
   void observe_outcome(size_t reason, const LexicalState &state) {
+    if (reason >= 2) observed_.escaping_failures.insert(reason);
     std::set<size_t> known;
     for (const auto id : state.initialized) if (storage(id).borrowed) known.insert(input_ordinal(id));
     CleanupEquations::MissingInitialization missing;
@@ -11744,6 +11760,13 @@ class ScalarChecker {
       const auto written_count = known.written_inputs.size();
       known.written_inputs.insert(effects.written_inputs.begin(), effects.written_inputs.end());
       changed = known.written_inputs.size() != written_count;
+      const auto failure_count = known.escaping_failures.size();
+      known.escaping_failures.insert(effects.escaping_failures.begin(), effects.escaping_failures.end());
+      changed |= known.escaping_failures.size() != failure_count;
+      if (effects.requires_deferred_failure_delivery && !known.requires_deferred_failure_delivery) {
+        known.requires_deferred_failure_delivery = true;
+        changed = true;
+      }
       if (known.initialized != effects.initialized) { known.initialized = effects.initialized; changed = true; }
       if (known.uninitialized != effects.uninitialized) { known.uninitialized = effects.uninitialized; changed = true; }
       if (known.present != effects.present) { known.present = effects.present; changed = true; }
