@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-11-19 — Callable results and deferred return inspection
+
+<a id="h-callable-tail-20261119"></a>
+**H-CALLABLE-TAIL-20261119.** The project user confirmed the K-CALLABLE-TAIL-20261119 proposal with “认同，确认” in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-19 (America/Los_Angeles). D-24r12/P-631–P-632 confirm explicit successful proc returns, local func/full-scope here value tails and existing single-brace feedback/return destinations. This revises H-361/H-362 only for ordinary completion. D-07r189, D-10r220, D-18r132, here storage r14, D-19r5 and D-29r20 align case arms, callbacks, future pure functions and generator examples. D-14r127, D-15r54 and D-22r63 update the same full-scope cross-reference. Compiler support requires separate verification.
+
+<a id="h-defer-returning-20261119"></a>
+**H-DEFER-RETURNING-20261119.** In the same message the user specified “`if returning` 应该明确是只在 defer 上下文允许”. D-17r127/D-23r29 and P-483/P-484 restrict inspection to deferred execution with the owning callable’s return destination. The earlier placement rule is at `a50b757893d9579d8dbc3ee0f8286ac4e392d616:design/ExceptionControl.md`, “Return-state inspection and replacement”. Preserve H-542–H-549’s replacement, cancellation, owner matching and one-way inference. Registry r961 records both decisions and their scope.
+
+## 2026-11-19 — Review ordinary function and here-body tail results
+
+<a id="k-callable-tail-20261119"></a>
+**K-CALLABLE-TAIL-20261119.** The project user proposed “proc 总是要求显式 `return`; func/here 都不要求显式 `return` 但也接收显式 `return`” in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-19 (America/Los_Angeles). D-24r11/registry r960 record the proposal, including a written bare return on successful void procedure paths and ordinary inferred tails for func/full-scope here. D-18’s single-brace outward return is an explicit review boundary. H-361/H-362 are at `0c0efbfde4dccb3f3397b6f961bd82bd9a12c848:design/DesignAuthorityRegistry.md`, records H-361/H-362.
+
+## 2026-11-19 — Confirm explicit discard of a typed result
+
+<a id="h-void-discard-20261119"></a>
+**H-VOID-DISCARD-20261119.** The project user answered “表述确认” to the typed-operand discard and cleanup rule and clarified that the procedure’s final expression supplies no return evidence in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-19 (America/Los_Angeles). D-10r219, registry r959 and P-629/P-630 record the bounded source contract. The procedure example now uses an explicit bare return. Ordinary function tail results are a separate proposal.
+
+## 2026-11-19 — Preserve cleanup responsibility when discarding a result
+
+<a id="h-discard-cleanup-20261119"></a>
+**H-DISCARD-CLEANUP-20261119.** The project user proposed `xxx : void` to discard a typed result and specified “cleanup职责永远不被discard” in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-19 (America/Los_Angeles). D-10r218 and registry r958 record the cleanup invariant for explicit and implicit discard. H-104 and D-24 supply the existing expression and inference rules. Explicit discard syntax and the boundary with contextual discard remain under discussion.
+
 ## 2026-11-19 — Confirm the explicit throwing case fallback
 
 <a id="h-case-throw-20261119"></a>

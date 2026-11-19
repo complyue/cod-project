@@ -1,8 +1,10 @@
 # Pure functions, knot-tying and tail calls: deferred research plan
 
-Design revision: 4 · Recorded: 2026-11-15 · Status: deferred pre-research; no implementation scheduled.
+Design revision: 5 · Recorded: 2026-11-19 · Status: deferred pre-research; no implementation scheduled.
 
 ## Design authority
+
+[H-CALLABLE-TAIL-20261119](../CHANGELOG.md#h-callable-tail-20261119) updates the ordinary callable comparison at r5. D-19 retains the H-363 pure declaration and its deferred implementation scope.
 
 - **Knot-tying research scope:** [D-19-KNOT](DesignAuthorityRegistry.md#d-19-knot), r4 section below, records [H-444](../CHANGELOG.md#h-444)'s explicit goal of supporting Haskell-like knot-tying in future pure/const functions. C-76/P-395 derives this research direction from functional computation with checked storage/lifetimes, serving charter §§3.3/6.3/8: express recursive sharing without exposing invalid objects. P-396 records construction/cleanup/storage dependencies; P-397 prevents today's ordinary-construction deferral becoming a permanent ban. [K-KNOT-COST-20261115](../CHANGELOG.md#k-knot-cost-20261115) continues the prior purity/TCO contract and adds this separately confirmed goal; concrete syntax, evaluation, checking and publication mechanisms remain pending-human. Acceptance is the scoped research evidence below, not current implementation. The human baseline is the current project user's message recorded 2026-11-15; exact message timestamp/name unavailable.
 
@@ -25,7 +27,7 @@ Current development implements ordinary binding/target qualifiers under D-14 whi
 
 ## Declaration surface
 
-`pure f(...) -> T { ...; expression }` declares a const function with its final body expression as the result. H-361/H-362 requires explicit value returns from ordinary proc/func brace bodies and permits void fallthrough. The pure form preserves concise functional definitions without changing the ordinary function/procedure result contract. This declaration spelling is recorded for future implementation; callable-type syntax, helper/callback admission and purity checking remain unimplemented.
+`pure f(...) -> T { ...; expression }` declares a const function with its final body expression as the result. Ordinary funcs and full-scope here invocations also admit final-expression results. Successful procedure completion requires a written return. Purity admission and tail-call optimization have their own criteria. This declaration spelling is recorded for future implementation; callable-type syntax, helper/callback admission and purity checking remain unimplemented.
 
 Binding const, target readonly access (including reference traversal) and result qualifiers follow [D-14](RegionalOwnership.md#independent-binding-and-target-qualifiers). None alone establishes a pure callable. A readonly callable holder can still invoke a body with separately permitted effects; pure is a behavioral boundary across the whole invocation.
 

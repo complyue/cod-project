@@ -1,8 +1,10 @@
 # Function values, here callables and declared place aliases
 
-Design revision: 131 · Recorded: 2026-11-19 · Status: scoped callable contract; implementation boundaries recorded separately.
+Design revision: 132 · Recorded: 2026-11-19 · Status: scoped callable contract; implementation boundaries recorded separately.
 
 ## Design authority
+
+[H-CALLABLE-TAIL-20261119](../CHANGELOG.md#h-callable-tail-20261119) continues the result and cleanup references at r132. D-18 retains direct lexical access, invocation lifetimes and control destinations.
 
 - **Here callable forms.** H-HERE-FUNCTOR-20261118 includes the receiver-bound functor. [K-GENERATOR-YIELD-FORMAL-20261118](../CHANGELOG.md#k-generator-yield-formal-20261118) groups for-loop bodies and here calls under the same parameter at r130. [Here callable forms](#forms-of-here-callable), D-18-HERE and D-29-GENERALIZED-FOR/P-623–P-624 cover the source inventory. Keep the existing lexical use bound, receiver owner and per-form control rules. [H-GENERATOR-RECEPTION-20261119](../CHANGELOG.md#h-generator-reception-20261119) continues this inventory at r131. D-29 checks that an immediate full scope can invoke the enclosing lexical here parameter with its original consumer.
 
@@ -50,7 +52,7 @@ Unmodified/val fields store bits directly; ref/ptr fields store same-owner refer
 
 ## Callable completion
 
-H-361/H-362 and [D-17](ExceptionControl.md) require explicit `return` for values from proc/func brace bodies. Return from deferred catch/finally targets the enclosing callable, replaces a pending completion and continues remaining cleanup. Missing a required return is unchecked, with static diagnostics where possible; void callables may fall through. H-363 records pure declarations with implicit body results while deferring purity implementation. Implementation availability for explicit returns, missing-return delivery and deferred execution is maintained in the source capability reference. These source changes preserve complete values, caller result storage and owner/access checks.
+The [callable result rules](CallableResultInference.md#results-of-proc-func-and-here-bodies) require an explicit return for successful procedure completion. A func or full-scope here may supply a normal value tail. Return from deferred catch/finally targets the enclosing callable, replaces a pending completion and continues remaining cleanup. A deferred entry may inspect its owning callable’s prepared result under [D-17](ExceptionControl.md#return-state-inspection-and-replacement). H-363 records pure declarations with implicit body results while deferring purity implementation. Implementation availability for explicit returns, missing-return delivery and deferred execution is maintained in the source capability reference. These source changes preserve complete values, caller result storage and owner/access checks.
 
 ## Alias terminology
 

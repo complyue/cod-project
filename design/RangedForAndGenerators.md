@@ -1,8 +1,10 @@
 # Ranged for-loops and synchronous generators
 
-Design revision: 19 · Recorded: 2026-11-19 · Status: selected generator/feedback syntax and checked forwarding; remaining scope, effect proofs and transport pending.
+Design revision: 20 · Recorded: 2026-11-19 · Status: selected generator/feedback syntax and checked forwarding; remaining scope, effect proofs and transport pending.
 
 ## Design authority
+
+[H-CALLABLE-TAIL-20261119](../CHANGELOG.md#h-callable-tail-20261119) applies the [callable result rules](CallableResultInference.md#results-of-proc-func-and-here-bodies) at r20 to the generator’s fixed void result. Check both spellings of a producer with non-void feedback and the same caller-owned body.
 
 - **One receiving header at each handoff.** [H-GENERATOR-RECEPTION-20261119](../CHANGELOG.md#h-generator-reception-20261119) confirms [D-29-GENERALIZED-FOR](DesignAuthorityRegistry.md#d-29-generalized-for) r18 for the named first here parameter, nested lexical invocation and full for-header equivalence. P-623 connects C-96/C-37/C-65 to readable traversal and explicit ownership. P-624 depends on D-17-FULL-SCOPE, D-18-HERE-PARAM, D-22-RECEIVE-SCOPE and D-29-HEADERS. Compare the same generator and receivers written both ways at zero and repeated handoffs. Check that returns in the two lexical bodies reach their respective suppliers. [H-HERE-HEADER-20261119](../CHANGELOG.md#h-here-header-20261119) confirms the [parenthesized header](#one-receiving-header-for-both-call-forms) at r19. Native transport and the wider qualification remain open.
 
@@ -53,11 +55,11 @@ A generator decides when to enter the caller’s body, which items it supplies a
 ```cod
 func ascending() yields u64 -> bool {
     if (not yield(1u64)) { return; } else {};
-    yield(2u64);
+    yield(2u64) : void;
 }
 func descending(here step(n:u64) -> bool) -> void {
     if (not step(2u64)) { return; } else {};
-    step(1u64);
+    step(1u64) : void;
 }
 
 val by_for <- 0u64;
@@ -93,13 +95,13 @@ These are two spellings of one method. Read the examples as alternatives in the 
 
 ```cod
 func emit(n:u64) yields u64 -> bool {
-    yield(n);
+    yield(n) : void;
 }
 ```
 
 ```cod
 func emit(here yield(item:u64) -> bool, n:u64) -> void {
-    yield(n);
+    yield(n) : void;
 }
 ```
 
@@ -122,6 +124,7 @@ Elaborate before overload selection. Two otherwise identical body-bearing declar
 proc twice() yields u64 {
     {{ yield(7u64); return; }};
     yield(8u64);
+    return;
 }
 ```
 
@@ -215,6 +218,7 @@ Lexical lookup binds `yield` to the [generator’s first here parameter](#a-gene
 proc first_two() yields u64 -> bool {
     if (not yield(1u64)) { return; } else {};
     yield(2u64);
+    return;
 }
 
 for val n <- first_two() {
@@ -235,6 +239,7 @@ proc inspect_one(x:u64 in O)
     where {owner O}
 {
     yield(1u64 -> count, x -> cell);
+    return;
 }
 
 # storage is an existing readable/writable scalar target.
@@ -309,6 +314,7 @@ D-23 places a new ref's independently returned scalar bits in its declaration's 
 proc two_values() yields u64 {
     yield(1u64);
     yield(2u64);
+    return;
 }
 proc distinct_targets() -> bool {
     ref first:u64 = 0u64;
@@ -348,11 +354,13 @@ proc twice(x:u64 in O) yields ref u64 in O where {owner O} {
     yield(x);
     x <- 9u64;
     yield(x);
+    return;
 }
 proc observe(x:u64 in O) where {owner O} {
     ref saved:u64 in O = x;
     for ref item = twice(x) { saved = item; }
     assert saved == 9u64;
+    return;
 }
 ```
 
@@ -374,6 +382,7 @@ proc visit_both(a:u64 in O, b:u64 in O)
 {
     yield(a);
     yield(b);
+    return;
 }
 
 for ref item = visit_both(left, right) {
@@ -393,6 +402,7 @@ proc visit_values(a:u64 in A, b:u64 in B)
 {
     yield(a);
     yield(b);
+    return;
 }
 ```
 
@@ -410,12 +420,14 @@ proc scratch() yields ref u64 in here {
     yield(cell);
     cell <- 1u64;
     yield(cell);
+    return;
 }
 
 proc use_scratch() {
     for ref item = scratch() {
         item <- item + 1u64;
     }
+    return;
 }
 ```
 
@@ -438,6 +450,7 @@ proc use_cleanup() {
         {{ defer observe(item); }}  # Runs while scratch's activation is live.
         # defer observe(item);      # Reject: caller-scope cleanup runs too late.
     }
+    return;
 }
 ```
 
@@ -445,7 +458,7 @@ The explicit inner full scope makes the demonstrated cleanup borrow valid; the d
 
 ## Void final completion
 
-The bounded design fixes the generator's own normal result to **void**. Bare `return;` ends generation early; normal fallthrough also completes it. Both run required cleanup. A value-producing return belonging to the generator rejects; it does not imply a final yield. A separately nested ordinary callable may still have its own value result.
+The bounded design fixes the generator's own normal result to **void**. A bare `return;` ends generation and runs required cleanup. A proc generator requires an explicit return for successful completion. A func generator may also finish on a void tail. Discard unused non-void feedback explicitly when it is the final expression of a void func generator or its callback-first equivalent. A value-producing return belonging to the generator rejects; it does not imply a final yield. A separately nested ordinary callable may still have its own value result.
 
 The whole `for` has no data result beyond void. There is no path-dependent result selected from the last yield, last feedback or a generator completion payload. Exceptional exits and a body return targeting an outer callable remain control completions, not values of the loop.
 
@@ -469,6 +482,7 @@ When F is void, every normal fallthrough body result is discarded. Explicit cont
 proc observations() yields u64 -> void {
     yield(1u64);
     yield(2u64);
+    return;
 }
 
 for val n <- observations() {
@@ -552,6 +566,7 @@ H-583 reuses structural result declarations and receiving specifications for the
 proc two_steps() yields u64 -> { again:bool; step:u64; } {
     { val again <-; val step <-; } := yield(1u64);
     if (again) { yield(step); } else {};
+    return;
 }
 
 for val n <- two_steps() {
@@ -605,6 +620,7 @@ The ordinary trailing throws clause is the generator's fixed outward declaration
 ```cod
 proc records() yields u64 -> bool throws ReadException {
     yield(read_one());
+    return;
 }
 ```
 
@@ -618,10 +634,12 @@ proc parse(x:u64) -> void throws ParseException;
 
 proc numbers() yields u64 {
     yield(1u64);
+    return;
 }
 
 proc run() throws ParseException {
     for val x <- numbers() { parse(x); }
+    return;
 }
 ```
 
@@ -638,10 +656,12 @@ proc guarded() yields u64 {
     try { yield(load_one()); }
     catch (e:const ReadException) { report(e); }
     finally { finish_attempt(); }
+    return;
 }
 
 proc run_guarded() throws ReadException {
     for val x <- guarded() { read_body(x); }
+    return;
 }
 ```
 
@@ -694,6 +714,7 @@ H-587 requires every entered try's finally to execute when control leaves its pr
 proc once() yields u64 {
     try { yield(1u64); }
     finally { finish_attempt(); }
+    return;
 }
 
 proc find() -> u64 {
@@ -786,6 +807,7 @@ proc run() {
     for val n <- numbers() {
         report(n);  # Accept: this operation belongs to run.
     }
+    return;
 }
 ```
 
@@ -825,6 +847,7 @@ proc run_forwarded() {
     for val n <- forwarded() {
         report(n);  # Accept: still run_forwarded's own body.
     }
+    return;
 }
 ```
 
@@ -847,6 +870,7 @@ proc advance(x:u64 in O) where {owner O} {
     for val n <- reread(x) {
         x <- n + 1u64;
     }
+    return;
 }
 ```
 
