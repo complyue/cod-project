@@ -1460,6 +1460,16 @@ class LLVMEmission {
     }, here_);
   }
   llvm::Value *prepare_source(const Expression &expr) {
+    if (contexts_.front().at(&expr).pipeline_preparation) {
+      std::map<CheckedOperation::PipelinePreparation, std::vector<size_t>> plans;
+      for (size_t i = 0; i < contexts_.size(); ++i)
+        plans[contexts_[i].at(&expr).pipeline_preparation.value()].push_back(i);
+      return contextual_value(expr, plans, "here.saved.traversal", [&](const auto &plan) {
+        return connect_prepared_pipeline(plan.traversal, [&](const Expression *operand) {
+          return load(pipeline_operand_slot(*operand));
+        });
+      }, here_);
+    }
     return with_prepared_producer(expr, [&](const auto &producer, const auto &frame) -> llvm::Value * {
       const auto operands = prepare_arguments(expr);
       if (!reachable()) return nullptr;
@@ -1486,6 +1496,11 @@ class LLVMEmission {
     b_.CreateStore(b_.CreateExtractValue(stage, 1), b_.CreateStructGEP(layout, connection, 0));
     b_.CreateStore(upstream, b_.CreateStructGEP(layout, connection, 1));
     return b_.CreateInsertValue(stage, connection, 1);
+  }
+  llvm::Value *connect_prepared_pipeline(std::span<const Expression *const> traversal, const auto &operand) {
+    auto *upstream = operand(traversal.front());
+    for (const auto *stage : traversal.subspan(1)) upstream = connect_prepared_stage(operand(stage), upstream);
+    return upstream;
   }
   llvm::AllocaInst *pipeline_operand_slot(const Expression &expr) {
     auto [position, inserted] = pipeline_operands_.try_emplace(&expr, nullptr);
@@ -1531,11 +1546,8 @@ class LLVMEmission {
       return found == prepared.end() ? load(pipeline_operand_slot(*operand)) : found->second;
     };
     if (!fresh_receiver) arguments = load_prepared_operands(expr, stored(receiver));
-    auto *upstream = stored(plan.traversal.front());
-    for (size_t i = 1; i + 1 < plan.traversal.size(); ++i) {
-      upstream = connect_prepared_stage(stored(plan.traversal[i]), upstream);
-    }
-    here_values[1] = upstream;
+    const auto upstream = std::span{plan.traversal}.first(plan.traversal.size() - 1);
+    here_values[1] = connect_prepared_pipeline(upstream, stored);
     return arguments;
   }
   llvm::Value *prepare_here_argument(const Expression &expr, size_t slot) {

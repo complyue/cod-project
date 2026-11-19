@@ -589,6 +589,56 @@ runner.CASES = {
         'proc sink(n:u64)->void{return;}'
         'proc run()->void{here stages=stage |> stage;rows !> stages(9u64) $> sink;return;}run();',
         2,'','a lexical pipeline has no unbound ordinary arguments'),
+    'lexical_pipeline_forwards_independent_sources_through_a_helper': (IO+
+        'proc mark(n:u64)->u64{behave @print(n);return n;}'
+        'func rows(day:u64) yields u64{yield(day);}'
+        'func add(here input() yields u64,offset:u64) yields u64{val amount<-offset;for val item<-input(){yield(item+amount);};}'
+        'func scale(here input() yields u64,factor:u64) yields u64{val amount<-factor;for val item<-input(){yield(item*amount);};}'
+        'proc drive(here input() yields u64)->void{for val item<-input(){behave @print(item);};return;}'
+        'proc relay(here left() yields u64,here right() yields u64)->void{drive(left);drive(right);drive(left);return;}'
+        'proc run()->void{here stages=add(mark(2u64)) |> scale(mark(3u64));'
+        'here first=rows(mark(10u64)) !> stages;here second=stages <! rows(mark(20u64));'
+        'relay(first,second);return;}run();',0,'2\n3\n10\n20\n36\n66\n36\n',''),
+    'lexical_pipeline_forwarding_carries_the_selected_borrow': (IO+
+        'func rows(line:const u64 in P) yields {id:u64;ref cell:const u64 in P;} -> bool where {owner P}{'
+        'if(!yield(7u64->id,line->cell)){return;}else{};yield(80u64->id,line->cell):void;}'
+        'func stage(here input() yields {id:u64;ref cell:const u64 in S;} -> bool,witness:const u64 in S) '
+        'yields {id:u64;ref cell:const u64 in S;} -> bool where {owner S}{'
+        'for {val n<-id;ref item=cell;} := input(){continue yield(n->id,item->cell);};}'
+        'proc drive(here input() yields {id:u64;ref cell:const u64 in D;} -> bool,witness:const u64 in D)->void where {owner D}{'
+        'for {val n<-id;ref item=cell;} := input(){behave @print(n);behave @print(item);continue false;};return;}'
+        'proc relay(here input() yields {id:u64;ref cell:const u64 in R;} -> bool,witness:const u64 in R)->void where {owner R}{'
+        'drive(input,witness);return;}'
+        'proc run()->void{val first<-75u64;val second<-99u64;ref selected=first;'
+        'here stages=stage(selected) |> stage(selected);here attached=rows(selected) !> stages;'
+        'selected=second;first<-76u64;relay(attached,first);return;}run();',0,'7\n76\n',''),
+    'lexical_pipeline_forwarding_rejects_a_different_expected_owner': (
+        'func rows(line:const u64 in P) yields ref const u64 in P where {owner P}{yield(line);}'
+        'func stage(here input() yields ref const u64 in S,witness:const u64 in S) '
+        'yields ref const u64 in S where {owner S}{for ref item=input(){yield(item);};}'
+        'proc drive(here input() yields ref const u64 in D,witness:const u64 in D)->void where {owner D}{return;}'
+        'proc run(outside:const u64 in O)->void where {owner O}{val inside<-99u64;'
+        'here stages=stage(outside) |> stage(outside);here attached=rows(outside) !> stages;'
+        'drive(attached,inside);return;}val outside<-75u64;run(outside);',
+        2,'','borrowed here input has a different actual owner from its contract'),
+    'lexical_pipeline_forwarding_preserves_a_helper_return_through_cleanup': (IO+
+        'proc rows() yields u64{try{yield(7u64);behave @print(80u64);}finally{behave @print(31u64);};return;}'
+        'proc stage(here input() yields u64,stamp:u64) yields u64{try{for val item<-input(){yield(item);};'
+        'behave @print(81u64);}finally{behave @print(stamp);};return;}'
+        'proc drive(here input() yields u64)->u64{for val item<-input(){return item;};return 99u64;}'
+        'proc relay(here input() yields u64)->u64{return drive(input);}'
+        'proc run()->void{here stages=stage(32u64) |> stage(33u64);here attached=rows !> stages;'
+        'behave @print(relay(attached));return;}run();',0,'31\n32\n33\n7\n',''),
+    'lexical_pipeline_can_supply_a_fresh_stage_as_its_source': (IO+
+        'proc mark(n:u64)->u64{behave @print(n);return n;}'
+        'func rows(day:u64) yields u64{yield(day);}'
+        'func add(here input() yields u64,offset:u64) yields u64{val amount<-offset;for val item<-input(){yield(item+amount);};}'
+        'func scale(here input() yields u64,factor:u64) yields u64{val amount<-factor;for val item<-input(){yield(item*amount);};}'
+        'proc sink(n:u64)->void{behave @print(n);return;}'
+        'proc drive(here input() yields u64)->void{for val item<-input(){sink(item);};return;}'
+        'proc run()->void{here stages=add(mark(2u64)) |> scale(mark(3u64));here reviewed=rows(10u64) !> stages;'
+        'reviewed !> add(mark(4u64)) $> sink;here rerouted=scale(mark(5u64)) <! reviewed;'
+        'drive(rerouted);reviewed $> sink;return;}run();',0,'2\n3\n4\n40\n5\n180\n36\n',''),
     'lexical_handoff_nested_stage_keeps_labelled_borrow_and_feedback': (IO+
         'proc rows(line:const u64 in O) yields {id:u64;ref cell:const u64 in O;} -> bool where {owner O}{'
         'behave @print(17u64);if(!yield(line->cell,17u64->id)){return;}else{};'
