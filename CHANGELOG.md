@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-19 — Confirm the DBMR redesign
+
+<a id="h-dbmr-approved-20261119"></a>
+**H-DBMR-APPROVED-20261119.** The project user confirmed “dbmr新设计我是认可的，状态不要记成待决哈” in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-19 (America/Los_Angeles). D-22r62 and registry r946 record the access, publication and image-completion contracts as confirmed together. Private construction and immutable publication support shared readers and isolate interrupted builds under charter §§4.3/7.1–7.2. The source baseline is H-DBMR-IMMUTABLE-20261119 at `4c718a1c264b7a2a158a1d973aac27a5e3499838:design/ConstructionAndAcquisition.md`, “DBMR modes”. Provider verification, interface refinements and stronger power-loss guarantees have separate scopes.
+
 ## 2026-11-19 — Build privately and publish immutable DBMR generations
 
 <a id="h-dbmr-immutable-20261119"></a>
