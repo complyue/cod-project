@@ -775,7 +775,8 @@ public:
     return found == missing.end() ? ConditionClauses{ConditionFacts{}} : found->second;
   }
   static void combine_initialization(std::set<size_t> &initialized, MissingInitialization &missing,
-      const std::set<size_t> &next_initialized, const MissingInitialization &next_missing, bool alternatives) {
+      const std::set<size_t> &next_initialized, const MissingInitialization &next_missing, bool alternatives,
+      const ConditionClauses *reaching = nullptr, const ConditionClauses *next_reaching = nullptr) {
     auto places = initialized;
     places.insert(next_initialized.begin(), next_initialized.end());
     for (const auto &[place, clauses] : missing) places.insert(place);
@@ -784,7 +785,9 @@ public:
     MissingInitialization retained;
     for (const auto place : places) {
       auto clauses = missing_initialization(place, initialized, missing);
-      const auto next = missing_initialization(place, next_initialized, next_missing);
+      auto next = missing_initialization(place, next_initialized, next_missing);
+      if (reaching) clauses = conjoin_conditions(clauses, *reaching);
+      if (next_reaching) next = conjoin_conditions(next, *next_reaching);
       if (alternatives) for (const auto &facts : next) add_condition(clauses, facts);
       else clauses = conjoin_conditions(clauses, next);
       if (clauses.empty()) ready.insert(place);
@@ -989,6 +992,8 @@ public:
     // Source handling requirements are independent of runtime category paths.
     std::set<size_t> declared_failures{};
     MissingInitialization uninitialized{};
+    // Saved reference selections have readiness independent of physical cells.
+    MissingInitialization uninitialized_captures{};
     bool needs_checked_cleanup_proof = false;
     bool guarded_pending_failure = false;
     // Necessary immutable input facts for reaching this queue completion.
@@ -1010,10 +1015,12 @@ public:
         CleanupEquations::resolve_initialization(requirement.initialized, requirement.uninitialized);
       }
       for (auto &[place, clauses] : uninitialized) clauses = transform(clauses);
+      for (auto &[capture, clauses] : uninitialized_captures) clauses = transform(clauses);
       resolve_initialization();
     }
     void resolve_initialization() {
       CleanupEquations::resolve_initialization(initialized, uninitialized);
+      CleanupEquations::resolve_initialization(selections.initialized_captures, uninitialized_captures);
       selections.resolve(initialized);
       returned.initialize(initialized, selections);
     }
@@ -1148,6 +1155,8 @@ private:
       merge_read(result.reads, read, before);
     }
     combine_initialization(result.initialized, result.uninitialized, next.initialized, next.uninitialized, false);
+    combine_initialization(result.selections.initialized_captures, result.uninitialized_captures,
+                           next.selections.initialized_captures, next.uninitialized_captures, false);
     result.returned.advance(next.selections);
     result.selections.then(next.selections, result.initialized);
     result.unknown_thrown = first.unknown_thrown || second.unknown_thrown || second.thrown.reads_unknown(first.payloads);
@@ -1168,6 +1177,7 @@ private:
     const auto previous_reads = known.reads;
     const auto previous_initialized = known.initialized;
     const auto previous_uninitialized = known.uninitialized;
+    const auto previous_uninitialized_captures = known.uninitialized_captures;
     const auto previous_returned = known.returned;
     const auto previous_thrown = known.thrown;
     const auto previous_unknown_thrown = known.unknown_thrown;
@@ -1209,9 +1219,14 @@ private:
       if (inserted) merge_boolean(found->second, boolean_payload(target));
       else merge_boolean(found->second, value);
     }
+    auto captures = std::move(known.selections.initialized_captures);
+    combine_initialization(captures, known.uninitialized_captures, effects.selections.initialized_captures,
+                           effects.uninitialized_captures, true, &previous_reaching, &effects.reaching);
     known.selections.merge(effects.selections);
-    known.selections.resolve(known.initialized);
+    known.selections.initialized_captures = std::move(captures);
+    known.resolve_initialization();
     return previous_reads != known.reads || previous_initialized != known.initialized || previous_uninitialized != known.uninitialized ||
+        previous_uninitialized_captures != known.uninitialized_captures ||
         previous_returned != known.returned || previous_thrown != known.thrown || previous_unknown_thrown != known.unknown_thrown || previous_payloads != known.payloads ||
         previous_selections != known.selections || previous_symbols != known.symbols || previous_payload_writes != known.payload_writes ||
         previous_present != known.present || previous_booleans != known.booleans || previous_declared != known.declared_failures ||
@@ -1219,14 +1234,17 @@ private:
         previous_reaching != known.reaching || previous_action_reaching != known.action_reaching;
   }
 public:
-  void observe_reference(const BooleanValue &observations) {
+  void observe_input_conditions(const ConditionClauses &paths) {
     bool changed = false;
-    for (const auto &[null, paths] : observations) for (const auto &path : paths) {
+    for (const auto &path : paths) {
       for (const auto &[input, value] : path.inputs) changed = observed_inputs_.insert(input).second || changed;
       for (const auto place : path.present) changed = observed_references_.insert(place).second || changed;
       for (const auto place : path.absent) changed = observed_references_.insert(place).second || changed;
     }
     if (changed) solved_.clear();
+  }
+  void observe_reference(const BooleanValue &observations) {
+    for (const auto &[null, paths] : observations) observe_input_conditions(paths);
   }
   static void merge_read(Reads &reads, size_t read, const ReadRequirement &before) {
     auto [found, inserted] = reads.emplace(read, before);

@@ -686,6 +686,36 @@ runner.CASES['repeated_defer_cannot_read_before_the_actions_run'] = saved_select
 runner.CASES['query_repeated_defer_cannot_read_before_the_actions_run'] = saved_selection_case(
     EARLY_LOOP_READ, inspect=True, rejects=True, declarations=PAIR_WRITER)
 
+PUT = ('proc put(ptr p:u64 in O,value:u64)->void where {owner O}'
+       '{if(p is not null){p<-value;{}}else{};}')
+FALLIBLE_PREPARATION = (PAYLOAD+PUT+'proc prepare(flag:bool)->u64 throws NullPointerException'
+                        '{if(flag){return 7u64;}else{throw sample_error();};}')
+HANDLER = 'catch(e:const NullPointerException)'
+
+for name, declarations, body, rejects in (
+    ('failed_preparation_handler_writes_saved_target', FALLIBLE_PREPARATION,
+     'try{defer put(selected,prepare(flag));{}}'+HANDLER+'{'+SAVED_WRITE+'};return selected;', False),
+    ('late_operand_rebind_preserves_prepared_and_recovered_target', FALLIBLE_PREPARATION,
+     'ptr held=selected;try{defer put(selected,{selected=backup;prepare(flag)});{}}'+
+     HANDLER+'{'+SAVED_WRITE.replace('selected', 'held')+'};return held;', False),
+    ('failed_preparation_contributes_no_write', FALLIBLE_PREPARATION,
+     'try{defer put(selected,prepare(flag));{}}'+HANDLER+'{};return selected;', True),
+    ('handler_writes_the_rebound_target', FALLIBLE_PREPARATION,
+     'ptr held=selected;'+SAVED_OPPOSITE+'try{defer put(selected,{selected=opposite;prepare(flag)});{}}'+
+     HANDLER+'{'+SAVED_WRITE+'};return held;', True),
+    ('guarded_transfer_in_single_iteration', '',
+     'ptr held=selected;for(i in 0u64..1u64){'+LOOP_TRANSFER+'};selected=backup;return held;', False),
+    ('ordinary_branch_writes_saved_target', PUT,
+     'if(flag){defer put(selected,7u64);}else{'+SAVED_WRITE+'};return selected;', False),
+    ('short_circuit_branch_writes_saved_target', PUT,
+     'flag && {defer put(selected,7u64);true};if(!flag){'+SAVED_WRITE+'}else{};return selected;', False),
+    ('other_target_in_fallback_leaves_saved_target_unwritten', PUT,
+     SAVED_OPPOSITE+'if(flag){defer put(selected,7u64);}else{'+SAVED_WRITE.replace('selected', 'opposite')+
+     '};return selected;', True),
+):
+    runner.CASES['prepare_'+name] = saved_selection_case(body, rejects=rejects, declarations=declarations)
+    runner.CASES['query_prepare_'+name] = saved_selection_case(body, inspect=True, rejects=rejects, declarations=declarations)
+
 runner.EXTRA_SOURCES = [Path(__file__)]
 if __name__ == '__main__':
     raise SystemExit(runner.main())
