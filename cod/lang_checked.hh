@@ -51,6 +51,8 @@ struct LexicalState {
   std::set<size_t> expired_bindings;
   std::map<size_t, std::set<size_t>> target_versions;
   std::map<size_t, size_t> selection_identities;
+  // A finalizer may initialize a saved target and then rebind its last slot.
+  std::map<size_t, bool> observed_selection_initialization;
   CleanupEquations::Selections selections;
   CleanupEquations::Returned returned;
   std::uint64_t inputs = 1;
@@ -522,6 +524,7 @@ class ScalarChecker {
     EvidencePlaces destination;
     std::optional<PresenceBranches> boolean;
     bool writes_boolean;
+    const Expression *saved_selection = nullptr;
   };
   struct PreparedReferenceAssignment {
     EvidenceSelection destination;
@@ -780,21 +783,24 @@ class ScalarChecker {
       auto stored = compact(proof);
       if (stored && *stored != PresenceBranches{}) reference_observations.insert_or_assign(slot, std::move(*stored));
     }
-    void bind(const std::string &name, EvidenceSlot slot, TargetEvidence selected) {
+    void save_selection(const EvidenceSlot &slot, TargetEvidence selected) {
       if (!tracking) return;
       if (footprints.contains(slot)) {
-        // A declaration can be reached again during an abstract iteration.
+        // The same source site can be reached on another abstract iteration.
         assign({slot, {slot}}, std::move(selected));
-        bindings[name] = {slot, {slot}};
         return;
       }
-      bindings[name] = {slot, {slot}};
       footprints[slot] = {slot};
       if (selected.presence != TargetPresence::unknown) facts[slot] = selected.presence;
       if (!selected.places.empty() || selected.presence == TargetPresence::absent) targets[slot] = std::move(selected.places);
-      if (selected.initialized) initialized_selections.insert(slot);
+      if (selected.initialized || selected.presence == TargetPresence::absent) initialized_selections.insert(slot);
       retain_selection(slot, std::move(selected.same_selected));
       remember_selection(slot, selected.presence_proof);
+    }
+    void bind(const std::string &name, EvidenceSlot slot, TargetEvidence selected) {
+      if (!tracking) return;
+      save_selection(slot, std::move(selected));
+      bindings[name] = {slot, {slot}};
     }
     void declare_place(const std::string &name, EvidenceSlot slot, TargetEvidence target) {
       if (!tracking) return;
@@ -866,7 +872,7 @@ class ScalarChecker {
         if (selection.footprint.size() == 1) facts[*selection.footprint.begin()] = known;
         if (selection.slot) facts[*selection.slot] = known;
       }
-      if (selected.initialized) {
+      if (selected.initialized || known == TargetPresence::absent) {
         if (selection.footprint.size() == 1) initialized_selections.insert(*selection.footprint.begin());
         if (selection.slot) initialized_selections.insert(*selection.slot);
       }
@@ -970,6 +976,10 @@ class ScalarChecker {
       auto refined = outcome(proof, value);
       if (!refined) return;
       facts = refined.known_presence();
+      // Readiness describes the selected non-null payload. Absence can satisfy
+      // it at an alternative join without initializing any physical target.
+      for (const auto &[slot, presence] : facts)
+        if (presence == TargetPresence::absent) initialized_selections.insert(slot);
       retain_conditions(std::move(refined));
     }
     void forget_observations(size_t first) {
@@ -1124,6 +1134,7 @@ class ScalarChecker {
   struct TypeBorrowedReturn {
     std::map<EvidenceSlot, ObservationPaths> targets;
     QuerySelections::Uninitialized uninitialized;
+    const Expression *saved_selection = nullptr;
     bool operator==(const TypeBorrowedReturn &) const = default;
 
     static TypeBorrowedReturn capture(const TargetEvidence &target, const QuerySelections &flow) {
@@ -1147,12 +1158,20 @@ class ScalarChecker {
     void merge(const TypeBorrowedReturn &other) {
       for (const auto &[place, reaching] : other.targets) targets[place].join(reaching);
       for (const auto &[place, missing] : other.uninitialized) uninitialized[place].join(missing);
+      if (saved_selection != other.saved_selection) saved_selection = nullptr;
+    }
+    void initialize(const QuerySelections &flow) {
+      if (saved_selection && flow.initialized_selections.contains(saved_selection)) {
+        uninitialized.clear();
+        saved_selection = nullptr;
+      }
     }
     void restrict_to(const ObservationPaths &reaching) {
       for (auto *paths : {&targets, &uninitialized}) {
         for (auto &[place, condition] : *paths) condition.conjoin(reaching);
         std::erase_if(*paths, [](const auto &entry) { return !entry.second; });
       }
+      if (uninitialized.empty()) saved_selection = nullptr;
     }
     void forget_observations(size_t first) {
       for (auto *paths : {&targets, &uninitialized})
@@ -1163,6 +1182,7 @@ class ScalarChecker {
     std::optional<PresenceBranches> boolean;
     // An empty bound denotes a null result. An unknown bound grants no narrowing.
     std::optional<TypeBorrowedReturn> borrowed;
+    const Expression *saved_selection() const { return borrowed ? borrowed->saved_selection : nullptr; }
     bool operator==(const TypeReturned &) const = default;
     void merge(const TypeReturned &other) {
       boolean = QuerySelections::alternatives(std::move(boolean), other.boolean);
@@ -1819,9 +1839,12 @@ class ScalarChecker {
     std::vector<size_t> affected;
     for (const auto &[id, targets] : lexical_.targets)
       if (!intersect(written, physical_slots({id})).empty()) affected.push_back(id);
+    // A definite local rebind inside a delayed body can retain the selected
+    // entry target in another slot. Prepared rebinds already carry a snapshot.
+    const auto entry = delayed_ && !deferred && affected.size() == 1 ? current_binding(source) : std::nullopt;
     for (const auto id : affected) {
       auto selected = source;
-      auto update = snapshot;
+      auto update = entry ? CleanupEquations::Targets{{}, {}, {*entry}} : snapshot;
       const bool weak = target.slots.size() != 1 || !target.slots.contains(id);
       if (weak) {
         update.entries.insert(id);
@@ -2416,11 +2439,13 @@ class ScalarChecker {
     refresh_input_facts(state);
   }
   static void assign_selection(LexicalState &state, size_t id, const CleanupEquations::Targets &targets) {
+    state.returned.selection_bindings.erase(id);
     state.selections.assign(id, targets);
     for (const auto input : inputs(state.inputs)) state.input_facts[input].selections.assign(id, targets);
     refresh_input_facts(state);
   }
   static void invalidate_selection(LexicalState &state, size_t id) {
+    state.returned.selection_bindings.erase(id);
     state.selections.invalidate(id);
     for (const auto input : inputs(state.inputs)) state.input_facts[input].selections.invalidate(id);
   }
@@ -2556,6 +2581,12 @@ class ScalarChecker {
     refresh_input_facts(state);
     state.live = state.live && state.selections.possible;
     if (!state.live) return;
+    auto retained_return = std::exchange(state.returned, CleanupEquations::Returned{});
+    retained_return.advance(effects.selections);
+    for (const auto binding : effects.selections.entry_initialized)
+      if (const auto selection = state.selection_identities.find(binding); selection != state.selection_identities.end())
+        if (const auto observed = state.observed_selection_initialization.find(selection->second);
+            observed != state.observed_selection_initialization.end()) observed->second = true;
     effects.returned.substitute(state.selections);
     invalidate_payloads(state, effects.payload_writes);
     for (const auto &[place, value] : effects.booleans) if (state.available.contains(place))
@@ -2619,6 +2650,7 @@ class ScalarChecker {
     for (const auto input : inputs(state.inputs))
       for (const auto &[target, value] : effects.payloads) state.input_facts[input].exceptions[target] = value;
     refresh_input_facts(state);
+    state.returned = std::move(retained_return);
     state.returned.then(effects.returned);
     state.returned.enter_initialization(initialization_frame());
     state.returned.initialize(state.initialized, state.selections);
@@ -2739,10 +2771,15 @@ class ScalarChecker {
           effect.present.insert(present.begin(), present.end());
         }
       if (found != target.initialized.end()) for (const auto parameter : found->second) {
-        if (!slots) initialize_targets(views.at(parameter), effect.initialized, effect.uninitialized);
-        const auto selected = physical_slots(views.at(parameter).slots);
+        const auto &view = views.at(parameter);
+        if (!slots) initialize_targets(view, effect.initialized, effect.uninitialized);
+        // An action registered once can initialize the exact prepared
+        // selection even after every source slot has been rebound.
+        if (!slots && prepared && !delayed_ && active_loops_.empty() && view.selection_identity)
+          effect.selections.initialized_captures.insert(*view.selection_identity);
+        const auto selected = physical_slots(view.slots);
         const auto binding = slots ? (selected.size() == 1 ? std::optional<size_t>{*selected.begin()} : std::nullopt)
-                                   : selection(views.at(parameter));
+                                   : selection(view);
         if (binding) {
           effect.selections.initialize(*binding);
           effect.selections.refine(*binding, false);
@@ -3299,6 +3336,14 @@ class ScalarChecker {
       else for (const auto &[place, value] : state.input_facts.at(input).exceptions) state.exceptions[place].merge(value);
       first = false;
     }
+    if (!first) for (const auto binding : state.selections.initialized) {
+      const auto selection = state.selection_identities.find(binding);
+      if (selection == state.selection_identities.end() || !state.bindings_available.contains(binding)) continue;
+      const auto observed = state.observed_selection_initialization.find(selection->second);
+      if (observed != state.observed_selection_initialization.end()) observed->second = true;
+    }
+    if (!first) for (auto &[selection, initialized] : state.observed_selection_initialization)
+      initialized = initialized || state.selections.initialized_captures.contains(selection);
     state.returned.initialize(state.initialized, state.selections);
     refine_present(state);
   }
@@ -3332,6 +3377,11 @@ class ScalarChecker {
     lexical_.initialized = a_exits ? b.initialized : b_exits ? a.initialized : intersect(a.initialized, b.initialized);
     lexical_.returned = a_exits ? b.returned : a.returned;
     if (!a_exits && !b_exits) lexical_.returned.merge(b.returned);
+    lexical_.observed_selection_initialization = a_exits ? b.observed_selection_initialization : a.observed_selection_initialization;
+    if (!a_exits && !b_exits) for (auto &[selection, initialized] : lexical_.observed_selection_initialization) {
+      const auto other = b.observed_selection_initialization.find(selection);
+      initialized = initialized && other != b.observed_selection_initialization.end() && other->second;
+    }
     lexical_.predicates = a_exits ? b.predicates : a.predicates;
     lexical_.boolean_inputs = a_exits ? b.boolean_inputs : a.boolean_inputs;
     lexical_.boolean_payloads = a_exits ? b.boolean_payloads : a.boolean_payloads;
@@ -3439,6 +3489,7 @@ class ScalarChecker {
     if (scope.symbol_entry) state.bound_symbols = *scope.symbol_entry;
     for (const auto &[name, id] : scope.bindings) {
       state.bindings_available.erase(id);
+      state.returned.selection_bindings.erase(id);
       if (!bindings_->at(id).selection.empty()) continue;
       state.targets.erase(id);
       state.null_sources.erase(id);
@@ -5283,8 +5334,10 @@ class ScalarChecker {
   static void merge_type_exits(TypeEvidenceExits &flow, std::set<size_t> reasons, const TypeEvidenceState &state,
                                TypeReturned result = {}, bool retained_return = false) {
     if (reasons.empty()) return;
+    if (result.borrowed) result.borrowed->initialize(state.selections);
     const auto entry = std::ranges::find_if(flow.paths, [&](const auto &path) {
-      return path.reasons == reasons && path.retained_return == retained_return;
+      return path.reasons == reasons && path.retained_return == retained_return &&
+          path.result.saved_selection() == result.saved_selection();
     });
     if (entry == flow.paths.end()) {
       flow.paths.push_back({std::move(reasons), state, std::move(result), retained_return});
@@ -5493,7 +5546,11 @@ class ScalarChecker {
     std::visit([&](const auto &effect) {
       using Effect = std::decay_t<decltype(effect)>;
       if constexpr (std::is_same_v<Effect, PreparedTransfer>) {
-        selections.initialize(effect.destination);
+        if (effect.saved_selection) {
+          auto target = selections.selected_target({effect.saved_selection, {effect.saved_selection}});
+          target.places = effect.destination;
+          selections.initialize(target);
+        } else selections.initialize(effect.destination);
         if (effect.writes_boolean) selections.write_boolean(effect.destination, effect.boolean);
       }
       else if constexpr (std::is_same_v<Effect, PreparedReferenceAssignment>)
@@ -5739,7 +5796,7 @@ class ScalarChecker {
       const auto *action = std::get_if<TypeDeferredFlow::Action>(&entry);
       return action && action->entry && action->entry->children.size() > 1;
     });
-    using WorkKey = std::tuple<size_t, bool, size_t>;
+    using WorkKey = std::tuple<size_t, bool, size_t, const Expression *>;
     std::map<WorkKey, Pending> pending, loop_inputs;
     const auto enqueue = [&](size_t queue, bool returned, size_t error, TypeEvidenceState state,
                              TypeReturned result) {
@@ -5749,13 +5806,16 @@ class ScalarChecker {
       if (returned) {
         const auto condition = state.selections.reach_condition();
         if (body.borrowed_return) {
-          if (result.borrowed) result.borrowed->restrict_to(condition);
+          if (result.borrowed) {
+            result.borrowed->restrict_to(condition);
+            result.borrowed->initialize(state.selections);
+          }
         } else {
           if (!result.boolean) result.boolean.emplace();
           for (const bool value : {false, true}) result.boolean->at(value).conjoin(condition);
         }
       }
-      const auto key = std::tuple{queue, returned, guards_errors ? error : 0};
+      const auto key = std::tuple{queue, returned, guards_errors ? error : 0, result.saved_selection()};
       if (const auto entry = pending.find(key); entry != pending.end()) {
         entry->second.state = merge_evidence(std::move(entry->second.state), state);
         entry->second.result.merge(result);
@@ -5772,7 +5832,7 @@ class ScalarChecker {
     // Loop headers also feed earlier iterations until their input stabilizes.
     while (!pending.empty()) {
       auto next = pending.extract(std::prev(pending.end()));
-      const auto [queue, returned, error] = next.key();
+      const auto [queue, returned, error, saved_selection] = next.key();
       auto &[state, result] = next.mapped();
       if (!queue) {
         if (completed) merge_type_exits(*completed, {error ? error : returned ? 1u : 0u}, state, result);
@@ -6555,10 +6615,17 @@ class ScalarChecker {
           state.selections.forget_changed(destination, destination_revision);
           state.selections.initialize(destination);
         }
-        else if (state.preparing(expr) && !destination.places.empty() && (type == Type::boolean || state.checks_initialization()))
+        else if (state.preparing(expr) && !destination.places.empty() && (type == Type::boolean || state.checks_initialization())) {
+          const Expression *saved = nullptr;
+          if (state.checks_initialization() && !state.repeated_observations && destination.places.size() > 1) {
+            state.selections.forget_changed(destination, destination_revision);
+            state.selections.save_selection(&expr, destination);
+            saved = &expr;
+          }
           state.prepared_call->effects.builtin = PreparedTransfer{destination.places,
               type == Type::boolean ? std::optional{snapshot_type_branches(state, target_facts.branches)} : std::nullopt,
-              type == Type::boolean};
+              type == Type::boolean, saved};
+        }
       } else if (state.required) {
         reference_destination(view, expr.at);
         const auto &selected = state.value;
@@ -7362,6 +7429,11 @@ class ScalarChecker {
                    (!state.target.places.empty() || state.target.presence == TargetPresence::absent)) {
             if (!contract.nullable()) require_type_initialized(state, state.target, {}, expr.at, true);
             returned.borrowed = TypeBorrowedReturn::capture(state.target, state.selections);
+            if (state.checks_initialization() && !state.repeated_observations &&
+                !returned.borrowed->uninitialized.empty() && state.target.places.size() > 1) {
+              state.selections.save_selection(&expr, state.target);
+              returned.borrowed->saved_selection = &expr;
+            }
           } else if (!contract.nullable() && state.checks_initialization() && state.selections.initialization_reachable) {
             // Every attempted ref return needs a valid prepared result, even
             // when an action will replace it before delivery.
@@ -8656,6 +8728,35 @@ class ScalarChecker {
     abrupt_ = &final_exits;
     const auto final_entry = lexical_;
     const auto final_returned = lexical_.returned;
+    std::map<size_t, size_t> finalizer_selections;
+    std::set<size_t> new_observations;
+    const auto observe_saved_target = [&](const CleanupEquations::Returned &returned) {
+      for (const auto binding : returned.selection_bindings) {
+        const auto identity = final_entry.selection_identities.find(binding);
+        if (identity == final_entry.selection_identities.end() || !final_entry.bindings_available.contains(binding)) continue;
+        finalizer_selections.emplace(binding, identity->second);
+        if (lexical_.observed_selection_initialization.try_emplace(identity->second, false).second)
+          new_observations.insert(identity->second);
+      }
+    };
+    const auto complete_saved_target = [&](LexicalState &state, CleanupEquations::Returned returned) {
+      if (std::ranges::any_of(returned.selection_bindings, [&](size_t binding) {
+            const auto identity = finalizer_selections.find(binding);
+            if (identity == finalizer_selections.end()) return false;
+            const auto observed = state.observed_selection_initialization.find(identity->second);
+            return observed != state.observed_selection_initialization.end() && observed->second;
+          })) returned.initialize_saved_selection();
+      std::erase_if(returned.selection_bindings, [&](size_t binding) {
+        const auto identity = finalizer_selections.find(binding);
+        const auto current = state.selection_identities.find(binding);
+        return identity == finalizer_selections.end() || current == state.selection_identities.end() ||
+            identity->second != current->second;
+      });
+      returned.then(state.returned);
+      state.returned = std::move(returned);
+      state.returned.initialize(state.initialized, state.selections);
+      for (const auto identity : new_observations) state.observed_selection_initialization.erase(identity);
+    };
     const auto preserve_initialization = [&](LexicalState &state, const LexicalState &previous) {
       CleanupEquations::combine_initialization(state.initialized, state.uninitialized,
           previous.initialized, previous.uninitialized, false);
@@ -8674,6 +8775,10 @@ class ScalarChecker {
       }
     };
     if (finalizer) {
+      for (const auto *paths : {&outgoing.paths, &control_inputs})
+        for (const auto &path : *paths) observe_saved_target(path.state.returned);
+      for (const auto &state : normals) observe_saved_target(state.returned);
+      refresh_input_facts(lexical_);
       lexical_.returned = {};
       for (const auto input : inputs(lexical_.inputs)) lexical_.input_facts.at(input).queues.at(cleanup_scope_) = 0;
     }
@@ -8689,9 +8794,7 @@ class ScalarChecker {
     for (const auto &path : final_exits.paths) {
       lexical_ = path.state;
       append_queues(lexical_, final_entry);
-      lexical_.returned = final_returned;
-      lexical_.returned.then(path.state.returned);
-      lexical_.returned.initialize(lexical_.initialized, lexical_.selections);
+      complete_saved_target(lexical_, final_returned);
       if (path.completion.reason == 1) note_abrupt(path.at, path.exceptions, path.completion);
       else {
         bool pending_return = false, pending_normal = !normals.empty();
@@ -8709,9 +8812,8 @@ class ScalarChecker {
     if (cleanup != Type::never) {
       for (const auto *paths : {&outgoing.paths, &control_inputs}) for (const auto &path : *paths) {
         lexical_ = finalizer ? final_state : path.state;
-        lexical_.returned = path.state.returned;
-        if (finalizer) lexical_.returned.then(final_state.returned);
-        lexical_.returned.initialize(lexical_.initialized, lexical_.selections);
+        if (finalizer) complete_saved_target(lexical_, path.state.returned);
+        else lexical_.returned.initialize(lexical_.initialized, lexical_.selections);
         lexical_.inputs = finalizer ? path.state.inputs & final_state.inputs : path.state.inputs;
         lexical_.live = lexical_.live && lexical_.inputs;
         if (finalizer) {
@@ -8730,9 +8832,7 @@ class ScalarChecker {
     if (finalizer) {
       const auto normal = lexical_;
       lexical_ = final_state;
-      lexical_.returned = normal.returned;
-      lexical_.returned.then(final_state.returned);
-      lexical_.returned.initialize(final_state.initialized, final_state.selections);
+      complete_saved_target(lexical_, normal.returned);
       lexical_.bindings_available.insert(normal.bindings_available.begin(), normal.bindings_available.end());
       lexical_.available.insert(normal.available.begin(), normal.available.end());
       lexical_.inputs = normal.inputs & final_state.inputs;
@@ -9711,6 +9811,12 @@ class ScalarChecker {
         if (contract.nullable()) lexical_.returned.nullness = snapshot_boolean(null_predicate(selected), lexical_, expr.at);
         if (contract.nullable() && !selected.initialized_target()) for (const auto place : selected.targets)
           if (place != null_target && !lexical_.initialized.contains(place)) lexical_.returned.uninitialized.insert(place);
+        if (lexical_.returned.needs_initialization() && selected.selection_identity) {
+          lexical_.returned.saved_capture = selected.selection_identity;
+          for (const auto &[binding, identity] : lexical_.selection_identities)
+            if (identity == *selected.selection_identity && lexical_.bindings_available.contains(binding))
+              lexical_.returned.selection_bindings.insert(binding);
+        }
       } else if (value != Type::never) {
         if (!transfers_value(value, *instance->result.type))
           fail(expr.at, "return type '" + type_name(value) + "' does not satisfy '" + type_name(*instance->result.type) + "'");
@@ -10164,6 +10270,8 @@ class ScalarChecker {
       auto returned = state.returned;
       returned.enter_initialization(initialization_frame());
       returned.initialize(state.initialized, state.selections);
+      returned.selection_bindings.clear();
+      returned.saved_capture.reset();
       returned.initialization = external_initialization(returned.initialization);
       returned.targets = input_ordinals(returned.targets);
       returned.uninitialized = input_ordinals(returned.uninitialized);

@@ -60,6 +60,19 @@ REF_READ = 'func read(ref p:u64 in O)->u64 where {owner O}'
 REF_READ_BODY = '{return p;}'
 REF_INPUTS = UNWRITTEN+'val ready<-8u64;'
 REF_CALL = 'ptr selected=select(local,ready,ready,3u64);return selected;'
+SAVED_SELECTION = ('proc choose(ptr first:u64 in O,ptr second:u64 in O,ref backup:u64 in O,flag:bool)'
+                   '->ptr u64 in O throws NullPointerException where {owner O}'
+                   '{ptr selected=if(flag){first}else{second};')
+SAVED_WRITE = 'if(selected is not null){selected<-7u64;{}}else{};'
+SAVED_OPPOSITE = 'ptr opposite=if(flag){second}else{first};'
+SAVED_CALL = (PREPARE_INPUTS+'val ready<-8u64;try{ptr chosen=choose(local,other,ready,flag);return chosen;}'
+              'catch(e:const NullPointerException){return 99u64;};')
+SAVED_EAGER_REBIND = ('if(selected is not null){defer (<-)(selected,7u64);defer{selected=backup;};return selected;}'
+                      'else{return selected;};')
+SAVED_EAGER_COPY = ('ptr held=selected;if(selected is not null){defer (<-)(selected,7u64);selected=backup;return held;}'
+                    'else{return held;};')
+SAVED_EAGER_OPPOSITE = (SAVED_OPPOSITE+'if(selected is not null){defer (<-)(selected,7u64);selected=opposite;'
+                        'return selected;}else{return selected;};')
 
 
 def guarded_reference(body):
@@ -80,6 +93,13 @@ def recursive_pick(base, step=RECURSIVE_STEP, declaration=RECURSIVE_PICK):
 
 def queried_ref_read(declarations, body):
     return IO+declarations+query(REF_INPUTS+body, '')+'behave @print(result);'
+
+
+def saved_selection_case(body, *, inspect=False, rejects=False):
+    invocation = query(SAVED_CALL, '') if inspect else 'val result<-{{'+SAVED_CALL+'}};'
+    source = IO+TYPES+SAVED_SELECTION+body+'}proc run(flag:bool)->void{'+invocation
+    source += 'behave @print(result);}run(true);run(false);'
+    return (source, 2, '', UNWRITTEN_RESULT) if rejects else (source, 0, '4\n4\n' if inspect else '7\n7\n', '')
 
 
 REF_POINTER_DEFINITION = recursive_pick('if(chosen is not null){return chosen;}else{return backup;};',
@@ -375,6 +395,59 @@ runner.CASES = {
     'query_keeps_successful_callee_writes_out_of_failure_paths': (
         queried_preparation('try{return first;}finally{ptr absent:u64=null in here;absent;first<-7u64;{}};',
             PREPARE_READ.replace('return 99u64;', 'return local;')), 2, '', UNINITIALIZED_LOCAL),
+    'saved_multitarget_selection_initialized_during_defer':
+        saved_selection_case('defer{'+SAVED_WRITE+'};return selected;'),
+    'query_proves_saved_multitarget_selection_initialized_during_defer':
+        saved_selection_case('defer{'+SAVED_WRITE+'};return selected;', inspect=True),
+    'saved_multitarget_selection_initialized_before_finalizer_rebind':
+        saved_selection_case('try{return selected;}finally{'+SAVED_WRITE+'selected=backup;{} };'),
+    'query_keeps_saved_initialization_after_finalizer_rebind':
+        saved_selection_case('try{return selected;}finally{'+SAVED_WRITE+'selected=backup;{} };', inspect=True),
+    'saved_selection_initialized_through_an_existing_second_view':
+        saved_selection_case('ptr held=selected;defer{selected=backup;'+SAVED_WRITE.replace('selected', 'held')+'};return selected;'),
+    'query_proves_saved_initialization_through_an_existing_second_view':
+        saved_selection_case('ptr held=selected;defer{selected=backup;'+SAVED_WRITE.replace('selected', 'held')+'};return selected;',
+                             inspect=True),
+    'saved_selection_initialized_through_a_view_rebound_during_cleanup':
+        saved_selection_case('ptr held=backup;defer{held=selected;selected=backup;'+
+                             SAVED_WRITE.replace('selected', 'held')+'};return selected;'),
+    'query_proves_saved_initialization_through_a_view_rebound_during_cleanup':
+        saved_selection_case('ptr held=backup;defer{held=selected;selected=backup;'+
+                             SAVED_WRITE.replace('selected', 'held')+'};return selected;', inspect=True),
+    'saved_multitarget_selection_initialized_by_a_prepared_transfer':
+        saved_selection_case('if(selected is not null){defer (<-)(selected,7u64);return selected;}else{return selected;};'),
+    'query_proves_prepared_transfer_to_saved_multitarget_selection':
+        saved_selection_case('if(selected is not null){defer (<-)(selected,7u64);return selected;}else{return selected;};',
+                             inspect=True),
+    'prepared_transfer_initializes_saved_target_after_its_slot_is_rebound':
+        saved_selection_case(SAVED_EAGER_REBIND),
+    'query_proves_prepared_initialization_after_saved_target_slot_rebind':
+        saved_selection_case(SAVED_EAGER_REBIND, inspect=True),
+    'prepared_transfer_and_return_can_select_the_same_target_through_different_slots':
+        saved_selection_case(SAVED_EAGER_COPY),
+    'query_compares_prepared_and_returned_selections_across_slots':
+        saved_selection_case(SAVED_EAGER_COPY, inspect=True),
+    'prepared_transfer_cannot_initialize_a_different_returned_selection':
+        saved_selection_case(SAVED_EAGER_OPPOSITE, rejects=True),
+    'query_requires_equality_between_prepared_and_returned_selections':
+        saved_selection_case(SAVED_EAGER_OPPOSITE, inspect=True, rejects=True),
+    'query_keeps_readiness_when_an_alternative_is_proven_null':
+        saved_selection_case(SAVED_WRITE+'return selected;', inspect=True),
+    'write_to_saved_selection_survives_rebind_by_later_action':
+        saved_selection_case('defer{selected=backup;};defer{'+SAVED_WRITE+'};return selected;'),
+    'rebind_by_earlier_action_does_not_retarget_saved_selection':
+        saved_selection_case('defer{'+SAVED_WRITE+'};defer{selected=backup;};return selected;', rejects=True),
+    'query_does_not_follow_a_slot_rebound_by_an_earlier_action':
+        saved_selection_case('defer{'+SAVED_WRITE+'};defer{selected=backup;};return selected;', inspect=True, rejects=True),
+    'same_possible_targets_do_not_establish_same_selected_target':
+        saved_selection_case(SAVED_OPPOSITE+'defer{'+SAVED_WRITE.replace('selected', 'opposite')+'};return selected;', rejects=True),
+    'query_requires_selection_equality_for_saved_initialization':
+        saved_selection_case(SAVED_OPPOSITE+'defer{'+SAVED_WRITE.replace('selected', 'opposite')+'};return selected;',
+                             inspect=True, rejects=True),
+    'replacement_does_not_inherit_old_saved_initialization':
+        saved_selection_case(SAVED_OPPOSITE+'defer{return opposite;};defer{'+SAVED_WRITE+'};return selected;', rejects=True),
+    'query_replacement_has_its_own_saved_initialization':
+        saved_selection_case(SAVED_OPPOSITE+'defer{return opposite;};defer{'+SAVED_WRITE+'};return selected;', inspect=True, rejects=True),
     'query_invalidates_written_boolean_evidence_from_overlapping_inputs': (
         IO+TYPES+PREPARE.replace('ptr second:u64 in O', 'ref setter:bool in O,ref gate:bool in O')+
         '{if(gate){setter<-false;if(gate){first<-7u64;{}}else{};}else{first<-7u64;{}};return first;}'+

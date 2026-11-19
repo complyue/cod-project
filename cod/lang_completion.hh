@@ -549,6 +549,8 @@ public:
   // A selection fact describes the current target, so rebinding can invalidate it.
   struct Selections {
     std::set<size_t> initialized, invalidated;
+    // Prepared operands carry immutable selection identities within a body.
+    std::set<size_t> initialized_captures;
     // Sufficient entry-target initialization for a current selected target.
     std::map<size_t, Initialization> initialized_if;
     // Initialization of entry targets survives changes to the current selection.
@@ -568,6 +570,8 @@ public:
       initialized.insert(id);
       initialized_if.erase(id);
       if (!invalidated.contains(id)) entry_initialized.insert(id);
+      else if (const auto target = targets.find(id); target != targets.end())
+        if (const auto entry = target->second.single_entry()) entry_initialized.insert(*entry);
     }
     std::optional<Initialization> initialization_requirements(size_t id) const {
       if (initialized.contains(id)) return Initialization{};
@@ -725,6 +729,7 @@ public:
         }
       }
       initialized.insert(next.initialized.begin(), next.initialized.end());
+      initialized_captures.insert(next.initialized_captures.begin(), next.initialized_captures.end());
       resolve(known);
     }
     void merge(const Selections &other) {
@@ -743,6 +748,7 @@ public:
         }
       }
       std::erase_if(initialized, [&](size_t id) { return !other.initialized.contains(id); });
+      std::erase_if(initialized_captures, [&](size_t id) { return !other.initialized_captures.contains(id); });
       std::erase_if(entry_initialized, [&](size_t id) { return !other.entry_initialized.contains(id); });
       std::erase_if(entry_nonnull, [&](size_t id) { return !other.entry_nonnull.contains(id); });
       std::erase_if(null_inputs, [&](size_t id) { return !other.null_inputs.contains(id); });
@@ -892,12 +898,40 @@ public:
     // Sufficient initialization of the saved result, independent of later slot
     // changes. Preserving an incoming result contributes no new requirement.
     std::optional<Initialization> initialization = Initialization{};
+    // Slots that still select the saved target on paths needing readiness.
+    // These are local completion evidence and never exported to a caller.
+    std::set<size_t> selection_bindings{};
+    std::optional<size_t> saved_capture{};
     bool operator==(const Returned &) const = default;
+    bool needs_initialization() const {
+      return !uninitialized.empty() || !initialization || !initialization->empty();
+    }
+    void initialize_saved_selection() {
+      uninitialized.clear();
+      initialization = Initialization{};
+      selection_bindings.clear();
+      saved_capture.reset();
+    }
     void initialize(const std::set<size_t> &known, const Selections &selections) {
       std::erase_if(uninitialized, [&](size_t target) { return known.contains(target); });
       if (initialization) std::erase_if(*initialization, [&](const auto &input) {
         return input.physical ? known.contains(input.id) : !input.frame && selections.entry_initialized.contains(input.id);
       });
+      if ((saved_capture && selections.initialized_captures.contains(*saved_capture)) ||
+          std::ranges::any_of(selection_bindings, [&](size_t binding) { return selections.initialized.contains(binding); }))
+        initialize_saved_selection();
+      if (!needs_initialization()) { selection_bindings.clear(); saved_capture.reset(); }
+    }
+    void advance(const Selections &next) {
+      if (selection_bindings.empty()) return;
+      if (std::ranges::any_of(selection_bindings, [&](size_t binding) { return next.entry_initialized.contains(binding); })) {
+        initialize_saved_selection();
+        return;
+      }
+      auto entry = selection_bindings;
+      std::erase_if(selection_bindings, [&](size_t binding) { return next.invalidated.contains(binding); });
+      for (const auto &[binding, target] : next.targets)
+        if (const auto source = target.single_entry(); source && entry.contains(*source)) selection_bindings.insert(binding);
     }
     void substitute(const Selections &before) {
       if (initialization) initialization = before.initialization_requirements(*initialization);
@@ -906,6 +940,13 @@ public:
       if (initialization) initialization = CleanupEquations::enter_initialization(*initialization, frame);
     }
     void merge(const Returned &other) {
+      if (!needs_initialization()) {
+        selection_bindings = other.selection_bindings;
+        saved_capture = other.saved_capture;
+      } else if (other.needs_initialization()) {
+        std::erase_if(selection_bindings, [&](size_t binding) { return !other.selection_bindings.contains(binding); });
+        if (saved_capture != other.saved_capture) saved_capture.reset();
+      }
       preserves = preserves || other.preserves;
       value.merge(other.value);
       targets.insert(other.targets.begin(), other.targets.end());
@@ -922,6 +963,8 @@ public:
       if (!next.preserves) {
         targets.clear(); uninitialized.clear(); null_sources.clear(); value.clear(); boolean.clear(); nullness.clear(); selection_sources.clear();
         initialization = Initialization{};
+        selection_bindings.clear();
+        saved_capture.reset();
       }
       merge(next);
       preserves = keep;
@@ -1104,6 +1147,7 @@ private:
       merge_read(result.reads, read, before);
     }
     combine_initialization(result.initialized, result.uninitialized, next.initialized, next.uninitialized, false);
+    result.returned.advance(next.selections);
     result.selections.then(next.selections, result.initialized);
     result.unknown_thrown = first.unknown_thrown || second.unknown_thrown || second.thrown.reads_unknown(first.payloads);
     result.returned.then(next.returned);
