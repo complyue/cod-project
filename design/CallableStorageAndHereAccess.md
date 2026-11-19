@@ -1,8 +1,10 @@
 # Callable storage and direct lexical access
 
-Design revision: 13 · 2026-11-19 · Confirmed source contract
+Design revision: 14 · 2026-11-19 · Confirmed source contract
 
 ## Design authority
+
+[H-CALLABLE-TAIL-20261119](../CHANGELOG.md#h-callable-tail-20261119) and [H-DEFER-RETURNING-20261119](../CHANGELOG.md#h-defer-returning-20261119) continue D-18-HERE-STORAGE at r14 for result ownership and deferred inspection. Compare the two brace forms and an independent full scope nested in a defer.
 
 [H-GENERATOR-RECEPTION-20261119](../CHANGELOG.md#h-generator-reception-20261119) continues D-18-HERE-STORAGE/P-611–P-612 at r13 for direct access to a lexically bound here parameter inside an immediate full scope. The D-29 nested-yield example checks activation identity and the two return destinations.
 
@@ -228,7 +230,7 @@ proc demo() -> u64 {
 | `{ break 7u64; }` | The call to plus_one. Only the addition in demo runs. | 107 |
 | `{ return 7u64; }` | The caller of demo. Neither addition runs. | 7 |
 
-A normal tail `{ 7u64 }` and a local return in `{{ return 7u64; }}` also yield 108. A nested ordinary statement group preserves the enclosing here body's destinations. A separately supplied here group establishes its own targets. Forwarding an existing formal preserves the original association, including the particular call activation under recursion. A nested full scope has its own callable boundary. Inside a generator loop body its own `continue` follows the [generator feedback contract](RangedForAndGenerators.md#explicit-continue-feedback).
+A normal tail `{ 7u64 }` and either local spelling `{{ 7u64 }}` or `{{ return 7u64; }}` also yield 108. A nested ordinary statement group preserves the enclosing here body's destinations. A separately supplied here group establishes its own targets. Forwarding an existing formal preserves the original association, including the particular call activation under recursion. A nested full scope has its own callable boundary. Inside a generator loop body its own `continue` follows the [generator feedback contract](RangedForAndGenerators.md#explicit-continue-feedback).
 
 ```cod
 func relay(here f() -> u64) -> u64 { return f() + 1u64; }
@@ -278,7 +280,7 @@ If name-only definition activation is retained, a later `effect @price;` would n
 
 ## Control, storage and interoperability
 
-- A standalone here block still owns local returns, `if returning`, local cleanup and checked failures. A nested immediate full scope can call an outer lexical here parameter such as `yield`. Its own return and implicit catch context remain local. An explicitly accessible exception variable has its ordinary ownership checks. A loop's lexical body keeps its distinctive nonlocal return and generator cleanup. Module defers drain in global reverse registration order with the original module contexts. A tail-call optimization can only retire a frame after its final live-slot use and cleanup. [Full scopes](ExceptionControl.md#full-scopes-as-immediate-ordinary-calls) · [Loop completion](RangedForAndGenerators.md#lexical-scope-and-completion)
+- A standalone here block owns its local return and normal tail result, cleanup and checked failures. Only its own deferred entries can inspect that result with `if returning`. A nested immediate full scope can call an outer lexical here parameter such as `yield`. Its own return and implicit catch context remain local. An explicitly accessible exception variable has its ordinary ownership checks. A loop's lexical body keeps its distinctive nonlocal return and generator cleanup. Module defers drain in global reverse registration order with the original module contexts. A tail-call optimization can only retire a frame after its final live-slot use and cleanup. [Full scopes](ExceptionControl.md#full-scopes-as-immediate-ordinary-calls) · [Loop completion](RangedForAndGenerators.md#lexical-scope-and-completion)
 - An installed here handler can execute through synchronous dynamic callees while its installation and defining slots are live. A later call can replace or release a regional target even while the module or lexical frame still exists. Snapshotting a regional reference freezes target selection, and a write to the live referent remains observable. A here read of a ref slot observes its current selection. Restoration on unwind cannot revive an ended owner. [Owner replacement](RegionalOwnership.md#replacing-an-occupied-region-owner)
 - Ordinary lexical callable holders, including functions represented by one word, remain ineligible for regional fields, regional arrays, DBMR persistence and unrestricted bits transfer. A region can store a relocatable data receiver. A structural result can deliver an ordinary callable to an eligible lexical destination. Permission for nominal lexical ADTs with callable fields has its own design scope. Foreign adapters must establish synchronous use, owner validity and cleanup before accepting a here entry. A native system retaining a callback for a later event needs a separate explicit lifetime contract. [Placement](CallableViewsAndCaptures.md#callable-views-have-lexical-storage) · [Foreign interfaces](RegionalAndLexicalStorageRefactor.md#foreign-interfaces-adapt-to-cod-semantics)
 

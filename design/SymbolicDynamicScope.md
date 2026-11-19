@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 219 · Recorded: 2026-11-19 · Phase: language/application co-design.
+Design revision: 220 · Recorded: 2026-11-19 · Phase: language/application co-design.
 
 ## Design authority
+
+[H-CALLABLE-TAIL-20261119](../CHANGELOG.md#h-callable-tail-20261119) applies the [callable result rules](CallableResultInference.md#results-of-proc-func-and-here-bodies) to calls, discards and double-brace callbacks at r220. An explicit procedure exit and a local callback tail each supply evidence to their own invocation.
 
 - **Discard and void.** [D-10-DISCARD](DesignAuthorityRegistry.md#d-10-discard), r219, records [H-DISCARD-CLEANUP-20261119](../CHANGELOG.md#h-discard-cleanup-20261119). Cleanup obligations survive every discard. H-104/C-41 and D-24 supply the expression-oriented and inferred-result baseline. P-629/P-630 connect visible result use with owner responsibility under charter §§3.2–3.3/4.3/8.1. [H-VOID-DISCARD-20261119](../CHANGELOG.md#h-void-discard-20261119) confirms [explicit discard of an independently typed operand](#void-inference-and-explicit-discard). Check an ignored scalar, a nullable borrow, a discarded owning temporary, a producer failure and incompatible conditional arms. No change to recursive inference or checked failures is authorized.
 
@@ -799,7 +801,7 @@ Conversion produces a value through an admitted conversion; assertion checks whe
 
 #### Void inference and explicit discard
 
-A callable can declare or infer void. A normally completing body with no value-producing return supplies [void inference evidence](CallableResultInference.md#completion-without-a-value). A use can independently discard a typed result. For example, calling a u64 function for its effects leaves the function’s result contract u64. The surrounding callable can still infer void. A throw or an outward return delivers no payload at the expression it leaves.
+A callable can declare or infer void. A bare return supplies [void inference evidence](CallableResultInference.md#completion-without-a-value). A normally completing func or full-scope here with no result payload also supplies that evidence. A use can independently discard a typed result. For example, calling a u64 function for its effects leaves the function’s result contract u64. The surrounding callable can still infer void from its own exits. A throw or an outward return delivers no payload at the expression it leaves.
 
 **Cleanup survives every discard.** Ordinary evaluation and ownership rules determine which obligations exist and who carries them on each path. Discarding a fresh owning result requires its ordinary cleanup exactly once. Discarding a borrowed view adds no referent read and leaves the owner’s release responsibility with its existing holder. Producer, partial-construction and cleanup failures follow their own contracts. This applies equally to implicit discard, omitted result fields and explicit `: void`. [Discarded compound outputs](ConstructionAndAcquisition.md#receiving-specifications)
 
@@ -1020,7 +1022,7 @@ The initial shorthand covers a single established fixed-arity callback signature
 
 At runtime evaluate the callee and written value arguments in their existing order, associate the trailing here body with the supplying activation at its written position, then prepare caller-context defaults and enter the callee. The body runs only on invocation. It may run repeatedly or be forwarded synchronously. Deferred use must still fit the original activation and all required owner lifetimes.
 
-Every return belonging to a double-brace callback is local. Each invocation has its own locals, cleanup, owner and return state. Ordinary callback-call propagation and catches apply. A required value uses explicit return. Both brace forms access the live enclosing slots with their actual owners.
+Every return belonging to a double-brace callback is local. Each invocation has its own locals, cleanup, owner and return state. Ordinary callback-call propagation and catches apply. A successful local value tail or explicit value return supplies the required callback result. Both brace forms access the live enclosing slots with their actual owners.
 
 **Parsing boundary and acceptance.** The attached block is part of one call expression, not an immediately executed expression after an incomplete call. A failed callback match is a source error, never a fallback to executing a separate scope. `apply(...); {{ ... }}` explicitly separates the call and an immediate full scope. Enclosing expression/control grammar determines attachment; overload lookup must not reclassify a control statement's body. Complete parser integration remains engineering work.
 
