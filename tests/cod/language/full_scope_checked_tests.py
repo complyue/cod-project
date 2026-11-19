@@ -50,6 +50,9 @@ PREPARE = ('proc prepare(ptr first:u64 in O,ptr second:u64 in O)'
 PREPARE_INPUTS = UNWRITTEN+'val other<-make local u64;'
 PREPARE_READ = ('try{ptr chosen=prepare(local,other);return chosen;}'
                 'catch(e:const NullPointerException){return 99u64;};')
+RECURSIVE_PICK = PICK.replace('right:T in O)', 'right:T in O,n:u64)')
+RECURSIVE_QUERY = PICK_QUERY.replace('choose(local,ready)', 'choose(local,ready,3u64)')
+RECURSIVE_STEP = 'return choose(left,right,n-1u64);'
 
 
 def guarded_reference(body):
@@ -62,6 +65,14 @@ def queried_pick(body):
 
 def queried_preparation(body, caller=PREPARE_READ):
     return IO+TYPES+PREPARE+'{'+body+'}'+query(PREPARE_INPUTS+caller, '')+'behave @print(result);'
+
+
+def recursive_pick(base, step=RECURSIVE_STEP, declaration=RECURSIVE_PICK):
+    return declaration+'{if(n==0u64){'+base+'}else{'+step+'};}'
+
+
+EXPANDING_PICK = recursive_pick('return right;', 'return choose(left,right,n-1u64,func[tag]()->const A{return tag;});',
+    RECURSIVE_PICK.replace('n:u64)', 'n:u64,tag:A)').replace('{T,owner O}', '{T,A,owner O}'))
 
 
 runner.CASES = {
@@ -212,6 +223,47 @@ runner.CASES = {
     'query_inspects_borrowed_signature_without_validating_generic_body': (
         IO+PICK+'{return 7u64;}'+UNWRITTEN+'val ready<-8u64;'
         'val result<-make local typeof(choose(local,ready)){4u64};behave @print(result);', 0, '4\n', ''),
+    'query_closes_recursive_borrowed_result': (
+        IO+recursive_pick('return right;')+query(RECURSIVE_QUERY)+'behave @print(result);', 0, '4\n', ''),
+    'query_rejects_recursive_permutation_with_unwritten_target': (
+        recursive_pick('return right;', 'return choose(right,left,n-1u64);')+query(RECURSIVE_QUERY),
+        2, '', UNWRITTEN_RESULT),
+    'query_closes_mutual_borrowed_returns_with_remapped_input_positions': (
+        IO+recursive_pick('return right;', 'return sibling(right,left,n-1u64);')+
+        recursive_pick('return left;', 'return choose(right,left,n-1u64);', RECURSIVE_PICK.replace('choose', 'sibling'))+
+        query(RECURSIVE_QUERY)+'behave @print(result);', 0, '4\n', ''),
+    'query_keeps_unwritten_target_from_mutual_base_case': (
+        recursive_pick('return right;', 'return sibling(left,right,n-1u64);')+
+        recursive_pick('return left;', declaration=RECURSIVE_PICK.replace('choose', 'sibling'))+
+        query(RECURSIVE_QUERY), 2, '', UNWRITTEN_RESULT),
+    'query_closes_recursive_finally_result_replacement': (
+        IO+recursive_pick('try{return left;}finally{return right;};')+
+        query(RECURSIVE_QUERY)+'behave @print(result);', 0, '4\n', ''),
+    'query_closes_recursive_defer_result_replacement': (
+        IO+recursive_pick('defer{return right;};return left;')+
+        query(RECURSIVE_QUERY)+'behave @print(result);', 0, '4\n', ''),
+    'query_closes_recursive_initialization': (
+        IO+TYPES+recursive_pick('left<-7u64;return left;', declaration=RECURSIVE_PICK.replace('func', 'proc')
+            .replace('where', 'throws NullPointerException where'))+query(RECURSIVE_QUERY, '')+
+        'behave @print(result);', 0, '4\n', ''),
+    'query_closes_recursive_result_over_two_concrete_type_arguments': (
+        IO+recursive_pick('return right;', 'return choose(left,right,n-1u64,0u32);',
+            RECURSIVE_PICK.replace('n:u64)', 'n:u64,tag:A)').replace('{T,owner O}', '{T,A,owner O}'))+
+        query(RECURSIVE_QUERY.replace('3u64)', '3u64,true)'))+'behave @print(result);', 0, '4\n', ''),
+    'query_distinguishes_a_recursive_null_result_from_incomplete_evidence': (
+        IO+recursive_pick('return null in O;')+query(UNWRITTEN+'val ready<-8u64;'
+            'ptr chosen=choose(local,ready,3u64);if(chosen is null){return 17u64;}else{return local;};')+
+        'behave @print(result);', 0, '4\n', ''),
+    'query_preserves_failed_recursive_call_paths': (
+        TYPES+recursive_pick('val failure<-make local NullPointerException;throw failure;',
+            declaration=RECURSIVE_PICK.replace('func', 'proc').replace('where', 'throws NullPointerException where'))+
+        query(UNWRITTEN+'val ready<-8u64;try{choose(local,ready,3u64);return 17u64;}'
+            'catch(e:const NullPointerException){return local;};', ''), 2, '', UNINITIALIZED_LOCAL),
+    'query_uses_declared_bound_for_expanding_recursive_type_arguments': (
+        EXPANDING_PICK+query(RECURSIVE_QUERY.replace('3u64)', '3u64,true)')), 2, '', UNWRITTEN_RESULT),
+    'query_inspects_a_signature_with_expanding_recursive_type_arguments': (
+        IO+EXPANDING_PICK+UNWRITTEN+'val ready<-8u64;'
+        'val result<-make local typeof(choose(local,ready,3u64,true)){4u64};behave @print(result);', 0, '4\n', ''),
     'query_reads_target_initialized_before_borrowed_return': (
         queried_preparation('first<-7u64;return first;'), 0, '4\n', ''),
     'query_reads_saved_target_initialized_in_finally': (
