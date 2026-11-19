@@ -72,6 +72,11 @@
   - Confirm which component(s) to test if not explicit in the request.
 - You may execute test scripts under `tests/` and its subdirectories (e.g., `tests/**/run-all.sh`) or invoke CTest/CMake test targets directly when running tests.
 
+## Diagnostics by compiler stage
+
+- Apply the [compiler diagnostics policy](applications/cod-booter/README.md#diagnostics-by-compiler-stage) to every language feature, compiler phase and diagnostic work item. The seed compiler must preserve correctness and report failures or useful observations directly available during that work. Assign additional analysis and elaborate diagnostic output to the CoD-written compiler.
+- Distinguish a safety or typing check from an optional warning about valid code. Preserve required checks, runtime behavior and sound unsupported-feature reporting in every supported seed path. A proposed language warning does not by itself commission a seed analysis pass.
+
 ## Compiler Terminology
 - Follow the [CoD operation terminology](design/CallableViewsAndCaptures.md#copying-moving-and-graph-transfer): CoD has no C++-style object copying/moving semantic model. Distinguish bits transfer, reference binding, ownership transfer, dedicated callable construction/capture and explicit graph transfer; native byte copying or C++ utility moves do not grant source-language permissions. Callable views require lexical-scope storage and cannot be stored in regions, including through compound carriers.
 - Follow the [alias glossary](design/CallableViewsAndCaptures.md#alias-terminology). Every use of the alias concept must identify **declared place aliasing**, **runtime target aliasing**, or **name/identity aliasing**; do not use unqualified alias/aliasing as an umbrella category. Apply this to design/development discussions, documentation, source comments, diagnostics and new/refactored interface or data names.
