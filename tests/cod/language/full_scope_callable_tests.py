@@ -507,6 +507,33 @@ runner.CASES = {
         'func compare(here step()->u64)->bool{return step()==7u64;}'
         'proc run()->u64{val result<-make local typeof(compare(){return false;}){true};return 7u64;}run();',
         2,'','return type does not satisfy the implicit callable result'),
+    'query_here_receiver_borrow_keeps_the_actual_argument_owner': (IO+
+        'func same(ref a:u64 in O,ref b:u64 in O)->bool where {owner O}{return a is b;}'
+        'func inspect(here step(ref item:u64 in O)->bool,ref source:u64 in O)->bool where {owner O}{return step(source);}'
+        'proc run()->void{val n<-7u64;val proof<-make local typeof(inspect(n)(ref item=)=>{same(item,n)}){true};'
+        'val local_proof<-make local typeof(inspect(n)(item)=>{{return same(item,n);}}){true};'
+        'behave @print(proof);behave @print(local_proof);return;}run();',0,'true\ntrue\n',''),
+    'query_here_receiver_keeps_invocation_owner_separate_from_supplier': (
+        'func same(ref a:u64 in O,ref b:u64 in O)->bool where {owner O}{return a is b;}'
+        'func inspect(here step(ref item:u64 in here)->bool)->bool{val n<-7u64;return step(n);}'
+        'proc run()->void{val n<-7u64;val proof<-make local typeof(inspect()(ref item=)=>{same(item,n)}){true};return;}run();',
+        2,'','arguments for one owner role have different actual owners'),
+    'query_here_receiver_retains_readonly_borrow': (
+        'func inspect(here step(ref item:const u64 in O)->u64,source:const u64 in O)->u64 where {owner O}{return step(source);}'
+        'val n<-7u64;val proof<-make local typeof(inspect(n)(ref item=)=>{item<-3u64;item}){7u64};',2,'','readonly'),
+    'query_here_receiver_rejects_readonly_ordinary_writable_borrow': (
+        'func inspect(here step(ref item:u64 in O)->u64,ref source:u64 in O)->u64 where {owner O}{return step(source);}'
+        'const val frozen<-7u64;val proof<-make local typeof(inspect(frozen)(ref item=)=>{item}){7u64};',
+        2,'','readonly argument cannot supply a writable borrowed parameter'),
+    'query_here_receiver_snapshot_has_independent_access': (IO+
+        'func inspect(here step(ref item:const u64 in O)->u64,source:const u64 in O)->u64 where {owner O}{return step(source);}'
+        'val n<-7u64;val proof<-make local typeof(inspect(n)(val item<-)=>{item<-3u64;item}){n};'
+        'behave @print(proof);',0,'7\n',''),
+    'query_here_receiver_snapshot_does_not_keep_the_lent_owner': (
+        'func same(ref a:u64 in O,ref b:u64 in O)->bool where {owner O}{return a is b;}'
+        'func inspect(here step(ref item:u64 in O)->bool,ref source:u64 in O)->bool where {owner O}{return step(source);}'
+        'proc run()->void{val n<-7u64;val proof<-make local typeof(inspect(n)(val item<-)=>{same(item,n)}){true};return;}run();',
+        2,'','arguments for one owner role have different actual owners'),
     'query_here_receiver_double_brace_has_local_return': (IO+
         'func compare(here step(n:u64)->u64,input:u64)->bool{return step(input)==7u64;}'
         'proc run()->bool{val result<-make local typeof(compare(7u64)(n)=>{{behave @print(90u64);return n;}}){true};'
