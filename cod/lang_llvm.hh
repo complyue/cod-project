@@ -60,6 +60,7 @@ class LLVMEmission {
   bool environments_ = false;
   unsigned environment_field_ = 0;
   std::vector<Type> callable_types_;
+  std::map<size_t, llvm::StructType *> product_layouts_;
   std::vector<llvm::Function *> general_, specialized_;
   struct HereEntry { llvm::Function *entry; llvm::StructType *activation; bool group; };
   std::map<size_t, HereEntry> here_entries_;
@@ -257,11 +258,13 @@ class LLVMEmission {
     auto *result = load(saved); if (result_type == scalar_) value_owners_[result] = saved; return result;
   }
   unsigned tag(const Type &type) {
+    const auto nominal_base = 8 + exception_categories.size();
+    if (type.kind == Type::product) return nominal_base + type.identity;
     if (type.kind == Type::procedure) {
       const auto found = std::find(callable_types_.begin(), callable_types_.end(), type);
       const auto id = std::distance(callable_types_.begin(), found);
       if (found == callable_types_.end()) callable_types_.push_back(type);
-      return 8 + exception_categories.size() + id;
+      return nominal_base + program_->schemas.size() + id;
     }
     switch (type.kind) {
     case Type::integer: return 1; case Type::uint8: return 2; case Type::uint32: return 3;
@@ -280,6 +283,30 @@ class LLVMEmission {
     case Type::exception: return exception_;
     default: throw std::logic_error("non-scalar native payload");
     }
+  }
+  llvm::StructType *product_layout(size_t root) {
+    if (const auto found = product_layouts_.find(root); found != product_layouts_.end()) return found->second;
+    std::vector<std::pair<size_t, size_t>> pending{{root, 0}};
+    while (!pending.empty()) {
+      auto &[id, field_index] = pending.back();
+      const auto &schema = program_->schemas.at(id);
+      if (field_index < schema.fields.size()) {
+        const auto &type = schema.fields[field_index++].type;
+        if (type.kind == Type::product && !product_layouts_.contains(type.identity))
+          pending.emplace_back(type.identity, 0);
+        continue;
+      }
+      std::vector<llvm::Type *> fields;
+      for (const auto &field : schema.fields) {
+        const auto &type = field.type;
+        fields.push_back(type.kind == Type::product ? product_layouts_.at(type.identity) : native_type(type));
+      }
+      // Fieldless products still need distinct addressable targets.
+      if (fields.empty()) fields.push_back(b_.getInt8Ty());
+      product_layouts_.emplace(id, llvm::StructType::get(context_, fields));
+      pending.pop_back();
+    }
+    return product_layouts_.at(root);
   }
   llvm::Value *pack(llvm::IRBuilder<> &builder, llvm::Value *value, const Type &type) {
     if (type.kind == Type::exception) {
@@ -934,8 +961,21 @@ class LLVMEmission {
     if (fact.builtin == BuiltinOperation::identity) {
       auto *left_owner = selected_owner(*expr.children[0]);
       auto *right_owner = selected_owner(*expr.children[1]);
+      auto *left = view_address(arguments[0]);
+      auto *right = view_address(arguments[1]);
       auto *equal = b_.CreateAnd(b_.CreateICmpEQ(left_owner, right_owner),
-          b_.CreateICmpEQ(view_address(arguments[0]), view_address(arguments[1])));
+          b_.CreateICmpEQ(left, right));
+      std::map<bool, std::vector<size_t>> distinct_subobjects;
+      for (size_t i = 0; i < contexts_.size(); ++i) {
+        const auto &a = contexts_[i].at(expr.children[0].get()).type;
+        const auto &b = contexts_[i].at(expr.children[1].get()).type;
+        distinct_subobjects[a != b && (a.kind == Type::product || b.kind == Type::product)].push_back(i);
+      }
+      if (distinct_subobjects.contains(true)) {
+        auto *same_locator = contextual_value(expr, distinct_subobjects, "identity.subobject",
+            [&](bool distinct) -> llvm::Value * { return distinct ? b_.CreateIsNull(left) : b_.getTrue(); }, b_.getInt1Ty());
+        equal = b_.CreateAnd(equal, same_locator);
+      }
       if (expr.text == "is not") equal = b_.CreateNot(equal);
       return outcome(pack(equal, Type::boolean), integer(0), integer(0), null_pointer());
     }
@@ -2179,6 +2219,22 @@ class LLVMEmission {
       return nullptr;
     }
     case K::field: {
+      if (fact.product_field) {
+        const auto &parent = *expr.children.front();
+        auto *address = emit_expression(parent, Projection::target);
+        if (!reachable()) return nullptr;
+        address = checked_address(address, parent, expr.at);
+        std::map<std::pair<size_t, size_t>, std::vector<size_t>> projections;
+        for (size_t i = 0; i < contexts_.size(); ++i) {
+          const auto &field = contexts_[i].at(&expr);
+          if (field.product_field) projections[{field.operand_type.identity, *field.product_field}].push_back(i);
+        }
+        auto *field = contextual_value(expr, projections, "product.field", [&](const auto &projection) {
+          const auto [schema, number] = projection;
+          return b_.CreateStructGEP(product_layout(schema), address, number);
+        }, b_.getPtrTy());
+        return !read ? field : discard ? empty_scalar() : load_place(field, expr);
+      }
       auto *value = emit_expression(*expr.children[0]);
       if (!reachable()) return nullptr;
       const auto &type = contexts_.front().at(expr.children[0].get()).type;
@@ -2187,6 +2243,19 @@ class LLVMEmission {
       auto *field = b_.CreateExtractValue(payload, index);
       if (expr.text == "cause_count") field = b_.CreateCall(runtime("cod_lang_exception_count", b_.getInt64Ty(), {b_.getInt64Ty()}), {field});
       return pack(field, Type::uint64);
+    }
+    case K::make_object: {
+      auto *address = storage_.at(*fact.place);
+      auto *layout = product_layout(fact.operand_type.identity);
+      for (const auto &initializer : expr.children) {
+        const auto &input = *initializer->children.front();
+        auto *value = emit_expression(input);
+        if (!reachable()) return nullptr;
+        value = convert_result(*initializer, input, value);
+        auto *field = b_.CreateStructGEP(layout, address, *contexts_.front().at(initializer.get()).product_field);
+        assign_place(field, value, *initializer, &CheckedOperation::operand_type);
+      }
+      return read ? empty_scalar() : address;
     }
     case K::raise: {
       llvm::Value *value = expr.children.empty() ? load(storage_.at(*fact.place)) : emit_expression(*expr.children[0]);
@@ -2384,9 +2453,10 @@ class LLVMEmission {
       if (storage_types.empty()) formats.insert(place_format(binding.type.kind));
       else for (const auto type : storage_types[i]) formats.insert(place_format(type));
       llvm::Type *layout = scalar_;
-      if (!formats.contains(Type::void_type))
+      if (binding.type.kind == Type::product) layout = product_layout(binding.type.identity);
+      else if (!formats.contains(Type::void_type))
         layout = formats.size() == 1 ? native_type(Type{*formats.begin()}) : b_.getInt64Ty();
-      auto *place = binding.borrowed ? nullptr : slot(layout, binding.name + ".storage");
+      auto *place = binding.borrowed || binding.subobject ? nullptr : slot(layout, binding.name + ".storage");
       storage_.push_back(place);
       if (place && environments_ && layout == scalar_) initialize_value(place);
     }

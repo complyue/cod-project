@@ -90,6 +90,7 @@ struct CheckedOperation {
   std::set<size_t> callable_targets;
   std::optional<std::set<size_t>> callable_choices;
   std::optional<size_t> place;
+  std::optional<size_t> product_field;
   std::optional<size_t> binding;
   // Immutable selected reference, independent of the mutable binding version.
   std::optional<size_t> selection_identity;
@@ -220,6 +221,8 @@ struct CheckedStorage {
   bool read_only;
   bool borrowed = false;
   size_t binding = 0;
+  bool subobject = false;
+  std::vector<size_t> fields = {};
 };
 
 enum class PlaceKind { value, reference, pointer, mixed };

@@ -325,7 +325,7 @@ struct Expression {
                     try_scope, handler, raise, return_value, deferred, make_region, touch, effect_group, transfer, procedure_effect,
                     pointer_group, pointer, make_local, rebind, region_binding, callable, alias, capture_owner,
                     here_body, named_argument, break_value, continue_value, typed_expression, return_tail,
-                    processor_composition, pipeline, here_binding };
+                    processor_composition, pipeline, here_binding, make_object };
   Kind kind;
   Location at;
   std::string text;
@@ -343,6 +343,7 @@ struct Expression {
   std::string owner_name = {};
   std::shared_ptr<ReceivingHeader> receiving = {};
   std::unique_ptr<PipelineEndpoints> endpoints = {};
+  bool initializer_block = false;
   // A supplied body is stored after the written operands. It binds slot one.
   bool has_here_body() const { return !children.empty() && children.back()->kind == Kind::here_body; }
   bool inspects_return(bool binds_payload = false) const;
@@ -1214,12 +1215,23 @@ class Parser {
         if (is("{")) expr->children.push_back(block());
         return expr;
       }
-      auto expr = make(Expression::Kind::make_region, name(TokenKind::identifier));
-      expect("(");
-      expect("capacity");
-      expect("=");
-      expr->children.push_back(expression());
-      expect(")");
+      const bool legacy_region = is("(", 1) && is("capacity", 2) && is("=", 3);
+      auto expr = make(legacy_region ? Expression::Kind::make_region : Expression::Kind::make_object,
+                       name(TokenKind::identifier));
+      if (legacy_region) {
+        expect("(");
+        expect("capacity");
+        expect("=");
+        expr->children.push_back(expression());
+        expect(")");
+      } else {
+        expr->annotation = Type{Type::named, expr->text};
+        if (is("("))
+          fail(peek().at, "micro-dispatch implementation gap: ordinary constructor arguments; this is not a language restriction");
+        if (take("in")) expr->owner_name = ordinary_name().text;
+        if (!is("{")) return expr;
+        expr->initializer_block = true;
+      }
       expect("{");
       while (!take("}")) {
         auto field = make(Expression::Kind::field, field_name());

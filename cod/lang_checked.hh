@@ -1852,6 +1852,7 @@ class ScalarChecker {
     if (read_only) fail(at, "cannot write through a readonly destination");
   }
   static void transfer_type(const Type &source, const Type &destination, const Location &at) {
+    if (destination.kind == Type::product) implementation_gap(at, "whole-product bits transfer");
     if (!transfers_value(source, destination)) fail(at, "bits transfer source does not satisfy destination type");
   }
   static void require_value(const Type &type, const Location &at) {
@@ -1862,8 +1863,15 @@ class ScalarChecker {
     using K = Expression::Kind;
     if (type == Type::null_ref) fail(declaration.at, "a null initializer requires an explicit target type");
     if (initial == Type::never && !declaration.annotation && declaration.children.front()->kind != K::make_local) return;
-    require_value(type, group.at);
     const auto &kind = group.declaration_kind;
+    if (type.kind == Type::product) {
+      if ((kind != "ref" && kind != "ptr") || (initial != Type::never && borrowed != true))
+        implementation_gap(declaration.at, "materializing a whole product as an independent value");
+      if (initial != Type::never && initial != Type::null_ref && initial != type)
+        fail(declaration.at, "reference initializer requires the declared product type");
+      return;
+    }
+    require_value(type, group.at);
     const bool callable = kind == "func" || kind == "proc";
     if (callable && (type.kind != Type::procedure || type.pure_callable != (kind == "func")))
       fail(declaration.at, "callable declaration requires a matching func/proc value");
@@ -3573,8 +3581,22 @@ class ScalarChecker {
   }
   void require_initialized(const CheckedOperation &view, const Location &at, const std::string &name) {
     if (view.initialized_target()) return;
-    for (const auto place : view.targets)
+    for (const auto place : view.targets) {
+      if (place != null_target && !storage(place).fields.empty()) {
+        const auto selected = selected_target(view, place, true);
+        std::vector<size_t> pending = storage(place).fields;
+        while (!pending.empty()) {
+          const auto field = pending.back();
+          pending.pop_back();
+          const auto &subobject = storage(field);
+          if (subobject.fields.empty())
+            require_initialized(field, at, subobject.name.substr(subobject.name.rfind('.') + 1), {}, selected);
+          else pending.insert(pending.end(), subobject.fields.begin(), subobject.fields.end());
+        }
+        continue;
+      }
       require_initialized(place, at, name, current_binding(view), selected_target(view, place, true));
+    }
   }
   void require_initialized(size_t place, const Location &at, const std::string &name, std::optional<size_t> selection = {},
       std::optional<CleanupEquations::ConditionFacts> target = {}) {
@@ -4316,13 +4338,15 @@ class ScalarChecker {
         return fact.builtin_name == "-" ? std::uint64_t{0} - *value : *value;
     return {};
   }
-  Type resolve_local_type(const Type &type, const CheckedInstance *instance, const Location &at) const {
+  Type resolve_local_type(const Type &type, const CheckedInstance *instance, const Location &at,
+                          bool product_view = false) const {
     Type resolved;
     if (instance) {
       const auto &method = program_.methods[instance->method];
       resolved = substitute(type, method, instance->substitutions);
     } else resolved = resolve_type(type);
-    if (!lexical_value_type(resolved)) implementation_gap(at, "non-value local storage type '" + type_name(type) + "'");
+    if (!lexical_value_type(resolved) && !(product_view && resolved.kind == Type::product))
+      implementation_gap(at, "non-value local storage type '" + type_name(type) + "'");
     return resolved;
   }
   Type resolve_type(Type type, const CheckedMethod *method = nullptr, const Substitutions *bindings = nullptr,
@@ -5723,6 +5747,62 @@ class ScalarChecker {
   static void check_exception_field(const Expression &expr) {
     if (expr.text != "category" && expr.text != "site" && expr.text != "requested" && expr.text != "available" && expr.text != "cause_count")
       fail(expr.at, "unknown intrinsic exception field '" + expr.text + "'");
+  }
+  const CheckedSchema &product_schema(const Type &type, const Location &at) const {
+    if (type.kind != Type::product) implementation_gap(at, "ordinary construction requires a supported product type");
+    const auto &schema = program_.schemas.at(type.identity);
+    if (!schema.bits) implementation_gap(at, "construction or projection of a reference-bearing product");
+    return schema;
+  }
+  static size_t product_field(const CheckedSchema &schema, const Expression &member) {
+    for (size_t i = 0; i < schema.fields.size(); ++i)
+      if (schema.fields[i].source->name == member.text) return i;
+    fail(member.at, "unknown field '" + member.text + "' of '" + schema.source->name + "'");
+  }
+  static bool readonly_field(const CheckedSchema::Field &field) {
+    return field.source->read_only || field.source->fixed_binding;
+  }
+  static std::vector<size_t> product_initializers(const CheckedSchema &schema, const Expression &expr) {
+    std::set<size_t> initialized;
+    std::vector<size_t> order;
+    for (const auto &item : expr.children) {
+      const auto index = product_field(schema, *item);
+      const auto &field = schema.fields[index];
+      if (item->binding != "<-") fail(item->at, "a direct product field requires bits transfer '<-'");
+      if (field.type.kind == Type::product) implementation_gap(item->at, "whole-product field initialization");
+      if (!initialized.insert(index).second && readonly_field(field))
+        fail(item->at, "readonly field '" + item->text + "' is initialized more than once");
+      order.push_back(index);
+    }
+    return order;
+  }
+  static void complete_product(const CheckedSchema &schema, const std::vector<size_t> &order, const Location &at) {
+    const std::set<size_t> initialized(order.begin(), order.end());
+    for (size_t i = 0; i < schema.fields.size(); ++i)
+      if (!initialized.contains(i))
+        fail(at, "product construction is missing initialization of field '" + schema.fields[i].source->name + "'");
+  }
+  size_t reserve_product(const Type &type, const Location &at) {
+    const auto name = "$product." + std::to_string(storage_->size());
+    if (delayed_ || declaration_scope(name, at).id != cleanup_scope_ ||
+        std::ranges::any_of(active_loops_, [&](const auto *loop) { return cleanup_scope_ < loop_states_.at(loop).first; }))
+      implementation_gap(at, "product allocation in a repeated or deferred group requires a separate full lexical scope");
+    const auto root = declare(name, type, false, true, at, false);
+    std::vector<size_t> pending{root};
+    for (size_t next = 0; next < pending.size(); ++next) {
+      const auto parent = pending[next];
+      const auto &schema = product_schema(storage(parent).type, at);
+      for (const auto &field : schema.fields) {
+        if (storage_->size() - root >= 4096)
+          fail(at, "compiler resource limit: too many subobjects in one lexical product");
+        const auto name = "$field." + std::to_string(storage_->size()) + "." + field.source->name;
+        const auto place = declare(name, field.type, readonly_field(field), true, at, false);
+        (*storage_)[place].subobject = true;
+        (*storage_)[parent].fields.push_back(place);
+        if (field.type.kind == Type::product) pending.push_back(place);
+      }
+    }
+    return root;
   }
   void check_query_binding(const std::string &name, const Location &at, bool owner_metadata = false) const {
     if (const auto id = lexical_.lookup(name)) {
@@ -7449,7 +7529,7 @@ class ScalarChecker {
                                      bool contextual, const Type *expected, std::vector<Type> *alternatives,
                                      ExpectedTypeUse expected_use, EvidenceRead read) const {
     using K = Expression::Kind;
-    if (state.here_control && (expr.kind == K::deferred || expr.kind == K::make_local || expr.kind == K::make_region ||
+    if (state.here_control && (expr.kind == K::deferred || expr.kind == K::make_local || expr.kind == K::make_object || expr.kind == K::make_region ||
         expr.kind == K::allocate || (expr.kind != K::return_test && expr.owner_name == "here")))
       implementation_gap(expr.at, "supplier-owned allocation, owner selection or defer from a here group");
     if (state.root_failure_covered.has_value() && expr.kind == K::deferred)
@@ -7548,7 +7628,8 @@ class ScalarChecker {
       if (!state.validating_body) switch (expr.kind) {
       case K::integer: case K::real: case K::boolean: case K::return_test: case K::null_ref: case K::name: case K::symbol:
       case K::unary: case K::binary: case K::call: case K::value_call: case K::behave: case K::perform: case K::field:
-      case K::conditional: case K::block: case K::grouped: case K::transfer: case K::rebind: case K::typed_expression: break;
+      case K::conditional: case K::block: case K::grouped: case K::transfer: case K::rebind: case K::typed_expression:
+      case K::make_object: break;
       case K::callable:
         if (expr.definition->name.empty()) break;
         [[fallthrough]];
@@ -7681,10 +7762,14 @@ class ScalarChecker {
         const bool value = expr.declaration_kind == "val" || expr.declaration_kind == "func" || expr.declaration_kind == "proc";
         if (state.required && value && !declaration->owner_name.empty())
           fail(declaration->at, "val storage belongs to its lexical scope, not an external owner");
-        const auto declared_owner = declaration->owner_name.empty() ? std::optional<EvidenceOwner>{} : owner_evidence(declaration->owner_name, state, declaration->at);
+        const auto declared_owner = declaration->owner_name == "here" ? state.full_scope_owner :
+            declaration->owner_name.empty() ? std::optional<EvidenceOwner>{} : owner_evidence(declaration->owner_name, state, declaration->at);
         const auto declared = declaration->annotation ?
             std::optional<Type>{evidence_annotation(*declaration->annotation, state)} : std::nullopt;
         const auto &initializer = *declaration->children.front();
+        if (state.required && initializer.kind == K::make_object && initializer.owner_name.empty() &&
+            declared_owner && compare_owners(declared_owner, state.full_scope_owner, &state) != OwnerMatch::satisfied)
+          implementation_gap(initializer.at, "product construction in the receiver's external owner");
         std::optional<Type> initial, storage_type;
         std::optional<PresenceBranches> boolean;
         if (initializer.kind == K::make_local) {
@@ -7711,6 +7796,8 @@ class ScalarChecker {
                                     declaration->at);
           }
           check_initializer_type(expr, *declaration, *initial, *type, borrowed);
+          if (type->kind == Type::product && state.value.mixed_view)
+            implementation_gap(initializer.at, "a product initializer mixing a target and an independent value");
           if (*initial != Type::never && borrowed == true)
             check_initializer_access(*declaration, state.value.read_only.value_or(false));
           if (proving_ && validating_ && expr.declaration_kind == "ref" && *initial != Type::never &&
@@ -7814,6 +7901,28 @@ class ScalarChecker {
     case K::make_local: {
       const auto storage = local_storage_evidence(expr, state);
       return storage.completes ? storage.type : std::optional<Type>{Type::never};
+    }
+    case K::make_object: {
+      const auto type = evidence_annotation(*expr.annotation, state);
+      if (type.kind != Type::product && !state.required) return {};
+      const auto &schema = product_schema(type, expr.at);
+      if (!expr.owner_name.empty() && expr.owner_name != "here" && state.required &&
+          compare_owners(owner_evidence(expr.owner_name, state, expr.at), state.full_scope_owner, &state) != OwnerMatch::satisfied)
+        implementation_gap(expr.at, "product construction outside the current lexical owner");
+      const auto order = product_initializers(schema, expr);
+      bool completes = true;
+      for (size_t i = 0; i < order.size(); ++i) {
+        const auto &item = *expr.children[i];
+        const auto value = type_evidence(*item.children.front(), state, false, nullptr, nullptr,
+                                         ExpectedTypeUse::materialization, completes);
+        if (state.required && value && *value != Type::never) transfer_type(*value, schema.fields[order[i]].type, item.at);
+        completes = completes && value != Type::never;
+      }
+      if (!completes) return Type::never;
+      if (expr.initializer_block) complete_product(schema, order, expr.at);
+      view = {false, true, {}, state.full_scope_owner};
+      target_facts.presence = TargetPresence::present;
+      return type;
     }
     case K::transfer: case K::rebind: {
       const auto type = child(0, false, true, EvidenceRead::target); view = state.value;
@@ -8684,10 +8793,28 @@ class ScalarChecker {
       return result;
     }
     case K::field: {
-      const auto type = child(0);
+      const auto type = child(0, false, true, EvidenceRead::target);
       if (type == Type::never) return Type::never;
-      if (state.required && type && type->kind == Type::exception) check_exception_field(expr);
-      return type && type->kind == Type::exception ? std::optional<Type>{Type::uint64} : std::nullopt;
+      if (type && type->kind == Type::product) {
+        const auto &schema = product_schema(*type, expr.at);
+        const auto &field = schema.fields[product_field(schema, expr)];
+        const auto parent = state.value;
+        if (state.required && (parent.view != true || parent.mixed_view))
+          implementation_gap(expr.at, "field selection requires an existing product target");
+        read_type_target(state, parent, state.target);
+        auto access = parent.read_only;
+        if (readonly_field(field)) access = true;
+        view = {access, true, true, parent.owner};
+        view.place_owners = parent.place_owners;
+        view.storage_kind = PlaceKind::value;
+        target_facts.presence = TargetPresence::present;
+        return field.type;
+      }
+      if (!type || type->kind != Type::exception) return {};
+      require_type_initialized(state, state.target, expr.children.front()->text, expr.at);
+      read_type_target(state, state.value, state.target);
+      if (state.required) check_exception_field(expr);
+      return Type::uint64;
     }
     case K::break_value: case K::continue_value: {
       if (!state.here_control) { state.complete = false; return {}; }
@@ -10470,7 +10597,7 @@ class ScalarChecker {
     return bounded;
   }
   std::optional<Type> pipeline_value_evidence(const Expression &expr, TypeEvidenceState &state) const {
-    const auto &operand = ungrouped_processor(expr);
+    const auto &operand = ungrouped_expression(expr);
     const auto op = pipeline_operator(operand.text);
     if (!op || op->kind != PipelineOperator::Kind::composition || operand.intrinsic || operand.children.size() != 2 ||
         (operand.kind != Expression::Kind::processor_composition && operand.kind != Expression::Kind::call))
@@ -10515,7 +10642,7 @@ class ScalarChecker {
       const auto &operand = *inputs.canonical[i];
       const auto type = pipeline_value_evidence(operand, state);
       if (!type) {
-        if (structural_pipeline_operand(ungrouped_processor(operand), state)) return {};
+        if (structural_pipeline_operand(ungrouped_expression(operand), state)) return {};
         implementation_gap(operand.at, "overloaded pipeline operand without independent type evidence");
       }
       types[i] = *type;
@@ -11016,13 +11143,13 @@ class ScalarChecker {
                                        : *syntax.body;
     return demand_supplied_here(body, contract, signature, std::move(owners), result, supplier, operations);
   }
-  static const Expression &ungrouped_processor(const Expression &expr) {
+  static const Expression &ungrouped_expression(const Expression &expr) {
     const auto *operand = &expr;
     while (operand->kind == Expression::Kind::grouped) operand = operand->children.front().get();
     return *operand;
   }
   void pipeline_stages(const Expression &expr, bool traversal, std::vector<const Expression *> &stages) const {
-    const auto &operand = ungrouped_processor(expr);
+    const auto &operand = ungrouped_expression(expr);
     if (operand.kind != Expression::Kind::processor_composition) {
       stages.push_back(&operand);
       return;
@@ -11309,7 +11436,7 @@ class ScalarChecker {
       }
     }
     if (!inherited) {
-      if (ungrouped_processor(syntax.target).kind != K::processor_composition && !syntax.upstream)
+      if (ungrouped_expression(syntax.target).kind != K::processor_composition && !syntax.upstream)
         implementation_gap(initializer.at, "establishing an open pipeline from a lone operand");
       pipeline_stages(syntax.target, true, saved.stages);
       pipeline_stages(syntax.target, false, plan.written);
@@ -11612,7 +11739,7 @@ class ScalarChecker {
       }
     }
     if (!syntax.body && !syntax.terminal) implementation_gap(expr.at, "open pipeline connections");
-    if (syntax.upstream || ungrouped_processor(syntax.target).kind == K::processor_composition) {
+    if (syntax.upstream || ungrouped_expression(syntax.target).kind == K::processor_composition) {
       check_attached_pipeline(expr, syntax, supplier, operations, operation, read, discard);
       return;
     }
@@ -11988,6 +12115,8 @@ class ScalarChecker {
     operation.read_only = slot.read_only;
     operation.fixed_binding = slot.fixed;
     operation.view = true;
+    if (read && operation.type.kind == Type::product)
+      implementation_gap(expr.at, "reading a whole product as an independent value");
     operation.initialization = selection_initialization(lexical_, selected);
     if (read) dereference(operation, expr.at);
     for (const auto place : operation.targets) {
@@ -12025,7 +12154,7 @@ class ScalarChecker {
     using K = Expression::Kind;
     CheckedOperation operation;
     if (checking_method_ && checking_method_->here_group &&
-        (expr.kind == K::deferred || expr.kind == K::make_local || expr.kind == K::make_region ||
+        (expr.kind == K::deferred || expr.kind == K::make_local || expr.kind == K::make_object || expr.kind == K::make_region ||
          expr.kind == K::allocate || (expr.kind != K::return_test && expr.owner_name == "here")))
       implementation_gap(expr.at, "supplier-owned allocation, owner selection or defer from a here group");
     if (expr.spread) implementation_gap(expr.at, "spread arguments");
@@ -12041,7 +12170,7 @@ class ScalarChecker {
         op && op->kind == PipelineOperator::Kind::consumer && !expr.intrinsic) {
       if (expr.children.size() != 2 || expr.has_here_body())
         fail(expr.at, "a terminal operator call requires a traversal and a sink");
-      const auto &source = ungrouped_processor(*expr.children[op->reversed]);
+      const auto &source = ungrouped_expression(*expr.children[op->reversed]);
       const auto traversal = source.kind == K::pipeline ? pipeline_syntax(source) : HereInvocation{source};
       if (traversal.body || traversal.terminal) fail(source.at, "a whole-traversal terminal requires an open consumer port");
       check_pipeline_terminal_operator(expr, traversal, *expr.children[!op->reversed], !op->reversed,
@@ -12783,10 +12912,12 @@ class ScalarChecker {
         std::optional<size_t> owner;
         if (!declaration->owner_name.empty()) {
           if (value) fail(declaration->at, "val storage belongs to its lexical scope, not an external owner");
-          owner = named_owner(declaration->owner_name, declaration->at);
+          owner = declaration->owner_name == "here" ? cleanup_scope_ : named_owner(declaration->owner_name, declaration->at);
         }
         const auto &initializer = *declaration->children.front();
         const bool copy = value || declaration->binding == "<-";
+        if (initializer.kind == K::make_object && initializer.owner_name.empty() && owner && *owner != cleanup_scope_)
+          implementation_gap(initializer.at, "product construction in the receiver's external owner");
         Type initial_type;
         bool initialized = true;
         bool completes = true;
@@ -12814,14 +12945,18 @@ class ScalarChecker {
           }
           operations[&initializer] = allocation;
         } else {
-          const auto annotation = declaration->annotation ? resolve_local_type(*declaration->annotation, instance, declaration->at) : Type{};
+          const auto annotation = declaration->annotation ?
+              resolve_local_type(*declaration->annotation, instance, declaration->at, !copy) : Type{};
           initial_type = check(initializer, instance, operations, copy, false, annotation.kind == Type::procedure ? &annotation : nullptr);
           completes = initial_type != Type::never;
         }
-        const auto type = declaration->annotation ? resolve_local_type(*declaration->annotation, instance, declaration->at) : initial_type;
+        const auto type = declaration->annotation ?
+            resolve_local_type(*declaration->annotation, instance, declaration->at, !copy) : initial_type;
         const auto &source = operations.at(&initializer);
         const bool borrowed = !copy && source.view;
         const bool mixed = borrowed && source.mixed_view;
+        if (type.kind == Type::product && mixed)
+          implementation_gap(initializer.at, "a product initializer mixing a target and an independent value");
         if (completes && owner)
           check_initializer_owner(borrowed, mixed, std::any_of(source.owners.begin(), source.owners.end(),
               [&](size_t actual) { return actual != *owner; }), declaration->at);
@@ -13136,11 +13271,90 @@ class ScalarChecker {
       note_abrupt(expr.at, {}, {1, true});
       break;
     }
+    case K::make_object: {
+      const auto type = resolve_local_type(*expr.annotation, instance, expr.at, true);
+      const auto &schema = product_schema(type, expr.at);
+      if (read && !discard) implementation_gap(expr.at, "reading a whole product as an independent value");
+      if (!expr.owner_name.empty() && expr.owner_name != "here" && named_owner(expr.owner_name, expr.at) != cleanup_scope_)
+        implementation_gap(expr.at, "product construction outside the current lexical owner");
+      const auto order = product_initializers(schema, expr);
+      const auto root = reserve_product(type, expr.at);
+      operation.type = operation.operand_type = type;
+      operation.view = true;
+      select_targets(operation, {root});
+      operation.owners = {storage(root).scope};
+      for (size_t i = 0; i < order.size(); ++i) {
+        const auto &item = *expr.children[i];
+        const auto index = order[i];
+        CheckedOperation field;
+        field.operand_type = schema.fields[index].type;
+        field.product_field = index;
+        const auto supplied = check(*item.children.front(), instance, operations);
+        field.type = supplied == Type::never ? Type{Type::never} : field.operand_type;
+        operations.insert_or_assign(&item, std::move(field));
+        if (supplied == Type::never) {
+          operation.type = Type::never;
+          lexical_.live = false;
+          continue;
+        }
+        transfer_type(supplied, schema.fields[index].type, item.at);
+        if (operation.type == Type::never) continue;
+        const auto place = storage(root).fields[index];
+        initialize(place);
+        if (schema.fields[index].type == Type::boolean) {
+          CheckedOperation target;
+          select_targets(target, {place});
+          write_predicate(target, predicate_of(operations.at(item.children.front().get())), item.at);
+        }
+      }
+      if (expr.initializer_block && operation.type != Type::never) {
+        complete_product(schema, order, expr.at);
+        initialize(root);
+      }
+      break;
+    }
     case K::field: {
-      const auto source = child(0);
-      if (source.kind != Type::exception && source != Type::never) implementation_gap(expr.at, "non-exception field selection");
-      check_exception_field(expr);
-      operation.type = source == Type::never ? Type{Type::never} : Type{Type::uint64};
+      const auto source = child(0, false);
+      if (source == Type::never) {
+        const auto &base = ungrouped_expression(*expr.children.front());
+        const auto &type = operations.at(&base).operand_type;
+        if (type.kind == Type::product) product_field(product_schema(type, expr.at), expr);
+        else check_exception_field(expr);
+        operation.type = Type::never;
+        break;
+      }
+      const auto &parent = operations.at(expr.children.front().get());
+      if (source.kind == Type::exception) {
+        read_view(parent, expr.at, expr.children.front()->text);
+        check_exception_field(expr);
+        operation.type = Type::uint64;
+        break;
+      }
+      if (source.kind != Type::product) implementation_gap(expr.at, "field selection for this target type");
+      const auto &schema = product_schema(source, expr.at);
+      const auto index = product_field(schema, expr);
+      const auto &field = schema.fields[index];
+      if (!parent.view || parent.mixed_view) implementation_gap(expr.at, "field selection requires an existing product target");
+      if (read && field.type.kind == Type::product) implementation_gap(expr.at, "reading a whole product as an independent value");
+      require_live_view(parent, expr.at);
+      dereference(parent, expr.at);
+      std::set<size_t> fields;
+      for (const auto place : parent.targets) if (place != null_target) {
+        if (storage(place).fields.size() != schema.fields.size())
+          implementation_gap(expr.at, "product target with unproved field storage");
+        fields.insert(storage(place).fields[index]);
+      }
+      select_targets(operation, fields);
+      operation.type = field.type;
+      operation.operand_type = source;
+      operation.product_field = index;
+      operation.view = true;
+      operation.owners = parent.owners;
+      operation.read_only = parent.read_only || readonly_field(field);
+      if (read) {
+        require_initialized(operation, expr.at, expr.text);
+        operation.predicate = stored_predicate(operation);
+      }
       break;
     }
     case K::raise: {
