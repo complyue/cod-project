@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Delayed blocks retain immutable caught bits across catch and queue reuse."""
+"""Delayed blocks retain caught exception data across handler exit and queue reuse."""
 from pathlib import Path
 import sys
 import foundation_tests as runner
@@ -21,11 +21,11 @@ WARN = '[-Wmissing-return]'
 runner.CASES = {
     "caught_after_handler": (ERROR + 'try{throw error();}catch(e){defer{behave @print(e.category);};};behave @print(1);', 0, "1\n5\n", WARN),
     "repeated_catch": (ERROR + LOOP + '{defer{behave @print(e.cause_count);};};};', 0, "3\n2\n1\n", WARN),
-    "repeated_scoped_catch": (ERROR + 'val saved<-error();for(i in 0..3){{saved<-chain(saved);try{throw saved;}catch(e){defer{behave @print(e.cause_count);};};}};', 0, "1\n2\n3\n", WARN),
+    "repeated_scoped_catch": (ERROR + 'val saved<-error();ref previous=saved;for(i in 0..3){{previous<-chain(previous);try{throw previous;}catch(e){defer{behave @print(e.cause_count);};};}};', 0, "1\n2\n3\n", WARN),
     "late_local_and_snapshot": (ERROR + 'val n<-0;' + LOOP + '{defer{behave @print(e.cause_count);behave @print(n);};n<-n+1;};};', 0, "3\n3\n2\n3\n1\n3\n", WARN),
     "nested_registration": (ERROR + LOOP + '{defer{defer{behave @print(e.cause_count);};};};};', 0, "3\n2\n1\n", WARN),
     "nested_prepared_call": (ERROR + 'proc observe(e:Exception)->void{behave @print(e.cause_count);}' + LOOP + '{defer{defer observe(e);};};};', 0, "3\n2\n1\n", WARN),
-    "captured_bare_rethrow": (ERROR + 'try{{try{throw chain(error());}catch(e){defer{throw;};};}}catch(e){behave @print(e.cause_count);};', 0, "1\n", WARN),
+    "captured_bare_rethrow": (ERROR + 'proc run()->void{try{throw chain(error());}catch(caught:const MissingReturnError){defer{throw;};};}try{run();}catch(resumed:const MissingReturnError){behave @print(resumed.cause_count);};', 0, "1\n", WARN),
     "nested_bare_rethrow": (ERROR + 'try{{try{throw chain(error());}catch(e){defer{defer{throw;};};};}}catch(e){behave @print(e.cause_count);};', 0, "1\n", WARN),
     "bare_rethrow_each_record": (ERROR + LOOP + '{defer{try{throw;}catch(x){behave @print(x.cause_count);};};};};', 0, "3\n2\n1\n", WARN),
     "named_rethrow_each_record": (ERROR + LOOP + '{defer{try{throw e;}catch(x){behave @print(x.cause_count);};};};};', 0, "3\n2\n1\n", WARN),

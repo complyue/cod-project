@@ -27,6 +27,9 @@ def call(name, operation='set(x,true)', declarations=SET, setup=LOCAL, observe=O
     case(name, setup+'try { '+operation+';'+observe+' }catch(e:const NullPointerException){};', declarations, **kwargs)
 
 
+GUARDED_SET = SET.replace(' throws NullPointerException', '').replace('if(flag)', 'if(flag && (x is not null))')
+GUARDED_READ = READ.replace(' throws NullPointerException', '').replace('if(flag)', 'if(flag && (x is not null))')
+BORROWED_CONDITION = GUARDED_SET.replace('flag:bool', 'ref flag:const bool in B').replace('owner O}', 'owner O,owner B}')
 case('scope_true', BORROWED_TARGET+'val flag<-true;{{defer{'+WRITE+'};}};'+OBSERVE)
 case('scope_false', BORROWED_TARGET+'val flag<-false;{{defer{'+WRITE+'};}};'+OBSERVE, reject=True)
 case('scope_late_true', BORROWED_TARGET+'val flag<-false;{{defer{'+WRITE+'};flag<-true;}};'+OBSERVE)
@@ -47,17 +50,17 @@ call('call_generic', declarations='proc set(ptr x:T in O,value:T,flag:bool)->voi
 call('call_snapshot', declarations=SET.replace(WRITE,WRITE+'flag<-false;'))
 call('call_snapshot_false', declarations=SET.replace(WRITE,WRITE+'flag<-true;'), operation='set(x,false)', reject=True)
 call('call_borrowed_condition', declarations=SET.replace('flag:bool','ref flag:const bool in B').replace('owner O}','owner O,owner B}'), setup=LOCAL+'val flag<-true;', operation='set(x,flag)')
-call('call_prepared_value', setup=BORROWED_TARGET+'val flag<-true;', operation='{{defer set(x,flag);flag<-false;}}')
-call('call_prepared_value_false', setup=BORROWED_TARGET+'val flag<-false;', operation='{{defer set(x,flag);flag<-true;}}', reject=True)
-call('call_prepared_borrow', declarations=SET.replace('flag:bool','ref flag:const bool in B').replace('owner O}','owner O,owner B}'), setup=BORROWED_TARGET+'val flag<-false;', operation='{{defer set(x,flag);flag<-true;}}')
-call('call_prepared_borrow_false', declarations=SET.replace('flag:bool','ref flag:const bool in B').replace('owner O}','owner O,owner B}'), setup=BORROWED_TARGET+'val flag<-true;', operation='{{defer set(x,flag);flag<-false;}}', reject=True)
+call('call_prepared_value', declarations=GUARDED_SET, setup=BORROWED_TARGET+'val flag<-true;', operation='{{defer set(x,flag);flag<-false;}}')
+call('call_prepared_value_false', declarations=GUARDED_SET, setup=BORROWED_TARGET+'val flag<-false;', operation='{{defer set(x,flag);flag<-true;}}', reject=True)
+call('call_prepared_borrow', declarations=BORROWED_CONDITION, setup=BORROWED_TARGET+'val flag<-false;ref decision=flag;', operation='{{defer set(x,decision);decision<-true;}}')
+call('call_prepared_borrow_false', declarations=BORROWED_CONDITION, setup=BORROWED_TARGET+'val flag<-true;ref decision=flag;', operation='{{defer set(x,decision);decision<-false;}}', reject=True)
 call('conditional_read_skipped', declarations=READ, operation='read(x,false)', observe='', output='')
 call('conditional_read_required', declarations=READ, operation='read(x,true)', observe='', reject=True)
 call('conditional_write_then_read', declarations=SET.replace(WRITE,WRITE+OBSERVE), observe='', output='7\n')
 call('conditional_write_then_read_false', declarations=SET.replace(WRITE,WRITE+OBSERVE), operation='set(x,false)', observe='', reject=True)
 call('read_before_conditional_write', declarations=SET.replace(WRITE,OBSERVE+WRITE), reject=True)
 call('conditional_read_forwarded', declarations=READ+'proc forward(ptr x:u64 in O,flag:bool)->void throws NullPointerException where {owner O}{read(x,flag);}', operation='forward(x,false)', observe='', output='')
-call('conditional_read_deferred', declarations=READ, setup=BORROWED_TARGET, operation='{{defer read(x,false);}}', observe='', output='')
+call('conditional_read_deferred', declarations=GUARDED_READ, setup=BORROWED_TARGET, operation='{{defer read(x,false);}}', observe='', output='')
 case('ref_promise_not_conditional', LOCAL+'read(x,false);', 'proc read(ref x:u64 in O,flag:bool)->void where {owner O}{if(flag){behave @print(x);}else{};}', reject=True)
 call('copied_argument_snapshot', declarations=SET.replace('flag:bool','flag:bool,ignored:bool'), setup=LOCAL+'val flag<-true;', operation='set(x,flag,{flag<-false;false})')
 call('copied_argument_false', declarations=SET.replace('flag:bool','flag:bool,ignored:bool'), setup=LOCAL+'val flag<-false;', operation='set(x,flag,{flag<-true;true})', reject=True)
@@ -89,11 +92,13 @@ call('skipped_read_replaced_by_return', declarations='proc read(ptr x:u64 in O,f
 call('call_unknown_condition', declarations=SET+'proc run(flag:bool)->void throws NullPointerException{'+LOCAL+'set(x,flag);'+OBSERVE+'}', operation='run(true)', setup='', observe='', reject=True)
 
 ALIASED = 'proc paired(ptr a:u64 in O,ptr b:u64 in O,flag:bool)->void throws NullPointerException where {owner O}{if(flag){a<-7u64;{}}else{};behave @print(b);}'
+GUARDED_PAIRED = ALIASED.replace(' throws NullPointerException', '').replace(
+    'if(flag)', 'if(flag && (a is not null))').replace('behave @print(b);', 'if(b is not null){behave @print(b);}else{};')
 call('conditional_alias_read', declarations=ALIASED, operation='paired(x,x,true)', observe='')
 call('conditional_alias_read_false', declarations=ALIASED, operation='paired(x,x,false)', observe='', reject=True)
 call('conditional_alias_read_other', declarations=ALIASED, setup=LOCAL+'val y<-make local u64;', operation='paired(x,y,true)', observe='', reject=True)
 call('conditional_alias_read_order', declarations=ALIASED.replace('if(flag){a<-7u64;{}}else{};behave @print(b);','behave @print(b);if(flag){a<-7u64;{}}else{};'), operation='paired(x,x,true)', observe='', reject=True)
-call('conditional_alias_read_prepared', declarations=ALIASED, setup=BORROWED_TARGET, operation='{{defer paired(x,x,true);}}', output='7\n7\n')
+call('conditional_alias_read_prepared', declarations=GUARDED_PAIRED, setup=BORROWED_TARGET, operation='{{defer paired(x,x,true);}}', output='7\n7\n')
 call('callable_alternatives_write', declarations=SET+SET.replace('proc set','proc other').replace('7u64','8u64')+'proc run(choice:bool)->void throws NullPointerException{'+LOCAL+'proc action=if(choice){set}else{other};action(x,true);'+OBSERVE+'}', setup='', operation='run(true);run(false)', observe='', output='7\n8\n')
 call('callable_alternative_no_write', declarations=SET+SET.replace('proc set','proc other').replace(WRITE,'')+'proc run(choice:bool)->void throws NullPointerException{'+LOCAL+'proc action=if(choice){set}else{other};action(x,true);'+OBSERVE+'}', setup='', operation='run(true)', observe='', reject=True)
 
