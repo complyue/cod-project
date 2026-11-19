@@ -1,5 +1,40 @@
 # Changelog
 
+## 2026-11-19 — Apply ordinary method dispatch to sum receivers
+
+<a id="k-sum-receiver-dispatch-20261119"></a>
+**K-SUM-RECEIVER-DISPATCH-20261119.** In the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-19 (America/Los_Angeles), the project user directed discussion to use confirmed language semantics and identified general method dispatch as the governing rule. D-07r196→197 and registry r972→973 close the question in H-SUM-RECEIVER-PARAMETER-20261119 as a consequence of H-375/H-376. The method parameter admits the active alternative through a parent-typed helper. Publication and implementation qualification keep their recorded scope.
+
+## 2026-11-19 — Put the sum alternative in the receiver signature
+
+<a id="h-sum-receiver-parameter-20261119"></a>
+**H-SUM-RECEIVER-PARAMETER-20261119.** In the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-19 (America/Los_Angeles), the project user preferred “这个场景在参数签名按正常method声明更好” and urged caution with predicate-bearing `where` clauses. D-07r196 and registry r972 replace the illustrative guarded signature in K-CTOR-CALL-ORGANIZATION-20261119. In the same chat the user supplied `func (())(self:const Accepted in O)` as the expected form and asked about current support. The seed rejects the operator name at parse time. Dispatch through the parent type remains a separate proposal.
+
+## 2026-11-19 — Consolidate constructor, functor and module selection rules
+
+<a id="k-ctor-call-organization-20261119"></a>
+**K-CTOR-CALL-ORGANIZATION-20261119.** Editorial continuity for D-07r194→195, D-15r55→56 and registry r970→971. H-CTOR-CALL-SEPARATION-20261119 and H-CTOR-CALL-FAMILIES-20261119 cover the instance boundary. D-07 owns construction and invocation. D-15 groups the proposed type-carried publication and adapter rules from K-TYPE-CALL-FAMILY-20261119. The Receipt example isolates the open sum-receiver dispatch choice. Qualification is unchanged.
+
+## 2026-11-19 — Name the opposing constructor and call-operator method families
+
+<a id="h-ctor-call-families-20261119"></a>
+**H-CTOR-CALL-FAMILIES-20261119.** The project user stated “ctor vs (()) 应该是互相对立的两个 method family” in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-19 (America/Los_Angeles). D-07r194 and registry r970 name that relationship explicitly. H-CTOR-CALL-SEPARATION-20261119 supplies the receiver distinction. Construction produces the instance, invocation takes it as receiver, and overload selection stays within the family chosen by the source operation. In a follow-up the user clarified “ctor准备所有字段，它的运行上下文中没有一个完成init的对象； (()) 直接拿到已经完成init的对象实例引用”. This concerns the instance being constructed throughout the ctor body and the initialization precondition on invocation.
+
+## 2026-11-19 — Distinguish constructor destinations from call-operator receivers
+
+<a id="h-ctor-call-separation-20261119"></a>
+**H-CTOR-CALL-SEPARATION-20261119.** In the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-19 (America/Los_Angeles), the project user clarified “ctor/initializer 跟 (()) 完全不是一回事” and identified the distinction as “(()) 必然有一个实例引用参数，ctor没有”. D-07r193 and registry r969 correct the open question in K-TYPE-CALL-FAMILY-20261119. Construction selects an initializer for the named alternative. A data call operator receives an initialized instance. Their overload sets are independent. This confirmation is scoped to that distinction.
+
+## 2026-11-19 — Consider carrying call operators with their nominal receiver type
+
+<a id="k-type-call-family-20261119"></a>
+**K-TYPE-CALL-FAMILY-20261119.** In the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-19 (America/Los_Angeles), the project user proposed “认为它是 type 的一部分，不单独 export/using/import” and “总是在 type 口径上聚合、解析 (()) overloads”. D-07r192/D-15r55 and registry r968 record the type-family proposal and the sum-method boundary under review. Prior lookup discussion at `d469dfe19d6bc7a6bc655f8320dd0c70bc78bd0b:design/DomainLanguageDesign.md`, “Functor receivers and callback arguments”. Constructor initialization retains its H-DCTOR-SOURCE-20261118 scope.
+
+## 2026-11-19 — Focus the comprehension research outline on enumeration
+
+<a id="k-comprehension-research-scope-20261119"></a>
+**K-COMPREHENSION-RESEARCH-SCOPE-20261119.** In the design side chat on 2026-11-19 (America/Los_Angeles), the project user specified “这篇专注于 comprehension/nondeterministic” and asked about a separate ownership paper. D-31r2/registry r967 give the comprehension paper its own prior work, proof question and evaluation. The language proposal and its pending qualification retain their r1 scope. Previous outline at `8f558c76b1889e3e286d600fa5c6e54f297748a0:design/ProducersAndTransformers.md`, “Research question and prior work”.
+
 ## 2026-11-19 — Express ambiguous call intent with the distinguishing argument
 
 <a id="h-call-intent-20261119"></a>

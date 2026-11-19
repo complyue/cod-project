@@ -1,8 +1,10 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 54 · Recorded: 2026-11-19 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 56 · Recorded: 2026-11-19 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
+
+- **Data call operators.** [D-07-FUNCTOR-LOOKUP](DesignAuthorityRegistry.md#d-07-functor-lookup), P-636/P-637, uses C-10/C-35 to keep operations with the nominal receiver in its selected world. The [publication proposal](#publication-of-type-carried-call-operators) compares unrelated receivers, two adapters of the same receiver and a constructor subset on a sum. [K-TYPE-CALL-FAMILY-20261119](../CHANGELOG.md#k-type-call-family-20261119) records its scope. [K-CTOR-CALL-ORGANIZATION-20261119](../CHANGELOG.md#k-ctor-call-organization-20261119) consolidates it at r56.
 
 - **Module top levels as here callables.** r53 [module scope](#here-callable-module-top-levels) records [H-HERE-MODULE-TOPLEVEL-20261118](../CHANGELOG.md#h-here-module-toplevel-20261118) under [D-18-HERE](DesignAuthorityRegistry.md#d-18-here). D-15-STATIC-NS, D-15-POSTPON and D-15-SHUTDOWN supply initialization readiness, shared module contexts and cleanup lifetime. These constraints serve charter §§3.3/4.3. Acceptance observes one module slot across interleaved startup fragments and preserves access checks on entry and shutdown. Qualification of the broader callable redesign remains open.
 
@@ -138,6 +140,14 @@ proc use(x:Node in O) -> u64 where {owner O} {
 To extend a source family, explicitly select that callable with import under the intended local alias, then use the established extension rules. Importing a type still grants its existing type-level permissions; this name rule does not remove permitted explicit conformance declarations. Explicit callable import, using's preserved implementation context, import's receiving interpretation, mixin body redefinition and explicit same-alias unions remain separate operations. Local shadowing alone is not explicit overload-conflict arbitration inside a composed family.
 
 For a nominal sum, exporting its type publishes every constructor together with its complete overload family in the exporting world. Using and import select a constructor as that same unit. An adapter may extend a constructor it imports in its own world. The family in the world of the `make` site determines whether braces are available. See the [two-world example and constructor selectors](DomainLanguageDesign.md#publishing-and-selecting-data-constructors).
+
+### Publication of type-carried call operators
+
+Under the [type-level lookup proposal](DomainLanguageDesign.md#type-level-call-operator-lookup), exporting or re-exporting a nominal data type publishes its visible `(())` family. Plain `using` selects it with the type. An `import` of the type also permits a local extension. A standalone `export`, `using` or `import` of `(())` is invalid. An adapter publishes its extension through its view of that type.
+
+Two local names for one nominal type resolve to the receiving world’s method information. Multiple selection paths to one method identity contribute it once. When distinct methods from selected adapters match equally well, the call is ambiguous irrespective of import order. Methods on unrelated receiver types belong to separate families.
+
+For `using "model.cod" Receipt {Accepted};`, the constructor list explicitly selects Accepted and its complete initializer family. Selecting Receipt itself carries the whole visible call-operator family. The [`with methods` clause](#explicit-associated-callables-with-with-methods) governs separately named associated callables such as `score`.
 
 ### Types carried by symbol selection
 

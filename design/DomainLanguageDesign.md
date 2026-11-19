@@ -1,12 +1,14 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 191
+Discussion revision: 197
 
 Recorded: 2026-11-19
 
 Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
+
+- **Construction and invocation.** [H-CTOR-CALL-SEPARATION-20261119](../CHANGELOG.md#h-ctor-call-separation-20261119) and [H-CTOR-CALL-FAMILIES-20261119](../CHANGELOG.md#h-ctor-call-families-20261119) confirm the [two method families](#constructor-and-call-operator-method-families). Check identical written arguments, ctor cleanup and receiver readiness. [D-07-FUNCTOR-LOOKUP](DesignAuthorityRegistry.md#d-07-functor-lookup), P-636/P-637, records the [proposed lookup rule](#type-level-call-operator-lookup) separately. C-10/C-35 connect a domain operation to the nominal type visible in its module world. Check unrelated types and competing adapters. At r196 [H-SUM-RECEIVER-PARAMETER-20261119](../CHANGELOG.md#h-sum-receiver-parameter-20261119) places alternative selection in the ordinary method signature. The example uses the user’s `self:const Accepted in O` spelling. At r197 [K-SUM-RECEIVER-DISPATCH-20261119](../CHANGELOG.md#k-sum-receiver-dispatch-20261119) applies the general dispatch contract to that signature, including a call through a Receipt parameter. Wider implementation qualification remains open. [Editorial continuity](../CHANGELOG.md#k-ctor-call-organization-20261119).
 
 [H-CALLABLE-TAIL-20261119](../CHANGELOG.md#h-callable-tail-20261119) applies the [callable result rules](CallableResultInference.md#results-of-proc-func-and-here-bodies) to a double-brace case arm at r189. Check the local result after its own defer runs. D-07-CASE retains its source-order and coverage rules.
 
@@ -221,6 +223,17 @@ A fold accumulator retains its explicit type guarantees and facts for its concre
 
 Lean acceptance must show one data identity with head-only conformance declarations in different modules, rejection of structural lookalikes without a declaration, adapter-import permission versus using-only declaration rejection, and consumer acceptance through using the adapter, invalid direct abstract construction, deterministic unique-best selection and an ambiguous crossed-specialization rejection. Product/sum construction and exhaustiveness need separate acceptance cases; no full GADT or general multiple-inheritance implementation is implied by this declaration split.
 
+#### Constructor and call-operator method families
+
+The source operation selects the method family before overload resolution. One nominal data type can provide both, even with identical explicit argument lists.
+
+| Expression | Method family | Instance at entry | Result |
+| --- | --- | --- | --- |
+| `make Accepted(7u64) in batch` | Initializers of the selected data constructor | The destination supplies its owner and the selected fields as initialization places. | A reference to the initialized instance on success. |
+| `r(7u64)` for `r:Receipt in batch` | Call operators for the data receiver | The receiver supplies a reference to an initialized instance with its actual owner and access. | The selected method’s ordinary result. |
+
+Adding a call operator leaves the initializer count of every constructor unchanged. A constructor overload alone cannot make a data value callable. See [named sum constructors](#named-sum-constructors) for the field contract and [functor receivers](#functor-receivers-and-callback-arguments) for receiver access and here arguments.
+
 #### Named sum constructors
 
 Each alternative of a nominal sum has a directly visible data constructor name. The same identity selects the alternative in `make Accepted(...)` and tests it in `r isa Accepted`. The predicate checks the active alternative without calling an initializer. An initialized null ptr tests false. A successful ptr test refines the target and non-null facts while the binding and the active alternative remain stable. The parent sum supplies the nominal result type.
@@ -243,7 +256,9 @@ ref s:Receipt in batch = make Skipped in batch {};
 
 The destination owner comes from ordinary `make` placement. The header may omit the result annotation because the constructor declaration already determines the parent sum, reference mode and actual destination owner. An explicit annotation must agree. The body can name the supplied owner with `where {owner O}`. The construction destination supplies this owner even for a fieldless alternative. Writing an ordinary callable result annotation still cannot invent an owner.
 
-Only the selected alternative’s fields enter the body as implicit initialization destinations. In the example they behave as `init val var id:u64` and `init ptr var prior:Receipt in O`. Explicit parameters supply the call arguments and determine overload matching. A parameter that duplicates an implicit field name at the same binding level would be a duplicate declaration. Field writes, reads after initialization and delegation to an `init` helper follow the [existing place rules](ConstructionAndAcquisition.md#init-destinations-and-declared-place-aliasing). The constructor keeps its ordinary lexical scope, argument evaluation, callable effects and cleanup. On every normal exit after cleanup, all required fields must be ready before `make` delivers the ref. An escaping failure delivers no completed result. Both bare and value-bearing returns targeting the constructor are forbidden, including from its deferred actions. A nested callable or standalone `{{ ... }}` owns its own returns.
+The selected alternative’s fields enter the ctor as individual initialization places. Here they behave as `init val var id:u64` and `init ptr var prior:Receipt in O`. Field writes, reads of initialized fields and delegation to an `init` helper follow the [place rules](ConstructionAndAcquisition.md#init-destinations-and-declared-place-aliasing). Explicit parameters determine overload matching and can include references to other initialized objects. A parameter with the same name as an implicit field at the same binding level is a duplicate declaration.
+
+The object under construction has no initialized instance receiver anywhere in the ctor body or its deferred cleanup, including after the last field write. A destination address passed by the compiler grants only the source-level field permissions. The ctor follows ordinary argument evaluation, lexical scope, effects and cleanup. Every normal exit must establish that all fields of the selected alternative are ready after cleanup. Only then does `make` deliver the reference. An escaping failure delivers no completed result. Bare and value-bearing returns targeting the ctor are forbidden, including from its deferred actions. A nested callable or standalone `{{ ... }}` owns its own returns.
 
 Check for the presence of constructor overloads **per alternative, before testing applicability**. With the declaration above, `make Accepted in batch { id <- 0u64; prior = null; }` rejects and `make Accepted() in batch` reports a missing applicable overload. A `proc` initializer still counts when the call site only permits a `func`. Skipped has no initializer overload, so its empty block supplies a complete payload. An initializer-free alternative with required fields must initialize each on every normally completing path. For a sum, reserve a named alternative under the [sum construction rule](#sum-object-construction-and-reference-storage). A constructor-backed alternative needs its initializer before it can become an ordinary readable result.
 
@@ -287,7 +302,7 @@ Before the first binding write, `edge is null` would read an uninitialized slot.
 
 Exporting a nominal sum type publishes every data constructor of that type. A constructor is one selection unit: its alternative identity travels with its entire initializer overload family in the publishing world, including an empty family. The same unit applies to export, using, import and re-export. Selecting a constructor cannot filter by initializer signature. Its nominal identity determines `r isa Accepted`; overloads determine which initializer can run for `make Accepted(...)`.
 
-At a `make` site, resolve the constructor in that site's module world. Inspect its overload family there before argument or callable-kind matching. Zero overloads permit braced field initialization. A nonempty family requires an applicable initializer for a call with arguments. Overloads that exist solely in a parallel world have no effect, even if both worlds are incorporated in the same program.
+Only overloads visible in the module world of the `make` site count toward the [constructor’s initialization rules](#named-sum-constructors). An overload confined to a parallel world has no effect even if both worlds enter the same program.
 
 The constructor selector goes after the existing module source and type name:
 
@@ -444,7 +459,7 @@ In a single-brace arm, `break v;` can finish the case from any ordinary nested s
 
 A functor is a here callable when its receiver supplies a compatible call operator to a here parameter. A direct call such as `limit(12u64)` invokes that operator on the data receiver. The selected method retains its own func/proc permissions. The here use grants bounded access to the receiver and carries no permission for its method body to read arbitrary caller locals.
 
-A proposed call-operator method takes the receiver as its first parameter. Its target access is an ordinary overload constraint. A readonly target admits only methods callable through readonly access. A writable target can use either access mode. When two applicable methods differ only in receiver target access, the writable match is exact for a writable receiver. Other arguments, owner constraints, callable kind and checked failures retain their ordinary rules.
+A data call-operator method requires a reference to an already initialized instance on entry. A reserved target identity alone cannot serve as its receiver. In the proposed declaration spelling, the receiver is the first parameter. The expression to the left of the call parentheses supplies its reference. Its target access is an ordinary overload constraint. A readonly target admits only methods callable through readonly access. A writable target can use either access mode. When two applicable methods differ only in receiver target access, the writable match is exact for a writable receiver. Other arguments, owner constraints, callable kind and checked failures retain their ordinary rules.
 
 ```cod
 data Threshold { minimum:u64; }
@@ -487,6 +502,35 @@ test(12u32) (x) => { current(x) };     # The trailing body supplies pred.
 ```
 
 The first declaration accepts the receiver directly as data and needs numeric widening. The second binds the receiver as a here predicate and matches the numeric argument exactly. With the same remaining matches, direct receipt as data wins over binding the receiver as a here argument. In this example each declaration has a better match on a different argument. Reject the bare call as ambiguous. Apply the [named argument rules](SymbolicDynamicScope.md#named-arguments-defaults-and-complete-binding) to each signature before ranking. The distinguishing label selects a parameter that only one declaration has, so the ordinary second argument can remain positional. The trailing spelling explicitly asks for a first here parameter. Its body reads `current` when invoked. The directly supplied predicate retains the receiver selected at argument preparation.
+
+#### Type-level call-operator lookup
+
+Under the proposed type-level rule, `r(args)` selects the visible `(())` family of the nominal receiver type at the call site. Each applicable method competes only within that family. A direct functor-to-here argument uses the same lookup at its supplying site. Synchronous forwarding preserves the bound receiver and the family selected at the supplying site. Invocation follows ordinary method dispatch within that family.
+
+```cod
+# Each module publishes a data type with a call operator accepting u64.
+using "limits.cod" Threshold;
+using "scales.cod" Scale;
+
+func accepts(t:const Threshold in O) -> bool where {const owner O} {
+    t(12u64)
+}
+```
+
+Only Threshold’s methods participate in this call. For extension permission and competing adapters of the *same* type, see [publication of type-carried call operators](ModuleWorlds.md#publication-of-type-carried-call-operators).
+
+**Sum alternatives in method signatures.** Express the specialization on the receiver parameter. Use the visible constructor name in the ordinary parameter annotation, as in `self:const Accepted in O`. The method name remains `(())`, and `where` declares the owner as usual.
+
+```cod
+func (())(self:const Receipt in O) -> u64 where {const owner O} { 0u64 }
+func (())(self:const Accepted in O) -> u64 where {const owner O} { self.id }
+
+func read_id(r:const Receipt in O) -> u64 where {const owner O} { r() }
+```
+
+Here `self:const Accepted in O` binds a readonly reference in O to an initialized Receipt whose active alternative is Accepted. Entering that method establishes the fact needed to read `self.id`, subject to ordinary invalidation if the alternative changes. Both methods belong to Receipt’s call-operator family. Matching uses the alternative’s identity irrespective of which initializer built the receipt. This use in a parameter needs no new nominal subtype or predicate evaluation in overload lookup.
+
+The receiver is an ordinary dispatch argument. For an Accepted receipt, both signatures apply and the Accepted method is more specific. For a Skipped receipt, only the Receipt method applies. Thus `read_id(r)` returns 42 for an Accepted with id 42 and zero for a Skipped, including when the alternative is known only at runtime. A caller-side `isa` test is unnecessary. The [general dispatch and coverage rules](AheadOfTimeExecutionPreparation.md#actual-type-dispatch-and-wpo-coverage) allow direct selection when the compiler proves the alternative and require a prepared path for every admitted case.
 
 #### One callback parameter for different owner counts
 
@@ -963,5 +1007,7 @@ The linked facilities provide implementation context, not independent design aut
 The [memory-region design](MemoryRegionAndRegionalTypes.md), [CoD driver design](CompileOnDemand.md) and [YAML conversion design](YamlConversionsOfRegionalTypes.md) remain relevant references with the qualification limits listed in the registry. Reusing code does not select its representation as the language's contract.
 
 ## Discussion process
+
+Use confirmed CoD semantics to answer design questions. When an example follows from an existing rule, cite the rule and record its consequence. Current seed behavior belongs in implementation evidence.
 
 Application design lives in its linked document set. Language topics record their current answer, governing constraints and open choices; application proposals become reusable language requirements only through an explicit scope and value decision. Human evidence and brief continuity entries belong in the [changelog](../CHANGELOG.md#authority-evidence-index). Update the relevant topic and current registry scope together; a proposal does not supply its own approval.

@@ -1,12 +1,14 @@
 # Producers and Transformers for Nondeterministic Comprehensions
 
-Design revision: 1 · 2026-11-19 · Language-design draft
+Design revision: 2 · 2026-11-19 · Language-design draft
 
 ## Design authority
 
 [D-31](DesignAuthorityRegistry.md#d-31) records the requested design scope. The project user proposed passing a source to a transformer, admitting every source that meets the producer interface, and treating a functor as one implementation. [Decision provenance](../CHANGELOG.md#k-producer-transformers-20261119)
 
 The confirmed baselines are [generator and here-call equivalence](RangedForAndGenerators.md#generalized-for-loops), [functor receiver preparation](DomainLanguageDesign.md#functor-receivers-and-callback-arguments), and [owner-checked synchronous access](CallableStorageAndHereAccess.md#what-an-invocation-needs). C-97/P-633–P-635 propose a derivation from C-96/C-65 and charter §§3.2–3.3/4.3/6.1. Reusing a traversal description lets callers choose the source and the consumer independently while keeping runtime control and borrows with the execution that owns them. The structural parameter spelling, pipe, composition of stored transformers and wider implementation contract are pending human review. The examples and acceptance cases below delimit the proposal.
+
+The paper outline concerns the semantics of enumerating answers. Its proof and experiments are proposed research. [Research scope](../CHANGELOG.md#k-comprehension-research-scope-20261119)
 
 ## A transformer takes a producer as an input
 
@@ -53,13 +55,13 @@ For example, a budget functor can store just its ceiling and take a source on ea
 
 ## Research question and prior work
 
-Can a language type a reusable, relocatable description of a comprehension separately from its live execution, while preserving the observable behavior of nested hand-written handoffs? A candidate paper title is *Owner-Checked Comprehensions with Persistent Transformer Plans*. The persistence claim concerns admissible rule data. Live frames, consumers and partially executed searches have separate lifetime requirements.
+Working title: *Composing Enumerative Choice with Producers and Transformers*. Can a transformer accept any source that satisfies its producer interface and compose dependent choices while preserving the feedback, exits and cleanup of explicit nested loops? A fare search illustrates the question. For each itinerary, a second source offers seats available on that itinerary. A filter may skip a seat, several seats may yield the same fare, and a caller asking for the first acceptable fare can finish while both sources are open.
 
-| Prior result | Question for CoD |
+| Comparison | What the paper should establish |
 | --- | --- |
-| Haskell comprehensions specify ordered enumeration. Fusion can eliminate intermediate lists from compiled comprehensions. [Haskell Report, §3.11](https://www.haskell.org/onlinereport/haskell2010/haskellch3.html) · [Gill, Launchbury and Peyton Jones](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/07/deforestation-short-cut.pdf) | Identify the domain in which a CoD traversal returns the same sequence, then account for observable effects and early exits. |
-| Go demonstrates a push iterator that filters another iterator. Strymonas gives a staged implementation for composable stream transformations including nested streams. [Go range over functions](https://go.dev/blog/range-functions) · [Kiselyov et al., POPL 2017](https://yanniss.github.io/streams-popl17.pdf) | Compare producer composition, short-circuiting, state and allocation against established streaming baselines. |
-| Clojure transducers let one transformation run against different sources. Substrait specifies a serializable representation of relational plans. [Clojure transducers](https://clojure.org/reference/transducers) · [Substrait plan serialization](https://substrait.io/serialization/basics/) | Show what owner checking adds when a persisted rule runs against new sources and a live, effectful consumer. |
-| Defunctionalization relates higher-order computations to first-order data. Rust lending iterators express items whose lifetimes depend on a borrow of the producer. [Danvy and Nielsen](https://tidsskrift.dk/brics/article/view/21684) · [Rust GAT lending iterator example](https://blog.rust-lang.org/2022/10/28/gats-stabilization/) | Explain precisely which rule data can survive relocation, which owner covers a yielded view and which callback remains usable only during its invocation. |
+| Haskell list comprehensions translate nested generators through `concatMap`. Icon uses generators and goal-directed evaluation to explore alternative results. [Haskell Report, §3.11](https://www.haskell.org/onlinereport/haskell2010/haskellch3.html) · [Griswold, *Programming with Generators*](https://doi.org/10.1093/comjnl/31.3.220) | For pure, finite, fully consumed sources, prove equality with the list of answers from nested enumeration, including order, duplicates and empty branches. |
+| Go composes push iterators and signals early termination through the result of `yield`. Strymonas fuses pipelines that include filtering and nested flat-map. [Go range over functions](https://go.dev/blog/range-functions) · [Kiselyov et al., *Stream Fusion, to Completeness*](https://yanniss.github.io/streams-popl17.pdf) | Compare the control required in each encoding when a source requires application-specific feedback, a stage stops a single upstream traversal, or the final consumer returns from its enclosing callable. |
 
-A research paper would need a small calculus or executable reference model, a statement of owner safety and preservation of control/effect traces, and a prototype exercising those claims. A discriminating experiment would publish an admissible rule description, reload it at a different address, supply a fresh source and ask for only the first match. Compare its answers and cleanup trace with a hand-written traversal, then measure allocations, peak live storage and time to first answer for both prefix and full enumeration. The experiment and proofs are proposed work.
+Use hand-written nested loops as the reference for effectful searches. Instrument both itinerary and seat producers. On a skipped seat, check which feedback reaches the seat producer even though the consumer never ran. On a return from the first accepted fare, check that the seat source closes before the itinerary source, each closes once, and neither source offers another candidate. Repeat with a consumer exception and with an empty inner source. An executable model can compare those event sequences. A prototype can separately measure time to first answer and intermediate allocations for prefix and full enumeration.
+
+The case for a research paper rests on a general rule for typed composition and a demonstration of what it guarantees across independently written stages. If existing iterator encodings provide the same guarantees with the same static checks, a comparative design note would fit the evidence. Coarse-grained ownership and relocatable graphs form a separate research topic grounded in the [regional storage design](RegionalAndLexicalStorageRefactor.md#shared-owner-information-from-checked-declarations).
