@@ -1666,7 +1666,7 @@ class Parser {
         });
     if (expr.kind == K::here_body && (expr.receiving->shape == ReceivingHeader::Shape::ordered || receives_bits || receives_ref || receives_fields)) {
       auto definition = std::make_shared<Form>();
-      definition->kind = callable_kind == Form::Kind::procedure ? Form::Kind::procedure : Form::Kind::function;
+      definition->kind = callable_kind == Form::Kind::function ? Form::Kind::function : Form::Kind::procedure;
       definition->at = expr.at;
       definition->supplied_scope = true;
       definition->supplied_group = !expr.scoped;

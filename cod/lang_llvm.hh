@@ -1467,8 +1467,10 @@ class LLVMEmission {
   std::vector<llvm::Value *> prepare_here_arguments(const Expression &expr) {
     const auto &fact = contexts_.front().at(&expr);
     std::vector<llvm::Value *> values(fact.here_arguments.size());
-    // A trailing body occupies the first slot even when preparation prevents entry.
-    for (size_t slot = expr.has_here_body(); slot < values.size(); ++slot) {
+    // The supplied body slot remains empty here even when preparation prevents entry.
+    const auto &roles = fact.here_arguments;
+    const bool supplied = !roles.empty() && !roles.front().source && !roles.front().lexical;
+    for (size_t slot = supplied; slot < values.size(); ++slot) {
       std::map<CheckedOperation::HereArgument, std::vector<size_t>> arguments;
       for (size_t i = 0; i < contexts_.size(); ++i)
         arguments[contexts_[i].at(&expr).here_arguments.at(slot)].push_back(i);
@@ -1814,7 +1816,7 @@ class LLVMEmission {
       }
       [[fallthrough]];
     }
-    case K::value_call: case K::call: case K::behave: case K::perform: {
+    case K::value_call: case K::call: case K::behave: case K::perform: case K::pipeline: {
       return temporary_scope(expr.at, !fact.borrowed_result || read ? scalar_ : static_cast<llvm::Type *>(b_.getPtrTy()), [&]() -> llvm::Value * {
         const auto here_values = prepare_here_arguments(expr);
         if (!reachable()) return nullptr;

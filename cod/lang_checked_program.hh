@@ -586,6 +586,7 @@ struct CheckedProgram {
   std::vector<QueryEnvironment> query_environments{{}};
   std::vector<CheckedCallable> callables;
   std::vector<std::unique_ptr<Expression>> scope_operands;
+  std::vector<Expr> generated_here_bodies;
   std::deque<CheckedMethod> methods;
   std::deque<CheckedInstance> instances;
   std::map<const Expression *, CheckedOperation> entry;

@@ -350,6 +350,43 @@ runner.CASES = {
     'labelled_handoff_rejects_mutation_of_readonly_selection': (
         'proc scan(line:const u64 in O) yields {id:u64;ref cell:const u64 in O;} where {owner O}{yield(24u64->id,line->cell);return;}'
         'val line<-1u64;for {ref selected=cell;} := scan(line){selected<-2u64;};',2,'','readonly'),
+    'pipeline_terminal_direct_spellings_match_a_supplied_body': (IO+
+        'proc source(base:u64) yields u64{yield(base);yield(base);return;}'
+        'proc mark(x:u64)->u64{behave @print(x);return x;}'
+        'proc sink(x:u64)->u64{behave @print(x+10u64);return x;}'
+        'source(mark(1u64))(n)=>{sink(n);};source(mark(1u64)) $> sink;sink <$ source(mark(1u64));',
+        0,'1\n11\n11\n1\n11\n11\n1\n11\n11\n',''),
+    'pipeline_terminal_zero_offers_do_not_call_a_sink': (IO+
+        'proc source() yields u64{behave @print(1u64);return;}'
+        'proc sink(n:u64)->void{behave @print(n);return;}'
+        'source $> sink;sink <$ source;',0,'1\n1\n',''),
+    'pipeline_terminal_returns_bool_feedback_in_both_directions': (IO+
+        'proc source() yields u64 -> bool{if(!yield(7u64)){return;}else{};yield(80u64);return;}'
+        'proc stop(n:u64)->bool{behave @print(n);return false;}'
+        'source()(n)=>{continue stop(n);};source() $> stop;stop <$ source();',0,'7\n7\n7\n',''),
+    'pipeline_terminal_passes_the_selected_ref_to_the_sink': (IO+
+        'proc source(ref backing:u64 in O) yields ref u64 in O where {owner O}{yield(backing);return;}'
+        'proc sink(ref item:u64 in P)->void where {owner P}{item<-item+1u64;return;}'
+        'val current<-5u64;source(current)(item)=>{sink(item);};source(current) $> sink;'
+        'sink <$ source(current);behave @print(current);',0,'8\n',''),
+    'pipeline_terminal_preserves_an_abrupt_preparation_prefix': (IO+
+        'proc mark(x:u64)->u64{behave @print(x);return x;}'
+        'proc source(first:u64,second:u64,last:u64) yields u64{yield(first+second+last);return;}'
+        'proc sink(n:u64)->void{behave @print(n);return;}'
+        'proc run()->u64{sink <$ source(mark(1u64),{return 42u64;},mark(80u64));return 99u64;}'
+        'behave @print(run());',0,'1\n42\n',''),
+    'pipeline_terminal_checked_failure_bypasses_the_producer_catch': (IO+'using "std:exceptions" NullPointerException;'+
+        'proc sink(n:u64)->void throws NullPointerException{behave @print(n);ptr p:u64=null in here;p;return;}'
+        'proc source() yields u64{try{yield(7u64);behave @print(80u64);}'
+        'catch(e:const NullPointerException){behave @print(81u64);}finally{behave @print(31u64);};return;}'
+        'try{sink <$ source();}catch(e:const NullPointerException){behave @print(32u64);};',0,'7\n31\n32\n',''),
+    'pipeline_terminal_rejects_a_feedback_type_mismatch': (
+        'func source() yields u64 -> bool{yield(7u64):void;}'
+        'func sink(n:u64)->u64{return n;}source() $> sink;',2,'',"continue type 'u64'"),
+    'pipeline_terminal_inherits_function_permissions': (
+        'func source() yields u64{yield(7u64);}'
+        'proc sink(n:u64)->void{return;}'
+        'func run()->void{source() $> sink;return;}run();',2,'','a function cannot invoke a procedure'),
     'lexical_handoff_nested_stage_keeps_labelled_borrow_and_feedback': (IO+
         'proc rows(line:const u64 in O) yields {id:u64;ref cell:const u64 in O;} -> bool where {owner O}{'
         'behave @print(17u64);if(!yield(line->cell,17u64->id)){return;}else{};'

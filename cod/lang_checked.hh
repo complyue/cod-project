@@ -155,6 +155,8 @@ class ScalarChecker {
   std::map<std::pair<size_t, std::string>, const Expression *> scope_operand_names_;
   std::map<size_t, std::vector<size_t>> scope_profiles_;
   std::map<std::pair<size_t, std::vector<CheckedHereTarget>>, size_t> here_receiver_profiles_;
+  std::map<std::tuple<const Expression *, size_t, size_t, size_t, bool>,
+           const Expression *> terminal_bodies_;
   struct FreeBindings {
     std::vector<Capture> captures, queries, symbols;
     std::set<std::string> declarations;
@@ -7206,13 +7208,13 @@ class ScalarChecker {
     std::vector<ArgumentMode> modes;
     size_t here_count = 0;
   };
-  HereCallBinding bind_here_call(const Expression &expr, const NamedFamily &family) const {
-    const auto supplied = expr.has_here_body();
+  HereCallBinding bind_here_call(const Expression &expr, const NamedFamily &family,
+                                 std::span<const Expr> operands, bool supplied) const {
     const auto bind_written = [&](const CheckedMethod &method) -> std::optional<std::vector<size_t>> {
       const auto parameters = method.input_parameters();
       std::vector<size_t> slots;
       std::set<size_t> occupied;
-      const auto ordinary = std::span<const Expr>{expr.children}.subspan(method.here.size() - supplied, parameters.size());
+      const auto ordinary = operands.subspan(method.here.size() - supplied, parameters.size());
       for (const auto &operand : ordinary) {
         size_t slot = slots.size();
         if (operand->kind == Expression::Kind::named_argument) {
@@ -7229,7 +7231,7 @@ class ScalarChecker {
     bool same_arity = false;
     for (const auto id : family.methods) {
       const auto &method = program_.methods[id];
-      if (method.here.empty() || method.here.size() + method.parameters.size() != expr.children.size()) continue;
+      if (method.here.empty() || method.here.size() + method.parameters.size() != operands.size() + supplied) continue;
       same_arity = true;
       auto bound = bind_written(method);
       if (!bound) continue;
@@ -7273,7 +7275,7 @@ class ScalarChecker {
     const auto family = named_family(expr.text, &state);
     if (family.declaration || state.here_control)
       implementation_gap(expr.at, "type inspection of a lexical here receiver or nested supplied group");
-    const auto binding = bind_here_call(expr, family);
+    const auto binding = bind_here_call(expr, family, std::span<const Expr>{expr.children}.first(expr.children.size() - 1), true);
     if (binding.here_count != 1)
       implementation_gap(expr.at, "type inspection of a call with additional here arguments");
     if (forwarded_here_operand(expr, &state)) fail(expr.at, "the first here parameter has both a forwarded and a trailing argument");
@@ -10289,6 +10291,52 @@ class ScalarChecker {
     }
     return demand(profile->second, arguments, at);
   }
+  const Expression &terminal_here_body(const Expression &site, const Expression &sink, const CheckedHereContract &signature,
+                                        const Type &feedback, CheckedInstance *supplier) {
+    using K = Expression::Kind;
+    if (signature.labelled) implementation_gap(sink.at, "named terminal calls with labelled handoffs");
+    const auto key = std::tuple{&site, module_, interpretation_, signature.inputs.size(), feedback != Type::void_type};
+    if (const auto found = terminal_bodies_.find(key); found != terminal_bodies_.end()) return *found->second;
+    const auto node = [&](K kind, std::string text = {}) {
+      auto expr = std::make_unique<Expression>();
+      expr->kind = kind; expr->at = sink.at; expr->text = std::move(text);
+      return expr;
+    };
+    auto supplied = node(K::here_body);
+    supplied->receiving = std::make_shared<ReceivingHeader>(ReceivingHeader{ReceivingHeader::Shape::ordered, {}});
+    supplied->definition = std::make_shared<Form>();
+    auto &definition = *supplied->definition;
+    definition.kind = supplier ? program_.methods[supplier->method].source->kind : Form::Kind::procedure;
+    definition.at = sink.at;
+    definition.supplied_scope = definition.supplied_group = true;
+    auto invoke = node(K::call, sink.text);
+    for (size_t i = 0; i < signature.inputs.size(); ++i) {
+      auto name = "$here.terminal." + std::to_string(i);
+      ReceivingItem item{};
+      item.name = name; item.at = sink.at;
+      supplied->receiving->items.push_back(std::move(item));
+      definition.parameters.push_back(Parameter{name, Type::void_type, sink.at, false, {}});
+      invoke->children.push_back(node(K::name, std::move(name)));
+    }
+    definition.body = node(K::block);
+    if (feedback == Type::void_type) definition.body->children.push_back(std::move(invoke));
+    else {
+      auto resume = node(K::continue_value, "continue");
+      resume->children.push_back(std::move(invoke));
+      definition.body->children.push_back(std::move(resume));
+    }
+    CheckedMethod method;
+    method.source = &definition;
+    method.module = module_;
+    method.interpretation = interpretation_;
+    method.parent = lexical_template(supplier ? std::optional{supplier->method} : std::nullopt);
+    method.definition = program_.methods.size();
+    lexical_methods_.emplace(&definition, method.definition);
+    program_.methods.push_back(std::move(method));
+    const auto &stored = *program_.generated_here_bodies.emplace_back(std::move(supplied));
+    terminal_bodies_.emplace(key, &stored);
+    return stored;
+  }
   size_t prepare_here_source(const Expression &expr, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations) {
     using K = Expression::Kind;
@@ -10463,27 +10511,43 @@ class ScalarChecker {
     }
     finish_call(expr, contract, effects, reasons, {}, {}, operation, read, discard);
   }
-  void check_here_receiver(const Expression &expr, CheckedInstance *supplier,
+  void check_here_receiver(const Expression &expr, const Expression &target, const Expression *terminal, CheckedInstance *supplier,
       std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation, bool read, bool discard) {
-    if (expr.kind != Expression::Kind::call || expr.intrinsic || &expr == prepared_call_)
+    if ((!terminal && target.kind != Expression::Kind::call) || target.intrinsic || &expr == prepared_call_)
       implementation_gap(expr.at, "here supply through computed, symbolic or deferred calls");
-    if (const auto slot = here_slot(expr.text)) {
+    if (const auto slot = here_slot(target.text)) {
+      if (terminal) implementation_gap(expr.at, "a named terminal on a bounded producer");
       check_bound_here_receiver(expr, *slot, supplier, operations, operation, read, discard);
       return;
     }
-    const auto supplied = expr.has_here_body();
-    const auto family = named_family(expr.text);
+    const auto *body = target.has_here_body() ? target.children.back().get() : nullptr;
+    const bool supplied = body || terminal;
+    const auto operands_written = std::span<const Expr>{target.children}.first(target.children.size() - (body != nullptr));
+    auto family = named_family(target.text);
     if (family.context || family.definition)
       implementation_gap(expr.at, "supplying here arguments to lexical receiver definitions");
-    auto [candidates, slots, modes, here_count] = bind_here_call(expr, family);
+    if (terminal) {
+      const auto processor = [&](size_t id) {
+        const auto &method = program_.methods[id];
+        return method.parameters.size() == operands_written.size() && method.here.size() > 1;
+      };
+      if (std::ranges::any_of(family.methods, processor))
+        implementation_gap(expr.at, "pipeline endpoint with a possible processor role");
+      std::erase_if(family.methods, [&](size_t id) {
+        const auto &here = program_.methods[id].here;
+        return here.size() != 1 || !here.front().here.empty();
+      });
+      if (family.methods.empty()) implementation_gap(expr.at, "pipeline endpoint without an established direct producer role");
+    }
+    auto [candidates, slots, modes, here_count] = bind_here_call(target, family, operands_written, supplied);
     if (supplied && here_count == 1 && forwards_here(expr)) fail(expr.at, "the first here parameter has both a forwarded and a trailing argument");
     const auto explicit_here = here_count - supplied;
     const auto count = slots.size();
-    const auto written = std::span<const Expr>{expr.children}.subspan(explicit_here, count);
+    const auto written = operands_written.subspan(explicit_here, count);
     std::vector<CheckedHereTarget> targets(here_count);
     operation.here_arguments.resize(here_count);
     for (size_t i = 0; i < explicit_here; ++i) {
-      const auto &operand = *expr.children[i];
+      const auto &operand = *operands_written[i];
       const auto formal = i + supplied;
       if (operand.spread) implementation_gap(operand.at, "spread arguments");
       if (operand.kind == Expression::Kind::named_argument)
@@ -10518,7 +10582,7 @@ class ScalarChecker {
       operands[slot] = &operand;
     }
     if (!std::ranges::is_sorted(slots)) operation.argument_evaluation_order = std::move(slots);
-    const auto selected = select_method(candidates, arguments, expr.at, expr.text, {}, access_of(views), owners_of(views), nullptr, true, true);
+    const auto selected = select_method(candidates, arguments, expr.at, target.text, {}, access_of(views), owners_of(views), nullptr, true, true);
     const auto &receiver = program_.methods[selected];
     if (checking_method_ && checking_method_->source->kind == Form::Kind::function && receiver.source->kind != Form::Kind::function)
       fail(expr.at, "a function cannot invoke a procedure");
@@ -10533,7 +10597,7 @@ class ScalarChecker {
     for (size_t i = 0; i < explicit_here; ++i) {
       const auto formal = i + supplied;
       const auto &signature = receiver.here[formal];
-      const auto &at = expr.children[i]->at;
+      const auto &at = operands_written[i]->at;
       const auto &input = operation.here_arguments[formal];
       if (input.source) {
         require_prepared_source(operations.at(input.source).prepared_producer.value(), receiver, bindings, signature, views, at);
@@ -10577,7 +10641,10 @@ class ScalarChecker {
     for (const auto i : here_owner_inputs(contract))
       owners.push_back(here_receiver_owner(receiver, *signature.inputs[i].owner, views, expr.at));
     const auto result = require_result(selected, arguments, {}, expr.at).contract.value();
-    auto [body, returning] = demand_supplied_here(*expr.children.back(), contract, signature, std::move(owners),
+    if (terminal && (result.borrowed() || result.type != Type::void_type))
+      implementation_gap(expr.at, "a direct named terminal on a producer with a non-void completion");
+    if (terminal) body = &terminal_here_body(expr, *terminal, signature, *contract.target, supplier);
+    auto [body_call, returning] = demand_supplied_here(*body, contract, signature, std::move(owners),
         result, supplier, operations);
     if (!completes) { operation.type = Type::never; return; }
     const auto finish_here = [&](CheckedOperation &call, const CheckedOperation::SuppliedHere &body) {
@@ -10598,18 +10665,18 @@ class ScalarChecker {
       finish_named_call(expr, arguments, views, call, read, discard, true, receiver);
       if (effects.breaks_here_call) call.predicate.reset();
     };
-    if (!returning) { finish_here(operation, body); return; }
+    if (!returning) { finish_here(operation, body_call); return; }
 
     const auto before = lexical_;
     auto with_return = operation;
-    auto returning_body = body;
+    auto returning_body = body_call;
     returning_body.instance = *returning;
     refine_return_input(true);
     finish_here(with_return, returning_body);
     const auto returned = lexical_;
     lexical_ = before;
     refine_return_input(false);
-    finish_here(operation, body);
+    finish_here(operation, body_call);
     const auto normal = lexical_;
     join(normal, false, returned, false, expr.at);
     if (operation.type != with_return.type) {
@@ -10617,6 +10684,22 @@ class ScalarChecker {
     }
     operation.supplied_here->returning = CheckedOperation::SuppliedHere::ReturningProfile{*returning, *with_return.callee};
     operation.predicate.reset();
+  }
+  void check_pipeline(const Expression &expr, CheckedInstance *supplier,
+      std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation, bool read, bool discard) {
+    using K = Expression::Kind;
+    const auto &ends = *expr.endpoints;
+    if (ends.source || !ends.consumer)
+      implementation_gap(expr.at, "pipeline source attachment and open connections");
+    const auto &producer = *expr.children[ends.middle];
+    const auto &sink = *expr.children[ends.consumer->operand];
+    if ((producer.kind != K::call && producer.kind != K::name) || producer.has_here_body() || producer.intrinsic ||
+        sink.kind != K::name || active_here(sink.text))
+      implementation_gap(expr.at, "pipeline terminal with a computed operand");
+    const auto family = named_family(sink.text);
+    if (family.methods.empty() || family.context || family.definition)
+      implementation_gap(sink.at, "a pipeline terminal without an established direct item call");
+    check_here_receiver(expr, producer, &sink, supplier, operations, operation, read, discard);
   }
   CheckedOperation check_guarded(const Expression &expr, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, bool read = true, bool discard = false, const Type *expected = nullptr,
@@ -11020,15 +11103,19 @@ class ScalarChecker {
              std::map<const Expression *, CheckedOperation> &operations, bool read = true, bool discard = false,
              const Type *expected = nullptr, ExpectedTypeUse expected_use = ExpectedTypeUse::materialization) {
     using K = Expression::Kind;
-    if (pipeline_expression(expr)) implementation_gap(expr.at, "pipeline role checking and bounded here bindings");
     CheckedOperation operation;
     if (checking_method_ && checking_method_->here_group &&
         (expr.kind == K::deferred || expr.kind == K::make_local || expr.kind == K::make_region ||
          expr.kind == K::allocate || (expr.kind != K::return_test && expr.owner_name == "here")))
       implementation_gap(expr.at, "supplier-owned allocation, owner selection or defer from a here group");
     if (expr.spread) implementation_gap(expr.at, "spread arguments");
+    if (expr.kind == K::pipeline) {
+      check_pipeline(expr, instance, operations, operation, read, discard);
+      return operations.insert_or_assign(&expr, std::move(operation)).first->second.type;
+    }
+    if (pipeline_expression(expr)) implementation_gap(expr.at, "pipeline role checking and bounded here bindings");
     if (expr.has_here_body() || forwards_here(expr) || takes_prepared_here(expr)) {
-      check_here_receiver(expr, instance, operations, operation, read, discard);
+      check_here_receiver(expr, expr, nullptr, instance, operations, operation, read, discard);
       return operations.insert_or_assign(&expr, std::move(operation)).first->second.type;
     }
     if (const auto slot = here_slot(expr.text)) {
