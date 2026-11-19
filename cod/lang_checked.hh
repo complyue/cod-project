@@ -501,6 +501,7 @@ class ScalarChecker {
     EvidencePlaces same_selected;
     // Facts implied by the present and absent outcomes of the selected value.
     std::optional<PresenceBranches> presence_proof;
+    bool initialized = false;
   };
   struct QueryWrites {
     EvidencePlaces places;
@@ -517,9 +518,10 @@ class ScalarChecker {
       return unknown || std::ranges::any_of(selected, [&](const auto &place) { return places.contains(place); });
     }
   };
-  struct PreparedBooleanTransfer {
+  struct PreparedTransfer {
     EvidencePlaces destination;
-    PresenceBranches value;
+    std::optional<PresenceBranches> boolean;
+    bool writes_boolean;
   };
   struct PreparedReferenceAssignment {
     EvidenceSelection destination;
@@ -531,7 +533,7 @@ class ScalarChecker {
   struct PreparedReferenceSwap {
     EvidenceSelection left, right;
   };
-  using PreparedBuiltin = std::variant<std::monostate, PreparedBooleanTransfer, PreparedReferenceAssignment,
+  using PreparedBuiltin = std::variant<std::monostate, PreparedTransfer, PreparedReferenceAssignment,
                                        PreparedBooleanSwap, PreparedReferenceSwap>;
   struct TypeDeferredEffects {
     QueryWrites payloads, slots;
@@ -545,6 +547,7 @@ class ScalarChecker {
   };
   struct QuerySelections {
     using Observations = std::map<EvidenceSlot, PresenceBranches>;
+    using Uninitialized = std::map<EvidenceSlot, ObservationPaths>;
     bool tracking = false;
     // Revisions prevent a tested selection from refining a slot written
     // during preparation of the other identity operand.
@@ -561,6 +564,10 @@ class ScalarChecker {
     // borrowed Boolean and an independent Boolean can read the same payload.
     std::map<std::string, EvidencePlaces> value_places;
     std::map<EvidenceSlot, EvidencePlaces> targets;
+    // Private storage with a reaching path on which its payload is unwritten.
+    Uninitialized uninitialized;
+    EvidencePlaces initialized_selections;
+    bool initialization_reachable = true;
     Observations booleans, reference_observations;
     std::map<EvidenceSlot, size_t> changed;
     // Invocation entry selections have no writable binding in this body.
@@ -778,7 +785,8 @@ class ScalarChecker {
       bindings[name] = {slot, {slot}};
       footprints[slot] = {slot};
       if (selected.presence != TargetPresence::unknown) facts[slot] = selected.presence;
-      if (!selected.places.empty()) targets[slot] = std::move(selected.places);
+      if (!selected.places.empty() || selected.presence == TargetPresence::absent) targets[slot] = std::move(selected.places);
+      if (selected.initialized) initialized_selections.insert(slot);
       retain_selection(slot, std::move(selected.same_selected));
       remember_selection(slot, selected.presence_proof);
     }
@@ -798,6 +806,7 @@ class ScalarChecker {
       facts.clear();
       conditions.reset();
       targets.clear();
+      initialized_selections.clear();
       booleans.clear();
       reference_observations.clear();
       equal_selections.clear();
@@ -840,15 +849,20 @@ class ScalarChecker {
       std::erase_if(reference_observations, [&](const auto &entry) { return written(entry.first); });
       preserve_observations(written, selected.presence_proof);
       std::erase_if(targets, [&](const auto &target) { return written(target.first); });
+      std::erase_if(initialized_selections, written);
       remove_selected(written);
       std::erase_if(selected.same_selected, written);
-      if (!selected.places.empty()) {
+      if (!selected.places.empty() || known == TargetPresence::absent) {
         if (selection.footprint.size() == 1) targets[*selection.footprint.begin()] = selected.places;
         if (selection.slot) targets[*selection.slot] = std::move(selected.places);
       }
       if (known != TargetPresence::unknown) {
         if (selection.footprint.size() == 1) facts[*selection.footprint.begin()] = known;
         if (selection.slot) facts[*selection.slot] = known;
+      }
+      if (selected.initialized) {
+        if (selection.footprint.size() == 1) initialized_selections.insert(*selection.footprint.begin());
+        if (selection.slot) initialized_selections.insert(*selection.slot);
       }
       record_assignment_selection(selection, std::move(selected));
     }
@@ -883,6 +897,45 @@ class ScalarChecker {
       condition.presence.clear();
       return condition;
     }
+    void initialize(const EvidencePlaces &places) {
+      if (places.size() == 1) uninitialized.erase(*places.begin());
+    }
+    void initialize(const TargetEvidence &target) {
+      initialize(target.places);
+      if (target.selection.slot) {
+        initialized_selections.insert(*target.selection.slot);
+        initialized_selections.insert(target.same_selected.begin(), target.same_selected.end());
+      }
+    }
+    bool selection_initialized(const TargetEvidence &target) const {
+      return target.initialized || (target.selection.slot && initialized_selections.contains(*target.selection.slot));
+    }
+    bool may_read_uninitialized(const EvidenceSlot &place, const ObservationPaths &reaching) const {
+      const auto found = uninitialized.find(place);
+      if (found == uninitialized.end()) return false;
+      auto missing = found->second;
+      missing.conjoin(reaching);
+      return static_cast<bool>(missing);
+    }
+    void merge_initialization(const QuerySelections &other) {
+      if (!other.initialization_reachable) return;
+      if (!initialization_reachable) {
+        uninitialized = other.uninitialized;
+        initialized_selections = other.initialized_selections;
+        initialization_reachable = true;
+        return;
+      }
+      initialized_selections = common_slots(std::move(initialized_selections), other.initialized_selections);
+      if (uninitialized.empty() && other.uninitialized.empty()) return;
+      const auto left_path = reach_condition(), right_path = other.reach_condition();
+      for (auto &[place, missing] : uninitialized) missing.conjoin(left_path);
+      for (const auto &[place, possible] : other.uninitialized) {
+        auto missing = possible;
+        missing.conjoin(right_path);
+        uninitialized[place].join(missing);
+      }
+      std::erase_if(uninitialized, [](const auto &entry) { return !entry.second; });
+    }
     PresenceBranches on_reaching_path(PresenceBranches proof) const {
       proof = expanded(std::move(proof));
       if (conditions) {
@@ -914,6 +967,7 @@ class ScalarChecker {
       retain_conditions(std::move(refined));
     }
     void forget_observations(size_t first) {
+      for (auto &[place, missing] : uninitialized) missing.forget_observations(first);
       for (auto &[place, proof] : booleans) proof.forget_observations(first);
       for (auto &[slot, proof] : reference_observations) proof.forget_observations(first);
       if (conditions) {
@@ -936,6 +990,7 @@ class ScalarChecker {
       std::erase_if(target.same_selected, written);
     }
     void join_flow(const QuerySelections &other) {
+      merge_initialization(other);
       std::set<EvidencePlaces> shared;
       for (const auto &left : equal_selections) for (const auto &right : other.equal_selections) {
         auto group = common_slots(left, right);
@@ -944,7 +999,10 @@ class ScalarChecker {
       std::erase_if(targets, [&](auto &target) {
         return !other.targets.contains(target.first);
       });
-      for (auto &[slot, places] : targets) places = join_places(std::move(places), other.targets.at(slot));
+      for (auto &[slot, places] : targets) {
+        const auto &selected = other.targets.at(slot);
+        places.insert(selected.begin(), selected.end());
+      }
       for (auto stored = booleans.begin(); stored != booleans.end();) {
         const auto right = other.booleans.find(stored->first);
         if (right != other.booleans.end() && stored->second == right->second) { ++stored; continue; }
@@ -996,7 +1054,9 @@ class ScalarChecker {
     }
     bool same_flow(const QuerySelections &other) const {
       return facts == other.facts && conditions == other.conditions && booleans == other.booleans && targets == other.targets &&
-          reference_observations == other.reference_observations && equal_selections == other.equal_selections;
+          reference_observations == other.reference_observations && equal_selections == other.equal_selections &&
+          uninitialized == other.uninitialized && initialized_selections == other.initialized_selections &&
+          initialization_reachable == other.initialization_reachable;
     }
   };
   struct TypeEvidenceState {
@@ -1019,6 +1079,10 @@ class ScalarChecker {
     bool complete = true;
     bool required = false;
     bool validating_body = false;
+    enum class InitializationCheck { unevaluated, body, suppressed };
+    InitializationCheck initialization = InitializationCheck::unevaluated;
+    bool checks_initialization() const { return initialization == InitializationCheck::body; }
+    bool checks_reaching_paths() const { return checks_initialization() || initialization == InitializationCheck::unevaluated; }
     std::optional<Type> caught_exception;
     std::optional<Type> invocation_result;
     bool supplied_invocation_result = false;
@@ -5021,13 +5085,17 @@ class ScalarChecker {
     if (relation == OwnerMatch::unknown) implementation_gap(at, "conditional reference result requires one provable owner");
   }
   static TargetEvidence join_targets(TargetEvidence left, const TargetEvidence &right) {
+    left.initialized = (left.initialized || left.presence == TargetPresence::absent) &&
+        (right.initialized || right.presence == TargetPresence::absent);
+    if (left.presence == TargetPresence::absent) left.places = right.places;
+    else if (right.presence != TargetPresence::absent)
+      left.places = QuerySelections::join_places(std::move(left.places), right.places);
     if (left.presence != right.presence) left.presence = TargetPresence::unknown;
     if (left.selection.slot != right.selection.slot) left.selection.slot.reset();
     if (left.selection.footprint.empty() || right.selection.footprint.empty()) left.selection.footprint.clear();
     else left.selection.footprint.insert(right.selection.footprint.begin(), right.selection.footprint.end());
     left.branches = QuerySelections::alternatives(std::move(left.branches), right.branches);
     left.presence_proof = QuerySelections::alternatives(std::move(left.presence_proof), right.presence_proof);
-    left.places = QuerySelections::join_places(std::move(left.places), right.places);
     left.contextual_null = left.contextual_null && right.contextual_null;
     left.same_selected = QuerySelections::common_slots(std::move(left.same_selected), right.same_selected);
     return left;
@@ -5294,6 +5362,17 @@ class ScalarChecker {
     for (const auto &failure : failures)
       note_type_failure(state, failure);
   }
+  static void require_type_initialized(const TypeEvidenceState &state, const TargetEvidence &target,
+                                       std::string_view name, const Location &at) {
+    if (!state.checks_initialization() || !state.selections.initialization_reachable ||
+        target.places.empty() || state.selections.selection_initialized(target)) return;
+    const auto reaching = state.selections.outcome(state.selections.selection_outcomes(target), true);
+    for (const auto &place : target.places) if (state.selections.may_read_uninitialized(place, reaching)) {
+      if (name.empty()) if (const auto *local = std::get_if<const Expression *>(&place)) name = (*local)->text;
+      fail(at, "read of '" + std::string(name.empty() ? "target" : name) +
+          "' before definite initialization of every possible target");
+    }
+  }
   static void read_type_target(TypeEvidenceState &state, const ViewEvidence &view, const TargetEvidence &target) {
     if (!state.selections.tracking || !view.nullable || target.presence == TargetPresence::present) return;
     note_type_exit(state, Completion::failure(exception_id(ExceptionCategory::null_pointer)));
@@ -5332,8 +5411,10 @@ class ScalarChecker {
   static void apply_type_builtin(QuerySelections &selections, const PreparedBuiltin &operation) {
     std::visit([&](const auto &effect) {
       using Effect = std::decay_t<decltype(effect)>;
-      if constexpr (std::is_same_v<Effect, PreparedBooleanTransfer>)
-        selections.write_boolean(effect.destination, effect.value);
+      if constexpr (std::is_same_v<Effect, PreparedTransfer>) {
+        selections.initialize(effect.destination);
+        if (effect.writes_boolean) selections.write_boolean(effect.destination, effect.boolean);
+      }
       else if constexpr (std::is_same_v<Effect, PreparedReferenceAssignment>)
         selections.assign(effect.destination, effect.value);
       else if constexpr (std::is_same_v<Effect, PreparedBooleanSwap>)
@@ -5363,22 +5444,34 @@ class ScalarChecker {
     auto *const exits = state.exits;
     auto *const deferred = state.deferred;
     const auto deferred_queue = state.deferred_queue;
+    const auto initialization = state.initialization;
     if (!reached) {
       state.exits = nullptr;
       state.deferred = nullptr;
+      state.initialization = TypeEvidenceState::InitializationCheck::suppressed;
     }
     const auto type = query_evidence(expr, state, view, target, contextual, expected, alternatives ? &independent : nullptr, expected_use, read);
+    if (state.checks_initialization() && !target.places.empty() && !target.initialized) {
+      const auto reaching = state.selections.outcome(state.selections.selection_outcomes(target), true);
+      target.initialized = state.selections.selection_initialized(target) ||
+          std::ranges::none_of(target.places, [&](const auto &place) {
+            return state.selections.may_read_uninitialized(place, reaching);
+          });
+    }
     const bool reads_result = read == EvidenceRead::payload && !state.preparing(expr);
     // Bare names still read their payload in statement position. A borrowed
     // result of a call, group or rebind is read only when the result is used.
     if ((reads_result || (read == EvidenceRead::discarded && expr.kind == K::name)) &&
         type && *type != Type::never && *type != Type::null_ref &&
-        expr.kind != K::block && expr.kind != K::conditional && expr.kind != K::try_scope)
+        expr.kind != K::block && expr.kind != K::conditional && expr.kind != K::try_scope) {
+      require_type_initialized(state, target, expr.kind == K::name ? expr.text : std::string_view{}, expr.at);
       read_type_target(state, view, target);
+    }
     state.exits = exits;
     if (!reached) {
       state.deferred = deferred;
       state.deferred_queue = deferred_queue;
+      state.initialization = initialization;
     }
     if (alternatives && type != Type::never) {
       if (type) alternatives->push_back(*type);
@@ -5532,8 +5625,9 @@ class ScalarChecker {
     state.exits = exits;
     return type;
   }
-  std::optional<PresenceBranches> deferred_boolean_result(const TypeDeferredFlow &flow, const TypeEvidenceExits &exits,
-                                                           const TypeEvidenceState &body, bool falls_through) const {
+  std::optional<PresenceBranches> complete_type_deferred(const TypeDeferredFlow &flow, const TypeEvidenceExits &exits,
+                                                        const TypeEvidenceState &body, bool falls_through,
+                                                        TypeEvidenceExits *completed) const {
     const bool may_replace = body.selections.deferred_return || std::ranges::any_of(exits.paths,
         [](const auto &path) { return path.state.selections.deferred_return; });
     bool returning = false;
@@ -5542,7 +5636,7 @@ class ScalarChecker {
       proof = QuerySelections::alternatives(std::move(proof), result);
       returning = true;
     };
-    if (!may_replace) {
+    if (!may_replace && !body.checks_initialization()) {
       for (const auto &path : exits.paths) if (path.returned()) collect(path.boolean_return);
       return returning ? proof : std::nullopt;
     }
@@ -5551,7 +5645,7 @@ class ScalarChecker {
       TypeEvidenceState state;
       std::optional<PresenceBranches> result;
     };
-    const bool guards_errors = std::ranges::any_of(flow.entries, [](const auto &entry) {
+    const bool guards_errors = body.checks_initialization() || std::ranges::any_of(flow.entries, [](const auto &entry) {
       const auto *action = std::get_if<TypeDeferredFlow::Action>(&entry);
       return action && action->entry && action->entry->children.size() > 1;
     });
@@ -5559,6 +5653,7 @@ class ScalarChecker {
     std::map<WorkKey, Pending> pending, loop_inputs;
     const auto enqueue = [&](size_t queue, bool returned, size_t error, TypeEvidenceState state,
                              std::optional<PresenceBranches> result) {
+      if (body.checks_initialization() && !state.selections.initialization_reachable) return;
       state.exits = nullptr;
       state.deferred = nullptr;
       if (returned) {
@@ -5586,7 +5681,8 @@ class ScalarChecker {
       const auto [queue, returned, error] = next.key();
       auto &[state, result] = next.mapped();
       if (!queue) {
-        if (returned) collect(result);
+        if (completed) merge_type_exits(*completed, {error ? error : returned ? 1u : 0u}, state);
+        if (returned && !error) collect(result);
         continue;
       }
       const auto &entry = flow.entries.at(queue - 1);
@@ -5662,6 +5758,7 @@ class ScalarChecker {
       invocation.selections.bindings = std::move(bindings);
       invocation.selections.value_places = std::move(places);
       invocation.prepared_call.reset();
+      invocation.deferred = nullptr;
       // The declaration supplies names. The queue supplies the live values.
       auto completed = replay_type_defer(*action.entry, std::move(invocation), error);
       for (auto &path : completed.paths) {
@@ -5683,11 +5780,28 @@ class ScalarChecker {
     std::optional<PresenceBranches> boolean;
     bool completes = true;
   };
+  static void project_type_initialization(TypeEvidenceState &caller, const TypeEvidenceState &completed, size_t first_observation) {
+    auto &missing = caller.selections.uninitialized;
+    const auto reaching = completed.selections.reach_condition();
+    for (auto entry = missing.begin(); entry != missing.end();) {
+      const auto observed = completed.selections.uninitialized.find(entry->first);
+      if (observed == completed.selections.uninitialized.end()) {
+        entry = missing.erase(entry);
+        continue;
+      }
+      auto paths = observed->second;
+      paths.conjoin(reaching);
+      paths.forget_observations(first_observation);
+      if (paths) { entry->second = std::move(paths); ++entry; }
+      else entry = missing.erase(entry);
+    }
+  }
   LocalStorageEvidence local_storage_evidence(const Expression &expr, TypeEvidenceState &state, bool reached = true) const {
     LocalStorageEvidence storage;
     if (expr.annotation) storage.type = evidence_annotation(*expr.annotation, state);
     else {
       auto query = state; query.returns = nullptr; query.exits = nullptr;
+      if (query.checks_initialization()) query.initialization = TypeEvidenceState::InitializationCheck::unevaluated;
       query.delayed_controls.clear();
       storage.type = type_evidence(*expr.children.front(), query);
     }
@@ -5730,8 +5844,14 @@ class ScalarChecker {
       const auto declaration = result_context(id, &state);
       auto body = body_evidence(id, {}, *retained, declaration);
       body.required = body.validating_body = true;
+      if (!state.selections.initialization_reachable)
+        body.initialization = TypeEvidenceState::InitializationCheck::suppressed;
+      else if (proving_ && validating_ && state.checks_reaching_paths())
+        body.initialization = TypeEvidenceState::InitializationCheck::body;
+      else body.initialization = state.initialization;
       body.selections.tracking = state.selections.tracking;
       body.selections.observation_decisions = state.selections.observation_decisions;
+      if (state.checks_initialization()) body.selections.uninitialized = state.selections.uninitialized;
       PresenceSlotMap exported_slots;
       if (body.selections.tracking) {
         PresenceSlotMap imported_slots;
@@ -5752,6 +5872,8 @@ class ScalarChecker {
           if (view == body.views.end()) continue;
           const auto source = named_type_target(state, name);
           const EvidenceSlot local = std::pair{callee.definition.get(), name};
+          if (view->second.value_binding == true)
+            require_type_initialized(state, source, name, capture.at);
           if (view->second.value_binding != true && source.selection.slot) {
             // Entry observations outlive writes to the invocation's slots.
             for (const auto &slot : source.same_selected) {
@@ -5783,7 +5905,7 @@ class ScalarChecker {
       const auto first_local_observation = body.selections.observation_decisions ? body.selections.observation_decisions->next_observation : 0;
       TypeEvidenceExits exits;
       TypeDeferredFlow deferred;
-      if (track_return) {
+      if (track_return || body.checks_initialization()) {
         body.deferred = &deferred;
         body.deferred_queue = 0;
       }
@@ -5797,10 +5919,12 @@ class ScalarChecker {
           }
         }
       }
-      if (state.exits || track_return || !writable_booleans.empty()) body.exits = &exits;
+      if (state.exits || body.deferred || !writable_booleans.empty()) body.exits = &exits;
       const auto completion = type_evidence(*callee.definition->body, body);
-      if (track_return) {
-        if (auto proof = deferred_boolean_result(deferred, exits, body, completion != Type::never)) {
+      TypeEvidenceExits completed;
+      if (body.deferred) {
+        if (auto proof = complete_type_deferred(deferred, exits, body, completion != Type::never,
+                state.checks_initialization() ? &completed : nullptr); track_return && proof) {
           proof->forget_observations(first_local_observation);
           returned.branches = proof->remap(exported_slots);
         }
@@ -5812,7 +5936,22 @@ class ScalarChecker {
         if (written(body.selections) || std::ranges::any_of(exits.paths, [&](const auto &path) { return written(path.state.selections); }))
           state.selections.write_boolean(places, {});
       }
-      if (state.exits) {
+      if (state.checks_initialization()) {
+        std::optional<QuerySelections> normal;
+        for (const auto &outcome : completed.paths) {
+          auto caller = state;
+          project_type_initialization(caller, outcome.state, first_local_observation);
+          for (auto reason : outcome.reasons) {
+            if (reason == 0 && body.invocation_result != Type::void_type)
+              reason = Completion::failure(exception_id(ExceptionCategory::missing_return)).reason;
+            if (reason <= 1) {
+              if (normal) normal->merge_initialization(caller.selections);
+              else normal = caller.selections;
+            } else if (state.exits) merge_type_exits(*state.exits, {reason}, caller);
+          }
+        }
+        if (normal) state.selections.uninitialized = std::move(normal->uninitialized);
+      } else if (state.exits) {
         if (completion != Type::never && body.invocation_result != Type::void_type)
           note_type_exit(state, Completion::failure(exception_id(ExceptionCategory::missing_return)));
         const auto registered = [](const TypeEvidenceExits::Path &path) { return path.state.has_deferred_action; };
@@ -5955,8 +6094,11 @@ class ScalarChecker {
       if (result == GroupResult::nullable_target) {
         target_facts = state.target;
         target_facts.selection.footprint.clear();
-      } else if (type == Type::boolean) {
-        target_facts.branches = state.target.branches ? state.target.branches : state.selections.read_boolean(state.target.places);
+      } else {
+        if (result == GroupResult::value && source.view == true)
+          require_type_initialized(state, state.target, {}, expr.at);
+        if (type == Type::boolean)
+          target_facts.branches = state.target.branches ? state.target.branches : state.selections.read_boolean(state.target.places);
       }
       if (result == GroupResult::value && type->kind == Type::procedure && source.view == true)
         note_type_allocation(state);
@@ -6025,6 +6167,8 @@ class ScalarChecker {
               initializer.children.size() == (initializer.annotation ? 0u : 1u))
             fail(declaration->at, "ref requires definitely initialized target storage");
         }
+        if (completes && borrowed == true && expr.declaration_kind == "ref")
+          require_type_initialized(state, state.target, initializer.kind == K::name ? initializer.text : std::string_view{}, initializer.at);
         state.bindings[declaration->text] = type;
         state.local_declarations[declaration->text] = declaration.get();
         state.definitions.erase(declaration->text);
@@ -6041,14 +6185,21 @@ class ScalarChecker {
                                          expr.declaration_kind == "ptr"};
         state.selections.remove_binding(declaration->text);
         EvidencePlaces places;
-        if (state.selections.tracking && completes && type == Type::boolean) {
+        if (state.selections.tracking && completes && (type == Type::boolean || state.checks_initialization())) {
           if (borrowed == true && !state.value.mixed_view) places = state.target.places;
           else if (borrowed == false && !state.value.mixed_view) {
             places.insert(declaration.get());
             if (value) state.selections.value_places.insert_or_assign(declaration->text, places);
-            if (initializer.kind != K::make_local)
-              boolean = state.target.branches ? state.target.branches : state.selections.read_boolean(state.target.places);
-            state.selections.write_boolean(places, boolean);
+            if (state.checks_initialization() && type && scalar_type(*type)) {
+              if (initializer.kind == K::make_local && initializer.children.size() == (initializer.annotation ? 0u : 1u))
+                state.selections.uninitialized.insert_or_assign(declaration.get(), state.selections.reach_condition());
+              else state.selections.initialize(places);
+            }
+            if (type == Type::boolean) {
+              if (initializer.kind != K::make_local)
+                boolean = state.target.branches ? state.target.branches : state.selections.read_boolean(state.target.places);
+              state.selections.write_boolean(places, boolean);
+            }
           }
         }
         if (!value && initial && *initial != Type::never) {
@@ -6077,7 +6228,7 @@ class ScalarChecker {
       state.views[expr.text] = selected;
       state.views[expr.text].value_capture = false;
       state.selections.remove_binding(expr.text);
-      if (type == Type::boolean && selected.value_binding == true && !state.target.places.empty())
+      if ((type == Type::boolean || state.checks_initialization()) && selected.value_binding == true && !state.target.places.empty())
         state.selections.value_places.emplace(expr.text, state.target.places);
       if (selected.nullable || !state.target.selection.footprint.empty())
         state.selections.declare_place(expr.text, &expr, state.target);
@@ -6089,7 +6240,8 @@ class ScalarChecker {
     }
     case K::transfer: case K::rebind: {
       const auto type = child(0, false, true, EvidenceRead::target); view = state.value;
-      const auto destination = state.target;
+      auto destination = state.target;
+      const auto destination_revision = state.selections.writes;
       if (expr.kind == K::transfer && type != Type::never) read_type_target(state, view, state.target);
       const auto *context = expr.kind == K::transfer && type && type->kind == Type::procedure ? &*type : nullptr;
       const auto source = type_evidence(*expr.children[1], state, context != nullptr, context, nullptr,
@@ -6110,10 +6262,15 @@ class ScalarChecker {
         if (type == Type::boolean) {
           target_facts.branches = state.target.branches;
           type_boolean_write(expr, state, destination.places, target_facts.branches);
-          if (state.preparing(expr) && !destination.places.empty())
-            state.prepared_call->effects.builtin =
-                PreparedBooleanTransfer{destination.places, snapshot_type_branches(state, target_facts.branches)};
         }
+        if (!state.preparing(expr) && state.checks_initialization()) {
+          state.selections.forget_changed(destination, destination_revision);
+          state.selections.initialize(destination);
+        }
+        else if (state.preparing(expr) && !destination.places.empty() && (type == Type::boolean || state.checks_initialization()))
+          state.prepared_call->effects.builtin = PreparedTransfer{destination.places,
+              type == Type::boolean ? std::optional{snapshot_type_branches(state, target_facts.branches)} : std::nullopt,
+              type == Type::boolean};
       } else if (state.required) {
         reference_destination(view, expr.at);
         const auto &selected = state.value;
@@ -6168,7 +6325,7 @@ class ScalarChecker {
       view = yes == Type::never ? no_state.value : no == Type::never ? yes_state.value : join_views(yes_state.value, no_state.value);
       const bool independent = arms.independent();
       if (independent) {
-        if (state.required && proving_ && validating_ && condition != Type::never) {
+        if (state.required && proving_ && validating_ && state.checks_reaching_paths() && condition != Type::never) {
           if (reaches_yes) require_present_projection(yes_state.value, yes_state.target.presence, expr.children[1]->at);
           if (reaches_no) require_present_projection(no_state.value, no_state.target.presence, expr.children[2]->at);
         }
@@ -6204,7 +6361,17 @@ class ScalarChecker {
       }
       if (!reaches_yes) yes_state.deferred_queue = no_state.deferred_queue;
       if (!reaches_no) no_state.deferred_queue = yes_state.deferred_queue;
-      state = condition == Type::never ? merge_evidence(std::move(yes_state), no_state) :
+      if (state.checks_initialization() && reaches_yes != reaches_no) {
+        // The type pass still needs both arms for lexical and result evidence.
+        const auto &reaching = reaches_yes ? yes_state : no_state;
+        auto missing = reaching.selections.uninitialized;
+        auto ready = reaching.selections.initialized_selections;
+        const bool continues = reaching.selections.initialization_reachable && (reaches_yes ? yes : no) != Type::never;
+        state = merge_reaching_evidence(std::move(yes_state), std::move(no_state), yes == Type::never, no == Type::never);
+        state.selections.uninitialized = std::move(missing);
+        state.selections.initialized_selections = std::move(ready);
+        state.selections.initialization_reachable = continues;
+      } else state = condition == Type::never ? merge_evidence(std::move(yes_state), no_state) :
           merge_reaching_evidence(std::move(yes_state), std::move(no_state), yes == Type::never, no == Type::never);
       if (condition == Type::never) return Type::never;
       return result;
@@ -6226,6 +6393,7 @@ class ScalarChecker {
           return Type::void_type;
         }
         auto delayed = state;
+        delayed.initialization = TypeEvidenceState::InitializationCheck::suppressed;
         TypeEvidenceExits delayed_exits;
         delayed.exits = state.selections.tracking ? &delayed_exits : nullptr;
         delayed.deferred = nullptr;
@@ -6258,7 +6426,7 @@ class ScalarChecker {
           may_replace |= path.returned();
         }
         const bool bodyless_catch = expr.binding == "fallback" && expr.children[1]->kind == K::handler;
-        register_type_defer(state, bodyless_catch ? nullptr : &expr, may_replace, std::move(effects));
+        register_type_defer(state, bodyless_catch && !state.checks_initialization() ? nullptr : &expr, may_replace, std::move(effects));
         return Type::void_type;
       }
       if (!state.returns || expr.children.front()->kind != K::block) {
@@ -6301,7 +6469,7 @@ class ScalarChecker {
         auto caught = catch_evidence(handler, catch_entry, handled);
         TypeEvidenceExits exits;
         if (track_exits) caught.exits = handler_reaches ? &exits : nullptr;
-        const auto type = type_evidence(*handler.children.front(), caught, contextual, expected, alternatives, expected_use, true, read);
+        const auto type = type_evidence(*handler.children.front(), caught, contextual, expected, alternatives, expected_use, handler_reaches, read);
         if (state.required) check_guarded_result(*result, *type, handler.at);
         if (read == EvidenceRead::payload && type && type->kind == Type::procedure)
           note_type_allocation(caught);
@@ -6523,8 +6691,11 @@ class ScalarChecker {
         if (state.required && state.bindings.contains(expr.text)) check_query_binding(expr.text, expr.at);
         if (const auto found = state.bindings.find(expr.text); found != state.bindings.end() && !state.definitions.contains(expr.text)) {
           target = found->second; local = true;
-          if (target && target->kind == Type::procedure)
-            read_type_target(state, state.views.at(expr.text), named_type_target(state, expr.text));
+          if (target && target->kind == Type::procedure) {
+            const auto selected = named_type_target(state, expr.text);
+            require_type_initialized(state, selected, expr.text, expr.at);
+            read_type_target(state, state.views.at(expr.text), selected);
+          }
         }
       }
       const auto name = local ? std::string_view{} : operation_name(expr, &state);
@@ -6535,6 +6706,7 @@ class ScalarChecker {
       auto probe = state;
       probe.required = false;
       probe.exits = nullptr;
+      probe.initialization = TypeEvidenceState::InitializationCheck::suppressed;
       std::vector<ArgumentEvidence> evidence(expr.children.size());
       std::vector<ViewEvidence> hinted_views(expr.children.size());
       std::vector<TargetEvidence> hinted_targets;
@@ -6592,6 +6764,13 @@ class ScalarChecker {
         if (state.selections.tracking) operand_targets.push_back(std::move(selected_target));
       }
       if (exits) return Type::never;
+      const auto retain_borrowed_targets = [&](const ViewEvidence &result, const Type &type, const auto &mode) {
+        if (!state.checks_initialization() || result.view != true || !scalar_type(type)) return;
+        for (size_t i = 0; i < operand_targets.size(); ++i)
+          if (mode(i) != ArgumentMode::value && arguments[i] == type &&
+              compare_owners(result.owner, owners[i], &state) != OwnerMatch::mismatch)
+            target_facts.places.insert(operand_targets[i].places.begin(), operand_targets[i].places.end());
+      };
       if (local) {
         if (state.required && (!target || target->kind != Type::procedure || !target->target))
           fail(expr.at, "nearest binding '" + expr.text + "' is not callable");
@@ -6619,6 +6798,7 @@ class ScalarChecker {
         view.nullable = borrowed && !target->nullable_views.empty() && target->nullable_views.back();
         if (borrowed) for (size_t i = 0; i < owners.size(); ++i)
           if (target->owners[i] == target->owners.back() && owners[i]) view.owner = owners[i];
+        if (borrowed) retain_borrowed_targets(view, *target->target, [&](size_t i) { return argument_mode(*target, i); });
         if (!implicit) {
           for (size_t i = 0; i < operand_targets.size(); ++i)
             type_input_mutation(expr, state, arguments[i], operand_targets[i], argument_mode(*target, i),
@@ -6659,6 +6839,7 @@ class ScalarChecker {
             selected.selection.slot.reset();
             selected.same_selected.clear();
             selected.presence_proof.reset();
+            require_type_initialized(state, operand_targets[i], i ? "right swap target" : "left swap target", expr.at);
             read_type_target(state, views[i], selected);
           }
         if (!reference && methods.methods.empty() && operand_targets.size() == 2 && arguments.front() == Type::boolean) {
@@ -6729,7 +6910,9 @@ class ScalarChecker {
       if (candidates.methods.empty() && !expr.intrinsic && has_declarations(expr.text) &&
           (!eager_operation(name) || !eager_types(name, arguments).error.empty())) {
         const auto result = inspect_declarations(expr.text, arguments, access, owners, expr.at, state,
-            [&](const CheckedMethod &declaration, const Substitutions &, const ResultContract &) {
+            [&](const CheckedMethod &declaration, const Substitutions &, const ResultContract &contract) {
+          retain_borrowed_targets(result_view(declaration, contract, owners), *contract.type,
+              [&](size_t i) { return argument_mode(parameter_at(declaration, i)); });
           for (size_t i = 0; i < operand_targets.size(); ++i) {
             const auto &parameter = parameter_at(declaration, i);
             type_input_mutation(expr, state, arguments[i], operand_targets[i], argument_mode(parameter), parameter.read_only,
@@ -6798,6 +6981,7 @@ class ScalarChecker {
                 state.prepared_call->effects.outcomes.insert(Completion::failure(category).reason);
           }
         const auto next = result_view(method, *type, owners);
+        retain_borrowed_targets(next, *type->type, [&](size_t i) { return argument_mode(parameter_at(method, i)); });
         view = !result || view == next ? next : ViewEvidence{};
         result = type->type;
       }

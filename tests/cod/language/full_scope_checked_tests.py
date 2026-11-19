@@ -27,8 +27,8 @@ def reject(source, diagnostic=NPE):
     return TYPES + PAYLOAD + source, 2, '', diagnostic
 
 
-def query(body):
-    return TYPES + 'val result<-make local typeof({{' + body + '}}){4u64};'
+def query(body, prelude=TYPES):
+    return prelude + 'val result<-make local typeof({{' + body + '}}){4u64};'
 
 
 CONDITIONAL_READ = (' {{val local<-make local u64;'
@@ -36,6 +36,8 @@ CONDITIONAL_READ = (' {{val local<-make local u64;'
 UNINITIALIZED_LOCAL = "read of 'local' before definite initialization"
 BORROWED_BOOLEAN = 'val off<-false,on<-true;ref flag=off;ref next=on;'
 DEFER_CONDITIONAL_READ = 'defer{'+CONDITIONAL_READ+'};'
+UNWRITTEN = 'val local<-make local u64;'
+DEFER_READ_LOCAL = 'defer{behave @print(local);}'
 
 
 runner.CASES = {
@@ -117,6 +119,41 @@ runner.CASES = {
         'non-value or abruptly completing operand'),
     'query_checks_catch_category': (query('try{}catch(e:const u64){};return 7u64;'),
         2, '', 'catch requires a selected intrinsic exception type'),
+    'query_rejects_unwritten_private_storage': (
+        query(UNWRITTEN+'return local;'), 2, '', UNINITIALIZED_LOCAL),
+    'query_checks_read_after_separate_abrupt_arm': (
+        'proc run(flag:bool)->void{'+query(UNWRITTEN+'if(flag){if(true){return 7u64;}else{};}else{};return local;', '')+
+        '}run(true);', 2, '', UNINITIALIZED_LOCAL),
+    'query_keeps_outer_input_unevaluated': (
+        IO+UNWRITTEN+query('return local;')+'behave @print(result);', 0, '4\n', ''),
+    'query_carries_nested_borrowed_write': (
+        IO+query(UNWRITTEN+'ptr p=local;{{defer{p<-7u64;};}};return local;')+'behave @print(result);', 0, '4\n', ''),
+    'query_checks_registration_failure_before_deferred_write': (
+        IO+query(UNWRITTEN+DEFER_READ_LOCAL+';defer{local<-7u64;};return 7u64;'),
+        2, '', UNINITIALIZED_LOCAL),
+    'query_accepts_guarded_deferred_read': (
+        IO+query(UNWRITTEN+DEFER_READ_LOCAL+'finally{};defer (<-)(local,7u64);return 7u64;')+
+        'behave @print(result);', 0, '4\n', ''),
+    'query_checks_non_null_target_after_nullable_join': (
+        TYPES+'proc run(flag:bool)->void{'+query(UNWRITTEN+
+        'ptr p:u64=null in here;if(flag){p=local;{}}else{};try{return p;}'
+        'catch(e:const NullPointerException){return 4u64;};', '')+'}run(true);', 2, '',
+        "read of 'p' before definite initialization"),
+    'query_retains_initialization_of_selected_target': (
+        IO+'proc run(flag:bool)->void{'+query(UNWRITTEN+'val other<-make local u64;'
+        'ptr p=if(flag){local}else{other};p<-7u64;return p;', '')+
+        'behave @print(result);}run(true);', 0, '4\n', ''),
+    'query_keeps_initialized_selection_across_reference_copy': (
+        IO+'proc run(flag:bool)->void{'+query(UNWRITTEN+'val other<-make local u64;val ready<-1u64;'
+        'ptr p=if(flag){local}else{other};p<-7u64;ptr retained=p;p=ready;return retained;', '')+
+        'behave @print(result);}run(true);', 0, '4\n', ''),
+    'query_checks_a_target_from_a_borrowed_result_signature': (
+        'func same(ptr x:u64 in O)->ptr u64 in O where {owner O};'+query(UNWRITTEN+
+        'ptr p=same(local);try{return p;}catch(e:const NullPointerException){return 4u64;};'),
+        2, '', "read of 'p' before definite initialization"),
+    'query_checks_prepared_bits_swap_at_registration': (
+        query(UNWRITTEN+'val ready<-3u64;defer (<->)(local,ready);local<-7u64;return local;'),
+        2, '', "read of 'left swap target' before definite initialization"),
     'query_rejects_repeated_catch_category': (query('try{}catch(e:const NullPointerException){}'
         'catch(f:const NullPointerException){};return 7u64;'), 2, '', 'duplicate exception category in catch clauses'),
     'query_matches_root_and_untyped_catch_category': (query('try{}catch(e:const Exception){}catch(f){};return 7u64;'),
