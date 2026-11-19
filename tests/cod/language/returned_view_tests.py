@@ -12,6 +12,9 @@ WARN = 'callable may finish without a result'
 SELECT = 'func first(ptr x:i64 in O,ptr y:i64 in O)->ptr i64 in O where {owner O}{return x;}\n'
 SET = 'func set(ptr x:i64 in O)->ptr i64 in O throws NullPointerException where {owner O}{x<-81;return x;}\n'
 LOCALS = 'val a<-make local i64,b<-make local i64;ptr p=if(true){a}else{b};'
+INSPECT_SAVED = ('func f(ptr x:i64 in O,ptr y:i64 in O,flag:bool)->ptr i64 in O where {owner O}{defer{'
+                 'try{if(flag){return x;}else{};}finally{'
+                 'if returning (){if(x is not null){x<-93;x=y;{}}else{};}else{};};return y;};}')
 runner.CASES = {
     'selected_initialized_result': (PRE+SET+LOCALS+'try{behave @print(set(p));}catch(e:const NullPointerException){};',0,'81\n',''),
     'result_does_not_initialize_all_candidates': (PRE+SET+LOCALS+'try{set(p);behave @print(b);}catch(e:const NullPointerException){};',2,'','before definite initialization'),
@@ -31,6 +34,12 @@ runner.CASES = {
     'finally_replaces_selected_address': (PRE+'func f(ptr x:i64 in O,ptr y:i64 in O)->ptr i64 in O where {owner O}{try{return x;}finally{return y;};}val a<-make local i64,b<-91;try{behave @print(f(a,b));}catch(e:const NullPointerException){};',0,'91\n',''),
     'finally_replacement_unwritten_rejected': (PRE+'func f(ptr x:i64 in O,ptr y:i64 in O)->ptr i64 in O where {owner O}{try{return x;}finally{return y;};}val a<-92,b<-make local i64;try{behave @print(f(a,b));}catch(e:const NullPointerException){};',2,'','before definite initialization'),
     'finally_initializes_saved_result': (PRE+'func f(ptr x:i64 in O)->ptr i64 in O throws NullPointerException where {owner O}{try{return x;}finally{x<-93;{}};}'+LOCALS+'try{behave @print(f(p));}catch(e:const NullPointerException){};',0,'93\n',''),
+    'inspection_initializes_saved_target_before_rebinding': (PRE+INSPECT_SAVED+
+        'val a<-make local i64,b<-44;try{behave @print(f(a,b,true));behave @print(f(a,b,false));}catch(e:const NullPointerException){};',
+        0,'93\n44\n',''),
+    'inspection_does_not_initialize_other_return_target': (PRE+INSPECT_SAVED+
+        'val a<-make local i64,b<-make local i64;try{behave @print(f(a,b,false));}catch(e:const NullPointerException){};',
+        2,'','before definite initialization'),
     'deferred_initializes_saved_result': (PRE+'func f(ptr x:i64 in O)->ptr i64 in O throws NullPointerException where {owner O}{defer{x<-94;};return x;}'+LOCALS+'try{behave @print(f(p));}catch(e:const NullPointerException){};',0,'94\n',''),
     'deferred_replaces_selected_address': (PRE+'func f(ptr x:i64 in O,ptr y:i64 in O)->ptr i64 in O where {owner O}{defer{return y;};return x;}val a<-make local i64,b<-95;try{behave @print(f(a,b));}catch(e:const NullPointerException){};',0,'95\n',''),
     'deferred_replacement_unwritten_rejected': (PRE+'func f(ptr x:i64 in O,ptr y:i64 in O)->ptr i64 in O where {owner O}{defer{return y;};return x;}val a<-95,b<-make local i64;try{behave @print(f(a,b));}catch(e:const NullPointerException){};',2,'','before definite initialization'),

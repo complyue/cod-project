@@ -51,6 +51,20 @@ runner.CASES = {
     "return_inspection_ordinary_suspension": (OBSERVE +
         'proc f()->i64{defer{try{return 7;}finally{if returning (){behave @print(31);}else{behave @print(32);}};};}observe(f());',
         0, "31\n7\n", ""),
+    "return_inspection_projects_mixed_finally": (OBSERVE +
+        'proc f(flag:bool)->i64{val n<-make local i64;defer{try{if(flag){n<-11;return 7;}else{};}'
+        'finally{if returning (){behave @print(n);}else{n<-22;{}};};return n;};}'
+        'observe(f(true));observe(f(false));', 0, "11\n7\n22\n", ""),
+    "return_inspection_finally_write_stays_on_matching_completion": (
+        'proc f(flag:bool)->i64{val n<-make local i64;defer{try{if(flag){return 7;}else{};}'
+        'finally{if returning (){n<-11;{}};};return n;};}f(false);',
+        2, "", "cannot prove initialization of 'n'"),
+    "return_inspection_projects_nested_finally": (OBSERVE +
+        'proc f(outer:bool,inner:bool)->i64{defer{try{if(outer){return 7;}else{};}finally{'
+        'try{if(inner){return 9;}else{};}finally{if returning (){behave @print(41);}else{behave @print(42);}};'
+        'if returning (){behave @print(43);}else{behave @print(44);};};return 8;};}'
+        'observe(f(true,true));observe(f(true,false));observe(f(false,true));observe(f(false,false));',
+        0, "41\n9\n41\n43\n7\n41\n9\n42\n44\n8\n", ""),
     "return_inspection_distinguishes_ready_paths": (OBSERVE +
         'proc f(flag:bool)->void{val n<-make local i64;defer{if returning (){behave @print(n);}else{return;}};'
         'if(flag){n<-1;return;}else{};}f(true);f(false);', 0, "1\n", ""),

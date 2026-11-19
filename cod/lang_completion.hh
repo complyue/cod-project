@@ -214,7 +214,6 @@ struct Completion {
 class CleanupEquations {
 public:
   static constexpr size_t deferred_return_offset = exception_categories.size() + 1;
-  static_assert(2 * deferred_return_offset <= 64);
   static size_t deferred_input(Completion completion, bool guarded, bool observes_return) {
     const auto arrival = !guarded || completion.reason < 2 ? 0 :
         completion.reason == 2 ? exception_categories.size() : completion.reason - 3;
@@ -1078,7 +1077,7 @@ public:
       });
     }
   };
-  struct Path { std::uint64_t inputs; Completion completion; size_t queue; Effects effects{}; };
+  struct Path { size_t input; Completion completion; size_t queue; Effects effects{}; };
   struct Action {
     bool guarded = false;
     std::vector<Path> paths;
@@ -1363,7 +1362,7 @@ public:
         const auto incoming = Completion::from(state);
         const auto selected = deferred_input(incoming, action.guarded, action.observes_return);
         for (const auto &path : action.paths) {
-          if (!(path.inputs & (std::uint64_t{1} << selected))) continue;
+          if (path.input != selected) continue;
           auto next = path.completion;
           if (!next.reason) {
             next = action.guarded && incoming.reason >= 2 ?
