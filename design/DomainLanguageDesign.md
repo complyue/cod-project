@@ -1,6 +1,6 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 189
+Discussion revision: 190
 
 Recorded: 2026-11-19
 
@@ -12,7 +12,7 @@ Phase: coordinated language/SNN design, implementation planning and validation.
 
 - **Case expressions and branch-local variables.** [D-07-CASE](DesignAuthorityRegistry.md#d-07-case) r188 specifies the [source rules and examples](#case-expressions-and-branch-local-variables). [H-CASE-CONTRACT-20261119](../CHANGELOG.md#h-case-contract-20261119) covers selection and lexical control. [H-CASE-COVERAGE-20261119](../CHANGELOG.md#h-case-coverage-20261119) permits a statically exhaustive value case to omit a fallback and places each arm directly in its own case body. [H-CASE-THROW-20261119](../CHANGELOG.md#h-case-throw-20261119) confirms a fresh unchecked error for the explicit throwing arm. Check it both outside and inside a catch. P-625/P-626 connect observable selection, binding, effect order and result delivery to C-10/C-65/C-72 and charter §§3.1–3.3/4.3/8.1. Check single evaluation, writes before a failed guard, nullable and closed subjects, fallthrough, nested arm ownership and cleanup. Rich diagnostics follow the [compiler-stage policy](../applications/cod-booter/README.md#diagnostics-by-compiler-stage). Native representation and extensions to owner proofs are outside scope.
 
-- **Functor classification.** [H-HERE-FUNCTOR-20261118](../CHANGELOG.md#h-here-functor-20261118) records the receiver-bound functor in [D-18’s here-callable inventory](CallableViewsAndCaptures.md#forms-of-here-callable). D-07-FUNCTORS r178/P-605–P-606 uses the bounded lifetime rule to preserve receiver ownership and access. Accept the two argument bindings in DL-01 under the matching predicate contract. Selection timing, competing overloads and implementation qualification remain open.
+- **Functor arguments.** [H-HERE-FUNCTOR-20261118](../CHANGELOG.md#h-here-functor-20261118) confirms direct passage of a data receiver with a compatible call operator to a here parameter. [H-FUNCTOR-ARGUMENT-20261119](../CHANGELOG.md#h-functor-argument-20261119) applies ordinary written argument evaluation to D-07-FUNCTORS r190. C-10/C-65/C-73 and P-605/P-606 connect an explicit domain operation to its receiver identity and live owner. Check a later argument rebinding the source slot, later writes to the original target, and zero or repeated invocations of a computed receiver. Competing overloads and compiler qualification remain separate.
 
 - **Callable model.** D-18-HERE permits synchronous execution and forwarding of caller-supplied work. Ordinary storable functions are capture-free under H-CALLABLE-MODEL-20261118.
 
@@ -468,9 +468,13 @@ test(current, 12u64);                         # pred gets current; n gets 12.
 test(12u64) (x) => {{ return current(x); }};     # pred gets the trailing body; n gets 12.
 ```
 
+With this signature, write `12u64` for `n:u64`. A bare `12` has type i64, which has no implicit whole-type widening to u64. The first argument supplies the predicate directly.
+
 The `x` in the signature belongs to pred. Calling `pred(n)` supplies x inside the predicate. In a parenthesized argument position, `{{ current = strict; return 12u64; }}` is an immediate [full-scope expression](ExceptionControl.md#full-scopes-as-immediate-ordinary-calls) with result type u64. Thus `test(current, {{ current = strict; return 12u64; }})` has a u64 second argument. In the trailing spelling above the braces supply the predicate and execute when test invokes it.
 
-**Receiver preparation remains open.** If current starts at a threshold of 10 and strict has a threshold of 20, selecting the target at the first argument makes the test on 12 true. Reading the live ref slot when pred runs makes it false. The explicit body reads current at invocation. Evaluating a computed receiver such as `choose_limit()` can also have observable effects. Receiver timing and the ranking of a direct data overload against a here-functor match need separate decisions.
+**Receiver preparation.** Evaluate the receiver expression once at its written argument position. Bind its selected target, owner and access to the here argument. Forwarding the argument preserves that selection. If a later argument rebinds `current` from a threshold of 10 to one of 20, the direct predicate still tests 12 against 10 and returns true. If code instead changes the original target’s minimum to 20 before invocation, the same predicate returns false. An explicit body evaluating `current(x)` reads the lexical slot when invoked. A computed receiver such as `choose_limit()` runs once during argument preparation even when the callee skips or repeats the predicate. Ordinary checks must prove the target’s owner stays live throughout its use.
+
+The priority between a direct data overload and a competing here-functor overload is a separate overload-selection question.
 
 #### One callback parameter for different owner counts
 
