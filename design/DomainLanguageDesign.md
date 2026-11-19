@@ -1,6 +1,6 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 185
+Discussion revision: 186
 
 Recorded: 2026-11-19
 
@@ -8,7 +8,7 @@ Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
 
-- **Case expressions and branch-local variables.** [H-CASE-CONTRACT-20261119](../CHANGELOG.md#h-case-contract-20261119) confirms [D-07-CASE](DesignAuthorityRegistry.md#d-07-case) r183 for the [source contract and examples](#case-expressions-and-branch-local-variables). P-625/P-626 derive inspectable selection, binding and effect order from C-10/C-65/C-72 and charter §§3.1–3.3/4.3/8.1. The acceptance cases cover a single subject evaluation, guard effects, invalidated field access, misses and fallthrough through intervening code, partial value/void cases, nested control and cleanup on both exits. Coverage follows the [compiler-stage policy](../applications/cod-booter/README.md#diagnostics-by-compiler-stage). [K-CASE-CONSUMER-20261119](../CHANGELOG.md#k-case-consumer-20261119) continues this scope at r184 by identifying the consuming expression or statement. [K-CASE-COMPLETION-20261119](../CHANGELOG.md#k-case-completion-20261119) reopens only value-case exhaustion at r185. The static proposal and the named runtime error are outside current implementation authority. This scope specifies source behavior. It grants no new owner proof, sum mutation operation or native representation.
+- **Case expressions and branch-local variables.** [D-07-CASE](DesignAuthorityRegistry.md#d-07-case) r186 specifies the [source rules and examples](#case-expressions-and-branch-local-variables). [H-CASE-CONTRACT-20261119](../CHANGELOG.md#h-case-contract-20261119) covers selection and lexical control. [H-CASE-FALLBACK-20261119](../CHANGELOG.md#h-case-fallback-20261119) requires an explicit final fallback for a value-producing case. P-625/P-626 connect observable selection, binding, effect order and result delivery to C-10/C-65/C-72 and charter §§3.1–3.3/4.3/8.1. Check single evaluation, effects on a miss or fallthrough, owner validity, nested control, cleanup, a partial void case, and missing, guarded or escaping fallbacks. Rich coverage diagnostics follow the [compiler-stage policy](../applications/cod-booter/README.md#diagnostics-by-compiler-stage). Representation, new mutation operations and new owner proofs are outside scope.
 
 - **Functor classification.** [H-HERE-FUNCTOR-20261118](../CHANGELOG.md#h-here-functor-20261118) records the receiver-bound functor in [D-18’s here-callable inventory](CallableViewsAndCaptures.md#forms-of-here-callable). D-07-FUNCTORS r178/P-605–P-606 uses the bounded lifetime rule to preserve receiver ownership and access. Accept the two argument bindings in DL-01 under the matching predicate contract. Selection timing, competing overloads and implementation qualification remain open.
 
@@ -330,7 +330,7 @@ proc classify(ptr r:Receipt in O, latest:u64 in O) -> u64 where {owner O} {
         (null) -> { 0u64 };
         (Accepted { val n <- id; latest <- id; }) | audit(n) -> { n };
         (Accepted) -> { latest };
-        (Skipped) -> { 0u64 };
+        (_) -> { 0u64 };
     };
 }
 ```
@@ -347,29 +347,24 @@ A constructor mismatch in the example skips both reception and `audit`. If Accep
 
 An explicit `x : T` in the subject, guard or body is an ordinary expression. For example, inside an arm receiving an abstract Entity ref, `ref n = x : Node in O;` may raise TypeAssertionFailedError. A proved impossible assertion rejects statically. Nullable-to-ref requires a prior non-null fact. For example, given a nullable Entity slot p, `p isa Node` as a guard tests membership and establishes non-nullness on success. A later rebind of p requires fresh evidence for that slot. An ordinary numeric `x : u8` retains the specialization-based conversion and potential-loss rules. A failed `assert predicate;` raises AssertionFailedError under its own contract. None of these exceptions implicitly retries matching. [Type tests and assertions](SymbolicDynamicScope.md#expression-type-conversion-and-assertion)
 
-**Coverage is advisory.** A partial case is valid, including one over an open abstract type. Where existing facts permit, identify a missing constructor or null alternative, a guard that can decline, or a shadowed arm. A partial import leaves the declared sum intact. An open hierarchy carries no obligation to enumerate concrete descendants. The language does not require an accepting suffix after an effect changes a discriminator or after an explicit transfer. The [compiler-wide diagnostic policy](../applications/cod-booter/README.md#diagnostics-by-compiler-stage) assigns additional coverage analysis to the CoD-written compiler. Definite initialization, owner validity and sound access to each field remain requirements on every reachable use.
+**Coverage diagnostics.** A void case may be partial, including over an open abstract type. A value-producing case requires the explicit fallback below. Both can benefit from diagnostics about omitted constructors or null, guards that can decline, and shadowed arms. A partial import leaves the declared sum intact. The [compiler-wide diagnostic policy](../applications/cod-booter/README.md#diagnostics-by-compiler-stage) assigns additional coverage analysis to the CoD-written compiler. Definite initialization, owner validity and sound field access remain mandatory.
 
 Join normal arm results under the [conditional result rules](ConstructionAndAcquisition.md#conditional-results). A single-brace `return` exits the enclosing callable. A double-brace `return v;` supplies this arm’s result after its own cleanup, and execution continues with the case’s consumer. A value-producing double-brace body needs an explicit local return under [ordinary full-scope rules](ExceptionControl.md#full-scopes-as-immediate-ordinary-calls); a tail expression alone supplies no implicit value. Do not return a reference to that invocation’s fresh storage. A reference to a sufficiently long-lived outer target retains its ordinary owner. An early case break also supplies a result. Paths that leave by an enclosing return, throw or arm fallthrough contribute no result to the join.
 
-**Reaching the end of the case.** A void case may finish without selecting an arm. Its reached statements and guard effects run in source order. In `return case ...;`, the return statement consumes the case result. Discarding the function’s eventual result at its call site does not change its return contract. The outcome of an unproved normal end in a value-producing case is under review.
+**Required fallback for a value-producing case.** Require a final unguarded wildcard arm `(_) -> { ... }`. The existing empty catch-all `()` is equivalent, including its empty-guard spelling `() | ->`. Either arm body spelling is available. A guard with a predicate can decline and cannot satisfy this requirement. Apply the same structural check when every declared constructor or both Boolean literals appear earlier. The compiler needs no proof about arbitrary predicates or completeness of a hierarchy.
 
-The proposed static rule requires every possible normal completion of a value-producing case to deliver a value. Reject if the compiler cannot rule out reaching the end of the scan. A header miss, a guard that may return false and an executed arm fallthrough can each reach a later source item. A successful value-producing arm or case break delivers a result. A path escaping by throw or enclosing return has its own destination. A selected full-scope arm retains its independent callable result obligations and cleanup. The existing conditional result join still applies.
+The fallback must deliver the common result on normal completion, for example by a single-brace tail, `break value;`, or double-brace local return. It may also leave by an ordinary nonlocal exit such as an explicit throw. Reject a `fallthrough;` targeting the end of this value case from its final arm. A fallthrough in an inner case belongs to that inner case. Existing type, lifetime, callable-return and checked failure rules apply. A void case can reach the end normally without a fallback.
 
 ```cod
-proc quote(priority:bool) -> u64 {
-    return case priority of {
+proc fee(expedited:bool) -> u64 {
+    return case expedited of {
         (true) -> { 5u64 };
-        (false) -> {
-            if (refresh_needed()) { fallthrough; }
-            2u64
-        };
+        (_) -> { 0u64 };
     };
 }
 ```
 
-Both Boolean patterns are present. If refresh_needed returns true on the false arm, execution still reaches the end without a price. The proposed checker rejects quote without predicting the call’s result. Adding a final unguarded `() -> { current_price() };` returning u64 closes that path. An explicit domain failure in the fallback can also close it under ordinary checked obligations. A final catch-all that can itself fall through supplies no such guarantee. The checker can use readily available finite-type and flow facts, then reject uncertain value cases. It need not execute arbitrary guards, prove equivalence of application predicates, or enumerate an open hierarchy. Authors may need a fallback even when an external invariant guarantees their guards cover every real input.
-
-The alternative accepts such a partial value case and raises the unchecked CaseMatchError if execution actually reaches the end. That error and the choice between the two contracts are under review. Advisory pattern-coverage diagnostics for void cases remain independent. A type checked as u64 through `break 5u64;` retains its result contract even if the surrounding expression statement discards a successful value.
+The return statement consumes the u64 result. Removing the last arm rejects fee. Replacing its header with `(_) | ready() ->` or its body with `{ fallthrough; }` also rejects. Calling `fee(false);` and discarding its successful result leaves the case contract intact. Likewise, a case with a u64 result used directly as an expression statement needs a fallback. In a void use such as `case expedited of { (true) -> { send_notice(); }; };`, assuming send_notice returns void, false simply reaches the following statement.
 
 **Statements between arms and fallthrough.** The case walks its contents in source order until an arm completes it or control leaves through an ordinary exit. A pattern miss, a false guard and a body executing `fallthrough;` all resume with the first item after that arm. Each intervening statement executes once on a path that reaches it. An arm that completes normally skips the rest of the case, even when the arm produces void. A fallthrough path contributes no value to the case result.
 
@@ -393,7 +388,7 @@ case receipt of {
 
 Each header establishes its own bindings and refinements. In the example `n` exists for the Accepted guard and body. Both intervening statements can also run with a null receipt, so neither may use `n` or assume an Accepted receipt. A statement may change outer state read by the next guard. If it throws, ordinary exception propagation applies at that statement.
 
-Only an arm body can execute `fallthrough;`. A guard or an ordinary statement between arms cannot use it. In a single-brace body an ordinary nested `if` may choose the transfer on one path. Other paths can still complete the case. A nested case handles its own arms. A helper or independently nested full-scope callable cannot transfer to its caller’s arm. The model needs no following arm as a jump destination. A last-arm fallthrough reaches the end of the scan under the exhaustion rule above.
+Only an arm body can execute `fallthrough;`. A guard or an ordinary statement between arms cannot use it. In a single-brace body an ordinary nested `if` may choose the transfer on one path. Other paths can still complete the case. A nested case handles its own arms. A helper or independently nested full-scope callable cannot transfer to its caller’s arm. The model needs no following arm as a jump destination. A final arm may fall through to the end of a void case. The required value fallback must complete or leave through an ordinary exit.
 
 A directly attached `-> {{ ... }}` arm runs its full-scope cleanup on exit. A local `return v;` supplies the completed arm’s result. An explicit `fallthrough;` requests continued scanning after cleanup succeeds. For example, `() -> {{ defer audit(); fallthrough; }};` runs audit before the intervening statement. An escaping cleanup exception follows ordinary propagation. A local cleanup that explicitly returns and successfully delivers a replacement result completes this arm under the ordinary full-scope rule. A fallthrough request alone sets no callable return value. Independently nested full scopes and separately called helpers retain their own control boundaries.
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-19 — Require a wildcard fallback for value-producing cases
+
+<a id="h-case-fallback-20261119"></a>
+**H-CASE-FALLBACK-20261119.** The project user specified “静态要求有 (_) -> { ... } 兜底，让程序作者静态满足” in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-19 (America/Los_Angeles) while discussing value-case exhaustion. D-07r186, D-17r124, registry r955 and P-625/P-626 close K-CASE-COMPLETION-20261119. A final unguarded catch-all supplies the result or explicitly exits. The existing empty header is equivalent. Partial void cases retain advisory coverage. This supersedes the candidate runtime error at `f8e67dfcac92c446f3e0c29c7e42dee060f4c823:design/DomainLanguageDesign.md`, “Reaching the end of the case”.
+
 ## 2026-11-19 — Review static value-case completion
 
 <a id="k-case-completion-20261119"></a>
