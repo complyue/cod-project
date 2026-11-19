@@ -541,6 +541,43 @@ runner.CASES = {
         'func first(here input() yields u64) yields u64 -> bool{for val item<-input(){yield(item):void;};}'
         'func second(here input() yields u64) yields u64{for val item<-input(){yield(item);};}'
         'for val item<-rows !> first |> second{};',2,'','prepared producer does not match the selected here contract'),
+    'pipeline_composition_overload_prepares_data_before_the_attachment_runs': (IO+
+        'proc selected_row()->u64{behave @print(10u64);return 20u64;}'
+        'proc window()->u32{behave @print(11u64);return 2u32;}'
+        'proc limit()->u64{behave @print(12u64);return 3u64;}'
+        'proc seed()->u64{behave @print(14u64);return 40u64;}'
+        'proc (|>)(first:u32,second:u64)->u64{behave @print(13u64);return first+second;}'
+        'proc (!>)(row:u64,plan:u64) yields u64 -> bool{behave @print(16u64);yield(row+plan):void;return;}'
+        'proc ($>)(here traversal() yields u64 -> bool,sink:u64)->u64{behave @print(15u64);val total<-sink;'
+        'for val item<-traversal(){behave @print(item);total<-total+item;continue false;};return total;}'
+        'behave @print(selected_row() !> window() |> limit() $> seed());'
+        'behave @print(seed() <$ limit() <| window() <! selected_row());',
+        0,'10\n11\n12\n13\n14\n15\n16\n25\n65\n14\n12\n11\n13\n10\n15\n16\n25\n65\n',''),
+    'pipeline_attachment_overload_saves_operands_for_multiple_consumers': (IO+
+        'proc mark(n:u64)->u64{behave @print(n);return n;}'
+        'proc (<|)(limit:u64,window:u64)->u64{behave @print(10u64);return window+limit;}'
+        'proc (<!)(plan:u64,row:u64) yields u64{behave @print(20u64);yield(row+plan);return;}'
+        'proc ($>)(here traversal() yields u64,sink:u64)->u64{val total<-sink;'
+        'for val item<-traversal(){total<-total+item;};return total;}'
+        'proc report(item:u64)->void{behave @print(item);return;}'
+        'here held=mark(1u64) !> mark(2u64) |> mark(3u64);behave @print(99u64);'
+        'held $> report;behave @print(($>)(held,40u64));behave @print((<$)(50u64,held));'
+        'behave @print(($>)((<!)(mark(4u64),(<|)(mark(6u64),mark(5u64))),60u64));',
+        0,'1\n2\n3\n10\n99\n20\n6\n20\n46\n20\n56\n4\n6\n5\n10\n20\n75\n',''),
+    'pipeline_composition_overload_preserves_a_borrowed_result_owner': (IO+
+        'func (|>)(ref witness:const u64 in P,n:u64)->ref const u64 in P where {owner P}{return witness;}'
+        'func (!>)(n:u64,ref witness:const u64 in P) yields ref const u64 in P where {owner P}{yield(witness);}'
+        'proc ($>)(here traversal() yields ref const u64 in P,witness:const u64 in P)->bool where {owner P}{'
+        'for ref item=traversal(){return item is witness;};return false;}'
+        'val original<-75u64;behave @print(3u64 !> original |> 7u64 $> original);',0,'true\n',''),
+    'pipeline_composition_falls_back_to_builtin_for_structural_stages': (IO+
+        'func (|>)(left:u64,right:u64)->u64{return left+right;}'
+        'func (!>)(row:u64,plan:u64) yields u64{yield(row+plan);}'
+        'func rows() yields u64{yield(1u64);}'
+        'func step(here input() yields u64,amount:u64) yields u64{'
+        'val offset<-amount;for val item<-input(){yield(item+offset);};}'
+        'proc report(item:u64)->void{behave @print(item);return;}'
+        'rows() !> step(2u64) |> step(4u64) $> report;3u64 !> 5u64 |> 7u64 $> report;',0,'7\n15\n',''),
     'pipeline_terminal_forwards_labelled_borrows_and_boolean_feedback': (IO+
         'func offers(line:const u64 in P) yields {id:u64;ref cell:const u64 in P;} -> bool where {owner P}{'
         'if(!yield(7u64->id,line->cell)){return;}else{};yield(80u64->id,line->cell):void;}'

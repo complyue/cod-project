@@ -5,6 +5,7 @@
 #include "lang_modules.hh"
 #include "lang_callable_flow.hh"
 
+#include <array>
 #include <bit>
 #include <charconv>
 #include <cmath>
@@ -153,6 +154,7 @@ class ScalarChecker {
   }
   std::map<const Form *, size_t> lexical_methods_;
   std::map<std::pair<size_t, std::string>, const Expression *> scope_operand_names_;
+  std::map<const Expression *, const Expression *> attachment_operands_;
   std::map<size_t, std::vector<size_t>> scope_profiles_;
   std::map<std::pair<size_t, std::vector<CheckedHereTarget>>, size_t> here_receiver_profiles_;
   // Entry selection travels with the proof. Actual stage operands and owners
@@ -10444,6 +10446,116 @@ class ScalarChecker {
     size_t method;
     bool completes = true;
   };
+  struct PipelineOperands {
+    std::array<const Expression *, 2> canonical;
+    bool reversed;
+  };
+  static PipelineOperands binary_pipeline_operands(const Expression &left, const Expression &right, bool reversed) {
+    return {{reversed ? &right : &left, reversed ? &left : &right}, reversed};
+  }
+  bool structural_pipeline_operand(const Expression &expr, const TypeEvidenceState &state) const {
+    using K = Expression::Kind;
+    if (expr.kind == K::processor_composition || expr.kind == K::pipeline) return true;
+    if (expr.kind != K::name && expr.kind != K::call) return false;
+    if (pipeline_binding(expr) || active_here(expr.text, &state)) return true;
+    const auto family = named_family(expr.text, &state);
+    bool bounded = false;
+    for (const auto id : family.methods) {
+      const auto &method = program_.methods[id];
+      if (!accepts_arity(method, expr.children.size())) continue;
+      if (method.here.empty()) return false;
+      bounded = true;
+    }
+    return bounded;
+  }
+  std::optional<Type> pipeline_value_evidence(const Expression &expr, TypeEvidenceState &state) const {
+    const auto &operand = ungrouped_processor(expr);
+    const auto op = pipeline_operator(operand.text);
+    if (!op || op->kind != PipelineOperator::Kind::composition || operand.intrinsic || operand.children.size() != 2 ||
+        (operand.kind != Expression::Kind::processor_composition && operand.kind != Expression::Kind::call))
+      return type_evidence(expr, state, true, nullptr, nullptr, ExpectedTypeUse::callable_result);
+    const auto inputs = binary_pipeline_operands(*operand.children[0], *operand.children[1], op->reversed);
+    const auto selected = select_pipeline_operator(op->kind, inputs, operand.at, state);
+    if (!selected) return {};
+    const auto &[method, types, owners, candidates] = *selected;
+    const auto result = infer_result(method, types, {}, &state).contract;
+    if (!result || !result->type) implementation_gap(operand.at, "a composition method needs an established result contract");
+    state.value = result_view(program_.methods[method], *result, owners);
+    if (&operand != &expr && result->borrowed()) {
+      const auto projection = group_result(*result->type, true, result->nullable(), false);
+      if (projection == GroupResult::unsupported) return {};
+      if (projection == GroupResult::value) state.value = {};
+    }
+    return result->type;
+  }
+  struct PipelineMethod {
+    size_t method;
+    std::vector<Type> types;
+    Owners owners;
+    std::vector<size_t> candidates;
+  };
+  std::optional<PipelineMethod> select_pipeline_operator(PipelineOperator::Kind kind, const PipelineOperands &inputs,
+      const Location &at, TypeEvidenceState &state) const {
+    const auto name = std::string(PipelineOperator{kind, false}.canonical_spelling());
+    auto family = named_family(name, &state);
+    const bool attachment = kind == PipelineOperator::Kind::source;
+    std::erase_if(family.methods, [&](size_t id) {
+      const auto &method = program_.methods[id];
+      return method.parameters.size() != 2 || (attachment ? method.here.size() != 1 || !method.here.front().here.empty()
+                                                          : !method.here.empty());
+    });
+    if (family.methods.empty()) return {};
+    if (family.context || family.definition || family.declaration)
+      implementation_gap(at, "an overloaded pipeline operation in a lexical callable family");
+    std::vector<Type> types(2);
+    Access access(2);
+    Owners owners(2);
+    for (const size_t i : {size_t{inputs.reversed}, size_t{!inputs.reversed}}) {
+      const auto &operand = *inputs.canonical[i];
+      const auto type = pipeline_value_evidence(operand, state);
+      if (!type) {
+        if (structural_pipeline_operand(ungrouped_processor(operand), state)) return {};
+        implementation_gap(operand.at, "overloaded pipeline operand without independent type evidence");
+      }
+      types[i] = *type;
+      access[i] = state.value.read_only;
+      owners[i] = state.value.owner;
+    }
+    const auto candidates = method_candidates(family.methods, types, {}, access, owners, &state, true, attachment);
+    if (candidates.methods.empty()) return {};
+    return PipelineMethod{select_method(family.methods, types, at, name, {}, access, owners, &state, true, attachment),
+        std::move(types), std::move(owners), std::move(family.methods)};
+  }
+  PreparedHereCall prepare_pipeline_method(const PipelineMethod &selection, const PipelineOperands &inputs,
+      CheckedInstance *supplier, std::map<const Expression *, CheckedOperation> &operations) {
+    const auto &method = program_.methods[selection.method];
+    PreparedHereCall call{};
+    call.method = selection.method;
+    call.operation.argument_sources = std::vector<const Expression *>{inputs.canonical.begin(), inputs.canonical.end()};
+    call.operation.arguments.resize(2);
+    call.arguments = selection.types;
+    call.views.resize(2);
+    schedule_ordinary_operands(call.operation, {size_t{inputs.reversed}, size_t{!inputs.reversed}});
+    const auto prepared = prepared_types(method, selection.types, {});
+    for (const auto [kind, i] : call.operation.operand_preparation) {
+      const auto &operand = *inputs.canonical[i];
+      const auto mode = argument_mode(method.input_parameters()[i]);
+      call.views[i] = check_written_scalar_operand(operand, mode, supplier, operations);
+      const auto &view = call.views[i];
+      if (view.type == Type::never) call.completes = false;
+      else if (view.type != selection.types[i] || (mode != ArgumentMode::value &&
+          (!selection.owners[i] || one_owner(view) != checked_owner(*selection.owners[i]))))
+        implementation_gap(operand.at, "pipeline operand evidence changed during written preparation");
+      call.operation.arguments[i] = {mode, prepared[i]};
+    }
+    if (call.completes) {
+      const auto &at = inputs.canonical.front()->at;
+      if (select_method(selection.candidates, call.arguments, at, method.source->name, {}, access_of(call.views),
+          owners_of(call.views), nullptr, true, !method.here.empty()) != selection.method)
+        implementation_gap(at, "pipeline operator selection changed during operand preparation");
+    }
+    return call;
+  }
   PreparedHereCall check_pipeline_operand(const Expression &expr, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, bool processor) {
     using K = Expression::Kind;
@@ -10521,6 +10633,16 @@ class ScalarChecker {
   size_t prepare_here_source(const Expression &expr, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations) {
     if (const auto *saved = saved_pipeline(expr, operations)) return prepare_saved_here_source(expr, *saved, operations);
+    if (expr.kind == Expression::Kind::call && !expr.intrinsic) {
+      if (const auto op = pipeline_operator(expr.text); op && op->kind == PipelineOperator::Kind::source) {
+        if (expr.children.size() != 2 || expr.has_here_body()) fail(expr.at, "an attachment source requires two ordinary operands");
+        const auto inputs = binary_pipeline_operands(*expr.children[0], *expr.children[1], op->reversed);
+        auto state = evidence_state();
+        const auto selected = select_pipeline_operator(op->kind, inputs, expr.at, state);
+        if (!selected) fail(expr.at, "no source-attachment method matches the operands");
+        return retain_prepared_traversal(expr, prepare_pipeline_method(*selected, inputs, instance, operations), operations);
+      }
+    }
     return retain_prepared_traversal(expr, check_pipeline_operand(expr, instance, operations, false), operations);
   }
   void require_prepared_owners(const CheckedOperation::PreparedProducer &producer, const Location &at) const {
@@ -10898,13 +11020,18 @@ class ScalarChecker {
     while (operand->kind == Expression::Kind::grouped) operand = operand->children.front().get();
     return *operand;
   }
-  static void pipeline_stages(const Expression &expr, bool traversal, std::vector<const Expression *> &stages) {
+  void pipeline_stages(const Expression &expr, bool traversal, std::vector<const Expression *> &stages) const {
     const auto &operand = ungrouped_processor(expr);
     if (operand.kind != Expression::Kind::processor_composition) {
       stages.push_back(&operand);
       return;
     }
-    const auto reverse = traversal && pipeline_operator(operand.text)->reversed;
+    const auto op = *pipeline_operator(operand.text);
+    auto state = evidence_state();
+    if (select_pipeline_operator(op.kind, binary_pipeline_operands(*operand.children[0], *operand.children[1], op.reversed),
+        operand.at, state))
+      implementation_gap(operand.at, "using the result of a composition overload as a builtin processor");
+    const auto reverse = traversal && op.reversed;
     pipeline_stages(*operand.children[reverse], traversal, stages);
     pipeline_stages(*operand.children[!reverse], traversal, stages);
   }
@@ -10971,6 +11098,7 @@ class ScalarChecker {
   ConnectedPipeline connect_saved_pipeline(const CheckedOperation::PipelinePreparation &plan,
       const std::map<const Expression *, CheckedOperation> &operations, const CheckedInstance *supplier = nullptr) {
     const auto &source = *plan.traversal.front();
+    if (plan.traversal.size() == 1) return {saved_pipeline_operand(source, operations), {}};
     CheckedHereTarget upstream;
     if (plan.lexical_source) upstream = here_target(*checking_method_, *plan.lexical_source);
     else {
@@ -11009,7 +11137,8 @@ class ScalarChecker {
     saved_traversal(plan, *saved.source, saved);
     auto [call, upstream] = connect_saved_pipeline(plan, operations);
     auto &producer = argument.prepared_producer.emplace(*call.operation.prepared_producer);
-    producer.instance = demand_here_receiver(call.method, {{}, upstream}, call.arguments, expr.at);
+    if (plan.traversal.size() > 1)
+      producer.instance = demand_here_receiver(call.method, {{}, upstream}, call.arguments, expr.at);
     producer.dependencies.insert(saved.owner);
     retain_traversal_dependencies(producer, plan, operations);
     argument.type = Type::void_type;
@@ -11166,6 +11295,18 @@ class ScalarChecker {
     if (syntax.upstream && saved.source) fail(initializer.at, "a pipeline can have only one source");
     if (syntax.terminal && saved.terminal) fail(initializer.at, "a pipeline can have only one consumer");
     auto &plan = operation.pipeline_preparation.emplace();
+    if (syntax.upstream) {
+      auto state = evidence_state();
+      const auto inputs = attachment_inputs(syntax);
+      if (const auto selected = select_pipeline_operator(PipelineOperator::Kind::source, inputs, initializer.at, state)) {
+        const auto &operand = attached_operator_operand(initializer);
+        retain_prepared_traversal(operand, prepare_pipeline_method(*selected, inputs, supplier, operations), operations);
+        saved.source = &operand;
+        plan.written.push_back(&operand);
+        bind_saved_pipeline(declaration, operation, operations.at(&operand).type != Type::never);
+        return;
+      }
+    }
     if (!inherited) {
       if (ungrouped_processor(syntax.target).kind != K::processor_composition && !syntax.upstream)
         implementation_gap(initializer.at, "establishing an open pipeline from a lone operand");
@@ -11198,9 +11339,12 @@ class ScalarChecker {
       const auto call = saved_pipeline_operand(*saved.stages.back(), operations);
       saved.terminal = check_here_consumer(initializer, syntax, supplier, operations, call.method, call.arguments, call.views).first;
     }
+    bind_saved_pipeline(declaration, operation, completes);
+  }
+  void bind_saved_pipeline(const Expression &declaration, CheckedOperation &operation, bool completes) {
     const auto id = bind(declaration.text, Type::void_type, {}, true, true, true, declaration.at);
     bindings_->at(id).pipeline = &declaration;
-    saved.owner = *bindings_->at(id).place_owners.begin();
+    operation.saved_pipeline->owner = *bindings_->at(id).place_owners.begin();
     operation.type = completes ? Type{Type::void_type} : Type{Type::never};
   }
   void check_saved_pipeline_use(const Expression &expr, const HereInvocation &syntax, const CheckedOperation::SavedPipeline &saved,
@@ -11222,10 +11366,14 @@ class ScalarChecker {
     auto [call, upstream] = connect_saved_pipeline(plan, operations);
     operation.argument_sources = std::move(call.operation.argument_sources);
     operation.arguments = std::move(call.operation.arguments);
-    operation.here_arguments.resize(2);
-    operation.here_arguments[1].source = plan.traversal[plan.traversal.size() - 2];
+    std::vector<CheckedHereTarget> targets(1);
+    operation.here_arguments.resize(1);
+    if (plan.traversal.size() > 1) {
+      operation.here_arguments.push_back({{}, plan.traversal[plan.traversal.size() - 2]});
+      targets.push_back(upstream);
+    }
     operation.pipeline_preparation = std::move(plan);
-    finish_here_receiver(expr, syntax, supplier, operations, operation, call.method, {{}, upstream}, call.arguments, call.views,
+    finish_here_receiver(expr, syntax, supplier, operations, operation, call.method, std::move(targets), call.arguments, call.views,
                          completes, read, discard, saved.terminal ? &*saved.terminal : nullptr);
   }
   ConnectedPipeline prepare_attachment(const Expression &expr, const HereInvocation &syntax, CheckedInstance *supplier,
@@ -11286,9 +11434,43 @@ class ScalarChecker {
     finish_here_receiver(expr, syntax, supplier, operations, operation, receiver.method, {{}, upstream},
                          receiver.arguments, receiver.views, receiver.completes, read, discard);
   }
+  const Expression &attached_operator_operand(const Expression &expr) {
+    if (const auto found = attachment_operands_.find(&expr); found != attachment_operands_.end()) return *found->second;
+    auto operand = std::make_unique<Expression>();
+    operand->kind = Expression::Kind::call;
+    operand->at = expr.at;
+    operand->text = "!>";
+    const auto &stored = *program_.scope_operands.emplace_back(std::move(operand));
+    attachment_operands_.emplace(&expr, &stored);
+    return stored;
+  }
+  PipelineOperands attachment_inputs(const HereInvocation &syntax) const {
+    return {{syntax.upstream, &syntax.target}, !syntax.upstream_first};
+  }
+  void invoke_attachment(const Expression &expr, const HereInvocation &syntax, PreparedHereCall call, CheckedInstance *supplier,
+      std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation, bool read, bool discard) {
+    if (!syntax.body && !syntax.terminal) fail(expr.at, "an attachment producer requires a consumer");
+    if (checking_method_ && checking_method_->source->kind == Form::Kind::function &&
+        program_.methods[call.method].source->kind != Form::Kind::function)
+      fail(expr.at, "a function cannot invoke a procedure");
+    operation = std::move(call.operation);
+    operation.here_arguments.resize(1);
+    finish_here_receiver(expr, syntax, supplier, operations, operation, call.method, {{}},
+        call.arguments, call.views, call.completes, read, discard);
+  }
   std::pair<CheckedOperation::PreparedProducer, bool> prepare_terminal_attachment(const Expression &expr,
       const HereInvocation &syntax, CheckedInstance *supplier, std::map<const Expression *, CheckedOperation> &operations,
       CheckedOperation::PipelinePreparation &plan) {
+    auto state = evidence_state();
+    const auto inputs = attachment_inputs(syntax);
+    if (const auto selected = select_pipeline_operator(PipelineOperator::Kind::source, inputs, expr.at, state)) {
+      const auto &operand = attached_operator_operand(expr);
+      retain_prepared_traversal(operand, prepare_pipeline_method(*selected, inputs, supplier, operations), operations);
+      plan.written.push_back(&operand);
+      plan.traversal.push_back(&operand);
+      const auto &prepared = operations.at(&operand);
+      return {*prepared.prepared_producer, prepared.type != Type::never};
+    }
     if (const auto *saved = saved_pipeline(syntax.target, operations)) {
       if (saved->source) fail(expr.at, "a pipeline can have only one source");
       if (saved->terminal) fail(expr.at, "a pipeline can have only one consumer");
@@ -11408,6 +11590,15 @@ class ScalarChecker {
         return;
       }
       require_named_terminal(sink);
+    }
+    if (syntax.upstream) {
+      auto state = evidence_state();
+      const auto inputs = attachment_inputs(syntax);
+      if (const auto selected = select_pipeline_operator(PipelineOperator::Kind::source, inputs, expr.at, state)) {
+        invoke_attachment(expr, syntax, prepare_pipeline_method(*selected, inputs, supplier, operations), supplier,
+            operations, operation, read, discard);
+        return;
+      }
     }
     if (const auto *saved = saved_pipeline(syntax.target, operations)) {
       check_saved_pipeline_use(expr, syntax, *saved, supplier, operations, operation, read, discard);
@@ -11855,6 +12046,29 @@ class ScalarChecker {
       check_pipeline_terminal_operator(expr, traversal, *expr.children[!op->reversed], !op->reversed,
           instance, operations, operation, read, discard);
       return operations.insert_or_assign(&expr, std::move(operation)).first->second.type;
+    }
+    if (expr.kind == K::processor_composition || (expr.kind == K::call && !expr.intrinsic)) {
+      if (const auto op = pipeline_operator(expr.text); op && op->kind != PipelineOperator::Kind::consumer) {
+        if (expr.children.size() != 2 + size_t{expr.has_here_body()})
+          fail(expr.at, "a composition or attachment method requires two ordinary operands");
+        if (op->kind == PipelineOperator::Kind::composition && expr.has_here_body())
+          fail(expr.at, "an ordinary composition method cannot receive a consumer body");
+        const auto inputs = binary_pipeline_operands(*expr.children[0], *expr.children[1], op->reversed);
+        auto state = evidence_state();
+        const auto selected = select_pipeline_operator(op->kind, inputs, expr.at, state);
+        if (!selected) implementation_gap(expr.at, "a pipeline operation without an ordinary method or a supplied traversal");
+        auto call = prepare_pipeline_method(*selected, inputs, instance, operations);
+        if (op->kind == PipelineOperator::Kind::source) {
+          invoke_attachment(expr, {expr, expr.has_here_body() ? expr.children.back().get() : nullptr}, std::move(call),
+              instance, operations, operation, read, discard);
+        } else {
+          operation = std::move(call.operation);
+          if (!call.completes) operation.type = Type::never;
+          else finish_named_call(expr, call.arguments, call.views, operation, read, discard, true,
+              demand(call.method, call.arguments, expr.at));
+        }
+        return operations.insert_or_assign(&expr, std::move(operation)).first->second.type;
+      }
     }
     if (pipeline_expression(expr)) implementation_gap(expr.at, "pipeline role checking and bounded here bindings");
     if (expr.kind == K::call && expr.has_here_body()) if (const auto *saved = saved_pipeline(expr, operations)) {
@@ -14086,12 +14300,17 @@ class ScalarChecker {
       if (identity_operation(operation))
         fail(form->at, "reference identity is an intrinsic operation and cannot have user methods");
       const auto pipeline = pipeline_operator(operation);
-      if (pipeline && (pipeline->kind != PipelineOperator::Kind::consumer || form->parameters.size() != 2 ||
-          !here || form->parameters[1].here))
-        implementation_gap(form->at, "pipeline operator methods outside the bounded whole-traversal terminal");
+      if (pipeline) {
+        using Kind = PipelineOperator::Kind;
+        const auto &parameters = form->parameters;
+        const bool valid = pipeline->kind == Kind::composition ? parameters.size() == 2 && !here && !parameters[1].here
+            : pipeline->kind == Kind::source ? parameters.size() == 3 && here && !parameters[1].here && !parameters[2].here
+                                            : parameters.size() == 2 && here && !parameters[1].here;
+        if (!valid) implementation_gap(form->at, "this pipeline operator method signature");
+      }
       if ((!operation.empty() && !eager_operation(operation) && !swap_operation(operation) && !pipeline) || form->conversion || (!lexical_methods_.contains(form) && !form->captures.empty()) || (!form->body && lexical_methods_.contains(form)))
         implementation_gap(form->at, "callable captures, effects, declarations, operators, owners or throws contracts");
-      if (!operation.empty()) {
+      if (!operation.empty() && !pipeline) {
         const auto arity = form->parameters.size();
         if (!arity || arity > 2 || (operation == "!" && arity != 1) ||
             (operation != "+" && operation != "-" && operation != "!" && arity != 2))
@@ -14128,8 +14347,11 @@ class ScalarChecker {
         if (!parameter.here) break;
         prepared.here.push_back(here_contract(prepared, parameter));
       }
-      if (pipeline && !prepared_source_contract(prepared.here.front()))
+      if (pipeline && pipeline->kind == PipelineOperator::Kind::consumer && !prepared_source_contract(prepared.here.front()))
         implementation_gap(form->at, "a whole-traversal terminal requires a prepared producer parameter");
+      if (pipeline && pipeline->kind == PipelineOperator::Kind::source &&
+          (!prepared.here.front().here.empty() || form->result_type != Type::void_type))
+        implementation_gap(form->at, "a source-attachment method requires a generator result contract");
       if (form->result_type) prepared.result.type = resolve_signature(*form->result_type);
       prepared.result.owner = form->result_owner;
       if (!form->result_owner.empty()) {

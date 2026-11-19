@@ -1580,8 +1580,10 @@ class LLVMEmission {
       return found == prepared.end() ? load(pipeline_operand_slot(*operand)) : found->second;
     };
     if (!fresh_receiver) arguments = load_prepared_operands(expr, stored(receiver));
-    const auto upstream = std::span{plan.traversal}.first(plan.traversal.size() - 1);
-    here_values[1] = connect_prepared_pipeline(upstream, stored);
+    if (plan.traversal.size() > 1) {
+      const auto upstream = std::span{plan.traversal}.first(plan.traversal.size() - 1);
+      here_values[1] = connect_prepared_pipeline(upstream, stored);
+    }
     return arguments;
   }
   llvm::Value *prepare_here_argument(const Expression &expr, size_t slot) {
@@ -1933,7 +1935,7 @@ class LLVMEmission {
       }
       [[fallthrough]];
     }
-    case K::value_call: case K::call: case K::behave: case K::perform: case K::pipeline: {
+    case K::value_call: case K::call: case K::behave: case K::perform: case K::pipeline: case K::processor_composition: {
       return temporary_scope(expr.at, !fact.borrowed_result || read ? scalar_ : static_cast<llvm::Type *>(b_.getPtrTy()), [&]() -> llvm::Value * {
         // An entry-time supplied body leaves its slot empty during preparation.
         std::vector<llvm::Value *> here_values(fact.here_arguments.size());
