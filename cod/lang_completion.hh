@@ -1074,6 +1074,7 @@ private:
     std::set<size_t> initialized{};
     MissingInitialization uninitialized{};
     ConditionClauses reaching{ConditionFacts{}};
+    std::set<size_t> initialized_captures{};
   };
   std::vector<Queue> queues_{{}};
   std::vector<Action> actions_;
@@ -1255,9 +1256,10 @@ public:
     queues_.push_back({{a, b}, {}}); return queues_.size() - 1;
   }
   size_t known(size_t queue, const std::set<size_t> &initialized, const MissingInitialization &uninitialized,
-               const ConditionClauses &reaching) {
-    if (initialized.empty() && uninitialized.empty() && unconditional(reaching)) return queue;
-    queues_.push_back({{queue}, {}, initialized, uninitialized, reaching}); return queues_.size() - 1;
+               const ConditionClauses &reaching, std::set<size_t> initialized_captures = {}) {
+    if (initialized.empty() && uninitialized.empty() && initialized_captures.empty() && unconditional(reaching)) return queue;
+    queues_.push_back({{queue}, {}, initialized, uninitialized, reaching, std::move(initialized_captures)});
+    return queues_.size() - 1;
   }
   size_t append(size_t previous, size_t suffix) {
     if (!previous) return suffix;
@@ -1317,6 +1319,7 @@ public:
         Effects known{{}, node.initialized};
         known.uninitialized = node.uninitialized;
         known.reaching = conditions->second;
+        known.selections.initialized_captures = node.initialized_captures;
         for (const auto previous : node.previous) for (const auto &[value, effects] : require(previous, state))
           changed = merge(result.outcomes, value, compose(known, effects)) || changed;
       } else {

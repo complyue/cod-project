@@ -98,11 +98,11 @@ def queried_ref_read(declarations, body):
     return IO+declarations+query(REF_INPUTS+body, '')+'behave @print(result);'
 
 
-def saved_selection_case(body, *, inspect=False, rejects=False, declarations=''):
+def saved_selection_case(body, *, inspect=False, rejects=False, declarations='', diagnostic=UNWRITTEN_RESULT):
     invocation = query(SAVED_CALL, '') if inspect else 'val result<-{{'+SAVED_CALL+'}};'
     source = IO+TYPES+declarations+SAVED_SELECTION+body+'}proc run(flag:bool)->void{'+invocation
     source += 'behave @print(result);}run(true);run(false);'
-    return (source, 2, '', UNWRITTEN_RESULT) if rejects else (source, 0, '4\n4\n' if inspect else '7\n7\n', '')
+    return (source, 2, '', diagnostic) if rejects else (source, 0, '4\n4\n' if inspect else '7\n7\n', '')
 
 
 REF_POINTER_DEFINITION = recursive_pick('if(chosen is not null){return chosen;}else{return backup;};',
@@ -657,6 +657,34 @@ for name, declaration, body, rejects in (
 ):
     runner.CASES['call_'+name] = saved_selection_case(body, rejects=rejects, declarations=declaration)
     runner.CASES['query_call_'+name] = saved_selection_case(body, inspect=True, rejects=rejects, declarations=declaration)
+
+LOOP_TRANSFER = 'if(selected is not null){defer (<-)(selected,7u64);}else{};'
+LOOP_CALL = 'defer fill(selected,selected,flag);'
+TWO_ITERATIONS = 'for(i in 0u64..2u64)'
+
+for name, declarations, body, rejects in (
+    ('guarded_transfer_retains_selection', '', TWO_ITERATIONS+'{'+LOOP_TRANSFER+'};return selected;', False),
+    ('named_call_retains_saved_view', PAIR_WRITER, 'ptr held=selected;'+TWO_ITERATIONS+'{'+LOOP_CALL+'};'
+                                                 'selected=backup;return held;', False),
+    ('nested_ranges_retain_selection', '',
+     TWO_ITERATIONS+'{for(j in 0u64..2u64){'+LOOP_TRANSFER+'};};return selected;', False),
+    ('fold_retains_selection', PAIR_WRITER, 'fold(i in 0u64..2u64,c=0u64){'+LOOP_CALL+'c};return selected;', False),
+    ('empty_and_nonempty_paths_write', PAIR_WRITER,
+     'for(i in 0u64..if(flag){2u64}else{0u64}){'+LOOP_CALL+'}else{'+SAVED_WRITE+'};return selected;', False),
+    ('empty_loop_registers_no_write', PAIR_WRITER, 'for(i in 0u64..0u64){'+LOOP_CALL+'};return selected;', True),
+    ('late_rebind_selects_unwritten_target', PAIR_WRITER,
+     SAVED_OPPOSITE+TWO_ITERATIONS+'{'+LOOP_CALL+'};selected=opposite;return selected;', True),
+    ('loop_rebind_does_not_initialize_entry_target', PAIR_WRITER,
+     'ptr held=selected;'+TWO_ITERATIONS+'{selected=backup;'+LOOP_CALL+'};return held;', True),
+):
+    runner.CASES['repeated_defer_'+name] = saved_selection_case(body, rejects=rejects, declarations=declarations)
+    runner.CASES['query_repeated_defer_'+name] = saved_selection_case(body, inspect=True, rejects=rejects, declarations=declarations)
+
+EARLY_LOOP_READ = TWO_ITERATIONS+'{'+LOOP_CALL+'if(selected is not null){selected;{}}else{};};return selected;'
+runner.CASES['repeated_defer_cannot_read_before_the_actions_run'] = saved_selection_case(
+    EARLY_LOOP_READ, rejects=True, declarations=PAIR_WRITER, diagnostic="cannot prove initialization of 'local'")
+runner.CASES['query_repeated_defer_cannot_read_before_the_actions_run'] = saved_selection_case(
+    EARLY_LOOP_READ, inspect=True, rejects=True, declarations=PAIR_WRITER)
 
 runner.EXTRA_SOURCES = [Path(__file__)]
 if __name__ == '__main__':
