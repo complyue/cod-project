@@ -28,7 +28,7 @@ case('source_cleared', after='selected=null;')
 case('source_slot_alias_rebound', before='var writer->selected;', after='writer=payload;')
 case('copy_chain', copy='ptr middle=selected;ptr saved=middle;')
 case('intermediate_rebound', copy='ptr middle=selected;ptr saved=middle;middle=payload;')
-case('scoped_copy', copy='ptr saved={{ptr local=selected;local}};')
+case('scoped_copy', copy='ptr saved={ptr local=selected;local};')
 case('saved_changed', after='saved=payload;', reject=True)
 case('saved_slot_alias_rebound', before='var writer->saved;', after='writer=payload;', reject=True)
 case('source_changed_before_observation', before='selected=null;', reject=True)
@@ -44,9 +44,12 @@ case('loop_rebinds_copy', after='for(i in 0u64..2u64){saved=payload;};', reject=
 case('callable_classifier', before='func detector=classify;', observe='val ready<-detector(selected);', after='selected=payload;')
 
 for name, body in (
-    ('deferred_block', base.LOCAL+SELECT+'ptr saved=selected;{{defer{ {{'+OBSERVE+FIRST+TAIL+'}}; };}};'+base.PRINT),
+    ('deferred_block', base.LOCAL+SELECT+'ptr saved=selected;ptr output=target;{{defer{'+
+        FIRST.replace('ready','classify(selected)').replace('target<-','output<-')+'selected=null;'+
+        TAIL.replace('target<-','output<-')+'};}};'+base.PRINT),
     ('finally', base.LOCAL+SELECT+'ptr saved=selected;'+OBSERVE+'try{'+FIRST+'}finally{'+TAIL+'};'+base.PRINT),
-    ('separate_actions', base.LOCAL+SELECT+'ptr saved=selected;{{defer{'+TAIL+'};defer{if(classify(selected)){target<-7u64;{}}else{};};}};'+base.PRINT),
+    ('separate_actions', base.LOCAL+SELECT+'ptr saved=selected;ptr output=target;{{defer{'+
+        TAIL.replace('target<-','output<-')+'};defer{if(classify(selected)){output<-7u64;{}}else{};};}};'+base.PRINT),
 ):
     base.case(name, body=body, declarations=fixture.CLASSIFY, signature='payload:Exception,present:bool', arguments=ARGUMENTS, output='8\n8\n8\n7\n')
 
@@ -77,6 +80,20 @@ for name, copy, early, mutation, separate, rejected in (
     body+='try{fill(target,'+('other' if separate else 'target')+',payload,present);}catch(e:const NullPointerException){};'
     base.case(name,body=body,declarations=fixture.CLASSIFY+helper,signature='payload:Exception,present:bool',arguments=ARGUMENTS,
               reject=rejected,output='8\n8\n8\n7\n')
+
+PRESENCE = 'func has_target(ptr item:u64 in O)->bool where {owner O}{return item is not null;}'
+SINGLE_ACTION = ('defer{if(has_target(source)){output<-7u64;{}}else{};source=null;'
+                 'if(saved is null){output<-8u64;{}}else{};};')
+for name, saved, before_drain, rejected in (
+    ('deferred_complementary_snapshots', 'source', '', False),
+    ('deferred_independent_snapshots', 'if(other){payload}else{null in here}', '', True),
+    ('deferred_snapshot_rebound_before_drain', 'source', 'source=null;', True),
+):
+    source = IO+PRESENCE+'proc run(present:bool,other:bool)->void{val payload<-1u64;val destination<-make local u64;'
+    source += 'ptr source=if(present){payload}else{null in here};ptr saved='+saved+';ptr output=destination;'
+    source += '{{'+SINGLE_ACTION+before_drain+'}};behave @print(destination);}run(true,false);run(false,true);'
+    runner.CASES[name] = (source, 2 if rejected else 0, '' if rejected else '7\n8\n',
+                          'before definite initialization' if rejected else '')
 
 runner.CASE_ARGUMENTS = {}
 runner.CASE_SHADOWS = {name: [] for name in runner.CASES}

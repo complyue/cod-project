@@ -3613,6 +3613,17 @@ class ScalarChecker {
           if (const auto recorded = state.selections.targets.find(binding);
               recorded != state.selections.targets.end() && recorded->second.entries.empty())
             selected.nullness = recorded->second.nullness;
+          if (selected.nullable() && !selected.places.empty()) {
+            // A cleanup condition observes the selection at the drain entry.
+            // Relate that observation to other snapshots before applying writes.
+            CleanupEquations::BooleanValue observed;
+            const CleanupEquations::BindingSnapshot snapshot{binding, state.target_versions.at(binding)};
+            for (const auto &[null, paths] : selected.null_observations()) for (auto facts : paths) {
+              (null ? facts.absent_bindings : facts.bindings).insert(snapshot);
+              CleanupEquations::add_condition(observed[null], std::move(facts));
+            }
+            selected.nullness = std::move(observed);
+          }
           return selected;
         }, deferred_action_);
         applied.transform_values([&](const auto &value) { return value.through(payloads, pending, true); },
