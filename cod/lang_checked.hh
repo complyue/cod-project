@@ -3021,20 +3021,43 @@ class ScalarChecker {
     });
     return reasons;
   }
-  CallEffects callable_effects(const Type &contract, const std::vector<Type> &arguments,
-                              const std::optional<std::set<size_t>> &choices) const {
+  bool capture_free_callable(size_t id) const {
+    const auto &callable = program_.callables.at(id);
+    return callable.type.pure_callable && std::ranges::all_of(callable.implementations(), [&](size_t target) {
+      return program_.instances[target].environment.empty() && read_effects(target).symbols.empty();
+    });
+  }
+  const std::set<size_t> *observed_callables(const Expression &expression) const {
+    if (checking_context_ >= callable_choices_.size()) return nullptr;
+    const auto &observations = callable_choices_[checking_context_];
+    const auto found = observations.find(&expression);
+    return found == observations.end() ? nullptr : &found->second;
+  }
+  bool capture_free_callables(const std::set<size_t> *choices) const {
+    return choices && !choices->empty() && std::ranges::all_of(*choices, [&](size_t id) { return capture_free_callable(id); });
+  }
+  struct CallableInvocationEffects {
+    CallEffects effects;
+    bool closed;
+  };
+  CallableInvocationEffects callable_effects(const Type &contract, const std::vector<Type> &arguments,
+                                             const std::optional<std::set<size_t>> &choices) const {
     callable_effect_consumers_.insert(checking_context_);
     CallEffects effects;
     bool first = true;
+    size_t covered = 0;
     for (size_t id = 0; id < program_.callables.size(); ++id) {
       const auto &callable = program_.callables[id];
       if (callable.type != contract || (choices && !choices->contains(id))) continue;
+      ++covered;
       for (const auto &[inputs, target] : callable.alternatives(arguments)) {
         const auto &next = read_effects(target);
         if (first) { effects = next; first = false; continue; }
         effects.reads.insert(next.reads.begin(), next.reads.end());
         effects.symbols.insert(next.symbols.begin(), next.symbols.end());
         effects.written_inputs.insert(next.written_inputs.begin(), next.written_inputs.end());
+        effects.escaping_failures.insert(next.escaping_failures.begin(), next.escaping_failures.end());
+        effects.requires_deferred_failure_delivery |= next.requires_deferred_failure_delivery;
         for (auto &[reason, known] : effects.initialized) {
           const auto found = next.initialized.find(reason);
           const auto missing = next.uninitialized.find(reason);
@@ -3059,7 +3082,7 @@ class ScalarChecker {
     std::erase_if(effects.uninitialized, [](const auto &entry) { return entry.second.empty(); });
     for (const auto reason : call_reasons(contract)) effects.initialized.try_emplace(reason);
     for (const auto reason : call_reasons(contract)) effects.present.try_emplace(reason);
-    return effects;
+    return {std::move(effects), choices && covered && choices->size() == covered};
   }
   void require_borrow_lifetime(const CheckedOperation &view, const Location &at, bool prepared) const {
     require_live_view(view, at);
@@ -5650,16 +5673,19 @@ class ScalarChecker {
     std::optional<Type> binding;
     OwnerMatch matches = OwnerMatch::satisfied;
   };
-  static ReturnPatternEvidence scalar_return_pattern(const Expression &pattern, const std::optional<Type> &annotation,
-                                                      const std::optional<Type> &result, bool borrowed, bool required) {
+  static bool bindable_return_value(const Type &type) {
+    return scalar_type(type) || (type.kind == Type::procedure && type.pure_callable);
+  }
+  static ReturnPatternEvidence value_return_pattern(const Expression &pattern, const std::optional<Type> &annotation,
+                                                     const std::optional<Type> &result, bool borrowed, bool required) {
     if (pattern.binding.empty() && pattern.owner_name.empty()) return {};
     if (required && pattern.declaration_kind == "val" && !pattern.owner_name.empty())
       fail(pattern.at, "a val return pattern cannot specify an owner");
     const bool value_pattern = !pattern.binding.empty() && pattern.owner_name.empty() &&
         (pattern.declaration_kind.empty() || pattern.declaration_kind == "val");
     if (required && value_pattern && annotation == Type::void_type) fail(pattern.at, "cannot bind a void return");
-    if (required && (!value_pattern || (annotation && !scalar_type(*annotation)) ||
-                     (result && result != Type::void_type && !scalar_type(*result))))
+    if (required && (!value_pattern || (annotation && !bindable_return_value(*annotation)) ||
+                     (result && result != Type::void_type && !bindable_return_value(*result))))
       implementation_gap(pattern.at, "this result mode, type or owner in deferred return inspection");
     const bool matches = !borrowed && result != Type::void_type && (!annotation || !result || annotation == result);
     auto binding = annotation ? annotation : result;
@@ -5676,10 +5702,10 @@ class ScalarChecker {
     bool borrowed = state.borrowed_return != nullptr;
     if (state.method) {
       const auto &method = program_.methods[*state.method];
-      if (method.here_group) return scalar_return_pattern(pattern, annotation, method.here_group->supplier, false, state.required);
+      if (method.here_group) return value_return_pattern(pattern, annotation, method.here_group->supplier, false, state.required);
       borrowed |= method.result.borrowed();
     }
-    return scalar_return_pattern(pattern, annotation, state.invocation_result, borrowed, state.required);
+    return value_return_pattern(pattern, annotation, state.invocation_result, borrowed, state.required);
   }
   struct ConditionalEvidence {
     std::optional<Type> yes, no;
@@ -9464,7 +9490,10 @@ class ScalarChecker {
   }
   void check_value_call(const Expression &expr, const Type &contract, size_t offset, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation, bool read, bool discard) {
-    if (!operation.invokes_here) note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
+    const auto *choices = operation.invokes_here ? nullptr : observed_callables(expr);
+    if (choices) operation.callable_choices = *choices;
+    if (!operation.invokes_here && (!proving_ || !capture_free_callables(choices)))
+      note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
     if (checking_method_ && checking_method_->source->kind == Form::Kind::function && !contract.pure_callable)
       fail(expr.at, "a function cannot invoke a procedure");
     if (expr.children.size() - offset != contract.parameters.size()) fail(expr.at, "callable argument count does not match its view");
@@ -9494,13 +9523,10 @@ class ScalarChecker {
         if (const auto role = checking_method_->here->inputs[i].owner; role)
           require_here_owner(one_owner(views[i]), here_formal_owner(*role), expr.children[i + offset]->at);
       }
-    if (checking_context_ < callable_choices_.size())
-      if (const auto found = callable_choices_[checking_context_].find(&expr); found != callable_choices_[checking_context_].end())
-        operation.callable_choices = found->second;
-    auto effects = callable_effects(contract, arguments,
+    auto [effects, closed] = callable_effects(contract, arguments,
         operation.invokes_here ? std::optional{std::set<size_t>{}} : operation.callable_choices);
     if (expr.kind == Expression::Kind::perform) effects.symbols.clear();
-    auto reasons = call_reasons(contract);
+    auto reasons = closed ? direct_call_reasons(contract, effects) : call_reasons(contract);
     if (operation.invokes_here && proving_ && checking_method_->here_argument_instance) {
       const auto callback = *checking_method_->here_argument_instance;
       const auto &body = read_effects(callback);
@@ -10351,7 +10377,7 @@ class ScalarChecker {
       const auto annotation = expr.annotation ?
           std::optional{substitute(*expr.annotation, *checking_method_, instance->substitutions, true)} : std::nullopt;
       const auto &inspected = group ? group->supplier : instance->result.type;
-      const auto pattern = scalar_return_pattern(expr, annotation, inspected, !group && instance->result.borrowed(), true);
+      const auto pattern = value_return_pattern(expr, annotation, inspected, !group && instance->result.borrowed(), true);
       operation.operand_type = pattern.binding.value_or(Type::void_type);
       operation.return_filter.can_match = pattern.matches != OwnerMatch::mismatch;
       break;
@@ -10705,7 +10731,17 @@ class ScalarChecker {
         lexical_.scopes.push_back({next_scope_++, {}});
         const auto id = declare(test.binding, pattern.operand_type, test.read_only || test.fixed_binding, true, test.at);
         lexical_.scopes.back().declarations = false;
-        bindings_->at(storage(id).binding).fixed = test.fixed_binding;
+        auto &binding = bindings_->at(storage(id).binding);
+        binding.fixed = test.fixed_binding;
+        binding.callable_value = pattern.operand_type.kind == Type::procedure;
+        if (binding.callable_value && proving_ && lexical_.live && !capture_free_callables(observed_callables(test))) {
+          // Check the prepared value on the cleanup path that actually matches.
+          const auto read = read_obligation({}, {test.at,
+              "micro-dispatch implementation gap: return pattern needs proof of a capture-free function value; this is not a language restriction"});
+          CleanupEquations::ReadRequirement proof;
+          proof.when = path_conditions(lexical_);
+          add_requirement(lexical_, read, lexical_.inputs, proof);
+        }
         initialize(id);
         pattern.place = id;
       }
@@ -11154,7 +11190,8 @@ class ScalarChecker {
         operation.invocation[0].payload_writes = payload_targets(target);
         break;
       }
-      if (destination.kind == Type::procedure) note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
+      if (destination.kind == Type::procedure && (!proving_ || !capture_free_callables(observed_callables(expr))))
+        note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
       if (written.size() == 1) initialize(*written.begin());
       else {
         initialize_targets(written_target, lexical_.initialized, lexical_.uninitialized);
@@ -11213,7 +11250,8 @@ class ScalarChecker {
         operation.type = value;
         break;
       }
-      if (!borrowed && value.kind == Type::procedure) note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
+      if (!borrowed && value.kind == Type::procedure && (!proving_ || !capture_free_callables(observed_callables(expr))))
+        note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
       if (borrowed && value != Type::never) {
         if (expr.children.empty()) fail(expr.at, "borrowed result requires an explicit target view");
         const auto &selected = operations.at(expr.children.front().get());
@@ -11444,7 +11482,7 @@ class ScalarChecker {
     struct Context {
       const Facts *facts;
       const std::vector<CheckedStorage> *storage;
-      std::map<const Expression *, Node> expressions, calls;
+      std::map<const Expression *, Node> expressions, observations;
       std::vector<Node> places;
       Node result;
     };
@@ -11522,15 +11560,26 @@ class ScalarChecker {
             contexts[c].storage->at(*fact.place).type.kind == Type::procedure) {
           flow.link(expr->kind == K::callable ? node : expression(c, expr->children.front().get()), contexts[c].places.at(*fact.place));
         }
-        if (expr->kind == K::transfer && fact.operand_type.kind == Type::procedure)
+        if (expr->kind == K::transfer && fact.operand_type.kind == Type::procedure) {
+          const auto source = expression(c, expr->children[1].get());
+          contexts[c].observations.emplace(expr, source);
           for (const auto place : fact.targets) if (place != null_target)
-            flow.link(expression(c, expr->children[1].get()), contexts[c].places.at(place));
-        if ((expr->kind == K::return_value || expr->kind == K::return_tail) && c && !expr->children.empty())
-          flow.link(expression(c, expr->children.front().get()), contexts[c].result);
+            flow.link(source, contexts[c].places.at(place));
+        }
+        if ((expr->kind == K::return_value || expr->kind == K::return_tail) && c && !expr->children.empty()) {
+          const auto source = expression(c, expr->children.front().get());
+          flow.link(source, contexts[c].result);
+          if (fact.operand_type.kind == Type::procedure && !fact.borrowed_result)
+            contexts[c].observations.emplace(expr, source);
+        }
+        if (expr->kind == K::return_test && fact.return_filter.can_match && fact.place && fact.operand_type.kind == Type::procedure) {
+          flow.link(contexts[c].result, contexts[c].places.at(*fact.place));
+          contexts[c].observations.emplace(expr, contexts[c].result);
+        }
         if (fact.callee && fact.type != Type::never) {
           for (const auto &[from, to] : invocation(c, *expr, fact, *fact.callee + 1, 0)) flow.link(from, to);
         } else if (fact.callable_call && fact.type != Type::never) {
-          const auto callee = flow.node(); contexts[c].calls.emplace(expr, callee);
+          const auto callee = flow.node(); contexts[c].observations.emplace(expr, callee);
           const size_t offset = expr->kind == K::value_call ? 1 : 0;
           if (offset) flow.link(expression(c, expr->children.front().get()), callee);
           else if (fact.symbol) flow.link(symbols.at(*fact.symbol), callee);
@@ -11579,7 +11628,7 @@ class ScalarChecker {
     flow.solve();
     CallableChoices result(contexts.size());
     for (size_t c = 0; c < contexts.size(); ++c)
-      for (const auto &[expr, node] : contexts[c].calls)
+      for (const auto &[expr, node] : contexts[c].observations)
         if (!flow.values(node).empty()) result[c].emplace(expr, flow.values(node));
     return result;
   }

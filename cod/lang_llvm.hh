@@ -1759,20 +1759,34 @@ class LLVMEmission {
       std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> incoming;
       for (size_t i = 1; i < 3; ++i) {
         b_.SetInsertPoint(i == 1 ? yes : no);
-        if (i == 1 && test.kind == K::return_test && !test.binding.empty()) {
-          std::map<std::optional<size_t>, std::vector<size_t>> destinations;
-          for (size_t context = 0; context < contexts_.size(); ++context) {
-            const auto &pattern = contexts_[context].at(&test);
-            destinations[pattern.return_filter.can_match ? pattern.place : std::nullopt].push_back(context);
-          }
-          contextual_value(test, destinations, "return.binding", [&](std::optional<size_t> place) {
-            if (place) b_.CreateStore(observed_return_value(), storage_.at(*place));
-            return empty_scalar();
-          });
-        }
         const auto &arm = *expr.children[i];
-        auto *value = projection == Projection::value ? emit_conditional_bits(expr, arm, discard)
-                                                      : emit_expression(arm, projection, discard);
+        const bool binds_return = i == 1 && test.kind == K::return_test && !test.binding.empty();
+        const auto emit = [&]() -> llvm::Value * {
+          if (binds_return) {
+            std::map<std::pair<std::optional<size_t>, bool>, std::vector<size_t>> destinations;
+            for (size_t context = 0; context < contexts_.size(); ++context) {
+              const auto &pattern = contexts_[context].at(&test);
+              destinations[{pattern.return_filter.can_match ? pattern.place : std::nullopt,
+                            pattern.operand_type.kind == Type::procedure}].push_back(context);
+            }
+            contextual_value(test, destinations, "return.binding", [&](const auto &destination) {
+              const auto [place, callable] = destination;
+              if (place) {
+                auto *storage = storage_.at(*place);
+                b_.CreateStore(observed_return_value(), storage);
+                if (callable && environments_) temporaries_->values.push_back(storage);
+              }
+              return empty_scalar();
+            });
+          }
+          return projection == Projection::value ? emit_conditional_bits(expr, arm, discard)
+                                                 : emit_expression(arm, projection, discard);
+        };
+        const bool callable_binding = binds_return && std::ranges::any_of(contexts_, [&](const auto &context) {
+          const auto &pattern = context.at(&test);
+          return pattern.return_filter.can_match && pattern.operand_type.kind == Type::procedure;
+        });
+        auto *value = callable_binding ? temporary_scope(arm.at, read ? scalar_ : static_cast<llvm::Type *>(b_.getPtrTy()), emit) : emit();
         if (reachable()) { incoming.emplace_back(value, b_.GetInsertBlock()); b_.CreateBr(join); }
       }
       b_.SetInsertPoint(join);

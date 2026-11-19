@@ -78,6 +78,27 @@ runner.CASES = {
     'return_owner_filter_rejects_nearest_non_owner': (
         'proc run(requested:u64)->u64{defer{if returning (in requested){}};return 7u64;}run(1u64);',
         2,'',"nearest binding 'requested' is not an owner"),
+    'return_inspection_uses_closed_indirect_call_outcomes': (IO+IDENTITY+
+        'proc run(f:func(u64)->const u64)->u64{defer{if returning (){return f(7u64);}};return 1u64;}'
+        'behave @print(run(identity));',0,'7\n',''),
+    'return_function_pattern_binds_a_proved_callable_set': (IO+IDENTITY+
+        'func fixed(n:u64)->const u64{return 9u64;}'
+        'proc run(flag:bool)->const func(u64)->const u64{defer{if returning (val saved){behave @print(saved(7u64));}};'
+        'if(flag){return identity;}else{return fixed;};}'
+        'func a=run(true);func b=run(false);behave @print(a(11u64));behave @print(b(11u64));',0,'7\n9\n11\n9\n',''),
+    'writing_a_function_pattern_holder_keeps_the_pending_return': (IO+IDENTITY+
+        'func fixed(n:u64)->const u64{return 9u64;}'
+        'proc run()->const func(u64)->const u64{defer{if returning (val saved:func(u64)->const u64)'
+        '{saved<-fixed;behave @print(saved(7u64));}};return identity;}'
+        'func held=run();behave @print(held(11u64));',0,'9\n11\n',''),
+    'return_function_pattern_with_no_prepared_value_uses_the_else_arm': (IO+
+        'using "std:exceptions" MissingReturnError;proc run()->const func(u64)->const u64{'
+        'defer{if returning (saved:func(u64)->const u64){}else{behave @print(7u64);}};}'
+        'try{run():void;}catch(e:const MissingReturnError){behave @print(8u64);};',0,'7\n8\n','[-Wmissing-return]'),
+    'return_inspection_preserves_closed_indirect_failure': (
+        'func missing(n:u64)->const u64{}'
+        'proc run(f:func(u64)->const u64)->u64{defer{if returning (){return f(7u64);}};return 1u64;}run(missing);',
+        2,'','return inspection requires independent deferred failure delivery'),
     'here_group_distinct_feedback_and_break': (IO+
         'func plus_one(here body()->u64)->u64{return body()+1u64;}'
         'func relay(here body()->u64)->u64{return plus_one(body)+10u64;}'
