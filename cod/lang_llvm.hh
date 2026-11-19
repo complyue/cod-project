@@ -888,7 +888,7 @@ class LLVMEmission {
       scope.deferred.push_back({&expr, llvm::StructType::get(context_, fields), captures});
     }
   }
-  void complete_cleanup(const std::function<void()> &emit, bool handles_failure = false) {
+  void complete_cleanup(const std::function<void()> &emit, CleanupBoundary boundary, bool handles_failure = false) {
     // Suspend the pending completion while cleanup executes its own control flow.
     const auto pending = completion_.transform([&](auto *place) { return load(place); });
     if (environments_) b_.CreateStore(empty_scalar(), completion_.value);
@@ -920,14 +920,18 @@ class LLVMEmission {
     }
     b_.CreateBr(done);
     b_.SetInsertPoint(replace);
-    auto *retain = block("cleanup.retain.return"), *replaced = block("cleanup.replaced.return");
-    b_.CreateCondBr(b_.CreateAnd(b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(2)), b_.CreateNot(load(completion_.has_return))), retain, replaced);
-    b_.SetInsertPoint(retain);
-    if (environments_) clear_value(completion_.value);
-    b_.CreateStore(pending.value, completion_.value);
-    b_.CreateStore(pending.has_return, completion_.has_return);
+    if (boundary == CleanupBoundary::deferred) {
+      auto *retain = block("cleanup.retain.return"), *replaced = block("cleanup.replaced.return");
+      b_.CreateCondBr(b_.CreateAnd(b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(2)), b_.CreateNot(load(completion_.has_return))), retain, replaced);
+      b_.SetInsertPoint(retain);
+      if (environments_) clear_value(completion_.value);
+      b_.CreateStore(pending.value, completion_.value);
+      b_.CreateStore(pending.has_return, completion_.has_return);
+      b_.CreateBr(done);
+      b_.SetInsertPoint(replaced);
+    }
+    release_value(pending.value);
     b_.CreateBr(done);
-    b_.SetInsertPoint(replaced); release_value(pending.value); b_.CreateBr(done);
     b_.SetInsertPoint(done);
     preserve_transfer(pending.transfer);
   }
@@ -968,7 +972,7 @@ class LLVMEmission {
         complete_cleanup([&] {
           if (descriptor.action->children.size() == 1) emit_expression(body, Projection::value, true);
           else emit_finally(*descriptor.action, Projection::value, true, pending_failure);
-        }, descriptor.action->children.size() > 1);
+        }, CleanupBoundary::deferred, descriptor.action->children.size() > 1);
         for (const auto &[id, place] : bindings) storage_[id] = place;
         b_.CreateBr(scope.cleanup);
         continue;
@@ -997,7 +1001,7 @@ class LLVMEmission {
           b_.CreateCondBr(abrupt_outcome(result), replace, done);
           b_.SetInsertPoint(replace); save_abrupt(result); b_.CreateBr(done);
           b_.SetInsertPoint(done);
-        });
+        }, CleanupBoundary::deferred);
         b_.CreateBr(scope.cleanup);
         continue;
       }
@@ -1187,7 +1191,8 @@ class LLVMEmission {
     }
     b_.CreateBr(handled);
     b_.SetInsertPoint(handled);
-    if (finalizer) complete_cleanup([&] { emit_expression(*finalizer); });
+    if (finalizer) complete_cleanup([&] { emit_expression(*finalizer); },
+        expr.kind == Expression::Kind::deferred ? CleanupBoundary::deferred : CleanupBoundary::ordinary_finally);
     auto *done = block("try.continue");
     b_.CreateCondBr(b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(0)), done, control_->exit);
     b_.SetInsertPoint(done);

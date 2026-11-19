@@ -200,6 +200,8 @@ struct ExceptionFacts {
   }
 };
 
+enum class CleanupBoundary { ordinary_finally, deferred };
+
 struct Completion {
   // Normal, enclosing return, terminal numeric failure, or an intrinsic category.
   size_t reason = 0;

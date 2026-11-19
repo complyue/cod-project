@@ -6047,13 +6047,13 @@ class ScalarChecker {
     merge_type_exits(outgoing, std::move(path.reasons), path.state, std::move(path.result), path.retained_return);
   }
   std::optional<Type> complete_type_finalizer(const Expression &handler, TypeEvidenceExits::Path &pending,
-                                              TypeEvidenceExits &outgoing) const {
+                                              TypeEvidenceExits &outgoing, CleanupBoundary boundary) const {
     TypeEvidenceExits exits;
     pending.state.exits = &exits;
     const auto type = type_evidence(handler, pending.state);
     pending.state.exits = nullptr;
     for (auto &path : exits.paths) {
-      if (!path.returned() && pending.returned()) {
+      if (boundary == CleanupBoundary::deferred && !path.returned() && pending.returned()) {
         path.retained_return = true;
         path.result = pending.result;
       }
@@ -6101,7 +6101,7 @@ class ScalarChecker {
 
     TypeEvidenceExits completed;
     for (auto &path : outgoing.paths)
-      if (complete_type_finalizer(*finalizer, path, completed) != Type::never)
+      if (complete_type_finalizer(*finalizer, path, completed, CleanupBoundary::deferred) != Type::never)
         forward_type_exit(completed, path);
     return completed;
   }
@@ -7453,11 +7453,12 @@ class ScalarChecker {
         if (project_paths) {
           if (result != Type::never) {
             TypeEvidenceExits::Path normal{{0}, std::move(state), {}};
-            if (complete_type_finalizer(*finalizer, normal, *outer) == Type::never) result = Type::never;
+            if (complete_type_finalizer(*finalizer, normal, *outer, CleanupBoundary::ordinary_finally) == Type::never)
+              result = Type::never;
             state = std::move(normal.state);
           } else state = std::move(entry);
           for (auto &path : outgoing.paths)
-            if (complete_type_finalizer(*finalizer, path, *outer) != Type::never)
+            if (complete_type_finalizer(*finalizer, path, *outer, CleanupBoundary::ordinary_finally) != Type::never)
               forward_type_exit(*outer, path);
         } else if (finalizer_entry) {
           if (cleanup == Type::never || result == Type::never) state = std::move(*finalizer_entry);
@@ -9773,19 +9774,21 @@ class ScalarChecker {
     for (const auto &path : final_exits.paths) {
       lexical_ = path.state;
       append_queues(lexical_, final_entry);
-      complete_saved_target(lexical_, final_returned);
-      if (path.completion.reason == 1) note_abrupt(path.at, path.exceptions, path.completion);
-      else {
-        bool pending_return = false, pending_normal = !normals.empty();
-        for (const auto *paths : {&outgoing.paths, &control_inputs}) for (const auto &input : *paths) {
-          pending_return = pending_return || input.completion.returned;
-          pending_normal = pending_normal || !input.completion.returned;
-        }
-        if (pending_normal) note_abrupt(path.at, path.exceptions, path.completion, path.immediate_scope_failure);
-        if (pending_return) {
-          auto retained = path.completion; retained.returned = true;
-          note_abrupt(path.at, path.exceptions, retained, path.immediate_scope_failure);
-        }
+      const bool retain_pending = expr.kind == Expression::Kind::deferred && path.completion.reason != 1;
+      complete_saved_target(lexical_, retain_pending ? final_returned : CleanupEquations::Returned{});
+      if (!retain_pending) {
+        note_abrupt(path.at, path.exceptions, path.completion, path.immediate_scope_failure);
+        continue;
+      }
+      bool pending_return = false, pending_normal = !normals.empty();
+      for (const auto *paths : {&outgoing.paths, &control_inputs}) for (const auto &input : *paths) {
+        pending_return = pending_return || input.completion.returned;
+        pending_normal = pending_normal || !input.completion.returned;
+      }
+      if (pending_normal) note_abrupt(path.at, path.exceptions, path.completion, path.immediate_scope_failure);
+      if (pending_return) {
+        auto retained = path.completion; retained.returned = true;
+        note_abrupt(path.at, path.exceptions, retained, path.immediate_scope_failure);
       }
     }
     if (cleanup != Type::never) {
