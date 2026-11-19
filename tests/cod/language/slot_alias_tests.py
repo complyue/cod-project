@@ -2,6 +2,7 @@
 """Declared place aliases share slots while retaining independent access paths."""
 from pathlib import Path
 import foundation_tests as runner
+from language_test_support import observe_after_cleanup
 
 IO = 'using symbol "std:io" @print;\n'
 NPE = 'using "std:exceptions" NullPointerException;\n'
@@ -16,8 +17,9 @@ runner.CASES = {
     'pointer_copy_is_independent': (IO+'val x<-1,y<-2;ptr p=x;var a->p;ptr snapshot=a;a=y;behave @print(snapshot);behave @print(p);',0,'1\n2\n',''),
     'selection_effect_once': (IO+'val x<-1,y<-2;ptr p=x;var a->{behave @print(9);p};a=y;behave @print(a);behave @print(p);',0,'9\n2\n2\n',''),
     'selection_rebinds_original': (IO+'val x<-1,y<-2;ptr p=x;var a->{p=y;p};p=x;behave @print(a);',0,'1\n',''),
-    'nested_name_lifetime': (IO+'val x<-1,y<-2;ptr p=x;{{var a->p;a=y;}};behave @print(p);p=x;behave @print(p);',0,'2\n1\n',''),
-    'shadow_resolves_before_declaration': (IO+'val x<-1;{{var x->x;x<-2;}};behave @print(x);',0,'2\n','[-Wshadow]'),
+    'nested_name_lifetime': (IO+'ref x:i64=1,y:i64=2;ptr p=x,q=y;'
+        '{{var a->p;a=q;behave @print(p);}};behave @print(p);',0,'2\n1\n',''),
+    'shadow_resolves_before_declaration': ('ref x:i64=1;{{var x->x;x<-2;}};',2,'',"duplicate declaration of 'x'"),
     'const_alias_binding_writable_target': (IO+'val x<-1,y<-2;ptr p=x;const var a->p;a<-3;p=y;behave @print(a);',0,'2\n',''),
     'readonly_alias_observes_mutation': (IO+'val x<-1,y<-2;ptr p=x;var a:const->p;p<-3;behave @print(a);a=y;behave @print(p);p<-4;behave @print(a);',0,'3\n2\n4\n',''),
     'readonly_slot_allows_readonly_rebind': (IO+'val x<-1;const val y<-2;ptr p:const i64=x;var a->p;a=y;behave @print(p);',0,'2\n',''),
@@ -37,9 +39,12 @@ runner.CASES = {
     'local_alias_in_nested_callable': (IO+'func factory()->const func(i64)->const i64{return func(ref x:i64)->const i64{var a->x;a<-16;return a;};}func f=factory();behave @print(f(0));',0,'16\n',''),
     'per_iteration_scope': (IO+'val x<-0;ptr p=x;for(i in 0..3){{var a->p;a<-a+1;}};behave @print(x);',0,'3\n',''),
     'deferred_current_slot': (IO+'{{val x<-1,y<-2;ptr p=x;var a->p;defer{behave @print(a);};p=y;}};',0,'2\n',''),
-    'deferred_rebind_changes_original': (IO+'val x<-1,y<-2;ptr p=x;var a->p;{{defer{a=y;};}};behave @print(p);',0,'2\n',''),
-    'deferred_alias_declaration': (IO+'val x<-1,y<-2;ptr p=x;{{defer{{var a->p;a=y;}};}};behave @print(p);',0,'2\n',''),
-    'deferred_alias_initializes': (IO+'val x<-make local i64;var a->x;{{defer{a<-17;};}};behave @print(x);',0,'17\n',''),
+    'deferred_rebind_changes_original': (IO+'proc run()->void{val x<-1,y<-2;ptr p=x;var a->p;'
+        'defer{behave @print(p);};defer{a=y;};}run();',0,'2\n',''),
+    'deferred_alias_declaration': (IO+'proc run()->void{val x<-1,y<-2;ptr p=x,q=y;'
+        'defer{behave @print(p);};defer{ {{var a->p;a=q;behave @print(p);}};};}run();',0,'2\n1\n',''),
+    'deferred_alias_initializes': (IO+'proc run()->void{val x<-make local i64;var a->x;'
+        +observe_after_cleanup('defer{a<-17;};','behave @print(x);')+'}run();',0,'17\n',''),
     'deferred_prepared_value': (IO+'proc show(x:i64)->void{behave @print(x);}{{val x<-1,y<-2;ptr p=x;var a->p;defer show(a);p=y;defer{behave @print(a);};}};',0,'2\n1\n',''),
     'alias_result_preserves_owner': (IO+'func view(ref x:i64 in O)->ref i64 in O where {owner O}{var a->x;return a;}val x<-1;view(x)<-18;behave @print(x);',0,'18\n',''),
     'default_parameter_is_independent': (IO+'func run(ref x:i64)->const i64{var a->x;a<-19;return x;}val x<-1;behave @print(run(x));behave @print(x);',0,'19\n1\n',''),
@@ -49,8 +54,13 @@ runner.CASES = {
     'explicit_callable_value_from_place': (IO+CALLABLES+'proc run()->void{func f=one;var a->f;func snapshot=a;func g=func[snapshot]()->const i64{return snapshot();};f<-two;behave @print(g());behave @print(a());}run();',0,'1\n2\n',''),
     'callable_place_capture_unproved': (IO+CALLABLES+'proc run()->void{func f=one;var a->f;func g=func[a]()->const i64{return a();};f<-two;behave @print(g());}run();',2,'','capture of a declared place alias'),
     'same_slot_branch_permissions': (IO+'val x<-1,y<-2;ptr p=x;var a->p;var b->if(true){a}else{p};b=y;behave @print(p);',0,'2\n',''),
-    'selection_cleanup_retains_slot': (IO+'val x<-1,y<-2;ptr p=x;var a->{{defer{p=y;};p}};behave @print(a);p=x;behave @print(a);',0,'2\n1\n',''),
-    'ending_alias_name_retains_original_slot': (IO+'val x<-1,y<-2;ptr p=x;var a->{{var local->p;local}};a=y;behave @print(p);',0,'2\n',''),
+    'selection_cleanup_retains_slot': (IO+'proc run(flag:bool)->void{val x<-1,y<-2,z<-3;ptr p=x,q=x;'
+        'var a->try{if(flag){p}else{q}}finally{flag<-!flag;p=y;q=z;{}};'
+        'behave @print(a);a=x;behave @print(p);behave @print(q);}run(true);run(false);',
+        0,'2\n1\n3\n3\n2\n1\n',''),
+    'ending_alias_name_retains_original_slot': (IO+
+        'func matches(ref cell:i64 in O)->bool where {owner O}{ref var local->cell;return local is cell;}'
+        'val x<-1,y<-2;ptr p=x,q=y;var a->if(matches(p)){p}else{q};a=y;behave @print(p);',0,'2\n',''),
     'caught_snapshot_alias': (IO+ERROR+'{{for(i in 0..2){try{missing();{}}catch(e:const MissingReturnError){{var a->e;defer{behave @print(a.category);};}};};}};',0,'5\n5\n','[-Wmissing-return]'),
     'temporary_is_not_slot': ('var a->1;',2,'','alias requires an existing storage place'),
     'null_is_not_slot': ('var a->null;',2,'','alias requires an existing storage place'),
@@ -76,8 +86,11 @@ runner.CASES = {
     'rebind_invalidates_initialization': ('proc run(flag:bool)->void{val x<-make local i64,y<-make local i64;ptr p=if(flag){x}else{y};var a->p;a<-1;a=y;p;}run(true);',2,'','before definite initialization'),
     'binding_owner_is_not_target_owner': ('proc run(ref x:i64 in O)->void where {owner O}{ref var a in O->x;}',2,'','selected binding storage, not its target owner'),
     'owner_change_via_alias': ('proc run(ref x:i64 in O,ref y:i64 in P)->void where {owner O,owner P}{var a->x;a=y;}',2,'','initializer-fixed owner'),
-    'expired_slot_cannot_be_selected': ('val x<-1;var a->{{ptr p=x;p}};',2,'','aliased binding\'s lexical scope has ended'),
-    'expired_payload_cannot_be_read': ('var a->{{val x<-1;x}};',2,'','aliased binding\'s lexical scope has ended'),
+    'expired_slot_cannot_be_selected': ('func borrow(ref input:i64 in O)->ref i64 in O where {owner O}'
+        '{ref var local->input;return local;}val x<-1;ref var a->borrow(x);',2,'','alias of a non-binding storage place'),
+    'expired_payload_cannot_be_read': ('func borrow(ref input:i64 in O)->ref i64 in O where {owner O}'
+        '{ref local:i64=1;ref var selected->local;return selected;}val x<-1;ref result=borrow(x);result;',2,'',
+        'borrowed result does not retain its declared external owner'),
     'alias_name_not_available_on_every_path': ('func choose(flag:bool)->i64{val x<-1;if(flag){var a->x;}else{};return a;}choose(true);',2,'',"binding 'a' is not available"),
     'duplicate_alias': ('val x<-1;var a->x;var a->x;',2,'','duplicate declaration'),
     'loop_requires_explicit_scope': ('val x<-1;for(i in 0..1){var a->x;};',2,'','requires a nested per-iteration'),
@@ -91,6 +104,6 @@ runner.CASE_SHADOWS = {
     'default_parameter_is_independent': ['x'],
     'borrowed_parameter_alias': ['x', 'y'],
 }
-runner.EXTRA_SOURCES = [Path(__file__)]
+runner.EXTRA_SOURCES = [Path(__file__), Path(__file__).with_name('language_test_support.py')]
 if __name__ == '__main__':
     raise SystemExit(runner.main())

@@ -25,8 +25,10 @@ runner.CASES = {
     'reference_reload_after_operands': (IO+'val x<-1,y<-2,z<-3;ptr p=x,q=y;{behave @print(7);p}<=>{behave @print(8);p=z;q};behave @print(p);behave @print(q);',0,'7\n8\n2\n3\n',''),
     'bits_addresses_before_later_rebind': (IO+'val x<-1,y<-2,z<-3;ptr p=x,q=y;p<->{p=z;q};behave @print(x);behave @print(y);behave @print(p);',0,'2\n1\n3\n',''),
     'bits_values_after_operand_effects': (IO+'val x<-1,y<-2;x<->{x<-3;y};behave @print(x);behave @print(y);',0,'2\n3\n',''),
-    'reference_reload_after_cleanup': (IO+'val x<-1,y<-2,z<-3;ptr p=x,q=y;{{defer{p=z;};p}}<=>q;behave @print(p);behave @print(q);',0,'2\n3\n',''),
-    'bits_address_survives_cleanup': (IO+'val x<-1,y<-2,z<-3;ptr p=x,q=y;{{defer{p=z;};p}}<->q;behave @print(x);behave @print(y);behave @print(p);',0,'2\n1\n3\n',''),
+    'reference_reload_after_cleanup': (IO+'val x<-1,y<-2,z<-3;ptr p=x,q=y;'
+        'try{p}finally{p=z;{}}<=>q;behave @print(p);behave @print(q);',0,'2\n3\n',''),
+    'bits_address_survives_cleanup': (IO+'val x<-1,y<-2,z<-3;ptr p=x,q=y;'
+        'try{p}finally{p=z;{}}<->q;behave @print(x);behave @print(y);behave @print(p);',0,'2\n1\n3\n',''),
     'reference_operand_failure': (IO+ERROR+'val x<-1,y<-2,z<-3;ptr p=x,q=y;try{p<=>{p=z;missing();q};}catch(e:const MissingReturnError){};behave @print(p);behave @print(q);',0,'3\n2\n',WARN),
     'bits_operand_failure': (IO+ERROR+'val x<-1,y<-2;try{x<->{x<-3;missing();y};}catch(e:const MissingReturnError){};behave @print(x);behave @print(y);',0,'3\n2\n',WARN),
     'null_pointer_exchange': (IO+'val x<-1;ptr p=x,q:i64=null in here;p<=>q;behave @print((p is null));behave @print(q);p<=>q;behave @print(p);behave @print((q is null));',0,'true\n1\n1\ntrue\n',''),
@@ -36,18 +38,23 @@ runner.CASES = {
     'uninitialized_pointer_targets_exchange': (IO+'val x<-make local i64,y<-make local i64;ptr p=x,q=y;p<=>q;p<-4;q<-5;behave @print(x);behave @print(y);',0,'5\n4\n',''),
     'ref_and_initialized_ptr_exchange': (IO+'val x<-1,y<-2;ref p=x;ptr q=y;p<=>q;behave @print(p);behave @print(q);',0,'2\n1\n',''),
     'readonly_reference_targets': (IO+'val x<-1,y<-2;ptr p:const i64=x,q:const i64=y;p<=>q;behave @print(p);behave @print(q);',0,'2\n1\n',''),
-    'bits_across_owners': (IO+'val x<-1;{{val y<-2;x<->y;behave @print(y);}};behave @print(x);',0,'1\n2\n',''),
+    'bits_across_owners': (IO+'ref x:i64=1;{{val y<-2;x<->y;behave @print(y);}};behave @print(x);',0,'1\n2\n',''),
     'generic_bits': (IO+'func swapped(val x:T,val y:T)->const T where T{x<->y;return x;}behave @print(swapped(1,6));behave @print(swapped(false,true));behave @print(swapped(1u8,7u8));',0,'6\ntrue\n7\n',''),
     'generic_references': (IO+'func swapped(ref x:T,ref y:T)->const T where T{x<=>y;return x;}behave @print(swapped(1,8));behave @print(swapped(false,true));',0,'8\ntrue\n',''),
     'callable_body_intrinsics_not_captures': (IO+'func f=func[](ref x:i64,ref y:i64)->const i64{intrinsic (<=>)(x,y);return x;};behave @print(f(1,9));',0,'9\n',''),
     'inferred_callable_swap_body': (IO+'func f=func(val x:i64,val y:i64)->const i64{x<->y;return x;};behave @print(f(1,10));',0,'10\n',''),
-    'borrowed_bits_setters': (IO+NPE+'proc swap(ptr x:i64 in O,ptr y:i64 in P)->void throws NullPointerException where {owner O,owner P}{x<->y;}val x<-1;{{val y<-2;try{swap(x,y);}catch(e:const NullPointerException){};behave @print(y);}};behave @print(x);',0,'1\n2\n',''),
+    'borrowed_bits_setters': (IO+NPE+'proc swap(ptr first:i64 in O,ptr second:i64 in P)->void throws NullPointerException '
+        'where {owner O,owner P}{first<->second;}ref x:i64=1;'
+        '{{val y<-2;try{swap(x,y);}catch(e:const NullPointerException){};behave @print(y);}};behave @print(x);',
+        0,'1\n2\n',''),
     'callee_slot_exchange_is_local': (IO+'proc swap(ref x:i64 in O,ref y:i64 in O)->void where {owner O}{x<=>y;x<-11;}val x<-1,y<-2;ptr p=x,q=y;swap(p,q);behave @print(p);behave @print(q);',0,'1\n11\n',''),
     'borrowed_result_after_exchange': (IO+'func select(ref x:T in O,ref y:T in O)->ref T in O where {T,owner O}{x<=>y;return x;}val x<-1,y<-2;select(x,y)<-12;behave @print(x);behave @print(y);',0,'1\n12\n',''),
     'loop_invariants': (IO+'func run(n:i64)->const i64{val x<-1,y<-10;ref p=x,q=y;for(i in 0..n){p<=>q;p<-p+1;};return p*100+q;}behave @print(run(0));behave @print(run(1));behave @print(run(2));behave @print(run(5));',0,'110\n1101\n211\n1303\n',''),
     'nested_loop_alias_exchange': (IO+'val x<-1,y<-2;ref p=x,q=y;var a->p;for(i in 0..3){for(j in 0..3){a<=>q;};};behave @print(p);behave @print(q);',0,'2\n1\n',''),
     'recursive_bits': (IO+'func rotate(val x:T,val y:T,n:i64)->const T where T{if(n==0){return x;}else{x<->y;return rotate(x,y,n-1);};}behave @print(rotate(1,13,31));behave @print(rotate(false,true,30));',0,'13\nfalse\n',''),
-    'deferred_exchange': (IO+'val x<-1,y<-2;ptr p=x,q=y;{{defer{p<=>q;};}};behave @print(p);behave @print(q);{{defer{p<->q;};}};behave @print(x);behave @print(y);',0,'2\n1\n2\n1\n',''),
+    'deferred_exchange': (IO+'proc run()->void{val x<-1,y<-2;ptr p=x,q=y;'
+        'defer{behave @print(x);behave @print(y);};defer{p<->q;};'
+        'defer{behave @print(p);behave @print(q);};defer{p<=>q;};}run();',0,'2\n1\n2\n1\n',''),
     'deferred_observation_order': (IO+'{{val x<-1,y<-2;ptr p=x,q=y;defer{behave @print(p);};defer{p<=>q;};}};',0,'2\n',''),
     'callable_holder_reference_exchange': (IO+'func one()->const i64{return 1;}func two()->const i64{return 2;}func a=one;func b=two;ptr p=a,q=b;p<=>q;behave @print(p());behave @print(q());',0,'2\n1\n',''),
     'exception_bits_and_causes': (IO+ERROR+'val first<-error();val second<-try{throw first from first;}catch(e:const MissingReturnError){e};first<->second;behave @print(first.cause_count);behave @print(second.cause_count);',0,'1\n0\n',WARN),
@@ -76,13 +83,15 @@ runner.CASES = {
     'swap_is_void': ('val x<-1,y<-2;val z<-x<->y;',2,'','non-value or abruptly completing operand'),
     'swap_not_chainable': ('ptr p=1,q=2,r=3;p<=>q<=>r;',2,'','swap operators cannot be chained'),
     'wrong_arity': ('ptr p=1;intrinsic (<=>)(p);',2,'','swap requires two destinations'),
-    'expired_bits_target': ('val y<-1;{{val x<-2;x}}<->y;',2,'','lexical owner has ended'),
-    'expired_reference_slot': ('val x<-1,y<-2;ptr q=y;{{ptr p=x;p}}<=>q;',2,'','reference binding\'s lexical scope has ended'),
+    'expired_bits_target': ('func leak(ref input:i64 in O)->ref i64 in O where {owner O}'
+        '{ref local:i64=2;return local;}val y<-1;leak(y)<->y;',2,'',
+        'borrowed result does not retain its declared external owner'),
+    'expired_reference_slot': ('func borrow(ref input:i64 in O)->ref i64 in O where {owner O}'
+        '{ptr local=input;return local;}val x<-1,y<-2;ptr q=y;borrow(x)<=>q;',2,'','requires a binding slot'),
     'plain_deferred_builtin': ('ptr p=1,q=2;defer intrinsic (<=>)(p,q);',0,'',''),
 }
 runner.CASE_ARGUMENTS = {}
 runner.CASE_SHADOWS = {
-    'borrowed_bits_setters': ['x'],
     'callee_slot_exchange_is_local': ['x', 'y'],
     'borrowed_result_after_exchange': ['x', 'y'],
 }
