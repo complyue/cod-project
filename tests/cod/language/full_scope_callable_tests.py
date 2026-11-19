@@ -470,6 +470,77 @@ runner.CASES = {
         'func both(here input() yields u64) yields u64{for val item<-input(){yield(item+1u64);};}'
         'proc sink(n:u64)->void{behave @print(n);return;}'
         'for val item<-both(){sink(item);};rows !> both $> sink;sink <$ both <! rows;',0,'80\n8\n8\n',''),
+    'pipeline_composition_keeps_written_order_in_grouped_and_mirrored_forms': (IO+
+        'proc mark(n:u64)->u64{behave @print(n);return n;}'
+        'proc rows(day:u64) yields u64{behave @print(10u64);yield(day);return;}'
+        'proc add(here input() yields u64,offset:u64) yields u64{behave @print(20u64);val amount<-offset;'
+        'for val item<-input(){yield(item+amount);};return;}'
+        'proc scale(here input() yields u64,factor:u64) yields u64{behave @print(30u64);val amount<-factor;'
+        'for val item<-input(){yield(item*amount);};return;}'
+        'proc sink(n:u64)->void{behave @print(n);return;}'
+        'rows(mark(1u64)) !> add(mark(2u64)) |> scale(mark(3u64)) |> add(mark(4u64)) $> sink;'
+        'sink <$ add(mark(4u64)) <| scale(mark(3u64)) <| add(mark(2u64)) <! rows(mark(1u64));'
+        'for val item<-rows(mark(1u64)) !> (scale(mark(3u64)) <| add(mark(2u64))) |> add(mark(4u64)){sink(item);};',
+        0,'1\n2\n3\n4\n20\n30\n20\n10\n13\n4\n3\n2\n1\n20\n30\n20\n10\n13\n1\n3\n2\n4\n20\n30\n20\n10\n13\n',''),
+    'pipeline_composition_abrupt_preparation_skips_remaining_written_operands': (IO+
+        'proc mark(n:u64)->u64{behave @print(n);return n;}'
+        'proc rows(day:u64) yields u64{behave @print(80u64);yield(day);return;}'
+        'proc pass(here input() yields u64,stamp:u64) yields u64{behave @print(81u64);'
+        'for val item<-input(){yield(item);};return;}'
+        'proc sink(n:u64)->void{behave @print(n);return;}'
+        'proc run()->u64{rows(mark(1u64)) !> (pass({return 7u64;}) <| pass(mark(2u64))) |> pass(mark(3u64)) $> sink;'
+        'return 99u64;}behave @print(run());',0,'1\n7\n',''),
+    'pipeline_composition_reopens_the_same_prepared_source': (IO+
+        'proc mark(n:u64)->u64{behave @print(n);return n;}'
+        'proc rows(day:u64) yields u64{behave @print(10u64);yield(day);return;}'
+        'proc pass(here input() yields u64,stamp:u64) yields u64{behave @print(stamp);'
+        'for val item<-input(){yield(item);};return;}'
+        'proc repeat(here input() yields u64) yields u64{for val item<-input(){yield(item);};'
+        'for val item<-input(){yield(item+1u64);};return;}'
+        'proc sink(n:u64)->void{behave @print(n);return;}'
+        'rows(mark(1u64)) !> pass(mark(2u64)) |> repeat $> sink;',0,'1\n2\n2\n10\n1\n2\n10\n2\n',''),
+    'pipeline_composition_can_skip_all_prepared_upstream_stages': (IO+
+        'proc mark(n:u64)->u64{behave @print(n);return n;}'
+        'proc rows(day:u64) yields u64{behave @print(80u64);yield(day);return;}'
+        'proc pass(here input() yields u64,stamp:u64) yields u64{behave @print(81u64);'
+        'for val item<-input(){yield(item);};return;}'
+        'proc skip(here input() yields u64,stamp:u64) yields u64{behave @print(stamp+30u64);return;}'
+        'for val item<-skip(mark(3u64)) <| pass(mark(2u64)) <! rows(mark(1u64)){behave @print(item);};',
+        0,'3\n2\n1\n33\n',''),
+    'pipeline_composition_uses_a_forwarded_producer_in_both_attachment_shapes': (IO+
+        'proc rows(day:u64) yields u64{behave @print(10u64);yield(day);return;}'
+        'proc pass(here input() yields u64,stamp:u64) yields u64{behave @print(stamp);'
+        'for val item<-input(){yield(item);};return;}'
+        'proc relay(here input() yields u64)->void{'
+        'for val item<-pass(20u64) <! input{behave @print(item);};'
+        'for val item<-pass(22u64) <| pass(21u64) <! input{behave @print(item);};return;}'
+        'relay(rows(7u64));',0,'20\n10\n7\n22\n21\n10\n7\n',''),
+    'pipeline_composition_preserves_labelled_feedback_and_the_actual_owner': (IO+
+        'proc rows(line:const u64 in P) yields {id:u64;ref cell:const u64 in P;} -> bool where {owner P}{'
+        'if(!yield(17u64->id,line->cell)){return;}else{};if(!yield(24u64->id,line->cell)){return;}else{};'
+        'yield(80u64->id,line->cell);return;}'
+        'proc screen(here input() yields {id:u64;ref cell:const u64 in S;} -> bool,witness:const u64 in S) '
+        'yields {ref cell:const u64 in S;id:u64;} -> bool where {owner S}{'
+        'for {val n<-id;ref item=cell;} := input(){if(n==17u64){continue true;}else{};'
+        'continue yield(item->cell,n->id);};return;}'
+        'proc forward(here input() yields {ref cell:const u64 in R;id:u64;} -> bool,witness:const u64 in R) '
+        'yields {id:u64;ref cell:const u64 in R;} -> bool where {owner R}{'
+        'for {val n<-id;ref item=cell;} := input(){continue yield(n->id,item->cell);};return;}'
+        'proc run()->void{val line<-75u64;for {val n<-id;ref item=cell;} := forward(line) <| screen(line) <! rows(line){'
+        'behave @print(n);behave @print(item);behave @print(item is line);continue false;};return;}run();',0,'24\n75\ntrue\n',''),
+    'pipeline_composition_checked_failure_cleans_up_every_entered_stage': (IO+'using "std:exceptions" NullPointerException;'+
+        'proc rows() yields u64{try{yield(7u64);}catch(e:const NullPointerException){behave @print(80u64);}'
+        'finally{behave @print(31u64);};return;}'
+        'proc stage(here input() yields u64,stamp:u64) yields u64{try{for val item<-input(){yield(item);};}'
+        'catch(e:const NullPointerException){behave @print(81u64);}finally{behave @print(stamp);};return;}'
+        'proc sink(n:u64)->void throws NullPointerException{behave @print(n);ptr p:u64=null in here;p;return;}'
+        'try{rows !> stage(32u64) |> stage(33u64) $> sink;}catch(e:const NullPointerException){behave @print(34u64);};',
+        0,'7\n31\n32\n33\n34\n',''),
+    'pipeline_composition_rejects_feedback_mismatch_between_stages': (
+        'func rows() yields u64{yield(7u64);}'
+        'func first(here input() yields u64) yields u64 -> bool{for val item<-input(){yield(item):void;};}'
+        'func second(here input() yields u64) yields u64{for val item<-input(){yield(item);};}'
+        'for val item<-rows !> first |> second{};',2,'','prepared producer does not match the selected here contract'),
     'lexical_handoff_nested_stage_keeps_labelled_borrow_and_feedback': (IO+
         'proc rows(line:const u64 in O) yields {id:u64;ref cell:const u64 in O;} -> bool where {owner O}{'
         'behave @print(17u64);if(!yield(line->cell,17u64->id)){return;}else{};'

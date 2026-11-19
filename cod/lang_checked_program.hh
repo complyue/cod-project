@@ -145,6 +145,14 @@ struct CheckedOperation {
     auto operator<=>(const PreparedProducer &) const = default;
   };
   std::optional<PreparedProducer> prepared_producer;
+  struct PipelinePreparation {
+    std::vector<const Expression *> written;
+    // Each position indexes written. The last position is the immediate receiver.
+    std::vector<size_t> traversal;
+    std::optional<size_t> lexical_source;
+    auto operator<=>(const PipelinePreparation &) const = default;
+  };
+  std::optional<PipelinePreparation> pipeline_preparation;
   size_t argument_count(const Expression &expr) const {
     return argument_sources ? argument_sources->size() : expr.children.size();
   }

@@ -10351,66 +10351,94 @@ class ScalarChecker {
     terminal_bodies_.emplace(key, &stored);
     return stored;
   }
-  size_t prepare_here_source(const Expression &expr, CheckedInstance *instance,
-      std::map<const Expression *, CheckedOperation> &operations) {
+  bool processor_role(size_t id) const {
+    const auto &here = program_.methods[id].here;
+    return here.size() == 2 && here.front().here.empty() && here.back().here.size() == 1;
+  }
+  struct PreparedHereCall {
+    CheckedOperation operation;
+    std::vector<Type> arguments;
+    std::vector<CheckedOperation> views;
+    size_t method;
+    bool completes = true;
+  };
+  PreparedHereCall check_pipeline_operand(const Expression &expr, CheckedInstance *instance,
+      std::map<const Expression *, CheckedOperation> &operations, bool processor) {
     using K = Expression::Kind;
     if ((expr.kind != K::call && expr.kind != K::name) || expr.intrinsic || expr.has_here_body() || active_here(expr.text))
-      implementation_gap(expr.at, "preparing a traversal requires a direct producer call");
+      implementation_gap(expr.at, "preparing a traversal requires a direct producer or processor call");
     auto family = named_family(expr.text);
     if (family.context || family.definition)
-      implementation_gap(expr.at, "preparing a lexical producer definition");
+      implementation_gap(expr.at, "preparing a lexical producer or processor definition");
     std::erase_if(family.methods, [&](size_t id) {
       const auto &here = program_.methods[id].here;
-      return here.size() != 1 || !here.front().here.empty();
+      return processor ? !processor_role(id) : here.size() != 1 || !here.front().here.empty();
     });
+    if (processor && family.methods.empty())
+      implementation_gap(expr.at, "pipeline operand without an established direct processor role");
     if (family.methods.empty()) fail(expr.at, "no producer with a matching consumer for '" + expr.text + "'");
-    const auto [candidates, slots, modes, here_count] = bind_here_call(expr, family, expr.children, 1);
-    CheckedOperation prepared;
-    auto &operands = prepared.argument_sources.emplace(slots.size());
-    std::vector<Type> arguments(slots.size());
-    std::vector<CheckedOperation> views(slots.size());
-    bool completes = true;
+    const auto [candidates, slots, modes, here_count] = bind_here_call(expr, family, expr.children, processor ? 2 : 1);
+    PreparedHereCall prepared{};
+    auto &operands = prepared.operation.argument_sources.emplace(slots.size());
+    auto &arguments = prepared.arguments;
+    auto &views = prepared.views;
+    arguments.resize(slots.size());
+    views.resize(slots.size());
     for (size_t i = 0; i < expr.children.size(); ++i) {
       const auto &operand = here_ordinary_operand(*expr.children[i]);
       const auto slot = slots[i];
       operands[slot] = &operand;
       views[slot] = check_here_ordinary_operand(operand, modes[slot], instance, operations);
       arguments[slot] = views[slot].type;
-      completes = completes && arguments[slot] != Type::never;
+      prepared.completes = prepared.completes && arguments[slot] != Type::never;
     }
-    if (!std::ranges::is_sorted(slots)) schedule_ordinary_operands(prepared, slots);
+    if (!std::ranges::is_sorted(slots)) schedule_ordinary_operands(prepared.operation, slots);
     const auto selected = select_method(candidates, arguments, expr.at, expr.text, {}, access_of(views), owners_of(views), nullptr, true, true);
+    prepared.method = selected;
     const auto &method = program_.methods[selected];
-    if (!completes) complete_here_arguments(method, arguments, operands);
+    if (!prepared.completes) complete_here_arguments(method, arguments, operands);
+    const auto types = prepared_types(method, arguments, {});
+    for (size_t i = 0; i < slots.size(); ++i) prepared.operation.arguments.push_back({modes[i], types[i]});
+    return prepared;
+  }
+  size_t retain_prepared_traversal(const Expression &expr, PreparedHereCall prepared,
+      std::map<const Expression *, CheckedOperation> &operations, std::optional<CheckedHereTarget> upstream = {}) {
+    const auto &method = program_.methods[prepared.method];
     if (declares_root(method.throws_types))
       implementation_gap(expr.at, "a declared Exception root on a prepared producer");
-    const auto source = demand(selected, arguments, expr.at);
+    const auto source = upstream ? demand_here_receiver(prepared.method, {{}, *upstream}, prepared.arguments, expr.at)
+                                 : demand(prepared.method, prepared.arguments, expr.at);
     const auto &target = program_.instances[source];
     if (target.result.type != Type::void_type)
       fail(expr.at, "a prepared producer must complete with void");
+    auto &operation = prepared.operation;
     std::map<std::string, size_t> actual_owners;
     for (size_t i = 0; i < target.arguments.size(); ++i) {
       const auto &parameter = method.input_parameters()[i];
-      if (modes[i] != ArgumentMode::value) {
-        const auto &at = operands[i]->at;
-        if (!parameter.read_only || modes[i] == ArgumentMode::borrowed_ptr)
+      const auto mode = operation.arguments[i].mode;
+      if (mode != ArgumentMode::value) {
+        const auto &at = operation.argument(expr, i).at;
+        if (!parameter.read_only || mode == ArgumentMode::borrowed_ptr)
           implementation_gap(at, "prepared producer requires a readonly, initialized borrowed operand");
-        const auto actual = one_owner(views[i]);
+        const auto actual = one_owner(prepared.views[i]);
         if (!actual) implementation_gap(at, "prepared producer requires an established actual owner");
-        require_borrow_lifetime(views[i], at, false);
+        require_borrow_lifetime(prepared.views[i], at, false);
         actual_owners.try_emplace(parameter.owner, *actual);
       }
-      prepared.arguments.push_back({modes[i], target.arguments[i]});
     }
-    auto &binding = prepared.prepared_producer.emplace(CheckedOperation::PreparedProducer{source, {}});
+    auto &binding = operation.prepared_producer.emplace(CheckedOperation::PreparedProducer{source, {}});
     for (const auto &owner : method.input_owners()) {
       const auto actual = actual_owners.find(owner.name);
       if (actual == actual_owners.end()) implementation_gap(expr.at, "prepared producer owner has no borrowed operand");
       binding.owners.push_back(actual->second);
     }
-    prepared.type = completes ? Type{Type::void_type} : Type{Type::never};
-    operations.insert_or_assign(&expr, std::move(prepared));
+    operation.type = prepared.completes ? Type{Type::void_type} : Type{Type::never};
+    operations.insert_or_assign(&expr, std::move(operation));
     return source;
+  }
+  size_t prepare_here_source(const Expression &expr, CheckedInstance *instance,
+      std::map<const Expression *, CheckedOperation> &operations) {
+    return retain_prepared_traversal(expr, check_pipeline_operand(expr, instance, operations, false), operations);
   }
   static bool same_here_labels(const CheckedHereContract &left, const CheckedHereContract &right) {
     return left.labelled == right.labelled && std::ranges::equal(left.inputs, right.inputs, {},
@@ -10446,6 +10474,31 @@ class ScalarChecker {
     if (lexical_.live && std::ranges::any_of(source.owners, [&](auto owner) { return !owner_alive(owner); }))
       fail(at, "prepared producer operand owner has ended");
     require_prepared_consumer_owners(offered, accepted, [&](size_t role) { return source.owners.at(role - 1); }, receiver, views, at);
+  }
+  void require_forwarded_here(size_t slot, const CheckedMethod &receiver, size_t formal, const Substitutions &bindings,
+      const std::vector<CheckedOperation> &views, const CheckedInstance &supplier, const Location &at) const {
+    const auto &signature = receiver.here[formal];
+    const auto incoming = here_invocation_type(*checking_method_, supplier.substitutions, at, slot);
+    const auto &incoming_signature = here_signature(*checking_method_, slot);
+    const auto outgoing = here_invocation_type(receiver, bindings, at, formal);
+    if (signature.here.size() == 1 && incoming_signature.here.size() == 1 && incoming_signature.inputs.empty() && signature.inputs.empty()) {
+      const auto &offered = incoming_signature.here.front();
+      const auto &accepted = signature.here.front();
+      if (incoming != outgoing || !offered.here.empty() || !accepted.here.empty() ||
+          !same_here_labels(offered, accepted) ||
+          here_value_signature(*checking_method_, offered, supplier.substitutions, at) != here_value_signature(receiver, accepted, bindings, at))
+        fail(at, "forwarded producer does not match the selected here contract");
+      require_prepared_consumer_owners(offered, accepted, [&](size_t role) { return here_formal_owner(role); }, receiver, views, at);
+      return;
+    }
+    if (!signature.here.empty() || !incoming_signature.here.empty() || !same_here_labels(incoming_signature, signature) ||
+        incoming != outgoing)
+      fail(at, "forwarded here argument does not match the selected contract");
+    for (const auto input : here_owner_inputs(incoming)) {
+      const auto actual = here_receiver_owner(receiver, *signature.inputs[input].owner, views, at);
+      if (!actual) fail(at, "forwarded here argument cannot use the new receiver's invocation owner");
+      require_here_owner(actual, here_formal_owner(*incoming_signature.inputs[input].owner), at);
+    }
   }
   bool deliver_here_completion(const Expression &expr, const CheckedOperation &operation) {
     const auto &body = read_effects(operation.supplied_here->instance);
@@ -10494,8 +10547,10 @@ class ScalarChecker {
     CallEffects effects;
     if (target) {
       const auto &prepared = program_.instances[*target];
-      operation.opened_source = demand_here_receiver(prepared.method, {{operation.supplied_here->instance, {}}},
-          prepared.arguments, expr.at);
+      auto targets = program_.methods[prepared.method].here_targets;
+      targets.resize(program_.methods[prepared.method].here.size());
+      targets.front().body = operation.supplied_here->instance;
+      operation.opened_source = demand_here_receiver(prepared.method, targets, prepared.arguments, expr.at);
       const auto &source = read_effects(*operation.opened_source);
       if (protected_body && validating_ && source.protected_defer_failure)
         implementation_gap(expr.at, "residual receiver defer failures across a protected here transfer");
@@ -10529,7 +10584,8 @@ class ScalarChecker {
   };
   void check_here_receiver(const Expression &expr, const HereInvocation &syntax, CheckedInstance *supplier,
       std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation, bool read, bool discard) {
-    const auto &[target, written_body, terminal, upstream, upstream_first] = syntax;
+    const auto &target = syntax.target;
+    const auto *terminal = syntax.terminal;
     using PreparationKind = CheckedOperation::OperandPreparation::Kind;
     if ((&expr == &target && target.kind != Expression::Kind::call) || target.intrinsic || &expr == prepared_call_)
       implementation_gap(expr.at, "here supply through computed, symbolic or deferred calls");
@@ -10538,20 +10594,12 @@ class ScalarChecker {
       check_bound_here_receiver(expr, *slot, supplier, operations, operation, read, discard);
       return;
     }
-    const auto *body = written_body;
-    const bool supplied = body || terminal;
-    const auto connected_here = size_t{supplied} + size_t{upstream != nullptr};
+    const bool supplied = syntax.body || terminal;
     const auto operands_written = std::span<const Expr>{target.children}.first(target.children.size() - target.has_here_body());
     auto family = named_family(target.text);
     if (family.context || family.definition)
       implementation_gap(expr.at, "supplying here arguments to lexical receiver definitions");
-    if (upstream) {
-      std::erase_if(family.methods, [&](size_t id) {
-        const auto &here = program_.methods[id].here;
-        return here.size() != 2 || !here.front().here.empty() || here.back().here.size() != 1;
-      });
-      if (family.methods.empty()) implementation_gap(expr.at, "pipeline middle without an established direct processor role");
-    } else if (terminal) {
+    if (terminal) {
       const auto processor = [&](size_t id) {
         const auto &method = program_.methods[id];
         return method.parameters.size() == operands_written.size() && method.here.size() > 1;
@@ -10564,25 +10612,20 @@ class ScalarChecker {
       });
       if (family.methods.empty()) implementation_gap(expr.at, "pipeline endpoint without an established direct producer role");
     }
-    const auto [candidates, slots, modes, here_count] = bind_here_call(target, family, operands_written, connected_here);
+    const auto [candidates, slots, modes, here_count] = bind_here_call(target, family, operands_written, supplied);
     if (supplied && here_count == 1 && forwards_here(expr)) fail(expr.at, "the first here parameter has both a forwarded and a trailing argument");
-    const auto explicit_here = here_count - connected_here;
+    const auto explicit_here = here_count - supplied;
     const auto count = slots.size();
     const auto written = operands_written.subspan(explicit_here, count);
     std::vector<CheckedHereTarget> targets(here_count);
     std::vector<const Expression *> here_operands(here_count);
     operation.here_arguments.resize(here_count);
-    if (upstream) {
-      here_operands[supplied] = upstream;
-      if (upstream_first) operation.operand_preparation.push_back({PreparationKind::here, supplied});
-    }
     for (size_t i = 0; i < explicit_here; ++i) {
-      const auto formal = i + connected_here;
+      const auto formal = i + supplied;
       here_operands[formal] = operands_written[i].get();
       operation.operand_preparation.push_back({PreparationKind::here, formal});
     }
     schedule_ordinary_operands(operation, slots);
-    if (upstream && !upstream_first) operation.operand_preparation.push_back({PreparationKind::here, supplied});
     auto &operands = operation.argument_sources.emplace(count);
     for (size_t i = 0; i < count; ++i) operands[slots[i]] = &here_ordinary_operand(*written[i]);
     operation.arguments.resize(count);
@@ -10631,28 +10674,19 @@ class ScalarChecker {
         require_prepared_source(operations.at(input.source).prepared_producer.value(), receiver, bindings, signature, views, at);
         continue;
       }
-      const auto slot = input.lexical.value();
-      const auto incoming = here_invocation_type(*checking_method_, supplier->substitutions, at, slot);
-      const auto &incoming_signature = here_signature(*checking_method_, slot);
-      if (signature.here.size() == 1 && incoming_signature.here.size() == 1 && incoming_signature.inputs.empty() && signature.inputs.empty()) {
-        const auto &offered = incoming_signature.here.front();
-        const auto &accepted = signature.here.front();
-        if (incoming != here_invocation_type(receiver, bindings, at, formal) || !offered.here.empty() || !accepted.here.empty() ||
-            !same_here_labels(offered, accepted) ||
-            here_value_signature(*checking_method_, offered, supplier->substitutions, at) != here_value_signature(receiver, accepted, bindings, at))
-          fail(at, "forwarded producer does not match the selected here contract");
-        require_prepared_consumer_owners(offered, accepted, [&](size_t role) { return here_formal_owner(role); }, receiver, views, at);
-        continue;
-      }
-      if (!signature.here.empty() || !incoming_signature.here.empty() || !same_here_labels(incoming_signature, signature) ||
-          incoming != here_invocation_type(receiver, bindings, at, formal))
-        fail(at, "forwarded here argument does not match the selected contract");
-      for (const auto input : here_owner_inputs(incoming)) {
-        const auto actual = here_receiver_owner(receiver, *signature.inputs[input].owner, views, at);
-        if (!actual) fail(at, "forwarded here argument cannot use the new receiver's invocation owner");
-        require_here_owner(actual, here_formal_owner(*incoming_signature.inputs[input].owner), at);
-      }
+      require_forwarded_here(input.lexical.value(), receiver, formal, bindings, views, *supplier, at);
     }
+    finish_here_receiver(expr, syntax, supplier, operations, operation, selected, std::move(targets), arguments, views,
+                         completes, read, discard);
+  }
+  void finish_here_receiver(const Expression &expr, const HereInvocation &syntax, CheckedInstance *supplier,
+      std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation, size_t selected,
+      std::vector<CheckedHereTarget> targets, const std::vector<Type> &arguments, const std::vector<CheckedOperation> &views,
+      bool completes, bool read, bool discard) {
+    const auto &receiver = program_.methods[selected];
+    const auto *body = syntax.body;
+    const auto *terminal = syntax.terminal;
+    const bool supplied = body || terminal;
     if (!supplied) {
       if (!completes) { operation.type = Type::never; return; }
       const bool known = std::ranges::any_of(targets, [](const auto &target) { return target.body || target.source; });
@@ -10664,6 +10698,7 @@ class ScalarChecker {
     }
     const auto &signature = receiver.here.front();
     if (!signature.here.empty()) implementation_gap(expr.at, "a supplied body for a higher-order here formal");
+    const auto bindings = *match(receiver, arguments, {}, true);
     const auto contract = here_invocation_type(receiver, bindings, expr.at);
     std::vector<std::optional<size_t>> owners;
     for (const auto i : here_owner_inputs(contract))
@@ -10713,6 +10748,68 @@ class ScalarChecker {
     operation.supplied_here->returning = CheckedOperation::SuppliedHere::ReturningProfile{*returning, *with_return.callee};
     operation.predicate.reset();
   }
+  static const Expression &ungrouped_processor(const Expression &expr) {
+    const auto *operand = &expr;
+    while (operand->kind == Expression::Kind::grouped) operand = operand->children.front().get();
+    return *operand;
+  }
+  static void pipeline_stages(const Expression &expr, bool traversal, std::vector<const Expression *> &stages) {
+    const auto &operand = ungrouped_processor(expr);
+    if (operand.kind != Expression::Kind::processor_composition) {
+      stages.push_back(&operand);
+      return;
+    }
+    const auto reverse = traversal && pipeline_operator(operand.text)->reversed;
+    pipeline_stages(*operand.children[reverse], traversal, stages);
+    pipeline_stages(*operand.children[!reverse], traversal, stages);
+  }
+  void check_attached_pipeline(const Expression &expr, const HereInvocation &syntax, CheckedInstance *supplier,
+      std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation, bool read, bool discard) {
+    if (!syntax.upstream) implementation_gap(expr.at, "processor composition with an open source connection");
+    CheckedOperation::PipelinePreparation plan;
+    if (syntax.upstream->kind == Expression::Kind::name) plan.lexical_source = here_slot(syntax.upstream->text);
+    pipeline_stages(syntax.target, false, plan.written);
+    if (syntax.upstream_first) plan.written.insert(plan.written.begin(), syntax.upstream);
+    else plan.written.push_back(syntax.upstream);
+    std::vector<const Expression *> traversal{syntax.upstream};
+    pipeline_stages(syntax.target, true, traversal);
+    std::map<const Expression *, size_t> written_slots;
+    std::vector<PreparedHereCall> leaves;
+    leaves.reserve(plan.written.size());
+    bool completes = true;
+    for (const auto *operand : plan.written) {
+      written_slots.emplace(operand, leaves.size());
+      if (operand == syntax.upstream && plan.lexical_source) leaves.emplace_back();
+      else leaves.push_back(check_pipeline_operand(*operand, supplier, operations, operand != syntax.upstream));
+      completes = completes && leaves.back().completes;
+    }
+    for (const auto *operand : traversal) plan.traversal.push_back(written_slots.at(operand));
+    auto &receiver = leaves[plan.traversal.back()];
+    if (checking_method_ && checking_method_->source->kind == Form::Kind::function &&
+        program_.methods[receiver.method].source->kind != Form::Kind::function)
+      fail(expr.at, "a function cannot invoke a procedure");
+    CheckedHereTarget upstream;
+    if (plan.lexical_source) upstream = here_target(*checking_method_, *plan.lexical_source);
+    else upstream.source = retain_prepared_traversal(*syntax.upstream, std::move(leaves[plan.traversal.front()]), operations);
+    for (size_t i = 1; i < traversal.size(); ++i) {
+      const auto &operand = *traversal[i];
+      auto &stage = leaves[plan.traversal[i]];
+      const auto &method = program_.methods[stage.method];
+      const auto bindings = *match(method, stage.arguments, {}, true);
+      const auto &source = *traversal[i - 1];
+      if (i == 1 && plan.lexical_source)
+        require_forwarded_here(*plan.lexical_source, method, 1, bindings, stage.views, *supplier, operand.at);
+      else require_prepared_source(operations.at(&source).prepared_producer.value(), method, bindings, method.here[1], stage.views, operand.at);
+      if (i + 1 < traversal.size()) upstream = {{}, retain_prepared_traversal(operand, std::move(stage), operations, upstream)};
+    }
+    operation = std::move(receiver.operation);
+    operation.here_arguments.resize(2);
+    if (traversal.size() == 2 && plan.lexical_source) operation.here_arguments[1].lexical = plan.lexical_source;
+    else operation.here_arguments[1].source = traversal[traversal.size() - 2];
+    operation.pipeline_preparation = std::move(plan);
+    finish_here_receiver(expr, syntax, supplier, operations, operation, receiver.method, {{}, upstream},
+                         receiver.arguments, receiver.views, completes, read, discard);
+  }
   void check_pipeline(const Expression &expr, CheckedInstance *supplier,
       std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation, bool read, bool discard) {
     using K = Expression::Kind;
@@ -10732,6 +10829,10 @@ class ScalarChecker {
     if (ends.source) {
       syntax.upstream = expr.children[ends.source->operand].get();
       syntax.upstream_first = ends.source->operand < ends.middle;
+    }
+    if (syntax.upstream || ungrouped_processor(syntax.target).kind == K::processor_composition) {
+      check_attached_pipeline(expr, syntax, supplier, operations, operation, read, discard);
+      return;
     }
     if ((syntax.target.kind != K::call && syntax.target.kind != K::name) || syntax.target.has_here_body() || syntax.target.intrinsic)
       implementation_gap(syntax.target.at, "pipeline with a computed producer or processor");
