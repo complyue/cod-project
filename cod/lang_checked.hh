@@ -2561,6 +2561,15 @@ class ScalarChecker {
           effect.selections.refine(*binding, false);
         }
       }
+      if (slots) if (const auto outcome = target.uninitialized.find(reason); outcome != target.uninitialized.end())
+        for (const auto &[parameter, missing] : outcome->second) {
+          // When only a null input can lack a write, its invocation-time
+          // target is initialized if present, independently of slot updates.
+          if (!std::all_of(missing.begin(), missing.end(), [&](const auto &facts) { return facts.absent.contains(parameter); }))
+            continue;
+          const auto selected = physical_slots(views.at(parameter).slots);
+          if (selected.size() == 1) effect.selections.entry_initialized.insert(*selected.begin());
+        }
     }
     return effects;
   }
