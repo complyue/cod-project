@@ -3733,7 +3733,7 @@ class ScalarChecker {
     if (!abrupt_) {
       if (!proving_) return;
       for (const auto category : categories) if (exception_categories.at(category).checked) {
-        if (checking_method_ && checking_method_->source->implicit_scope)
+        if (checking_method_ && (checking_method_->source->implicit_scope || checking_method_->here_group))
           observed_.scope_checked_failures.insert(category);
         else if (validating_ && (!checking_method_ || !checking_method_->throws_categories.contains(category)))
           fail(at, "checked exception '" + std::string(exception_categories[category].name) + "' requires a covering catch or throws declaration");
@@ -3755,7 +3755,7 @@ class ScalarChecker {
   void note_declared(size_t requirement) {
     if (abrupt_) { abrupt_->declared.insert(requirement); return; }
     if (!proving_) return;
-    if (checking_method_ && checking_method_->source->implicit_scope) {
+    if (checking_method_ && (checking_method_->source->implicit_scope || checking_method_->here_group)) {
       observed_.scope_checked_failures.insert(0);
       return;
     }
@@ -4007,6 +4007,12 @@ class ScalarChecker {
     std::optional<Type> normal_type;
     for (const auto &path : flow.paths) for (const auto origin : inputs(path.state.inputs)) {
       const auto queue = path.state.input_facts.at(origin).queues.at(scope);
+      if (proving_ && checking_method_ && checking_method_->here && !observed_.protected_defer_failure && cleanup_.has_actions(queue)) {
+        const auto &outcomes = cleanup_.apply(queue, Completion{});
+        observed_.protected_defer_failure = std::ranges::any_of(outcomes, [](const auto &outcome) {
+          return Completion::from(outcome.first).reason >= 2;
+        });
+      }
       std::vector<Completion> inputs;
       if (path.exceptions.empty()) inputs.push_back(path.completion);
       else for (const auto category : path.exceptions.possibilities()) inputs.push_back({3 + category, path.completion.returned});
@@ -8973,7 +8979,8 @@ class ScalarChecker {
     scope_operand_names_.emplace(key, &stored);
     return stored;
   }
-  size_t scope_profile(CheckedMethod::ScopeInputs inputs, ResultContract result = {}, std::vector<Type> failures = {}) {
+  size_t scope_profile(CheckedMethod::ScopeInputs inputs, ResultContract result = {}, std::vector<Type> failures = {},
+                       std::optional<CheckedMethod::HereGroupResults> group = {}) {
     auto &profiles = scope_profiles_[inputs.lexical_method];
     std::set<size_t> throws_categories;
     for (const auto &failure : failures) {
@@ -8982,7 +8989,7 @@ class ScalarChecker {
     }
     for (const auto id : profiles) {
       const auto &method = program_.methods[id];
-      if (method.result != result || method.throws_categories != throws_categories) continue;
+      if (method.result != result || method.throws_categories != throws_categories || method.here_group != group) continue;
       const auto &candidate = *method.scope_inputs;
       if (candidate.owner_names != inputs.owner_names || candidate.relations != inputs.relations ||
           candidate.nonnull != inputs.nonnull || candidate.live_values != inputs.live_values ||
@@ -9004,6 +9011,7 @@ class ScalarChecker {
     method.result = std::move(result);
     method.throws_categories = std::move(throws_categories);
     method.throws_types = std::move(failures);
+    method.here_group = std::move(group);
     for (auto &parameter : inputs.parameters) {
       const auto name = "$scope.input." + std::to_string(method.parameters.size());
       parameter.type = Type{Type::named, name};
@@ -9281,10 +9289,20 @@ class ScalarChecker {
     for (const auto category : here.throws_categories) type.throws_types.push_back(exception_type(category));
     return type;
   }
-  CheckedOperation::SuppliedHere demand_supplied_here(const Expression &body, const Type &contract, CheckedInstance *supplier,
-      std::map<const Expression *, CheckedOperation> &operations) {
-    if (!body.definition) implementation_gap(body.at, "single-brace or receiving-pattern here body execution");
+  CheckedOperation::SuppliedHere demand_supplied_here(const Expression &body, const Type &contract, const ResultContract &receiving,
+      CheckedInstance *supplier, std::map<const Expression *, CheckedOperation> &operations) {
+    if (!body.definition) implementation_gap(body.at, "this receiving pattern for a here body");
     const auto &definition = *body.definition;
+    std::optional<CheckedMethod::HereGroupResults> group;
+    if (definition.supplied_group) {
+      if (checking_method_ && checking_method_->here_group) implementation_gap(body.at, "a single-brace here body supplied inside a here group");
+      if (body.receiving->from_for && receiving.type != Type::void_type)
+        fail(body.at, "a generator loop requires a receiver with a void result");
+      if (receiving.borrowed() || (receiving.type != Type::void_type && !scalar_type(*receiving.type)) ||
+          (supplier && (supplier->result.borrowed() || (supplier->result.type != Type::void_type && !scalar_type(*supplier->result.type)))))
+        implementation_gap(body.at, "single-brace here completion with a non-scalar supplier or receiving result");
+      group = CheckedMethod::HereGroupResults{supplier ? supplier->result.type : std::nullopt, *receiving.type};
+    }
     const auto &parameters = definition.parameters;
     if (parameters.size() != contract.parameters.size()) fail(body.at, "here body header arity does not match the selected contract");
     for (size_t i = 0; i < parameters.size(); ++i) {
@@ -9349,7 +9367,8 @@ class ScalarChecker {
       supplied.places.push_back(&operand);
     }
     scope_owner_relations(inputs, supplied.owners);
-    const auto profile = scope_profile(std::move(inputs), ResultContract{*contract.target}, contract.throws_types);
+    const auto failures = group ? std::vector<Type>{} : contract.throws_types;
+    const auto profile = scope_profile(std::move(inputs), ResultContract{*contract.target}, failures, std::move(group));
     supplied.instance = demand(profile, std::move(arguments), body.at);
     return supplied;
   }
@@ -9425,18 +9444,38 @@ class ScalarChecker {
       fail(expr.at, "a function cannot invoke a procedure");
     const auto contract = here_invocation_type(receiver, *match(receiver, arguments, {}, true), expr.at);
     const auto callee = demand(selected, arguments, expr.at);
+    bool may_break = false;
     if (forward) {
       const auto incoming = here_invocation_type(*checking_method_, supplier->substitutions, expr.at);
       if (incoming != contract) fail(expr.at, "forwarded here argument does not match the selected contract");
       operation.forwards_here = true;
+      if (proving_ && lexical_.live && read_effects(callee).protected_defer_failure)
+        observed_.protected_defer_failure = true;
     } else {
-      auto body = demand_supplied_here(*expr.children.back(), contract, supplier, operations);
+      auto body = demand_supplied_here(*expr.children.back(), contract, program_.instances[callee].result, supplier, operations);
       const auto &effects = read_effects(body.instance);
       if (validating_ && !effects.symbols.empty())
         implementation_gap(expr.at, "dynamic binding requirements at a here invocation");
+      if (program_.methods[program_.instances[body.instance].method].here_group) {
+        if (validating_ && read_effects(callee).protected_defer_failure)
+          implementation_gap(expr.at, "residual receiver defer failures across a protected here transfer");
+        may_break = effects.breaks_here_call;
+        for (const auto failure : effects.scope_checked_failures) {
+          if (failure) note_abrupt(expr.at, {failure});
+          else note_declared(declared_requirement(expr));
+        }
+        if (effects.returns_from_supplier) {
+          const auto normal = std::exchange(lexical_.returned, {});
+          if (supplier && supplier->result.type == Type::boolean)
+            lexical_.returned.boolean = CleanupEquations::unknown_boolean();
+          note_abrupt(expr.at, {}, {1, true});
+          lexical_.returned = normal;
+        }
+      }
       operation.supplied_here = std::move(body);
     }
     finish_named_call(expr, arguments, views, operation, read, discard, true, callee);
+    if (may_break) operation.predicate.reset();
   }
   CheckedOperation check_guarded(const Expression &expr, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, bool read = true, bool discard = false, const Type *expected = nullptr,
@@ -9758,6 +9797,10 @@ class ScalarChecker {
              const Type *expected = nullptr, ExpectedTypeUse expected_use = ExpectedTypeUse::materialization) {
     using K = Expression::Kind;
     CheckedOperation operation;
+    if (checking_method_ && checking_method_->here_group &&
+        (expr.kind == K::deferred || expr.kind == K::make_local || expr.kind == K::make_region ||
+         expr.kind == K::allocate || expr.owner_name == "here"))
+      implementation_gap(expr.at, "supplier-owned allocation, owner selection or defer from a here group");
     if (expr.spread) implementation_gap(expr.at, "spread arguments");
     if (expr.has_here_body() || forwards_here(expr)) {
       check_here_receiver(expr, instance, operations, operation, read, discard);
@@ -10620,9 +10663,32 @@ class ScalarChecker {
       write_predicate(written_target, operation.predicate, expr.at);
       break;
     }
-    case K::return_value: {
+    case K::break_value: case K::continue_value: case K::return_value: {
       if (!instance) fail(expr.at, "return requires an enclosing callable");
+      const auto &group = checking_method_->here_group;
+      if (expr.kind != K::return_value && !group) fail(expr.at, "here control requires a single-brace here body");
+      if (group && expr.kind != K::continue_value) {
+        const bool breaking = expr.kind == K::break_value;
+        const auto expected = breaking ? std::optional{group->receiving_call} : group->supplier;
+        if (!expected) fail(expr.at, "return requires an enclosing supplier callable");
+        if (breaking && *expected == Type::void_type && !expr.children.empty())
+          fail(expr.at, "void receiving calls require bare break");
+        const auto value = expr.children.empty() ? Type{Type::void_type} :
+            check(*expr.children.front(), instance, operations, true, false, &*expected);
+        if (value != Type::never && !transfers_value(value, *expected))
+          fail(expr.at, std::string(breaking ? "break" : "supplier return") + " requires '" + type_name(*expected) + "'");
+        operation.type = Type::never;
+        operation.operand_type = *expected;
+        operation.here_exit = breaking ? HereExit::break_call : HereExit::return_supplier;
+        if (lexical_.live && proving_ && value != Type::never) {
+          (breaking ? observed_.breaks_here_call : observed_.returns_from_supplier) = true;
+          note_abrupt(expr.at);
+        }
+        break;
+      }
       const auto &contract = instance->result;
+      if (expr.kind == K::continue_value && contract.type == Type::void_type && !expr.children.empty())
+        fail(expr.at, "void here feedback requires bare continue");
       const bool borrowed = contract.borrowed();
       const auto use = instance->result_supplied && !borrowed
           ? ExpectedTypeUse::callable_result : ExpectedTypeUse::materialization;
@@ -10658,7 +10724,8 @@ class ScalarChecker {
         }
       } else if (value != Type::never) {
         if (!transfers_value(value, *instance->result.type))
-          fail(expr.at, "return type '" + type_name(value) + "' does not satisfy '" + type_name(*instance->result.type) + "'");
+          fail(expr.at, std::string(expr.kind == K::continue_value ? "continue" : "return") + " type '" +
+               type_name(value) + "' does not satisfy '" + type_name(*instance->result.type) + "'");
         lexical_.returned = {false, {}, {}, {}};
         if (value.kind == Type::exception) lexical_.returned.value = operations.at(expr.children.front().get()).exceptions;
         if (value == Type::boolean) {
@@ -11294,9 +11361,15 @@ class ScalarChecker {
       abrupt_ = &flow;
       const auto incoming = lexical_;
       CheckedOperation completed;
-      completed.type = check(*method.body, &instance, instance.operations, true, true) == Type::never ? Type{Type::never} : Type{Type::void_type};
+      const bool has_feedback = checking_method_->here_group && instance.result.type != Type::void_type;
+      const auto end = check(*method.body, &instance, instance.operations, true, !has_feedback,
+          has_feedback ? &*instance.result.type : nullptr);
+      if (has_feedback && end != Type::never && lexical_.live && !transfers_value(end, *instance.result.type))
+        fail(method.body->at, "here body fallthrough requires feedback of type '" + type_name(*instance.result.type) + "'");
+      completed.type = end == Type::never ? Type{Type::never} : Type{Type::void_type};
       const auto completion = finish_scope(completed, flow, &outcomes, 0, method.at).type;
-      if (validating_ && proving && *instance.result.type != Type::void_type && completion != Type::never && warned_missing_return_.insert(instance.method).second)
+      if (validating_ && proving && !checking_method_->here_group && *instance.result.type != Type::void_type &&
+          completion != Type::never && warned_missing_return_.insert(instance.method).second)
         program_.warnings.push_back({Warning::missing_return, method.at, "callable may finish without an explicit return"});
       if (proving) {
         abrupt_ = nullptr;
@@ -11309,7 +11382,8 @@ class ScalarChecker {
           observe_outcome(3 + exception_id(ExceptionCategory::out_of_memory), incoming);
         for (const auto requirement : outcomes.declared) note_declared(requirement);
         if (completion != Type::never && lexical_.live)
-          observe_outcome(*instance.result.type == Type::void_type ? 0 : 3 + exception_id(ExceptionCategory::missing_return), lexical_);
+          observe_outcome(checking_method_->here_group || *instance.result.type == Type::void_type ?
+              0 : 3 + exception_id(ExceptionCategory::missing_return), lexical_);
         const auto normal = lexical_;
         for (const auto &path : outcomes.paths) {
           observe_outcome(path.completion.reason == 1 ? 0 : path.completion.reason, path.state);
@@ -11392,6 +11466,15 @@ class ScalarChecker {
       if (known.present != effects.present) { known.present = effects.present; changed = true; }
       if (known.scope_checked_failures != effects.scope_checked_failures) {
         known.scope_checked_failures = effects.scope_checked_failures;
+        changed = true;
+      }
+      if (known.breaks_here_call != effects.breaks_here_call || known.returns_from_supplier != effects.returns_from_supplier) {
+        known.breaks_here_call = effects.breaks_here_call;
+        known.returns_from_supplier = effects.returns_from_supplier;
+        changed = true;
+      }
+      if (known.protected_defer_failure != effects.protected_defer_failure) {
+        known.protected_defer_failure = effects.protected_defer_failure;
         changed = true;
       }
       if (known.booleans != effects.booleans) { known.booleans = effects.booleans; changed = true; }
@@ -11937,7 +12020,7 @@ public:
     for (const auto &method : program_.methods)
       if (method.here && method.result.type && method.type_parameters.empty())
         check_declared_results(method, method.result, declared_results(method, method.parameters));
-    if (unsupported_here) implementation_gap(*unsupported_here, "single-brace or receiving-pattern here body execution");
+    if (unsupported_here) implementation_gap(*unsupported_here, "this receiving pattern for a here body");
     prepare_interpretations();
     plan_initialization(source);
     for (size_t i = 0; i < program_.methods.size(); ++i) {

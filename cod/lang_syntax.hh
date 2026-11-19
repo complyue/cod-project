@@ -381,6 +381,7 @@ struct Form {
   bool explicit_captures = false;
   bool implicit_scope = false;
   bool supplied_scope = false;
+  bool supplied_group = false;
   std::vector<TypeParameter> type_parameters;
   std::vector<Type> throws_types;
   std::vector<OwnerParameter> owner_parameters;
@@ -1454,11 +1455,16 @@ class Parser {
     using K = Expression::Kind;
     const bool delayed_scope = expr.kind == K::deferred && expr.children.front()->kind == K::block &&
         expr.children.front()->scoped;
-    if (expr.kind == K::here_body && expr.scoped && expr.receiving->shape == ReceivingHeader::Shape::ordered) {
+    const auto *single = expr.kind == K::here_body && !expr.scoped && expr.receiving->shape == ReceivingHeader::Shape::single
+        ? &expr.receiving->items.front() : nullptr;
+    const bool receives_bits = single && single->operation == "<-" &&
+        (single->declaration_kind.empty() || single->declaration_kind == "val");
+    if (expr.kind == K::here_body && (expr.receiving->shape == ReceivingHeader::Shape::ordered || receives_bits)) {
       auto definition = std::make_shared<Form>();
       definition->kind = callable_kind == Form::Kind::procedure ? Form::Kind::procedure : Form::Kind::function;
       definition->at = expr.at;
       definition->supplied_scope = true;
+      definition->supplied_group = !expr.scoped;
       for (const auto &item : expr.receiving->items) {
         Parameter parameter{item.name, item.annotation.value_or(Type{Type::void_type}), item.at, false, {}};
         parameter.declaration_kind = item.declaration_kind;
@@ -1468,6 +1474,22 @@ class Parser {
         definition->parameters.push_back(std::move(parameter));
       }
       definition->body = std::move(expr.children.front());
+      if (receives_bits && single->declaration_kind.empty()) {
+        auto &parameter = definition->parameters.front();
+        parameter.name = "$here.received";
+        // Prepare the selected existing destination on each actual handoff.
+        auto delivery = std::make_unique<Expression>();
+        delivery->kind = K::transfer;
+        delivery->at = single->at;
+        for (const auto &name : {single->name, parameter.name}) {
+          auto operand = std::make_unique<Expression>();
+          operand->kind = K::name;
+          operand->at = single->at;
+          operand->text = name;
+          delivery->children.push_back(std::move(operand));
+        }
+        definition->body->children.insert(definition->body->children.begin(), std::move(delivery));
+      }
       expr.children.clear();
       expr.definition = std::move(definition);
     }

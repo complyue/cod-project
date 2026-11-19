@@ -20,6 +20,41 @@ def query(body):
 
 
 runner.CASES = {
+    'here_group_distinct_feedback_and_break': (IO+
+        'func plus_one(here body()->u64)->u64{return body()+1u64;}'
+        'func relay(here body()->u64)->u64{return plus_one(body)+10u64;}'
+        'behave @print(relay(){continue 7u64;});behave @print(relay(){break 7u64;});',0,'18\n7\n',''),
+    'here_group_return_crosses_receiver_cleanup': (IO+
+        'proc relay(here body()->void)->void{defer behave @print(42u64);'
+        'try{body();}finally{behave @print(41u64);return;};}'
+        'proc run()->u64{relay(){return 7u64;};return 0u64;}behave @print(run());',0,'41\n42\n7\n',''),
+    'here_group_checked_failure_bypasses_receiver_catch': (IO+'using "std:exceptions" NullPointerException;'+
+        'func fail_now()->void throws NullPointerException{ptr p:u64=null in here;p;}'
+        'proc relay(here body()->void throws NullPointerException)->void{try{body();}'
+        'catch(e:const NullPointerException){behave @print(80u64);}finally{behave @print(81u64);};}'
+        'proc run()->void{try{relay(){fail_now();};}catch(e:const NullPointerException){behave @print(82u64);};}run();',0,'81\n82\n',''),
+    'here_group_receiver_recovers_own_cleanup_failure': (IO+'using "std:exceptions" NullPointerException;'+
+        'func fail_now()->void throws NullPointerException{ptr p:u64=null in here;p;}'
+        'proc relay(here body()->void)->void{try{try{body();}finally{fail_now();};}'
+        'catch(e:const NullPointerException){behave @print(32u64);};behave @print(90u64);}'
+        'proc run()->u64{relay(){return 7u64;};return 0u64;}behave @print(run());',0,'32\n7\n',''),
+    'here_group_recursive_break_keeps_call_activation': (IO+
+        'func relay(here body()->void)->u64{body();return 99u64;}'
+        'func walk(depth:u64)->u64{val d<-depth;return relay(){if(d>0u64){d<-walk(d-1u64);{};}else{};break d+1u64;};}'
+        'behave @print(walk(4u64));',0,'5\n',''),
+    'generator_for_and_here_share_receiving': (IO+
+        'func generate() yields u64->bool{if(!yield(1u64)){return;}else{};yield(2u64);}'
+        'proc run()->void{val left<-0u64,right<-0u64;'
+        'for val v<-generate(){left<-left*10u64+v;continue true;};'
+        'generate()(v)=>{right<-right*10u64+v;true};behave @print(left);behave @print(right);}run();',0,'12\n12\n',''),
+    'generator_single_value_receives_into_existing_slot': (IO+
+        'func generate() yields u64{yield(1u64);yield(2u64);}'
+        'proc run()->void{val a<-0u64,b<-0u64,rank<-0u64;'
+        'for a<-generate(){rank<-rank*10u64+a;};generate()(b<-)=>{b<-b+10u64;};'
+        'behave @print(rank);behave @print(b);}run();',0,'12\n12\n',''),
+    'generator_void_feedback_rejects_explicit_operand': (
+        'func generate() yields u64{yield(1u64);}func action()->void{}'
+        'for val v<-generate(){continue action();};',2,'','void here feedback requires bare continue'),
     'supplied_scope_forwarding_preserves_live_slot': (IO+
         'func relay(here body(n:u64)->u64,n:u64)->u64{return body(n);}'
         'func outer(here body(n:u64)->u64,n:u64)->u64{return relay(body,n);}'

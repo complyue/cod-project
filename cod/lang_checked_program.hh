@@ -68,6 +68,8 @@ inline std::set<size_t> exception_possibilities(const Type &type) {
   return result;
 }
 
+enum class HereExit : std::uint8_t { break_call = 1, return_supplier, failure };
+
 struct CheckedOperation {
   Type type;
   Type operand_type;
@@ -135,6 +137,7 @@ struct CheckedOperation {
   std::optional<SuppliedHere> supplied_here;
   bool forwards_here = false;
   bool invokes_here = false;
+  std::optional<HereExit> here_exit;
   // Possible borrowed callable targets at invocation, after slot selection.
   std::vector<std::set<size_t>> callable_argument_targets;
   std::set<size_t> nullable_arguments;
@@ -246,6 +249,9 @@ struct CallEffects {
   // Checked obligations of an immediate scope after local completion. Zero
   // represents the declared Exception root independently of payload evidence.
   std::set<size_t> scope_checked_failures;
+  bool breaks_here_call = false;
+  bool returns_from_supplier = false;
+  bool protected_defer_failure = false;
 };
 enum class OwnerMatch { satisfied, unknown, mismatch };
 // Proof identities are separate from executable owner handles. Scoped identities
@@ -384,6 +390,12 @@ struct CheckedMethod {
   std::vector<size_t> retained_types;
   std::optional<size_t> parent;
   std::optional<CheckedHereContract> here;
+  struct HereGroupResults {
+    std::optional<Type> supplier;
+    Type receiving_call;
+    bool operator==(const HereGroupResults &) const = default;
+  };
+  std::optional<HereGroupResults> here_group;
   struct ScopeInputs {
     struct PlaceAccess {
       size_t input;

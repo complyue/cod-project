@@ -36,17 +36,19 @@ class LLVMEmission {
   llvm::StructType *outcome_ = llvm::StructType::create(context_,
       {scalar_, b_.getInt64Ty(), b_.getInt64Ty(), b_.getPtrTy(), b_.getInt64Ty(), b_.getInt64Ty(), b_.getInt64Ty()}, "cod.outcome");
   llvm::StructType *here_ = llvm::StructType::create(context_, {b_.getPtrTy(), b_.getPtrTy()}, "cod.here");
+  llvm::StructType *here_transfer_ = llvm::StructType::create(context_, "cod.here.transfer");
+  bool protected_outcomes_ = false;
   const CheckedProgram *program_ = nullptr;
   // Transient native parameter roles shared by declarations, calls and entry.
   struct CallLayout {
     size_t operands = 0, owners = 0, captures = 0, retained = 0;
-    bool declaration_context = false, destination = false, accepts_here = false;
+    bool declaration_context = false, destination = false, accepts_here = false, here_group = false;
     size_t captures_index() const { return operands + owners; }
     size_t retained_begin() const { return captures_index() + (captures != 0); }
     size_t query_index() const { return retained_begin() + retained; }
     size_t result_index() const { return query_index() + declaration_context; }
     size_t here_index() const { return result_index() + destination; }
-    size_t parameter_count() const { return here_index() + accepts_here; }
+    size_t parameter_count() const { return here_index() + accepts_here + here_group; }
   };
   std::vector<CallLayout> call_layouts_;
   bool specialize_ = true;
@@ -55,7 +57,7 @@ class LLVMEmission {
   unsigned environment_field_ = 0;
   std::vector<Type> callable_types_;
   std::vector<llvm::Function *> general_, specialized_;
-  struct HereEntry { llvm::Function *entry; llvm::StructType *activation; };
+  struct HereEntry { llvm::Function *entry; llvm::StructType *activation; bool group; };
   std::map<size_t, HereEntry> here_entries_;
   std::vector<llvm::GlobalVariable *> symbols_;
   std::map<size_t, llvm::AllocaInst *> effect_values_;
@@ -93,16 +95,17 @@ class LLVMEmission {
   std::vector<llvm::AllocaInst *> parameter_values_;
   llvm::Value *query_environment_ = nullptr;
   llvm::Value *here_argument_ = nullptr;
+  llvm::Value *here_destination_ = nullptr;
   llvm::Function *function_ = nullptr;
   llvm::BasicBlock *finish_ = nullptr;
   // Live slots and suspended values share the complete pending state. Native
-  // call outcomes omit the local control kind and explicit-return marker.
+  // call outcomes carry a protected destination independently of local return and failure.
   template <typename T> struct CompletionState {
-    T value{}, category{}, site{}, fatal{}, requested{}, available{}, cause{}, kind{}, has_return{};
-    auto fields() const { return std::array{value, category, site, fatal, requested, available, cause, kind, has_return}; }
+    T value{}, category{}, site{}, fatal{}, requested{}, available{}, cause{}, kind{}, has_return{}, transfer{};
+    auto fields() const { return std::array{value, category, site, fatal, requested, available, cause, kind, has_return, transfer}; }
     template <typename Transform> auto transform(const Transform &apply) const {
       return CompletionState<decltype(apply(value))>{apply(value), apply(category), apply(site), apply(fatal),
-          apply(requested), apply(available), apply(cause), apply(kind), apply(has_return)};
+          apply(requested), apply(available), apply(cause), apply(kind), apply(has_return), transfer ? apply(transfer) : nullptr};
     }
   };
   CompletionState<llvm::AllocaInst *> completion_;
@@ -321,7 +324,8 @@ class LLVMEmission {
   }
   std::uint64_t site(const Location &at) { sites_.push_back(at); return sites_.size(); }
   llvm::Value *outcome(llvm::Value *value, llvm::Value *category, llvm::Value *where, llvm::Value *fatal,
-      llvm::Value *requested = nullptr, llvm::Value *available = nullptr, llvm::Value *cause = nullptr) {
+      llvm::Value *requested = nullptr, llvm::Value *available = nullptr, llvm::Value *cause = nullptr,
+      llvm::Value *transfer = nullptr) {
     llvm::Value *result = llvm::UndefValue::get(outcome_);
     result = b_.CreateInsertValue(result, value, 0);
     result = b_.CreateInsertValue(result, category, 1);
@@ -329,23 +333,55 @@ class LLVMEmission {
     result = b_.CreateInsertValue(result, fatal, 3);
     result = b_.CreateInsertValue(result, requested ? requested : integer(0), 4);
     result = b_.CreateInsertValue(result, available ? available : integer(0), 5);
-    return b_.CreateInsertValue(result, cause ? cause : integer(0), 6);
+    result = b_.CreateInsertValue(result, cause ? cause : integer(0), 6);
+    if (protected_outcomes_) result = b_.CreateInsertValue(result, transfer ? transfer : null_pointer(), 7);
+    return result;
   }
   llvm::Value *failed(llvm::Value *result) {
     return b_.CreateOr(b_.CreateICmpNE(b_.CreateExtractValue(result, 1), integer(0)),
         b_.CreateICmpNE(b_.CreateExtractValue(result, 3), null_pointer()));
   }
-  void save_failure(llvm::Value *result) {
+  llvm::Value *abrupt_outcome(llvm::Value *result) {
+    auto *failure = failed(result);
+    return protected_outcomes_ ? b_.CreateOr(failure, b_.CreateIsNotNull(b_.CreateExtractValue(result, 7))) : failure;
+  }
+  void preserve_transfer(llvm::Value *outer) {
+    if (!protected_outcomes_) return;
+    auto *kind = load(completion_.kind);
+    if (here_destination_) {
+      // An explicit continue in the group's own cleanup completes that
+      // invocation before its earlier transfer has left the group.
+      auto *local_feedback = b_.CreateAnd(b_.CreateICmpEQ(kind, b_.getInt8(1)), b_.CreateICmpEQ(outer, here_destination_));
+      outer = b_.CreateSelect(local_feedback, null_pointer(), outer);
+    }
+    auto *inner = load(completion_.transfer);
+    auto *pending = b_.CreateSelect(b_.CreateIsNull(inner), outer, inner);
+    b_.CreateStore(pending, completion_.transfer);
+    auto *leaves = b_.CreateAnd(b_.CreateIsNotNull(pending), b_.CreateICmpNE(kind, b_.getInt8(2)));
+    b_.CreateStore(b_.CreateSelect(leaves, b_.getInt8(3), kind), completion_.kind);
+  }
+  void save_abrupt(llvm::Value *result) {
     b_.CreateStore(b_.CreateExtractValue(result, 1), completion_.category);
     b_.CreateStore(b_.CreateExtractValue(result, 2), completion_.site);
     b_.CreateStore(b_.CreateExtractValue(result, 3), completion_.fatal);
     b_.CreateStore(b_.CreateExtractValue(result, 4), completion_.requested);
     b_.CreateStore(b_.CreateExtractValue(result, 5), completion_.available);
     b_.CreateStore(b_.CreateExtractValue(result, 6), completion_.cause);
-    b_.CreateStore(b_.getInt8(2), completion_.kind);
+    if (protected_outcomes_) {
+      auto *incoming = b_.CreateExtractValue(result, 7);
+      b_.CreateStore(b_.CreateSelect(b_.CreateIsNotNull(incoming), incoming, load(completion_.transfer)), completion_.transfer);
+      b_.CreateStore(b_.CreateSelect(failed(result), b_.getInt8(2), b_.getInt8(3)), completion_.kind);
+    } else b_.CreateStore(b_.getInt8(2), completion_.kind);
+  }
+  void save_return(llvm::Value *value, const Location &at) {
+    assign_value(completion_.value, value, at);
+    b_.CreateStore(integer(0), completion_.category);
+    b_.CreateStore(null_pointer(), completion_.fatal);
+    b_.CreateStore(b_.getTrue(), completion_.has_return);
+    b_.CreateStore(b_.getInt8(1), completion_.kind);
   }
   void fail_path(ExceptionCategory category, const Location &at, llvm::Value *fatal = nullptr) {
-    save_failure(outcome(empty_scalar(), integer(exception_id(category)), integer(site(at)), fatal ? fatal : null_pointer()));
+    save_abrupt(outcome(empty_scalar(), integer(exception_id(category)), integer(site(at)), fatal ? fatal : null_pointer()));
     b_.CreateBr(control_->exit);
   }
   llvm::Value *active_exception() {
@@ -356,7 +392,7 @@ class LLVMEmission {
     return value;
   }
   void raise_exception(llvm::Value *value) {
-    save_failure(outcome(empty_scalar(), b_.CreateExtractValue(value, 0), b_.CreateExtractValue(value, 1), null_pointer(),
+    save_abrupt(outcome(empty_scalar(), b_.CreateExtractValue(value, 0), b_.CreateExtractValue(value, 1), null_pointer(),
         b_.CreateExtractValue(value, 2), b_.CreateExtractValue(value, 3), b_.CreateExtractValue(value, 4)));
     b_.CreateBr(control_->exit);
   }
@@ -520,19 +556,20 @@ class LLVMEmission {
   llvm::Value *prepare_here(const CheckedOperation::SuppliedHere &body, const Location &at) {
     const auto &entry = here_entries_.at(body.instance);
     auto *value = b_.CreateInsertValue(llvm::UndefValue::get(here_), entry.entry, 0);
-    if (body.places.empty() && body.owners.empty()) return b_.CreateInsertValue(value, null_pointer(), 1);
+    if (!entry.group && body.places.empty() && body.owners.empty()) return b_.CreateInsertValue(value, null_pointer(), 1);
     auto *activation = slot(entry.activation, "here.activation");
     for (size_t i = 0; i < body.places.size(); ++i) {
       const auto &place = *body.places[i];
       auto *address = emit_expression(place, Projection::target);
-      b_.CreateStore(pack_view(address, place), b_.CreateStructGEP(entry.activation, activation, i));
+      b_.CreateStore(pack_view(address, place), b_.CreateStructGEP(entry.activation, activation, entry.group + i));
     }
     for (size_t i = 0; i < body.owners.size(); ++i)
-      b_.CreateStore(owner_identity(body.owners[i], at), b_.CreateStructGEP(entry.activation, activation, body.places.size() + i));
+      b_.CreateStore(owner_identity(body.owners[i], at), b_.CreateStructGEP(entry.activation, activation, entry.group + body.places.size() + i));
     return b_.CreateInsertValue(value, activation, 1);
   }
   llvm::Value *native_call(const Expression &expr, llvm::Function *target, size_t method, std::vector<llvm::Value *> prepared,
-                           const std::vector<llvm::Value *> &captured = {}, std::optional<size_t> instance = {}, const Type *callable_view = nullptr) {
+                           const std::vector<llvm::Value *> &captured = {}, std::optional<size_t> instance = {},
+                           const Type *callable_view = nullptr, llvm::AllocaInst *here_site = nullptr) {
     const auto &layout = call_layouts_.at(method);
     const auto &inputs = input_frame(method).inputs;
     if (prepared.size() != layout.operands) throw std::logic_error("unchecked native call arity");
@@ -584,11 +621,13 @@ class LLVMEmission {
         if (!call.supplied_here && !call.forwards_here) throw std::logic_error("unchecked here argument reached native call");
         entries[call.supplied_here].push_back(i);
       }
-      prepared.push_back(contextual_value(expr, entries, "here.argument", [&](const auto &supplied) -> llvm::Value * {
+      auto *argument = contextual_value(expr, entries, "here.argument", [&](const auto &supplied) -> llvm::Value * {
         if (supplied) return prepare_here(*supplied, expr.at);
         if (!here_argument_) throw std::logic_error("no here argument to forward");
         return here_argument_;
-      }, here_));
+      }, here_);
+      if (here_site) b_.CreateStore(b_.CreateExtractValue(argument, 1), here_site);
+      prepared.push_back(argument);
     }
     if (!target || prepared.size() != layout.parameter_count() || target->arg_size() != layout.parameter_count())
       throw std::logic_error("native call disagrees with its parameter roles");
@@ -626,7 +665,7 @@ class LLVMEmission {
     if (!instance.result.borrowed() && *instance.result.type != *value.type.target) {
       auto *adapt = block("callable.result.prepare"), *join = block("callable.result.prepared");
       auto *previous = b_.GetInsertBlock();
-      b_.CreateCondBr(failed(result), join, adapt);
+      b_.CreateCondBr(abrupt_outcome(result), join, adapt);
       b_.SetInsertPoint(adapt);
       auto *converted = convert_value(b_.CreateExtractValue(result, 0), *instance.result.type, *value.type.target);
       auto *completed = b_.CreateInsertValue(result, converted, 0);
@@ -705,7 +744,7 @@ class LLVMEmission {
     b_.CreateStore(right_value, left); b_.CreateStore(left_value, right);
     return outcome(empty_scalar(), integer(0), integer(0), null_pointer());
   }
-  llvm::Value *invoke(const Expression &expr, const std::vector<llvm::Value *> &arguments) {
+  llvm::Value *invoke(const Expression &expr, const std::vector<llvm::Value *> &arguments, llvm::AllocaInst *here_site = nullptr) {
     const auto &fact = contexts_.front().at(&expr);
     if (fact.invokes_here) {
       if (!here_argument_) throw std::logic_error("no here argument to invoke");
@@ -742,13 +781,13 @@ class LLVMEmission {
             const auto &other = program_->instances[*choice.operation->callee];
             return other.method == target.method && other.retained_types == target.retained_types &&
                 other.query_environment == target.query_environment;
-          })) return native_call(expr, general_[target.method], target.method, inputs, captured, id);
+          })) return native_call(expr, general_[target.method], target.method, inputs, captured, id, nullptr, here_site);
     }
     return choose(expr, inputs, cases, outcome_, [&](const Choice &choice) -> llvm::Value * {
       if (choice.operation->callee) {
         const auto id = *choice.operation->callee;
         auto *target = specialize_ && cases.size() == 1 ? specialized_[id] : general_[program_->instances[id].method];
-        return native_call(expr, target, program_->instances[id].method, inputs, captured, id);
+        return native_call(expr, target, program_->instances[id].method, inputs, captured, id, nullptr, here_site);
       }
       if (choice.operation->builtin == BuiltinOperation::unary || choice.operation->builtin == BuiltinOperation::binary)
         return outcome(eager_builtin(expr, arguments, choice), integer(0), integer(0), null_pointer());
@@ -797,10 +836,37 @@ class LLVMEmission {
       return outcome(empty_scalar(), integer(0), integer(0), null_pointer());
     });
   }
+  llvm::Value *consume_here_transfer(llvm::Value *result, llvm::Value *here_site, const Location &at) {
+    auto *target = b_.CreateExtractValue(result, 7);
+    auto *matched = block("here.leaves"), *ordinary = block("here.call.outcome"), *join = block("here.outcome");
+    b_.CreateCondBr(b_.CreateAnd(b_.CreateIsNotNull(target), b_.CreateICmpEQ(target, here_site)), matched, ordinary);
+    b_.SetInsertPoint(ordinary);
+    b_.CreateBr(join);
+    b_.SetInsertPoint(matched);
+    auto *cancel = block("here.cleanup.failed"), *deliver = block("here.deliver");
+    b_.CreateCondBr(failed(result), cancel, deliver);
+    b_.SetInsertPoint(cancel);
+    auto *cleanup_failure = b_.CreateInsertValue(result, null_pointer(), 7);
+    b_.CreateBr(join);
+    b_.SetInsertPoint(deliver);
+    auto *kind = b_.CreateLoad(b_.getInt8Ty(), b_.CreateStructGEP(here_transfer_, target, 0));
+    auto *payload = b_.CreateLoad(outcome_, b_.CreateStructGEP(here_transfer_, target, 1));
+    auto *returning = block("here.supplier.return");
+    b_.CreateCondBr(b_.CreateICmpEQ(kind, b_.getInt8(static_cast<unsigned>(HereExit::return_supplier))), returning, join);
+    b_.SetInsertPoint(returning);
+    save_return(b_.CreateExtractValue(payload, 0), at);
+    b_.CreateBr(control_->exit);
+    b_.SetInsertPoint(join);
+    auto *outcome = b_.CreatePHI(outcome_, 3);
+    outcome->addIncoming(result, ordinary);
+    outcome->addIncoming(cleanup_failure, cancel);
+    outcome->addIncoming(payload, deliver);
+    return outcome;
+  }
   llvm::Value *propagate(llvm::Value *result) {
     auto *bad = block("call.failed"), *good = block("call.completed");
-    b_.CreateCondBr(failed(result), bad, good);
-    b_.SetInsertPoint(bad); save_failure(result); b_.CreateBr(control_->exit);
+    b_.CreateCondBr(abrupt_outcome(result), bad, good);
+    b_.SetInsertPoint(bad); save_abrupt(result); b_.CreateBr(control_->exit);
     b_.SetInsertPoint(good);
     return b_.CreateExtractValue(result, 0);
   }
@@ -828,6 +894,7 @@ class LLVMEmission {
     b_.CreateStore(b_.CreateSelect(entered_failure, pending.category, integer(0)), completion_.category);
     b_.CreateStore(b_.CreateSelect(entered_failure, pending.fatal, null_pointer()), completion_.fatal);
     b_.CreateStore(b_.getFalse(), completion_.has_return);
+    if (protected_outcomes_) b_.CreateStore(null_pointer(), completion_.transfer);
     Control action{control_, block("cleanup.completed")};
     control_ = &action;
     emit();
@@ -840,7 +907,7 @@ class LLVMEmission {
     if (environments_) clear_value(completion_.value);
     const auto places = completion_.fields();
     const auto values = pending.fields();
-    for (size_t i = 0; i < places.size(); ++i) b_.CreateStore(values[i], places[i]);
+    for (size_t i = 0; i < places.size(); ++i) if (places[i]) b_.CreateStore(values[i], places[i]);
     if (handles_failure) {
       auto *resumed = b_.CreateSelect(pending.has_return, b_.getInt8(1), b_.getInt8(0));
       b_.CreateStore(b_.CreateSelect(pending_failure, resumed, pending.kind), completion_.kind);
@@ -858,6 +925,7 @@ class LLVMEmission {
     b_.CreateBr(done);
     b_.SetInsertPoint(replaced); release_value(pending.value); b_.CreateBr(done);
     b_.SetInsertPoint(done);
+    preserve_transfer(pending.transfer);
   }
   void drain(Scope &scope) {
     b_.SetInsertPoint(scope.cleanup);
@@ -922,8 +990,8 @@ class LLVMEmission {
           auto *result = invoke(body, arguments);
           release_value(b_.CreateExtractValue(result, 0));
           auto *replace = block("defer.failed"), *done = block("defer.completed");
-          b_.CreateCondBr(failed(result), replace, done);
-          b_.SetInsertPoint(replace); save_failure(result); b_.CreateBr(done);
+          b_.CreateCondBr(abrupt_outcome(result), replace, done);
+          b_.SetInsertPoint(replace); save_abrupt(result); b_.CreateBr(done);
           b_.SetInsertPoint(done);
         });
         b_.CreateBr(scope.cleanup);
@@ -935,12 +1003,12 @@ class LLVMEmission {
       if (contexts_.front().at(&body).callee)
         for (size_t i = body.children.size(); i < arguments.size(); ++i) release_value(arguments[i]);
       auto *replace = block("defer.failed");
-      b_.CreateCondBr(failed(result), replace, scope.cleanup);
-      b_.SetInsertPoint(replace); save_failure(result); b_.CreateBr(scope.cleanup);
+      b_.CreateCondBr(abrupt_outcome(result), replace, scope.cleanup);
+      b_.SetInsertPoint(replace); save_abrupt(result); b_.CreateBr(scope.cleanup);
     }
     b_.SetInsertPoint(invalid);
     b_.CreateCall(release, {record});
-    save_failure(outcome(empty_scalar(), integer(exception_id(ExceptionCategory::unsound_runtime_typing)), integer(0), null_pointer()));
+    save_abrupt(outcome(empty_scalar(), integer(exception_id(ExceptionCategory::unsound_runtime_typing)), integer(0), null_pointer()));
     b_.CreateBr(scope.cleanup);
     b_.SetInsertPoint(done);
   }
@@ -1032,7 +1100,7 @@ class LLVMEmission {
     return load(result);
   }
   void call_scope(const std::vector<const Expression *> &expressions, const Location &at,
-                  llvm::Value *returns_value = nullptr) {
+                  llvm::Value *returns_value = nullptr, const Type *feedback = nullptr) {
     auto *outer_temporaries = temporaries_;
     Scope scope{scope_, block("scope.cleanup"), slot(b_.getPtrTy(), "defer.head"), {}, {}};
     if (environments_) scope.values.values = parameter_values_;
@@ -1043,7 +1111,15 @@ class LLVMEmission {
     b_.CreateStore(null_pointer(), scope.head);
     for (const auto *expr : expressions) collect_deferred(*expr, scope);
     const auto effects = save_effects(expressions);
-    sequence(expressions, Projection::value, true);
+    const bool supplies_value = feedback && *feedback != Type::void_type;
+    auto *value = sequence(expressions, Projection::value, !supplies_value);
+    if (supplies_value && reachable()) {
+      const auto &body = *expressions.back();
+      value = choose(body, {value}, choices(body, {&body}), scalar_, [&](const Choice &choice) {
+        return convert_value(value, choice.inputs.front(), *feedback);
+      });
+      assign_value(completion_.value, value, body.at);
+    }
     if (reachable()) b_.CreateBr(scope.cleanup);
     drain(scope); release_values(scope.values); restore_effects(effects);
     scope_ = scope.parent; control_ = control.parent; temporaries_ = outer_temporaries;
@@ -1051,7 +1127,7 @@ class LLVMEmission {
       auto *missing = block("return.missing");
       b_.CreateCondBr(b_.CreateAnd(returns_value, b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(0))), missing, finish_);
       b_.SetInsertPoint(missing);
-      save_failure(outcome(empty_scalar(), integer(exception_id(ExceptionCategory::missing_return)), integer(site(at)), null_pointer()));
+      save_abrupt(outcome(empty_scalar(), integer(exception_id(ExceptionCategory::missing_return)), integer(site(at)), null_pointer()));
     }
     b_.CreateBr(finish_);
   }
@@ -1088,13 +1164,20 @@ class LLVMEmission {
       b_.CreateCondBr(b_.CreateICmpNE(b_.CreateExtractValue(caught, 1), b_.getInt32(0)), selected, next);
       b_.SetInsertPoint(selected);
       b_.CreateStore(caught, storage_.at(*fact.place));
+      auto *pending_transfer = protected_outcomes_ ? load(completion_.transfer) : nullptr;
+      if (protected_outcomes_) b_.CreateStore(null_pointer(), completion_.transfer);
       b_.CreateStore(b_.getInt8(0), completion_.kind); b_.CreateStore(integer(0), completion_.category); b_.CreateStore(null_pointer(), completion_.fatal);
       b_.CreateStore(b_.getFalse(), completion_.has_return);
       clear_value(completion_.value);
-      Control catching{control_, handled};
+      Control catching{control_, protected_outcomes_ ? block("catch.completed") : handled};
       control_ = &catching;
       auto *result = emit_expression(*handler.children.front(), projection, discard);
-      if (reachable()) { if (read) assign_value(saved, discard ? empty_scalar() : result, handler.at); else b_.CreateStore(result, saved); b_.CreateBr(handled); }
+      if (reachable()) { if (read) assign_value(saved, discard ? empty_scalar() : result, handler.at); else b_.CreateStore(result, saved); b_.CreateBr(catching.exit); }
+      if (protected_outcomes_) {
+        b_.SetInsertPoint(catching.exit);
+        preserve_transfer(pending_transfer);
+        b_.CreateBr(handled);
+      }
       control_ = catching.parent;
       b_.SetInsertPoint(next);
     }
@@ -1551,7 +1634,14 @@ class LLVMEmission {
       return temporary_scope(expr.at, !fact.borrowed_result || read ? scalar_ : static_cast<llvm::Type *>(b_.getPtrTy()), [&]() -> llvm::Value * {
         const auto arguments = prepare_arguments(expr);
         if (!reachable()) return nullptr;
-        auto *value = propagate(invoke(expr, arguments));
+        llvm::AllocaInst *here_site = nullptr;
+        if (fact.supplied_here && program_->methods[program_->instances[fact.supplied_here->instance].method].here_group) {
+          here_site = slot(b_.getPtrTy(), "here.call.destination");
+          b_.CreateStore(null_pointer(), here_site);
+        }
+        auto *result = invoke(expr, arguments, here_site);
+        if (here_site) result = consume_here_transfer(result, load(here_site), expr.at);
+        auto *value = propagate(result);
         if (!fact.borrowed_result) return own_value(value);
         auto *address = view_address(value);
         return !read ? address : discard ? empty_scalar() : b_.CreateLoad(scalar_, checked_address(address, expr, expr.at));
@@ -1658,7 +1748,7 @@ class LLVMEmission {
       if (expr.kind == K::transfer) return read ? b_.CreateLoad(scalar_, address) : address;
       return !read ? address : discard ? empty_scalar() : b_.CreateLoad(scalar_, checked_address(address, expr, expr.at));
     }
-    case K::return_value: {
+    case K::return_value: case K::break_value: case K::continue_value: {
       llvm::Value *value = empty_scalar();
       if (!expr.children.empty()) {
         value = emit_expression(*expr.children.front(), fact.borrowed_result ? Projection::target : Projection::value);
@@ -1666,9 +1756,15 @@ class LLVMEmission {
         if (fact.borrowed_result) value = pack_view(value, expr, true);
         else value = convert_result(expr, *expr.children.front(), value);
       }
-      assign_value(completion_.value, value, expr.at); b_.CreateStore(integer(0), completion_.category); b_.CreateStore(null_pointer(), completion_.fatal);
-      b_.CreateStore(b_.getTrue(), completion_.has_return);
-      b_.CreateStore(b_.getInt8(1), completion_.kind); b_.CreateBr(control_->exit);
+      if (fact.here_exit) {
+        if (!here_destination_) throw std::logic_error("here group has no protected destination");
+        auto *payload = outcome(value, integer(0), integer(0), null_pointer());
+        b_.CreateStore(b_.getInt8(static_cast<unsigned>(*fact.here_exit)), b_.CreateStructGEP(here_transfer_, here_destination_, 0));
+        b_.CreateStore(payload, b_.CreateStructGEP(here_transfer_, here_destination_, 1));
+        b_.CreateStore(here_destination_, completion_.transfer);
+        b_.CreateStore(b_.getInt8(3), completion_.kind);
+      } else save_return(value, expr.at);
+      b_.CreateBr(control_->exit);
       return nullptr;
     }
     case K::field: {
@@ -1749,6 +1845,7 @@ class LLVMEmission {
     parameters.insert(parameters.end(), layout.retained + layout.declaration_context, b_.getInt32Ty());
     if (layout.destination) parameters.push_back(b_.getPtrTy());
     if (layout.accepts_here) parameters.push_back(here_);
+    if (layout.here_group) parameters.push_back(b_.getPtrTy());
     return llvm::Function::Create(llvm::FunctionType::get(outcome_, parameters, false),
         llvm::GlobalValue::InternalLinkage, name, module_);
   }
@@ -1760,27 +1857,45 @@ class LLVMEmission {
     const auto places = layout.operands - written;
     if (layout.captures || layout.retained || layout.declaration_context || layout.destination || layout.accepts_here)
       throw std::logic_error("unexpected parameter role in supplied here body");
-    std::vector<llvm::Type *> fields(places, scalar_);
+    // The first field is the transfer record, so its address also identifies
+    // the originating call activation across every forwarding receiver.
+    std::vector<llvm::Type *> fields;
+    if (layout.here_group) fields.push_back(here_transfer_);
+    fields.insert(fields.end(), places, scalar_);
     fields.insert(fields.end(), layout.owners, b_.getPtrTy());
     auto *activation = llvm::StructType::get(context_, fields);
     std::vector<llvm::Type *> parameters(written, scalar_);
     parameters.push_back(b_.getPtrTy());
     auto *entry = llvm::Function::Create(llvm::FunctionType::get(outcome_, parameters, false),
         llvm::GlobalValue::InternalLinkage, "cod.here.entry." + std::to_string(id), module_);
-    here_entries_.emplace(id, HereEntry{entry, activation});
+    here_entries_.emplace(id, HereEntry{entry, activation, layout.here_group});
     llvm::IRBuilder<> body(llvm::BasicBlock::Create(context_, "entry", entry));
     auto *borrowed = entry->getArg(written);
     std::vector<llvm::Value *> prepared;
     for (size_t i = 0; i < written; ++i) prepared.push_back(entry->getArg(i));
     for (size_t i = 0; i < places; ++i)
-      prepared.push_back(body.CreateLoad(scalar_, body.CreateStructGEP(activation, borrowed, i)));
+      prepared.push_back(body.CreateLoad(scalar_, body.CreateStructGEP(activation, borrowed, layout.here_group + i)));
     for (const auto &[owner, input] : instance.frame.owners)
-      prepared.push_back(body.CreateLoad(b_.getPtrTy(), body.CreateStructGEP(activation, borrowed, places + null_target - 1 - owner)));
-    body.CreateRet(body.CreateCall(general_.at(instance.method), prepared));
+      prepared.push_back(body.CreateLoad(b_.getPtrTy(), body.CreateStructGEP(activation, borrowed, layout.here_group + places + null_target - 1 - owner)));
+    if (layout.here_group) prepared.push_back(borrowed);
+    auto *result = body.CreateCall(general_.at(instance.method), prepared);
+    if (!layout.here_group) { body.CreateRet(result); return; }
+    auto *forward = llvm::BasicBlock::Create(context_, "here.failure", entry);
+    auto *completed = llvm::BasicBlock::Create(context_, "here.completed", entry);
+    auto *failure = body.CreateOr(body.CreateICmpNE(body.CreateExtractValue(result, 1), integer(0)),
+                                  body.CreateIsNotNull(body.CreateExtractValue(result, 3)));
+    body.CreateCondBr(failure, forward, completed);
+    body.SetInsertPoint(completed);
+    body.CreateRet(result);
+    body.SetInsertPoint(forward);
+    body.CreateStore(body.getInt8(static_cast<unsigned>(HereExit::failure)), body.CreateStructGEP(here_transfer_, borrowed, 0));
+    auto *plain_failure = body.CreateInsertValue(result, null_pointer(), 7);
+    body.CreateStore(plain_failure, body.CreateStructGEP(here_transfer_, borrowed, 1));
+    body.CreateRet(body.CreateInsertValue(llvm::Constant::getNullValue(outcome_), borrowed, 7));
   }
   void begin(llvm::Function *function, const std::vector<CheckedStorage> &storage, const std::vector<CheckedBinding> &bindings,
              const CheckedFrame &frame = {}) {
-    function_ = function; arguments_.clear(); retained_types_.clear(); parameter_values_.clear(); value_owners_.clear(); query_environment_ = nullptr; here_argument_ = nullptr; temporaries_ = nullptr;
+    function_ = function; arguments_.clear(); retained_types_.clear(); parameter_values_.clear(); value_owners_.clear(); query_environment_ = nullptr; here_argument_ = nullptr; here_destination_ = nullptr; temporaries_ = nullptr;
     for (size_t i = 0; i < frame.inputs.size(); ++i) arguments_.push_back(function->getArg(i));
     b_.SetInsertPoint(block("entry")); finish_ = block("completion"); scope_ = nullptr; control_ = nullptr;
     owner_identities_.clear();
@@ -1791,6 +1906,10 @@ class LLVMEmission {
         slot(b_.getInt64Ty(), "exception.requested"), slot(b_.getInt64Ty(), "exception.available"),
         slot(b_.getInt64Ty(), "exception.cause"), slot(b_.getInt8Ty(), "completion.kind"),
         slot(b_.getInt1Ty(), "completion.has.return")};
+    if (protected_outcomes_) {
+      completion_.transfer = slot(b_.getPtrTy(), "completion.here");
+      b_.CreateStore(null_pointer(), completion_.transfer);
+    }
     b_.CreateStore(b_.getFalse(), completion_.has_return);
     b_.CreateStore(empty_scalar(), completion_.value); b_.CreateStore(integer(0), completion_.category);
     b_.CreateStore(integer(0), completion_.site); b_.CreateStore(null_pointer(), completion_.fatal); b_.CreateStore(b_.getInt8(0), completion_.kind);
@@ -1836,6 +1955,7 @@ class LLVMEmission {
     if (function->arg_size() != call.parameter_count()) throw std::logic_error("native body disagrees with its parameter roles");
     begin(function, prepared.storage, layout.bindings, frame);
     if (call.accepts_here) here_argument_ = function->getArg(call.here_index());
+    if (call.here_group) here_destination_ = function->getArg(call.here_index());
     contexts_.clear();
     for (const auto &context : prepared.contexts) contexts_.push_back({&context.operations(), context.instance});
     if (call.captures) {
@@ -1889,7 +2009,8 @@ class LLVMEmission {
       auto *value = arguments_.at(call.operands + c);
       b_.CreateStore(copy_value(value, method.captures.at(c).at), place);
     }
-    call_scope({method.source->body.get()}, method.source->at, returns_value);
+    call_scope({method.source->body.get()}, method.source->at, call.here_group ? nullptr : returns_value,
+        call.here_group ? &*layout.result.type : nullptr);
     if (initialization) {
       b_.SetInsertPoint(initialization->exit);
       for (auto i = parameter_values_.rbegin(); i != parameter_values_.rend(); ++i) clear_value(*i);
@@ -1899,12 +2020,15 @@ class LLVMEmission {
     b_.SetInsertPoint(finish_);
     if (environments_) {
       auto *failed = block("return.discard"), *ready = block("return.ready");
-      b_.CreateCondBr(b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(2)), failed, ready);
+      auto *kind = load(completion_.kind);
+      auto *discard = protected_outcomes_ ? b_.CreateICmpUGE(kind, b_.getInt8(2)) : b_.CreateICmpEQ(kind, b_.getInt8(2));
+      b_.CreateCondBr(discard, failed, ready);
       b_.SetInsertPoint(failed); clear_value(completion_.value); b_.CreateBr(ready); b_.SetInsertPoint(ready);
     }
     if (call.destination) b_.CreateStore(load(completion_.value), function->getArg(call.result_index()));
     b_.CreateRet(outcome(load(completion_.value), load(completion_.category), load(completion_.site), load(completion_.fatal),
-        load(completion_.requested), load(completion_.available), load(completion_.cause)));
+        load(completion_.requested), load(completion_.available), load(completion_.cause),
+        protected_outcomes_ ? load(completion_.transfer) : nullptr));
   }
   void emit_sites() {
     function_ = llvm::Function::Create(llvm::FunctionType::get(b_.getPtrTy(), {b_.getInt64Ty()}, false),
@@ -1922,6 +2046,13 @@ class LLVMEmission {
 public:
   std::pair<std::string, std::string> emit(const CheckedProgram &program, bool emit_text, bool emit_bitcode, bool specialize = true, bool bounds_checks = true) {
     program_ = &program; specialize_ = specialize; bounds_checks_ = bounds_checks;
+    protected_outcomes_ = std::ranges::any_of(program.methods, [](const auto &method) { return method.here_group && !method.instances.empty(); });
+    if (protected_outcomes_) {
+      std::vector<llvm::Type *> fields(outcome_->element_begin(), outcome_->element_end());
+      fields.push_back(b_.getPtrTy());
+      outcome_->setBody(fields);
+      here_transfer_->setBody({b_.getInt8Ty(), outcome_});
+    }
     environments_ = std::any_of(program.methods.begin(), program.methods.end(), [](const auto &method) { return !method.captures.empty(); }) ||
         std::any_of(program.callables.begin(), program.callables.end(), [&](const auto &value) { return !program.captured_symbols(value).empty(); });
     std::vector<llvm::Type *> fields{b_.getInt64Ty(), b_.getInt32Ty()};
@@ -1993,7 +2124,7 @@ public:
         return !result.borrowed() && result.type->kind == Type::procedure;
       });
       call_layouts_[i] = {frame.inputs.size(), frame.owners.size(), method.captures.size(),
-          method.retained_types.size(), method.declaration_context(), destination, method.here.has_value()};
+          method.retained_types.size(), method.declaration_context(), destination, method.here.has_value(), method.here_group.has_value()};
     }
     general_.resize(program.methods.size()); specialized_.resize(program.instances.size());
     for (size_t i = 0; i < program.methods.size(); ++i) {
