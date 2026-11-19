@@ -10074,6 +10074,14 @@ class ScalarChecker {
   size_t here_formal_owner(size_t role) const {
     return role ? external_owners_.at(checking_method_->input_owners().at(role - 1).name) : lexical_.scopes.front().id;
   }
+  std::vector<std::optional<size_t>> here_formal_owners(const CheckedHereContract &signature, const Type &contract) const {
+    std::vector<std::optional<size_t>> owners;
+    for (const auto i : here_owner_inputs(contract)) {
+      const auto role = *signature.inputs[i].owner;
+      owners.push_back(role ? std::optional{here_formal_owner(role)} : std::nullopt);
+    }
+    return owners;
+  }
   void require_here_owner(std::optional<EvidenceOwner> actual, EvidenceOwner expected, const Location &at,
                           const TypeEvidenceState *state = nullptr) const {
     const auto equality = compare_owners(actual, expected, state);
@@ -10261,27 +10269,37 @@ class ScalarChecker {
         inputs.owner_names.emplace(name, capture_owner(named_owner(name, capture.at), capture.at));
         continue;
       }
-      if (!source.value_binding || source.alias || !source.selection.empty() || !numeric(source.type))
-        implementation_gap(capture.at, "here access requires a local numeric val slot with stable storage");
+      if (source.alias || !source.selection.empty() || !numeric(source.type) ||
+          (!source.value_binding && (source.nullable || !source.read_only)))
+        implementation_gap(capture.at, "here access requires a numeric val or initialized readonly reference slot with stable storage");
       const auto &operand = scope_operand(base, capture);
       const auto type = check(operand, supplier, operations, false);
       const auto view = operations.at(&operand);
-      if (view.targets.size() != 1 || view.owners.size() != 1 || !view.place || storage(*view.place).borrowed)
-        implementation_gap(capture.at, "here access requires a local numeric val slot with stable storage");
-      // A receiver may enter the body zero or several times. A live numeric
-      // val stays initialized, and its value is always read from that slot.
+      if (view.targets.contains(null_target) || view.owners.size() != 1 ||
+          (source.value_binding && (view.targets.size() != 1 || !view.place || storage(*view.place).borrowed)))
+        implementation_gap(capture.at, "here access requires an initialized selection with one established owner");
+      // A receiver may enter the body zero or several times. Each invocation
+      // reads the supplier's live slot with its established target owner.
       if (validating_ && proving_ && lexical_.live && !view.initialized_target() &&
-          !missing_initialization(lexical_, *view.place, selected_target(view, *view.place, true)).empty())
+          std::ranges::any_of(view.targets, [&](size_t place) {
+            return !missing_initialization(lexical_, place, selected_target(view, place, true)).empty();
+          }))
         implementation_gap(capture.at, "here access to a slot without definite initialization at supply");
       const auto role = capture_owner(*view.owners.begin(), capture.at);
       Parameter input{name, type, capture.at, false, {}};
-      input.declaration_kind = "ptr";
+      input.declaration_kind = source.value_binding ? "ptr" : "ref";
       input.owner = inputs.owners.at(role).name;
       input.read_only = view.read_only;
       input.fixed_binding = view.fixed_binding;
       const auto ordinal = arguments.size();
-      inputs.live_values.insert(ordinal);
-      inputs.place_owners[ordinal].insert(role);
+      if (source.value_binding) {
+        inputs.live_values.insert(ordinal);
+        inputs.place_owners[ordinal].insert(role);
+      } else {
+        inputs.live_bindings.insert(ordinal);
+        for (const auto owner : source.place_owners)
+          inputs.place_owners[ordinal].insert(capture_owner(owner, capture.at));
+      }
       inputs.nonnull.push_back(true);
       inputs.parameters.push_back(std::move(input));
       arguments.push_back(type);
@@ -10302,6 +10320,9 @@ class ScalarChecker {
     }
     const auto profile = scope_profile(std::move(inputs), ResultContract{*contract.target}, failures, std::move(group));
     supplied.instance = demand(profile, std::move(arguments), body.at);
+    if (validating_ && (!read_effects(supplied.instance).binding_sources.empty() ||
+                        (returning && !read_effects(*returning).binding_sources.empty())))
+      implementation_gap(body.at, "rebinding a supplier reference slot from a repeatedly callable here body");
     return {std::move(supplied), returning};
   }
   size_t demand_here_receiver(size_t receiver, const std::vector<CheckedHereTarget> &entries,
@@ -10461,25 +10482,19 @@ class ScalarChecker {
     return left.labelled == right.labelled && std::ranges::equal(left.inputs, right.inputs, {},
         &CheckedHereContract::Component::label, &CheckedHereContract::Component::label);
   }
-  static void require_owner_free_here(const CheckedHereContract &signature, const Location &at) {
-    if (signature.result.owner || signature.feedback ||
-        std::ranges::any_of(signature.inputs, [](const auto &input) { return input.owner.has_value(); }))
-      implementation_gap(at, "forwarding an open pipeline with an exposed owner or compound feedback");
-    for (const auto &nested : signature.here) require_owner_free_here(nested, at);
-  }
-  bool matches_open_here(const CheckedMethod &offering, const CheckedHereContract &offered, const Substitutions &available,
+  bool matches_here_protocol(const CheckedMethod &offering, const CheckedHereContract &offered, const Substitutions &available,
       const CheckedMethod &receiving, const CheckedHereContract &accepted, const Substitutions &required, const Location &at) const {
     return same_here_labels(offered, accepted) && offered.here.size() == accepted.here.size() &&
         here_value_signature(offering, offered, available, at) == here_value_signature(receiving, accepted, required, at) &&
         std::ranges::equal(offered.here, accepted.here, [&](const auto &left, const auto &right) {
-          return matches_open_here(offering, left, available, receiving, right, required, at);
+          return matches_here_protocol(offering, left, available, receiving, right, required, at);
         });
   }
   static bool open_pipeline_contract(const CheckedHereContract &signature) {
     return !signature.here.empty() && !signature.here.back().here.empty();
   }
-  void require_prepared_consumer_owners(const CheckedHereContract &offered, const CheckedHereContract &accepted,
-      const auto &source_owner, const CheckedMethod &receiver, const std::vector<CheckedOperation> &views, const Location &at) const {
+  void require_here_protocol_owners(const CheckedHereContract &offered, const CheckedHereContract &accepted,
+      const auto &offered_owner, const auto &accepted_owner, const Location &at) const {
     for (size_t i = 0; i < offered.inputs.size(); ++i) if (const auto source_role = offered.inputs[i].owner) {
       const auto receiving_role = accepted.inputs[i].owner.value();
       if (!*source_role || !receiving_role) {
@@ -10487,12 +10502,13 @@ class ScalarChecker {
           fail(at, "prepared producer handoff owner does not match the selected contract");
         continue;
       }
-      const auto actual = here_receiver_owner(receiver, receiving_role, views, at);
-      require_here_owner(source_owner(*source_role), *actual, at);
+      require_here_owner(offered_owner(*source_role), accepted_owner(receiving_role), at);
     }
+    for (size_t i = 0; i < offered.here.size(); ++i)
+      require_here_protocol_owners(offered.here[i], accepted.here[i], offered_owner, accepted_owner, at);
   }
-  void require_prepared_source(const CheckedOperation::PreparedProducer &source, const CheckedMethod &receiver,
-      const Substitutions &bindings, const CheckedHereContract &expected, const std::vector<CheckedOperation> &views,
+  void require_prepared_source_contract(const CheckedOperation::PreparedProducer &source, const CheckedMethod &receiver,
+      const Substitutions &bindings, const CheckedHereContract &expected, const auto &accepted_owner,
       const Location &at) const {
     const auto &instance = program_.instances[source.instance];
     const auto &method = program_.methods[instance.method];
@@ -10506,7 +10522,13 @@ class ScalarChecker {
         here_invocation_type(method, instance.substitutions, at) != here_value_signature(receiver, accepted, bindings, at))
       fail(at, "prepared producer does not match the selected here contract");
     require_prepared_owners(source, at);
-    require_prepared_consumer_owners(offered, accepted, [&](size_t role) { return source.owners.at(role - 1); }, receiver, views, at);
+    require_here_protocol_owners(offered, accepted, [&](size_t role) { return source.owners.at(role - 1); }, accepted_owner, at);
+  }
+  void require_prepared_source(const CheckedOperation::PreparedProducer &source, const CheckedMethod &receiver,
+      const Substitutions &bindings, const CheckedHereContract &expected, const std::vector<CheckedOperation> &views,
+      const Location &at) const {
+    require_prepared_source_contract(source, receiver, bindings, expected,
+        [&](size_t role) { return *here_receiver_owner(receiver, role, views, at); }, at);
   }
   void require_forwarded_here(size_t slot, const CheckedMethod &receiver, size_t formal, const Substitutions &bindings,
       const std::vector<CheckedOperation> &views, const CheckedInstance &supplier, const Location &at) const {
@@ -10514,11 +10536,12 @@ class ScalarChecker {
     const auto incoming = here_invocation_type(*checking_method_, supplier.substitutions, at, slot);
     const auto &incoming_signature = here_signature(*checking_method_, slot);
     const auto outgoing = here_invocation_type(receiver, bindings, at, formal);
+    const auto incoming_owner = [&](size_t role) { return here_formal_owner(role); };
+    const auto outgoing_owner = [&](size_t role) { return *here_receiver_owner(receiver, role, views, at); };
     if (open_pipeline_contract(signature) || open_pipeline_contract(incoming_signature)) {
-      require_owner_free_here(incoming_signature, at);
-      require_owner_free_here(signature, at);
-      if (!matches_open_here(*checking_method_, incoming_signature, supplier.substitutions, receiver, signature, bindings, at))
+      if (!matches_here_protocol(*checking_method_, incoming_signature, supplier.substitutions, receiver, signature, bindings, at))
         fail(at, "forwarded open pipeline does not match the selected here contract");
+      require_here_protocol_owners(incoming_signature, signature, incoming_owner, outgoing_owner, at);
       return;
     }
     if (signature.here.size() == 1 && incoming_signature.here.size() == 1 && incoming_signature.inputs.empty() && signature.inputs.empty()) {
@@ -10528,7 +10551,7 @@ class ScalarChecker {
           !same_here_labels(offered, accepted) ||
           here_value_signature(*checking_method_, offered, supplier.substitutions, at) != here_value_signature(receiver, accepted, bindings, at))
         fail(at, "forwarded producer does not match the selected here contract");
-      require_prepared_consumer_owners(offered, accepted, [&](size_t role) { return here_formal_owner(role); }, receiver, views, at);
+      require_here_protocol_owners(offered, accepted, incoming_owner, outgoing_owner, at);
       return;
     }
     if (!signature.here.empty() || !incoming_signature.here.empty() || !same_here_labels(incoming_signature, signature) ||
@@ -10568,12 +10591,7 @@ class ScalarChecker {
     const auto contract = here_invocation_type(*checking_method_, supplier->substitutions, expr.at, slot);
     const auto &consumer = signature.here.front();
     const auto feedback = here_value_signature(*checking_method_, consumer, supplier->substitutions, expr.at);
-    std::vector<std::optional<size_t>> owners;
-    for (const auto i : here_owner_inputs(feedback)) {
-      const auto role = *consumer.inputs[i].owner;
-      owners.push_back(role ? std::optional{here_formal_owner(role)} : std::nullopt);
-    }
-    auto [body, returning] = demand_supplied_here(*expr.children.back(), feedback, consumer, std::move(owners),
+    auto [body, returning] = demand_supplied_here(*expr.children.back(), feedback, consumer, here_formal_owners(consumer, feedback),
         ResultContract{*contract.target}, supplier, operations);
     if (returning) implementation_gap(expr.at, "return inspection in a supplied body of a prepared producer");
     operation.invokes_here = slot;
@@ -10722,7 +10740,8 @@ class ScalarChecker {
       const auto &input = operation.here_arguments[formal];
       if (input.source) {
         if (const auto pipeline = targets[formal].pipeline)
-          require_prepared_open_pipeline(open_pipelines_[*pipeline], operations.at(input.source), receiver, signature, bindings, operations, at);
+          require_prepared_open_pipeline(open_pipelines_[*pipeline], operations.at(input.source), receiver, signature,
+              bindings, views, operations, at);
         else require_prepared_source(operations.at(input.source).prepared_producer.value(), receiver, bindings, signature, views, at);
         continue;
       }
@@ -10933,24 +10952,33 @@ class ScalarChecker {
     return id->second;
   }
   void require_prepared_open_pipeline(const OpenPipeline &pipeline, const CheckedOperation &operand, const CheckedMethod &receiver,
-      const CheckedHereContract &expected, const Substitutions &bindings,
+      const CheckedHereContract &expected, const Substitutions &bindings, const std::vector<CheckedOperation> &views,
       const std::map<const Expression *, CheckedOperation> &operations, const Location &at) const {
-    for (const auto *stage : *operand.open_pipeline_operands)
+    const auto &stages = *operand.open_pipeline_operands;
+    for (const auto *stage : stages)
       require_prepared_owners(*operations.at(stage).prepared_producer, at);
     if (!open_pipeline_contract(expected) || expected.here.size() != (pipeline.terminal ? 1 : 2) ||
         !expected.inputs.empty() || expected.result.type != Type::void_type)
       fail(at, "open pipeline does not match the selected here contract");
-    require_owner_free_here(expected, at);
+    if (expected.result.owner || expected.feedback)
+      implementation_gap(at, "labelled or borrowed here feedback contracts");
     const auto &first = program_.instances[pipeline.stages.front()];
     const auto &last = program_.instances[pipeline.stages.back()];
     const auto &input = program_.methods[first.method];
     const auto &output = program_.methods[last.method];
-    require_owner_free_here(input.here.back(), at);
-    if (!pipeline.terminal) require_owner_free_here(output.here.front(), at);
-    if (!matches_open_here(input, input.here.back(), first.substitutions, receiver, expected.here.back(), bindings, at) ||
+    if (!matches_here_protocol(input, input.here.back(), first.substitutions, receiver, expected.here.back(), bindings, at) ||
         (!pipeline.terminal &&
-         !matches_open_here(output, output.here.front(), last.substitutions, receiver, expected.here.front(), bindings, at)))
+         !matches_here_protocol(output, output.here.front(), last.substitutions, receiver, expected.here.front(), bindings, at)))
       fail(at, "open pipeline does not match the selected here contract");
+    const auto receiver_owner = [&](size_t role) { return *here_receiver_owner(receiver, role, views, at); };
+    const auto &source_port = *operations.at(stages.front()).prepared_producer;
+    require_here_protocol_owners(input.here.back(), expected.here.back(),
+        [&](size_t role) { return source_port.owners.at(role - 1); }, receiver_owner, at);
+    if (!pipeline.terminal) {
+      const auto &consumer_port = *operations.at(stages.back()).prepared_producer;
+      require_here_protocol_owners(output.here.front(), expected.here.front(),
+          [&](size_t role) { return consumer_port.owners.at(role - 1); }, receiver_owner, at);
+    }
     // The named terminal's selected call is checked in its supplying context.
     // Use that completed proof when checking the exposed completion contract.
     if (pipeline.terminal && !validating_) return;
@@ -10979,7 +11007,6 @@ class ScalarChecker {
       implementation_gap(expr.at, "open pipeline invocation with ordinary arguments or non-void completion");
     if (supplies_consumer != (signature.here.size() == 2))
       fail(expr.at, supplies_consumer ? "a pipeline can have only one consumer" : "an open processor requires a consumer");
-    require_owner_free_here(signature, expr.at);
     const auto &upstream = signature.here.back();
     if (upstream.here.size() != 1 || !upstream.inputs.empty() || upstream.result.type != Type::void_type ||
         !upstream.here.front().here.empty() || (supplies_consumer && !signature.here.front().here.empty()))
@@ -10994,26 +11021,28 @@ class ScalarChecker {
     auto &argument = operation.here_arguments.front();
     CheckedHereTarget source_target;
     const auto bindings = supplier->substitutions;
+    const auto formal_owner = [&](size_t role) { return here_formal_owner(role); };
     bool completes = true;
     if (source.kind == Expression::Kind::name) argument.lexical = here_slot(source.text);
     if (argument.lexical) {
       const auto &offered = here_signature(*checking_method_, *argument.lexical);
-      require_owner_free_here(offered, source.at);
-      if (!matches_open_here(*checking_method_, offered, bindings, *checking_method_, upstream, bindings, source.at))
+      if (!matches_here_protocol(*checking_method_, offered, bindings, *checking_method_, upstream, bindings, source.at))
         fail(source.at, "pipeline source does not match the selected here contract");
+      require_here_protocol_owners(offered, upstream, formal_owner, formal_owner, source.at);
       source_target = here_target(*checking_method_, *argument.lexical);
     } else {
       source_target.source = prepare_here_source(source, supplier, operations);
       argument.source = &source;
       const auto &prepared = operations.at(&source);
-      require_prepared_source(*prepared.prepared_producer, *checking_method_, bindings, upstream, {}, source.at);
+      require_prepared_source_contract(*prepared.prepared_producer, *checking_method_, bindings, upstream, formal_owner, source.at);
       completes = prepared.type != Type::never;
     }
     if (supplies_consumer) {
       const auto &consumer = signature.here.front();
       const auto feedback = here_value_signature(*checking_method_, consumer, bindings, expr.at);
       const auto &body = syntax.terminal ? terminal_here_body(expr, *syntax.terminal, consumer, *feedback.target, supplier) : *syntax.body;
-      auto [supplied, returning] = demand_supplied_here(body, feedback, consumer, {}, ResultContract{Type::void_type}, supplier, operations);
+      auto [supplied, returning] = demand_supplied_here(body, feedback, consumer, here_formal_owners(consumer, feedback),
+          ResultContract{Type::void_type}, supplier, operations);
       if (returning) implementation_gap(expr.at, "return inspection in a supplied body of an open pipeline");
       operation.supplied_here = std::move(supplied);
     }

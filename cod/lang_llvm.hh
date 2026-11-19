@@ -597,9 +597,12 @@ class LLVMEmission {
       b_.CreateStore(llvm::Constant::getNullValue(here_transfer_), activation);
       b_.CreateStore(observed_return_value(), b_.CreateStructGEP(here_return_header(), activation, 1));
     }
+    const auto &inputs = *method.scope_inputs;
+    const auto first_capture = inputs.here_reception->selected.size();
     for (size_t i = 0; i < body.places.size(); ++i) {
       const auto &place = *body.places[i];
-      auto *address = emit_expression(place, Projection::target);
+      const auto projection = inputs.live_bindings.contains(first_capture + i) ? Projection::slot : Projection::target;
+      auto *address = emit_expression(place, projection);
       b_.CreateStore(pack_view(address, place), b_.CreateStructGEP(entry.activation, activation, entry.group + i));
     }
     for (size_t i = 0; i < body.owners.size(); ++i)

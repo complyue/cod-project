@@ -671,6 +671,64 @@ runner.CASES = {
         'proc run(outside:const u64 in P)->void where {owner P}{val first<-5u64;val replacement<-50u64;ref selected=first;'
         'here stages=stage(selected) |> stage(outside);selected=replacement;first<-6u64;drive(stages);return;}'
         'val supplied_amount<-8u64;run(supplied_amount);',0,'114\n',''),
+    'lexical_pipeline_open_forwarding_preserves_labelled_borrows_and_feedback': (IO+
+        'func rows(line:const u64 in P) yields {id:u64;ref cell:const u64 in P;} -> bool where {owner P}{'
+        'if(!yield(7u64->id,line->cell)){return;}else{};yield(80u64->id,line->cell):void;}'
+        'func stage(here input() yields {id:u64;ref cell:const u64 in S;} -> bool,witness:const u64 in S) '
+        'yields {id:u64;ref cell:const u64 in S;} -> bool where {owner S}{'
+        'for {val n<-id;ref item=cell;} := input(){continue yield(n->id,item->cell);};}'
+        'proc drive(here plan(here input() yields {id:u64;ref cell:const u64 in D;} -> bool) '
+        'yields {id:u64;ref cell:const u64 in D;} -> bool,line:const u64 in D)->void where {owner D}{'
+        'for {val n<-id;ref item=cell;} := rows(line) !> plan{'
+        'behave @print(n);behave @print(item);behave @print(item is line);continue false;};return;}'
+        'proc relay(here plan(here input() yields {id:u64;ref cell:const u64 in R;} -> bool) '
+        'yields {id:u64;ref cell:const u64 in R;} -> bool,line:const u64 in R)->void where {owner R}{drive(plan,line);return;}'
+        'proc run()->void{val first<-75u64;val second<-99u64;ref selected=first;'
+        'here stages=stage(selected) |> stage(selected);selected=second;first<-76u64;relay(stages,first);return;}run();',
+        0,'7\n76\ntrue\n',''),
+    'lexical_pipeline_open_forwarding_accepts_independent_port_owners': (IO+
+        'func rows(line:const u64 in R) yields ref const u64 in R where {owner R}{yield(line);}'
+        'func pass(here input() yields ref const u64 in S,witness:const u64 in S) yields ref const u64 in S where {owner S}{'
+        'for ref cell=input(){yield(cell);};}'
+        'func replace(here input() yields ref const u64 in A,origin:const u64 in A,replacement:const u64 in B) '
+        'yields ref const u64 in B where {owner A,owner B}{for ref cell=input(){yield(replacement);};}'
+        'proc drive(here plan(here input() yields ref const u64 in A) yields ref const u64 in B,'
+        'line:const u64 in A,output_value:const u64 in B)->void where {owner A,owner B}{'
+        'for ref cell=plan <! rows(line){behave @print(cell);behave @print(cell is output_value);};return;}'
+        'proc run(original:const u64 in P)->void where {owner P}{val replacement<-42u64;'
+        'here stages=pass(original) |> replace(original,replacement);drive(stages,original,replacement);return;}'
+        'val supplied_line<-75u64;run(supplied_line);',0,'42\ntrue\n',''),
+    'lexical_pipeline_open_forwarding_rejects_the_wrong_input_owner': (
+        'func stage(here input() yields ref const u64 in O,witness:const u64 in O) yields ref const u64 in O where {owner O}{'
+        'for ref cell=input(){yield(cell);};}'
+        'proc accepts(here plan(here input() yields ref const u64 in A) yields ref const u64 in B,'
+        'source:const u64 in A,destination:const u64 in B)->void where {owner A,owner B}{return;}'
+        'proc run(outer:const u64 in R)->void where {owner R}{val inner<-42u64;'
+        'here stages=stage(outer) |> stage(outer);accepts(stages,inner,outer);return;}val line<-75u64;run(line);',
+        2,'','borrowed here input has a different actual owner from its contract'),
+    'lexical_pipeline_open_forwarding_rejects_the_wrong_output_owner': (
+        'func stage(here input() yields ref const u64 in O,witness:const u64 in O) yields ref const u64 in O where {owner O}{'
+        'for ref cell=input(){yield(cell);};}'
+        'proc accepts(here plan(here input() yields ref const u64 in A) yields ref const u64 in B,'
+        'source:const u64 in A,destination:const u64 in B)->void where {owner A,owner B}{return;}'
+        'proc run(outer:const u64 in R)->void where {owner R}{val inner<-42u64;'
+        'here stages=stage(outer) |> stage(outer);accepts(stages,outer,inner);return;}val line<-75u64;run(line);',
+        2,'','borrowed here input has a different actual owner from its contract'),
+    'lexical_pipeline_terminal_forwarding_preserves_a_source_invocation_owner': (IO+
+        'func origin(n:u64) yields ref const u64 in here{val cell<-n;yield(cell);}'
+        'func convert(here input() yields ref const u64 in here) yields u64{for ref item=input(){yield(item+1u64);};}'
+        'func pass(here input() yields u64) yields u64{for val item<-input(){yield(item);};}'
+        'proc report(n:u64)->void{behave @print(n);return;}'
+        'proc submit(here terminal(here input() yields ref const u64 in here)->void,'
+        'here input() yields ref const u64 in here)->void{input !> terminal;return;}'
+        'proc relay(here terminal(here input() yields ref const u64 in here)->void)->void{submit(terminal,origin(24u64));return;}'
+        'here stages=convert |> pass;here terminal=stages $> report;relay(terminal);',0,'25\n',''),
+    'supplied_scope_requires_proof_for_rebinding_a_live_reference_capture': (
+        'proc twice(here action()->void)->void{action();action();return;}'
+        'proc run(ref selection:const u64 in O,ref other:const u64 in O)->void where {owner O}{'
+        'twice(){{selection=other;return;}};return;}'
+        'val one<-1u64,two<-2u64;run(one,two);',
+        2,'','rebinding a supplier reference slot from a repeatedly callable here body'),
     'lexical_pipeline_open_forwarding_checks_the_upstream_feedback': (
         'func stage(here input() yields u64) yields u64{for val item<-input(){yield(item);};}'
         'proc accepts(here plan(here input() yields u64 -> bool) yields u64)->void{return;}'
