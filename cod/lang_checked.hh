@@ -155,6 +155,15 @@ class ScalarChecker {
   std::map<std::pair<size_t, std::string>, const Expression *> scope_operand_names_;
   std::map<size_t, std::vector<size_t>> scope_profiles_;
   std::map<std::pair<size_t, std::vector<CheckedHereTarget>>, size_t> here_receiver_profiles_;
+  // Entry selection travels with the proof. Actual stage operands and owners
+  // stay in the bounded backing provided by the caller.
+  struct OpenPipeline {
+    std::vector<size_t> stages;
+    std::optional<size_t> terminal;
+    auto operator<=>(const OpenPipeline &) const = default;
+  };
+  std::map<OpenPipeline, size_t> open_pipeline_ids_;
+  std::vector<OpenPipeline> open_pipelines_;
   std::map<std::tuple<const Expression *, size_t, size_t, size_t, bool>,
            const Expression *> terminal_bodies_;
   struct FreeBindings {
@@ -10452,6 +10461,23 @@ class ScalarChecker {
     return left.labelled == right.labelled && std::ranges::equal(left.inputs, right.inputs, {},
         &CheckedHereContract::Component::label, &CheckedHereContract::Component::label);
   }
+  static void require_owner_free_here(const CheckedHereContract &signature, const Location &at) {
+    if (signature.result.owner || signature.feedback ||
+        std::ranges::any_of(signature.inputs, [](const auto &input) { return input.owner.has_value(); }))
+      implementation_gap(at, "forwarding an open pipeline with an exposed owner or compound feedback");
+    for (const auto &nested : signature.here) require_owner_free_here(nested, at);
+  }
+  bool matches_open_here(const CheckedMethod &offering, const CheckedHereContract &offered, const Substitutions &available,
+      const CheckedMethod &receiving, const CheckedHereContract &accepted, const Substitutions &required, const Location &at) const {
+    return same_here_labels(offered, accepted) && offered.here.size() == accepted.here.size() &&
+        here_value_signature(offering, offered, available, at) == here_value_signature(receiving, accepted, required, at) &&
+        std::ranges::equal(offered.here, accepted.here, [&](const auto &left, const auto &right) {
+          return matches_open_here(offering, left, available, receiving, right, required, at);
+        });
+  }
+  static bool open_pipeline_contract(const CheckedHereContract &signature) {
+    return !signature.here.empty() && !signature.here.back().here.empty();
+  }
   void require_prepared_consumer_owners(const CheckedHereContract &offered, const CheckedHereContract &accepted,
       const auto &source_owner, const CheckedMethod &receiver, const std::vector<CheckedOperation> &views, const Location &at) const {
     for (size_t i = 0; i < offered.inputs.size(); ++i) if (const auto source_role = offered.inputs[i].owner) {
@@ -10488,6 +10514,13 @@ class ScalarChecker {
     const auto incoming = here_invocation_type(*checking_method_, supplier.substitutions, at, slot);
     const auto &incoming_signature = here_signature(*checking_method_, slot);
     const auto outgoing = here_invocation_type(receiver, bindings, at, formal);
+    if (open_pipeline_contract(signature) || open_pipeline_contract(incoming_signature)) {
+      require_owner_free_here(incoming_signature, at);
+      require_owner_free_here(signature, at);
+      if (!matches_open_here(*checking_method_, incoming_signature, supplier.substitutions, receiver, signature, bindings, at))
+        fail(at, "forwarded open pipeline does not match the selected here contract");
+      return;
+    }
     if (signature.here.size() == 1 && incoming_signature.here.size() == 1 && incoming_signature.inputs.empty() && signature.inputs.empty()) {
       const auto &offered = incoming_signature.here.front();
       const auto &accepted = signature.here.front();
@@ -10547,17 +10580,24 @@ class ScalarChecker {
     operation.operand_type = contract;
     operation.argument_sources.emplace();
     operation.supplied_here = std::move(body);
-    const auto &body_effects = read_effects(operation.supplied_here->instance);
-    if (validating_ && !body_effects.symbols.empty())
-      implementation_gap(expr.at, "dynamic binding requirements at a here invocation");
-    const bool protected_body = program_.methods[program_.instances[operation.supplied_here->instance].method].here_group.has_value();
-    CallEffects effects;
     if (target) {
       const auto &prepared = program_.instances[*target];
       auto targets = program_.methods[prepared.method].here_targets;
       targets.resize(program_.methods[prepared.method].here.size());
       targets.front().body = operation.supplied_here->instance;
       operation.opened_source = demand_here_receiver(prepared.method, targets, prepared.arguments, expr.at);
+    }
+    finish_bound_here_invocation(expr, operation, read, discard);
+  }
+  void finish_bound_here_invocation(const Expression &expr, CheckedOperation &operation, bool read, bool discard) {
+    const auto &contract = operation.operand_type;
+    const auto *body_effects = operation.supplied_here ? &read_effects(operation.supplied_here->instance) : nullptr;
+    if (validating_ && body_effects && !body_effects->symbols.empty())
+      implementation_gap(expr.at, "dynamic binding requirements at a here invocation");
+    const bool protected_body = operation.supplied_here &&
+        program_.methods[program_.instances[operation.supplied_here->instance].method].here_group.has_value();
+    CallEffects effects;
+    if (operation.opened_source) {
       const auto &source = read_effects(*operation.opened_source);
       if (protected_body && validating_ && source.protected_defer_failure)
         implementation_gap(expr.at, "residual receiver defer failures across a protected here transfer");
@@ -10565,18 +10605,19 @@ class ScalarChecker {
       effects.escaping_failures = source.escaping_failures;
       effects.requires_deferred_failure_delivery = source.requires_deferred_failure_delivery;
     }
-    auto reasons = target ? direct_call_reasons(contract, effects) : call_reasons(contract);
+    auto reasons = operation.opened_source ? direct_call_reasons(contract, effects) : call_reasons(contract);
     if (protected_body) {
-      for (const auto failure : body_effects.scope_checked_failures) {
+      for (const auto failure : body_effects->scope_checked_failures) {
         if (failure) note_abrupt(expr.at, {failure});
         else note_declared(declared_requirement(expr));
       }
-      if (proving_ && (body_effects.propagates_here_transfer || !body_effects.escaping_failures.empty() || body_effects.requires_deferred_failure_delivery))
+      if (proving_ && (body_effects->propagates_here_transfer || !body_effects->escaping_failures.empty() ||
+                      body_effects->requires_deferred_failure_delivery))
         reasons.insert(Completion::protected_transfer);
-    } else {
+    } else if (body_effects) {
       // The ordinary callback's failures return to the producer and are
       // checked against its declared call contract.
-      if (proving_ && body_effects.propagates_here_transfer) reasons.insert(Completion::protected_transfer);
+      if (proving_ && body_effects->propagates_here_transfer) reasons.insert(Completion::protected_transfer);
     }
     for (const auto reason : reasons) {
       effects.initialized.try_emplace(reason);
@@ -10656,7 +10697,9 @@ class ScalarChecker {
         operation.here_arguments[slot].lexical = lexical;
         targets[slot] = here_target(*checking_method_, *lexical);
       } else {
-        targets[slot].source = prepare_here_source(operand, supplier, operations);
+        const auto *saved = saved_pipeline(operand, operations);
+        if (saved && !saved->source) targets[slot].pipeline = prepare_open_pipeline(operand, *saved, operations);
+        else targets[slot].source = prepare_here_source(operand, supplier, operations);
         operation.here_arguments[slot].source = &operand;
         completes = completes && operations.at(&operand).type != Type::never;
       }
@@ -10678,7 +10721,9 @@ class ScalarChecker {
       const auto &at = operand->at;
       const auto &input = operation.here_arguments[formal];
       if (input.source) {
-        require_prepared_source(operations.at(input.source).prepared_producer.value(), receiver, bindings, signature, views, at);
+        if (const auto pipeline = targets[formal].pipeline)
+          require_prepared_open_pipeline(open_pipelines_[*pipeline], operations.at(input.source), receiver, signature, bindings, operations, at);
+        else require_prepared_source(operations.at(input.source).prepared_producer.value(), receiver, bindings, signature, views, at);
         continue;
       }
       require_forwarded_here(input.lexical.value(), receiver, formal, bindings, views, *supplier, at);
@@ -10693,7 +10738,7 @@ class ScalarChecker {
     const bool supplied = syntax.body || syntax.terminal || saved_terminal;
     if (!supplied) {
       if (!completes) { operation.type = Type::never; return; }
-      const bool known = std::ranges::any_of(targets, [](const auto &target) { return target.body || target.source; });
+      const bool known = std::ranges::any_of(targets, [](const auto &target) { return target.body || target.source || target.pipeline; });
       const auto callee = known ? demand_here_receiver(selected, targets, arguments, expr.at) : demand(selected, arguments, expr.at);
       if (proving_ && lexical_.live && read_effects(callee).protected_defer_failure)
         observed_.protected_defer_failure = true;
@@ -10851,7 +10896,7 @@ class ScalarChecker {
   size_t prepare_saved_here_source(const Expression &expr, const CheckedOperation::SavedPipeline &saved,
       std::map<const Expression *, CheckedOperation> &operations) {
     if (!saved.source || saved.terminal)
-      implementation_gap(expr.at, "forwarding a lexical pipeline with an open source or a bound terminal");
+      fail(expr.at, "a prepared producer requires a bound source and an open consumer");
     CheckedOperation argument;
     auto &plan = argument.pipeline_preparation.emplace();
     saved_traversal(plan, *saved.source, saved);
@@ -10868,6 +10913,133 @@ class ScalarChecker {
     const auto result = producer.instance;
     operations.insert_or_assign(&expr, std::move(argument));
     return result;
+  }
+  size_t prepare_open_pipeline(const Expression &expr, const CheckedOperation::SavedPipeline &saved,
+      std::map<const Expression *, CheckedOperation> &operations) {
+    OpenPipeline pipeline;
+    for (const auto *stage : saved.stages)
+      pipeline.stages.push_back(operations.at(stage).prepared_producer->instance);
+    if (const auto &body = saved.terminal) {
+      if (!body->places.empty() || !body->owners.empty() || !body->lexical_here.empty() || body->returning)
+        implementation_gap(expr.at, "forwarding an open pipeline with a terminal that uses lexical state");
+      pipeline.terminal = body->instance;
+    }
+    auto [id, inserted] = open_pipeline_ids_.try_emplace(pipeline, open_pipelines_.size());
+    if (inserted) open_pipelines_.push_back(std::move(pipeline));
+    CheckedOperation argument;
+    argument.type = Type::void_type;
+    argument.open_pipeline_operands = saved.stages;
+    operations.insert_or_assign(&expr, std::move(argument));
+    return id->second;
+  }
+  void require_prepared_open_pipeline(const OpenPipeline &pipeline, const CheckedOperation &operand, const CheckedMethod &receiver,
+      const CheckedHereContract &expected, const Substitutions &bindings,
+      const std::map<const Expression *, CheckedOperation> &operations, const Location &at) const {
+    for (const auto *stage : *operand.open_pipeline_operands)
+      require_prepared_owners(*operations.at(stage).prepared_producer, at);
+    if (!open_pipeline_contract(expected) || expected.here.size() != (pipeline.terminal ? 1 : 2) ||
+        !expected.inputs.empty() || expected.result.type != Type::void_type)
+      fail(at, "open pipeline does not match the selected here contract");
+    require_owner_free_here(expected, at);
+    const auto &first = program_.instances[pipeline.stages.front()];
+    const auto &last = program_.instances[pipeline.stages.back()];
+    const auto &input = program_.methods[first.method];
+    const auto &output = program_.methods[last.method];
+    require_owner_free_here(input.here.back(), at);
+    if (!pipeline.terminal) require_owner_free_here(output.here.front(), at);
+    if (!matches_open_here(input, input.here.back(), first.substitutions, receiver, expected.here.back(), bindings, at) ||
+        (!pipeline.terminal &&
+         !matches_open_here(output, output.here.front(), last.substitutions, receiver, expected.here.front(), bindings, at)))
+      fail(at, "open pipeline does not match the selected here contract");
+    // The named terminal's selected call is checked in its supplying context.
+    // Use that completed proof when checking the exposed completion contract.
+    if (pipeline.terminal && !validating_) return;
+    auto failures = output.throws_categories;
+    bool throws_root = declares_root(output.throws_types);
+    if (pipeline.terminal) {
+      for (const auto category : read_effects(*pipeline.terminal).scope_checked_failures) {
+        if (category) failures.insert(category);
+        else {
+          throws_root = true;
+          failures = exception_possibilities(exception_type(0));
+          break;
+        }
+      }
+    }
+    if (failures != expected.throws_categories || throws_root != expected.throws_root)
+      fail(at, "open pipeline checked failures do not match the selected here contract");
+  }
+  void check_bound_pipeline(const Expression &expr, const HereInvocation &syntax, size_t slot, CheckedInstance *supplier,
+      std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation, bool read, bool discard) {
+    const auto &signature = here_signature(*checking_method_, slot);
+    const auto &source = *syntax.upstream;
+    const bool supplies_consumer = syntax.body || syntax.terminal;
+    if (!syntax.target.children.empty() || !signature.inputs.empty() || signature.here.size() > 2 ||
+        signature.result.type != Type::void_type)
+      implementation_gap(expr.at, "open pipeline invocation with ordinary arguments or non-void completion");
+    if (supplies_consumer != (signature.here.size() == 2))
+      fail(expr.at, supplies_consumer ? "a pipeline can have only one consumer" : "an open processor requires a consumer");
+    require_owner_free_here(signature, expr.at);
+    const auto &upstream = signature.here.back();
+    if (upstream.here.size() != 1 || !upstream.inputs.empty() || upstream.result.type != Type::void_type ||
+        !upstream.here.front().here.empty() || (supplies_consumer && !signature.here.front().here.empty()))
+      implementation_gap(expr.at, "an open pipeline requires a producer source and a direct consumer");
+
+    using Preparation = CheckedOperation::OperandPreparation;
+    operation.invokes_here = slot;
+    operation.operand_type = here_invocation_type(*checking_method_, supplier->substitutions, expr.at, slot);
+    operation.argument_sources.emplace();
+    operation.here_arguments.resize(1);
+    operation.operand_preparation.push_back({Preparation::Kind::here, 0});
+    auto &argument = operation.here_arguments.front();
+    CheckedHereTarget source_target;
+    const auto bindings = supplier->substitutions;
+    bool completes = true;
+    if (source.kind == Expression::Kind::name) argument.lexical = here_slot(source.text);
+    if (argument.lexical) {
+      const auto &offered = here_signature(*checking_method_, *argument.lexical);
+      require_owner_free_here(offered, source.at);
+      if (!matches_open_here(*checking_method_, offered, bindings, *checking_method_, upstream, bindings, source.at))
+        fail(source.at, "pipeline source does not match the selected here contract");
+      source_target = here_target(*checking_method_, *argument.lexical);
+    } else {
+      source_target.source = prepare_here_source(source, supplier, operations);
+      argument.source = &source;
+      const auto &prepared = operations.at(&source);
+      require_prepared_source(*prepared.prepared_producer, *checking_method_, bindings, upstream, {}, source.at);
+      completes = prepared.type != Type::never;
+    }
+    if (supplies_consumer) {
+      const auto &consumer = signature.here.front();
+      const auto feedback = here_value_signature(*checking_method_, consumer, bindings, expr.at);
+      const auto &body = syntax.terminal ? terminal_here_body(expr, *syntax.terminal, consumer, *feedback.target, supplier) : *syntax.body;
+      auto [supplied, returning] = demand_supplied_here(body, feedback, consumer, {}, ResultContract{Type::void_type}, supplier, operations);
+      if (returning) implementation_gap(expr.at, "return inspection in a supplied body of an open pipeline");
+      operation.supplied_here = std::move(supplied);
+    }
+    if (!completes) { operation.type = Type::never; return; }
+    if (const auto pipeline = here_target(*checking_method_, slot).pipeline) {
+      if (!source_target.source) implementation_gap(source.at, "an open pipeline requires a checked source entry");
+      const auto plan = open_pipelines_[*pipeline];
+      if (plan.terminal) operation.supplied_here = CheckedOperation::SuppliedHere{*plan.terminal, {}, {}, {}, {}};
+      const bool function = checking_method_->source->kind == Form::Kind::function;
+      if (function && program_.methods[program_.instances[*source_target.source].method].source->kind != Form::Kind::function)
+        fail(expr.at, "a function cannot invoke a procedure producer");
+      if (function && plan.terminal &&
+          program_.methods[program_.instances[*plan.terminal].method].source->kind != Form::Kind::function)
+        implementation_gap(expr.at, "invoking a terminal supplied by a procedure from a function");
+      for (size_t i = 0; i < plan.stages.size(); ++i) {
+        const auto &stage = program_.instances[plan.stages[i]];
+        if (function && program_.methods[stage.method].source->kind != Form::Kind::function)
+          fail(expr.at, "a function cannot invoke a procedure processor");
+        const bool final = i + 1 == plan.stages.size();
+        const auto body = final ? std::optional{operation.supplied_here->instance} : std::nullopt;
+        source_target = {{}, demand_here_receiver(stage.method, {{body, {}}, source_target}, stage.arguments, expr.at)};
+      }
+      operation.opened_source = source_target.source;
+      operation.opened_pipeline_stages = plan.stages.size();
+    }
+    finish_bound_here_invocation(expr, operation, read, discard);
   }
   void check_pipeline_binding(const Expression &declaration, CheckedInstance *supplier,
       std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation) {
@@ -11002,6 +11174,12 @@ class ScalarChecker {
     if (const auto *saved = saved_pipeline(syntax.target, operations)) {
       check_saved_pipeline_use(expr, syntax, *saved, supplier, operations, operation, read, discard);
       return;
+    }
+    if (syntax.upstream && (syntax.target.kind == K::name || syntax.target.kind == K::call)) {
+      if (const auto slot = here_slot(syntax.target.text); slot && open_pipeline_contract(here_signature(*checking_method_, *slot))) {
+        check_bound_pipeline(expr, syntax, *slot, supplier, operations, operation, read, discard);
+        return;
+      }
     }
     if (!syntax.body && !syntax.terminal) implementation_gap(expr.at, "open pipeline connections");
     if (syntax.upstream || ungrouped_processor(syntax.target).kind == K::processor_composition) {

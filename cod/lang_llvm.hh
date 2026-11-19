@@ -823,6 +823,16 @@ class LLVMEmission {
     const auto &fact = contexts_.front().at(&expr);
     if (fact.invokes_here) {
       auto *argument = here_arguments_.at(*fact.invokes_here);
+      if (fact.opened_pipeline_stages) {
+        const auto count = *fact.opened_pipeline_stages;
+        auto *backing = b_.CreateExtractValue(argument, 1);
+        auto *layout = llvm::ArrayType::get(here_, count);
+        argument = here_values.at(0);
+        for (size_t i = 0; i < count; ++i) {
+          auto *address = b_.CreateInBoundsGEP(layout, backing, {b_.getInt32(0), b_.getInt64(i)});
+          argument = connect_prepared_stage(b_.CreateLoad(here_, address), argument);
+        }
+      }
       llvm::Value *entry = nullptr;
       auto prepared = arguments;
       std::vector<llvm::Type *> parameters(arguments.size(), scalar_);
@@ -1460,6 +1470,16 @@ class LLVMEmission {
     }, here_);
   }
   llvm::Value *prepare_source(const Expression &expr) {
+    if (contexts_.front().at(&expr).open_pipeline_operands) {
+      const auto &operands = *contexts_.front().at(&expr).open_pipeline_operands;
+      auto *layout = llvm::ArrayType::get(here_, operands.size());
+      auto *backing = slot(layout, "here.open.stages");
+      for (size_t i = 0; i < operands.size(); ++i) {
+        auto *address = b_.CreateInBoundsGEP(layout, backing, {b_.getInt32(0), b_.getInt64(i)});
+        b_.CreateStore(load(pipeline_operand_slot(*operands[i])), address);
+      }
+      return b_.CreateInsertValue(llvm::Constant::getNullValue(here_), backing, 1);
+    }
     if (contexts_.front().at(&expr).pipeline_preparation) {
       std::map<CheckedOperation::PipelinePreparation, std::vector<size_t>> plans;
       for (size_t i = 0; i < contexts_.size(); ++i)

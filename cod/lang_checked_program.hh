@@ -180,6 +180,7 @@ struct CheckedOperation {
     size_t owner = 0;
   };
   std::optional<SavedPipeline> saved_pipeline;
+  std::optional<std::vector<const Expression *>> open_pipeline_operands;
   struct HereArgument {
     std::optional<size_t> lexical;
     const Expression *source = nullptr;
@@ -188,6 +189,7 @@ struct CheckedOperation {
   std::vector<HereArgument> here_arguments;
   std::optional<size_t> invokes_here;
   std::optional<size_t> opened_source;
+  std::optional<size_t> opened_pipeline_stages;
   std::vector<size_t> scope_here;
   std::optional<HereExit> here_exit;
   // Possible borrowed callable targets at invocation, after slot selection.
@@ -434,6 +436,7 @@ struct CheckedHereContract {
 };
 struct CheckedHereTarget {
   std::optional<size_t> body, source;
+  std::optional<size_t> pipeline = {};
   auto operator<=>(const CheckedHereTarget &) const = default;
 };
 struct CheckedLexicalHere {

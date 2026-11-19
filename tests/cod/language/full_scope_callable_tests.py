@@ -639,6 +639,59 @@ runner.CASES = {
         'proc run()->void{here stages=add(mark(2u64)) |> scale(mark(3u64));here reviewed=rows(10u64) !> stages;'
         'reviewed !> add(mark(4u64)) $> sink;here rerouted=scale(mark(5u64)) <! reviewed;'
         'drive(rerouted);reviewed $> sink;return;}run();',0,'2\n3\n4\n40\n5\n180\n36\n',''),
+    'lexical_pipeline_forwards_open_stages_and_an_attached_terminal': (IO+
+        'proc mark(n:u64)->u64{behave @print(n);return n;}'
+        'func rows(day:u64) yields u64{yield(day);}'
+        'func add(here input() yields u64,offset:u64) yields u64{val amount<-offset;for val item<-input(){yield(item+amount);};}'
+        'func scale(here input() yields u64,factor:u64) yields u64{val amount<-factor;for val item<-input(){yield(item*amount);};}'
+        'proc sink(n:u64)->void{behave @print(n);return;}'
+        'proc process(here plan(here input() yields u64) yields u64)->void{'
+        'for val item<-rows(mark(10u64)) !> plan{sink(item);};'
+        'for val item<-plan <! rows(mark(20u64)){sink(item);};return;}'
+        'proc submit(here terminal(here input() yields u64)->void,here input() yields u64)->void{input !> terminal;return;}'
+        'proc relay(here terminal(here input() yields u64)->void)->void{'
+        'submit(terminal,rows(mark(30u64)));submit(terminal,rows(mark(40u64)));return;}'
+        'proc run()->void{here stages=add(mark(2u64)) |> scale(mark(3u64));'
+        'process(stages);here to_sink=stages $> sink;val sink<-99u64;relay(to_sink);behave @print(sink);return;}run();',
+        0,'2\n3\n10\n36\n20\n66\n30\n96\n40\n126\n99\n','[-Wshadow]'),
+    'lexical_pipeline_open_forwarding_preserves_a_helper_return_through_cleanup': (IO+
+        'proc rows() yields u64{try{yield(7u64);behave @print(80u64);}finally{behave @print(31u64);};return;}'
+        'proc stage(here input() yields u64,stamp:u64) yields u64{try{for val item<-input(){yield(item);};'
+        'behave @print(81u64);}finally{behave @print(stamp);};return;}'
+        'proc drive(here plan(here input() yields u64) yields u64)->u64{'
+        'for val item<-rows !> plan{return item;};return 99u64;}'
+        'proc run()->void{here stages=stage(32u64) |> stage(33u64);'
+        'behave @print(drive(stages));return;}run();',0,'31\n32\n33\n7\n',''),
+    'lexical_pipeline_open_forwarding_preserves_hidden_stage_borrows': (IO+
+        'func rows() yields u64{yield(100u64);}'
+        'func stage(here input() yields u64,amount:const u64 in O) yields u64 where {owner O}{'
+        'val offset<-amount;for val item<-input(){yield(item+offset);};}'
+        'proc drive(here plan(here input() yields u64) yields u64)->void{'
+        'for val item<-rows !> plan{behave @print(item);};return;}'
+        'proc run(outside:const u64 in P)->void where {owner P}{val first<-5u64;val replacement<-50u64;ref selected=first;'
+        'here stages=stage(selected) |> stage(outside);selected=replacement;first<-6u64;drive(stages);return;}'
+        'val supplied_amount<-8u64;run(supplied_amount);',0,'114\n',''),
+    'lexical_pipeline_open_forwarding_checks_the_upstream_feedback': (
+        'func stage(here input() yields u64) yields u64{for val item<-input(){yield(item);};}'
+        'proc accepts(here plan(here input() yields u64 -> bool) yields u64)->void{return;}'
+        'here stages=stage |> stage;accepts(stages);',2,'','open pipeline does not match the selected here contract'),
+    'lexical_pipeline_forwarded_terminal_failure_crosses_entered_cleanups': (IO+'using "std:exceptions" NullPointerException;'+
+        'proc rows() yields u64{try{yield(7u64);}catch(e:const NullPointerException){behave @print(80u64);}'
+        'finally{behave @print(31u64);};return;}'
+        'proc stage(here input() yields u64,stamp:u64) yields u64{try{for val item<-input(){yield(item);};}'
+        'catch(e:const NullPointerException){behave @print(81u64);}finally{behave @print(stamp);};return;}'
+        'proc sink(n:u64)->void throws NullPointerException{behave @print(n);ptr p:u64=null in here;p;return;}'
+        'proc drive(here terminal(here input() yields u64)->void throws NullPointerException)->void throws NullPointerException{'
+        'rows !> terminal;return;}'
+        'here stages=stage(32u64) |> stage(33u64);here terminal=stages $> sink;'
+        'try{drive(terminal);}catch(e:const NullPointerException){behave @print(34u64);};',
+        0,'7\n31\n32\n33\n34\n',''),
+    'lexical_pipeline_forwarding_cannot_erase_a_named_terminal_failure': ('using "std:exceptions" NullPointerException;'
+        'func stage(here input() yields u64) yields u64{for val item<-input(){yield(item);};}'
+        'proc sink(n:u64)->void throws NullPointerException{ptr p:u64=null in here;p;return;}'
+        'proc discard(here terminal(here input() yields u64)->void)->void{return;}'
+        'here stages=stage |> stage;here terminal=stages $> sink;discard(terminal);',
+        2,'','open pipeline checked failures do not match the selected here contract'),
     'lexical_handoff_nested_stage_keeps_labelled_borrow_and_feedback': (IO+
         'proc rows(line:const u64 in O) yields {id:u64;ref cell:const u64 in O;} -> bool where {owner O}{'
         'behave @print(17u64);if(!yield(line->cell,17u64->id)){return;}else{};'
