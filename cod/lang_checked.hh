@@ -1019,6 +1019,16 @@ class ScalarChecker {
       if (target.presence_proof) target.presence_proof->forget(written);
       std::erase_if(target.same_selected, written);
     }
+    bool same_prepared_target(const TargetEvidence &earlier, size_t since, const TargetEvidence &later) const {
+      if (earlier.presence == TargetPresence::present && later.presence == TargetPresence::present &&
+          earlier.places.size() == 1 && earlier.places == later.places) return true;
+      const auto same = [&](const EvidenceSlot &slot) {
+        const auto last = changed.find(slot);
+        return (last == changed.end() || last->second <= since) &&
+            (later.selection.slot == slot || later.same_selected.contains(slot));
+      };
+      return (earlier.selection.slot && same(*earlier.selection.slot)) || std::ranges::any_of(earlier.same_selected, same);
+    }
     void join_flow(const QuerySelections &other) {
       merge_initialization(other);
       std::set<EvidencePlaces> shared;
@@ -3030,17 +3040,55 @@ class ScalarChecker {
     }
     operation.invocation = invocation_effects(summary, reasons, views, expr.at, prepared, prepared_slots, boolean_inputs, exception_inputs);
     if (!summary.bindings.empty()) invocation_bindings(summary, views, operation, prepared_slots);
+    std::set<size_t> ready_after_call;
     if (!prepared_slots) for (auto &[reason, effects] : operation.invocation) {
+      if (!reason && summary.bindings.empty()) if (const auto known = summary.initialized.find(0); known != summary.initialized.end())
+        ready_after_call = known->second;
       const auto outcome = summary.uninitialized.find(reason);
       if (outcome == summary.uninitialized.end()) continue;
+      std::set<size_t> projected;
       for (const auto &[parameter, missing] : outcome->second) {
+        if (projected.contains(parameter)) continue;
         const auto &view = views.at(parameter);
-        auto when = instantiate_conditions(missing, boolean_inputs, views, false, exception_inputs);
+        auto unwritten = missing;
+        std::set<size_t> same_target{parameter};
+        if (summary.bindings.empty()) for (const auto &[other, condition] : outcome->second) {
+          if (other <= parameter || projected.contains(other) || !same_selected_reference(view, views.at(other))) continue;
+          same_target.insert(other);
+          projected.insert(other);
+          // A shared target is unwritten only when every corresponding input
+          // is unwritten. Keep the callee guards until after this intersection.
+          unwritten = CleanupEquations::conjoin_conditions(unwritten, condition);
+        }
+        const auto when = instantiate_conditions(unwritten, boolean_inputs, views, false, exception_inputs);
         initialize_targets(view, effects.initialized, effects.uninitialized, when);
-        if (summary.bindings.empty() && (when.empty() || initialized_when_present(parameter, missing)))
-          initialize_call_selection(effects.selections, view, prepared);
+        const auto ready_if_present = [&] {
+          return std::ranges::all_of(unwritten, [&](const auto &facts) {
+            return std::ranges::any_of(same_target, [&](size_t input) { return facts.absent.contains(input); });
+          });
+        };
+        if (summary.bindings.empty() && (when.empty() || ready_if_present())) {
+          for (const auto input : same_target) initialize_call_selection(effects.selections, views.at(input), prepared);
+          if (!reason) ready_after_call.insert(same_target.begin(), same_target.end());
+        }
       }
       effects.resolve_initialization();
+    }
+    if (proving_ && operation.callee && !immediate_scope && summary.bindings.empty()) {
+      // Per-formal summaries can lose complementary writes when a call
+      // forwards or permutes its inputs. Reuse the finite source proof for
+      // the shared storage, keeping the native failure and read obligations.
+      auto &normal = operation.invocation.at(0);
+      for (const auto input : prove_shared_call_initialization(expr, *operation.callee, views, ready_after_call)) {
+        const auto &view = views.at(input);
+        CleanupEquations::ConditionFacts absent;
+        absent.absent.insert(input);
+        const auto when = instantiate_conditions({std::move(absent)}, boolean_inputs, views, false, exception_inputs);
+        initialize_targets(view, normal.initialized, normal.uninitialized, when);
+        initialize_call_selection(normal.selections, view, prepared);
+        ready_after_call.insert(input);
+      }
+      normal.resolve_initialization();
     }
     if (prepared_slots) {
       CleanupEquations::Reads reads;
@@ -3193,7 +3241,7 @@ class ScalarChecker {
         const auto &view = views.at(parameter);
         for (const auto target : view.targets) if (target != null_target) operation.targets.insert(target);
         operation.origins.insert(view.origins.begin(), view.origins.end());
-        if (summary.returned.uninitialized.contains(parameter) &&
+        if (summary.returned.uninitialized.contains(parameter) && !ready_after_call.contains(parameter) &&
             !std::all_of(view.targets.begin(), view.targets.end(), [&](size_t place) {
               return place == null_target || lexical_.initialized.contains(place);
             })) operation.constrain_initialization(view.initialization);
@@ -5964,6 +6012,16 @@ class ScalarChecker {
     std::optional<PresenceBranches> boolean;
     bool completes = true;
   };
+  struct TypeCallInputs {
+    std::set<size_t> ready;
+    // Each group shares an entry payload. Its formal bindings stay independent.
+    std::map<size_t, size_t> shared_targets;
+    size_t target(size_t input) const {
+      const auto shared = shared_targets.find(input);
+      return shared == shared_targets.end() ? input : shared->second;
+    }
+    bool operator==(const TypeCallInputs &) const = default;
+  };
   struct TypeCallSummary {
     std::set<size_t> targets, required_inputs, initialized_inputs;
     bool completes = false;
@@ -5983,7 +6041,7 @@ class ScalarChecker {
       std::vector<Type> arguments, retained;
       ResultContract contract;
       TypeEvidenceState context;
-      std::set<size_t> ready_inputs;
+      TypeCallInputs inputs;
       std::set<size_t> dependents{};
       // Live edges start with no observed normal completion. An unproved
       // body uses the conservative declaration bound instead.
@@ -6020,7 +6078,7 @@ class ScalarChecker {
     }
   };
   std::optional<TypeCallSummary> sample_type_call(const TypeCallProofs::Obligation &obligation) const {
-    const auto &[id, prepared, retained, contract, context, ready_inputs, dependents, previous] = obligation;
+    const auto &[id, prepared, retained, contract, context, inputs, dependents, previous] = obligation;
     const auto &method = program_.methods[id];
     try {
       auto body = body_evidence(id, prepared, retained, context);
@@ -6035,6 +6093,8 @@ class ScalarChecker {
       body.exits = &exits;
       body.deferred = &deferred;
       TypeCallSummary result;
+      std::map<size_t, PresenceBranches> input_presence;
+      std::map<size_t, size_t> result_inputs;
       for (size_t i = 0; i < prepared.size(); ++i) {
         const auto &parameter = parameter_at(method, i);
         if (parameter.owner.empty()) {
@@ -6042,11 +6102,15 @@ class ScalarChecker {
           continue;
         }
         TargetEvidence input;
+        const auto place = inputs.target(i);
         if (argument_mode(parameter) == ArgumentMode::borrowed_ptr) {
           const auto &decisions = body.selections.observation_decisions;
-          input.presence_proof = PresenceBranches::observed(decisions, decisions->next_observation++);
-          if (!ready_inputs.contains(i)) {
-            body.selections.uninitialized.emplace(i, input.presence_proof->at(true));
+          const auto [observation, first] = input_presence.try_emplace(place);
+          if (first) observation->second = PresenceBranches::observed(decisions, decisions->next_observation++);
+          input.presence_proof = observation->second;
+          if (place != i) input.same_selected.insert(place);
+          if (!inputs.ready.contains(place)) {
+            body.selections.uninitialized.emplace(place, input.presence_proof->at(true));
             result.initialized_inputs.insert(i);
           }
         } else {
@@ -6054,9 +6118,10 @@ class ScalarChecker {
           // an input contract and contributes no callee write guarantee.
           input.presence = TargetPresence::present;
         }
-        input.places.insert(i);
+        if (parameter.owner == contract.owner) result_inputs.try_emplace(place, i);
+        input.places.insert(place);
         body.selections.bind(parameter.name, i, std::move(input));
-        if (prepared[i] == Type::boolean) body.selections.borrowed_booleans.insert(i);
+        if (prepared[i] == Type::boolean) body.selections.borrowed_booleans.insert(place);
       }
       const auto completion = type_evidence(*method.source->body, body);
       complete_type_deferred(deferred, exits, body, completion != Type::never, &completed);
@@ -6075,17 +6140,18 @@ class ScalarChecker {
             possible.conjoin(reaching);
             if (!possible) continue;
             const auto *ordinal = std::get_if<size_t>(&place);
-            if (!ordinal || *ordinal >= prepared.size() || parameter_at(method, *ordinal).owner != contract.owner) return {};
-            result.targets.insert(*ordinal);
+            if (!ordinal || !result_inputs.contains(*ordinal)) return {};
+            const auto result_input = result_inputs.at(*ordinal);
+            result.targets.insert(result_input);
             if (const auto missing = selected.uninitialized.find(place); missing != selected.uninitialized.end()) {
               auto unwritten = missing->second;
               unwritten.conjoin(reaching);
-              if (selections.may_read_uninitialized(place, unwritten)) result.required_inputs.insert(*ordinal);
+              if (selections.may_read_uninitialized(place, unwritten)) result.required_inputs.insert(result_input);
             }
           }
         }
         std::erase_if(result.initialized_inputs, [&](size_t input) {
-          return selections.may_read_uninitialized(input, reaching);
+          return selections.may_read_uninitialized(inputs.target(input), reaching);
         });
       }
       if (!result.completes) result.initialized_inputs.clear();
@@ -6096,7 +6162,7 @@ class ScalarChecker {
     }
   }
   std::optional<size_t> type_call_obligation(size_t id, const std::vector<Type> &arguments, const std::vector<Type> &retained,
-      const ResultContract &contract, const TypeEvidenceState &supplied, const std::set<size_t> &ready_inputs) const {
+      const ResultContract &contract, const TypeEvidenceState &supplied, const TypeCallInputs &inputs) const {
     auto &proofs = *type_call_proofs_;
     const auto &method = program_.methods[id];
     if (!method.source->body || variadic(method) || caller_bindings(method)) return {};
@@ -6106,21 +6172,21 @@ class ScalarChecker {
     const auto known = std::ranges::find_if(ids, [&](size_t index) {
       const auto &obligation = proofs.obligations[index];
       return obligation.arguments == prepared && obligation.retained == retained && obligation.contract == contract &&
-          obligation.ready_inputs == ready_inputs && obligation.context.same_definition_inputs(context);
+          obligation.inputs == inputs && obligation.context.same_definition_inputs(context);
     });
     if (known != ids.end()) return *known;
     if (!proofs.admit_input_structure(prepared, retained, contract, context)) return {};
     const auto index = proofs.obligations.size();
-    proofs.obligations.push_back({id, std::move(prepared), retained, contract, std::move(context), ready_inputs});
+    proofs.obligations.push_back({id, std::move(prepared), retained, contract, std::move(context), inputs});
     ids.push_back(index);
     proofs.pending.insert(index);
     return index;
   }
   std::optional<TypeCallSummary> prove_type_call(size_t id, const std::vector<Type> &arguments,
       const std::vector<Type> &retained, const ResultContract &contract, const TypeEvidenceState &supplied,
-      const std::set<size_t> &ready_inputs) const {
+      const TypeCallInputs &inputs) const {
     if (auto *proofs = type_call_proofs_) {
-      const auto index = type_call_obligation(id, arguments, retained, contract, supplied, ready_inputs);
+      const auto index = type_call_obligation(id, arguments, retained, contract, supplied, inputs);
       if (!index) return {};
       auto &obligation = proofs->obligations[*index];
       if (proofs->current) obligation.dependents.insert(*proofs->current);
@@ -6133,7 +6199,7 @@ class ScalarChecker {
       ~Reset() { active = nullptr; }
     } reset{type_call_proofs_};
     try {
-      const auto root = type_call_obligation(id, arguments, retained, contract, supplied, ready_inputs);
+      const auto root = type_call_obligation(id, arguments, retained, contract, supplied, inputs);
       if (!root) return {};
       while (!proofs.pending.empty()) {
         const auto index = proofs.pending.extract(proofs.pending.begin()).value();
@@ -6152,6 +6218,40 @@ class ScalarChecker {
       // Optional proof preparation follows the same declaration fallback.
     }
     return {};
+  }
+  std::set<size_t> prove_shared_call_initialization(const Expression &expr, size_t instance,
+      const std::vector<CheckedOperation> &views, const std::set<size_t> &established) const {
+    const auto &selected = program_.instances[instance];
+    const auto &method = program_.methods[selected.method];
+    if (variadic(method) || caller_bindings(method) ||
+        (*selected.result.type != Type::void_type && !scalar_type(*selected.result.type))) return {};
+    TypeCallInputs inputs;
+    std::vector<size_t> pointers;
+    std::set<size_t> unproved_groups;
+    for (size_t i = 0; i < views.size(); ++i) {
+      if (argument_mode(parameter_at(method, i)) != ArgumentMode::borrowed_ptr) continue;
+      const auto &view = views[i];
+      for (const auto prior : pointers) if (same_selected_reference(view, views[prior])) {
+        const auto target = inputs.target(prior);
+        inputs.shared_targets.emplace(i, target);
+        if (!established.contains(i) && !established.contains(prior) && !view.initialized_target() &&
+            !views[prior].initialized_target()) unproved_groups.insert(target);
+        break;
+      }
+      if (view.initialized_target()) inputs.ready.insert(inputs.target(i));
+      pointers.push_back(i);
+    }
+    if (unproved_groups.empty()) return {};
+    const bool lexical = lexical_methods_.contains(method.source);
+    const auto family = lexical ? named_family(expr.text) : NamedFamily{};
+    if (lexical && !family.declaration) return {};
+    const TypeEvidenceState module_context;
+    const auto &context = family.declaration ? *family.declaration : module_context;
+    if (!explicit_type_call_effects(selected.method, context, selected.arguments)) return {};
+    auto proof = prove_type_call(selected.method, selected.arguments, selected.retained_types, selected.result, context, inputs);
+    if (!proof || !proof->completes) return {};
+    std::erase_if(proof->initialized_inputs, [&](size_t input) { return !unproved_groups.contains(inputs.target(input)); });
+    return std::move(proof->initialized_inputs);
   }
   static void project_type_initialization(TypeEvidenceState &caller, const TypeEvidenceState &completed, size_t first_observation) {
     auto &missing = caller.selections.uninitialized;
@@ -7116,6 +7216,7 @@ class ScalarChecker {
       std::vector<ViewEvidence> views;
       std::vector<TargetEvidence> operand_targets;
       std::vector<size_t> operand_revisions;
+      std::map<size_t, size_t> shared_targets;
       std::vector<ArgumentMode> prepared_modes;
       const auto readable_borrow = [](ArgumentMode mode) {
         return mode == ArgumentMode::borrowed_ref || mode == ArgumentMode::borrowed_read;
@@ -7156,6 +7257,13 @@ class ScalarChecker {
         views.push_back(selected);
         prepared_modes.push_back(parameter.mode);
         if (state.selections.tracking) {
+          if (!local && state.checks_initialization() && parameter.mode == ArgumentMode::borrowed_ptr)
+            for (size_t prior = 0; prior < operand_targets.size(); ++prior) {
+              if (prepared_modes[prior] != ArgumentMode::borrowed_ptr || arguments[prior] != arguments.back() ||
+                  !state.selections.same_prepared_target(operand_targets[prior], operand_revisions[prior], selected_target)) continue;
+              shared_targets.emplace(operand_targets.size(), shared_targets.contains(prior) ? shared_targets.at(prior) : prior);
+              break;
+            }
           operand_targets.push_back(std::move(selected_target));
           operand_revisions.push_back(state.selections.writes);
         }
@@ -7419,15 +7527,19 @@ class ScalarChecker {
         const auto next = result_view(method, *type, owners);
         std::optional<TypeCallSummary> proved;
         if (state.required && state.checks_initialization() && (scalar_type(*type->type) || type->type == Type::void_type)) {
-          std::set<size_t> ready_inputs;
+          TypeCallInputs inputs;
+          for (const auto &[input, representative] : shared_targets)
+            if (argument_mode(parameter_at(method, input)) == ArgumentMode::borrowed_ptr &&
+                argument_mode(parameter_at(method, representative)) == ArgumentMode::borrowed_ptr)
+              inputs.shared_targets.emplace(input, representative);
           bool writable_unready_input = false;
           for (size_t i = 0; i < operand_targets.size(); ++i)
             if (const auto &parameter = parameter_at(method, i); argument_mode(parameter) == ArgumentMode::borrowed_ptr) {
-              if (ready_input(i)) ready_inputs.insert(i);
+              if (ready_input(i)) inputs.ready.insert(inputs.target(i));
               else writable_unready_input |= !parameter.read_only;
             }
           if (type->borrowed() || writable_unready_input)
-            proved = prove_type_call(id, arguments, retained, *type, family.declaration ? *family.declaration : state, ready_inputs);
+            proved = prove_type_call(id, arguments, retained, *type, family.declaration ? *family.declaration : state, inputs);
         }
         if (proved && !proved->completes) {
           if (invokes) return Type::never;

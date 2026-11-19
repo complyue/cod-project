@@ -630,6 +630,34 @@ runner.CASES['query_call_null_path_leaves_physical_storage_unwritten'] = (
     WRITER+'proc run(flag:bool)->void{'+query(NULLABLE_WRITE_AND_REBIND, '')+'}run(true);',
     2, '', UNINITIALIZED_LOCAL)
 
+PAIR_INPUTS = 'proc fill(ptr p:u64 in O,ptr q:u64 in O,pick:bool)'
+WRITE_ONE = 'if(pick){'+WRITE_WHEN_PRESENT+'}else{'+WRITE_WHEN_PRESENT.replace('p', 'q')+'};'
+PAIR_WRITER = PAIR_INPUTS+'->void where {owner O}{'+WRITE_ONE+'}'
+PERMUTE_INPUTS = ('proc forward(ptr p:u64 in O,ptr q:u64 in O,pick:bool,n:u64)->void where {owner O}'
+                  '{if(n>0u64){forward(q,p,pick,n-1u64);}else{fill(p,q,pick);};}')
+
+for name, declaration, body, rejects in (
+    ('ordinary_shared_write', PAIR_WRITER, 'fill(selected,selected,flag);return selected;', False),
+    ('prepared_shared_write_with_late_rebind', PAIR_WRITER,
+     'ptr held=selected;defer fill(selected,held,{selected=backup;flag});return held;', False),
+    ('recursive_shared_write_with_permutation', PAIR_WRITER+PERMUTE_INPUTS,
+     'defer forward(selected,selected,flag,2u64);return selected;', False),
+    ('borrowed_result_on_second_owner_role',
+     PAIR_INPUTS.replace('ptr q:u64 in O', 'ptr q:u64 in Q')+'->ptr u64 in Q where {owner O,owner Q}{'+WRITE_ONE+'return q;}',
+     'return fill(selected,selected,flag);', False),
+    ('distinct_selections_with_equal_bounds', PAIR_WRITER,
+     SAVED_OPPOSITE+'defer fill(selected,opposite,flag);return selected;', True),
+    ('slot_rebound_between_preparations', PAIR_WRITER,
+     SAVED_OPPOSITE+'ptr held=selected;defer fill(selected,{selected=opposite;selected},flag);return held;', True),
+    ('independent_formal_rebind_leaves_missing_write', PAIR_WRITER.replace(WRITE_ONE, 'p=null;'+WRITE_ONE),
+     'defer fill(selected,selected,flag);return selected;', True),
+    ('recursive_shared_input_with_missing_write',
+     PAIR_WRITER.replace(WRITE_ONE, 'if(pick){'+WRITE_WHEN_PRESENT+'}else{};')+PERMUTE_INPUTS,
+     'defer forward(selected,selected,flag,2u64);return selected;', True),
+):
+    runner.CASES['call_'+name] = saved_selection_case(body, rejects=rejects, declarations=declaration)
+    runner.CASES['query_call_'+name] = saved_selection_case(body, inspect=True, rejects=rejects, declarations=declaration)
+
 runner.EXTRA_SOURCES = [Path(__file__)]
 if __name__ == '__main__':
     raise SystemExit(runner.main())
