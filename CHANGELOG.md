@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-19 — Focus the comprehension research outline on enumeration
+
+<a id="k-comprehension-research-scope-20261119"></a>
+**K-COMPREHENSION-RESEARCH-SCOPE-20261119.** In the design side chat on 2026-11-19 (America/Los_Angeles), the project user specified “这篇专注于 comprehension/nondeterministic” and asked about a separate ownership paper. D-31r2/registry r967 give the comprehension paper its own prior work, proof question and evaluation. The language proposal and its pending qualification retain their r1 scope. Previous outline at `8f558c76b1889e3e286d600fa5c6e54f297748a0:design/ProducersAndTransformers.md`, “Research question and prior work”.
+
 ## 2026-11-19 — Express ambiguous call intent with the distinguishing argument
 
 <a id="h-call-intent-20261119"></a>
