@@ -6899,7 +6899,7 @@ class ScalarChecker {
         return Type::integer;
       }
       if (!state.validating_body) switch (expr.kind) {
-      case K::integer: case K::real: case K::boolean: case K::null_ref: case K::name: case K::symbol:
+      case K::integer: case K::real: case K::boolean: case K::return_test: case K::null_ref: case K::name: case K::symbol:
       case K::unary: case K::binary: case K::call: case K::value_call: case K::behave: case K::perform: case K::field:
       case K::conditional: case K::block: case K::grouped: case K::transfer: case K::rebind: case K::typed_expression: break;
       case K::callable:
@@ -6921,6 +6921,8 @@ class ScalarChecker {
     case K::boolean:
       if (state.selections.tracking) target_facts.branches = PresenceBranches::constant(expr.text == "true");
       return Type::boolean;
+    case K::return_test:
+      implementation_gap(expr.at, "deferred return-state inspection");
     case K::null_ref:
       view.view = true;
       view.nullable = true;
@@ -10000,6 +10002,8 @@ class ScalarChecker {
       operation.type = Type::boolean; operation.integer = expr.text == "true";
       operation.predicate = constant_predicate(operation.integer);
       break;
+    case K::return_test:
+      implementation_gap(expr.at, "deferred return-state inspection");
     case K::null_ref:
       if (read) implementation_gap(expr.at, "untyped null in a payload expression; bind a typed ptr view first");
       operation.type = Type::null_ref; operation.view = operation.nullable_view = true; select_targets(operation, {null_target});

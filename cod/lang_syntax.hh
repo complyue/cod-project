@@ -288,7 +288,7 @@ struct Form;
 struct ReceivingHeader;
 struct Expression {
   enum class Kind { integer, real, boolean, name, symbol, unary, binary, call, value_call, perform, behave, effect,
-                    block, grouped, conditional, field, range_for, fold, allocate, index, null_ref,
+                    block, grouped, conditional, return_test, field, range_for, fold, allocate, index, null_ref,
                     try_scope, handler, raise, return_value, deferred, make_region, touch, effect_group, transfer, procedure_effect,
                     pointer_group, pointer, make_local, rebind, region_binding, callable, alias, capture_owner,
                     here_body, named_argument, break_value, continue_value, typed_expression, return_tail };
@@ -1060,6 +1060,34 @@ class Parser {
     attach_body(*producer, std::move(header));
     return producer;
   }
+  Expr return_conditional(const Token &opening_if) {
+    using K = Expression::Kind;
+    const ParseEntry entry(recursion_, opening_if.at, "a return-state conditional");
+    auto condition = make(K::return_test, expect("returning"));
+    expect("(");
+    if (!is(")")) {
+      if (take("in")) condition->owner_name = ordinary_name().text;
+      else {
+        condition->fixed_binding = take("const");
+        if (is("val") || is("ref") || is("ptr")) condition->declaration_kind = tokens_[cursor_++].text;
+        condition->binding = value_name().text;
+        if (take(":")) {
+          condition->read_only = take("const");
+          condition->annotation = parse_type();
+        }
+        if (take("in")) condition->owner_name = ordinary_name().text;
+      }
+    }
+    expect(")");
+    auto expr = make(K::conditional, opening_if);
+    expr->children.push_back(std::move(condition));
+    expr->children.push_back(block());
+    if (!take("else")) expr->children.push_back(make(K::block, opening_if));
+    else if (is("if", 0) && is("returning", 1)) expr->children.push_back(return_conditional(expect("if")));
+    else expr->children.push_back(block());
+    return finish(std::move(expr));
+  }
+
   Expr primary(bool attach, bool owner_projection) {
     auto token = peek();
     if (callable_binding()) {
@@ -1298,6 +1326,7 @@ class Parser {
       return expr;
     }
     if (take("if")) {
+      if (is("returning")) return return_conditional(token);
       auto expr = make(Expression::Kind::conditional, token);
       expect("(");
       expr->children.push_back(expression());
@@ -1547,14 +1576,21 @@ class Parser {
     callable->definition = std::move(definition);
     expr.children.push_back(std::move(callable));
   }
-  static void validate_explicit_scopes(const Expression &expr, bool iteration = false, bool deferred = false,
+  enum class ReturnContext { module, callable, deferred };
+  static void validate_explicit_scopes(const Expression &expr, ReturnContext returning,
+                                       bool iteration = false, bool deferred = false,
                                        const Location *draining = nullptr, const ReceivingHeader *handoff = nullptr) {
     using K = Expression::Kind;
     if ((expr.kind == K::block || expr.kind == K::here_body) && expr.scoped) {
       iteration = deferred = false;
       draining = nullptr;
       handoff = nullptr;
+      returning = ReturnContext::callable;
     }
+    if (expr.kind == K::return_test && returning != ReturnContext::deferred)
+      fail(expr.at, "'if returning' requires deferred execution in a lexical return destination");
+    if (expr.kind == K::return_test && !expr.binding.empty() && expr.declaration_kind.empty() && !expr.annotation)
+      fail(expr.at, "a return pattern binding requires val, ref, ptr or a complete type annotation");
     if (expr.kind == K::here_body && !expr.scoped) handoff = expr.receiving.get();
     if (expr.kind == K::break_value || expr.kind == K::continue_value) {
       if (!handoff) fail(expr.at, "'" + expr.text + "' requires an active single-brace here body");
@@ -1578,13 +1614,14 @@ class Parser {
       const bool loop_body = (expr.kind == K::range_for && i >= 2) ||
                             (expr.kind == K::fold && i == 3);
       const bool deferred_body = expr.kind == K::deferred && expr.children.front()->kind == K::block;
-      validate_explicit_scopes(*expr.children[i], loop_body || iteration, deferred_body || deferred,
+      const auto child_returning = deferred_body && returning != ReturnContext::module ? ReturnContext::deferred : returning;
+      validate_explicit_scopes(*expr.children[i], child_returning, loop_body || iteration, deferred_body || deferred,
           deferred_body ? &expr.at : draining, loop_body || deferred_body ? nullptr : handoff);
     }
     // A callable body executes in its own call scope, independently of where
     // its value is constructed. Loops inside it still need explicit scopes.
     if (expr.definition && expr.definition->body)
-      validate_explicit_scopes(*expr.definition->body);
+      validate_explicit_scopes(*expr.definition->body, ReturnContext::callable);
   }
 
 public:
@@ -1783,7 +1820,9 @@ public:
       depths_.clear();
     }
     for (const auto &form : forms) if (form->body) {
-      validate_explicit_scopes(*form->body);
+      const auto context = form->kind == Form::Kind::function || form->kind == Form::Kind::procedure
+          ? ReturnContext::callable : ReturnContext::module;
+      validate_explicit_scopes(*form->body, context);
       normalize_assignment_calls(*form->body);
       normalize_full_scopes(*form->body, form->kind);
       normalize_return_tail(*form);
