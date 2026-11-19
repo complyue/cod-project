@@ -1419,7 +1419,7 @@ class LLVMEmission {
     std::vector<llvm::Value *> arguments;
     const auto &fact = contexts_.front().at(&expr);
     const size_t offset = expr.kind == Expression::Kind::value_call && fact.callable_call ? 1 : 0;
-    bool protect = deferred || std::ranges::any_of(fact.here_arguments, [](const auto &input) { return input.source; });
+    bool protect = deferred || std::ranges::any_of(fact.here_arguments, [](const auto &input) { return input.source || input.traversal; });
     for (size_t i = offset; !protect && i < fact.argument_count(expr); ++i)
       protect = !inert_argument(fact.argument(expr, i));
     std::vector<llvm::Value *> captured;
@@ -1488,9 +1488,7 @@ class LLVMEmission {
       for (size_t i = 0; i < contexts_.size(); ++i)
         plans[contexts_[i].at(&expr).pipeline_preparation.value()].push_back(i);
       return contextual_value(expr, plans, "here.saved.traversal", [&](const auto &plan) {
-        return connect_prepared_pipeline(plan.traversal, [&](const Expression *operand) {
-          return load(pipeline_operand_slot(*operand));
-        });
+        return prepare_traversal(plan);
       }, here_);
     }
     return with_prepared_producer(expr, [&](const auto &producer, const auto &frame) -> llvm::Value * {
@@ -1524,6 +1522,19 @@ class LLVMEmission {
     auto *upstream = operand(traversal.front());
     for (const auto *stage : traversal.subspan(1)) upstream = connect_prepared_stage(operand(stage), upstream);
     return upstream;
+  }
+  llvm::Value *prepare_traversal(const CheckedOperation::PipelinePreparation &plan) {
+    std::map<const Expression *, llvm::Value *> prepared;
+    for (const auto *operand : plan.written) {
+      auto *value = plan.lexical_source && operand == plan.traversal.front()
+          ? here_arguments_.at(*plan.lexical_source) : prepare_source(*operand);
+      if (!reachable()) return nullptr;
+      prepared.emplace(operand, value);
+    }
+    return connect_prepared_pipeline(plan.traversal, [&](const Expression *operand) {
+      const auto found = prepared.find(operand);
+      return found == prepared.end() ? load(pipeline_operand_slot(*operand)) : found->second;
+    });
   }
   llvm::AllocaInst *pipeline_operand_slot(const Expression &expr) {
     auto [position, inserted] = pipeline_operands_.try_emplace(&expr, nullptr);
@@ -1578,6 +1589,7 @@ class LLVMEmission {
     for (size_t i = 0; i < contexts_.size(); ++i)
       arguments[contexts_[i].at(&expr).here_arguments.at(slot)].push_back(i);
     return contextual_value(expr, arguments, "here.input", [&](const auto &input) {
+      if (input.traversal) return prepare_traversal(*input.traversal);
       if (input.source) return prepare_source(*input.source);
       return here_arguments_.at(input.lexical.value());
     }, here_);

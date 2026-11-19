@@ -50,6 +50,16 @@ runner.CASES['extension_inherits_slots'] = (source(REF, 'val x<-false,y<-true;pt
 runner.CASES['mixed_callable_kinds'] = (source(REF, 'val x<-false,y<-true;ptr p=x,q=y;exchange(p,q);'+OUT('p'), selection='import', extra='proc exchange(ref a:bool in O,ref b:bool in O)->void where {owner O}{'+OUT('4')+'intrinsic (<=>)(a,b);return;}'), 0, '4\ntrue\n', '')
 runner.CASES['double_rename'] = ({'ops.cod': REF+'export (<=>);', 'middle.cod':'import "ops.cod" (<=>) as exchange;func exchange(ref a:bool in O,ref b:bool in O)->void where {owner O}{intrinsic (<=>)(a,b);}export exchange;', 'main.cod':IO+'using "middle.cod" exchange as rotate;'+BASE+'rotate(p,q);'+OUT('p')+'val a<-false,b<-true;ptr u=a,v=b;rotate(u,v);'+OUT('u')},0,'7\ntrue\n','')
 runner.CASES['ordinary_alias_keeps_local_bindings'] = ({'ops.cod':REF.replace('(<=>)(ref','helper(ref')+'export helper;', 'main.cod':IO+'using "ops.cod" helper as (<=>);'+BASE+'p<=>q;'+OUT('p')+OUT('q')},0,'1\n7\n','')
+runner.CASES['compatible_callable_selected_as_whole_terminal'] = ({
+    'ops.cod':'proc count(here input() yields u64,seed:u64)->u64{'
+              'val sum<-seed;for val value<-input(){sum<-sum+value;};return sum;}export count;',
+    'main.cod':IO+'using "ops.cod" count as ($>);func rows() yields u64{yield(7u64);}'
+                  +OUT('rows() $> 4u64')+OUT('($>)(rows(),5u64)'),
+},0,'11\n12\n','')
+runner.CASES['incompatible_callable_cannot_supply_the_terminal_role'] = ({
+    'ops.cod':'func unrelated()->u64{return 1u64;}export unrelated;',
+    'main.cod':'using "ops.cod" unrelated as ($>);func rows() yields u64{yield(7u64);}($>)(rows(),5u64);',
+},2,'','no whole-traversal terminal operator is visible')
 runner.CASES['reference_alias_at_bits_token'] = ({'ops.cod':REF+'export (<=>);','main.cod':IO+'using "ops.cod" (<=>) as (<->);'+BASE+'p<->q;'+OUT('(p is y)')+OUT('x')},0,'true\n1\n','')
 runner.CASES['intrinsic_uses_builtin_spelling'] = ({'ops.cod':REF+'export (<=>);','main.cod':IO+'using "ops.cod" (<=>) as (<->);'+BASE+'intrinsic (<->)(p,q);'+OUT('(p is x)')+OUT('x')},0,'true\n7\n','')
 runner.CASES['lexical_shadow'] = (source(REF,'proc run()->void{func exchange(a:i64,b:i64)->i64{return a+b;};'+OUT('exchange(1,7)')+'return;}run();'),0,'8\n','[-Wshadow]')

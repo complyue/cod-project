@@ -553,6 +553,52 @@ runner.CASES = {
         'proc audit(id:u32)->void{behave @print(id+10u32);return;}'
         'proc audit(code:u64)->void{behave @print(code+20u64);return;}'
         'proc drive(n:T)->void where {T}{rows(n) $> audit;return;}drive(7u32);drive(8u64);',0,'17\n28\n',''),
+    'pipeline_terminal_whole_traversal_returns_a_count_for_saved_and_empty_sources': (IO+
+        'func rows(active:bool) yields u64 -> bool{if(!active){return;}else{};'
+        'if(!yield(17u64)){return;}else{};if(!yield(24u64)){return;}else{};yield(42u64):void;}'
+        'func step(here input() yields u64 -> bool,offset:u64) yields u64 -> bool{'
+        'val increment<-offset;for val item<-input(){continue yield(item+increment);};}'
+        'proc ($>)(here traversal() yields u64 -> bool,starting:u64)->u64{val count<-starting;behave @print(100u64);'
+        'for val item<-traversal(){behave @print(item);count<-count+1u64;continue count<2u64;};return count;}'
+        'here stages=step(1u64) |> step(2u64);here scan=rows(true) !> stages;here empty_scan=rows(false) !> stages;'
+        'val counter<-0u64;behave @print(scan $> counter);behave @print(counter <$ scan);behave @print(($>)(empty_scan,counter));',
+        0,'100\n20\n27\n2\n100\n20\n27\n2\n100\n0\n',''),
+    'pipeline_terminal_whole_traversal_prepares_inline_stages_in_written_order': (IO+
+        'proc mark(n:u64)->u64{behave @print(n);return n;}func rows(n:u64) yields u64{yield(n);}'
+        'func step(here input() yields u64,offset:u64) yields u64{'
+        'val increment<-offset;for val item<-input(){yield(item+increment);};}'
+        'proc (<$)(sink:u64,here traversal() yields u64)->u64{'
+        'val result<-sink;for val item<-traversal(){result<-result+item;};return result;}'
+        'behave @print(rows(mark(10u64)) !> step(mark(1u64)) |> step(mark(2u64)) $> mark(20u64));'
+        'behave @print(mark(30u64) <$ step(mark(4u64)) <| step(mark(3u64)) <! rows(mark(40u64)));'
+        'behave @print((<$)(mark(50u64),rows(mark(60u64)) !> step(mark(6u64))));',
+        0,'10\n1\n2\n20\n33\n30\n4\n3\n40\n77\n50\n60\n6\n116\n',''),
+    'pipeline_terminal_whole_traversal_stops_preparation_at_the_failing_operand': (IO+
+        'using "std:exceptions" NullPointerException;'
+        'proc mark(n:u64)->u64{behave @print(n);return n;}'
+        'proc fail_operand(n:u64)->u64 throws NullPointerException{'
+        'behave @print(n);ptr absent:u64=null in here;absent;return n;}'
+        'func rows(n:u64) yields u64{yield(n);}'
+        'func step(here input() yields u64,offset:u64) yields u64{'
+        'val increment<-offset;for val item<-input(){yield(item+increment);};}'
+        'proc ($>)(here traversal() yields u64,sink:u64)->u64{behave @print(100u64);return sink;}'
+        'try{rows(mark(1u64)) !> step(fail_operand(2u64)) |> step(mark(3u64)) $> mark(4u64):void;}'
+        'catch(e:const NullPointerException){behave @print(5u64);};'
+        'try{fail_operand(6u64) <$ step(mark(7u64)) <! rows(mark(8u64)):void;}'
+        'catch(e:const NullPointerException){behave @print(9u64);};',
+        0,'1\n2\n5\n6\n9\n',''),
+    'pipeline_terminal_whole_traversal_selects_overloads_by_source_protocol': (IO+
+        'func small() yields u32{yield(17u32);}func wide() yields u64{yield(24u64);}'
+        'proc ($>)(here traversal() yields u32,sink:u64)->u64{for val item<-traversal(){behave @print(item);};return sink+1u64;}'
+        'proc ($>)(here traversal() yields u64,sink:u64)->u64{for val item<-traversal(){behave @print(item);};return sink+2u64;}'
+        'proc item(value:u64)->void{behave @print(value);return;}'
+        'val count<-10u64;behave @print(small() $> count);behave @print(count <$ wide());wide() $> item;',
+        0,'17\n11\n24\n12\n24\n',''),
+    'pipeline_terminal_whole_traversal_rejects_a_mismatched_sink_owner': (
+        'func rows(line:const u64 in R) yields ref const u64 in R where {owner R}{yield(line);}'
+        'proc ($>)(here traversal() yields ref const u64 in A,sink:const u64 in A)->void where {owner A}{return;}'
+        'proc query(line:const u64 in R)->void where {owner R}{val other<-75u64;rows(line) $> other;return;}'
+        'val input_line<-75u64;query(input_line);',2,'','no whole-traversal terminal matches the source and sink contracts'),
     'named_scalar_call_prepares_written_order_and_allows_an_in_position_label': (IO+
         'proc trace(n:u64)->u64{behave @print(n);return n;}'
         'proc apply(left:u64,right:u64)->void{behave @print(10u64*left+right);return;}'

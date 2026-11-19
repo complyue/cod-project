@@ -184,6 +184,7 @@ struct CheckedOperation {
   struct HereArgument {
     std::optional<size_t> lexical;
     const Expression *source = nullptr;
+    std::optional<PipelinePreparation> traversal = {};
     auto operator<=>(const HereArgument &) const = default;
   };
   std::vector<HereArgument> here_arguments;
