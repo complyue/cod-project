@@ -1680,10 +1680,16 @@ class LLVMEmission {
     case K::integer: case K::boolean:
       return pack(llvm::ConstantInt::get(llvm::cast<llvm::IntegerType>(native_type(fact.type)), fact.integer), fact.type);
     case K::return_test: {
-      std::map<bool, std::vector<size_t>> alternatives;
-      for (size_t i = 0; i < contexts_.size(); ++i) alternatives[contexts_[i].at(&expr).return_pattern_matches].push_back(i);
-      return contextual_value(expr, alternatives, "return.matches", [&](bool matches) {
-        return pack(matches ? observed_return() : b_.getFalse(), Type::boolean);
+      std::map<CheckedOperation::ReturnFilter, std::vector<size_t>> alternatives;
+      for (size_t i = 0; i < contexts_.size(); ++i) alternatives[contexts_[i].at(&expr).return_filter].push_back(i);
+      return contextual_value(expr, alternatives, "return.matches", [&](const auto &filter) {
+        if (!filter.can_match) return pack(b_.getFalse(), Type::boolean);
+        auto *matches = observed_return();
+        if (filter.owner_comparison) {
+          const auto [result_owner, expected_owner] = *filter.owner_comparison;
+          matches = b_.CreateAnd(matches, b_.CreateICmpEQ(owner_identity(result_owner, expr.at), owner_identity(expected_owner, expr.at)));
+        }
+        return pack(matches, Type::boolean);
       });
     }
     case K::real: {
@@ -1757,7 +1763,7 @@ class LLVMEmission {
           std::map<std::optional<size_t>, std::vector<size_t>> destinations;
           for (size_t context = 0; context < contexts_.size(); ++context) {
             const auto &pattern = contexts_[context].at(&test);
-            destinations[pattern.return_pattern_matches ? pattern.place : std::nullopt].push_back(context);
+            destinations[pattern.return_filter.can_match ? pattern.place : std::nullopt].push_back(context);
           }
           contextual_value(test, destinations, "return.binding", [&](std::optional<size_t> place) {
             if (place) b_.CreateStore(observed_return_value(), storage_.at(*place));

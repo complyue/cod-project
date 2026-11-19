@@ -119,7 +119,11 @@ struct CheckedOperation {
   bool mixed_view = false;
   bool scalar_value_join = false;
   bool borrowed_result = false;
-  bool return_pattern_matches = true;
+  struct ReturnFilter {
+    bool can_match = true;
+    std::optional<std::pair<size_t, size_t>> owner_comparison;
+    auto operator<=>(const ReturnFilter &) const = default;
+  } return_filter;
   BuiltinOperation builtin = BuiltinOperation::none;
   std::string builtin_name; // Selected eager operation, independent of source spelling.
   // Destination calls select every address before checking entry-read promises.

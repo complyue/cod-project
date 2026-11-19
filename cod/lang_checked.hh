@@ -1150,6 +1150,7 @@ class ScalarChecker {
     bool checks_reaching_paths() const { return initialization != InitializationCheck::suppressed; }
     std::optional<Type> caught_exception;
     std::optional<Type> invocation_result;
+    std::optional<EvidenceOwner> invocation_result_owner;
     std::optional<bool> pending_return;
     const ResultContract *borrowed_return = nullptr;
     bool tracks_target_places() const { return checks_initialization() || borrowed_return; }
@@ -4033,8 +4034,10 @@ class ScalarChecker {
   }
   void refine(const Expression &expr, bool value, const std::map<const Expression *, CheckedOperation> &operations) {
     if (expr.kind == Expression::Kind::return_test) {
-      if (operations.at(&expr).return_pattern_matches) refine_return_input(value);
-      else if (value) lexical_.live = false;
+      const auto &filter = operations.at(&expr).return_filter;
+      if (!filter.can_match) {
+        if (value) lexical_.live = false;
+      } else if (value || !filter.owner_comparison) refine_return_input(value);
       return;
     }
     const auto proof = predicate_of(operations.at(&expr));
@@ -4383,7 +4386,7 @@ class ScalarChecker {
         for (const auto &child : expr.children) visit(*child, caught, query);
         return;
       }
-      if (expr.kind == K::null_ref && !expr.owner_name.empty() && expr.owner_name != "here")
+      if ((expr.kind == K::null_ref || expr.kind == K::return_test) && !expr.owner_name.empty() && expr.owner_name != "here")
         use(expr.owner_name, expr.at, bound, query);
       if (expr.kind == K::symbol || expr.kind == K::effect || expr.kind == K::touch || expr.kind == K::perform || expr.kind == K::behave)
         use(expr.text, expr.at, bound, query, true);
@@ -5260,6 +5263,7 @@ class ScalarChecker {
     state.substitutions = *match(method, arguments, retained);
     state.retained = retained;
     state.full_scope_owner = 0;
+    state.invocation_result_owner.reset();
     state.caught_exception.reset();
     // An ordinary retained value has invocation-local storage. A standalone
     // here body has direct access to its supplying activation instead.
@@ -5275,8 +5279,10 @@ class ScalarChecker {
       }
     for (size_t i = 0; i < method.input_owners().size(); ++i) {
       const auto owner = EvidenceOwner::parameter(i);
-      state.owner_bindings[method.input_owners()[i].name] = owner;
+      const auto &name = method.input_owners()[i].name;
+      state.owner_bindings[name] = owner;
       state.external_owners.insert(owner);
+      if (method.result.borrowed() && method.result.owner == name) state.invocation_result_owner = owner;
     }
     if (method.scope_inputs) {
       const auto &profile = *method.scope_inputs;
@@ -5637,12 +5643,15 @@ class ScalarChecker {
     if (presence == TargetPresence::absent) fail(at, "conditional scalar value requires a proven non-null target");
     implementation_gap(at, "conditional scalar value requires a proven non-null target in typeof");
   }
-  struct ScalarReturnPattern {
+  static bool return_owner_filter(const Expression &pattern) {
+    return pattern.binding.empty() && !pattern.owner_name.empty();
+  }
+  struct ReturnPatternEvidence {
     std::optional<Type> binding;
-    bool matches = true;
+    OwnerMatch matches = OwnerMatch::satisfied;
   };
-  static ScalarReturnPattern scalar_return_pattern(const Expression &pattern, const std::optional<Type> &annotation,
-                                                     const std::optional<Type> &result, bool borrowed, bool required) {
+  static ReturnPatternEvidence scalar_return_pattern(const Expression &pattern, const std::optional<Type> &annotation,
+                                                      const std::optional<Type> &result, bool borrowed, bool required) {
     if (pattern.binding.empty() && pattern.owner_name.empty()) return {};
     if (required && pattern.declaration_kind == "val" && !pattern.owner_name.empty())
       fail(pattern.at, "a val return pattern cannot specify an owner");
@@ -5655,9 +5664,14 @@ class ScalarChecker {
     const bool matches = !borrowed && result != Type::void_type && (!annotation || !result || annotation == result);
     auto binding = annotation ? annotation : result;
     if (binding == Type::void_type) binding = Type::never;
-    return {binding, matches};
+    return {binding, matches ? OwnerMatch::satisfied : OwnerMatch::mismatch};
   }
-  ScalarReturnPattern scalar_return_pattern(const Expression &pattern, const TypeEvidenceState &state) const {
+  ReturnPatternEvidence return_pattern_evidence(const Expression &pattern, const TypeEvidenceState &state) const {
+    if (return_owner_filter(pattern)) {
+      const auto owner = pattern.owner_name == "here" ? state.full_scope_owner : owner_evidence(pattern.owner_name, state, pattern.at);
+      const auto match = state.invocation_result_owner ? compare_owners(state.invocation_result_owner, owner, &state) : OwnerMatch::mismatch;
+      return {{}, match};
+    }
     const auto annotation = pattern.annotation ? std::optional{evidence_annotation(*pattern.annotation, state)} : std::nullopt;
     bool borrowed = state.borrowed_return != nullptr;
     if (state.method) {
@@ -5695,7 +5709,7 @@ class ScalarChecker {
       auto &yes = arms.yes_state;
       const auto &name = condition.binding;
       const bool readonly = condition.read_only || condition.fixed_binding;
-      yes.bindings[name] = scalar_return_pattern(condition, state).binding;
+      yes.bindings[name] = return_pattern_evidence(condition, state).binding;
       yes.local_declarations[name] = &condition;
       yes.definitions.erase(name);
       yes.owner_bindings.erase(name);
@@ -7076,9 +7090,11 @@ class ScalarChecker {
       if (state.selections.tracking) target_facts.branches = PresenceBranches::constant(expr.text == "true");
       return Type::boolean;
     case K::return_test: {
-      const auto pattern = scalar_return_pattern(expr, state);
-      if (!pattern.matches || state.pending_return)
-        target_facts.branches = PresenceBranches::constant(pattern.matches && state.pending_return.value_or(false));
+      const auto pattern = return_pattern_evidence(expr, state);
+      if (pattern.matches == OwnerMatch::mismatch || state.pending_return == false)
+        target_facts.branches = PresenceBranches::constant(false);
+      else if (pattern.matches == OwnerMatch::satisfied && state.pending_return == true)
+        target_facts.branches = PresenceBranches::constant(true);
       return Type::boolean;
     }
     case K::null_ref:
@@ -9621,6 +9637,17 @@ class ScalarChecker {
     }
     auto arguments = contract.parameters;
     CheckedOperation::SuppliedHere supplied{};
+    const auto capture_owner = [&](size_t actual, const Location &at) {
+      if (lexical_.live && !owner_alive(actual)) fail(at, "here access requires a live supplier owner");
+      const auto found = std::ranges::find(owners, std::optional{actual});
+      const auto role = std::distance(owners.begin(), found);
+      if (found == owners.end()) {
+        add_owner(at);
+        owners.push_back(actual);
+        supplied.owners.push_back(actual);
+      }
+      return role;
+    };
     const auto &dependencies = free_bindings(definition);
     std::map<std::string, Capture> dependencies_by_name;
     for (const auto *names : {&dependencies.captures, &dependencies.queries}) for (const auto &name : *names)
@@ -9630,6 +9657,10 @@ class ScalarChecker {
       const auto binding = lexical_.lookup(name);
       if (!binding) continue;
       const auto &source = bindings_->at(*binding);
+      if (source.owner_binding) {
+        inputs.owner_names.emplace(name, capture_owner(named_owner(name, capture.at), capture.at));
+        continue;
+      }
       if (!source.value_binding || source.alias || !source.selection.empty() || !numeric(source.type))
         implementation_gap(capture.at, "here access requires a local numeric val slot with stable storage");
       const auto &operand = scope_operand(base, capture);
@@ -9642,15 +9673,7 @@ class ScalarChecker {
       if (validating_ && proving_ && lexical_.live && !view.initialized_target() &&
           !missing_initialization(lexical_, *view.place, selected_target(view, *view.place, true)).empty())
         implementation_gap(capture.at, "here access to a slot without definite initialization at supply");
-      const auto actual = *view.owners.begin();
-      if (lexical_.live && !owner_alive(actual)) fail(capture.at, "here access requires a live supplier owner");
-      const auto found = std::ranges::find(owners, std::optional{actual});
-      const auto role = std::distance(owners.begin(), found);
-      if (found == owners.end()) {
-        add_owner(capture.at);
-        owners.push_back(actual);
-        supplied.owners.push_back(actual);
-      }
+      const auto role = capture_owner(*view.owners.begin(), capture.at);
       Parameter input{name, type, capture.at, false, {}};
       input.declaration_kind = "ptr";
       input.owner = inputs.owners.at(role).name;
@@ -10239,7 +10262,7 @@ class ScalarChecker {
     CheckedOperation operation;
     if (checking_method_ && checking_method_->here_group &&
         (expr.kind == K::deferred || expr.kind == K::make_local || expr.kind == K::make_region ||
-         expr.kind == K::allocate || expr.owner_name == "here"))
+         expr.kind == K::allocate || (expr.kind != K::return_test && expr.owner_name == "here")))
       implementation_gap(expr.at, "supplier-owned allocation, owner selection or defer from a here group");
     if (expr.spread) implementation_gap(expr.at, "spread arguments");
     if (expr.has_here_body() || forwards_here(expr)) {
@@ -10312,14 +10335,25 @@ class ScalarChecker {
       operation.predicate = constant_predicate(operation.integer);
       break;
     case K::return_test: {
+      operation.type = Type::boolean;
+      const auto &group = checking_method_->here_group;
+      if (return_owner_filter(expr)) {
+        const auto owner = expr.owner_name == "here" ? cleanup_scope_ : named_owner(expr.owner_name, expr.at);
+        if (group || !instance->result.borrowed()) operation.return_filter.can_match = false;
+        else {
+          const auto result = external_owners_.at(instance->result.owner);
+          const auto match = compare_owners(result, owner);
+          operation.return_filter.can_match = match != OwnerMatch::mismatch;
+          if (match == OwnerMatch::unknown) operation.return_filter.owner_comparison = std::pair{result, owner};
+        }
+        break;
+      }
       const auto annotation = expr.annotation ?
           std::optional{substitute(*expr.annotation, *checking_method_, instance->substitutions, true)} : std::nullopt;
-      const auto &group = checking_method_->here_group;
       const auto &inspected = group ? group->supplier : instance->result.type;
       const auto pattern = scalar_return_pattern(expr, annotation, inspected, !group && instance->result.borrowed(), true);
-      operation.type = Type::boolean;
       operation.operand_type = pattern.binding.value_or(Type::void_type);
-      operation.return_pattern_matches = pattern.matches;
+      operation.return_filter.can_match = pattern.matches != OwnerMatch::mismatch;
       break;
     }
     case K::null_ref:
@@ -10653,7 +10687,10 @@ class ScalarChecker {
       // reference after that arm's cleanup has finished.
       const bool value_join = read && !discard && [&] {
         auto probe = evidence_state();
-        if (return_test && instance) probe.invocation_result = instance->result.type;
+        if (return_test && instance) {
+          probe.invocation_result = instance->result.type;
+          if (instance->result.borrowed()) probe.invocation_result_owner = external_owners_.at(instance->result.owner);
+        }
         const auto condition = type_evidence(test, probe);
         if (return_test && probe.target.branches && !probe.target.branches->at(true)) return false;
         return condition != Type::never && conditional_arms(expr, probe, false, expected, nullptr, expected_use, true).independent();
@@ -10673,7 +10710,7 @@ class ScalarChecker {
         pattern.place = id;
       }
       const auto checked_yes = check(*expr.children[1], instance, operations, read && !value_join, discard, expected, expected_use);
-      const auto yes = return_test && !operations.at(&test).return_pattern_matches ? Type{Type::never} : checked_yes;
+      const auto yes = return_test && !operations.at(&test).return_filter.can_match ? Type{Type::never} : checked_yes;
       auto yes_state = lexical_;
       lexical_ = before;
       refine(test, false, operations);

@@ -66,6 +66,18 @@ runner.CASES = {
         'using "std:exceptions" MissingReturnError;func missing()->u64{}'
         'proc run(problem:MissingReturnError){defer{return if returning (val saved:u64){saved}else{throw problem;};};}'
         'try{missing():void;}catch(e:const MissingReturnError){run(e);};',2,'','independent result contract'),
+    'return_owner_filter_compares_actual_owner_roles': (IO+
+        'proc run(ref source:u64 in A,ref other:u64 in B)->ref u64 in A where {owner A,owner B}{'
+        'defer{if returning (in B){behave @print(1u64);}else if returning (){behave @print(2u64);}};return source;}'
+        'proc split(ref source:u64 in O)->void where {owner O}{val local<-6u64;run(source,local):void;return;}'
+        'val a<-7u64,b<-8u64;run(a,b):void;split(a);',0,'1\n2\n',''),
+    'return_owner_filter_matches_typed_null': (IO+
+        'proc run(ref source:u64 in O)->ptr u64 in O where {owner O}{defer{'
+        'if returning (in O){behave @print(1u64);}else{behave @print(2u64);}};return null;}'
+        'val a<-7u64;ptr saved=run(a);behave @print((saved is null));',0,'1\ntrue\n',''),
+    'return_owner_filter_rejects_nearest_non_owner': (
+        'proc run(requested:u64)->u64{defer{if returning (in requested){}};return 7u64;}run(1u64);',
+        2,'',"nearest binding 'requested' is not an owner"),
     'here_group_distinct_feedback_and_break': (IO+
         'func plus_one(here body()->u64)->u64{return body()+1u64;}'
         'func relay(here body()->u64)->u64{return plus_one(body)+10u64;}'
