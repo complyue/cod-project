@@ -1,6 +1,6 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 184
+Discussion revision: 185
 
 Recorded: 2026-11-19
 
@@ -8,7 +8,7 @@ Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
 
-- **Case expressions and branch-local variables.** [H-CASE-CONTRACT-20261119](../CHANGELOG.md#h-case-contract-20261119) confirms [D-07-CASE](DesignAuthorityRegistry.md#d-07-case) r183 for the [source contract and examples](#case-expressions-and-branch-local-variables). P-625/P-626 derive inspectable selection, binding and effect order from C-10/C-65/C-72 and charter §§3.1–3.3/4.3/8.1. The acceptance cases cover a single subject evaluation, guard effects, invalidated field access, misses and fallthrough through intervening code, partial value/void cases, nested control and cleanup on both exits. Coverage follows the [compiler-stage policy](../applications/cod-booter/README.md#diagnostics-by-compiler-stage). [K-CASE-CONSUMER-20261119](../CHANGELOG.md#k-case-consumer-20261119) continues this scope at r184 by identifying the consuming expression or statement. This scope specifies source behavior. It grants no new owner proof, sum mutation operation or native representation.
+- **Case expressions and branch-local variables.** [H-CASE-CONTRACT-20261119](../CHANGELOG.md#h-case-contract-20261119) confirms [D-07-CASE](DesignAuthorityRegistry.md#d-07-case) r183 for the [source contract and examples](#case-expressions-and-branch-local-variables). P-625/P-626 derive inspectable selection, binding and effect order from C-10/C-65/C-72 and charter §§3.1–3.3/4.3/8.1. The acceptance cases cover a single subject evaluation, guard effects, invalidated field access, misses and fallthrough through intervening code, partial value/void cases, nested control and cleanup on both exits. Coverage follows the [compiler-stage policy](../applications/cod-booter/README.md#diagnostics-by-compiler-stage). [K-CASE-CONSUMER-20261119](../CHANGELOG.md#k-case-consumer-20261119) continues this scope at r184 by identifying the consuming expression or statement. [K-CASE-COMPLETION-20261119](../CHANGELOG.md#k-case-completion-20261119) reopens only value-case exhaustion at r185. The static proposal and the named runtime error are outside current implementation authority. This scope specifies source behavior. It grants no new owner proof, sum mutation operation or native representation.
 
 - **Functor classification.** [H-HERE-FUNCTOR-20261118](../CHANGELOG.md#h-here-functor-20261118) records the receiver-bound functor in [D-18’s here-callable inventory](CallableViewsAndCaptures.md#forms-of-here-callable). D-07-FUNCTORS r178/P-605–P-606 uses the bounded lifetime rule to preserve receiver ownership and access. Accept the two argument bindings in DL-01 under the matching predicate contract. Selection timing, competing overloads and implementation qualification remain open.
 
@@ -351,20 +351,25 @@ An explicit `x : T` in the subject, guard or body is an ordinary expression. For
 
 Join normal arm results under the [conditional result rules](ConstructionAndAcquisition.md#conditional-results). A single-brace `return` exits the enclosing callable. A double-brace `return v;` supplies this arm’s result after its own cleanup, and execution continues with the case’s consumer. A value-producing double-brace body needs an explicit local return under [ordinary full-scope rules](ExceptionControl.md#full-scopes-as-immediate-ordinary-calls); a tail expression alone supplies no implicit value. Do not return a reference to that invocation’s fresh storage. A reference to a sufficiently long-lived outer target retains its ordinary owner. An early case break also supplies a result. Paths that leave by an enclosing return, throw or arm fallthrough contribute no result to the join.
 
-**Reaching the end of the case.** A scan may reach the end because every remaining header declined or because the last reached body executed fallthrough. Retain the effects of every executed statement, header and guard. A void case finishes normally. If the case has a value contract, reaching the end raises the unchecked `CaseMatchError` at the case site, even when the expression result is discarded. Determine that contract from the ordinary typing context and result-producing paths before execution. A selected full-scope body that owes a value and finishes without returning one follows the ordinary callable rule for `MissingReturnError`. An ordinary unchecked failure can be caught. A catch-all arm can supply a domain-specific result or throw. An optional coverage warning leaves these runtime outcomes intact.
+**Reaching the end of the case.** A void case may finish without selecting an arm. Its reached statements and guard effects run in source order. In `return case ...;`, the return statement consumes the case result. Discarding the function’s eventual result at its call site does not change its return contract. The outcome of an unproved normal end in a value-producing case is under review.
+
+The proposed static rule requires every possible normal completion of a value-producing case to deliver a value. Reject if the compiler cannot rule out reaching the end of the scan. A header miss, a guard that may return false and an executed arm fallthrough can each reach a later source item. A successful value-producing arm or case break delivers a result. A path escaping by throw or enclosing return has its own destination. A selected full-scope arm retains its independent callable result obligations and cleanup. The existing conditional result join still applies.
 
 ```cod
-proc fee(expedited:bool) -> u64 {
-    return case expedited of { (true) -> { 5u64 }; };
-}
-proc notify(expedited:bool) {
-    case expedited of { (true) -> { send_notice(); }; };
+proc quote(priority:bool) -> u64 {
+    return case priority of {
+        (true) -> { 5u64 };
+        (false) -> {
+            if (refresh_needed()) { fallthrough; }
+            2u64
+        };
+    };
 }
 ```
 
-In `return case ...;`, the return statement consumes the case result to fulfill fee’s declared u64 result. A later call written `fee(false);` discards the function result on success. For false, fee instead raises CaseMatchError before it returns, and notify finishes normally.
+Both Boolean patterns are present. If refresh_needed returns true on the false arm, execution still reaches the end without a price. The proposed checker rejects quote without predicting the call’s result. Adding a final unguarded `() -> { current_price() };` returning u64 closes that path. An explicit domain failure in the fallback can also close it under ordinary checked obligations. A final catch-all that can itself fall through supplies no such guarantee. The checker can use readily available finite-type and flow facts, then reject uncertain value cases. It need not execute arbitrary guards, prove equivalence of application predicates, or enumerate an open hierarchy. Authors may need a fallback even when an external invariant guarantees their guards cover every real input.
 
-A directly discarded case is a distinct expression statement. In `case expedited of { (true) -> { break 5u64; }; };` the typed break establishes a u64 case result. On true the surrounding statement discards 5. On false the case raises CaseMatchError before any result is available to discard. A final matched arm that explicitly falls through reaches the same end. An ordinary void completion in a selected arm must still agree with the common result type.
+The alternative accepts such a partial value case and raises the unchecked CaseMatchError if execution actually reaches the end. That error and the choice between the two contracts are under review. Advisory pattern-coverage diagnostics for void cases remain independent. A type checked as u64 through `break 5u64;` retains its result contract even if the surrounding expression statement discards a successful value.
 
 **Statements between arms and fallthrough.** The case walks its contents in source order until an arm completes it or control leaves through an ordinary exit. A pattern miss, a false guard and a body executing `fallthrough;` all resume with the first item after that arm. Each intervening statement executes once on a path that reaches it. An arm that completes normally skips the rest of the case, even when the arm produces void. A fallthrough path contributes no value to the case result.
 

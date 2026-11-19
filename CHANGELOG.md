@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-19 — Review static value-case completion
+
+<a id="k-case-completion-20261119"></a>
+**K-CASE-COMPLETION-20261119.** The project user asked in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) whether a value-less end can always be rejected statically. D-07r185, D-17r123 and registry r954 reopen only the exhaustion policy from `8e32cdda8ae87052d8ddb865940494ecd70b66ce:design/DomainLanguageDesign.md`, “Reaching the end of the case”. The static proposal rejects unproved completion and keeps partial void cases. The candidate runtime error has no current implementation authority.
+
 ## 2026-11-19 — Identify the consumer of a case result
 
 <a id="k-case-consumer-20261119"></a>
