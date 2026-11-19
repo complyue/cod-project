@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-19 — Confirm the storage-helper migration
+
+<a id="h-storage-helper-confirmation-20261119"></a>
+**H-STORAGE-HELPER-CONFIRMATION-20261119.** The project user replied “确认。 落实提交推送同步” in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) after reviewing the three replacements and the user-overload example. This confirms retiring the builtin forms of `store`, `ref_at` and `setfield`, preserving addressable element borrows, distinguishing field payload writes from edge rebinding, and keeping user-defined callable results. The confirmed text is [D-10-ORDINARY-NAMES](design/DesignAuthorityRegistry.md#d-10-ordinary-names) at `41c520040f4d2211bcfcb10a0018ed8d7c1111ad:design/SymbolicDynamicScope.md`, under [H-ORDINARY-NAMES-20261119](#h-ordinary-names-20261119).
+
 ## 2026-11-19 — Return traversal and storage names to ordinary lookup
 
 <a id="h-ordinary-names-20261119"></a>

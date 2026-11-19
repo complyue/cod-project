@@ -4,7 +4,7 @@ Design revision: 227 · Recorded: 2026-11-19 · Phase: language/application co-d
 
 ## Design authority
 
-[H-ORDINARY-NAMES-20261119](../CHANGELOG.md#h-ordinary-names-20261119) covers ordinary identifier lookup, field selection and the retained symbolic dependency form at r227 under [D-10-ORDINARY-NAMES](DesignAuthorityRegistry.md#d-10-ordinary-names).
+[H-ORDINARY-NAMES-20261119](../CHANGELOG.md#h-ordinary-names-20261119) covers ordinary identifier lookup, field selection and the retained symbolic dependency form at r227 under [D-10-ORDINARY-NAMES](DesignAuthorityRegistry.md#d-10-ordinary-names). [H-STORAGE-HELPER-CONFIRMATION-20261119](../CHANGELOG.md#h-storage-helper-confirmation-20261119) confirms the storage-helper replacements and the treatment of user-defined overloads in that revision.
 
 [H-MAKE-LEXICAL-DEFAULT-20261119](../CHANGELOG.md#h-make-lexical-default-20261119) continues the [pointer-initialization overview](#pointer-reads-and-parameter-owners) at r226. [D-22-MAKE-OWNER](DesignAuthorityRegistry.md#d-22-make-owner) governs ordinary allocation under P-352. Initializing from an addressable target preserves its actual owner and access.
 
