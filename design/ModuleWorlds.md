@@ -1,14 +1,14 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 56 · Recorded: 2026-11-19 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 58 · Recorded: 2026-11-19 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
 
-- **Data call operators.** [D-07-FUNCTOR-LOOKUP](DesignAuthorityRegistry.md#d-07-functor-lookup), P-636/P-637, uses C-10/C-35 to keep operations with the nominal receiver in its selected world. The [publication proposal](#publication-of-type-carried-call-operators) compares unrelated receivers, two adapters of the same receiver and a constructor subset on a sum. [K-TYPE-CALL-FAMILY-20261119](../CHANGELOG.md#k-type-call-family-20261119) records its scope. [K-CTOR-CALL-ORGANIZATION-20261119](../CHANGELOG.md#k-ctor-call-organization-20261119) consolidates it at r56.
+- **Data call operators.** [H-FUNCTOR-PUBLICATION-20261119](../CHANGELOG.md#h-functor-publication-20261119) confirms the [source publication and merge rule](#publication-of-type-carried-call-operators) at r57 under [D-07-FUNCTOR-LOOKUP](DesignAuthorityRegistry.md#d-07-functor-lookup). C-10/C-35 and P-636/P-637 connect domain operations to nominal type identity and the module world that selected them. Check compatible extensions, repeated selection of one method, incompatible contributions from two adapters and world isolation. Native representation and implementation qualification are separate.
 
 - **Module top levels as here callables.** r53 [module scope](#here-callable-module-top-levels) records [H-HERE-MODULE-TOPLEVEL-20261118](../CHANGELOG.md#h-here-module-toplevel-20261118) under [D-18-HERE](DesignAuthorityRegistry.md#d-18-here). D-15-STATIC-NS, D-15-POSTPON and D-15-SHUTDOWN supply initialization readiness, shared module contexts and cleanup lifetime. These constraints serve charter §§3.3/4.3. Acceptance observes one module slot across interleaved startup fragments and preserves access checks on entry and shutdown. Qualification of the broader callable redesign remains open.
 
-- **Data constructor families.** [D-07-DCTOR-PUBLICATION](DesignAuthorityRegistry.md#d-07-dctor-publication), r52 in the type-selection section, records [whole-family selection](../CHANGELOG.md#h-dctor-world-publication-20261118) and the [selector and fallback rule](../CHANGELOG.md#h-dctor-source-20261118). C-35/C-45 and charter §§4.3/8.1 connect stable constructor identity with explicit selection in a module world. D-07 owns the two-world example. Native implementation qualification remains open.
+- **Constructor family.** [H-DCTOR-FAMILY-MERGE-20261119](../CHANGELOG.md#h-dctor-family-merge-20261119) confirms the [shared module-world merge rule](#merging-type-owned-method-families) for [D-07-DCTOR-PUBLICATION](DesignAuthorityRegistry.md#d-07-dctor-publication) at r58. C-10/C-35/C-45 and P-603/P-604 connect explicit selection to stable type and dctor identities. Check compatible and conflicting contributions to one dctor, equal signatures on different dctors, and braced construction in a base versus combined world. H-DCTOR-WORLD-PUBLICATION-20261118 and H-DCTOR-SOURCE-20261118 govern selectors and extension permission. Native implementation qualification remains separate.
 
 - **Module shutdown reporting.** D-15r50 applies the [D-17 publication rule](ExceptionControl.md#when-a-defer-pass-cannot-publish-its-aggregate) to the D-15-SHUTDOWN/P-458–P-460 drain. [H-OOM-BEST-EFFORT-20261118](../CHANGELOG.md#h-oom-best-effort-20261118) records this dependency update. Startup remains aborted, committed cleanup runs and owners are released even if final reporting loses detail. Native integration remains open.
 
@@ -139,15 +139,46 @@ proc use(x:Node in O) -> u64 where {owner O} {
 
 To extend a source family, explicitly select that callable with import under the intended local alias, then use the established extension rules. Importing a type still grants its existing type-level permissions; this name rule does not remove permitted explicit conformance declarations. Explicit callable import, using's preserved implementation context, import's receiving interpretation, mixin body redefinition and explicit same-alias unions remain separate operations. Local shadowing alone is not explicit overload-conflict arbitration inside a composed family.
 
-For a nominal sum, exporting its type publishes every constructor together with its complete overload family in the exporting world. Using and import select a constructor as that same unit. An adapter may extend a constructor it imports in its own world. The family in the world of the `make` site determines whether braces are available. See the [two-world example and constructor selectors](DomainLanguageDesign.md#publishing-and-selecting-data-constructors).
+### Merging type-owned method families
+
+When several `using` or `import` declarations select views of the same nominal data type, the receiving module merges the published contributions to each of its two method families. All names for that type in the receiving world see the merged information. A definition reached by multiple paths with the same interpretation contributes once. Compatible overloads coexist. Conflicting contributions reject the module composition even when no expression uses the disputed method. The diagnostic identifies both definitions. Import order gives neither definition precedence. A separate world retains its own selections.
+
+The constructor overload family belongs to the nominal type. Its dctors are methods of that family. For a sum, `export Receipt;` publishes every dctor and its visible initializer overloads. A constructor selector makes the named dctors explicit, and importing a dctor permits extending it. In the merged family, the overloads for the dctor named at the `make` site determine whether braced initialization is available. See the [constructor selectors and combined-world example](DomainLanguageDesign.md#publishing-and-selecting-data-constructors).
 
 ### Publication of type-carried call operators
 
-Under the [type-level lookup proposal](DomainLanguageDesign.md#type-level-call-operator-lookup), exporting or re-exporting a nominal data type publishes its visible `(())` family. Plain `using` selects it with the type. An `import` of the type also permits a local extension. A standalone `export`, `using` or `import` of `(())` is invalid. An adapter publishes its extension through its view of that type.
+Exporting a nominal data type also publishes the `(())` family visible on that type in the exporting world. Re-export of a selected type view carries its family. Plain `using` selects the family with the type. An `import` of the type also permits local extension. A standalone `export`, `using` or `import` of `(())` is invalid. Calls use [type-level lookup](DomainLanguageDesign.md#type-level-call-operator-lookup).
 
-Two local names for one nominal type resolve to the receiving world’s method information. Multiple selection paths to one method identity contribute it once. When distinct methods from selected adapters match equally well, the call is ambiguous irrespective of import order. Methods on unrelated receiver types belong to separate families.
+```cod
+# model.cod
+data Threshold { minimum:u64; }
+export Threshold;
 
-For `using "model.cod" Receipt {Accepted};`, the constructor list explicitly selects Accepted and its complete initializer family. Selecting Receipt itself carries the whole visible call-operator family. The [`with methods` clause](#explicit-associated-callables-with-with-methods) governs separately named associated callables such as `score`.
+# checks.cod
+import "model.cod" Threshold;
+func (())(self:const Threshold in O, n:u64) -> bool where {const owner O} {
+    n >= self.minimum
+}
+export Threshold;
+
+# limits.cod
+import "model.cod" Threshold;
+func (())(self:const Threshold in O) -> u64 where {const owner O} {
+    self.minimum
+}
+export Threshold;
+
+# app.cod
+using  "checks.cod" Threshold;
+import "limits.cod" Threshold;
+func at_limit(t:const Threshold in O) -> bool where {const owner O} {
+    t(t())
+}
+```
+
+The inner `t()` reads the minimum through the method from limits. The outer call uses the predicate from checks and returns true. If limits also independently defines the same `(Threshold, u64)` method as checks, app rejects the two definitions when it combines the views. If limits instead re-exports the checks definition, both paths lead to a single method. Within a valid combined family, ordinary method dispatch selects the unique best applicable overload for each call.
+
+For `using "model.cod" Receipt {Accepted};`, the constructor list explicitly selects the Accepted dctor with all its initializer overloads. Selecting Receipt itself carries the whole visible call-operator family. The [`with methods` clause](#explicit-associated-callables-with-with-methods) governs separately named associated callables such as `score`.
 
 ### Types carried by symbol selection
 
