@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-19 — Publish and merge call operators with the receiver type
+
+<a id="h-functor-publication-20261119"></a>
+**H-FUNCTOR-PUBLICATION-20261119.** In the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-19 (America/Los_Angeles), the project user confirmed the adapter publication example and specified “在 app.cod modu world 里尝试合并所有contribution，没有冲突就接受，有冲突时报错”. D-07r198/D-15r57 and registry r975 close K-TYPE-CALL-FAMILY-20261119. The source rule covers plain type selection, complete contributions from selected adapters, identity deduplication and conflict rejection in the receiving world. Native implementation qualification remains separate.
+
+## 2026-11-19 — Review short decisions before pipelines and the Actor model
+
+<a id="k-quick-review-and-actor-agenda-20261119"></a>
+**K-QUICK-REVIEW-AND-ACTOR-AGENDA-20261119.** In the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-19 (America/Los_Angeles), the project user requested “mailbox 作为更大的 Actor model 议题放最后” and an early review of functor publication, exception recovery and initialization/borrowing. Registry r973→974 schedules the publication example first, then the two pipeline discussions and the Actor model. Existing exception and initialization contracts cover the ordinary cases. New operations require a concrete use case. This changes the discussion order only.
+
 ## 2026-11-19 — Apply ordinary method dispatch to sum receivers
 
 <a id="k-sum-receiver-dispatch-20261119"></a>

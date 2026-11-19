@@ -1,6 +1,6 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 197
+Discussion revision: 198
 
 Recorded: 2026-11-19
 
@@ -8,7 +8,7 @@ Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
 
-- **Construction and invocation.** [H-CTOR-CALL-SEPARATION-20261119](../CHANGELOG.md#h-ctor-call-separation-20261119) and [H-CTOR-CALL-FAMILIES-20261119](../CHANGELOG.md#h-ctor-call-families-20261119) confirm the [two method families](#constructor-and-call-operator-method-families). Check identical written arguments, ctor cleanup and receiver readiness. [D-07-FUNCTOR-LOOKUP](DesignAuthorityRegistry.md#d-07-functor-lookup), P-636/P-637, records the [proposed lookup rule](#type-level-call-operator-lookup) separately. C-10/C-35 connect a domain operation to the nominal type visible in its module world. Check unrelated types and competing adapters. At r196 [H-SUM-RECEIVER-PARAMETER-20261119](../CHANGELOG.md#h-sum-receiver-parameter-20261119) places alternative selection in the ordinary method signature. The example uses the user’s `self:const Accepted in O` spelling. At r197 [K-SUM-RECEIVER-DISPATCH-20261119](../CHANGELOG.md#k-sum-receiver-dispatch-20261119) applies the general dispatch contract to that signature, including a call through a Receipt parameter. Wider implementation qualification remains open. [Editorial continuity](../CHANGELOG.md#k-ctor-call-organization-20261119).
+- **Construction and invocation.** [H-CTOR-CALL-SEPARATION-20261119](../CHANGELOG.md#h-ctor-call-separation-20261119) and [H-CTOR-CALL-FAMILIES-20261119](../CHANGELOG.md#h-ctor-call-families-20261119) confirm the [two method families](#constructor-and-call-operator-method-families). Check identical written arguments, ctor cleanup and receiver readiness. [D-07-FUNCTOR-LOOKUP](DesignAuthorityRegistry.md#d-07-functor-lookup), P-636/P-637, records the [type-level lookup rule](#type-level-call-operator-lookup). [H-FUNCTOR-PUBLICATION-20261119](../CHANGELOG.md#h-functor-publication-20261119) confirms publication with the type and conflict-checked composition in the receiving world at r198. C-10/C-35 connect a domain operation to the nominal type visible in its module world. Check unrelated types and competing adapters. At r196 [H-SUM-RECEIVER-PARAMETER-20261119](../CHANGELOG.md#h-sum-receiver-parameter-20261119) places alternative selection in the ordinary method signature. The example uses the user’s `self:const Accepted in O` spelling. At r197 [K-SUM-RECEIVER-DISPATCH-20261119](../CHANGELOG.md#k-sum-receiver-dispatch-20261119) applies the general dispatch contract to that signature, including a call through a Receipt parameter. Wider implementation qualification remains open. [Editorial continuity](../CHANGELOG.md#k-ctor-call-organization-20261119).
 
 [H-CALLABLE-TAIL-20261119](../CHANGELOG.md#h-callable-tail-20261119) applies the [callable result rules](CallableResultInference.md#results-of-proc-func-and-here-bodies) to a double-brace case arm at r189. Check the local result after its own defer runs. D-07-CASE retains its source-order and coverage rules.
 
@@ -505,7 +505,7 @@ The first declaration accepts the receiver directly as data and needs numeric wi
 
 #### Type-level call-operator lookup
 
-Under the proposed type-level rule, `r(args)` selects the visible `(())` family of the nominal receiver type at the call site. Each applicable method competes only within that family. A direct functor-to-here argument uses the same lookup at its supplying site. Synchronous forwarding preserves the bound receiver and the family selected at the supplying site. Invocation follows ordinary method dispatch within that family.
+The call `r(args)` selects the visible `(())` family of the nominal receiver type at the call site. Each applicable method competes only within that family. A direct functor-to-here argument uses the same lookup at its supplying site. Synchronous forwarding preserves the bound receiver and the family selected at the supplying site. Invocation follows ordinary method dispatch within that family.
 
 ```cod
 # Each module publishes a data type with a call operator accepting u64.
