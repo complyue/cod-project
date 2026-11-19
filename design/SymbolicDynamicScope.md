@@ -1,10 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 211 · Recorded: 2026-11-18 · Phase: language/application co-design.
+Design revision: 212 · Recorded: 2026-11-18 · Phase: language/application co-design.
 
 ## Design authority
 
-- **Trailing single braces.** D-10r210 records the parsing dependency on [D-18-HERE-GROUP](DesignAuthorityRegistry.md#d-18-here-group), P-619/P-620, under [K-HERE-GROUP-20261118](../CHANGELOG.md#k-here-group-20261118). [H-CALLABLE-VALUE-KINDS-20261118](../CHANGELOG.md#h-callable-value-kinds-20261118) confirms the declaration/use spelling and [H-HERE-BODY-RESULT-20261118](../CHANGELOG.md#h-here-body-result-20261118) confirms local break feedback. Qualification of the wider group semantics remains open. Existing double-brace selection and completion remain under D-10-TRAILING-CALLBACK.
+- **Trailing single braces.** [H-HERE-BREAK-CONTINUE-20261118](../CHANGELOG.md#h-here-break-continue-20261118), D-10r212, D-18-HERE-GROUP/P-619–P-620 and D-18-HERE-BREAK/P-621–P-622. Unprefixed trailing groups use separate destinations for body feedback, early completion of the supplying call expression and lexical return. The [forwarding example](CallableStorageAndHereAccess.md#break-and-continue-in-a-single-brace-here-body) checks each operand against its destination.
 
 - **Definition-installed effectful procedures.** [D-10-HANDLER-INSTALL](DesignAuthorityRegistry.md#d-10-handler-install), r207, covers the [restricted source forms](#definition-installed-effectful-procedures) under [H-EFFECTFUL-PROC-INSTALL-20261118](../CHANGELOG.md#h-effectful-proc-install-20261118). C-36/C-65 and charter §§3.2/4.3/6.1 connect scoped handler selection with statically bounded access to runtime state. Activation-time snapshots and ordinary restoration supply the baseline. [H-EFFECT-CONSUMER-CALL-20261118](../CHANGELOG.md#h-effect-consumer-call-20261118) fixes the direct-definition versus ordinary callable-value distinction for lexical helpers that reach perform/behave. Acceptance covers both invocation modes, forbidden handler extraction/assignment, direct helper chains and rejection through a stored value. [D-18-HERE-PARAM](DesignAuthorityRegistry.md#d-18-here-param) reviews the proposed lexical permission for procedural literals at a here formal. Family integration and implementation qualification remain open.
 
@@ -942,7 +942,7 @@ Acceptance of incremental grammar/diagnostic work should show both the admitted 
 
 ### Trailing callback arguments
 
-A [single-brace here body](CallableStorageAndHereAccess.md#single-brace-bodies-for-a-here-callable) sends an outward return or escaping exception to its lexical supplier. Write the trailing group directly after the call. Within the group, `break expr;` yields the normal result of this body invocation and the receiver resumes.
+A [single-brace here body](CallableStorageAndHereAccess.md#single-brace-bodies-for-a-here-callable) sends an outward return or escaping exception to its lexical supplier. Write the trailing group directly after the call. Within the group, `continue expr;` supplies feedback to the current body invocation. A `break expr;` supplies the whole originating call’s result, even if another function invoked the forwarded formal.
 
 A first parameter declared as a [here callable](CallableStorageAndHereAccess.md#an-effect-in-a-here-callback) accepts either brace form. Forwarding to another synchronous here formal preserves the supplied body, its authority and its control destinations.
 

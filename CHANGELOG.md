@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-18 — Give here-body feedback to continue and the original call result to break
+
+<a id="h-here-break-continue-20261118"></a>
+**H-HERE-BREAK-CONTINUE-20261118.** On 2026-11-18 (America/Los_Angeles) the project user corrected the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50): “`break` 语义按你最开始的建议是对的，我后来改的语义应该给 `continue` 而不是给 `break`”. Storage r10/D-18r128/D-10r212 and P-621/P-622 supersede H-HERE-BODY-RESULT-20261118 and the local-break portion of H-CALLABLE-MODEL-20261118. Continue returns feedback to the body invocation, break completes the original receiving call, and return exits the supplier. Prior baseline: `f67a0df7fdc47c5da4ac98874356c6a9472c5057:design/CallableStorageAndHereAccess.md`, “Early result from a here body”. Native transport remains delegated.
+
 ## 2026-11-18 — Confirm capture-free functions and activation-bounded here callables
 
 <a id="h-callable-model-20261118"></a>

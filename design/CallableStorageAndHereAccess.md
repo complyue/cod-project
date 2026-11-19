@@ -1,10 +1,12 @@
 # Callable storage and direct lexical access
 
-Design revision: 9 · 2026-11-18 · Confirmed source contract
+Design revision: 10 · 2026-11-18 · Confirmed source contract
 
 ## Design authority
 
 [H-CALLABLE-MODEL-20261118](../CHANGELOG.md#h-callable-model-20261118) confirms r9 for [D-18-HERE-STORAGE](DesignAuthorityRegistry.md#d-18-here-storage), D-18-HERE, FUNC-VALUES, HERE-PARAM, HERE-GROUP and HERE-BREAK. P-609–P-612/P-615–P-622 connect charter §§3.2–3.3/4.3/6.1, C-65/C-73 and D-12-LIFETIME to explicit state ownership and the lexical origin of procedural work. [D-10](SymbolicDynamicScope.md#definition-installed-effectful-procedures) governs symbolic replay, [D-17](ExceptionControl.md#full-scopes-as-immediate-ordinary-calls) governs local completion and [D-29](RangedForAndGenerators.md#lexical-scope-and-completion) governs the precedent for protected body exits.
+
+[H-HERE-BREAK-CONTINUE-20261118](../CHANGELOG.md#h-here-break-continue-20261118) confirms the two typed exits in r10 under [D-18-HERE-BREAK](DesignAuthorityRegistry.md#d-18-here-break), P-621/P-622. The block spelling identifies the originating call and keeps the result and cleanup destination explicit through forwarding. The table and forwarding case below are source acceptance criteria.
 
 Acceptance covers function selection without an enclosing activation, direct slot writes, synchronous forwarding across different owner counts, both brace forms, early feedback, reentrancy, cleanup and rejection of escape. Native layout, inlining and migration strategy are delegated to mainline. Functor receiver preparation and name-only activation of mixed symbolic families remain separate questions.
 
@@ -172,10 +174,10 @@ proc first_match() -> u64 {
 
 Here the outward return belongs to first_match. After a match, visit’s finally runs, relay unwinds and first_match delivers 7 if cleanup succeeds. When the group falls through, visit resumes after step() and first_match can return 0. Every receiver runs the cleanup it actually established. A receiver-local return from cleanup cannot convert the pending caller transfer into success at that receiver. A new escaping cleanup failure follows the generator’s existing replacement/aggregation rules. A protected outward transfer must retain its target across nested calls; an ordinary catchable runtime exception would give retry_once the wrong behavior. [Generator cleanup](RangedForAndGenerators.md#cleanup-completion-at-the-for-boundary)
 
-| What the source needs | Proposed grouping behavior |
+| What the source needs | Grouping behavior |
 | --- | --- |
 | Storage and defer | No new full-scope owner. `here` names the supplier’s existing lexical owner. A direct `defer` registers in the supplier’s nearest full scope each time the group runs. A delayed borrow must survive to that scope’s drain. A header name is bound for its invocation; a saved bits argument can outlive that binding, a borrow of an expired receiver slot cannot. |
-| Normal result | For a non-void formal, use the ordinary group expression’s result on every normally completing path, as with generator feedback. A caller-targeted return or throw produces no value for step(). For instance, `{ 3u64 }` can supply 3 to a u64 formal; `{ return 3u64; }` exits the enclosing callable. For a void formal, discard the normal expression result. No loop target or new `continue` syntax follows from this proposal. |
+| Normal result | For a non-void formal, use the ordinary group expression’s result on every normally completing path, as with generator feedback. A caller-targeted return or throw produces no value for step(). For instance, `{ 3u64 }` can supply 3 to a u64 formal; `{ return 3u64; }` exits the enclosing callable. For a void formal, discard the normal expression result. An explicit `continue` supplies feedback under the formal’s result contract. A `break` supplies the result of the call to which the body was attached. |
 | Parsing | Reserve the trailing group for an explicit here parameter. Use ordinary slot-one binding, including a leading `{=> x; ... }` if parameterized. A `for` header’s body brace belongs to the loop. In expression position, `visit(); { ... }` separates a completed call and a group. Parsing must not attach a brace by trial overload resolution. |
 
 For a u64-valued formal, let `plus_one` return `body() + 1u64`. Each line below can be the sole statement in a different u64-returning supplier.
@@ -193,14 +195,16 @@ return plus_one() { return 7u64; };      # The supplier returns 7; the addition 
 - On each actual invocation, bind header arguments afresh. For a form such as `{=> item; ... }`, names are visible only in that invocation. Reuse the generator-body restriction on direct local declarations: repeatedly invoking the group cannot publish or repeatedly initialize a new caller variable. Declare persistent state before the call or use a nested explicit full scope for fresh locals. Inside such a nested full scope, an explicit return is local again.
 - Adopt the generator’s **per-invocation effect restoration** separately from full-scope ownership. Each invocation starts with the active dynamic bindings. Restore changes it installed, and release its fresh effect-owned resources, before resuming or unwinding the receiver. Persistent writes through valid targets remain observable. This avoids editing a caller binding underneath an active receiver shadow. It is an observable rule attached to invoking the group, including normal completion; ordinary unattached grouping keeps H-319. Direct defer and `here` still belong to the lexical supplier. [Loop scoping](ExceptionControl.md#loop-scoping-rules)
 - For example, from a proc with @rate initially 10, `twice() { defer record(@rate); effect @rate <- 20u64; };` registers two prepared calls if twice invokes the group twice. Each prepares 10; both run at the supplier’s scope exit. The second invocation also starts at 10. Placing `defer record(@rate)` *after* the installation instead saves 20 on each invocation, assuming a bits parameter. A deferred block which reads @rate at drain time requires a valid binding then. A registration into a scope already draining rejects under D-17. No implicit per-invocation user-defer queue is needed.
-- Fully prepare a normal result or outward return under its actual access and owner contracts. A borrowed reference into an effect-owned region being released cannot be delivered through either exit. For a non-void formal a group whose every path exits the supplier owes no normal value; a recovered body-local catch or fallthrough still owes the declared result. An early return is checked against the supplying callable, and the caller must still handle possible fallthrough if the receiver can invoke the group zero times. A group supplies no new loop target; neither a receiver’s loops nor its yield become visible to it.
+- Fully prepare a normal result or outward return under its actual access and owner contracts. A borrowed reference into an effect-owned region being released cannot be delivered through either exit. For a non-void formal a group whose every path exits the supplier owes no normal value; a recovered body-local catch or fallthrough still owes the declared result. An early return is checked against the supplying callable, and the caller must still handle possible fallthrough if the receiver can invoke the group zero times. A receiver’s loops and yield are outside the body’s lexical context.
 - The lexical destination includes the particular activation and the applicable handler at the supplying expression. For a single-brace body, a checked failure can pass outward even with a no-throws here formal: it is checked at the supplying call. A receiver catch that would cover the same type when supplied double braces does not count. Independently declared receiver failures remain caller obligations. Passing a here formal through another func preserves this distinction, including generic calls and calls through compatible function views. The compiler must keep the original catch/return destinations and referenced owners live for every invocation, including invocations during cleanup. Simply retaining a link to a live outer frame would not prove a particular local catch still active.
 - Protect only a transfer that actually leaves the group. Called helpers keep their own local returns. A group-local try can recover its helper’s exception and resume normally. If a receiver’s finally calls an unrelated failing helper during unwind, that failure follows ordinary cleanup replacement; a normal receiver-local return cannot overwrite the supplier’s pending result. A caller-owned deferred failure stays with the caller’s own defer pass. A forwarding helper does not wrap or aggregate the same body exception again at each hop. These are acceptance cases for the same target-aware control paths required by generators.
-- An implementation can use a private completion result for normal feedback, outward return with its destination, or a body failure crossing to the supplying call, and route each through normal cleanup. A receiver failure keeps its ordinary path. The double-brace entry instead uses ordinary call completion. A shared backend still needs proof and coverage for both brace forms, recursive forwarding, cleanup failure and exactly-once release of abandoned owning results. Existing generator design supplies a semantic contract; native implementation completeness is a separate matter.
+- An implementation can use a private completion result for normal feedback, break with its originating call destination, outward return with its supplying callable destination, or a body failure crossing to the supplying call, and route each through normal cleanup. A receiver failure keeps its ordinary path. The double-brace entry instead uses ordinary call completion. A shared backend still needs proof and coverage for both brace forms, recursive forwarding, cleanup failure and exactly-once release of abandoned owning results. Existing generator design supplies a semantic contract; native implementation completeness is a separate matter.
 
-### Early result from a here body
+<a id="early-result-from-a-here-body"></a>
 
-A `break expr;` in the single-brace group completes **one invocation of the supplied body**. Its prepared value becomes the result of `body()`. The function that invoked it resumes at that expression. It can transform the value, run subsequent statements, or invoke the body again.
+### Break and continue in a single-brace here body
+
+`continue expr;` completes the current invocation of the body. The code that called the here formal receives the feedback and resumes. Only another invocation runs the body again. `break expr;` completes the original call expression to which the body was supplied. The supplier receives the value at that expression and resumes there. An explicit `return expr;` exits the callable in which the group was written.
 
 ```cod
 func plus_one(here body() -> u64) -> u64 {
@@ -212,15 +216,27 @@ proc demo() -> u64 {
 }
 ```
 
-| Supplied body | Result of demo |
-| --- | --- |
-| `{ 7u64 }` or `{{ return 7u64; }}` | 108. The body supplies 7, plus_one adds 1, then demo adds 100. |
-| `{ break 7u64; }` | 108. The body supplies 7 immediately. Both additions still run. |
-| `{ return 7u64; }` | 7. This return exits demo and skips both additions. |
+| Body supplied by demo | What receives 7 | Result of demo |
+| --- | --- | --- |
+| `{ continue 7u64; }` | One invocation of body. Both additions run. | 108 |
+| `{ break 7u64; }` | The call to plus_one. Only the addition in demo runs. | 107 |
+| `{ return 7u64; }` | The caller of demo. Neither addition runs. | 7 |
 
-An ordinary group nested inside the supplied body can use `break` for early feedback, for example `{ if (cached()) { break 7u64; } else {}; compute() }`. The body’s own signature supplies the result type, mode, owner and access requirements. A forwarder can return bool while invoking a u64 body; `break 7u64;` is valid there and `break false;` fails the body’s contract. Bare `break;` supplies void. A new single-brace body invocation has its own feedback destination. A separate callable cannot reach an outer body’s feedback destination. General loop-break and labelled jumps are outside this rule. [Generator feedback precedent](RangedForAndGenerators.md#explicit-continue-feedback)
+A normal tail `{ 7u64 }` and a local return in `{{ return 7u64; }}` also yield 108. A nested ordinary statement group preserves the enclosing here body's destinations. A separately supplied here group establishes its own targets. Forwarding an existing formal preserves the original association, including the particular call activation under recursion. A nested full scope has its own callable boundary. Inside a generator loop body its own `continue` follows the [generator feedback contract](RangedForAndGenerators.md#explicit-continue-feedback).
 
-The body skips its remaining statements and runs the cleanup due on this exit, including active finally blocks within it and restoration of per-invocation effects. A defer registered with the supplier remains registered there. If operand preparation or cleanup fails, no normal value is delivered; the group’s failure rules apply. Otherwise the receiver resumes normally, including any outstanding init writes and its usual return and cleanup. No receiver frame is unwound by a successful break and no additional success proof is imposed on its call site.
+```cod
+func relay(here f() -> u64) -> u64 { return f() + 1u64; }
+func matches(here f() -> u64) -> bool { return relay(f) == 8u64; }
+
+val a <- matches() { continue 7u64; };  # relay gets 7, matches compares 8, a is true.
+val b <- matches() { break false; };    # matches delivers false; the comparison is skipped.
+```
+
+Use the established body signature for `continue` and the established result contract of the original receiving call for `break`. In the second example `continue false;` and `break 7u64;` fail their respective contracts. For a void destination use the bare form. For a value destination supply the required payload, including its mode, fields and owner evidence. An exit operand provides no independent anchor for overload selection or result-type inference.
+
+Prepare the operand once. Complete body-exit cleanup and restore per-invocation effects. A successful `continue` resumes at the active invocation. A `break` unwinds all active forwarding frames through the original receiving call, running the cleanup each frame established. User catches cannot intercept a successful control transfer. A defer registered on the supplier stays on its own list. An escaping cleanup failure follows the existing protected-exit rules. Deliver a result only after required cleanup succeeds and all selected result owners remain live. [Cleanup at a protected boundary](RangedForAndGenerators.md#cleanup-completion-at-the-for-boundary)
+
+A delivered `break` counts as successful completion of the original call. Every promised `init` write must therefore be proved on that path. For example, if the receiver invokes the body and only then initializes an output, a breaking path which skips that write cannot report success. A `continue` permits the receiver to resume and perform the write. Intermediate calls abandoned by a break do not publish a normal result. [Initialization obligations](ConstructionAndAcquisition.md)
 
 ## Where stored values differ from live slots
 
