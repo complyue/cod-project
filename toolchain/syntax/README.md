@@ -21,21 +21,22 @@ The installer builds a bundle under the ignored `toolchain/syntax/.local/` direc
 
 Fully quit and restart Zed, then open `showcase.cod`. The language indicator should say **CoD**. To update the preview after editing the grammar or queries, rerun the installer and restart Zed. To remove it, uninstall **CoD Preview** in Zed or remove just the `extensions/installed/cod-preview` symlink from your Zed user-data directory and restart.
 
-Zed distinguishes module directives (`keyword.module.cod`), declarations (`keyword.declaration.cod`), control flow (`keyword.control.cod`), the `const` modifier (`keyword.modifier.const.cod`), and `@symbols` (`variable.special.cod-symbol`). Operators (`operator.cod`) use slate blue, while `make` (`keyword.allocation.cod`) uses bold yellow-green. The example below also uses italic gold for module directives, green for declarations (including `in`), red for `const`, and rose for symbols. Control flow keeps the theme's usual keyword color.
+## Optional Zed theme: Ayu Dark CoD
+
+[Ayu Dark CoD](themes/ayu-dark-cod.json) is a standalone theme based on the [Ayu Dark theme shipped with Zed 1.29.2](https://github.com/zed-industries/zed/blob/v1.29.2/assets/themes/ayu/ayu.json) ([MIT license](themes/ayu-dark-cod.LICENSE)). It keeps the original UI and base syntax colors and adds six CoD styles: italic gold module directives, green declarations (including `in`), red `const`, bold yellow-green `make`, rose `@symbols`, and slate-blue operators. Control flow keeps the usual keyword color.
+
+Install the grammar as above, then copy just the theme JSON into Zed's user themes directory. On macOS or Linux, from the repository root:
+
+```sh
+mkdir -p ~/.config/zed/themes
+cp -i toolchain/syntax/themes/ayu-dark-cod.json ~/.config/zed/themes/
+```
+
+Select **Ayu Dark CoD** with `theme selector: toggle`. No `theme_overrides` are needed for this theme, and the grammar installer does not change the active theme. For **One Light**, use these optional overrides in your Zed settings:
 
 ```json
 {
   "theme_overrides": {
-    "Ayu Dark": {
-      "syntax": {
-        "keyword.module.cod": { "color": "#E6C164", "font_style": "italic", "font_weight": 600 },
-        "keyword.declaration.cod": { "color": "#69C6A0", "font_weight": 600 },
-        "keyword.modifier.const.cod": { "color": "#FF4248" },
-        "keyword.allocation.cod": { "color": "#C5DC68", "font_weight": 700 },
-        "variable.special.cod-symbol": { "color": "#F58FA1" },
-        "operator.cod": { "color": "#91A7C4" }
-      }
-    },
     "One Light": {
       "syntax": {
         "keyword.module.cod": { "color": "#805803", "font_style": "italic", "font_weight": 600 },
@@ -49,5 +50,7 @@ Zed distinguishes module directives (`keyword.module.cod`), declarations (`keywo
   }
 }
 ```
+
+## Check grammar changes
 
 When changing either grammar, check the showcase for comments, quoted module paths, fraction `//` versus division `/`, range `..` versus decimal points, and both orientations of the pipeline connectors. For redundant path separators and other lexer edge cases, see [`comments.cod`](../../tests/cod/language/comments.cod). A highlight match is not a feature-support claim; see the [seed implementation scope](../../tests/cod/language/README.md#current-implementation-boundary) and the [design authority registry](../../design/DesignAuthorityRegistry.md).
