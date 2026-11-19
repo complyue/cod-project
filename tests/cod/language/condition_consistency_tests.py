@@ -14,6 +14,10 @@ PRINT = 'behave @print(target);'
 FIRST = 'if(flag){target<-7u64;{}}else{};'
 SECOND = 'if(!flag){target<-8u64;{}}else{};'
 SET = 'proc set(ptr destination:u64 in O,flag:bool)->void throws NullPointerException where {owner O}{if(flag){destination<-7u64;{}}else{};}'
+OUTPUT = LOCAL+'ptr output=target;'
+FIRST_OUTPUT = FIRST.replace('target<-', 'output<-')
+SECOND_OUTPUT = SECOND.replace('target<-', 'output<-')
+GUARDED_SET = SET.replace(' throws NullPointerException', '').replace('if(flag)', 'if(flag && (destination is not null))')
 runner.CASES = {}
 
 
@@ -31,12 +35,12 @@ case('unrelated_boolean', LOCAL+FIRST+SECOND.replace('!flag', '!other')+PRINT,
      signature='flag:bool,other:bool', arguments=('true,false', 'false,true'), reject=True)
 case('impossible_read', LOCAL+'if(flag){if(!flag){'+PRINT+'}else{};}else{};', output='')
 case('possible_read', LOCAL+'if(flag){if(flag){'+PRINT+'}else{};}else{};', reject=True)
-case('deferred_complements', LOCAL+'{{defer{'+FIRST+SECOND+'};}};'+PRINT)
-case('deferred_snapshot', LOCAL+'{{defer{ {{val saved<-flag;'+FIRST+'flag<-true;'+SECOND.replace('!flag', '!saved')+'}}; };}};'+PRINT)
-case('deferred_changed_snapshot', LOCAL+'{{defer{'+FIRST+'flag<-true;'+SECOND+'};}};'+PRINT, reject=True)
+case('deferred_complements', OUTPUT+'{{defer{'+FIRST_OUTPUT+SECOND_OUTPUT+'};}};'+PRINT)
+case('deferred_snapshot', OUTPUT+'{{defer{ {{val saved<-flag;'+FIRST_OUTPUT+'flag<-true;'+SECOND_OUTPUT.replace('!flag', '!saved')+'}}; };}};'+PRINT)
+case('deferred_changed_snapshot', OUTPUT+'{{defer{'+FIRST_OUTPUT+'flag<-true;'+SECOND_OUTPUT+'};}};'+PRINT, reject=True)
 case('nested_deferred', LOCAL+'{{defer{defer{'+FIRST+SECOND+'};};}};'+PRINT)
-case('separate_actions', LOCAL+'{{defer{'+SECOND+'};defer{'+FIRST+'};}};'+PRINT)
-case('changed_action_snapshot', LOCAL+'{{defer{'+SECOND+'};defer{'+FIRST+'flag<-true;};}};'+PRINT, reject=True)
+case('separate_actions', OUTPUT+'{{defer{'+SECOND_OUTPUT+'};defer{'+FIRST_OUTPUT+'};}};'+PRINT)
+case('changed_action_snapshot', OUTPUT+'{{defer{'+SECOND_OUTPUT+'};defer{'+FIRST_OUTPUT+'flag<-true;};}};'+PRINT, reject=True)
 case('deferred_read_before_writes', LOCAL+'{{defer{'+PRINT+FIRST+SECOND+'};}};', reject=True)
 case('finally_complements', LOCAL+'try{'+FIRST+'}finally{'+SECOND+'};'+PRINT)
 case('loop_once', LOCAL+'for(i in 0u64..1u64){'+FIRST+SECOND+'};'+PRINT)
@@ -50,10 +54,10 @@ for name, declarations, first, second in (
 ):
     case(name, LOCAL+'try{'+first+';'+second+';'+PRINT+'}catch(e:const NullPointerException){};', NULL+declarations, output='7\n7\n')
 case('callable', LOCAL+'proc action=set;try{action(target,flag);action(target,!flag);'+PRINT+'}catch(e:const NullPointerException){};', NULL+SET, output='7\n7\n')
-case('prepared', LOCAL+'try{ {{defer{set(target,flag);set(target,!flag);};}};'+PRINT+'}catch(e:const NullPointerException){};', NULL+SET, output='7\n7\n')
-case('copied_preparation_snapshot', LOCAL+'try{ {{defer set(target,flag);defer set(target,!flag);}};'+PRINT+'}catch(e:const NullPointerException){};', NULL+SET, output='7\n7\n')
-case('failed_registration', LOCAL+'try{ {{defer set(target,flag);defer set(target,!flag);}}; }catch(e:const Exception){};'+PRINT,
-     NULL+'using "std:exceptions" Exception;'+SET, reject=True)
+case('prepared', OUTPUT+'{{defer{set(output,flag);set(output,!flag);};}};'+PRINT, GUARDED_SET, output='7\n7\n')
+case('copied_preparation_snapshot', OUTPUT+'{{defer set(output,flag);defer set(output,!flag);}};'+PRINT, GUARDED_SET, output='7\n7\n')
+case('failed_registration', OUTPUT+'try{ {{defer set(output,flag);defer set(output,!flag);}}; }catch(e:const Exception){};'+PRINT,
+     'using "std:exceptions" Exception;'+GUARDED_SET, reject=True)
 case('changed_call_input', LOCAL+'try{set(target,flag);flag<-true;set(target,!flag);'+PRINT+'}catch(e:const NullPointerException){};', NULL+SET, reject=True)
 case('ref_entry_promise', LOCAL+'skip(target,flag);', 'proc skip(ref value:u64 in O,condition:bool)->void where {owner O}{if(condition&&!condition){behave @print(value);}else{};}', reject=True)
 case('borrowed_alias_mutation', LOCAL+'val control<-flag;try{mutate(control,control,target);'+PRINT+'}catch(e:const NullPointerException){};', NULL+
@@ -97,7 +101,7 @@ errors('category_saved', LOCAL+'val saved:Exception<-payload;'+HEAD+'payload<-un
 errors('category_changed', LOCAL+HEAD+'payload<-unchecked();'+TAIL+PRINT, reject=True)
 errors('category_independent', LOCAL+HEAD+TAIL.replace('throw payload', 'throw other')+PRINT, reject=True,
        signature='payload:Exception,other:Exception', arguments=('checked(),unchecked()',))
-errors('category_deferred', LOCAL+'{{defer{'+HEAD+TAIL+'};}};'+PRINT)
+errors('category_deferred', OUTPUT+'{{defer{'+HEAD.replace('target<-','output<-')+TAIL.replace('target<-','output<-')+'};}};'+PRINT)
 errors('category_nested', LOCAL+'{{defer{defer{'+HEAD+TAIL+'};};}};'+PRINT)
 errors('category_finally', LOCAL+'try{'+HEAD+'}finally{'+TAIL+'};'+PRINT)
 errors('category_snapshot_actions', LOCAL+'{{defer{'+TAIL+'};defer{'+HEAD+'payload<-unchecked();};}};'+PRINT, reject=True)

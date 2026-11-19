@@ -28,21 +28,23 @@ case('nested_write', 'val incoming<-unchecked(),payload:Exception<-checked();{{d
 case('loop_queue', VALUE+'{{for(i in 0u64..3u64){defer{'+OBSERVE+'};};}};', '5\n'*3)
 case('iteration_scope', VALUE+'for(i in 0u64..3u64){ {{defer{'+OBSERVE+'};}}; };', '5\n'*3)
 case('readonly_snapshot', 'val source:Exception<-unchecked();const val payload<-source;{{defer{'+OBSERVE+'};source<-checked();}};')
-case('selected_read', 'val first:Exception<-checked(),second:Exception<-unchecked();ref payload=first;{{defer{'+OBSERVE+'};payload=second;}};')
-bad('selected_write_failure_prefix', 'val first:Exception<-checked(),payload:Exception<-checked();ref selected=first;{{defer{'+OBSERVE+'};defer{selected<-unchecked();};selected=payload;}};')
+case('selected_read', 'val first:Exception<-checked(),second:Exception<-unchecked();ref payload=first;ref alternate=second;{{defer{'+OBSERVE+'};payload=alternate;}};')
+bad('selected_write_failure_prefix', 'val first:Exception<-checked(),payload:Exception<-checked();'
+    'ref selected=first;ref observed_target=payload;{{defer{'+OBSERVE.replace('throw payload','throw observed_target')+
+    '};defer{selected<-unchecked();};selected=observed_target;}};')
 bad('helper_write_failure_prefix', 'val payload:Exception<-checked();{{defer{'+OBSERVE+'};defer{write(payload);};}};', declarations='func write(ref value:Exception in O)->void where {owner O}{value<-unchecked();}')
 bad('prepared_write_failure_prefix', 'val payload:Exception<-checked();{{defer{'+OBSERVE+'};defer write(payload);}};', declarations='func write(ref value:Exception in O)->void where {owner O}{value<-unchecked();}')
 case('copied_helper_result', VALUE+'{{defer{ {{val saved<-keep(payload);'+OBSERVE.replace('throw payload','throw saved')+'}}; };}};', declarations='func keep(value:Exception)->const Exception{return value;}')
 case('generic_helper_result', VALUE+'{{defer{ {{val saved<-keep(payload);'+OBSERVE.replace('throw payload','throw saved')+'}}; };}};', declarations='func keep(value:T)->const T where {T}{return value;}')
 case('recursive_helper_result', VALUE+'{{defer{ {{val saved<-keep(payload,8u64);'+OBSERVE.replace('throw payload','throw saved')+'}}; };}};', declarations='func keep(value:Exception,n:u64)->const Exception{if(n==0u64){return value;}else{return keep(value,n-1u64);};}')
 case('nested_handler', VALUE+'{{defer{ {{val observed<-make local u64;try{try{throw payload;}catch(e:const MissingReturnError){throw e;};}catch(e:const MissingReturnError){observed<-e.category;{}}catch(e:const Exception){};behave @print(observed);}}; };}};')
-case('explicit_return', 'behave @print(run());', '5\n', declarations='proc run()->u64{'+VALUE+'defer{ {{val observed<-make local u64;try{throw payload;}catch(e:const MissingReturnError){observed<-e.category;{}}catch(e:const Exception){};return observed;}}; };return 9u64;}')
+case('explicit_return', 'behave @print(run());', '5\n', declarations='proc run()->u64{'+VALUE+'defer{return {{val observed<-make local u64;try{throw payload;}catch(e:const MissingReturnError){observed<-e.category;{}}catch(e:const Exception){};return observed;}};};return 9u64;}')
 case('category_partition', 'run(true);run(false);', '5\n4\n', declarations='proc run(flag:bool)->void{val left:Exception<-unchecked(),right:Exception<-checked();val payload:Exception<-if(flag){left}else{right};defer{'+OBSERVE.replace('catch(e:const Exception){}', 'catch(e:const NullPointerException){observed<-e.category;{}}catch(e:const Exception){}')+'};}')
 
 bad('late_checked_write', VALUE+'{{defer{'+OBSERVE+'};payload<-checked();}};')
 bad('earlier_checked_write', VALUE+'{{defer{'+OBSERVE+'};defer{payload<-checked();};}};')
 bad('later_write_does_not_help', 'val payload:Exception<-checked();{{defer{payload<-unchecked();};defer{'+OBSERVE+'};}};')
-bad('wrong_selected_target', VALUE+'val other:Exception<-checked();ref selected=payload;{{defer{'+OBSERVE.replace('throw payload','throw selected')+'};selected=other;}};')
+bad('wrong_selected_target', VALUE+'val other:Exception<-checked();ref selected=payload;ref alternate=other;{{defer{'+OBSERVE.replace('throw payload','throw selected')+'};selected=alternate;}};')
 bad('unknown_parameter', 'run(unchecked());', declarations='proc run(payload:Exception)->void{defer{'+OBSERVE+'};}')
 bad('uninitialized_exception', 'val payload<-make local Exception;{{defer{'+OBSERVE+'};}};')
 bad('missing_write', VALUE+'{{defer{'+OBSERVE.replace('observed<-e.category;{}','{}')+'};}};')
@@ -80,11 +82,11 @@ for incoming in (False, True):
         case('boolean_snapshot_'+label, body, '7\n', reject=not incoming)
 
 case('all_boolean_paths_initialize', 'val flag<-false;{{defer{'+BOOLEAN.replace('else{}','else{observed<-7u64;{}}')+'};}};', '7\n')
-case('boolean_direct_alias', 'val known<-true,other<-false;ref flag=other;{{defer{'+BOOLEAN+'};flag=known;}};', '7\n')
+case('boolean_rebound_to_true_target', 'val known<-true,other<-false;ref flag=other;ref alternate=known;{{defer{'+BOOLEAN+'};flag=alternate;}};', '7\n')
 case('category_prior_initialization', 'val payload:Exception<-checked();{{defer{'+OBSERVE.replace('val observed<-make local u64','val observed<-5u64')+'};}};')
 bad('wrong_handler_initializes', VALUE+'{{defer{'+OBSERVE.replace('catch(e:const MissingReturnError)','catch(e:const NullPointerException)')+'};}};')
 
-bad('boolean_wrong_alias', 'val known<-true,other<-false;ref flag=known;{{defer{'+BOOLEAN+'};flag=other;}};')
+bad('boolean_rebound_to_false_target', 'val known<-true,other<-false;ref flag=known;ref alternate=other;{{defer{'+BOOLEAN+'};flag=alternate;}};')
 bad('boolean_possible_alias', 'run(true);', declarations='proc run(choice:bool)->void{val first<-true,second<-false;ref flag=if(choice){first}else{second};defer{'+BOOLEAN+'};}')
 
 runner.CASE_ARGUMENTS = {}
