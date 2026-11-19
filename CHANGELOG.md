@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-19 — Identify the consumer of a case result
+
+<a id="k-case-consumer-20261119"></a>
+**K-CASE-CONSUMER-20261119.** The user identified `return` as the consumer in `return case ...;`. D-07r184/registry r953 distinguish that use from discarding a successful call result and from evaluating a case directly as an expression statement. This editorial continuation preserves the result join and exhaustion rule at `a8d73fae00f7cd2458174c854dbdfb566d17bc3b:design/DomainLanguageDesign.md`, “Reaching the end of the case”.
+
 ## 2026-11-19 — Confirm case expressions and lexical control
 
 <a id="h-case-contract-20261119"></a>

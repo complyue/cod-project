@@ -1,6 +1,6 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 183
+Discussion revision: 184
 
 Recorded: 2026-11-19
 
@@ -8,7 +8,7 @@ Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
 
-- **Case expressions and branch-local variables.** [H-CASE-CONTRACT-20261119](../CHANGELOG.md#h-case-contract-20261119) confirms [D-07-CASE](DesignAuthorityRegistry.md#d-07-case) r183 for the [source contract and examples](#case-expressions-and-branch-local-variables). P-625/P-626 derive inspectable selection, binding and effect order from C-10/C-65/C-72 and charter §§3.1–3.3/4.3/8.1. The acceptance cases cover a single subject evaluation, guard effects, invalidated field access, misses and fallthrough through intervening code, partial value/void cases, nested control and cleanup on both exits. Coverage follows the [compiler-stage policy](../applications/cod-booter/README.md#diagnostics-by-compiler-stage). This scope specifies source behavior. It grants no new owner proof, sum mutation operation or native representation.
+- **Case expressions and branch-local variables.** [H-CASE-CONTRACT-20261119](../CHANGELOG.md#h-case-contract-20261119) confirms [D-07-CASE](DesignAuthorityRegistry.md#d-07-case) r183 for the [source contract and examples](#case-expressions-and-branch-local-variables). P-625/P-626 derive inspectable selection, binding and effect order from C-10/C-65/C-72 and charter §§3.1–3.3/4.3/8.1. The acceptance cases cover a single subject evaluation, guard effects, invalidated field access, misses and fallthrough through intervening code, partial value/void cases, nested control and cleanup on both exits. Coverage follows the [compiler-stage policy](../applications/cod-booter/README.md#diagnostics-by-compiler-stage). [K-CASE-CONSUMER-20261119](../CHANGELOG.md#k-case-consumer-20261119) continues this scope at r184 by identifying the consuming expression or statement. This scope specifies source behavior. It grants no new owner proof, sum mutation operation or native representation.
 
 - **Functor classification.** [H-HERE-FUNCTOR-20261118](../CHANGELOG.md#h-here-functor-20261118) records the receiver-bound functor in [D-18’s here-callable inventory](CallableViewsAndCaptures.md#forms-of-here-callable). D-07-FUNCTORS r178/P-605–P-606 uses the bounded lifetime rule to preserve receiver ownership and access. Accept the two argument bindings in DL-01 under the matching predicate contract. Selection timing, competing overloads and implementation qualification remain open.
 
@@ -351,7 +351,7 @@ An explicit `x : T` in the subject, guard or body is an ordinary expression. For
 
 Join normal arm results under the [conditional result rules](ConstructionAndAcquisition.md#conditional-results). A single-brace `return` exits the enclosing callable. A double-brace `return v;` supplies this arm’s result after its own cleanup, and execution continues with the case’s consumer. A value-producing double-brace body needs an explicit local return under [ordinary full-scope rules](ExceptionControl.md#full-scopes-as-immediate-ordinary-calls); a tail expression alone supplies no implicit value. Do not return a reference to that invocation’s fresh storage. A reference to a sufficiently long-lived outer target retains its ordinary owner. An early case break also supplies a result. Paths that leave by an enclosing return, throw or arm fallthrough contribute no result to the join.
 
-**Reaching the end of the case.** A scan may reach the end because every remaining header declined or because the last reached body executed fallthrough. Retain the effects of every executed statement, header and guard. A void case finishes normally. If the case has a value contract, reaching the end raises the unchecked `CaseMatchError` at the case site, even when the expression result is discarded. Determine that contract from the ordinary typing context and result-producing paths before execution. A selected full-scope body that owes a value and finishes without returning one follows the ordinary callable rule for `MissingReturnError`. An ordinary unchecked failure can be caught. A caller can always write a catch-all to supply a domain-specific result or throw. An optional coverage warning leaves these runtime outcomes intact.
+**Reaching the end of the case.** A scan may reach the end because every remaining header declined or because the last reached body executed fallthrough. Retain the effects of every executed statement, header and guard. A void case finishes normally. If the case has a value contract, reaching the end raises the unchecked `CaseMatchError` at the case site, even when the expression result is discarded. Determine that contract from the ordinary typing context and result-producing paths before execution. A selected full-scope body that owes a value and finishes without returning one follows the ordinary callable rule for `MissingReturnError`. An ordinary unchecked failure can be caught. A catch-all arm can supply a domain-specific result or throw. An optional coverage warning leaves these runtime outcomes intact.
 
 ```cod
 proc fee(expedited:bool) -> u64 {
@@ -362,7 +362,9 @@ proc notify(expedited:bool) {
 }
 ```
 
-For false, fee raises CaseMatchError and notify finishes normally. A final matched arm that explicitly falls through reaches the same end. An ordinary void completion in a selected arm must still agree with the common result type.
+In `return case ...;`, the return statement consumes the case result to fulfill fee’s declared u64 result. A later call written `fee(false);` discards the function result on success. For false, fee instead raises CaseMatchError before it returns, and notify finishes normally.
+
+A directly discarded case is a distinct expression statement. In `case expedited of { (true) -> { break 5u64; }; };` the typed break establishes a u64 case result. On true the surrounding statement discards 5. On false the case raises CaseMatchError before any result is available to discard. A final matched arm that explicitly falls through reaches the same end. An ordinary void completion in a selected arm must still agree with the common result type.
 
 **Statements between arms and fallthrough.** The case walks its contents in source order until an arm completes it or control leaves through an ordinary exit. A pattern miss, a false guard and a body executing `fallthrough;` all resume with the first item after that arm. Each intervening statement executes once on a path that reaches it. An arm that completes normally skips the rest of the case, even when the arm produces void. A fallthrough path contributes no value to the case result.
 
