@@ -209,6 +209,7 @@ class ScalarChecker {
   std::map<std::pair<size_t, size_t>, size_t> product_selections_;
   std::vector<size_t> input_field_places_;
   std::map<size_t, size_t> input_field_roots_;
+  std::map<size_t, size_t> input_slot_referents_;
   std::set<size_t> rebound_;
   std::map<std::string, size_t> external_owners_;
   struct PayloadWrites {
@@ -1946,6 +1947,8 @@ class ScalarChecker {
     for (const auto id : physical_slots(view.slots)) {
       const auto &binding = bindings_->at(id);
       reference_slot(binding.value_binding, view.fixed_binding || binding.fixed, at);
+      if (binding.embedded_slot && storage(*binding.embedded_slot).borrowed)
+        implementation_gap(at, "rebinding an embedded slot through a borrowed product");
     }
   }
   void require_deferred_slots(const CheckedOperation &view, const Location &at) const {
@@ -2714,6 +2717,8 @@ class ScalarChecker {
     return initialized_inputs;
   }
   std::optional<size_t> borrowed_binding_place(size_t binding) const {
+    if (const auto referent = input_slot_referents_.find(binding); referent != input_slot_referents_.end())
+      return referent->second;
     const auto &inputs = checking_instance_->frame.inputs;
     for (size_t i = 0; i < inputs.size() + input_field_places_.size(); ++i) {
       const auto place = input_place(i);
@@ -2907,7 +2912,7 @@ class ScalarChecker {
     // Value possibilities grow from no observed return, independently of
     // the optimistic initialization/presence guarantees above.
     const auto input_type = [&](size_t p) -> const Type & {
-      return p < arguments.size() ? arguments[p] : fields[p - arguments.size()].description->type;
+      return p < arguments.size() ? arguments[p] : fields[p - arguments.size()].type();
     };
     for (const auto reason : call_reasons(method)) for (const auto parameter : borrowed)
       if (input_type(parameter) == Type::boolean) effects.booleans[reason][parameter] = effects.returned.boolean;
@@ -3230,11 +3235,23 @@ class ScalarChecker {
       const std::vector<CheckedOperation> &operands, CheckedOperation &operation, bool read, bool discard,
       size_t offset = 0, bool immediate_scope = false) {
     const auto fields = product_inputs(arguments, expr.at);
+    const bool prepared = &expr == prepared_call_;
     std::vector<CheckedOperation> projected;
     if (!fields.empty()) {
       projected = operands;
-      for (const auto &field : fields)
-        projected.push_back(project_product(projected.at(field.parent), field.field, expr.at, true));
+      for (const auto &field : fields) {
+        if (field.role != ProductInput::Role::referent) {
+          auto place = project_product(projected.at(field.parent), field.field, expr.at, true);
+          place.type = field.type();
+          projected.push_back(std::move(place));
+          continue;
+        }
+        auto slot = projected.at(field.parent);
+        if (prepared && proving_ && std::ranges::any_of(slot.targets, [&](size_t place) {
+              return place != null_target && rebound_.contains(storage(place).binding);
+            })) implementation_gap(expr.at, "deferred product borrow with a mutable embedded selection");
+        projected.push_back(select_product_reference(std::move(slot), *field.description, expr.at, true, true));
+      }
     }
     const auto &views = fields.empty() ? operands : projected;
     const auto borrowed_input = [&](size_t i) {
@@ -3247,7 +3264,6 @@ class ScalarChecker {
       return i < arguments.size() ? arguments[i] : views[i].type;
     };
     std::vector<ExceptionFacts> exception_inputs;
-    const bool prepared = &expr == prepared_call_;
     const bool prepared_slots = prepared && !summary.bindings.empty();
     const bool has_invocation_time_slots = !immediate_scope && !summary.bindings.empty();
     const bool conditional_call = !summary.uninitialized.empty() || std::any_of(summary.reads.begin(), summary.reads.end(),
@@ -5147,11 +5163,9 @@ class ScalarChecker {
       const auto mode = argument_mode(parameter);
       if (mode == ArgumentMode::value || definition.scope_inputs || definition.source->symbolic || caller_bindings(definition))
         implementation_gap(at, "product parameters require a borrowed target in an ordinary direct call");
-      borrowed_product_schema(arguments[i], at);
     }
     if (result.contract->type->kind == Type::product) {
       if (!result.contract->borrowed()) implementation_gap(at, "whole-product value results");
-      borrowed_product_schema(*result.contract->type, at);
     }
     check_declared_results(definition, *result.contract, declared);
     definition.contextual_result = definition.contextual_result || supplied.has_value();
@@ -5254,6 +5268,8 @@ class ScalarChecker {
         if (&expr == prepared_call_) require_deferred_slots(views[i], expr.at);
         for (const auto slot : physical_slots(views[i].slots)) {
           const auto &binding = bindings_->at(slot);
+          if (binding.embedded_slot && storage(*binding.embedded_slot).borrowed)
+            implementation_gap(expr.at, "forwarding an embedded slot through a borrowed product");
           if (binding.read_only != parameters[i].read_only && proving_ && validating_) {
             const auto &sources = effects.binding_sources;
             const auto found = sources.find(i);
@@ -5872,11 +5888,6 @@ class ScalarChecker {
     if (type.kind != Type::product) implementation_gap(at, "ordinary construction requires a supported product type");
     return program_.schemas.at(type.identity);
   }
-  const CheckedSchema &borrowed_product_schema(const Type &type, const Location &at) const {
-    const auto &schema = product_schema(type, at);
-    if (!schema.bits) implementation_gap(at, "borrowed reference-bearing product parameters and results");
-    return schema;
-  }
   static size_t product_field(const CheckedSchema &schema, const Expression &member) {
     for (size_t i = 0; i < schema.fields.size(); ++i)
       if (schema.fields[i].source->name == member.text) return i;
@@ -5899,19 +5910,39 @@ class ScalarChecker {
     }
   }
   struct ProductInput {
-    size_t root, parent, field;
+    enum class Role { direct, slot, referent };
+    size_t parent, field;
     const CheckedSchema::Field *description;
+    Role role;
+    const Type &type() const {
+      static const Type slot_type = Type::void_type;
+      return role == Role::slot ? slot_type : description->type;
+    }
   };
   std::vector<ProductInput> product_inputs(const std::vector<Type> &arguments, const Location &at) const {
     std::vector<ProductInput> fields;
+    const auto input_type = [&](size_t input) -> const Type & {
+      return input < arguments.size() ? arguments[input] : fields[input - arguments.size()].type();
+    };
     for (size_t i = 0; i < arguments.size() + fields.size(); ++i) {
-      const auto &type = i < arguments.size() ? arguments[i] : fields[i - arguments.size()].description->type;
+      const auto &type = input_type(i);
       if (type.kind != Type::product) continue;
-      const auto &schema = borrowed_product_schema(type, at);
-      const auto root = i < arguments.size() ? i : fields[i - arguments.size()].root;
+      // A recursive edge can retain a whole view. Materializing further
+      // projections through that edge requires a finite access proof.
+      size_t ancestor = i;
+      while (ancestor >= arguments.size()) {
+        ancestor = fields[ancestor - arguments.size()].parent;
+        if (input_type(ancestor) == type) break;
+      }
+      if (ancestor != i && input_type(ancestor) == type) continue;
+      const auto &schema = product_schema(type, at);
       for (size_t field = 0; field < schema.fields.size(); ++field) {
-        if (fields.size() == 4096) fail(at, "compiler resource limit: too many borrowed product fields");
-        fields.push_back({root, i, field, &schema.fields[field]});
+        const auto &description = schema.fields[field];
+        const bool direct = description.storage == PlaceKind::value;
+        if (fields.size() + (direct ? 1 : 2) > 4096) fail(at, "compiler resource limit: too many borrowed product fields");
+        const auto slot = arguments.size() + fields.size();
+        fields.push_back({i, field, &description, direct ? ProductInput::Role::direct : ProductInput::Role::slot});
+        if (!direct) fields.push_back({slot, field, &description, ProductInput::Role::referent});
       }
     }
     return fields;
@@ -5941,9 +5972,9 @@ class ScalarChecker {
     result.product_field = index;
     result.view = true;
     result.owners = parent.owners;
-    result.read_only = parent.read_only || readonly_field(field);
+    result.read_only = parent.read_only || (field.storage == PlaceKind::value ? readonly_field(field) : field.source->read_only);
     result.initialization = parent.initialization;
-    if (result.place) {
+    if (result.place && field.storage == PlaceKind::value) {
       const auto binding = storage(*result.place).binding;
       if (const auto found = lexical_.selection_identities.find(binding); found != lexical_.selection_identities.end())
         result.selection_identity = found->second;
@@ -5962,9 +5993,11 @@ class ScalarChecker {
     return result;
   }
   CheckedOperation select_product_reference(CheckedOperation slot, const CheckedSchema::Field &field,
-                                            const Location &at, bool write_only) {
+                                            const Location &at, bool write_only, bool project_input = false) {
     slot.embedded_slot_selection = slot.selection_identity;
+    const auto absent = slot.null_sources;
     for (const auto place : slot.targets) {
+      if (place == null_target) continue;
       const auto binding = storage(place).binding;
       slot.slots.insert(binding);
       if (!write_only)
@@ -5975,6 +6008,15 @@ class ScalarChecker {
     const auto owners = slot.owners;
     slot = selection_state(std::move(slot), at);
     slot.owners = owners;
+    slot.type = field.type;
+    if (project_input && !absent.empty()) {
+      slot.nullness.reset();
+      slot.null_sources.insert(absent.begin(), absent.end());
+      slot.targets.insert(null_target);
+      select_targets(slot, slot.targets);
+      slot.binding.reset();
+      slot.selection_identity.reset();
+    }
     return slot;
   }
   CheckedOperation embedded_slot_targets(const CheckedOperation &target) const {
@@ -13975,7 +14017,7 @@ class ScalarChecker {
     cleanup_scope_ = 0; next_scope_ = 1;
     next_target_version_ = 0;
     next_selection_identity_ = 0; selection_sources_.clear(); incoming_selections_.clear(); product_selections_.clear();
-    input_field_places_.clear(); input_field_roots_.clear(); return_selection_actions_.clear();
+    input_field_places_.clear(); input_field_roots_.clear(); input_slot_referents_.clear(); return_selection_actions_.clear();
     next_boolean_observation_ = 0; conditional_selections_.clear();
   }
 
@@ -14128,27 +14170,56 @@ class ScalarChecker {
   }
   void bind_product_inputs(const CheckedInstance &instance, const Location &at, LexicalState::InputFacts &entry) {
     const auto fields = product_inputs(instance.arguments, at);
-    for (const auto &[root, parent, index, description] : fields) {
+    for (const auto &[parent, index, description, role] : fields) {
       const auto container = input_place(parent);
       const auto owner = storage(container).scope;
       const auto name = "$input.field." + std::to_string(storage_->size()) + "." + description->source->name;
-      const auto place = declare(name, description->type, storage(container).read_only || readonly_field(*description),
-                                 true, at, false, &entry);
+      const bool slot = role == ProductInput::Role::slot;
+      const bool referent = role == ProductInput::Role::referent;
+      const bool readonly = storage(container).read_only ||
+          (role == ProductInput::Role::direct ? readonly_field(*description) : description->source->read_only);
+      const auto place = declare(name, description->type, readonly, !slot, at, false, &entry, slot);
       auto &field = storage_->at(place);
       field.scope = owner;
       field.borrowed = field.subobject = true;
-      auto &fields_in_storage = storage_->at(container).fields;
-      if (index != fields_in_storage.size()) throw std::logic_error("product input fields out of order");
-      fields_in_storage.push_back(place);
+      if (slot) {
+        field.type = Type::void_type;
+        auto &binding = bindings_->at(field.binding);
+        binding.place_owners = {owner};
+        binding.requires_initialized = description->storage == PlaceKind::reference;
+        binding.nullable = description->storage == PlaceKind::pointer;
+        binding.fixed = description->source->fixed_binding;
+      }
+      if (!referent) {
+        auto &fields_in_storage = storage_->at(container).fields;
+        if (index != fields_in_storage.size()) throw std::logic_error("product input fields out of order");
+        fields_in_storage.push_back(place);
+        const auto root = input_field_roots_.find(container);
+        input_field_roots_.emplace(place, root == input_field_roots_.end() ? container : root->second);
+      }
       std::erase(scope_storage_[0], place);
       lexical_.owners[field.binding] = {owner};
       const auto ordinal = instance.frame.inputs.size() + input_field_places_.size();
-      const auto selection = lexical_.selection_identities.at(field.binding);
-      selection_sources_.at(selection) = {ordinal};
+      const auto selection = slot ? new_selection_identity({ordinal}) : lexical_.selection_identities.at(field.binding);
+      if (!slot) selection_sources_.at(selection) = {ordinal};
       incoming_selections_.emplace(place, selection);
       input_field_places_.push_back(place);
-      input_field_roots_.emplace(place, input_place(root));
-      if (instance.frame.inputs[root].mode != ArgumentMode::borrowed_ptr) {
+      const bool nullable = referent && description->storage == PlaceKind::pointer;
+      if (referent) {
+        const auto binding = storage(container).binding;
+        input_slot_referents_.emplace(binding, place);
+        auto &targets = lexical_.targets.at(binding);
+        auto &sources = lexical_.null_sources.at(binding);
+        targets.insert(place);
+        if (nullable) { targets.insert(null_target); sources.insert(place); }
+        entry.selections.assign(binding, selection_targets(targets, sources));
+        lexical_.selection_identities.at(binding) = selection;
+        if (!proving_) {
+          possible_targets_.at(binding) = targets;
+          possible_null_sources_.at(binding) = sources;
+        }
+      }
+      if (entry.initialized.contains(container) && !nullable) {
         entry.initialized.insert(place);
         entry.present.insert(place);
       }

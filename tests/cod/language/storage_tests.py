@@ -220,6 +220,53 @@ runner.CASES = {
         'data Entry {ref selected:u64;}val target<-make local u64;'
         'ptr item=make Entry;item.selected=target;ref ready=item;',
         2, "", "read of 'selected target' before definite initialization"),
+    "borrowed_product_retains_the_required_referent_and_owner": (PRELUDE +
+        'data Box {ref value:u64;}'
+        'func borrow(ref source:const Box in O)->ref const u64 in O where {const owner O}{return source.value;}'
+        'val target<-7u64;ref item=make Box {value=target;};ref result=borrow(item);'
+        'behave @print((result is target));behave @print(result);', 0, "true\n7\n", ""),
+    "borrowed_product_checks_container_field_and_payload_separately": (PRELUDE +
+        'data Box {ptr value:u64;}func read(ptr source:const Box in O)->u64 where {const owner O}{'
+        'if(source is null){return 1u64;}else{};if(source.value is null){return 2u64;}else{};return source.value;}'
+        'val target<-7u64;ptr absent:Box=null in here;ref empty=make Box {value=null;};ref present=make Box {value=target;};'
+        'behave @print(read(absent));behave @print(read(empty));behave @print(read(present));', 0, "1\n2\n7\n", ""),
+    "borrowed_product_slot_readiness_does_not_initialize_returned_target": (
+        'data Box {ptr value:u64;}func project(ref source:Box in O)->ptr u64 in O where {owner O}{return source.value;}'
+        'val target<-make local u64;ref item=make Box {value=target;};ptr selected=project(item);selected;',
+        2, "", "before definite initialization"),
+    "borrowed_product_call_initializes_the_selected_referent": (PRELUDE +
+        'data Box {ptr value:u64;}proc write(ref source:Box in O) where {owner O}{'
+        'if(source.value is null){return;}else{};source.value<-19u64;return;}'
+        'val target<-make local u64;ref item=make Box {value=target;};write(item);behave @print(target);', 0, "19\n", ""),
+    "borrowed_product_recursion_can_return_a_whole_selected_node": (PRELUDE +
+        'data Node {count:u64;ptr next:Node;}func next_of(node:const Node in O)->ptr const Node in O where {const owner O}{return node.next;}'
+        'ref last=make Node {count<-11u64;next=null;};ref first=make Node {count<-7u64;next=last;};'
+        'ptr following=next_of(first);ptr end=next_of(last);behave @print((following is last));'
+        'behave @print((end is null));behave @print(following.count);', 0, "true\ntrue\n11\n", ""),
+    "borrowed_product_projects_an_acyclic_product_referent": (PRELUDE +
+        'data Leaf {count:u64;ptr optional:u64;}data Root {ref child:Leaf;}'
+        'func count(ref source:const Root in O)->u64 where {const owner O}{return source.child.count;}'
+        'ref leaf=make Leaf {count<-17u64;optional=null;};ref root=make Root {child=leaf;};behave @print(count(root));',
+        0, "17\n", ""),
+    "borrowed_product_indirect_and_inline_paths_can_share_a_target": (
+        'data Leaf {bit:bool;}data Root {inline:Leaf;ref through:Leaf;}'
+        'proc inspect(ref source:Root in O) where {owner O}{source.inline.bit<-false;source.through.bit<-true;'
+        'val missing<-make local u64;if(source.inline.bit){missing;{}}else{};return;}'
+        'ptr root=make Root;root.inline.bit<-false;root.through=root.inline;ref ready=root;inspect(ready);',
+        2, "", "before definite initialization"),
+    "borrowed_product_call_resolves_the_field_after_operand_preparation": (PRELUDE +
+        'data Box {ref selected:u64;}func value(ref source:const Box in O,ignored:u64)->u64 where {const owner O}{return source.selected;}'
+        'val first<-7u64;val second<-11u64;ref item=make Box {selected=first;};'
+        'behave @print(value(item,{item.selected=second;0u64}));', 0, "11\n", ""),
+    "deferred_product_call_cannot_assume_a_rebound_field_selection": (PRELUDE +
+        'data Box {ref value:u64;}proc read(ref source:const Box in O) where {const owner O}{behave @print(source.value);return;}'
+        'proc run()->void{val target<-7u64;val other<-11u64;ref item=make Box {value=target;};'
+        'defer read(item);item.value=other;return;}run();',
+        2, "", "deferred product borrow with a mutable embedded selection"),
+    "borrowed_product_rebinding_requires_slot_effects": (
+        'data Box {ptr value:u64;}proc update(ref source:Box in O,ref target:u64 in O) where {owner O}{source.value=target;return;}'
+        'val first<-7u64;val second<-11u64;ref item=make Box {value=first;};update(item,second);',
+        2, "", "rebinding an embedded slot through a borrowed product"),
 }
 runner.CASE_ARGUMENTS = {"shadow_error": ["-Werror=shadow"], "unrelated_warning_error": ["-Werror=missing-return"]}
 runner.EXTRA_SOURCES = [Path(__file__)]
