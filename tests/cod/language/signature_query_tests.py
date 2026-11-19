@@ -26,6 +26,33 @@ runner.CASES = {
     'variadic_pair_signature': (query('inspect(declared,1)',prefix='func declared(inputs:i64...)->i64;func inspect(callback:func(T,T)->const T,input:T)->const T where T;'),0,'7\n',''),
     'variadic_same_type_not_erased': (query('inspect(declared,1)',prefix='func declared(inputs:T...)->const T where T;func inspect(callback:func(T,T)->const T,input:T)->const T where T;'),2,'','no applicable declared signature'),
     'duplicate_declarations': (query(prefix=ID+ID+APPLY),0,'7\n',''),
+    'here_generator_equivalent_definition': (
+        'func emit(n:u64) yields u64 -> bool {yield(n);}'
+        'func emit(here step(item:u64)->bool,n:u64)->void{step(n);}',
+        2,'',"duplicate method signature for 'emit'"),
+    'here_reordered_labelled_protocol': (
+        'func emit() yields {count:u64;found:bool;} -> {again:bool;weight:u64;} {}'
+        'func emit() yields {found:bool;count:u64;} -> {weight:u64;again:bool;} {}',
+        2,'',"duplicate method signature for 'emit'"),
+    'here_renamed_borrowed_owner': (
+        'func emit(item:u64 in O) yields ref u64 in O where {owner O} {yield(item);}'
+        'func emit(here step(ref value:u64 in P)->void,item:u64 in P)->void where {owner P} {step(item);}',
+        2,'',"duplicate method signature for 'emit'"),
+    'here_declared_receiver_result_mismatch': (
+        'func invoke(here body()->void)->u64;'
+        'func invoke(here step()->void)->bool{return true;}',
+        2,'','implementation result does not satisfy callable declaration'),
+    'here_generic_declaration_receiver_result_mismatch': (
+        'func invoke(here body(x:T)->void,input:T)->u64 where T;'
+        'func invoke(here step(x:u8)->void,input:u8)->bool{return true;}',
+        2,'','implementation result does not satisfy callable declaration'),
+    'here_variadic_declaration_receiver_result_mismatch': (
+        'func invoke(here body()->void,input:u64...)->u64;'
+        'func invoke(here step()->void)->bool{return true;}',
+        2,'','implementation result does not satisfy callable declaration'),
+    'here_repeated_input_name': (
+        'func invoke(here body(item:u64,item:bool)->void)->void{}',
+        2,'',"duplicate here input name 'item'"),
     'context_selects_disjoint_signatures': (query(prefix='func declared(input:i64)->i64;func declared(input:bool)->bool;'+APPLY),0,'7\n',''),
     'concrete_signature_without_context': (query('inspect(declared)',prefix='func declared(input:u64)->u64;func inspect(callback:F)->i64 where F;'),0,'7\n',''),
     'duplicate_signature_without_context': (query('inspect(declared)',prefix='func declared(input:u64)->u64;func declared(input:u64)->u64;func inspect(callback:F)->i64 where F;'),0,'7\n',''),

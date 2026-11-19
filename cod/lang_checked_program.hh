@@ -15,6 +15,7 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -338,6 +339,21 @@ struct CheckedInstance {
   CheckedFrame frame;
   bool result_supplied = false;
 };
+struct CheckedHereContract {
+  struct Component {
+    std::string label;
+    Type type;
+    ArgumentMode mode = ArgumentMode::value;
+    // Zero denotes the component's invocation owner. Other roles index the receiver's owners from one.
+    std::optional<size_t> owner;
+    bool read_only = false;
+  };
+  std::vector<Component> inputs;
+  bool labelled = false;
+  Component result;
+  std::optional<std::vector<Component>> feedback;
+  std::set<size_t> throws_categories;
+};
 struct CheckedMethod {
   const Form *source = nullptr;
   std::string operation; // Semantic operation identity, independent of the local alias.
@@ -357,6 +373,7 @@ struct CheckedMethod {
   std::vector<std::string> type_parameters;
   std::vector<size_t> retained_types;
   std::optional<size_t> parent;
+  std::optional<CheckedHereContract> here;
   struct ScopeInputs {
     struct PlaceAccess {
       size_t input;
@@ -383,8 +400,9 @@ struct CheckedMethod {
     CleanupEquations::ConditionClauses reference_conditions;
   };
   std::optional<ScopeInputs> scope_inputs;
-  const std::vector<Parameter> &input_parameters() const {
-    return scope_inputs ? scope_inputs->parameters : source->parameters;
+  std::span<const Parameter> input_parameters() const {
+    if (scope_inputs) return scope_inputs->parameters;
+    return std::span<const Parameter>(source->parameters).subspan(here.has_value());
   }
   const std::vector<OwnerParameter> &input_owners() const {
     return scope_inputs ? scope_inputs->owners : source->owner_parameters;
