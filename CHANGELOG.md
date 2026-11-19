@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-19 — Express ambiguous call intent with the distinguishing argument
+
+<a id="h-call-intent-20261119"></a>
+**H-CALL-INTENT-20261119.** In the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-19 (America/Los_Angeles), the project user accepted ambiguity for the crossed data/here and numeric matches and made explicit parameter naming a design principle. The user described a here call as explicit `-> yield` intent and asked to omit the other `-> n` label. D-07r191, D-10r223 and registry r966 record these source decisions. The bounded integration permits positional continuation after an in-position label or default request and preserves the named suffix after reordering. It refines H-451’s blanket positional-after-named restriction at `8f558c76b1889e3e286d600fa5c6e54f297748a0:design/SymbolicDynamicScope.md`, “Named arguments, defaults and complete binding”. H-475/H-477 retain their overload and default rules. Compiler implementation remains separate.
+
 ## 2026-11-19 — Scope structural producers and transformers
 
 <a id="k-producer-transformers-20261119"></a>
