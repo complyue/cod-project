@@ -182,9 +182,17 @@ class ScalarChecker {
   std::map<size_t, size_t> incoming_selections_;
   std::set<size_t> rebound_;
   std::map<std::string, size_t> external_owners_;
+  struct PayloadWrites {
+    std::set<size_t> places, origins;
+    void include(const CheckedOperation &target) {
+      places.insert(target.targets.begin(), target.targets.end());
+      origins.insert(target.origins.begin(), target.origins.end());
+    }
+  } payload_writes_;
   struct LoopState {
     size_t first, last;
-    std::set<size_t> bindings, rebound, expired, payloads, payload_origins;
+    std::set<size_t> bindings, rebound, expired;
+    PayloadWrites writes;
     std::map<size_t, CleanupEquations::Initialization> initialized = {};
   };
   std::map<const Expression *, LoopState> loop_states_;
@@ -1856,20 +1864,16 @@ class ScalarChecker {
         storage(written).type == storage(other).type &&
         compare_owners(storage(written).scope, storage(other).scope) != OwnerMatch::mismatch;
   }
-  void record_payload_write(const CheckedOperation &target) {
+  void record_payload_write(const CheckedOperation &target, bool deferred = false) {
     if (proving_) return;
     // A write can preserve the first iteration's value yet change a later one.
     // Record its destination independently of the computed postcondition.
-    for (const auto *expr : active_loops_) {
-      auto &loop = loop_states_.at(expr);
-      for (const auto place : target.targets) if (place != null_target) loop.payloads.insert(place);
-      loop.payload_origins.insert(target.origins.begin(), target.origins.end());
-    }
+    payload_writes_.include(target);
+    if (!deferred) for (const auto *expr : active_loops_) loop_states_.at(expr).writes.include(target);
   }
   void write_exception_payloads(std::map<size_t, ExceptionFacts> &values,
-                                const CheckedOperation &target, const ExceptionFacts &categories, bool written = true) {
+                                const CheckedOperation &target, const ExceptionFacts &categories) {
     if (target.type.kind != Type::exception) return;
-    if (written) record_payload_write(target);
     for (const auto place : payload_targets(target)) values[place] = updated_payload(target, place,
         stored_exceptions(place, target.type, values), categories,
         [](auto &a, const auto &b) { a.merge(b); }, [](const auto &value, const auto &conditions) { return value.guarded(conditions); });
@@ -2150,6 +2154,20 @@ class ScalarChecker {
       ++it;
     }
   }
+  void resolve_payload_writes(PayloadWrites &writes) const {
+    // Later iterations and deferred actions can select targets discovered
+    // only after the binding dependencies have closed.
+    for (const auto origin : writes.origins) {
+      const auto &places = possible_targets_.at(origin);
+      writes.places.insert(places.begin(), places.end());
+    }
+    writes.places.erase(null_target);
+    const auto written = writes.places;
+    for (size_t place = 0; place < storage_->size(); ++place)
+      if (storage(place).borrowed && std::any_of(written.begin(), written.end(), [&](size_t target) {
+            return borrowed_payload_alias(target, place);
+          })) writes.places.insert(place);
+  }
   void solve_targets() {
     bool changed;
     do {
@@ -2164,22 +2182,14 @@ class ScalarChecker {
       }
     } while (changed);
     catalog_storage_ = *storage_;
+    resolve_payload_writes(payload_writes_);
     for (auto &[expr, loop] : loop_states_) {
       for (const auto binding : loop.bindings)
         if (loop.rebound.contains(binding)) for (const auto place : possible_targets_.at(binding)) if (place != null_target) {
           const auto scope = storage(place).scope;
           if (scope >= loop.first && scope < loop.last) loop.expired.insert(binding);
         }
-      // A destination selected on a later iteration need not appear in the
-      // discovery pass's current targets. Resolve its binding dependencies too.
-      for (const auto origin : loop.payload_origins)
-        for (const auto place : possible_targets_.at(origin)) if (place != null_target) loop.payloads.insert(place);
-      const auto written = loop.payloads;
-      for (size_t place = 0; place < storage_->size(); ++place) {
-        if (storage(place).type.kind != Type::exception && storage(place).type != Type::boolean) continue;
-        if (std::any_of(written.begin(), written.end(), [&](size_t target) { return borrowed_payload_alias(target, place); }))
-          loop.payloads.insert(place);
-      }
+      resolve_payload_writes(loop.writes);
     }
   }
   static std::vector<size_t> inputs(std::uint64_t mask) {
@@ -2667,6 +2677,7 @@ class ScalarChecker {
         if (first) { effects = next; first = false; continue; }
         effects.reads.insert(next.reads.begin(), next.reads.end());
         effects.symbols.insert(next.symbols.begin(), next.symbols.end());
+        effects.written_inputs.insert(next.written_inputs.begin(), next.written_inputs.end());
         for (auto &[reason, known] : effects.initialized) {
           const auto found = next.initialized.find(reason);
           const auto missing = next.uninitialized.find(reason);
@@ -2685,6 +2696,9 @@ class ScalarChecker {
           for (const auto &[parameter, value] : values) CleanupEquations::merge_boolean(effects.booleans[reason][parameter], value);
       }
     }
+    if (first) for (size_t i = 0; i < arguments.size(); ++i)
+      if (!contract.owners.empty() && contract.owners[i] && (contract.const_views.empty() || !contract.const_views[i]))
+        effects.written_inputs.insert(i);
     std::erase_if(effects.uninitialized, [](const auto &entry) { return entry.second.empty(); });
     for (const auto reason : call_reasons(contract)) effects.initialized.try_emplace(reason);
     for (const auto reason : call_reasons(contract)) effects.present.try_emplace(reason);
@@ -2793,27 +2807,30 @@ class ScalarChecker {
       }
       for (auto &[reason, effect] : operation.invocation) effect.reads.insert(reads.begin(), reads.end());
     }
-    for (auto &[reason, effects] : operation.invocation) {
-      for (size_t i = 0; i < arguments.size(); ++i) {
-        if (contract.owners.empty() || !contract.owners[i] || (!contract.const_views.empty() && contract.const_views[i])) continue;
-        auto target = views[i];
-        if (prepared_slots) {
-          target.targets.clear();
-          for (const auto slot : physical_slots(target.slots)) {
-            const auto &possible = possible_targets_.at(slot);
-            target.targets.insert(possible.begin(), possible.end());
-          }
+    std::set<size_t> written_targets;
+    for (const auto i : summary.written_inputs) {
+      if (!contract.const_views.empty() && contract.const_views[i]) continue;
+      auto target = views.at(i);
+      if (prepared_slots) {
+        target.targets.clear();
+        target.origins = physical_slots(target.slots);
+        for (const auto slot : target.origins) {
+          const auto &possible = possible_targets_.at(slot);
+          target.targets.insert(possible.begin(), possible.end());
         }
-        const auto written = payload_targets(target);
-        effects.payload_writes.insert(written.begin(), written.end());
-        if (!prepared) record_payload_write(target);
       }
+      const auto written = payload_targets(target);
+      written_targets.insert(written.begin(), written.end());
+      record_payload_write(target, prepared);
+    }
+    for (auto &[reason, effects] : operation.invocation) {
+      effects.payload_writes = written_targets;
       auto payloads = entry_payloads;
       if (prepared_slots) {
         // These calls retain binding slots whose invocation-time selections
         // still need a payload/selection correlation proof.
         for (auto &[place, value] : payloads)
-          if (mutable_payload_target(place)) value = exception_possibilities(storage(place).type);
+          if (written_targets.contains(place)) value = exception_possibilities(storage(place).type);
       } else {
         // Publish simultaneous postconditions after weakening other possible
         // aliases. Sequential strong writes would lose same-target alternatives.
@@ -2824,8 +2841,8 @@ class ScalarChecker {
           const auto outcome = summary.payloads.find(reason);
           if (outcome != summary.payloads.end() && outcome->second.contains(i))
             value = outcome->second.at(i).substitute(exception_inputs);
-          else if (!contract.const_views.empty() && contract.const_views[i]) continue;
-          write_exception_payloads(payloads, views[i], value, !prepared && (contract.const_views.empty() || !contract.const_views[i]));
+          else if (!summary.written_inputs.contains(i)) continue;
+          write_exception_payloads(payloads, views[i], value);
           if (views[i].place) definite[*views[i].place].merge(value);
         }
         for (auto &[place, value] : definite) payloads[place] = std::move(value);
@@ -2838,7 +2855,7 @@ class ScalarChecker {
         CleanupEquations::BooleanValues definite;
         for (size_t i = 0; i < arguments.size(); ++i) {
           if (arguments[i] != Type::boolean || contract.owners.empty() || !contract.owners[i]) continue;
-          const bool readonly = !contract.const_views.empty() && contract.const_views[i];
+          const bool readonly = !summary.written_inputs.contains(i) || (!contract.const_views.empty() && contract.const_views[i]);
           auto value = CleanupEquations::unknown_boolean();
           const auto outcome = summary.booleans.find(reason);
           const bool reported = outcome != summary.booleans.end() && outcome->second.contains(i);
@@ -8344,11 +8361,12 @@ class ScalarChecker {
             write_exceptions(left, right_exceptions); write_exceptions(right, left_exceptions);
             write_predicate(left, right_predicate, expr.at); write_predicate(right, left_predicate, expr.at);
           } else {
+            record_payload_write(left, true); record_payload_write(right, true);
             const auto incoming = incoming_payloads();
             auto payloads = incoming;
             const auto left_exceptions = stored_exceptions(left, incoming), right_exceptions = stored_exceptions(right, incoming);
-            write_exception_payloads(payloads, left, right_exceptions, false);
-            write_exception_payloads(payloads, right, left_exceptions, false);
+            write_exception_payloads(payloads, left, right_exceptions);
+            write_exception_payloads(payloads, right, left_exceptions);
             operation.invocation[0].payloads = payload_changes(incoming, payloads);
             if (left.type == Type::boolean) {
               auto booleans = incoming_booleans();
@@ -8684,7 +8702,7 @@ class ScalarChecker {
       }
       const auto iteration_scope = next_scope_;
       if (repeat_possible) {
-        if (!proving_) loop_states_[&expr] = {iteration_scope, iteration_scope, before.bindings_available, {}, {}, {}, {}};
+        if (!proving_) loop_states_[&expr] = {iteration_scope, iteration_scope, before.bindings_available, {}, {}, {}};
         auto &loop = loop_states_.at(&expr);
         refresh_targets(lexical_, true, &loop.rebound);
         if (proving_) {
@@ -8693,9 +8711,9 @@ class ScalarChecker {
           lexical_.expired_bindings.insert(loop.expired.begin(), loop.expired.end());
         }
         for (const auto input : inputs(lexical_.inputs)) for (auto &[id, categories] : lexical_.input_facts[input].exceptions)
-          if (!proving_ || loop.payloads.contains(id)) categories = exception_possibilities(storage(id).type);
+          if (!proving_ || loop.writes.places.contains(id)) categories = exception_possibilities(storage(id).type);
         if (!proving_) lexical_.predicates.clear();
-        else for (const auto place : loop.payloads) lexical_.predicates.erase(place);
+        else for (const auto place : loop.writes.places) lexical_.predicates.erase(place);
         active_loops_.push_back(&expr);
       }
       checked_scope_owners_[&expr] = iteration_scope;
@@ -8977,6 +8995,7 @@ class ScalarChecker {
       auto written_target = target; select_targets(written_target, written);
       if (prepared) {
         require_borrow_lifetime(target, expr.children[0]->at, true);
+        record_payload_write(written_target, true);
         CallEffects effects;
         effects.initialized[0] = {0};
         operation.invocation = invocation_effects(effects, {0}, {target}, expr.at, true);
@@ -8985,7 +9004,7 @@ class ScalarChecker {
         operation.targets.erase(null_target);
         const auto incoming = incoming_payloads();
         auto payloads = incoming;
-        write_exception_payloads(payloads, written_target, operations.at(expr.children[1].get()).exceptions, false);
+        write_exception_payloads(payloads, written_target, operations.at(expr.children[1].get()).exceptions);
         operation.invocation[0].payloads = payload_changes(incoming, payloads);
         if (destination == Type::boolean) {
           auto booleans = incoming_booleans();
@@ -9383,7 +9402,10 @@ class ScalarChecker {
     proving_ = proving; observed_ = {};
     storage_ = &storage; bindings_ = &bindings;
     storage.clear(); bindings.clear(); operations.clear(); definitions_.clear();
-    if (!proving) { possible_targets_.clear(); possible_null_sources_.clear(); target_dependencies_.clear(); catalog_storage_.clear(); rebound_.clear(); loop_states_.clear(); }
+    if (!proving) {
+      possible_targets_.clear(); possible_null_sources_.clear(); target_dependencies_.clear(); catalog_storage_.clear();
+      rebound_.clear(); payload_writes_ = {}; loop_states_.clear();
+    }
     lexical_ = {}; cleanup_ = {}; scope_storage_.clear(); checked_scope_owners_.clear(); read_sites_.clear(); external_owners_.clear();
     declared_sites_.clear(); declared_requirements_.clear();
     deferred_actions_with_checked_scopes_.clear();
@@ -9683,6 +9705,8 @@ class ScalarChecker {
       }
     });
     instance.complete = validating_;
+    for (const auto place : payload_writes_.places)
+      if (storage(place).borrowed) observed_.written_inputs.insert(input_ordinal(place));
     std::erase_if(observed_.uninitialized, [](const auto &entry) { return entry.second.empty(); });
     for (const auto reason : call_reasons(*checking_method_)) observed_.initialized.try_emplace(reason);
     for (const auto reason : call_reasons(*checking_method_)) observed_.present.try_emplace(reason);
@@ -9744,6 +9768,9 @@ class ScalarChecker {
       if (known.reads != effects.reads) { known.reads = effects.reads; changed = true; }
       if (known.symbols != effects.symbols) { known.symbols = effects.symbols; changed = true; }
     } else {
+      const auto written_count = known.written_inputs.size();
+      known.written_inputs.insert(effects.written_inputs.begin(), effects.written_inputs.end());
+      changed = known.written_inputs.size() != written_count;
       if (known.initialized != effects.initialized) { known.initialized = effects.initialized; changed = true; }
       if (known.uninitialized != effects.uninitialized) { known.uninitialized = effects.uninitialized; changed = true; }
       if (known.present != effects.present) { known.present = effects.present; changed = true; }

@@ -98,6 +98,13 @@ safe('loop_unrelated_slot_call', SAVED+'val first<-false,second<-false;ptr a=fir
      '7\n7\n0\n0\n7\n7\n0\n0\n', prefix='func (<=>)(ref left:bool in O,ref right:bool in O)->void where {owner O}{left<-true;}')
 safe('loop_readonly_slot_call', SAVED+'ptr a=saved,b=saved;for(i in 0u64..2u64){ {{defer (<=>)(a,b);}};'+GUARD+'};',
      '7\n7\n0\n0\n7\n7\n0\n0\n', prefix='func (<=>)(ref left:const bool in O,ref right:const bool in O)->void where {owner O}{left;right;}')
+safe('loop_intrinsic_reference_swap', SAVED+'ptr a=saved,b=saved;for(i in 0u64..2u64){ {{defer intrinsic (<=>)(a,b);}};'+GUARD+'};',
+     '7\n7\n0\n0\n7\n7\n0\n0\n')
+safe('loop_recursive_call_preserves_payload', SAVED+'ptr selected=saved;for(i in 0u64..2u64){ {{inspect(selected,3u64);}};'+GUARD+'};',
+     '7\n7\n0\n0\n7\n7\n0\n0\n', prefix='func inspect(ref target:bool in O,n:u64)->void where {owner O}'
+     '{if(n>0u64){inspect(target,n-1u64);}else{target;{}};}')
+rejected('loop_prepared_write_changes_payload', SAVED+'ptr selected=saved;val incoming<-saved;'
+         'for(i in 0u64..2u64){ {{defer (<-)(selected,incoming);}};'+GUARD+'incoming<-true;};')
 rejected('loop_rebound_slot_call', SAVED+'val first<-false,second<-false;ptr a=first,b=second;for(i in 0u64..3u64){'+GUARD+'{{defer (<=>)(a,b);}};a=saved;};',
          prefix='func (<=>)(ref left:bool in O,ref right:bool in O)->void where {owner O}{left<-true;}')
 

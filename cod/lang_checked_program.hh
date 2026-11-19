@@ -201,6 +201,8 @@ struct CallEffects {
   // intermediate selections not retained by any completed outcome. null_target
   // records an independently absent target introduced by the method.
   std::map<size_t, std::set<size_t>> binding_sources;
+  // Possible writes to the original borrowed targets, independently of postconditions.
+  std::set<size_t> written_inputs;
   // Postconditions describe the original borrowed targets, not local parameter
   // bindings after rebinding. Values refer to argument snapshots at call entry.
   // Empty provisional facts do not remove declared completion paths.
