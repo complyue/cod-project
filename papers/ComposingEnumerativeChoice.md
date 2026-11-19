@@ -2,13 +2,13 @@
 
 ## Abstract
 
-A fare search chooses an itinerary, then chooses among the seats on that itinerary. Either choice may offer zero, one, or many answers. A list comprehension gives this search a concise meaning. A booking application may also need to stop at the first acceptable fare, return feedback to the seat source, or close an open inventory cursor on failure. We study a CoD design in which any compatible producer can supply the choices and a transformer can run another producer. The question is whether independently written stages preserve the observable behavior of hand-written nested loops. We give an ordered-answer model for finite pure searches, work through an effectful counterexample to answer-only equivalence, and describe how to test the stronger claim. The structural producer parameter and pipeline notation are language proposals. The proof and measurements are open.
+A fare search chooses an itinerary, then chooses among the seats on that itinerary. Either choice may offer zero, one, or many answers. A list comprehension gives this search a concise meaning. A booking application may also need to stop at the first acceptable fare, return feedback to the seat source, or close an open inventory cursor on failure. We study a CoD design in which any compatible producer can supply the choices and a transformer can run another producer. The question is whether independently written stages preserve the observable behavior of hand-written nested loops. We give an ordered-answer model for finite pure searches, work through an effectful counterexample to answer-only equivalence, and describe how to test the stronger claim. CoD has selected a composite pipeline as its first implementation target. General producer binding, the proof and measurements remain open.
 
 ## A closed traversal
 
 A producer offers a candidate by calling a consumer synchronously. That consumer can supply typed feedback before the producer decides what to do next. We call the pipeline *closed* when a single traversal activation accounts for all these handoffs. The source can be lazy, consult a live service, or even enumerate forever. What makes the pipeline closed is that a handoff uses a consumer belonging to a still-active traversal. A receiver-bound container is one possible source. A generator or transformed traversal satisfying the same protocol works as well. [Generator and here-call equivalence](../design/RangedForAndGenerators.md#generalized-for-loops) · [Structural producer proposal](../design/ProducersAndTransformers.md)
 
-Here a transformer accepts a whole itinerary producer. The application operation `fares_on(route)` enumerates fares for just that route. Both sources use void feedback in this example. The proposed pipe supplies the source to the next stage.
+Here a transformer accepts a whole itinerary producer. The application operation `fares_on(route)` enumerates fares for just that route. Both sources use void feedback. The `|>` operator composes the two processors and `!>` attaches the itinerary source to their composition.
 
 ```cod
 proc fares_for(here routes() yields u64) yields u64 {
@@ -24,7 +24,7 @@ proc affordable(here fares() yields u64, limit:u64) yields u64 {
 }
 
 proc first_affordable() -> u64 {
-    for val fare <- itineraries() |> fares_for() |> affordable(100u64) {
+    for val fare <- itineraries() !> fares_for() |> affordable(100u64) {
         return fare;
     }
     return 0u64;  # This example uses positive fares.

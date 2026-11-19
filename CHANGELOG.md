@@ -1,5 +1,50 @@
 # Changelog
 
+## 2026-11-19 — Qualify the composite synchronous pipeline for implementation
+
+<a id="h-pipeline-composite-contract-20261119"></a>
+**H-PIPELINE-COMPOSITE-CONTRACT-20261119.** The project user replied “认同。提交推送同步，按此推进” in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-19 (America/Los_Angeles). D-31r10→11 and registry r984→985 qualify D-31-COMPOSITE under C-97/P-633–P-635 and P-638/P-639. A neutral connection is resolved using operand protocols and explicit roles. A genuine ambiguity requires an explicit spelling. Mainline can implement against the invoice-review workload, its mirrored spelling, bounded storage and comparison cases under the agreed design remit. General contextual binding, mutable here holders, permanent ABI and research claims remain open. Prior published design baseline at `99bee4679ada43f0a0b8363001c4cea1db285c8c:design/ProducersAndTransformers.md`.
+
+## 2026-11-19 — Design the complete pipeline before implementation and tests
+
+<a id="h-pipeline-composite-first-20261119"></a>
+**H-PIPELINE-COMPOSITE-FIRST-20261119.** In the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-19 (America/Los_Angeles), the project user requested “直接实现最复杂的表达式，考虑全套需求后再落代码和测试” and suggested using operand types and clear context for intent, with explicit workarounds for rare collisions. D-31r9→10 and registry r983→984 record this change to the implementation order discussed under H-PIPELINE-DESIGN-REMIT-20261119. Mainline acknowledged the composite target. The neutral parse, role examples and integrated acceptance case are design work; this decision covers the work sequence.
+
+## 2026-11-19 — Assign pipeline semantics and implementation-led syntax work
+
+<a id="h-pipeline-design-remit-20261119"></a>
+**H-PIPELINE-DESIGN-REMIT-20261119.** In the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-19 (America/Los_Angeles), the project user endorsed the phrasing `here xxx = ...` and specified “语义肯定你把关，基于实现成本的语法设计我觉得可以开发那路边实现边局部设计”. D-31r8→9 and registry r982→983 record the spelling preference and delegation of local syntax choices to compiler development, with language design retaining semantic review. Broader pipeline implementation qualification remains pending.
+
+## 2026-11-19 — Name partial pipelines locally and store domain functors in regions
+
+<a id="k-open-pipeline-storage-20261119"></a>
+**K-OPEN-PIPELINE-STORAGE-20261119.** In the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) the project user requested lexical variable storage for partial pipelines and identified a library overload returning a regional functor as an idiom worth designing for. D-31r7→8 and registry r981→982 propose a bounded local here binding and illustrate a region-allocated policy returned by a composition overload. P-638/P-639 and the binding syntax remain pending. H-563 and H-478 govern regional placement.
+
+## 2026-11-19 — Connect both ends of a composed processor chain
+
+<a id="k-pipeline-named-terminal-20261119"></a>
+**K-PIPELINE-NAMED-TERMINAL-20261119.** In the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) the project user distinguished the four producer/consumer connectors from the two processor connectors, chose the dollar-sign pair for the consumer end, and requested reasonable library/application overloading. D-31r6→7 and registry r980→981 record this model and propose matching endpoint pairs, three mirrored overload families, direct per-item calls and explicit whole-traversal sinks. The overload lookup and bounded partial-connection details remain design proposals.
+
+## 2026-11-19 — Compose processors before attaching a source
+
+<a id="k-processor-composition-20261119"></a>
+**K-PROCESSOR-COMPOSITION-20261119.** The project user proposed weaker source attachment, independent processor composition and constructors that derive processor fields from business inputs in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50). D-31r5→6 and registry r979→980 describe the two precedence tiers, proposed associativity and bounded reuse across two sources. The [research paper](papers/ComposingEnumerativeChoice.md) uses the same notation. The proposal remains under review.
+
+## 2026-11-19 — Compare forward and reverse pipelines over processor functors
+
+<a id="k-processor-functor-pipes-20261119"></a>
+**K-PROCESSOR-FUNCTOR-PIPES-20261119.** The project user proposed regional functors as processors with a reverse pipe in a for header and a forward pipe with a terminal here body in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50). D-31r4→5 and registry r978→979 apply the existing receiver and receiving rules and compare operand preparation, data flow and processor state. The pipe spellings and their elaboration remain proposals.
+
+## 2026-11-19 — Assess closed pipelines against streaming library use cases
+
+<a id="k-pipeline-library-examples-20261119"></a>
+**K-PIPELINE-LIBRARY-EXAMPLES-20261119.** The project user requested examples chosen for their business value in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50). D-31r3→4 and registry r977→978 compare a Frames/pipes survey report, a Pantry/conduit archive check and a streaming ordered merge. The last distinguishes a cursor-backed merge from alternating arbitrary push traversals. The comparison is design evidence within the existing pending scope.
+
+## 2026-11-19 — Compare closed pipeline declarations and calls on one fare search
+
+<a id="k-closed-pipeline-idioms-20261119"></a>
+**K-CLOSED-PIPELINE-IDIOMS-20261119.** The project user requested comparison against actual Haskell streaming usage in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-19 (America/Los_Angeles). D-31r2→3 and registry r976→977 compare two producer-contract spellings and three caller forms, including skipped-item feedback and first-result cleanup. The syntax and binding rules remain proposals under P-633–P-635.
+
 ## 2026-11-19 — Merge data constructors as methods of their type’s constructor family
 
 <a id="h-dctor-family-merge-20261119"></a>
