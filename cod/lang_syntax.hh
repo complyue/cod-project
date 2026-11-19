@@ -39,6 +39,28 @@ struct Token {
   Location at;
 };
 
+struct PipelineOperator {
+  enum class Kind { composition, source, consumer } kind;
+  bool reversed;
+
+  std::string_view canonical_spelling() const {
+    switch (kind) {
+    case Kind::composition: return "|>";
+    case Kind::source: return "!>";
+    case Kind::consumer: return "$>";
+    }
+    throw std::logic_error("unknown pipeline operator kind");
+  }
+};
+
+inline std::optional<PipelineOperator> pipeline_operator(std::string_view spelling) {
+  using K = PipelineOperator::Kind;
+  if (spelling == "|>" || spelling == "<|") return PipelineOperator{K::composition, spelling == "<|"};
+  if (spelling == "!>" || spelling == "<!") return PipelineOperator{K::source, spelling == "<!"};
+  if (spelling == "$>" || spelling == "<$") return PipelineOperator{K::consumer, spelling == "<$"};
+  return {};
+}
+
 inline std::vector<Token> tokenize(const std::string &source, const std::string &file) {
   std::vector<Token> tokens;
   Location at{file};
@@ -146,7 +168,8 @@ inline std::vector<Token> tokenize(const std::string &source, const std::string 
     if (cursor + 1 < source.size()) {
       const auto pair = source.substr(cursor, 2);
       if (pair == "->" || pair == "==" || pair == "!=" || pair == "<=" || pair == ">=" ||
-          pair == "&&" || pair == "||" || pair == "<-" || pair == "<:" || pair == ".." || pair == "=>") {
+          pair == "&&" || pair == "||" || pair == "<-" || pair == "<:" || pair == ".." || pair == "=>" ||
+          pipeline_operator(pair)) {
         punctuation = pair;
         advance();
       }
@@ -286,12 +309,23 @@ inline std::string type_name(const Type &type) {
 
 struct Form;
 struct ReceivingHeader;
+struct PipelineEndpoints {
+  struct Connection {
+    Token spelling;
+    size_t operand;
+  };
+  // All indices refer to operands in written order, before any supplied body.
+  size_t middle;
+  std::optional<Connection> source, consumer;
+};
+
 struct Expression {
   enum class Kind { integer, real, boolean, name, symbol, unary, binary, call, value_call, perform, behave, effect,
                     block, grouped, conditional, return_test, field, range_for, fold, allocate, index, null_ref,
                     try_scope, handler, raise, return_value, deferred, make_region, touch, effect_group, transfer, procedure_effect,
                     pointer_group, pointer, make_local, rebind, region_binding, callable, alias, capture_owner,
-                    here_body, named_argument, break_value, continue_value, typed_expression, return_tail };
+                    here_body, named_argument, break_value, continue_value, typed_expression, return_tail,
+                    processor_composition, pipeline, here_binding };
   Kind kind;
   Location at;
   std::string text;
@@ -308,6 +342,7 @@ struct Expression {
   std::string declaration_kind = {};
   std::string owner_name = {};
   std::shared_ptr<ReceivingHeader> receiving = {};
+  std::unique_ptr<PipelineEndpoints> endpoints = {};
   // A supplied body is stored after the written operands. It binds slot one.
   bool has_here_body() const { return !children.empty() && children.back()->kind == Kind::here_body; }
   bool inspects_return(bool binds_payload = false) const;
@@ -411,13 +446,17 @@ inline bool Expression::inspects_return(bool binds_payload) const {
 inline bool swap_operation(std::string_view op) { return op == "<=>" || op == "<->"; }
 inline bool identity_operation(std::string_view op) { return op == "is" || op == "is not"; }
 
+inline constexpr int endpoint_precedence = 1;
+inline constexpr int composition_precedence = 2;
+inline constexpr int unary_precedence = 9;
+
 inline int binary_precedence(const std::string &op) {
-  if (op == "||") return 1;
-  if (op == "&&") return 2;
-  if (op == "==" || op == "!=" || identity_operation(op)) return 3;
-  if (op == "<" || op == ">" || op == "<=" || op == ">=") return 4;
-  if (op == "+" || op == "-") return 5;
-  if (op == "*" || op == "/" || op == "%") return 6;
+  if (op == "||") return 3;
+  if (op == "&&") return 4;
+  if (op == "==" || op == "!=" || identity_operation(op)) return 5;
+  if (op == "<" || op == ">" || op == "<=" || op == ">=") return 6;
+  if (op == "+" || op == "-") return 7;
+  if (op == "*" || op == "/" || op == "%") return 8;
   return -1;
 }
 
@@ -443,6 +482,7 @@ inline bool module_keyword(std::string_view name) {
 }
 
 class Parser {
+  enum class HereAttachment { immediate, for_body, pipeline_body };
   std::vector<Token> tokens_;
   size_t cursor_ = 0;
   static constexpr size_t structure_limit = 128;
@@ -551,10 +591,14 @@ class Parser {
     const auto close = right_paren_[cursor_ + ahead];
     return close < tokens_.size() && is("=>", close + 1 - cursor_);
   }
+  std::optional<PipelineOperator> next_pipeline_operator() const {
+    return peek().kind == TokenKind::punctuation ? pipeline_operator(peek().text) : std::nullopt;
+  }
   static bool accepts_supplied_body(const Expression &expr) {
     using K = Expression::Kind;
     return !expr.intrinsic && (expr.kind == K::call || expr.kind == K::value_call ||
-        expr.kind == K::perform || expr.kind == K::behave);
+        expr.kind == K::perform || expr.kind == K::behave ||
+        expr.kind == K::processor_composition || expr.kind == K::pipeline);
   }
   Token name(TokenKind kind) {
     if (peek().kind != kind)
@@ -577,7 +621,7 @@ class Parser {
     return (token.kind == TokenKind::identifier && (intrinsic_name(token.text) || token.text == "not" || identity_operation(token.text))) ||
            (token.kind == TokenKind::punctuation &&
             (binary_precedence(token.text) >= 0 || token.text == "!" || token.text == "=" || token.text == "<-" ||
-             swap_operation(token.text)));
+             swap_operation(token.text) || pipeline_operator(token.text)));
   }
   Token lexical_name(bool *operation = nullptr) {
     const bool parenthesized = take("(");
@@ -706,9 +750,9 @@ class Parser {
     expect(")");
     return field;
   }
-  void arguments(Expression &expr) {
+  void arguments(Expression &expr, bool allow_supplied_body = true) {
     const auto close = right_paren_[cursor_];
-    const bool follows_call = close < tokens_.size() &&
+    const bool follows_call = allow_supplied_body && close < tokens_.size() &&
         (is("{", close + 1 - cursor_) || here_header(close + 1 - cursor_));
     const bool labelled_yield = labelled_yield_ && expr.kind == Expression::Kind::call && expr.text == "yield";
     const bool named = (accepts_supplied_body(expr) && follows_call) || labelled_yield;
@@ -721,7 +765,7 @@ class Parser {
         else {
           Expr argument;
           if (!named || !is("->")) {
-            argument = expression(0, true, !named);
+            argument = expression(0, HereAttachment::immediate, !named);
             argument->spread = take("...");
           }
           if (named && take("->")) {
@@ -829,17 +873,20 @@ class Parser {
       } while (take(","));
       expect(")");
     }
-    expect("->");
-    here_result(signature, param.at);
+    if (is("yields")) add_yield_parameter(signature.parameters, true);
+    else {
+      expect("->");
+      here_result(signature, param.at);
+    }
     if (take("throws")) signature.throws_types.push_back(parse_type());
     if (is("...")) fail(peek().at, "a here parameter cannot be variadic");
     return parameter;
   }
-  void generator_contract(Form &form) {
+  void add_yield_parameter(std::vector<Parameter> &parameters, bool allow_upstream_here) {
     const auto token = expect("yields");
-    if (std::ranges::any_of(form.parameters, [](const auto &parameter) { return parameter.name == "yield"; }))
+    if (std::ranges::any_of(parameters, [](const auto &parameter) { return parameter.name == "yield"; }))
       fail(token.at, "yields introduces the first parameter 'yield', which is already declared");
-    if (!form.parameters.empty() && form.parameters.front().here)
+    if (!allow_upstream_here && !parameters.empty() && parameters.front().here)
       fail(token.at, "yields supplies the first here parameter");
     Parameter yield{"yield", Type::void_type, token.at, false, {}};
     auto &signature = *(yield.here = std::make_shared<HereSignature>());
@@ -856,7 +903,10 @@ class Parser {
       signature.parameters.push_back(std::move(output));
     }
     if (take("->")) here_result(signature, token.at);
-    form.parameters.insert(form.parameters.begin(), std::move(yield));
+    parameters.insert(parameters.begin(), std::move(yield));
+  }
+  void generator_contract(Form &form) {
+    add_yield_parameter(form.parameters, false);
     form.result_type = Type::void_type;
   }
   void generic_clause(Form &form) {
@@ -903,11 +953,12 @@ class Parser {
         fail(form.at, "captured functions are lexical callable expressions, not module method declarations");
     }
     const bool parameter_list = take("(");
+    const auto pipeline = form.operation ? pipeline_operator(form.name) : std::nullopt;
     if (parameter_list) {
       if (!take(")")) {
         do {
           if (is("here") && !is(":", 1)) {
-            if (!form.parameters.empty()) fail(peek().at, "a here callable must be the first parameter");
+            if (!pipeline && !form.parameters.empty()) fail(peek().at, "a here callable must be the first parameter");
             form.parameters.push_back(here_parameter());
           } else form.parameters.push_back(parameter_declaration());
         } while (take(","));
@@ -915,6 +966,11 @@ class Parser {
       }
     } else if (function) {
       fail(peek().at, "a function requires a parameter list");
+    }
+    if (pipeline) {
+      if (form.parameters.size() != 2) fail(form.at, "a pipeline method requires two explicit operands");
+      if (pipeline->reversed) std::swap(form.parameters[0], form.parameters[1]);
+      form.name = pipeline->canonical_spelling();
     }
     const bool preceding_where = take("where");
     if (preceding_where) generic_clause(form);
@@ -1021,6 +1077,8 @@ class Parser {
     }
   }
   void attach_body(Expression &call, ReceivingHeader header) {
+    if (call.endpoints && call.endpoints->consumer)
+      fail(peek().at, "a pipeline can have only one consumer");
     using K = Expression::Kind;
     if (call.has_here_body()) fail(peek().at, "a call can supply only one trailing here body");
     validate_receivers(header);
@@ -1062,7 +1120,7 @@ class Parser {
       expect(":");
       expect("=");
     } else header.items.push_back(receiving_item(true, false));
-    auto producer = expression(0, false);
+    auto producer = expression(0, HereAttachment::for_body);
     if (!accepts_supplied_body(*producer)) fail(at, "a generator for loop requires a producer call");
     attach_body(*producer, std::move(header));
     return producer;
@@ -1095,8 +1153,16 @@ class Parser {
     return finish(std::move(expr));
   }
 
-  Expr primary(bool attach, bool owner_projection) {
+  Expr primary(HereAttachment attachment, bool owner_projection) {
+    const bool pipeline_operand = attachment == HereAttachment::pipeline_body;
     auto token = peek();
+    if (is("here") && tokens_[cursor_ + 1].kind == TokenKind::identifier) {
+      expect("here");
+      auto binding = make(Expression::Kind::here_binding, value_name());
+      expect("=");
+      binding->children.push_back(expression());
+      return binding;
+    }
     if (callable_binding()) {
       const bool fixed_binding = take("const");
       const auto mode = tokens_[cursor_++].text;
@@ -1329,7 +1395,7 @@ class Parser {
       if (!perform) expect("behave");
       auto expr = make(perform ? Expression::Kind::perform : Expression::Kind::behave,
                        name(TokenKind::symbol));
-      if (is("(")) arguments(*expr);
+      if (is("(") && !(pipeline_operand && here_header())) arguments(*expr, !pipeline_operand);
       return expr;
     }
     if (take("if")) {
@@ -1355,7 +1421,7 @@ class Parser {
         (is("is", 1) && is("not", 2) && is(")", 3)) ||
         (is("[", 1) && is("]", 2) && (is("=", 3) || is("<-", 3)) && is(")", 4)))) {
       auto expr = make(Expression::Kind::call, lexical_name());
-      arguments(*expr);
+      arguments(*expr, !pipeline_operand);
       return expr;
     }
     if (take("(")) {
@@ -1367,7 +1433,7 @@ class Parser {
     if (take("-") || take("!") || take("not")) {
       auto expr = make(Expression::Kind::unary, token);
       if (expr->text == "not") expr->text = "!";
-      expr->children.push_back(expression(7, attach, owner_projection));
+      expr->children.push_back(expression(unary_precedence, attachment, owner_projection));
       return expr;
     }
     if (token.kind == TokenKind::integer) {
@@ -1392,31 +1458,90 @@ class Parser {
       if (token.text == "true" || token.text == "false") return make(Expression::Kind::boolean, token);
       if (token.text == "procedure" || token.text == "proc" || token.text == "function" || token.text == "global" || token.text == "symbol")
         fail(token.at, "prototype declarations belong at module top level");
-      auto expr = make(is("(") ? Expression::Kind::call : Expression::Kind::name, token);
-      if (is("(")) arguments(*expr);
+      const bool call = is("(") && !(pipeline_operand && here_header());
+      auto expr = make(call ? Expression::Kind::call : Expression::Kind::name, token);
+      if (call) arguments(*expr, !pipeline_operand);
       return expr;
     }
     fail(token.at, "expected an expression; symbolic writes require 'effect'");
   }
-  Expr expression(int minimum = 0, bool attach = true, bool owner_projection = true, bool type_suffix = true) {
+  Expr expression(int minimum = 0, HereAttachment attachment = HereAttachment::immediate,
+                  bool owner_projection = true, bool type_suffix = true) {
     const ParseEntry entry(recursion_, peek().at, "an expression");
-    auto operand = expression_impl(minimum, attach, owner_projection);
+    auto operand = expression_impl(minimum, attachment, owner_projection);
     if (minimum != 0 || !type_suffix || !is(":")) return finish(std::move(operand));
     auto typed = make(Expression::Kind::typed_expression, expect(":"));
     typed->children.push_back(finish(std::move(operand)));
     typed->annotation = parse_type();
     return finish(std::move(typed));
   }
-  Expr expression_impl(int minimum, bool attach, bool owner_projection) {
-    auto left = primary(attach, owner_projection);
+  Expr compose_processors(Expr first, bool owner_projection, bool reversed) {
+    using K = Expression::Kind;
+    std::vector<Expr> operands;
+    std::vector<Token> operators;
+    operands.push_back(std::move(first));
+    while (const auto op = next_pipeline_operator()) {
+      if (op->kind != PipelineOperator::Kind::composition) break;
+      if (op->reversed != reversed)
+        fail(peek().at, "mixed processor composition directions require parentheses");
+      // A run of N binary operators needs at least N + 1 expression levels.
+      check_depth(operators.size() + 2, peek().at, "an expression");
+      operators.push_back(tokens_[cursor_++]);
+      operands.push_back(expression(composition_precedence + 1, HereAttachment::pipeline_body, owner_projection));
+    }
+    auto compose = [&](size_t index, Expr left, Expr right) {
+      auto node = make(K::processor_composition, operators[index]);
+      node->children.push_back(std::move(left));
+      node->children.push_back(std::move(right));
+      return finish(std::move(node));
+    };
+    if (reversed) {
+      auto result = std::move(operands.back());
+      for (size_t i = operators.size(); i > 0; --i)
+        result = compose(i - 1, std::move(operands[i - 1]), std::move(result));
+      return result;
+    }
+    auto result = std::move(operands.front());
+    for (size_t i = 0; i < operators.size(); ++i)
+      result = compose(i, std::move(result), std::move(operands[i + 1]));
+    return result;
+  }
+  Expr connect_pipeline(Expr first, bool owner_projection) {
+    using K = PipelineOperator::Kind;
+    auto node = make(Expression::Kind::pipeline, peek());
+    node->endpoints = std::make_unique<PipelineEndpoints>();
+    auto &endpoints = *node->endpoints;
+    node->children.push_back(std::move(first));
+    while (const auto op = next_pipeline_operator()) {
+      if (op->kind == K::composition) break;
+      const auto spelling = tokens_[cursor_++];
+      const auto right = node->children.size();
+      const bool source = op->kind == K::source;
+      auto &connection = source ? endpoints.source : endpoints.consumer;
+      if (connection)
+        fail(spelling.at, source ? "a pipeline can have only one source" : "a pipeline can have only one consumer");
+      const bool endpoint_on_right = source == op->reversed;
+      const auto middle = endpoint_on_right ? right - 1 : right;
+      if (right != 1 && middle != endpoints.middle)
+        fail(spelling.at, "source and consumer must attach to the same pipeline middle");
+      endpoints.middle = middle;
+      connection = PipelineEndpoints::Connection{spelling, endpoint_on_right ? right : right - 1};
+      node->children.push_back(expression(composition_precedence, HereAttachment::pipeline_body, owner_projection));
+    }
+    return node;
+  }
+  Expr expression_impl(int minimum, HereAttachment attachment, bool owner_projection) {
+    const bool attach = attachment == HereAttachment::immediate;
+    const bool pipeline_operand = attachment == HereAttachment::pipeline_body;
+    auto left = primary(attachment, owner_projection);
     while (true) {
       if (attach && accepts_supplied_body(*left) && (is("{") || here_header())) {
         trailing_body(*left);
         left = finish(std::move(left));
-      } else if (is("(")) {
+      } else if (is("(") && !(pipeline_operand && here_header())) {
         auto call = make(Expression::Kind::value_call, peek());
         call->children.push_back(std::move(left));
-        arguments(*call);
+        arguments(*call, !pipeline_operand);
         left = finish(std::move(call));
       } else if (take(".")) {
         auto member = make(Expression::Kind::field, name(TokenKind::identifier));
@@ -1439,13 +1564,24 @@ class Parser {
       if (op.text == "is" && take("not")) op.text = "is not";
       auto binary = make(Expression::Kind::binary, op);
       binary->children.push_back(std::move(left));
-      binary->children.push_back(expression(binary_precedence(op.text) + 1, attach, owner_projection));
+      binary->children.push_back(expression(binary_precedence(op.text) + 1, attachment, owner_projection));
       left = finish(std::move(binary));
+    }
+    if (minimum <= composition_precedence) {
+      if (const auto op = next_pipeline_operator(); op && op->kind == PipelineOperator::Kind::composition)
+        left = compose_processors(std::move(left), owner_projection, op->reversed);
+    }
+    if (minimum <= endpoint_precedence) {
+      if (const auto endpoint = next_pipeline_operator(); endpoint && endpoint->kind != PipelineOperator::Kind::composition)
+        left = connect_pipeline(std::move(left), owner_projection);
+      using K = Expression::Kind;
+      if (attach && (left->kind == K::pipeline || left->kind == K::processor_composition) && here_header())
+        trailing_body(*left);
     }
     if (minimum == 0 && swap_operation(peek().text)) {
       auto swap = make(Expression::Kind::call, tokens_[cursor_++]);
       swap->children.push_back(std::move(left));
-      swap->children.push_back(expression(1, attach, owner_projection));
+      swap->children.push_back(expression(endpoint_precedence, attachment, owner_projection));
       if (swap_operation(peek().text)) fail(peek().at, "swap operators cannot be chained");
       return swap;
     }
@@ -1453,19 +1589,19 @@ class Parser {
       auto assignment = make(Expression::Kind::call, tokens_[cursor_++]);
       assignment->text = "[]" + assignment->text;
       assignment->children = std::move(left->children);
-      assignment->children.push_back(expression(0, attach, owner_projection, false));
+      assignment->children.push_back(expression(0, attachment, owner_projection, false));
       return assignment;
     }
     if (minimum == 0 && is("<-")) {
       auto transfer = make(Expression::Kind::transfer, expect("<-"));
       transfer->children.push_back(std::move(left));
-      transfer->children.push_back(expression(0, attach, owner_projection, false));
+      transfer->children.push_back(expression(0, attachment, owner_projection, false));
       return transfer;
     }
     if (minimum == 0 && is("=")) {
       auto rebind = make(Expression::Kind::rebind, expect("="));
       rebind->children.push_back(std::move(left));
-      rebind->children.push_back(expression(0, attach, owner_projection, false));
+      rebind->children.push_back(expression(0, attachment, owner_projection, false));
       return rebind;
     }
     return left;
@@ -1607,7 +1743,7 @@ class Parser {
     if (expr.kind == K::deferred && draining)
       fail(expr.at, "defer cannot register work into its currently draining scope\n" +
           location_text(*draining) + ": note: enclosing deferred execution begins here");
-    const bool declaration = expr.kind == K::pointer_group || expr.kind == K::region_binding ||
+    const bool declaration = expr.kind == K::pointer_group || expr.kind == K::region_binding || expr.kind == K::here_binding ||
         expr.kind == K::alias || (expr.kind == K::callable && !expr.definition->name.empty());
     if (deferred && declaration)
       fail(expr.at, "a deferred-block variable declaration requires a nested explicit {{ ... }} scope");

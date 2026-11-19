@@ -4383,6 +4383,7 @@ class ScalarChecker {
         break;
       case K::value_call: case K::symbol: case K::effect: case K::touch: case K::procedure_effect:
       case K::effect_group: case K::allocate: case K::make_region: case K::region_binding: case K::capture_owner:
+      case K::processor_composition: case K::pipeline: case K::here_binding:
         required.opaque_storage = true;
         break;
       default: break;
@@ -4417,7 +4418,7 @@ class ScalarChecker {
         }
         return;
       }
-      if (expr.kind == K::alias) {
+      if (expr.kind == K::alias || expr.kind == K::here_binding) {
         for (const auto &child : expr.children) visit(*child, bound, query);
         if (!expr.owner_name.empty() && expr.owner_name != "here") use(expr.owner_name, expr.at, bound, query);
         bound.insert(expr.text);
@@ -7115,10 +7116,19 @@ class ScalarChecker {
     } else for (const auto &places : writable_booleans) state.selections.write_boolean(places, {});
     return complete_callable_type(program_.methods[id], {}, *result.contract);
   }
+  static bool pipeline_expression(const Expression &expr) {
+    using K = Expression::Kind;
+    return expr.kind == K::processor_composition || expr.kind == K::pipeline || expr.kind == K::here_binding ||
+           (expr.kind == K::call && pipeline_operator(expr.text));
+  }
   std::optional<Type> query_evidence(const Expression &expr, TypeEvidenceState &state, ViewEvidence &view, TargetEvidence &target_facts,
                                      bool contextual, const Type *expected, std::vector<Type> *alternatives,
                                      ExpectedTypeUse expected_use, EvidenceRead read) const {
     using K = Expression::Kind;
+    if (pipeline_expression(expr)) {
+      if (state.required) implementation_gap(expr.at, "pipeline role checking and bounded here bindings");
+      return {};
+    }
     if (expr.kind == K::name && active_here(expr.text, &state)) {
       if (state.required) fail(expr.at, "a here argument can only be invoked or forwarded");
       return {};
@@ -10413,6 +10423,7 @@ class ScalarChecker {
              std::map<const Expression *, CheckedOperation> &operations, bool read = true, bool discard = false,
              const Type *expected = nullptr, ExpectedTypeUse expected_use = ExpectedTypeUse::materialization) {
     using K = Expression::Kind;
+    if (pipeline_expression(expr)) implementation_gap(expr.at, "pipeline role checking and bounded here bindings");
     CheckedOperation operation;
     if (checking_method_ && checking_method_->here_group &&
         (expr.kind == K::deferred || expr.kind == K::make_local || expr.kind == K::make_region ||
@@ -12632,6 +12643,7 @@ class ScalarChecker {
           operation = program_.families[family->second].operation;
       if (identity_operation(operation))
         fail(form->at, "reference identity is an intrinsic operation and cannot have user methods");
+      if (pipeline_operator(operation)) implementation_gap(form->at, "pipeline operator methods");
       if ((!operation.empty() && !eager_operation(operation) && !swap_operation(operation)) || form->conversion || (!lexical_methods_.contains(form) && !form->captures.empty()) || (!form->body && lexical_methods_.contains(form)))
         implementation_gap(form->at, "callable captures, effects, declarations, operators, owners or throws contracts");
       if (!operation.empty()) {
