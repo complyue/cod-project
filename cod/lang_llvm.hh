@@ -1450,7 +1450,8 @@ class LLVMEmission {
   std::vector<llvm::Value *> prepare_here_arguments(const Expression &expr) {
     const auto &fact = contexts_.front().at(&expr);
     std::vector<llvm::Value *> values(fact.here_arguments.size());
-    for (size_t slot = fact.supplied_here.has_value(); slot < values.size(); ++slot) {
+    // A trailing body occupies the first slot even when preparation prevents entry.
+    for (size_t slot = expr.has_here_body(); slot < values.size(); ++slot) {
       std::map<CheckedOperation::HereArgument, std::vector<size_t>> arguments;
       for (size_t i = 0; i < contexts_.size(); ++i)
         arguments[contexts_[i].at(&expr).here_arguments.at(slot)].push_back(i);

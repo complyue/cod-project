@@ -482,6 +482,15 @@ runner.CASES = {
         'proc rows() yields u64{yield(1u64);return;}'
         'func stage(here input() yields u64) yields u64{for val n<-input(){yield(n);};}'
         'for val n<-stage(rows()){};',2,'','a function cannot invoke a procedure producer'),
+    'here_receiver_abrupt_argument_preserves_preparation_prefix': (IO+
+        'proc mark(n:u64)->u64{behave @print(n);return n;}'
+        'proc receive(here body(x:u64)->u64,first:u64,middle:u64,last:u64)->u64{behave @print(last);return body(first+middle);}'
+        'proc run()->u64{return receive(mark(11u64),{return 21u64;},mark(98u64))(n)=>{behave @print(99u64);n};}'
+        'behave @print(run());',0,'11\n21\n',''),
+    'here_receiver_abrupt_argument_still_checks_the_body': (
+        'func receive(here body(x:u64)->u64,input:u64)->u64{return body(input);}'
+        'func run()->u64{return receive({return 21u64;})(n)=>{false};}run();',
+        2,'','here body fallthrough requires feedback of type'),
     'generator_void_feedback_rejects_explicit_operand': (
         'func generate() yields u64{yield(1u64);}func action()->void{}'
         'for val v<-generate(){continue action();};',2,'','void here feedback requires bare continue'),

@@ -10269,6 +10269,7 @@ class ScalarChecker {
     operation.arguments.resize(count);
     std::vector<Type> arguments(count);
     std::vector<CheckedOperation> views(count);
+    bool completes = true;
     for (size_t i = 0; i < count; ++i) {
       const auto &source = *written[i];
       const bool named = source.kind == Expression::Kind::named_argument;
@@ -10277,11 +10278,11 @@ class ScalarChecker {
       const auto slot = slots->at(i);
       const auto mode = modes.at(slot);
       const auto type = check(operand, supplier, operations, mode == ArgumentMode::value, false, nullptr, expected_type_use(mode));
-      if (type == Type::never) implementation_gap(operand.at, "abrupt ordinary arguments to a here receiver");
-      if (!scalar_type(type)) implementation_gap(operand.at, "here receiver ordinary arguments require scalar inputs");
+      if (type == Type::never) completes = false;
+      else if (!scalar_type(type)) implementation_gap(operand.at, "here receiver ordinary arguments require scalar inputs");
       arguments[slot] = type;
       views[slot] = operations.at(&operand);
-      prepare_borrow(views[slot], mode, operand.at);
+      if (type != Type::never) prepare_borrow(views[slot], mode, operand.at);
       operation.arguments[slot] = {mode, type};
       operands[slot] = &operand;
     }
@@ -10290,6 +10291,22 @@ class ScalarChecker {
     const auto &receiver = program_.methods[selected];
     if (checking_method_ && checking_method_->source->kind == Form::Kind::function && receiver.source->kind != Form::Kind::function)
       fail(expr.at, "a function cannot invoke a procedure");
+    if (!completes) {
+      // A never operand has no runtime payload. Its declared parameter must
+      // still be determined before checking the supplied body.
+      const std::vector<std::optional<Type>> evidence(arguments.begin(), arguments.end());
+      const auto partial = *match_evidence(receiver, evidence, {}, true);
+      for (size_t i = 0; i < count; ++i) {
+        if (arguments[i] != Type::never) continue;
+        if (modes[i] != ArgumentMode::value)
+          implementation_gap(operands[i]->at, "owner evidence for an abruptly completing borrowed operand");
+        arguments[i] = substitute(receiver.parameters[i], receiver, partial, true);
+        if (!scalar_type(arguments[i]))
+          implementation_gap(operands[i]->at, "cannot establish a scalar parameter type for an abruptly completing operand");
+      }
+      const auto prepared = prepared_types(receiver, arguments, {});
+      for (size_t i = 0; i < count; ++i) operation.arguments[i].type = prepared[i];
+    }
     const auto bindings = *match(receiver, arguments, {}, true);
     for (size_t i = 0; i < explicit_here; ++i) {
       const auto formal = i + supplied;
@@ -10323,6 +10340,7 @@ class ScalarChecker {
       }
     }
     if (!supplied) {
+      if (!completes) { operation.type = Type::never; return; }
       const bool known = std::ranges::any_of(targets, [](const auto &target) { return target.body || target.source; });
       const auto callee = known ? demand_here_receiver(selected, targets, arguments, expr.at) : demand(selected, arguments, expr.at);
       if (proving_ && lexical_.live && read_effects(callee).protected_defer_failure)
@@ -10339,6 +10357,7 @@ class ScalarChecker {
     const auto result = require_result(selected, arguments, {}, expr.at).contract.value();
     auto [body, returning] = demand_supplied_here(*expr.children.back(), contract, signature, std::move(owners),
         result, supplier, operations);
+    if (!completes) { operation.type = Type::never; return; }
     const auto finish_here = [&](CheckedOperation &call, const CheckedOperation::SuppliedHere &body) {
       targets.front().body = body.instance;
       const auto receiver = demand_here_receiver(selected, targets, arguments, expr.at);
