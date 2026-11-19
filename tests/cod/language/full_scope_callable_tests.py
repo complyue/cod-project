@@ -25,6 +25,12 @@ def query(body):
     return 'val result<-make local typeof({{' + body + '}}){4u64};'
 
 
+def shared_pointer_cleanup(body):
+    return (IO + 'func prepare(ptr first:u64 in O,ptr second:u64 in O)->ptr u64 in O where {owner O}{' + body +
+            'return first;}val raw<-make local u64;ptr received=prepare(raw,raw);'
+            'if(received is not null){behave @print(received);}else{};')
+
+
 runner.CASES = {
     'function_tail_and_explicit_return_share_inference': (IO+
         'func sample(flag:bool){if(flag){return 3u32;}else{};12u64;}'
@@ -136,6 +142,13 @@ runner.CASES = {
     'return_pointer_pattern_write_does_not_prepare_another_target': (IO+PTR_RESULT+
         READ_PTR_RESULT+'defer{return spare;};'+WRITE_PTR_RESULT+'return picked;}'+PTR_RESULT_INPUTS+
         'run(value_input,uninitialized_input):void;',2,'',"initialization of 'uninitialized_input'"),
+    'failed_writer_registration_leaves_unwritten_replacement': (
+        shared_pointer_cleanup('defer{return second;};'+WRITE_PTR_RESULT),2,'','initialization'),
+    'same_cleanup_writes_before_return_through_shared_formal': (
+        shared_pointer_cleanup('defer{if returning (ptr saved){if(saved is not null){saved<-9u64;{}}'
+                               'else{};return second;}};'),0,'9\n',''),
+    'guarded_replacement_requires_a_prepared_return': (
+        shared_pointer_cleanup('defer{if returning (){return second;}};'+WRITE_PTR_RESULT),0,'9\n',''),
     'return_inspection_uses_closed_indirect_call_outcomes': (IO+IDENTITY+
         'proc run(f:func(u64)->const u64)->u64{defer{if returning (){return f(7u64);}};return 1u64;}'
         'behave @print(run(identity));',0,'7\n',''),
