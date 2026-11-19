@@ -1846,15 +1846,17 @@ class ScalarChecker {
   template <typename Value, typename Merge, typename Guard> Value updated_payload(const CheckedOperation &target,
       size_t place, const Value &before, const Value &value, const Merge &merge, const Guard &guard) const {
     if (target.place == place) return value;
-    // A selected input identifies the payload to read. A write through a
-    // borrowed target can also change storage reached by other formal inputs.
-    if (std::none_of(target.targets.begin(), target.targets.end(), [&](size_t id) { return id != null_target && storage(id).borrowed; }))
-      if (const auto selected = selected_payload_condition(target, place)) {
-        auto inverse = *selected; inverse.equal = false;
-        auto result = guard(before, SelectionConditions{{inverse}});
-        merge(result, guard(value, SelectionConditions{{*selected}}));
-        return result;
-      }
+    // An unselected alternative leaves this payload intact when it cannot
+    // reach the same storage through another input.
+    if (const auto selected = selected_payload_condition(target, place); selected &&
+        std::ranges::none_of(target.targets, [&](size_t other) {
+          return other != place && payload_targets_may_share(other, place);
+        })) {
+      auto inverse = *selected; inverse.equal = false;
+      auto result = guard(before, SelectionConditions{{inverse}});
+      merge(result, guard(value, SelectionConditions{{*selected}}));
+      return result;
+    }
     auto result = before; merge(result, value); return result;
   }
   ExceptionFacts stored_exceptions(const CheckedOperation &view, const std::map<size_t, ExceptionFacts> &values) const {

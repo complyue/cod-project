@@ -72,6 +72,12 @@ runner.CASES = {
     'local_read_observes_targets_shared_after_registration': (
         IO+BORROWED_BOOLEAN+'ref peer=off;{{'+DEFER_CONDITIONAL_READ+'defer{peer<-false;};flag=next;peer=next;}};',
         2, '', UNINITIALIZED_LOCAL),
+    'local_read_keeps_target_when_writer_rebinds_after_write': (
+        IO+'val off<-false,on<-true;ref flag=on;ref peer=off;{{'+DEFER_CONDITIONAL_READ+
+        'defer{peer=flag;};defer{peer<-false;};}};', 0, '7\n', ''),
+    'local_read_observes_shared_target_when_writer_rebinds_before_write': (
+        IO+'val off<-false,on<-true;ref flag=on;ref peer=off;{{'+DEFER_CONDITIONAL_READ+
+        'defer{peer<-false;};defer{peer=flag;};}};', 2, '', UNINITIALIZED_LOCAL),
     'throw_only_typed': run('val e<-sample_error();try{ {{throw e;}}; }'
                             'catch(caught:const NullPointerException){behave @print(caught.category);};', '4\n'),
     'throw_only_void_result': reject('val e<-sample_error();val result<-make local typeof({{throw e;}}){7u64};',
