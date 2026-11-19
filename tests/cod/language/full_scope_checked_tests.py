@@ -73,6 +73,9 @@ SAVED_EAGER_COPY = ('ptr held=selected;if(selected is not null){defer (<-)(selec
                     'else{return held;};')
 SAVED_EAGER_OPPOSITE = (SAVED_OPPOSITE+'if(selected is not null){defer (<-)(selected,7u64);selected=opposite;'
                         'return selected;}else{return selected;};')
+WRITE_WHEN_PRESENT = 'if(p is not null){p<-7u64;{}}else{};'
+WRITER = 'proc fill(ptr p:u64 in O)->void where {owner O}{'+WRITE_WHEN_PRESENT+'}'
+WRITER_WITH_LATER_OPERAND = WRITER.replace('in O)', 'in O,ignored:bool)')
 
 
 def guarded_reference(body):
@@ -95,9 +98,9 @@ def queried_ref_read(declarations, body):
     return IO+declarations+query(REF_INPUTS+body, '')+'behave @print(result);'
 
 
-def saved_selection_case(body, *, inspect=False, rejects=False):
+def saved_selection_case(body, *, inspect=False, rejects=False, declarations=''):
     invocation = query(SAVED_CALL, '') if inspect else 'val result<-{{'+SAVED_CALL+'}};'
-    source = IO+TYPES+SAVED_SELECTION+body+'}proc run(flag:bool)->void{'+invocation
+    source = IO+TYPES+declarations+SAVED_SELECTION+body+'}proc run(flag:bool)->void{'+invocation
     source += 'behave @print(result);}run(true);run(false);'
     return (source, 2, '', UNWRITTEN_RESULT) if rejects else (source, 0, '4\n4\n' if inspect else '7\n7\n', '')
 
@@ -596,6 +599,37 @@ runner.CASES = {
         'try{unchecked_path(unchecked());}catch(failed:const MissingReturnError){behave @print(failed.category);};',
         0, '4\n5\n', '[-Wmissing-return]'),
 }
+
+for name, declaration, body, rejects in (
+    ('writes_saved_target_on_void_completion', WRITER, 'defer fill(selected);return selected;', False),
+    ('writes_saved_target_with_discarded_scalar_result',
+     WRITER.replace('->void', '->bool').replace(WRITE_WHEN_PRESENT, WRITE_WHEN_PRESENT+'return true;'),
+     'defer fill(selected);return selected;', False),
+    ('writes_saved_target_after_later_operand_rebind', WRITER_WITH_LATER_OPERAND,
+     'ptr held=selected;defer fill(selected,{selected=backup;true});return held;', False),
+    ('writes_saved_target_through_recursive_forwarding',
+     WRITER.replace('proc fill(', 'proc write_value(')+
+     'proc fill(ptr p:u64 in O,n:u64)->void where {owner O}{'
+     'if(n>0u64){fill(p,n-1u64);}else{write_value(p);};}',
+     'defer fill(selected,2u64);return selected;', False),
+    ('keeps_a_rebound_target_unwritten', WRITER_WITH_LATER_OPERAND,
+     SAVED_OPPOSITE+'defer fill(selected,{selected=opposite;true});return selected;', True),
+    ('retains_missing_writes_through_a_normal_branch',
+     WRITER_WITH_LATER_OPERAND.replace(WRITE_WHEN_PRESENT, 'if(ignored){'+WRITE_WHEN_PRESENT+'}else{};'),
+     'defer fill(selected,flag);return selected;', True),
+):
+    runner.CASES['prepared_call_'+name] = saved_selection_case(body, rejects=rejects, declarations=declaration)
+    runner.CASES['query_prepared_call_'+name] = saved_selection_case(body, inspect=True, rejects=rejects, declarations=declaration)
+
+NULLABLE_WRITE_AND_REBIND = (UNWRITTEN+'val ready<-8u64;ptr candidate=if(flag){local}else{null in here};'
+                            'fill(candidate);candidate=ready;'
+                            'if(candidate is not null){return local;}else{return 19u64;};')
+runner.CASES['call_null_path_leaves_physical_storage_unwritten'] = (
+    WRITER+guarded_reference(NULLABLE_WRITE_AND_REBIND), 2, '', UNINITIALIZED_LOCAL)
+runner.CASES['query_call_null_path_leaves_physical_storage_unwritten'] = (
+    WRITER+'proc run(flag:bool)->void{'+query(NULLABLE_WRITE_AND_REBIND, '')+'}run(true);',
+    2, '', UNINITIALIZED_LOCAL)
+
 runner.EXTRA_SOURCES = [Path(__file__)]
 if __name__ == '__main__':
     raise SystemExit(runner.main())

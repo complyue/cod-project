@@ -541,6 +541,7 @@ class ScalarChecker {
   struct TypeDeferredEffects {
     QueryWrites payloads, slots;
     EvidencePlaces initialized;
+    EvidencePlaces initialized_selections;
     std::set<size_t> outcomes;
     bool opaque = false;
     PreparedBuiltin builtin;
@@ -912,15 +913,28 @@ class ScalarChecker {
     void initialize(const EvidencePlaces &places) {
       if (places.size() == 1) uninitialized.erase(*places.begin());
     }
+    void initialize_selection(const TargetEvidence &target) {
+      if (target.selection.slot) initialized_selections.insert(*target.selection.slot);
+      initialized_selections.insert(target.same_selected.begin(), target.same_selected.end());
+    }
     void initialize(const TargetEvidence &target) {
       initialize(target.places);
-      if (target.selection.slot) {
-        initialized_selections.insert(*target.selection.slot);
-        initialized_selections.insert(target.same_selected.begin(), target.same_selected.end());
-      }
+      initialize_selection(target);
+    }
+    void initialize_if_present(const TargetEvidence &target) {
+      initialize_selection(target);
+      if (target.places.size() != 1) return;
+      const auto missing = uninitialized.find(*target.places.begin());
+      if (missing == uninitialized.end()) return;
+      auto absent = outcome(selection_outcomes(target), false);
+      // A later rebind can change a slot's presence without writing this cell.
+      absent.presence.clear();
+      missing->second.conjoin(absent);
+      if (!missing->second) uninitialized.erase(missing);
     }
     bool selection_initialized(const TargetEvidence &target) const {
-      return target.initialized || (target.selection.slot && initialized_selections.contains(*target.selection.slot));
+      return target.initialized || (target.selection.slot && initialized_selections.contains(*target.selection.slot)) ||
+          std::ranges::any_of(target.same_selected, [&](const auto &slot) { return initialized_selections.contains(slot); });
     }
     bool may_read_uninitialized(const EvidenceSlot &place, const ObservationPaths &reaching) const {
       const auto found = uninitialized.find(place);
@@ -2667,6 +2681,15 @@ class ScalarChecker {
   static bool caller_bindings(const CheckedMethod &method) {
     return method.operation == "<=>";
   }
+  static bool initialized_when_present(size_t parameter, const CleanupEquations::ConditionClauses &missing) {
+    return std::ranges::all_of(missing, [&](const auto &facts) { return facts.absent.contains(parameter); });
+  }
+  void initialize_call_selection(CleanupEquations::Selections &selections, const CheckedOperation &view, bool prepared) const {
+    if (prepared && !delayed_ && active_loops_.empty() && view.selection_identity)
+      selections.initialized_captures.insert(*view.selection_identity);
+    if (const auto binding = current_binding(view); binding && (!prepared || !rebound_.contains(*binding)))
+      selections.initialize(*binding);
+  }
   static CallEffects initial_effects(const CheckedMethod &method, const std::vector<Type> &arguments) {
     CallEffects effects;
     std::set<size_t> borrowed;
@@ -2772,16 +2795,17 @@ class ScalarChecker {
         }
       if (found != target.initialized.end()) for (const auto parameter : found->second) {
         const auto &view = views.at(parameter);
-        if (!slots) initialize_targets(view, effect.initialized, effect.uninitialized);
-        // An action registered once can initialize the exact prepared
-        // selection even after every source slot has been rebound.
-        if (!slots && prepared && !delayed_ && active_loops_.empty() && view.selection_identity)
-          effect.selections.initialized_captures.insert(*view.selection_identity);
+        if (!slots) {
+          initialize_targets(view, effect.initialized, effect.uninitialized);
+          // A once-registered action can initialize its prepared selection
+          // after every source slot has been rebound.
+          initialize_call_selection(effect.selections, view, prepared);
+        }
         const auto selected = physical_slots(view.slots);
         const auto binding = slots ? (selected.size() == 1 ? std::optional<size_t>{*selected.begin()} : std::nullopt)
                                    : selection(view);
         if (binding) {
-          effect.selections.initialize(*binding);
+          if (slots) effect.selections.initialize(*binding);
           effect.selections.refine(*binding, false);
         }
       }
@@ -2789,8 +2813,7 @@ class ScalarChecker {
         for (const auto &[parameter, missing] : outcome->second) {
           // When only a null input can lack a write, its invocation-time
           // target is initialized if present, independently of slot updates.
-          if (!std::all_of(missing.begin(), missing.end(), [&](const auto &facts) { return facts.absent.contains(parameter); }))
-            continue;
+          if (!initialized_when_present(parameter, missing)) continue;
           const auto selected = physical_slots(views.at(parameter).slots);
           if (selected.size() == 1) effect.selections.entry_initialized.insert(*selected.begin());
         }
@@ -3014,8 +3037,8 @@ class ScalarChecker {
         const auto &view = views.at(parameter);
         auto when = instantiate_conditions(missing, boolean_inputs, views, false, exception_inputs);
         initialize_targets(view, effects.initialized, effects.uninitialized, when);
-        if (when.empty() && summary.bindings.empty()) if (const auto binding = current_binding(view))
-          if (!prepared || !rebound_.contains(*binding)) effects.selections.initialize(*binding);
+        if (summary.bindings.empty() && (when.empty() || initialized_when_present(parameter, missing)))
+          initialize_call_selection(effects.selections, view, prepared);
       }
       effects.resolve_initialization();
     }
@@ -4828,8 +4851,8 @@ class ScalarChecker {
   mutable std::set<size_t> pending_results_;
   mutable std::optional<size_t> result_probe_;
   mutable bool result_graph_changed_ = false;
-  struct TypeBorrowedProofs;
-  mutable TypeBorrowedProofs *type_borrowed_proofs_ = nullptr;
+  struct TypeCallProofs;
+  mutable TypeCallProofs *type_call_proofs_ = nullptr;
 
   static std::optional<Type> common_result(const std::vector<Type> &returns, const Location &at) {
     if (returns.empty()) return {};
@@ -5059,9 +5082,9 @@ class ScalarChecker {
       check_declared_results(definition, supplied, input_declared);
       return {supplied, ResultOrigin::supplied};
     }
-    // An optional borrowed-target proof uses established signatures. It must
+    // Optional call-effect proofs use established signatures. They must
     // not leave a speculative result-inference obligation in the main graph.
-    if (type_borrowed_proofs_) return {};
+    if (type_call_proofs_) return {};
     const auto context = result_context(method, state);
     auto &candidates = method_result_obligations_[method];
     const auto found = std::find_if(candidates.begin(), candidates.end(), [&](size_t id) {
@@ -5897,7 +5920,11 @@ class ScalarChecker {
             // An ordinary call cannot consume a failure already pending.
             const auto next_error = prepared && !outcome ? error : outcome;
             auto completed = state;
-            if (!outcome) for (const auto &place : effects.initialized) completed.selections.uninitialized.erase(place);
+            if (!outcome) {
+              for (const auto &place : effects.initialized) completed.selections.uninitialized.erase(place);
+              for (const auto &slot : effects.initialized_selections)
+                completed.selections.initialize_if_present(completed.selections.selected_target({slot, {slot}}));
+            }
             if (action.may_replace) enqueue(action.earlier, true, next_error, completed, {});
             enqueue(action.earlier, returned, next_error, std::move(completed), result);
           }
@@ -5937,12 +5964,12 @@ class ScalarChecker {
     std::optional<PresenceBranches> boolean;
     bool completes = true;
   };
-  struct TypeBorrowedResult {
+  struct TypeCallSummary {
     std::set<size_t> targets, required_inputs, initialized_inputs;
     bool completes = false;
-    bool operator==(const TypeBorrowedResult &) const = default;
+    bool operator==(const TypeCallSummary &) const = default;
 
-    void merge(const TypeBorrowedResult &other) {
+    void merge(const TypeCallSummary &other) {
       if (!other.completes) return;
       if (!completes) { *this = other; return; }
       targets.insert(other.targets.begin(), other.targets.end());
@@ -5950,7 +5977,7 @@ class ScalarChecker {
       std::erase_if(initialized_inputs, [&](size_t input) { return !other.initialized_inputs.contains(input); });
     }
   };
-  struct TypeBorrowedProofs {
+  struct TypeCallProofs {
     struct Obligation {
       size_t method;
       std::vector<Type> arguments, retained;
@@ -5960,7 +5987,7 @@ class ScalarChecker {
       std::set<size_t> dependents{};
       // Live edges start with no observed normal completion. An unproved
       // body uses the conservative declaration bound instead.
-      std::optional<TypeBorrowedResult> result{TypeBorrowedResult{}};
+      std::optional<TypeCallSummary> result{TypeCallSummary{}};
     };
     std::deque<Obligation> obligations;
     std::map<size_t, std::vector<size_t>> methods;
@@ -5992,14 +6019,14 @@ class ScalarChecker {
       return true;
     }
   };
-  std::optional<TypeBorrowedResult> sample_type_borrowed_result(const TypeBorrowedProofs::Obligation &obligation) const {
+  std::optional<TypeCallSummary> sample_type_call(const TypeCallProofs::Obligation &obligation) const {
     const auto &[id, prepared, retained, contract, context, ready_inputs, dependents, previous] = obligation;
     const auto &method = program_.methods[id];
     try {
       auto body = body_evidence(id, prepared, retained, context);
       body.required = body.validating_body = true;
       body.initialization = TypeEvidenceState::InitializationCheck::borrowed_summary;
-      body.borrowed_return = &contract;
+      if (contract.borrowed()) body.borrowed_return = &contract;
       body.invocation_result = contract.type;
       body.selections.tracking = true;
       body.selections.observation_decisions = std::make_shared<ObservationDecisions>();
@@ -6007,7 +6034,7 @@ class ScalarChecker {
       TypeDeferredFlow deferred;
       body.exits = &exits;
       body.deferred = &deferred;
-      TypeBorrowedResult result;
+      TypeCallSummary result;
       for (size_t i = 0; i < prepared.size(); ++i) {
         const auto &parameter = parameter_at(method, i);
         if (parameter.owner.empty()) {
@@ -6034,24 +6061,27 @@ class ScalarChecker {
       const auto completion = type_evidence(*method.source->body, body);
       complete_type_deferred(deferred, exits, body, completion != Type::never, &completed);
       if (!body.complete) return {};
-      for (const auto &path : completed.paths) if (path.returned()) {
+      for (const auto &path : completed.paths) {
+        if (!path.reasons.contains(1) && !(contract.type == Type::void_type && path.reasons.contains(0))) continue;
         result.completes = true;
-        if (!path.state.complete || !path.result.borrowed) return {};
-        const auto &selected = *path.result.borrowed;
+        if (!path.state.complete) return {};
         const auto &selections = path.state.selections;
         const auto reaching = selections.reach_condition();
-        for (const auto &[place, targets] : selected.targets) {
-          auto possible = targets;
-          possible.conjoin(reaching);
-          if (!possible) continue;
-          const auto *ordinal = std::get_if<size_t>(&place);
-          if (!ordinal || *ordinal >= prepared.size() || parameter_at(method, *ordinal).owner != contract.owner) return {};
-          result.targets.insert(*ordinal);
-          if (const auto missing = selected.uninitialized.find(place); missing != selected.uninitialized.end()) {
-            auto unwritten = missing->second;
-            unwritten.conjoin(reaching);
-            if (selections.may_read_uninitialized(place, unwritten))
-              result.required_inputs.insert(*ordinal);
+        if (contract.borrowed()) {
+          if (!path.result.borrowed) return {};
+          const auto &selected = *path.result.borrowed;
+          for (const auto &[place, targets] : selected.targets) {
+            auto possible = targets;
+            possible.conjoin(reaching);
+            if (!possible) continue;
+            const auto *ordinal = std::get_if<size_t>(&place);
+            if (!ordinal || *ordinal >= prepared.size() || parameter_at(method, *ordinal).owner != contract.owner) return {};
+            result.targets.insert(*ordinal);
+            if (const auto missing = selected.uninitialized.find(place); missing != selected.uninitialized.end()) {
+              auto unwritten = missing->second;
+              unwritten.conjoin(reaching);
+              if (selections.may_read_uninitialized(place, unwritten)) result.required_inputs.insert(*ordinal);
+            }
           }
         }
         std::erase_if(result.initialized_inputs, [&](size_t input) {
@@ -6065,9 +6095,9 @@ class ScalarChecker {
       return {};
     }
   }
-  std::optional<size_t> type_borrowed_obligation(size_t id, const std::vector<Type> &arguments, const std::vector<Type> &retained,
+  std::optional<size_t> type_call_obligation(size_t id, const std::vector<Type> &arguments, const std::vector<Type> &retained,
       const ResultContract &contract, const TypeEvidenceState &supplied, const std::set<size_t> &ready_inputs) const {
-    auto &proofs = *type_borrowed_proofs_;
+    auto &proofs = *type_call_proofs_;
     const auto &method = program_.methods[id];
     if (!method.source->body || variadic(method) || caller_bindings(method)) return {};
     auto prepared = prepared_types(method, arguments, retained);
@@ -6086,31 +6116,31 @@ class ScalarChecker {
     proofs.pending.insert(index);
     return index;
   }
-  std::optional<TypeBorrowedResult> prove_type_borrowed_result(size_t id, const std::vector<Type> &arguments,
+  std::optional<TypeCallSummary> prove_type_call(size_t id, const std::vector<Type> &arguments,
       const std::vector<Type> &retained, const ResultContract &contract, const TypeEvidenceState &supplied,
       const std::set<size_t> &ready_inputs) const {
-    if (auto *proofs = type_borrowed_proofs_) {
-      const auto index = type_borrowed_obligation(id, arguments, retained, contract, supplied, ready_inputs);
+    if (auto *proofs = type_call_proofs_) {
+      const auto index = type_call_obligation(id, arguments, retained, contract, supplied, ready_inputs);
       if (!index) return {};
       auto &obligation = proofs->obligations[*index];
       if (proofs->current) obligation.dependents.insert(*proofs->current);
       return obligation.result;
     }
-    TypeBorrowedProofs proofs;
-    type_borrowed_proofs_ = &proofs;
+    TypeCallProofs proofs;
+    type_call_proofs_ = &proofs;
     struct Reset {
-      TypeBorrowedProofs *&active;
+      TypeCallProofs *&active;
       ~Reset() { active = nullptr; }
-    } reset{type_borrowed_proofs_};
+    } reset{type_call_proofs_};
     try {
-      const auto root = type_borrowed_obligation(id, arguments, retained, contract, supplied, ready_inputs);
+      const auto root = type_call_obligation(id, arguments, retained, contract, supplied, ready_inputs);
       if (!root) return {};
       while (!proofs.pending.empty()) {
         const auto index = proofs.pending.extract(proofs.pending.begin()).value();
         auto &obligation = proofs.obligations[index];
         if (!obligation.result) continue;
         proofs.current = index;
-        auto next = sample_type_borrowed_result(obligation);
+        auto next = sample_type_call(obligation);
         if (next) next->merge(*obligation.result);
         if (next == obligation.result) continue;
         obligation.result = std::move(next);
@@ -7085,6 +7115,7 @@ class ScalarChecker {
       Owners owners;
       std::vector<ViewEvidence> views;
       std::vector<TargetEvidence> operand_targets;
+      std::vector<size_t> operand_revisions;
       std::vector<ArgumentMode> prepared_modes;
       const auto readable_borrow = [](ArgumentMode mode) {
         return mode == ArgumentMode::borrowed_ref || mode == ArgumentMode::borrowed_read;
@@ -7124,7 +7155,10 @@ class ScalarChecker {
         arguments.push_back(type.value_or(Type::never)); access.push_back(selected.read_only); owners.push_back(selected.owner);
         views.push_back(selected);
         prepared_modes.push_back(parameter.mode);
-        if (state.selections.tracking) operand_targets.push_back(std::move(selected_target));
+        if (state.selections.tracking) {
+          operand_targets.push_back(std::move(selected_target));
+          operand_revisions.push_back(state.selections.writes);
+        }
       }
       if (exits) return Type::never;
       const auto check_borrowed_argument = [&](size_t i, ArgumentMode mode) {
@@ -7136,31 +7170,25 @@ class ScalarChecker {
           implementation_gap(operand.at, "readable borrowed argument requires an established preparation mode");
         check_type_deferred_argument(state, expr, operand, views[i], mode);
       };
+      const auto saved_operand = [&](size_t i) {
+        auto operand = operand_targets.at(i);
+        state.selections.forget_changed(operand, operand_revisions.at(i));
+        return operand;
+      };
       const auto ready_input = [&](size_t i) {
-        const auto &operand = operand_targets.at(i);
-        if (operand.initialized || operand.presence == TargetPresence::absent) return true;
+        const auto operand = saved_operand(i);
+        if (state.selections.selection_initialized(operand) || operand.presence == TargetPresence::absent) return true;
         // Later operands can initialize the prepared target. A rebind cannot
         // make the saved operand follow the binding's new selection.
-        const auto reaching = state.selections.reach_condition();
+        const auto reaching = state.selections.outcome(state.selections.selection_outcomes(operand), true);
         return !operand.places.empty() && std::ranges::none_of(operand.places, [&](const auto &place) {
           return state.selections.may_read_uninitialized(place, reaching);
         });
       };
       const auto retain_borrowed_targets = [&](const ViewEvidence &result, const Type &type, const auto &mode,
-          const std::optional<TypeBorrowedResult> &proved = {}) {
+          const std::optional<TypeCallSummary> &proved = {}) {
         if (!state.tracks_target_places() || result.view != true || !scalar_type(type)) return;
-        if (proved) {
-          target_facts.initialized = std::ranges::all_of(proved->required_inputs, ready_input);
-          for (const auto i : proved->initialized_inputs) {
-            const auto &operand = operand_targets.at(i);
-            // Only an exact, present input establishes readiness for other
-            // reads of its physical target. A nullable result can still be ready.
-            if (operand.presence != TargetPresence::present || operand.places.size() != 1) continue;
-            const auto &place = *operand.places.begin();
-            if (invokes) state.selections.uninitialized.erase(place);
-            else state.prepared_call->effects.initialized.insert(place);
-          }
-        }
+        if (proved) target_facts.initialized = std::ranges::all_of(proved->required_inputs, ready_input);
         for (size_t i = 0; i < operand_targets.size(); ++i) {
           if (proved ? !proved->targets.contains(i) : mode(i) == ArgumentMode::value || arguments[i] != type ||
               compare_owners(result.owner, owners[i], &state) == OwnerMatch::mismatch) continue;
@@ -7172,6 +7200,18 @@ class ScalarChecker {
           target_facts.places.insert(operand.places.begin(), operand.places.end());
         }
         if (proved && proved->targets.empty()) target_facts.presence = TargetPresence::absent;
+      };
+      const auto apply_initialized_inputs = [&](const TypeCallSummary &proof) {
+        for (const auto i : proof.initialized_inputs) {
+          auto operand = saved_operand(i);
+          if (invokes) state.selections.initialize_if_present(operand);
+          else if (!state.repeated_observations && !operand.places.empty()) {
+            const auto *slot = expr.children[i + offset].get();
+            state.selections.save_selection(slot, std::move(operand));
+            state.prepared_call->effects.initialized_selections.insert(slot);
+          } else if (operand.presence == TargetPresence::present && operand.places.size() == 1)
+            state.prepared_call->effects.initialized.insert(*operand.places.begin());
+        }
       };
       if (local) {
         if (state.required && (!target || target->kind != Type::procedure || !target->target))
@@ -7377,12 +7417,17 @@ class ScalarChecker {
                 state.prepared_call->effects.outcomes.insert(Completion::failure(category).reason);
           }
         const auto next = result_view(method, *type, owners);
-        std::optional<TypeBorrowedResult> proved;
-        if (state.required && state.checks_initialization() && type->borrowed() && scalar_type(*type->type)) {
+        std::optional<TypeCallSummary> proved;
+        if (state.required && state.checks_initialization() && (scalar_type(*type->type) || type->type == Type::void_type)) {
           std::set<size_t> ready_inputs;
+          bool writable_unready_input = false;
           for (size_t i = 0; i < operand_targets.size(); ++i)
-            if (argument_mode(parameter_at(method, i)) == ArgumentMode::borrowed_ptr && ready_input(i)) ready_inputs.insert(i);
-          proved = prove_type_borrowed_result(id, arguments, retained, *type, family.declaration ? *family.declaration : state, ready_inputs);
+            if (const auto &parameter = parameter_at(method, i); argument_mode(parameter) == ArgumentMode::borrowed_ptr) {
+              if (ready_input(i)) ready_inputs.insert(i);
+              else writable_unready_input |= !parameter.read_only;
+            }
+          if (type->borrowed() || writable_unready_input)
+            proved = prove_type_call(id, arguments, retained, *type, family.declaration ? *family.declaration : state, ready_inputs);
         }
         if (proved && !proved->completes) {
           if (invokes) return Type::never;
@@ -7390,6 +7435,7 @@ class ScalarChecker {
           proved.reset();
         }
         retain_borrowed_targets(next, *type->type, [&](size_t i) { return argument_mode(parameter_at(method, i)); }, proved);
+        if (proved) apply_initialized_inputs(*proved);
         view = !result || view == next ? next : ViewEvidence{};
         result = type->type;
       }

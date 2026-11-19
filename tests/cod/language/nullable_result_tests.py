@@ -35,7 +35,7 @@ case('callee_conditional_null', declaration=RELAY.replace('in O)->', 'in O,choos
 case('conditional_result', copy='ptr saved=if(other){relay(selected)}else{relay(selected)};', extra=True)
 case('conditional_result_and_copy', copy='ptr saved=if(other){relay(selected)}else{selected};', extra=True)
 case('conditional_independent_result', copy='ptr saved=if(other){relay(selected)}else{payload};', extra=True, reject=True)
-case('scoped_result', copy='ptr saved={{relay(selected)}};')
+case('scoped_result', observe='val ready<-{{return classify(saved);}};')
 case('finalized_result', copy=fixture.OBSERVE+'ptr saved=try{relay(selected)}finally{selected=null;{}};', observe='')
 case('cleanup_preserves_selection', declaration=RELAY.replace('return p;', 'try{return p;}finally{p=null;{}};'))
 case('cleanup_replaces_selection', declaration=OTHER.replace('return other;', 'try{return p;}finally{return other;}'), copy='ptr saved=relay(selected,payload);', reject=True)
