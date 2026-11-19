@@ -96,7 +96,9 @@ class LLVMEmission {
   llvm::Value *query_environment_ = nullptr;
   llvm::Value *here_argument_ = nullptr;
   llvm::Value *here_destination_ = nullptr;
-  llvm::Value *suspended_return_ = nullptr;
+  struct SeenReturn {
+    llvm::Value *present{}, *value{};
+  } suspended_return_;
   llvm::Function *function_ = nullptr;
   llvm::BasicBlock *finish_ = nullptr;
   // Live slots and suspended values share the complete pending state. Native
@@ -382,8 +384,12 @@ class LLVMEmission {
     b_.CreateStore(b_.getInt8(1), completion_.kind);
   }
   llvm::Value *observed_return() {
-    if (!suspended_return_) throw std::logic_error("return inspection has no suspended completion");
-    return b_.CreateOr(suspended_return_, load(completion_.has_return));
+    if (!suspended_return_.present) throw std::logic_error("return inspection has no suspended completion");
+    return b_.CreateOr(suspended_return_.present, load(completion_.has_return));
+  }
+  llvm::Value *observed_return_value() {
+    if (!suspended_return_.value) throw std::logic_error("return binding has no suspended result");
+    return b_.CreateSelect(load(completion_.has_return), load(completion_.value), suspended_return_.value);
   }
   void fail_path(ExceptionCategory category, const Location &at, llvm::Value *fatal = nullptr) {
     save_abrupt(outcome(empty_scalar(), integer(exception_id(category)), integer(site(at)), fatal ? fatal : null_pointer()));
@@ -937,8 +943,10 @@ class LLVMEmission {
     if (protected_outcomes_) b_.CreateStore(null_pointer(), completion_.transfer);
     Control action{control_, block("cleanup.completed")};
     control_ = &action;
-    auto *outer_return = suspended_return_;
-    suspended_return_ = outer_return ? b_.CreateOr(outer_return, pending.has_return) : pending.has_return;
+    const auto outer_return = suspended_return_;
+    suspended_return_ = {
+        outer_return.present ? b_.CreateOr(outer_return.present, pending.has_return) : pending.has_return,
+        outer_return.value ? b_.CreateSelect(pending.has_return, pending.value, outer_return.value) : pending.value};
     emit();
     suspended_return_ = outer_return;
     if (reachable()) b_.CreateBr(action.exit);
@@ -1656,8 +1664,13 @@ class LLVMEmission {
     }
     case K::integer: case K::boolean:
       return pack(llvm::ConstantInt::get(llvm::cast<llvm::IntegerType>(native_type(fact.type)), fact.integer), fact.type);
-    case K::return_test:
-      return pack(observed_return(), Type::boolean);
+    case K::return_test: {
+      std::map<bool, std::vector<size_t>> alternatives;
+      for (size_t i = 0; i < contexts_.size(); ++i) alternatives[contexts_[i].at(&expr).return_pattern_matches].push_back(i);
+      return contextual_value(expr, alternatives, "return.matches", [&](bool matches) {
+        return pack(matches ? observed_return() : b_.getFalse(), Type::boolean);
+      });
+    }
     case K::real: {
       auto text = expr.text;
       if (text.ends_with("f32") || text.ends_with("f64")) text.resize(text.size() - 3);
@@ -1717,13 +1730,25 @@ class LLVMEmission {
       });
     }
     case K::conditional: {
-      auto *condition = emit_expression(*expr.children[0]);
+      const auto &test = *expr.children[0];
+      auto *condition = emit_expression(test);
       if (!reachable()) return nullptr;
       auto *yes = block("if.then"), *no = block("if.else"), *join = block("if.join");
       b_.CreateCondBr(unpack(condition, Type::boolean), yes, no);
       std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> incoming;
       for (size_t i = 1; i < 3; ++i) {
         b_.SetInsertPoint(i == 1 ? yes : no);
+        if (i == 1 && test.kind == K::return_test && !test.binding.empty()) {
+          std::map<std::optional<size_t>, std::vector<size_t>> destinations;
+          for (size_t context = 0; context < contexts_.size(); ++context) {
+            const auto &pattern = contexts_[context].at(&test);
+            destinations[pattern.return_pattern_matches ? pattern.place : std::nullopt].push_back(context);
+          }
+          contextual_value(test, destinations, "return.binding", [&](std::optional<size_t> place) {
+            if (place) b_.CreateStore(observed_return_value(), storage_.at(*place));
+            return empty_scalar();
+          });
+        }
         const auto &arm = *expr.children[i];
         auto *value = projection == Projection::value ? emit_conditional_bits(expr, arm, discard)
                                                       : emit_expression(arm, projection, discard);
@@ -1991,7 +2016,7 @@ class LLVMEmission {
   void begin(llvm::Function *function, const std::vector<CheckedStorage> &storage, const std::vector<CheckedBinding> &bindings,
              const CheckedFrame &frame = {}) {
     function_ = function; arguments_.clear(); retained_types_.clear(); parameter_values_.clear(); value_owners_.clear(); query_environment_ = nullptr; here_argument_ = nullptr; here_destination_ = nullptr; temporaries_ = nullptr;
-    suspended_return_ = nullptr;
+    suspended_return_ = {};
     for (size_t i = 0; i < frame.inputs.size(); ++i) arguments_.push_back(function->getArg(i));
     b_.SetInsertPoint(block("entry")); finish_ = block("completion"); scope_ = nullptr; control_ = nullptr;
     owner_identities_.clear();
@@ -2053,7 +2078,7 @@ class LLVMEmission {
     if (call.accepts_here) here_argument_ = function->getArg(call.here_index());
     if (call.here_group) here_destination_ = function->getArg(call.here_index());
     if (method.here_group && method.here_group->supplier_return.has_value())
-      suspended_return_ = b_.getInt1(*method.here_group->supplier_return);
+      suspended_return_.present = b_.getInt1(*method.here_group->supplier_return);
     contexts_.clear();
     for (const auto &context : prepared.contexts) contexts_.push_back({&context.operations(), context.instance});
     if (call.captures) {

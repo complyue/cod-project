@@ -51,6 +51,21 @@ runner.CASES = {
         0, '5\n6\n', '[-Wmissing-return]'),
     'ordinary_void_procedure_can_return_from_cleanup': (
         'proc finished()->void{defer{return;};}finished();', 0, '', ''),
+    'return_scalar_filter_matches_prepared_type': (IO+
+        'proc run()->u64{defer{if returning (val wrong:u32){return 11u64;}'
+        'else if returning (saved:u64){if(saved==7u64){return 8u64;}else{return 99u64;}}};return 7u32;}'
+        'behave @print(run());',0,'8\n',''),
+    'return_scalar_filter_uses_concrete_generic_result': (IO+
+        'proc run(value:T)->const T where T{defer{if returning (saved:u64){behave @print(saved);}'
+        'else{behave @print(1u64);}};return value;}behave @print(run(3u32));behave @print(run(7u64));',
+        0,'1\n3\n7\n7\n',''),
+    'return_pattern_snapshot_can_enter_nofail_full_scope': (IO+
+        'proc run()->u64{defer{if returning (val saved){saved<-12u64;{{behave @print(saved);}};}};return 7u64;}'
+        'behave @print(run());',0,'12\n7\n',''),
+    'return_pattern_condition_cannot_anchor_the_inferred_result': (
+        'using "std:exceptions" MissingReturnError;func missing()->u64{}'
+        'proc run(problem:MissingReturnError){defer{return if returning (val saved:u64){saved}else{throw problem;};};}'
+        'try{missing():void;}catch(e:const MissingReturnError){run(e);};',2,'','independent result contract'),
     'here_group_distinct_feedback_and_break': (IO+
         'func plus_one(here body()->u64)->u64{return body()+1u64;}'
         'func relay(here body()->u64)->u64{return plus_one(body)+10u64;}'

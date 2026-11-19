@@ -3006,6 +3006,20 @@ class ScalarChecker {
     }
     return call_reasons(categories);
   }
+  std::set<size_t> direct_call_reasons(const Type &contract, const CallEffects &effects) {
+    auto reasons = call_reasons(contract);
+    if (!proving_) return reasons;
+    if (effects.requires_deferred_failure_delivery) {
+      if (lexical_.live) observed_.requires_deferred_failure_delivery = true;
+    } else std::erase_if(reasons, [&](size_t reason) {
+      // The declaration supplies checked obligations independently of the
+      // concrete body's executable failures.
+      const auto completion = Completion{reason};
+      const bool checked = completion.exception() && exception_categories.at(reason - 3).checked;
+      return completion.failed() && !checked && !effects.escaping_failures.contains(reason);
+    });
+    return reasons;
+  }
   CallEffects callable_effects(const Type &contract, const std::vector<Type> &arguments,
                               const std::optional<std::set<size_t>> &choices) const {
     callable_effect_consumers_.insert(checking_context_);
@@ -4018,7 +4032,11 @@ class ScalarChecker {
     refresh_input_facts(lexical_);
   }
   void refine(const Expression &expr, bool value, const std::map<const Expression *, CheckedOperation> &operations) {
-    if (expr.kind == Expression::Kind::return_test) { refine_return_input(value); return; }
+    if (expr.kind == Expression::Kind::return_test) {
+      if (operations.at(&expr).return_pattern_matches) refine_return_input(value);
+      else if (value) lexical_.live = false;
+      return;
+    }
     const auto proof = predicate_of(operations.at(&expr));
     if (!proof) return;
     // Related tests can constrain one another in either source order. Each
@@ -4332,9 +4350,17 @@ class ScalarChecker {
         return;
       }
       if (expr.kind == K::conditional) {
-        visit(*expr.children[0], bound, query);
+        const auto &condition = *expr.children[0];
+        visit(condition, bound, query);
         auto otherwise = bound;
+        const bool pattern = condition.kind == K::return_test && !condition.binding.empty();
+        const bool shadowed = pattern && bound.contains(condition.binding);
+        if (pattern) {
+          bound.insert(condition.binding);
+          required.declarations.insert(condition.binding);
+        }
         visit(*expr.children[1], bound, query);
+        if (pattern && !shadowed) bound.erase(condition.binding);
         visit(*expr.children[2], otherwise, query);
         // Both arms start with the same bindings. After the join, declarations
         // are syntactically visible; ordered checking proves availability.
@@ -5005,20 +5031,9 @@ class ScalarChecker {
     if (!completes) { operation.type = Type::never; return; }
     const auto contract = callable_type(program_.methods[target.method], target.arguments, target.result,
         access_of(views), owners_of(views), &arguments);
-    auto reasons = call_reasons(contract);
-    if (proving_) {
-      // The declaration supplies checked obligations even when the concrete
-      // body only completes normally. Executable unchecked failures grow
-      // from the completed paths of concrete callees.
-      if (effects.requires_deferred_failure_delivery) {
-        if (lexical_.live) observed_.requires_deferred_failure_delivery = true;
-      } else std::erase_if(reasons, [&](size_t reason) {
-        const bool checked = reason >= 3 && exception_categories.at(reason - 3).checked;
-        return reason >= 2 && !checked && !effects.escaping_failures.contains(reason);
-      });
-      if (effects.propagates_here_transfer && (operation.forwards_here || operation.supplied_here))
-        reasons.insert(Completion::protected_transfer);
-    }
+    auto reasons = direct_call_reasons(contract, effects);
+    if (proving_ && effects.propagates_here_transfer && (operation.forwards_here || operation.supplied_here))
+      reasons.insert(Completion::protected_transfer);
     finish_call(expr, contract, effects, reasons, arguments, views, operation, read, discard);
   }
   struct EagerTypes {
@@ -5622,6 +5637,31 @@ class ScalarChecker {
     if (presence == TargetPresence::absent) fail(at, "conditional scalar value requires a proven non-null target");
     implementation_gap(at, "conditional scalar value requires a proven non-null target in typeof");
   }
+  struct ScalarReturnPattern {
+    std::optional<Type> binding;
+    bool matches = true;
+  };
+  static ScalarReturnPattern scalar_return_pattern(const Expression &pattern, const std::optional<Type> &annotation,
+                                                     const std::optional<Type> &result, bool borrowed, bool required) {
+    if (pattern.binding.empty() && pattern.owner_name.empty()) return {};
+    if (required && pattern.declaration_kind == "val" && !pattern.owner_name.empty())
+      fail(pattern.at, "a val return pattern cannot specify an owner");
+    const bool value_pattern = !pattern.binding.empty() && pattern.owner_name.empty() &&
+        (pattern.declaration_kind.empty() || pattern.declaration_kind == "val");
+    if (required && value_pattern && annotation == Type::void_type) fail(pattern.at, "cannot bind a void return");
+    if (required && (!value_pattern || (annotation && !scalar_type(*annotation)) ||
+                     (result && result != Type::void_type && !scalar_type(*result))))
+      implementation_gap(pattern.at, "this result mode, type or owner in deferred return inspection");
+    const bool matches = !borrowed && result != Type::void_type && (!annotation || !result || annotation == result);
+    auto binding = annotation ? annotation : result;
+    if (binding == Type::void_type) binding = Type::never;
+    return {binding, matches};
+  }
+  ScalarReturnPattern scalar_return_pattern(const Expression &pattern, const TypeEvidenceState &state) const {
+    const auto annotation = pattern.annotation ? std::optional{evidence_annotation(*pattern.annotation, state)} : std::nullopt;
+    const bool borrowed = state.borrowed_return || (state.method && program_.methods[*state.method].result.borrowed());
+    return scalar_return_pattern(pattern, annotation, state.invocation_result, borrowed, state.required);
+  }
   struct ConditionalEvidence {
     std::optional<Type> yes, no;
     TypeEvidenceState yes_state, no_state;
@@ -5634,9 +5674,9 @@ class ScalarChecker {
                                        const Type *expected, std::vector<Type> *alternatives,
                                        ExpectedTypeUse expected_use, bool reached, EvidenceRead read = EvidenceRead::payload) const {
     ConditionalEvidence arms{{}, {}, state, state};
-    const bool return_test = expr.children.front()->kind == Expression::Kind::return_test;
-    const auto proof = return_test && state.pending_return ? std::optional{PresenceBranches::constant(*state.pending_return)} :
-        state.target.branches;
+    const auto &condition = *expr.children.front();
+    const bool return_test = condition.kind == Expression::Kind::return_test;
+    const auto &proof = state.target.branches;
     const bool yes_reaches = state.selections.reachable(proof, true);
     const bool no_reaches = state.selections.reachable(proof, false);
     arms.yes_state.selections.assume(proof, true);
@@ -5644,9 +5684,35 @@ class ScalarChecker {
     // A branch predicated on a prepared return cannot provide the initial
     // evidence required to prepare that return.
     if (return_test) arms.yes_state.returns = nullptr;
+    const bool binds = return_test && !condition.binding.empty();
+    TypeEvidenceExits matching_exits;
+    if (binds) {
+      auto &yes = arms.yes_state;
+      const auto &name = condition.binding;
+      const bool readonly = condition.read_only || condition.fixed_binding;
+      yes.bindings[name] = scalar_return_pattern(condition, state).binding;
+      yes.local_declarations[name] = &condition;
+      yes.definitions.erase(name);
+      yes.owner_bindings.erase(name);
+      yes.selections.remove_binding(name);
+      const auto owner = EvidenceOwner::for_scope(condition);
+      yes.views[name] = {readonly, true, true, owner, false, condition.fixed_binding, readonly, true};
+      yes.views.at(name).place_owners.insert(owner);
+      yes.views.at(name).storage_kind = PlaceKind::value;
+      if (yes.selections.tracking) yes.selections.value_places.emplace(name, EvidencePlaces{&condition});
+      if (state.exits) yes.exits = &matching_exits;
+    }
     arms.yes = type_evidence(*expr.children[1], arms.yes_state, contextual, expected, return_test ? nullptr : alternatives,
                             expected_use, reached && yes_reaches, read);
     arms.yes_state.returns = state.returns;
+    if (binds) {
+      restore_type_binding(arms.yes_state, state, condition.binding);
+      arms.yes_state.exits = state.exits;
+      for (auto &exit : matching_exits.paths) {
+        restore_type_binding(exit.state, state, condition.binding);
+        forward_type_exit(*state.exits, exit);
+      }
+    }
     arms.no = type_evidence(*expr.children[2], arms.no_state, contextual, expected, alternatives, expected_use, reached && no_reaches, read);
     return arms;
   }
@@ -7004,11 +7070,12 @@ class ScalarChecker {
     case K::boolean:
       if (state.selections.tracking) target_facts.branches = PresenceBranches::constant(expr.text == "true");
       return Type::boolean;
-    case K::return_test:
-      if (!expr.binding.empty() || !expr.owner_name.empty())
-        implementation_gap(expr.at, "mode, type and owner patterns in deferred return inspection");
-      if (state.pending_return) target_facts.branches = PresenceBranches::constant(*state.pending_return);
+    case K::return_test: {
+      const auto pattern = scalar_return_pattern(expr, state);
+      if (!pattern.matches || state.pending_return)
+        target_facts.branches = PresenceBranches::constant(pattern.matches && state.pending_return.value_or(false));
       return Type::boolean;
+    }
     case K::null_ref:
       view.view = true;
       view.nullable = true;
@@ -7332,12 +7399,12 @@ class ScalarChecker {
       return type;
     }
     case K::conditional: {
+      const bool observes_return = expr.children[0]->kind == K::return_test;
       const auto condition = child(0);
       if (state.returns && condition == Type::never) return Type::never;
       if (state.required && condition != Type::boolean && condition != Type::never) fail(expr.at, "condition requires bool");
-      const auto pending_return = expr.children[0]->kind == K::return_test ? state.pending_return : std::nullopt;
       if (state.deferred) state.selections.observe_choice(state.target.branches);
-      const auto condition_proof = pending_return ? std::optional{PresenceBranches::constant(*pending_return)} : state.target.branches;
+      const auto condition_proof = state.target.branches;
       const bool reaches_yes = state.selections.reachable(condition_proof, true);
       const bool reaches_no = state.selections.reachable(condition_proof, false);
       if (condition != Type::never && reaches_yes && reaches_no) capture_preparation_targets(expr, state);
@@ -7382,8 +7449,8 @@ class ScalarChecker {
       }
       if (!reaches_yes) yes_state.deferred_queue = no_state.deferred_queue;
       if (!reaches_no) no_state.deferred_queue = yes_state.deferred_queue;
-      if (pending_return) {
-        if (*pending_return) {
+      if (observes_return && condition_proof) {
+        if (condition_proof->at(true)) {
           state = merge_evidence(std::move(yes_state), no_state, true);
           return yes;
         }
@@ -7403,6 +7470,7 @@ class ScalarChecker {
       } else state = condition == Type::never ? merge_evidence(std::move(yes_state), no_state) :
           merge_reaching_evidence(std::move(yes_state), std::move(no_state), yes == Type::never, no == Type::never);
       if (condition == Type::never) return Type::never;
+      if (observes_return && state.returns && !state.invocation_result) return no;
       return result;
     }
     case K::deferred:
@@ -9371,7 +9439,7 @@ class ScalarChecker {
     for (const auto failure : effects.scope_checked_failures) contract.throws_types.push_back(exception_type(failure));
     if (deferred_action_ && !effects.scope_checked_failures.empty())
       deferred_actions_with_checked_scopes_.insert(*deferred_action_);
-    finish_call(expr, contract, effects, call_reasons(contract), arguments, views, operation, read, discard, 0, true);
+    finish_call(expr, contract, effects, direct_call_reasons(contract, effects), arguments, views, operation, read, discard, 0, true);
   }
   void check_value_call(const Expression &expr, const Type &contract, size_t offset, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation, bool read, bool discard) {
@@ -10237,11 +10305,17 @@ class ScalarChecker {
       operation.type = Type::boolean; operation.integer = expr.text == "true";
       operation.predicate = constant_predicate(operation.integer);
       break;
-    case K::return_test:
-      if (!expr.binding.empty() || !expr.owner_name.empty())
-        implementation_gap(expr.at, "mode, type and owner patterns in deferred return inspection");
+    case K::return_test: {
+      if (checking_method_->here_group && !expr.binding.empty())
+        implementation_gap(expr.at, "return payload inspection through a supplied here group");
+      const auto annotation = expr.annotation ?
+          std::optional{substitute(*expr.annotation, *checking_method_, instance->substitutions, true)} : std::nullopt;
+      const auto pattern = scalar_return_pattern(expr, annotation, instance->result.type, instance->result.borrowed(), true);
       operation.type = Type::boolean;
+      operation.operand_type = pattern.binding.value_or(Type::void_type);
+      operation.return_pattern_matches = pattern.matches;
       break;
+    }
     case K::null_ref:
       if (read) implementation_gap(expr.at, "untyped null in a payload expression; bind a typed ptr view first");
       operation.type = Type::null_ref; operation.view = operation.nullable_view = true; select_targets(operation, {null_target});
@@ -10567,21 +10641,36 @@ class ScalarChecker {
       break;
     }
     case K::conditional: {
+      const auto &test = *expr.children.front();
+      const bool return_test = test.kind == K::return_test;
       // When the joined scalar result needs a value, read a selected
       // reference after that arm's cleanup has finished.
       const bool value_join = read && !discard && [&] {
         auto probe = evidence_state();
-        const auto condition = type_evidence(*expr.children[0], probe);
+        if (return_test && instance) probe.invocation_result = instance->result.type;
+        const auto condition = type_evidence(test, probe);
+        if (return_test && probe.target.branches && !probe.target.branches->at(true)) return false;
         return condition != Type::never && conditional_arms(expr, probe, false, expected, nullptr, expected_use, true).independent();
       }();
       const auto condition = child(0);
       if (condition != Type::boolean && condition != Type::never) fail(expr.at, "if condition requires bool");
       const auto before = lexical_;
-      refine(*expr.children[0], true, operations);
-      const auto yes = check(*expr.children[1], instance, operations, read && !value_join, discard, expected, expected_use);
+      refine(test, true, operations);
+      const bool binds_return = return_test && !test.binding.empty();
+      if (binds_return) {
+        auto &pattern = operations.at(&test);
+        lexical_.scopes.push_back({next_scope_++, {}});
+        const auto id = declare(test.binding, pattern.operand_type, test.read_only || test.fixed_binding, true, test.at);
+        lexical_.scopes.back().declarations = false;
+        bindings_->at(storage(id).binding).fixed = test.fixed_binding;
+        initialize(id);
+        pattern.place = id;
+      }
+      const auto checked_yes = check(*expr.children[1], instance, operations, read && !value_join, discard, expected, expected_use);
+      const auto yes = return_test && !operations.at(&test).return_pattern_matches ? Type{Type::never} : checked_yes;
       auto yes_state = lexical_;
       lexical_ = before;
-      refine(*expr.children[0], false, operations);
+      refine(test, false, operations);
       const auto no = check(*expr.children[2], instance, operations, read && !value_join, discard, expected, expected_use);
       auto no_state = lexical_;
       auto &yes_fact = operations.at(expr.children[1].get()), &no_fact = operations.at(expr.children[2].get());
@@ -10604,6 +10693,7 @@ class ScalarChecker {
         project(*expr.children[1], yes_fact, yes_state);
         project(*expr.children[2], no_fact, no_state);
       }
+      if (binds_return) retire_scope(yes_state);
       join(yes_state, yes == Type::never, no_state, no == Type::never, expr.at);
       if (yes == Type::never) operation.type = no;
       else if (no == Type::never || yes == no) operation.type = yes;
