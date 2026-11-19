@@ -182,6 +182,8 @@ class ScalarChecker {
   size_t next_target_version_ = 0;
   size_t next_selection_identity_ = 0;
   std::map<size_t, std::set<size_t>> selection_sources_;
+  // These immutable selections observe the return that entered an action.
+  std::map<size_t, size_t> return_selection_actions_;
   struct BooleanDecision {
     enum class Origin { input, storage };
     Origin origin;
@@ -239,6 +241,7 @@ class ScalarChecker {
   std::optional<size_t> deferred_action_;
   struct ReturnInputs {
     CompletionInputs present, absent;
+    std::optional<CleanupEquations::Targets> borrowed_selection{};
   } return_inputs_;
   size_t next_finalizer_input_ = 2 * CleanupEquations::deferred_return_offset;
   std::vector<CallEffects::ReadSite> read_sites_;
@@ -2050,10 +2053,21 @@ class ScalarChecker {
   }
   std::optional<SelectionCondition> deferred_selection_condition(size_t binding, size_t target, bool equal) const {
     if (!deferred_action_) return {};
+    if (const auto identity = lexical_.selection_identities.find(binding); identity != lexical_.selection_identities.end())
+      if (const auto action = return_selection_actions_.find(identity->second); action != return_selection_actions_.end())
+        return SelectionCondition{action->second, CleanupEquations::pending_return_selection, target, equal};
     const auto selected = lexical_.selections.substitute({{}, {}, {binding}});
     if (selected) if (const auto entry = selected->single_entry())
       return SelectionCondition{deferred_action_, *entry, target, equal};
     return {};
+  }
+  void record_return_readiness(LexicalState &state, size_t binding) const {
+    const auto identity = state.selection_identities.find(binding);
+    if (identity == state.selection_identities.end()) return;
+    const auto action = return_selection_actions_.find(identity->second);
+    if (action == return_selection_actions_.end() || action->second != deferred_action_) return;
+    for (const auto input : state.inputs)
+      state.input_facts.at(input).selections.entry_initialized.insert(CleanupEquations::pending_return_selection);
   }
   std::optional<SelectionCondition> selected_payload_condition(const CheckedOperation &view, size_t place) const {
     if (!deferred_action_ || !view.targets.contains(place) || view.place) return {};
@@ -2452,6 +2466,8 @@ class ScalarChecker {
   std::optional<CleanupEquations::ConditionFacts> selected_target(size_t selection, size_t place, bool equal) const {
     if (place == null_target) return {};
     CleanupEquations::ConditionFacts facts;
+    if (const auto action = return_selection_actions_.find(selection); action != return_selection_actions_.end())
+      facts.conditions.add({action->second, CleanupEquations::pending_return_selection, place, equal});
     if (storage(place).borrowed) {
       const auto incoming = incoming_selections_.find(place);
       if (incoming == incoming_selections_.end()) return {};
@@ -2486,9 +2502,10 @@ class ScalarChecker {
     }
     CleanupEquations::resolve_initialization(initialized, missing);
   }
-  static void initialize_selection(LexicalState &state, size_t id) {
+  void initialize_selection(LexicalState &state, size_t id) {
     state.selections.initialize(id);
     for (const auto input : state.inputs) state.input_facts[input].selections.initialize(id);
+    record_return_readiness(state, id);
     refresh_input_facts(state);
   }
   std::optional<CleanupEquations::Initialization> selection_initialization(const LexicalState &state, size_t id) const {
@@ -2504,7 +2521,7 @@ class ScalarChecker {
         })) return CleanupEquations::Initialization{};
     return state.selections.initialization_requirements(id);
   }
-  static void assign_initialization(LexicalState &state, size_t id,
+  void assign_initialization(LexicalState &state, size_t id,
       const std::optional<CleanupEquations::Initialization> &condition) {
     if (!condition) return;
     if (condition->empty()) { initialize_selection(state, id); return; }
@@ -2656,6 +2673,7 @@ class ScalarChecker {
     state.live = state.live && state.selections.possible;
     if (!state.live) return;
     auto retained_return = std::exchange(state.returned, CleanupEquations::Returned{});
+    retained_return.initialize_from_observation(effects.selections);
     retained_return.advance(effects.selections);
     for (const auto binding : effects.selections.entry_initialized)
       if (const auto selection = state.selection_identities.find(binding);
@@ -3857,6 +3875,7 @@ class ScalarChecker {
     std::erase_if(targets, [&](size_t place) { return (place == null_target) != null; });
     lexical_.selections.test(test.binding, null);
     for (const auto input : lexical_.inputs) lexical_.input_facts.at(input).selections.test(test.binding, null);
+    if (null) record_return_readiness(lexical_, test.binding);
     if (!null) lexical_.null_sources.at(test.binding).clear();
     lexical_.live = lexical_.live && !targets.empty() && lexical_.selections.possible;
     if (!null) record_presence(targets);
@@ -4123,7 +4142,9 @@ class ScalarChecker {
         for (auto &[place, value] : payloads)
           if (value.empty()) value = exception_possibilities(storage(place).type);
         auto applied = effects;
+        const auto observed_selection = cleanup_.project_observed_return(applied, state.returned, state.selections);
         applied.resolve_conditions([&](size_t binding) -> std::optional<CleanupEquations::Targets> {
+          if (binding == CleanupEquations::pending_return_selection) return observed_selection;
           if (deferred_action_) return state.selections.substitute({{}, {}, {binding}});
           const auto found = state.targets.find(binding);
           if (found == state.targets.end()) return {};
@@ -10072,11 +10093,21 @@ class ScalarChecker {
       };
       if (finalizer->inspects_return()) {
         return_inputs_ = {};
-        for (const auto &entry : pending) if (entry.state->live)
+        bool bounded_selection = true;
+        for (const auto &entry : pending) if (entry.state->live) {
+          const bool prepared = prepares_observed_return(entry);
+          const auto &observed = prepared ? entry.state->returned.borrowed_selection : inherited.borrowed_selection;
+          if (prepared || std::ranges::any_of(entry.state->inputs, [&](size_t input) { return inherited.present.contains(input); })) {
+            if (!observed) bounded_selection = false;
+            else if (return_inputs_.borrowed_selection) return_inputs_.borrowed_selection->merge(*observed);
+            else return_inputs_.borrowed_selection = observed;
+          }
           for (const auto input : entry.state->inputs) {
-            if (prepares_observed_return(entry) || inherited.present.contains(input)) return_inputs_.present.insert(input);
+            if (prepared || inherited.present.contains(input)) return_inputs_.present.insert(input);
             else return_inputs_.absent.insert(input);
           }
+        }
+        if (!bounded_selection) return_inputs_.borrowed_selection.reset();
         // A normal continuation and a local return may reach this finally
         // from the same deferred entry. Give their effects separate routes.
         for (const auto input : intersect(return_inputs_.present, return_inputs_.absent)) {
@@ -10795,19 +10826,24 @@ class ScalarChecker {
           const bool nullable = mode == ResultMode::borrowed_ptr;
           const auto owner = *pattern.owners.begin();
           std::set<size_t> targets;
-          // External selections in this lowering come from borrowed input places.
-          // The arm binding keeps a distinct selection identity.
-          if (pattern.return_filter.can_match) for (const auto &input : instance->frame.inputs) {
-            const auto &candidate = storage(input.place);
-            if (candidate.borrowed && candidate.scope == owner && candidate.type == pattern.operand_type)
-              targets.insert(input.place);
+          const auto &observed = return_inputs_.borrowed_selection;
+          const bool concrete = observed && observed->entries.empty();
+          if (pattern.return_filter.can_match) {
+            if (concrete) targets = observed->places;
+            else for (const auto &input : instance->frame.inputs) {
+              const auto &candidate = storage(input.place);
+              if (candidate.borrowed && candidate.scope == owner && candidate.type == pattern.operand_type)
+                targets.insert(input.place);
+            }
           }
-          if (nullable) targets.insert(null_target);
+          if (nullable && (!concrete || observed->nullable())) targets.insert(null_target);
           const bool readonly = test.read_only || (pattern.return_filter.can_match && instance->result.read_only);
           const auto id = bind(test.binding, pattern.operand_type, targets, readonly, false, test.fixed_binding, test.at);
           lexical_.owners[id].insert(owner);
           bindings_->at(id).nullable = nullable;
           bindings_->at(id).requires_initialized = !nullable;
+          if (deferred_action_ && observed && observed->single_entry() == CleanupEquations::pending_return_selection)
+            return_selection_actions_.emplace(lexical_.selection_identities.at(id), *deferred_action_);
           // Ref preparation already proved the selected payload initialized.
           if (!nullable) initialize_selection(lexical_, id);
           pattern.binding = id;
@@ -11355,6 +11391,10 @@ class ScalarChecker {
           lexical_.returned.initialization = CleanupEquations::capture_initialization(*lexical_.returned.initialization, initialization_frame());
         lexical_.returned.selection_sources = selection_sources(selected.selection_identity);
         if (contract.nullable()) lexical_.returned.nullness = snapshot_boolean(null_predicate(selected), lexical_, expr.at);
+        const auto observed = selected.selection_identity ? return_selection_actions_.find(*selected.selection_identity) : return_selection_actions_.end();
+        if (observed != return_selection_actions_.end() && observed->second == deferred_action_)
+          lexical_.returned.borrowed_selection = CleanupEquations::Targets{{}, {}, {CleanupEquations::pending_return_selection}};
+        else lexical_.returned.borrowed_selection = selection_targets(selected.targets, selected.null_sources);
         if (contract.nullable() && !selected.initialized_target()) for (const auto place : selected.targets)
           if (place != null_target && !lexical_.initialized.contains(place)) lexical_.returned.uninitialized.insert(place);
         if (lexical_.returned.needs_initialization() && selected.selection_identity) {
@@ -11465,6 +11505,8 @@ class ScalarChecker {
         if (summary.observes_return) {
           lexical_.inputs.insert(CleanupEquations::deferred_return_offset);
           return_inputs_.present.insert(CleanupEquations::deferred_return_offset);
+          if (instance && instance->result.borrowed())
+            return_inputs_.borrowed_selection = CleanupEquations::Targets{{}, {}, {CleanupEquations::pending_return_selection}};
         }
         lexical_.selections = {};
         lexical_.input_facts = {{0, {lexical_.initialized, {}, incoming, {{cleanup_scope_, 0}}, lexical_.present}}};
@@ -11735,7 +11777,7 @@ class ScalarChecker {
     next_finalizer_input_ = 2 * CleanupEquations::deferred_return_offset;
     cleanup_scope_ = 0; next_scope_ = 1;
     next_target_version_ = 0;
-    next_selection_identity_ = 0; selection_sources_.clear(); incoming_selections_.clear();
+    next_selection_identity_ = 0; selection_sources_.clear(); incoming_selections_.clear(); return_selection_actions_.clear();
     next_boolean_observation_ = 0; conditional_selections_.clear();
   }
 
@@ -11845,6 +11887,7 @@ class ScalarChecker {
       returned.initialize(state.initialized, state.selections);
       returned.selection_bindings.clear();
       returned.saved_capture.reset();
+      returned.borrowed_selection.reset();
       returned.initialization = external_initialization(returned.initialization);
       returned.targets = input_ordinals(returned.targets);
       returned.uninitialized = input_ordinals(returned.uninitialized);

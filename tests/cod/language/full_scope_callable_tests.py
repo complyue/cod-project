@@ -8,6 +8,12 @@ BASE = 'func one()->const u64{return 1u64;}func two()->const u64{return 2u64;}'
 IDENTITY = 'func identity(x:T)->const T where T{return x;}'
 APPLY = 'func apply(f:func(T)->const T,x:T)->const T where T{return f(x);}'
 FIXED = 'func fixed(f:func(u64)->const u64,x:u64)->const u64{return f(x);}'
+PTR_RESULT = 'proc run(ref picked:u64 in O,ptr spare:u64 in O)->ptr u64 in O where {owner O}{'
+PTR_RESULT_INPUTS = 'val value_input<-7u64,uninitialized_input<-make local u64;'
+OBSERVE_PTR_RESULT = ('if returning (ptr saved){if(saved is not null){behave @print(saved);}'
+                      'else{behave @print(0u64);};}')
+READ_PTR_RESULT = 'defer{' + OBSERVE_PTR_RESULT + '};'
+WRITE_PTR_RESULT = 'defer{if returning (ptr saved){if(saved is not null){saved<-9u64;{}}else{}}};'
 GUARDED_QUERY = ('using "std:exceptions" NullPointerException;val e<-make local NullPointerException;')
 GUARDED_TRY = ('try{if(true){throw e;}else{};val n<-4294967296u64;{}}'
                'catch(c:const NullPointerException){return 7u32;}')
@@ -111,6 +117,25 @@ runner.CASES = {
         'proc run(ptr source:u64 in O)->ptr u64 in O where {owner O}{'
         'defer{if returning (ptr saved){if(saved is not null){behave @print(saved);}else{};}};return source;}'
         'val a<-make local u64;run(a):void;',2,'','initialization'),
+    'return_pointer_pattern_reads_only_the_prepared_target': (IO+PTR_RESULT+
+        READ_PTR_RESULT+'return picked;}'+PTR_RESULT_INPUTS+'run(value_input,uninitialized_input):void;',0,'7\n',''),
+    'return_pointer_pattern_null_reads_no_targets': (IO+PTR_RESULT+
+        READ_PTR_RESULT+'return null;}'+PTR_RESULT_INPUTS+'run(value_input,uninitialized_input):void;',0,'0\n',''),
+    'return_pointer_pattern_checks_readiness_after_replacement': (IO+PTR_RESULT+
+        READ_PTR_RESULT+'defer{return spare;};return picked;}'+PTR_RESULT_INPUTS+
+        'run(value_input,uninitialized_input):void;',2,'',"initialization of 'uninitialized_input'"),
+    'return_pointer_pattern_uses_the_result_suspended_by_finally': (IO+PTR_RESULT+
+        'defer{try{return picked;}finally{'+OBSERVE_PTR_RESULT+'};};return spare;}'+PTR_RESULT_INPUTS+
+        'run(value_input,uninitialized_input):void;',0,'7\n',''),
+    'return_pointer_pattern_write_proves_result_ready_when_present': (IO+PTR_RESULT+
+        WRITE_PTR_RESULT+'return spare;}'+PTR_RESULT_INPUTS+
+        'ptr value=run(value_input,uninitialized_input);if(value is not null){behave @print(value);}else{};',0,'9\n',''),
+    'return_pointer_pattern_write_prepares_later_cleanup_read': (IO+PTR_RESULT+
+        READ_PTR_RESULT+WRITE_PTR_RESULT+'return spare;}'+PTR_RESULT_INPUTS+
+        'run(value_input,uninitialized_input):void;',0,'9\n',''),
+    'return_pointer_pattern_write_does_not_prepare_another_target': (IO+PTR_RESULT+
+        READ_PTR_RESULT+'defer{return spare;};'+WRITE_PTR_RESULT+'return picked;}'+PTR_RESULT_INPUTS+
+        'run(value_input,uninitialized_input):void;',2,'',"initialization of 'uninitialized_input'"),
     'return_inspection_uses_closed_indirect_call_outcomes': (IO+IDENTITY+
         'proc run(f:func(u64)->const u64)->u64{defer{if returning (){return f(7u64);}};return 1u64;}'
         'behave @print(run(identity));',0,'7\n',''),

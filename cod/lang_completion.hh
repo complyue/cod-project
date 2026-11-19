@@ -218,6 +218,8 @@ struct Completion {
 
 class CleanupEquations {
 public:
+  // This entry selector belongs to the pending completion, outside lexical binding IDs.
+  static constexpr size_t pending_return_selection = null_target;
   static constexpr size_t deferred_return_offset = exception_categories.size() + 1;
   static size_t deferred_input(Completion completion, bool guarded, bool observes_return) {
     const auto arrival = !guarded || !completion.failed() ? 0 :
@@ -917,15 +919,33 @@ public:
     // These are local completion evidence and never exported to a caller.
     std::set<size_t> selection_bindings{};
     std::optional<size_t> saved_capture{};
+    std::optional<Targets> borrowed_selection{};
     bool operator==(const Returned &) const = default;
+    Targets observed_selection() const {
+      auto selected = borrowed_selection.value_or(Targets{});
+      if (preserves || !borrowed_selection) selected.entries.insert(pending_return_selection);
+      if (selected.entries.empty() && !nullness.empty()) selected.nullness = nullness;
+      return selected;
+    }
+    void project_selection(const Targets &incoming) {
+      if (borrowed_selection && borrowed_selection->entries.erase(pending_return_selection))
+        borrowed_selection->merge(incoming);
+    }
     bool needs_initialization() const {
       return !uninitialized.empty() || !initialization || !initialization->empty();
+    }
+    bool observed_selection_initialized(const Selections &entry) const {
+      if (borrowed_selection && needs_initialization()) return false;
+      return preserves ? entry.entry_initialized.contains(pending_return_selection) : borrowed_selection.has_value();
     }
     void initialize_saved_selection() {
       uninitialized.clear();
       initialization = Initialization{};
       selection_bindings.clear();
       saved_capture.reset();
+    }
+    void initialize_from_observation(Selections &effects) {
+      if (borrowed_selection && effects.entry_initialized.erase(pending_return_selection)) initialize_saved_selection();
     }
     void initialize(const std::set<size_t> &known, const Selections &selections) {
       std::erase_if(uninitialized, [&](size_t target) { return known.contains(target); });
@@ -969,6 +989,10 @@ public:
       null_sources.insert(other.null_sources.begin(), other.null_sources.end());
       merge_boolean(boolean, other.boolean);
       merge_boolean(nullness, other.nullness);
+      if (other.borrowed_selection) {
+        if (borrowed_selection) borrowed_selection->merge(*other.borrowed_selection);
+        else borrowed_selection = other.borrowed_selection;
+      }
       selection_sources.insert(other.selection_sources.begin(), other.selection_sources.end());
       if (initialization && other.initialization) initialization->insert(other.initialization->begin(), other.initialization->end());
       else initialization.reset();
@@ -980,6 +1004,7 @@ public:
         initialization = Initialization{};
         selection_bindings.clear();
         saved_capture.reset();
+        borrowed_selection.reset();
       }
       merge(next);
       preserves = keep;
@@ -1089,6 +1114,19 @@ public:
     bool enforce_checked_boundary = false;
     bool observes_return = false;
   };
+  Targets project_observed_return(Effects &effects, const Returned &incoming, const Selections &entry) const {
+    auto selected = incoming.observed_selection();
+    if (incoming.observed_selection_initialized(entry)) {
+      for (auto &[read, requirement] : effects.reads) if (const auto place = read_target(read)) {
+        const SelectionCondition observed{{}, pending_return_selection, *place, true};
+        std::erase_if(requirement.when, [&](const auto &facts) { return facts.conditions.terms.contains(observed); });
+      }
+      if (effects.returned.borrowed_selection && effects.returned.borrowed_selection->single_entry() == pending_return_selection)
+        effects.returned.initialize_saved_selection();
+    }
+    effects.returned.project_selection(selected);
+    return selected;
+  }
 private:
   struct Queue {
     std::vector<size_t> previous;
@@ -1152,7 +1190,11 @@ private:
     }
     auto next = second;
     next.returned.substitute(first.selections);
-    next.resolve_conditions([&](size_t binding) { return first.selections.substitute({{}, {}, {binding}}); });
+    const auto observed = project_observed_return(next, first.returned, first.selections);
+    next.resolve_conditions([&](size_t binding) -> std::optional<Targets> {
+      if (binding == pending_return_selection) return observed;
+      return first.selections.substitute({{}, {}, {binding}});
+    });
     next.transform_values([&](const auto &value) { return value.through(first.payloads, first.thrown); },
         [&](const auto &value) { return value.through(first.payloads, first.thrown, false, true); });
     next.transform_conditions([&](const auto &clauses) { return through_conditions(clauses, first.booleans); });
@@ -1174,6 +1216,7 @@ private:
     combine_initialization(result.initialized, result.uninitialized, next.initialized, next.uninitialized, false);
     combine_initialization(result.selections.initialized_captures, result.uninitialized_captures,
                            next.selections.initialized_captures, next.uninitialized_captures, false);
+    result.returned.initialize_from_observation(next.selections);
     result.returned.advance(next.selections);
     result.selections.then(next.selections, result.initialized);
     result.unknown_thrown = first.unknown_thrown || second.unknown_thrown || second.thrown.reads_unknown(first.payloads);
