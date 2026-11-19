@@ -1,0 +1,296 @@
+# CoD syntax showcase — for visual review, not one compilable unit.
+# Read each numbered section on its own. Some are excerpts from different
+# modules or assume bindings supplied by the surrounding source. Examples show
+# ordinary usage; lexer edge cases and regression examples belong in the tests.
+#
+# SEED FIXTURE: spelling drawn from the seed fixtures, within their scope.
+# DESIGN TARGET: confirmed spellings whose seed migration is still pending.
+# PARSER ONLY: the seed parses the forms; checking reports an implementation gap.
+# DESIGN ONLY: a scoped design example, not a seed support claim.
+# Fixture names below are relative to tests/cod/language/. Design IDs refer to
+# design/DesignAuthorityRegistry.md; a decision there does not imply execution.
+
+# 01 — SEED FIXTURE: comments, paths, literals and expressions ----------------
+# From numeric-widths.cod and foundation/scalars.cod. Quoted text here names
+# a module; it is not a general-purpose string value.
+using symbol "std:io" @print;
+symbol from "./vocabulary.cod" @x;
+
+val channels:u8 <- 4u8;
+val frame_size:u32 <- 256u32;
+val samples:u64 <- 96000u64;
+val gain:f32 <- 1.5f32;
+val tolerance:f64 <- 2.5e-3f64;
+val offset:i64 <- -9;
+val paused:bool <- false;
+
+# Split the stream into complete frames and a final partial frame.
+val frames <- samples / frame_size;
+val tail_samples <- samples % frame_size;
+val ready <- !paused && frames > 0u64;
+val pixel_offset <- i64(-2.75);
+behave @print(frames);
+
+# 02 — DESIGN TARGET: storage, declared places and array elements -------------
+# D-22-MAKE-OWNER: `make` uses the lexical owner if no receiver supplies one.
+# `in here` can select that owner explicitly. `in arena` places a target in an
+# existing writable region.
+val original:u64 <- 3u64;
+val independent <- original;
+const val limit:u64 <- 10u64;
+ptr scratch = make typeof(original);
+scratch <- limit;
+
+ref view = original;
+ptr selected:u64 = null in here;
+const ptr fixed_binding = original;
+const ref readonly_view:const u64 = original;
+selected = view;
+if (selected is not null && selected is view) {
+    selected <- 7u64;
+} else {};
+fixed_binding <- 8u64;
+
+var slot -> selected;
+slot = independent;
+slot <- 9u64;
+# Review: `=` changes the target held in a binding; `<-` writes bits. `slot`
+# names the pointer slot itself (declared place aliasing), while `view` and
+# `fixed_binding` name the same target through independent bindings. Compare
+# binding constness in `const ptr` with target constness in `:const u64`.
+
+# D-10-ORDINARY-NAMES and D-30: borrow and write through indexing. Assume
+# `arena` is a writable owner and the library's ordinary `len` is visible.
+array Counts[u32]:u64;
+ref counts = make Counts(4u64, 0u64) in arena;
+ref cell = counts[0u32];
+counts[0u32] <- 9u64;
+val first_count <- cell;
+val size <- len(counts);
+
+# 03 — DESIGN TARGET: ranges, library folds and full scopes --------------------
+# D-22-MAKE-OWNER supplies the target spelling for reservation. D-30 defines
+# `fold` as an ordinary callable with a synchronous `here` step, not a keyword.
+func last_or(first:i64, last:i64) -> const i64 {
+    ptr result = make i64;
+    for (i in first .. last) {{
+        result <- i;
+    }} else {
+        result <- -1;
+    };
+    return result;
+}
+
+func fold(here step(acc:u64, item:u64) -> u64,
+          first:u64, past:u64, seed:u64) -> u64 {
+    val acc <- seed;
+    for (i in first .. past) { acc <- step(acc, i); };
+    return acc;
+}
+
+val total <- fold(0u64, 4u64, 10u64) (acc, i) => { acc + i };
+
+func choose_and_update(flag:bool) -> u64 {
+    val count <- 1u64;
+    val chosen <- if (flag) { 7u64 } else { 8u64 };
+    val result <- {{
+        val saved <- count;
+        count <- chosen;
+        return saved;
+    }};
+    return result + count;
+}
+# Review: `..` is a half-open range, and the `for` fallback is for zero
+# iterations. Compare the conditional's grouping braces with the immediate
+# full scope: its `return saved` supplies a local result, not a function exit.
+
+# 04 — SEED FIXTURE: overloads, callable values and supplied here bodies -------
+# From foundation/scalars.cod, methods.cod, closures/callable-arguments.cod
+# and full_scope_callable_tests.py. These examples do not use ordinary captures.
+unit Position;
+func (+)(i:i64(Position), step:i64) -> i64(Position) {
+    return Position(scalar(i) + step);
+}
+func score(x:i64) -> i64 { return x * 2; }
+func score(x:f32) -> f32 { return x * 3.0f32; }
+func score(x:i64(Position)) -> i64 { return scalar(x); }
+
+func apply(f:func(u64) -> const u64, n:u64) -> const u64 {
+    return f(n);
+}
+func increment = func(x:u64) -> const u64 { return x + 1u64; };
+val applied <- apply(increment, 3u64);
+val position_score <- score((+)(Position(10), 5));
+
+func generate() yields u64 -> bool {
+    if (!yield(1u64)) { return; } else {};
+    yield(2u64);
+}
+
+proc consume() -> void {
+    val left <- 0u64, right <- 0u64;
+    for val item <- generate() {
+        left <- left * 10u64 + item;
+        continue true;
+    };
+    generate() (item) => {
+        right <- right * 10u64 + item;
+        true
+    };
+    return;
+}
+
+func relay(here body() -> void) -> u64 {
+    body();
+    return 99u64;
+}
+val early <- relay() { break 7u64; };
+# Review: compare the callback type's `->`, generator feedback `->`, and
+# receiving-header `=>`. `continue true` and the trailing body's `true` are
+# feedback; `break 7u64` completes the original `relay` call instead.
+
+# 05 — SEED FIXTURE: checked failures, handlers and deferred work -------------
+# The provider supplies the reading and declares when the source can be absent.
+using "std:exceptions" NullPointerException;
+using symbol "std:io" @print;
+
+func read_sensor() -> u64 throws NullPointerException;
+
+proc report_sensor(request_id:u64) -> void {
+    val reading <- 0u64;
+    defer behave @print(request_id);   # The call argument is prepared now.
+    defer { behave @print(reading); }; # The block reads the slot at cleanup.
+    try {
+        reading <- read_sensor();
+    } catch (error:const NullPointerException) {
+        behave @print(error.category);
+    } finally {
+        behave @print(reading);
+    };
+    return;
+}
+# Review: `finally` runs at completion of `try`; `defer` runs at scope exit.
+
+# 06 — SEED FIXTURE: dynamic symbols, installation and replay -----------------
+# Adapted from symbolic-context.cod and defer_runtime_tests.py. Compare the
+# current bindings used by `behave` with replay by `perform` in this pattern.
+using symbol "std:io" @print;
+symbol @level:i64;
+symbol @read:proc() -> i64;
+
+effect @level <- 1;
+effect proc @read() -> i64 { return @level; };
+{{
+    effect @level <- 2;
+    behave @print(behave @read());
+    behave @print(perform @read());
+}};
+behave @print(@level);
+# Review: distinguish an `@` symbol from a lexical name at declaration and
+# use. Follow the inner `effect` through the full-scope closing braces.
+
+# 07 — SEED FIXTURE: module selection, import and publication -----------------
+# Three independent excerpts: the paths refer to the named modules below.
+
+# prices.cod — publish a callable family by name.
+func subtotal(price:u64, quantity:u64) -> u64 { return price * quantity; }
+export subtotal;
+
+# billing.cod — import into the receiving module and publish its chosen name.
+export import "./prices.cod" subtotal as line_total;
+
+# order.cod — use the published family without extending it.
+using "./billing.cod" line_total;
+val total <- line_total(450u64, 3u64);
+
+# 08 — PARSER ONLY: mirrored pipelines and local here bindings ----------------
+# Sources: tests/cod/language/README.md (Current implementation boundary),
+# cod/lang_syntax.hh and design/ProducersAndTransformers.md (D-31-COMPOSITE,
+# D-31-PIPELINE-STORAGE). The scoped composite contract is confirmed for
+# implementation; seed checking and execution are not available for these forms.
+# Assume the source, stages, sink and day bindings from the invoice examples.
+proc pipeline_forms() -> void {
+    src !> p1 |> p2 |> p3 $> report;
+    report <$ p3 <| p2 <| p1 <! src;
+
+    src !> p1 |> p2 |> p3 (item) => { report(item); };
+    for val item <- p3 <| p2 <| p1 <! src { report(item); }
+
+    here stages = p1 |> p2;                 # Both endpoints open.
+    here today = invoices(day) !> stages;   # Needs a consumer.
+    here to_report = stages $> report;      # Needs a source.
+    today $> report;
+    invoices(tomorrow) !> to_report;
+    return;
+}
+# Review: both directions traverse p1, then p2, then p3. A trailing body supplies
+# the per-item action inline, while `$>` connects a named consumer.
+
+# 09 — DESIGN ONLY: nominal sum ADT, named constructors and construction ------
+# From design/DomainLanguageDesign.md (D-07-SUM-CONSTRUCTORS and
+# D-07-DCTOR-PUBLICATION). The scoped source rules do not qualify the seed's
+# sum layout or constructor implementation. `batch` is a live writable owner.
+data Receipt =
+    Accepted { id:u64; ptr prior:Receipt; }
+  | Skipped {};
+
+func Accepted(raw:u64) -> ref Receipt in O where {owner O} {
+    assert raw != 0u64;
+    id <- raw;
+    prior = null;
+}
+
+ref receipt:Receipt in batch = make Accepted(42u64) in batch;
+ref skipped:Receipt in batch = make Skipped in batch {};
+receipt isa Accepted;
+# Review: `Accepted` selects a layout in the declaration, a constructor in
+# `make`, and an alternative in `isa`. The constructor body has destinations
+# for `id` and `prior`, not a completed instance receiver.
+
+# 10 — DESIGN ONLY: case, field reception, guards and fallback ----------------
+# From design/DomainLanguageDesign.md (D-07-CASE). Assume `audit` is a proc
+# that records the supplied number and yields a Boolean result on return.
+proc classify(ptr r:Receipt in O, latest:u64 in O) -> u64 where {owner O} {
+    return case r of {
+        (null) -> { 0u64 };
+        (Accepted { val n <- id; latest <- id; }) | audit(n) -> { n };
+        (Accepted) -> { latest };
+        (_) -> { 0u64 };
+    };
+}
+
+func checked_id(ptr r:const Receipt in O) -> u64 where {const owner O} {
+    return case r of {
+        (Accepted { val n <- id; }) -> { n };
+        (Skipped) -> { 0u64 };
+        () -> throw;
+    };
+}
+# Review: follow `n` from the field spec into the guard and body. The `|`
+# introduces a guard here, unlike the sum separator above. `() -> throw;`
+# denotes a fresh UnexpectedCaseError in this design, not an ordinary rethrow.
+
+# 11 — DESIGN ONLY: data functor and bounded here argument --------------------
+# From design/DomainLanguageDesign.md (D-07-FUNCTORS, D-07-FUNCTOR-LOOKUP).
+# `current` is an initialized Threshold reference in the surrounding source.
+data Threshold { minimum:u64; }
+
+func (())(self:const Threshold in O, x:u64) -> bool where {const owner O} {
+    return x >= self.minimum;
+}
+
+func test(here pred(x:u64) -> bool, n:u64) -> bool {
+    return pred(n);
+}
+
+test(current, 12u64);
+test(12u64) (x) => {{ return current(x); }};
+# Review: `(())` names a call operator on an initialized receiver, not a
+# constructor. The direct argument binds the selected receiver at preparation;
+# the written here body reads `current` when invoked.
+
+# 12 — DESIGN ONLY / DEFERRED: fixed-width fractions --------------------------
+# From design/FixedWidthFractions.md (D-16). The draft uses `/` between the
+# component types and `//` to construct an exact ratio. The seed reserves the
+# constructor token but does not implement it.
+val advance_payment:i64/i32 <- 1 // 3;

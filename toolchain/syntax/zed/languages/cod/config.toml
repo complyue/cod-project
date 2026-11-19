@@ -1,0 +1,11 @@
+name = "CoD"
+grammar = "cod"
+path_suffixes = ["cod"]
+line_comments = ["# "]
+tab_size = 4
+
+brackets = [
+  { start = "(", end = ")", close = true, newline = false },
+  { start = "[", end = "]", close = true, newline = false },
+  { start = "{", end = "}", close = true, newline = true },
+]

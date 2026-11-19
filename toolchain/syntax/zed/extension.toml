@@ -1,0 +1,12 @@
+id = "cod-preview"
+name = "CoD Preview"
+version = "0.1.0"
+schema_version = 1
+description = "Preview syntax highlighting for CoD source files."
+repository = "https://github.com/complyue/cod-project"
+
+# The local installer links a bundle with a prebuilt grammars/cod.wasm.
+[grammars.cod]
+repository = "https://github.com/complyue/cod-project"
+rev = "main"
+path = "toolchain/syntax/zed"

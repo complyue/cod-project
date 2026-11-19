@@ -1,0 +1,126 @@
+{
+  "name": "CoD",
+  "scopeName": "source.cod",
+  "fileTypes": ["cod"],
+  "comment": "Lexical preview of the selected source design and toolchain/syntax/showcase.cod, not a parser or a statement of seed support.",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#module-paths" },
+    { "include": "#symbols" },
+    { "include": "#numbers" },
+    { "include": "#keywords" },
+    { "include": "#operators" },
+    { "include": "#delimiters" }
+  ],
+  "repository": {
+    "comments": {
+      "name": "comment.line.number-sign.cod",
+      "match": "(#).*$",
+      "captures": {
+        "1": { "name": "punctuation.definition.comment.cod" }
+      }
+    },
+    "module-paths": {
+      "name": "string.quoted.double.module-path.cod",
+      "begin": "\"",
+      "end": "(\")|$",
+      "beginCaptures": {
+        "0": { "name": "punctuation.definition.string.begin.cod" }
+      },
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.string.end.cod" }
+      },
+      "patterns": [
+        { "match": "\\\\[\\\\\"]", "name": "constant.character.escape.cod" },
+        { "match": "\\\\(?:[^\\\\\"\\n]|$)", "name": "invalid.illegal.escape.cod" }
+      ]
+    },
+    "symbols": {
+      "name": "constant.other.symbol.cod",
+      "match": "(@)[A-Za-z_][A-Za-z0-9_]*",
+      "captures": {
+        "1": { "name": "punctuation.definition.symbol.cod" }
+      }
+    },
+    "numbers": {
+      "comment": "A leading minus is a separate operator. An exponent sign and any width suffix stay in the literal scope.",
+      "patterns": [
+        {
+          "name": "constant.numeric.float.cod",
+          "match": "(?<![A-Za-z0-9_])[0-9]+(?:(?:\\.[0-9]+(?:[eE][+-]?[0-9]+)?|[eE][+-]?[0-9]+)(?:f32|f64)?|f32|f64)(?![A-Za-z0-9_])"
+        },
+        {
+          "name": "constant.numeric.integer.cod",
+          "match": "(?<![A-Za-z0-9_])[0-9]+(?:u8|u32|u64)?(?![A-Za-z0-9_])"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        { "match": "\\b(?:using|import|mixin|export|from|as|units)\\b", "name": "keyword.control.import.cod" },
+        { "match": "\\b(?:if|else)\\b", "name": "keyword.control.conditional.cod" },
+        { "match": "\\b(?:for|break|continue)\\b", "name": "keyword.control.loop.cod" },
+        { "match": "\\b(?:return|returning|yield|yields)\\b", "name": "keyword.control.flow.cod" },
+        { "match": "\\b(?:try|catch|finally|throw|throws|defer)\\b", "name": "keyword.control.exception.cod" },
+        { "match": "\\b(?:func|function|proc|procedure)\\b", "name": "storage.type.function.cod" },
+        { "match": "\\b(?:val|var|ref|ptr|data|type|unit|array|global|symbol|here)\\b", "name": "storage.type.declaration.cod" },
+        { "match": "\\b(?:const|owned|owner|in|where|with|conversion|intrinsic)\\b", "name": "storage.modifier.cod" },
+        { "match": "\\b(?:effect|perform|behave|touch)\\b", "name": "keyword.other.effect.cod" },
+        { "match": "\\b(?:make|capacity|typeof)\\b", "name": "keyword.other.allocation.cod" },
+        { "match": "\\b(?:is|not)\\b", "name": "keyword.operator.word.cod" },
+        { "match": "\\b(?:i64|u8|u32|u64|f32|f64|bool|void)\\b", "name": "storage.type.primitive.cod" },
+        { "match": "\\b(?:true|false)\\b", "name": "constant.language.boolean.cod" },
+        { "match": "\\bnull\\b", "name": "constant.language.null.cod" },
+        { "match": "\\b(?:cause_at|deref|scalar)\\b", "name": "support.function.builtin.cod" },
+        { "match": "\\bregion\\b(?=[ \\t]*\\()", "name": "support.function.builtin.cod" },
+        { "match": "\\bregion\\b", "name": "storage.type.declaration.cod" },
+
+        { "include": "#showcase-keywords" }
+      ]
+    },
+    "showcase-keywords": {
+      "comment": "Design-only spellings from the showcase. These scopes do not indicate seed support.",
+      "patterns": [
+        { "match": "\\b(?:case|of|assert)\\b", "name": "keyword.control.preview.cod" },
+        { "match": "\\bisa\\b", "name": "keyword.operator.preview.cod" }
+      ]
+    },
+    "operators": {
+      "comment": "Prefer longer tokens at the same position. The seed reserves // for fractions and rejects ::.",
+      "patterns": [
+        { "match": "<=>|<->", "name": "keyword.operator.swap.cod" },
+        { "match": "\\.\\.\\.", "name": "keyword.operator.spread.cod" },
+        { "match": "//", "name": "keyword.operator.reserved.cod" },
+        { "match": "::", "name": "invalid.illegal.double-colon.cod" },
+        { "match": "\\|>|<\\||!>|<!|\\$>|<\\$", "name": "keyword.operator.pipeline.cod" },
+        { "match": "->|=>", "name": "keyword.operator.arrow.cod" },
+        { "match": "<-", "name": "keyword.operator.assignment.cod" },
+        { "match": "<:", "name": "keyword.operator.constraint.cod" },
+        { "match": "\\.\\.", "name": "keyword.operator.range.cod" },
+        { "match": "==|!=|<=|>=|[<>]", "name": "keyword.operator.comparison.cod" },
+        { "match": "&&|\\|\\||!", "name": "keyword.operator.logical.cod" },
+        { "match": "=", "name": "keyword.operator.assignment.cod" },
+        { "match": "[+*/%\\-]", "name": "keyword.operator.arithmetic.cod" },
+        {
+          "comment": "A lone bar is used for sums and guards in the design-only showcase sections.",
+          "match": "\\|",
+          "name": "keyword.operator.preview.cod"
+        }
+      ]
+    },
+    "delimiters": {
+      "patterns": [
+        { "match": "\\(", "name": "punctuation.section.parens.begin.cod" },
+        { "match": "\\)", "name": "punctuation.section.parens.end.cod" },
+        { "match": "\\[", "name": "punctuation.section.brackets.begin.cod" },
+        { "match": "\\]", "name": "punctuation.section.brackets.end.cod" },
+        { "match": "\\{", "name": "punctuation.section.braces.begin.cod" },
+        { "match": "\\}", "name": "punctuation.section.braces.end.cod" },
+        { "match": ",", "name": "punctuation.separator.comma.cod" },
+        { "match": ":", "name": "punctuation.separator.colon.cod" },
+        { "match": ";", "name": "punctuation.terminator.statement.cod" },
+        { "match": "\\.", "name": "punctuation.accessor.cod" }
+      ]
+    }
+  }
+}
