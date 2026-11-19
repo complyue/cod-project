@@ -56,7 +56,7 @@ runner.CASES={
  'declared_exception_not_waived':(PRE+'func identity(ptr x:i64 in O)->ptr i64 in O throws NullPointerException where {owner O}{return x;}'+LOC+OBS('identity(p)'),2,'',CHECK),
  'uninitialized_target_rejected':(PRE+ID+'val x<-make local i64;'+OBS('identity(x)'),2,'','before definite initialization'),
  'readonly_target_preserved':(PRE+'func identity(ptr x:const i64 in O)->ptr const i64 in O where {owner O}{return x;}'+LOC+'identity(p)<-8;',2,'','readonly destination'),
- 'expired_owner_rejected':(PRE+ID+'ptr p={{val x<-7;identity(x)}};'+OBS('p'),2,'','owner has ended'),
+ 'expired_owner_rejected':(PRE+ID+'func leak(ref outside:i64 in O)->ptr i64 in O where {owner O}{val inner<-7;return identity(inner);}'+'val outer<-8;leak(outer);',2,'','borrowed result does not retain its declared external owner'),
 }
 runner.CASE_ARGUMENTS={}
 runner.CASE_SHADOWS = {

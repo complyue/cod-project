@@ -6,6 +6,9 @@ import foundation_tests as runner
 PRE='using symbol "std:io" @print;using "std:exceptions" NullPointerException;\n'
 METHODS='proc set(ptr x:i64 in O)->void throws NullPointerException where {owner O}{x<-7;}proc other(ptr x:i64 in O)->void throws NullPointerException where {owner O}{x<-8;}proc ignore(ptr x:i64 in O)->void throws NullPointerException where {owner O}{}\n'
 BASE=PRE+METHODS+'proc unrelated=ignore;proc selected=set;val x<-make local i64;\n'
+DEFERRED = BASE.replace(' throws NullPointerException', '').replace(
+    '{x<-7;}', '{if(x is not null){x<-7;{}}else{};}').replace(
+    '{x<-8;}', '{if(x is not null){x<-8;{}}else{};}')
 OBS='behave @print(x);'
 TRY=lambda body:'try{'+body+'}catch(e:const NullPointerException){};'
 runner.CASES={
@@ -15,7 +18,7 @@ runner.CASES={
  'pointer_holder':(BASE+'ptr alias=selected;'+TRY('alias(x);'+OBS),0,'7\n',''),
  'independent_copy':(BASE+'proc copied=selected;'+TRY('copied(x);'+OBS),0,'7\n',''),
  'conditional_selection':(BASE+'proc chosen=if(false){selected}else{other};'+TRY('chosen(x);'+OBS),0,'8\n',''),
- 'scoped_selection':(BASE+'proc chosen={{proc local=selected;local}};'+TRY('chosen(x);'+OBS),0,'7\n',''),
+ 'scoped_selection':(BASE+'func save(f:F)->const F where F{return {{proc local=f;return local;}};}proc chosen=save(selected);'+TRY('chosen(x);'+OBS),0,'7\n',''),
  'selected_nonwriter':(BASE+TRY('unrelated(x);'+OBS),2,'','before definite initialization'),
  'mixed_implementations_rejected':(BASE+'proc chosen=if(false){selected}else{unrelated};'+TRY('chosen(x);'+OBS),2,'','before definite initialization'),
  'selected_read_obligation':(PRE+METHODS+'proc read(ptr x:i64 in O)->void throws NullPointerException where {owner O}{x;{}}proc selected=read;val x<-make local i64;'+TRY('selected(x);'),2,'','cannot prove initialization'),
@@ -29,9 +32,9 @@ runner.CASES={
  'returned_capture':(BASE+'func wrap(f:F)->const F where F{return proc[f](ptr y:i64 in O)->void throws NullPointerException where {owner O}{f(y);};}proc chosen=wrap(selected);'+TRY('chosen(x);'+OBS),0,'7\n',''),
  'nested_captures':(BASE+'func wrap(f:F)->const F where F{return proc[f](ptr y:i64 in O)->void throws NullPointerException where {owner O}{f(y);};}proc chosen=wrap(wrap(selected));'+TRY('chosen(x);'+OBS),0,'7\n',''),
  'growing_captures':(BASE+'func wrap(f:F)->const F where F{return proc[f](ptr y:i64 in O)->void throws NullPointerException where {owner O}{f(y);};}for(i in 0..20){{selected<-wrap(selected);}};'+TRY('selected(x);'+OBS),0,'7\n',''),
- 'deferred_selection':(BASE+TRY('0;{{defer selected(x);}};'+OBS),0,'7\n',''),
+ 'deferred_selection':(DEFERRED+'ptr output=x;{{defer selected(output);}};'+OBS,0,'7\n',''),
  'deferred_higher_order':(BASE+'proc invoke(f:F,ptr x:i64 in O)->void throws NullPointerException where {F,owner O}{defer f(x);}'+TRY('invoke(selected,x);'+OBS),0,'7\n',''),
- 'delayed_selection':(BASE+TRY('0;{{defer{selected(x);};}};'+OBS),0,'7\n',''),
+ 'delayed_selection':(DEFERRED+'ptr output=x;{{defer{selected(output);};}};'+OBS,0,'7\n',''),
  'borrowed_holder_replacement':(BASE+'proc install(ref f:F in O,replacement:F)->void where {F,owner O}{f<-replacement;}proc next=other;install(selected,next);'+TRY('selected(x);'+OBS),0,'8\n',''),
  'borrowed_nonwriter_replacement_rejected':(BASE+'proc install(ref f:F in O,replacement:F)->void where {F,owner O}{f<-replacement;}install(selected,unrelated);'+TRY('selected(x);'+OBS),2,'','before definite initialization'),
  'returned_holder_replacement_rejected':(BASE+'func holder(ref f:F in O)->ref F in O where {F,owner O}{return f;}holder(selected)<-unrelated;'+TRY('selected(x);'+OBS),2,'','before definite initialization'),

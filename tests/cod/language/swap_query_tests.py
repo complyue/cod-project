@@ -8,7 +8,7 @@ BASE = 'val x<-1,y<-7;ptr p=x,q=y;'
 REF = 'func (<=>)(ptr a:i64 in O,ptr b:i64 in O)->void where {owner O}{intrinsic (<=>)(a,b);}'
 BITS = 'func (<->)(ref a:i64 in O,ref b:i64 in P)->void where {owner O,owner P}{intrinsic (<->)(a,b);}'
 OUT = lambda value:'behave @print('+value+');'
-QUERY = lambda expression:'val result<-make local typeof({'+expression+';1}){9};'
+QUERY = lambda expression:'val result<-make local typeof({ '+expression+';1 }){9};'
 
 runner.CASES = {}
 for name, spelling in [('infix','p OP q'),('explicit','(OP)(p,q)'),('intrinsic','intrinsic (OP)(p,q)')]:
