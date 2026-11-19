@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <compare>
 #include <filesystem>
 #include <map>
 #include <memory>
@@ -20,6 +21,7 @@ struct Location {
   std::string file;
   unsigned line = 1;
   unsigned column = 1;
+  auto operator<=>(const Location &) const = default;
 };
 
 inline std::string location_text(const Location &at) {

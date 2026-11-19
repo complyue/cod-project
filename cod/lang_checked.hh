@@ -228,7 +228,7 @@ class ScalarChecker {
   const Expression *prepared_call_ = nullptr;
   std::set<size_t> deferred_inputs_;
   std::optional<size_t> deferred_action_;
-  std::vector<Location> read_sites_;
+  std::vector<CallEffects::ReadSite> read_sites_;
   std::vector<Location> declared_sites_;
   std::map<const Expression *, size_t> declared_requirements_;
   std::set<size_t> deferred_actions_with_checked_scopes_;
@@ -1713,13 +1713,17 @@ class ScalarChecker {
     reference_destination(view, at);
     return selection_state(std::move(view), at);
   }
+  size_t read_obligation(std::optional<size_t> place, CallEffects::ReadSite site) {
+    read_sites_.push_back(std::move(site));
+    return cleanup_.read(place);
+  }
   CleanupEquations::Reads prepared_binding_reads(const CheckedOperation &view, const Location &at,
       bool nonnull = false, const std::set<size_t> &initialized = {}) {
     CleanupEquations::Reads reads;
     if (!proving_) return reads;
     const auto incoming = physical_slots(view.slots);
     if (nonnull) {
-      const auto read = cleanup_.read(null_target); read_sites_.push_back(at);
+      const auto read = read_obligation(null_target, {at, {}});
       auto &requirement = reads[read];
       requirement.nonnull = incoming;
       std::erase_if(*requirement.nonnull, [&](size_t id) { return !possible_targets_.at(id).contains(null_target); });
@@ -1734,7 +1738,7 @@ class ScalarChecker {
     for (const auto id : incoming) {
       if (initialized.contains(id)) continue;
       for (const auto place : possible_targets_.at(id)) if (place != null_target) {
-        const auto read = cleanup_.read(place); read_sites_.push_back(at);
+        const auto read = read_obligation(place, {at, {}});
         auto &requirement = reads[read];
         requirement.selection = view.binding ? view.binding : std::optional<size_t>{id};
         requirement.entry_initialized = initialized;
@@ -2365,6 +2369,19 @@ class ScalarChecker {
     observed_.reads.insert({input_ordinal(place), std::move(external), std::move(missing), external_conditions(before.when),
         external_initialization(before.initialized_selections)});
   }
+  bool in_immediate_scope() const {
+    return checking_method_ && checking_method_->source->implicit_scope;
+  }
+  void require_local_read(const CallEffects::ReadSite &site, const CleanupEquations::ConditionClauses &when) {
+    if (in_immediate_scope()) {
+      auto missing = external_conditions(when, true);
+      if (!CleanupEquations::unconditional(missing)) {
+        if (!missing.empty()) observed_.reads.insert({site, {}, {}, std::move(missing)});
+        return;
+      }
+    }
+    if (validating_) fail(site.at, site.diagnostic);
+  }
   void require_symbol(LexicalState &state, size_t symbol, const Location &at) {
     if (!proving_ || !state.live || state.bound_symbols.contains(symbol)) return;
     if (!delayed_ && !checking_instance_ && validating_)
@@ -2398,13 +2415,18 @@ class ScalarChecker {
       state.predicates[place] = boolean_predicate(value);
     for (const auto symbol : effects.symbols) require_symbol(state, symbol, at);
     if (proving_) for (const auto &[read, before] : effects.reads) {
-      const auto place = cleanup_.binding(read);
+      const auto place = cleanup_.read_target(read);
       if (before.satisfied(place, state.initialized, state.selections)) continue;
+      if (!place) {
+        if (delayed_) add_requirement(state, read, state.inputs, before);
+        else require_local_read(read_sites_.at(read), before.when);
+        continue;
+      }
       auto known = before;
       CleanupEquations::combine_initialization(known.initialized, known.uninitialized,
           state.initialized, state.uninitialized, false);
       known.when = CleanupEquations::conjoin_conditions(known.when,
-          CleanupEquations::missing_initialization(place, known.initialized, known.uninitialized));
+          CleanupEquations::missing_initialization(*place, known.initialized, known.uninitialized));
       if (known.nonnull) std::erase_if(*known.nonnull, [&](size_t id) {
         const auto guard = known.nonnull_versions.find(id), current = state.target_versions.find(id);
         return guard != known.nonnull_versions.end() && current != state.target_versions.end() && guard->second == current->second;
@@ -2415,14 +2437,21 @@ class ScalarChecker {
       known.enter_initialization(initialization_frame());
       if (known.satisfied(place, state.initialized, {})) continue;
       if (before.nonnull) {
-        if (!delayed_ && validating_) fail(read_sites_.at(read), "cannot prove a non-null target for deferred reference swap");
+        if (!delayed_ && validating_) fail(read_sites_.at(read).at, "cannot prove a non-null target for deferred reference swap");
         add_requirement(state, read, state.inputs, known);
         continue;
       }
-      if (!storage(place).borrowed && (!delayed_ || (!deferred_inputs_.contains(place) && !conditional_read(known))) && validating_)
-        fail(read_sites_.at(read), "cannot prove initialization of '" + storage(place).name + "' for deferred or borrowed read");
+      if (!storage(*place).borrowed) {
+        const auto diagnostic = "cannot prove initialization of '" + storage(*place).name + "' for deferred or borrowed read";
+        if (!delayed_ && in_immediate_scope()) {
+          require_local_read({read_sites_.at(read).at, diagnostic}, known.when);
+          continue;
+        }
+        if ((!delayed_ || (!deferred_inputs_.contains(*place) && !conditional_read(known))) && validating_)
+          fail(read_sites_.at(read).at, diagnostic);
+      }
       add_requirement(state, read, state.inputs, known);
-      observe_read(place, known);
+      observe_read(*place, known);
     }
     CleanupEquations::combine_initialization(state.initialized, state.uninitialized,
         effects.initialized, effects.uninitialized, false);
@@ -2500,9 +2529,15 @@ class ScalarChecker {
       return binding;
     };
     CleanupEquations::Reads reads;
-    if (proving_) for (const auto &[parameter, preceding, conditional, condition, initialized_inputs] : target.reads) {
-      const auto when = instantiate_conditions(condition, booleans, views, slots, exceptions);
+    if (proving_) for (const auto &[source, preceding, conditional, condition, initialized_inputs] : target.reads) {
+      auto when = instantiate_conditions(condition, booleans, views, slots, exceptions);
       if (when.empty()) continue;
+      if (const auto *local = std::get_if<CallEffects::ReadSite>(&source)) {
+        const auto read = read_obligation({}, *local);
+        reads[read].when = std::move(when);
+        continue;
+      }
+      const auto parameter = std::get<size_t>(source);
       auto before = preceding;
       CleanupEquations::MissingInitialization missing;
       std::set<size_t> known;
@@ -2535,7 +2570,7 @@ class ScalarChecker {
       });
       if (same_selection) continue;
       for (const auto place : view.targets) if (place != null_target && !known.contains(place)) {
-        const auto read = cleanup_.read(place); read_sites_.push_back(at);
+        const auto read = read_obligation(place, {at, {}});
         auto &requirement = reads.emplace(read, CleanupEquations::ReadRequirement{known, selection(view)}).first->second;
         requirement.initialized_selections = initialization;
         requirement.uninitialized = missing;
@@ -3077,10 +3112,16 @@ class ScalarChecker {
     if (target) before.when = CleanupEquations::conjoin_conditions(before.when, {*target});
     before.uninitialized = lexical_.uninitialized;
     if (before.when.empty()) return;
-    if (!storage(place).borrowed && (!delayed_ || (!deferred_inputs_.contains(place) && !conditional_read(before))) && validating_)
-      fail(at, "read of '" + name + "' before definite initialization of every possible target");
-    const auto obligation = cleanup_.read(place);
-    read_sites_.push_back(at);
+    if (!storage(place).borrowed) {
+      const auto diagnostic = "read of '" + name + "' before definite initialization of every possible target";
+      if (!delayed_ && in_immediate_scope()) {
+        require_local_read({at, diagnostic}, before.when);
+        return;
+      }
+      if ((!delayed_ || (!deferred_inputs_.contains(place) && !conditional_read(before))) && validating_)
+        fail(at, diagnostic);
+    }
+    const auto obligation = read_obligation(place, {at, {}});
     before.substitute(lexical_.selections);
     add_requirement(lexical_, obligation, missing, before);
     observe_read(place, before);
@@ -9582,7 +9623,7 @@ class ScalarChecker {
     }
     for (const auto &[read, requirement] : state.requirements)
       if ((requirement.inputs & state.inputs) && !requirement.before.nonnull)
-        observe_read(cleanup_.binding(read), requirement.before);
+        if (const auto place = cleanup_.read_target(read)) observe_read(*place, requirement.before);
   }
   CallEffects check_instance(size_t i, bool distinct_bindings = false) {
     checking_context_ = i + 1;

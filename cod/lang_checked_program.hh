@@ -175,9 +175,15 @@ struct CheckedBinding {
 
 // Substitutions are checking obligations, not semantic methods or activation records.
 struct CallEffects {
+  struct ReadSite {
+    Location at;
+    std::string diagnostic;
+    auto operator<=>(const ReadSite &) const = default;
+  };
   // Operand summaries use incoming ordinals, independent of callee storage.
   struct Read {
-    size_t parameter;
+    // A local read can only be proved by excluding its missing-write paths.
+    std::variant<size_t, ReadSite> target;
     std::set<size_t> initialized;
     CleanupEquations::MissingInitialization uninitialized{};
     CleanupEquations::ConditionClauses when{CleanupEquations::ConditionFacts{}};

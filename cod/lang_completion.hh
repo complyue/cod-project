@@ -809,12 +809,13 @@ public:
     // Sufficient initialization of the sequence's incoming selected targets.
     std::optional<Initialization> initialized_selections = {};
     bool operator==(const ReadRequirement &) const = default;
-    bool satisfied(size_t place, const std::set<size_t> &known, const Selections &selections) const {
+    bool satisfied(std::optional<size_t> place, const std::set<size_t> &known, const Selections &selections) const {
       if (when.empty()) return true;
+      if (!place) return false;
       if (nonnull) return !nonnull_unproved && std::all_of(nonnull->begin(), nonnull->end(),
           [&](size_t id) { return selections.nonnull(id); });
       const auto ready = [&](size_t id) { return initialized.contains(id) || known.contains(id); };
-      return ready(place) || (selection && selections.initialized.contains(*selection)) ||
+      return ready(*place) || (selection && selections.initialized.contains(*selection)) ||
           (initialized_selections && std::all_of(initialized_selections->begin(), initialized_selections->end(),
               [&](const auto &entry) { return entry.physical ? ready(entry.id) : !entry.frame && selections.initialized.contains(entry.id); })) ||
           (targets && std::all_of(targets->begin(), targets->end(), ready));
@@ -1035,7 +1036,7 @@ private:
   std::vector<Action> actions_;
   std::set<size_t> observed_inputs_, observed_references_;
   static constexpr size_t states = 2 * (3 + exception_categories.size());
-  std::vector<size_t> reads_;
+  std::vector<std::optional<size_t>> reads_;
   using Outcomes = std::map<size_t, Effects>;
   using QueueState = std::pair<size_t, size_t>;
   struct SolvedState {
@@ -1087,13 +1088,19 @@ private:
     next.transform_values([&](const auto &value) { return value.through(first.payloads, first.thrown); },
         [&](const auto &value) { return value.through(first.payloads, first.thrown, false, true); });
     next.transform_conditions([&](const auto &clauses) { return through_conditions(clauses, first.booleans); });
-    for (const auto &[read, known] : next.reads) if (!known.satisfied(reads_.at(read), first.initialized, first.selections)) {
+    for (const auto &[read, known] : next.reads) {
+      const auto place = read_target(read);
+      if (known.satisfied(place, first.initialized, first.selections)) continue;
+      if (!place) {
+        merge_read(result.reads, read, known);
+        continue;
+      }
       auto before = known;
       combine_initialization(before.initialized, before.uninitialized, first.initialized, first.uninitialized, false);
       before.when = conjoin_conditions(before.when,
-          missing_initialization(reads_.at(read), before.initialized, before.uninitialized));
+          missing_initialization(*place, before.initialized, before.uninitialized));
       before.substitute(first.selections);
-      if (before.satisfied(reads_.at(read), first.initialized, {})) continue;
+      if (before.satisfied(place, first.initialized, {})) continue;
       merge_read(result.reads, read, before);
     }
     combine_initialization(result.initialized, result.uninitialized, next.initialized, next.uninitialized, false);
@@ -1180,8 +1187,8 @@ public:
     auto [found, inserted] = reads.emplace(read, before);
     if (!inserted) found->second.merge(before);
   }
-  size_t read(size_t binding) { reads_.push_back(binding); return reads_.size() - 1; }
-  size_t binding(size_t read) const { return reads_.at(read); }
+  size_t read(std::optional<size_t> place) { reads_.push_back(place); return reads_.size() - 1; }
+  std::optional<size_t> read_target(size_t read) const { return reads_.at(read); }
   bool has_actions(size_t queue) const {
     std::set<size_t> seen;
     std::vector<size_t> pending{queue};
