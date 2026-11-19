@@ -1,10 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 216 · Recorded: 2026-11-19 · Phase: language/application co-design.
+Design revision: 217 · Recorded: 2026-11-19 · Phase: language/application co-design.
 
 ## Design authority
 
-- **Generator/argument spelling.** [K-GENERATOR-YIELD-FORMAL-20261118](../CHANGELOG.md#k-generator-yield-formal-20261118) records the D-29r17 proposal in the r214 feature overview. D-29-GENERALIZED-FOR/P-623–P-624 and D-10-TRAILING-CALLBACK govern selection, first-slot binding, labels and cleanup. Compare the two call syntaxes with one selected method. [H-GENERATOR-RECEPTION-20261119](../CHANGELOG.md#h-generator-reception-20261119) confirms the first formal and the [shared receiving header](RangedForAndGenerators.md#one-receiving-header-for-both-call-forms) at D-29r18/D-10r215. Check fresh and existing controls at every invocation. [H-HERE-HEADER-20261119](../CHANGELOG.md#h-here-header-20261119) confirms the parenthesized spelling at r216.
+- **Generator/argument spelling.** [K-GENERATOR-YIELD-FORMAL-20261118](../CHANGELOG.md#k-generator-yield-formal-20261118) records the D-29r17 proposal in the r214 feature overview. D-29-GENERALIZED-FOR/P-623–P-624 and D-10-TRAILING-CALLBACK govern selection, first-slot binding, labels and cleanup. Compare the two call syntaxes with one selected method. [H-GENERATOR-RECEPTION-20261119](../CHANGELOG.md#h-generator-reception-20261119) confirms the first formal and the [shared receiving header](RangedForAndGenerators.md#one-receiving-header-for-both-call-forms) at D-29r18/D-10r215. Check fresh and existing controls at every invocation. [H-HERE-HEADER-20261119](../CHANGELOG.md#h-here-header-20261119) confirms the parenthesized spelling. [K-HEADER-PROSE-20261119](../CHANGELOG.md#k-header-prose-20261119) continues r216 at r217 for the examples below.
 
 - **Language feature overview.** [K-GENERALIZED-FOR-20261118](../CHANGELOG.md#k-generalized-for-20261118) updates D-10r213 for the feature overview. D-29-GENERALIZED-FOR/P-623–P-624 owns equivalent call forms. D-10-TRAILING-CALLBACK/P-567–P-569 supplies the binding rules. H-HERE-ORIGIN-HANDOFF-20261118, H-HERE-BREAK-CONTINUE-20261118 and D-29-EFFECTS explain synchronous caller-owned work under charter §§3.2/6.1/8.1. The [generalized for-loop examples](RangedForAndGenerators.md#generalized-for-loops) compare live writes, feedback and control targets within the existing source contracts. Collection conformance and lowering remain separately scoped.
 
@@ -953,7 +953,7 @@ A [single-brace here body](CallableStorageAndHereAccess.md#single-brace-bodies-f
 
 A first parameter declared as a [here callable](CallableStorageAndHereAccess.md#an-effect-in-a-here-callback) accepts either brace form. Forwarding to another synchronous here formal preserves the supplied body, its authority and its control destinations.
 
-[H-TRAILING-CALLBACK-20261117](../CHANGELOG.md#h-trailing-callback-20261117) selects a trailing callable body using double braces, with parameters introduced by an initial `=>` and terminated by `;`:
+The parameter list precedes the arrow. In the double-brace body below, `return` supplies the callback result to `apply`. [Header decision](../CHANGELOG.md#h-here-header-20261119)
 
 ```cod
 proc apply(here body(x:u64) -> u64, value:u64) -> u64 {

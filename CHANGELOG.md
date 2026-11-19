@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-19 — Align the trailing-callback introduction with its examples
+
+<a id="k-header-prose-20261119"></a>
+**K-HEADER-PROSE-20261119.** D-10r217 and registry r944 continue H-HERE-HEADER-20261119. The introduction now describes the same parenthesized header as its examples. Prior text: `6d2f7aff4f9c0d33e61589d3e522673d6e78b02f:design/SymbolicDynamicScope.md`, “Trailing callback arguments”.
+
 ## 2026-11-19 — Adopt parenthesized receiving headers
 
 <a id="h-here-header-20261119"></a>
