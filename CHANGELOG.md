@@ -5,6 +5,11 @@
 <a id="h-hlvm-candidate-20261120"></a>
 **H-HLVM-CANDIDATE-20261120.** In the project chat, the project user proposed `hlvm-basic` for running BASIC source or saving a DBMR to run later, with the prerequisite “要等 CoD 基本的 lexer/parser 已经通了的情况下再推进”, then asked to record the idea in a planning document. The [application note](applications/README.md#deferred-application-hlvm-basic) applies the executor and editable program graph from [*Algebraic Effects Is All You Need*](papers/AlgebraicEffectsIsAllYouNeed.md) to BASIC. It does not change the compiler roadmap or authorize implementation.
 
+## 2026-11-19 — Update the lexical product coverage reference
+
+<a id="k-lexical-reference-field-coverage-20261119"></a>
+**K-LEXICAL-REFERENCE-FIELD-COVERAGE-20261119.** D-28r37→38 and registry r990→991 update the [lexical product coverage reference](design/RegionalAndLexicalStorageRefactor.md#lexical-adts-as-part-of-the-complete-model). H-478 and H-562 continue to govern nominal identity and readiness. C-39/C-65/C-91 and charter §§3.3/6.3/12 still require common semantics across placements and native evidence. The edit leaves the pending layout, ABI and complete proof scopes as recorded. Prior wording at `4f7223107e822775442fbc039dcf0427b698fc75:design/RegionalAndLexicalStorageRefactor.md`.
+
 ## 2026-11-19 — Confirm the storage-helper migration
 
 <a id="h-storage-helper-confirmation-20261119"></a>

@@ -1731,12 +1731,19 @@ class ScalarChecker {
     return id;
   }
   size_t declare(const std::string &name, const Type &type, bool read_only, bool value_binding, const Location &at,
-                 bool source_declaration = true, LexicalState::InputFacts *callable_entry = nullptr) {
+                 bool source_declaration = true, LexicalState::InputFacts *callable_entry = nullptr,
+                 bool embedded_slot = false) {
     const auto scope = declaration_scope(name, at).id;
     const auto id = storage_->size();
     storage_->push_back({name, type, scope, read_only});
     scope_storage_[scope].push_back(id);
-    storage_->back().binding = bind(name, type, {id}, read_only, value_binding, false, at, {}, source_declaration, callable_entry);
+    const auto targets = embedded_slot ? std::set<size_t>{} : std::set<size_t>{id};
+    const auto binding = bind(name, type, targets, read_only, value_binding, false, at, {}, source_declaration, callable_entry);
+    storage_->back().binding = binding;
+    if (embedded_slot) {
+      bindings_->at(binding).embedded_slot = id;
+      lexical_.owners.at(binding).insert(scope);
+    }
     lexical_.available.insert(id);
     return id;
   }
@@ -2539,6 +2546,15 @@ class ScalarChecker {
     lexical_.returned.uninitialized.erase(id);
     for (const auto input : lexical_.inputs) lexical_.input_facts[input].initialized.insert(id);
     refresh_input_facts(lexical_);
+  }
+  void initialize_written_targets(const CheckedOperation &target) {
+    if (target.place) initialize(*target.place);
+    else if (!target.targets.empty()) {
+      initialize_targets(target, lexical_.initialized, lexical_.uninitialized);
+      for (const auto input : lexical_.inputs)
+        lexical_.input_facts[input].initialized.insert(lexical_.initialized.begin(), lexical_.initialized.end());
+      refresh_input_facts(lexical_);
+    }
   }
   std::optional<CleanupEquations::ConditionFacts> selected_target(size_t selection, size_t place, bool equal) const {
     if (place == null_target) return {};
@@ -5100,11 +5116,11 @@ class ScalarChecker {
       const auto mode = argument_mode(parameter);
       if (mode == ArgumentMode::value || definition.scope_inputs || definition.source->symbolic || caller_bindings(definition))
         implementation_gap(at, "product parameters require a borrowed target in an ordinary direct call");
-      product_schema(arguments[i], at);
+      borrowed_product_schema(arguments[i], at);
     }
     if (result.contract->type->kind == Type::product) {
       if (!result.contract->borrowed()) implementation_gap(at, "whole-product value results");
-      product_schema(*result.contract->type, at);
+      borrowed_product_schema(*result.contract->type, at);
     }
     check_declared_results(definition, *result.contract, declared);
     definition.contextual_result = definition.contextual_result || supplied.has_value();
@@ -5823,8 +5839,11 @@ class ScalarChecker {
   }
   const CheckedSchema &product_schema(const Type &type, const Location &at) const {
     if (type.kind != Type::product) implementation_gap(at, "ordinary construction requires a supported product type");
-    const auto &schema = program_.schemas.at(type.identity);
-    if (!schema.bits) implementation_gap(at, "construction or projection of a reference-bearing product");
+    return program_.schemas.at(type.identity);
+  }
+  const CheckedSchema &borrowed_product_schema(const Type &type, const Location &at) const {
+    const auto &schema = product_schema(type, at);
+    if (!schema.bits) implementation_gap(at, "borrowed reference-bearing product parameters and results");
     return schema;
   }
   static size_t product_field(const CheckedSchema &schema, const Expression &member) {
@@ -5857,7 +5876,7 @@ class ScalarChecker {
     for (size_t i = 0; i < arguments.size() + fields.size(); ++i) {
       const auto &type = i < arguments.size() ? arguments[i] : fields[i - arguments.size()].description->type;
       if (type.kind != Type::product) continue;
-      const auto &schema = product_schema(type, at);
+      const auto &schema = borrowed_product_schema(type, at);
       const auto root = i < arguments.size() ? i : fields[i - arguments.size()].root;
       for (size_t field = 0; field < schema.fields.size(); ++field) {
         if (fields.size() == 4096) fail(at, "compiler resource limit: too many borrowed product fields");
@@ -5911,15 +5930,44 @@ class ScalarChecker {
     }
     return result;
   }
+  CheckedOperation select_product_reference(CheckedOperation slot, const CheckedSchema::Field &field,
+                                            const Location &at, bool write_only) {
+    slot.embedded_slot_selection = slot.selection_identity;
+    for (const auto place : slot.targets) {
+      const auto binding = storage(place).binding;
+      slot.slots.insert(binding);
+      if (!write_only)
+        require_initialized(place, at, field.source->name, {}, selected_target(slot, place, true));
+    }
+    slot.binding = slot.slots.size() == 1 ? std::optional{*slot.slots.begin()} : std::nullopt;
+    slot.nullable_view = field.storage == PlaceKind::pointer;
+    const auto owners = slot.owners;
+    slot = selection_state(std::move(slot), at);
+    slot.owners = owners;
+    return slot;
+  }
+  CheckedOperation embedded_slot_targets(const CheckedOperation &target) const {
+    const auto slots = physical_slots(target.slots);
+    CheckedOperation selected;
+    std::set<size_t> places;
+    for (const auto binding : slots) if (const auto slot = bindings_->at(binding).embedded_slot) places.insert(*slot);
+    if (places.size() == slots.size()) {
+      select_targets(selected, places);
+      selected.selection_identity = target.embedded_slot_selection;
+    }
+    return selected;
+  }
   static std::vector<size_t> product_initializers(const CheckedSchema &schema, const Expression &expr) {
     std::set<size_t> initialized;
     std::vector<size_t> order;
     for (const auto &item : expr.children) {
       const auto index = product_field(schema, *item);
       const auto &field = schema.fields[index];
-      if (item->binding != "<-") fail(item->at, "a direct product field requires bits transfer '<-'");
-      if (field.type.kind == Type::product) implementation_gap(item->at, "whole-product field initialization");
-      if (!initialized.insert(index).second && readonly_field(field))
+      const bool direct = field.storage == PlaceKind::value;
+      if (direct && item->binding != "<-") fail(item->at, "a direct product field requires bits transfer '<-'");
+      if (!direct && item->binding != "=") fail(item->at, "a reference field initializer requires binding '='");
+      if (direct && field.type.kind == Type::product) implementation_gap(item->at, "whole-product field initialization");
+      if (!initialized.insert(index).second && (direct ? readonly_field(field) : field.source->fixed_binding))
         fail(item->at, "readonly field '" + item->text + "' is initialized more than once");
       order.push_back(index);
     }
@@ -5945,10 +5993,16 @@ class ScalarChecker {
         if (storage_->size() - root >= 4096)
           fail(at, "compiler resource limit: too many subobjects in one lexical product");
         const auto name = "$field." + std::to_string(storage_->size()) + "." + field.source->name;
-        const auto place = declare(name, field.type, readonly_field(field), true, at, false);
+        const bool direct = field.storage == PlaceKind::value;
+        const auto place = declare(name, field.type, direct ? readonly_field(field) : field.source->read_only,
+                                   direct, at, false, nullptr, !direct);
         (*storage_)[place].subobject = true;
         (*storage_)[parent].fields.push_back(place);
-        if (field.type.kind == Type::product) pending.push_back(place);
+        if (direct && field.type.kind == Type::product) pending.push_back(place);
+        auto &binding = bindings_->at(storage(place).binding);
+        binding.fixed = field.source->fixed_binding;
+        binding.requires_initialized = field.storage == PlaceKind::reference;
+        binding.nullable = field.storage == PlaceKind::pointer;
       }
     }
     return root;
@@ -8063,9 +8117,14 @@ class ScalarChecker {
       bool completes = true;
       for (size_t i = 0; i < order.size(); ++i) {
         const auto &item = *expr.children[i];
+        const auto &field = schema.fields[order[i]];
+        const bool direct = field.storage == PlaceKind::value;
         const auto value = type_evidence(*item.children.front(), state, false, nullptr, nullptr,
-                                         ExpectedTypeUse::materialization, completes);
-        if (state.required && value && *value != Type::never) transfer_type(*value, schema.fields[order[i]].type, item.at);
+            ExpectedTypeUse::materialization, completes, direct ? EvidenceRead::payload : EvidenceRead::target);
+        if (state.required && value && *value != Type::never) {
+          if (direct) transfer_type(*value, field.type, item.at);
+          else rebind_type(field.type, *value, item.at);
+        }
         completes = completes && value != Type::never;
       }
       if (!completes) return Type::never;
@@ -8952,12 +9011,16 @@ class ScalarChecker {
         if (state.required && (parent.view != true || parent.mixed_view))
           implementation_gap(expr.at, "field selection requires an existing product target");
         read_type_target(state, parent, state.target);
+        const bool direct = field.storage == PlaceKind::value;
         auto access = parent.read_only;
-        if (readonly_field(field)) access = true;
-        view = {access, true, true, parent.owner};
+        if (direct ? readonly_field(field) : field.source->read_only) access = true;
+        view = {access, true, direct, parent.owner};
         view.place_owners = parent.place_owners;
-        view.storage_kind = PlaceKind::value;
-        target_facts.presence = TargetPresence::present;
+        view.storage_kind = field.storage;
+        view.fixed_binding = direct || field.source->fixed_binding || parent.read_only.value_or(true);
+        view.slot_read_only = field.source->read_only;
+        view.nullable = field.storage == PlaceKind::pointer;
+        if (!view.nullable) target_facts.presence = TargetPresence::present;
         return field.type;
       }
       if (!type || type->kind != Type::exception) return {};
@@ -12303,7 +12366,8 @@ class ScalarChecker {
   }
   Type check(const Expression &expr, CheckedInstance *instance,
              std::map<const Expression *, CheckedOperation> &operations, bool read = true, bool discard = false,
-             const Type *expected = nullptr, ExpectedTypeUse expected_use = ExpectedTypeUse::materialization) {
+             const Type *expected = nullptr, ExpectedTypeUse expected_use = ExpectedTypeUse::materialization,
+             bool write_slot = false) {
     using K = Expression::Kind;
     CheckedOperation operation;
     if (checking_method_ && checking_method_->here_group &&
@@ -13204,7 +13268,8 @@ class ScalarChecker {
         fail(expr.at, "alias annotation requires the exact selected type");
       if (expr.annotation && !expr.read_only && source.read_only)
         fail(expr.at, "readonly source cannot supply a writable alias target");
-      const auto canonical = source.binding ? source.binding : slots.size() == 1 ? std::optional<size_t>{*slots.begin()} : std::nullopt;
+      const auto canonical = std::ranges::any_of(slots, [&](size_t slot) { return bindings_->at(slot).embedded_slot.has_value(); })
+          ? std::nullopt : source.binding ? source.binding : slots.size() == 1 ? std::optional<size_t>{*slots.begin()} : std::nullopt;
       const auto id = bind(expr.text, type, canonical ? std::set<size_t>{} : source.targets,
           source.read_only || expr.read_only || (selected.value_binding && expr.fixed_binding),
           selected.value_binding, source.fixed_binding || expr.fixed_binding, expr.at, canonical);
@@ -13223,7 +13288,8 @@ class ScalarChecker {
       const bool prepared = &expr == prepared_call_;
       operation.arguments = {{ArgumentMode::borrowed_ptr, Type::never, expr.kind == K::rebind},
                              {expr.kind == K::transfer ? ArgumentMode::value : ArgumentMode::borrowed_ptr, Type::never}};
-      const auto destination = child(0, false);
+      const auto destination = check(*expr.children[0], instance, operations, false, false, nullptr,
+          ExpectedTypeUse::materialization, expr.kind == K::rebind);
       operation.arguments[0].type = destination;
       if (destination == Type::never) {
         child(1, expr.kind == K::transfer);
@@ -13254,13 +13320,16 @@ class ScalarChecker {
           if (snapshot.initialization)
             snapshot.initialization = CleanupEquations::capture_initialization(*snapshot.initialization, initialization_frame());
           rebind(target, snapshot, targets, true);
-          operation.invocation[0].selections = lexical_.selections;
+          auto &effect = operation.invocation[0];
+          effect.selections = lexical_.selections;
+          initialize_targets(embedded_slot_targets(target), effect.initialized, effect.uninitialized);
           lexical_ = before;
           operation.type = destination;
           break;
         }
         if (read && !discard) require_initialized(selected, expr.at, expr.children[0]->text);
         rebind(target, selected, snapshot_selection(selected, expr.at));
+        initialize_written_targets(embedded_slot_targets(target));
         operation.type = destination;
         operation.targets = selected.targets;
         operation.place = selected.place;
@@ -13316,13 +13385,7 @@ class ScalarChecker {
       }
       if (destination.kind == Type::procedure && (!proving_ || !capture_free_callables(observed_callables(expr))))
         note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
-      if (written.size() == 1) initialize(*written.begin());
-      else {
-        initialize_targets(written_target, lexical_.initialized, lexical_.uninitialized);
-        for (const auto input : lexical_.inputs)
-          lexical_.input_facts[input].initialized.insert(lexical_.initialized.begin(), lexical_.initialized.end());
-        refresh_input_facts(lexical_);
-      }
+      initialize_written_targets(written_target);
       if (const auto binding = current_binding(target)) initialize_selection(lexical_, *binding);
       operation.type = operation.operand_type = destination;
       select_targets(operation, written);
@@ -13442,10 +13505,12 @@ class ScalarChecker {
       for (size_t i = 0; i < order.size(); ++i) {
         const auto &item = *expr.children[i];
         const auto index = order[i];
+        const auto &member = schema.fields[index];
+        const bool direct = member.storage == PlaceKind::value;
         CheckedOperation field;
-        field.operand_type = schema.fields[index].type;
+        field.operand_type = member.type;
         field.product_field = index;
-        const auto supplied = check(*item.children.front(), instance, operations);
+        const auto supplied = check(*item.children.front(), instance, operations, direct);
         field.type = supplied == Type::never ? Type{Type::never} : field.operand_type;
         operations.insert_or_assign(&item, std::move(field));
         if (supplied == Type::never) {
@@ -13453,11 +13518,28 @@ class ScalarChecker {
           lexical_.live = false;
           continue;
         }
-        transfer_type(supplied, schema.fields[index].type, item.at);
+        if (direct) transfer_type(supplied, member.type, item.at);
         if (operation.type == Type::never) continue;
         const auto place = storage(root).fields[index];
+        const auto &source = operations.at(item.children.front().get());
+        if (!direct) {
+          if (!source.view || source.mixed_view)
+            implementation_gap(item.at, "reference field initialization requires an existing target or null");
+          rebind_type(member.type, supplied, item.at);
+          rebind_access(member.source->read_only, source.read_only, item.at);
+          require_live_view(source, item.at);
+          if (std::ranges::any_of(source.owners, [&](size_t owner) {
+                return compare_owners(owner, storage(root).scope) != OwnerMatch::satisfied;
+              })) fail(item.at, "reference field target must share the containing product's owner");
+          if (member.storage == PlaceKind::reference) {
+            if (proving_ && validating_ && lexical_.live && source.targets.contains(null_target))
+              fail(item.at, "ref field requires a proven non-null target");
+            require_initialized(source, item.at, "ref field target");
+          }
+          assign_targets(storage(place).binding, source, snapshot_selection(source, item.at));
+        }
         initialize(place);
-        if (schema.fields[index].type == Type::boolean) {
+        if (direct && member.type == Type::boolean) {
           CheckedOperation target;
           select_targets(target, {place});
           write_predicate(target, predicate_of(operations.at(item.children.front().get())), item.at);
@@ -13495,8 +13577,18 @@ class ScalarChecker {
       require_live_view(parent, expr.at);
       dereference(parent, expr.at);
       operation = project_product(parent, index, expr.at);
+      if (field.storage != PlaceKind::value) {
+        operation.read_only = parent.read_only || field.source->read_only;
+        operation.fixed_binding = parent.read_only || field.source->fixed_binding;
+        if (parent.targets.size() == 1 && parent.targets.contains(null_target)) {
+          operation.type = Type::never;
+          break;
+        }
+        operation = select_product_reference(std::move(operation), field, expr.at, write_slot);
+      }
       if (read) {
-        require_initialized(operation, expr.at, expr.text);
+        if (field.storage == PlaceKind::value) require_initialized(operation, expr.at, expr.text);
+        else read_view(operation, expr.at, expr.text);
         operation.predicate = stored_predicate(operation);
       }
       break;

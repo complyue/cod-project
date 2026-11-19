@@ -94,6 +94,7 @@ struct CheckedOperation {
   std::optional<size_t> binding;
   // Immutable selected reference, independent of the mutable binding version.
   std::optional<size_t> selection_identity;
+  std::optional<size_t> embedded_slot_selection;
   std::set<size_t> slots;
   std::set<size_t> targets, owners, origins, selection_versions;
   // Formal nullable inputs, or null_target for an independently absent view.
@@ -262,6 +263,7 @@ struct CheckedBinding {
   std::optional<size_t> definition = {};
   // A reference slot has its own lifetime, separate from its selected target.
   std::set<size_t> place_owners = {};
+  std::optional<size_t> embedded_slot = {};
   // A fixed alias carries access restrictions and uses its selection's proof state.
   std::optional<size_t> alias = {};
   // A selected alias keeps one physical slot from this finite set for its whole lifetime.

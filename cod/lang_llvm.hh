@@ -291,15 +291,17 @@ class LLVMEmission {
       auto &[id, field_index] = pending.back();
       const auto &schema = program_->schemas.at(id);
       if (field_index < schema.fields.size()) {
-        const auto &type = schema.fields[field_index++].type;
-        if (type.kind == Type::product && !product_layouts_.contains(type.identity))
+        const auto &field = schema.fields[field_index++];
+        const auto &type = field.type;
+        if (field.storage == PlaceKind::value && type.kind == Type::product && !product_layouts_.contains(type.identity))
           pending.emplace_back(type.identity, 0);
         continue;
       }
       std::vector<llvm::Type *> fields;
       for (const auto &field : schema.fields) {
         const auto &type = field.type;
-        fields.push_back(type.kind == Type::product ? product_layouts_.at(type.identity) : native_type(type));
+        if (field.storage != PlaceKind::value) fields.push_back(b_.getPtrTy());
+        else fields.push_back(type.kind == Type::product ? product_layouts_.at(type.identity) : native_type(type));
       }
       // Fieldless products still need distinct addressable targets.
       if (fields.empty()) fields.push_back(b_.getInt8Ty());
@@ -2229,11 +2231,16 @@ class LLVMEmission {
           const auto &field = contexts_[i].at(&expr);
           if (field.product_field) projections[{field.operand_type.identity, *field.product_field}].push_back(i);
         }
-        auto *field = contextual_value(expr, projections, "product.field", [&](const auto &projection) {
-          const auto [schema, number] = projection;
-          return b_.CreateStructGEP(product_layout(schema), address, number);
+        auto *field = contextual_value(expr, projections, "product.field", [&](const auto &member) -> llvm::Value * {
+          const auto [schema, number] = member;
+          auto *slot = b_.CreateStructGEP(product_layout(schema), address, number);
+          if (projection != Projection::slot && program_->schemas[schema].fields[number].storage != PlaceKind::value)
+            return b_.CreateLoad(b_.getPtrTy(), slot);
+          return slot;
         }, b_.getPtrTy());
-        return !read ? field : discard ? empty_scalar() : load_place(field, expr);
+        if (!read) return field;
+        field = checked_address(field, expr, expr.at);
+        return discard ? empty_scalar() : load_place(field, expr);
       }
       auto *value = emit_expression(*expr.children[0]);
       if (!reachable()) return nullptr;
@@ -2247,13 +2254,16 @@ class LLVMEmission {
     case K::make_object: {
       auto *address = storage_.at(*fact.place);
       auto *layout = product_layout(fact.operand_type.identity);
+      const auto &schema = program_->schemas.at(fact.operand_type.identity);
       for (const auto &initializer : expr.children) {
         const auto &input = *initializer->children.front();
-        auto *value = emit_expression(input);
+        const auto index = *contexts_.front().at(initializer.get()).product_field;
+        const bool direct = schema.fields[index].storage == PlaceKind::value;
+        auto *value = emit_expression(input, direct ? Projection::value : Projection::target);
         if (!reachable()) return nullptr;
-        value = convert_result(*initializer, input, value);
-        auto *field = b_.CreateStructGEP(layout, address, *contexts_.front().at(initializer.get()).product_field);
-        assign_place(field, value, *initializer, &CheckedOperation::operand_type);
+        auto *field = b_.CreateStructGEP(layout, address, index);
+        if (direct) assign_place(field, convert_result(*initializer, input, value), *initializer, &CheckedOperation::operand_type);
+        else b_.CreateStore(value, field);
       }
       return read ? empty_scalar() : address;
     }
@@ -2467,7 +2477,7 @@ class LLVMEmission {
     for (size_t i = 0; i < bindings.size(); ++i) {
       auto &binding = bindings_[i];
       const auto &declaration = bindings[i];
-      if (!binding.reference_slot && !declaration.value_binding && !declaration.alias && declaration.selection.empty())
+      if (!binding.reference_slot && !declaration.value_binding && !declaration.embedded_slot && !declaration.alias && declaration.selection.empty())
         binding.reference_slot = slot(b_.getPtrTy(), "reference.target");
       binding.selected_place = declaration.selection.empty() ? nullptr : slot(b_.getPtrTy(), "alias.selection");
     }

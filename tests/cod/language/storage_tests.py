@@ -156,6 +156,45 @@ runner.CASES = {
         'proc run(flag:bool)->void{ptr first=make Counter;ptr second=make Counter;'
         'ptr chosen=if(flag){first}else{second};establish(chosen);chosen=second;chosen.count;return;}run(false);',
         2, "", "read of 'count' before definite initialization"),
+    "lexical_product_embedded_binding_and_explicit_place_alias": (PRELUDE +
+        'data Entry {tag:u64;ptr selected:u64;}val first<-17u64;val second<-21u64;'
+        'ref item=make Entry {tag<-3u64;selected=first;};ptr var field->item.selected;'
+        'field=second;item.selected<-23u64;behave @print(first);behave @print(second);', 0, "17\n23\n", ""),
+    "lexical_product_nullable_edges_close_a_cycle_after_reservation": (PRELUDE +
+        'data Node {count:u64;ptr next:Node;}ptr a=make Node;ptr b=make Node;a.count<-13u64;b.count<-19u64;'
+        'a.next=b;b.next=a;ref ready=a;behave @print(ready.next.count);behave @print((ready.next.next is ready));',
+        0, "19\ntrue\n", ""),
+    "lexical_product_null_field_has_the_containing_owner": (PRELUDE +
+        'data Entry {ptr selected:u64;}ref item=make Entry {selected=null;};'
+        'behave @print((item.selected is null));val target<-43u64;item.selected=target;'
+        'behave @print((item.selected is target));', 0, "true\ntrue\n", ""),
+    "lexical_product_reference_field_rejects_another_owner": (
+        'data Entry {ptr selected:u64;}val target<-3u64;ptr source=target;{{ref item=make Entry {selected=source;};}};',
+        2, "", "must share the containing product's owner"),
+    "lexical_product_slot_before_initialization_rejects_observation": (
+        'data Entry {ptr selected:u64;}ptr item=make Entry;(item.selected is null);',
+        2, "", "read of 'selected' before definite initialization"),
+    "lexical_product_ptr_slot_does_not_initialize_its_target": (
+        'data Entry {ptr selected:u64;}val reserved<-make local u64;'
+        'ref item=make Entry {selected=reserved;};item.selected;',
+        2, "", "read of 'selected' before definite initialization"),
+    "lexical_product_ref_slot_requires_a_ready_target": (
+        'data Entry {ref selected:u64;}val reserved<-make local u64;ref item=make Entry {selected=reserved;};',
+        2, "", "read of 'ref field target' before definite initialization"),
+    "lexical_product_initializes_the_dynamically_selected_slot": (PRELUDE +
+        'data Entry {ptr selected:u64;}proc run(flag:bool)->void{val source<-13u64;'
+        'ptr a=make Entry;ptr b=make Entry;ptr chosen=if(flag){a}else{b};'
+        'chosen.selected=source;behave @print(chosen.selected);return;}run(true);run(false);', 0, "13\n13\n", ""),
+    "lexical_product_does_not_initialize_an_unselected_slot": (PRELUDE +
+        'data Entry {ptr selected:u64;}proc run(flag:bool)->void{val source<-13u64;'
+        'ptr a=make Entry;ptr b=make Entry;ptr chosen=if(flag){a}else{b};'
+        'chosen.selected=source;behave @print(a.selected);return;}run(false);',
+        2, "", "read of 'selected' before definite initialization"),
+    "lexical_product_initializes_a_slot_during_deferred_invocation": (PRELUDE +
+        'using "std:exceptions" OutOfMemoryError;data Entry {ptr selected:u64;}'
+        'proc run()->void{val source<-13u64;ptr item=make Entry;'
+        'defer{behave @print(item.selected);}catch(e:const OutOfMemoryError){return;};'
+        'defer (=)(item.selected,source);return;}run();', 0, "13\n", ""),
 }
 runner.CASE_ARGUMENTS = {"shadow_error": ["-Werror=shadow"], "unrelated_warning_error": ["-Werror=missing-return"]}
 runner.EXTRA_SOURCES = [Path(__file__)]
