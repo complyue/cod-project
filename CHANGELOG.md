@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-19 — Build privately and publish immutable DBMR generations
+
+<a id="h-dbmr-immutable-20261119"></a>
+**H-DBMR-IMMUTABLE-20261119.** The project user specified “只有共享只读模式、ram region 直存和专享匿名构建发布 3 种模式” in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-19 (America/Los_Angeles), allowed native private temporary names and added “不要跨文件系统发布，确保构建在目标文件系统里”. D-22r61 and registry r945 replace the lock/marker/backoff and in-place writer portions of H-DBMR-ACCESS-MODES-20261118, H-DBMR-COOPERATING-PROCESSES-20261118, H-DBMR-CONTENTION-WORK-20261118 and H-DBMR-IMAGE-COMPLETION-20261118. Fresh-name atomicity and payload-checksum validation continue. Owned RAM publication and anonymous file-backed construction with final tail trimming serve read-mostly workloads. D-20 roadmap r10 and D-02r2 apply the revised dependency. Host mechanisms, option spellings and power-loss guarantees remain open. Prior contract: `14d5e320c4d526de15d507b3b027e6c99c5d49a2:design/ConstructionAndAcquisition.md`, “DBMR alternatives and protocol work”.
+
 ## 2026-11-19 — Align the trailing-callback introduction with its examples
 
 <a id="k-header-prose-20261119"></a>

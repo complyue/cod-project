@@ -2,6 +2,10 @@
 
 This document specifies the design of the `cod` driver that provides a REPL-like developer experience by compiling and running ephemeral executables, with session state persisted in a disk-backed memory region (DBMR). There is no JIT and no in-process code injection. Instead, each evaluation step produces a small native executable that is run immediately. Session state survives across runs via a persistent workspace file on disk.
 
+## Design authority
+
+[D-02](DesignAuthorityRegistry.md#d-02) remains a driver draft under P-03/P-04. At r2, [H-DBMR-IMMUTABLE-20261119](../CHANGELOG.md#h-dbmr-immutable-20261119) constrains DBMR operations for the driver under charter §§7.1–7.2. Multiple sessions can inspect the same immutable input while a child builds a separate version. Session conflict policy and native implementation remain open.
+
 ---
 
 ## Goals
@@ -25,15 +29,15 @@ This document specifies the design of the `cod` driver that provides a REPL-like
 
 - `cod` front-end (binary in `cod/`) implements the interactive loop and command parsing.
 - Workspace persistence:
-  - Backed by `shilos::DBMR<Root>` where `Root` defaults to `cod::WorksRoot`.
+  - The DBMR workspace schema defaults to `cod::WorksRoot`.
   - File path selectable via `--works <path>` or `-w <path>`. Default is `./.cod/works.dbmr`.
   - The root object lives inside the DBMR and owns session-scoped data as defined by the project (see WorksRoot Model below).
 - Build-and-Run pipeline (per evaluation):
   1. Assemble a minimal translation unit (TU) that includes the project-provided REPL scope header(s) from CodProject.yaml (see repl.scope).
   2. Generate a tiny `main()` that embeds the submitted statements/expressions verbatim inside a block.
   3. Compile and link the TU into an executable in a temp workdir.
-  4. Launch the executable as a child process, wiring stdio to the REPL and passing a handle to the workspace DBMR file path and open mode (e.g., via argv and/or `COD_WORKS_PATH` environment variable).
-  5. Collect exit status, stdout/stderr, and persist any updates the child writes to the DBMR.
+  4. Launch the executable as a child process, wiring stdio to the REPL and passing the selected readonly workspace path and the intended new version path (e.g., via argv and/or `COD_WORKS_PATH` environment variable).
+  5. Collect exit status, stdout/stderr, and record which complete version the child successfully published.
 - Project integration:
   - `cod` reads `CodManifest.yaml` to discover dependency snapshots and derive include paths and other toolchain flags deterministically.
   - No network activity is performed by `cod`; package resolution is handled by `codp`.
@@ -42,7 +46,7 @@ This document specifies the design of the `cod` driver that provides a REPL-like
 
 ## Command-Line Interface (CLI)
 
-- `cod [-w|--works <PATH>] [--project <PATH>]` — start an interactive session bound to the DBMR at PATH (default `./.cod/works.dbmr`). If the DBMR file does not exist, `cod` creates it with a default capacity.
+- `cod [-w|--works <PATH>] [--project <PATH>]` — start an interactive session bound to the DBMR at PATH (default `./.cod/works.dbmr`). If the image is absent, the driver can privately construct and publish the initial version.
 - `cod [-w|--works <PATH>] [--project <PATH>] -e|--eval <EXPRESSION>` — evaluate a single expression or statement and exit (non-interactive mode).
 - `cod --help` — show usage.
 
@@ -114,16 +118,7 @@ Rationale:
 
 ## DBMR Lifecycle & Capacity
 
-- Default file name: `.cod/works.dbmr` in the current working directory.
-- Open/creation:
-  - Read-only open is used for inspection commands; read-write for interactive sessions.
-  - On creation, `DBMR<WorksRoot>::create(path, free_capacity, …)` is called with a sensible default (e.g., 64–256 MiB configurable via a CLI flag in the future).
-- Close:
-  - Call `constrict_on_close(true)` when the session ends cleanly to optionally shrink the file to occupied size.
-  - The driver ensures `msync` of updates before unmapping.
-
-Concurrency model (Stage 1):
-- Single-writer semantics: one REPL mutating a given DBMR at a time. Multiple read-only observers are allowed.
+The initial workspace path defaults to `.cod/works.dbmr`. Both the runner and inspection tools open a published version readonly and validate its schema. To persist edits, build a fresh version in an owned RAM region or a private file-backed region, then publish to a fresh path. Existing readers retain the version they opened. The driver still needs a session policy for selecting the next version and resolving competing edits. [DBMR modes and publication](ConstructionAndAcquisition.md#dbmr-modes)
 
 ---
 
@@ -245,7 +240,7 @@ YAML conversion:
 
 - Build failures: show compiler and linker diagnostics verbatim, with the generated TU path and a `--keep-tmp` option to preserve artefacts for debugging.
 - Runtime failures: show exit status / signal; forward child stdout/stderr to the REPL.
-- Workspace errors: DBMR open/resize/type-mismatch errors include file path, expected vs actual `TYPE_UUID`, and guidance.
+- Workspace errors: DBMR open/build/publication/type-mismatch errors include file path, expected vs actual `TYPE_UUID`, and guidance.
 
 ---
 
@@ -270,8 +265,8 @@ YAML conversion:
 ## Open Questions
 
 - What is the minimal contract between the runner and the project scope for DBMR access? Environment variable name and argv position are proposed; the scope header can decide how to consume it.
-- Policy for default DBMR capacity and growth strategy. DBMR supports resize on demand, but we need user-friendly defaults and limits.
-- Concurrency semantics if multiple writers are unavoidable — likely to require advisory locking at the DBMR file level.
+- Capacity hints and limits for private workspace builders.
+- How should two sessions that publish different successors of the same input select the next workspace version?
 
 ---
 
@@ -281,7 +276,7 @@ YAML conversion:
   - Define `cod::WorksRoot` satisfying the regional type rules (no copy/move, in-region construction, `TYPE_UUID`).
 - `cod/main.cc`:
   - Parse `--works/-w` and `--project`.
-  - Open or create the DBMR; validate root type UUID.
+  - Open a validated workspace version or publish a completed initial image.
   - Treat each REPL submission as ordinary C++ code; wrap it minimally into a runner TU that includes the configured scope header(s) and embeds the submitted statements.
   - Drive the build pipeline and child process execution.
 - Keep YAML conversions in `*_yaml.hh` files separate from core allocation logic.
