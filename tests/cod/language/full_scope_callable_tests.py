@@ -387,6 +387,89 @@ runner.CASES = {
         'func source() yields u64{yield(7u64);}'
         'proc sink(n:u64)->void{return;}'
         'func run()->void{source() $> sink;return;}run();',2,'','a function cannot invoke a procedure'),
+    'pipeline_attachment_mirrors_preparation_without_mirroring_traversal': (IO+
+        'proc mark(n:u64)->u64{behave @print(n);return n;}'
+        'proc rows(day:u64) yields u64{behave @print(40u64);yield(day);return;}'
+        'proc stage(here input() yields u64,offset:u64) yields u64{behave @print(30u64);val amount<-offset;'
+        'for val item<-input(){yield(item+amount);};return;}'
+        'proc sink(n:u64)->void{behave @print(n);return;}'
+        'stage(rows(mark(1u64)),mark(2u64))(item)=>{sink(item);};'
+        'rows(mark(1u64)) !> stage(mark(2u64)) $> sink;'
+        'sink <$ stage(mark(2u64)) <! rows(mark(1u64));'
+        'for val item<-stage(mark(2u64)) <! rows(mark(1u64)){sink(item);};',
+        0,'1\n2\n30\n40\n3\n1\n2\n30\n40\n3\n2\n1\n30\n40\n3\n2\n1\n30\n40\n3\n',''),
+    'pipeline_attachment_keeps_the_target_selected_in_written_order': (IO+
+        'proc rows(line:const u64 in P) yields {id:u64;ref cell:const u64 in P;} -> bool where {owner P}{'
+        'if(!yield(24u64->id,line->cell)){return;}else{};yield(80u64->id,line->cell);return;}'
+        'proc stage(here source() yields {id:u64;ref cell:const u64 in S;} -> bool,witness:const u64 in S,enabled:bool) '
+        'yields {ref cell:const u64 in S;id:u64;} -> bool where {owner S}{'
+        'if(!enabled){return;}else{};for {val n<-id;ref item=cell;} := source(){continue yield(item->cell,n->id);};return;}'
+        'proc run()->void{val first<-75u64;val second<-99u64;ref selected=first;'
+        'for {val n<-id;ref item=cell;} := rows(selected) !> stage(first,{selected=second;true}){'
+        'behave @print(n);behave @print(item);continue false;};selected=first;'
+        'for {val n<-id;ref item=cell;} := stage(first,{selected=second;true}) <! rows(selected){'
+        'behave @print(n);behave @print(item);continue false;};return;}run();',0,'24\n75\n24\n99\n',''),
+    'pipeline_attachment_source_return_keeps_the_written_prefix': (IO+
+        'proc mark(n:u64)->u64{behave @print(n);return n;}'
+        'proc rows(first:u64,second:u64) yields u64{behave @print(80u64);yield(first+second);return;}'
+        'proc stage(here input() yields u64,stamp:u64) yields u64{behave @print(stamp+80u64);'
+        'for val item<-input(){yield(item);};return;}'
+        'proc sink(n:u64)->void{behave @print(n);return;}'
+        'proc forward()->u64{rows(mark(1u64),{return 7u64;}) !> stage(mark(2u64)) $> sink;return 99u64;}'
+        'proc reverse()->u64{sink <$ stage(mark(2u64)) <! rows(mark(1u64),{return 7u64;});return 99u64;}'
+        'behave @print(forward());behave @print(reverse());',0,'1\n7\n2\n1\n7\n',''),
+    'pipeline_attachment_stage_return_keeps_the_written_prefix': (IO+
+        'proc mark(n:u64)->u64{behave @print(n);return n;}'
+        'proc rows(day:u64) yields u64{behave @print(80u64);yield(day);return;}'
+        'proc stage(here input() yields u64,first:u64,second:u64) yields u64{'
+        'val amount<-first+second;for val item<-input(){yield(item+amount);};return;}'
+        'proc sink(n:u64)->void{behave @print(n);return;}'
+        'proc forward()->u64{rows(mark(1u64)) !> stage(mark(2u64),{return 7u64;}) $> sink;return 99u64;}'
+        'proc reverse()->u64{sink <$ stage(mark(2u64),{return 7u64;}) <! rows(mark(1u64));return 99u64;}'
+        'behave @print(forward());behave @print(reverse());',0,'1\n2\n7\n2\n7\n',''),
+    'pipeline_attachment_prepares_an_unopened_source': (IO+
+        'proc mark(n:u64)->u64{behave @print(n);return n;}'
+        'proc rows(day:u64) yields u64{behave @print(80u64);yield(day);return;}'
+        'proc skip(here input() yields u64,stamp:u64) yields u64{behave @print(stamp+30u64);return;}'
+        'proc sink(n:u64)->void{behave @print(n);return;}'
+        'rows(mark(1u64)) !> skip(mark(2u64)) $> sink;'
+        'sink <$ skip(mark(2u64)) <! rows(mark(1u64));',0,'1\n2\n32\n2\n1\n32\n',''),
+    'pipeline_attachment_selector_failure_stops_in_written_order': (IO+'using "std:exceptions" NullPointerException;'+
+        'proc select(n:u64,failed:bool)->u64 throws NullPointerException{try{behave @print(n);'
+        'if(failed){ptr p:u64=null in here;p;{};}else{};return n;}finally{behave @print(n+10u64);};}'
+        'proc rows(day:u64) yields u64{behave @print(80u64);yield(day);return;}'
+        'proc stage(here input() yields u64,stamp:u64) yields u64{behave @print(81u64);'
+        'for val item<-input(){yield(item);};return;}'
+        'proc sink(n:u64)->void{behave @print(n);return;}'
+        'try{rows(select(1u64,true)) !> stage(select(2u64,false)) $> sink;}catch(e:const NullPointerException){behave @print(9u64);};'
+        'try{sink <$ stage(select(2u64,false)) <! rows(select(1u64,true));}catch(e:const NullPointerException){behave @print(9u64);};'
+        'try{rows(select(1u64,false)) !> stage(select(2u64,true)) $> sink;}catch(e:const NullPointerException){behave @print(9u64);};'
+        'try{sink <$ stage(select(2u64,true)) <! rows(select(1u64,false));}catch(e:const NullPointerException){behave @print(9u64);};',
+        0,'1\n11\n9\n2\n12\n1\n11\n9\n1\n11\n2\n12\n9\n2\n12\n9\n',''),
+    'pipeline_attachment_supplier_return_crosses_entered_cleanups': (IO+
+        'proc rows() yields u64{try{yield(7u64);behave @print(80u64);}finally{behave @print(31u64);};return;}'
+        'proc stage(here input() yields u64) yields u64{try{for val item<-input(){yield(item);};'
+        'behave @print(81u64);}finally{behave @print(32u64);};return;}'
+        'proc run()->u64{for val item<-stage <! rows{return item;};return 99u64;}'
+        'behave @print(run());',0,'31\n32\n7\n',''),
+    'pipeline_attachment_checked_sink_failure_crosses_entered_cleanups': (IO+'using "std:exceptions" NullPointerException;'+
+        'proc rows() yields u64{try{yield(7u64);}catch(e:const NullPointerException){behave @print(80u64);}'
+        'finally{behave @print(31u64);};return;}'
+        'proc stage(here input() yields u64) yields u64{try{for val item<-input(){yield(item);};}'
+        'catch(e:const NullPointerException){behave @print(81u64);}finally{behave @print(32u64);};return;}'
+        'proc sink(n:u64)->void throws NullPointerException{behave @print(n);ptr p:u64=null in here;p;return;}'
+        'try{rows !> stage $> sink;}catch(e:const NullPointerException){behave @print(33u64);};',
+        0,'7\n31\n32\n33\n',''),
+    'pipeline_attachment_rejects_incompatible_feedback': (
+        'func rows() yields u64 -> bool{yield(7u64):void;}'
+        'func stage(here input() yields u64) yields u64{for val item<-input(){yield(item);};}'
+        'for val item<-stage <! rows(){};',2,'','prepared producer does not match the selected here contract'),
+    'pipeline_attachment_establishes_the_processor_role': (IO+
+        'func rows() yields u64{yield(7u64);}'
+        'func both() yields u64{yield(80u64);}'
+        'func both(here input() yields u64) yields u64{for val item<-input(){yield(item+1u64);};}'
+        'proc sink(n:u64)->void{behave @print(n);return;}'
+        'for val item<-both(){sink(item);};rows !> both $> sink;sink <$ both <! rows;',0,'80\n8\n8\n',''),
     'lexical_handoff_nested_stage_keeps_labelled_borrow_and_feedback': (IO+
         'proc rows(line:const u64 in O) yields {id:u64;ref cell:const u64 in O;} -> bool where {owner O}{'
         'behave @print(17u64);if(!yield(line->cell,17u64->id)){return;}else{};'

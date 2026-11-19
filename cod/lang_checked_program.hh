@@ -131,8 +131,13 @@ struct CheckedOperation {
   std::vector<CheckedArgument> arguments;
   // Checked operand sources can differ from the children of the source call.
   std::optional<std::vector<const Expression *>> argument_sources;
-  // When source operands bind out of order, prepare them in written order.
-  std::vector<size_t> argument_evaluation_order;
+  struct OperandPreparation {
+    enum class Kind { ordinary, here } kind;
+    size_t slot;
+    auto operator<=>(const OperandPreparation &) const = default;
+  };
+  // An empty schedule uses ordinary parameter order. A supplied body is bound at entry.
+  std::vector<OperandPreparation> operand_preparation;
   std::vector<size_t> scope_owners;
   struct PreparedProducer {
     size_t instance;

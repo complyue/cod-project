@@ -1399,11 +1399,13 @@ class LLVMEmission {
     }
     return contextual_value(child, alternatives, "argument", prepare);
   }
-  std::vector<llvm::Value *> prepare_arguments(const Expression &expr, bool deferred = false) {
+  std::vector<llvm::Value *> prepare_arguments(const Expression &expr, bool deferred = false,
+                                               std::span<llvm::Value *> here_values = {}) {
+    using Preparation = CheckedOperation::OperandPreparation;
     std::vector<llvm::Value *> arguments;
     const auto &fact = contexts_.front().at(&expr);
     const size_t offset = expr.kind == Expression::Kind::value_call && fact.callable_call ? 1 : 0;
-    bool protect = deferred;
+    bool protect = deferred || std::ranges::any_of(fact.here_arguments, [](const auto &input) { return input.source; });
     for (size_t i = offset; !protect && i < fact.argument_count(expr); ++i)
       protect = !inert_argument(fact.argument(expr, i));
     std::vector<llvm::Value *> captured;
@@ -1424,11 +1426,15 @@ class LLVMEmission {
 
     const auto first = arguments.size();
     arguments.resize(first + fact.argument_count(expr));
-    for (size_t written = 0; written < fact.argument_count(expr); ++written) {
-      const auto i = fact.argument_evaluation_order.empty() ? written : fact.argument_evaluation_order.at(written);
-      auto *value = prepare_argument(expr, i, !offset || i || protect);
+    const auto &schedule = fact.operand_preparation;
+    const auto count = schedule.empty() ? fact.argument_count(expr) : schedule.size();
+    for (size_t written = 0; written < count; ++written) {
+      const auto [kind, slot] = schedule.empty() ? Preparation{Preparation::Kind::ordinary, written} : schedule[written];
+      if (kind == Preparation::Kind::here) {
+        if (slot >= here_values.size()) throw std::logic_error("missing checked here operand slot");
+        here_values[slot] = prepare_here_argument(expr, slot);
+      } else arguments[first + slot] = prepare_argument(expr, slot, !offset || slot || protect);
       if (!reachable()) return {};
-      arguments[first + i] = value;
     }
     check_destination_arguments(expr, arguments);
     arguments.insert(arguments.end(), captured.begin(), captured.end());
@@ -1464,23 +1470,14 @@ class LLVMEmission {
       return b_.CreateInsertValue(llvm::Constant::getNullValue(here_), activation, 1);
     }, here_);
   }
-  std::vector<llvm::Value *> prepare_here_arguments(const Expression &expr) {
-    const auto &fact = contexts_.front().at(&expr);
-    std::vector<llvm::Value *> values(fact.here_arguments.size());
-    // The supplied body slot remains empty here even when preparation prevents entry.
-    const auto &roles = fact.here_arguments;
-    const bool supplied = !roles.empty() && !roles.front().source && !roles.front().lexical;
-    for (size_t slot = supplied; slot < values.size(); ++slot) {
-      std::map<CheckedOperation::HereArgument, std::vector<size_t>> arguments;
-      for (size_t i = 0; i < contexts_.size(); ++i)
-        arguments[contexts_[i].at(&expr).here_arguments.at(slot)].push_back(i);
-      values[slot] = contextual_value(expr, arguments, "here.input", [&](const auto &input) {
-        if (input.source) return prepare_source(*input.source);
-        return here_arguments_.at(input.lexical.value());
-      }, here_);
-      if (!reachable()) break;
-    }
-    return values;
+  llvm::Value *prepare_here_argument(const Expression &expr, size_t slot) {
+    std::map<CheckedOperation::HereArgument, std::vector<size_t>> arguments;
+    for (size_t i = 0; i < contexts_.size(); ++i)
+      arguments[contexts_[i].at(&expr).here_arguments.at(slot)].push_back(i);
+    return contextual_value(expr, arguments, "here.input", [&](const auto &input) {
+      if (input.source) return prepare_source(*input.source);
+      return here_arguments_.at(input.lexical.value());
+    }, here_);
   }
   void check_destination_arguments(const Expression &expr, const std::vector<llvm::Value *> &arguments,
                                    bool deferred = false) {
@@ -1682,9 +1679,12 @@ class LLVMEmission {
     using K = Expression::Kind;
     const auto &fact = contexts_.front().at(&expr);
     if (fact.argument_sources) {
-      std::map<std::vector<const Expression *>, std::vector<size_t>> alternatives;
-      for (size_t i = 0; i < contexts_.size(); ++i)
-        alternatives[contexts_[i].at(&expr).argument_sources.value()].push_back(i);
+      using Layout = std::pair<std::vector<const Expression *>, std::vector<CheckedOperation::OperandPreparation>>;
+      std::map<Layout, std::vector<size_t>> alternatives;
+      for (size_t i = 0; i < contexts_.size(); ++i) {
+        const auto &checked = contexts_[i].at(&expr);
+        alternatives[{checked.argument_sources.value(), checked.operand_preparation}].push_back(i);
+      }
       if (alternatives.size() > 1)
         return contextual_value(expr, alternatives, "scope.inputs", [&](const auto &) {
           return emit_checked_expression(expr, projection, discard);
@@ -1818,9 +1818,9 @@ class LLVMEmission {
     }
     case K::value_call: case K::call: case K::behave: case K::perform: case K::pipeline: {
       return temporary_scope(expr.at, !fact.borrowed_result || read ? scalar_ : static_cast<llvm::Type *>(b_.getPtrTy()), [&]() -> llvm::Value * {
-        const auto here_values = prepare_here_arguments(expr);
-        if (!reachable()) return nullptr;
-        const auto arguments = prepare_arguments(expr);
+        // An entry-time supplied body leaves its slot empty during preparation.
+        std::vector<llvm::Value *> here_values(fact.here_arguments.size());
+        const auto arguments = prepare_arguments(expr, false, here_values);
         if (!reachable()) return nullptr;
         llvm::AllocaInst *here_site = nullptr;
         if (fact.supplied_here && program_->methods[program_->instances[fact.supplied_here->instance].method].here_group) {
