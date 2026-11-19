@@ -18,7 +18,7 @@ runner.CASES = {
     'selection_effect_once': (IO+'val x<-1,y<-2;ptr p=x;var a->{behave @print(9);p};a=y;behave @print(a);behave @print(p);',0,'9\n2\n2\n',''),
     'selection_rebinds_original': (IO+'val x<-1,y<-2;ptr p=x;var a->{p=y;p};p=x;behave @print(a);',0,'1\n',''),
     'nested_name_lifetime': (IO+'ref x:i64=1,y:i64=2;ptr p=x,q=y;'
-        '{{var a->p;a=q;behave @print(p);}};behave @print(p);',0,'2\n1\n',''),
+        '{{var a->p;a=q;behave @print(p);}};behave @print(p);',0,'2\n2\n',''),
     'shadow_resolves_before_declaration': ('ref x:i64=1;{{var x->x;x<-2;}};',2,'',"duplicate declaration of 'x'"),
     'const_alias_binding_writable_target': (IO+'val x<-1,y<-2;ptr p=x;const var a->p;a<-3;p=y;behave @print(a);',0,'2\n',''),
     'readonly_alias_observes_mutation': (IO+'val x<-1,y<-2;ptr p=x;var a:const->p;p<-3;behave @print(a);a=y;behave @print(p);p<-4;behave @print(a);',0,'3\n2\n4\n',''),
@@ -42,7 +42,7 @@ runner.CASES = {
     'deferred_rebind_changes_original': (IO+'proc run()->void{val x<-1,y<-2;ptr p=x;var a->p;'
         'defer{behave @print(p);};defer{a=y;};}run();',0,'2\n',''),
     'deferred_alias_declaration': (IO+'proc run()->void{val x<-1,y<-2;ptr p=x,q=y;'
-        'defer{behave @print(p);};defer{ {{var a->p;a=q;behave @print(p);}};};}run();',0,'2\n1\n',''),
+        'defer{behave @print(p);};defer{ {{var a->p;a=q;behave @print(p);}};};}run();',0,'2\n2\n',''),
     'deferred_alias_initializes': (IO+'proc run()->void{val x<-make local i64;var a->x;'
         +observe_after_cleanup('defer{a<-17;};','behave @print(x);')+'}run();',0,'17\n',''),
     'deferred_prepared_value': (IO+'proc show(x:i64)->void{behave @print(x);}{{val x<-1,y<-2;ptr p=x;var a->p;defer show(a);p=y;defer{behave @print(a);};}};',0,'2\n1\n',''),

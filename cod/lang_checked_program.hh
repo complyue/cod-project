@@ -342,6 +342,9 @@ struct CheckedMethod {
     std::vector<bool> nonnull;
     // These inputs use borrowed transport while retaining val/holder semantics.
     std::set<size_t> live_values;
+    // A reference input carries the supplier's binding slot.
+    std::set<size_t> live_bindings;
+    std::set<std::pair<size_t, size_t>> overlapping_input_bindings;
     // Entry observations use input ordinals until the body allocates local slots.
     std::set<std::pair<size_t, size_t>> disjoint_input_targets;
     CleanupEquations::BooleanValues boolean_conditions;

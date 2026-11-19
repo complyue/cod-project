@@ -161,7 +161,8 @@ reject('callable_unknown_alternative', definitions=SET+SET.replace('set(','other
 reject('declared_failure', definitions=SET.replace(')->void',')->void throws NullPointerException'))
 reject('cleanup_overwrite', setup=BORROWED_OUTPUT, work='{{defer{ok<-true;};defer set(ok,p);}};')
 reject('source_pointer_rebound_after_cleanup', setup=BORROWED_OUTPUT, work='{{defer set(ok,p);}};p=q;')
-case('cleanup_local_pointer_rebind', setup=BORROWED_OUTPUT, work='{{defer{p=q;{}};defer set(ok,p);}};')
+case('cleanup_local_pointer_rebind', setup=BORROWED_OUTPUT+'ptr saved=p;',
+     work='{{defer{p=q;{}};defer set(ok,p);}};', yes='saved')
 reject('prepared_borrow_overwrite', definitions=BORROW, setup=BORROWED_OUTPUT+'val source<-p is not null;', work='{{defer copy(ok,source);source<-true;}};')
 reject('deferred_borrow_overwrite', setup=BORROWED_OUTPUT+'val source<-p is not null;', work='{{defer{ok<-source;};source<-true;}};')
 reject('cleanup_bad_chain', setup=BORROWED_OUTPUT+'val source<-p is not null;', work='{{defer{ok<-source;};defer{source<-true;};}};')

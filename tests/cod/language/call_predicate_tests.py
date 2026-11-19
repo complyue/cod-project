@@ -34,7 +34,8 @@ safe('copied_boolean', setup='val ok<-has(p);val saved<-ok;ok<-false;', conditio
 safe('overwritten_boolean', setup='val ok<-true;ok<-has(p);', condition='ok')
 safe('guarded_expression', condition='try{has(p)}finally{}')
 safe('scoped_expression', condition='{{return has(p);}}')
-safe('scoped_argument', condition='has({ptr selected=p;{{defer{selected=q;};}};selected})')
+safe('scoped_argument', condition='has({ptr selected=p;{{defer{selected=q;};}};selected})',
+     yes='q', output='11\n11\n0\n0\n')
 TARGET = 'func target(ptr a:i64 in O)->ptr i64 in O where {owner O}{return a;}'
 safe('borrowed_result_predicate', definitions=TARGET+SIGNATURE+'{return target(a) is not null;}')
 safe('borrowed_result_argument', definitions=TARGET+CHECK, condition='has(target(p))')

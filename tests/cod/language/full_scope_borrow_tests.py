@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Immediate scope operands use ordinary borrowed target and owner contracts."""
+"""Immediate scope bodies use live reference slots and ordinary target owners."""
 from pathlib import Path
 import foundation_tests as runner
 
@@ -11,6 +11,14 @@ SELECT = (
 )
 VALUES = ('func one()->u64{return 1u64;}func two()->u64{return 2u64;}'
           'func wrap(val source:func()->u64)->func()->u64{return func[source]()->u64{return source();};}')
+CHECKED = NPE + ('func error()->const NullPointerException{ptr nil:u64=null in here;'
+                 'try{nil;{}}catch(e:const NullPointerException){return e;};return error();}')
+SLOT_METHOD = 'proc (<=>)(ptr a:i64 in O,ptr b:i64 in O)->void'
+SLOT_BODY = ' where {owner O}{if(a is not null){ {{b=null;behave @print(a);}}; }else{};}'
+SLOT_CALLS = ('val x<-1,y<-7;ptr p=x,q=y;'
+              'try{p<=>p;}catch(e:const NullPointerException){behave @print(8);};behave @print(p is null);'
+              'p=x;try{p<=>q;}catch(e:const NullPointerException){behave @print(9);};'
+              'behave @print(p is null);behave @print(q is null);')
 
 
 def query(body):
@@ -37,12 +45,12 @@ def conditional_scope(body, before='ptr selected:u64 in O=if(flag){input}else{nu
 
 
 runner.CASES = {
-    'local_slot_and_deferred_target': (IO+'ref a:u64=1u64;ref b:u64=10u64;ref p:u64=a;'
-        '{{p=b;defer{p<-20u64;};}};behave @print(p is a);behave @print(a+b);', 0, 'true\n21\n', ''),
-    'nullable_slot_can_rebind_locally': (IO+'ptr p:u64=null in here;ref b:u64=10u64;'
+    'live_slot_and_deferred_write': (IO+'ref a:u64=1u64;ref b:u64=10u64;ref p:u64=a;'
+        '{{p=b;defer{p<-20u64;};}};behave @print(p is b);behave @print(a+b);', 0, 'true\n21\n', ''),
+    'nullable_slot_can_rebind': (IO+'ptr p:u64=null in here;ref b:u64=10u64;'
         '{{behave @print(p is null);p=b;behave @print(p);p=null;}};behave @print(p is null);', 0, 'true\n10\ntrue\n', ''),
     'nonnull_ptr_can_rebind_to_null': (IO+'ref a:u64=2u64;ptr p:u64=a;'
-        '{{behave @print(p);p=null;behave @print(p is null);}};behave @print(p);', 0, '2\ntrue\n2\n', ''),
+        '{{behave @print(p);p=null;behave @print(p is null);}};behave @print(p is null);', 0, '2\ntrue\ntrue\n', ''),
     'nullable_read_infers_checked_failure': (NPE+'ptr p:u64=null in here;{{return p;}};', 2, '',
         'checked exception'),
     'nullable_read_can_be_handled': (IO+NPE+'ptr p:u64=null in here;'
@@ -156,7 +164,31 @@ runner.CASES = {
         'behave @print({{target<-wrap(two);return original();}});behave @print(original());', 0, '2\n2\n', ''),
     'generic_default_parameter_roles': (IO+VALUES+'func retain(input:T)->const T where T{return {{return input;}};}'
         'behave @print(retain(3u64));func saved=retain(one);behave @print(saved());behave @print(retain(8));', 0, '3\n1\n8\n', ''),
+    'prepared_transfer_keeps_target_across_live_rebind': (IO+
+        'proc run()->void{val a<-11u64,b<-22u64;ptr p=a;defer{behave @print(a);behave @print(b);};'
+        'defer (<-)(p,7u64);{{p=b;}};behave @print(p);}run();', 0, '22\n7\n22\n', ''),
+    'overlapping_supplier_binding_slots': (
+        IO+NPE+SLOT_METHOD+' throws NullPointerException'+SLOT_BODY+SLOT_CALLS, 0, '8\ntrue\n1\nfalse\ntrue\n', ''),
+    'overlapping_slots_keep_nullable_read_obligation': (
+        IO+NPE+SLOT_METHOD+SLOT_BODY+SLOT_CALLS, 2, '', 'checked exception'),
 }
+
+READY_REPLACEMENT = 'val a<-make local u64;val b<-22u64;ptr p=a;'
+UNWRITTEN_REPLACEMENT = 'val a<-11u64;val b<-make local u64;ptr p=a;'
+for name, declarations, body, expected, diagnostic in (
+    ('nested_rebind', '', READY_REPLACEMENT+'{{ {{p=b;}}; }};return p;', '22\n', ''),
+    ('prepared_rebind_in_cleanup', '', READY_REPLACEMENT+'{{defer (=)(p,b);}};return p;', '22\n', ''),
+    ('discarded_rebind_does_not_read_payload', '', UNWRITTEN_REPLACEMENT+'ptr saved=p;{{p=b;}};return saved;', '11\n', ''),
+    ('rebind_drops_old_readiness', '', UNWRITTEN_REPLACEMENT+'{{defer (<-)(p,7u64);p=b;}};return p;', '', 'initialization'),
+    ('checked_failure_keeps_unwritten_target', CHECKED, UNWRITTEN_REPLACEMENT+
+        'val e<-error();try{ {{p=b;throw e;}}; }catch(x:const NullPointerException){return p;};return p;', '', 'initialization'),
+    ('checked_failure_before_rebind_keeps_old_selection', CHECKED, UNWRITTEN_REPLACEMENT+
+        'val e<-error();try{ {{throw e;p=b;}}; }catch(x:const NullPointerException){return p;};return p;', '11\n', ''),
+):
+    status = 2 if diagnostic else 0
+    runner.CASES[name] = (IO+declarations+'proc run()->u64{'+body+'}behave @print(run());', status, expected, diagnostic)
+    runner.CASES['query_'+name] = (IO+declarations+query(body)+'behave @print(queried);', status,
+                                  '' if diagnostic else '4\n', diagnostic)
 runner.EXTRA_SOURCES = [Path(__file__)]
 if __name__ == '__main__':
     raise SystemExit(runner.main())

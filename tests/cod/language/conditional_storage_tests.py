@@ -23,7 +23,7 @@ runner.CASES = {
  'ordinary_group': (run(BASE+'ref y={val extra<-2;if(flag){x}else{7}};x<-9;'+OUT('y+extra')),0,'3\n9\n',''),
  'scope_cleanup_keeps_pending_bits': (run(
      'ref x:i64=1,z:i64=3;ptr p=x;val y<-{{defer{p=z;x<-9;};return if(flag){p+0}else{x+1};}};'
-     +OUT('y')+OUT('p')+OUT('p is x')),0,'1\n9\ntrue\n2\n9\ntrue\n',''),
+     +OUT('y')+OUT('p')+OUT('p is x')),0,'1\n3\nfalse\n2\n3\nfalse\n',''),
  'finally_keeps_snapshot': (run(BASE+'ref y=try{if(flag){x}else{x+1}}finally{x<-9;{}};'+OUT('y')),0,'1\n2\n',''),
  'selected_reference_reads_after_its_finally': (run(BASE+'ref y=if(flag){try{x}finally{x<-2;{}}}else{7};x<-9;'+OUT('y')),0,'2\n7\n',''),
  'guarded_result_snapshot_after_finally': (MISSING+run(BASE+'ref y=(try{if(!flag){missing();{}}else{};x}'
