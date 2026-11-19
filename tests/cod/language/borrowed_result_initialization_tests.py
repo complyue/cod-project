@@ -31,7 +31,9 @@ case('source_slot_changed',setup=SETUP+'ptr input=a;',call='select(input,c)',aft
 case('late_slot_change_cannot_initialize',setup=SETUP+'ptr input=c;',call='select(input,a)',after='input=a;',reject=True)
 case('late_payload_write',call='select(c,a)',after='c<-9u64;',output='9\n')
 case('unrelated_payload_write',call='select(c,a)',after='b<-9u64;',reject=True)
-case('missing_loop_restore',definition=SELECT.replace('current=source;};','current=spare;};'),reject=True)
+case('missing_loop_restore', definition=HEAD+
+     '{ptr output=source,current=source;for(i in 0u64..3u64){output=current;current=spare;};return output;}',
+     reject=True)
 case('intrinsic_rebind',definition=SELECT.replace('defer (=)','defer intrinsic (=)'))
 case('saved_return_finally_rebind',definition=SELECT.replace('return output;','try{return output;}finally{output=spare;{}};'))
 case('saved_return_finally_input_rebind',definition=SELECT.replace('return output;','try{return output;}finally{source=spare;{}};'))
@@ -74,9 +76,14 @@ case('ref_return_then_write',definition=REF,call='select(a,b)',output='9\n')
 
 case('later_operand_rebind',setup=SETUP+'ptr input=a;',call='select(input,{input=c;c})')
 case('later_operand_bad_snapshot',setup=SETUP+'ptr input=c;',call='select(input,{input=a;a})',reject=True)
-USE='proc ptr_use(ptr selected:u64 in O)->void throws NullPointerException where {owner O}{behave @print(selected);}'
-case('helper_in_deferred_frame',definition=SELECT+USE,receive='',call='{{defer{ptr_use(select(a,c));};}}',read='{}')
-case('bad_helper_in_deferred_frame',definition=SELECT+USE,receive='',call='{{defer{ptr_use(select(c,a));};}}',read='{}',reject=True)
+USE=('proc ptr_use(ptr selected:u64 in O)->void where {owner O}'
+     '{if(selected is not null){behave @print(selected);}else{};}')
+DEFERRED_SELECTION=SELECT.replace(' throws NullPointerException','')+USE
+DEFERRED_TARGETS=SETUP+'ptr initialized=a,unwritten=c;'
+case('helper_in_deferred_frame', definition=DEFERRED_SELECTION, setup=DEFERRED_TARGETS,
+     receive='', call='{{defer{ptr_use(select(initialized,unwritten));};}}', read='{}')
+case('bad_helper_in_deferred_frame', definition=DEFERRED_SELECTION, setup=DEFERRED_TARGETS,
+     receive='', call='{{defer{ptr_use(select(unwritten,initialized));};}}', read='{}', reject=True)
 case('expired_local_owner',definition=SELECT+FORWARD.replace('return select(source,spare);','val local<-7u64;return select(local,local);'),call='forward(a,c)',reject=True,diagnostic='declared external owner')
 
 # Interpret normal execution and every failed-registration prefix. An earlier
