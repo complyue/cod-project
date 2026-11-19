@@ -96,6 +96,7 @@ class LLVMEmission {
   llvm::Value *query_environment_ = nullptr;
   llvm::Value *here_argument_ = nullptr;
   llvm::Value *here_destination_ = nullptr;
+  llvm::Value *suspended_return_ = nullptr;
   llvm::Function *function_ = nullptr;
   llvm::BasicBlock *finish_ = nullptr;
   // Live slots and suspended values share the complete pending state. Native
@@ -901,7 +902,10 @@ class LLVMEmission {
     if (protected_outcomes_) b_.CreateStore(null_pointer(), completion_.transfer);
     Control action{control_, block("cleanup.completed")};
     control_ = &action;
+    auto *outer_return = suspended_return_;
+    suspended_return_ = outer_return ? b_.CreateOr(outer_return, pending.has_return) : pending.has_return;
     emit();
+    suspended_return_ = outer_return;
     if (reachable()) b_.CreateBr(action.exit);
     b_.SetInsertPoint(action.exit);
     control_ = action.parent;
@@ -1608,6 +1612,9 @@ class LLVMEmission {
     }
     case K::integer: case K::boolean:
       return pack(llvm::ConstantInt::get(llvm::cast<llvm::IntegerType>(native_type(fact.type)), fact.integer), fact.type);
+    case K::return_test:
+      if (!suspended_return_) throw std::logic_error("return inspection has no suspended completion");
+      return pack(b_.CreateOr(suspended_return_, load(completion_.has_return)), Type::boolean);
     case K::real: {
       auto text = expr.text;
       if (text.ends_with("f32") || text.ends_with("f64")) text.resize(text.size() - 3);
@@ -1940,6 +1947,7 @@ class LLVMEmission {
   void begin(llvm::Function *function, const std::vector<CheckedStorage> &storage, const std::vector<CheckedBinding> &bindings,
              const CheckedFrame &frame = {}) {
     function_ = function; arguments_.clear(); retained_types_.clear(); parameter_values_.clear(); value_owners_.clear(); query_environment_ = nullptr; here_argument_ = nullptr; here_destination_ = nullptr; temporaries_ = nullptr;
+    suspended_return_ = nullptr;
     for (size_t i = 0; i < frame.inputs.size(); ++i) arguments_.push_back(function->getArg(i));
     b_.SetInsertPoint(block("entry")); finish_ = block("completion"); scope_ = nullptr; control_ = nullptr;
     owner_identities_.clear();

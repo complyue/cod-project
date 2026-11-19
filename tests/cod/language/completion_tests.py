@@ -37,6 +37,25 @@ runner.CASES = {
     "return_inspection_in_eager_operand": ('proc f()->void{defer f(if returning (){} else {});return;}', 2, "", "requires deferred execution in a lexical return destination"),
     "return_inspection_in_independent_full_scope": ('proc f()->void{defer{{if returning (){};return;}};return;}', 2, "", "requires deferred execution in a lexical return destination"),
     "return_inspection_bare_binding": ('proc f()->void{defer{if returning (result){}};return;}', 2, "", "return pattern binding requires val, ref, ptr or a complete type annotation"),
+    "return_inspection_explicit_void_and_fallthrough": (OBSERVE +
+        'proc explicit()->void{defer{if returning (){behave @print(1);}else{behave @print(2);}};return;}'
+        'func fallthrough()->void{defer{if returning (){1/0;{} }};}'
+        'proc iterated()->void{defer{if returning (){behave @print(3);}else{behave @print(4);}};'
+        'defer{if returning (){behave @print(5);}else{behave @print(6);return;}};}'
+        'explicit();fallthrough();iterated();', 0, "1\n6\n3\n", ""),
+    "return_inspection_value_tail": (OBSERVE +
+        'func f(){defer{if returning (){return 8;}};7}observe(f());', 0, "8\n", ""),
+    "return_inspection_recovers_failed_preparation": (BAD +
+        'proc f()->i64{defer{if returning (){return 99;}else{return 8;}};return bad();}observe(f());',
+        0, "8\n", "[-Wmissing-return]"),
+    "return_inspection_ordinary_suspension": (OBSERVE +
+        'proc f()->i64{defer{try{return 7;}finally{if returning (){behave @print(31);}else{behave @print(32);}};};}observe(f());',
+        0, "31\n7\n", ""),
+    "return_inspection_distinguishes_ready_paths": (OBSERVE +
+        'proc f(flag:bool)->void{val n<-make local i64;defer{if returning (){behave @print(n);}else{return;}};'
+        'if(flag){n<-1;return;}else{};}f(true);f(false);', 0, "1\n", ""),
+    "return_inspection_cannot_anchor_its_result": (
+        'proc f(){defer{if returning (){return 7u64;}};}f();', 2, "", "independent result contract"),
     "deferred_finally_initialized": (OBSERVE + '{{val n<-make local i64;defer{n<-1;}finally{observe(n);};}};', 0, "1\n", ""),
     "deferred_own_loop": (OBSERVE + '{{defer{for(i in 0..3){observe(i);};};}};', 0, "0\n1\n2\n", ""),
     "deferred_loop_mutation": (OBSERVE + '{{val n<-0;for(i in 0..3){defer{n<-n+1;observe(n);};};}};', 0, "1\n2\n3\n", ""),

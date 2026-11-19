@@ -231,6 +231,9 @@ class ScalarChecker {
   const Expression *prepared_call_ = nullptr;
   std::set<size_t> deferred_inputs_;
   std::optional<size_t> deferred_action_;
+  struct ReturnInputs {
+    std::uint64_t present = 0, absent = 0;
+  } return_inputs_;
   std::vector<CallEffects::ReadSite> read_sites_;
   std::vector<Location> declared_sites_;
   std::map<const Expression *, size_t> declared_requirements_;
@@ -1140,6 +1143,7 @@ class ScalarChecker {
     bool checks_reaching_paths() const { return initialization != InitializationCheck::suppressed; }
     std::optional<Type> caught_exception;
     std::optional<Type> invocation_result;
+    std::optional<bool> pending_return;
     const ResultContract *borrowed_return = nullptr;
     bool tracks_target_places() const { return checks_initialization() || borrowed_return; }
     bool supplied_invocation_result = false;
@@ -2432,7 +2436,7 @@ class ScalarChecker {
   }
   static std::vector<size_t> inputs(std::uint64_t mask) {
     std::vector<size_t> result;
-    for (size_t i = 0; i <= exception_categories.size(); ++i) if (mask & (std::uint64_t{1} << i)) result.push_back(i);
+    for (; mask; mask &= mask - 1) result.push_back(std::countr_zero(mask));
     return result;
   }
   void initialize(size_t id) {
@@ -3975,6 +3979,12 @@ class ScalarChecker {
     }
   }
   void refine(const Expression &expr, bool value, const std::map<const Expression *, CheckedOperation> &operations) {
+    if (expr.kind == Expression::Kind::return_test) {
+      lexical_.inputs &= value ? return_inputs_.present : return_inputs_.absent;
+      lexical_.live = lexical_.live && lexical_.inputs;
+      refresh_input_facts(lexical_);
+      return;
+    }
     const auto proof = predicate_of(operations.at(&expr));
     if (!proof) return;
     // Related tests can constrain one another in either source order. Each
@@ -4072,6 +4082,8 @@ class ScalarChecker {
           if (CleanupEquations::conjoin_conditions(reaching, CleanupEquations::boolean_conditions(path_conditions(state))).empty()) continue;
         }
         if (proving_ && validating_) {
+          if (effects.observes_return && (effects.raises_deferred_failure || (input.reason >= 2 && effects.guarded_pending_failure)))
+            implementation_gap(path.at, "return inspection requires independent deferred failure delivery on this path");
           const bool checked_body_failure = input.reason >= 3 &&
               (exception_categories.at(input.reason - 3).checked || !flow.declared.empty());
           const bool guards_checked_body = effects.guarded_pending_failure &&
@@ -5567,11 +5579,19 @@ class ScalarChecker {
                                        const Type *expected, std::vector<Type> *alternatives,
                                        ExpectedTypeUse expected_use, bool reached, EvidenceRead read = EvidenceRead::payload) const {
     ConditionalEvidence arms{{}, {}, state, state};
-    const bool yes_reaches = state.selections.reachable(state.target.branches, true);
-    const bool no_reaches = state.selections.reachable(state.target.branches, false);
-    arms.yes_state.selections.assume(state.target.branches, true);
-    arms.no_state.selections.assume(state.target.branches, false);
-    arms.yes = type_evidence(*expr.children[1], arms.yes_state, contextual, expected, alternatives, expected_use, reached && yes_reaches, read);
+    const bool return_test = expr.children.front()->kind == Expression::Kind::return_test;
+    const auto proof = return_test && state.pending_return ? std::optional{PresenceBranches::constant(*state.pending_return)} :
+        state.target.branches;
+    const bool yes_reaches = state.selections.reachable(proof, true);
+    const bool no_reaches = state.selections.reachable(proof, false);
+    arms.yes_state.selections.assume(proof, true);
+    arms.no_state.selections.assume(proof, false);
+    // A branch predicated on a prepared return cannot provide the initial
+    // evidence required to prepare that return.
+    if (return_test) arms.yes_state.returns = nullptr;
+    arms.yes = type_evidence(*expr.children[1], arms.yes_state, contextual, expected, return_test ? nullptr : alternatives,
+                            expected_use, reached && yes_reaches, read);
+    arms.yes_state.returns = state.returns;
     arms.no = type_evidence(*expr.children[2], arms.no_state, contextual, expected, alternatives, expected_use, reached && no_reaches, read);
     return arms;
   }
@@ -5597,6 +5617,7 @@ class ScalarChecker {
       if (inserted || different) unavailable(name);
     }
     if (right_exits) return left;
+    if (left.pending_return != right.pending_return) left.pending_return.reset();
     for (auto &[name, declaration] : left.local_declarations) {
       if (const auto other = right.local_declarations.find(name);
           other == right.local_declarations.end() || !declaration || other->second != declaration) {
@@ -6049,29 +6070,35 @@ class ScalarChecker {
   std::optional<Type> complete_type_finalizer(const Expression &handler, TypeEvidenceExits::Path &pending,
                                               TypeEvidenceExits &outgoing, CleanupBoundary boundary) const {
     TypeEvidenceExits exits;
+    const auto inherited = pending.state.pending_return;
+    if (pending.returned()) pending.state.pending_return = true;
     pending.state.exits = &exits;
     const auto type = type_evidence(handler, pending.state);
     pending.state.exits = nullptr;
+    pending.state.pending_return = inherited;
     for (auto &path : exits.paths) {
+      path.state.pending_return = inherited;
       if (boundary == CleanupBoundary::deferred && !path.returned() && pending.returned()) {
         path.retained_return = true;
         path.result = pending.result;
       }
       forward_type_exit(outgoing, path);
     }
-    return type;
+    return pending.state.selections.initialization_reachable ? type : std::optional<Type>{Type::never};
   }
-  TypeEvidenceExits replay_type_defer(const Expression &entry, TypeEvidenceState state, size_t pending_error) const {
+  TypeEvidenceExits replay_type_defer(const Expression &entry, TypeEvidenceState state, size_t pending_error, bool returned) const {
     using K = Expression::Kind;
     TypeEvidenceExits incoming, outgoing;
     enter_type_defer(state);
+    state.pending_return = returned;
     state.exits = &incoming;
     // The current lowering enters any guarded deferred entry with its pending
     // failure. Model this until native cleanup separates the error queue.
     if (entry.children.size() > 1 && pending_error)
       merge_type_exits(incoming, {pending_error}, state);
     else if (type_evidence(*entry.children.front(), state, false, nullptr, nullptr,
-                           ExpectedTypeUse::materialization, true, EvidenceRead::discarded) != Type::never)
+                           ExpectedTypeUse::materialization, true, EvidenceRead::discarded) != Type::never &&
+             state.selections.initialization_reachable)
       merge_type_exits(outgoing, {0}, state);
 
     const Expression *finalizer = nullptr;
@@ -6089,7 +6116,8 @@ class ScalarChecker {
       TypeEvidenceExits exits;
       caught.exits = &exits;
       if (type_evidence(*handler.children.front(), caught, false, nullptr, nullptr,
-                        ExpectedTypeUse::materialization, true, EvidenceRead::discarded) != Type::never)
+                        ExpectedTypeUse::materialization, true, EvidenceRead::discarded) != Type::never &&
+          caught.selections.initialization_reachable)
         merge_type_exits(exits, {0}, caught);
       for (auto &path : exits.paths) {
         leave_type_catch(path.state, *selected, handler.text);
@@ -6273,7 +6301,7 @@ class ScalarChecker {
       invocation.prepared_call.reset();
       invocation.deferred = nullptr;
       // The declaration supplies names. The queue supplies the live values.
-      auto completed = replay_type_defer(*action.entry, std::move(invocation), error);
+      auto completed = replay_type_defer(*action.entry, std::move(invocation), error, returned);
       for (auto &path : completed.paths) {
         const bool replacement = path.returned();
         const auto &proof = replacement ? path.result : result;
@@ -6922,7 +6950,10 @@ class ScalarChecker {
       if (state.selections.tracking) target_facts.branches = PresenceBranches::constant(expr.text == "true");
       return Type::boolean;
     case K::return_test:
-      implementation_gap(expr.at, "deferred return-state inspection");
+      if (!expr.binding.empty() || !expr.owner_name.empty())
+        implementation_gap(expr.at, "mode, type and owner patterns in deferred return inspection");
+      if (state.pending_return) target_facts.branches = PresenceBranches::constant(*state.pending_return);
+      return Type::boolean;
     case K::null_ref:
       view.view = true;
       view.nullable = true;
@@ -7249,8 +7280,9 @@ class ScalarChecker {
       const auto condition = child(0);
       if (state.returns && condition == Type::never) return Type::never;
       if (state.required && condition != Type::boolean && condition != Type::never) fail(expr.at, "condition requires bool");
+      const auto pending_return = expr.children[0]->kind == K::return_test ? state.pending_return : std::nullopt;
       if (state.deferred) state.selections.observe_choice(state.target.branches);
-      const auto condition_proof = state.target.branches;
+      const auto condition_proof = pending_return ? std::optional{PresenceBranches::constant(*pending_return)} : state.target.branches;
       const bool reaches_yes = state.selections.reachable(condition_proof, true);
       const bool reaches_no = state.selections.reachable(condition_proof, false);
       if (condition != Type::never && reaches_yes && reaches_no) capture_preparation_targets(expr, state);
@@ -7295,6 +7327,14 @@ class ScalarChecker {
       }
       if (!reaches_yes) yes_state.deferred_queue = no_state.deferred_queue;
       if (!reaches_no) no_state.deferred_queue = yes_state.deferred_queue;
+      if (pending_return) {
+        if (*pending_return) {
+          state = merge_evidence(std::move(yes_state), no_state, true);
+          return yes;
+        }
+        state = merge_evidence(std::move(no_state), yes_state, true);
+        return no;
+      }
       if (state.checks_initialization() && reaches_yes != reaches_no) {
         // The type pass still needs both arms for lexical and result evidence.
         const auto &reaching = reaches_yes ? yes_state : no_state;
@@ -7440,8 +7480,11 @@ class ScalarChecker {
           const auto &joined = finalizer_entry ? *finalizer_entry : state;
           std::optional<TypeEvidenceState> incoming;
           if (result != Type::never) incoming = joined;
-          for (const auto &path : outgoing.paths)
-            incoming = incoming ? merge_evidence(std::move(*incoming), path.state) : path.state;
+          for (const auto &path : outgoing.paths) {
+            auto suspended = path.state;
+            if (path.returned() && finalizer->inspects_return()) suspended.pending_return = true;
+            incoming = incoming ? merge_evidence(std::move(*incoming), suspended) : std::move(suspended);
+          }
           // An abandoned normal path contributes lexical declarations only.
           finalizer_entry = merge_evidence(std::move(*incoming), joined, true);
         }
@@ -9613,14 +9656,22 @@ class ScalarChecker {
     auto *outer = abrupt_;
     AbruptFlow incoming{lexical_.scopes.size(), {}};
     if (expr.kind == Expression::Kind::deferred) {
-      for (size_t category = 1; category < exception_categories.size(); ++category) {
-        auto state = lexical_; state.inputs = std::uint64_t{1} << category;
-        state.input_facts = {{category, state.input_facts.at(0)}};
-        incoming.paths.push_back({std::move(state), ExceptionFacts::arrival(action).restricted({category}), expr.at, Completion::failure(category)});
-      }
-      auto state = lexical_; state.inputs = std::uint64_t{1} << exception_categories.size();
-      state.input_facts = {{exception_categories.size(), state.input_facts.at(0)}};
-      incoming.paths.push_back({std::move(state), {}, expr.at, {2, false}});
+      const bool observes_return = return_inputs_.present != 0;
+      const auto arrive = [&](Completion reason, const ExceptionFacts &exceptions) {
+        for (const bool returned : {false, true}) {
+          if (returned && !observes_return) break;
+          const auto input = CleanupEquations::deferred_input({reason.reason, returned}, true, observes_return);
+          const auto normal = CleanupEquations::deferred_input({0, returned}, true, observes_return);
+          auto state = before;
+          state.inputs = std::uint64_t{1} << input;
+          state.input_facts = {{input, before.input_facts.at(normal)}};
+          (returned ? return_inputs_.present : return_inputs_.absent) |= state.inputs;
+          incoming.paths.push_back({std::move(state), exceptions, expr.at, reason});
+        }
+      };
+      for (size_t category = 1; category < exception_categories.size(); ++category)
+        arrive(Completion::failure(category), ExceptionFacts::arrival(action).restricted({category}));
+      arrive({2, false}, {});
     }
     abrupt_ = &incoming;
     const auto body = check(*expr.children[0], instance, operations, read, discard, expected, expected_use);
@@ -9756,6 +9807,7 @@ class ScalarChecker {
         queue = cleanup_.append(previous.input_facts.at(input).queues.at(cleanup_scope_), queue);
       }
     };
+    const auto inherited_return_inputs = return_inputs_;
     if (finalizer) {
       for (const auto *paths : {&outgoing.paths, &control_inputs})
         for (const auto &path : *paths) observe_saved_target(path.state.returned);
@@ -9763,8 +9815,23 @@ class ScalarChecker {
       refresh_input_facts(lexical_);
       lexical_.returned = {};
       for (const auto input : inputs(lexical_.inputs)) lexical_.input_facts.at(input).queues.at(cleanup_scope_) = 0;
+      if (finalizer->inspects_return()) {
+        return_inputs_ = {};
+        for (const auto &state : normals) if (state.live) {
+          return_inputs_.present |= state.inputs & inherited_return_inputs.present;
+          return_inputs_.absent |= state.inputs & inherited_return_inputs.absent;
+        }
+        for (const auto *paths : {&outgoing.paths, &control_inputs}) for (const auto &path : *paths) {
+          if (path.completion.returned) return_inputs_.present |= path.state.inputs;
+          else {
+            return_inputs_.present |= path.state.inputs & inherited_return_inputs.present;
+            return_inputs_.absent |= path.state.inputs & inherited_return_inputs.absent;
+          }
+        }
+      }
     }
     const auto cleanup = finalizer ? check(*finalizer, instance, operations) : Type{Type::void_type};
+    return_inputs_ = inherited_return_inputs;
     if (cleanup != Type::void_type && cleanup != Type::never) fail(expr.at, "finally must complete with void or an explicit return");
     const auto final_state = lexical_;
     abrupt_ = outer;
@@ -10003,7 +10070,14 @@ class ScalarChecker {
       operation.predicate = constant_predicate(operation.integer);
       break;
     case K::return_test:
-      implementation_gap(expr.at, "deferred return-state inspection");
+      if (!expr.binding.empty() || !expr.owner_name.empty())
+        implementation_gap(expr.at, "mode, type and owner patterns in deferred return inspection");
+      if (checking_method_ && checking_method_->here_group)
+        implementation_gap(expr.at, "return inspection through a supplied here group");
+      if (lexical_.live && (lexical_.inputs & return_inputs_.present & return_inputs_.absent))
+        implementation_gap(expr.at, "distinguishing the completions suspended by this finally");
+      operation.type = Type::boolean;
+      break;
     case K::null_ref:
       if (read) implementation_gap(expr.at, "untyped null in a payload expression; bind a typed ptr view first");
       operation.type = Type::null_ref; operation.view = operation.nullable_view = true; select_targets(operation, {null_target});
@@ -10946,6 +11020,7 @@ class ScalarChecker {
         const auto was_delayed = delayed_;
         const auto previous_inputs = deferred_inputs_;
         const auto previous_action = deferred_action_;
+        const auto previous_return_inputs = return_inputs_;
         auto *outer = abrupt_;
         delayed_controls_.insert(loop_controls_.begin(), loop_controls_.end());
         delayed_ = true;
@@ -10968,9 +11043,13 @@ class ScalarChecker {
         lexical_.payload_writes.clear();
         const auto incoming = incoming_payloads(action);
         lexical_.exceptions = incoming;
-        lexical_.inputs = 1;
+        summary.observes_return = expr.inspects_return();
+        return_inputs_ = {summary.observes_return ? std::uint64_t{1} << CleanupEquations::deferred_return_offset : 0, 1};
+        lexical_.inputs = return_inputs_.absent | return_inputs_.present;
         lexical_.selections = {};
         lexical_.input_facts = {{0, {lexical_.initialized, {}, incoming, {{cleanup_scope_, 0}}, lexical_.present}}};
+        if (summary.observes_return)
+          lexical_.input_facts.emplace(CleanupEquations::deferred_return_offset, lexical_.input_facts.at(0));
         lexical_.requirements.clear();
         lexical_.returned = {};
         lexical_.live = true;
@@ -11020,6 +11099,7 @@ class ScalarChecker {
         delayed_ = was_delayed;
         deferred_inputs_ = previous_inputs;
         deferred_action_ = previous_action;
+        return_inputs_ = previous_return_inputs;
         abrupt_ = outer;
       } else {
         const auto *prepared = prepared_call_;
@@ -11221,7 +11301,7 @@ class ScalarChecker {
     deferred_actions_with_checked_scopes_.clear();
     loop_controls_.clear(); delayed_controls_.clear(); deferred_inputs_.clear(); active_loops_.clear();
     caught_.reset(); catch_bindings_.clear(); caught_inputs_.clear();
-    captures_ = nullptr; delayed_ = false; deferred_action_.reset(); prepared_call_ = nullptr;
+    captures_ = nullptr; delayed_ = false; deferred_action_.reset(); return_inputs_ = {}; prepared_call_ = nullptr;
     cleanup_scope_ = 0; next_scope_ = 1;
     next_target_version_ = 0;
     next_selection_identity_ = 0; selection_sources_.clear(); incoming_selections_.clear();

@@ -212,8 +212,14 @@ struct Completion {
 };
 
 class CleanupEquations {
-  static_assert(exception_categories.size() < 64);
 public:
+  static constexpr size_t deferred_return_offset = exception_categories.size() + 1;
+  static_assert(2 * deferred_return_offset <= 64);
+  static size_t deferred_input(Completion completion, bool guarded, bool observes_return) {
+    const auto arrival = !guarded || completion.reason < 2 ? 0 :
+        completion.reason == 2 ? exception_categories.size() : completion.reason - 3;
+    return arrival + (observes_return && completion.returned ? deferred_return_offset : 0);
+  }
   using BooleanPayload = std::pair<std::optional<size_t>, size_t>;
   using BindingSnapshot = std::pair<size_t, std::set<size_t>>;
   // Necessary path facts shared by value summaries and read obligations.
@@ -998,6 +1004,8 @@ public:
     MissingInitialization uninitialized_captures{};
     bool needs_checked_cleanup_proof = false;
     bool guarded_pending_failure = false;
+    bool observes_return = false;
+    bool raises_deferred_failure = false;
     // Necessary immutable input facts for reaching this queue completion.
     ConditionClauses reaching{ConditionFacts{}};
     // Necessary Boolean observations for this completion, relative to action entry.
@@ -1075,6 +1083,7 @@ public:
     bool guarded = false;
     std::vector<Path> paths;
     bool enforce_checked_boundary = false;
+    bool observes_return = false;
   };
 private:
   struct Queue {
@@ -1127,6 +1136,8 @@ private:
     result.declared_failures.insert(second.declared_failures.begin(), second.declared_failures.end());
     result.needs_checked_cleanup_proof = first.needs_checked_cleanup_proof || second.needs_checked_cleanup_proof;
     result.guarded_pending_failure = first.guarded_pending_failure || second.guarded_pending_failure;
+    result.observes_return = first.observes_return || second.observes_return;
+    result.raises_deferred_failure = first.raises_deferred_failure || second.raises_deferred_failure;
     if (!unconditional(second.action_reaching)) {
       const auto unknown = unknown_boolean();
       const auto lifted = substitute_boolean_payloads(second.action_reaching, [&](size_t place) -> const BooleanValue * {
@@ -1190,6 +1201,8 @@ private:
     const auto previous_declared = known.declared_failures;
     const auto previous_checked_cleanup = known.needs_checked_cleanup_proof;
     const auto previous_guarded_failure = known.guarded_pending_failure;
+    const auto previous_return_observation = known.observes_return;
+    const auto previous_deferred_failure = known.raises_deferred_failure;
     const auto previous_selections = known.selections;
     const auto previous_symbols = known.symbols;
     const auto previous_reaching = known.reaching;
@@ -1201,6 +1214,8 @@ private:
     known.declared_failures.insert(effects.declared_failures.begin(), effects.declared_failures.end());
     known.needs_checked_cleanup_proof = previous_checked_cleanup || effects.needs_checked_cleanup_proof;
     known.guarded_pending_failure = previous_guarded_failure || effects.guarded_pending_failure;
+    known.observes_return = previous_return_observation || effects.observes_return;
+    known.raises_deferred_failure = previous_deferred_failure || effects.raises_deferred_failure;
     for (const auto &[read, before] : effects.reads) merge_read(known.reads, read, before);
     combine_initialization(known.initialized, known.uninitialized, effects.initialized, effects.uninitialized, true);
     std::erase_if(known.present, [&](size_t id) { return !effects.present.contains(id); });
@@ -1233,6 +1248,7 @@ private:
         previous_selections != known.selections || previous_symbols != known.symbols || previous_payload_writes != known.payload_writes ||
         previous_present != known.present || previous_booleans != known.booleans || previous_declared != known.declared_failures ||
         previous_checked_cleanup != known.needs_checked_cleanup_proof || previous_guarded_failure != known.guarded_pending_failure ||
+        previous_return_observation != known.observes_return || previous_deferred_failure != known.raises_deferred_failure ||
         previous_reaching != known.reaching || previous_action_reaching != known.action_reaching;
   }
 public:
@@ -1345,8 +1361,7 @@ public:
       } else {
         const auto &action = actions_.at(*node.action);
         const auto incoming = Completion::from(state);
-        const auto selected = !action.guarded || incoming.reason < 2 ? 0 :
-            incoming.reason == 2 ? exception_categories.size() : incoming.reason - 3;
+        const auto selected = deferred_input(incoming, action.guarded, action.observes_return);
         for (const auto &path : action.paths) {
           if (!(path.inputs & (std::uint64_t{1} << selected))) continue;
           auto next = path.completion;
@@ -1363,7 +1378,9 @@ public:
           if (action.enforce_checked_boundary &&
               ((output >= 3 && exception_categories.at(output - 3).checked) || !effects.declared_failures.empty()))
             effects.needs_checked_cleanup_proof = true;
-          if (action.guarded && incoming.reason >= 3) effects.guarded_pending_failure = true;
+          if (action.guarded && incoming.reason >= 2) effects.guarded_pending_failure = true;
+          effects.observes_return |= action.observes_return;
+          effects.raises_deferred_failure |= output >= 2;
           if (next.reason < 3) effects.thrown.clear();
           for (const auto &[intermediate, nested] : require(path.queue, next.index())) {
             auto invoked = compose(effects, nested);
