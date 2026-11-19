@@ -1,8 +1,10 @@
 # CoD exception control and regional cleanup
 
-Design revision: 120 · Recorded: 2026-11-18 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; full-scope control and live lexical input contracts; current implementation availability is recorded in the source capability reference.
+Design revision: 121 · Recorded: 2026-11-19 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; full-scope control and live lexical input contracts; current implementation availability is recorded in the source capability reference.
 
 ## Design authority
+
+- **Lexical yield in a full scope.** [H-GENERATOR-RECEPTION-20261119](../CHANGELOG.md#h-generator-reception-20261119) updates [D-17-FULL-SCOPE](DesignAuthorityRegistry.md#d-17-full-scope) at r121. D-18-HERE and D-29-GENERALIZED-FOR distinguish calling a lexically available here parameter from the full scope’s own return and cleanup. Check the two exits in the [nested generator example](RangedForAndGenerators.md#a-generator-declaration-introduces-a-here-parameter-named-yield). P-564–P-566 and the existing exception contracts continue for their covered scopes.
 
 - **Independent aggregate members.** [H-DEFER-MEMBER-TAKE-20261118](../CHANGELOG.md#h-defer-member-take-20261118) confirms that each residual member carries an independent owner and taking it transfers that owner alone. [D-17-AGGREGATE-OWNERSHIP](DesignAuthorityRegistry.md#d-17-aggregate-ownership), r118, applies P-582/P-583, C-54/C-63/C-65 and charter §§3.3/4.1/4.3/6.3/8.1. Acceptance covers indexed removal, surviving siblings, independent body failure and forwarding one holder across successive handler visits. The user also requests readonly enumeration through ordinary holder-to-view binding. D-17r119 documents the [exception-specific application](#enumerating-and-taking-deferred-failures) of [D-30’s collection operations](CollectionsAndBuiltinContainers.md#proposed-common-operations). [K-COLLECTION-INTERFACES-20261118](../CHANGELOG.md#k-collection-interfaces-20261118) records this dependency. Operation names, owning generator reception and native representation remain outside the confirmed implementation scope.
 
@@ -401,7 +403,7 @@ The initializer of `v` infers the owner named by `e`. A readonly source permits 
 Read-only enumeration is this operation applied to each member. A readonly batch supports inspection. Taking and draining require writable access to the collection. The following spellings are proposals. Assume a writable batch for this example and an in-range index `i`.
 
 ```cod
-visit(batch.exceptions) {{=> index, v;
+visit(batch.exceptions) (index, v) => {{
     report(index, v);
 }};
 
@@ -866,7 +868,7 @@ A standalone full scope invokes its niladic here body once when execution reache
 - Ordinary value results require an explicit return. `{{ 7u64; }}` does not return 7; `{{ return 7u64; }}` does. D-24's independent inference, required-value completion and expected-signature rules apply. Returned references must outlive this invocation; a reference to its local storage cannot escape merely because invocation was immediate.
 - Without an expected result, a standalone body whose only completion is throwing defaults to `void`. Thus `typeof({{ throw e; }})` is `void` for a valid exception operand, while `typeof({{ return 7u64; }})` is `u64`. The same implicit invocation and result contract apply when the expression executes. A throwing path delivers no result. The default supplies no recursive inference anchor, waives no source checks, and does not change the callback parameter’s expected signature.
 - Func/proc permissions remain those admitted at the expression's checking site; introducing the implicit callable cannot grant procedure effects in a function. Lexical slot access, initialization, checked failures, effect restoration and cleanup use the ordinary call rules. The full scope's `here` is its own invocation owner. Module definitions and module lifetime are not turned into implicit callable captures by this rule.
-- Loop continue/feedback, generator yield and nonlocal return privileges do not cross this boundary. An inner loop or generator follows its own declared contract. Ordinary catch context and its hidden tip likewise do not become ambient across an ordinary call: bare throw/rethrow needs a catch in the implicit callable; explicitly supplied exception values follow ordinary propagation rules.
+- A continue or return written in the full scope needs a destination inside that callable. The scope may call a lexical here parameter, including a generator's `yield`. The supplied body's own exits follow its lexical control destinations. Ordinary catch context and its hidden tip likewise do not become ambient across an ordinary call: bare throw/rethrow needs a catch in the implicit callable; explicitly supplied exception values follow ordinary propagation rules.
 
 ```cod
 proc write_outer() -> u64 {

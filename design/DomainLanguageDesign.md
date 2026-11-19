@@ -1,6 +1,6 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 177
+Discussion revision: 178
 
 Recorded: 2026-11-18
 
@@ -8,13 +8,13 @@ Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
 
-- **Callback lifetime.** [H-CALLABLE-MODEL-20261118](../CHANGELOG.md#h-callable-model-20261118) selects D-18-HERE for the synchronous cases in DL-01. The explicit wrapper is the acceptance baseline. P-605–P-608 cover the separate functor review. Data-to-here shorthand and overload preference remain open.
+- **Functor classification.** [H-HERE-FUNCTOR-20261118](../CHANGELOG.md#h-here-functor-20261118) records the receiver-bound functor in [D-18’s here-callable inventory](CallableViewsAndCaptures.md#forms-of-here-callable). D-07-FUNCTORS r178/P-605–P-606 uses the bounded lifetime rule to preserve receiver ownership and access. Accept the two argument bindings in DL-01 under the matching predicate contract. Selection timing, competing overloads and implementation qualification remain open.
 
-- **Related callable redesign.** r176 links the D-07r174/r175 functor and bounded-parameter alternatives to [D-18-HERE](CallableViewsAndCaptures.md#here-callables-and-direct-lexical-access) under [K-HERE-CALLABLES-20261118](../CHANGELOG.md#k-here-callables-20261118). D-18r116 owns the proposed live-slot semantics and its separate qualification review.
+- **Callable model.** D-18-HERE permits synchronous execution and forwarding of caller-supplied work. Ordinary storable functions are capture-free under H-CALLABLE-MODEL-20261118.
 
 - **Callback parameters with call-bounded use.** [D-07-CALLBACK-BOUND](DesignAuthorityRegistry.md#d-07-callback-bound), r175 DL-01, is [under review](../CHANGELOG.md#k-callback-owner-arity-20261118). C-65/C-73 and charter §4.3 motivate accepting ordinary domain callbacks while keeping each borrow valid. H-555 covers bounded lexical borrows. A parameter that hides the number of owners is a new contract. Acceptance compares two call sites, forwarding, escape and owner replacement in the [worked example](#one-callback-parameter-for-different-owner-counts). The spelling and implementation are open.
 
-- **Functor receivers.** [D-07-FUNCTORS](DesignAuthorityRegistry.md#d-07-functors), r174 DL-01, is a source proposal under [K-FUNCTOR-RECEIVER-20261118](../CHANGELOG.md#k-functor-receiver-20261118). C-10/C-65/C-73 and charter §§3.3/4.3 connect type-associated operations with checked access to borrowed targets. D-18 supplies the confirmed ordinary capture and lifetime baseline (H-555). The [receiver examples](#functor-receivers-and-callback-arguments) cover readonly dispatch, bounded forwarding and escape through a result. Functor adaptation, its value path and compiler support are pending.
+- **Functor receivers.** D-07-FUNCTORS relates C-10/C-65/C-73 to explicit operation and receiver lifetime under charter §§3.3/4.3. Respect the target access required by the selected call operator and reject unproved owner lifetimes. P-605/P-606 cover the review of preparation and overload selection.
 
 - **Named sum constructors.** [D-07-SUM-CONSTRUCTORS](DesignAuthorityRegistry.md#d-07-sum-constructors), r173 DL-01, records the [source decision](../CHANGELOG.md#h-dctor-source-20261118). C-10/C-65/C-72 and charter §§4.3/8.1 connect readable alternatives, owner-qualified construction and definite field initialization. Acceptance covers nullable membership, successful and failed initializers, staged constructor-free cycles, distinct regional slot and target identities, and [two module worlds](#publishing-and-selecting-data-constructors). Native layout and proofs, and invoking an overload on reserved storage, remain separate.
 
@@ -318,7 +318,7 @@ Haskell 2010 spells the analogous import `import Model (Receipt(Accepted))` or `
 
 #### Functor receivers and callback arguments
 
-A call-operator method can use an explicit data receiver. At a here formal the caller can write a bounded body using its live receiver slot. Implicit receiver adaptation is a separate UX choice.
+A functor is a here callable when its receiver supplies a compatible call operator to a here parameter. A direct call such as `limit(12u64)` invokes that operator on the data receiver. The selected method retains its own func/proc permissions. The here use grants bounded access to the receiver and carries no permission for its method body to read arbitrary caller locals.
 
 A proposed call-operator method takes the receiver as its first parameter. Its target access is an ordinary overload constraint. A readonly target admits only methods callable through readonly access. A writable target can use either access mode. When two applicable methods differ only in receiver target access, the writable match is exact for a writable receiver. Other arguments, owner constraints, callable kind and checked failures retain their ordinary rules.
 
@@ -332,15 +332,21 @@ func (())(self:const Threshold in O, x:u64) -> bool where {const owner O} {
 
 A method may instead declare `self:Threshold in O` when it needs writable target access. A caller with `ref limit:const Threshold in O` cannot supply that access. A caller with `const ref limit:Threshold in O` has a fixed reference slot and a writable target. The owner's allocation permission is independent of both.
 
-The explicit form uses the ordinary call operator at each invocation.
+For a predicate with one u64 input, `test` has **two outer parameters**. Its first parameter is itself callable.
 
 ```cod
-func test(here pred(x:u64) -> bool, x:u64) -> bool { return pred(x); }
-# limit is a live Threshold reference in the supplier.
-test(12u64) {{=> x; return limit(x); }};
+func test(here pred(x:u64) -> bool, n:u64) -> bool {
+    return pred(n);
+}
+
+# current is a reference to a Threshold with the readonly call overload above.
+test(current, 12u64);                         # pred gets current; n gets 12.
+test(12u64) (x) => {{ return current(x); }};     # pred gets the trailing body; n gets 12.
 ```
 
-An ordinary function cannot retain a runtime receiver. The open shorthand `test(limit, 12u64)` could supply the same here body for a named binding. For a computed receiver such as `choose_limit()`, evaluating it once can select a different target and run different effects from evaluating it at each invocation. Specify preparation and the preference between direct data and adapted arguments before accepting the shorthand.
+The `x` in the signature belongs to pred. Calling `pred(n)` supplies x inside the predicate. In a parenthesized argument position, `{{ current = strict; return 12u64; }}` is an immediate [full-scope expression](ExceptionControl.md#full-scopes-as-immediate-ordinary-calls) with result type u64. Thus `test(current, {{ current = strict; return 12u64; }})` has a u64 second argument. In the trailing spelling above the braces supply the predicate and execute when test invokes it.
+
+**Receiver preparation remains open.** If current starts at a threshold of 10 and strict has a threshold of 20, selecting the target at the first argument makes the test on 12 true. Reading the live ref slot when pred runs makes it false. The explicit body reads current at invocation. Evaluating a computed receiver such as `choose_limit()` can also have observable effects. Receiver timing and the ranking of a direct data overload against a here-functor match need separate decisions.
 
 #### One callback parameter for different owner counts
 

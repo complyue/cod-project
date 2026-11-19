@@ -1,14 +1,13 @@
 # Ranged for-loops and synchronous generators
 
-Design revision: 15 · Recorded: 2026-11-17 · Status: selected generator/feedback syntax and checked forwarding; remaining scope, effect proofs and transport pending.
+Design revision: 19 · Recorded: 2026-11-19 · Status: selected generator/feedback syntax and checked forwarding; remaining scope, effect proofs and transport pending.
 
 ## Design authority
 
-- **Full-scope dependency continuity:** [K-FULL-SCOPE-IMPLEMENTATION-20261118](../CHANGELOG.md#k-full-scope-implementation-20261118) updates only the referenced r92 qualification. This document’s semantic revision, own qualification, acceptance and exclusions are unchanged.
+- **One receiving header at each handoff.** [H-GENERATOR-RECEPTION-20261119](../CHANGELOG.md#h-generator-reception-20261119) confirms [D-29-GENERALIZED-FOR](DesignAuthorityRegistry.md#d-29-generalized-for) r18 for the named first here parameter, nested lexical invocation and full for-header equivalence. P-623 connects C-96/C-37/C-65 to readable traversal and explicit ownership. P-624 depends on D-17-FULL-SCOPE, D-18-HERE-PARAM, D-22-RECEIVE-SCOPE and D-29-HEADERS. Compare the same generator and receivers written both ways at zero and repeated handoffs. Check that returns in the two lexical bodies reach their respective suppliers. [H-HERE-HEADER-20261119](../CHANGELOG.md#h-here-header-20261119) confirms the [parenthesized header](#one-receiving-header-for-both-call-forms) at r19. Native transport and the wider qualification remain open.
 
-- **Current capture qualification:** [H-BOUNDED-IMPLEMENTATION-ADOPTION-20261117](../CHANGELOG.md#h-bounded-implementation-adoption-20261117)/[K-BOUNDED-IMPLEMENTATION-ADOPTION-20261117](../CHANGELOG.md#k-bounded-implementation-adoption-20261117) qualifies D-18's bounded ordinary value-input profile. This dependency-status update preserves this file's semantic revision, value paths, constraints and acceptance; it grants no generator body/control/owner proof. The registry owns the separate current scopes.
-
-- **Full scopes are ordinary callable invocations:** [H-FULL-SCOPE-CALLABLE-20261117](../CHANGELOG.md#h-full-scope-callable-20261117)/[K-FULL-SCOPE-CALLABLE-20261117](../CHANGELOG.md#k-full-scope-callable-20261117), [D-17-FULL-SCOPE](DesignAuthorityRegistry.md#d-17-full-scope)/P-564–P-566, covers r14→15 in the explicit-full-scope interactions below. The user confirms ordinary capture, local return and independent cleanup everywhere; D-17 owns the source acceptance. Reuse C-63/C-65/C-73/C-75/C-84 and charter §§2/3.2–3.3/4.3/6.3/8/12 for one inspectable callable/lifetime model. Preserve actual owners, permissions, declared failures and D-16; no shared cells, lifetime extension or implicit value return. [H-FULL-SCOPE-IMPLEMENTATION-20261118](../CHANGELOG.md#h-full-scope-implementation-20261118) separately qualifies D-17’s bounded r92 full-scope profile, including immediate ref/ptr inputs; general escaping borrowed-view and declared-place capture mechanisms remain outside it. D-18's value-input profile retains its independent qualification. D-10 separately records the selected trailing callback surface; complete implementation/value-path qualification remains pending.
+- **Generalized for-loops.** [K-GENERALIZED-FOR-20261118](../CHANGELOG.md#k-generalized-for-20261118), D-29r16/C-96, D-18-HERE-PARAM and D-18-HERE-BREAK. H-603 and H-HERE-ORIGIN-HANDOFF-20261118 establish caller-owned execution. H-HERE-BREAK-CONTINUE-20261118 distinguishes feedback, completion of the receiving call and supplier exit. The [two-implementation example](#generalized-for-loops) records the user’s same-generator, two-call-forms direction under charter §§3.2/4.3/6.1/8.1 and P-521–P-527/P-558–P-560/P-621–P-622. The example checks equal visits, feedback and final completion. [D-29-GENERALIZED-FOR](DesignAuthorityRegistry.md#d-29-generalized-for) records the scope and candidate relationships P-623/P-624. H-600 still fixes each borrowed yield owner. A bare generator-loop break follows from void completion under either spelling. Detailed producer admission, protocol checking and native implementation qualification remain open.
+- **Full scopes inside either body.** D-17-FULL-SCOPE and D-18-HERE govern direct access to enclosing slots, separate local return and independently drained cleanup in double braces. H-CALLABLE-MODEL-20261118 and the earlier scoped control qualification apply.
 
 - **Source and implementation scope:** [K-TRACKER-BOUNDARIES-20261117](../CHANGELOG.md#k-tracker-boundaries-20261117) continues r13→14's selected H-577–H-604 scopes under H-604's renewed derivation instruction. The remaining-work matrix below separates fixed source obligations from checker/native proofs and optional extensions; no new source rule or mechanism qualification follows. Existing C-96/C-65/C-84 and P-521–P-560 relations retain their recorded scope and candidate charter §§2/3.2–3.3/4.3/6.3/8/12 rationale. Preserve current invariants/acceptance, D-16 and D-18's existing qualification boundaries.
 
@@ -30,7 +29,7 @@ Design revision: 15 · Recorded: 2026-11-17 · Status: selected generator/feedba
 - **Human baseline:** [H-577](../CHANGELOG.md#h-577) proposes a typed single-method loop body using its lexical context and confirms that explicit body return targets the surrounding callable. The later H-580–H-584 feedback decisions below define its normal-result and continue forms. [H-578](../CHANGELOG.md#h-578) requests receiving-spec reuse and the assignment-style headers below. [H-579](../CHANGELOG.md#h-579) prefers void-only generator completion; this draft adopts that bounded recommendation without inferring approval of the remaining signature/proof details. [H-580](../CHANGELOG.md#h-580) requires unrestricted normal body-result types for void feedback and static conformity of all normal branches for non-void feedback; [D-29-FEEDBACK](DesignAuthorityRegistry.md#d-29-feedback)/P-525–P-527 records that source boundary separately. [H-581](../CHANGELOG.md#h-581) adds explicit body feedback with continue; [H-582](../CHANGELOG.md#h-582) restricts void feedback to bare continue and rejects its operand-bearing form. [H-583](../CHANGELOG.md#h-583) selects multi-field yield results through existing structural result declarations and receiving specifications. [H-584](../CHANGELOG.md#h-584) accepts the presented yields Y [-> F] syntax, omitted-feedback void and contextual multi-field feedback/receiving model. [H-585](../CHANGELOG.md#h-585) selects automatic checked-body forwarding; [H-588](../CHANGELOG.md#h-588) refines it to bypass generator catches and resume ordinary exception handling at the lexical for site. Fixed explicit generator throws remains required. [D-29-SIGNATURE](DesignAuthorityRegistry.md#d-29-signature), [D-29-FAILURES](DesignAuthorityRegistry.md#d-29-failures) and [D-29-CONTROL](DesignAuthorityRegistry.md#d-29-control) keep those source decisions separate from complete implementation qualification. [H-586](../CHANGELOG.md#h-586) requests assessment of private/native propagation versus special exception wrappers; no public wrapper hierarchy is selected. [H-587](../CHANGELOG.md#h-587) requires entered try/finally cleanup on every protected exit, regardless of lowering. [H-589](../CHANGELOG.md#h-589) treats generator cleanup as part of the whole for operation; [H-590](../CHANGELOG.md#h-590) rejects using generator-local return to replace a pending body exception or enclosing-callable return. Exact source scope and provenance are in those records.
 - **Value rationale:** candidate C-63/C-65/C-73 → C-96 → D-29 under charter §§2/3.2–3.3/4.3/6.1–6.3/8/12: express traversal, data exchange and lexical control in a checked, readable program, while reusing ordinary receiving operations and natural owner lifetimes. Native outlining must preserve that program rather than define its meaning.
 - **Dependencies / invariants:** D-10 calls/effects, D-14/D-28 owners, D-17 scopes/completion, D-18 callable values, D-22 result/receiving specifications, D-23 operations, D-24 inference and D-16 numerical compatibility. Preserve unique actual owners, access/readiness, exact cleanup and the no-closure-cell/no-lifetime-extension boundary. Callable views remain lexical, never regional. There is no C++ object copying/moving model.
-- **Non-goals:** no retained iterator object, async callback, persistent continuation, independently resumable generator frame, first-class result group, custom final generator result or physical ABI is selected. A synchronous native call stack is not a persistent execution-state contract. D-18's value-input review retains its separate qualification.
+- **Non-goals:** no retained iterator object, async callback, persistent continuation, independently resumable generator frame, first-class result group, custom final generator result or physical ABI is selected. A synchronous native call stack is not a persistent execution-state contract. D-18 governs access to the actual supplying activation.
 - **Acceptance / record:** the final section identifies observations and rejection cases for a future qualified implementation. [K-GENERATOR-DRAFT-20261117](../CHANGELOG.md#k-generator-draft-20261117) records this new draft and its open boundaries; it is not continuity qualification of a previously accepted generator mechanism. [K-GENERATOR-FEEDBACK-20261117](../CHANGELOG.md#k-generator-feedback-20261117) updates r1→2 with H-580 and a concrete pending signature proposal. [K-GENERATOR-FAILURES-20261117](../CHANGELOG.md#k-generator-failures-20261117) records r2→3 under H-584/H-585, with source-level failure composition, H-588 catch bypass, H-587 cleanup and outstanding proof scope. [K-GENERATOR-CLEANUP-20261117](../CHANGELOG.md#k-generator-cleanup-20261117) records r3→4: reuse ordinary outward failure rules while preserving the separate lexical return destinations. No compiler support is claimed.
 
 ## Data and control directions
@@ -46,6 +45,112 @@ The proposed synchronous model invokes the generator once, preparing its ordinar
 | Explicit body `return` | Completion of the lexically surrounding callable, not feedback to yield. |
 
 Describing the body as a typed anonymous single method does not make it an ordinary source callable scope or an escaping callable value. The generator may invoke it only while the enclosing loop invocation is active under the proposed synchronous boundary. Retention, deferred invocation after that boundary, or implicit boxing of outer variables requires a different design and is excluded here.
+
+## Generalized for-loops
+
+A generator decides when to enter the caller’s body, which items it supplies and what to do with the feedback. **The same generator accepts either a `for` header or a single-brace here call.** Selecting a call form does not select another traversal algorithm. The producer can be written with `yields Y -> F` and `yield(x)`, or as a void operation whose first `here` parameter has the corresponding inputs Y and result F. One implementation serves both call sites.
+
+```cod
+func ascending() yields u64 -> bool {
+    if (not yield(1u64)) { return; } else {};
+    yield(2u64);
+}
+func descending(here step(n:u64) -> bool) -> void {
+    if (not step(2u64)) { return; } else {};
+    step(1u64);
+}
+
+val by_for <- 0u64;
+for val n <- ascending() {
+    by_for <- by_for * 10u64 + n;
+    continue true;
+}
+val by_call <- 0u64;
+ascending() (n) => {
+    by_call <- by_call * 10u64 + n;
+    continue true;
+};
+```
+
+Each accumulator records visit order. With ascending, both end at 12. Replacing ascending with descending in **either** call site records 21. If both bodies send `continue false;` on the first visit, ascending records 1 and descending records 2. Each producer explicitly tests that feedback. A third generator may ignore it and keep visiting. Empty, repeated, filtered, recursive and destructive traversals keep their own behavior in either spelling.
+
+| Inside the single-brace body | Destination in both spellings |
+| --- | --- |
+| Normal tail or `continue f;` | Resumes the producer at the current handoff with F. Use bare `continue;` for void feedback. The producer chooses its next step. |
+| `break;` | Finishes the whole void traversal, runs required cleanup, and resumes the supplier just after the original call or loop. A generator has no final payload for `break value;`. |
+| `return value;` | Returns from the callable containing the supplied body, through traversal cleanup. |
+| Escaping checked failure | Reaches the supplying call or loop site. Producer catches around the handoff cannot intercept it. Producer-originated failures retain the producer’s own contract. |
+
+**What must match.** Both spellings bind the same ordinary arguments and defaults, use the same method-selection evidence, invoke the same selected implementation once, and check the supplied body against its established protocol. A `yields` declaration exposes the body as the implicit first here parameter in the here-call spelling. Written positional arguments still start with the first ordinary producer parameter. For a matching here-first declaration, a `for` body fills that first parameter. Its result type F is independent of the traversal’s final void result. A receiver with an unrelated non-void final result keeps its ordinary here-call contract. Switching spelling cannot resolve a genuine ambiguity or infer a missing protocol from a body.
+
+At each handoff retain evaluation and reception order, labels, val/ref/ptr/owning modes, owner, access and cleanup. A `for` header can select or rename fields, transfer bits with `<-`, or rebind existing destinations with `=`. Compare the here-call body with **the same receiving actions**. Introducing an independent scalar snapshot in just one version can change the program. An equivalent call must preserve the effects of header reception even when the producer invokes the body several times or never invokes it. [Receiving headers](#for-headers)
+
+Each borrowed generator output keeps its fixed actual owner for the traversal, including a generator-invocation owner spelled `in here`. A different owner on each callback invocation is an additional interface capability of an ordinary visitor. Calling a generator with braces cannot change its declared owner contract. A callback can also use double braces to request a local return and ordinary callback exception matching. Only the single-brace group supplies the loop control destinations above. These rules describe source behavior and do not require a stored callback, a coroutine, implicit function-value conversion or one native representation. [Fixed yield owners](#one-fixed-owner-per-borrowed-yield-component) · [Collection visits](CollectionsAndBuiltinContainers.md#observation-and-owner-scope) · [Here control destinations](CallableStorageAndHereAccess.md#break-and-continue-in-a-single-brace-here-body)
+
+### A generator declaration introduces a here parameter named yield
+
+These are two spellings of one method. Read the examples as alternatives in the same module world.
+
+```cod
+func emit(n:u64) yields u64 -> bool {
+    yield(n);
+}
+```
+
+```cod
+func emit(here yield(item:u64) -> bool, n:u64) -> void {
+    yield(n);
+}
+```
+
+The compiler binds the identifier `yield` to the first parameter of this method. In the worked expansion, `item` names the input for illustration. The scalar yield contract still has one unnamed output. The bool result is feedback to this particular invocation of the parameter. The outer function completes void. A helper whose first here parameter is named `step` can receive `yield` explicitly and invoke it synchronously. For example, `func relay(here step(item:u64) -> bool, n:u64) -> bool { return step(n); }` permits `relay(yield, n)` inside emit. This preserves the original consumer and its control destinations. User-written callback-first producers can keep their own parameter names. A written ordinary parameter also called `yield` would duplicate the generated formal under the usual declaration rules.
+
+A `for` header and a single-brace here call supply the same first argument. The compiler binds the receiving controls at each actual handoff. In the scalar case the call sites can read:
+
+```cod
+for val x <- emit(7u64) { continue x == 7u64; }
+emit(7u64) (x) => { continue x == 7u64; };
+```
+
+Elaborate before overload selection. Two otherwise identical body-bearing declarations written in the two spellings cannot contribute independent overloads. Ordinary method declaration/definition, defaults and duplicate-argument rules apply to the resulting signature. A signature query retains the normalized here parameter and the full checked contract. The written ordinary argument `7u64` still binds n. Recursive invocations each receive their own actual here argument.
+
+**Information that must survive elaboration.** Keep the distinction between an unnamed output and a labelled, order-independent output schema. A receiving specification still selects fields by label and preserves evaluation, delivery, owner and cleanup rules for all fields, including omitted ones. The here callback’s feedback can itself be a labelled result. Do not flatten a labelled schema into an ordered tuple. A purely structural multi-field protocol requires selectors by label. Reordering a schema declaration preserves every selection. In `yields ref T in here`, resolve the owner to the **producer invocation** before checking the supplied body. The caller's lexical permissions, checked failures and protected control exits follow the supplied single-brace body. These are requirements on the checked call, independent of the native representation.
+
+**Nested use of the first parameter.** An immediate full scope can invoke a lexically available `yield` just as it can invoke a here parameter named `step`.
+
+```cod
+proc twice() yields u64 {
+    {{ yield(7u64); return; }};
+    yield(8u64);
+}
+```
+
+If the consumer continues both times, it sees 7 and 8. The first `return;` completes the inner invocation. If the consumer itself returns on 7, its return exits the callable that supplied the consumer, running required cleanup on the way. Execution never reaches the second yield on that path. Lexical lookup identifies the actual here parameter in each activation. A separately defined ordinary helper needs an explicit here parameter to perform the same handoff.
+
+### One receiving header for both call forms
+
+The receiving operations of the single-brace here body are exactly those of the corresponding [for header](#for-headers). Each invocation prepares the yield operands, selects all existing destinations, delivers the selected outputs and enters the body. A fresh control name belongs to that invocation. Zero handoffs perform zero selections or deliveries. A missing field, an invalid owner or a forbidden receiving operation has the same diagnostic boundary in either spelling. Cross-entry write/write and write/borrowed-read overlaps have the same undefined behavior.
+
+Place the header before the body as `(…) => { … }`. Use ordinary parameter declaration syntax for fresh parameters with the expected input contract. For a single output an explicit loop control can be written with its receiving operator, including an existing destination. For a labelled schema, put the existing braced receiving specification inside the parentheses. The following pairs are alternatives:
+
+```cod
+# values() yields u64. The first pair creates a fresh n for every handoff.
+for val n <- values() { consume(n); }
+values() (n:u64) => { consume(n); };
+
+# total is an existing writable u64. The second pair updates that slot.
+for total <- values() { consume(total); }
+values() (total <-) => { consume(total); };
+
+# inspect_one yields count:u64 and ref cell:u64 in O.
+# cursor is an existing writable ref slot with owner O.
+for { cursor = cell; val n <- count; } := inspect_one(storage) { cursor <- n; }
+inspect_one(storage) ({ cursor = cell; val n <- count; }) => { cursor <- n; };
+```
+
+The explicit scalar header is the left side of the loop with the producer removed: `(val n <-)`, `(ref r =)`, `(r =)` and `(r <-)` retain their respective receiving operations. An ordinary parameter declaration always introduces a fresh name, including when an outer variable has the same spelling. Type annotations and contextual parameter-name shorthand follow the established callback signature. An ordinary ordered callback can bind its parameters by position. A structural protocol with multiple labels uses the named spec even when their types differ. A single labelled output can still use the single-control shorthand.
+
+In the braced pattern each selector names a source field. The spec permits omissions, renaming, repeated selection where the field's custody permits, and a mix of fresh and existing destinations. An empty spec `({})` discards the fields of a known labelled handoff. The producer still evaluates every field and performs required cleanup. A niladic parameter list `()` instead requires a zero-input callback. Header braces introduce no executable scope. Parentheses followed by the arrow identify a trailing header, leaving ordinary successive calls such as `f()(x)` with their existing parse.
 
 ## Generator and yield signatures
 
@@ -76,14 +181,14 @@ Callable-valued component contracts use type-position parentheses to separate th
 
 ```cod
 proc callbacks() yields (func(u64) -> u64) -> bool;
-proc exchanges() yields (proc() -> u64) -> (proc() -> bool);
+proc exchanges() yields (func() -> u64) -> (func() -> bool);
 ```
 
-Callbacks yields one function value and expects bool feedback. Exchanges yields one procedure value returning u64 and expects a procedure value returning bool as feedback; exchanges itself still finishes void. Parenthesize a callable type used as an entire single yield or feedback contract, keeping any inner where/throws clauses inside the parentheses. An outer arrow or clause after the closing parenthesis belongs to the generator. This local grouping rule avoids a second precedence interpretation; it does not revise ordinary numeric/UoM/fraction type grammar or expression grouping.
+Callbacks yields one function value and expects bool feedback. Exchanges yields one function value returning u64 and expects a function value returning bool as feedback; exchanges itself still finishes void. Parenthesize a callable type used as an entire single yield or feedback contract, keeping any inner where/throws clauses inside the parentheses. An outer arrow or clause after the closing parenthesis belongs to the generator. This local grouping rule avoids a second precedence interpretation; it does not revise ordinary numeric/UoM/fraction type grammar or expression grouping.
 
 A labelled schema retains its explicit field boundaries and each component's own type/mode/owner contract. Parentheses group a type, not the labels into a first-class value. Nested structural result schemas, positional tuples and extra payload storage permissions remain excluded under D-22.
 
-Where an existing callable-view position admits a generator contract, retain the complete protocol, for example `proc(u64) yields u64 -> bool`. Do not erase that contract to `proc(u64) -> void`, treat feedback as the generator's ordinary result, or invoke it without its required for body. `typeof` of a named generator preserves ordinary parameters, callable kind, yields/feedback, fixed owners, declared failures and the existing definition-bound default contracts; it does not infer missing information from the consuming body. Multi-method origin requirements remain D-10's ordinary complete-family requirement. These are metadata obligations, not a new callable-value storage/capture mechanism or ABI approval.
+Where an existing callable-view position admits a generator contract, retain the complete protocol, for example `func(u64) yields u64 -> bool`. Do not erase that contract to `func(u64) -> void`, treat feedback as the generator's ordinary result, or invoke it without a compatible supplied body. `typeof` of a named generator preserves ordinary parameters, callable kind, yields/feedback, fixed owners, declared failures and the existing definition-bound default contracts; it does not infer missing information from the consuming body. Multi-method origin requirements remain D-10's ordinary complete-family requirement. These are metadata obligations, not a new callable-value storage/capture mechanism or ABI approval.
 
 Method selection still precedes body/receiver checking. A different yield/feedback contract cannot by itself distinguish methods with otherwise indistinguishable inputs, resolve an overload tie or trigger a retry after body checking fails. Preserve existing ordinary component compatibility; this grouping rule does not select new generator variance, effect polymorphism or implicit adapters. Complete generic/view checking, native transport and supported storage remain independently qualified work.
 
@@ -102,7 +207,7 @@ for val n <- unresolved(7u64) { true }
 
 Every yield site is checked against that one protocol, including recursive methods and paths not taken by a particular invocation. Zero runtime yields does not make the body or protocol untyped. Fixed void generator completion provides no payload-type inference evidence. Ordinary concrete result modes, independent expected signatures, permitted conversions and unique-owner checks remain; no new numeric join, owner union or general result variance is introduced. Select by ordinary inputs/declarations before validating receiving and feedback, preserving named/default argument ordering and declared failures. Complete checker support for these obligations remains work.
 
-A yield belongs to its lexically enclosing generator callable. A nested for body inside that callable may yield to that generator's consumer; it does not retarget yield to the dynamically executing inner generator. An intervening ordinary callable definition starts its own boundary and cannot capture the outer body's yield entry implicitly. A separately declared nested generator uses its own protocol. Recursive invocations use their own active entry under the same lexical contract. This source target rule does not grant escaping continuation storage or prove native transport.
+Lexical lookup binds `yield` to the [generator’s first here parameter](#a-generator-declaration-introduces-a-here-parameter-named-yield), including from an immediate full scope with direct lexical access. A nested for body inside that callable may yield to that generator's consumer; it does not retarget yield to the dynamically executing inner generator. An intervening ordinary callable definition starts its own boundary and cannot capture the outer body's yield entry implicitly. A separately declared nested generator uses its own protocol. Recursive invocations use their own active entry under the same lexical contract. This source target rule does not grant escaping continuation storage or prove native transport.
 
 ### Single-value yield and feedback use
 
@@ -120,7 +225,7 @@ for val n <- first_two() {
 
 `yield(expression)` prepares one value under YieldContract and hands control to the caller-owned body. Its normal expression result has FeedbackContract. Here the first response determines whether generator code proceeds to its second yield. Bool false has no implicit loop-control meaning. The generator may ignore feedback from a particular yield just as it can discard an ordinary expression result; that does not remove the declared requirement on the body.
 
-A void-feedback yield can be used as a statement, but not as a value for `val response <- yield(...)`. Missing consumers do not create an implicit empty body: a generator invocation needs the body supplied by `for` under this bounded proposal. Zero-argument event yields remain a separate grammar extension rather than being inferred from void feedback.
+A void-feedback yield can be used as a statement, but not as a value for `val response <- yield(...)`. Missing consumers do not create an implicit empty body: a traversal invocation needs the body supplied by the loop or here-call form. Zero-argument event yields remain a separate grammar extension rather than being inferred from void feedback.
 
 ### Labelled yield components
 
@@ -483,9 +588,9 @@ proc search() -> u64 {
 
 Preserve [D-17 loop scope](ExceptionControl.md#loop-scoping-rules) while completing the new construct: ordinary body groups are not full scopes; direct body declarations remain restricted; explicit `{{ ... }}` permits local declarations and per-iteration cleanup. A direct body defer registers with the nearest lexically enclosing full scope, skipping the loop. It must not be silently redirected to the dynamically active generator. Deferred loop-control snapshots and forbidden delayed borrows retain D-17's distinctions. Each iteration restores effects and releases its fresh effect-owned regions on normal and abnormal exits.
 
-These are constraints on integration, not a claim that an ordinary callable-value implementation already meets them. The new body-entry proof must preserve direct lexical access, its return target, lexical deferred-registration destination and actual-owner validity without implicit closure storage or lifetime extension. D-18's qualified ordinary value-input profile supplies no shortcut to this separate loop-body proof.
+These are constraints on integration, not a claim that an ordinary callable-value implementation already meets them. The new body-entry proof must preserve direct lexical access, its return target, lexical deferred-registration destination and actual-owner validity without implicit closure storage or lifetime extension. A capture-free function value cannot stand in for this live body access.
 
-If the new form supports `else`, retain the existing zero-body-executions meaning rather than interpreting it as successful exhaustion; header controls are unavailable there. H-581/H-582 selects the generator-loop continue forms above; no break, labelled control or non-void feedback default is selected here. Nested generator composition uses the lexical yield target specified above; its complete control/owner transport proof remains separate.
+If the new form supports `else`, retain the existing zero-body-executions meaning rather than interpreting it as successful exhaustion; header controls are unavailable there. The [generalized for-loop contract](#generalized-for-loops) admits bare break for the void traversal and H-581/H-582 governs continue. Labelled control and a default for missing non-void feedback remain outside this scope. Nested generator composition uses the lexical yield target specified above; its complete control/owner transport proof remains separate.
 
 ## Checked declarations and exception execution
 
@@ -700,7 +805,7 @@ A module execution site keeps its existing procedure/effect permissions. A separ
 The operation's source site determines the boundary:
 
 - Generator input expressions and caller-side defaults use their existing caller preparation rules. Definition-side defaults and the generator preamble retain their existing callee rules.
-- Yield operands, generator-local feedback receiving operations and subsequent processing belong to the generator. A func generator cannot call a proc in its yield operand or use a proc-valued feedback result as a callee.
+- Yield operands, generator-local feedback receiving operations and subsequent processing belong to the generator. A func generator cannot call a named proc in its yield operand. Only an eligible function value can travel as storable callable feedback.
 - Loop-header reception, body statements, tail/continue feedback expressions and body-owned cleanup retain the lexical caller's permissions. They do not become generator code because a backend outlines them.
 - Generator-local catches, finally and deferred actions retain the generator's restrictions on every exit. Body cleanup retains its own lexical permissions and existing registration destination. Yield does not turn a generator finally into a caller finally.
 - Keep D-10's ordinary callable-argument and transitive-helper checks. An ordinary function cannot invoke a procedure parameter and cannot rename such an invocation to yield. The body entry has only its specific synchronous control lifetime; it cannot be stored, captured or returned as an ordinary escaping callable.
@@ -749,11 +854,11 @@ Starting with x equal to 1, the val yield contract supplies 1 and then 2; x ends
 
 Body checked failures still bypass generator catches, and fixed generator throws remains an obligation. Body return still targets its enclosing callable. H-589/H-590 cleanup composition, per-iteration effect restoration, H-600 fixed owners and deferred lifetime checks remain. Feedback can carry only ordinary admitted values/references; it cannot transport the caller's control entry or extend any owner lifetime.
 
-Select the generator method from ordinary inputs and established declarations before checking the body. No body-driven kind inference, overload tie-breaking, retry or proc-to-func adapter follows. Where a generator view is otherwise admitted, its contract retains the declared kind and full protocol; the body is checked at each for site. Complete view/nesting/effect/native proof remains work. Inlining and outlining must preserve lexical call eligibility, active dynamic bindings and actual completion targets; neither optimization qualifies a source program that violates them.
+Select the generator method from ordinary inputs and established declarations before checking the body. No body-driven kind inference, overload tie-breaking, retry or proc-to-func adapter follows. Where a generator view is otherwise admitted, its contract retains the declared kind and full protocol; the body is checked at each loop or equivalent here-call site. Complete view/nesting/effect/native proof remains work. Inlining and outlining must preserve lexical call eligibility, active dynamic bindings and actual completion targets; neither optimization qualifies a source program that violates them.
 
 ## Full scopes inside a loop body
 
-H-FULL-SCOPE-CALLABLE-20261117 makes an explicit `{{ ... }}` an ordinary immediately invoked callable, even inside a caller-owned loop body. Its captures follow D-18, its return is local, and its cleanup completes before the outer body resumes. A direct loop-body return still targets the callable containing that loop; the implicit nested callable does not inherit that control privilege. Continue/feedback must target a loop in the same callable, and yield must belong to that callable's own generator contract. Ordinary nested calls cannot reach a caller's suspended yield.
+H-FULL-SCOPE-CALLABLE-20261117 makes an explicit `{{ ... }}` an ordinary immediately invoked callable, even inside a caller-owned loop body. Its enclosing slot accesses follow D-18, its return is local, and its cleanup completes before the outer body resumes. A direct loop-body return still targets the callable containing that loop; the implicit nested callable does not inherit that control privilege. An inner continue requires a loop or single-brace here body that supplies its control target inside the full scope. The full scope can invoke a lexically available here parameter, including `yield`. Ordinary helpers can invoke a parameter forwarded explicitly to them.
 
 ```cod
 # For a generator with u64 feedback:
@@ -763,7 +868,7 @@ for val item <- source() {
 # By contrast, {{ continue item; }} cannot continue the outer loop.
 ```
 
-The implicit callable retains the checking site's func/proc permissions; this grants no new proc effects inside func code. A captured yielded reference may access its selected live target under the established owner, but cannot retain a loop-control slot or outlive a handoff without the ordinary proof. A local return neither cancels the generator nor returns from the loop's surrounding callable. Failure escaping the implicit invocation reaches the loop body and then follows the existing generator-bypass/cleanup contract. The trailing ordinary callback syntax in D-10 is distinct from a generator body and inherits no special passthrough privileges.
+The implicit callable retains the checking site's func/proc permissions; this grants no new proc effects inside func code. A captured yielded reference may access its selected live target under the established owner, but cannot retain a loop-control slot or outlive a handoff without the ordinary proof. A local return neither cancels the generator nor returns from the loop's surrounding callable. Failure escaping the implicit invocation reaches the loop body and then follows the existing generator-bypass/cleanup contract. For a trailing here argument, single braces preserve the supplier’s control destinations and double braces establish local completion.
 
 ## Signature and proof work remaining
 
@@ -785,10 +890,12 @@ The following are remaining proof/implementation work for the selected source pr
 
 Under a qualified implementation scope, bounded sound acceptance may diagnose unsupported proof/transport cases. Such a limit must be distinguishable from a source-contract violation; it cannot silently choose a different owner, skip cleanup or waive an obligation. This matrix does not qualify a new mechanism by itself.
 
-Additional generator variance/adapters, extra inference forms, generalized forwarding of internal owners, zero-argument event-yield grammar and new loop-control forms remain separately scoped extensions. They are not prerequisites for implementing the selected profile, and existing partial receiving does not implicitly approve them. Normal `if returning` remains D-17's contract; field-level structural-return inspection is D-22's optional extension.
+Additional generator variance/adapters, extra inference forms, generalized forwarding of internal owners, zero-argument event-yield grammar and additional labelled control forms remain separately scoped extensions. They are not prerequisites for implementing the selected profile, and existing partial receiving does not implicitly approve them. Normal `if returning` remains D-17's contract; field-level structural-return inspection is D-22's optional extension.
 Do not expand the design with custom final results, resumable iterators or a coroutine runtime to avoid those checks.
 
 ## Acceptance before implementation qualification
+
+- Run ascending and descending through both call forms with identical bindings. Require 12/12 and 21/21 respectively, plus the matching first-item results after false feedback. Check zero body entries, a bare break after one handoff, forwarded supplier return, checked failure bypass, cleanup order and rejection of a borrowed output with an unstable owner.
 
 The following is a review checklist, not current passing-test evidence:
 

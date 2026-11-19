@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026-11-19 — Adopt parenthesized receiving headers
+
+<a id="h-here-header-20261119"></a>
+**H-HERE-HEADER-20261119.** The project user replied “同意。提交推送同步。” in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-19 (America/Los_Angeles), accepting the parenthesized header before the body, including a braced labelled receiving spec inside it. D-29r19/D-10r216 and registry r943 close the spelling question in H-GENERATOR-RECEPTION-20261119. Single and double body braces retain their respective control destinations. Native implementation and the parked functor questions retain their prior scopes.
+
+## 2026-11-19 — Receive each generator handoff with the same loop controls
+
+<a id="h-generator-reception-20261119"></a>
+**H-GENERATOR-RECEPTION-20261119.** On 2026-11-19 (America/Los_Angeles), the project user confirmed the lexical first `yield` formal and nested-return interpretation in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), then specified “这方面跟 for-loop 的等效也应该确立起来” and “可以用 for-loop var 完全等效的语义”. D-29r18/D-10r215, D-17r121 and D-18r131/storage r13 give both spellings the same receiving operations. An immediate full scope may invoke the lexical formal while keeping its own return. D-30r4 applies labelled reception to array visits. The suggested `(…) => { … }` punctuation is under review. P-623/P-624 and registry r942 retain the wider qualification boundary. Prior traversal contract: `fe3e8095b9087ec7d1777433c763930c5d4ad26b:design/RangedForAndGenerators.md`, “Generalized for-loops”.
+
+## 2026-11-18 — Explore generator declarations as a named here parameter
+
+<a id="k-generator-yield-formal-20261118"></a>
+**K-GENERATOR-YIELD-FORMAL-20261118.** The project user proposed in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-18 (America/Los_Angeles) “实际产出一个首参数为 `yield` 名字的 here-call 参数” and grouping the for-loop and here call as one family. D-29r17/D-10r214/D-18r130 and registry r941 describe one checked declaration and two call spellings. The family count refines H-HERE-FUNCTOR-20261118. Nested full-scope use of the lexical formal and positional binding of unordered labels remain design review items. This assessment qualifies no new lowering. Prior call-form baseline: `fe3e8095b9087ec7d1777433c763930c5d4ad26b:design/RangedForAndGenerators.md`, “Generalized for-loops”.
+
+## 2026-11-18 — Count the receiver-bound functor as a here callable
+
+<a id="h-here-functor-20261118"></a>
+**H-HERE-FUNCTOR-20261118.** On 2026-11-18 (America/Los_Angeles), the project user specified in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) “functor 也属于 ‘here callable’ 的一种” and asked to verify the count. D-18r129, storage r12, D-07r178 and registry r940 record six source forms, counting the single- and double-brace body spellings together. The D-07 example identifies the separate predicate and u64 arguments. This extends the source inventory in `fe3e8095b9087ec7d1777433c763930c5d4ad26b:design/CallableViewsAndCaptures.md`, “Here callables and direct lexical access”. Receiver-selection timing and overload ranking remain open.
+
+## 2026-11-18 — Generalized for-loops and collection visits
+
+<a id="k-generalized-for-20261118"></a>
+**K-GENERALIZED-FOR-20261118.** On 2026-11-18 (America/Los_Angeles) the project user requested a language-feature section in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) and clarified “多个不同generator实现不同语义，不管通过 for-loop 调用，还是通过 here-call 调用，都能等效的吧”. D-29r16/D-10r213/D-30r3/storage r11 and registry r939 record the same-generator, two-call-forms direction and examples. The design derives bare break for void traversals from H-HERE-BREAK-CONTINUE-20261118, preserves H-600 fixed borrowed owners, and distinguishes inspection from removal. Candidate relationships P-623/P-624 and detailed implementation qualification remain separate. Prior control baseline: `63359f5137556415ed45a1f70562ee987722b942:design/CallableStorageAndHereAccess.md`, “Break and continue in a single-brace here body”.
+
 ## 2026-11-18 — Give here-body feedback to continue and the original call result to break
 
 <a id="h-here-break-continue-20261118"></a>
