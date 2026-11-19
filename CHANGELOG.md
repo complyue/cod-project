@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-19 — Assign diagnostic work across compiler stages
+
+<a id="h-compiler-diagnostics-20261119"></a>
+**H-COMPILER-DIAGNOSTICS-20261119.** On 2026-11-19 (America/Los_Angeles) the project user specified in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) “seed compiler 只需做编译正确性保障范围内顺手就能输出的 diag 信息” and “diag原则全局使用”. D-20 roadmap r11, registry r947 and AGENTS.md apply the rule to every compiler area. The CoD-written compiler owns additional analysis and output for detailed diagnostics. Source correctness, sound rejection and required runtime behavior still apply to the seed. Previous stage split: `584391fbe09cac9d745050964a61ca9dbbe9b315:applications/cod-booter/README.md`, “Next-stage repositories and native runtime”.
+
 ## 2026-11-19 — Confirm the DBMR redesign
 
 <a id="h-dbmr-approved-20261119"></a>
