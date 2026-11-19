@@ -6815,16 +6815,44 @@ class ScalarChecker {
       return {};
     }
     if (expr.kind == K::call && !expr.intrinsic && active_here(expr.text, &state)) {
-      const auto contract = here_invocation_type(program_.methods[*state.method], state.substitutions, expr.at);
+      const auto &method = program_.methods[*state.method];
+      const auto contract = here_invocation_type(method, state.substitutions, expr.at);
       if (expr.children.size() != contract.parameters.size()) fail(expr.at, "here invocation argument count does not match its contract");
+      if (state.preparing(expr)) implementation_gap(expr.at, "prepared deferred here invocation");
+      std::vector<TargetEvidence> targets;
       bool completes = true;
       for (size_t i = 0; i < expr.children.size(); ++i) {
-        const auto argument = type_evidence(*expr.children[i], state, false, nullptr, nullptr, ExpectedTypeUse::materialization, completes);
-        if (state.required && argument && *argument != Type::never && !accepts_argument(*argument, contract.parameters[i], ArgumentMode::value))
-          fail(expr.children[i]->at, "argument does not satisfy the here contract");
+        const auto &operand = *expr.children[i];
+        const auto mode = argument_mode(contract, i);
+        const auto use = mode == ArgumentMode::value ? EvidenceRead::payload : EvidenceRead::target;
+        const auto argument = type_evidence(operand, state, false, nullptr, nullptr, expected_type_use(mode), completes, use);
+        if (state.required && argument && *argument != Type::never) {
+          if (!accepts_argument(*argument, contract.parameters[i], mode))
+            fail(operand.at, "argument does not satisfy the here contract");
+          const auto &input = method.here->inputs[i];
+          if (input.owner) {
+            if (state.value.view != true || state.value.mixed_view)
+              implementation_gap(operand.at, "borrowed arguments require existing target views");
+            if (!input.read_only && state.value.read_only.value_or(false))
+              fail(operand.at, "readonly argument cannot supply a writable borrowed parameter");
+            const auto role = *input.owner;
+            auto owner = EvidenceOwner{};
+            if (role) {
+              owner = EvidenceOwner::parameter(role - 1);
+              if (!state.external_owners.contains(owner)) owner = EvidenceOwner{null_target - role};
+            }
+            require_here_owner(state.value.owner, owner, operand.at, &state);
+            if (completes) prepare_type_readable_argument(state, operand, state.value, state.target, mode);
+          }
+        }
+        targets.push_back(std::move(state.target));
         completes = completes && argument != Type::never;
       }
-      if (completes) record_type_call(expr, state, contract, true);
+      if (completes) {
+        for (size_t i = 0; i < targets.size(); ++i)
+          type_input_mutation(expr, state, contract.parameters[i], targets[i], argument_mode(contract, i), method.here->inputs[i].read_only);
+        record_type_call(expr, state, contract, true);
+      }
       return completes ? *contract.target : Type{Type::never};
     }
     const auto child = [&](size_t i, bool context = false, bool reached = true, EvidenceRead use = EvidenceRead::payload) {
@@ -8992,6 +9020,7 @@ class ScalarChecker {
       if (method.result != result || method.throws_categories != throws_categories || method.here_group != group) continue;
       const auto &candidate = *method.scope_inputs;
       if (candidate.owner_names != inputs.owner_names || candidate.relations != inputs.relations ||
+          candidate.here_input_owners != inputs.here_input_owners || candidate.here_snapshots != inputs.here_snapshots ||
           candidate.nonnull != inputs.nonnull || candidate.live_values != inputs.live_values ||
           candidate.live_bindings != inputs.live_bindings ||
           candidate.place_access != inputs.place_access || candidate.place_owners != inputs.place_owners ||
@@ -9247,6 +9276,11 @@ class ScalarChecker {
       operation.arguments.push_back({mode, operation.invokes_here || argument == Type::never ? parameter : argument});
     }
     if (!completes) { operation.type = Type::never; return; }
+    if (operation.invokes_here && validating_ && proving_ && lexical_.live)
+      for (size_t i = 0; i < views.size(); ++i) {
+        if (const auto role = checking_method_->here->inputs[i].owner; role)
+          require_here_owner(one_owner(views[i]), here_formal_owner(*role), expr.children[i + offset]->at);
+      }
     if (checking_context_ < callable_choices_.size())
       if (const auto found = callable_choices_[checking_context_].find(&expr); found != callable_choices_[checking_context_].end())
         operation.callable_choices = found->second;
@@ -9265,7 +9299,26 @@ class ScalarChecker {
     return expr.kind == Expression::Kind::call && !expr.intrinsic && !active_here(expr.text, state) && !expr.children.empty() &&
            expr.children.front()->kind == Expression::Kind::name && active_here(expr.children.front()->text, state);
   }
-  // Reuse the ordinary call equations for independent arguments and outcomes.
+  size_t here_formal_owner(size_t role) const {
+    return role ? external_owners_.at(checking_method_->input_owners().at(role - 1).name) : lexical_.scopes.front().id;
+  }
+  void require_here_owner(std::optional<EvidenceOwner> actual, EvidenceOwner expected, const Location &at,
+                          const TypeEvidenceState *state = nullptr) const {
+    const auto equality = compare_owners(actual, expected, state);
+    if (equality == OwnerMatch::mismatch) fail(at, "borrowed here input has a different actual owner from its contract");
+    if (equality == OwnerMatch::unknown) implementation_gap(at, "borrowed here input requires an unproved fixed owner equality");
+  }
+  std::optional<size_t> here_receiver_owner(const CheckedMethod &receiver, size_t role,
+      const std::vector<CheckedOperation> &views, const Location &at) const {
+    if (!role) return {}; // The receiver's own activation will supply this owner.
+    const auto &name = receiver.input_owners().at(role - 1).name;
+    const auto formals = receiver.input_parameters();
+    const auto found = std::ranges::find(formals, name, &Parameter::owner);
+    if (found != formals.end())
+      if (const auto actual = one_owner(views.at(std::distance(formals.begin(), found)))) return actual;
+    implementation_gap(at, "here contract requires an owner established by an ordinary borrowed argument");
+  }
+  // Reuse the ordinary call equations for arguments and outcomes.
   // The here capability itself stays outside the language's value carriers.
   Type here_invocation_type(const CheckedMethod &receiver, const Substitutions &bindings, const Location &at) const {
     const auto &here = *receiver.here;
@@ -9274,14 +9327,22 @@ class ScalarChecker {
     const ModuleLookup lookup(module_, receiver.module);
     Type type{Type::procedure};
     type.pure_callable = type.value_result = true;
+    std::map<size_t, size_t> roles;
     for (const auto &component : here.inputs) {
       const auto parameter = substitute(component.type, receiver, bindings, true);
-      if (component.mode != ArgumentMode::value || !scalar_type(parameter))
-        implementation_gap(at, "here invocation requires independently established scalar inputs");
+      if (!scalar_type(parameter) ||
+          (component.mode != ArgumentMode::value && component.mode != ArgumentMode::borrowed_ref))
+        implementation_gap(at, "here invocation currently supports scalar value and initialized ref inputs");
       type.parameters.push_back(parameter);
       type.const_views.push_back(component.read_only);
+      type.argument_modes.push_back(component.mode);
+      type.owners.push_back(component.owner ? roles.try_emplace(*component.owner, roles.size() + 1).first->second : 0);
     }
-    if (std::ranges::none_of(type.const_views, [](bool read_only) { return read_only; })) type.const_views.clear();
+    if (roles.empty()) {
+      type.owners.clear();
+      type.argument_modes.clear();
+    } else type.owners.push_back(0);
+    if (std::ranges::none_of(type.const_views, std::identity{})) type.const_views.clear();
     const auto result = substitute(here.result.type, receiver, bindings, true);
     if (result != Type::void_type && !scalar_type(result))
       implementation_gap(at, "here invocation requires an independently established scalar or void result");
@@ -9289,7 +9350,8 @@ class ScalarChecker {
     for (const auto category : here.throws_categories) type.throws_types.push_back(exception_type(category));
     return type;
   }
-  CheckedOperation::SuppliedHere demand_supplied_here(const Expression &body, const Type &contract, const ResultContract &receiving,
+  CheckedOperation::SuppliedHere demand_supplied_here(const Expression &body, const Type &contract,
+      std::vector<std::optional<size_t>> owners, const ResultContract &receiving,
       CheckedInstance *supplier, std::map<const Expression *, CheckedOperation> &operations) {
     if (!body.definition) implementation_gap(body.at, "this receiving pattern for a here body");
     const auto &definition = *body.definition;
@@ -9305,19 +9367,6 @@ class ScalarChecker {
     }
     const auto &parameters = definition.parameters;
     if (parameters.size() != contract.parameters.size()) fail(body.at, "here body header arity does not match the selected contract");
-    for (size_t i = 0; i < parameters.size(); ++i) {
-      const auto &parameter = parameters[i];
-      if (parameter.declaration_kind == "ref" || parameter.declaration_kind == "ptr" || !parameter.owner.empty())
-        fail(parameter.at, "here body header requires an independent value parameter under the selected contract");
-      if (parameter.type != Type::void_type) {
-        const auto declared = supplier ? substitute(parameter.type, program_.methods[supplier->method], supplier->substitutions)
-                                       : resolve_type(parameter.type);
-        if (declared != contract.parameters[i]) fail(parameter.at, "here body header type does not match the selected contract");
-      }
-      const auto readonly = !contract.const_views.empty() && contract.const_views[i];
-      if ((parameter.type != Type::void_type || parameter.read_only) && parameter.read_only != readonly)
-        fail(parameter.at, "here body header access does not match the selected contract");
-    }
     const auto base = lexical_method(&definition);
     if (!program_.methods[base].type_parameters.empty())
       implementation_gap(body.at, "retained generic parameters in a supplied here body");
@@ -9325,9 +9374,37 @@ class ScalarChecker {
     inputs.lexical_method = base;
     inputs.parameters = parameters;
     inputs.nonnull.resize(parameters.size(), false);
+    inputs.here_input_owners = owners.size();
+    const auto add_owner = [&](const Location &at) {
+      inputs.owners.push_back({"$scope.owner." + std::to_string(inputs.owners.size()), {}, at});
+    };
+    for (size_t i = 0; i < owners.size(); ++i) add_owner(body.at);
     for (size_t i = 0; i < parameters.size(); ++i) {
-      inputs.parameters[i].declaration_kind = "val";
-      inputs.parameters[i].read_only = !contract.const_views.empty() && contract.const_views[i];
+      const auto &parameter = parameters[i];
+      const auto &item = body.receiving->items[i];
+      const auto mode = argument_mode(contract, i);
+      const bool receives_value = parameter.declaration_kind == "val" || item.operation == "<-";
+      const bool borrowed = mode != ArgumentMode::value;
+      const bool binds_ref = borrowed && !receives_value;
+      const bool snapshot = borrowed && receives_value;
+      if (!parameter.owner.empty() || parameter.declaration_kind == "ptr" || parameter.declaration_kind == "func")
+        implementation_gap(parameter.at, "this receiving declaration for a here body");
+      if (!borrowed && parameter.declaration_kind == "ref")
+        implementation_gap(parameter.at, "supplier-owned materialization of a scalar here input");
+      if (parameter.type != Type::void_type) {
+        const auto declared = supplier ? substitute(parameter.type, program_.methods[supplier->method], supplier->substitutions)
+                                       : resolve_type(parameter.type);
+        if (declared != contract.parameters[i]) fail(parameter.at, "here body header type does not match the selected contract");
+      }
+      const auto readonly = !contract.const_views.empty() && contract.const_views[i];
+      if (!snapshot && (parameter.type != Type::void_type || parameter.read_only) &&
+          parameter.read_only != readonly && !(binds_ref && parameter.read_only))
+        fail(parameter.at, "here body header access does not match the selected contract");
+      auto &input = inputs.parameters[i];
+      input.declaration_kind = binds_ref ? "ref" : "val";
+      input.read_only = parameter.read_only || (!snapshot && readonly);
+      if (binds_ref) input.owner = inputs.owners.at(contract.owners[i] - 1).name;
+      if (snapshot) inputs.here_snapshots.insert(i);
     }
     auto arguments = contract.parameters;
     CheckedOperation::SuppliedHere supplied{};
@@ -9352,7 +9429,15 @@ class ScalarChecker {
       if (validating_ && proving_ && lexical_.live && !view.initialized_target() &&
           !missing_initialization(lexical_, *view.place, selected_target(view, *view.place, true)).empty())
         implementation_gap(capture.at, "here access to a slot without definite initialization at supply");
-      const auto role = scope_owner_role(inputs, supplied.owners, *view.owners.begin(), capture.at);
+      const auto actual = *view.owners.begin();
+      if (lexical_.live && !owner_alive(actual)) fail(capture.at, "here access requires a live supplier owner");
+      const auto found = std::ranges::find(owners, std::optional{actual});
+      const auto role = std::distance(owners.begin(), found);
+      if (found == owners.end()) {
+        add_owner(capture.at);
+        owners.push_back(actual);
+        supplied.owners.push_back(actual);
+      }
       Parameter input{name, type, capture.at, false, {}};
       input.declaration_kind = "ptr";
       input.owner = inputs.owners.at(role).name;
@@ -9366,7 +9451,11 @@ class ScalarChecker {
       arguments.push_back(type);
       supplied.places.push_back(&operand);
     }
-    scope_owner_relations(inputs, supplied.owners);
+    for (const auto a : owners) {
+      auto &relations = inputs.relations.emplace_back();
+      for (const auto b : owners)
+        relations.push_back(a && b ? compare_owners(a, b) : a == b ? OwnerMatch::satisfied : OwnerMatch::mismatch);
+    }
     const auto failures = group ? std::vector<Type>{} : contract.throws_types;
     const auto profile = scope_profile(std::move(inputs), ResultContract{*contract.target}, failures, std::move(group));
     supplied.instance = demand(profile, std::move(arguments), body.at);
@@ -9403,6 +9492,7 @@ class ScalarChecker {
     };
     std::vector<size_t> candidates;
     std::optional<std::vector<size_t>> slots;
+    std::vector<ArgumentMode> modes;
     bool same_arity = false;
     for (const auto id : family.methods) {
       const auto &method = program_.methods[id];
@@ -9412,8 +9502,11 @@ class ScalarChecker {
       if (!bound) continue;
       if (slots && *slots != *bound) implementation_gap(expr.at, "overloads with different named here argument bindings");
       slots = std::move(bound);
-      if (std::ranges::any_of(method.input_parameters(), [](const auto &parameter) { return argument_mode(parameter) != ArgumentMode::value; }))
-        implementation_gap(expr.at, "here receiver selection with borrowed ordinary parameters");
+      std::vector<ArgumentMode> candidate_modes;
+      for (const auto &parameter : method.input_parameters()) candidate_modes.push_back(argument_mode(parameter));
+      if (!candidates.empty() && modes != candidate_modes)
+        implementation_gap(expr.at, "here receiver overloads with different ordinary argument preparation");
+      modes = std::move(candidate_modes);
       candidates.push_back(id);
     }
     if (candidates.empty() && same_arity) fail(expr.at, "written arguments must bind distinct ordinary parameters of the here receiver");
@@ -9429,12 +9522,14 @@ class ScalarChecker {
       if (named && source.children.empty()) implementation_gap(source.at, "default arguments to a here receiver");
       const auto &operand = named ? *source.children.front() : source;
       const auto slot = slots->at(i);
-      const auto type = check(operand, supplier, operations);
+      const auto mode = modes.at(slot);
+      const auto type = check(operand, supplier, operations, mode == ArgumentMode::value, false, nullptr, expected_type_use(mode));
       if (type == Type::never) implementation_gap(operand.at, "abrupt ordinary arguments to a here receiver");
-      if (!scalar_type(type)) implementation_gap(operand.at, "here receiver ordinary arguments require scalar values");
+      if (!scalar_type(type)) implementation_gap(operand.at, "here receiver ordinary arguments require scalar inputs");
       arguments[slot] = type;
       views[slot] = operations.at(&operand);
-      operation.arguments[slot] = {ArgumentMode::value, type};
+      prepare_borrow(views[slot], mode, operand.at);
+      operation.arguments[slot] = {mode, type};
       operands[slot] = &operand;
     }
     if (!std::ranges::is_sorted(*slots)) operation.argument_evaluation_order = std::move(*slots);
@@ -9443,16 +9538,24 @@ class ScalarChecker {
     if (checking_method_ && checking_method_->source->kind == Form::Kind::function && receiver.source->kind != Form::Kind::function)
       fail(expr.at, "a function cannot invoke a procedure");
     const auto contract = here_invocation_type(receiver, *match(receiver, arguments, {}, true), expr.at);
+    std::vector<std::optional<size_t>> owners;
+    for (const auto i : here_owner_inputs(contract))
+      owners.push_back(here_receiver_owner(receiver, *receiver.here->inputs[i].owner, views, expr.at));
     const auto callee = demand(selected, arguments, expr.at);
     bool may_break = false;
     if (forward) {
       const auto incoming = here_invocation_type(*checking_method_, supplier->substitutions, expr.at);
       if (incoming != contract) fail(expr.at, "forwarded here argument does not match the selected contract");
+      const auto owner_inputs = here_owner_inputs(incoming);
+      for (size_t i = 0; i < owner_inputs.size(); ++i) {
+        if (!owners[i]) fail(expr.at, "forwarded here argument cannot use the new receiver's invocation owner");
+        require_here_owner(owners[i], here_formal_owner(*checking_method_->here->inputs[owner_inputs[i]].owner), expr.at);
+      }
       operation.forwards_here = true;
       if (proving_ && lexical_.live && read_effects(callee).protected_defer_failure)
         observed_.protected_defer_failure = true;
     } else {
-      auto body = demand_supplied_here(*expr.children.back(), contract, program_.instances[callee].result, supplier, operations);
+      auto body = demand_supplied_here(*expr.children.back(), contract, std::move(owners), program_.instances[callee].result, supplier, operations);
       const auto &effects = read_effects(body.instance);
       if (validating_ && !effects.symbols.empty())
         implementation_gap(expr.at, "dynamic binding requirements at a here invocation");

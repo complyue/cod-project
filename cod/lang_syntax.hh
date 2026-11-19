@@ -1459,7 +1459,8 @@ class Parser {
         ? &expr.receiving->items.front() : nullptr;
     const bool receives_bits = single && single->operation == "<-" &&
         (single->declaration_kind.empty() || single->declaration_kind == "val");
-    if (expr.kind == K::here_body && (expr.receiving->shape == ReceivingHeader::Shape::ordered || receives_bits)) {
+    const bool receives_ref = single && single->operation == "=" && single->declaration_kind == "ref";
+    if (expr.kind == K::here_body && (expr.receiving->shape == ReceivingHeader::Shape::ordered || receives_bits || receives_ref)) {
       auto definition = std::make_shared<Form>();
       definition->kind = callable_kind == Form::Kind::procedure ? Form::Kind::procedure : Form::Kind::function;
       definition->at = expr.at;

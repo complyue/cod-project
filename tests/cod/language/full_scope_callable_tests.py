@@ -52,6 +52,35 @@ runner.CASES = {
         'proc run()->void{val a<-0u64,b<-0u64,rank<-0u64;'
         'for a<-generate(){rank<-rank*10u64+a;};generate()(b<-)=>{b<-b+10u64;};'
         'behave @print(rank);behave @print(b);}run();',0,'12\n12\n',''),
+    'borrowed_handoffs_share_receiving_rules': (IO+
+        'proc twice(source:u64 in O) yields ref u64 in O where {owner O}{yield(source);source<-9u64;yield(source);return;}'
+        'val left<-1u64,right<-1u64,total<-0u64;'
+        'for ref item=twice(left){item<-item+1u64;};'
+        'twice(right)(val item<-)=>{item<-item+1u64;total<-total*10u64+item;};'
+        'behave @print(left);behave @print(right);behave @print(total);',0,'10\n9\n30\n',''),
+    'borrowed_handoff_uses_producer_activation_owner': (IO+
+        'proc scratch() yields ref u64 in here{val cell<-3u64;yield(cell);yield(cell);return;}'
+        'val peer<-3u64,total<-0u64;for ref item=scratch(){'
+        'if(item is not peer){total<-total*10u64+item;{};}else{};item<-item+1u64;};'
+        'behave @print(total);',0,'34\n',''),
+    'borrowed_handoff_preserves_input_owner_and_target_identity': (IO+
+        'proc once(ref source:u64 in O) yields ref u64 in O where {owner O}{yield(source);return;}'
+        'val target<-5u64,result<-0u64;once(target)(item)=>{{'
+        'if(item is target){result<-7u64;{};}else{};}};behave @print(result);',0,'7\n',''),
+    'borrowed_here_forwarding_preserves_declared_owner': (IO+
+        'func relay(here body(ref item:u64 in P)->void,ref source:u64 in P)->void where {owner P}{body(source);return;}'
+        'func outer(here body(ref item:u64 in O)->void,ref source:u64 in O)->void where {owner O}{relay(body,source);return;}'
+        'val target<-2u64;outer(target)(ref item=)=>{item<-item+3u64;};behave @print(target);',0,'5\n',''),
+    'borrowed_here_forwarding_rejects_new_invocation_owner': (
+        'func relay(here body(ref item:u64 in here)->void)->void{val local<-1u64;body(local);return;}'
+        'func outer(here body(ref item:u64 in here)->void)->void{relay(body);return;}outer()(ref item=)=>{};',
+        2,'',"new receiver's invocation owner"),
+    'borrowed_handoff_rejects_different_actual_owner': (
+        'proc wrong(source:u64 in O) yields ref u64 in O where {owner O}{val local<-5u64;yield(local);return;}'
+        'val target<-3u64;for ref item=wrong(target){};',2,'','borrowed here input has a different actual owner'),
+    'borrowed_handoff_rejects_mutation_through_readonly_control': (
+        'proc inspect(source:const u64 in O) yields ref const u64 in O where {owner O}{yield(source);return;}'
+        'val target<-3u64;for ref item=inspect(target){item<-4u64;};',2,'','readonly'),
     'generator_void_feedback_rejects_explicit_operand': (
         'func generate() yields u64{yield(1u64);}func action()->void{}'
         'for val v<-generate(){continue action();};',2,'','void here feedback requires bare continue'),

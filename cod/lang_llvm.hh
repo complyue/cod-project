@@ -749,9 +749,13 @@ class LLVMEmission {
     if (fact.invokes_here) {
       if (!here_argument_) throw std::logic_error("no here argument to invoke");
       auto prepared = arguments;
+      std::vector<llvm::Type *> parameters(arguments.size(), scalar_);
+      for (const auto input : here_owner_inputs(fact.operand_type)) {
+        prepared.push_back(selected_owner(fact.argument(expr, input)));
+        parameters.push_back(b_.getPtrTy());
+      }
       prepared.push_back(b_.CreateExtractValue(here_argument_, 1));
       auto *entry = b_.CreateExtractValue(here_argument_, 0);
-      std::vector<llvm::Type *> parameters(arguments.size(), scalar_);
       parameters.push_back(b_.getPtrTy());
       return b_.CreateCall(llvm::FunctionType::get(outcome_, parameters, false), entry, prepared);
     }
@@ -1853,8 +1857,10 @@ class LLVMEmission {
     const auto &instance = program_->instances.at(id);
     const auto &method = program_->methods.at(instance.method);
     const auto &layout = call_layouts_.at(instance.method);
+    const auto &inputs = *method.scope_inputs;
     const auto written = method.source->parameters.size();
     const auto places = layout.operands - written;
+    const auto handed_owners = inputs.here_input_owners;
     if (layout.captures || layout.retained || layout.declaration_context || layout.destination || layout.accepts_here)
       throw std::logic_error("unexpected parameter role in supplied here body");
     // The first field is the transfer record, so its address also identifies
@@ -1862,21 +1868,35 @@ class LLVMEmission {
     std::vector<llvm::Type *> fields;
     if (layout.here_group) fields.push_back(here_transfer_);
     fields.insert(fields.end(), places, scalar_);
-    fields.insert(fields.end(), layout.owners, b_.getPtrTy());
+    fields.insert(fields.end(), layout.owners - handed_owners, b_.getPtrTy());
     auto *activation = llvm::StructType::get(context_, fields);
     std::vector<llvm::Type *> parameters(written, scalar_);
+    parameters.insert(parameters.end(), handed_owners, b_.getPtrTy());
     parameters.push_back(b_.getPtrTy());
     auto *entry = llvm::Function::Create(llvm::FunctionType::get(outcome_, parameters, false),
         llvm::GlobalValue::InternalLinkage, "cod.here.entry." + std::to_string(id), module_);
     here_entries_.emplace(id, HereEntry{entry, activation, layout.here_group});
     llvm::IRBuilder<> body(llvm::BasicBlock::Create(context_, "entry", entry));
-    auto *borrowed = entry->getArg(written);
+    auto *borrowed = entry->getArg(written + handed_owners);
     std::vector<llvm::Value *> prepared;
-    for (size_t i = 0; i < written; ++i) prepared.push_back(entry->getArg(i));
+    for (size_t i = 0; i < written; ++i) {
+      llvm::Value *value = entry->getArg(i);
+      if (inputs.here_snapshots.contains(i)) {
+        auto *address = body.CreateIntToPtr(body.CreateExtractValue(value, 0), body.getPtrTy());
+        value = body.CreateLoad(scalar_, address);
+      }
+      prepared.push_back(value);
+    }
     for (size_t i = 0; i < places; ++i)
       prepared.push_back(body.CreateLoad(scalar_, body.CreateStructGEP(activation, borrowed, layout.here_group + i)));
-    for (const auto &[owner, input] : instance.frame.owners)
-      prepared.push_back(body.CreateLoad(b_.getPtrTy(), body.CreateStructGEP(activation, borrowed, layout.here_group + places + null_target - 1 - owner)));
+    for (const auto &[owner, input] : instance.frame.owners) {
+      const auto role = null_target - 1 - owner;
+      if (role < handed_owners) prepared.push_back(entry->getArg(written + role));
+      else {
+        const auto field = layout.here_group + places + role - handed_owners;
+        prepared.push_back(body.CreateLoad(b_.getPtrTy(), body.CreateStructGEP(activation, borrowed, field)));
+      }
+    }
     if (layout.here_group) prepared.push_back(borrowed);
     auto *result = body.CreateCall(general_.at(instance.method), prepared);
     if (!layout.here_group) { body.CreateRet(result); return; }

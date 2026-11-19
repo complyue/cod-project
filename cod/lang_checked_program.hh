@@ -49,6 +49,13 @@ inline ArgumentMode argument_mode(const Parameter &parameter) {
 inline ArgumentMode argument_mode(const Type &view, size_t position) {
   return view.argument_modes.empty() ? ArgumentMode::value : view.argument_modes.at(position);
 }
+// A here invocation transports one owner identity per role, in first-use order.
+inline std::vector<size_t> here_owner_inputs(const Type &invocation) {
+  std::vector<size_t> inputs;
+  for (size_t i = 0; i + 1 < invocation.owners.size(); ++i)
+    if (invocation.owners[i] == inputs.size() + 1) inputs.push_back(i);
+  return inputs;
+}
 inline Type exception_type(size_t category) { return {Type::exception, exception_categories.at(category).name, category}; }
 inline bool accepts_exception(const Type &source, const Type &target) {
   return source.kind == Type::exception && target.kind == Type::exception && (!target.identity || source == target);
@@ -408,6 +415,10 @@ struct CheckedMethod {
     std::map<std::string, size_t> owner_names;
     std::vector<std::vector<OwnerMatch>> relations;
     std::vector<bool> nonnull;
+    // The entry receives these owners at each handoff. Remaining owners and
+    // live places come from the supplier's activation.
+    size_t here_input_owners = 0;
+    std::set<size_t> here_snapshots;
     // These inputs use borrowed transport while retaining val/holder semantics.
     std::set<size_t> live_values;
     // A reference input carries the supplier's binding slot.
