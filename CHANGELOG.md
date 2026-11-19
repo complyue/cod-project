@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-19 — Scope structural producers and transformers
+
+<a id="k-producer-transformers-20261119"></a>
+**K-PRODUCER-TRANSFORMERS-20261119.** In the design side chat on 2026-11-19 (America/Los_Angeles), the project user proposed “src 符合 producer 接口就行，functor只是特例” and suggested an independent design document and a research paper. D-31r1/registry r965 record that direction, candidate C-97/P-633–P-635, unsettled syntax and a research question. D-10r222 links it from the feature overview. The earlier account is at `18b97cd962165041512bd1e8b48de8645ee4df5c:design/SymbolicDynamicScope.md`, “Callable containers and enumerative nondeterminism”.
+
 ## 2026-11-19 — Document callable containers as choice producers
 
 <a id="k-enumerative-choice-20261119"></a>

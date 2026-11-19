@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 221 · Recorded: 2026-11-19 · Phase: language/application co-design.
+Design revision: 222 · Recorded: 2026-11-19 · Phase: language/application co-design.
 
 ## Design authority
+
+[K-PRODUCER-TRANSFORMERS-20261119](../CHANGELOG.md#k-producer-transformers-20261119) continues the D-10 feature overview at r222 by linking the proposed structural producer protocol in D-31. D-29 continues to govern the traversal examples and their observable results.
 
 - **Callable containers as choice producers.** [K-ENUMERATIVE-CHOICE-20261119](../CHANGELOG.md#k-enumerative-choice-20261119) continues the D-10 feature overview at r221 under D-29-GENERALIZED-FOR/P-623–P-624 and D-07-FUNCTORS. C-96/C-65 link caller-controlled traversal and owner validity to charter §§3.2/4.3/6.1. Compare both call spellings, the filtered route sequence and the target of an early exit. The Haskell list comparison checks order, duplicate answers and how consumption is bounded. The operator spelling and native admission retain their respective design scopes.
 
@@ -1654,6 +1656,8 @@ A library can provide one traversal and let each caller use either `for val n <-
 For the proposed collection interface, `visit(xs) (index, item) => { ... };` exposes a readonly item for each visit. In a void visit, `continue;` finishes the current observation and `break;` ends the whole visit. The collection stays intact in both cases. A library function with a non-void result can also let the caller supply that result with `break value;`. [Collection examples](CollectionsAndBuiltinContainers.md#observation-and-owner-scope)
 
 ### Callable containers and enumerative nondeterminism
+
+A callable container is one possible source. The [producer and transformer design](ProducersAndTransformers.md) considers a filter whose input is any compatible producer, including the output of another transformer. It covers preparation, pipeline syntax and the lifetime of a reusable rule description.
 
 A container can model a choice among zero or more answers by offering each candidate to a caller-supplied body. The producer controls which candidates it offers and in what order. The caller decides what to do with each one. This models *enumerative nondeterminism*. Several answers can be possible even when their visit order is completely predictable. Repeated handoffs remain observable.
 
