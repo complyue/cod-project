@@ -1,8 +1,14 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 220 · Recorded: 2026-11-19 · Phase: language/application co-design.
+Design revision: 223 · Recorded: 2026-11-19 · Phase: language/application co-design.
 
 ## Design authority
+
+- **Explicit call intent.** [H-CALL-INTENT-20261119](../CHANGELOG.md#h-call-intent-20261119) covers D-10-ARGUMENTS and D-10-TRAILING-CALLBACK at r223. P-405/P-406 relate visible argument destinations to C-10/C-57 and charter §§3.3/8.1. Check crossed functor matches, one distinguishing label followed by an ordinary positional value, reordered labels and first-here selection. Preserve written evaluation order, default phases, owners and the requirement for one applicable best method.
+
+[K-PRODUCER-TRANSFORMERS-20261119](../CHANGELOG.md#k-producer-transformers-20261119) continues the D-10 feature overview at r222 by linking the proposed structural producer protocol in D-31. D-29 continues to govern the traversal examples and their observable results.
+
+- **Callable containers as choice producers.** [K-ENUMERATIVE-CHOICE-20261119](../CHANGELOG.md#k-enumerative-choice-20261119) continues the D-10 feature overview at r221 under D-29-GENERALIZED-FOR/P-623–P-624 and D-07-FUNCTORS. C-96/C-65 link caller-controlled traversal and owner validity to charter §§3.2/4.3/6.1. Compare both call spellings, the filtered route sequence and the target of an early exit. The Haskell list comparison checks order, duplicate answers and how consumption is bounded. The operator spelling and native admission retain their respective design scopes.
 
 [H-CALLABLE-TAIL-20261119](../CHANGELOG.md#h-callable-tail-20261119) applies the [callable result rules](CallableResultInference.md#results-of-proc-func-and-here-bodies) to calls, discards and double-brace callbacks at r220. An explicit procedure exit and a local callback tail each supply evidence to their own invocation.
 
@@ -992,9 +998,9 @@ proc invoke(here body() -> u64) -> u64 { return body(); }
 invoke() {{ return 9u64; }};               # Niladic shorthand, result 9.
 ```
 
-The callback is the **first declared parameter**, as in [Julia's do-notation](https://docs.julialang.org/en/v1/manual/functions/#Do-Block-Syntax-for-Function-Arguments). CoD retains its own return, lexical access and lifetime rules. Bind the trailing callable to that first slot before binding the written argument list. Positional arguments then start at the second declared slot and otherwise preserve ordinary order, including the positional-prefix/named-suffix rule. Named arguments still bind their declared names. The example's mapping is `apply(callback, 7u64)`; this describes parameter destinations, not a new evaluation order.
+The callback is the **first declared parameter**, as in [Julia's do-notation](https://docs.julialang.org/en/v1/manual/functions/#Do-Block-Syntax-for-Function-Arguments). CoD retains its own return, lexical access and lifetime rules. Bind the trailing callable to that first slot before binding the written argument list. Positional arguments then start at the second declared slot and follow the [ordinary argument rules](#named-arguments-defaults-and-complete-binding). The trailing body explicitly supplies that first here parameter. With a generator its declared name is `yield`. With `here pred(...)` it supplies `pred`. This identifies a parameter role during selection. A written label resolves against the actual declared name. The standalone argument `-> yield` requests a declared default for that name. A trailing body supplies a callback, even when that parameter has no default. The example's mapping is `apply(callback, 7u64)`; this describes parameter destinations, not a new evaluation order.
 
-There is no search for a callback parameter later in the signature. A non-callable first parameter, an explicitly supplied value/default request for the first parameter, or another missing required argument rejects. A declared default on the first parameter is suppressed by this explicitly supplied callback. Defaults on remaining omitted slots retain their existing rules. Calls without a trailing block keep ordinary positional binding. The callback construction is outside the parenthesized argument list, so it does not violate that list's ban on a positional argument after a named argument. The bounded form supplies one trailing callback; use explicit named callable arguments for other callbacks.
+There is no search for a callback parameter later in the signature. A candidate without a first here parameter, with a duplicate value or default request for that parameter, or with another missing required argument is inapplicable. Multiple compatible here candidates still need a unique best match. A declared default on the first parameter is suppressed by this explicitly supplied callback. Defaults on remaining omitted slots retain their existing rules. Calls without a trailing block keep ordinary positional binding. The bounded form supplies one trailing callback; use explicit named callable arguments for other callbacks.
 
 **Header and expected type.** `(x, index) => { ... }` binds fresh positional parameters of an ordered signature. `(x, index) => {{ ... }}` uses the same header with local callback return. Ordinary annotations can be written in either header. A niladic body may omit the parameter list and arrow. Header parsing uses the closing parenthesis and arrow. The independently selected expected callable signature supplies each parameter's type, val/ref/ptr/init/place mode, owner/access constraints, func/proc kind, result contract and failure requirements. This is contextual declaration checking, not type assertion or a new operation on the callback's parameters. Any explicit ordinary parameter annotations must satisfy that contract; they cannot erase owner/access/init obligations. No default expressions are authored by this anonymous header. For a generator-compatible single-brace here call, the [shared receiving header](RangedForAndGenerators.md#one-receiving-header-for-both-call-forms) accepts the same fresh controls, existing destinations and labelled projections as the corresponding for loop.
 
@@ -1030,7 +1036,9 @@ Accept niladic and parameterized examples, local typed returns, named remaining 
 
 ### Named arguments, defaults and complete binding
 
-H-451 selects a positional prefix followed by named arguments in any order. **No positional argument may follow the first named argument.** Names bind against the declaration signature. Every required parameter must be supplied; a missing parameter with a declared default is completed by that default. Omission does not mean partial application.
+**Call-site intent.** If established binding and ranking rules leave more than one viable interpretation, require the caller to identify the intended parameter by name or use a call form that explicitly supplies its role. An already unique best match needs no label. A label shared by surviving candidates may still leave ambiguity. Candidate checking cannot execute operands or default expressions to settle a tie. The [functor example](DomainLanguageDesign.md#functor-receivers-and-callback-arguments) shows when one label suffices.
+
+**Labels in declaration order.** A value may name the next positional parameter as `value -> name` and the following argument may still be positional. Check the label for each candidate even when it is in position. Once a label binds a parameter out of declaration order, all later arguments in that list must name their destinations. This preserves arbitrary reordering for a fully named suffix. Bind against the declaration signature. Every required parameter must be supplied; a missing parameter with a declared default is completed by that default. Omission does not mean partial application.
 
 H-457 selects the expression-first named form `expression -> parameter`; H-475 adds `-> parameter` to request that parameter's declared default explicitly. The destination is a parameter name in the declaration, not an expression or caller variable; the arrow does not copy, rebind or transfer ownership. The declared parameter mode still controls initialization. A top-level argument-label arrow binds the complete preceding argument expression (and any explicit spread), independently of overload lookup. `=` and `<-` inside that expression retain their ordinary operations. `:` retains expression typing. Exact interaction with all compound expressions/types still needs parser acceptance; do not recognize labels by scanning raw text without respecting nested grammar.
 
@@ -1043,12 +1051,13 @@ adjust(5u64, 3u64 -> bias);                  # value=5, scale defaults to 2, bia
 adjust(3u64 -> bias, 5u64 -> value);          # same bindings, named order unrestricted
 adjust(4u64 -> scale, 3u64 -> bias, 5u64 -> value);
 adjust(3u64 -> bias);                       # reject: required value is missing
-adjust(5u64 -> value, 3u64);                 # reject: positional after named
+adjust(5u64 -> value, 3u64);                 # value=5, scale=3, bias defaults
+adjust(3u64 -> bias, 5u64);                  # reject: bare argument after reordered bias
 adjust(5u64, 6u64 -> value);                 # reject: value supplied twice
 adjust(5u64, 3u64 -> unknown);               # reject: unknown parameter
 ```
 
-Ordinary positional arguments fill leading declaration slots in order without skipping optional parameters. The explicitly selected trailing-callback form above first fills slot one with its callback, so its written positional arguments start at slot two. Named arguments fill matching unfilled slots. Duplicate names, supplying a slot positionally and by name, unknown names and missing required slots reject that candidate binding. A call needs an applicable unambiguous declaration/method; do not run operands or defaults speculatively to try candidates. An explicitly supplied value suppresses its default; explicit null is still an argument with ordinary owner/nullability checks. An explicit default request instead uses the declared initializer as specified below. A required parameter may follow a default-bearing one because named binding can complete it. Ordinary omission needs no positional hole marker; `-> parameter` is an explicit named default request, not a positional placeholder. These rules apply to both functions and procedures.
+Check arguments from left to right for each candidate. A positional argument fills the next declaration slot in order, including a slot with a default. An in-position label advances the same way. Never guess a destination from a value’s type or from the slots left over after an out-of-order label. The explicitly selected trailing-callback form above first fills slot one with its callback, so its written positional arguments start at slot two. Named arguments fill matching unfilled slots. Duplicate names, supplying a slot positionally and by name, unknown names and missing required slots reject that candidate binding. A call needs an applicable unambiguous declaration/method; do not run operands or defaults speculatively to try candidates. An explicitly supplied value suppresses its default; explicit null is still an argument with ordinary owner/nullability checks. An explicit default request instead uses the declared initializer as specified below. A required parameter may follow a default-bearing one because named binding can complete it. Ordinary omission needs no positional hole marker; `-> parameter` is an explicit named default request, not a positional placeholder. These rules apply to both functions and procedures.
 
 **Selection precedes default analysis (H-477).** Select a unique overload using the declared signatures, supplied argument types and binding forms, declared constraints, and default-presence/count metadata under H-474/H-475. Do not analyze a default expression to infer candidate types, resolve its free names, check its effects or decide whether a competing candidate is applicable. An omitted slot or `-> parameter` needs a declared default; checking that the recipe exists is not analysis of its contents.
 
@@ -1088,12 +1097,13 @@ The default request names a parameter that must exist and have a declared defaul
 
 **Explicit named default request.** `-> parameter` is allowed only as a call-argument form. It contributes no value expression and is not a standalone default value, null, callable-owner projection or type witness. The destination binds to the declaration/origin contract, including through `typeof origin`; a target implementation's private names/defaults cannot satisfy it. Require a declared default, not merely an implicitly empty variadic tail.
 
-A request starts the named-argument portion, so no positional value or positional expansion may follow it. Named values and default requests may be reordered within that portion. A slot may be occupied once: a repeated request, a request plus a supplied value, or a request for a positionally supplied parameter rejects. Unknown names and parameters without defaults reject that candidate. All remaining required slots still need bindings; a request is not partial application.
+An explicit default request names and occupies its slot under the same order rule. If it names the next positional slot, the following value can still be positional. An out-of-order request starts the named-only suffix. Usual variadic expansion and duplicate-slot rules also apply. A slot may be occupied once: a repeated request, a request plus a supplied value, or a request for a positionally supplied parameter rejects. Unknown names and parameters without defaults reject that candidate. All remaining required slots still need bindings; a request is not partial application.
 
 ```cod
 adjust(5u64, -> scale, 3u64 -> bias); # scale uses its declared default.
 adjust(5u64, -> scale, -> bias);     # Both defaults run in their normal phases.
-adjust(-> scale, 5u64);             # Reject: positional argument after named.
+adjust(5u64, -> scale, 3u64);       # In order: request the scale default, then supply bias.
+adjust(-> scale, 5u64);             # Reject: scale skipped value, so the rest needs names.
 adjust(5u64, -> value);             # Reject: value already supplied/no default.
 adjust(5u64, -> scale, 3u64 -> scale); # Reject: duplicate binding for scale.
 ```
@@ -1244,7 +1254,7 @@ Caller-default failure precedes input ownership transfer; callee-default failure
 
 **Further review:** complete block grammar; helper/type-name hygiene and dependency checks in caller-defaults; public declaration versus implementing-method parameter names; conflicting defaults across declarations; type-bound default context transport and explicit contract erasure; and broader named pack composition. H-474/H-475 settles type-first comparison, fewer defaults, unopposed fixed-form preference, rejection of crossed preferences, and explicit named-default/empty-pack selection; this ranking is no longer an open choice. H-476/H-477 admits established type evidence from used defaults only after unique overload selection, with circular/unresolved inference rejected; default analysis never filters competing candidates and a selected-default error never retries selection. The declaration is the public naming/default contract; implementation-local names cannot change it. Default effects and checked failures stay visible through the selected contract. D-16 remains unchanged.
 
-**Acceptance:** complete reordered bindings and default omission; reject positional-after-named, duplicate, unknown and missing-required cases; preserve written explicit evaluation/conversion order and mode/owner/access/init checks; distinguish named arrows from grouped borrowed-owner projection; evaluate defaults once per omission; observe definition-versus-caller locals and fixed symbolic identity with caller-current values; reject escaping default-local views and invalid effect use. Acceptance also requires mixed defaults observing caller-before-callee order, pre-entry versus post-entry failure/ownership cleanup, and registration-versus-invocation defaults in deferred calls. Acceptance also requires named-only default authorship, rejection of defaults in inline callable types/anonymous declarations, unevaluated typeof with retained declaration origin, unchanged definition-site symbolic identities, actual-invocation caller lookup, and rejection of omission through a plain structural view. Acceptance includes compatible targets with different local names/defaults, original-default versus direct-target behavior, full-signature obligations and rejection of missing default-context evidence. Acceptance also requires live reads through the original alias without precomputing its value or retargeting it after index changes, unchanged target-body captures, and preserved context/lifetime obligations on forwarding. Acceptance further requires complete multi-method coverage independent of the receiver's current uses, rejection of a missing signature or an incompatible/ambiguous intercepting overload, preservation of origin defaults/names, and valid caller-local adapters. Acceptance also covers zero-versus-one default on equal type matches, exact matching with a default beating widening without one, equal-count ambiguity, named binding before counting, and no evaluation of losing defaults. H-475 acceptance adds crossed-preference rejection, explicit default and empty-pack selection, default-count/phase preservation for requests, and rejection of unknown/required/duplicate requests, positional-after-request and unresolved empty-pack type/owner evidence. H-476/H-477 acceptance includes unique selection before omitted/requested-default inference, supplied-value inference with skipped defaults, established helper-result evidence without execution, preserved context/origin and phases, and rejection of contradictory or unanchored evidence. It also requires ambiguity without analyzing competing defaults, a missing-name diagnostic only for the selected needed default, no inspection of an excluded default, and no retry after selected-default failure. Physical type-context transport, local family grammar and detailed inference procedures remain under review; selected behavior still requires implementation and proof coverage. Current source does not implement named arguments, parameter-default blocks or expression-colon typing.
+**Acceptance:** complete reordered bindings and default omission; accept positional arguments after an in-position label and reject them after a reordered label; reject duplicate, unknown and missing-required bindings; preserve written explicit evaluation/conversion order and mode/owner/access/init checks; distinguish named arrows from grouped borrowed-owner projection; evaluate defaults once per omission; observe definition-versus-caller locals and fixed symbolic identity with caller-current values; reject escaping default-local views and invalid effect use. Acceptance also requires mixed defaults observing caller-before-callee order, pre-entry versus post-entry failure/ownership cleanup, and registration-versus-invocation defaults in deferred calls. Acceptance also requires named-only default authorship, rejection of defaults in inline callable types/anonymous declarations, unevaluated typeof with retained declaration origin, unchanged definition-site symbolic identities, actual-invocation caller lookup, and rejection of omission through a plain structural view. Acceptance includes compatible targets with different local names/defaults, original-default versus direct-target behavior, full-signature obligations and rejection of missing default-context evidence. Acceptance also requires live reads through the original alias without precomputing its value or retargeting it after index changes, unchanged target-body captures, and preserved context/lifetime obligations on forwarding. Acceptance further requires complete multi-method coverage independent of the receiver's current uses, rejection of a missing signature or an incompatible/ambiguous intercepting overload, preservation of origin defaults/names, and valid caller-local adapters. Acceptance also covers zero-versus-one default on equal type matches, exact matching with a default beating widening without one, equal-count ambiguity, named binding before counting, and no evaluation of losing defaults. H-475 acceptance adds crossed-preference rejection, explicit default and empty-pack selection, default-count/phase preservation for requests, and rejection of unknown/required/duplicate requests, positional values after reordered requests and unresolved empty-pack type/owner evidence. H-476/H-477 acceptance includes unique selection before omitted/requested-default inference, supplied-value inference with skipped defaults, established helper-result evidence without execution, preserved context/origin and phases, and rejection of contradictory or unanchored evidence. It also requires ambiguity without analyzing competing defaults, a missing-name diagnostic only for the selected needed default, no inspection of an excluded default, and no retry after selected-default failure. Physical type-context transport, local family grammar and detailed inference procedures remain under review; selected behavior still requires implementation and proof coverage. Seed implementation coverage is recorded in the [language capability reference](../tests/cod/language/README.md).
 
 ### Evaluated bits and storage places
 
@@ -1650,6 +1660,71 @@ The SNN owns the neuron equations, AP/rate interpretation, training rules and da
 A library can provide one traversal and let each caller use either `for val n <- ascending() { ... }` or `ascending() (n) => { ... };`. Both select the same generator, enter the caller’s live lexical scope in the same order and deliver the same feedback. In the declaration, `yields` introduces a first here parameter named `yield`; `yield(item)` calls it. A written first here parameter such as `step` carries the same protocol. There is one method for the two call spellings. Changing the selected generator can change the visit order or membership effects under either spelling. [Ascending and descending in both call forms](RangedForAndGenerators.md#generalized-for-loops)
 
 For the proposed collection interface, `visit(xs) (index, item) => { ... };` exposes a readonly item for each visit. In a void visit, `continue;` finishes the current observation and `break;` ends the whole visit. The collection stays intact in both cases. A library function with a non-void result can also let the caller supply that result with `break value;`. [Collection examples](CollectionsAndBuiltinContainers.md#observation-and-owner-scope)
+
+### Callable containers and enumerative nondeterminism
+
+A callable container is one possible source. The [producer and transformer design](ProducersAndTransformers.md) considers a filter whose input is any compatible producer, including the output of another transformer. It covers preparation, pipeline syntax and the lifetime of a reusable rule description.
+
+A container can model a choice among zero or more answers by offering each candidate to a caller-supplied body. The producer controls which candidates it offers and in what order. The caller decides what to do with each one. This models *enumerative nondeterminism*. Several answers can be possible even when their visit order is completely predictable. Repeated handoffs remain observable.
+
+For example, a container of two station IDs can offer both through its call operator. The two definitions below are alternative spellings of one traversal. They use the [proposed functor declaration syntax](DomainLanguageDesign.md#functor-receivers-and-callback-arguments).
+
+```cod
+data Stops { first:u64; second:u64; }
+
+func (())(self:const Stops in O) yields u64 where {const owner O} {
+    yield(self.first);
+    yield(self.second);
+}
+
+# Equivalently, write this definition in place of the one above.
+func (())(self:const Stops in O, here emit(id:u64) -> void)
+    -> void where {const owner O} {
+    emit(self.first);
+    emit(self.second);
+}
+```
+
+In `starts()`, the expression `starts` supplies `self`. Count the caller-visible parameters after binding that receiver. The first is the `here` parameter for the consumer. Both `for val id <- starts() { record_stop(id); }` and `starts() (id) => { record_stop(id); };` record the same two stops in order. A container author can also expose the same generator protocol through a named operation. [Generator declaration and call equivalence](RangedForAndGenerators.md#generalized-for-loops)
+
+Suppose `starts` offers 10 and 20, and `ends` offers 20 and 30. This procedure body enumerates candidate routes and records each one whose endpoints differ.
+
+```cod
+for val origin <- starts() {
+    for val destination <- ends() {
+        if (origin == destination) { continue; }
+        record_route(origin, destination);
+    }
+}
+return;
+```
+
+The recorded routes are `(10, 20)`, `(10, 30)` and `(20, 30)`, in that order. Each outer candidate starts a fresh inner traversal. An empty inner traversal contributes zero routes. In a search procedure, `return true;` at the first accepted route exits both loops through their required cleanup. A bare `break;` at the same site ends only the current inner traversal. Completed writes and calls such as `record_route` keep their effects when search continues. A search that needs to undo a speculative update must arrange that explicitly.
+
+The example yields independent scalar values. For a borrowed yield, each component has one statically established owner throughout the traversal. A collection of independently owned objects can expose an ordinary visitor with an owner bound separately for each callback invocation, as in the proposed collection interface. [Fixed yield owners](RangedForAndGenerators.md#one-fixed-owner-per-borrowed-yield-component) · [Per-member visitation](CollectionsAndBuiltinContainers.md#observation-and-owner-scope)
+
+#### Comparison with Haskell lists
+
+Haskell represents an enumeration of alternatives as a list. The list comprehension and the CoD traversal agree on the route order for these inputs.
+
+```haskell
+routes starts ends = [(a, b) | a <- starts, b <- ends, a /= b]
+
+routes [10, 20] [20, 30]  -- [(10,20), (10,30), (20,30)]
+```
+
+The list monad explains how choices compose. Given `next :: a -> [b]`, `xs >>= next` enumerates the answers of `next x` for each successive `x` in `xs`. The corresponding CoD pattern is to call the next producer inside the current consumer. The inner traversal can depend on the outer candidate, for example by visiting only the destinations reachable from the current station. [Haskell 2010 Report, §3.11 on list comprehensions](https://www.haskell.org/onlinereport/haskell2010/haskellch3.html) · [Standard Prelude, list monad instance](https://www.haskell.org/onlinereport/haskell2010/haskellch9.html)
+
+| Choice operation | Haskell list | CoD traversal |
+| --- | --- | --- |
+| Offer zero or one answer | `[]` or `[x]` | Finish without a handoff, or call `yield(x)` once. |
+| Compose and filter | Nested generators and a Boolean guard | Nested producer calls and a conditional in the consumer. |
+| Observe a prefix | `take 1 (routes starts ends)` demands at most the first answer. | The body can act on the first answer and exit with its lexical `break` or `return`. |
+| Keep the answers | A lazy list is a value its caller can retain and consume later. | Each handoff invokes the live body synchronously. A caller that wants a retained collection builds it explicitly under the usual ownership rules. |
+
+For the finite, ordered producers above, collecting the CoD handoffs reproduces the Haskell list, including duplicate routes if the inputs repeat. For an unbounded inner enumeration, depth-first traversal in either example can spend all its time on the first origin. In CoD the consumer can also perform observable work at each handoff, such as booking a seat. Skipping a later candidate leaves an earlier booking in effect.
+
+Within the Haskell list monad, `return x` gives `[x]`. In the CoD producer, `yield(x)` offers that single candidate and resumes when the consumer finishes normally. Haskell’s `Functor []` supplies `fmap` for mapping elements, its `Monad []` supplies choice composition, and a CoD functor supplies an overloaded call operation. [List instances in the Standard Prelude](https://www.haskell.org/onlinereport/haskell2010/haskellch9.html)
 
 ## Validation and unresolved contract scope
 

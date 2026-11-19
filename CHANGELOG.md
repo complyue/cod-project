@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-11-19 — Express ambiguous call intent with the distinguishing argument
+
+<a id="h-call-intent-20261119"></a>
+**H-CALL-INTENT-20261119.** In the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-19 (America/Los_Angeles), the project user accepted ambiguity for the crossed data/here and numeric matches and made explicit parameter naming a design principle. The user described a here call as explicit `-> yield` intent and asked to omit the other `-> n` label. D-07r191, D-10r223 and registry r966 record these source decisions. The bounded integration permits positional continuation after an in-position label or default request and preserves the named suffix after reordering. It refines H-451’s blanket positional-after-named restriction at `8f558c76b1889e3e286d600fa5c6e54f297748a0:design/SymbolicDynamicScope.md`, “Named arguments, defaults and complete binding”. H-475/H-477 retain their overload and default rules. Compiler implementation remains separate.
+
+## 2026-11-19 — Scope structural producers and transformers
+
+<a id="k-producer-transformers-20261119"></a>
+**K-PRODUCER-TRANSFORMERS-20261119.** In the design side chat on 2026-11-19 (America/Los_Angeles), the project user proposed “src 符合 producer 接口就行，functor只是特例” and suggested an independent design document and a research paper. D-31r1/registry r965 record that direction, candidate C-97/P-633–P-635, unsettled syntax and a research question. D-10r222 links it from the feature overview. The earlier account is at `18b97cd962165041512bd1e8b48de8645ee4df5c:design/SymbolicDynamicScope.md`, “Callable containers and enumerative nondeterminism”.
+
+## 2026-11-19 — Document callable containers as choice producers
+
+<a id="k-enumerative-choice-20261119"></a>
+**K-ENUMERATIVE-CHOICE-20261119.** The project user requested a dedicated language-feature section (“值得在语言特性文档专门放个章节阐述”) in the design side chat on 2026-11-19 (America/Los_Angeles). D-10r220→221 and registry r963→964 illustrate H-GENERATOR-RECEPTION-20261119 and H-FUNCTOR-ARGUMENT-20261119 with a bound receiver and nested search. At the user’s request the section compares observable answers and consumption with Haskell lists. The example preserves traversal order, control targets, effects and owner requirements. The functor declaration spelling and compiler support retain their existing scope. Prior overview at `bfbba6afaa890f89653250212dba89e5eca37ef9:design/SymbolicDynamicScope.md`, “Generalized for-loops”.
+
 ## 2026-11-19 — Apply ordinary argument preparation to a directly supplied functor
 
 <a id="h-functor-argument-20261119"></a>

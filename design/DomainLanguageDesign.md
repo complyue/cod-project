@@ -1,6 +1,6 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 190
+Discussion revision: 191
 
 Recorded: 2026-11-19
 
@@ -12,7 +12,7 @@ Phase: coordinated language/SNN design, implementation planning and validation.
 
 - **Case expressions and branch-local variables.** [D-07-CASE](DesignAuthorityRegistry.md#d-07-case) r188 specifies the [source rules and examples](#case-expressions-and-branch-local-variables). [H-CASE-CONTRACT-20261119](../CHANGELOG.md#h-case-contract-20261119) covers selection and lexical control. [H-CASE-COVERAGE-20261119](../CHANGELOG.md#h-case-coverage-20261119) permits a statically exhaustive value case to omit a fallback and places each arm directly in its own case body. [H-CASE-THROW-20261119](../CHANGELOG.md#h-case-throw-20261119) confirms a fresh unchecked error for the explicit throwing arm. Check it both outside and inside a catch. P-625/P-626 connect observable selection, binding, effect order and result delivery to C-10/C-65/C-72 and charter §§3.1–3.3/4.3/8.1. Check single evaluation, writes before a failed guard, nullable and closed subjects, fallthrough, nested arm ownership and cleanup. Rich diagnostics follow the [compiler-stage policy](../applications/cod-booter/README.md#diagnostics-by-compiler-stage). Native representation and extensions to owner proofs are outside scope.
 
-- **Functor arguments.** [H-HERE-FUNCTOR-20261118](../CHANGELOG.md#h-here-functor-20261118) confirms direct passage of a data receiver with a compatible call operator to a here parameter. [H-FUNCTOR-ARGUMENT-20261119](../CHANGELOG.md#h-functor-argument-20261119) applies ordinary written argument evaluation to D-07-FUNCTORS r190. C-10/C-65/C-73 and P-605/P-606 connect an explicit domain operation to its receiver identity and live owner. Check a later argument rebinding the source slot, later writes to the original target, and zero or repeated invocations of a computed receiver. Competing overloads and compiler qualification remain separate.
+- **Functor arguments.** [H-HERE-FUNCTOR-20261118](../CHANGELOG.md#h-here-functor-20261118) confirms direct passage of a data receiver with a compatible call operator to a here parameter. [H-FUNCTOR-ARGUMENT-20261119](../CHANGELOG.md#h-functor-argument-20261119) applies ordinary written argument evaluation to D-07-FUNCTORS r190. C-10/C-65/C-73 and P-605/P-606 connect an explicit domain operation to its receiver identity and live owner. Check a later argument rebinding the source slot, later writes to the original target, and zero or repeated invocations of a computed receiver. [H-CALL-INTENT-20261119](../CHANGELOG.md#h-call-intent-20261119) settles the crossed direct-data/here match at r191. P-606 depends on D-10-ARGUMENTS for explicit labels. Compare an ambiguous bare call, both single-label calls and a trailing here body. Compiler qualification remains separate.
 
 - **Callable model.** D-18-HERE permits synchronous execution and forwarding of caller-supplied work. Ordinary storable functions are capture-free under H-CALLABLE-MODEL-20261118.
 
@@ -474,7 +474,19 @@ The `x` in the signature belongs to pred. Calling `pred(n)` supplies x inside th
 
 **Receiver preparation.** Evaluate the receiver expression once at its written argument position. Bind its selected target, owner and access to the here argument. Forwarding the argument preserves that selection. If a later argument rebinds `current` from a threshold of 10 to one of 20, the direct predicate still tests 12 against 10 and returns true. If code instead changes the original target’s minimum to 20 before invocation, the same predicate returns false. An explicit body evaluating `current(x)` reads the lexical slot when invoked. A computed receiver such as `choose_limit()` runs once during argument preparation even when the callee skips or repeats the predicate. Ordinary checks must prove the target’s owner stays live throughout its use.
 
-The priority between a direct data overload and a competing here-functor overload is a separate overload-selection question.
+**Competing data and here overloads.** Consider this overload family on its own. Both declarations can use the same Threshold defined above.
+
+```cod
+func test(rule:const Threshold in O, n:u64) -> bool where {const owner O};
+func test(here pred(x:u64) -> bool, n:u32) -> bool;
+
+test(current, 12u32);                  # Ambiguous.
+test(current -> rule, 12u32);          # Data overload. n widens to u64.
+test(current -> pred, 12u32);          # Here overload. n is u32.
+test(12u32) (x) => { current(x) };     # The trailing body supplies pred.
+```
+
+The first declaration accepts the receiver directly as data and needs numeric widening. The second binds the receiver as a here predicate and matches the numeric argument exactly. With the same remaining matches, direct receipt as data wins over binding the receiver as a here argument. In this example each declaration has a better match on a different argument. Reject the bare call as ambiguous. Apply the [named argument rules](SymbolicDynamicScope.md#named-arguments-defaults-and-complete-binding) to each signature before ranking. The distinguishing label selects a parameter that only one declaration has, so the ordinary second argument can remain positional. The trailing spelling explicitly asks for a first here parameter. Its body reads `current` when invoked. The directly supplied predicate retains the receiver selected at argument preparation.
 
 #### One callback parameter for different owner counts
 
