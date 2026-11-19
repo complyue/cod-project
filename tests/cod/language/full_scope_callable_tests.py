@@ -66,6 +66,24 @@ runner.CASES = {
     'return_inspection_calls_group_with_protected_return': (IO+
         'proc relay(here body()->void)->void{try{body();}finally{behave @print(4u64);return;};}'
         'proc run()->u64{defer{if returning (){relay(){return 9u64;};}};return 1u64;}behave @print(run());',0,'4\n9\n',''),
+    'forwarded_group_observes_supplier_finally_return': (IO+
+        'func relay(here body()->void)->void{body();}'
+        'func forward(here body()->void)->void{relay(body);}'
+        'proc run(flag:bool)->u64{defer{try{if(flag){return 7u64;}else{};}finally{forward(){'
+        'if returning (){behave @print(1u64);}else{behave @print(2u64);}};};return 9u64;};}'
+        'behave @print(run(true));behave @print(run(false));',0,'1\n7\n2\n9\n',''),
+    'group_finally_observes_supplier_return_without_observing_feedback': (IO+
+        'func relay(here body(taken:bool)->void,flag:bool)->void{body(flag);}'
+        'proc run(flag:bool)->u64{defer{relay(flag)(taken)=>{try{if(taken){return 7u64;}else{continue;};}finally{'
+        'if returning (){behave @print(1u64);}else{behave @print(2u64);}};};return 9u64;};}'
+        'behave @print(run(true));behave @print(run(false));',0,'1\n7\n2\n9\n',''),
+    'group_finally_cancellation_preserves_inherited_return_only': (IO+
+        'using "std:exceptions" MissingReturnError;func missing()->u64{}'
+        'func relay(here body()->void)->void{body();}'
+        'proc run(flag:bool)->u64{defer{relay(){try{try{return 7u64;}finally{missing():void;};}'
+        'catch(e:const MissingReturnError){if returning (){behave @print(1u64);}else{behave @print(2u64);}};};'
+        'return 9u64;};if(flag){return 8u64;}else{};}'
+        'behave @print(run(true));behave @print(run(false));',0,'1\n9\n2\n9\n','[-Wmissing-return]'),
     'here_group_local_finally_cancels_return_before_catch': (IO+
         'using "std:exceptions" MissingReturnError;func missing()->u64{}'
         'func relay(here body()->void)->void{body();}'

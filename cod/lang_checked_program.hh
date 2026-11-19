@@ -139,6 +139,11 @@ struct CheckedOperation {
     size_t instance;
     std::vector<const Expression *> places;
     std::vector<size_t> owners;
+    struct ReturningProfile {
+      size_t body, receiver;
+      auto operator<=>(const ReturningProfile &) const = default;
+    };
+    std::optional<ReturningProfile> returning;
     auto operator<=>(const SuppliedHere &) const = default;
   };
   std::optional<SuppliedHere> supplied_here;
@@ -406,6 +411,7 @@ struct CheckedMethod {
   struct HereGroupResults {
     std::optional<Type> supplier;
     Type receiving_call;
+    std::optional<bool> supplier_return;
     bool operator==(const HereGroupResults &) const = default;
   };
   std::optional<HereGroupResults> here_group;

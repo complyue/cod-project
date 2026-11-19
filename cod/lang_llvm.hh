@@ -378,8 +378,12 @@ class LLVMEmission {
     assign_value(completion_.value, value, at);
     b_.CreateStore(integer(0), completion_.category);
     b_.CreateStore(null_pointer(), completion_.fatal);
-    b_.CreateStore(b_.getTrue(), completion_.has_return);
+    b_.CreateStore(b_.getInt1(!here_destination_), completion_.has_return);
     b_.CreateStore(b_.getInt8(1), completion_.kind);
+  }
+  llvm::Value *observed_return() {
+    if (!suspended_return_) throw std::logic_error("return inspection has no suspended completion");
+    return b_.CreateOr(suspended_return_, load(completion_.has_return));
   }
   void fail_path(ExceptionCategory category, const Location &at, llvm::Value *fatal = nullptr) {
     save_abrupt(outcome(empty_scalar(), integer(exception_id(category)), integer(site(at)), fatal ? fatal : null_pointer()));
@@ -554,9 +558,17 @@ class LLVMEmission {
     }
     return contextual_value(expr, alternatives, "owner", [&](size_t owner) { return owner_identity(owner, expr.at); }, b_.getPtrTy());
   }
-  llvm::Value *prepare_here(const CheckedOperation::SuppliedHere &body, const Location &at) {
+  llvm::Value *prepare_here(const CheckedOperation::SuppliedHere &body, const Location &at,
+                            llvm::Value *returning = nullptr) {
     const auto &entry = here_entries_.at(body.instance);
-    auto *value = b_.CreateInsertValue(llvm::UndefValue::get(here_), entry.entry, 0);
+    llvm::Value *invoke = entry.entry;
+    if (body.returning) {
+      const auto &alternate = here_entries_.at(body.returning->body);
+      if (!returning || alternate.activation != entry.activation || alternate.entry->getFunctionType() != entry.entry->getFunctionType())
+        throw std::logic_error("supplied here return state changed the activation layout");
+      invoke = b_.CreateSelect(returning, alternate.entry, entry.entry);
+    }
+    auto *value = b_.CreateInsertValue(llvm::UndefValue::get(here_), invoke, 0);
     if (!entry.group && body.places.empty() && body.owners.empty()) return b_.CreateInsertValue(value, null_pointer(), 1);
     auto *activation = slot(entry.activation, "here.activation");
     for (size_t i = 0; i < body.places.size(); ++i) {
@@ -614,6 +626,7 @@ class LLVMEmission {
       prepared.push_back(instance ? b_.getInt32(program_->instances[*instance].query_environment) : query_environment_);
     }
     if (layout.destination) { destination = slot(scalar_, "callable.result"); prepared.push_back(destination); }
+    llvm::Value *callee = target;
     if (layout.accepts_here) {
       std::map<std::optional<CheckedOperation::SuppliedHere>, std::vector<size_t>> entries;
       for (size_t i = 0; i < contexts_.size(); ++i) {
@@ -622,17 +635,39 @@ class LLVMEmission {
         if (!call.supplied_here && !call.forwards_here) throw std::logic_error("unchecked here argument reached native call");
         entries[call.supplied_here].push_back(i);
       }
-      auto *argument = contextual_value(expr, entries, "here.argument", [&](const auto &supplied) -> llvm::Value * {
-        if (supplied) return prepare_here(*supplied, expr.at);
+      const auto argument_value = [&](const auto &supplied, llvm::Value *returning) -> llvm::Value * {
+        if (supplied) return prepare_here(*supplied, expr.at, returning);
         if (!here_argument_) throw std::logic_error("no here argument to forward");
         return here_argument_;
+      };
+      llvm::Value *argument;
+      if (std::ranges::any_of(entries, [](const auto &entry) { return entry.first && entry.first->returning; })) {
+        auto *returning = observed_return();
+        auto *dispatch_type = llvm::StructType::get(context_, {here_, b_.getPtrTy()});
+        auto *dispatch = contextual_value(expr, entries, "here.dispatch", [&](const auto &supplied) {
+          llvm::Value *receiver = target;
+          if (supplied && supplied->returning) {
+            const auto id = supplied->returning->receiver;
+            const bool specialized = specialize_ && instance && target == specialized_.at(*instance);
+            auto *alternate = specialized ? specialized_.at(id) : general_.at(program_->instances[id].method);
+            if (!alternate || target->getFunctionType() != alternate->getFunctionType())
+              throw std::logic_error("supplied here return state changed the receiver layout");
+            receiver = b_.CreateSelect(returning, alternate, target);
+          }
+          auto *value = b_.CreateInsertValue(llvm::UndefValue::get(dispatch_type), argument_value(supplied, returning), 0);
+          return b_.CreateInsertValue(value, receiver, 1);
+        }, dispatch_type);
+        argument = b_.CreateExtractValue(dispatch, 0);
+        callee = b_.CreateExtractValue(dispatch, 1);
+      } else argument = contextual_value(expr, entries, "here.argument", [&](const auto &supplied) {
+        return argument_value(supplied, nullptr);
       }, here_);
       if (here_site) b_.CreateStore(b_.CreateExtractValue(argument, 1), here_site);
       prepared.push_back(argument);
     }
     if (!target || prepared.size() != layout.parameter_count() || target->arg_size() != layout.parameter_count())
       throw std::logic_error("native call disagrees with its parameter roles");
-    llvm::Value *result = b_.CreateCall(target, prepared);
+    llvm::Value *result = b_.CreateCall(target->getFunctionType(), callee, prepared);
     if (destination) result = b_.CreateInsertValue(result, load(destination), 0);
     return result;
   }
@@ -1622,8 +1657,7 @@ class LLVMEmission {
     case K::integer: case K::boolean:
       return pack(llvm::ConstantInt::get(llvm::cast<llvm::IntegerType>(native_type(fact.type)), fact.integer), fact.type);
     case K::return_test:
-      if (!suspended_return_) throw std::logic_error("return inspection has no suspended completion");
-      return pack(b_.CreateOr(suspended_return_, load(completion_.has_return)), Type::boolean);
+      return pack(observed_return(), Type::boolean);
     case K::real: {
       auto text = expr.text;
       if (text.ends_with("f32") || text.ends_with("f64")) text.resize(text.size() - 3);
@@ -1806,6 +1840,7 @@ class LLVMEmission {
         b_.CreateStore(b_.getInt8(static_cast<unsigned>(*fact.here_exit)), b_.CreateStructGEP(here_transfer_, here_destination_, 0));
         b_.CreateStore(payload, b_.CreateStructGEP(here_transfer_, here_destination_, 1));
         b_.CreateStore(here_destination_, completion_.transfer);
+        b_.CreateStore(b_.getInt1(*fact.here_exit == HereExit::return_supplier), completion_.has_return);
         b_.CreateStore(b_.getInt8(3), completion_.kind);
       } else save_return(value, expr.at);
       b_.CreateBr(control_->exit);
@@ -2017,6 +2052,8 @@ class LLVMEmission {
     begin(function, prepared.storage, layout.bindings, frame);
     if (call.accepts_here) here_argument_ = function->getArg(call.here_index());
     if (call.here_group) here_destination_ = function->getArg(call.here_index());
+    if (method.here_group && method.here_group->supplier_return.has_value())
+      suspended_return_ = b_.getInt1(*method.here_group->supplier_return);
     contexts_.clear();
     for (const auto &context : prepared.contexts) contexts_.push_back({&context.operations(), context.instance});
     if (call.captures) {
@@ -2142,6 +2179,11 @@ public:
         if (operation.supplied_here) {
           here_instances.insert(operation.supplied_here->instance);
           retain_method(program.instances[operation.supplied_here->instance].method);
+          if (const auto &returning = operation.supplied_here->returning) {
+            here_instances.insert(returning->body);
+            retain_method(program.instances[returning->body].method);
+            retain_method(program.instances[returning->receiver].method);
+          }
         }
         const bool installation = expr->kind == Expression::Kind::effect || expr->kind == Expression::Kind::procedure_effect;
         if (operation.symbol && (expr->kind == Expression::Kind::symbol || (installation && operation.publishes_effect) || operation.callable_call))
