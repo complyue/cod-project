@@ -45,6 +45,11 @@ PICK = 'func choose(ptr left:T in O,ptr right:T in O)->ptr T in O where {T,owner
 PICK_QUERY = (UNWRITTEN+'val ready<-8u64;ptr chosen=choose(local,ready);'
               'try{return chosen;}catch(e:const NullPointerException){return 99u64;};')
 UNWRITTEN_RESULT = "read of 'chosen' before definite initialization"
+PREPARE = ('proc prepare(ptr first:u64 in O,ptr second:u64 in O)'
+           '->ptr u64 in O throws NullPointerException where {owner O}')
+PREPARE_INPUTS = UNWRITTEN+'val other<-make local u64;'
+PREPARE_READ = ('try{ptr chosen=prepare(local,other);return chosen;}'
+                'catch(e:const NullPointerException){return 99u64;};')
 
 
 def guarded_reference(body):
@@ -53,6 +58,10 @@ def guarded_reference(body):
 
 def queried_pick(body):
     return IO+PICK+'{'+body+'}'+query(PICK_QUERY)+'behave @print(result);'
+
+
+def queried_preparation(body, caller=PREPARE_READ):
+    return IO+TYPES+PREPARE+'{'+body+'}'+query(PREPARE_INPUTS+caller, '')+'behave @print(result);'
 
 
 runner.CASES = {
@@ -203,6 +212,43 @@ runner.CASES = {
     'query_inspects_borrowed_signature_without_validating_generic_body': (
         IO+PICK+'{return 7u64;}'+UNWRITTEN+'val ready<-8u64;'
         'val result<-make local typeof(choose(local,ready)){4u64};behave @print(result);', 0, '4\n', ''),
+    'query_reads_target_initialized_before_borrowed_return': (
+        queried_preparation('first<-7u64;return first;'), 0, '4\n', ''),
+    'query_reads_saved_target_initialized_in_finally': (
+        queried_preparation('try{return first;}finally{first<-7u64;{}};'), 0, '4\n', ''),
+    'query_reads_saved_target_initialized_in_defer': (
+        queried_preparation('defer{if(first is not null){first<-7u64;{}}else{};};return first;'), 0, '4\n', ''),
+    'query_matches_saved_target_and_cleanup_write_under_the_same_value_guard': (
+        queried_preparation('defer{if(flag){first<-7u64;{}}else{second<-8u64;{}};};'
+                            'if(flag){return first;}else{return second;};',
+                            PREPARE_READ.replace('local,other', 'local,other,true'))
+        .replace('second:u64 in O)', 'second:u64 in O,flag:bool)'), 0, '4\n', ''),
+    'query_rejects_cleanup_writes_under_the_opposite_value_guard': (
+        queried_preparation('defer{if(flag){second<-7u64;{}}else{first<-8u64;{}};};'
+                            'if(flag){return first;}else{return second;};',
+                            PREPARE_READ.replace('local,other', 'local,other,true'))
+        .replace('second:u64 in O)', 'second:u64 in O,flag:bool)'), 2, '', UNWRITTEN_RESULT),
+    'query_reads_saved_target_initialized_by_prepared_transfer': (
+        queried_preparation('defer (<-)(first,7u64);return first;'), 0, '4\n', ''),
+    'query_carries_callee_initialization_to_the_original_target': (
+        queried_preparation('first<-7u64;return second;',
+            'try{prepare(local,other);return local;}catch(e:const NullPointerException){return 99u64;};'), 0, '4\n', ''),
+    'query_carries_named_deferred_initialization_at_invocation': (
+        IO+PREPARE.replace(' throws NullPointerException', '')+
+        '{if(first is not null){first<-7u64;{}}else{};return second;}'+query(PREPARE_INPUTS+
+        'defer{behave @print(local);}finally{};defer prepare(local,other);return 5u64;')+
+        'behave @print(result);', 0, '4\n', ''),
+    'query_does_not_credit_write_to_rebound_slot_for_saved_result': (
+        queried_preparation('ptr saved=first;defer{saved=second;'
+            'if(saved is not null){saved<-7u64;{}}else{};};return saved;'), 2, '', UNWRITTEN_RESULT),
+    'query_keeps_successful_callee_writes_out_of_failure_paths': (
+        queried_preparation('try{return first;}finally{ptr absent:u64=null in here;absent;first<-7u64;{}};',
+            PREPARE_READ.replace('return 99u64;', 'return local;')), 2, '', UNINITIALIZED_LOCAL),
+    'query_invalidates_written_boolean_evidence_from_overlapping_inputs': (
+        IO+TYPES+PREPARE.replace('ptr second:u64 in O', 'ref setter:bool in O,ref gate:bool in O')+
+        '{if(gate){setter<-false;if(gate){first<-7u64;{}}else{};}else{first<-7u64;{}};return first;}'+
+        query(UNWRITTEN+'val switch<-true;'+PREPARE_READ.replace('local,other', 'local,switch,switch'), ''),
+        2, '', UNWRITTEN_RESULT),
     'query_checks_prepared_bits_swap_at_registration': (
         query(UNWRITTEN+'val ready<-3u64;defer (<->)(local,ready);local<-7u64;return local;'),
         2, '', "read of 'left swap target' before definite initialization"),
