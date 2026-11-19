@@ -417,6 +417,71 @@ runner.CASES = {
     'lexical_handoff_full_scope_cannot_materialize_entry': (
         'proc stage() yields u64{ {{func saved=yield;return;}};return;}'
         'for val n<-stage(){};',2,'','a here argument can only be invoked or forwarded'),
+    'prepared_here_source_runs_operands_once_before_the_stage': (IO+
+        'proc mark(n:u64)->u64{behave @print(n);return n;}'
+        'proc rows(day:u64) yields u64 -> bool{behave @print(40u64);'
+        'if(!yield(day)){return;}else{};yield(99u64);return;}'
+        'proc stage(here input() yields u64 -> bool,stamp:u64) yields u64 -> bool{behave @print(stamp);'
+        'for val n<-input(){continue yield(n);};for val n<-input(){continue yield(n+1u64);};return;}'
+        'proc run()->void{for val n<-stage(rows(mark(24u64)),mark(32u64)){behave @print(n);continue false;};return;}run();',
+        0,'24\n32\n32\n40\n24\n40\n25\n',''),
+    'prepared_here_source_is_not_entered_when_skipped': (IO+
+        'proc mark(n:u64)->u64{behave @print(n);return n;}'
+        'proc rows(day:u64) yields u64{behave @print(80u64);yield(day);return;}'
+        'proc stage(here input() yields u64) yields u64{behave @print(31u64);return;}'
+        'proc run()->void{for val n<-stage(rows(mark(7u64))){behave @print(n);};return;}run();',0,'7\n31\n',''),
+    'prepared_here_source_uses_distinct_formals_and_forwards_inputs': (IO+
+        'proc mark(n:u64)->u64{behave @print(n);return n;}'
+        'func rows(day:u64) yields u64{yield(day);}'
+        'proc visit(here first() yields u64,here second() yields u64)->void{'
+        'for val n<-second(){behave @print(n+10u64);};for val n<-first(){behave @print(n+20u64);};return;}'
+        'proc relay(here first() yields u64,here second() yields u64)->void{visit(first,second);return;}'
+        'relay(rows(mark(1u64)),rows(mark(2u64)));',0,'1\n2\n12\n21\n',''),
+    'prepared_here_source_preserves_labelled_feedback_and_stop': (IO+
+        'func rows(day:u64) yields {ok:bool;id:u64;} -> bool{if(!yield(day->id,true->ok)){return;}else{};yield(80u64->id,false->ok);}'
+        'func stage(here src() yields {id:u64;ok:bool;} -> bool) yields {ok:bool;id:u64;} -> bool{'
+        'for {val id<-id;val ready<-ok;} := src(){continue yield(ready->ok,id->id);};}'
+        'proc run()->void{stage(rows(24u64))({val id<-id;val ready<-ok;})=>{behave @print(id);behave @print(ready);false};return;}run();',
+        0,'24\ntrue\n',''),
+    'prepared_here_source_carries_its_invocation_owner': (IO+
+        'func origin(value:u64) yields ref const u64 in here{val slot<-value;yield(slot);}'
+        'func stage(here input() yields ref const u64 in here) yields u64{for ref item=input(){yield(item+1u64);};}'
+        'proc run()->void{for val n<-stage(origin(24u64)){behave @print(n);};return;}run();',0,'25\n',''),
+    'prepared_here_source_propagates_outer_return_through_cleanups': (IO+
+        'proc rows(day:u64) yields u64{defer behave @print(31u64);yield(day);behave @print(80u64);return;}'
+        'proc stage(here src() yields u64) yields u64{defer behave @print(32u64);for val n<-src(){yield(n);};return;}'
+        'proc run()->u64{for val n<-stage(rows(24u64)){return n;};return 0u64;}behave @print(run());',0,'31\n32\n24\n',''),
+    'prepared_here_source_downstream_failure_bypasses_both_catches': (IO+'using "std:exceptions" NullPointerException;'+
+        'func fail_now()->void throws NullPointerException{ptr p:u64=null in here;p;{};}'
+        'proc rows(day:u64) yields u64{try{yield(day);}'
+        'catch(e:const NullPointerException){behave @print(80u64);}finally{behave @print(31u64);};return;}'
+        'proc stage(here src() yields u64) yields u64{try{for val n<-src(){yield(n);};}'
+        'catch(e:const NullPointerException){behave @print(81u64);}finally{behave @print(32u64);};return;}'
+        'proc run()->void{try{for val n<-stage(rows(24u64)){behave @print(n);fail_now();};}'
+        'catch(e:const NullPointerException){behave @print(33u64);};return;}run();',0,'24\n31\n32\n33\n',''),
+    'prepared_here_source_checks_failures_on_the_selected_overload': (IO+'using "std:exceptions" Exception;'+
+        'func rows(day:u64) yields u64{yield(day);}'
+        'func rows(flag:bool) yields u64 throws Exception{if(flag){yield(80u64);}else{};}'
+        'func stage(here src() yields u64) yields u64{for val n<-src(){yield(n);};}'
+        'proc run()->void{for val n<-stage(rows(24u64)){behave @print(n);};return;}run();',0,'24\n',''),
+    'prepared_here_source_preparation_failure_does_not_enter_stage': (IO+'using "std:exceptions" NullPointerException;'+
+        'func input()->u64 throws NullPointerException{ptr p:u64=null in here;return p;}'
+        'proc rows(day:u64) yields u64{behave @print(80u64);yield(day);return;}'
+        'proc stage(here src() yields u64) yields u64{behave @print(81u64);for val n<-src(){yield(n);};return;}'
+        'proc run()->void{try{for val n<-stage(rows(input())){behave @print(n);};}'
+        'catch(e:const NullPointerException){behave @print(7u64);};return;}run();',0,'7\n',''),
+    'prepared_here_source_requires_compatible_handoff': (
+        'func rows() yields {other:u64;}{yield(1u64->other);}'
+        'func stage(here input() yields {id:u64;}) yields u64{for val n<-input(){yield(n);};}'
+        'for val n<-stage(rows()){};',2,'','prepared producer does not match the selected here contract'),
+    'prepared_here_source_cannot_drop_spread': (
+        'func rows() yields u64{yield(1u64);}'
+        'proc stage(here input() yields u64)->void{return;}'
+        'stage(rows()...);',2,'','spread arguments'),
+    'prepared_here_source_retains_procedure_restrictions': (
+        'proc rows() yields u64{yield(1u64);return;}'
+        'func stage(here input() yields u64) yields u64{for val n<-input(){yield(n);};}'
+        'for val n<-stage(rows()){};',2,'','a function cannot invoke a procedure producer'),
     'generator_void_feedback_rejects_explicit_operand': (
         'func generate() yields u64{yield(1u64);}func action()->void{}'
         'for val v<-generate(){continue action();};',2,'','void here feedback requires bare continue'),

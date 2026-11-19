@@ -867,7 +867,8 @@ class Parser {
     if (!take(")")) {
       do {
         if (is("here") && !is(":", 1)) {
-          if (!signature.parameters.empty()) fail(peek().at, "a here callable must be the first parameter");
+          if (!signature.parameters.empty() && !signature.parameters.back().here)
+            fail(peek().at, "here callable parameters must precede ordinary parameters");
           signature.parameters.push_back(here_parameter());
         } else signature.parameters.push_back(parameter_declaration());
       } while (take(","));
@@ -906,7 +907,9 @@ class Parser {
     parameters.insert(parameters.begin(), std::move(yield));
   }
   void generator_contract(Form &form) {
-    add_yield_parameter(form.parameters, false);
+    const bool upstream = !form.parameters.empty() && form.parameters.front().here &&
+        !form.parameters.front().here->parameters.empty() && form.parameters.front().here->parameters.front().here;
+    add_yield_parameter(form.parameters, upstream);
     form.result_type = Type::void_type;
   }
   void generic_clause(Form &form) {
@@ -958,7 +961,8 @@ class Parser {
       if (!take(")")) {
         do {
           if (is("here") && !is(":", 1)) {
-            if (!pipeline && !form.parameters.empty()) fail(peek().at, "a here callable must be the first parameter");
+            if (!pipeline && !form.parameters.empty() && !form.parameters.back().here)
+              fail(peek().at, "here callable parameters must precede ordinary parameters");
             form.parameters.push_back(here_parameter());
           } else form.parameters.push_back(parameter_declaration());
         } while (take(","));

@@ -42,14 +42,16 @@ class LLVMEmission {
   // Transient native parameter roles shared by declarations, calls and entry.
   struct CallLayout {
     size_t operands = 0, owners = 0, captures = 0, retained = 0;
-    bool declaration_context = false, destination = false, accepts_here = false, here_group = false;
+    bool declaration_context = false, destination = false;
+    size_t here_formals = 0;
+    bool here_group = false;
     size_t lexical_here = 0;
     size_t captures_index() const { return operands + owners; }
     size_t retained_begin() const { return captures_index() + (captures != 0); }
     size_t query_index() const { return retained_begin() + retained; }
     size_t result_index() const { return query_index() + declaration_context; }
     size_t here_index() const { return result_index() + destination; }
-    size_t here_count() const { return accepts_here + lexical_here; }
+    size_t here_count() const { return here_formals + lexical_here; }
     size_t parameter_count() const { return here_index() + here_count() + here_group; }
   };
   std::vector<CallLayout> call_layouts_;
@@ -61,6 +63,7 @@ class LLVMEmission {
   std::vector<llvm::Function *> general_, specialized_;
   struct HereEntry { llvm::Function *entry; llvm::StructType *activation; bool group; };
   std::map<size_t, HereEntry> here_entries_;
+  std::map<size_t, llvm::Function *> prepared_source_entries_;
   std::vector<llvm::GlobalVariable *> symbols_;
   std::map<size_t, llvm::AllocaInst *> effect_values_;
   // Operation facts retain the checked interpretation that justifies them.
@@ -607,7 +610,8 @@ class LLVMEmission {
   }
   llvm::Value *native_call(const Expression &expr, llvm::Function *target, size_t method, std::vector<llvm::Value *> prepared,
                            const std::vector<llvm::Value *> &captured = {}, std::optional<size_t> instance = {},
-                           const Type *callable_view = nullptr, llvm::AllocaInst *here_site = nullptr) {
+                           const Type *callable_view = nullptr, llvm::AllocaInst *here_site = nullptr,
+                           const std::vector<llvm::Value *> &here_values = {}) {
     const auto &layout = call_layouts_.at(method);
     const auto &inputs = input_frame(method).inputs;
     if (prepared.size() != layout.operands) throw std::logic_error("unchecked native call arity");
@@ -652,45 +656,41 @@ class LLVMEmission {
     }
     if (layout.destination) { destination = slot(scalar_, "callable.result"); prepared.push_back(destination); }
     llvm::Value *callee = target;
-    if (layout.accepts_here) {
-      using HereArgument = std::pair<std::optional<CheckedOperation::SuppliedHere>, std::optional<size_t>>;
-      std::map<HereArgument, std::vector<size_t>> entries;
+    if (here_values.size() != layout.here_formals)
+      throw std::logic_error("native call disagrees with its here parameter roles");
+    if (invocation.supplied_here) {
+      std::map<CheckedOperation::SuppliedHere, std::vector<size_t>> entries;
       for (size_t i = 0; i < contexts_.size(); ++i) {
         const auto &call = contexts_[i].at(&expr);
-        if (!call.callee || program_->instances[*call.callee].method != method) continue;
-        if (!call.supplied_here && !call.forwards_here) throw std::logic_error("unchecked here argument reached native call");
-        entries[{call.supplied_here, call.forwards_here}].push_back(i);
+        if (call.callee && program_->instances[*call.callee].method == method)
+          entries[call.supplied_here.value()].push_back(i);
       }
-      const auto argument_value = [&](const HereArgument &input, llvm::Value *returning) -> llvm::Value * {
-        if (input.first) return prepare_here(*input.first, expr.at, returning);
-        return here_arguments_.at(input.second.value());
-      };
       llvm::Value *argument;
-      if (std::ranges::any_of(entries, [](const auto &entry) { return entry.first.first && entry.first.first->returning; })) {
+      if (std::ranges::any_of(entries, [](const auto &entry) { return entry.first.returning.has_value(); })) {
         auto *returning = observed_return();
         auto *dispatch_type = llvm::StructType::get(context_, {here_, b_.getPtrTy()});
-        auto *dispatch = contextual_value(expr, entries, "here.dispatch", [&](const HereArgument &input) {
-          const auto &supplied = input.first;
+        auto *dispatch = contextual_value(expr, entries, "here.dispatch", [&](const auto &supplied) {
           llvm::Value *receiver = target;
-          if (supplied && supplied->returning) {
-            const auto id = supplied->returning->receiver;
+          if (supplied.returning) {
+            const auto id = supplied.returning->receiver;
             const bool specialized = specialize_ && instance && target == specialized_.at(*instance);
             auto *alternate = specialized ? specialized_.at(id) : general_.at(program_->instances[id].method);
             if (!alternate || target->getFunctionType() != alternate->getFunctionType())
               throw std::logic_error("supplied here return state changed the receiver layout");
             receiver = b_.CreateSelect(returning, alternate, target);
           }
-          auto *value = b_.CreateInsertValue(llvm::UndefValue::get(dispatch_type), argument_value(input, returning), 0);
+          auto *value = b_.CreateInsertValue(llvm::UndefValue::get(dispatch_type), prepare_here(supplied, expr.at, returning), 0);
           return b_.CreateInsertValue(value, receiver, 1);
         }, dispatch_type);
         argument = b_.CreateExtractValue(dispatch, 0);
         callee = b_.CreateExtractValue(dispatch, 1);
       } else argument = contextual_value(expr, entries, "here.argument", [&](const auto &supplied) {
-        return argument_value(supplied, nullptr);
+        return prepare_here(supplied, expr.at);
       }, here_);
       if (here_site) b_.CreateStore(b_.CreateExtractValue(argument, 1), here_site);
       prepared.push_back(argument);
     }
+    prepared.insert(prepared.end(), here_values.begin() + invocation.supplied_here.has_value(), here_values.end());
     for (size_t slot = 0; slot < layout.lexical_here; ++slot) {
       std::map<size_t, std::vector<size_t>> alternatives;
       for (size_t i = 0; i < contexts_.size(); ++i) {
@@ -817,18 +817,35 @@ class LLVMEmission {
     b_.CreateStore(right_value, left); b_.CreateStore(left_value, right);
     return outcome(empty_scalar(), integer(0), integer(0), null_pointer());
   }
-  llvm::Value *invoke(const Expression &expr, const std::vector<llvm::Value *> &arguments, llvm::AllocaInst *here_site = nullptr) {
+  llvm::Value *invoke(const Expression &expr, const std::vector<llvm::Value *> &arguments, llvm::AllocaInst *here_site = nullptr,
+                      const std::vector<llvm::Value *> &here_values = {}) {
     const auto &fact = contexts_.front().at(&expr);
     if (fact.invokes_here) {
       auto *argument = here_arguments_.at(*fact.invokes_here);
+      llvm::Value *entry = nullptr;
       auto prepared = arguments;
       std::vector<llvm::Type *> parameters(arguments.size(), scalar_);
       for (const auto input : here_owner_inputs(fact.operand_type)) {
         prepared.push_back(selected_owner(fact.argument(expr, input)));
         parameters.push_back(b_.getPtrTy());
       }
+      if (fact.supplied_here) {
+        std::map<CheckedOperation::SuppliedHere, std::vector<size_t>> entries;
+        for (size_t i = 0; i < contexts_.size(); ++i) entries[contexts_[i].at(&expr).supplied_here.value()].push_back(i);
+        auto *supplied = contextual_value(expr, entries, "here.consumer", [&](const auto &body) {
+          return prepare_here(body, expr.at);
+        }, here_);
+        if (here_site) b_.CreateStore(b_.CreateExtractValue(supplied, 1), here_site);
+        prepared.push_back(supplied);
+        parameters.push_back(here_);
+        std::map<size_t, std::vector<size_t>> sources;
+        for (size_t i = 0; i < contexts_.size(); ++i) sources[contexts_[i].at(&expr).opened_source.value()].push_back(i);
+        entry = contextual_value(expr, sources, "here.open", [&](size_t source) -> llvm::Value * {
+          return prepared_source_entries_.at(source);
+        }, b_.getPtrTy());
+      }
       prepared.push_back(b_.CreateExtractValue(argument, 1));
-      auto *entry = b_.CreateExtractValue(argument, 0);
+      if (!entry) entry = b_.CreateExtractValue(argument, 0);
       parameters.push_back(b_.getPtrTy());
       return b_.CreateCall(llvm::FunctionType::get(outcome_, parameters, false), entry, prepared);
     }
@@ -858,13 +875,13 @@ class LLVMEmission {
             const auto &other = program_->instances[*choice.operation->callee];
             return other.method == target.method && other.retained_types == target.retained_types &&
                 other.query_environment == target.query_environment;
-          })) return native_call(expr, general_[target.method], target.method, inputs, captured, id, nullptr, here_site);
+          })) return native_call(expr, general_[target.method], target.method, inputs, captured, id, nullptr, here_site, here_values);
     }
     return choose(expr, inputs, cases, outcome_, [&](const Choice &choice) -> llvm::Value * {
       if (choice.operation->callee) {
         const auto id = *choice.operation->callee;
         auto *target = specialize_ && cases.size() == 1 ? specialized_[id] : general_[program_->instances[id].method];
-        return native_call(expr, target, program_->instances[id].method, inputs, captured, id, nullptr, here_site);
+        return native_call(expr, target, program_->instances[id].method, inputs, captured, id, nullptr, here_site, here_values);
       }
       if (choice.operation->builtin == BuiltinOperation::unary || choice.operation->builtin == BuiltinOperation::binary)
         return outcome(eager_builtin(expr, arguments, choice), integer(0), integer(0), null_pointer());
@@ -1417,6 +1434,34 @@ class LLVMEmission {
     arguments.insert(arguments.end(), captured.begin(), captured.end());
     return arguments;
   }
+  llvm::Value *prepare_source(const Expression &expr) {
+    const auto operands = prepare_arguments(expr);
+    if (!reachable()) return nullptr;
+    llvm::Value *activation = null_pointer();
+    if (!operands.empty()) {
+      auto *storage = llvm::ArrayType::get(scalar_, operands.size());
+      activation = slot(storage, "here.source.operands");
+      for (size_t i = 0; i < operands.size(); ++i)
+        b_.CreateStore(operands[i], b_.CreateConstGEP2_64(storage, activation, 0, i));
+    }
+    // The opening call selects the checked entry for its actual consumer.
+    return b_.CreateInsertValue(llvm::Constant::getNullValue(here_), activation, 1);
+  }
+  std::vector<llvm::Value *> prepare_here_arguments(const Expression &expr) {
+    const auto &fact = contexts_.front().at(&expr);
+    std::vector<llvm::Value *> values(fact.here_arguments.size());
+    for (size_t slot = fact.supplied_here.has_value(); slot < values.size(); ++slot) {
+      std::map<CheckedOperation::HereArgument, std::vector<size_t>> arguments;
+      for (size_t i = 0; i < contexts_.size(); ++i)
+        arguments[contexts_[i].at(&expr).here_arguments.at(slot)].push_back(i);
+      values[slot] = contextual_value(expr, arguments, "here.input", [&](const auto &input) {
+        if (input.source) return prepare_source(*input.source);
+        return here_arguments_.at(input.lexical.value());
+      }, here_);
+      if (!reachable()) break;
+    }
+    return values;
+  }
   void check_destination_arguments(const Expression &expr, const std::vector<llvm::Value *> &arguments,
                                    bool deferred = false) {
     if (contexts_.front().at(&expr).destination_arguments) for (size_t i = 0; i < expr.children.size(); ++i) {
@@ -1753,6 +1798,8 @@ class LLVMEmission {
     }
     case K::value_call: case K::call: case K::behave: case K::perform: {
       return temporary_scope(expr.at, !fact.borrowed_result || read ? scalar_ : static_cast<llvm::Type *>(b_.getPtrTy()), [&]() -> llvm::Value * {
+        const auto here_values = prepare_here_arguments(expr);
+        if (!reachable()) return nullptr;
         const auto arguments = prepare_arguments(expr);
         if (!reachable()) return nullptr;
         llvm::AllocaInst *here_site = nullptr;
@@ -1760,7 +1807,7 @@ class LLVMEmission {
           here_site = slot(b_.getPtrTy(), "here.call.destination");
           b_.CreateStore(null_pointer(), here_site);
         }
-        auto *result = invoke(expr, arguments, here_site);
+        auto *result = invoke(expr, arguments, here_site, here_values);
         if (here_site) result = consume_here_transfer(result, load(here_site), expr.at);
         auto *value = propagate(result);
         if (!fact.borrowed_result) return own_value(value);
@@ -2008,6 +2055,24 @@ class LLVMEmission {
     return llvm::Function::Create(llvm::FunctionType::get(outcome_, parameters, false),
         llvm::GlobalValue::InternalLinkage, name, module_);
   }
+  void declare_prepared_source(size_t id) {
+    const auto &instance = program_->instances.at(id);
+    const auto &layout = call_layouts_.at(instance.method);
+    if (layout.owners || layout.captures || layout.retained || layout.declaration_context || layout.destination ||
+        layout.here_formals != 1 || layout.lexical_here || layout.here_group)
+      throw std::logic_error("unexpected parameter role in prepared producer");
+    auto *entry = llvm::Function::Create(llvm::FunctionType::get(outcome_, {here_, b_.getPtrTy()}, false),
+        llvm::GlobalValue::InternalLinkage, "cod.here.source." + std::to_string(id), module_);
+    prepared_source_entries_.emplace(id, entry);
+    llvm::IRBuilder<> body(llvm::BasicBlock::Create(context_, "entry", entry));
+    auto *storage = llvm::ArrayType::get(scalar_, layout.operands);
+    std::vector<llvm::Value *> arguments;
+    for (size_t i = 0; i < layout.operands; ++i)
+      arguments.push_back(body.CreateLoad(scalar_, body.CreateConstGEP2_64(storage, entry->getArg(1), 0, i)));
+    arguments.push_back(entry->getArg(0));
+    auto *target = specialize_ ? specialized_.at(id) : general_.at(instance.method);
+    body.CreateRet(body.CreateCall(target, arguments));
+  }
   void declare_here_entry(size_t id) {
     const auto &instance = program_->instances.at(id);
     const auto &method = program_->methods.at(instance.method);
@@ -2017,7 +2082,7 @@ class LLVMEmission {
     const auto offered = reception.offered;
     const auto places = layout.operands - reception.selected.size();
     const auto handed_owners = inputs.here_input_owners;
-    if (layout.captures || layout.retained || layout.declaration_context || layout.destination || layout.accepts_here)
+    if (layout.captures || layout.retained || layout.declaration_context || layout.destination || layout.here_formals)
       throw std::logic_error("unexpected parameter role in supplied here body");
     // The activation starts with the transfer record. Its address identifies
     // the originating call across every forwarding receiver.
@@ -2257,13 +2322,19 @@ public:
     // Scoped profiles can be created by provisional or restricted proofs.
     // Emit them when the final operations need their executable body.
     for (size_t i = 0; i < program.methods.size(); ++i)
-      if (!program.methods[i].scope_inputs && !program.methods[i].here_argument_instance && !program.methods[i].instances.empty())
+      if (!program.methods[i].scope_inputs && program.methods[i].here_targets.empty() &&
+          !program.methods[i].has_higher_order_here() && !program.methods[i].instances.empty())
         retain_method(i);
     std::set<size_t> used_symbols;
     std::set<size_t> here_instances;
+    std::set<size_t> prepared_sources;
     const auto collect_operations = [&](const auto &operations) {
       for (const auto &[expr, operation] : operations) {
         if (operation.callee) retain_method(program.instances[*operation.callee].method);
+        if (operation.opened_source) {
+          prepared_sources.insert(*operation.opened_source);
+          retain_method(program.instances[*operation.opened_source].method);
+        }
         if (operation.supplied_here) {
           here_instances.insert(operation.supplied_here->instance);
           retain_method(program.instances[operation.supplied_here->instance].method);
@@ -2318,8 +2389,8 @@ public:
         return !result.borrowed() && result.type->kind == Type::procedure;
       });
       call_layouts_[i] = {frame.inputs.size(), frame.owners.size(), method.captures.size(),
-          method.retained_types.size(), method.declaration_context(), destination, method.here.has_value(), method.here_group.has_value(),
-          method.here_inputs() - method.here.has_value()};
+          method.retained_types.size(), method.declaration_context(), destination, method.here.size(), method.here_group.has_value(),
+          method.here_inputs() - method.here.size()};
     }
     general_.resize(program.methods.size()); specialized_.resize(program.instances.size());
     for (size_t i = 0; i < program.methods.size(); ++i) {
@@ -2343,6 +2414,7 @@ public:
       }
     }
     for (const auto instance : here_instances) declare_here_entry(instance);
+    for (const auto instance : prepared_sources) declare_prepared_source(instance);
     for (size_t i = 0; i < program.methods.size(); ++i) {
       if (!emitted_methods[i]) continue;
       const auto &method = program.methods[i];

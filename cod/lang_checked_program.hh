@@ -153,7 +153,14 @@ struct CheckedOperation {
     auto operator<=>(const SuppliedHere &) const = default;
   };
   std::optional<SuppliedHere> supplied_here;
-  std::optional<size_t> forwards_here, invokes_here;
+  struct HereArgument {
+    std::optional<size_t> lexical;
+    const Expression *source = nullptr;
+    auto operator<=>(const HereArgument &) const = default;
+  };
+  std::vector<HereArgument> here_arguments;
+  std::optional<size_t> invokes_here;
+  std::optional<size_t> opened_source;
   std::vector<size_t> scope_here;
   std::optional<HereExit> here_exit;
   // Possible borrowed callable targets at invocation, after slot selection.
@@ -388,6 +395,7 @@ struct CheckedHereContract {
     bool read_only = false;
     bool operator==(const Component &) const = default;
   };
+  std::vector<CheckedHereContract> here;
   std::vector<Component> inputs;
   bool labelled = false;
   Component result;
@@ -395,11 +403,15 @@ struct CheckedHereContract {
   std::set<size_t> throws_categories;
   bool operator==(const CheckedHereContract &) const = default;
 };
+struct CheckedHereTarget {
+  std::optional<size_t> body, source;
+  auto operator<=>(const CheckedHereTarget &) const = default;
+};
 struct CheckedLexicalHere {
   std::string name;
   Type invocation;
   CheckedHereContract signature;
-  std::optional<size_t> callback;
+  CheckedHereTarget target;
   bool operator==(const CheckedLexicalHere &) const = default;
 };
 struct CheckedMethod {
@@ -421,9 +433,9 @@ struct CheckedMethod {
   std::vector<std::string> type_parameters;
   std::vector<size_t> retained_types;
   std::optional<size_t> parent;
-  std::optional<CheckedHereContract> here;
-  // Concrete callback supplied to a receiver or forwarded to it by its caller.
-  std::optional<size_t> here_argument_instance;
+  std::vector<CheckedHereContract> here;
+  // Concrete body or prepared producer bound to each formal.
+  std::vector<CheckedHereTarget> here_targets;
   struct HereGroupResults {
     std::optional<Type> supplier;
     Type receiving_call;
@@ -470,11 +482,14 @@ struct CheckedMethod {
   };
   std::optional<ScopeInputs> scope_inputs;
   size_t here_inputs() const {
-    return here.has_value() + (scope_inputs ? scope_inputs->lexical_here.size() : 0);
+    return here.size() + (scope_inputs ? scope_inputs->lexical_here.size() : 0);
+  }
+  bool has_higher_order_here() const {
+    return std::ranges::any_of(here, [](const auto &formal) { return !formal.here.empty(); });
   }
   std::span<const Parameter> input_parameters() const {
     if (scope_inputs) return scope_inputs->parameters;
-    return std::span<const Parameter>(source->parameters).subspan(here.has_value());
+    return std::span<const Parameter>(source->parameters).subspan(here.size());
   }
   const std::vector<OwnerParameter> &input_owners() const {
     return scope_inputs ? scope_inputs->owners : source->owner_parameters;
