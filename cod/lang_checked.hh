@@ -5440,14 +5440,14 @@ class ScalarChecker {
       note_type_failure(state, failure);
   }
   static void require_type_initialized(const TypeEvidenceState &state, const TargetEvidence &target,
-                                       std::string_view name, const Location &at) {
+                                       std::string_view name, const Location &at, bool require_incoming = false) {
     if (!state.checks_initialization() || !state.selections.initialization_reachable ||
         target.places.empty() || state.selections.selection_initialized(target)) return;
     const auto reaching = state.selections.outcome(state.selections.selection_outcomes(target), true);
     for (const auto &place : target.places) if (state.selections.may_read_uninitialized(place, reaching)) {
       // The optional summary leaves incoming payloads unwritten to establish
       // which writes follow from the callee alone.
-      if (state.initialization == TypeEvidenceState::InitializationCheck::borrowed_summary &&
+      if (!require_incoming && state.initialization == TypeEvidenceState::InitializationCheck::borrowed_summary &&
           std::holds_alternative<size_t>(place)) continue;
       if (name.empty()) if (const auto *local = std::get_if<const Expression *>(&place)) name = (*local)->text;
       fail(at, "read of '" + std::string(name.empty() ? "target" : name) +
@@ -5583,6 +5583,15 @@ class ScalarChecker {
     const auto declared = state.local_declarations.find(name);
     if (declared != state.local_declarations.end() && state.delayed_controls.contains(declared->second))
       fail(at, "a deferred block cannot capture loop-control binding '" + name + "'");
+  }
+  static void prepare_type_readable_argument(const TypeEvidenceState &state, const Expression &operand,
+                                             const ViewEvidence &view, const TargetEvidence &target, ArgumentMode mode) {
+    if (!state.checks_initialization() || !state.selections.initialization_reachable) return;
+    if (mode == ArgumentMode::borrowed_ref && view.nullable &&
+        state.selections.reachable(state.selections.selection_outcomes(target), false))
+      fail(operand.at, "ref argument requires a proven non-null target");
+    const auto name = operand.kind == Expression::Kind::name ? std::string_view{operand.text} : std::string_view{};
+    require_type_initialized(state, target, name, operand.at, true);
   }
   static void check_type_deferred_argument(const TypeEvidenceState &state, const Expression &call, const Expression &operand,
                                            const ViewEvidence &view, ArgumentMode mode) {
@@ -5887,6 +5896,7 @@ class ScalarChecker {
       std::vector<Type> arguments, retained;
       ResultContract contract;
       TypeEvidenceState context;
+      std::set<size_t> ready_inputs;
       std::set<size_t> dependents{};
       // Live edges start with no observed normal completion. An unproved
       // body uses the conservative declaration bound instead.
@@ -5923,7 +5933,7 @@ class ScalarChecker {
     }
   };
   std::optional<TypeBorrowedResult> sample_type_borrowed_result(const TypeBorrowedProofs::Obligation &obligation) const {
-    const auto &[id, prepared, retained, contract, context, dependents, previous] = obligation;
+    const auto &[id, prepared, retained, contract, context, ready_inputs, dependents, previous] = obligation;
     const auto &method = program_.methods[id];
     try {
       auto body = body_evidence(id, prepared, retained, context);
@@ -5945,17 +5955,21 @@ class ScalarChecker {
           continue;
         }
         TargetEvidence input;
-        auto missing = ObservationPaths::unconditional();
         if (argument_mode(parameter) == ArgumentMode::borrowed_ptr) {
           const auto &decisions = body.selections.observation_decisions;
           input.presence_proof = PresenceBranches::observed(decisions, decisions->next_observation++);
-          missing = input.presence_proof->at(true);
-        } else input.presence = TargetPresence::present;
+          if (!ready_inputs.contains(i)) {
+            body.selections.uninitialized.emplace(i, input.presence_proof->at(true));
+            result.initialized_inputs.insert(i);
+          }
+        } else {
+          // Readable arguments establish readiness at preparation. This is
+          // an input contract and contributes no callee write guarantee.
+          input.presence = TargetPresence::present;
+        }
         input.places.insert(i);
         body.selections.bind(parameter.name, i, std::move(input));
-        body.selections.uninitialized.emplace(i, std::move(missing));
         if (prepared[i] == Type::boolean) body.selections.borrowed_booleans.insert(i);
-        result.initialized_inputs.insert(i);
       }
       const auto completion = type_evidence(*method.source->body, body);
       complete_type_deferred(deferred, exits, body, completion != Type::never, &completed);
@@ -5976,8 +5990,7 @@ class ScalarChecker {
           if (const auto missing = selected.uninitialized.find(place); missing != selected.uninitialized.end()) {
             auto unwritten = missing->second;
             unwritten.conjoin(reaching);
-            // A ref already requires readiness at its return expression.
-            if (!contract.nullable() ? static_cast<bool>(unwritten) : selections.may_read_uninitialized(place, unwritten))
+            if (selections.may_read_uninitialized(place, unwritten))
               result.required_inputs.insert(*ordinal);
           }
         }
@@ -5993,7 +6006,7 @@ class ScalarChecker {
     }
   }
   std::optional<size_t> type_borrowed_obligation(size_t id, const std::vector<Type> &arguments, const std::vector<Type> &retained,
-      const ResultContract &contract, const TypeEvidenceState &supplied) const {
+      const ResultContract &contract, const TypeEvidenceState &supplied, const std::set<size_t> &ready_inputs) const {
     auto &proofs = *type_borrowed_proofs_;
     const auto &method = program_.methods[id];
     if (!method.source->body || variadic(method) || caller_bindings(method)) return {};
@@ -6003,20 +6016,21 @@ class ScalarChecker {
     const auto known = std::ranges::find_if(ids, [&](size_t index) {
       const auto &obligation = proofs.obligations[index];
       return obligation.arguments == prepared && obligation.retained == retained && obligation.contract == contract &&
-          obligation.context.same_definition_inputs(context);
+          obligation.ready_inputs == ready_inputs && obligation.context.same_definition_inputs(context);
     });
     if (known != ids.end()) return *known;
     if (!proofs.admit_input_structure(prepared, retained, contract, context)) return {};
     const auto index = proofs.obligations.size();
-    proofs.obligations.push_back({id, std::move(prepared), retained, contract, std::move(context)});
+    proofs.obligations.push_back({id, std::move(prepared), retained, contract, std::move(context), ready_inputs});
     ids.push_back(index);
     proofs.pending.insert(index);
     return index;
   }
   std::optional<TypeBorrowedResult> prove_type_borrowed_result(size_t id, const std::vector<Type> &arguments,
-      const std::vector<Type> &retained, const ResultContract &contract, const TypeEvidenceState &supplied) const {
+      const std::vector<Type> &retained, const ResultContract &contract, const TypeEvidenceState &supplied,
+      const std::set<size_t> &ready_inputs) const {
     if (auto *proofs = type_borrowed_proofs_) {
-      const auto index = type_borrowed_obligation(id, arguments, retained, contract, supplied);
+      const auto index = type_borrowed_obligation(id, arguments, retained, contract, supplied, ready_inputs);
       if (!index) return {};
       auto &obligation = proofs->obligations[*index];
       if (proofs->current) obligation.dependents.insert(*proofs->current);
@@ -6029,7 +6043,7 @@ class ScalarChecker {
       ~Reset() { active = nullptr; }
     } reset{type_borrowed_proofs_};
     try {
-      const auto root = type_borrowed_obligation(id, arguments, retained, contract, supplied);
+      const auto root = type_borrowed_obligation(id, arguments, retained, contract, supplied, ready_inputs);
       if (!root) return {};
       while (!proofs.pending.empty()) {
         const auto index = proofs.pending.extract(proofs.pending.begin()).value();
@@ -6441,7 +6455,8 @@ class ScalarChecker {
             fail(declaration->at, "ref requires definitely initialized target storage");
         }
         if (completes && borrowed == true && expr.declaration_kind == "ref")
-          require_type_initialized(state, state.target, initializer.kind == K::name ? initializer.text : std::string_view{}, initializer.at);
+          require_type_initialized(state, state.target, initializer.kind == K::name ? initializer.text : std::string_view{},
+                                   initializer.at, true);
         state.bindings[declaration->text] = type;
         state.local_declarations[declaration->text] = declaration.get();
         state.definitions.erase(declaration->text);
@@ -6552,6 +6567,7 @@ class ScalarChecker {
         rebind_type(*type, *source, expr.at);
         if (proving_ && validating_ && !view.nullable && selected.nullable && state.target.presence != TargetPresence::present)
           fail(expr.at, "ref requires a proven non-null target");
+        if (!view.nullable) require_type_initialized(state, state.target, {}, expr.at, true);
         if (!selected.read_only || (!view.slot_read_only && *selected.read_only))
           implementation_gap(expr.at, "reference target access is not established");
         rebind_access(view.slot_read_only.value_or(false), *selected.read_only, expr.at);
@@ -7002,6 +7018,10 @@ class ScalarChecker {
       Owners owners;
       std::vector<ViewEvidence> views;
       std::vector<TargetEvidence> operand_targets;
+      std::vector<ArgumentMode> prepared_modes;
+      const auto readable_borrow = [](ArgumentMode mode) {
+        return mode == ArgumentMode::borrowed_ref || mode == ArgumentMode::borrowed_read;
+      };
       bool complete = true;
       bool exits = target == Type::never;
       for (size_t i = offset; i < expr.children.size(); ++i) {
@@ -7022,6 +7042,8 @@ class ScalarChecker {
           type = type_evidence(*expr.children[i], state, true, expected_argument, nullptr, use, !exits, operand_read);
           selected = state.value;
           selected_target = state.target;
+          if (!exits && type && type != Type::never && readable_borrow(parameter.mode))
+            prepare_type_readable_argument(state, *expr.children[i], selected, selected_target, parameter.mode);
           if (!exits && type && type->kind == Type::procedure && parameter.mode == ArgumentMode::value)
             note_type_allocation(state);
         } else if (!type && expected_argument) {
@@ -7034,12 +7056,28 @@ class ScalarChecker {
         exits = exits || type == Type::never;
         arguments.push_back(type.value_or(Type::never)); access.push_back(selected.read_only); owners.push_back(selected.owner);
         views.push_back(selected);
+        prepared_modes.push_back(parameter.mode);
         if (state.selections.tracking) operand_targets.push_back(std::move(selected_target));
       }
       if (exits) return Type::never;
+      const auto check_borrowed_argument = [&](size_t i, ArgumentMode mode) {
+        if (mode == ArgumentMode::value) return;
+        if (views[i].view != true || views[i].mixed_view)
+          implementation_gap(expr.at, "borrowed parameter requires an existing view");
+        const auto &operand = *expr.children[i + offset];
+        if (readable_borrow(mode) && state.checks_initialization() && prepared_modes[i] != mode)
+          implementation_gap(operand.at, "readable borrowed argument requires an established preparation mode");
+        check_type_deferred_argument(state, expr, operand, views[i], mode);
+      };
       const auto ready_input = [&](size_t i) {
         const auto &operand = operand_targets.at(i);
-        return operand.initialized || operand.presence == TargetPresence::absent;
+        if (operand.initialized || operand.presence == TargetPresence::absent) return true;
+        // Later operands can initialize the prepared target. A rebind cannot
+        // make the saved operand follow the binding's new selection.
+        const auto reaching = state.selections.reach_condition();
+        return !operand.places.empty() && std::ranges::none_of(operand.places, [&](const auto &place) {
+          return state.selections.may_read_uninitialized(place, reaching);
+        });
       };
       const auto retain_borrowed_targets = [&](const ViewEvidence &result, const Type &type, const auto &mode,
           const std::optional<TypeBorrowedResult> &proved = {}) {
@@ -7077,11 +7115,9 @@ class ScalarChecker {
           fail(expr.at, "a function cannot invoke a procedure");
         if (state.required) for (size_t i = 0; i < arguments.size(); ++i) {
           const auto mode = target->argument_modes.empty() ? ArgumentMode::value : target->argument_modes[i];
-          check_type_deferred_argument(state, expr, *expr.children[i + offset], views[i], mode);
+          check_borrowed_argument(i, mode);
           if (!accepts_argument(arguments[i], target->parameters[i], mode))
             fail(expr.children[i + (expr.kind == K::value_call)]->at, "argument does not satisfy the callable view type");
-          if (mode != ArgumentMode::value && (views[i].view != true || views[i].mixed_view))
-            implementation_gap(expr.at, "borrowed parameter requires an existing view");
           if (mode != ArgumentMode::value && access[i].value_or(false) && (target->const_views.empty() || !target->const_views[i]))
             fail(expr.at, "readonly argument cannot supply a writable borrowed parameter");
           for (size_t j = 0; j < i; ++j) if (!target->owners.empty() && target->owners[i] && target->owners[i] == target->owners[j]) {
@@ -7221,9 +7257,7 @@ class ScalarChecker {
             state.prepared_call->effects.outcomes.insert(Completion::failure(exception_id(ExceptionCategory::null_pointer)).reason);
           if (state.required) for (size_t i = 0; i < arguments.size(); ++i) {
             const auto mode = argument_mode(parameter_at(declaration, i));
-            check_type_deferred_argument(state, expr, *expr.children[i], views[i], mode);
-            if (mode != ArgumentMode::value && (views[i].view != true || views[i].mixed_view))
-              implementation_gap(expr.at, "borrowed parameter requires an existing view");
+            check_borrowed_argument(i, mode);
           }
         });
         if (result) view = result->view;
@@ -7264,9 +7298,7 @@ class ScalarChecker {
           fail(expr.at, "a function cannot invoke a procedure");
         if (state.required) for (size_t i = 0; i < arguments.size(); ++i) {
           const auto mode = argument_mode(parameter_at(method, i));
-          check_type_deferred_argument(state, expr, *expr.children[i], views[i], mode);
-          if (mode != ArgumentMode::value && (views[i].view != true || views[i].mixed_view))
-            implementation_gap(expr.at, "borrowed parameter requires an existing view");
+          check_borrowed_argument(i, mode);
         }
         const auto type = infer_result(id, arguments, retained, family.declaration ? family.declaration : &state).contract;
         if (!type || nested_binder(method, *type->type) || (result && result != type->type)) return {};
@@ -7278,15 +7310,18 @@ class ScalarChecker {
                 state.prepared_call->effects.outcomes.insert(Completion::failure(category).reason);
           }
         const auto next = result_view(method, *type, owners);
-        auto proved = state.required && state.checks_initialization() && type->borrowed() && scalar_type(*type->type)
-            ? prove_type_borrowed_result(id, arguments, retained, *type, family.declaration ? *family.declaration : state)
-            : std::nullopt;
+        std::optional<TypeBorrowedResult> proved;
+        if (state.required && state.checks_initialization() && type->borrowed() && scalar_type(*type->type)) {
+          std::set<size_t> ready_inputs;
+          for (size_t i = 0; i < operand_targets.size(); ++i)
+            if (argument_mode(parameter_at(method, i)) == ArgumentMode::borrowed_ptr && ready_input(i)) ready_inputs.insert(i);
+          proved = prove_type_borrowed_result(id, arguments, retained, *type, family.declaration ? *family.declaration : state, ready_inputs);
+        }
         if (proved && !proved->completes) {
           if (invokes) return Type::never;
           state.prepared_call->effects.outcomes.erase(0);
           proved.reset();
         }
-        if (proved && !type->nullable() && !std::ranges::all_of(proved->required_inputs, ready_input)) proved.reset();
         retain_borrowed_targets(next, *type->type, [&](size_t i) { return argument_mode(parameter_at(method, i)); }, proved);
         view = !result || view == next ? next : ViewEvidence{};
         result = type->type;
@@ -7324,8 +7359,14 @@ class ScalarChecker {
           else if (result == contract.type && state.value.view == true && !state.value.mixed_view && valid_owner &&
                    (contract.read_only || state.value.read_only == false) &&
                    (contract.nullable() || !state.value.nullable || state.target.presence == TargetPresence::present) &&
-                   (!state.target.places.empty() || state.target.presence == TargetPresence::absent))
+                   (!state.target.places.empty() || state.target.presence == TargetPresence::absent)) {
+            if (!contract.nullable()) require_type_initialized(state, state.target, {}, expr.at, true);
             returned.borrowed = TypeBorrowedReturn::capture(state.target, state.selections);
+          } else if (!contract.nullable() && state.checks_initialization() && state.selections.initialization_reachable) {
+            // Every attempted ref return needs a valid prepared result, even
+            // when an action will replace it before delivery.
+            fail(expr.at, "cannot prove preparation of the borrowed ref result");
+          }
         } else if (state.exits && state.selections.tracking && result == Type::boolean)
           returned.boolean = state.selections.observe(state.target.branches);
         note_type_exit(state, {1, true}, std::move(returned));

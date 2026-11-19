@@ -53,6 +53,13 @@ PREPARE_READ = ('try{ptr chosen=prepare(local,other);return chosen;}'
 RECURSIVE_PICK = PICK.replace('right:T in O)', 'right:T in O,n:u64)')
 RECURSIVE_QUERY = PICK_QUERY.replace('choose(local,ready)', 'choose(local,ready,3u64)')
 RECURSIVE_STEP = 'return choose(left,right,n-1u64);'
+REF_RECURSIVE_PICK = RECURSIVE_PICK.replace('ptr right:', 'ref right:').replace('->ptr T', '->ref T')
+REF_POINTER_PICK = ('func select(ptr left:u64 in O,ref backup:u64 in O,ptr chosen:u64 in O,n:u64)'
+                    '->ref u64 in O where {owner O}')
+REF_READ = 'func read(ref p:u64 in O)->u64 where {owner O}'
+REF_READ_BODY = '{return p;}'
+REF_INPUTS = UNWRITTEN+'val ready<-8u64;'
+REF_CALL = 'ptr selected=select(local,ready,ready,3u64);return selected;'
 
 
 def guarded_reference(body):
@@ -71,6 +78,17 @@ def recursive_pick(base, step=RECURSIVE_STEP, declaration=RECURSIVE_PICK):
     return declaration+'{if(n==0u64){'+base+'}else{'+step+'};}'
 
 
+def queried_ref_read(declarations, body):
+    return IO+declarations+query(REF_INPUTS+body, '')+'behave @print(result);'
+
+
+REF_POINTER_DEFINITION = recursive_pick('if(chosen is not null){return chosen;}else{return backup;};',
+    'return select(left,backup,chosen,n-1u64);', REF_POINTER_PICK)
+REF_REPLACEMENT = ('func prepare(ptr p:u64 in O,ref backup:u64 in O)->ref u64 in O where {owner O}'
+                   '{if(p is not null){try{return p;}finally{return backup;};}else{return backup;};}')
+READABLE_REF_RESULT = ('func read(p:u64 in O)->ref u64 in O where {owner O}{return p;}'
+                       'func prepare(ptr p:u64 in O,ref backup:u64 in O)->ref u64 in O where {owner O}'
+                       '{if(p is not null){return read(p);}else{return backup;};}')
 EXPANDING_PICK = recursive_pick('return right;', 'return choose(left,right,n-1u64,func[tag]()->const A{return tag;});',
     RECURSIVE_PICK.replace('n:u64)', 'n:u64,tag:A)').replace('{T,owner O}', '{T,A,owner O}'))
 
@@ -264,6 +282,67 @@ runner.CASES = {
     'query_inspects_a_signature_with_expanding_recursive_type_arguments': (
         IO+EXPANDING_PICK+UNWRITTEN+'val ready<-8u64;'
         'val result<-make local typeof(choose(local,ready,3u64,true)){4u64};behave @print(result);', 0, '4\n', ''),
+    'query_closes_recursive_ref_from_a_prepared_ref_input': (
+        IO+recursive_pick('return right;', declaration=REF_RECURSIVE_PICK)+
+        query(RECURSIVE_QUERY)+'behave @print(result);', 0, '4\n', ''),
+    'query_closes_mutual_recursive_ref_from_a_prepared_ref_input': (
+        IO+recursive_pick('return right;', 'return sibling(left,right,n-1u64);', REF_RECURSIVE_PICK)+
+        recursive_pick('return right;', declaration=REF_RECURSIVE_PICK.replace('choose', 'sibling'))+
+        query(RECURSIVE_QUERY)+'behave @print(result);', 0, '4\n', ''),
+    'query_closes_recursive_ref_from_an_initialized_pointer': (
+        queried_ref_read(REF_POINTER_DEFINITION, REF_CALL), 0, '4\n', ''),
+    'query_does_not_treat_an_unwritten_pointer_as_a_ready_ref_result': (
+        queried_ref_read(REF_POINTER_DEFINITION, REF_CALL.replace('local,ready,ready', 'local,ready,local')),
+        2, '', "read of 'selected' before definite initialization"),
+    'query_keeps_recursive_pointer_preparations_with_different_readiness_distinct': (
+        queried_ref_read(REF_POINTER_DEFINITION+REF_POINTER_PICK.replace('select', 'outer').replace('n:u64)',
+            'n:u64,flag:bool)')+'{if(flag){return select(left,backup,chosen,n);}'
+            'else{return select(left,backup,left,n);};}', REF_CALL.replace('select(local,ready,ready,3u64)',
+            'outer(local,ready,ready,3u64,false)')), 2, '', "read of 'selected' before definite initialization"),
+    'query_checks_direct_ref_argument_initialization_at_preparation': (
+        queried_ref_read(REF_READ+REF_READ_BODY, 'return read(local);'), 2, '', UNINITIALIZED_LOCAL),
+    'query_checks_direct_ref_argument_presence_at_preparation': (
+        queried_ref_read(REF_READ+REF_READ_BODY, 'ptr p:u64=null in here;return read(p);'),
+        2, '', 'ref argument requires a proven non-null target'),
+    'query_accepts_guarded_nullable_argument_when_prepared_as_ref': (
+        queried_ref_read(REF_READ+REF_READ_BODY, 'ptr p=ready;if(p is not null){return read(p);}else{return 1u64;};'),
+        0, '4\n', ''),
+    'query_checks_callable_view_ref_argument_initialization': (
+        queried_ref_read(REF_READ+REF_READ_BODY, 'func called=read;return called(local);'), 2, '', UNINITIALIZED_LOCAL),
+    'query_checks_deferred_ref_argument_before_cleanup': (
+        queried_ref_read(REF_READ.replace('func', 'proc')+REF_READ_BODY,
+            'defer read(local);local<-7u64;return 1u64;'), 2, '', UNINITIALIZED_LOCAL),
+    'query_checks_ref_argument_before_a_later_operand_write': (
+        queried_ref_read(REF_READ.replace('p:u64 in O)', 'p:u64 in O,ignored:u64)')+REF_READ_BODY,
+            'return read(local,{local<-7u64;0u64});'), 2, '', UNINITIALIZED_LOCAL),
+    'query_carries_a_later_operand_write_to_a_prepared_ptr_before_entry': (
+        queried_ref_read(REF_POINTER_DEFINITION, REF_CALL.replace('local,ready,ready,3u64',
+            'local,ready,local,{local<-7u64;3u64}')), 0, '4\n', ''),
+    'query_checks_ref_argument_in_inferred_body_with_a_bodyless_callee': (
+        queried_ref_read(REF_READ+';', 'return read(local);'), 2, '', UNINITIALIZED_LOCAL),
+    'query_preserves_signature_only_ref_argument_inspection': (
+        IO+REF_READ+';'+REF_INPUTS+'val result<-make local typeof(read(local)){4u64};behave @print(result);', 0, '4\n', ''),
+    'query_does_not_credit_finally_write_toward_earlier_ref_return_preparation': (
+        queried_ref_read('func prepare(ptr p:u64 in O,ref backup:u64 in O)->ref u64 in O where {owner O}'
+            '{if(p is not null){try{return p;}finally{p<-7u64;{}};}else{return backup;};}',
+            'ptr chosen=prepare(local,ready);return chosen;'), 2, '', UNWRITTEN_RESULT),
+    'query_requires_a_ready_ref_return_even_when_finally_replaces_it': (
+        queried_ref_read(REF_REPLACEMENT, 'ptr chosen=prepare(local,ready);return chosen;'),
+        2, '', UNWRITTEN_RESULT),
+    'query_accepts_replacement_of_a_valid_prepared_ref_return': (
+        queried_ref_read(REF_REPLACEMENT, 'local<-7u64;ptr chosen=prepare(local,ready);return chosen;'), 0, '4\n', ''),
+    'query_ref_proof_checks_readable_borrow_preparation_in_the_callee': (
+        queried_ref_read(READABLE_REF_RESULT, 'ptr chosen=prepare(local,ready);return chosen;'),
+        2, '', UNWRITTEN_RESULT),
+    'query_ref_proof_passes_an_initialized_borrow_to_a_readable_parameter': (
+        queried_ref_read(READABLE_REF_RESULT, 'local<-7u64;ptr chosen=prepare(local,ready);return chosen;'),
+        0, '4\n', ''),
+    'query_ref_proof_checks_an_unreadable_target_at_local_ref_construction': (
+        queried_ref_read('func prepare(ptr p:u64 in O,ref backup:u64 in O)->ref u64 in O where {owner O}'
+            '{if(p is not null){ref held=p;{}}else{};return backup;}',
+            'ptr chosen=prepare(local,ready);return chosen;'), 2, '', UNWRITTEN_RESULT),
+    'query_checks_ref_rebinding_before_later_initialization': (
+        queried_ref_read('', 'ref held=ready;held=local;local<-7u64;return 4u64;'), 2, '', UNINITIALIZED_LOCAL),
     'query_reads_target_initialized_before_borrowed_return': (
         queried_preparation('first<-7u64;return first;'), 0, '4\n', ''),
     'query_reads_saved_target_initialized_in_finally': (
