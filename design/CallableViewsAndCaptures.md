@@ -1,8 +1,10 @@
 # Function values, here callables and declared place aliases
 
-Design revision: 127 · Recorded: 2026-11-18 · Status: scoped callable contract; implementation boundaries recorded separately.
+Design revision: 128 · Recorded: 2026-11-18 · Status: scoped callable contract; implementation boundaries recorded separately.
 
 ## Design authority
+
+- **Here body control.** [H-HERE-BREAK-CONTINUE-20261118](../CHANGELOG.md#h-here-break-continue-20261118) covers this r128 summary and D-18-HERE-BREAK/P-621–P-622 at storage r10. Results reach the same source destination through direct and forwarded calls. The [examples](CallableStorageAndHereAccess.md#break-and-continue-in-a-single-brace-here-body) check feedback, early call completion and supplier return. Mainline owns native transport.
 
 - [D-18](DesignAuthorityRegistry.md#d-18), [D-18-HERE](DesignAuthorityRegistry.md#d-18-here) and [D-18-HERE-STORAGE](DesignAuthorityRegistry.md#d-18-here-storage). [H-CALLABLE-MODEL-20261118](../CHANGELOG.md#h-callable-model-20261118) confirms r127 and storage r9 for capture-free functions, synchronous here calls, both brace forms and activation identity. P-609–P-612/P-615–P-622 derive from C-65/C-73, D-12-LIFETIME and charter §§3.2–3.3/4.3/6.1. Reusable code and caller-owned state have independently checkable lifetimes. See [callable storage and direct lexical access](CallableStorageAndHereAccess.md) for acceptance across recursion, repeated invocation, forwarding, owner invalidation and cleanup. Mainline owns lowering and verification.
 - H-481 preserves definition identity. H-563 covers lexical storage. H-558 governs the alias glossary. H-567/H-568 distinguish callable preparation from bits or graph transfer. H-459–H-462 preserve type-bound defaults and multi-method coverage. D-10 owns dynamic binding and symbolic replay. D-17 owns full-scope completion. D-21/D-26 own dispatch and native coverage. D-28 owns current owner-plus-locator resolution.
@@ -139,6 +141,7 @@ Both calls update the same n. Likewise `{{ p = other; }}` rebinds the enclosing 
 | Module top level | Each incorporated module, including the selected `__main__`, executes its top-level code with direct access to its own initialized lexical slots. Its prefix and `postpon` fragments share that module activation. A callable declared there keeps its own access rules. [Module scope and example](ModuleWorlds.md#here-callable-module-top-levels) |
 | Standalone or trailing `{{ ... }}` | Standalone executes immediately. A trailing body with outer-slot access requires a bounded receiver. Each invocation has its own locals, cleanup and local return. |
 | `for` body | The caller owns the body. Direct `return` targets the enclosing callable, `continue` supplies feedback and generator cleanup still runs. D-29 already specifies [direct lexical access](RangedForAndGenerators.md#lexical-scope-and-completion). |
+| Single-brace here argument | A `continue` supplies the current body invocation’s result. A `break` supplies the result of the receiving call to which the group was attached. A `return` exits the lexical supplier. |
 | `here` callback parameter | The supplied body's defining activation provides the slots. The receiving body can invoke it repeatedly. It can forward the same body to another func’s compatible here formal for that nested call. Storing or returning the body for later use rejects. Invoking the formal hands control to the original supplier’s lexical scope, even after forwarding through another func. A proc-authored literal may do procedural work there. Function-authored literals retain func permissions. |
 | `effect @sym(...) { ... }` body | A reached installation may invoke a method that needs lexical slots only while its particular defining activation is available. Module-world family registration alone supplies no live frame. Scoped replay and restoration must prove those slots live. |
 
