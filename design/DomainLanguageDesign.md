@@ -1,12 +1,20 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 173
+Discussion revision: 177
 
 Recorded: 2026-11-18
 
 Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
+
+- **Callback lifetime.** [H-CALLABLE-MODEL-20261118](../CHANGELOG.md#h-callable-model-20261118) selects D-18-HERE for the synchronous cases in DL-01. The explicit wrapper is the acceptance baseline. P-605–P-608 cover the separate functor review. Data-to-here shorthand and overload preference remain open.
+
+- **Related callable redesign.** r176 links the D-07r174/r175 functor and bounded-parameter alternatives to [D-18-HERE](CallableViewsAndCaptures.md#here-callables-and-direct-lexical-access) under [K-HERE-CALLABLES-20261118](../CHANGELOG.md#k-here-callables-20261118). D-18r116 owns the proposed live-slot semantics and its separate qualification review.
+
+- **Callback parameters with call-bounded use.** [D-07-CALLBACK-BOUND](DesignAuthorityRegistry.md#d-07-callback-bound), r175 DL-01, is [under review](../CHANGELOG.md#k-callback-owner-arity-20261118). C-65/C-73 and charter §4.3 motivate accepting ordinary domain callbacks while keeping each borrow valid. H-555 covers bounded lexical borrows. A parameter that hides the number of owners is a new contract. Acceptance compares two call sites, forwarding, escape and owner replacement in the [worked example](#one-callback-parameter-for-different-owner-counts). The spelling and implementation are open.
+
+- **Functor receivers.** [D-07-FUNCTORS](DesignAuthorityRegistry.md#d-07-functors), r174 DL-01, is a source proposal under [K-FUNCTOR-RECEIVER-20261118](../CHANGELOG.md#k-functor-receiver-20261118). C-10/C-65/C-73 and charter §§3.3/4.3 connect type-associated operations with checked access to borrowed targets. D-18 supplies the confirmed ordinary capture and lifetime baseline (H-555). The [receiver examples](#functor-receivers-and-callback-arguments) cover readonly dispatch, bounded forwarding and escape through a result. Functor adaptation, its value path and compiler support are pending.
 
 - **Named sum constructors.** [D-07-SUM-CONSTRUCTORS](DesignAuthorityRegistry.md#d-07-sum-constructors), r173 DL-01, records the [source decision](../CHANGELOG.md#h-dctor-source-20261118). C-10/C-65/C-72 and charter §§4.3/8.1 connect readable alternatives, owner-qualified construction and definite field initialization. Acceptance covers nullable membership, successful and failed initializers, staged constructor-free cycles, distinct regional slot and target identities, and [two module worlds](#publishing-and-selecting-data-constructors). Native layout and proofs, and invoking an overload on reserved storage, remain separate.
 
@@ -307,6 +315,36 @@ ref next:Receipt in batch = make Skipped(7u64) in batch;
 A constructor list makes the listed names explicit. For `using "model.cod" Receipt {Accepted};`, ordinary public-source fallback can still find Skipped at lower priority. That implicit selection grants no extension permission. Selecting a subset leaves the full set of alternatives intact for type checking and exhaustiveness.
 
 Haskell 2010 spells the analogous import `import Model (Receipt(Accepted))` or `import Model (Receipt(..))`. Within explicit lists, bare `Receipt` selects the type alone. Haskell’s wildcard also covers exported record field names. CoD uses its ordinary `export Receipt;` to publish all constructors and their overloads. [Haskell 2010 Report, §§5.2–5.3](https://www.haskell.org/onlinereport/haskell2010/haskellch5.html)
+
+#### Functor receivers and callback arguments
+
+A call-operator method can use an explicit data receiver. At a here formal the caller can write a bounded body using its live receiver slot. Implicit receiver adaptation is a separate UX choice.
+
+A proposed call-operator method takes the receiver as its first parameter. Its target access is an ordinary overload constraint. A readonly target admits only methods callable through readonly access. A writable target can use either access mode. When two applicable methods differ only in receiver target access, the writable match is exact for a writable receiver. Other arguments, owner constraints, callable kind and checked failures retain their ordinary rules.
+
+```cod
+data Threshold { minimum:u64; }
+
+func (())(self:const Threshold in O, x:u64) -> bool where {const owner O} {
+    return x >= self.minimum;
+}
+```
+
+A method may instead declare `self:Threshold in O` when it needs writable target access. A caller with `ref limit:const Threshold in O` cannot supply that access. A caller with `const ref limit:Threshold in O` has a fixed reference slot and a writable target. The owner's allocation permission is independent of both.
+
+The explicit form uses the ordinary call operator at each invocation.
+
+```cod
+func test(here pred(x:u64) -> bool, x:u64) -> bool { return pred(x); }
+# limit is a live Threshold reference in the supplier.
+test(12u64) {{=> x; return limit(x); }};
+```
+
+An ordinary function cannot retain a runtime receiver. The open shorthand `test(limit, 12u64)` could supply the same here body for a named binding. For a computed receiver such as `choose_limit()`, evaluating it once can select a different target and run different effects from evaluating it at each invocation. Specify preparation and the preference between direct data and adapted arguments before accepting the shorthand.
+
+#### One callback parameter for different owner counts
+
+The same here signature accepts bodies using zero, one or several separately proved owners. Each body uses its own declaration sites and particular supplying activation. The receiving function can invoke it or forward it synchronously. A later use through a released target rejects even if its former slot now holds another live owner. See [the callable contract](CallableStorageAndHereAccess.md#what-an-invocation-needs) for recursion, relocation and a shared invocation interface.
 
 #### Standalone callable declarations
 

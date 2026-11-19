@@ -1,8 +1,10 @@
 # Static checks for deferred execution
 
-Design revision: 3 · Recorded: 2026-11-17 · Status: confirmed bounded static-check implementation contract and value path; implementation availability is separate.
+Design revision: 4 · Recorded: 2026-11-18 · Status: confirmed bounded static-check implementation contract and value path; implementation availability is separate.
 
 ## Design authority
+
+- **Callable dependency.** [H-CALLABLE-MODEL-20261118](../CHANGELOG.md#h-callable-model-20261118) updates this document’s lexical input examples under D-17-DEFER-CHECKS/P-561–P-563. Preserve actual owner and registration/cleanup timing. A here use must fit its supplying activation, even if execution is deferred. Native transport is delegated.
 
 - **Full-scope dependency continuity:** [K-FULL-SCOPE-IMPLEMENTATION-20261118](../CHANGELOG.md#k-full-scope-implementation-20261118) records D-17r92’s separate qualification. This r3 structural-check contract, its own authority, acceptance and current-coverage limits are unchanged.
 
@@ -99,10 +101,10 @@ Validate source rejection before execution and preserve legal native behavior in
 
 ## Ordinary callable boundary
 
-[D-17's confirmed full-scope contract](ExceptionControl.md#full-scopes-as-immediate-ordinary-calls) governs captures and control as well as cleanup. `{{ ... }}` has independent invocation-local value inputs, local returns/return inspection and its own owner. No outer loop/yield or catch context crosses that ordinary callable boundary. The implicit callable construction is checked in the enclosing execution context; its body starts a fresh ordinary context. A standalone invocation occurs immediately when the expression is reached; surrounding delayed-block syntax still determines when that happens.
+A [double-brace full scope](ExceptionControl.md#full-scopes-as-immediate-ordinary-calls) accesses live outer slots. It has its own owner, locals, return state and defer list. An inner defer registers on that separate list. A delayed full scope starts when its enclosing action executes.
 
-Acceptance of this checker requires the correct cleanup-boundary distinction, not a new runtime callback representation. [D-17’s bounded r92 full-scope implementation profile](ExceptionControl.md#full-scope-implementation-profile) is independently qualified by H-FULL-SCOPE-IMPLEMENTATION-20261118; a structural pass alone cannot claim to implement it. Broader borrowed-view/place capture scopes remain separately pending. D-18's value-input contract retains its separately recorded qualification. D-10 separately selects trailing callable arguments. Their construction stays in the enclosing context and their bodies are independent ordinary callables; this checker alone does not establish their implementation.
+Check the registration destination in the actual invocation. A structural pass covers that distinction. Live slot access and local body completion follow the [full-scope profile](ExceptionControl.md#full-scope-implementation-profile). A trailing here body executes when invoked and cannot escape its supplying activation.
 
 ## Qualification boundary
 
-The qualified contract covers the stated value path, structural source profile, eager-preparation/callable/query boundaries, diagnostics and acceptance. It does not qualify independent queued-error/FIFO, checked-pass, return-inspection, aggregate, module-startup, generator or full ordinary-callable control/capture lowering. D-17’s full-scope profile and the D-18 ordinary value-input profile each have their own bounded qualification. Implement within these contracts, preserve their exclusions and report current compiler availability accurately.
+The bounded static-check contract covers source structure, registration and preparation timing, query boundaries and diagnostics. D-17 separately governs FIFO, checked failures, return inspection, shutdown and aggregation. D-18 governs callable lifetimes and leaves native representation to mainline.

@@ -1,8 +1,12 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 205 · Recorded: 2026-11-18 · Phase: language/application co-design.
+Design revision: 211 · Recorded: 2026-11-18 · Phase: language/application co-design.
 
 ## Design authority
+
+- **Trailing single braces.** D-10r210 records the parsing dependency on [D-18-HERE-GROUP](DesignAuthorityRegistry.md#d-18-here-group), P-619/P-620, under [K-HERE-GROUP-20261118](../CHANGELOG.md#k-here-group-20261118). [H-CALLABLE-VALUE-KINDS-20261118](../CHANGELOG.md#h-callable-value-kinds-20261118) confirms the declaration/use spelling and [H-HERE-BODY-RESULT-20261118](../CHANGELOG.md#h-here-body-result-20261118) confirms local break feedback. Qualification of the wider group semantics remains open. Existing double-brace selection and completion remain under D-10-TRAILING-CALLBACK.
+
+- **Definition-installed effectful procedures.** [D-10-HANDLER-INSTALL](DesignAuthorityRegistry.md#d-10-handler-install), r207, covers the [restricted source forms](#definition-installed-effectful-procedures) under [H-EFFECTFUL-PROC-INSTALL-20261118](../CHANGELOG.md#h-effectful-proc-install-20261118). C-36/C-65 and charter §§3.2/4.3/6.1 connect scoped handler selection with statically bounded access to runtime state. Activation-time snapshots and ordinary restoration supply the baseline. [H-EFFECT-CONSUMER-CALL-20261118](../CHANGELOG.md#h-effect-consumer-call-20261118) fixes the direct-definition versus ordinary callable-value distinction for lexical helpers that reach perform/behave. Acceptance covers both invocation modes, forbidden handler extraction/assignment, direct helper chains and rejection through a stored value. [D-18-HERE-PARAM](DesignAuthorityRegistry.md#d-18-here-param) reviews the proposed lexical permission for procedural literals at a here formal. Family integration and implementation qualification remain open.
 
 - **Type membership and branch refinement.** [H-ISA-20261118](../CHANGELOG.md#h-isa-20261118) confirms the [`isa` source rules](#type-membership-and-branch-refinement) at r205. [D-10-ISA](DesignAuthorityRegistry.md#d-10-isa), P-587/P-588, connects explicit typed intent and reference safety (C-10/C-65) to charter §§3.3/4.3/6.3/8.1. Acceptance covers a nullable target, early exit, rebinding and an independently retained reference. Owner, access and initialization checks still apply. Runtime evidence transport and compiler qualification remain open.
 
@@ -14,7 +18,7 @@ Design revision: 205 · Recorded: 2026-11-18 · Phase: language/application co-d
 
 - **Semicolon omission and syntax UX:** [H-SEMICOLON-UX-20261117](../CHANGELOG.md#h-semicolon-ux-20261117)/[K-SEMICOLON-UX-20261117](../CHANGELOG.md#k-semicolon-ux-20261117), [D-10-SEMICOLON-UX](DesignAuthorityRegistry.md#d-10-semicolon-ux)/P-570–P-572, covers r201→202's general source/diagnostic principle below. The human selects permissive omission where practical and warnings with clearer alternatives for misleading valid spellings; corner cases are ongoing UX work. Candidate C-06 → charter §§8.1–8.3/9/12 supports readable source and actionable diagnostics without guessing intent. Preserve deterministic syntax, source meaning, owners/effects and D-16; exact newline/insertion grammar, warning heuristics and complete implementation/value-path qualification remain pending. Existing examples with explicit separators are not a universal mandatory-semicolon policy.
 
-- **Trailing ordinary callbacks:** [H-TRAILING-CALLBACK-20261117](../CHANGELOG.md#h-trailing-callback-20261117)/[K-FULL-SCOPE-CALLABLE-20261117](../CHANGELOG.md#k-full-scope-callable-20261117), [D-10-TRAILING-CALLBACK](DesignAuthorityRegistry.md#d-10-trailing-callback)/P-567–P-569, records the current r201 surface: an optional `=>` parameter header inside double braces, callback in the first declared slot, written positional arguments starting at slot two. This is an explicit exception to ordinary call binding, not a search for an arbitrary hole. Candidate C-36/C-73/C-84 → charter §§2/3.3/5.3/6.3/8/12 supports readable ordinary callable composition and inspectable parameter contracts. The section below states derived timing, typing and rejection criteria; source choices do not qualify the complete grammar/checker/native/value path, new capture permissions or the separate D-18 value-input contract. Preserve D-16 and all ordinary-call/default rules outside this form.
+- **Trailing here arguments.** [H-CALLABLE-MODEL-20261118](../CHANGELOG.md#h-callable-model-20261118), D-10-TRAILING-CALLBACK/P-567–P-569, continues first-slot insertion and default evaluation order. D-18 r127 governs live lexical access, nonescape and the control destination selected by the braces.
 
 - **Generator body handoff:** [H-603](../CHANGELOG.md#h-603)/[K-GENERATOR-CALLER-EFFECTS-20261117](../CHANGELOG.md#k-generator-caller-effects-20261117), [D-29-EFFECTS](DesignAuthorityRegistry.md#d-29-effects)/P-558–P-560, covers r199's function/effect boundary. Yield transfers control to the caller-owned loop body, which is checked under that caller's lexical permissions and is not an indirect procedure call by a func generator. Preserve H-197/H-198 for generator-owned statements and ordinary calls, existing dynamic binding/restoration, owners and D-16; D-29 owns the nested/feedback/cleanup acceptance matrix. C-37/C-96/C-65/C-84 → charter §§2/3.2–3.3/4.3/6.1–6.3/8/12 serves reusable traversal with visible context responsibility. Only the source boundary/rationale is confirmed; full mechanism/value-path/native qualification and D-18's value-input review remain separate.
 
@@ -28,9 +32,9 @@ Design revision: 205 · Recorded: 2026-11-18 · Phase: language/application co-d
 
 - **Callable-reference continuity:** [K-ALIAS-GLOSSARY-20261117](../CHANGELOG.md#k-alias-glossary-20261117) preserves this revision's existing D-18 dependency under the canonical CallableViewsAndCaptures.md path. Only dependency links and this continuity summary change; existing contracts, qualification, acceptance and D-16 remain unchanged.
 
-- **Capture/lifetime alignment:** [H-553–H-557](../CHANGELOG.md#h-553)/[K-CAPTURE-LIFETIMES-20261117](../CHANGELOG.md#k-capture-lifetimes-20261117), [D-18-VALUE-CAPTURE](DesignAuthorityRegistry.md#d-18-value-capture)/P-485–P-490 and [D-12-LIFETIME](DesignAuthorityRegistry.md#d-12-lifetime)/P-491–P-493 cover this revision's capture/owner dependency wording. Preserve independent value locals, selected reference targets, explicit var places, unique actual owners and statically bounded borrows; reject implicit slot sharing, closure-cell promotion and lifetime extension. C-36/C-54/C-65/C-73/C-75 and charter §§2/3.2–3.3/4.3/6.3/8 preserve visible storage/lifetime responsibility. D-18 owns acceptance and H-327/H-329 alias continuity. D-16, unrelated qualified scopes and existing symbol-declaration restrictions continue. New proof/physical/value-path qualification and source support remain separate; no allocator or graph-copy mechanism follows.
+- **Lexical lifetime.** D-18-HERE and D-12-LIFETIME require the actual supplying activation and actual owners through the final use. Only symbolic handler replay acquires a snapshot of required dynamic bindings at definition activation.
 
-- **Full scopes are ordinary callable invocations:** [H-FULL-SCOPE-CALLABLE-20261117](../CHANGELOG.md#h-full-scope-callable-20261117)/[K-FULL-SCOPE-CALLABLE-20261117](../CHANGELOG.md#k-full-scope-callable-20261117), [D-17-FULL-SCOPE](DesignAuthorityRegistry.md#d-17-full-scope)/P-564–P-566, covers r200→201 in the explicit-full-scope interactions below. The user confirms ordinary capture, local return and independent cleanup everywhere; D-17 owns the source acceptance. Reuse C-63/C-65/C-73/C-75/C-84 and charter §§2/3.2–3.3/4.3/6.3/8/12 for one inspectable callable/lifetime model. Preserve actual owners, permissions, declared failures and D-16; no shared cells, lifetime extension or implicit value return. [H-FULL-SCOPE-IMPLEMENTATION-20261118](../CHANGELOG.md#h-full-scope-implementation-20261118) separately qualifies D-17’s bounded r92 full-scope profile, including immediate ref/ptr inputs; general escaping borrowed-view and declared-place capture mechanisms remain outside it. D-18's value-input profile retains its independent qualification. D-10 separately records the selected trailing callback surface; complete implementation/value-path qualification remains pending.
+- **Full scopes.** D-17-FULL-SCOPE preserves invocation-local return and cleanup. Standalone and caller-default bodies use direct lexical access.
 
 - **Checked deferred coverage:** [H-550/H-551](../CHANGELOG.md#h-550)/[K-DEFER-CHECKED-COVERAGE-20261116](../CHANGELOG.md#k-defer-checked-coverage-20261116), [D-17-DEFER-DISPATCH](DesignAuthorityRegistry.md#d-17-defer-dispatch)/P-461–P-463, requires checked failures to be handled before their owning defer pass completes. A covering defer catch counts; enclosing throws alone cannot authorize residual checked members. Preserve actual registration/FIFO order, H-525 declared obligations, retained ordinary body_exception, owners and D-16. D-17r86 owns acceptance and conservative proof boundaries. Candidate C-36/C-44/C-63/C-65 and charter §§2/3.1–3.3/4.3/6.3/8/12 serve explicit recoverability and valid ordered cleanup. This dependency alignment continues unrelated contracts; it does not qualify the whole mechanism/value path or assert compiler support.
 
@@ -323,21 +327,46 @@ Acceptance covers one overload-backed update, persistent content after the enclo
 
 ## Callable effects
 
-A symbolic definition registers or extends a module-world family without installing a runtime value. The selected combined form performs definition/extension at compilation and compatible family-view installation at runtime:
+### Definition-installed effectful procedures
 
-```text
-symbol @selected:proc() -> i64;
-effect @selected() -> i64 { return @gain; };
-effect @selected;
-effect @selected = other;
-effect @selected = @other;
+The restricted design admits a handler through a definition such as `effect @quote() -> u64 { ... };`. Source calls select its currently installed binding with `perform @quote()` or `behave @quote()`. Assigning a procedure into the slot, extracting the installed handler as a value, or adapting, returning or passing it through a callable type rejects. This applies even to a handler whose body returns a constant. A type-only use of a declared signature and compile-time imports of a symbol identity or its methods request no runtime handler. Independent bits, ref/ptr and owned-region effect bindings keep their respective installation rules.
+
+```cod
+symbol @rate:u64;
+symbol @quote:proc()->u64;
+effect @rate <- 10u64;
+effect @quote() -> u64 { return @rate; };
+effect @rate <- 20u64;
+val replayed <- perform @quote();   # 10
+val current <- behave @quote();     # 20
+# proc saved = @quote;             # Reject extraction.
+# effect @other = @quote;          # Reject assignment installation.
 ```
 
-Existing import/extension permissions, declaration promises, applicability and ambiguity checks govern method information. An existing symbol retains its identity and declared slot contract. That contract constrains the installed family view; it is not a blanket prohibition on adding methods. The combined form installs the compatible family selected in the current module context, including applicable methods, rather than only its added method.
+The definition activates with the required symbolic bindings, then publishes its scoped installation. Snapshotting occurs once at that activation. `perform` uses the selected handler's snapshot; `behave` uses current bindings. An inner handler can name another symbol and invoke it by either mode. The runtime may retain the selected outer handler internally for replay and restore shadowed installations on normal or exceptional exit. Source code receives no handle to that record. Frame validity covers those internal uses, prepared delayed invocations and restoration. Releasing a separately owned region while a later call still needs one of its targets remains invalid.
 
-`effect @selected;` adds no method. It materializes the current composed family, including admitted extensions/mixins, and installs it. Bare `other` denotes a registered symbol object whose selected module semantics supplies a family view. `@other` reads an existing TLS callable value; installing it retains its captures. An ordinary lexical callable value is also an installation source under its existing complete-value contract. Source/destination identities may differ without merging their methods or redirecting the source interpretation.
+**Calls through lexical definitions.** A lexical proc can invoke an installed handler by symbol. Calling that proc by its definition exposes its body and the required binding to the checker (H-185/H-189). Calling an ordinary stored or passed callable that would reach the same perform/behave rejects. This is a source rule: a single possible target, inlining or a live handler at the indirect call site cannot legalize that call.
 
-All installation forms yield void and restore the prior binding on normal/exceptional scope exit. Procedure rebinding uses `=`, not owning-region transfer with `<-`. Captures arise at runtime value construction; bare symbol lookup or module registration performs no capture. Reinstalling a value neither recaptures nor extends expired owners. `perform` replays captures and `behave` uses current bindings. Functions retain their dynamic-context exclusion.
+```cod
+# @quote is installed above; @rate is currently 20.
+proc read_quote() -> u64 { return behave @quote(); }
+proc price() -> u64 { return read_quote(); }
+
+val a <- price();         # 20 through two named definitions.
+# proc later = read_quote;  # Reject: proc cannot initialize a callable value.
+```
+
+A diagnostic can identify the named procedure and suggest a direct call. The two callable value kinds are func and here; reading a handler or adapting a proc name cannot produce an ordinary stored callable, regardless of its body. Type-only signature queries never execute a handler.
+
+A standalone `{{ ... }}` is an immediate call to its own definition. A generator's `yield` has a dedicated handoff to the caller's lexical loop body. Both retain their existing effect and binding checks. The proposed unified here parameter lets a receiver, including a func, invoke a procedural literal explicitly supplied from a proc. Its own code retains the restrictions of its declared kind. [Here callback example](CallableStorageAndHereAccess.md#an-effect-in-a-here-callback)
+
+**Definition and method reuse.** A declaration supplying a symbol's signature, a static method import and runtime installation are distinct. On a strict definition-with-body reading, bare `effect @quote;` cannot install anything. It also has a possible narrower meaning as activation of a statically selected definition, without extracting an installed handler. The term “definition installation” alone does not decide between these spellings. D-21 requires an entry module extending a dependency family to supply an explicit installation. Its existing name-only examples would need a replacement that activates the composed family in the entry context. Two nested definition sites offering the same signature raise a separate issue: existing combined definitions contribute methods in the module world. Dynamic shadowing cannot by itself resolve equally specific distinct bodies in a single family. Per-installation implementations versus shared family extension require a rule before promising this replacement for swapped handler values. [Entry composition](AheadOfTimeExecutionPreparation.md#entry-installation-and-unused-dependency-code)
+
+### Method registration and scoped installation
+
+A declaration can register or extend a symbol's module-world method family. Import and extension permissions, declaration promises, applicability and ambiguity govern that step. When execution reaches a combined definition, it activates the compatible family selected in the current module world and installs the resulting handler. A skipped branch installs nothing. Leaving the scope restores the prior installation on normal and exceptional exits. The result of installation is void.
+
+The [entry-module requirement](AheadOfTimeExecutionPreparation.md#entry-installation-and-unused-dependency-code) still needs an explicit installation point for an extended family. The choice about name-only activation above determines whether that point requires a body. An assignment from a selected source family or from an active binding cannot supply it.
 
 The prototype currently accepts `effect proc`; treatment of that spelling, defaults and detailed grammar migration remains DD-AOT-07. The selected `effect @sym(...)` behavior is settled. A skipped runtime path installs nothing; repeated execution creates installations without repeatedly registering methods. Existing declaration/scope boundaries apply.
 
@@ -368,7 +397,7 @@ H-236 requires architecture before local lookup fixes. H-247/H-248 makes that ar
 | `@var_name` | Read the value under the declared symbol identity; WPO requires a supplied dynamic binding. |
 | `effect @s <- value` | Scoped ownership/bits transfer; bits symbols require this form. Restore the preceding binding on scope exit; result is void. |
 | `effect @s = value` | Scoped non-consuming reference rebinding under the symbol's declared owner constraint; H-561 admits lexical and ordinary regional owners for the owner-parameter form. Rejected for plain bits-valued symbols; explicit ref/ptr symbols may have bits targets. |
-| Materialize a procedure value | Retain the selected family/interpretation and required lexical/dynamic environment under existing owner rules. Module registration alone creates no runtime capture. |
+| Activate a symbolic procedure definition | Select the family and establish the scoped handler with its required symbolic bindings. Module registration is static. |
 | `perform @p` | Resolve the procedure, temporarily install its captured effect values in its execution scope, execute its body, and restore the caller's bindings. |
 | `behave @p` | Resolve and execute the procedure with its definition's lexical environment and the current dynamic bindings. Its stored dynamic captures are not installed. |
 | Function | Lexically defined; compute from explicit inputs to outputs, with no symbolic effect access, `perform` or `behave`. |
@@ -378,7 +407,7 @@ H-236 requires architecture before local lookup fixes. H-247/H-248 makes that ar
 | Required bindings | Checked on the effective caller paths during on-demand whole-program compilation; absence is a compilation error. |
 | Expression / `void` | Evaluation yields a result; `void` explicitly indicates no meaningful returned value. The language direction uses expressions without a separate statement category. |
 
-A procedure declaration/body can be registered before its definition event has execution semantics. Here capture at “definition” means the event that creates the procedure value in the resulting execution, not scanning the declaration. Compiling its code or binding an existing procedure value to another symbol with `effect` does not, by itself, recreate its captures. Named procedure declaration forms are described below; additional procedure-value expression syntax remains open.
+Static registration publishes a procedure declaration before its definition activation executes. For an installed handler, activation establishes the required symbolic snapshot. Compiling or importing a definition does not read the current bindings. Named procedure declaration forms are described below; additional procedure-value expression syntax remains open.
 
 The supplied `effect` spelling operates within the enclosing scope. It need not introduce a separate brace construct. Repeated/nested bindings restore in the corresponding unwind order. The procedure value used by a call is resolved in the caller's current context **before** its captures are installed; otherwise changing the dispatch symbol could change which procedure is being called.
 
@@ -441,24 +470,24 @@ In declaration/selection syntax, `@name` identifies which symbol is meant. In an
 
 ### Identity introduction versus procedure installation
 
-A symbol declaration registers an identity, declared TLS contract and local access name. Bare `p` names that symbol object; it is not a second ordinary callable alias. A symbolic method declaration constructs the family’s semantic information. Neither supplies a current TLS binding. `@p` in a read expression accesses the binding; effect-destination syntax identifies the slot without reading it.
+A symbol declaration registers an identity, declared TLS contract and local access name. Bare `p` names that symbol object; it is not a second ordinary callable alias. A symbolic method declaration constructs the family’s semantic information. Neither supplies a current TLS binding. For a symbolic proc, perform/behave resolve the installed handler. A free-standing value expression `@p` rejects. Effect-destination syntax identifies the slot.
 
 | Operation | Semantic result | Runtime installation |
 | --- | --- | --- |
 | Declare/select a symbol | Introduce or alias its identity and semantics. | None from selection alone. |
 | Define/extend a symbolic callable | Construct receiver-local method information under selection permissions. | None without effect. |
-| `effect @p;` or combined effect definition | Select a compatible family from the current module interpretation. | Materialize and install that view. |
-| `effect @p = source;` | Resolve source symbol semantics and destination compatibility. | Install a materialized source-family view. |
-| `effect @p = @source;` | Resolve typed source/destination slots. | Install the existing value and captures. |
+| Combined effect definition | Select a compatible family in the current module interpretation. | Activate and install the scoped handler. |
+| `effect @p;` | Candidate activation of the composed definitions without a body at this site. | [Under review](#definition-installed-effectful-procedures). |
+| `effect @p = source;` or `effect @p = @source;` | Assignment installation of a symbolic procedure. | Reject. |
 
-Two aliases of one identity address the same TLS slot. Different source/destination identities can intentionally participate in installation; that operation does not alias identities or extend destination methods. Alias selection and installation must be represented separately in the compiler.
+Two names for one symbol identity address the same TLS slot. Static name/identity aliasing supplies no runtime installation or access to a stored procedure value.
 
 <a id="combined-using-and-identity-checked-abbreviation"></a>
 ### Source selection and explicit installation
 
 Using/import/mixin composes module information according to existing permissions and selected contexts. Exporting a symbol-identified callable publishes its entire method set. Selecting a bodyless contract does not fabricate an implementation. Selection alone installs no receiver value; a dependency can still perform explicit effects in its once-only incorporated initialization.
 
-The prototype’s `using symbol` and `... @source as @destination` paths combine selection with installation. Their old implicit-installation behavior requires coordinated grammar/example migration under H-372/H-373. Preserve intentional cross-identity installation through explicit effects and preserve aliases/contexts under the source-selection contract. A same-spelled distinct identity must not be silently merged; an installation destination is not a compile-time alias. Namespace collisions, shadowing and the final selection grammar remain scoped design work, not an assumed independent `@` lookup escape.
+The prototype’s `using symbol` and `... @source as @destination` paths combine selection with installation. Their old implicit-installation behavior requires coordinated grammar/example migration under H-372/H-373. For distinct identities, source selection alone cannot install the procedure of one identity under the other. Preserve name/identity aliasing and interpretation under the source-selection contract. A same-spelled distinct identity must not be silently merged; an installation destination is not a compile-time alias. Namespace collisions, shadowing and the final selection grammar remain scoped design work, not an assumed independent `@` lookup escape.
 
 A vocabulary supplies identities without a default binding. In the selected model an integration selects those identities and source semantics, then explicitly installs the intended compatible view. This separation preserves H-109/H-140 once-only incorporation and H-166 resource lifetime while making the receiver’s runtime mutation visible.
 
@@ -487,7 +516,7 @@ The consistent reading of `A as B` is “use A in the role/name B.” For an out
 
 The coherent interpretation with H-105/H-115 is that an omitted entry uses the same receiving spelling. A same-spelling local alias may denote a different identity from the source alias: redefinition then uses the receiving identity; it does not equate the two original symbols. The prototype checks this case with independently declared source and receiving identities; spellings themselves do not determine identity. There is no fallback to a source binding when the intended receiving name or required value is unavailable; the missing requirement is diagnosed on the demanded whole-program path.
 
-The mapping is compiler input and creates no runtime alias relation. `using` keeps source body/identities and interpretation; `mixin` translates the body into the receiving context. Runtime materialization, not either selection statement, constructs captures; reinstallation preserves an existing value’s captures. `perform` installs whichever values that resulting procedure captured; `behave` reads current dynamic bindings under that procedure's resolved identities. Capture values can be computed at runtime even though the set of identities and access locations is determined during compilation.
+The mapping is compiler input and creates no runtime alias relation. `using` keeps source body/identities and interpretation; `mixin` translates the body into the receiving context. Activating a handler definition establishes its symbolic replay data. `perform` installs whichever values that resulting procedure captured; `behave` reads current dynamic bindings under that procedure's resolved identities. Capture values can be computed at runtime even though the set of identities and access locations is determined during compilation.
 
 In that prototype form, outer `as @step` chooses the destination binding; the target language must expose installation as an effect, separately from alias selection. The inner `@target as @tgt_neuron` supplies an existing local symbol for a role in the mixed-in body. Neither should be treated as an implicit text-wide rename. Translation must cover symbolic reads, effect targets and procedure-call symbols consistently. Source initialization and other already-created procedures are not silently rewritten by this body's map; H-109's source execution and its own binding checks remain separate.
 
@@ -663,7 +692,7 @@ H-230 requires distinct callable identities for extension modules. Different loc
 
 The selected module contract uses using/import for existing definitions and mixin for receiver-local definitions. Source-preserving selections retain types, lexical resolution and captures; symbolic destinations must be declared before selection. Omitting as requires matching source/destination symbol identities, while explicit as can install the source-defined procedure under a different predeclared destination. Combined identity introduction remains using symbol. Direct named-callable extension requires import under the extended local alias. The module contract keeps semantic-family provenance separate from extension/local-union identities and checks exports for every cross-module selector. Original methods with no ordinary callable dependencies deduplicate across contexts; distinct observable contexts are not silently erased. Import stores a receiving implementation context, using preserves the selected context, and scope restoration prevents cross-alias leakage. Selecting a type establishes lower-priority lookup through the source's published namespace, making associated behavior available along with its other public names. H-483 requires local ordinary definitions to shadow names brought implicitly by either type reuse form. Explicit callable imports retain their extension rules; symbol from establishes the same public-source fallback. The complete new surface is not established by this implementation evidence. Original methods deduplicate across paths. Cross-alias grants and extension of unrelated merged callable families remain separately scoped. These limits do not change the separate declaration rules for compiler operations.
 
-Mixin translates source-body symbol roles to receiving identities before checking required bindings and collecting captures. Repeated mixing uses the current provider's aliases; it does not rewrite the source initialization or existing definitions. Body maps are rejected on using/import, and built-in procedures have no body to mix. Lexical procedures may also be mixed under ordinary local names and subsequently installed into symbolic bindings. Operation-overload mixin remains outside this subset; mixin does not copy type definitions, function definitions or globals. UoM selection retains its separate using-units contract.
+Mixin translates source-body symbol roles to receiving identities before checking required bindings and collecting captures. Repeated mixing uses the current provider's aliases; it does not rewrite the source initialization or existing definitions. Body maps are rejected on using/import, and built-in procedures have no body to mix. Lexical procedures may also be mixed under ordinary local names. A symbolic installation requires a definition. Operation-overload mixin remains outside this subset; mixin does not copy type definitions, function definitions or globals. UoM selection retains its separate using-units contract.
 
 ## Vocabulary modules and procedure reuse
 
@@ -675,9 +704,9 @@ Vocabulary modules publish common symbol/type identities and callable contracts/
 | `import` | Preserve the source body and non-callable bindings. | Admit receiver-local extension and the selected receiving interpretation. |
 | `mixin` | Redefine the body in the receiver. | Resolve under that receiving definition, with explicit symbol mapping where supplied. |
 
-These compile-time operations neither install a TLS value nor snapshot runtime bindings. A runtime operation that constructs a selected callable view supplies its environment under the capture contract; installing an already constructed value preserves that environment. Source lexical captures and actual owners cannot be replaced by same-spelled receiver variables. Family environment construction and grammar migration must reconcile these requirements rather than deriving captures from scanner state.
+These compile-time operations neither install a TLS binding nor snapshot runtime values. Activating the symbolic definition selects its family and snapshots the required symbols. Source lexical slots and actual owners keep their defining identities.
 
-Invocation remains separate: `perform` temporarily replays the selected value’s captures, while `behave` and ordinary direct procedure calls use current dynamic bindings. For a value captured with `@x = 1`, reinstallation after `@x = 7` retains 1 for perform; a fresh value constructed with 7 can capture 7. Both use the value’s selected family/context, and behave uses the current caller binding. These examples identify the construction event explicitly and do not ascribe capture to import itself.
+When an installed definition activated with @x equal to 1 and the caller subsequently installs 7, perform replays 1 and behave sees 7. Both use the selected handler’s family and interpretation.
 
 H-230’s base/extended/indirect `1,7,1` and H-232’s using/import interpretation remain acceptance constraints. Source body/non-callable bindings and independent identities persist. Equivalent definitions may share machine code, but merely removing the one-method guard or renaming an internal identity cannot implement family values.
 
@@ -687,7 +716,7 @@ H-197/H-198 establishes functions as lexical callables that may operate on expli
 
 A function definition binds a lexical name and cannot access dynamic effect variables. A procedure may have an ordinary lexical name or belong to a symbol-identified module family. Explicit effects install family views into dynamic scope. Both procedure forms may use effects; lexical naming does not make a procedure a function. A function cannot call either procedure form, directly or indirectly. Under [H-603's generator boundary](RangedForAndGenerators.md#callable-kind-and-supplied-body-effects), yield transfers control to the caller's lexical loop body; that body is not an ordinary call made by the generator. A procedure caller may therefore use procedure operations in the body of a for invoking a func generator. The generator's own statements, ordinary callees, yield operands and cleanup retain the function restriction.
 
-A lexical procedure keeps its lexical definition context and H-180’s captured values of the dynamic variables it uses. Installing that existing procedure with `effect @operation = local_procedure` preserves the selected definition and captures; assignment is not another definition event. The destination identity must have an explicitly declared compatible procedure type. Procedure `mixin` is the distinct operation that redefines a source body in receiving context.
+A lexical procedure keeps its definition context. A helper that reaches perform/behave can be invoked [by its definition](#definition-installed-effectful-procedures); invoking it through an ordinary callable value rejects. Assignment of a lexical procedure to an effect slot rejects. Procedure mixin redefines a source body in the receiving context.
 
 H-185 specifies the call forms: `p(...)` resolves a lexical procedure; `perform @p(...)` and `behave @p(...)` resolve a procedure through its symbolic binding. H-189 makes direct lexical calls use the caller's current dynamic bindings. `perform` temporarily installs the selected value’s captured values; `behave` uses current values. `perform p(...)`, `behave p(...)` and direct `@p(...)` calls are invalid. Pure functions cannot invoke procedures through any form.
 
@@ -913,10 +942,14 @@ Acceptance of incremental grammar/diagnostic work should show both the admitted 
 
 ### Trailing callback arguments
 
+A [single-brace here body](CallableStorageAndHereAccess.md#single-brace-bodies-for-a-here-callable) sends an outward return or escaping exception to its lexical supplier. Write the trailing group directly after the call. Within the group, `break expr;` yields the normal result of this body invocation and the receiver resumes.
+
+A first parameter declared as a [here callable](CallableStorageAndHereAccess.md#an-effect-in-a-here-callback) accepts either brace form. Forwarding to another synchronous here formal preserves the supplied body, its authority and its control destinations.
+
 [H-TRAILING-CALLBACK-20261117](../CHANGELOG.md#h-trailing-callback-20261117) selects a trailing callable body using double braces, with parameters introduced by an initial `=>` and terminated by `;`:
 
 ```cod
-proc apply(body:proc(u64)->u64, value:u64) -> u64 {
+proc apply(here body(x:u64) -> u64, value:u64) -> u64 {
     return body(value);
 }
 apply(7u64) {{=> x;
@@ -926,11 +959,11 @@ apply(7u64 -> value) {{=> x;
     return x + 1u64;
 }};                                      # Same binding.
 
-proc invoke(body:proc()->u64) -> u64 { return body(); }
+proc invoke(here body() -> u64) -> u64 { return body(); }
 invoke() {{ return 9u64; }};               # Niladic shorthand, result 9.
 ```
 
-The callback is the **first declared parameter**, as in [Julia's do-notation](https://docs.julialang.org/en/v1/manual/functions/#Do-Block-Syntax-for-Function-Arguments). CoD retains its own explicit returns, capture and lifetime rules. Bind the trailing callable to that first slot before binding the written argument list. Positional arguments then start at the second declared slot and otherwise preserve ordinary order, including the positional-prefix/named-suffix rule. Named arguments still bind their declared names. The example's mapping is `apply(callback, 7u64)`; this describes parameter destinations, not a new evaluation order.
+The callback is the **first declared parameter**, as in [Julia's do-notation](https://docs.julialang.org/en/v1/manual/functions/#Do-Block-Syntax-for-Function-Arguments). CoD retains its own return, lexical access and lifetime rules. Bind the trailing callable to that first slot before binding the written argument list. Positional arguments then start at the second declared slot and otherwise preserve ordinary order, including the positional-prefix/named-suffix rule. Named arguments still bind their declared names. The example's mapping is `apply(callback, 7u64)`; this describes parameter destinations, not a new evaluation order.
 
 There is no search for a callback parameter later in the signature. A non-callable first parameter, an explicitly supplied value/default request for the first parameter, or another missing required argument rejects. A declared default on the first parameter is suppressed by this explicitly supplied callback. Defaults on remaining omitted slots retain their existing rules. Calls without a trailing block keep ordinary positional binding. The callback construction is outside the parenthesized argument list, so it does not violate that list's ban on a positional argument after a named argument. The bounded form supplies one trailing callback; use explicit named callable arguments for other callbacks.
 
@@ -941,9 +974,9 @@ The selected callable **parameter type** supplies the callback's `throws` contra
 ```cod
 using "std:exceptions" NullPointerException;
 
-proc invoke(body:proc()->void throws NullPointerException) -> void
+proc invoke(here body() -> void throws NullPointerException) -> void
     throws NullPointerException { body(); }
-proc quiet(body:proc()->void) -> void { body(); }
+proc quiet(here body() -> void) -> void { body(); }
 
 proc use(val e:NullPointerException) -> void throws NullPointerException {
     invoke() {{ throw e; }};   # Accepted by invoke's callback signature.
@@ -956,11 +989,11 @@ A callback written at the call site therefore keeps its expected signature. Its 
 
 The initial shorthand covers a single established fixed-arity callback signature, with a header naming all its parameters. It does not synthesize multiple methods for `typeof` a callable family, resolve a circular generic result, or reinterpret a pack as several fixed parameters. Richer signatures can use an ordinary explicitly declared callable where compatible; no new method-coverage, variance, pure or parameter-default policy follows. Structural callback results use the ordinary declared result schema and explicit named return form.
 
-**Selection and evaluation.** Bind/check the candidate declaration shapes and independently available written-argument evidence before checking the callback body against one established expected signature. Header arity is syntactic evidence, but do not trial-check its return expressions, captures or effects to choose between incompatible expected signatures. If that information leaves ambiguity, reject and require an explicit callable contract or named adapter. Body checking cannot retroactively repair overload selection. A func-expected body keeps ordinary func restrictions; a proc-expected body does not make a proc call legal inside an enclosing func.
+**Selection and evaluation.** Bind/check the candidate declaration shapes and independently available written-argument evidence before checking the callback body against one established expected signature. Header arity is syntactic evidence, but do not trial-check its return expressions, outer-slot uses or effects to choose between incompatible expected signatures. If that information leaves ambiguity, reject and require an explicit callable contract or named adapter. Body checking cannot retroactively repair overload selection. A literal written in a func retains func permissions. A proc-authored here body may do procedural work.
 
-At runtime, evaluate the callee expression and written value arguments in their existing order; then materialize the trailing callable's ordinary captures at its written position, after those arguments. Prepare caller-context defaults afterward under H-458, then enter the callee and initialize parameters in declaration order. The callback body is not executed during argument preparation. The callee may call it zero, one or several times, or retain/return it only under ordinary lifetime rules. Capture construction failure is ordinary argument-preparation failure. A plain deferred call prepares the trailing callable at registration and invokes the receiving callee later. No early execution, shared variable cells, automatic nonescape promise or lifetime extension is introduced.
+At runtime evaluate the callee and written value arguments in their existing order, associate the trailing here body with the supplying activation at its written position, then prepare caller-context defaults and enter the callee. The body runs only on invocation. It may run repeatedly or be forwarded synchronously. Deferred use must still fit the original activation and all required owner lifetimes.
 
-Every callback return is local. Each invocation has ordinary invocation-local captured values, cleanup, owner and return state. Errors use ordinary callback-call propagation and catches; this is not D-29's generator-body exception/control passthrough. Required-value fallthrough follows the ordinary missing-return diagnostics and MissingReturnError contract; the shorthand never turns a final expression into an implicit value return. Captured references retain their selected actual owners; callback storage remains lexical, and it cannot be placed in a region through this syntax.
+Every return belonging to a double-brace callback is local. Each invocation has its own locals, cleanup, owner and return state. Ordinary callback-call propagation and catches apply. A required value uses explicit return. Both brace forms access the live enclosing slots with their actual owners.
 
 **Parsing boundary and acceptance.** The attached block is part of one call expression, not an immediately executed expression after an incomplete call. A failed callback match is a source error, never a fallback to executing a separate scope. `apply(...); {{ ... }}` explicitly separates the call and an immediate full scope. Enclosing expression/control grammar determines attachment; overload lookup must not reclassify a control statement's body. Complete parser integration remains engineering work.
 
@@ -1133,31 +1166,30 @@ The caller may define a local named callable to adapt available operations expli
 
 This whole-family compatibility obligation is distinct from [D-21's semantic-method/native-implementation hierarchy](AheadOfTimeExecutionPreparation.md#callable-method-and-native-implementation-hierarchy). It does not demand one native body per origin signature, forbid code sharing or require emitting dead code. Code elimination cannot weaken source compatibility. Defaults and named arguments still need an applicable unambiguous origin signature at each call. Apply H-474's default-count rule to that origin contract; whole-family completeness supplies no extra ambiguity tie-break. The target's own unused defaults cannot change the origin-view choice. The selected family/world defines the contract, without promising coverage of future unrelated extensions or interpretations.
 
-**Type-bound default expressions.** H-461 places the expression that evaluates a default in its originating definition context in the callable type contract. `typeof origin` retains that expression, its resolved declaration identities and its context/dependency association. It does not evaluate fallback early or turn its current bits into a saved default value. The supplied callable value still supplies its selected implementation and ordinary body environment; adapting it to the contract does not independently capture fallback into that value.
+**Type-bound default expressions.** H-461 places the expression that evaluates a default in its originating definition context in the callable type contract. `typeof origin` retains that expression, its resolved declaration identities and its context/dependency association. It does not evaluate fallback early or turn its current bits into a saved default value. The supplied callable value still supplies its selected implementation; adapting it to the contract does not independently capture fallback into that value.
 
 ```text
-# values is a live regional i64 array; i and j select targets in the same owner.
+# values is a live regional i64 array; i selects a target in that array.
 val var fallback -> values[i];
-val var extra -> values[j];
 func origin(n:i64 { fallback }) -> i64 { return n; }
-func target [extra] (n:i64) -> i64 { return n + extra; }
+func target(n:i64) -> i64 { return n + 1i64; }
 func adapted:typeof origin = target;
 # On omission: the type's default expression reads fallback in origin's context;
-# the target body then adds extra through its own ordinary capture.
+# the selected function adds one to that argument.
 ```
 
-The alias declaration selects fallback's target once. Later evaluation of the type-bound expression reads that target's current contents; it does not rerun `values[i]` with a changed index or resolve fallback as an unrelated caller local. Changing the target's contents before a later omitted call is observable. Explicitly supplying n skips this default expression entirely. Different admitted callable type contracts can give compatible targets different named/default interfaces without adding the defaults to those targets' body capture sets. No call to origin's body is implied.
+The declared place alias selects fallback's target once. Later evaluation of the type-bound expression reads that target's current contents; it does not rerun `values[i]` with a changed index or resolve fallback as an unrelated caller local. Changing the target's contents before a later omitted call is observable. Explicitly supplying n skips this default expression entirely. Different admitted callable type contracts can give compatible targets different named/default interfaces without adding the defaults to those targets' body capture sets. No call to origin's body is implied.
 
 Type level and evaluation stage are separate under charter §5. Retaining a default recipe and its context association does not require analyzing it before overload selection, eagerly reading runtime contents, adding body captures to each typed callable value or declaring a permanent runtime type ABI. Where the definition context has runtime owner/locator bindings, the compiler must establish the corresponding context evidence when it evaluates the default. That evidence may be shared or supplied through the type/evaluation context; this contract does not require copying a default-provider environment into each adapted value. A descriptor containing only syntax cannot be treated as proof that an expired or unavailable context is valid.
 
-The ordinary owner/access/initialization and lifetime rules therefore apply to both the type-bound default dependency and the target's own environment. Returning or forwarding a typed callable cannot silently detach the default from its definition context, substitute target captures, keep an expired lexical alias cell, or extend a regional owner's lifetime. Unsupported context transport is an implementation gap and invalid lifetime/access evidence rejects. Physical representation, dependent context instantiation/sharing, exact callable-type equality/erasure and complete proof coverage for the selected call/default rules remain engineering/review work; no per-value default capture or precomputed default snapshot is selected. H-454–H-458 still fixes lookup and execution phases.
+The ordinary owner/access/initialization and lifetime rules therefore apply to the type-bound default dependency and every explicit argument. Returning or forwarding a typed callable cannot silently detach the default from its definition context, keep an expired lexical alias cell, or extend a regional owner's lifetime. Unsupported context transport is an implementation gap and invalid lifetime/access evidence rejects. Physical representation, dependent context instantiation/sharing, exact callable-type equality/erasure and complete proof coverage for the selected call/default rules remain engineering/review work; no per-value default capture or precomputed default snapshot is selected. H-454–H-458 still fixes lookup and execution phases.
 
 **Default environments.** H-454/H-455 distinguishes two parameter-default forms. Each used default runs once when omitted or explicitly requested with `-> parameter`, not once when the callable is defined. Supplying a value skips the default entirely.
 
 | Default form | Environment and scope |
 | --- | --- |
 | `{ expression }` | Use the callee's definition environment. It is not an extra full lexical scope merely because it is grouped. |
-| `{{ return expression; }}` | Immediately invoke an ordinary niladic callable in the caller context. Its explicit return supplies the default value. An ordinary free local name resolves in that caller context, with ordinary captured-value/borrow semantics. |
+| `{{ return expression; }}` | Immediately invoke an ordinary niladic callable in the caller context. Its explicit return supplies the default value. An ordinary free local name resolves in that caller context, with direct access to the caller’s live slots. |
 
 H-456 recommends that caller-context defaults depend on **symbolic variables rather than ordinary caller-local names**. This is guidance, not a prohibition of H-455's caller-local lookup. Resolve a symbolic reference's identity at the callee definition site; read that identity's current binding in the caller context. A caller's unrelated same-spelled symbol or local cannot retarget that symbolic reference. Ordinary symbol availability, owner/access/readiness and effect permissions still apply; there is no fallback to another identity or captured value.
 
@@ -1169,7 +1201,7 @@ proc next(n:u64 {{ return @step; }}) -> u64 { return n + 1u64; }
 # Another symbol also spelled @step is a different identity.
 ```
 
-This environment distinction belongs to **parameter-default syntax**. An ordinary `{{ ... }}` elsewhere remains an immediate ordinary callable invocation; it does not acquire a general caller-evaluation feature. H-FULL-SCOPE-CALLABLE-20261117 applies everywhere: a caller-default return is local to that implicit invocation, captured val updates stay local, and there is no implicit last-expression value return. Locals made inside a caller-default scope keep that scope's lifetime. Independent bits may be read into the prepared argument before exit; a reference to an ended local cannot escape into the callee. Owner-bearing results, effects and cleanup retain their existing contracts. Defaults must be included in applicable capture/effect/native-coverage checks; recommending symbolic variables does not relax function/procedure effect restrictions.
+These environments are specific to parameter defaults. A caller-default return is local to the double-brace invocation. Its accesses use the caller’s current slots. A type query checks the dependency without executing the default.
 
 **Parameter initialization and phase order.** H-452's callable preamble initializes parameter bindings in declaration order in the callable's inherent lifetime. Each explicit expression/conversion runs once in call-site written order before entry, irrespective of its named destination. Value/ref/ptr/owned parameter modes and ordinary initializer-before-binding lookup remain; initializing an init-reference binding does not discharge its referent's write obligation. H-458 selects the following execution phases:
 
@@ -1195,14 +1227,14 @@ LLVM lowering uses typed places for referent, field and element access, with com
 
 ```text
 proc @p(arg:T) -> RT { ... }
-effect @p;
+effect @p;  # Name-only activation is under review.
 perform @p(argument);
 behave @p(argument);
 ```
 
 The method declaration defines or extends the symbol’s module-world family without a runtime binding. If no symbol exists, its explicit signature can introduce the nominal identity and declared contract under the existing declaration rules; an existing/imported symbol retains its identity and permissions. Declaration promises and compatible view checks remain distinct from method addition.
 
-Bare `p` denotes that symbol object, not an additional ordinary callable alias. Materializing a family view is a separate runtime operation; `effect @p;` performs that operation and installation without adding a method. Combined `effect @p(...) { ... }` requests both stages. Capture belongs to materialization, and installation of an existing callable value preserves its captures. Functions cannot gain dynamic access through either spelling.
+Bare p names the registered symbol. The combined definition activates and installs a handler. Separate name-only activation of registered definitions is [under review](#definition-installed-effectful-procedures). Neither form supplies a first-class handler or grants functions dynamic access.
 
 The existing `proc(T1, T2) -> RT` view contract remains typed. Several methods do not make a callable value ambiguous: invocation dispatches by actual types within its selected interpretation. The compiler’s present one-method construction guard is an implementation gap, not a restriction of this contract. General view compatibility, concrete-type evidence and grammar migration are tracked in [D-21](AheadOfTimeExecutionPreparation.md).
 
@@ -1222,9 +1254,9 @@ The SNN support layer may use functions for numerical work and explicit array ed
 
 ## Captured values and call behavior
 
-[D-18's definition-mention contract](CallableViewsAndCaptures.md#definition-mentions-and-runtime-view-construction), confirmed by H-481, separates definition-bound names from stored callable values. A definition mention in a value context freshly materializes a view using its established lexical context and the current required symbolic bindings, including within recursion. Copying/adapting/reinstalling an existing view preserves its captures. Direct calls and type-only queries do not construct views merely by naming a definition. Ordinary lexical shadowing, bare symbol identity versus @symbol lookup, function effect exclusion and inherited default-expression contexts remain unchanged. Runtime capture payloads belong to materialized views; this introduces no special source-level executing-callable value.
+[D-18’s definition-mention contract](CallableViewsAndCaptures.md#definition-mentions-and-runtime-view-construction) separates named definitions from eligible stored callable values. For an installed handler only definition activation captures its required symbolic bindings. Direct calls and type-only queries do not construct views merely by naming a definition. See the [direct-call rule](#definition-installed-effectful-procedures) for ordinary procedures.
 
-Let `D` be the caller's current symbolic bindings, and let a procedure value `p` retain its selected family/interpretation, lexical environment `L`, and captured values `C` indexed by its required symbols. These are semantic components, not a prescribed heap object layout.
+Let `D` be the caller's current symbolic bindings, and let the installed handler record for `@p` supply its selected family/interpretation, direct lexical access `L`, and saved bindings `C` indexed by its required symbols. These are semantic components, not a prescribed heap object layout.
 
 ```text
 perform @p:
@@ -1241,7 +1273,7 @@ behave @p:
 
 Only the captured identities are temporarily installed. `behave` does not erase lexical captures or turn lexical names into dynamic names. The callee can establish further `effect` bindings normally in either call mode.
 
-For a scalar example, evaluate `effect @x <- 1`, materialize/install a view under `@p` whose selected method reads `@x`, then evaluate `effect @x <- 2` in the caller scope:
+For a scalar example, evaluate `effect @x <- 1`, activate a handler definition under `@p` whose selected method reads `@x`, then evaluate `effect @x <- 2` in the caller scope:
 
 | Observation | Result |
 | --- | --- |

@@ -1,8 +1,10 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 52 · Recorded: 2026-11-18 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 53 · Recorded: 2026-11-18 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
+
+- **Module top levels as here callables.** r53 [module scope](#here-callable-module-top-levels) records [H-HERE-MODULE-TOPLEVEL-20261118](../CHANGELOG.md#h-here-module-toplevel-20261118) under [D-18-HERE](DesignAuthorityRegistry.md#d-18-here). D-15-STATIC-NS, D-15-POSTPON and D-15-SHUTDOWN supply initialization readiness, shared module contexts and cleanup lifetime. These constraints serve charter §§3.3/4.3. Acceptance observes one module slot across interleaved startup fragments and preserves access checks on entry and shutdown. Qualification of the broader callable redesign remains open.
 
 - **Data constructor families.** [D-07-DCTOR-PUBLICATION](DesignAuthorityRegistry.md#d-07-dctor-publication), r52 in the type-selection section, records [whole-family selection](../CHANGELOG.md#h-dctor-world-publication-20261118) and the [selector and fallback rule](../CHANGELOG.md#h-dctor-source-20261118). C-35/C-45 and charter §§4.3/8.1 connect stable constructor identity with explicit selection in a module world. D-07 owns the two-world example. Native implementation qualification remains open.
 
@@ -544,6 +546,19 @@ Registering these bodies does not invoke them, install effects or materialize ca
 Ordinary declaration checks still apply: unique/public name resolution, finite and anchored type/callable identities, valid layouts and owner constraints, independent result evidence and valid selected interpretation. A ring of re-export aliases with no defining object does not invent an identity. Mutually embedded by-value types do not gain a finite layout merely because module cycles are allowed. Recursive type inference without an independent anchor still rejects. General cyclic import-adaptation/extension proofs are not supplied by the even/odd case; unsupported proofs must be diagnosed rather than silently collapsing contexts.
 
 Declaration-only cycles can be reached from the selected entry and otherwise normally initialized ordinary modules. Entry unselectability remains in force. A cycle involving executable initialization is governed separately by the postpon contract: its initialization readiness graph must have a proved legal linear schedule. An actual readiness cycle still rejects. This module permission does not authorize cycles in the package manager's dependency/version-resolution graph.
+
+### Here-callable module top levels
+
+The executable top level of each incorporated module is a here callable, including that of the selected `__main__`. Its ordinary prefix and its explicit `postpon` blocks access the same module's live lexical slots. Scheduling another module's block between two fragments preserves both modules' distinct contexts. Static namespace registration precedes this execution. A procedure's symbolic snapshot is taken at its own definition activation. [Here-callable forms](CallableViewsAndCaptures.md#here-callables-and-direct-lexical-access)
+
+```cod
+# A dependency module: its ordinary prefix runs before its own postpon suffix.
+val count <- 1u64;
+postpon { count <- count + 1u64; }
+postpon { assert count == 2u64; }
+```
+
+The entry module has the same lexical rule and its existing entry-last prefix order. Each read still needs an initialized slot and each dereference a live target owner. Module contexts remain available for successfully registered module-level deferred actions through the [application shutdown drain](#cross-module-shutdown-order). An ordinary callable declared at top level retains its own access contract.
 
 ### Ordered top-level postpon suffixes
 

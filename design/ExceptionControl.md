@@ -1,6 +1,6 @@
 # CoD exception control and regional cleanup
 
-Design revision: 119 · Recorded: 2026-11-18 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; bounded full-scope elaboration profile confirmed; current implementation availability is recorded in the source capability reference.
+Design revision: 120 · Recorded: 2026-11-18 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; full-scope control and live lexical input contracts; current implementation availability is recorded in the source capability reference.
 
 ## Design authority
 
@@ -31,7 +31,7 @@ Design revision: 119 · Recorded: 2026-11-18 · Status: confirmed bounded except
 
 - **Checked failures of double braces.** [H-DOUBLE-BRACE-THROWS-20261118](../CHANGELOG.md#h-double-brace-throws-20261118) confirms the [standalone checked interface](#checked-failures-of-standalone-full-scopes) in r93 and the [contextual callback rule](SymbolicDynamicScope.md#trailing-callback-arguments). D-17-FULL-SCOPE/P-564–P-566 and C-63/P-235/P-236 connect one inspectable call boundary to charter §§3.2/6.3/8. H-313/H-525 preserve declared obligations. The bounded r92 implementation profile carries forward with the standalone rule and acceptance cases below. [K-FULL-SCOPE-QUERY-20261118](../CHANGELOG.md#k-full-scope-query-20261118) applies its existing query checks to readonly writes and forbidden procedure effects. Wider callback lowering and deferred-pass mechanisms retain separate qualification.
 
-- **Qualified full-scope implementation:** [H-FULL-SCOPE-IMPLEMENTATION-20261118](../CHANGELOG.md#h-full-scope-implementation-20261118)/[K-FULL-SCOPE-IMPLEMENTATION-20261118](../CHANGELOG.md#k-full-scope-implementation-20261118) confirms the complete bounded r92 [ordinary-callable elaboration profile](#full-scope-implementation-profile), including immediate ref/ptr proof and transport, under [D-17-FULL-SCOPE](DesignAuthorityRegistry.md#d-17-full-scope)/P-564–P-566. Its confirmed C-63/C-65/C-73/C-75/C-84 → charter §§2/3.2–3.3/4.3/6.3/8/12 path connects one callable model to explicit input, owner, result and cleanup responsibility without lifetime extension. H-FULL-SCOPE-CALLABLE-20261117 remains the source baseline; H-BOUNDED-IMPLEMENTATION-ADOPTION-20261117 independently qualifies the stated dependencies. The profile’s constraints, acceptance, migration and exclusions below delimit delegation. [K-FULL-SCOPE-EXCEPTION-REFERENCES-20261118](../CHANGELOG.md#k-full-scope-exception-references-20261118) aligns D-17r101’s bounded full-scope profile with D-18r115 under the owner-bound exception decisions. General escaping borrowed views, new declared-place capture and exception-specific transport retain their separate scopes.
+- **Full-scope inputs and implementation.** [H-CALLABLE-MODEL-20261118](../CHANGELOG.md#h-callable-model-20261118), D-17-FULL-SCOPE r120/P-564–P-566. The r92 qualification continues for local control, inference, checks and cleanup. D-18r127 replaces independent outer inputs with direct lexical access. Acceptance below distinguishes writes to the original slot from a return local to the body. Mainline owns transport.
 
 - **Qualified bounded dependencies:** [H-BOUNDED-IMPLEMENTATION-ADOPTION-20261117](../CHANGELOG.md#h-bounded-implementation-adoption-20261117)/[K-BOUNDED-IMPLEMENTATION-ADOPTION-20261117](../CHANGELOG.md#k-bounded-implementation-adoption-20261117) qualifies [D-17-DEFER-CHECKS](DesignAuthorityRegistry.md#d-17-defer-checks) semantic r3/P-561–P-563 and the surviving ordinary value inputs in D-18r115/P-485–P-487 within their stated acceptance and exclusions. The C-63/P-235/P-236 path continues. The static checker preserves eager preparation, independent callable bodies and nonexecuting queries; qualification does not establish compiler support or qualify full-scope control lowering, FIFO/aggregate/checked-pass, module/generator or new borrowed capture mechanisms. D-16 remains unchanged.
 
@@ -39,7 +39,7 @@ Design revision: 119 · Recorded: 2026-11-18 · Status: confirmed bounded except
 
 - **Native-coverage reference continuity:** [K-AOT-CONTRACT-CONSOLIDATION-20261117](../CHANGELOG.md#k-aot-contract-consolidation-20261117) preserves this revision's D-26 dependency at its current AOT contract section. Only dependency links and this summary change; existing semantics, authority, acceptance and D-16 remain unchanged.
 
-- **Full scopes are ordinary callable invocations:** [H-FULL-SCOPE-CALLABLE-20261117](../CHANGELOG.md#h-full-scope-callable-20261117)/[K-FULL-SCOPE-CALLABLE-20261117](../CHANGELOG.md#k-full-scope-callable-20261117), [D-17-FULL-SCOPE](DesignAuthorityRegistry.md#d-17-full-scope)/P-564–P-566, covers r89→90 in the explicit-full-scope interactions below. The user confirms ordinary capture, local return and independent cleanup everywhere; D-17 owns the source acceptance. Reuse C-63/C-65/C-73/C-75/C-84 and charter §§2/3.2–3.3/4.3/6.3/8/12 for one inspectable callable/lifetime model. Preserve actual owners, permissions, declared failures and D-16; no shared cells, lifetime extension or implicit value return. [H-FULL-SCOPE-IMPLEMENTATION-20261118](../CHANGELOG.md#h-full-scope-implementation-20261118) separately qualifies D-17’s bounded r92 full-scope profile, including immediate ref/ptr inputs; general escaping borrowed-view and declared-place capture mechanisms remain outside it. D-18's value-input profile retains its independent qualification. D-10 separately records the selected trailing callback surface; complete implementation/value-path qualification remains pending.
+- **Full scopes.** H-FULL-SCOPE-CALLABLE-20261117 establishes local explicit returns, separate cleanup and ordinary checked failures for double braces. D-18-HERE governs outer slots and bounded use.
 
 - **Return inspection and cancellation:** [D-17-RETURN-STATE](DesignAuthorityRegistry.md#d-17-return-state)/[H-542–H-547](../CHANGELOG.md#h-542), plus [H-548](../CHANGELOG.md#h-548)/[K-RETURNING-PROFILE-20261116](../CHANGELOG.md#k-returning-profile-20261116), covers r85's bounded return-state profile and cleanup interactions. [H-549](../CHANGELOG.md#h-549)/[K-RETURNING-BINDING-20261116](../CHANGELOG.md#k-returning-binding-20261116) confirms one-way use of the established result type and clarifies existing materialization failures. Human-confirmed recovery/filter/owner directions and cost-delegated scoped cancellation continue; H-548 delegates the remaining simple, coherent choices. The selected profile uses explicit-return markers, ordinary declarators and existing bits/callable/reference binding lifetimes; owning results support inspection without capture. Candidate C-54/C-63/C-65/P-482–P-484 serves author-controlled completion, observable result state and valid storage under charter §§2/3.2–3.3/4.3/6.3/8/12. Acceptance is below. Preserve FIFO failures, declared checked contracts, access/owners, exact release and D-16. No ownership-consuming binding, general regional copy or new pure-callable contract; full value-path/physical qualification and source support remain separate. Agent selections under delegation are not additional human confirmations.
 
@@ -859,20 +859,20 @@ Each draining sequence remains fixed while independent inner scopes may register
 
 ### Full scopes as immediate ordinary calls
 
-[H-FULL-SCOPE-CALLABLE-20261117](../CHANGELOG.md#h-full-scope-callable-20261117) selects full ordinary-callable equivalence everywhere, rather than cleanup-only equivalence. A standalone full scope constructs the ordinary callable inputs at the point it is reached, invokes the niladic body once, completes that invocation's cleanup and produces its ordinary result. The compiler may eliminate the materialized view/call when observations are preserved; no allocation or physical call instruction is mandated.
+A standalone full scope invokes its niladic here body once when execution reaches the expression. Its local variables, return state, checked failures and cleanup follow ordinary call rules. It uses the enclosing activation’s slots directly. A materialized handle or physical call is optional.
 
-- Ordinary scalar val and complete callable inputs follow D-18's capture snapshot and independent invocation-local value rules. Updating that local value does not update the enclosing holder. A ref/ptr capture keeps its selected target, access and actual owner: target writes may be externally observable, but rebinding the local reference does not rebind its source slot. Explicit declared place aliasing retains its separately checked borrowed-place meaning. No implicit shared cells or owner retention.
+- A write to an enclosing scalar or a rebind of an enclosing mutable reference slot is visible after the call. Each access requires the actual owner and current locator. Fresh parameters and declarations inside the body have their ordinary local storage.
 - Every return targets the nearest callable, including this implicit callable. Its deferred/finally returns replace only its own retained result. `if returning` inspects that same invocation's state. To return from the outer callable, write an outer `return {{ return value; }};`. An inner return supplies no result-inference evidence to the outer callable.
 - Ordinary value results require an explicit return. `{{ 7u64; }}` does not return 7; `{{ return 7u64; }}` does. D-24's independent inference, required-value completion and expected-signature rules apply. Returned references must outlive this invocation; a reference to its local storage cannot escape merely because invocation was immediate.
 - Without an expected result, a standalone body whose only completion is throwing defaults to `void`. Thus `typeof({{ throw e; }})` is `void` for a valid exception operand, while `typeof({{ return 7u64; }})` is `u64`. The same implicit invocation and result contract apply when the expression executes. A throwing path delivers no result. The default supplies no recursive inference anchor, waives no source checks, and does not change the callback parameter’s expected signature.
-- Func/proc permissions remain those admitted at the expression's checking site; introducing the implicit callable cannot grant procedure effects in a function. Capture construction, initialization, checked failures, effect restoration and cleanup use the ordinary call rules. The full scope's `here` is its own invocation owner. Module definitions and module lifetime are not turned into implicit callable captures by this rule.
+- Func/proc permissions remain those admitted at the expression's checking site; introducing the implicit callable cannot grant procedure effects in a function. Lexical slot access, initialization, checked failures, effect restoration and cleanup use the ordinary call rules. The full scope's `here` is its own invocation owner. Module definitions and module lifetime are not turned into implicit callable captures by this rule.
 - Loop continue/feedback, generator yield and nonlocal return privileges do not cross this boundary. An inner loop or generator follows its own declared contract. Ordinary catch context and its hidden tip likewise do not become ambient across an ordinary call: bare throw/rethrow needs a catch in the implicit callable; explicitly supplied exception values follow ordinary propagation rules.
 
 ```cod
-proc value_capture() -> u64 {
+proc write_outer() -> u64 {
     val n <- 1u64;
     {{ n <- 2u64; }}
-    return n;                         # 1: outer holder unchanged.
+    return n;                         # 2: the body wrote the enclosing n.
 }
 proc local_return() -> u64 {
     {{ return 1u64; }}
@@ -881,7 +881,7 @@ proc local_return() -> u64 {
 proc borrowed_target() -> u64 {
     ref n:u64 = 1u64;
     {{ n <- 2u64; }}
-    return n;                         # 2: write to the captured live target.
+    return n;                         # 2: write through the enclosing reference.
 }
 proc cleanup_return() -> u64 {
     defer { {{ return 9u64; }} }      # Local result discarded.
@@ -889,11 +889,11 @@ proc cleanup_return() -> u64 {
 }
 ```
 
-Caller-context defaults use the same local-return rule, with D-10's established lookup environment. D-22's temporary receiving form expands to reception inside this ordinary implicit callable; writes to captured values stay local, while admitted borrowed-place/target writes retain ordinary observability. D-29's direct loop body remains caller-owned; an explicit full scope inside it is an ordinary nested callable.
+Caller-context defaults use the same local-return rule and D-10 lookup. A temporary receiving scope keeps its newly declared locals and exposes permitted updates to existing destinations. A full scope inside a generator loop body still has its own return.
 
 A delayed block controls when its contained full-scope expression is reached. Thus `defer { {{ ... }} }` constructs/invokes that full scope during cleanup; it does not capture those inputs at registration. The direct full-scope block spelling `defer {{ ... }}` has that same delayed-body boundary. Plain deferred-call syntax still prepares its actual callable/arguments eagerly. Grouping alone introduces neither boundary.
 
-**Acceptance:** the four outcomes above; local explicit returns and independent inference; per-call capture independence versus permitted target/place updates; independent nested cleanup, exact owner release and failure propagation; no outer pending-result/catch/loop control access across the callable boundary; ordinary default/receiving scope lifetimes. Full-scope source semantics are selected. D-17-DEFER-CHECKS and D-18-VALUE-CAPTURE now have their bounded implementation/value-path qualifications; the bounded full-scope implementation profile below now has its own r92 qualification. Broader capture proofs and a permanent ABI retain their separate scopes.
+**Acceptance.** Check the four outcomes above, nested cleanup, independent result inference, writes and rebinding, actual owner release and exceptional control.
 
 #### Checked failures of standalone full scopes
 
@@ -916,66 +916,20 @@ A [trailing callback](SymbolicDynamicScope.md#trailing-callback-arguments) alrea
 
 ### Full-scope implementation profile
 
-[H-FULL-SCOPE-IMPLEMENTATION-20261118](../CHANGELOG.md#h-full-scope-implementation-20261118) qualifies this bounded r92 implementation profile and its value path. It implements the confirmed source model through ordinary callable facilities, preserving local returns and independent captures. Its value is one checked callable meaning shared by source validation, result inference, queries and native execution, reducing duplicated control and lifetime rules. The ordinary callable is a semantic boundary; a physical call or allocated view is optional.
-
-**Scope and dependencies.** Cover standalone `{{ ... }}` in every otherwise admitted expression position, including a delayed body's full-scope expression, ordinary callable arguments and nested full scopes. Use the exact independently qualified ordinary input, result, owner, effect and cleanup contracts. The adopted D-18 value-input profile covers independent scalars and complete callable inputs. This profile also covers the bounded immediate ref/ptr proof and transport below. An exception input is a reference with an actual owner under [the exception object contract](#exception-object-owners-and-release). Exception-specific transport requires its own qualification. No general escaping borrowed-view image, declared-place capture proof, new owning carrier, aggregate transport, generator protocol or trailing-callback grammar is qualified by reusing the boundary. Caller-context defaults and temporary receiving retain their selected lookup/expansion semantics when their respective contracts are implemented; they do not get a second full-scope interpretation.
-
-**Common checked meaning.** Establish one implicit niladic callable with the full scope's source identity and ordinary resolved inputs. Preserve definition/symbol identities, the applicable lookup environment, access qualifiers and the captured actual owners; do not reinterpret a source name using a later namesake. Capture construction is checked in the enclosing context, while the body has its own invocation owner, locals, result evidence and completion state. Use ordinary capture classification: independent values supply invocation locals, reference captures retain selected targets and local reference slots, and declared place aliasing requires its ordinary proof. Module definitions and symbolic binding cells do not become shared mutable captures. A compiler may synthesize an ordinary callable representation or use an equivalent internal representation; neither syntax-tree duplication nor a permanent ABI is required.
-
-**Bounded immediate ref/ptr inputs.** The implicit callable itself is invoked immediately and is not published as a stored callback. For every ordinary ref/ptr free input, retain the selected target (or null), exact target type, access, slot-rebinding qualifier and statically unique actual owner at input preparation. Supply an independent invocation-local reference slot; rebinding it cannot rebind the source slot. Preserve runtime target aliasing when separate inputs select the same target. Target writes remain observable according to ordinary access checks; reading the reference identity does not grant payload-read or initialization permission.
-
-The compiler must prove that every borrowed actual owner and selected target remain valid across preparation, invocation and cleanup. Well-nested lexical ownership supplies that proof for ordinary enclosing lexical targets; regional targets require the ordinary live borrowed-owner evidence. Consuming/replacing an owner cannot coexist with outstanding uses, including deferred uses and pending borrowed results. A retained reference result needs its separate ordinary post-call liveness proof; immediacy does not make a local target escape safely. Nested calls, deferred work and admitted explicit place operations must preserve these dependencies through their ordinary contracts. Unknown/multiple owners or an unproved lifetime reject.
-
-Transport may reuse ordinary borrowed ref/ptr parameters plus their owner information. It must preserve nullability, access and the current owner-plus-locator resolution contract from [D-28](RegionalAndLexicalStorageRefactor.md#shared-owner-information-from-checked-declarations). Share proven common owner information where possible; do not replace actual owner identity with a cached base address or add per-reference owning responsibility. No new escaping environment format, runtime borrow registry, owner retention or lifetime extension is required. Eliding an intermediate view is permitted only while preserving capture timing, local slot independence and ordinary cleanup. Generic borrowed targets are admitted only with the same type/layout/owner evidence required by the corresponding ordinary parameter.
-
-The new proof scope ends at the immediate call and its ordinary result checks. A returned or stored callable that retains one of these borrowed inputs still requires the independently qualified escaping-view proof/transport; this profile cannot establish it merely because the intermediate invocation was immediate. Explicit declared place aliasing is also distinct from the reference-slot snapshots covered here. The selected source behavior of these broader forms is unchanged, and their implementation gaps remain explicit.
+Every standalone full scope uses the same checked body in validation, result inference, type queries and execution. It has its own `here` owner, return record and cleanup. Its free lexical names retain their declaration identity and designate the supplying activation’s slots. Check access, initialization, concrete target owner and possible invalidation at each use. A deferred full scope starts when its containing deferred action actually runs.
 
 ```cod
-proc local_reference_slot() -> u64 {
-    ref a:u64 = 1u64;
-    ref b:u64 = 10u64;
-    ref p:u64 = a;
-    {{
-        p = b;      # Rebind the inner reference slot only.
-        p <- 20u64; # Write b's selected target.
-    }}
-    assert p is a;
-    return a + b;   # 21.
-}
-```
-
-**Checking and queries.** At the immediate invocation apply the [standalone checked interface](#checked-failures-of-standalone-full-scopes), including failures of nested calls. Body validation, return inference and query-only inspection must agree on this boundary. An explicit inner return contributes to the implicit callable's result, not the enclosing callable's. A tail expression is not an implicit return. Expected-signature and missing-return handling follow D-24 and the ordinary callable rules. Queries may establish the result and capture requirements without invoking the body, reading captures, allocating inputs or registering cleanup. Func/proc permission, source well-formedness, readonly access, initialization and owner-escape checks still apply; the scope boundary grants no permission to accept an otherwise invalid source program.
-
-For `typeof({{ ... }})`, the queried type is the result of the implicit invocation. Establish its inferred body’s source and access validity while deriving that result. A write to a `const val` capture rejects even when the return type is independently obvious. Dynamic procedure behavior inside a full scope in a `func` also rejects. Type-only inspection creates no executable demand, capture read, TLS lookup, or deferred registration. Querying the type of a valid throw-only scope does not throw e or impose a checked catch at the query site. An invalid operand, including bare `throw;` without a local caught context, still rejects. Calls with established signatures supply ordinary declaration evidence. In particular, querying through a separately annotated anonymous callable argument keeps its existing signature-only treatment.
-
-**Runtime and completion.** When the expression is reached, prepare ordinary inputs once, acquire the complete required independent values before exposing writable invocation locals, and invoke once. Failed preparation releases only its successfully acquired prefix under ordinary cleanup; it enters no partially prepared body and rolls back no completed outer effect. The body uses its own `return`/`if returning`, catch context, loop control and cleanup state. On success, prepare its ordinary result before destroying local dependencies and deliver only after its cleanup succeeds. On failure, propagate through the ordinary call boundary. Discarded results, local complete values and owned resources receive their usual exact cleanup. A reference to invocation-local storage cannot escape; an admitted returned callable may retain independent values or independently proved surviving borrows under D-18. No capture or `here` owner is extended merely because the call is immediate.
-
-During enclosing cleanup, the inner callable still has independent completion: an inner return cannot replace the enclosing retained result. Its escaping failure has the same effect as a separately defined helper failing at that call site. Delayed block forms construct the full scope's inputs when cleanup reaches the expression; eager preparation for plain deferred-call syntax remains unchanged. Inlining, shared code, immutable backing or elision must preserve those observations and owner boundaries.
-
-```cod
-proc independent_completion() -> u64 {
+proc example() -> u64 {
     val n <- 1u64;
     val inner <- {{
         defer { n <- 3u64; }
         return n;
     }};
-    return n + inner; # 2: outer n stays 1; inner bits were captured before cleanup.
+    return n + inner;                 # 4: inner saved 1, cleanup wrote 3.
 }
 ```
 
-**Migration and acceptance.** Replace lexical-block outer writes, outer returns and tail-result acceptance in affected full-scope paths; do not leave them as a fallback for inputs whose ordinary callable preparation is unproved. Unsupported dependencies require an accurate implementation-gap diagnostic, not execution under the old meaning. Report the actual migration cost under AGENTS and remove obsolete checked/native paths as replacement coverage is established. Existing tests may remain only when their expectations agree with the current source contract; historical observations stay in Git. No new source-level feature flag or compatibility dialect is selected.
-
-| Boundary | Required evidence |
-| --- | --- |
-| Value and reference inputs | The preceding four source examples, independent_completion and local_reference_slot have the stated outcomes. Captured values and reference slots are invocation-local; admitted target/place writes preserve their ordinary permissions. Readonly violations and premature capture reads reject. |
-| Immediate borrow proof and transport | Accept non-null and nullable inputs, same-target inputs, distinct proven actual owners and references forwarded through ordinary borrowed parameters. Preserve null/identity tests, readonly access, source-slot independence and target writes through inner cleanup. Reject wrong/unknown owners, invalid lifetime or owner consumption with outstanding uses. A deferred borrowed use remains valid through the full invocation; a returned/stored callable gains no escaping-view proof. Cover both general and specialized transport. |
-| Results and queries | Local explicit return, void fallthrough, ordinary required-value failure, independent inference and discarded results agree between checking/query and execution. Query inspection produces no capture/body effects. |
-| Cleanup and outer control | Nested cleanup completes exactly once; inner return does not replace outer return. Independently admitted if-returning forms inspect only the inner state. An escaping inner failure propagates as an ordinary call failure. No outer loop/yield/catch context leaks inward. |
-| Owners and complete values | Here denotes the inner invocation; returned local references reject. Admitted complete callable results retain their ordinary independent values and only proved live borrowed dependencies. Preparation, entry, body, result and cleanup failures release acquired responsibility exactly once. |
-| Placement and timing | Nested expressions, argument evaluation and delayed/eager defer positions retain once-only evaluation and the selected capture timing. Source and query checking retain identical callable boundaries even for unused or generic bodies. |
-| Native consistency and cost | General and specialized execution agree with an equivalent ordinary niladic callable. Track additional calls, storage and live owned values; demonstrate ordinary read-only input elision where valid. No allocation per invocation, materialized-view requirement or new permanent ABI is prescribed. |
-
-This profile does not independently implement or qualify the complete deferred FIFO/aggregation runtime, return-inspection mechanism, broader aggregate/init/receiving proofs, caller-default or callback syntax, module startup, generator protocols, pure/TCO or D-16 fractions. Where one of those mechanisms is involved, its existing selected semantics remain mandatory and its qualification remains separate. Full ordinary-callable source equivalence is not weakened by a temporary implementation gap. An actual engineering obstacle that would require weaker behavior must be discussed as a design trade-off before changing that behavior.
+If a full scope executes `p = other;` on an enclosing mutable reference, the next read of p in the supplier sees the new binding. Returning a reference to the inner scope’s own storage still rejects. A type-only query validates the same accesses without executing them. Explicit parameters of separately called helpers keep their ordinary passing contracts. Checked failure inference, early exit, unwinding and local return replacement retain their D-17 rules. See [D-18](CallableStorageAndHereAccess.md#what-an-invocation-needs) for direct access across recursion and backing growth. Native representation is delegated.
 
 ### Module-level deferred actions
 
@@ -1256,7 +1210,7 @@ H-356 authorizes implementing this language work independently of the LLVM bindi
 
 Before claiming complete coverage, verify H-370’s owning-argument boundary and resolve any uncovered integration choice involving checked exceptions from cleanup or cleanup failure while another completion is pending. Existing D-17 rules remain authoritative where they already apply. Neither a parser-only change nor execution of a standalone cleanup sample satisfies acceptance.
 
-The [trailing callback form](SymbolicDynamicScope.md#trailing-callback-arguments) separately constructs an ordinary callable argument. H-TRAILING-CALLBACK-20261117 places it in the first declared parameter; its body runs only when invoked by the callee. Standalone full scopes remain immediate calls and do not silently change meaning because a consumer happens to expect a callable. Ordinary capture/access/lifetime and func/proc restrictions continue to govern any admitted callback.
+A [trailing callback](SymbolicDynamicScope.md#trailing-callback-arguments) supplies the first here parameter. Double braces retain local completion and ordinary checked failure propagation. Single braces use the supplying callable’s control targets.
 
 ## Loop scoping rules
 
