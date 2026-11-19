@@ -147,8 +147,8 @@ struct CheckedOperation {
   std::optional<PreparedProducer> prepared_producer;
   struct PipelinePreparation {
     std::vector<const Expression *> written;
-    // Each position indexes written. The last position is the immediate receiver.
-    std::vector<size_t> traversal;
+    // Leaves from a lexical binding can be absent from this use's written operands.
+    std::vector<const Expression *> traversal;
     std::optional<size_t> lexical_source;
     auto operator<=>(const PipelinePreparation &) const = default;
   };
@@ -172,6 +172,13 @@ struct CheckedOperation {
     auto operator<=>(const SuppliedHere &) const = default;
   };
   std::optional<SuppliedHere> supplied_here;
+  struct SavedPipeline {
+    std::vector<const Expression *> stages;
+    const Expression *source = nullptr;
+    std::optional<SuppliedHere> terminal;
+    size_t owner = 0;
+  };
+  std::optional<SavedPipeline> saved_pipeline;
   struct HereArgument {
     std::optional<size_t> lexical;
     const Expression *source = nullptr;
@@ -244,6 +251,7 @@ struct CheckedBinding {
   // Caller-slot inputs can denote the same binding in an activation.
   std::set<size_t> overlaps = {};
   bool nullable = false;
+  const Expression *pipeline = nullptr;
   PlaceKind kind() const { return place_kind(value_binding, requires_initialized); }
 };
 

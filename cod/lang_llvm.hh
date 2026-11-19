@@ -100,6 +100,7 @@ class LLVMEmission {
   std::vector<llvm::AllocaInst *> parameter_values_;
   llvm::Value *query_environment_ = nullptr;
   std::vector<llvm::Value *> here_arguments_;
+  std::map<const Expression *, llvm::AllocaInst *> pipeline_operands_;
   llvm::Value *here_destination_ = nullptr;
   struct SeenReturn {
     llvm::Value *present{}, *value{};
@@ -1440,11 +1441,13 @@ class LLVMEmission {
     arguments.insert(arguments.end(), captured.begin(), captured.end());
     return arguments;
   }
-  llvm::StructType *prepared_producer_layout(size_t operands, size_t owners, size_t bound_here) {
+  llvm::StructType *prepared_producer_layout(size_t operands, size_t owners) {
     std::vector<llvm::Type *> fields(operands, scalar_);
     fields.insert(fields.end(), owners, b_.getPtrTy());
-    fields.insert(fields.end(), bound_here, here_);
     return llvm::StructType::get(context_, fields);
+  }
+  llvm::StructType *prepared_connection_layout() {
+    return llvm::StructType::get(context_, {b_.getPtrTy(), here_});
   }
   template <typename Emit>
   llvm::Value *with_prepared_producer(const Expression &expr, const Emit &emit) {
@@ -1453,17 +1456,17 @@ class LLVMEmission {
       producers[contexts_[i].at(&expr).prepared_producer.value()].push_back(i);
     return contextual_value(expr, producers, "here.producer", [&](const auto &producer) {
       const auto method = program_->instances[producer.instance].method;
-      return emit(producer, input_frame(method), program_->methods[method].here.size() - 1);
+      return emit(producer, input_frame(method));
     }, here_);
   }
   llvm::Value *prepare_source(const Expression &expr) {
-    return with_prepared_producer(expr, [&](const auto &producer, const auto &frame, size_t bound_here) -> llvm::Value * {
+    return with_prepared_producer(expr, [&](const auto &producer, const auto &frame) -> llvm::Value * {
       const auto operands = prepare_arguments(expr);
       if (!reachable()) return nullptr;
       const auto &owners = frame.owners;
       llvm::Value *activation = null_pointer();
-      if (!operands.empty() || !owners.empty() || bound_here) {
-        auto *storage = prepared_producer_layout(operands.size(), owners.size(), bound_here);
+      if (!operands.empty() || !owners.empty()) {
+        auto *storage = prepared_producer_layout(operands.size(), owners.size());
         activation = slot(storage, "here.source.operands");
         for (size_t i = 0; i < operands.size(); ++i)
           b_.CreateStore(operands[i], b_.CreateStructGEP(storage, activation, i));
@@ -1477,30 +1480,60 @@ class LLVMEmission {
       return b_.CreateInsertValue(llvm::Constant::getNullValue(here_), activation, 1);
     });
   }
-  llvm::Value *connect_prepared_stage(const Expression &expr, llvm::Value *stage, llvm::Value *upstream) {
-    return with_prepared_producer(expr, [&](const auto &, const auto &frame, size_t bound_here) {
-      if (bound_here != 1) throw std::logic_error("prepared processor does not have one connected source");
-      auto *layout = prepared_producer_layout(frame.inputs.size(), frame.owners.size(), bound_here);
-      auto *activation = b_.CreateExtractValue(stage, 1);
-      b_.CreateStore(upstream, b_.CreateStructGEP(layout, activation, frame.inputs.size() + frame.owners.size()));
-      return stage;
+  llvm::Value *connect_prepared_stage(llvm::Value *stage, llvm::Value *upstream) {
+    auto *layout = prepared_connection_layout();
+    auto *connection = slot(layout, "here.connection");
+    b_.CreateStore(b_.CreateExtractValue(stage, 1), b_.CreateStructGEP(layout, connection, 0));
+    b_.CreateStore(upstream, b_.CreateStructGEP(layout, connection, 1));
+    return b_.CreateInsertValue(stage, connection, 1);
+  }
+  llvm::AllocaInst *pipeline_operand_slot(const Expression &expr) {
+    auto [position, inserted] = pipeline_operands_.try_emplace(&expr, nullptr);
+    if (inserted) position->second = slot(here_, "here.saved.operand");
+    return position->second;
+  }
+  std::vector<llvm::Value *> load_prepared_operands(const Expression &expr, llvm::Value *prepared) {
+    // The consumer always runs in the supplying activation, which has the original owner evidence.
+    const auto &fact = contexts_.front().at(&expr);
+    auto *backing = b_.CreateExtractValue(prepared, 1);
+    std::vector<llvm::Value *> operands(fact.argument_count(expr));
+    auto *layout = prepared_producer_layout(operands.size(), 0);
+    for (size_t i = 0; i < operands.size(); ++i) {
+      auto *address = b_.CreateStructGEP(layout, backing, i);
+      operands[i] = b_.CreateLoad(scalar_, address);
+    }
+    return operands;
+  }
+  llvm::Value *save_pipeline_operands(const Expression &expr, const CheckedOperation::PipelinePreparation &plan) {
+    return temporary_scope(expr.at, scalar_, [&]() -> llvm::Value * {
+      for (const auto *operand : plan.written) {
+        auto *value = prepare_source(*operand);
+        if (!reachable()) return nullptr;
+        b_.CreateStore(value, pipeline_operand_slot(*operand));
+      }
+      return empty_scalar();
     });
   }
   std::vector<llvm::Value *> prepare_pipeline(const Expression &expr,
       const CheckedOperation::PipelinePreparation &plan, std::span<llvm::Value *> here_values) {
-    const auto receiver = plan.traversal.back();
-    std::vector<llvm::Value *> prepared(plan.written.size());
+    const auto *receiver = plan.traversal.back();
+    std::map<const Expression *, llvm::Value *> prepared;
     std::vector<llvm::Value *> arguments;
-    for (size_t i = 0; i < plan.written.size(); ++i) {
-      if (i == receiver) arguments = prepare_arguments(expr);
-      else if (i == plan.traversal.front() && plan.lexical_source) prepared[i] = here_arguments_.at(*plan.lexical_source);
-      else prepared[i] = prepare_source(*plan.written[i]);
+    bool fresh_receiver = false;
+    for (const auto *operand : plan.written) {
+      if (operand == receiver) { arguments = prepare_arguments(expr); fresh_receiver = true; }
+      else if (operand == plan.traversal.front() && plan.lexical_source) prepared.emplace(operand, here_arguments_.at(*plan.lexical_source));
+      else prepared.emplace(operand, prepare_source(*operand));
       if (!reachable()) return {};
     }
-    auto *upstream = prepared[plan.traversal.front()];
+    const auto stored = [&](const Expression *operand) {
+      const auto found = prepared.find(operand);
+      return found == prepared.end() ? load(pipeline_operand_slot(*operand)) : found->second;
+    };
+    if (!fresh_receiver) arguments = load_prepared_operands(expr, stored(receiver));
+    auto *upstream = stored(plan.traversal.front());
     for (size_t i = 1; i + 1 < plan.traversal.size(); ++i) {
-      const auto stage = plan.traversal[i];
-      upstream = connect_prepared_stage(*plan.written[stage], prepared[stage], upstream);
+      upstream = connect_prepared_stage(stored(plan.traversal[i]), upstream);
     }
     here_values[1] = upstream;
     return arguments;
@@ -1761,6 +1794,7 @@ class LLVMEmission {
       return installation ? finish_effect(fact, value, expr.at) : value;
     }
     switch (expr.kind) {
+    case K::here_binding: return save_pipeline_operands(expr, fact.pipeline_preparation.value());
     case K::grouped: {
       const auto &operand = *expr.children.front();
       if (projection != Projection::value) return emit_expression(operand, projection, discard);
@@ -2122,15 +2156,21 @@ class LLVMEmission {
         llvm::GlobalValue::InternalLinkage, "cod.here.source." + std::to_string(id), module_);
     prepared_source_entries_.emplace(id, entry);
     llvm::IRBuilder<> body(llvm::BasicBlock::Create(context_, "entry", entry));
-    auto *storage = prepared_producer_layout(layout.operands, layout.owners, layout.here_formals - 1);
+    auto *storage = prepared_producer_layout(layout.operands, layout.owners);
+    llvm::Value *backing = entry->getArg(1);
+    llvm::Value *upstream = nullptr;
+    if (layout.here_formals == 2) {
+      auto *connection = prepared_connection_layout();
+      upstream = body.CreateLoad(here_, body.CreateStructGEP(connection, backing, 1));
+      backing = body.CreateLoad(b_.getPtrTy(), body.CreateStructGEP(connection, backing, 0));
+    }
     std::vector<llvm::Value *> arguments;
     for (size_t i = 0; i < layout.operands; ++i)
-      arguments.push_back(body.CreateLoad(scalar_, body.CreateStructGEP(storage, entry->getArg(1), i)));
+      arguments.push_back(body.CreateLoad(scalar_, body.CreateStructGEP(storage, backing, i)));
     for (size_t i = 0; i < layout.owners; ++i)
-      arguments.push_back(body.CreateLoad(b_.getPtrTy(), body.CreateStructGEP(storage, entry->getArg(1), layout.operands + i)));
+      arguments.push_back(body.CreateLoad(b_.getPtrTy(), body.CreateStructGEP(storage, backing, layout.operands + i)));
     arguments.push_back(entry->getArg(0));
-    for (size_t i = 1; i < layout.here_formals; ++i)
-      arguments.push_back(body.CreateLoad(here_, body.CreateStructGEP(storage, entry->getArg(1), layout.operands + layout.owners + i - 1)));
+    if (upstream) arguments.push_back(upstream);
     auto *target = specialize_ ? specialized_.at(id) : general_.at(instance.method);
     body.CreateRet(body.CreateCall(target, arguments));
   }
@@ -2202,7 +2242,7 @@ class LLVMEmission {
   }
   void begin(llvm::Function *function, const std::vector<CheckedStorage> &storage, const std::vector<CheckedBinding> &bindings,
              const CheckedFrame &frame = {}) {
-    function_ = function; arguments_.clear(); retained_types_.clear(); parameter_values_.clear(); value_owners_.clear(); query_environment_ = nullptr; here_arguments_.clear(); here_destination_ = nullptr; temporaries_ = nullptr;
+    function_ = function; arguments_.clear(); retained_types_.clear(); parameter_values_.clear(); value_owners_.clear(); query_environment_ = nullptr; here_arguments_.clear(); pipeline_operands_.clear(); here_destination_ = nullptr; temporaries_ = nullptr;
     suspended_return_ = {};
     for (size_t i = 0; i < frame.inputs.size(); ++i) arguments_.push_back(function->getArg(i));
     b_.SetInsertPoint(block("entry")); finish_ = block("completion"); scope_ = nullptr; control_ = nullptr;

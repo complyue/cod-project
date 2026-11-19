@@ -541,6 +541,54 @@ runner.CASES = {
         'func first(here input() yields u64) yields u64 -> bool{for val item<-input(){yield(item):void;};}'
         'func second(here input() yields u64) yields u64{for val item<-input(){yield(item);};}'
         'for val item<-rows !> first |> second{};',2,'','prepared producer does not match the selected here contract'),
+    'lexical_pipeline_reuses_stages_with_independent_sources_and_bound_sink': (IO+
+        'proc mark(n:u64)->u64{behave @print(n);return n;}'
+        'func rows(day:u64) yields u64{yield(day);}'
+        'func add(here input() yields u64,offset:u64) yields u64{val amount<-offset;for val item<-input(){yield(item+amount);};}'
+        'func scale(here input() yields u64,factor:u64) yields u64{val amount<-factor;for val item<-input(){yield(item*amount);};}'
+        'proc sink(n:u64)->void{behave @print(n);return;}'
+        'proc run()->void{here stages=add(mark(2u64)) |> scale(mark(3u64));'
+        'here first=rows(mark(10u64)) !> stages;here second=stages <! rows(mark(20u64));'
+        'first $> sink;sink <$ second;for val item<-first(){sink(item);};'
+        'here to_sink=stages $> sink;rows(mark(30u64)) !> to_sink;return;}run();',
+        0,'2\n3\n10\n20\n36\n66\n36\n30\n96\n',''),
+    'lexical_pipeline_keeps_the_selected_readonly_targets': (IO+
+        'func rows(line:const u64 in P) yields ref const u64 in P -> bool where {owner P}{'
+        'if(!yield(line)){return;}else{};yield(line):void;}'
+        'func stage(here input() yields ref const u64 in O -> bool,witness:const u64 in O) '
+        'yields ref const u64 in O -> bool where {owner O}{for ref item=input(){continue yield(item);};}'
+        'proc run()->void{val first<-75u64;val second<-99u64;ref selected=first;'
+        'here stages=stage(selected) |> stage(selected);here attached=rows(selected) !> stages;'
+        'selected=second;first<-76u64;for ref item=attached(){behave @print(item);behave @print(item is first);continue false;};'
+        'return;}run();',0,'76\ntrue\n',''),
+    'lexical_pipeline_retains_the_terminal_at_its_binding_site': (IO+
+        'func rows() yields u64{yield(7u64);}'
+        'func stage(here input() yields u64) yields u64{for val item<-input(){yield(item);};}'
+        'proc report(item:u64)->void{behave @print(item);return;}'
+        'proc run()->void{here stages=stage |> stage;here to_sink=stages $> report;'
+        'val report<-99u64;rows !> to_sink;behave @print(report);return;}run();',0,'7\n99\n','[-Wshadow]'),
+    'lexical_pipeline_cannot_escape_as_an_ordinary_result': (
+        'func stage(here input() yields u64) yields u64{for val item<-input(){yield(item);};}'
+        'proc run()->u64{here stages=stage |> stage;return stages;}run();',2,'','a bounded here binding requires a pipeline connection or consumer'),
+    'lexical_pipeline_drives_a_saved_source_during_deferred_execution': (IO+
+        'proc mark(n:u64)->u64{behave @print(n);return n;}'
+        'func rows(day:u64) yields u64{yield(day);}'
+        'func stage(here input() yields u64) yields u64{for val item<-input(){yield(item);};}'
+        'proc sink(n:u64)->void{behave @print(n);return;}'
+        'proc run()->void{here stages=stage |> stage;here prepared=rows(mark(1u64)) !> stages;'
+        'defer{prepared $> sink;};behave @print(2u64);return;}run();',0,'1\n2\n1\n',''),
+    'lexical_pipeline_requires_the_binding_on_every_reaching_path': (
+        'func rows() yields u64{yield(1u64);}'
+        'func stage(here input() yields u64) yields u64{for val item<-input(){yield(item);};}'
+        'proc sink(n:u64)->void{return;}'
+        'proc run(ready:bool)->void{if(ready){here stages=stage |> stage;}else{};'
+        'rows !> stages $> sink;return;}run(false);',2,'',"here binding 'stages' is not available on every reaching path"),
+    'lexical_pipeline_rejects_unbound_ordinary_arguments': (
+        'func rows() yields u64{yield(1u64);}'
+        'func stage(here input() yields u64) yields u64{for val item<-input(){yield(item);};}'
+        'proc sink(n:u64)->void{return;}'
+        'proc run()->void{here stages=stage |> stage;rows !> stages(9u64) $> sink;return;}run();',
+        2,'','a lexical pipeline has no unbound ordinary arguments'),
     'lexical_handoff_nested_stage_keeps_labelled_borrow_and_feedback': (IO+
         'proc rows(line:const u64 in O) yields {id:u64;ref cell:const u64 in O;} -> bool where {owner O}{'
         'behave @print(17u64);if(!yield(line->cell,17u64->id)){return;}else{};'
