@@ -350,6 +350,73 @@ runner.CASES = {
     'labelled_handoff_rejects_mutation_of_readonly_selection': (
         'proc scan(line:const u64 in O) yields {id:u64;ref cell:const u64 in O;} where {owner O}{yield(24u64->id,line->cell);return;}'
         'val line<-1u64;for {ref selected=cell;} := scan(line){selected<-2u64;};',2,'','readonly'),
+    'lexical_handoff_nested_stage_keeps_labelled_borrow_and_feedback': (IO+
+        'proc rows(line:const u64 in O) yields {id:u64;ref cell:const u64 in O;} -> bool where {owner O}{'
+        'behave @print(17u64);if(!yield(line->cell,17u64->id)){return;}else{};'
+        'behave @print(24u64);if(!yield(24u64->id,line->cell)){return;}else{};'
+        'behave @print(25u64);if(!yield(line->cell,25u64->id)){return;}else{};'
+        'behave @print(42u64);yield(42u64->id,line->cell);return;}'
+        'proc filter(line:const u64 in O) yields {ref cell:const u64 in O;id:u64;} -> bool where {owner O}{'
+        'for {val n<-id;ref item=cell;} := rows(line){'
+        'if(n==17u64){continue true;}else{};continue yield(item->cell,n->id);};return;}'
+        'proc run()->void{val line<-75u64;for {ref item=cell;val n<-id;} := filter(line){'
+        'behave @print(item);continue n!=25u64;};return;}run();',0,'17\n24\n75\n25\n75\n',''),
+    'lexical_handoff_downstream_return_runs_both_cleanups': (IO+
+        'proc inner() yields u64{try{yield(7u64);behave @print(80u64);}finally{behave @print(31u64);};return;}'
+        'proc stage() yields u64{try{for val n<-inner(){yield(n);};behave @print(81u64);}'
+        'finally{behave @print(32u64);};return;}'
+        'proc run()->u64{for val n<-stage(){return n;};return 0u64;}behave @print(run());',0,'31\n32\n7\n',''),
+    'lexical_handoff_downstream_failure_bypasses_both_catches': (IO+'using "std:exceptions" NullPointerException;'+
+        'func fail_now()->void throws NullPointerException{ptr p:u64=null in here;p;{};}'
+        'proc inner() yields u64{try{yield(24u64);}'
+        'catch(e:const NullPointerException){behave @print(80u64);}finally{behave @print(31u64);};return;}'
+        'proc stage() yields u64{try{for val n<-inner(){yield(n);};}'
+        'catch(e:const NullPointerException){behave @print(81u64);}finally{behave @print(32u64);};return;}'
+        'proc run()->void{try{for val n<-stage(){behave @print(n);fail_now();};}'
+        'catch(e:const NullPointerException){behave @print(33u64);};return;}run();',0,'24\n31\n32\n33\n',''),
+    'lexical_handoff_inner_break_leaves_outer_consumer_live': (IO+
+        'proc inner() yields u64{yield(7u64);behave @print(80u64);return;}'
+        'proc stage() yields u64{for val n<-inner(){yield(n);break;};yield(8u64);return;}'
+        'proc run()->void{for val n<-stage(){behave @print(n);};return;}run();',0,'7\n8\n',''),
+    'lexical_handoff_recursive_suppliers_keep_distinct_destinations': (IO+
+        'func inner() yields u64{yield(7u64);yield(80u64);}'
+        'func stage() yields u64{for val n<-inner(){yield(n);};}'
+        'proc run(depth:u64)->void{val remaining<-depth;for val n<-stage(){'
+        'if(remaining>0u64){run(remaining-1u64);}else{};behave @print(n+remaining);break;};'
+        'behave @print(depth);return;}run(2u64);',0,'7\n0\n8\n1\n9\n2\n',''),
+    'lexical_handoff_inner_cleanup_recovery_keeps_downstream_break': (IO+'using "std:exceptions" NullPointerException;'+
+        'func fail_now()->void throws NullPointerException{ptr p:u64=null in here;p;{};}'
+        'proc inner() yields u64 throws NullPointerException{try{yield(7u64);}'
+        'finally{behave @print(31u64);fail_now();};return;}'
+        'proc stage() yields u64{try{for val n<-inner(){yield(n);};}'
+        'catch(e:const NullPointerException){behave @print(32u64);}finally{behave @print(33u64);};'
+        'behave @print(80u64);return;}'
+        'proc run()->void{for val n<-stage(){behave @print(n);break;};behave @print(34u64);return;}run();',
+        0,'7\n31\n32\n33\n34\n',''),
+    'lexical_handoff_forwarding_preserves_break_destination': (IO+
+        'func inner() yields u64{yield(7u64);yield(8u64);}'
+        'func send(here step(x:u64)->void,x:u64)->void{step(x);}'
+        'func stage() yields u64{for val n<-inner(){send(yield,n);};yield(80u64);}'
+        'proc run()->void{for val n<-stage(){behave @print(n);break;};behave @print(9u64);return;}run();',0,'7\n9\n',''),
+    'lexical_handoff_full_scope_keeps_borrowed_owner_and_feedback': (IO+
+        'proc stage(ref line:const u64 in O) yields ref const u64 in O -> bool where {owner O}{'
+        'val more<-{{yield(line)}};if(more){yield(line):void;}else{};return;}'
+        'proc run()->void{val line<-25u64;for ref item=stage(line){behave @print(item);continue false;};return;}run();',
+        0,'25\n',''),
+    'lexical_handoff_full_scope_propagates_downstream_return': (IO+
+        'proc stage() yields u64{try{ {{yield(7u64);return;}};behave @print(80u64);}'
+        'finally{behave @print(31u64);};return;}'
+        'proc run()->u64{for val n<-stage(){return n;};return 0u64;}behave @print(run());',0,'31\n7\n',''),
+    'lexical_handoff_type_query_of_full_scope_is_nonexecuting': (IO+
+        'func stage() yields u64 -> bool{'
+        'val probe<-make local typeof({{yield(99u64)}}){true};if(probe){yield(7u64):void;}else{};}'
+        'proc run()->void{for val n<-stage(){behave @print(n);continue false;};return;}run();',0,'7\n',''),
+    'lexical_handoff_ordinary_callable_cannot_capture_entry': (
+        'proc stage() yields u64{func escaped()->void{yield(7u64);};escaped();return;}'
+        'for val n<-stage(){};',2,'','access to a here formal from a nested callable scope'),
+    'lexical_handoff_full_scope_cannot_materialize_entry': (
+        'proc stage() yields u64{ {{func saved=yield;return;}};return;}'
+        'for val n<-stage(){};',2,'','a here argument can only be invoked or forwarded'),
     'generator_void_feedback_rejects_explicit_operand': (
         'func generate() yields u64{yield(1u64);}func action()->void{}'
         'for val v<-generate(){continue action();};',2,'','void here feedback requires bare continue'),

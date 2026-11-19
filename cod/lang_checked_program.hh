@@ -144,6 +144,7 @@ struct CheckedOperation {
     size_t instance;
     std::vector<const Expression *> places;
     std::vector<size_t> owners;
+    std::vector<size_t> lexical_here;
     struct ReturningProfile {
       size_t body, receiver;
       auto operator<=>(const ReturningProfile &) const = default;
@@ -152,8 +153,8 @@ struct CheckedOperation {
     auto operator<=>(const SuppliedHere &) const = default;
   };
   std::optional<SuppliedHere> supplied_here;
-  bool forwards_here = false;
-  bool invokes_here = false;
+  std::optional<size_t> forwards_here, invokes_here;
+  std::vector<size_t> scope_here;
   std::optional<HereExit> here_exit;
   // Possible borrowed callable targets at invocation, after slot selection.
   std::vector<std::set<size_t>> callable_argument_targets;
@@ -272,6 +273,7 @@ struct CallEffects {
   bool breaks_here_call = false;
   bool returns_from_supplier = false;
   bool propagates_here_transfer = false;
+  bool propagates_outer_here_transfer = false;
   bool protected_defer_failure = false;
 };
 enum class OwnerMatch { satisfied, unknown, mismatch };
@@ -384,12 +386,21 @@ struct CheckedHereContract {
     // Zero denotes the component's invocation owner. Other roles index the receiver's owners from one.
     std::optional<size_t> owner;
     bool read_only = false;
+    bool operator==(const Component &) const = default;
   };
   std::vector<Component> inputs;
   bool labelled = false;
   Component result;
   std::optional<std::vector<Component>> feedback;
   std::set<size_t> throws_categories;
+  bool operator==(const CheckedHereContract &) const = default;
+};
+struct CheckedLexicalHere {
+  std::string name;
+  Type invocation;
+  CheckedHereContract signature;
+  std::optional<size_t> callback;
+  bool operator==(const CheckedLexicalHere &) const = default;
 };
 struct CheckedMethod {
   const Form *source = nullptr;
@@ -433,6 +444,7 @@ struct CheckedMethod {
     std::map<std::string, size_t> owner_names;
     std::vector<std::vector<OwnerMatch>> relations;
     std::vector<bool> nonnull;
+    std::vector<CheckedLexicalHere> lexical_here;
     struct HereReception {
       size_t offered;
       std::vector<size_t> selected;
@@ -457,6 +469,9 @@ struct CheckedMethod {
     CleanupEquations::ConditionClauses reference_conditions;
   };
   std::optional<ScopeInputs> scope_inputs;
+  size_t here_inputs() const {
+    return here.has_value() + (scope_inputs ? scope_inputs->lexical_here.size() : 0);
+  }
   std::span<const Parameter> input_parameters() const {
     if (scope_inputs) return scope_inputs->parameters;
     return std::span<const Parameter>(source->parameters).subspan(here.has_value());

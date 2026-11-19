@@ -1135,6 +1135,13 @@ class ScalarChecker {
     std::map<std::string, std::optional<Type>> bindings;
     std::map<std::string, const Expression *> local_declarations;
     std::map<std::string, Definition> definitions;
+    struct Here {
+      Type invocation;
+      CheckedHereContract signature;
+      std::vector<std::optional<EvidenceOwner>> owners;
+      bool operator==(const Here &) const = default;
+    };
+    std::map<std::string, Here> lexical_here;
     std::set<std::string> symbol_shadows;
     std::map<std::string, ViewEvidence> views;
     std::map<std::string, EvidenceOwner> owner_bindings;
@@ -1175,7 +1182,7 @@ class ScalarChecker {
     std::optional<TypePreparedCall> prepared_call;
     bool preparing(const Expression &expr) const { return prepared_call && prepared_call->expression == &expr; }
     bool same_definition_inputs(const TypeEvidenceState &other) const {
-      return bindings == other.bindings && symbol_shadows == other.symbol_shadows && views == other.views &&
+      return bindings == other.bindings && symbol_shadows == other.symbol_shadows && views == other.views && lexical_here == other.lexical_here &&
           owner_bindings == other.owner_bindings && owner_relations == other.owner_relations;
     }
     struct Returns {
@@ -3408,6 +3415,8 @@ class ScalarChecker {
             (exception_categories.at(reason - 3).checked || declares_root(contract.throws_types));
         if (completion.protected_here() && operation.supplied_here) {
           if (deliver_here_completion(expr, operation)) here_break = lexical_;
+          if (read_effects(operation.supplied_here->instance).propagates_outer_here_transfer)
+            note_abrupt(expr.at, {}, completion);
         }
         else note_abrupt(expr.at, completion.exception() ? std::set<size_t>{reason - 3} : std::set<size_t>{},
                          completion, scope_failure);
@@ -4147,7 +4156,7 @@ class ScalarChecker {
     std::optional<Type> normal_type;
     for (const auto &path : flow.paths) for (const auto origin : path.state.inputs) {
       const auto queue = path.state.input_facts.at(origin).queues.at(scope);
-      if (proving_ && checking_method_ && checking_method_->here && !observed_.protected_defer_failure && cleanup_.has_actions(queue)) {
+      if (proving_ && checking_method_ && checking_method_->here_inputs() && !observed_.protected_defer_failure && cleanup_.has_actions(queue)) {
         const auto &outcomes = cleanup_.apply(queue, Completion{});
         observed_.protected_defer_failure = std::ranges::any_of(outcomes, [](const auto &outcome) {
           return Completion::from(outcome.first).failed();
@@ -4249,7 +4258,7 @@ class ScalarChecker {
           normal_type = type;
           normals.push_back(std::move(state));
         } else {
-          const bool retained = path.receiver_transfer_pending || (input.protected_here() && checking_method_ && checking_method_->here);
+          const bool retained = path.receiver_transfer_pending || (input.protected_here() && checking_method_ && checking_method_->here_inputs());
           exits.push_back({std::move(state), std::move(failure), path.at, completion, path.immediate_scope_failure,
                            completion.protected_here() ? path.here_exit : std::nullopt,
                            completion.failed() && retained});
@@ -4486,7 +4495,7 @@ class ScalarChecker {
     return definition_dependencies_.emplace(&method, std::move(names)).first->second;
   }
 
-  static TypeEvidenceState project_evidence(const TypeEvidenceState &source, const std::set<std::string> &names) {
+  TypeEvidenceState project_evidence(const TypeEvidenceState &source, const std::set<std::string> &names) const {
     TypeEvidenceState state;
     state.complete = source.complete; state.required = source.required;
     state.method = source.method; state.substitutions = source.substitutions; state.retained = source.retained;
@@ -4498,11 +4507,19 @@ class ScalarChecker {
     for (const auto &name : names) {
       select(source.bindings, state.bindings, name);
       select(source.definitions, state.definitions, name);
+      select(source.lexical_here, state.lexical_here, name);
       select(source.views, state.views, name);
       select(source.owner_bindings, state.owner_bindings, name);
       if (source.symbol_shadows.contains(name)) state.symbol_shadows.insert(name);
       if (const auto view = state.views.find(name); view != state.views.end() && view->second.owner) owners.insert(*view->second.owner);
       if (const auto owner = state.owner_bindings.find(name); owner != state.owner_bindings.end()) owners.insert(owner->second);
+      if (const auto here = state.lexical_here.find(name); here != state.lexical_here.end()) {
+        for (const auto &owner : here->second.owners) if (owner) owners.insert(*owner);
+      }
+      if (const auto slot = here_slot(name, &source)) {
+        for (const auto &component : here_signature(program_.methods[*source.method], *slot).inputs)
+          if (const auto owner = evidence_here_owner(component.owner, source)) owners.insert(*owner);
+      }
     }
     for (const auto owner : owners) {
       if (source.external_owners.contains(owner)) state.external_owners.insert(owner);
@@ -4522,11 +4539,12 @@ class ScalarChecker {
     const ModuleLookup lookup(module_, method.module), context(interpretation_, method.interpretation);
     const auto &source = *method.source;
     const auto &free = free_bindings(source).captures;
-    for (const auto *names : {&free, &source.captures, &free_bindings(source).queries}) for (const auto &name : *names)
-      if (active_here(name.name))
-        implementation_gap(name.at, "access to a here formal from a nested callable scope");
+    if (!source.implicit_scope)
+      for (const auto *names : {&free, &source.captures, &free_bindings(source).queries}) for (const auto &name : *names)
+        if (active_here(name.name))
+          implementation_gap(name.at, "access to a here formal from a nested callable scope");
     const auto required = [&](const Capture &capture) {
-      return lexical_.lookup(capture.name).has_value() ||
+      return lexical_.lookup(capture.name).has_value() || active_here(capture.name) ||
           lexical_self(capture.name, checking_instance_ ? std::optional<size_t>{checking_instance_->method} : std::nullopt) ||
           std::any_of(query_environment().bindings.begin(), query_environment().bindings.end(), [&](const auto &binding) { return binding.name == capture.name; }) ||
           (!module_names().callables.contains(capture.name) && !has_declarations(capture.name) && !module_names().symbols.contains(capture.name) &&
@@ -5313,6 +5331,9 @@ class ScalarChecker {
       }
       if (const auto found = available.owner_bindings.find(capture.name); found != available.owner_bindings.end())
         context.owner_bindings.emplace(*found);
+      if (method.implicit_scope && !program_.methods[id].scope_inputs)
+        if (auto here = here_evidence(capture.name, available, capture.at))
+          context.lexical_here.try_emplace(capture.name, std::move(*here));
     };
     const auto &free = free_bindings(method);
     for (const auto &capture : free.captures) retain(capture);
@@ -5325,6 +5346,8 @@ class ScalarChecker {
     };
     for (auto &[name, view] : context.views) view.map_owners(owner);
     for (auto &[name, id] : context.owner_bindings) id = owner(id);
+    for (auto &[name, here] : context.lexical_here)
+      for (auto &role : here.owners) if (role) role = owner(*role);
     for (const auto &[original, id] : owners) {
       context.external_owners.insert(EvidenceOwner::retained(id));
       for (const auto &[other, target] : owners)
@@ -7155,15 +7178,15 @@ class ScalarChecker {
       if (state.required) fail(expr.at, "a here argument can only be invoked or forwarded");
       return {};
     }
-    if (expr.has_here_body() || forwards_here(expr, &state)) {
+    if (expr.has_here_body() || forwarded_here_operand(expr, &state)) {
       if (state.required) implementation_gap(expr.at, "type inspection of a call receiving a here argument");
       return {};
     }
-    if (expr.kind == K::call && !expr.intrinsic && active_here(expr.text, &state)) {
-      const auto &method = program_.methods[*state.method];
-      const auto contract = here_invocation_type(method, state.substitutions, expr.at);
+    if (const auto here = expr.kind == K::call && !expr.intrinsic ? here_evidence(expr.text, state, expr.at) : std::nullopt; here) {
+      const auto &signature = here->signature;
+      const auto &contract = here->invocation;
       std::optional<BoundHereOperands> bound;
-      if (method.here->labelled) bound = bind_here_operands(expr, *method.here);
+      if (signature.labelled) bound = bind_here_operands(expr, signature);
       else if (expr.children.size() != contract.parameters.size()) fail(expr.at, "here invocation argument count does not match its contract");
       if (state.preparing(expr)) implementation_gap(expr.at, "prepared deferred here invocation");
       std::vector<TargetEvidence> targets(contract.parameters.size());
@@ -7177,19 +7200,13 @@ class ScalarChecker {
         if (state.required && argument && *argument != Type::never) {
           if (!accepts_argument(*argument, contract.parameters[i], mode))
             fail(operand.at, "argument does not satisfy the here contract");
-          const auto &input = method.here->inputs[i];
+          const auto &input = signature.inputs[i];
           if (input.owner) {
             if (state.value.view != true || state.value.mixed_view)
               implementation_gap(operand.at, "borrowed arguments require existing target views");
             if (!input.read_only && state.value.read_only.value_or(false))
               fail(operand.at, "readonly argument cannot supply a writable borrowed parameter");
-            const auto role = *input.owner;
-            auto owner = EvidenceOwner{};
-            if (role) {
-              owner = EvidenceOwner::parameter(role - 1);
-              if (!state.external_owners.contains(owner)) owner = EvidenceOwner{null_target - role};
-            }
-            require_here_owner(state.value.owner, owner, operand.at, &state);
+            require_here_owner(state.value.owner, *here->owners[i], operand.at, &state);
             if (completes) prepare_type_readable_argument(state, operand, state.value, state.target, mode);
           }
         }
@@ -7198,7 +7215,7 @@ class ScalarChecker {
       }
       if (completes) {
         for (size_t i = 0; i < targets.size(); ++i)
-          type_input_mutation(expr, state, contract.parameters[i], targets[i], argument_mode(contract, i), method.here->inputs[i].read_only);
+          type_input_mutation(expr, state, contract.parameters[i], targets[i], argument_mode(contract, i), signature.inputs[i].read_only);
         record_type_call(expr, state, contract, true);
       }
       return completes ? *contract.target : Type{Type::never};
@@ -9412,6 +9429,7 @@ class ScalarChecker {
       if (method.result != result || method.throws_categories != throws_categories || method.here_group != group) continue;
       const auto &candidate = *method.scope_inputs;
       if (candidate.owner_names != inputs.owner_names || candidate.relations != inputs.relations ||
+          candidate.lexical_here != inputs.lexical_here ||
           candidate.here_reception != inputs.here_reception ||
           candidate.here_input_owners != inputs.here_input_owners || candidate.here_snapshots != inputs.here_snapshots ||
           candidate.nonnull != inputs.nonnull || candidate.live_values != inputs.live_values ||
@@ -9568,6 +9586,10 @@ class ScalarChecker {
     std::vector<CheckedOperation> views;
     std::map<size_t, size_t> place_inputs;
     for (const auto &capture : method.captures) {
+      if (const auto slot = here_slot(capture.name)) {
+        retain_lexical_here(inputs, operation.scope_here, capture, *slot, owner_role);
+        continue;
+      }
       const auto binding = lexical_.lookup(capture.name);
       const auto *source = binding ? &bindings_->at(*binding) : nullptr;
       if (source && source->owner_binding) {
@@ -9623,6 +9645,8 @@ class ScalarChecker {
       arguments.push_back(type);
       views.push_back(view);
     }
+    for (const auto &query : method.queries)
+      if (const auto slot = here_slot(query.name)) retain_lexical_here(inputs, operation.scope_here, query, *slot, owner_role);
     scope_owner_relations(inputs, operation.scope_owners);
     scope_input_observations(inputs, views, expr.at);
     const auto profile = scope_profile(std::move(inputs));
@@ -9640,7 +9664,9 @@ class ScalarChecker {
     for (const auto failure : effects.scope_checked_failures) contract.throws_types.push_back(exception_type(failure));
     if (deferred_action_ && !effects.scope_checked_failures.empty())
       deferred_actions_with_checked_scopes_.insert(*deferred_action_);
-    finish_call(expr, contract, effects, direct_call_reasons(contract, effects), arguments, views, operation, read, discard, 0, true);
+    auto reasons = direct_call_reasons(contract, effects);
+    if (proving_ && effects.propagates_here_transfer) reasons.insert(Completion::protected_transfer);
+    finish_call(expr, contract, effects, reasons, arguments, views, operation, read, discard, 0, true);
   }
   void check_value_call(const Expression &expr, const Type &contract, size_t offset, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation, bool read, bool discard) {
@@ -9650,8 +9676,9 @@ class ScalarChecker {
       note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
     if (checking_method_ && checking_method_->source->kind == Form::Kind::function && !contract.pure_callable)
       fail(expr.at, "a function cannot invoke a procedure");
-    if (operation.invokes_here && checking_method_->here->labelled) {
-      auto bound = bind_here_operands(expr, *checking_method_->here);
+    const auto *signature = operation.invokes_here ? &here_signature(*checking_method_, *operation.invokes_here) : nullptr;
+    if (signature && signature->labelled) {
+      auto bound = bind_here_operands(expr, *signature);
       operation.argument_sources = std::move(bound.values);
       if (!std::ranges::is_sorted(bound.written_order)) operation.argument_evaluation_order = std::move(bound.written_order);
     }
@@ -9684,37 +9711,81 @@ class ScalarChecker {
     if (!completes) { operation.type = Type::never; return; }
     if (operation.invokes_here && validating_ && proving_ && lexical_.live)
       for (size_t i = 0; i < views.size(); ++i) {
-        if (const auto role = checking_method_->here->inputs[i].owner; role)
+        if (const auto role = signature->inputs[i].owner; role)
           require_here_owner(one_owner(views[i]), here_formal_owner(*role), operation.argument(expr, i + offset).at);
       }
     auto [effects, closed] = callable_effects(contract, arguments,
         operation.invokes_here ? std::optional{std::set<size_t>{}} : operation.callable_choices);
     if (expr.kind == Expression::Kind::perform) effects.symbols.clear();
     auto reasons = closed ? direct_call_reasons(contract, effects) : call_reasons(contract);
-    if (operation.invokes_here && proving_ && checking_method_->here_argument_instance) {
-      const auto callback = *checking_method_->here_argument_instance;
-      const auto &body = read_effects(callback);
-      const bool protected_here = program_.methods[program_.instances[callback].method].here_group.has_value();
+    if (const auto callback = operation.invokes_here && proving_ ? here_callback(*checking_method_, *operation.invokes_here) : std::nullopt; callback) {
+      const auto &body = read_effects(*callback);
+      const bool protected_here = program_.methods[program_.instances[*callback].method].here_group.has_value();
       if (lexical_.live && body.requires_deferred_failure_delivery) observed_.requires_deferred_failure_delivery = true;
       if (protected_here || !body.requires_deferred_failure_delivery) std::erase_if(reasons, [&](size_t reason) {
         const auto completion = Completion{reason};
         const bool checked = completion.exception() && exception_categories.at(reason - 3).checked;
         return completion.failed() && !checked && (protected_here || !body.escaping_failures.contains(reason));
       });
-      if (protected_here && (body.propagates_here_transfer || !body.escaping_failures.empty() || body.requires_deferred_failure_delivery))
+      if (body.propagates_here_transfer || (protected_here && (!body.escaping_failures.empty() || body.requires_deferred_failure_delivery)))
         reasons.insert(Completion::protected_transfer);
     }
     finish_call(expr, contract, effects, reasons, arguments, views,
                 operation, read, discard, offset);
   }
-  bool active_here(const std::string &name, const TypeEvidenceState *state = nullptr) const {
+  std::optional<size_t> here_slot(const std::string &name, const TypeEvidenceState *state = nullptr) const {
     const auto *method = state ? (state->method ? &program_.methods[*state->method] : nullptr) : checking_method_;
-    return method && method->here && method->source->parameters.front().name == name &&
-           !(state ? state->bindings.contains(name) || state->definitions.contains(name) : lexical_.lookup(name).has_value());
+    if (!method || !method->here_inputs() ||
+        (state ? state->bindings.contains(name) || state->definitions.contains(name) : lexical_.lookup(name).has_value())) return {};
+    if (method->here && method->source->parameters.front().name == name) return 0;
+    if (!method->scope_inputs) return {};
+    const auto &lexical = method->scope_inputs->lexical_here;
+    const auto found = std::ranges::find(lexical, name, &CheckedLexicalHere::name);
+    if (found == lexical.end()) return {};
+    return std::distance(lexical.begin(), found) + method->here.has_value();
   }
-  bool forwards_here(const Expression &expr, const TypeEvidenceState *state = nullptr) const {
-    return expr.kind == Expression::Kind::call && !expr.intrinsic && !active_here(expr.text, state) && !expr.children.empty() &&
-           expr.children.front()->kind == Expression::Kind::name && active_here(expr.children.front()->text, state);
+  bool active_here(const std::string &name, const TypeEvidenceState *state = nullptr) const {
+    return here_slot(name, state).has_value() || (state && state->lexical_here.contains(name) &&
+        !state->bindings.contains(name) && !state->definitions.contains(name));
+  }
+  const Expression *forwarded_here_operand(const Expression &expr, const TypeEvidenceState *state = nullptr) const {
+    if (expr.kind != Expression::Kind::call || expr.intrinsic || active_here(expr.text, state) || expr.children.empty() ||
+        expr.children.front()->kind != Expression::Kind::name || !active_here(expr.children.front()->text, state)) return nullptr;
+    return expr.children.front().get();
+  }
+  std::optional<size_t> forwards_here(const Expression &expr) const {
+    if (const auto *operand = forwarded_here_operand(expr)) return here_slot(operand->text);
+    return {};
+  }
+  static const CheckedLexicalHere *lexical_here(const CheckedMethod &method, size_t slot) {
+    if (method.here && slot == 0) return nullptr;
+    return &method.scope_inputs.value().lexical_here.at(slot - method.here.has_value());
+  }
+  static const CheckedHereContract &here_signature(const CheckedMethod &method, size_t slot) {
+    if (const auto *lexical = lexical_here(method, slot)) return lexical->signature;
+    return method.here.value();
+  }
+  static std::optional<size_t> here_callback(const CheckedMethod &method, size_t slot) {
+    if (const auto *lexical = lexical_here(method, slot)) return lexical->callback;
+    return method.here_argument_instance;
+  }
+  static std::optional<EvidenceOwner> evidence_here_owner(std::optional<size_t> role, const TypeEvidenceState &state) {
+    if (!role) return {};
+    if (!*role) return EvidenceOwner{};
+    const auto owner = EvidenceOwner::parameter(*role - 1);
+    return state.external_owners.contains(owner) ? owner : EvidenceOwner{null_target - *role};
+  }
+  std::optional<TypeEvidenceState::Here> here_evidence(const std::string &name, const TypeEvidenceState &state,
+                                                      const Location &at) const {
+    if (const auto slot = here_slot(name, &state)) {
+      const auto &method = program_.methods[*state.method];
+      const auto &signature = here_signature(method, *slot);
+      TypeEvidenceState::Here here{here_invocation_type(method, state.substitutions, at, *slot), signature, {}};
+      for (const auto &component : signature.inputs) here.owners.push_back(evidence_here_owner(component.owner, state));
+      return here;
+    }
+    if (active_here(name, &state)) return state.lexical_here.at(name);
+    return {};
   }
   size_t here_formal_owner(size_t role) const {
     return role ? external_owners_.at(checking_method_->input_owners().at(role - 1).name) : lexical_.scopes.front().id;
@@ -9737,8 +9808,9 @@ class ScalarChecker {
   }
   // Reuse the ordinary call equations for arguments and outcomes.
   // The here capability itself stays outside the language's value carriers.
-  Type here_invocation_type(const CheckedMethod &receiver, const Substitutions &bindings, const Location &at) const {
-    const auto &here = *receiver.here;
+  Type here_invocation_type(const CheckedMethod &receiver, const Substitutions &bindings, const Location &at, size_t slot = 0) const {
+    if (const auto *lexical = lexical_here(receiver, slot)) return lexical->invocation;
+    const auto &here = receiver.here.value();
     if (here.feedback || here.result.owner)
       implementation_gap(at, "labelled or borrowed here feedback contracts");
     const ModuleLookup lookup(module_, receiver.module);
@@ -9766,6 +9838,15 @@ class ScalarChecker {
     type.target = std::make_shared<Type>(result);
     for (const auto category : here.throws_categories) type.throws_types.push_back(exception_type(category));
     return type;
+  }
+  void retain_lexical_here(CheckedMethod::ScopeInputs &inputs, std::vector<size_t> &sources,
+                           const Capture &name, size_t slot, const auto &owner_role) const {
+    CheckedLexicalHere binding{name.name, here_invocation_type(*checking_method_, checking_instance_->substitutions, name.at, slot),
+        here_signature(*checking_method_, slot), here_callback(*checking_method_, slot)};
+    for (auto &component : binding.signature.inputs)
+      if (component.owner) component.owner = 1 + owner_role(here_formal_owner(*component.owner), name.at);
+    inputs.lexical_here.push_back(std::move(binding));
+    sources.push_back(slot);
   }
   static CheckedMethod::ScopeInputs::HereReception bind_here_reception(const Expression &body, const CheckedHereContract &contract) {
     const auto &header = *body.receiving;
@@ -9865,7 +9946,10 @@ class ScalarChecker {
     for (const auto *names : {&dependencies.captures, &dependencies.queries}) for (const auto &name : *names)
       dependencies_by_name.try_emplace(name.name, name);
     for (const auto &[name, capture] : dependencies_by_name) {
-      if (active_here(name)) implementation_gap(capture.at, "nested access to a here formal from a supplied body");
+      if (const auto slot = here_slot(name)) {
+        retain_lexical_here(inputs, supplied.lexical_here, capture, *slot, capture_owner);
+        continue;
+      }
       const auto binding = lexical_.lookup(name);
       if (!binding) continue;
       const auto &source = bindings_->at(*binding);
@@ -9954,8 +10038,8 @@ class ScalarChecker {
     const auto family = named_family(expr.text);
     if (family.context || family.definition)
       implementation_gap(expr.at, "supplying here arguments to lexical receiver definitions");
-    const auto count = expr.children.size() - supplied - forward;
-    const auto written = std::span<const Expr>{expr.children}.subspan(forward, count);
+    const auto count = expr.children.size() - supplied - forward.has_value();
+    const auto written = std::span<const Expr>{expr.children}.subspan(forward.has_value(), count);
     const auto bind_written = [&](const CheckedMethod &method) -> std::optional<std::vector<size_t>> {
       const auto parameters = method.input_parameters();
       std::vector<size_t> slots;
@@ -10026,8 +10110,8 @@ class ScalarChecker {
       owners.push_back(here_receiver_owner(receiver, *signature.inputs[i].owner, views, expr.at));
     auto callee = demand(selected, arguments, expr.at);
     if (forward) {
-      const auto incoming = here_invocation_type(*checking_method_, supplier->substitutions, expr.at);
-      const auto &incoming_signature = *checking_method_->here;
+      const auto incoming = here_invocation_type(*checking_method_, supplier->substitutions, expr.at, *forward);
+      const auto &incoming_signature = here_signature(*checking_method_, *forward);
       if (incoming != contract || incoming_signature.labelled != signature.labelled ||
           !std::ranges::equal(incoming_signature.inputs, signature.inputs, {},
               &CheckedHereContract::Component::label, &CheckedHereContract::Component::label))
@@ -10035,11 +10119,11 @@ class ScalarChecker {
       const auto owner_inputs = here_owner_inputs(incoming);
       for (size_t i = 0; i < owner_inputs.size(); ++i) {
         if (!owners[i]) fail(expr.at, "forwarded here argument cannot use the new receiver's invocation owner");
-        require_here_owner(owners[i], here_formal_owner(*checking_method_->here->inputs[owner_inputs[i]].owner), expr.at);
+        require_here_owner(owners[i], here_formal_owner(*incoming_signature.inputs[owner_inputs[i]].owner), expr.at);
       }
-      operation.forwards_here = true;
-      if (checking_method_->here_argument_instance)
-        callee = demand_here_receiver(selected, *checking_method_->here_argument_instance, arguments, expr.at);
+      operation.forwards_here = forward;
+      if (const auto callback = here_callback(*checking_method_, *forward))
+        callee = demand_here_receiver(selected, *callback, arguments, expr.at);
       if (proving_ && lexical_.live && read_effects(callee).protected_defer_failure)
         observed_.protected_defer_failure = true;
       finish_named_call(expr, arguments, views, operation, read, discard, true, callee);
@@ -10497,12 +10581,12 @@ class ScalarChecker {
       check_here_receiver(expr, instance, operations, operation, read, discard);
       return operations.insert_or_assign(&expr, std::move(operation)).first->second.type;
     }
-    if (active_here(expr.text)) {
+    if (const auto slot = here_slot(expr.text)) {
       if (expr.kind == K::name) fail(expr.at, "a here argument can only be invoked or forwarded");
       if (expr.kind == K::call && !expr.intrinsic) {
         if (&expr == prepared_call_) implementation_gap(expr.at, "prepared deferred here invocation");
-        operation.invokes_here = true;
-        const auto contract = here_invocation_type(*checking_method_, instance->substitutions, expr.at);
+        operation.invokes_here = slot;
+        const auto contract = here_invocation_type(*checking_method_, instance->substitutions, expr.at, *slot);
         check_value_call(expr, contract, 0, instance, operations, operation, read, discard);
         return operations.insert_or_assign(&expr, std::move(operation)).first->second.type;
       }
@@ -12228,6 +12312,7 @@ class ScalarChecker {
         const auto normal = lexical_;
         for (const auto &path : outcomes.paths) {
           observe_outcome(path.completion.reason == 1 ? 0 : path.completion.reason, path.state);
+          if (path.completion.protected_here() && !path.here_exit) observed_.propagates_outer_here_transfer = true;
           lexical_ = path.state; abrupt_ = nullptr;
           forward_abrupt(path);
         }
@@ -12323,6 +12408,10 @@ class ScalarChecker {
       }
       if (effects.propagates_here_transfer && !known.propagates_here_transfer) {
         known.propagates_here_transfer = true;
+        changed = true;
+      }
+      if (effects.propagates_outer_here_transfer && !known.propagates_outer_here_transfer) {
+        known.propagates_outer_here_transfer = true;
         changed = true;
       }
       if (known.protected_defer_failure != effects.protected_defer_failure) {
