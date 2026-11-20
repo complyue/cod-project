@@ -3,6 +3,7 @@
 
 #include "lang_checked_program.hh"
 #include "lang_exceptions.hh"
+#include "lang_llvm_c.h"
 
 #include <clang/Basic/Diagnostic.h>
 #include <clang/Basic/DiagnosticOptions.h>
@@ -627,7 +628,8 @@ class LLVMEmission {
       const auto intrinsic = op == "+" ? (signed_value ? llvm::Intrinsic::sadd_with_overflow : llvm::Intrinsic::uadd_with_overflow) :
           op == "-" ? (signed_value ? llvm::Intrinsic::ssub_with_overflow : llvm::Intrinsic::usub_with_overflow) :
                       (signed_value ? llvm::Intrinsic::smul_with_overflow : llvm::Intrinsic::umul_with_overflow);
-      auto *checked = b_.CreateIntrinsic(intrinsic, {left->getType()}, {left, right});
+      auto *checked = llvm::unwrap(cod_llvm_build_checked_integer(
+          llvm::wrap(&b_), llvm::wrap(&module_), intrinsic, llvm::wrap(left), llvm::wrap(right)));
       const auto operation = op == "+" ? "addition" : op == "-" ? "subtraction" : "multiplication";
       require(b_.CreateNot(b_.CreateExtractValue(checked, 1)), expr.at, type_name(type) + " " + operation + " overflow");
       result = b_.CreateExtractValue(checked, 0);
