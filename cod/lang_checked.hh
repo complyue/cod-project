@@ -240,10 +240,14 @@ class ScalarChecker {
   std::vector<DeferredProductWrites> deferred_product_writes_;
   struct ProjectionPaths {
     using Places = std::map<size_t, CleanupEquations::ConditionClauses>;
+    struct Start {
+      CleanupEquations::ConditionFacts when;
+      Places places;
+    };
     Places places;
     // Candidate slots at the first invocation-time step. The saved receiver
     // already chose one, but the caller may have evidence for only the set.
-    std::map<size_t, Places> starting_slots;
+    std::map<size_t, Start> starting_slots;
     // True when the paths for each starting slot describe its concrete destinations.
     bool complete = false;
     // Without a place, find the paths that reach no destination at all.
@@ -261,8 +265,11 @@ class ScalarChecker {
       };
       if (starting_slots.empty()) return missing(places);
       CleanupEquations::ConditionClauses skipped;
-      for (const auto &[slot, paths] : starting_slots) {
-        for (const auto &facts : missing(paths)) CleanupEquations::add_condition(skipped, facts);
+      for (const auto &[slot, start] : starting_slots) {
+        for (auto facts : missing(start.places)) {
+          facts.append(start.when);
+          CleanupEquations::add_condition(skipped, std::move(facts));
+        }
         if (CleanupEquations::unconditional(skipped)) break;
       }
       return skipped;
@@ -2434,6 +2441,7 @@ class ScalarChecker {
     bool all;
     std::map<size_t, Projection> projected;
     std::map<size_t, ProjectionPaths> paths;
+    std::map<size_t, size_t> saved_nullable_inputs;
     bool contains(size_t input) const { return all || projected.contains(input); }
     const ProjectionPaths *path(size_t input) const {
       const auto found = paths.find(input);
@@ -2458,10 +2466,13 @@ class ScalarChecker {
           return storage(slot).borrowed;
         })) return {CleanupEquations::ConditionFacts{}};
     const auto *parents = slots.path(projection.slot_input);
+    const auto *paths = slots.path(input);
     CleanupEquations::ConditionClauses alternatives;
     if (null && projection.absent_parent) {
-      if (!parents || !parents->complete) return {CleanupEquations::ConditionFacts{}};
-      alternatives = parents->may_skip();
+      if (parents && parents->complete) alternatives = parents->may_skip();
+      else if (!parents && paths && paths->starting_slots.contains(null_target))
+        alternatives.insert(paths->starting_slots.at(null_target).when);
+      else return {CleanupEquations::ConditionFacts{}};
     }
     for (const auto id : projection.bindings) {
       const auto slot = binding(id).embedded_slot.value();
@@ -2472,7 +2483,10 @@ class ScalarChecker {
         }
         continue;
       }
-      CleanupEquations::add_condition(alternatives, observe(id));
+      auto facts = observe(id);
+      if (!parents && paths) if (const auto start = paths->starting_slots.find(slot); start != paths->starting_slots.end())
+        facts.append(start->second.when);
+      CleanupEquations::add_condition(alternatives, std::move(facts));
     }
     return alternatives;
   }
@@ -2515,6 +2529,10 @@ class ScalarChecker {
         const auto &view = views.at(parameter);
         if (!slots.contains(parameter) && view.binding) facts.absent_bindings.emplace(*view.binding, view.selection_versions);
       }
+      if (!slots.all) for (const bool null : {false, true})
+        for (const auto parameter : null ? known.absent : known.present)
+          if (const auto saved = slots.saved_nullable_inputs.find(parameter); saved != slots.saved_nullable_inputs.end())
+            facts.conditions.add({{}, saved->second, null_target, null, true});
       CleanupEquations::ConditionClauses clauses;
       CleanupEquations::add_condition(clauses, std::move(facts));
       for (const auto parameter : observed_selections)
@@ -3509,9 +3527,18 @@ class ScalarChecker {
   std::vector<CheckedOperation> project_call_fields(const std::vector<ProductInput> &fields,
       const std::vector<CheckedOperation> &operands, const Location &at, bool at_invocation, InvocationSlots &invocation_slots) {
     auto projected = operands;
+    std::vector<std::optional<size_t>> stable_preparations(operands.size());
+    if (at_invocation && !invocation_slots.all) for (size_t i = 0; i < operands.size(); ++i) {
+      const auto &operand = operands[i];
+      if (!stable_prepared_selection(operand)) continue;
+      stable_preparations[i] = i;
+      if (operand.targets.contains(null_target))
+        invocation_slots.saved_nullable_inputs.emplace(i, *operand.selection_identity);
+    }
     for (const auto &field : fields) {
       const auto input = projected.size();
       const auto *parent_paths = invocation_slots.path(field.parent);
+      const auto stable_parent = stable_preparations.at(field.parent);
       if (field.role != ProductInput::Role::referent) {
         auto place = project_product(projected.at(field.parent), field.field, at, true);
         place.type = field.type();
@@ -3528,10 +3555,14 @@ class ScalarChecker {
                 CleanupEquations::add_condition(fields[storage(container).fields[field.field]], facts);
           };
           project(parent_paths->places, paths.places);
-          for (const auto &[slot, containers] : parent_paths->starting_slots)
-            project(containers, paths.starting_slots[slot]);
+          for (const auto &[slot, start] : parent_paths->starting_slots) {
+            auto &destination = paths.starting_slots[slot];
+            destination.when = start.when;
+            project(start.places, destination.places);
+          }
         }
         projected.push_back(std::move(place));
+        stable_preparations.push_back(stable_parent);
         continue;
       }
       auto slot = projected.at(field.parent);
@@ -3540,6 +3571,19 @@ class ScalarChecker {
       const bool absent_parent = slot.targets.contains(null_target);
       const bool complete = parent_paths ? parent_paths->complete : !slot.targets.empty();
       const bool multiple_starts = !parent_paths && !slot.place;
+      const auto saved_selection = multiple_starts && stable_parent && std::ranges::none_of(slot.targets, [&](size_t place) {
+        return place != null_target && storage(place).borrowed;
+      }) ? slot.selection_identity : std::nullopt;
+      const auto saved_start = [&](size_t place) {
+        CleanupEquations::ConditionFacts when;
+        if (saved_selection) when.conditions.add({{}, *saved_selection, place, true, true});
+        // Reaching any concrete slot requires the prepared root to be present.
+        if (stable_parent && place != null_target)
+          if (const auto root = invocation_slots.saved_nullable_inputs.find(*stable_parent);
+              root != invocation_slots.saved_nullable_inputs.end())
+            when.conditions.add({{}, root->second, null_target, false, true});
+        return ProjectionPaths::Start{std::move(when), {}};
+      };
       auto referent = changing ? invocation_referent(std::move(slot), *field.description) :
           select_product_reference(std::move(slot), *field.description, at, true, true);
       if (changing) {
@@ -3547,12 +3591,13 @@ class ScalarChecker {
         auto &paths = invocation_slots.paths[input];
         paths.complete = complete;
         if (parent_paths) {
-          for (const auto &[start, candidates] : parent_paths->starting_slots) paths.starting_slots.try_emplace(start);
-        } else if (multiple_starts && absent_parent) paths.starting_slots.try_emplace(null_target);
+          for (const auto &[slot, start] : parent_paths->starting_slots)
+            paths.starting_slots.emplace(slot, ProjectionPaths::Start{start.when, {}});
+        } else if (multiple_starts && absent_parent) paths.starting_slots.emplace(null_target, saved_start(null_target));
         for (const auto id : referent.slots) {
           const auto slot = binding(id).embedded_slot.value();
           paths.complete &= !storage(slot).borrowed;
-          if (multiple_starts) paths.starting_slots.try_emplace(slot);
+          if (multiple_starts) paths.starting_slots.emplace(slot, saved_start(slot));
           const CleanupEquations::ConditionClauses *parent = nullptr;
           if (parent_paths) {
             if (const auto path = parent_paths->places.find(slot); path != parent_paths->places.end()) parent = &path->second;
@@ -3568,16 +3613,21 @@ class ScalarChecker {
                 CleanupEquations::add_condition(places[target], std::move(facts));
               }
             };
-            extend(paths.places, parent);
-            if (multiple_starts) extend(paths.starting_slots.at(slot), nullptr);
-            if (parent_paths) for (const auto &[start, candidates] : parent_paths->starting_slots) {
-              if (const auto path = candidates.find(slot); path != candidates.end())
-                extend(paths.starting_slots.at(start), &path->second);
+            if (multiple_starts) {
+              auto &start = paths.starting_slots.at(slot);
+              extend(start.places, nullptr);
+              const CleanupEquations::ConditionClauses when{start.when};
+              extend(paths.places, &when);
+            } else extend(paths.places, parent);
+            if (parent_paths) for (const auto &[candidate, start] : parent_paths->starting_slots) {
+              if (const auto path = start.places.find(slot); path != start.places.end())
+                extend(paths.starting_slots.at(candidate).places, &path->second);
             }
           }
         }
       }
       projected.push_back(std::move(referent));
+      stable_preparations.push_back(changing ? std::nullopt : stable_parent);
     }
     return projected;
   }
@@ -3590,7 +3640,10 @@ class ScalarChecker {
     const bool embedded_updates = std::ranges::any_of(summary.binding_sources, [&](const auto &effect) {
       return effect.first >= arguments.size();
     });
-    InvocationSlots invocation_slots{};
+    const bool has_invocation_time_slots = !immediate_scope && !summary.bindings.empty() &&
+        std::ranges::any_of(operation.arguments, [](const auto &argument) { return argument.binding_slot; });
+    const bool prepared_slots = prepared && has_invocation_time_slots;
+    InvocationSlots invocation_slots{prepared_slots, {}, {}, {}};
     if (prepared && !proving_ && !fields.empty()) discover_deferred_product_call(fields, operands, summary, expr.at);
     const auto projected = fields.empty() ? std::vector<CheckedOperation>{} :
         project_call_fields(fields, operands, expr.at, prepared && proving_, invocation_slots);
@@ -3605,10 +3658,6 @@ class ScalarChecker {
       return i < arguments.size() ? arguments[i] : views[i].type;
     };
     std::vector<ExceptionFacts> exception_inputs;
-    const bool has_invocation_time_slots = !immediate_scope && !summary.bindings.empty() &&
-        std::ranges::any_of(operation.arguments, [](const auto &argument) { return argument.binding_slot; });
-    const bool prepared_slots = prepared && has_invocation_time_slots;
-    invocation_slots.all = prepared_slots;
     auto observed_slots = invocation_slots;
     observed_slots.all = has_invocation_time_slots;
     const bool late_payloads = prepared_slots || !invocation_slots.projected.empty();

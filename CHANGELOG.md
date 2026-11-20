@@ -5,6 +5,11 @@
 <a id="h-hlvm-candidate-20261120"></a>
 **H-HLVM-CANDIDATE-20261120.** In the project chat, the project user proposed `hlvm-basic` for running BASIC source or saving a DBMR to run later, with the prerequisite “要等 CoD 基本的 lexer/parser 已经通了的情况下再推进”, then asked to record the idea in a planning document. The [application note](applications/README.md#deferred-application-hlvm-basic) applies the executor and editable program graph from [*Algebraic Effects Is All You Need*](papers/AlgebraicEffectsIsAllYouNeed.md) to BASIC. It does not change the compiler roadmap or authorize implementation.
 
+## 2026-11-19 — Prove shared saved receiver choices during cleanup
+
+<a id="k-deferred-saved-receiver-20261119"></a>
+**K-DEFERRED-SAVED-RECEIVER-20261119.** D-28r46→47 and registry r999→1000 continue [lexical product coverage](design/RegionalAndLexicalStorageRefactor.md#consequences-of-one-nominal-adt) under [H-356](#h-356), [H-437](#h-437), [H-445](#h-445), [H-478](#h-478) and [D-17-DEFER-CHECKS](design/DesignAuthorityRegistry.md#d-17-defer-checks). Separate calls can use the same saved receiver choice to prove a physical write before a read. Invocation-time rebinds, actual owners and successful-prefix cleanup preserve C-63/C-65/C-72/C-93 and charter §§3.3/6.3/12. Prior coverage at `37e2a57fd3475c6aac8649ac6f263018dfd2c3b1:design/RegionalAndLexicalStorageRefactor.md`.
+
 ## 2026-11-19 — Update deferred field initialization coverage
 
 <a id="k-deferred-path-initialization-20261119"></a>

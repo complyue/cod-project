@@ -7,6 +7,19 @@ import foundation_tests as runner
 PRELUDE = 'using symbol "std:io" @print;\n'
 SHADOW = PRELUDE + 'val x<-1u64; {{val x<-2u64; behave @print(x);}};'
 PRODUCT = 'data Window {minimum:u64; maximum:u64;}'
+DEFERRED_LEAF = PRELUDE + 'data Leaf {value:u64;}data Box {ptr child:Leaf;}'
+DEFERRED_LEAF_CALLS = DEFERRED_LEAF + (
+    'proc fill(ref entry:Box in O) where {owner O}{'
+    'if(entry.child is null){return;}else{};entry.child.value<-19u64;return;}'
+    'proc inspect(ref entry:const Box in O) where {const owner O}{'
+    'if(entry.child is null){return;}else{};behave @print(entry.child.value);return;}'
+)
+SELECTED_BOX = DEFERRED_LEAF_CALLS + (
+    'proc run(flag:bool)->void{ref first=make Leaf {value<-7u64;};'
+    'ref left=make Box {child=first;};ref right=make Box {child=first;};'
+    'ptr chosen=if(flag){left}else{right};'
+)
+REPLACE_BOTH_CHILDREN = 'ptr second=make Leaf;ptr third=make Leaf;left.child=second;right.child=third;'
 runner.CASES = {
     "storage": (None, 0, "3\n4\n4\n3\n9\n3\n3\n2\n15\n7.5\n5\n6\n7\n8\n11\ntrue\n3\n12\n3\n2\n13\n", ""),
     "storage_shadow": (None, 0, "12\n11\n10\n", "[-Wshadow]"),
@@ -538,6 +551,34 @@ runner.CASES = {
         'proc run(flag:bool)->void{ref first=make Leaf {value<-7u64;};ref item=make Box {child=first;};'
         'ref alternate=make Box {child=first;};ptr chosen=if(flag){item}else{alternate};defer inspect(item);defer fill(chosen);'
         'ptr second=make Leaf;item.child=second;alternate.child=null;return;}run(false);', 2, "", "initialization"),
+    "deferred_calls_share_the_receiver_saved_before_a_holder_rebind": (SELECTED_BOX +
+        'defer inspect(chosen);defer fill(chosen);chosen=right;' +
+        REPLACE_BOTH_CHILDREN + 'return;}run(true);run(false);', 0, "19\n19\n", ""),
+    "deferred_calls_keep_an_earlier_receiver_in_a_second_binding": (SELECTED_BOX +
+        'ptr kept=chosen;defer inspect(chosen);chosen=right;defer fill(kept);' +
+        REPLACE_BOTH_CHILDREN + 'return;}run(true);run(false);', 0, "19\n19\n", ""),
+    "deferred_calls_separate_receivers_when_the_holder_changes_between_registrations": (SELECTED_BOX +
+        'defer inspect(chosen);chosen=right;defer fill(chosen);' +
+        REPLACE_BOTH_CHILDREN + 'return;}run(true);run(false);', 2, "", "initialization"),
+    "deferred_calls_share_a_nullable_saved_receiver": (DEFERRED_LEAF +
+        'proc fill(ptr entry:Box in O) where {owner O}{if(entry is null){return;}else{};'
+        'if(entry.child is null){return;}else{};entry.child.value<-19u64;return;}'
+        'proc inspect(ptr entry:const Box in O) where {const owner O}{if(entry is null){return;}else{};'
+        'if(entry.child is null){return;}else{};behave @print(entry.child.value);return;}'
+        'proc run(flag:bool)->void{ref first=make Leaf {value<-7u64;};ref left=make Box {child=first;};'
+        'ptr right:Box=null in here;ptr chosen=if(flag){left}else{right};'
+        'defer inspect(chosen);defer fill(chosen);ptr second=make Leaf;left.child=second;return;}'
+        'run(true);run(false);', 0, "19\n", ""),
+    "shared_saved_receiver_still_follows_an_ancestor_rebind_between_invocations": (SELECTED_BOX +
+        'ptr spare=make Leaf;ptr pending=first;defer inspect(chosen);'
+        'defer{left.child=pending;right.child=pending;};defer fill(chosen);'
+        'pending=spare;return;}run(true);run(false);', 2, "", "initialization"),
+    "loop_registrations_can_share_an_invariant_receiver": (SELECTED_BOX +
+        'for(i in 0u64..2u64){defer inspect(chosen);defer fill(chosen);};' +
+        REPLACE_BOTH_CHILDREN + 'return;}run(true);run(false);', 0, "19\n19\n19\n19\n", ""),
+    "loop_registrations_cannot_share_a_receiver_that_varies_between_iterations": (SELECTED_BOX +
+        'for(i in 0u64..2u64){if(i==0u64){defer inspect(chosen);}else{defer fill(chosen);};chosen=right;};' +
+        REPLACE_BOTH_CHILDREN + 'return;}run(true);', 2, "", "initialization"),
 }
 runner.CASE_ARGUMENTS = {"shadow_error": ["-Werror=shadow"], "unrelated_warning_error": ["-Werror=missing-return"]}
 runner.EXTRA_SOURCES = [Path(__file__)]
