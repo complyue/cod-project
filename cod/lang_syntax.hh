@@ -174,7 +174,7 @@ enum class ArgumentMode { value, borrowed_read, borrowed_ref, borrowed_ptr };
 struct Type {
   enum Kind { integer, uint8, uint32, uint64, boolean, void_type, procedure, float32, float64,
               named, unit, quantity, product, region_schema, region, regional, array, reference, null_ref, abstract_type, arguments, parameter,
-              exception, never };
+              exception, never, c_type_marker };
   Kind kind;
   std::string name;
   size_t identity = 0;
@@ -280,7 +280,7 @@ inline std::string type_name(const Type &type) {
   case Type::quantity: return type_name(*type.target) + "(" + type.name + ")";
   case Type::unit: return type.name;
   case Type::named: case Type::product: case Type::region_schema: case Type::regional: case Type::array:
-  case Type::abstract_type: return type.name;
+  case Type::abstract_type: case Type::c_type_marker: return type.name;
   case Type::region: return std::string(type.owned ? "owned " : "") + "region" +
                            (type.target ? " :" + type_name(*type.target) : "");
   case Type::reference: return "stored reference to " + type_name(*type.target);
@@ -1918,12 +1918,13 @@ public:
           form->c_data = true;
         }
         form->name = ordinary_name().text;
+        if (form->c_data && take(";")) {
+          append(std::move(form));
+          continue;
+        }
         if (take("<:")) form->parent_type = parse_type();
         if (!is("{")) {
-          if (form->c_data) {
-            if (is(";")) fail(start.at, "seed implementation gap: fieldless data \"C\" declaration");
-            fail(peek().at, "expected a brace body for a data \"C\" record");
-          }
+          if (form->c_data) fail(peek().at, "expected a brace body for a data \"C\" record");
           if (data && !form->parent_type)
             fail(start.at, "a head-only data declaration requires an abstract parent");
           form->kind = data ? Form::Kind::conformance : Form::Kind::abstract_type;
@@ -1951,6 +1952,8 @@ public:
           form->parameters.back().read_only = read_only;
           if (!is("}")) expect(";");
         }
+        if (form->c_data && form->parameters.empty())
+          fail(start.at, "end a fieldless data \"C\" declaration with ';' instead of an empty body");
         take(";");
       } else if (!callable_binding() && (is("function") || is("func") || is("procedure") || is("proc") || is("conversion"))) {
         callable(*form);

@@ -5412,6 +5412,7 @@ class ScalarChecker {
       const auto &method = program_.methods[instance->method];
       resolved = substitute(type, method, instance->substitutions);
     } else resolved = resolve_type(type);
+    reject_c_type_payload(resolved, at);
     if (!lexical_value_type(resolved) && !(product_view && resolved.kind == Type::product))
       implementation_gap(at, "non-value local storage type '" + type_name(type) + "'");
     return resolved;
@@ -5691,8 +5692,13 @@ class ScalarChecker {
         ((type.target && nested_binder(method, *type.target)) ||
          std::any_of(type.parameters.begin(), type.parameters.end(), [&](const auto &p) { return nested_binder(method, p); }));
   }
+  static void reject_c_type_payload(const Type &type, const Location &at) {
+    if (type.kind == Type::c_type_marker)
+      fail(at, "fieldless data \"C\" '" + type.name + "' names a handle type and has no value representation");
+  }
   static void signature_type(const CheckedMethod &method, const Type &type, const Location &at, bool result = false,
                              bool borrowed_target = false) {
+    reject_c_type_payload(type, at);
     if (bits_type(type) || binder(method, type) || (result && type == Type::void_type)) return;
     if (borrowed_target && (type.kind == Type::product || (!result && type.kind == Type::array))) return;
     if (type.kind == Type::array)
@@ -6895,6 +6901,7 @@ class ScalarChecker {
                "', found '" + type_name(index) + "'");
   }
   const CheckedSchema &product_schema(const Type &type, const Location &at) const {
+    reject_c_type_payload(type, at);
     if (type.kind != Type::product) implementation_gap(at, "ordinary construction requires a supported product type");
     return program_.schemas.at(type.identity);
   }
@@ -9463,8 +9470,11 @@ class ScalarChecker {
       query.delayed_controls.clear();
       storage.type = type_evidence(*expr.children.front(), query);
     }
-    if (state.required && storage.type && storage.type->kind == Type::procedure)
-      implementation_gap(expr.at, "raw callable storage construction");
+    if (state.required && storage.type) {
+      reject_c_type_payload(*storage.type, expr.at);
+      if (storage.type->kind == Type::procedure)
+        implementation_gap(expr.at, "raw callable storage construction");
+    }
     for (size_t i = expr.annotation ? 0 : 1; i < expr.children.size(); ++i) {
       const auto initializer = type_evidence(*expr.children[i], state, false, nullptr, nullptr,
                                              ExpectedTypeUse::materialization, reached && storage.completes);
@@ -17326,18 +17336,19 @@ class ScalarChecker {
       const bool array = form->kind == Form::Kind::array;
       if (!product && !array && form->kind != Form::Kind::region_definition) continue;
       if (form->parent_type) implementation_gap(form->at, "data declarations with a parent type");
-      if (form->c_data && form->parameters.empty())
-        implementation_gap(form->at, "fieldless data \"C\" declaration");
-      const auto kind = array ? Type::array : product ? Type::product : Type::region_schema;
+      const bool marker = form->c_data && form->parameters.empty();
+      const auto kind = array ? Type::array : marker ? Type::c_type_marker : product ? Type::product : Type::region_schema;
       const Type type{kind, form->name, array ? program_.arrays.size() : program_.schemas.size()};
       if (!module_names().types.emplace(form->name, type).second)
         fail(form->at, "duplicate type binding '" + form->name + "'");
       if (array) program_.arrays.push_back({form.get(), *form->index_type, *form->result_type});
-      else program_.schemas.push_back({form.get(), {}, product});
+      else program_.schemas.push_back({form.get(), {}, kind == Type::product});
     }
     for (auto &array : std::span(program_.arrays).subspan(first_array)) {
       array.index = resolve_type(std::move(array.index));
       array.element = resolve_type(std::move(array.element));
+      reject_c_type_payload(array.index, array.source->at);
+      reject_c_type_payload(array.element, array.source->at);
       if (!integral(array.index))
         implementation_gap(array.source->at, "array index domain '" + type_name(array.index) + "'");
       if (array.element.kind == Type::procedure)
@@ -17358,6 +17369,7 @@ class ScalarChecker {
         auto type = resolve_type(field.type);
         if (schema.source->c_data && storage != PlaceKind::value)
           fail(field.at, "data \"C\" requires by-value bits fields");
+        reject_c_type_payload(type, field.at);
         if (type.kind == Type::region_schema) fail(field.at, "a region schema does not name a field payload type");
         if (!scalar_type(type) && type.kind != Type::product)
           implementation_gap(field.at, "field representation for type '" + type_name(type) + "'");
@@ -17528,7 +17540,10 @@ class ScalarChecker {
       if (pipeline && pipeline->kind == PipelineOperator::Kind::source &&
           (!prepared.here.front().here.empty() || form->result_type != Type::void_type))
         implementation_gap(form->at, "a source-attachment method requires a generator result contract");
-      if (form->result_type) prepared.result.type = resolve_signature(*form->result_type);
+      if (form->result_type) {
+        prepared.result.type = resolve_signature(*form->result_type);
+        reject_c_type_payload(*prepared.result.type, form->at);
+      }
       prepared.result.owner = form->result_owner;
       if (!form->result_owner.empty()) {
         prepared.result.mode = form->result_kind == "ptr" ? ResultMode::borrowed_ptr : ResultMode::borrowed_ref;
