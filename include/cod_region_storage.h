@@ -42,6 +42,14 @@ static inline cod_region_storage_status cod_region_storage_open(cod_region_stora
   return COD_REGION_STORAGE_OK;
 }
 
+/* Open exact backing for the extents reserved in a layout. Its bytes are
+   uninitialized. Keep the plan's extents paired with this owner. */
+static inline cod_region_storage_status cod_region_storage_open_layout(cod_region_storage *region, size_t layout_size) {
+  const cod_region_storage_status status = cod_region_storage_open(region, layout_size);
+  if (status == COD_REGION_STORAGE_OK) region->used = layout_size;
+  return status;
+}
+
 static inline void cod_region_storage_release(cod_region_storage *region) {
   free(region->bytes);
   region->bytes = NULL;
@@ -49,16 +57,17 @@ static inline void cod_region_storage_release(cod_region_storage *region) {
   region->used = 0;
 }
 
-/* Reserve uninitialized payload. A failed reservation leaves the owner and
-   output extent unchanged. An empty extent consumes no capacity. */
-static inline cod_region_storage_status cod_region_storage_reserve(cod_region_storage *region,
+/* Reserve an aligned byte extent without allocating backing. Failure leaves
+   the layout size and the output extent unchanged. */
+static inline cod_region_storage_status cod_region_layout_reserve(size_t *used, size_t capacity,
     size_t count, size_t element_size, size_t alignment, cod_region_extent *extent) {
 #ifdef __cplusplus
   const size_t max_alignment = alignof(max_align_t);
 #else
   const size_t max_alignment = _Alignof(max_align_t);
 #endif
-  if (!region->bytes || !element_size || !alignment || alignment > max_alignment ||
+  if (capacity > (size_t)PTRDIFF_MAX) return COD_REGION_STORAGE_TOO_LARGE;
+  if (*used > capacity || !element_size || !alignment || alignment > max_alignment ||
       (alignment & (alignment - 1))) return COD_REGION_STORAGE_INVALID;
   if (count > SIZE_MAX / element_size) return COD_REGION_STORAGE_TOO_LARGE;
   const size_t size = count * element_size;
@@ -67,13 +76,20 @@ static inline cod_region_storage_status cod_region_storage_reserve(cod_region_st
     extent->size = 0;
     return COD_REGION_STORAGE_OK;
   }
-  const size_t padding = (alignment - (region->used & (alignment - 1))) & (alignment - 1);
-  const size_t remaining = region->capacity - region->used;
+  const size_t padding = (alignment - (*used & (alignment - 1))) & (alignment - 1);
+  const size_t remaining = capacity - *used;
   if (padding > remaining || size > remaining - padding) return COD_REGION_STORAGE_FULL;
-  extent->offset = region->used + padding;
+  extent->offset = *used + padding;
   extent->size = size;
-  region->used = extent->offset + size;
+  *used = extent->offset + size;
   return COD_REGION_STORAGE_OK;
+}
+
+/* A live owner uses the same layout rules as a preflight reservation. */
+static inline cod_region_storage_status cod_region_storage_reserve(cod_region_storage *region,
+    size_t count, size_t element_size, size_t alignment, cod_region_extent *extent) {
+  if (!region->bytes) return COD_REGION_STORAGE_INVALID;
+  return cod_region_layout_reserve(&region->used, region->capacity, count, element_size, alignment, extent);
 }
 
 /* Resolve an extent while its owner is live. This checks the byte range.

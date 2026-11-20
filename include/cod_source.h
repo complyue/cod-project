@@ -175,19 +175,18 @@ static inline cod_source_status cod_source_index_lines(cod_source_revision *sour
   if (size > (size_t)PTRDIFF_MAX) return COD_SOURCE_TOO_LARGE;
   size_t count = 1;
   for (size_t offset = 0; offset < size; ++offset) count += bytes[offset] == '\n';
-  if (count > (size_t)PTRDIFF_MAX / sizeof(cod_source_span)) return COD_SOURCE_TOO_LARGE;
-
-  const cod_region_storage_status opened = cod_region_storage_open(&source->line_storage, count * sizeof(cod_source_span));
-  if (opened == COD_REGION_STORAGE_NO_MEMORY) return COD_SOURCE_NO_MEMORY;
-  if (opened != COD_REGION_STORAGE_OK) return COD_SOURCE_TOO_LARGE;
 #ifdef __cplusplus
   const size_t alignment = alignof(cod_source_span);
 #else
   const size_t alignment = _Alignof(cod_source_span);
 #endif
+  size_t layout_size = 0;
   cod_region_extent index;
-  if (cod_region_storage_reserve(&source->line_storage, count, sizeof(cod_source_span), alignment, &index) !=
+  if (cod_region_layout_reserve(&layout_size, (size_t)PTRDIFF_MAX, count, sizeof(cod_source_span), alignment, &index) !=
       COD_REGION_STORAGE_OK) return COD_SOURCE_TOO_LARGE;
+  const cod_region_storage_status opened = cod_region_storage_open_layout(&source->line_storage, layout_size);
+  if (opened == COD_REGION_STORAGE_NO_MEMORY) return COD_SOURCE_NO_MEMORY;
+  if (opened != COD_REGION_STORAGE_OK) return COD_SOURCE_TOO_LARGE;
   cod_source_span *lines = (cod_source_span *)cod_region_storage_address(&source->line_storage, index);
 
   size_t first = 0;
