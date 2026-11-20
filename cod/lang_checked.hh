@@ -363,6 +363,7 @@ class ScalarChecker {
   }
   struct TypeEvidenceExits;
   struct TypeDeferredFlow;
+  struct TypeEvidenceState;
   enum class TargetPresence { unknown, present, absent };
   using PreparedEntryTarget = std::pair<const Expression *, size_t>;
   struct QueryProductPlace {
@@ -381,6 +382,9 @@ class ScalarChecker {
                                     PreparedEntryTarget, QueryProductPlace>;
   using PresenceFacts = std::map<EvidenceSlot, TargetPresence>;
   using EvidencePlaces = std::set<EvidenceSlot>;
+  struct QueryInputReadError : std::runtime_error {
+    using std::runtime_error::runtime_error;
+  };
   using PresenceSlotMap = std::map<EvidenceSlot, EvidencePlaces>;
   using BooleanObservations = std::map<size_t, bool>;
   struct ObservationPath {
@@ -643,6 +647,15 @@ class ScalarChecker {
   };
   using PreparedBuiltin = std::variant<std::monostate, PreparedTransfer, PreparedReferenceAssignment,
                                        PreparedBooleanSwap, PreparedReferenceSwap>;
+  struct PreparedProductCall {
+    const Expression *source;
+    size_t method;
+    std::vector<Type> arguments, retained;
+    ResultContract result;
+    std::shared_ptr<const TypeEvidenceState> context;
+    std::vector<TargetEvidence> operands;
+    std::set<size_t> reasons;
+  };
   struct TypeDeferredEffects {
     QueryWrites payloads, slots;
     EvidencePlaces initialized;
@@ -650,6 +663,7 @@ class ScalarChecker {
     std::set<size_t> outcomes;
     bool opaque = false;
     PreparedBuiltin builtin;
+    std::shared_ptr<const PreparedProductCall> product_call;
   };
   struct TypePreparedCall {
     const Expression *expression;
@@ -1246,6 +1260,7 @@ class ScalarChecker {
     std::map<std::pair<EvidenceOwner, EvidenceOwner>, OwnerMatch> owner_relations;
     ViewEvidence value;
     QuerySelections selections;
+    EvidencePlaces imported_storage;
     TargetEvidence target;
     std::optional<EvidenceOwner> full_scope_owner;
     bool complete = true;
@@ -6901,7 +6916,9 @@ class ScalarChecker {
     // The caller handles the effects reachable through explicit borrowed
     // arguments and binding slots. Exclude hidden channels into its storage.
     const auto &source = *program_.methods[method].source;
-    if (!std::ranges::all_of(arguments, scalar_type)) return false;
+    if (!std::ranges::all_of(arguments, [](const Type &type) {
+          return scalar_type(type) || type.kind == Type::product;
+        })) return false;
     if (source.kind != Form::Kind::function && !module_storage_is_closed(method)) return false;
     const auto &environment = state.declaration && method == state.method ? *state.declaration : state;
     if (!has_type_captures(method, environment)) return true;
@@ -7017,8 +7034,11 @@ class ScalarChecker {
         field_name = program_.schemas.at(schema).fields.at(index).source->name;
       } else if (field_name.empty()) if (const auto *local = std::get_if<const Expression *>(&place)) field_name = (*local)->text;
       if (unresolved) implementation_gap(at, "product field initialization with an unresolved receiver in typeof");
-      fail(at, "read of '" + std::string(field_name.empty() ? "target" : field_name) +
-          "' before definite initialization of every possible target");
+      const auto message = "read of '" + std::string(field_name.empty() ? "target" : field_name) +
+          "' before definite initialization of every possible target";
+      if (state.imported_storage.contains(place))
+        throw QueryInputReadError(location_text(at) + ": " + message);
+      fail(at, message);
     }
   }
   static EvidencePlaces query_product_fields(const QuerySelections &flow, const TargetEvidence &receiver,
@@ -7460,6 +7480,17 @@ class ScalarChecker {
       const auto &action = std::get<TypeDeferredFlow::Action>(entry);
       if (!action.entry) {
         const auto &effects = action.effects;
+        if (effects.product_call) {
+          const auto &call = *effects.product_call;
+          const auto summary = prove_product_query_call(call, state);
+          for (const auto reason : product_query_outcomes(call, summary)) {
+            auto completed = state;
+            if (const auto outcome = summary.product_effects.find(reason); outcome != summary.product_effects.end())
+              outcome->second.apply(completed.selections);
+            enqueue(action.earlier, returned, reason ? reason : error, std::move(completed), result);
+          }
+          continue;
+        }
         const bool exact = !std::holds_alternative<std::monostate>(effects.builtin);
         if (exact && effects.outcomes.contains(0)) {
           auto normal = state;
@@ -7527,10 +7558,54 @@ class ScalarChecker {
     std::optional<PresenceBranches> boolean;
     bool completes = true;
   };
+  struct QueryCallSelection {
+    EvidencePlaces places;
+    TargetPresence presence = TargetPresence::unknown;
+    bool operator==(const QueryCallSelection &) const = default;
+    TargetEvidence evidence() const {
+      TargetEvidence result;
+      result.places = places;
+      result.presence = presence;
+      return result;
+    }
+    void merge(const QueryCallSelection &other) {
+      if ((places.empty() && presence != TargetPresence::absent) ||
+          (other.places.empty() && other.presence != TargetPresence::absent)) places.clear();
+      else places.insert(other.places.begin(), other.places.end());
+      if (presence != other.presence) presence = TargetPresence::unknown;
+    }
+  };
+  struct QueryCallStorage {
+    std::map<size_t, QueryCallSelection> operands;
+    std::map<EvidenceSlot, QueryCallSelection> slots;
+    EvidencePlaces places, unwritten;
+    bool operator==(const QueryCallStorage &) const = default;
+  };
+  struct QueryCallEffects {
+    EvidencePlaces initialized;
+    std::map<EvidenceSlot, QueryCallSelection> slots;
+    EvidencePlaces rebound, boolean_writes;
+    bool unknown_boolean_write = false;
+    bool operator==(const QueryCallEffects &) const = default;
+    void merge(const QueryCallEffects &other) {
+      initialized = QuerySelections::common_slots(std::move(initialized), other.initialized);
+      for (auto &[slot, selection] : slots) selection.merge(other.slots.at(slot));
+      rebound.insert(other.rebound.begin(), other.rebound.end());
+      boolean_writes.insert(other.boolean_writes.begin(), other.boolean_writes.end());
+      unknown_boolean_write |= other.unknown_boolean_write;
+    }
+    void apply(QuerySelections &flow) const {
+      for (const auto &slot : rebound) flow.assign({slot, {slot}}, slots.at(slot).evidence());
+      for (const auto &place : initialized) flow.uninitialized.erase(place);
+      if (unknown_boolean_write || !boolean_writes.empty())
+        flow.write_boolean(unknown_boolean_write ? EvidencePlaces{} : boolean_writes, {});
+    }
+  };
   struct TypeCallInputs {
     std::set<size_t> ready;
     // Each group shares an entry payload. Its formal bindings stay independent.
     std::map<size_t, size_t> shared_targets;
+    std::optional<QueryCallStorage> storage;
     size_t target(size_t input) const {
       const auto shared = shared_targets.find(input);
       return shared == shared_targets.end() ? input : shared->second;
@@ -7539,17 +7614,101 @@ class ScalarChecker {
   };
   struct TypeCallSummary {
     std::set<size_t> targets, required_inputs, initialized_inputs;
+    std::map<size_t, QueryCallEffects> product_effects;
+    std::optional<QueryCallSelection> product_result;
+    std::optional<std::string> invalid_input_read;
     bool completes = false;
     bool operator==(const TypeCallSummary &) const = default;
 
     void merge(const TypeCallSummary &other) {
+      if (other.invalid_input_read) invalid_input_read = other.invalid_input_read;
+      for (const auto &[reason, effects] : other.product_effects) {
+        const auto [entry, inserted] = product_effects.emplace(reason, effects);
+        if (!inserted) entry->second.merge(effects);
+      }
+      if (other.product_result) {
+        if (product_result) product_result->merge(*other.product_result);
+        else product_result = other.product_result;
+      }
       if (!other.completes) return;
-      if (!completes) { *this = other; return; }
+      if (!completes) {
+        completes = true;
+        targets = other.targets;
+        required_inputs = other.required_inputs;
+        initialized_inputs = other.initialized_inputs;
+        return;
+      }
       targets.insert(other.targets.begin(), other.targets.end());
       required_inputs.insert(other.required_inputs.begin(), other.required_inputs.end());
       std::erase_if(initialized_inputs, [&](size_t input) { return !other.initialized_inputs.contains(input); });
     }
   };
+  bool tracked_product_argument(const Type &type, const TargetEvidence &operand, const QuerySelections &flow) const {
+    if (type.kind != Type::product || operand.presence == TargetPresence::absent) return false;
+    if (std::ranges::any_of(operand.places, [](const auto &place) {
+          const auto *product = std::get_if<QueryProductPlace>(&place);
+          return product && product->reservation;
+        })) return true;
+    if (!operand.places.empty() && std::ranges::all_of(operand.places, [](const auto &place) {
+          const auto *product = std::get_if<QueryProductPlace>(&place);
+          return product && product->enclosing;
+        })) return false;
+    const auto belongs = [&](const auto &entry) {
+      const auto *product = std::get_if<QueryProductPlace>(&entry.first);
+      return product && product->reservation && (product->schema == type.identity ||
+          std::ranges::any_of(product->path, [&](const auto &step) { return step.first == type.identity; }));
+    };
+    return std::ranges::any_of(flow.uninitialized, belongs) || std::ranges::any_of(flow.footprints, belongs);
+  }
+  QueryCallStorage query_call_storage(const CheckedMethod &method, const std::vector<Type> &arguments,
+      const std::vector<TargetEvidence> &operands, const TypeEvidenceState &state, const Location &at) const {
+    const auto &flow = state.selections;
+    const auto reaching = flow.outcome({}, true);
+    QueryCallStorage storage;
+    EvidencePlaces pending;
+    for (size_t i = 0; i < operands.size(); ++i) {
+      if (argument_mode(parameter_at(method, i)) == ArgumentMode::value) continue;
+      const auto &operand = operands[i];
+      auto presence = operand.presence;
+      if (const auto proof = flow.selection_outcomes(operand)) {
+        if (!flow.reachable(proof, true)) presence = TargetPresence::absent;
+        else if (!flow.reachable(proof, false)) presence = TargetPresence::present;
+      }
+      auto places = presence == TargetPresence::absent ? EvidencePlaces{} : operand.places;
+      if (arguments[i].kind == Type::product && presence != TargetPresence::absent) {
+        if (places.empty() && !tracked_product_argument(arguments[i], operand, flow))
+          places.insert(QueryProductPlace{nullptr, arguments[i].identity, {}, true});
+        if (places.empty() || std::ranges::any_of(places, [](const auto &place) {
+              const auto *product = std::get_if<QueryProductPlace>(&place);
+              return !product || (!product->reservation && !product->enclosing);
+            })) implementation_gap(at, "product initialization through a helper with an unresolved receiver in typeof");
+      }
+      if (places.empty() && presence != TargetPresence::absent) continue;
+      pending.insert(places.begin(), places.end());
+      storage.operands.emplace(i, QueryCallSelection{std::move(places), presence});
+    }
+    while (!pending.empty()) {
+      auto place = pending.extract(pending.begin()).value();
+      if (!storage.places.insert(place).second) continue;
+      if (storage.places.size() > 4096) fail(at, "compiler resource limit: too many product places in a typeof call");
+      if (flow.may_read_uninitialized(place, reaching)) storage.unwritten.insert(place);
+      const auto *product = std::get_if<QueryProductPlace>(&place);
+      if (!product || !product->reservation) continue;
+      if (const auto type = inline_query_product(*product)) {
+        const auto &fields = program_.schemas.at(*type).fields;
+        for (size_t index = 0; index < fields.size(); ++index) pending.insert(product->field(*type, index));
+      } else if (flow.footprints.contains(place)) {
+        const auto selected = flow.selected_target({place, {place}});
+        if (selected.presence != TargetPresence::absent) {
+          if (selected.places.empty() && !storage.unwritten.contains(place))
+            implementation_gap(at, "product initialization through a helper with an unresolved embedded referent in typeof");
+          pending.insert(selected.places.begin(), selected.places.end());
+        }
+        storage.slots.emplace(place, QueryCallSelection{selected.places, selected.presence});
+      }
+    }
+    return storage;
+  }
   struct TypeCallProofs {
     struct Obligation {
       size_t method;
@@ -7610,10 +7769,23 @@ class ScalarChecker {
       TypeCallSummary result;
       std::map<size_t, PresenceBranches> input_presence;
       std::map<size_t, size_t> result_inputs;
+      if (inputs.storage) {
+        body.imported_storage = inputs.storage->places;
+        for (const auto &place : inputs.storage->unwritten)
+          body.selections.uninitialized.emplace(place, ObservationPaths::unconditional());
+        for (const auto &[slot, selection] : inputs.storage->slots)
+          body.selections.save_selection(slot, selection.evidence());
+      }
       for (size_t i = 0; i < prepared.size(); ++i) {
         const auto &parameter = parameter_at(method, i);
         if (parameter.owner.empty()) {
           if (prepared[i] == Type::boolean) body.selections.value_places.emplace(parameter.name, EvidencePlaces{i});
+          continue;
+        }
+        if (inputs.storage) if (const auto actual = inputs.storage->operands.find(i); actual != inputs.storage->operands.end()) {
+          body.selections.bind(parameter.name, i, actual->second.evidence());
+          if (prepared[i] == Type::boolean)
+            body.selections.borrowed_booleans.insert(actual->second.places.begin(), actual->second.places.end());
           continue;
         }
         TargetEvidence input;
@@ -7644,18 +7816,46 @@ class ScalarChecker {
       if (!body.complete) return {};
       const bool allows_fallthrough = !method.source->completion_requires_return(*contract.type);
       for (const auto &path : completed.paths) {
-        if (!path.reasons.contains(1) && !(allows_fallthrough && path.reasons.contains(0))) continue;
-        result.completes = true;
         if (!path.state.complete) return {};
         const auto &selections = path.state.selections;
         const auto reaching = selections.reach_condition();
+        if (inputs.storage) {
+          QueryCallEffects effects;
+          for (const auto &place : inputs.storage->unwritten)
+            if (!selections.may_read_uninitialized(place, reaching)) effects.initialized.insert(place);
+          for (const auto &[slot, entry] : inputs.storage->slots) {
+            const auto selection = selections.selected_target({slot, {slot}});
+            if (std::ranges::any_of(selection.places, [&](const auto &place) { return !inputs.storage->places.contains(place); }))
+              return {};
+            effects.slots.emplace(slot, QueryCallSelection{selection.places, selection.presence});
+            if (selections.changed_since(slot, 0)) effects.rebound.insert(slot);
+          }
+          for (const auto &place : selections.payload_writes.places)
+            if (inputs.storage->places.contains(place)) effects.boolean_writes.insert(place);
+          effects.unknown_boolean_write = selections.payload_writes.unknown;
+          for (const auto reason : path.reasons) {
+            const auto completion = reason == 1 || (reason == 0 && allows_fallthrough) ? 0 :
+                reason == 0 ? Completion::failure(exception_id(ExceptionCategory::missing_return)).reason : reason;
+            const auto [entry, inserted] = result.product_effects.emplace(completion, effects);
+            if (!inserted) entry->second.merge(effects);
+          }
+        }
+        if (!path.reasons.contains(1) && !(allows_fallthrough && path.reasons.contains(0))) continue;
+        result.completes = true;
         if (contract.borrowed()) {
           if (!path.result.borrowed) return {};
           const auto &selected = *path.result.borrowed;
+          QueryCallSelection returned;
+          if (inputs.storage) returned.presence = selected.observe(selections).presence;
           for (const auto &[place, targets] : selected.targets) {
             auto possible = targets;
             possible.conjoin(reaching);
             if (!possible) continue;
+            if (inputs.storage) {
+              if (!inputs.storage->places.contains(place)) return {};
+              returned.places.insert(place);
+              continue;
+            }
             const auto *ordinal = std::get_if<size_t>(&place);
             if (!ordinal || !result_inputs.contains(*ordinal)) return {};
             const auto result_input = result_inputs.at(*ordinal);
@@ -7666,12 +7866,20 @@ class ScalarChecker {
               if (selections.may_read_uninitialized(place, unwritten)) result.required_inputs.insert(result_input);
             }
           }
+          if (inputs.storage) {
+            if (result.product_result) result.product_result->merge(returned);
+            else result.product_result = std::move(returned);
+          }
         }
         std::erase_if(result.initialized_inputs, [&](size_t input) {
           return selections.may_read_uninitialized(inputs.target(input), reaching);
         });
       }
       if (!result.completes) result.initialized_inputs.clear();
+      return result;
+    } catch (const QueryInputReadError &error) {
+      TypeCallSummary result;
+      result.invalid_input_read = error.what();
       return result;
     } catch (const std::runtime_error &) {
       // A declaration still supplies the result bound when its body evidence is unavailable.
@@ -7702,7 +7910,7 @@ class ScalarChecker {
   std::optional<TypeCallSummary> prove_type_call(size_t id, const std::vector<Type> &arguments,
       const std::vector<Type> &retained, const ResultContract &contract, const TypeEvidenceState &supplied,
       const TypeCallInputs &inputs) const {
-    if (std::ranges::any_of(arguments, [](const auto &type) { return type.kind == Type::product; })) return {};
+    if (!inputs.storage && std::ranges::any_of(arguments, [](const auto &type) { return type.kind == Type::product; })) return {};
     if (auto *proofs = type_call_proofs_) {
       const auto index = type_call_obligation(id, arguments, retained, contract, supplied, inputs);
       if (!index) return {};
@@ -7731,11 +7939,28 @@ class ScalarChecker {
         proofs.pending.insert(obligation.dependents.begin(), obligation.dependents.end());
       }
       auto &result = proofs.obligations[*root].result;
-      if (result && result->completes) return std::move(result);
+      if (result && (result->completes || inputs.storage)) return std::move(result);
     } catch (const std::runtime_error &) {
       // Optional proof preparation follows the same declaration fallback.
     }
     return {};
+  }
+  TypeCallSummary prove_product_query_call(const PreparedProductCall &call, const TypeEvidenceState &state) const {
+    const auto &at = call.source->at;
+    if (!explicit_type_call_effects(call.method, *call.context, call.arguments))
+      implementation_gap(at, "product initialization through a helper with unproved storage effects in typeof");
+    TypeCallInputs inputs;
+    inputs.storage = query_call_storage(program_.methods[call.method], call.arguments, call.operands, state, at);
+    auto proof = prove_type_call(call.method, call.arguments, call.retained, call.result, *call.context, inputs);
+    if (!proof) implementation_gap(at, "product initialization through a helper with no proved body in typeof");
+    if (proof->invalid_input_read) throw QueryInputReadError(*proof->invalid_input_read);
+    return std::move(*proof);
+  }
+  static std::set<size_t> product_query_outcomes(const PreparedProductCall &call, const TypeCallSummary &summary) {
+    auto outcomes = call.reasons;
+    for (const auto &[reason, effects] : summary.product_effects) outcomes.insert(reason);
+    if (!summary.completes) outcomes.erase(0);
+    return outcomes;
   }
   std::set<size_t> prove_shared_call_initialization(const Expression &expr, size_t instance,
       const std::vector<CheckedOperation> &views, const std::set<size_t> &established) const {
@@ -7889,6 +8114,7 @@ class ScalarChecker {
       if (state.checks_initialization()) {
         body.selections.uninitialized = state.selections.uninitialized;
         body.selections.borrowed_booleans = state.selections.borrowed_booleans;
+        body.imported_storage = state.imported_storage;
       }
       PresenceSlotMap exported_slots;
       std::map<EvidenceSlot, EvidenceSelection> live_bindings;
@@ -8616,6 +8842,8 @@ class ScalarChecker {
         if (state.selections.tracking && completes && (type == Type::boolean || state.tracks_target_places())) {
           if (borrowed == true && !state.value.mixed_view) places = state.target.places;
           else if (borrowed == false && !state.value.mixed_view) {
+            if (state.imported_storage.contains(declaration.get()))
+              implementation_gap(declaration->at, "recursive activation shares an abstract storage origin in typeof");
             places.insert(declaration.get());
             if (value) state.selections.value_places.insert_or_assign(declaration->text, places);
             if (state.checks_initialization() && type && scalar_type(*type)) {
@@ -8697,7 +8925,13 @@ class ScalarChecker {
       const auto order = product_initializers(schema, expr);
       const bool track_places = state.checks_initialization() && state.selections.tracking;
       const QueryProductPlace product{&expr, type.identity, {}};
-      if (track_places) reserve_query_product(state.selections, product, expr.at);
+      if (track_places) {
+        if (std::ranges::any_of(state.imported_storage, [&](const auto &place) {
+              const auto *incoming = std::get_if<QueryProductPlace>(&place);
+              return incoming && incoming->reservation == &expr;
+            })) implementation_gap(expr.at, "recursive activation shares an abstract product origin in typeof");
+        reserve_query_product(state.selections, product, expr.at);
+      }
       bool completes = true;
       for (size_t i = 0; i < order.size(); ++i) {
         const auto &item = *expr.children[i];
@@ -9383,7 +9617,17 @@ class ScalarChecker {
           }
         }
       };
+      std::vector<TargetEvidence> product_operands;
+      if (state.required && state.checks_initialization()) {
+        for (size_t i = 0; i < operand_targets.size(); ++i)
+          if (tracked_product_argument(arguments[i], operand_targets[i], state.selections)) {
+            for (size_t operand = 0; operand < operand_targets.size(); ++operand) product_operands.push_back(saved_operand(operand));
+            break;
+          }
+      }
       if (local) {
+        if (!product_operands.empty())
+          implementation_gap(expr.at, "product initialization through a callable view in typeof");
         if (state.required && (!target || target->kind != Type::procedure || !target->target))
           fail(expr.at, "nearest binding '" + expr.text + "' is not callable");
         if (state.required && target->parameters.size() != arguments.size()) fail(expr.at, "callable argument count does not match its view");
@@ -9519,6 +9763,8 @@ class ScalarChecker {
       const auto candidates = method_candidates(family.methods, arguments, retained, access, owners, &state);
       if (candidates.methods.empty() && !expr.intrinsic && has_declarations(expr.text) &&
           (!eager_operation(name) || !eager_types(name, arguments).error.empty())) {
+        if (!product_operands.empty())
+          implementation_gap(expr.at, "product initialization through a helper with no proved body in typeof");
         const auto result = inspect_declarations(expr.text, arguments, access, owners, expr.at, state,
             [&](const CheckedMethod &declaration, const Substitutions &, const ResultContract &contract) {
           retain_borrowed_targets(result_view(declaration, contract, owners), *contract.type,
@@ -9563,13 +9809,15 @@ class ScalarChecker {
       std::optional<Type> result;
       for (const auto id : best) {
         const auto &method = program_.methods[id];
-        for (size_t i = 0; i < operand_targets.size(); ++i) {
-          const auto &parameter = parameter_at(method, i);
-          type_input_mutation(expr, state, arguments[i], operand_targets[i], argument_mode(parameter), parameter.read_only,
-                              caller_bindings(method));
+        if (product_operands.empty()) {
+          for (size_t i = 0; i < operand_targets.size(); ++i) {
+            const auto &parameter = parameter_at(method, i);
+            type_input_mutation(expr, state, arguments[i], operand_targets[i], argument_mode(parameter), parameter.read_only,
+                                caller_bindings(method));
+          }
+          record_type_call(expr, state, method, invokes ||
+              explicit_type_call_effects(id, family.declaration ? *family.declaration : state, arguments));
         }
-        record_type_call(expr, state, method, invokes ||
-            explicit_type_call_effects(id, family.declaration ? *family.declaration : state, arguments));
         if (state.validating_body && state.method && program_.methods[*state.method].source->kind == Form::Kind::function &&
             method.source->kind == Form::Kind::procedure)
           fail(expr.at, "a function cannot invoke a procedure");
@@ -9579,6 +9827,49 @@ class ScalarChecker {
         }
         const auto type = infer_result(id, arguments, retained, family.declaration ? family.declaration : &state).contract;
         if (!type || nested_binder(method, *type->type) || (result && result != type->type)) return {};
+        if (!product_operands.empty()) {
+          const auto &context = family.declaration ? *family.declaration : state;
+          auto reasons = call_reasons(method);
+          if (state.root_failure_covered == false && declares_root(method.throws_types)) require_type_root_failure(state, expr.at);
+          for (const auto &obligation : declaration_obligations(method, arguments, access, owners, &state)) {
+            if (state.root_failure_covered == false && declares_root(obligation.declaration->throws_types))
+              require_type_root_failure(state, expr.at);
+            for (const auto &failure : obligation.declaration->throws_types)
+              for (const auto category : exception_possibilities(failure))
+                reasons.insert(Completion::failure(category).reason);
+          }
+          if (!invokes) for (auto &operand : product_operands) {
+            const auto presence = state.selections.selection_outcomes(operand);
+            if (!state.selections.reachable(presence, true)) operand.presence = TargetPresence::absent;
+            else if (!state.selections.reachable(presence, false)) operand.presence = TargetPresence::present;
+            // Keep the selected value without the live slot observations
+            // that were used while preparing it.
+            operand = QueryCallSelection{std::move(operand.places), operand.presence}.evidence();
+          }
+          PreparedProductCall call{&expr, id, arguments, retained, *type,
+              std::make_shared<TypeEvidenceState>(result_context(id, &context)), std::move(product_operands), std::move(reasons)};
+          if (!invokes) {
+            auto &effects = state.prepared_call->effects;
+            effects.outcomes = call.reasons;
+            effects.product_call = std::make_shared<PreparedProductCall>(std::move(call));
+            view = result_view(method, *type, owners);
+            return type->type;
+          }
+          const auto proof = prove_product_query_call(call, state);
+          if (state.exits) for (const auto reason : product_query_outcomes(call, proof)) {
+            if (!reason) continue;
+            auto failed = state;
+            if (const auto outcome = proof.product_effects.find(reason); outcome != proof.product_effects.end())
+              outcome->second.apply(failed.selections);
+            merge_type_exits(*state.exits, {reason}, failed);
+          }
+          if (!proof.completes) return Type::never;
+          if (const auto outcome = proof.product_effects.find(0); outcome != proof.product_effects.end())
+            outcome->second.apply(state.selections);
+          view = result_view(method, *type, owners);
+          if (proof.product_result) target_facts = proof.product_result->evidence();
+          return type->type;
+        }
         if (state.exits || !invokes)
           for (const auto &obligation : declaration_obligations(method, arguments, access, owners, &state)) {
             if (state.root_failure_covered == false && declares_root(obligation.declaration->throws_types))

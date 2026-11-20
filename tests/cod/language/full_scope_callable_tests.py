@@ -22,6 +22,17 @@ QUERY_EVIDENCE = 'typeof requires a known declaration or operand type'
 QUERY_PAIR = 'data Pair {first:u64;second:u64;}'
 QUERY_HOLDER = 'data Holder {ptr selected:u64;}'
 QUERY_NODE = 'data Node {value:u64;ref next:Node;}'
+READ_QUERY_PAIR = ('func inspect(ptr p:const Pair in O)->u64 where {const owner O}{'
+                   'if(p is null){return 0u64;}else{};return p.second;}')
+WRITE_QUERY_PAIR = ('proc populate(ptr p:Pair in O)->void where {owner O}{'
+                    'if(p is null){return;}else{};p.second<-7u64;return;}')
+WRITE_QUERY_HOLDER = ('proc populate(ref p:Holder in O)->void where {owner O}{'
+                      'if(p.selected is null){return;}else{};p.selected<-7u64;return;}')
+QUERY_CALL_FAILURE = ('using "std:exceptions" NullPointerException;'
+                      'proc populate(ptr p:Pair in O)->void throws NullPointerException where {owner O}{'
+                      'if(p is null){return;}else{};')
+READ_QUERY_AFTER_FAILURE = ('ptr item=make Pair;try{populate(item);}'
+                            'catch(e:const NullPointerException){return item.second;};return item.second;')
 
 
 def query(body):
@@ -1253,6 +1264,60 @@ runner.CASES = {
         IO + QUERY_NODE + query('ptr a=make Node;ptr b=make Node;a.value<-7u64;b.value<-8u64;'
                                 'a.next=b;b.next=a;ref complete=a;return complete.next.value;') +
         'behave @print(result);', 0, '4\n', ''),
+    'query_helper_rejects_an_unwritten_product_field': (
+        QUERY_PAIR + READ_QUERY_PAIR + query('ptr item=make Pair;return inspect(item);'),
+        2, '', "read of 'second' before definite initialization"),
+    'query_helper_does_not_require_an_unread_sibling': (
+        IO + QUERY_PAIR + READ_QUERY_PAIR +
+        query('ptr item=make Pair;item.second<-7u64;return inspect(item);') + 'behave @print(result);', 0, '4\n', ''),
+    'query_helper_writes_follow_the_actual_product': (
+        IO + QUERY_PAIR + WRITE_QUERY_PAIR + query('ptr item=make Pair;populate(item);return item.second;') +
+        'behave @print(result);', 0, '4\n', ''),
+    'query_helper_write_does_not_initialize_a_sibling': (
+        QUERY_PAIR + WRITE_QUERY_PAIR + query('ptr item=make Pair;populate(item);return item.first;'),
+        2, '', "read of 'first' before definite initialization"),
+    'query_recursive_helper_preserves_field_writes': (
+        IO + QUERY_PAIR + 'proc populate(ptr p:Pair in O,n:u64)->void where {owner O}{'
+        'if(p is null){return;}else{};if(n==0u64){p.second<-7u64;return;}else{};populate(p,n-1u64);return;}' +
+        query('ptr item=make Pair;populate(item,3u64);return item.second;') + 'behave @print(result);', 0, '4\n', ''),
+    'query_helper_rebinds_a_slot_without_initializing_its_new_referent': (
+        QUERY_HOLDER + 'proc redirect(ref p:Holder in O,ptr source:u64 in O)->void where {owner O}{p.selected=source;return;}' +
+        query('val old<-7u64;val missing<-make local u64;ref item=make Holder {selected=old;};'
+              'redirect(item,missing);return item.selected;'), 2, '', "read of 'missing' before definite initialization"),
+    'query_helper_publishes_a_write_before_checked_failure': (
+        IO + QUERY_PAIR + QUERY_CALL_FAILURE + 'p.second<-7u64;ptr absent:u64=null in here;absent;return;}' +
+        query(READ_QUERY_AFTER_FAILURE) + 'behave @print(result);', 0, '4\n', ''),
+    'query_helper_failure_omits_a_later_write': (
+        QUERY_PAIR + QUERY_CALL_FAILURE + 'ptr absent:u64=null in here;absent;p.second<-7u64;return;}' +
+        query(READ_QUERY_AFTER_FAILURE), 2, '', "read of 'second' before definite initialization"),
+    'query_prepared_helper_keeps_the_saved_product_after_a_rebind': (
+        IO + QUERY_PAIR + WRITE_QUERY_PAIR +
+        query('ptr first=make Pair;ptr second=make Pair;ptr selected=first;'
+              '{{defer populate(selected);selected=second;return;}};return first.second;') +
+        'behave @print(result);', 0, '4\n', ''),
+    'query_prepared_helper_uses_the_embedded_slot_at_invocation': (
+        IO + QUERY_HOLDER + WRITE_QUERY_HOLDER +
+        query('val target<-make local u64;ref item=make Holder {selected=null;};'
+              '{{defer populate(item);item.selected=target;return;}};return target;') +
+        'behave @print(result);', 0, '4\n', ''),
+    'query_prepared_helper_rejects_a_late_unwritten_referent': (
+        QUERY_HOLDER + 'func inspect(ref p:const Holder in O)->u64 where {const owner O}{'
+        'if(p.selected is null){return 0u64;}else{};return p.selected;}' +
+        query('val ready<-7u64;val target<-make local u64;ref item=make Holder {selected=ready;};'
+              '{{defer inspect(item);item.selected=target;return;}};return ready;'),
+        2, '', "read of 'target' before definite initialization"),
+    'query_prepared_helper_registration_failure_keeps_the_field_unwritten': (
+        QUERY_PAIR + 'using "std:exceptions" OutOfMemoryError;' + WRITE_QUERY_PAIR +
+        query('ptr item=make Pair;try{ {{defer populate(item);}}; }catch(e:const OutOfMemoryError){return item.second;};'
+              'return item.second;'), 2, '', "read of 'second' before definite initialization"),
+    'query_helper_return_preserves_a_borrowed_field': (
+        IO + QUERY_PAIR + 'func select_second(ptr p:Pair in O)->ptr u64 in O where {owner O}{'
+        'if(p is null){return null in O;}else{};return p.second;}' +
+        query('ptr item=make Pair;ptr target=select_second(item);target<-7u64;return item.second;') +
+        'behave @print(result);', 0, '4\n', ''),
+    'query_product_helper_without_a_body_reports_unproved_coverage': (
+        QUERY_PAIR + 'func inspect(ptr p:const Pair in O)->u64 where {const owner O};' +
+        query('ptr item=make Pair;return inspect(item);'), 2, '', 'no proved body'),
     'query_contextual_scope_argument_has_no_effects': (IO + IDENTITY + APPLY +
         'val result<-make local typeof(apply({{behave @print(98u64);return identity;}},1u64)){15u64};'
         'behave @print(result);', 0, '15\n', ''),
