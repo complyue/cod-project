@@ -74,8 +74,8 @@
 
 ## Diagnostics by compiler stage
 
-- Apply the [compiler diagnostics policy](applications/cod-booter/README.md#diagnostics-by-compiler-stage) to every language feature, compiler phase and diagnostic work item. The seed compiler must preserve correctness and report failures or useful observations directly available during that work. Assign additional analysis and elaborate diagnostic output to the CoD-written compiler.
-- Distinguish a safety or typing check from an optional warning about valid code. Preserve required checks, runtime behavior and sound unsupported-feature reporting in every supported seed path. A proposed language warning does not by itself commission a seed analysis pass.
+- Apply the [compiler diagnostics policy](applications/cod-booter/README.md#diagnostics-by-compiler-stage) to every language feature and compiler phase. The C++ seed and the CoD-written booter both belong in the planned `e-wrks/cod-seed` repository. Both must enforce the required checks, report failures and preserve required runtime behavior. They may include source locations or observations already available from those checks.
+- The booter fills gaps in the seed's exception handling. Check the required propagation, handling and cleanup behavior on supported paths. A proposal for a warning about valid code does not commission additional analysis or diagnostic output in either bootstrap compiler. The future compiler in `e-wrks/cod` owns full diagnostics, including diagnostic-only passes and detailed explanations.
 
 ## Compiler Terminology
 - Follow the [CoD operation terminology](design/CallableViewsAndCaptures.md#copying-moving-and-graph-transfer): CoD has no C++-style object copying/moving semantic model. Distinguish bits transfer, reference binding, ownership transfer, dedicated callable construction/capture and explicit graph transfer; native byte copying or C++ utility moves do not grant source-language permissions. Callable views require lexical-scope storage and cannot be stored in regions, including through compound carriers.

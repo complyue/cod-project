@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-20 — Keep the booter and its exception-handling work in cod-seed
+
+<a id="h-booter-exceptions-diagnostics-20261120"></a>
+**H-BOOTER-EXCEPTIONS-DIAGNOSTICS-20261120.** In the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) the project user clarified “补足异常处理”, assigned the booter to `e-wrks/cod-seed` and reserved full diagnostics for `e-wrks/cod`. D-20 roadmap r17 and registry r1017 apply [the compiler-stage policy](#h-compiler-diagnostics-20261119) to both bootstrap compilers. The booter fills gaps in seed exception handling and requires only diagnostics available from correctness checks. The preceding roadmap is at `bb6232f6b05c13ada042ea5240fd421154d4ce69:applications/cod-booter/README.md`.
+
 ## 2026-11-20 — Defer HLVM applications until the basic CoD frontend works
 
 <a id="h-hlvm-candidate-20261120"></a>
