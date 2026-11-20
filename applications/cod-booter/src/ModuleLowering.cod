@@ -2,7 +2,7 @@ using "ParserStorage.cod" ExprNodes;
 using "ParserStorage.cod" len as syntax_len;
 using "ParserStorage.cod" no_node;
 using "ParserStorage.cod" module_node;
-using "ParserStorage.cod" procedure_node;
+using "ParserStorage.cod" callable_node;
 using "ParserStorage.cod" using_node;
 using "ParserStorage.cod" block_node;
 using "ParserStorage.cod" full_scope_node;
@@ -29,15 +29,17 @@ using "ExpressionParser.cod" ParseResult;
 using "NameResolution.cod" NameBindings;
 using "NameResolution.cod" NameWork;
 using "NameResolution.cod" first_item;
-using "NameResolution.cod" procedure_head;
+using "NameResolution.cod" callable_head;
 using "NameResolution.cod" exception_binding;
 using "OperandChecking.cod" OperandFacts;
 using "OperandChecking.cod" scalar_u64;
+using "OperandChecking.cod" has_value_tail;
 using "OperandChecking.cod" independent_value;
 using "OperandChecking.cod" writable_place;
 using "OperandChecking.cod" nullable_ptr;
 using "CompletionChecking.cod" CompletionSites;
 using "CompletionChecking.cod" can_continue;
+using "CompletionChecking.cod" can_miss_return;
 using "CompletionChecking.cod" present_target;
 using "CompletionChecking.cod" absent_target;
 using "ModuleExports.cod" exception_root_identity;
@@ -88,7 +90,7 @@ data LoweringState {
 func native_unsupported() -> u8 { return 1u8; }
 func native_command_capacity() -> u8 { return 2u8; }
 func invalid_native_module() -> u8 { return 3u8; }
-func unproved_procedure_completion() -> u8 { return 4u8; }
+func unproved_callable_completion() -> u8 { return 4u8; }
 
 func command(ref code:NativeCommands in C, ref plan:NativePlan in P, opcode:u8,
              a:u64, b:u64, c:u64, d:u64) -> void where {owner C, owner P} {
@@ -508,7 +510,7 @@ func lower_node(nodes:const ExprNodes in N, names:const NameBindings in B, links
     if (!state.live || plan.diagnostic != 0u8) { return; } else {};
     plan.node <- at;
     val kind <- nodes[at].kind;
-    if (kind == using_node() || kind == procedure_node()) { return; } else {};
+    if (kind == using_node() || kind == callable_node()) { return; } else {};
     if (kind == literal_node()) {
         emit(code, plan, word_constant(), slot(at), nodes[at].number);
         return;
@@ -714,11 +716,13 @@ func lower_activation(nodes:const ExprNodes in N, names:const NameBindings in B,
     where {const owner N, const owner B, const owner L, const owner F, const owner S, owner C, owner P} {
     plan.node <- scope;
     val program <- nodes[scope].kind == module_node();
-    val falls_through <- !program && can_continue(sites, nodes[scope].right);
+    val body <- nodes[scope].right;
+    val can_complete <- program || can_continue(sites, body);
+    val check_return <- can_miss_return(nodes, facts, sites, scope);
     val entry <- new_block(plan);
     val cleanup <- new_block(plan);
-    val returned <- if (falls_through) { new_block(plan) } else { cleanup };
-    val return_ready <- if (falls_through) { new_slot(plan) } else { no_node() };
+    val returned <- if (check_return) { new_block(plan) } else { cleanup };
+    val return_ready <- if (check_return) { new_slot(plan) } else { no_node() };
     val return_slot <- if (facts[scope].kind == scalar_u64()) { returned_word() } else { no_node() };
     ref state = make LoweringState {
         active_function <- scope; active_scope <- scope; exception_target <- cleanup;
@@ -730,27 +734,28 @@ func lower_activation(nodes:const ExprNodes in N, names:const NameBindings in B,
     emit(code, plan, word_constant(), pending_category(), 0u64);
     emit(code, plan, word_constant(), pending_site(), 0u64);
     emit(code, plan, word_constant(), returned_word(), 0u64);
-    if (falls_through) { emit(code, plan, word_constant(), return_ready, 0u64); } else {};
+    if (check_return) { emit(code, plan, word_constant(), return_ready, 0u64); } else {};
     initialize_defer_flags(sites, code, plan, scope, syntax_len(nodes));
     if (program) {
         lower_list(nodes, names, links, facts, sites, code, plan, state, nodes[scope].left, no_node());
     } else {
-        receive_formals(nodes, links, code, plan, procedure_head(nodes, scope));
-        lower_node(nodes, names, links, facts, sites, code, plan, state, nodes[scope].right);
+        receive_formals(nodes, links, code, plan, callable_head(nodes, scope));
+        lower_node(nodes, names, links, facts, sites, code, plan, state, body);
     };
     if (plan.diagnostic != 0u8) { return; } else {};
     if (state.live) {
-        if (!program && !falls_through) {
-            plan.diagnostic <- unproved_procedure_completion();
+        if (!can_complete) {
+            plan.diagnostic <- unproved_callable_completion();
             plan.node <- scope;
             return;
         } else {};
+        if (has_value_tail(nodes, facts, scope)) { emit(code, plan, copy_word(), returned_word(), slot(body)); } else {};
         finish_block(code, plan, state, cleanup);
     } else {};
     forward_return(code, plan, state, returned, cleanup, no_node(), return_ready);
     position(code, plan, state, cleanup);
     drain_scope(nodes, names, links, facts, sites, code, plan, state, scope);
-    if (falls_through) {
+    if (check_return) {
         val normal <- new_block(plan);
         val missing <- new_block(plan);
         val done <- new_block(plan);
@@ -791,14 +796,14 @@ func lower_native_module(nodes:const ExprNodes in N, tree:const ParseResult in T
     for (at in 0u64 .. tree.used) {
         plan.node <- at;
         if (!module_command_supported(names, sites, at)) { plan.diagnostic <- native_unsupported(); return false; } else {};
-        if (nodes[at].kind == procedure_node()) {
-            command(code, plan, declare_function(), at, formal_count(nodes, procedure_head(nodes, at)), 0u64, 0u64);
+        if (nodes[at].kind == callable_node()) {
+            command(code, plan, declare_function(), at, formal_count(nodes, callable_head(nodes, at)), 0u64, 0u64);
             if (plan.diagnostic != 0u8) { return false; } else {};
         } else {};
     };
     command(code, plan, declare_function(), tree.root, 0u64, 1u64, 0u64);
     for (at in 0u64 .. tree.used) {
-        if (nodes[at].kind == procedure_node() || at == tree.root) {
+        if (nodes[at].kind == callable_node() || at == tree.root) {
             lower_activation(nodes, names, links, facts, sites, code, plan, at);
             if (plan.diagnostic != 0u8) { return false; } else {};
         } else {};
@@ -811,4 +816,4 @@ export lower_native_module;
 export native_unsupported;
 export native_command_capacity;
 export invalid_native_module;
-export unproved_procedure_completion;
+export unproved_callable_completion;

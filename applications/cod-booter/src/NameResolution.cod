@@ -5,8 +5,9 @@ using "ParserStorage.cod" no_node;
 using "ParserStorage.cod" module_node;
 using "ParserStorage.cod" module_item_node;
 using "ParserStorage.cod" using_node;
-using "ParserStorage.cod" procedure_node;
-using "ParserStorage.cod" procedure_head_node;
+using "ParserStorage.cod" callable_node;
+using "ParserStorage.cod" callable_head_node;
+using "ParserStorage.cod" is_function;
 using "ParserStorage.cod" parameter_node;
 using "ParserStorage.cod" ref_parameter_node;
 using "ParserStorage.cod" ptr_parameter_node;
@@ -76,7 +77,7 @@ data NameState {
 
 func ordinary_selection() -> u8 { return 1u8; }
 func symbolic_selection() -> u8 { return 2u8; }
-func procedure_binding() -> u8 { return 3u8; }
+func callable_binding() -> u8 { return 3u8; }
 func formal_binding() -> u8 { return 4u8; }
 func local_binding() -> u8 { return 5u8; }
 func owner_binding() -> u8 { return 6u8; }
@@ -96,6 +97,7 @@ func invalid_module_tree() -> u8 { return 8u8; }
 func name_storage_exhausted() -> u8 { return 9u8; }
 func nested_defer_in_drain() -> u8 { return 10u8; }
 func declaration_in_deferred_group() -> u8 { return 11u8; }
+func dynamic_symbol_in_function() -> u8 { return 12u8; }
 
 func reject_name(ref state:NameState in R, node:u64, diagnostic:u8) -> void where {owner R} {
     state.diagnostic <- diagnostic;
@@ -153,9 +155,12 @@ func resolve_value(source:const SourceBytes in S, nodes:const ExprNodes in N, re
     val found <- lookup(source, nodes, work, name, 0u64, state.used);
     if (found == no_node()) { reject_name(state, name, unresolved_name()); return; } else {};
     val kind <- bindings[found].kind;
-    if (nodes[name].kind == symbol_node() && kind != symbolic_selection()) {
-        reject_name(state, name, expected_symbol_binding());
-        return;
+    if (nodes[name].kind == symbol_node()) {
+        if (kind != symbolic_selection()) { reject_name(state, name, expected_symbol_binding()); return; } else {};
+        if (is_function(nodes, enclosing_callable(nodes, bindings, state.scope_node))) {
+            reject_name(state, name, dynamic_symbol_in_function());
+            return;
+        } else {};
     } else {};
     remember(bindings, name, bindings[found].declaration, kind);
 }
@@ -251,11 +256,22 @@ func first_item(nodes:const ExprNodes in N, tail:u64) -> u64 where {const owner 
     return no_node();
 }
 
-func procedure_head(nodes:const ExprNodes in N, definition:u64) -> u64 where {const owner N} {
+func callable_head(nodes:const ExprNodes in N, definition:u64) -> u64 where {const owner N} {
     val header <- nodes[definition].left;
     for (unused in 0u64 .. definition) {
-        if (nodes[header].kind == procedure_head_node()) { return header; } else {};
+        if (nodes[header].kind == callable_head_node()) { return header; } else {};
         (header <- nodes[header].left):void;
+    };
+    return no_node();
+}
+
+func enclosing_callable(nodes:const ExprNodes in N, names:const NameBindings in B, scope:u64) -> u64
+    where {const owner N, const owner B} {
+    if (scope == no_node()) { return scope; } else {};
+    val site <- scope;
+    for (unused in 0u64 .. syntax_len(nodes)) {
+        if (site == no_node() || nodes[site].kind != full_scope_node()) { return site; } else {};
+        (site <- names[site].scope):void;
     };
     return no_node();
 }
@@ -431,9 +447,9 @@ func register_module(source:const SourceBytes in S, nodes:const ExprNodes in N, 
             kind <- if (nodes[name].kind == symbol_node()) { symbolic_selection() } else { ordinary_selection() };
             declare_name(source, nodes, bindings, work, state, name, form, kind, unproved_module_binding());
         } else {};
-        if (nodes[form].kind == procedure_node()) {
-            name <- nodes[procedure_head(nodes, form)].left;
-            declare_name(source, nodes, bindings, work, state, name, form, procedure_binding(), unproved_module_binding());
+        if (nodes[form].kind == callable_node()) {
+            name <- nodes[callable_head(nodes, form)].left;
+            declare_name(source, nodes, bindings, work, state, name, form, callable_binding(), unproved_module_binding());
         } else {};
         if (state.diagnostic != 0u8) { return; } else {};
         (item <- work[item].next):void;
@@ -485,10 +501,10 @@ func resolve_formals(source:const SourceBytes in S, nodes:const ExprNodes in N, 
     };
 }
 
-func resolve_procedure(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
-                        ref work:NameWork in W, ref state:NameState in R, definition:u64) -> void
+func resolve_callable(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
+                      ref work:NameWork in W, ref state:NameState in R, definition:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
-    val head <- procedure_head(nodes, definition);
+    val head <- callable_head(nodes, definition);
     state.scope_node <- definition;
     register_owners(source, nodes, bindings, work, state, head);
     if (state.diagnostic != 0u8) { return; } else {};
@@ -501,17 +517,17 @@ func resolve_procedure(source:const SourceBytes in S, nodes:const ExprNodes in N
 }
 
 func resolve_module_bodies(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
-                           ref work:NameWork in W, ref state:NameState in R, first:u64, procedures:bool) -> void
+                           ref work:NameWork in W, ref state:NameState in R, first:u64, definitions:bool) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     val item <- first;
     val form <- no_node();
     for (unused in 0u64 .. syntax_len(nodes)) {
         if (item == no_node()) { return; } else {};
         form <- nodes[item].right;
-        if (nodes[form].kind == procedure_node()) {
-            if (procedures) { resolve_procedure(source, nodes, bindings, work, state, form); } else {};
+        if (nodes[form].kind == callable_node()) {
+            if (definitions) { resolve_callable(source, nodes, bindings, work, state, form); } else {};
         } else {
-            if (!procedures && nodes[form].kind != using_node()) {
+            if (!definitions && nodes[form].kind != using_node()) {
                 resolve_expression(source, nodes, bindings, work, state, form);
             } else {};
         };
@@ -571,7 +587,7 @@ export NameResolutionResult;
 export resolve_module_names;
 export ordinary_selection;
 export symbolic_selection;
-export procedure_binding;
+export callable_binding;
 export formal_binding;
 export local_binding;
 export owner_binding;
@@ -591,4 +607,5 @@ export name_storage_exhausted;
 export nested_defer_in_drain;
 export declaration_in_deferred_group;
 export first_item;
-export procedure_head;
+export callable_head;
+export enclosing_callable;

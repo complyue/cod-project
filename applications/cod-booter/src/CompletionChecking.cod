@@ -3,8 +3,9 @@ using "ParserStorage.cod" len as syntax_len;
 using "ParserStorage.cod" no_node;
 using "ParserStorage.cod" module_node;
 using "ParserStorage.cod" module_item_node;
-using "ParserStorage.cod" procedure_node;
-using "ParserStorage.cod" procedure_head_node;
+using "ParserStorage.cod" callable_node;
+using "ParserStorage.cod" callable_head_node;
+using "ParserStorage.cod" is_function;
 using "ParserStorage.cod" throws_clause_node;
 using "ParserStorage.cod" block_node;
 using "ParserStorage.cod" full_scope_node;
@@ -34,10 +35,13 @@ using "ExpressionParser.cod" ParseResult;
 using "NameResolution.cod" NameBindings;
 using "NameResolution.cod" NameWork;
 using "NameResolution.cod" first_item;
+using "NameResolution.cod" enclosing_callable;
 using "NameResolution.cod" exception_binding;
 using "OperandChecking.cod" OperandFacts;
 using "OperandChecking.cod" nullable_ptr;
 using "OperandChecking.cod" never_result;
+using "OperandChecking.cod" void_result;
+using "OperandChecking.cod" has_value_tail;
 using "ModuleExports.cod" exception_root_identity;
 using "ModuleExports.cod" null_pointer_identity;
 using "ModuleExports.cod" missing_return_identity;
@@ -163,7 +167,7 @@ func prepare_context(nodes:const ExprNodes in N, facts:const OperandFacts in F,
         inherit_context(sites, at, last, guard, incoming, replacing);
         return;
     } else {};
-    if (kind == procedure_node()) {
+    if (kind == callable_node()) {
         inherit_context(sites, at, nodes[at].right, no_node(), no_node(), no_node());
         return;
     } else {};
@@ -195,18 +199,8 @@ func declared_throw(nodes:const ExprNodes in N, definition:u64) -> u64 where {co
     val clause <- nodes[definition].left;
     for (unused in 0u64 .. definition) {
         if (nodes[clause].kind == throws_clause_node()) { return clause; } else {};
-        if (nodes[clause].kind == procedure_head_node()) { return no_node(); } else {};
+        if (nodes[clause].kind == callable_head_node()) { return no_node(); } else {};
         (clause <- nodes[clause].left):void;
-    };
-    return no_node();
-}
-
-func enclosing_callable(nodes:const ExprNodes in N, names:const NameBindings in B, scope:u64) -> u64
-    where {const owner N, const owner B} {
-    val site <- scope;
-    for (unused in 0u64 .. scope + 1u64) {
-        if (nodes[site].kind != full_scope_node()) { return site; } else {};
-        (site <- names[site].scope):void;
     };
     return no_node();
 }
@@ -321,6 +315,14 @@ func record_registration(names:const NameBindings in B, ref sites:CompletionSite
 
 func can_continue(sites:const CompletionSites in X, child:u64) -> bool where {const owner X} {
     return child == no_node() || sites[child].can_continue != 0u8;
+}
+
+func can_miss_return(nodes:const ExprNodes in N, facts:const OperandFacts in F,
+                     sites:const CompletionSites in X, definition:u64) -> bool
+    where {const owner N, const owner F, const owner X} {
+    if (nodes[definition].kind != callable_node() || !can_continue(sites, nodes[definition].right)) { return false; } else {};
+    if (!is_function(nodes, definition)) { return true; } else {};
+    return facts[definition].kind != void_result() && !has_value_tail(nodes, facts, definition);
 }
 
 func operands_can_complete(nodes:const ExprNodes in N, sites:const CompletionSites in X, at:u64) -> bool
@@ -505,7 +507,7 @@ func propagate_return_failure(nodes:const ExprNodes in N, names:const NameBindin
             return no_node();
         } else {};
         caller <- enclosing_callable(nodes, names, names[use].scope);
-        if (nodes[caller].kind == procedure_node()) { (count <- enqueue_return_failure(sites, caller, count)):void; } else {};
+        if (nodes[caller].kind == callable_node()) { (count <- enqueue_return_failure(sites, caller, count)):void; } else {};
         (use <- sites[use].missing_return_user):void;
     };
     return count;
@@ -521,13 +523,13 @@ func check_missing_return_paths(nodes:const ExprNodes in N, names:const NameBind
     val count <- 0u64;
     val definition <- no_node();
     for (at in 0u64 .. used) {
-        if (nodes[at].kind == procedure_node() && can_continue(sites, nodes[at].right) &&
+        if (can_miss_return(nodes, facts, sites, at) &&
             !has_terminal_defer(nodes, links, facts, nodes[at].right, used)) {
             (count <- enqueue_return_failure(sites, at, count)):void;
         } else {};
         if (nodes[at].kind == throw_node() && sites[at].category == missing_return_identity()) {
             definition <- enclosing_callable(nodes, names, names[at].scope);
-            if (sites[at].destination == definition && nodes[definition].kind == procedure_node()) {
+            if (sites[at].destination == definition && nodes[definition].kind == callable_node()) {
                 (count <- enqueue_return_failure(sites, definition, count)):void;
             } else {};
         } else {};
@@ -569,7 +571,7 @@ func check_module_completion(nodes:const ExprNodes in N, tree:const ParseResult 
     } else {};
     for (at in 0u64 .. tree.used) {
         initialize_site(sites, at);
-        if (nodes[at].kind == procedure_node()) {
+        if (nodes[at].kind == callable_node()) {
             sites[at].throws_clause <- declared_throw(nodes, at);
             {};
         } else {};
@@ -593,6 +595,7 @@ export CompletionSites;
 export CompletionCheckResult;
 export check_module_completion;
 export can_continue;
+export can_miss_return;
 export possible_failure;
 export definite_failure;
 export callable_return;

@@ -42,8 +42,8 @@ func module_node() -> u8 { return 26u8; }
 func module_item_node() -> u8 { return 27u8; }
 func using_node() -> u8 { return 28u8; }
 func module_path_node() -> u8 { return 29u8; }
-func procedure_node() -> u8 { return 30u8; }
-func procedure_head_node() -> u8 { return 31u8; }
+func callable_node() -> u8 { return 30u8; }
+func callable_head_node() -> u8 { return 31u8; }
 func parameter_node() -> u8 { return 32u8; }
 func ref_parameter_node() -> u8 { return 33u8; }
 func ptr_parameter_node() -> u8 { return 34u8; }
@@ -56,7 +56,13 @@ func deferred_block_node() -> u8 { return 40u8; }
 func discard_node() -> u8 { return 41u8; }
 
 func discarded_guard_result() -> u64 { return 1u64; }
+func procedure_definition() -> u64 { return 0u64; }
+func function_definition() -> u64 { return 1u64; }
 func no_node() -> u64 { return 18446744073709551615u64; }
+
+func is_function(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
+    return at != no_node() && nodes[at].kind == callable_node() && nodes[at].number == function_definition();
+}
 
 func len(tokens:const Tokens in T) -> u64 where {const owner T} {
     return intrinsic (len)(tokens);
@@ -99,8 +105,8 @@ export module_node;
 export module_item_node;
 export using_node;
 export module_path_node;
-export procedure_node;
-export procedure_head_node;
+export callable_node;
+export callable_head_node;
 export parameter_node;
 export ref_parameter_node;
 export ptr_parameter_node;
@@ -112,4 +118,7 @@ export owner_clause_node;
 export deferred_block_node;
 export discard_node;
 export discarded_guard_result;
+export procedure_definition;
+export function_definition;
+export is_function;
 export no_node;

@@ -8,8 +8,10 @@ using "ParserStorage.cod" module_node;
 using "ParserStorage.cod" module_item_node;
 using "ParserStorage.cod" using_node;
 using "ParserStorage.cod" module_path_node;
-using "ParserStorage.cod" procedure_node;
-using "ParserStorage.cod" procedure_head_node;
+using "ParserStorage.cod" callable_node;
+using "ParserStorage.cod" callable_head_node;
+using "ParserStorage.cod" procedure_definition;
+using "ParserStorage.cod" function_definition;
 using "ParserStorage.cod" parameter_node;
 using "ParserStorage.cod" ref_parameter_node;
 using "ParserStorage.cod" ptr_parameter_node;
@@ -21,6 +23,7 @@ using "Lexer.cod" module_path;
 using "Lexer.cod" using_word;
 using "Lexer.cod" symbol_word;
 using "Lexer.cod" proc_word;
+using "Lexer.cod" func_word;
 using "Lexer.cod" ref_word;
 using "Lexer.cod" ptr_word;
 using "Lexer.cod" val_word;
@@ -108,7 +111,7 @@ func parse_parameters(source:const SourceBytes in S, tokens:const Tokens in T,
     return no_node();
 }
 
-func parse_procedure_head(source:const SourceBytes in S, tokens:const Tokens in T,
+func parse_callable_head(source:const SourceBytes in S, tokens:const Tokens in T,
                           ref nodes:ExprNodes in A, ref result:ParseResult in R, past:u64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     if (!parse_identifier(tokens, nodes, result, past, expected_name())) { return; } else {};
@@ -122,7 +125,7 @@ func parse_procedure_head(source:const SourceBytes in S, tokens:const Tokens in 
     val parameters <- parse_parameters(source, tokens, nodes, result, past);
     if (result.diagnostic != 0u8) { return; } else {};
     val close <- result.next;
-    append_node(nodes, result, procedure_head_node(), nodes[name].first, tokens[close].past,
+    append_node(nodes, result, callable_head_node(), nodes[name].first, tokens[close].past,
                 0u64, name, parameters, tokens[open].first);
     if (result.diagnostic == 0u8) { (result.next <- close + 1u64):void; } else {};
 }
@@ -177,12 +180,12 @@ func parse_owner_clauses(source:const SourceBytes in S, tokens:const Tokens in T
     (result.diagnostic <- expected_owner_clause()):void;
 }
 
-func parse_procedure(source:const SourceBytes in S, tokens:const Tokens in T,
-                     ref nodes:ExprNodes in A, ref result:ParseResult in R, past:u64) -> void
+func parse_callable(source:const SourceBytes in S, tokens:const Tokens in T,
+                    ref nodes:ExprNodes in A, ref result:ParseResult in R, past:u64, kind:u64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val first <- tokens[result.next].first;
     result.next <- result.next + 1u64;
-    parse_procedure_head(source, tokens, nodes, result, past);
+    parse_callable_head(source, tokens, nodes, result, past);
     if (result.diagnostic != 0u8) { return; } else {};
     if (punct_pair_at(source, tokens, result.next, past, 45u8, 62u8)) { # '->'
         if (!parse_type_clause(tokens, nodes, result, past, result_clause_node())) { return; } else {};
@@ -202,7 +205,7 @@ func parse_procedure(source:const SourceBytes in S, tokens:const Tokens in T,
     parse_block(source, tokens, nodes, result, past);
     if (result.diagnostic != 0u8) { return; } else {};
     val body <- result.root;
-    append_node(nodes, result, procedure_node(), first, nodes[body].past, 0u64, header, body, first);
+    append_node(nodes, result, callable_node(), first, nodes[body].past, kind, header, body, first);
 }
 
 func parse_module_item(source:const SourceBytes in S, tokens:const Tokens in T,
@@ -210,9 +213,11 @@ func parse_module_item(source:const SourceBytes in S, tokens:const Tokens in T,
                        past:u64, previous:u64) -> bool
     where {const owner S, const owner T, owner A, owner R} {
     val at <- result.next;
-    val procedure_form <- proc_word(source, tokens[at]);
-    if (procedure_form) {
-        parse_procedure(source, tokens, nodes, result, past);
+    val function_form <- func_word(source, tokens[at]);
+    val callable_form <- function_form || proc_word(source, tokens[at]);
+    if (callable_form) {
+        val kind <- if (function_form) { function_definition() } else { procedure_definition() };
+        parse_callable(source, tokens, nodes, result, past, kind);
     } else {
         if (using_word(source, tokens[at])) {
             parse_selection(source, tokens, nodes, result, past);
@@ -227,7 +232,7 @@ func parse_module_item(source:const SourceBytes in S, tokens:const Tokens in T,
         end <- tokens[result.next].past;
         (result.next <- result.next + 1u64):void;
     } else {
-        if (!procedure_form) { result.diagnostic <- expected_module_separator(); return false; } else {};
+        if (!callable_form) { result.diagnostic <- expected_module_separator(); return false; } else {};
     };
     val first <- tokens[at].first;
     append_node(nodes, result, module_item_node(), first, end, 0u64, previous, form, first);

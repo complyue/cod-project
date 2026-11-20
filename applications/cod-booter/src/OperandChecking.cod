@@ -10,7 +10,8 @@ using "ParserStorage.cod" try_node;
 using "ParserStorage.cod" catch_clause_node;
 using "ParserStorage.cod" catch_handler_node;
 using "ParserStorage.cod" finally_clause_node;
-using "ParserStorage.cod" procedure_node;
+using "ParserStorage.cod" callable_node;
+using "ParserStorage.cod" is_function;
 using "ParserStorage.cod" parameter_node;
 using "ParserStorage.cod" ref_parameter_node;
 using "ParserStorage.cod" ptr_parameter_node;
@@ -42,12 +43,13 @@ using "ExpressionParser.cod" ParseResult;
 using "NameResolution.cod" NameBindings;
 using "NameResolution.cod" NameWork;
 using "NameResolution.cod" first_item;
-using "NameResolution.cod" procedure_head;
+using "NameResolution.cod" callable_head;
+using "NameResolution.cod" enclosing_callable;
 using "NameResolution.cod" builtin_u64;
 using "NameResolution.cod" builtin_void;
 using "NameResolution.cod" ordinary_selection;
 using "NameResolution.cod" symbolic_selection;
-using "NameResolution.cod" procedure_binding;
+using "NameResolution.cod" callable_binding;
 using "NameResolution.cod" formal_binding;
 using "NameResolution.cod" local_binding;
 using "NameResolution.cod" exception_binding;
@@ -109,6 +111,8 @@ func operand_storage_exhausted() -> u8 { return 12u8; }
 func invalid_operand_tree() -> u8 { return 13u8; }
 func wrong_finally_result() -> u8 { return 14u8; }
 func duplicate_catch_category() -> u8 { return 15u8; }
+func procedure_call_in_function() -> u8 { return 16u8; }
+func value_tail_in_void_function() -> u8 { return 17u8; }
 
 func set_fact(ref facts:OperandFacts in F, at:u64, kind:u8, reception:u8,
               owner_site:u64, identity:u64, checked_exception:u8) -> void where {owner F} {
@@ -238,7 +242,7 @@ func check_signature(nodes:const ExprNodes in N, names:const NameBindings in B, 
                      selected:const SelectedExports in E, ref facts:OperandFacts in F,
                      ref report:OperandCheckResult in R, definition:u64, used:u64) -> void
     where {const owner N, const owner B, const owner L, const owner E, owner F, owner R} {
-    val head <- procedure_head(nodes, definition);
+    val head <- callable_head(nodes, definition);
     check_formals(nodes, names, links, facts, report, definition, nodes[head].right, used);
     if (report.diagnostic != 0u8) { return; } else {};
     check_signature_clauses(nodes, names, links, selected, facts, report, definition, links[head].next, used);
@@ -333,9 +337,12 @@ func check_direct_call(nodes:const ExprNodes in N, names:const NameBindings in B
                        ref facts:OperandFacts in F, ref owners:CallOwners in O, at:u64, used:u64) -> u8
     where {const owner N, const owner B, const owner L, owner F, owner O} {
     val callee <- nodes[at].left;
-    if (names[callee].kind != procedure_binding()) { return unproved_call_target(); } else {};
+    if (names[callee].kind != callable_binding()) { return unproved_call_target(); } else {};
     val definition <- names[callee].declaration;
-    val head <- procedure_head(nodes, definition);
+    if (!is_function(nodes, definition) && is_function(nodes, enclosing_callable(nodes, names, names[at].scope))) {
+        return procedure_call_in_function();
+    } else {};
+    val head <- callable_head(nodes, definition);
     val formal <- first_item(nodes, nodes[head].right);
     val argument <- first_item(nodes, nodes[at].right);
     val diagnostic <- 0u8;
@@ -475,16 +482,30 @@ func check_scope_tail(nodes:const ExprNodes in N, ref facts:OperandFacts in F, s
     return diagnostic;
 }
 
+func has_value_tail(nodes:const ExprNodes in N, facts:const OperandFacts in F, definition:u64) -> bool
+    where {const owner N, const owner F} {
+    return is_function(nodes, definition) && facts[nodes[definition].right].kind == scalar_u64();
+}
+
+func check_callable_tail(nodes:const ExprNodes in N, facts:const OperandFacts in F, definition:u64) -> u8
+    where {const owner N, const owner F} {
+    if (!is_function(nodes, definition)) { return 0u8; } else {};
+    val kind <- facts[nodes[definition].right].kind;
+    if (kind == 0u8) { return unproved_result_contract(); } else {};
+    if (kind == scalar_u64() && facts[definition].kind == void_result()) { return value_tail_in_void_function(); } else {};
+    return 0u8;
+}
+
 func check_return(nodes:const ExprNodes in N, names:const NameBindings in B, ref facts:OperandFacts in F,
                    at:u64) -> u8 where {const owner N, const owner B, owner F} {
     val scope <- names[at].scope;
     val value <- nodes[at].left;
     if (nodes[scope].kind == module_node()) { return wrong_return_type(); } else {};
     if (nodes[scope].kind == full_scope_node()) { return merge_result(facts, scope, result_kind(nodes, facts, value, true)); } else {};
-    if (nodes[scope].kind != procedure_node()) { return unproved_result_contract(); } else {};
+    if (nodes[scope].kind != callable_node()) { return unproved_result_contract(); } else {};
     if (value != no_node() && facts[value].kind == never_result()) { return 0u8; } else {};
     if (facts[scope].kind == void_result()) {
-        if (value != no_node()) { return wrong_return_type(); } else {};
+        if (value != no_node() && facts[value].kind != void_result()) { return wrong_return_type(); } else {};
         return 0u8;
     } else {};
     if (value == no_node()) { return wrong_return_type(); } else {};
@@ -542,6 +563,7 @@ func check_operand(nodes:const ExprNodes in N, names:const NameBindings in B, li
         return 0u8;
     } else {};
     if (kind == catch_clause_node()) { return check_catch_clause(nodes, facts, at); } else {};
+    if (kind == callable_node()) { return check_callable_tail(nodes, facts, at); } else {};
     if (names[at].scope == no_node()) { return 0u8; } else {};
     if (kind == literal_node()) { scalar_fact(facts, at, independent_value(), no_node()); return 0u8; } else {};
     if (kind == name_node()) {
@@ -633,7 +655,7 @@ func check_module_operands(nodes:const ExprNodes in N, tree:const ParseResult in
     };
     report.diagnostic <- 0u8;
     for (at in 0u64 .. tree.used) {
-        if (nodes[at].kind == procedure_node()) {
+        if (nodes[at].kind == callable_node()) {
             check_signature(nodes, names, links, selected, facts, report, at, tree.used);
             if (report.diagnostic != 0u8) { return false; } else {};
         } else {};
@@ -642,7 +664,7 @@ func check_module_operands(nodes:const ExprNodes in N, tree:const ParseResult in
         prepare_result_use(nodes, facts, tree.used - 1u64 - offset);
     };
     # The syntax puts operands before their operation and local declarations
-    # before uses. Procedure contracts are already available for forward calls.
+    # before uses. Callable contracts are already available for forward calls.
     for (at in 0u64 .. tree.used) {
         report.diagnostic <- check_operand(nodes, names, links, selected, facts, owners, at, tree.used);
         if (report.diagnostic != 0u8) { report.node <- at; return false; } else {};
@@ -658,6 +680,7 @@ export OperandCheckResult;
 export check_module_operands;
 export void_result;
 export scalar_u64;
+export has_value_tail;
 export never_result;
 export exception_type;
 export null_literal;
