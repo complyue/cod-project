@@ -2,6 +2,7 @@
 
 #include "cod_providers.h"
 
+#include "compile_diagnostic.h"
 #include "lang_llvm_commands_c.h"
 #include "lang_llvm_object_c.h"
 
@@ -18,11 +19,6 @@ COMMAND_OFFSET(b);
 COMMAND_OFFSET(c);
 COMMAND_OFFSET(d);
 #undef COMMAND_OFFSET
-
-enum {
-  llvm_ok, llvm_invalid_command_range, llvm_construction_failed, llvm_verification_failed,
-  llvm_emission_failed, llvm_publication_failed
-};
 
 cod_native_status cod_native_LLVMSession_construct_impl(uint64_t *resource, cod_native_LLVMSession_failure *failure) {
   cod_llvm_session *session = calloc(1, sizeof(*session));

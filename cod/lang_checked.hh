@@ -15218,7 +15218,8 @@ class ScalarChecker {
     if (returning) implementation_gap(expr.at, "return inspection through a native here operation");
     if (std::ranges::any_of(body.places, [&](const Expression *capture) {
           const auto &view = operations.at(capture);
-          return !view.read_only && (view.type.kind != Type::native_handle || !const_owner(*one_owner(view)));
+          // The fixed handle lends a native resource capability through the live owner.
+          return !view.read_only && view.type.kind != Type::native_handle;
         }))
       implementation_gap(expr.at, "a writable captured supplier place in a native here operation");
     CheckedOperation operation;
