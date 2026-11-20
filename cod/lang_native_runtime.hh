@@ -7,7 +7,7 @@
 
 namespace cod::language {
 
-inline std::string native_runtime_source(bool regions) {
+inline std::string native_runtime_source() {
   std::string source = "#include <cstdint>\nenum class CoDException : std::uint64_t {\n";
   for (const auto &category : exception_categories)
     source += std::string(category.name) + " = " + std::to_string(exception_id(category.category)) + ",\n";
@@ -165,73 +165,6 @@ void cod_lang_print_u64(std::uint64_t value) { std::printf("%llu\n", static_cast
 void cod_lang_print_f32(float value) { std::printf("%.9g\n", static_cast<double>(value)); }
 void cod_lang_print_f64(double value) { std::printf("%.17g\n", value); }
 void cod_lang_print_bool(std::uint32_t value) { std::puts(value ? "true" : "false"); }
-}
-)CPP";
-  if (!regions) return source;
-  source += R"CPP(
-#include <shilos/region.hh>
-
-struct CoDRegionRoot {
-  static constexpr shilos::UUID TYPE_UUID{"d5b09c4c-21dd-4b88-90bb-31e057c6c627"};
-  explicit CoDRegionRoot(shilos::memory_region<CoDRegionRoot> &) {}
-  CoDRegionRoot(const CoDRegionRoot &) = delete;
-  CoDRegionRoot(CoDRegionRoot &&) = delete;
-  CoDRegionRoot &operator=(const CoDRegionRoot &) = delete;
-  CoDRegionRoot &operator=(CoDRegionRoot &&) = delete;
-};
-using CoDRegion = shilos::memory_region<CoDRegionRoot>;
-using CoDRegionOwner = shilos::auto_region<CoDRegionRoot>;
-
-)CPP";
-  source += R"CPP(
-extern "C" {
-void *cod_lang_region_new(std::uint64_t capacity, std::uint64_t *status) {
-  if (capacity < sizeof(CoDRegionRoot) || capacity > std::numeric_limits<std::size_t>::max() - sizeof(CoDRegion)) {
-    status[0] = static_cast<std::uint64_t>(CoDException::InvalidCapacityError);
-    return nullptr;
-  }
-  try { return CoDRegion::alloc_region(static_cast<std::size_t>(capacity)); }
-  catch (const std::bad_alloc &) { status[0] = static_cast<std::uint64_t>(CoDException::OutOfMemoryError); return nullptr; }
-}
-void cod_lang_region_free(void *region) { CoDRegion::free_region(static_cast<CoDRegion *>(region)); }
-std::uint64_t cod_lang_region_root(void *owner) {
-  auto &region = *static_cast<CoDRegion *>(owner);
-  return static_cast<std::uint64_t>(reinterpret_cast<std::byte *>(region.root().get()) -
-                                    reinterpret_cast<std::byte *>(&region));
-}
-std::uint64_t cod_lang_region_reserve_root(void *owner, std::uint64_t bytes, std::uint64_t alignment,
-                                          std::uint64_t *status) {
-  auto &region = *static_cast<CoDRegion *>(owner);
-  // The empty native root marks the start of the LLVM-defined root storage.
-  // Reserve its remaining bytes in place; no extra root object or pointer table.
-  const auto offset = cod_lang_region_root(owner);
-  if (bytes < sizeof(CoDRegionRoot) || !alignment ||
-      reinterpret_cast<std::uintptr_t>(region.root().get()) % alignment)
-    runtime_failure("unsupported native root layout");
-  try {
-    if (bytes - sizeof(CoDRegionRoot) > std::numeric_limits<std::size_t>::max()) throw std::bad_alloc();
-    region.allocate(static_cast<std::size_t>(bytes - sizeof(CoDRegionRoot)), 1);
-    return offset;
-  } catch (const std::bad_alloc &) {
-    status[0] = static_cast<std::uint64_t>(CoDException::RegionCapacityExceededError);
-    status[1] = region.free_capacity() + sizeof(CoDRegionRoot);
-    return 0;
-  }
-}
-std::uint64_t cod_lang_region_alloc(void *owner, std::uint64_t bytes, std::uint64_t alignment, std::uint64_t *status) {
-  auto &region = *static_cast<CoDRegion *>(owner);
-  try {
-    if (bytes > std::numeric_limits<std::size_t>::max()) throw std::bad_alloc();
-    auto *storage = region.allocate(static_cast<std::size_t>(bytes), static_cast<std::size_t>(alignment));
-    return static_cast<std::uint64_t>(static_cast<std::byte *>(storage) - reinterpret_cast<std::byte *>(&region));
-  } catch (const std::bad_alloc &) {
-    status[0] = static_cast<std::uint64_t>(CoDException::RegionCapacityExceededError);
-    status[1] = region.capacity() - region.occupation();
-    return 0;
-  }
-}
-std::uint64_t cod_lang_region_used(void *region) { return static_cast<CoDRegion *>(region)->occupation(); }
-std::uint64_t cod_lang_region_capacity(void *region) { return static_cast<CoDRegion *>(region)->capacity(); }
 }
 )CPP";
   return source;

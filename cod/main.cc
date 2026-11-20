@@ -650,7 +650,7 @@ int CodTool::compileLanguage(const CodReplConfig &config, const fs::path &entry,
     };
     if (emission.ir) write(*emission.ir, compilation.llvm_ir);
     if (emission.bitcode) write(*emission.bitcode, compilation.bitcode);
-    if (emission.runtime) write(*emission.runtime, cod::language::native_runtime_source(compilation.uses_regions));
+    if (emission.runtime) write(*emission.runtime, cod::language::native_runtime_source());
     if (check_only) return 0;
 
     llvm::SmallString<256> directory;
@@ -675,7 +675,7 @@ int CodTool::compileLanguage(const CodReplConfig &config, const fs::path &entry,
     } cleanup{source, bitcode, runtime_bitcode, executable, temporary};
     cod::cache::BitcodeCompiler compiler;
     write(bitcode, compilation.bitcode);
-    write(source, cod::language::native_runtime_source(compilation.uses_regions));
+    write(source, cod::language::native_runtime_source());
     // Native optimization needs the files, not duplicate in-memory encodings.
     std::string{}.swap(compilation.llvm_ir);
     std::string{}.swap(compilation.bitcode);

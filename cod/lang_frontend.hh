@@ -16,7 +16,6 @@ struct Compilation {
   std::vector<std::string> warnings;
   std::string llvm_ir;
   std::string bitcode;
-  bool uses_regions = false;
 };
 
 class Compiler {
