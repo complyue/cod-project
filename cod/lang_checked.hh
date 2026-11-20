@@ -356,7 +356,8 @@ class ScalarChecker {
   using Access = std::vector<std::optional<bool>>;
   // Only a known argument or return contract can supply an implicit callable's result.
   enum class ExpectedTypeUse { materialization, callable_result };
-  enum class EvidenceRead { payload, target, binding_slot, discarded };
+  enum class EvidenceRead { payload, target, projection, binding_slot, discarded };
+  enum class IndexedUse { value_only, immediate_target };
   static ExpectedTypeUse expected_type_use(ArgumentMode mode) {
     return mode == ArgumentMode::value ? ExpectedTypeUse::callable_result : ExpectedTypeUse::materialization;
   }
@@ -6111,9 +6112,12 @@ class ScalarChecker {
     if (!substitutions) throw std::logic_error("unchecked method demand");
     for (size_t i = 0; i < arguments.size(); ++i) if (arguments[i].kind == Type::array) {
       const auto &parameter = parameter_at(definition, i);
-      if (argument_mode(parameter) != ArgumentMode::borrowed_read || !parameter.read_only ||
-          definition.scope_inputs || definition.source->symbolic || caller_bindings(definition))
-        implementation_gap(at, "array parameters require ordinary readonly borrows");
+      const auto mode = argument_mode(parameter);
+      const auto &element = program_.arrays.at(arguments[i].identity).element;
+      const bool readable = mode == ArgumentMode::borrowed_read && parameter.read_only;
+      const bool writable = mode == ArgumentMode::borrowed_ref && !parameter.read_only && indexed_product(element, at);
+      if ((!readable && !writable) || definition.scope_inputs || definition.source->symbolic || caller_bindings(definition))
+        implementation_gap(at, "array parameters require readonly borrows or writable refs to initialized numeric products");
     }
     const auto &supplied = program_.query_environments[query_environment].result;
     const auto result = supplied ? ResultEvidence{supplied, ResultOrigin::supplied} :
@@ -6228,6 +6232,11 @@ class ScalarChecker {
       distinct_bindings = !left.empty() && !right.empty() && intersect(left, right).empty();
     }
     const auto &effects = read_effects(*operation.callee, distinct_bindings);
+    for (size_t i = 0; i < views.size(); ++i)
+      if (views[i].indexed_target && argument_mode(parameters[i]) != ArgumentMode::value &&
+          (uses_caller_bindings || &expr == prepared_call_ || target.result.borrowed() ||
+           target.result.type->kind == Type::procedure || !effects.binding_sources.empty()))
+        implementation_gap(expr.at, "a call that can retain an indexed array target");
     if (uses_caller_bindings) {
       for (size_t i = 0; i < views.size(); ++i) {
         if (&expr == prepared_call_) require_deferred_slots(views[i], expr.at);
@@ -6856,11 +6865,19 @@ class ScalarChecker {
     if (type.kind != Type::array || !borrowed)
       fail(at, "intrinsic (len) requires a borrowed array");
   }
-  const CheckedArray &array_read_shape(const Type &type, bool view, bool read_only, const Location &at) const {
+  bool indexed_product(const Type &type, const Location &at) const {
+    if (type.kind != Type::product) return false;
+    const auto &schema = product_schema(type, at);
+    // These initialized fields can change bits without changing reference or predicate facts.
+    return std::ranges::all_of(schema.fields, [](const auto &field) {
+      return field.storage == PlaceKind::value && numeric(field.type);
+    });
+  }
+  const CheckedArray &indexed_array(const Type &type, bool view, bool read_only, const Location &at) const {
     if (type.kind != Type::array) implementation_gap(at, "indexed operation on '" + type_name(type) + "'");
     const auto &array = program_.arrays.at(type.identity);
-    if (!view || !read_only || !scalar_type(array.element))
-      implementation_gap(at, "indexed reads require a readonly borrowed array of scalar elements");
+    if (!view || (!(read_only && scalar_type(array.element)) && !indexed_product(array.element, at)))
+      implementation_gap(at, "indexed access requires a borrowed array of initialized numeric products or readonly scalar elements");
     return array;
   }
   static void check_array_index(const CheckedArray &array, const Type &index, const Location &at) {
@@ -6940,6 +6957,7 @@ class ScalarChecker {
     result.operand_type = parent.type;
     result.product_field = index;
     result.view = true;
+    result.indexed_target = parent.indexed_target;
     result.owners = parent.owners;
     result.read_only = parent.read_only || (field.storage == PlaceKind::value ? readonly_field(field) : field.source->read_only);
     result.initialization = parent.initialization;
@@ -11367,9 +11385,10 @@ class ScalarChecker {
       const auto array = state.value;
       if (source && source != Type::never) {
         if (state.required) {
-          if (!state.validating_body && read != EvidenceRead::payload && read != EvidenceRead::discarded)
+          if (!state.validating_body && read != EvidenceRead::payload && read != EvidenceRead::discarded &&
+              read != EvidenceRead::projection)
             implementation_gap(expr.at, "borrowing an indexed array element");
-          shape = &array_read_shape(*source, array.view == true && !array.mixed_view, array.read_only == true, expr.at);
+          shape = &indexed_array(*source, array.view == true && !array.mixed_view, array.read_only == true, expr.at);
         } else if (source->kind == Type::array) shape = &program_.arrays.at(source->identity);
         if (shape) {
           require_type_initialized(state, state.target, "array operand", expr.at);
@@ -11381,13 +11400,13 @@ class ScalarChecker {
       if (!shape || !index) return {};
       if (state.required) check_array_index(*shape, *index, expr.children[1]->at);
       record_type_invocation(expr, state, {0, Completion::failure(exception_id(ExceptionCategory::index_out_of_bounds)).reason}, true);
-      view = {true, true, {}, array.owner};
+      view = {array.read_only, true, {}, array.owner};
       target_facts.initialized = true;
       target_facts.presence = TargetPresence::present;
       return shape->element;
     }
     case K::field: {
-      const auto type = child(0, false, true, EvidenceRead::target);
+      const auto type = child(0, false, true, EvidenceRead::projection);
       if (type == Type::never) return Type::never;
       if (type && type->kind == Type::product) {
         const auto &schema = product_schema(*type, expr.at);
@@ -14801,7 +14820,7 @@ class ScalarChecker {
   Type check(const Expression &expr, CheckedInstance *instance,
              std::map<const Expression *, CheckedOperation> &operations, bool read = true, bool discard = false,
              const Type *expected = nullptr, ExpectedTypeUse expected_use = ExpectedTypeUse::materialization,
-             bool write_slot = false) {
+             bool write_slot = false, IndexedUse indexed_use = IndexedUse::value_only) {
     using K = Expression::Kind;
     CheckedOperation operation;
     if (checking_method_ && checking_method_->here_group &&
@@ -15150,7 +15169,8 @@ class ScalarChecker {
         // input evidence without pre-analyzing every normally producing operand.
         auto before = declared_builtin && !preparation.type ? std::optional{evidence_state()} : std::nullopt;
         const auto argument = check(*expr.children[i], instance, operations, mode == ArgumentMode::value, false,
-            preparation.type ? &*preparation.type : nullptr, expected_type_use(mode));
+            preparation.type ? &*preparation.type : nullptr, expected_type_use(mode), false,
+            mode == ArgumentMode::value ? IndexedUse::value_only : IndexedUse::immediate_target);
         if (argument == Type::never) {
           if (before) {
             evidence = argument_evidence(expr, std::move(*before), i);
@@ -15738,7 +15758,8 @@ class ScalarChecker {
       operation.arguments = {{ArgumentMode::borrowed_ptr, Type::never, expr.kind == K::rebind},
                              {expr.kind == K::transfer ? ArgumentMode::value : ArgumentMode::borrowed_ptr, Type::never}};
       const auto destination = check(*expr.children[0], instance, operations, false, false, nullptr,
-          ExpectedTypeUse::materialization, expr.kind == K::rebind);
+          ExpectedTypeUse::materialization, expr.kind == K::rebind,
+          expr.kind == K::transfer && !prepared ? IndexedUse::immediate_target : IndexedUse::value_only);
       operation.arguments[0].type = destination;
       if (destination == Type::never) {
         child(1, expr.kind == K::transfer);
@@ -15839,6 +15860,7 @@ class ScalarChecker {
       operation.type = operation.operand_type = destination;
       select_targets(operation, written);
       operation.owners = target.owners;
+      operation.indexed_target = target.indexed_target;
       operation.selection_identity = target.selection_identity;
       operation.origins = target.origins;
       operation.read_only = operation.view = true;
@@ -16005,31 +16027,39 @@ class ScalarChecker {
       const CheckedArray *shape = nullptr;
       if (source != Type::never) {
         const auto &array = operations.at(expr.children.front().get());
-        shape = &array_read_shape(source, array.view && !array.mixed_view, array.read_only, expr.at);
+        shape = &indexed_array(source, array.view && !array.mixed_view, array.read_only, expr.at);
+        operation.operand_type = source;
         require_live_view(array, expr.at);
         read_view(array, expr.at, "array operand");
       }
       const auto index = child(1);
       if (!shape || index == Type::never) { operation.type = Type::never; break; }
-      if (!read || write_slot) implementation_gap(expr.at, "borrowing an indexed array element");
       check_array_index(*shape, index, expr.children[1]->at);
+      if (read && shape->element.kind == Type::product)
+        implementation_gap(expr.at, "reading a whole indexed product as an independent value");
       operation.type = shape->element;
-      operation.operand_type = source;
-      // Value consumers still select overloads using the underlying readonly target.
+      // Value consumers select overloads using the target's access and owner.
       const auto &array = operations.at(expr.children.front().get());
       require_live_view(array, expr.at);
-      operation.view = operation.read_only = true;
+      operation.view = operation.indexed_target = true;
+      operation.read_only = array.read_only;
       operation.owners = array.owners;
       operation.initialization = CleanupEquations::Initialization{};
       note_abrupt(expr.at, {exception_id(ExceptionCategory::index_out_of_bounds)});
       break;
     }
     case K::field: {
-      const auto source = child(0, false);
+      const auto source = check(*expr.children.front(), instance, operations, false, false, nullptr,
+          ExpectedTypeUse::materialization, false, IndexedUse::immediate_target);
       if (source == Type::never) {
         const auto &base = ungrouped_expression(*expr.children.front());
-        const auto &type = operations.at(&base).operand_type;
+        const auto &checked = operations.at(&base);
+        const auto &type = checked.operand_type;
         if (type.kind == Type::product) product_field(product_schema(type, expr.at), expr);
+        else if (base.kind == K::index && type.kind == Type::array) {
+          const auto &element = program_.arrays.at(type.identity).element;
+          if (element.kind == Type::product) product_field(product_schema(element, expr.at), expr);
+        }
         else check_exception_field(expr);
         operation.type = Type::never;
         break;
@@ -16239,6 +16269,8 @@ class ScalarChecker {
     }
     default: implementation_gap(expr.at, "source expression '" + expr.text + "' is outside the scalar-method foundation");
     }
+    if (operation.indexed_target && (write_slot || (!read && indexed_use != IndexedUse::immediate_target)))
+      implementation_gap(expr.at, "borrowing an indexed array element outside a direct projection, transfer or call");
     if (operation.type == Type::never) lexical_.live = false;
     if (operation.view && !operation.selection_identity) operation.selection_identity = new_selection_identity();
     operations[&expr] = operation;

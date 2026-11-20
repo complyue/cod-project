@@ -1,0 +1,160 @@
+using "SourceStorage.cod" SourceBytes;
+using "SourceStorage.cod" Token;
+using "ParserStorage.cod" Tokens;
+using "ParserStorage.cod" ExprNode;
+using "ParserStorage.cod" ExprNodes;
+using "ParserStorage.cod" len;
+using "Lexer.cod" integer_literal;
+using "Lexer.cod" punctuation;
+
+data ParseResult {
+    next:u64;
+    used:u64;
+    root:u64;
+    diagnostic:u8;
+}
+
+func literal_node() -> u8 { return 1u8; }
+func add_node() -> u8 { return 2u8; }
+func multiply_node() -> u8 { return 3u8; }
+func group_node() -> u8 { return 4u8; }
+func expected_operand() -> u8 { return 1u8; }
+func expected_close() -> u8 { return 2u8; }
+func expected_u64() -> u8 { return 3u8; }
+func literal_too_large() -> u8 { return 4u8; }
+func node_storage_exhausted() -> u8 { return 5u8; }
+
+func punct_at(source:const SourceBytes in S, tokens:const Tokens in T,
+              at:u64, past:u64) -> u8 where {const owner S, const owner T} {
+    if (at >= past || tokens[at].kind != punctuation()) { return 0u8; } else {};
+    val first <- tokens[at].first;
+    if (tokens[at].past - first != 1u64) { return 0u8; } else {};
+    return source[first];
+}
+
+func append_decimal_digit(ref number:u64 in N, byte:u8) -> bool where {owner N} {
+    val digit:u64 <- byte - 48u8;
+    if (number > (18446744073709551615u64 - digit) / 10u64) { return false; } else {};
+    number <- number * 10u64 + digit;
+    return true;
+}
+
+func parse_literal(source:const SourceBytes in S, token:const Token in T,
+                   ref result:ParseResult in R) -> u64 where {const owner S, const owner T, owner R} {
+    val end <- token.past;
+    if (end - token.first < 4u64 || source[end - 3u64] != 117u8 ||
+        source[end - 2u64] != 54u8 || source[end - 1u64] != 52u8) {
+        result.diagnostic <- expected_u64();
+        return 0u64;
+    } else {};
+    val number <- 0u64;
+    for (at in token.first .. end - 3u64) {
+        if (!append_decimal_digit(number, source[at])) {
+            result.diagnostic <- literal_too_large();
+            return 0u64;
+        } else {};
+    };
+    return number;
+}
+
+func append_node(ref nodes:ExprNodes in A, ref result:ParseResult in R,
+                 kind:u8, first:u64, past:u64, number:u64, left:u64,
+                 right:u64) -> void where {owner A, owner R} {
+    val id <- result.used;
+    if (id >= len(nodes)) {
+        result.diagnostic <- node_storage_exhausted();
+        return;
+    } else {};
+    nodes[id].kind <- kind;
+    nodes[id].first <- first;
+    nodes[id].past <- past;
+    nodes[id].number <- number;
+    nodes[id].left <- left;
+    nodes[id].right <- right;
+    result.root <- id;
+    result.used <- id + 1u64;
+    return;
+}
+
+func precedence(op:u8) -> u8 {
+    if (op == 43u8) { return 1u8; } else {}; # '+'
+    if (op == 42u8) { return 2u8; } else {}; # '*'
+    return 0u8;
+}
+
+func parse_expression_at(source:const SourceBytes in S, tokens:const Tokens in T,
+                         ref nodes:ExprNodes in A, ref result:ParseResult in R,
+                         past:u64, minimum:u8) -> void
+    where {const owner S, const owner T, owner A, owner R} {
+    val at <- result.next;
+    if (at >= past) { result.diagnostic <- expected_operand(); return; } else {};
+    if (punct_at(source, tokens, at, past) == 40u8) { # '('
+        result.next <- at + 1u64;
+        parse_expression_at(source, tokens, nodes, result, past, 1u8);
+        if (result.diagnostic != 0u8) { return; } else {};
+        val close <- result.next;
+        if (punct_at(source, tokens, close, past) != 41u8) { # ')'
+            result.diagnostic <- expected_close();
+            return;
+        } else {};
+        val inner <- result.root;
+        append_node(nodes, result, group_node(), tokens[at].first, tokens[close].past, 0u64, inner, 0u64);
+        if (result.diagnostic != 0u8) { return; } else {};
+        (result.next <- close + 1u64):void;
+    } else {
+        if (tokens[at].kind != integer_literal()) {
+            result.diagnostic <- expected_operand();
+            return;
+        } else {};
+        val number <- parse_literal(source, tokens[at], result);
+        if (result.diagnostic != 0u8) { return; } else {};
+        append_node(nodes, result, literal_node(), tokens[at].first, tokens[at].past, number, 0u64, 0u64);
+        if (result.diagnostic != 0u8) { return; } else {};
+        (result.next <- at + 1u64):void;
+    };
+
+    # Every accepted operator advances next. An error leaves next at the
+    # failing token so the caller can recover or report its source span.
+    for (unused in result.next .. past) {
+        if (!parse_infix(source, tokens, nodes, result, past, minimum)) { return; } else {};
+    };
+}
+
+func parse_infix(source:const SourceBytes in S, tokens:const Tokens in T,
+                 ref nodes:ExprNodes in A, ref result:ParseResult in R,
+                 past:u64, minimum:u8) -> bool
+    where {const owner S, const owner T, owner A, owner R} {
+    val binding <- precedence(punct_at(source, tokens, result.next, past));
+    if (binding < minimum) { return false; } else {};
+    val left <- result.root;
+    result.next <- result.next + 1u64;
+    parse_expression_at(source, tokens, nodes, result, past, binding + 1u8);
+    if (result.diagnostic != 0u8) { return false; } else {};
+    val right <- result.root;
+    val kind <- if (binding == 1u8) { add_node() } else { multiply_node() };
+    append_node(nodes, result, kind, nodes[left].first, nodes[right].past, 0u64, left, right);
+    return result.diagnostic == 0u8;
+}
+
+# Tokens come from the indexed lexer over source. The caller supplies
+# initialized node storage and receives a root index or a diagnostic at next.
+func parse_expression(source:const SourceBytes in S, tokens:const Tokens in T,
+                      ref nodes:ExprNodes in A, first:u64, past:u64,
+                      ref result:ParseResult in R) -> void
+    where {const owner S, const owner T, owner A, owner R} {
+    result.next <- first;
+    result.used <- 0u64;
+    result.root <- 0u64;
+    result.diagnostic <- 0u8;
+    if (first > past || past > len(tokens)) {
+        result.diagnostic <- expected_operand();
+        return;
+    } else {};
+    parse_expression_at(source, tokens, nodes, result, past, 1u8);
+}
+
+export Tokens;
+export ExprNode;
+export ExprNodes;
+export ParseResult;
+export parse_expression;

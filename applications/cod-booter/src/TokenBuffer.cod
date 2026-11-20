@@ -1,0 +1,40 @@
+using "SourceStorage.cod" SourceBytes;
+using "ParserStorage.cod" Tokens;
+using "ParserStorage.cod" len;
+using "Lexer.cod" scan_token;
+using "Lexer.cod" end_of_source;
+using "Lexer.cod" unsupported_byte;
+
+data ScanResult {
+    used:u64;
+    next:u64;
+    complete:bool;
+    invalid_source:bool;
+}
+
+# The caller supplies initialized token storage. The produced token prefix
+# includes either EOF or the token that describes the first lexical error.
+func scan_tokens(source:const SourceBytes in S, ref tokens:Tokens in T,
+                 ref result:ScanResult in R) -> void where {const owner S, owner T, owner R} {
+    result.used <- 0u64;
+    result.next <- 0u64;
+    result.complete <- false;
+    result.invalid_source <- false;
+    for (index in 0u64 .. len(tokens)) {
+        scan_token(source, result.next, tokens[index]);
+        result.used <- index + 1u64;
+        result.next <- tokens[index].past;
+        if (tokens[index].kind == end_of_source()) {
+            result.complete <- true;
+            return;
+        } else {};
+        if (tokens[index].kind >= unsupported_byte()) {
+            result.invalid_source <- true;
+            return;
+        } else {};
+    };
+}
+
+export Tokens;
+export ScanResult;
+export scan_tokens;

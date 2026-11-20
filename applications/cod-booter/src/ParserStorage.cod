@@ -1,0 +1,26 @@
+using "SourceStorage.cod" Token;
+
+array Tokens[u64]:Token;
+
+data ExprNode {
+    kind:u8;
+    first:u64;
+    past:u64;
+    number:u64;
+    left:u64;
+    right:u64;
+}
+array ExprNodes[u64]:ExprNode;
+
+func len(tokens:const Tokens in T) -> u64 where {const owner T} {
+    return intrinsic (len)(tokens);
+}
+
+func len(nodes:const ExprNodes in N) -> u64 where {const owner N} {
+    return intrinsic (len)(nodes);
+}
+
+export Tokens;
+export ExprNode;
+export ExprNodes;
+export len;

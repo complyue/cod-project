@@ -2265,7 +2265,7 @@ class LLVMEmission {
         }
         if (read && discard) return empty_scalar();
         auto *data = b_.CreateLoad(b_.getPtrTy(), b_.CreateStructGEP(array_view_, view, 0), "array.data");
-        auto *element = native_type(shape.element);
+        llvm::Type *element = shape.element.kind == Type::product ? product_layout(shape.element.identity) : native_type(shape.element);
         auto *address = b_.CreateGEP(element, data, index);
         return read ? pack(b_.CreateLoad(element, address), shape.element) : address;
       }, read ? static_cast<llvm::Type *>(scalar_) : b_.getPtrTy());
