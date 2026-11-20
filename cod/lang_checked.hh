@@ -1738,6 +1738,7 @@ class ScalarChecker {
       bool unresolved = false;
       bool saw_throw = false;
       bool unresolved_throw = false;
+      bool may_recover_failure = false;
     } *returns = nullptr;
   };
   struct TypeBorrowedReturn {
@@ -6081,10 +6082,11 @@ class ScalarChecker {
   struct ResultEvidence {
     std::optional<ResultContract> contract;
     ResultOrigin origin = ResultOrigin::inferred;
+    bool always_throws = false;
   };
   static ResultEvidence scope_result(ResultEvidence result, const Type *expected, bool probing_argument = false) {
     if (result.contract && result.origin != ResultOrigin::throw_only_default) return result;
-    if (expected) return {ResultContract{*expected}, ResultOrigin::supplied};
+    if (expected) return {ResultContract{*expected}, ResultOrigin::supplied, result.always_throws};
     // Operand hints cannot use the standalone default to select a signature.
     return probing_argument ? ResultEvidence{} : result;
   }
@@ -6151,7 +6153,7 @@ class ScalarChecker {
     context.insert(context.end(), retained.begin(), retained.end());
     program_.instances.push_back({method, arguments, *result.contract, {}, false, {}, {}, {}, environment,
                                   std::move(context), retained, *substitutions, query_environment, {},
-                                  result.origin == ResultOrigin::supplied});
+                                  result.origin == ResultOrigin::supplied, result.always_throws});
     program_.instances.back().effects = initial_effects(definition, arguments);
     if (caller_bindings(definition) && arguments.size() == 2 && arguments[0] == arguments[1] &&
         definition.input_parameters()[0].read_only == definition.input_parameters()[1].read_only)
@@ -6644,7 +6646,7 @@ class ScalarChecker {
     if (method.source->implicit_scope && completion == Type::never && state.complete &&
         returns.types.empty() && !returns.value_obligation && !returns.unresolved &&
         returns.saw_throw && !returns.unresolved_throw)
-      return {ResultContract{Type::void_type}, ResultOrigin::throw_only_default};
+      return {ResultContract{Type::void_type}, ResultOrigin::throw_only_default, !returns.may_recover_failure};
     if (complete && returns.unresolved) return {};
     if (const auto type = common_result(returns.types, method.source->at)) return {ResultContract{type}};
     return {};
@@ -7275,7 +7277,7 @@ class ScalarChecker {
       if (state.exits) yes.exits = &matching_exits;
     }
     arms.yes = type_evidence(*expr.children[1], arms.yes_state, contextual, expected, return_test ? nullptr : alternatives,
-                            expected_use, reached && yes_reaches, read);
+                            expected_use, reached && yes_reaches, read, true);
     arms.yes_state.returns = state.returns;
     if (binds) {
       restore_type_binding(arms.yes_state, state, condition.binding);
@@ -7285,7 +7287,8 @@ class ScalarChecker {
         forward_type_exit(*state.exits, exit);
       }
     }
-    arms.no = type_evidence(*expr.children[2], arms.no_state, contextual, expected, alternatives, expected_use, reached && no_reaches, read);
+    arms.no = type_evidence(*expr.children[2], arms.no_state, contextual, expected, alternatives,
+                           expected_use, reached && no_reaches, read, true);
     return arms;
   }
   static std::optional<EvidenceOwner> owner_evidence(const std::string &name, const TypeEvidenceState &state, const Location &at) {
@@ -7785,7 +7788,7 @@ class ScalarChecker {
   std::optional<Type> type_evidence(const Expression &expr, TypeEvidenceState &state, bool contextual = false,
                                     const Type *expected = nullptr, std::vector<Type> *alternatives = nullptr,
                                     ExpectedTypeUse expected_use = ExpectedTypeUse::materialization, bool reached = true,
-                                    EvidenceRead read = EvidenceRead::payload) const {
+                                    EvidenceRead read = EvidenceRead::payload, bool joining = false) const {
     using K = Expression::Kind;
     const ModuleLookup lookup(module_, state.method ? program_.methods[*state.method].module : module_);
     const ModuleLookup context(interpretation_, state.method ? program_.methods[*state.method].interpretation : interpretation_);
@@ -7801,7 +7804,8 @@ class ScalarChecker {
       state.deferred = nullptr;
       state.initialization = TypeEvidenceState::InitializationCheck::suppressed;
     }
-    const auto type = query_evidence(expr, state, view, target, contextual, expected, alternatives ? &independent : nullptr, expected_use, read);
+    const auto type = query_evidence(expr, state, view, target, contextual, expected,
+                                     alternatives ? &independent : nullptr, expected_use, read, joining);
     if (state.checks_initialization() && !target.places.empty() && !target.initialized) {
       const auto reaching = state.selections.outcome(state.selections.selection_outcomes(target), true);
       target.initialized = state.selections.selection_initialized(target) ||
@@ -9471,7 +9475,8 @@ class ScalarChecker {
     return storage;
   }
   std::optional<Type> scope_callable_evidence(const Expression &callee, TypeEvidenceState &state,
-                                              const Type *expected, bool probing_argument, TargetEvidence &returned) const {
+                                              const Type *expected, bool probing_argument, TargetEvidence &returned,
+                                              bool joining) const {
     const auto id = lexical_method(callee.definition.get(), state.method);
     const auto retained = callable_retained_types(id, &state);
     const auto result = retained ? scope_result(infer_result(id, {}, *retained, &state), expected, probing_argument) : ResultEvidence{};
@@ -9480,10 +9485,8 @@ class ScalarChecker {
         implementation_gap(callee.at, "typeof requires a known declaration or operand type with a proved result contract");
       return {};
     }
-    if (state.returns && result.origin == ResultOrigin::throw_only_default) {
-      state.returns->saw_throw = true;
-      return Type::never;
-    }
+    const bool abrupt = result.always_throws && (state.returns || joining);
+    if (abrupt && state.returns) state.returns->saw_throw = true;
     const auto &captures = free_bindings(*callee.definition).captures;
     for (const auto &capture : captures) check_type_capture(state, capture.name, capture.at);
     std::vector<EvidencePlaces> writable_booleans;
@@ -9714,7 +9717,7 @@ class ScalarChecker {
         }
       }
     } else for (const auto &places : writable_booleans) state.selections.write_boolean(places, {});
-    return complete_callable_type(program_.methods[id], {}, *result.contract);
+    return abrupt ? Type{Type::never} : complete_callable_type(program_.methods[id], {}, *result.contract);
   }
   static bool pipeline_expression(const Expression &expr) {
     using K = Expression::Kind;
@@ -9981,7 +9984,7 @@ class ScalarChecker {
   }
   std::optional<Type> query_evidence(const Expression &expr, TypeEvidenceState &state, ViewEvidence &view, TargetEvidence &target_facts,
                                      bool contextual, const Type *expected, std::vector<Type> *alternatives,
-                                     ExpectedTypeUse expected_use, EvidenceRead read) const {
+                                     ExpectedTypeUse expected_use, EvidenceRead read, bool joining) const {
     using K = Expression::Kind;
     if (state.here_control && (expr.kind == K::deferred || expr.kind == K::make_local || expr.kind == K::make_object || expr.kind == K::make_region ||
         expr.kind == K::allocate || (expr.kind != K::return_test && expr.owner_name == "here")))
@@ -10160,7 +10163,8 @@ class ScalarChecker {
       return {};
     }
     case K::grouped: {
-      const auto type = type_evidence(*expr.children.front(), state, contextual, expected, alternatives, expected_use, true, EvidenceRead::target);
+      const auto type = type_evidence(*expr.children.front(), state, contextual, expected, alternatives,
+                                      expected_use, true, EvidenceRead::target, joining);
       if (!type || type == Type::never) return type;
       const auto &source = state.value;
       const auto result = group_result(*type, source.view.value_or(false), source.nullable, source.mixed_view);
@@ -10184,7 +10188,8 @@ class ScalarChecker {
     }
     case K::typed_expression: {
       if (*expr.annotation != Type::void_type) implementation_gap(expr.at, "non-void expression conversion or assertion");
-      const auto operand = child(0, false, true, EvidenceRead::target);
+      const auto operand = type_evidence(*expr.children.front(), state, false, nullptr, nullptr,
+                                         ExpectedTypeUse::materialization, true, EvidenceRead::target, joining);
       if (!operand) {
         if (state.returns) state.returns->unresolved = true;
         return {};
@@ -10198,7 +10203,7 @@ class ScalarChecker {
       for (size_t i = 0; i < expr.children.size(); ++i) {
         const bool last = i + 1 == expr.children.size();
         result = type_evidence(*expr.children[i], state, contextual && last, last ? expected : nullptr,
-                               last ? alternatives : nullptr, expected_use, !exits, last ? read : EvidenceRead::discarded);
+                               last ? alternatives : nullptr, expected_use, !exits, last ? read : EvidenceRead::discarded, joining);
         exits = exits || result == Type::never;
         if (state.returns && exits) break;
       }
@@ -10667,7 +10672,7 @@ class ScalarChecker {
         state.root_failure_covered = std::ranges::any_of(std::span(expr.children).subspan(1), [&](const auto &handler) {
           return handler->kind != K::block && (!handler->annotation || evidence_annotation(*handler->annotation, before) == exception_type(0));
         });
-      auto result = type_evidence(*expr.children.front(), state, contextual, expected, alternatives, expected_use, true, read);
+      auto result = type_evidence(*expr.children.front(), state, contextual, expected, alternatives, expected_use, true, read, guarded && joining);
       state.exits = outer;
       state.root_failure_covered = before.root_failure_covered;
       for (auto &path : body_exits.paths) path.state.root_failure_covered = before.root_failure_covered;
@@ -10696,7 +10701,10 @@ class ScalarChecker {
         auto caught = catch_evidence(handler, catch_entry, handled);
         TypeEvidenceExits exits;
         if (track_exits) caught.exits = handler_reaches ? &exits : nullptr;
-        const auto type = type_evidence(*handler.children.front(), caught, contextual, expected, alternatives, expected_use, handler_reaches, read);
+        const auto type = type_evidence(*handler.children.front(), caught, contextual, expected, alternatives,
+                                        expected_use, handler_reaches, read, guarded && joining);
+        // A normally completing deferred catch can consume the pending throw.
+        if (!guarded && state.returns && type != Type::never) state.returns->may_recover_failure = true;
         if (state.required) check_guarded_result(*result, *type, handler.at);
         if (read == EvidenceRead::payload && type && type->kind == Type::procedure)
           note_type_allocation(caught);
@@ -10932,7 +10940,7 @@ class ScalarChecker {
         }
         target = implicit ?
             scope_callable_evidence(callee, state, scope_expectation ? expected : nullptr,
-                                    scope_expectation && contextual && !state.required, target_facts) : child(0);
+                                    scope_expectation && contextual && !state.required, target_facts, joining) : child(0);
         local = true;
       } else if (!expr.intrinsic && state.complete) {
         if (state.required && state.bindings.contains(expr.text)) check_query_binding(expr.text, expr.at);
@@ -12782,14 +12790,17 @@ class ScalarChecker {
     scope_input_observations(inputs, arguments, views, expr.at);
     const auto profile = scope_profile(std::move(inputs));
     std::optional<ResultContract> supplied;
+    bool always_throws = false;
     if (expected) {
       const auto result = scope_result(infer_result(profile, arguments, retained, &state), expected);
       if (result.origin == ResultOrigin::supplied) supplied = result.contract;
+      always_throws = result.always_throws;
     }
     const auto query = retain_query_environment(program_.methods[profile], supplied, &state, operation.scope_owners);
     const auto target = demand(profile, arguments, expr.at, {}, retained, query, &state);
     operation.callee = target;
     const auto &selected = program_.instances[target];
+    always_throws |= selected.always_throws;
     auto contract = callable_type(program_.methods[profile], selected.arguments, selected.result);
     const auto &effects = read_effects(target);
     for (const auto failure : effects.scope_checked_failures) contract.throws_types.push_back(exception_type(failure));
@@ -12798,6 +12809,7 @@ class ScalarChecker {
     auto reasons = direct_call_reasons(contract, effects);
     if (proving_ && effects.propagates_here_transfer) reasons.insert(Completion::protected_transfer);
     finish_call(expr, contract, effects, reasons, arguments, views, operation, read, discard, 0, true);
+    if (always_throws && &expr != prepared_call_) operation.type = Type::never;
   }
   void check_value_call(const Expression &expr, const Type &contract, size_t offset, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation, bool read, bool discard) {

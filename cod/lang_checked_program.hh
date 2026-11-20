@@ -439,6 +439,7 @@ struct CheckedInstance {
   size_t query_environment = 0;
   CheckedFrame frame;
   bool result_supplied = false;
+  bool always_throws = false;
 };
 struct CheckedHereContract {
   struct Component {

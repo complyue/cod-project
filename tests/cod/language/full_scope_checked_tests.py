@@ -171,6 +171,17 @@ runner.CASES = {
         0, '7\n11\n8\n11\n', ''),
     'throw_only_typed': run('val e<-sample_error();try{ {{throw e;}}; }'
                             'catch(caught:const NullPointerException){behave @print(caught.category);};', '4\n'),
+    'throw_only_conditional_arm_has_no_result': run(
+        'proc choose(flag:bool){try{return if(flag){{defer observe(4u64);throw sample_error();}}'
+        'else{{defer observe(2u64);observe(1u64);7u64;}};}'
+        'catch(e:const NullPointerException){return 5u64;};}'
+        'observe(choose(false));observe(choose(true));', '1\n2\n7\n4\n5\n', OBSERVE),
+    'throw_only_conditional_query_uses_completing_arm': run(
+        'val flag<-true;val result<-make local typeof(if(flag){{observe(99u64);throw sample_error();}}'
+        'else{7u64}){11u64};observe(result);', '11\n', OBSERVE),
+    'recovering_void_arm_participates_in_join': reject(
+        'val flag<-true;val result<-if(flag){{defer catch(e:const NullPointerException){};throw sample_error();}}'
+        'else{7u64};', 'conditional join with different scalar result types'),
     'throw_only_void_result': reject('val e<-sample_error();val result<-make local typeof({{throw e;}}){7u64};',
                                      'initializer does not satisfy local storage type'),
     'throw_only_query_has_no_reads': run('val e<-make local NullPointerException;'
@@ -205,7 +216,7 @@ runner.CASES = {
     'ambiguous_contract_cannot_type_throw_only_result': reject(
         TAKE + 'proc take(value:bool)->void{}val e<-sample_error();'
         'try{take({{throw e;}});{}}catch(caught:const NullPointerException){};',
-        'non-value or abruptly completing operand'),
+        'cannot establish a parameter type for an abruptly completing operand'),
     'query_checks_catch_category': (query('try{}catch(e:const u64){};return 7u64;'),
         2, '', 'catch requires a selected intrinsic exception type'),
     'query_rejects_unwritten_private_storage': (
