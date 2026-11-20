@@ -1,0 +1,412 @@
+using "ParserStorage.cod" ExprNodes;
+using "ParserStorage.cod" len as syntax_len;
+using "ParserStorage.cod" no_node;
+using "ParserStorage.cod" module_node;
+using "ParserStorage.cod" module_item_node;
+using "ParserStorage.cod" procedure_node;
+using "ParserStorage.cod" procedure_head_node;
+using "ParserStorage.cod" throws_clause_node;
+using "ParserStorage.cod" block_node;
+using "ParserStorage.cod" full_scope_node;
+using "ParserStorage.cod" block_item_node;
+using "ParserStorage.cod" argument_node;
+using "ParserStorage.cod" try_node;
+using "ParserStorage.cod" catch_clause_node;
+using "ParserStorage.cod" catch_handler_node;
+using "ParserStorage.cod" finally_clause_node;
+using "ParserStorage.cod" deferred_call_node;
+using "ParserStorage.cod" return_node;
+using "ParserStorage.cod" throw_node;
+using "ParserStorage.cod" group_node;
+using "ParserStorage.cod" call_node;
+using "ParserStorage.cod" behave_node;
+using "ParserStorage.cod" transfer_node;
+using "ParserStorage.cod" add_node;
+using "ParserStorage.cod" multiply_node;
+using "ParserStorage.cod" null_node;
+using "ParserStorage.cod" name_node;
+using "ParserStorage.cod" ptr_binding_node;
+using "ParserStorage.cod" ptr_parameter_node;
+using "ParserStorage.cod" val_binding_node;
+using "ExpressionParser.cod" ParseResult;
+using "NameResolution.cod" NameBindings;
+using "NameResolution.cod" NameWork;
+using "NameResolution.cod" first_item;
+using "OperandChecking.cod" OperandFacts;
+using "OperandChecking.cod" nullable_ptr;
+using "ModuleExports.cod" exception_root_identity;
+using "ModuleExports.cod" null_pointer_identity;
+
+data CompletionSite {
+    event:u8;
+    presence:u8;
+    can_continue:u8;
+    guarded_by:u64;
+    incoming_handler:u64;
+    throws_clause:u64;
+    category:u64;
+    destination:u64;
+    cleanup_first:u64;
+    cleanup_stop:u64;
+    registration:u64;
+    previous_defer:u64;
+    last_defer:u64;
+}
+array CompletionSites[u64]:CompletionSite;
+
+data CompletionCheckResult {
+    diagnostic:u8;
+    node:u64;
+}
+
+func possible_failure() -> u8 { return 1u8; }
+func definite_failure() -> u8 { return 2u8; }
+func callable_return() -> u8 { return 3u8; }
+
+func present_target() -> u8 { return 1u8; }
+func absent_target() -> u8 { return 2u8; }
+func unknown_target() -> u8 { return 3u8; }
+
+func uncovered_checked_failure() -> u8 { return 1u8; }
+func uncovered_deferred_failure() -> u8 { return 2u8; }
+func unproved_deferred_error() -> u8 { return 3u8; }
+func missing_rethrow_context() -> u8 { return 4u8; }
+func unproved_rethrow_capture() -> u8 { return 5u8; }
+func unproved_finally_completion() -> u8 { return 6u8; }
+func completion_storage_exhausted() -> u8 { return 7u8; }
+func invalid_completion_tree() -> u8 { return 8u8; }
+func unproved_incoming_exception() -> u8 { return 9u8; }
+
+func initialize_site(ref sites:CompletionSites in X, at:u64) -> void where {owner X} {
+    sites[at].event <- 0u8;
+    sites[at].presence <- 0u8;
+    sites[at].can_continue <- 1u8;
+    sites[at].guarded_by <- no_node();
+    sites[at].incoming_handler <- no_node();
+    sites[at].throws_clause <- no_node();
+    sites[at].category <- no_node();
+    sites[at].destination <- no_node();
+    sites[at].cleanup_first <- no_node();
+    sites[at].cleanup_stop <- no_node();
+    sites[at].registration <- no_node();
+    sites[at].previous_defer <- no_node();
+    sites[at].last_defer <- no_node();
+    return;
+}
+
+func inherit_context(ref sites:CompletionSites in X, child:u64, guarded_by:u64, incoming_handler:u64) -> void
+    where {owner X} {
+    if (child == no_node()) { return; } else {};
+    sites[child].guarded_by <- guarded_by;
+    sites[child].incoming_handler <- incoming_handler;
+    return;
+}
+
+func binary_context(kind:u8) -> bool {
+    return kind == module_item_node() || kind == block_item_node() || kind == argument_node() ||
+        kind == catch_clause_node() || kind == call_node() || kind == behave_node() ||
+        kind == transfer_node() || kind == add_node() || kind == multiply_node();
+}
+
+func prepare_context(nodes:const ExprNodes in N, ref sites:CompletionSites in X, at:u64) -> u8
+    where {const owner N, owner X} {
+    val kind <- nodes[at].kind;
+    val guard <- sites[at].guarded_by;
+    val incoming <- sites[at].incoming_handler;
+    if (kind == finally_clause_node()) { return unproved_finally_completion(); } else {};
+    if (kind == try_node()) {
+        inherit_context(sites, nodes[at].left, at, incoming);
+        inherit_context(sites, nodes[at].right, guard, incoming);
+        return 0u8;
+    } else {};
+    if (kind == procedure_node()) {
+        inherit_context(sites, nodes[at].right, no_node(), no_node());
+        return 0u8;
+    } else {};
+    if (kind == catch_handler_node()) {
+        inherit_context(sites, nodes[at].right, guard, at);
+        return 0u8;
+    } else {};
+    if (kind == deferred_call_node()) {
+        sites[nodes[at].right].registration <- at;
+        inherit_context(sites, nodes[at].left, guard, incoming);
+        return 0u8;
+    } else {};
+    if (binary_context(kind)) {
+        inherit_context(sites, nodes[at].left, guard, incoming);
+        inherit_context(sites, nodes[at].right, guard, incoming);
+        return 0u8;
+    } else {};
+    if (kind == val_binding_node() || kind == ptr_binding_node()) {
+        inherit_context(sites, nodes[at].right, guard, incoming);
+        return 0u8;
+    } else {};
+    if (kind == module_node() || kind == block_node() || kind == full_scope_node() ||
+        kind == group_node() || kind == return_node() || kind == throw_node()) {
+        inherit_context(sites, nodes[at].left, guard, incoming);
+    } else {};
+    return 0u8;
+}
+
+func declared_throw(nodes:const ExprNodes in N, definition:u64) -> u64 where {const owner N} {
+    val clause <- nodes[definition].left;
+    for (unused in 0u64 .. definition) {
+        if (nodes[clause].kind == throws_clause_node()) { return clause; } else {};
+        if (nodes[clause].kind == procedure_head_node()) { return no_node(); } else {};
+        (clause <- nodes[clause].left):void;
+    };
+    return no_node();
+}
+
+func enclosing_callable(nodes:const ExprNodes in N, names:const NameBindings in B, scope:u64) -> u64
+    where {const owner N, const owner B} {
+    val site <- scope;
+    for (unused in 0u64 .. scope + 1u64) {
+        if (nodes[site].kind != full_scope_node()) { return site; } else {};
+        (site <- names[site].scope):void;
+    };
+    return no_node();
+}
+
+func covers(caught:u64, category:u64) -> bool {
+    return caught == no_node() || caught == exception_root_identity() || caught == category;
+}
+
+func matching_handler(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
+                      sites:const CompletionSites in X, guarding:u64, category:u64, used:u64) -> u64
+    where {const owner N, const owner L, const owner F, const owner X} {
+    val guard <- guarding;
+    val clause <- no_node();
+    val handler <- no_node();
+    for (unused in 0u64 .. used) {
+        if (guard == no_node()) { return no_node(); } else {};
+        if (clause == no_node()) { (clause <- first_item(nodes, nodes[guard].right)):void; } else {};
+        if (clause != no_node()) {
+            handler <- nodes[clause].right;
+            if (covers(facts[nodes[handler].left].identity, category)) { return handler; } else {};
+            (clause <- links[clause].next):void;
+        } else {};
+        if (clause == no_node()) { (guard <- sites[guard].guarded_by):void; } else {};
+    };
+    return no_node();
+}
+
+func record_exit(ref sites:CompletionSites in X, at:u64, event:u8, category:u64, destination:u64,
+                 scope:u64, stop:u64) -> void where {owner X} {
+    sites[at].event <- event;
+    sites[at].category <- category;
+    sites[at].destination <- destination;
+    sites[at].cleanup_first <- if (scope == stop) { no_node() } else { scope };
+    sites[at].cleanup_stop <- stop;
+    return;
+}
+
+# Concrete failures can use this destination directly. A root contract
+# still dispatches by runtime type from guarded_by, preserving catch order.
+func route_failure(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
+                   facts:const OperandFacts in F, ref sites:CompletionSites in X, at:u64, used:u64,
+                   category:u64, checked:u8, event:u8) -> u8
+    where {const owner N, const owner B, const owner L, const owner F, owner X} {
+    val scope <- names[at].scope;
+    val handler <- matching_handler(nodes, links, facts, sites, sites[at].guarded_by, category, used);
+    if (handler != no_node()) {
+        record_exit(sites, at, event, category, handler, scope, names[nodes[handler].right].scope);
+        return 0u8;
+    } else {};
+    val boundary <- enclosing_callable(nodes, names, scope);
+    if (checked != 0u8 || category == exception_root_identity()) {
+        val contract <- sites[boundary].throws_clause;
+        if (contract == no_node() || !covers(facts[contract].identity, category)) {
+            return uncovered_checked_failure();
+        } else {};
+    } else {};
+    record_exit(sites, at, event, category, boundary, scope, no_node());
+    return 0u8;
+}
+
+func record_presence(nodes:const ExprNodes in N, names:const NameBindings in B, facts:const OperandFacts in F,
+                     ref sites:CompletionSites in X, at:u64) -> void
+    where {const owner N, const owner B, const owner F, owner X} {
+    val kind <- nodes[at].kind;
+    if (kind == null_node()) {
+        sites[at].presence <- absent_target();
+        return;
+    } else {};
+    if (facts[at].reception != nullable_ptr()) { return; } else {};
+    if (kind == ptr_parameter_node()) {
+        sites[at].presence <- unknown_target();
+        return;
+    } else {};
+    if (kind == ptr_binding_node()) {
+        val source <- nodes[at].right;
+        if (facts[source].reception == nullable_ptr() || nodes[source].kind == null_node()) {
+            sites[at].presence <- sites[source].presence;
+        } else {
+            sites[at].presence <- present_target();
+        };
+        return;
+    } else {};
+    if (kind == name_node()) {
+        sites[at].presence <- sites[names[at].declaration].presence;
+        return;
+    } else {};
+}
+
+func record_registration(names:const NameBindings in B, ref sites:CompletionSites in X, at:u64) -> void
+    where {const owner B, owner X} {
+    val scope <- names[at].scope;
+    sites[at].previous_defer <- sites[scope].last_defer;
+    sites[scope].last_defer <- at;
+    return;
+}
+
+func can_continue(sites:const CompletionSites in X, child:u64) -> bool where {const owner X} {
+    return child == no_node() || sites[child].can_continue != 0u8;
+}
+
+func operands_can_complete(nodes:const ExprNodes in N, sites:const CompletionSites in X, at:u64) -> bool
+    where {const owner N, const owner X} {
+    val kind <- nodes[at].kind;
+    if (kind == block_item_node() || kind == argument_node() || kind == add_node() ||
+        kind == multiply_node() || kind == transfer_node() || kind == call_node() || kind == behave_node()) {
+        return can_continue(sites, nodes[at].left) && can_continue(sites, nodes[at].right);
+    } else {};
+    if (kind == group_node() || kind == block_node() || kind == full_scope_node() ||
+        kind == throw_node() || kind == return_node() || kind == deferred_call_node()) {
+        return can_continue(sites, nodes[at].left);
+    } else {};
+    if (kind == val_binding_node() || kind == ptr_binding_node()) {
+        return can_continue(sites, nodes[at].right);
+    } else {};
+    return true;
+}
+
+func check_call_completion(nodes:const ExprNodes in N, names:const NameBindings in B,
+                           links:const NameWork in L, facts:const OperandFacts in F,
+                           ref sites:CompletionSites in X, at:u64, used:u64) -> u8
+    where {const owner N, const owner B, const owner L, const owner F, owner X} {
+    val definition <- names[nodes[at].left].declaration;
+    val declaration <- sites[definition].throws_clause;
+    if (declaration == no_node()) { return 0u8; } else {};
+    val category <- facts[declaration].identity;
+    val checked <- facts[declaration].checked_exception;
+    if (sites[at].registration != no_node()) {
+        if (checked != 0u8 || category == exception_root_identity()) { return uncovered_deferred_failure(); } else {};
+        # Unchecked deferred failures need the separate residual-error pass.
+        return unproved_deferred_error();
+    } else {};
+    return route_failure(nodes, names, links, facts, sites, at, used, category, checked, possible_failure());
+}
+
+func check_throw_completion(nodes:const ExprNodes in N, names:const NameBindings in B,
+                            links:const NameWork in L, facts:const OperandFacts in F,
+                            ref sites:CompletionSites in X, at:u64, used:u64) -> u8
+    where {const owner N, const owner B, const owner L, const owner F, owner X} {
+    val evidence <- nodes[at].left;
+    if (evidence == no_node()) {
+        val incoming <- sites[at].incoming_handler;
+        if (incoming == no_node()) { return missing_rethrow_context(); } else {};
+        if (names[nodes[incoming].right].scope != names[at].scope) { return unproved_rethrow_capture(); } else {};
+        (evidence <- nodes[incoming].left):void;
+    } else {};
+    val category <- facts[evidence].identity;
+    if (category != no_node()) {
+        return route_failure(nodes, names, links, facts, sites, at, used, category,
+                             facts[evidence].checked_exception, definite_failure());
+    } else {};
+    # A catch without a type annotation can have narrower incoming failures.
+    # Accept a route covering the root, or report the missing incoming proof.
+    val diagnostic <- route_failure(nodes, names, links, facts, sites, at, used,
+                                    exception_root_identity(), 1u8, definite_failure());
+    if (diagnostic == uncovered_checked_failure()) { return unproved_incoming_exception(); } else {};
+    return diagnostic;
+}
+
+func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
+                 facts:const OperandFacts in F, ref sites:CompletionSites in X, at:u64, used:u64) -> u8
+    where {const owner N, const owner B, const owner L, const owner F, owner X} {
+    record_presence(nodes, names, facts, sites, at);
+    if (!operands_can_complete(nodes, sites, at)) {
+        sites[at].can_continue <- 0u8;
+        return 0u8;
+    } else {};
+    if (facts[at].needs_target != 0u8 && sites[at].presence != present_target()) {
+        val event <- if (sites[at].presence == absent_target()) { definite_failure() } else { possible_failure() };
+        if (event == definite_failure()) {
+            sites[at].can_continue <- 0u8;
+            {};
+        } else {};
+        return route_failure(nodes, names, links, facts, sites, at, used, null_pointer_identity(), 1u8, event);
+    } else {};
+    val kind <- nodes[at].kind;
+    if (kind == call_node()) { return check_call_completion(nodes, names, links, facts, sites, at, used); } else {};
+    if (kind == deferred_call_node()) { record_registration(names, sites, at); return 0u8; } else {};
+    if (kind == throw_node()) {
+        sites[at].can_continue <- 0u8;
+        return check_throw_completion(nodes, names, links, facts, sites, at, used);
+    } else {};
+    if (kind == return_node()) {
+        sites[at].can_continue <- 0u8;
+        val scope <- names[at].scope;
+        record_exit(sites, at, callable_return(), no_node(), scope, scope, no_node());
+    } else {};
+    return 0u8;
+}
+
+# The inputs are the same bound module revision. Cleanup links describe
+# candidates in reverse registration order. Taking a link on an actual exit
+# still depends on whether its registration succeeded on the executed path.
+func check_module_completion(nodes:const ExprNodes in N, tree:const ParseResult in T,
+                             names:const NameBindings in B, links:const NameWork in L, facts:const OperandFacts in F,
+                             ref sites:CompletionSites in X, ref report:CompletionCheckResult in R) -> bool
+    where {const owner N, const owner T, const owner B, const owner L, const owner F, owner X, owner R} {
+    report.node <- no_node();
+    report.diagnostic <- invalid_completion_tree();
+    if (tree.diagnostic != 0u8 || tree.used == 0u64 || tree.used > syntax_len(nodes) ||
+        tree.root != tree.used - 1u64 || nodes[tree.root].kind != module_node()) { return false; } else {};
+    if (intrinsic (len)(names) < tree.used || intrinsic (len)(links) < tree.used ||
+        intrinsic (len)(facts) < tree.used || intrinsic (len)(sites) < tree.used) {
+        report.diagnostic <- completion_storage_exhausted();
+        return false;
+    } else {};
+    for (at in 0u64 .. tree.used) {
+        initialize_site(sites, at);
+        if (nodes[at].kind == procedure_node()) {
+            sites[at].throws_clause <- declared_throw(nodes, at);
+            {};
+        } else {};
+    };
+    val site <- tree.root;
+    # Syntax is postorder, so a reverse visit supplies each child's context
+    # before the child is visited. Ordinary brace groups keep that context.
+    for (offset in 0u64 .. tree.used) {
+        site <- tree.root - offset;
+        report.diagnostic <- prepare_context(nodes, sites, site);
+        if (report.diagnostic != 0u8) { report.node <- site; return false; } else {};
+    };
+    for (at in 0u64 .. tree.used) {
+        report.diagnostic <- check_event(nodes, names, links, facts, sites, at, tree.used);
+        if (report.diagnostic != 0u8) { report.node <- at; return false; } else {};
+    };
+    return true;
+}
+
+export CompletionSite;
+export CompletionSites;
+export CompletionCheckResult;
+export check_module_completion;
+export possible_failure;
+export definite_failure;
+export callable_return;
+export present_target;
+export absent_target;
+export unknown_target;
+export uncovered_checked_failure;
+export uncovered_deferred_failure;
+export unproved_deferred_error;
+export missing_rethrow_context;
+export unproved_rethrow_capture;
+export unproved_finally_completion;
+export completion_storage_exhausted;
+export invalid_completion_tree;
+export unproved_incoming_exception;

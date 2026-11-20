@@ -16,6 +16,9 @@ using "OperandChecking.cod" OperandFacts;
 using "OperandChecking.cod" CallOwners;
 using "OperandChecking.cod" OperandCheckResult;
 using "OperandChecking.cod" check_module_operands;
+using "CompletionChecking.cod" CompletionSites;
+using "CompletionChecking.cod" CompletionCheckResult;
+using "CompletionChecking.cod" check_module_completion;
 
 data ModuleBindingResult {
     frontend:FrontendResult;
@@ -27,6 +30,7 @@ func module_read_failed() -> u8 { return 1u8; }
 func module_selection_failed() -> u8 { return 2u8; }
 func module_binding_failed() -> u8 { return 3u8; }
 func module_operands_failed() -> u8 { return 4u8; }
+func module_completion_failed() -> u8 { return 5u8; }
 
 func binding_diagnostic(nodes:const ExprNodes in N, ref result:ModuleBindingResult in R,
                         stage:u8, diagnostic:u8, at:u64) -> void where {const owner N, owner R} {
@@ -85,6 +89,24 @@ func analyze_module_operands(source:const SourceBytes in S, ref tokens:Tokens in
     return true;
 }
 
+func analyze_module_completion(source:const SourceBytes in S, ref tokens:Tokens in T, ref nodes:ExprNodes in N,
+                               spellings:const SourceBytes in B, exports:const ModuleExports in E,
+                               ref selected:SelectedExports in X, ref bindings:NameBindings in Y,
+                               ref work:NameWork in W, ref facts:OperandFacts in F, ref owners:CallOwners in O,
+                               ref sites:CompletionSites in C, ref result:ModuleBindingResult in R) -> bool
+    where {const owner S, owner T, owner N, const owner B, const owner E, owner X, owner Y, owner W,
+           owner F, owner O, owner C, owner R} {
+    if (!analyze_module_operands(source, tokens, nodes, spellings, exports, selected, bindings, work, facts, owners, result)) {
+        return false;
+    } else {};
+    ref completion = make CompletionCheckResult { diagnostic <- 0u8; node <- no_node(); };
+    if (!check_module_completion(nodes, result.frontend.tree, bindings, work, facts, sites, completion)) {
+        binding_diagnostic(nodes, result, module_completion_failed(), completion.diagnostic, completion.node);
+        return false;
+    } else {};
+    return true;
+}
+
 export ModuleBindingResult;
 export bind_module;
 export module_read_failed;
@@ -92,3 +114,5 @@ export module_selection_failed;
 export module_binding_failed;
 export module_operands_failed;
 export analyze_module_operands;
+export module_completion_failed;
+export analyze_module_completion;
