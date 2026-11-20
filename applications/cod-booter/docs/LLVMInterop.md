@@ -1,6 +1,6 @@
 # Native C providers, LLVM bindings and scoped cleanup
 
-Revision 13 · 2026-11-20 · Confirmed for the first booter: synchronous calls, scoped native handles, LLVM session ownership, C declaration direction and typed `SourceRevision` failure generation.
+Revision 14 · 2026-11-20 · Confirmed for the first booter: synchronous calls, scoped native handles, LLVM session ownership, C declaration direction and typed `SourceRevision` failure generation.
 
 ## Design authority
 
@@ -8,6 +8,7 @@ Revision 13 · 2026-11-20 · Confirmed for the first booter: synchronous calls, 
 - **Native handles and C records.** [D-20-C-HANDLES](../../../design/DesignAuthorityRegistry.md#d-20-c-handles), P-646/P-647 and [H-BOOTER-C-HANDLES-20261120](../../../CHANGELOG.md#h-booter-c-handles-20261120) cover [the scoped handle and record rules](#native-handles-and-c-records). Scoped ownership ties disposal to a live activation and makes actual C resource dependencies visible. Preserve the native C boundary, [D-28 interop](../../../design/DesignAuthorityRegistry.md#d-28-interop), [D-18 here parameters](../../../design/DesignAuthorityRegistry.md#d-18-here-param) and D-14/D-17 ownership and cleanup. Verify both borrowed handle words, loan confinement, valid record layout, and complete and partial acquisition paths.
 - **First LLVM session.** [D-20-LLVM-HANDLES](../../../design/DesignAuthorityRegistry.md#d-20-llvm-handles) applies the same owner and capability path to the [LLVM session lifecycle](#llvm-session-ownership) under [H-BOOTER-LLVM-HANDLES-20261120](../../../CHANGELOG.md#h-booter-llvm-handles-20261120). Check disposal of the acquired prefix on construction failure and exact reverse release after successful acquisition. Verification and emission remain explicit operations.
 - **First-host declarations and acquisition.** [D-20-C-DECLARATIONS](../../../design/DesignAuthorityRegistry.md#d-20-c-declarations) and [D-20-C-ACQUISITION](../../../design/DesignAuthorityRegistry.md#d-20-c-acquisition) cover the [checked declarations and acquisition outcome](#declarations-and-the-first-host-call). [H-BOOTER-C-DECLARATIONS-20261120](../../../CHANGELOG.md#h-booter-c-declarations-20261120) confirms the r12 baseline. [H-SOURCE-REVISION-FAILURE-20261120](../../../CHANGELOG.md#h-source-revision-failure-20261120) confirms the r13 `SourceRevision` failure interface. P-644/P-645 apply C-80 and charter §§4.3, 6.3 and 12. The checked signature gives the caller and both generators one failure contract. Check the generated type and payload and observe partial native cleanup before a typed CoD catch. Permanent ABI, general fallible destruction and build configuration have separate scope.
+- **Catalog and rejection reporting.** The [first launcher integration](#builtin-catalog-and-rejection-reporting) continues [D-20-C-PROVIDERS](../../../design/DesignAuthorityRegistry.md#d-20-c-providers), D-20-C-HANDLES and [D-20-DIAGNOSTICS](../../../design/DesignAuthorityRegistry.md#d-20-diagnostics) at r14 under P-642/P-643/P-627. One checked native boundary lends the canonical builtin inputs and carries facts already available from a failing check. Verify the same builtin selections and an invalid-input report that survives releasing the indexed source. The private launcher operations carry no public ABI or diagnostic analysis requirement. [Continuity record](../../../CHANGELOG.md#k-booter-catalog-diagnostic-20261120).
 - **Related language contracts.** [D-20-NATIVE-C](../../../design/DesignAuthorityRegistry.md#d-20-native-c) selects C for native operations. [D-22 init destinations](../../../design/DesignAuthorityRegistry.md#d-22-init-places) and [D-17 defer timing](../../../design/ExceptionControl.md#deferred-work-and-explicit-scopes) continue within their recorded scopes. [H-601](../../../CHANGELOG.md#h-601) and [H-602](../../../CHANGELOG.md#h-602) establish the ordinary init-reference and explicit var boundary. These contracts govern ordinary CoD places and deferred actions alongside the scoped native owner.
 
 ## Generated C providers for the first booter
@@ -39,8 +40,8 @@ The first generated boundary serves the indexed source, scratch and LLVM operati
 
 | Operation group | First-booter contract |
 | --- | --- |
-| C entry and paths | The launcher lends source and output path handles under its live activation. The source constructor reads the path while that loan is valid. The CoD driver returns its ordinary compilation status. The production entry also needs an immutable intrinsic catalog and a diagnostic destination. Their concrete transport remains open. |
-| Indexed source revision | CoD acquires a source revision as an owned CType. A synchronous use lends read-only bytes and the completed line index under one actual revision owner. CoD formats a rejected byte position while that owner remains live. Tokens retain revision-relative half-open byte spans. An unsuccessful acquisition produces no lend. |
+| C entry and paths | The launcher lends source and output path handles under its live activation. The source constructor reads the path while that loan is valid. The CoD driver returns its ordinary compilation status. The booter borrows its builtin table through a scoped catalog operation. The launcher supplies independent diagnostic storage. See [catalog and rejection reporting](#builtin-catalog-and-rejection-reporting). |
+| Indexed source revision | CoD acquires a source revision as an owned CType. A synchronous use lends read-only bytes and the completed line index under one actual revision owner. CoD resolves a rejected byte position while that owner remains live. Tokens retain revision-relative half-open byte spans. An unsuccessful acquisition produces no lend. |
 | In-memory working region | CoD computes checked token, syntax and command capacities. A native scratch owner provides fixed backing and supplies properly initialized arrays to a synchronous work body under one actual working owner. The called operations preserve CoD's access and relocation rules. |
 | LLVM session | Apply the [confirmed session lifecycle](#llvm-session-ownership) inside the work scope. The construct operation borrows the readonly command array under the caller's actual working owner and checks its initialized prefix. The session is destroyed before the scratch owner and source revision. |
 
@@ -117,11 +118,29 @@ The initial providers use a nonthrowing `void` disposal hook that releases each 
 
 The proposed build starts with the existing seed, checks the declarations, generates the provider headers and stubs and compiles them with the separate native implementations and launcher. The seed emits the CoD driver and its C-callable boundary, and the build links them into the booter. Generation must not depend on first linking its providers. The concrete build graph requires separate configuration authorization.
 
+### Builtin catalog and rejection reporting
+
+The first shipped booter uses a scoped native `IntrinsicCatalog`. Its checked synchronous use operation lends the spelling bytes and export rows together. Both readonly views belong to the same actual catalog owner B for the duration of the callback. A row’s module and name spans index those exact bytes. Each span must satisfy `first <= past <= byte_count`. Seed and booter consume one canonical definition of spellings, kinds, identities and checkedness. The owner may lend immutable static backing directly. See the [builtin definitions](../../../cod/lang_intrinsic_catalog.h) and the [CoD row layout](../src/ModuleExports.cod).
+
+```cod
+data "C" IntrinsicCatalog;
+proc "C" IntrinsicCatalog();
+proc "C" catalog_use(
+    here work(ref spellings:const SourceBytes in B, ref exports:const ModuleExports in B) -> u8,
+    handle catalog:IntrinsicCatalog in B
+) -> u8 where {const owner B};
+```
+
+For each invocation, the launcher supplies storage for one initially empty, fixed-size bits record under its own live owner. A checked synchronous write fills it on rejection. Take offsets from scratch-backed nodes while those nodes are live. Resolve the half-open source span and any available related location through the live revision’s line index. Write the existing stage, diagnostic code and available numeric positions into the record. A failure before a revision is available has no source position. In particular, the OS error of a failed open remains available through the ordinary typed acquisition path.
+
+The launcher reads and formats the record after the compiler returns and the source loan closes. A sink handle can name the caller’s record, or a checked writable view can supply its storage directly. The write only stores bits. The launcher needs neither source bytes nor scratch references to format them. The booter retains its ordinary compilation status and exception handling. The names and record layout are private to the first launcher.
+
 ### Acceptance
 
 - Compare both generators' contracts for the same declarations and target. Check generated constructor and destructor adaptation, both borrowed handle words and synchronous calls in both directions with live lexical access.
-- Build and run the first booter through the generated boundary. Use the indexed source and working region to compile [the deferred-release workload](../workloads/deferred-release.cod). Verify LLVM output, run it and observe deferred release before the caller handles the failure. Report an invalid input using the source index before releasing the revision.
+- Build and run the first booter through the generated boundary. Use the indexed source and working region to compile [the deferred-release workload](../workloads/deferred-release.cod). Verify LLVM output, run it and observe deferred release before the caller handles the failure. Resolve available diagnostic positions before releasing the revision. Check the launcher’s report after release.
 - Check wrong-owner and escaped borrows, writable access to the mapped source, out-of-bounds or invalid views, incompatible record layout and nested handle fields in by-value records. Check that a constructor which creates a disposable child associates it with its owner before exposing the loan.
+- Compare catalog rows and spellings for both compiler modes, including an exported symbol and a checked exception. Verify a rejection with a known source span, a diagnostic with an available related position, and a source-open failure without a position. Reuse the launcher's result storage for a success and check that no stale diagnostic is reported.
 - Exercise successful acquisition and failure after a partial source, scratch or LLVM acquisition. Observe each acquired resource released once in dependency order before the caller’s typed catch runs. Check the declared library exception and its preserved error field, onward propagation, and rejection of an unhandled checked call. On success, observe one final destruction. Check an escaping callback failure separately from normal feedback, including `255u8`.
 
 ## Select APIs by application demand
