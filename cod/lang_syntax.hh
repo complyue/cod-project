@@ -1168,6 +1168,19 @@ class Parser {
     return finish(std::move(expr));
   }
 
+  void field_initializers(Expression &expr) {
+    expect("{");
+    while (!take("}")) {
+      auto field = make(Expression::Kind::field, field_name());
+      if (take("=")) field->binding = "=";
+      else { expect("<-"); field->binding = "<-"; }
+      field->children.push_back(expression());
+      expr.children.push_back(std::move(field));
+      if (!is("}")) expect(";");
+      else take(";");
+    }
+  }
+
   Expr primary(HereAttachment attachment, bool owner_projection) {
     const bool pipeline_operand = attachment == HereAttachment::pipeline_body;
     auto token = peek();
@@ -1244,16 +1257,7 @@ class Parser {
         if (!is("{")) return expr;
         expr->initializer_block = true;
       }
-      expect("{");
-      while (!take("}")) {
-        auto field = make(Expression::Kind::field, field_name());
-        if (take("=")) field->binding = "=";
-        else { expect("<-"); field->binding = "<-"; }
-        field->children.push_back(expression());
-        expr->children.push_back(std::move(field));
-        if (!is("}")) expect(";");
-        else take(";");
-      }
+      field_initializers(*expr);
       return expr;
     }
     if (is("try") || is("defer")) {
@@ -1285,7 +1289,7 @@ class Parser {
         expect("(");
         auto handler = make(Expression::Kind::handler, value_name());
         if (take(":")) {
-          expect("const");
+          handler->read_only = take("const");
           handler->annotation = parse_type();
         } else catch_all = true;
         expect(")");
@@ -1298,7 +1302,10 @@ class Parser {
     }
     if (take("throw")) {
       auto expr = make(Expression::Kind::raise, token);
-      if (!is(";") && !is("}")) {
+      if (peek().kind == TokenKind::identifier && is("{", 1)) {
+        expr->annotation = parse_type();
+        field_initializers(*expr);
+      } else if (!is(";") && !is("}")) {
         expr->children.push_back(expression());
         if (take("from")) expr->children.push_back(expression());
       }

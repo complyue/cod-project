@@ -117,6 +117,7 @@ class LLVMEmission {
   };
   std::vector<EmissionBinding> bindings_;
   std::map<size_t, llvm::Value *> owner_identities_;
+  std::map<size_t, llvm::AllocaInst *> caught_owners_;
   std::vector<llvm::AllocaInst *> parameter_values_;
   llvm::Value *query_environment_ = nullptr;
   std::vector<llvm::Value *> here_arguments_;
@@ -541,10 +542,48 @@ class LLVMEmission {
       value = b_.CreateInsertValue(value, load(place), index++);
     return value;
   }
-  void raise_exception(llvm::Value *value) {
+  void raise_exception(llvm::Value *value, llvm::Value *owner = nullptr) {
     save_abrupt(outcome(empty_scalar(), b_.CreateExtractValue(value, 0), b_.CreateExtractValue(value, 1), null_pointer(),
-        b_.CreateExtractValue(value, 2), b_.CreateExtractValue(value, 3), b_.CreateExtractValue(value, 4)));
+        b_.CreateExtractValue(value, 2), b_.CreateExtractValue(value, 3), b_.CreateExtractValue(value, 4), nullptr, owner));
     b_.CreateBr(control_->exit);
+  }
+  llvm::Value *construct_exception(const Expression &expr, size_t category) {
+    auto *layout = product_layout(*program_->exception_types.at(category).schema);
+    auto *capacity = integer(100 * 1024 * 1024);
+    auto *size = llvm::ConstantExpr::getSizeOf(layout);
+    auto *allocate = block("exception.allocate"), *insufficient = block("exception.capacity");
+    b_.CreateCondBr(b_.CreateICmpULE(size, capacity), allocate, insufficient);
+    b_.SetInsertPoint(insufficient);
+    save_abrupt(outcome(empty_scalar(), integer(exception_id(ExceptionCategory::region_capacity_exceeded)),
+                        integer(site(expr.at)), null_pointer(), size, capacity));
+    b_.CreateBr(control_->exit);
+    b_.SetInsertPoint(allocate);
+    auto *owner = b_.CreateCall(runtime("malloc", b_.getPtrTy(), {b_.getInt64Ty()}), {capacity}, "exception.region");
+    auto *initialize = block("exception.initialize"), *unavailable = block("exception.unavailable");
+    b_.CreateCondBr(b_.CreateIsNotNull(owner), initialize, unavailable);
+    b_.SetInsertPoint(unavailable);
+    fail_path(ExceptionCategory::out_of_memory, expr.at);
+    b_.SetInsertPoint(initialize);
+    Control construction{control_, block("exception.abandoned")};
+    control_ = &construction;
+    for (const auto &initializer : expr.children) {
+      const auto &input = *initializer->children.front();
+      auto *value = emit_expression(input);
+      if (!reachable()) break;
+      const auto index = *contexts_.front().at(initializer.get()).product_field;
+      assign_place(b_.CreateStructGEP(layout, owner, index), convert_result(*initializer, input, value),
+                   *initializer, &CheckedOperation::operand_type);
+    }
+    control_ = construction.parent;
+    if (reachable()) {
+      save_abrupt(outcome(empty_scalar(), integer(category), integer(site(expr.at)), null_pointer(),
+                          nullptr, nullptr, nullptr, nullptr, owner));
+      b_.CreateBr(control_->exit);
+    }
+    b_.SetInsertPoint(construction.exit);
+    release_failure_owner(b_, owner);
+    b_.CreateBr(control_->exit);
+    return nullptr;
   }
   void require(llvm::Value *condition, const Location &at, const std::string &message) {
     auto *good = block("numeric.valid"), *bad = block("numeric.failure");
@@ -1466,6 +1505,12 @@ class LLVMEmission {
       b_.CreateStore(caught, storage_.at(*fact.place));
       auto *pending_transfer = protected_outcomes_ ? load(completion_.transfer) : nullptr;
       auto *caught_owner = owned_failures_ ? take_failure_owner(b_, completion_.failure_owner) : nullptr;
+      llvm::AllocaInst *holder = nullptr;
+      if (owned_failures_) {
+        holder = slot(b_.getPtrTy(), "catch.owner");
+        b_.CreateStore(caught_owner, holder);
+        caught_owners_.emplace(*fact.place, holder);
+      }
       if (protected_outcomes_) b_.CreateStore(null_pointer(), completion_.transfer);
       b_.CreateStore(b_.getInt8(0), completion_.kind); b_.CreateStore(integer(0), completion_.category); b_.CreateStore(null_pointer(), completion_.fatal);
       b_.CreateStore(b_.getFalse(), completion_.has_return);
@@ -1476,10 +1521,11 @@ class LLVMEmission {
       if (reachable()) { if (read) assign_value(saved, discard ? empty_scalar() : result, handler.at); else b_.CreateStore(result, saved); b_.CreateBr(catching.exit); }
       if (protected_outcomes_ || owned_failures_) {
         b_.SetInsertPoint(catching.exit);
-        release_failure_owner(b_, caught_owner);
+        if (holder) release_failure_owner(b_, take_failure_owner(b_, holder));
         preserve_transfer(pending_transfer);
         b_.CreateBr(handled);
       }
+      if (holder) caught_owners_.erase(*fact.place);
       control_ = catching.parent;
       b_.SetInsertPoint(next);
     }
@@ -2341,6 +2387,20 @@ class LLVMEmission {
       }, read ? static_cast<llvm::Type *>(scalar_) : b_.getPtrTy());
     }
     case K::field: {
+      if (fact.exception_owner) {
+        std::map<std::tuple<size_t, size_t, size_t>, std::vector<size_t>> projections;
+        for (size_t i = 0; i < contexts_.size(); ++i) {
+          const auto &field = contexts_[i].at(&expr);
+          if (field.exception_owner) projections[{field.operand_type.identity, *field.exception_owner, *field.product_field}].push_back(i);
+        }
+        auto *member = contextual_value(expr, projections, "exception.field", [&](const auto &selection) -> llvm::Value * {
+          const auto &[category, holder, index] = selection;
+          auto *layout = product_layout(*program_->exception_types.at(category).schema);
+          return b_.CreateStructGEP(layout, load(caught_owners_.at(holder)), index);
+        }, b_.getPtrTy());
+        if (!read) return member;
+        return discard ? empty_scalar() : load_place(member, expr);
+      }
       if (fact.product_field) {
         const auto &parent = *expr.children.front();
         auto *address = emit_expression(parent, Projection::target);
@@ -2388,6 +2448,13 @@ class LLVMEmission {
       return read ? empty_scalar() : address;
     }
     case K::raise: {
+      if (expr.annotation) {
+        std::map<size_t, std::vector<size_t>> alternatives;
+        for (size_t i = 0; i < contexts_.size(); ++i) alternatives[contexts_[i].at(&expr).operand_type.identity].push_back(i);
+        return contextual_value(expr, alternatives, "exception.construct", [&](size_t category) {
+          return construct_exception(expr, category);
+        });
+      }
       llvm::Value *value = expr.children.empty() ? load(storage_.at(*fact.place)) : emit_expression(*expr.children[0]);
       if (!reachable()) return nullptr;
       value = unpack(value, program_->exception_type(0));
@@ -2408,7 +2475,8 @@ class LLVMEmission {
         b_.SetInsertPoint(ready);
         value = b_.CreateInsertValue(value, handle, 4);
       }
-      raise_exception(value);
+      auto *owner = fact.exception_owner ? take_failure_owner(b_, caught_owners_.at(*fact.exception_owner)) : nullptr;
+      raise_exception(value, owner);
       return nullptr;
     }
     case K::try_scope: return emit_finally(expr, projection, discard);

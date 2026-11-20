@@ -89,6 +89,7 @@ struct CheckedOperation {
   std::optional<std::set<size_t>> callable_choices;
   std::optional<size_t> place;
   std::optional<size_t> product_field;
+  std::optional<size_t> exception_owner;
   std::optional<size_t> binding;
   // Immutable selected reference, independent of the mutable binding version.
   std::optional<size_t> selection_identity;
@@ -738,6 +739,7 @@ inline CheckedBody checked_body(const CheckedProgram &program, const CheckedMeth
     };
     const auto lower = [&](auto &&self, CheckedOperation &operation) -> void {
       optional(operation.place); optional(operation.callable_place); optional(operation.accumulator); optional(operation.captured_place);
+      optional(operation.exception_owner);
       set(operation.targets); set(operation.callable_targets); set(operation.captures);
       for (auto &capture : operation.callable_captures) self(self, capture);
     };
