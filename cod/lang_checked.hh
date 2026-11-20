@@ -354,7 +354,7 @@ class ScalarChecker {
   using Access = std::vector<std::optional<bool>>;
   // Only a known argument or return contract can supply an implicit callable's result.
   enum class ExpectedTypeUse { materialization, callable_result };
-  enum class EvidenceRead { payload, target, discarded };
+  enum class EvidenceRead { payload, target, binding_slot, discarded };
   static ExpectedTypeUse expected_type_use(ArgumentMode mode) {
     return mode == ArgumentMode::value ? ExpectedTypeUse::callable_result : ExpectedTypeUse::materialization;
   }
@@ -365,7 +365,20 @@ class ScalarChecker {
   struct TypeDeferredFlow;
   enum class TargetPresence { unknown, present, absent };
   using PreparedEntryTarget = std::pair<const Expression *, size_t>;
-  using EvidenceSlot = std::variant<size_t, const Expression *, std::string, std::pair<const Form *, std::string>, PreparedEntryTarget>;
+  struct QueryProductPlace {
+    const Expression *reservation;
+    size_t schema;
+    std::vector<std::pair<size_t, size_t>> path;
+    bool enclosing = false;
+    auto operator<=>(const QueryProductPlace &) const = default;
+    QueryProductPlace field(size_t container, size_t index) const {
+      auto result = *this;
+      result.path.emplace_back(container, index);
+      return result;
+    }
+  };
+  using EvidenceSlot = std::variant<size_t, const Expression *, std::string, std::pair<const Form *, std::string>,
+                                    PreparedEntryTarget, QueryProductPlace>;
   using PresenceFacts = std::map<EvidenceSlot, TargetPresence>;
   using EvidencePlaces = std::set<EvidenceSlot>;
   using PresenceSlotMap = std::map<EvidenceSlot, EvidencePlaces>;
@@ -1019,6 +1032,10 @@ class ScalarChecker {
     void initialize(const EvidencePlaces &places) {
       if (places.size() == 1) uninitialized.erase(*places.begin());
     }
+    void initialize_product_slot(const EvidenceSelection &slot) {
+      if (slot.footprint.size() == 1 && std::holds_alternative<QueryProductPlace>(*slot.footprint.begin()))
+        initialize(slot.footprint);
+    }
     void initialize_selection(const TargetEvidence &target) {
       if (target.selection.slot) initialized_selections.insert(*target.selection.slot);
       initialized_selections.insert(target.same_selected.begin(), target.same_selected.end());
@@ -1128,7 +1145,10 @@ class ScalarChecker {
     }
     bool same_prepared_target(const TargetEvidence &earlier, size_t since, const TargetEvidence &later) const {
       if (earlier.presence == TargetPresence::present && later.presence == TargetPresence::present &&
-          earlier.places.size() == 1 && earlier.places == later.places) return true;
+          earlier.places.size() == 1 && earlier.places == later.places) {
+        const auto *product = std::get_if<QueryProductPlace>(&*earlier.places.begin());
+        if (!product || product->reservation) return true;
+      }
       const auto same = [&](const EvidenceSlot &slot) {
         return !changed_since(slot, since) && (later.selection.slot == slot || later.same_selected.contains(slot));
       };
@@ -6922,16 +6942,108 @@ class ScalarChecker {
     for (const auto &failure : failures)
       note_type_failure(state, failure);
   }
-  static void require_type_initialized(const TypeEvidenceState &state, const TargetEvidence &target,
-                                       std::string_view name, const Location &at) {
+  std::optional<size_t> inline_query_product(const QueryProductPlace &place) const {
+    if (!place.reservation) return {};
+    if (place.path.empty()) return place.schema;
+    const auto [schema, index] = place.path.back();
+    const auto &field = program_.schemas.at(schema).fields.at(index);
+    return field.storage == PlaceKind::value && field.type.kind == Type::product
+        ? std::optional{field.type.identity} : std::nullopt;
+  }
+  void reserve_query_product(QuerySelections &flow, const QueryProductPlace &root, const Location &at) const {
+    std::vector<QueryProductPlace> pending{root};
+    const auto reaching = flow.reach_condition();
+    for (size_t i = 0; i < pending.size(); ++i) {
+      const auto place = pending[i];
+      const auto type = inline_query_product(place);
+      if (!type || program_.schemas.at(*type).fields.empty()) {
+        flow.uninitialized.insert_or_assign(place, reaching);
+        continue;
+      }
+      const auto &fields = program_.schemas.at(*type).fields;
+      if (pending.size() + fields.size() > 4096)
+        fail(at, "compiler resource limit: too many subobjects in one lexical product");
+      for (size_t field = 0; field < fields.size(); ++field) {
+        auto member = place.field(*type, field);
+        if (fields[field].storage != PlaceKind::value) {
+          // A reserved slot has no target until its first binding. Its
+          // separate readiness fact still forbids reading the slot.
+          TargetEvidence unbound;
+          unbound.presence = TargetPresence::absent;
+          flow.save_selection(member, std::move(unbound));
+        }
+        pending.push_back(std::move(member));
+      }
+    }
+  }
+  void require_type_initialized(const TypeEvidenceState &state, const TargetEvidence &target,
+                                std::string_view name, const Location &at) const {
     if (!state.checks_initialization() || !state.selections.initialization_reachable ||
-        target.places.empty() || state.selections.selection_initialized(target)) return;
+        target.places.empty()) return;
+    const auto &flow = state.selections;
     const auto reaching = state.selections.outcome(state.selections.selection_outcomes(target), true);
-    for (const auto &place : target.places) if (state.selections.may_read_uninitialized(place, reaching)) {
-      if (name.empty()) if (const auto *local = std::get_if<const Expression *>(&place)) name = (*local)->text;
-      fail(at, "read of '" + std::string(name.empty() ? "target" : name) +
+    auto pending = target.places;
+    EvidencePlaces visited;
+    const bool selected_ready = flow.selection_initialized(target);
+    const bool unresolved = std::ranges::any_of(target.places, [](const auto &place) {
+      const auto *product = std::get_if<QueryProductPlace>(&place);
+      return product && !product->reservation && !product->enclosing;
+    });
+    while (!pending.empty()) {
+      auto item = pending.extract(pending.begin());
+      auto &place = item.value();
+      if (!visited.insert(place).second) continue;
+      if (const auto *product = std::get_if<QueryProductPlace>(&place)) {
+        if (const auto type = inline_query_product(*product); type && !program_.schemas.at(*type).fields.empty()) {
+          const auto &fields = program_.schemas.at(*type).fields;
+          for (size_t index = 0; index < fields.size(); ++index) {
+            const auto member = product->field(*type, index);
+            pending.insert(member);
+            if (fields[index].storage == PlaceKind::reference) {
+              if (const auto selected = flow.targets.find(member); selected != flow.targets.end())
+                pending.insert(selected->second.begin(), selected->second.end());
+              else if (!flow.may_read_uninitialized(member, reaching))
+                implementation_gap(at, "required product field has no proved target in typeof");
+            }
+          }
+          continue;
+        }
+      }
+      if (selected_ready && target.places.contains(place)) continue;
+      if (!flow.may_read_uninitialized(place, reaching)) continue;
+      auto field_name = name;
+      if (const auto *member = std::get_if<QueryProductPlace>(&place); member && !member->path.empty()) {
+        const auto [schema, index] = member->path.back();
+        field_name = program_.schemas.at(schema).fields.at(index).source->name;
+      } else if (field_name.empty()) if (const auto *local = std::get_if<const Expression *>(&place)) field_name = (*local)->text;
+      if (unresolved) implementation_gap(at, "product field initialization with an unresolved receiver in typeof");
+      fail(at, "read of '" + std::string(field_name.empty() ? "target" : field_name) +
           "' before definite initialization of every possible target");
     }
+  }
+  static EvidencePlaces query_product_fields(const QuerySelections &flow, const TargetEvidence &receiver,
+                                             size_t schema, size_t index, bool direct) {
+    EvidencePlaces fields;
+    if (receiver.presence == TargetPresence::absent) return fields;
+    bool unknown = receiver.places.empty();
+    for (const auto &place : receiver.places) {
+      const auto *local = std::get_if<QueryProductPlace>(&place);
+      if (local && (local->reservation || local->enclosing)) fields.insert(local->field(schema, index));
+      else unknown = true;
+    }
+    if (unknown) {
+      // When a join or an opaque call loses a receiver's provenance, its
+      // current field may still be one of the tracked hypothetical places.
+      const auto candidates = [&](const auto &places) {
+        for (const auto &[place, facts] : places)
+          if (const auto *local = std::get_if<QueryProductPlace>(&place); local && local->reservation &&
+              !local->path.empty() && local->path.back() == std::pair{schema, index}) fields.insert(place);
+      };
+      if (direct) candidates(flow.uninitialized);
+      else candidates(flow.footprints);
+      if (!fields.empty()) fields.insert(QueryProductPlace{nullptr, schema, {{schema, index}}});
+    }
+    return fields;
   }
   static void read_type_target(TypeEvidenceState &state, const ViewEvidence &view, const TargetEvidence &target) {
     if (!state.selections.tracking || !view.nullable || target.presence == TargetPresence::present) return;
@@ -7005,8 +7117,10 @@ class ScalarChecker {
         } else selections.initialize(effect.destination);
         if (effect.writes_boolean) selections.write_boolean(effect.destination, effect.boolean);
       }
-      else if constexpr (std::is_same_v<Effect, PreparedReferenceAssignment>)
+      else if constexpr (std::is_same_v<Effect, PreparedReferenceAssignment>) {
         selections.assign(effect.destination, effect.value);
+        selections.initialize_product_slot(effect.destination);
+      }
       else if constexpr (std::is_same_v<Effect, PreparedBooleanSwap>)
         selections.exchange_boolean(effect.left, effect.right);
       else if constexpr (std::is_same_v<Effect, PreparedReferenceSwap>)
@@ -7051,7 +7165,7 @@ class ScalarChecker {
     const bool reads_result = read == EvidenceRead::payload && !state.preparing(expr);
     // Bare names still read their payload in statement position. A borrowed
     // result of a call, group or rebind is read only when the result is used.
-    if ((reads_result || (read == EvidenceRead::discarded && expr.kind == K::name)) &&
+    if ((reads_result || (read == EvidenceRead::discarded && (expr.kind == K::name || expr.kind == K::field))) &&
         type && *type != Type::never && *type != Type::null_ref &&
         expr.kind != K::block && expr.kind != K::conditional && expr.kind != K::try_scope) {
       require_type_initialized(state, target, expr.kind == K::name ? expr.text : std::string_view{}, expr.at);
@@ -7093,8 +7207,8 @@ class ScalarChecker {
     if (declared != state.local_declarations.end() && state.delayed_controls.contains(declared->second))
       fail(at, "a deferred block cannot capture loop-control binding '" + name + "'");
   }
-  static void prepare_type_readable_argument(const TypeEvidenceState &state, const Expression &operand,
-                                             const ViewEvidence &view, const TargetEvidence &target, ArgumentMode mode) {
+  void prepare_type_readable_argument(const TypeEvidenceState &state, const Expression &operand,
+                                      const ViewEvidence &view, const TargetEvidence &target, ArgumentMode mode) const {
     if (!state.checks_initialization() || !state.selections.initialization_reachable) return;
     if (mode == ArgumentMode::borrowed_ref && view.nullable &&
         state.selections.reachable(state.selections.selection_outcomes(target), false))
@@ -7793,11 +7907,22 @@ class ScalarChecker {
           for (const bool value : {false, true})
             for (const auto &[slot, presence] : proof.at(value).presence) retain_witness(slot);
         };
+        if (state.checks_initialization()) for (const auto &[slot, footprint] : state.selections.footprints) {
+          if (!std::holds_alternative<QueryProductPlace>(slot)) continue;
+          const EvidenceSelection selection{slot, footprint};
+          body.selections.save_selection(slot, state.selections.selected_target(selection));
+          retain_witness(slot);
+          live_bindings.emplace(slot, selection);
+        }
         for (const auto &capture : captures) {
           const auto &name = capture.name;
           const auto view = body.views.find(name);
           if (view == body.views.end()) continue;
-          const auto source = named_type_target(state, name);
+          auto source = named_type_target(state, name);
+          const auto type = body.bindings.at(name);
+          if (!state.checks_initialization() && body.checks_initialization() &&
+              type && type->kind == Type::product && source.presence != TargetPresence::absent)
+            source.places = {QueryProductPlace{nullptr, type->identity, {}, true}};
           const EvidenceSlot local = std::pair{callee.definition.get(), name};
           if (view->second.value_binding == true) {
             body.selections.value_places.emplace(name, source.places);
@@ -7809,6 +7934,8 @@ class ScalarChecker {
               }
               body.selections.bindings.emplace(name, EvidenceSelection{*place, {*place}});
             }
+          } else if (source.selection.slot && live_bindings.contains(*source.selection.slot)) {
+            body.selections.bindings.emplace(name, source.selection);
           } else if (source.selection.slot) {
             const auto [place, inserted] = local_place_slots.try_emplace(*source.selection.slot, local);
             if (inserted) {
@@ -8568,6 +8695,9 @@ class ScalarChecker {
           compare_owners(owner_evidence(expr.owner_name, state, expr.at), state.full_scope_owner, &state) != OwnerMatch::satisfied)
         implementation_gap(expr.at, "product construction outside the current lexical owner");
       const auto order = product_initializers(schema, expr);
+      const bool track_places = state.checks_initialization() && state.selections.tracking;
+      const QueryProductPlace product{&expr, type.identity, {}};
+      if (track_places) reserve_query_product(state.selections, product, expr.at);
       bool completes = true;
       for (size_t i = 0; i < order.size(); ++i) {
         const auto &item = *expr.children[i];
@@ -8579,16 +8709,42 @@ class ScalarChecker {
           if (direct) transfer_type(*value, field.type, item.at);
           else rebind_type(field.type, *value, item.at);
         }
+        if (track_places && completes && value && *value != Type::never) {
+          const auto member = product.field(type.identity, order[i]);
+          if (direct) {
+            if (field.type == Type::boolean) state.selections.write_boolean({member}, state.target.branches);
+          } else {
+            const auto &source = state.value;
+            if (source.view != true || source.mixed_view)
+              implementation_gap(item.at, "reference field initialization requires an existing target or null");
+            rebind_access(field.source->read_only, source.read_only.value_or(true), item.at);
+            if ((*value != Type::null_ref || source.owner) &&
+                compare_owners(source.owner, state.full_scope_owner, &state) != OwnerMatch::satisfied)
+              fail(item.at, "reference field target must share the containing product's owner");
+            if (field.storage == PlaceKind::reference) {
+              if (source.nullable && state.target.presence != TargetPresence::present)
+                fail(item.at, "ref field requires a proven non-null target");
+              require_type_initialized(state, state.target, "ref field target", item.at);
+            }
+            state.selections.assign({member, {member}}, state.target);
+          }
+          state.selections.initialize(EvidencePlaces{member});
+        }
         completes = completes && value != Type::never;
       }
       if (!completes) return Type::never;
       if (expr.initializer_block) complete_product(schema, order, expr.at);
       view = {false, true, {}, state.full_scope_owner};
       target_facts.presence = TargetPresence::present;
+      if (track_places) {
+        target_facts.places.insert(product);
+        if (expr.initializer_block && schema.fields.empty()) state.selections.initialize(target_facts.places);
+      }
       return type;
     }
     case K::transfer: case K::rebind: {
-      const auto type = child(0, false, true, EvidenceRead::target); view = state.value;
+      const auto read_destination = expr.kind == K::rebind ? EvidenceRead::binding_slot : EvidenceRead::target;
+      const auto type = child(0, false, true, read_destination); view = state.value;
       auto destination = state.target;
       const auto destination_revision = state.selections.writes;
       if (expr.kind == K::transfer && type != Type::never) read_type_target(state, view, state.target);
@@ -8634,7 +8790,12 @@ class ScalarChecker {
         rebind_type(*type, *source, expr.at);
         if (proving_ && validating_ && !view.nullable && selected.nullable && state.target.presence != TargetPresence::present)
           fail(expr.at, "ref requires a proven non-null target");
-        if (!view.nullable) require_type_initialized(state, state.target, {}, expr.at);
+        const bool first_product_binding = !destination.selection.footprint.empty() &&
+            std::ranges::all_of(destination.selection.footprint, [](const auto &slot) {
+              const auto *field = std::get_if<QueryProductPlace>(&slot);
+              return field && field->reservation;
+            }) && state.selections.presence(destination.selection) == TargetPresence::absent;
+        if (!view.nullable && !first_product_binding) require_type_initialized(state, state.target, {}, expr.at);
         if (!selected.read_only || (!view.slot_read_only && *selected.read_only))
           implementation_gap(expr.at, "reference target access is not established");
         rebind_access(view.slot_read_only.value_or(false), *selected.read_only, expr.at);
@@ -8656,6 +8817,7 @@ class ScalarChecker {
         else if (view.nullable || !destination.selection.footprint.empty()) {
           const auto before = state.selections.writes;
           state.selections.assign(destination.selection, target_facts);
+          state.selections.initialize_product_slot(destination.selection);
           if (destination.selection.slot && !destination.selection.footprint.empty()) {
             const auto assigned = state.selections.selected_target(destination.selection);
             target_facts.selection.slot = assigned.selection.slot;
@@ -9460,7 +9622,8 @@ class ScalarChecker {
       if (type == Type::never) return Type::never;
       if (type && type->kind == Type::product) {
         const auto &schema = product_schema(*type, expr.at);
-        const auto &field = schema.fields[product_field(schema, expr)];
+        const auto index = product_field(schema, expr);
+        const auto &field = schema.fields[index];
         const auto parent = state.value;
         if (state.required && (parent.view != true || parent.mixed_view))
           implementation_gap(expr.at, "field selection requires an existing product target");
@@ -9474,6 +9637,29 @@ class ScalarChecker {
         view.fixed_binding = direct || field.source->fixed_binding || parent.read_only.value_or(true);
         view.slot_read_only = field.source->read_only;
         view.nullable = field.storage == PlaceKind::pointer;
+        if (state.checks_initialization()) {
+          auto fields = query_product_fields(state.selections, state.target, type->identity, index, direct);
+          const auto *first = fields.size() == 1 ? std::get_if<QueryProductPlace>(&*fields.begin()) : nullptr;
+          if (first && first->enclosing) {
+            // An enclosing field has a type and an owner here. Its
+            // payload is outside the hypothetical invocation.
+            if (field.type.kind == Type::product)
+              target_facts.places.insert(QueryProductPlace{nullptr, field.type.identity, {}, true});
+          } else if (direct) target_facts.places = std::move(fields);
+          else if (!fields.empty()) {
+            if (read != EvidenceRead::binding_slot) {
+              TargetEvidence slots;
+              slots.places = fields;
+              require_type_initialized(state, slots, expr.text, expr.at);
+            }
+            const auto slot = fields.size() == 1 ? std::optional{*fields.begin()} : std::nullopt;
+            target_facts = state.selections.selected_target({slot, std::move(fields)});
+            if (read != EvidenceRead::binding_slot && target_facts.places.empty() &&
+                target_facts.presence != TargetPresence::absent && field.type.kind != Type::product &&
+                !state.selections.uninitialized.empty())
+              implementation_gap(expr.at, "product field referent initialization is unproved in typeof");
+          }
+        }
         if (!view.nullable) target_facts.presence = TargetPresence::present;
         return field.type;
       }

@@ -5,6 +5,11 @@
 <a id="h-hlvm-candidate-20261120"></a>
 **H-HLVM-CANDIDATE-20261120.** In the project chat, the project user proposed `hlvm-basic` for running BASIC source or saving a DBMR to run later, with the prerequisite “要等 CoD 基本的 lexer/parser 已经通了的情况下再推进”, then asked to record the idea in a planning document. The [application note](applications/README.md#deferred-application-hlvm-basic) applies the executor and editable program graph from [*Algebraic Effects Is All You Need*](papers/AlgebraicEffectsIsAllYouNeed.md) to BASIC. It does not change the compiler roadmap or authorize implementation.
 
+## 2026-11-19 — Check local product readiness inside type queries
+
+<a id="k-queried-product-readiness-20261119"></a>
+**K-QUERIED-PRODUCT-READINESS-20261119.** D-17r129→130 and registry r1001→1002 continue P-564–P-566 under [H-FULL-SCOPE-IMPLEMENTATION-20261118](#h-full-scope-implementation-20261118), [H-445](#h-445) and [H-478](#h-478). Type-only local product fields use the existing initialization flow through borrowing, rebinding and cleanup. Enclosing payloads remain unevaluated. This preserves actual owners, field-level readiness and nonexecuting inspection under C-63/C-65/C-72/C-84 and charter §§3.2–3.3/4.3/6.3/8/12. Prior coverage at `3a4f1bf1035bbf7513e93f5894df32c3b4a0a39c:design/ExceptionControl.md`.
+
 ## 2026-11-19 — Check live lexical product slots in full scopes
 
 <a id="k-full-scope-product-slots-20261119"></a>

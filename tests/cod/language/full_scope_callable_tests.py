@@ -19,6 +19,9 @@ GUARDED_TRY = ('try{if(true){throw e;}else{};val n<-4294967296u64;{}}'
                'catch(c:const NullPointerException){return 7u32;}')
 FINALLY_READ = 'finally{late;{}};return late;'
 QUERY_EVIDENCE = 'typeof requires a known declaration or operand type'
+QUERY_PAIR = 'data Pair {first:u64;second:u64;}'
+QUERY_HOLDER = 'data Holder {ptr selected:u64;}'
+QUERY_NODE = 'data Node {value:u64;ref next:Node;}'
 
 
 def query(body):
@@ -1211,6 +1214,45 @@ runner.CASES = {
         query('val n<-make local u64;return {{defer (<-)(n,9u64);return n;}};'), 2, '', 'initialization'),
     'returned_complete_value': (IO+'func factory(val seed:u64)->func()->const u64{return {{seed<-seed+1u64;return func[seed]()->const u64{return seed;};}};}func saved=factory(4u64);behave @print(saved());behave @print(saved());', 0, '5\n5\n', ''),
     'query_has_no_effects': (IO+'proc run()->void{val n<-make local u64;val result<-make local typeof({{behave @print(n);return 7u64;}}){8u64};behave @print(result);return;}run();', 0, '8\n', ''),
+    'query_product_field_inspection_leaves_outer_payload_unevaluated': (
+        IO + QUERY_PAIR + 'ptr item=make Pair;' + query('ptr local=make Pair;return item.second;') +
+        'behave @print(result);', 0, '4\n', ''),
+    'query_nested_outer_product_field_inspection_leaves_payload_unevaluated': (
+        IO + QUERY_PAIR + 'data Outer {child:Pair;}ptr item=make Outer;' +
+        query('ptr local=make Pair;return item.child.second;') + 'behave @print(result);', 0, '4\n', ''),
+    'query_product_local_field_read_requires_initialization': (
+        QUERY_PAIR + query('ptr item=make Pair;return item.second;'), 2, '', 'initialization'),
+    'query_discarded_product_field_read_requires_initialization': (
+        QUERY_PAIR + query('ptr item=make Pair;item.second;return 7u64;'), 2, '', 'initialization'),
+    'query_product_write_through_another_reference_reaches_the_same_field': (
+        IO + QUERY_PAIR + query('ptr item=make Pair;ptr another=item;another.second<-7u64;'
+                               'behave @print(97u64);return item.second;') + 'behave @print(result);', 0, '4\n', ''),
+    'query_product_write_does_not_reach_a_rebound_target': (
+        QUERY_PAIR + query('ptr first=make Pair;ptr second=make Pair;ptr chosen=first;'
+                           'chosen.second<-7u64;chosen=second;return chosen.second;'), 2, '', 'initialization'),
+    'query_nested_product_write_preserves_sibling_readiness': (
+        QUERY_PAIR + 'data Outer {child:Pair;}' +
+        query('ptr item=make Outer;item.child.first<-7u64;return item.child.second;'), 2, '', 'initialization'),
+    'query_product_slot_read_requires_its_own_initialization': (
+        QUERY_HOLDER + query('ptr item=make Holder;return item.selected;'), 2, '', 'initialization'),
+    'query_product_slot_binding_does_not_initialize_its_referent': (
+        QUERY_HOLDER + query('val unread<-make local u64;ptr item=make Holder;'
+                             'item.selected=unread;return item.selected;'), 2, '', 'initialization'),
+    'query_nested_full_scope_rebinds_the_embedded_product_slot': (
+        IO + QUERY_HOLDER + query('val ready<-7u64;ptr item=make Holder;{{item.selected=ready;return;}};'
+                                  'return item.selected;') + 'behave @print(result);', 0, '4\n', ''),
+    'query_product_cleanup_write_only_applies_after_the_inner_scope': (
+        IO + QUERY_PAIR + query('ptr item=make Pair;{{defer{item.second<-7u64;};}};return item.second;') +
+        'behave @print(result);', 0, '4\n', ''),
+    'query_product_read_before_its_own_cleanup_write_rejects': (
+        QUERY_PAIR + query('ptr item=make Pair;defer{item.second<-7u64;};return item.second;'), 2, '', 'initialization'),
+    'query_complete_reference_checks_required_product_fields_across_a_cycle': (
+        QUERY_NODE + query('ptr a=make Node;ptr b=make Node;a.value<-7u64;a.next=b;b.next=a;'
+                           'ref complete=a;return complete.next.value;'), 2, '', 'initialization'),
+    'query_complete_reference_accepts_a_ready_required_product_cycle': (
+        IO + QUERY_NODE + query('ptr a=make Node;ptr b=make Node;a.value<-7u64;b.value<-8u64;'
+                                'a.next=b;b.next=a;ref complete=a;return complete.next.value;') +
+        'behave @print(result);', 0, '4\n', ''),
     'query_contextual_scope_argument_has_no_effects': (IO + IDENTITY + APPLY +
         'val result<-make local typeof(apply({{behave @print(98u64);return identity;}},1u64)){15u64};'
         'behave @print(result);', 0, '15\n', ''),
