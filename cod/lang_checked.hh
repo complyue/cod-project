@@ -743,6 +743,12 @@ class ScalarChecker {
       if (target.selection.slot) origins.emplace(*target.selection.slot, ProductFieldPath{});
       return origins;
     }
+    static void retain_exact_value(TargetEvidence &result, const TargetEvidence &source) {
+      result.same_selected.insert(source.same_selected.begin(), source.same_selected.end());
+      if (source.selection.slot) result.same_selected.insert(*source.selection.slot);
+      if (result.presence == TargetPresence::unknown) result.presence = source.presence;
+      if (!result.presence_proof) result.presence_proof = source.presence_proof;
+    }
     void project_field(TargetEvidence &field, const TargetEvidence &receiver, size_t schema, size_t index) const {
       const auto step = std::pair{schema, index};
       for (auto [slot, path] : field_origins(receiver)) {
@@ -1536,6 +1542,9 @@ class ScalarChecker {
     ObservationPaths absent;
     SelectedProductFields input_projections;
     ProductFieldPaths initialized_fields;
+    // The return holds the prepared value. A mutable slot still matches
+    // that value only if writes have left the observation intact.
+    std::map<EvidenceSlot, size_t> exact_selections;
     const Expression *saved_selection = nullptr;
     bool operator==(const TypeBorrowedReturn &) const = default;
 
@@ -1544,6 +1553,14 @@ class ScalarChecker {
       const auto selection = flow.selection_outcomes(target);
       result.absent = flow.outcome(selection, false);
       result.absent.presence.clear();
+      const auto remember_slot = [&](const EvidenceSlot &slot) {
+        if (flow.footprints.contains(slot) &&
+            (std::holds_alternative<QueryInputTarget>(slot) || std::holds_alternative<QueryProjectedSlot>(slot) ||
+             std::holds_alternative<QueryProductPlace>(slot)))
+          result.exact_selections.emplace(slot, flow.writes);
+      };
+      if (target.selection.slot) remember_slot(*target.selection.slot);
+      for (const auto &slot : target.same_selected) remember_slot(slot);
       auto reaching = flow.outcome(selection, true);
       if (!reaching) return result;
       reaching.presence.clear();
@@ -1576,6 +1593,14 @@ class ScalarChecker {
       for (const auto &[place, reaching] : other.targets) targets[place].join(reaching);
       for (const auto &[place, missing] : other.uninitialized) uninitialized[place].join(missing);
       absent.join(other.absent);
+      for (auto slot = exact_selections.begin(); slot != exact_selections.end();) {
+        const auto right = other.exact_selections.find(slot->first);
+        if (right == other.exact_selections.end()) slot = exact_selections.erase(slot);
+        else {
+          slot->second = std::min(slot->second, right->second);
+          ++slot;
+        }
+      }
       if (saved_selection != other.saved_selection) saved_selection = nullptr;
     }
     TargetEvidence observe(const QuerySelections &flow) const {
@@ -1599,6 +1624,8 @@ class ScalarChecker {
       if (!presence.when_true && presence.when_false) selected.presence = TargetPresence::absent;
       if (presence.when_true || presence.when_false) selected.presence_proof = std::move(presence);
       if (saved_selection) selected.same_selected.insert(saved_selection);
+      for (const auto &[slot, revision] : exact_selections)
+        if (!flow.changed_since(slot, revision)) selected.same_selected.insert(slot);
       if (!selected.places.empty()) {
         selected.field_selections = input_projections;
         selected.initialized_fields = flow.ready_fields(selected);
@@ -7850,18 +7877,32 @@ class ScalarChecker {
       if (presence != other.presence) presence = TargetPresence::unknown;
     }
   };
+  using QueryInputField = std::pair<size_t, ProductFieldPath>;
+  using QueryDeliveredSlots = std::map<QueryInputField, EvidenceSlot>;
   struct QueryProductResult {
     QueryCallSelection selection;
-    std::set<std::pair<size_t, ProductFieldPath>> input_projections;
+    std::set<QueryInputField> input_projections, loaded_projections;
+    EvidencePlaces loaded_slots;
+    std::set<size_t> exact_inputs;
+    bool initialized = false;
     bool operator==(const QueryProductResult &) const = default;
     void merge(const QueryProductResult &other) {
       if (selection.presence == TargetPresence::absent) input_projections = other.input_projections;
       else if (other.selection.presence != TargetPresence::absent)
         input_projections = QuerySelections::common_slots(std::move(input_projections), other.input_projections);
+      // Null is a value here. An explicit null result can differ from the
+      // reference currently stored in a slot.
+      loaded_projections = QuerySelections::common_slots(std::move(loaded_projections), other.loaded_projections);
+      loaded_slots = QuerySelections::common_slots(std::move(loaded_slots), other.loaded_slots);
+      exact_inputs = QuerySelections::common_slots(std::move(exact_inputs), other.exact_inputs);
+      initialized = (initialized || selection.presence == TargetPresence::absent) &&
+          (other.initialized || other.selection.presence == TargetPresence::absent);
       selection.merge(other.selection);
     }
     TargetEvidence evidence(const std::vector<TargetEvidence> &operands) const {
       auto selected = selection.evidence();
+      selected.initialized = initialized;
+      for (const auto input : exact_inputs) QuerySelections::retain_exact_value(selected, operands.at(input));
       for (const auto &[ordinal, path] : input_projections)
         for (auto [slot, prefix] : QuerySelections::field_origins(operands.at(ordinal))) {
           prefix.insert(prefix.end(), path.begin(), path.end());
@@ -7869,8 +7910,18 @@ class ScalarChecker {
         }
       return selected;
     }
+    void connect_loaded_value(TargetEvidence &selected, const QuerySelections &flow,
+                              const QueryDeliveredSlots &delivered) const {
+      const auto connect = [&](const EvidenceSlot &slot) {
+        auto equal = flow.same_selected(slot);
+        selected.same_selected.merge(equal);
+      };
+      for (const auto &slot : loaded_slots)
+        if (flow.footprints.contains(slot)) connect(slot);
+      for (const auto &field : loaded_projections)
+        if (const auto slot = delivered.find(field); slot != delivered.end()) connect(slot->second);
+    }
   };
-  using QueryInputField = std::pair<size_t, ProductFieldPath>;
   struct QueryCallProjection {
     EvidencePlaces places;
     QueryCallSelection value;
@@ -7936,7 +7987,8 @@ class ScalarChecker {
       boolean_writes.insert(other.boolean_writes.begin(), other.boolean_writes.end());
       unknown_boolean_write |= other.unknown_boolean_write;
     }
-    void apply(QuerySelections &flow, const std::vector<TargetEvidence> &operands, bool repeated) const {
+    void apply(QuerySelections &flow, const std::vector<TargetEvidence> &operands, bool repeated,
+               QueryDeliveredSlots *delivered = nullptr) const {
       const auto before = flow.writes;
       std::vector<std::pair<EvidenceSelection, const QueryCallProjection *>> projected;
       for (const auto &[field, summary] : projections) {
@@ -7949,8 +8001,10 @@ class ScalarChecker {
           origins.emplace(std::move(slot), std::move(prefix));
         }
         auto selection = flow.project_slot(std::move(origins), summary.places, repeated);
-        if (selection.slot && std::holds_alternative<QueryProjectedSlot>(*selection.slot))
+        if (selection.slot && std::holds_alternative<QueryProjectedSlot>(*selection.slot)) {
+          if (delivered) delivered->emplace(field, *selection.slot);
           projected.emplace_back(std::move(selection), &summary);
+        }
       }
       for (const auto &[input, fields] : input_fields)
         if (!fields.empty()) flow.initialize_present_fields(operands.at(input), fields);
@@ -7977,7 +8031,7 @@ class ScalarChecker {
     bool operator==(const TypeCallInputs &) const = default;
   };
   struct TypeCallSummary {
-    std::set<size_t> targets, required_inputs, initialized_inputs;
+    std::set<size_t> targets, required_inputs, initialized_inputs, exact_inputs;
     std::map<size_t, QueryCallEffects> product_effects;
     std::optional<QueryProductResult> product_result;
     std::optional<std::string> invalid_input_read;
@@ -8000,11 +8054,13 @@ class ScalarChecker {
         targets = other.targets;
         required_inputs = other.required_inputs;
         initialized_inputs = other.initialized_inputs;
+        exact_inputs = other.exact_inputs;
         return;
       }
       targets.insert(other.targets.begin(), other.targets.end());
       required_inputs.insert(other.required_inputs.begin(), other.required_inputs.end());
       std::erase_if(initialized_inputs, [&](size_t input) { return !other.initialized_inputs.contains(input); });
+      exact_inputs = QuerySelections::common_slots(std::move(exact_inputs), other.exact_inputs);
     }
   };
   bool tracked_product_argument(const Type &type, const TargetEvidence &operand, const QuerySelections &flow) const {
@@ -8159,6 +8215,11 @@ class ScalarChecker {
       TypeCallSummary result;
       std::map<size_t, PresenceBranches> input_presence;
       std::map<size_t, size_t> result_inputs;
+      const auto save_input = [&](TargetEvidence &selected, const EvidenceSlot &witness) {
+        if (body.selections.entry_selections.insert(witness).second)
+          body.selections.save_selection(witness, selected);
+        selected.same_selected.insert(witness);
+      };
       if (inputs.storage) {
         body.imported_storage = inputs.storage->places;
         for (const auto &place : inputs.storage->unwritten)
@@ -8174,12 +8235,8 @@ class ScalarChecker {
         }
         if (inputs.storage) if (const auto actual = inputs.storage->operands.find(i); actual != inputs.storage->operands.end()) {
           auto selected = actual->second.evidence();
-          if (prepared[i].kind == Type::product) {
-            const auto witness = inputs.storage->input_witness(i);
-            if (body.selections.entry_selections.insert(witness).second)
-              body.selections.save_selection(witness, selected);
-            selected.same_selected.insert(witness);
-          }
+          if (prepared[i].kind == Type::product || contract.borrowed())
+            save_input(selected, inputs.storage->input_witness(i));
           body.selections.bind(parameter.name, i, std::move(selected));
           if (prepared[i] == Type::boolean)
             body.selections.borrowed_booleans.insert(actual->second.places.begin(), actual->second.places.end());
@@ -8204,6 +8261,7 @@ class ScalarChecker {
         }
         if (parameter.owner == contract.owner) result_inputs.try_emplace(place, i);
         input.places.insert(place);
+        if (!inputs.storage && contract.borrowed()) save_input(input, QueryInputTarget{place});
         body.selections.bind(parameter.name, i, std::move(input));
         if (prepared[i] == Type::boolean) body.selections.borrowed_booleans.insert(place);
       }
@@ -8262,17 +8320,34 @@ class ScalarChecker {
           }
         }
         if (!path.reasons.contains(1) && !(allows_fallthrough && path.reasons.contains(0))) continue;
-        result.completes = true;
+        const bool first_completion = !std::exchange(result.completes, true);
         if (contract.borrowed()) {
           if (!path.result.borrowed) return {};
           const auto &selected = *path.result.borrowed;
+          const auto observed = selected.observe(selections);
           QueryProductResult returned;
           if (inputs.storage) {
-            const auto observed = selected.observe(selections);
             returned.selection.presence = observed.presence;
             returned.selection.initialized_fields = observed.initialized_fields;
+            returned.initialized = observed.initialized;
             for (const auto &[slot, field] : observed.field_selections)
               returned.input_projections.emplace(std::get<QueryInputTarget>(slot).ordinal, field);
+            for (const auto &slot : observed.same_selected) {
+              if (const auto *input = std::get_if<QueryInputTarget>(&slot)) returned.exact_inputs.insert(input->ordinal);
+              if (inputs.storage->slots.contains(slot)) returned.loaded_slots.insert(slot);
+              if (const auto origins = selections.projected_slots.find(slot); origins != selections.projected_slots.end())
+                for (const auto &[root, field] : selections.expand_fields(origins->second))
+                  if (const auto *input = std::get_if<QueryInputTarget>(&root))
+                    returned.loaded_projections.emplace(input->ordinal, field);
+            }
+          } else {
+            std::set<size_t> exact;
+            for (const auto &slot : observed.same_selected)
+              if (const auto *input = std::get_if<QueryInputTarget>(&slot))
+                if (const auto found = result_inputs.find(input->ordinal); found != result_inputs.end())
+                  exact.insert(found->second);
+            result.exact_inputs = first_completion ? std::move(exact) :
+                QuerySelections::common_slots(std::move(result.exact_inputs), exact);
           }
           for (const auto &[place, targets] : selected.targets) {
             auto possible = targets;
@@ -10098,6 +10173,8 @@ class ScalarChecker {
         if (!state.tracks_target_places() || result.view != true || !scalar_type(type)) return;
         if (proved) {
           target_facts.initialized = std::ranges::all_of(proved->required_inputs, ready_input);
+          for (const auto input : proved->exact_inputs)
+            QuerySelections::retain_exact_value(target_facts, saved_operand(input));
           std::optional<SelectedProductFields> projections;
           for (const auto input : proved->targets) {
             auto fields = saved_operand(input).field_selections;
@@ -10387,12 +10464,15 @@ class ScalarChecker {
           }
           if (!proof.completes) return Type::never;
           const auto before_effects = state.selections.writes;
+          QueryDeliveredSlots delivered;
           if (const auto outcome = proof.product_effects.find(0); outcome != proof.product_effects.end())
-            outcome->second.apply(state.selections, call.operands, state.repeated_observations.has_value());
+            outcome->second.apply(state.selections, call.operands, state.repeated_observations.has_value(),
+                                  proof.product_result ? &delivered : nullptr);
           view = result_view(method, *type, owners);
           if (proof.product_result) {
             target_facts = proof.product_result->evidence(call.operands);
             state.selections.forget_changed(target_facts, before_effects);
+            proof.product_result->connect_loaded_value(target_facts, state.selections, delivered);
           }
           return type->type;
         }

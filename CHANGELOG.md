@@ -5,6 +5,11 @@
 <a id="h-hlvm-candidate-20261120"></a>
 **H-HLVM-CANDIDATE-20261120.** In the project chat, the project user proposed `hlvm-basic` for running BASIC source or saving a DBMR to run later, with the prerequisite “要等 CoD 基本的 lexer/parser 已经通了的情况下再推进”, then asked to record the idea in a planning document. The [application note](applications/README.md#deferred-application-hlvm-basic) applies the executor and editable program graph from [*Algebraic Effects Is All You Need*](papers/AlgebraicEffectsIsAllYouNeed.md) to BASIC. It does not change the compiler roadmap or authorize implementation.
 
+## 2026-11-19 — Preserve returned embedded referents in queries
+
+<a id="k-queried-returned-referents-20261119"></a>
+**K-QUERIED-RETURNED-REFERENTS-20261119.** D-17r134→135 and registry r1006→1007 continue P-564–P-566 under [H-FULL-SCOPE-IMPLEMENTATION-20261118](#h-full-scope-implementation-20261118), [H-445](#h-445) and [H-478](#h-478). The seed retains borrowed input identity and reconnects a returned embedded referent to its slot when their values still match after cleanup. Independent null results and completed rebinds retain their own proof obligations. This preserves borrowed target identity, actual owners, nonexecuting inspection and return-before-cleanup order under C-63/C-65/C-72/C-84 and charter §§3.2–3.3/4.3/6.3/8/12. Prior coverage at `a565ccaffaa45113fac93abef6032db3abdd8c55:design/ExceptionControl.md`.
+
 ## 2026-11-19 — Track selected embedded reference slots in queries
 
 <a id="k-queried-embedded-slots-20261119"></a>

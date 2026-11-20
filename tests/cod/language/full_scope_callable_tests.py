@@ -30,6 +30,11 @@ READ_SELECTED_HOLDER = ('func peek(ptr p:const Holder in O)->u64 where {const ow
                         'if(p.selected is null){return 0u64;}else{};return p.selected;}')
 REBIND_SELECTED_HOLDER = ('proc redirect(ptr p:Holder in O,ptr target:u64 in O)->void where {owner O}{'
                           'if(p is null){return;}else{};p.selected=target;return;}')
+RETURN_SELECTED_HOLDER = ('func get_link(ptr p:Holder in O)->ptr u64 in O where {owner O}{'
+                          'if(p is null){return null in O;}else{};return p.selected;}')
+RETURN_AND_REBIND_HOLDER = ('func get_link(ptr p:Holder in O,ptr replacement:u64 in O)->ptr u64 in O where {owner O}{'
+                           'if(p is null){return null in O;}else{};'
+                           'defer (=)(p.selected,replacement);return p.selected;}')
 QUERY_NODE = 'data Node {value:u64;ref next:Node;}'
 READ_QUERY_PAIR = ('func inspect(ptr p:const Pair in O)->u64 where {const owner O}{'
                    'if(p is null){return 0u64;}else{};return p.second;}')
@@ -1473,6 +1478,83 @@ runner.CASES = {
         QUERY_HOLDER + QUERY_PRODUCT_FLAGS + READ_SELECTED_HOLDER +
         query(QUERY_HOLDER_CHOICE + 'chosen.selected=ready;'
               '{{defer peek(chosen);chosen.selected=a;return;}};return 0u64;'),
+        2, '', "read of 'a' before definite initialization"),
+    'query_returned_referent_prepares_the_slots_current_target': (
+        IO + QUERY_HOLDER + QUERY_PRODUCT_FLAGS + RETURN_SELECTED_HOLDER +
+        query(QUERY_BOUND_HOLDERS + 'ptr held=get_link(chosen);held<-7u64;return chosen.selected;') +
+        'behave @print(result);', 0, '4\n', ''),
+    'query_returned_referent_of_a_fixed_slot_retains_the_selected_target': (
+        IO + QUERY_HOLDER + QUERY_PRODUCT_FLAGS + RETURN_SELECTED_HOLDER +
+        query(QUERY_HOLDER_CHOICE + 'ptr initial=if(pick_left){a}else{b};left.selected=initial;'
+              'ptr held=get_link(left);held<-7u64;return left.selected;') + 'behave @print(result);',
+        0, '4\n', ''),
+    'query_returned_referent_can_be_forwarded_by_a_product_helper': (
+        IO + QUERY_HOLDER + QUERY_PRODUCT_FLAGS + RETURN_SELECTED_HOLDER +
+        'func forward(ptr p:Holder in O)->ptr u64 in O where {owner O}{return get_link(p);}' +
+        query(QUERY_BOUND_HOLDERS + 'ptr held=forward(chosen);held<-7u64;return chosen.selected;') +
+        'behave @print(result);', 0, '4\n', ''),
+    'query_returned_referent_can_be_forwarded_by_a_scalar_helper': (
+        IO + QUERY_HOLDER + QUERY_PRODUCT_FLAGS + RETURN_SELECTED_HOLDER +
+        'func through(ptr p:u64 in O)->ptr u64 in O where {owner O}{return p;}' +
+        query(QUERY_BOUND_HOLDERS + 'ptr held=through(get_link(chosen));held<-7u64;return chosen.selected;') +
+        'behave @print(result);', 0, '4\n', ''),
+    'query_nullable_scalar_forwarding_does_not_equate_an_explicit_null_with_the_input': (
+        QUERY_HOLDER + QUERY_PRODUCT_FLAGS + RETURN_SELECTED_HOLDER +
+        'func through(ptr p:u64 in O,flag:bool)->ptr u64 in O where {owner O}{'
+        'if(flag){return p;}else{return null in O;};}' +
+        query(QUERY_BOUND_HOLDERS + 'ptr held=through(get_link(chosen),pick_other);'
+              'if(held is null){return chosen.selected;}else{return 0u64;};'),
+        2, '', "read of 'a' before definite initialization"),
+    'query_scalar_helper_can_return_the_original_input_after_a_local_rebind': (
+        IO + QUERY_HOLDER + QUERY_PRODUCT_FLAGS + RETURN_SELECTED_HOLDER +
+        'func through(ptr p:u64 in O,ptr replacement:u64 in O)->ptr u64 in O where {owner O}{'
+        'ptr old=p;p=replacement;return old;}' +
+        query(QUERY_BOUND_HOLDERS + 'val fresh<-make local u64;ptr held=through(get_link(chosen),fresh);'
+              'held<-7u64;return chosen.selected;') + 'behave @print(result);', 0, '4\n', ''),
+    'query_scalar_helper_returning_a_local_rebind_does_not_prepare_the_original_input': (
+        QUERY_HOLDER + QUERY_PRODUCT_FLAGS + RETURN_SELECTED_HOLDER +
+        'func through(ptr p:u64 in O,ptr replacement:u64 in O)->ptr u64 in O where {owner O}{'
+        'p=replacement;return p;}' +
+        query(QUERY_BOUND_HOLDERS + 'val fresh<-make local u64;ptr held=through(get_link(chosen),fresh);'
+              'held<-7u64;return chosen.selected;'), 2, '', "read of 'a' before definite initialization"),
+    'query_returned_referent_does_not_follow_a_caller_rebind': (
+        QUERY_HOLDER + QUERY_PRODUCT_FLAGS + RETURN_SELECTED_HOLDER +
+        query(QUERY_BOUND_HOLDERS + 'val fresh<-make local u64;ptr held=get_link(chosen);'
+              'chosen.selected=fresh;held<-7u64;return chosen.selected;'),
+        2, '', "read of 'fresh' before definite initialization"),
+    'query_returned_referent_can_follow_a_callee_rebind_before_return': (
+        IO + QUERY_HOLDER + QUERY_PRODUCT_FLAGS +
+        'func get_link(ptr p:Holder in O,ptr replacement:u64 in O)->ptr u64 in O where {owner O}{'
+        'if(p is null){return null in O;}else{};p.selected=replacement;return p.selected;}' +
+        query(QUERY_BOUND_HOLDERS + 'val fresh<-make local u64;val another<-make local u64;'
+              'ptr replacement=if(pick_other){fresh}else{another};ptr held=get_link(chosen,replacement);'
+              'held<-7u64;return chosen.selected;') + 'behave @print(result);', 0, '4\n', ''),
+    'query_prepared_return_does_not_follow_a_rebind_in_callee_cleanup': (
+        QUERY_HOLDER + QUERY_PRODUCT_FLAGS + RETURN_AND_REBIND_HOLDER +
+        query(QUERY_BOUND_HOLDERS + 'val fresh<-make local u64;ptr held=get_link(chosen,fresh);'
+              'held<-7u64;return chosen.selected;'), 2, '', "read of 'fresh' before definite initialization"),
+    'query_prepared_return_keeps_the_earlier_target_after_callee_cleanup': (
+        IO + QUERY_HOLDER + QUERY_PRODUCT_FLAGS + RETURN_AND_REBIND_HOLDER +
+        query(QUERY_BOUND_HOLDERS + 'val fresh<-make local u64;ptr held=get_link(chosen,fresh);'
+              'held<-7u64;return held;') + 'behave @print(result);', 0, '4\n', ''),
+    'query_cleanup_can_initialize_the_prepared_result_after_rebinding_its_slot': (
+        IO + QUERY_HOLDER + QUERY_PRODUCT_FLAGS +
+        'func get_link(ptr p:Holder in O,ptr replacement:u64 in O)->ptr u64 in O where {owner O}{'
+        'if(p is null){return null in O;}else{};if(p.selected is null){return null in O;}else{};'
+        'defer (<-)(p.selected,7u64);defer (=)(p.selected,replacement);return p.selected;}' +
+        query(QUERY_BOUND_HOLDERS + 'val fresh<-make local u64;ptr held=get_link(chosen,fresh);return held;') +
+        'behave @print(result);', 0, '4\n', ''),
+    'query_returned_referent_shares_nullness_with_the_unchanged_slot': (
+        IO + QUERY_HOLDER + QUERY_PRODUCT_FLAGS + RETURN_SELECTED_HOLDER +
+        query(QUERY_HOLDER_CHOICE + 'left.selected=ready;right.selected=null in here;ptr held=get_link(chosen);'
+              'if(held is null){return 0u64;}else{ref observed=chosen.selected;return observed;};') +
+        'behave @print(result);', 0, '4\n', ''),
+    'query_explicit_null_return_does_not_establish_nullness_for_the_slot': (
+        QUERY_HOLDER + QUERY_PRODUCT_FLAGS +
+        'func get_link(ptr p:Holder in O,flag:bool)->ptr u64 in O where {owner O}{'
+        'if(p is null){return null in O;}else{};if(flag){return p.selected;}else{return null in O;};}' +
+        query(QUERY_BOUND_HOLDERS + 'ptr held=get_link(chosen,pick_other);'
+              'if(held is null){return chosen.selected;}else{return 0u64;};'),
         2, '', "read of 'a' before definite initialization"),
     'query_recursive_helper_preserves_field_writes': (
         IO + QUERY_PAIR + 'proc populate(ptr p:Pair in O,n:u64)->void where {owner O}{'
