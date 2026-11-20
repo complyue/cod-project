@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-20 — Acquire and release the first LLVM binding through typed handles
+
+<a id="h-booter-llvm-handles-20261120"></a>
+**H-BOOTER-LLVM-HANDLES-20261120.** The project user confirmed in the [C interop side chat](codex://threads/01a1f94d-2093-7e31-8dd2-d34fbf7d9d07), relayed to mainline on 2026-11-20 America/Los_Angeles, “首版 LLVM binding 用 owned/borrowed typed handle 替代 `defer init(...)()` 资源管理套路。构造失败由 C 清理部分资源，验证和发射仍显式调用，普通 `defer` 和 `init` 语义不变。” Interop r11 and registry r1021 apply [the scoped native handle decision](#h-booter-c-handles-20261120) to the first LLVM session under C-80/C-65 and P-646/P-647. C releases the acquired prefix on failed construction. Successful acquisition publishes one lexical owner with a generated destructor and owner-bound typed borrows. ABI, destructor failure and build configuration remain open. Prior profile at `1573af0361774e166c98201cf4518db613844432:applications/cod-booter/docs/LLVMInterop.md`.
+
 ## 2026-11-20 — Use scoped native handles in the first booter
 
 <a id="h-booter-c-handles-20261120"></a>
