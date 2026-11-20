@@ -5,9 +5,9 @@ function score(x:Metric in O1) -> i64 where {owner O1} { return 1 }
 function through(x:Metric in O1) -> i64 where {owner O1} { return private_bridge(x) + private_bridge(x) }
 function pointer_value(x:Sample in O1) -> i64 where {owner O1} { return deref(x).value }
 function unused(x:Unavailable in O1) -> i64 where {owner O1} { return missing_implementation(x) }
-function (len)(x:Sample in O1) -> i64 where {owner O1} { return x.value }
+function len(x:Sample in O1) -> i64 where {owner O1} { return x.value }
 
-export (len);
+export len;
 export Metric;
 export Sample;
 export create;

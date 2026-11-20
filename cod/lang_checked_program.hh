@@ -251,6 +251,12 @@ struct CheckedSchema {
   bool bits;
 };
 
+struct CheckedArray {
+  const Form *source;
+  Type index;
+  Type element;
+};
+
 struct CheckedBinding {
   Type type;
   bool read_only;
@@ -625,6 +631,7 @@ struct CheckedFamily {
 struct CheckedProgram {
   struct Initializer { size_t module; const Expression *expression; };
   std::vector<CheckedSchema> schemas;
+  std::vector<CheckedArray> arrays;
   std::vector<CheckedSymbol> symbols;
   std::deque<CheckedFamily> families;
   std::vector<QueryEnvironment> query_environments{{}};

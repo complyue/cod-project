@@ -5693,6 +5693,8 @@ class ScalarChecker {
                              bool borrowed_product = false) {
     if (bits_type(type) || binder(method, type) || (result && type == Type::void_type)) return;
     if (borrowed_product && type.kind == Type::product) return;
+    if (type.kind == Type::array)
+      implementation_gap(at, "array parameter or result of type '" + type_name(type) + "'");
     if (type.kind == Type::procedure && type.target) {
       if (type.variadic || !type.capture_owners.empty() || !type.capture_regions.empty() ||
           (type.owners.empty() && std::any_of(type.nullable_views.begin(), type.nullable_views.end(), [](bool v) { return v; })))
@@ -17127,16 +17129,30 @@ class ScalarChecker {
     plan_entry_installations();
   }
 
-  void register_schemas(const SourceModule &source) {
+  void register_nominal_types(const SourceModule &source) {
     const auto first = program_.schemas.size();
+    const auto first_array = program_.arrays.size();
     for (const auto &form : source.forms) {
       const bool product = form->kind == Form::Kind::data;
-      if (!product && form->kind != Form::Kind::region_definition) continue;
+      const bool array = form->kind == Form::Kind::array;
+      if (!product && !array && form->kind != Form::Kind::region_definition) continue;
       if (form->parent_type) implementation_gap(form->at, "data declarations with a parent type");
-      const Type type{product ? Type::product : Type::region_schema, form->name, program_.schemas.size()};
+      const auto kind = array ? Type::array : product ? Type::product : Type::region_schema;
+      const Type type{kind, form->name, array ? program_.arrays.size() : program_.schemas.size()};
       if (!module_names().types.emplace(form->name, type).second)
         fail(form->at, "duplicate type binding '" + form->name + "'");
-      program_.schemas.push_back({form.get(), {}, product});
+      if (array) program_.arrays.push_back({form.get(), *form->index_type, *form->result_type});
+      else program_.schemas.push_back({form.get(), {}, product});
+    }
+    for (auto &array : std::span(program_.arrays).subspan(first_array)) {
+      array.index = resolve_type(std::move(array.index));
+      array.element = resolve_type(std::move(array.element));
+      if (!integral(array.index))
+        implementation_gap(array.source->at, "array index domain '" + type_name(array.index) + "'");
+      if (array.element.kind == Type::procedure)
+        fail(array.source->at, "callable views require lexical storage and cannot be array elements");
+      if (!scalar_type(array.element) && array.element.kind != Type::product)
+        implementation_gap(array.source->at, "array element type '" + type_name(array.element) + "'");
     }
     const auto count = program_.schemas.size() - first;
     if (!count) return;
@@ -17205,12 +17221,13 @@ class ScalarChecker {
       }
       program_.exception_values = true;
     }
-    register_schemas(source);
+    register_nominal_types(source);
     std::vector<const Form *> definitions;
     for (const auto &form : forms) {
       if (source.dependencies.contains(form.get())) continue;
       if (form->kind == Form::Kind::expression || form->kind == Form::Kind::export_resource ||
-          form->kind == Form::Kind::data || form->kind == Form::Kind::region_definition) continue;
+          form->kind == Form::Kind::data || form->kind == Form::Kind::region_definition || form->kind == Form::Kind::array)
+        continue;
       if ((form->kind == Form::Kind::using_resource || form->kind == Form::Kind::import_resource) && form->path == "std:exceptions" && !form->using_symbol) continue;
       if (form->kind == Form::Kind::using_resource && form->using_symbol && form->path == "std:io" && form->name == "print") {
         if (!print_symbol) {

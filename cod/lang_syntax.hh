@@ -455,10 +455,13 @@ inline int binary_precedence(const std::string &op) {
 }
 
 inline bool intrinsic_name(std::string_view name) {
-  return name == "cause_at" || name == "region" || name == "used_bytes" || name == "capacity_bytes" ||
-         name == "deref" || name == "len" || name == "ref_at" || name == "store" ||
+  return name == "cause_at" || name == "region" || name == "deref" || name == "ref_at" || name == "store" ||
          name == "setfield" || name == "scalar" || name == "i64" || name == "u8" ||
          name == "u32" || name == "u64" || name == "f32" || name == "f64";
+}
+
+inline bool explicit_query_intrinsic_name(std::string_view name) {
+  return name == "len" || name == "used_bytes" || name == "capacity_bytes";
 }
 
 inline bool expression_keyword(std::string_view name) {
@@ -628,7 +631,7 @@ class Parser {
             (binary_precedence(token.text) >= 0 || token.text == "!" || token.text == "=" || token.text == "<-" ||
              swap_operation(token.text) || pipeline_operator(token.text)));
   }
-  Token lexical_name(bool *operation = nullptr) {
+  Token lexical_name(bool *operation = nullptr, bool explicit_intrinsic = false) {
     const bool parenthesized = take("(");
     if (operation) *operation = parenthesized;
     if (!parenthesized) return ordinary_name();
@@ -639,7 +642,8 @@ class Parser {
       expect("]");
       if (take("<-")) op.text = "[]<-";
       else { expect("="); op.text = "[]="; }
-    } else if (!operation_token(op))
+    } else if (!operation_token(op) &&
+               !(explicit_intrinsic && op.kind == TokenKind::identifier && explicit_query_intrinsic_name(op.text)))
       fail(op.at, "expected an operator or intrinsic name");
     if (op.text == "&&" || op.text == "||") fail(op.at, "short-circuit operators are control expressions");
     expect(")");
@@ -1432,7 +1436,7 @@ class Parser {
     if (is("{")) return block();
     if (take("intrinsic")) {
       if (!is("(")) fail(peek().at, "intrinsic requires a parenthesized operator or intrinsic name");
-      auto expr = make(Expression::Kind::call, lexical_name());
+      auto expr = make(Expression::Kind::call, lexical_name(nullptr, true));
       expr->intrinsic = true;
       arguments(*expr);
       return expr;

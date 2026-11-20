@@ -1,7 +1,7 @@
 using symbol "std:io" @print;
 symbol from "intrinsic-library.cod" @bias;
 using "intrinsic-library.cod" Cell as C;
-using "intrinsic-library.cod" (len);
+using "intrinsic-library.cod" len;
 using "intrinsic-library.cod" (store);
 using "intrinsic-library.cod" (+);
 using "intrinsic-library.cod" (<-);
@@ -31,7 +31,7 @@ symbol @indexed_assign : proc(i64) -> i64;
 procedure @indexed_assign(value:i64) -> i64 { return @scores[Index(0u32)] = value }
 effect @bias <- 2;
 behave @print(len(B(7)));
-behave @print((len)(B(8)));
+behave @print(len(B(8)));
 behave @print(len(@values));
 behave @print(scalar(saved));
 behave @print(scalar(pure(B(5))));

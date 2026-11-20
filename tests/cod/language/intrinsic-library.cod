@@ -6,9 +6,9 @@ data Cell { value:i64; }
 unit Index;
 array Scores[u32(Index)]:i64;
 function twice(value:i64) -> i64 { return value * 2 }
-function (len)(value:i64(Box)) -> u64 { return u64(scalar(value)) }
-procedure (len)(value:i64) -> u64 { return u64(value + @bias) }
-procedure (len)(value:bool) -> u64 { return u64(@missing) }
+function len(value:i64(Box)) -> u64 { return u64(scalar(value)) }
+procedure len(value:i64) -> u64 { return u64(value + @bias) }
+procedure len(value:bool) -> u64 { return u64(@missing) }
 function (store)(value:i64(Box), amount:i64) -> i64(Box) { return Box(scalar(value) + amount) }
 procedure (<-)(cell:Cell in O1, amount:i64) -> const Cell in O1 where {owner O1} {
   setfield(cell, value, amount + @bias);
@@ -34,7 +34,7 @@ procedure @raw_store(target:f32 in O1, value:f32) -> const f32 where {owner O1} 
 export (+);
 export (<-);
 export ([]=);
-export (len);
+export len;
 export (store);
 export @bias;
 export @missing;

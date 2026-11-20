@@ -16,7 +16,7 @@ behave @assert(sum == 18);
 array Values[u32]:i64;
 region symbol @arena;
 effect @arena <- region(256u64);
-proc (len)(values:Values in O) -> const u64 where {owner O} { return 99u64 }
+proc len(values:Values in O) -> const u64 where {owner O} { return 99u64 }
 function actual_length(values:Values in O) -> const u64 where {owner O} {
   return intrinsic (len)(values)
 }

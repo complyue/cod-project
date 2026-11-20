@@ -371,10 +371,10 @@
     "stderr_contains": "a function cannot invoke a procedure overload"
   },
   {
-    "file": "intrinsic-reserved-name.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "reserved keyword 'len'"
+    "file": "ordinary-storage-queries.cod",
+    "exit": 0,
+    "stdout": "7\n10\n21\n11\n",
+    "stderr_contains": "declaration shadows outer binding 'len' [-Wshadow]"
   },
   {
     "file": "module-reserved-name.cod",
