@@ -213,6 +213,8 @@ The expression entry also offers scratch planning over the same source borrow. T
 
 The scratch driver registers release before invoking the work callback with the planned capacities. Lexical failure returns before registration. A registration failure prevents acquisition. Once work begins, release runs on scope exit, including when the reserve request fails and leaves the provider's allocation empty.
 
+The native expression driver parses before opening an LLVM session. It registers release before opening and calls the verification and output callback only after all lowering operations succeed. Release runs after a partial opening failure or a rejected lowering, verification or write.
+
 The expression parser retains each arithmetic operator's byte offset alongside the full expression span. Lowering passes that offset to the backend for checked `u64` addition and multiplication, so a generated overflow reports the operator that failed.
 
 The seed builds integer addition, subtraction and multiplication with overflow through a private LLVM C helper. The emitter uses the resulting overflow flag to dispatch source-located failure through ordinary cleanup.
