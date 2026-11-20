@@ -54,7 +54,7 @@
         "scrollbar.thumb.border": "#2d2f34ff",
         "scrollbar.track.background": "#00000000",
         "scrollbar.track.border": "#1b1e24ff",
-        "editor.foreground": "#bfbdb6ff",
+        "editor.foreground": "#e6e0d4ff",
         "editor.background": "#0d1016ff",
         "editor.gutter.background": "#0d1016ff",
         "editor.subheader.background": "#1f2127ff",
@@ -233,7 +233,7 @@
             "font_weight": null
           },
           "function": {
-            "color": "#ffb353ff",
+            "color": "#e0c7a8ff",
             "font_style": null,
             "font_weight": null
           },
@@ -243,7 +243,7 @@
             "font_weight": null
           },
           "keyword": {
-            "color": "#ff8f3fff",
+            "color": "#c59d88ff",
             "font_style": null,
             "font_weight": null
           },
@@ -303,12 +303,12 @@
             "font_weight": null
           },
           "punctuation.bracket": {
-            "color": "#a6a5a0ff",
+            "color": "#9ba8baff",
             "font_style": null,
             "font_weight": null
           },
           "punctuation.delimiter": {
-            "color": "#a6a5a0ff",
+            "color": "#9ba8baff",
             "font_style": null,
             "font_weight": null
           },
@@ -378,17 +378,20 @@
             "font_weight": 700
           },
           "type": {
-            "color": "#59c2ffff",
+            "color": "#b9dbeeff",
             "font_style": null,
             "font_weight": null
           },
+          "type.builtin": {
+            "color": "#92aabdff"
+          },
           "variable": {
-            "color": "#bfbdb6ff",
+            "color": "#e6e0d4ff",
             "font_style": null,
             "font_weight": null
           },
           "variable.parameter": {
-            "color": "#d2a6ffff",
+            "color": "#ddd1efff",
             "font_style": null,
             "font_weight": null
           },
@@ -407,27 +410,30 @@
             "font_style": null,
             "font_weight": null
           },
+          "keyword.control.cod": {
+            "color": "#C39E89"
+          },
           "keyword.module.cod": {
-            "color": "#E6C164",
+            "color": "#B7A47F",
             "font_style": "italic",
-            "font_weight": 600
+            "font_weight": 400
           },
           "keyword.declaration.cod": {
-            "color": "#69C6A0",
-            "font_weight": 600
+            "color": "#8FAFA1",
+            "font_weight": 400
           },
           "keyword.modifier.const.cod": {
-            "color": "#FF4248"
+            "color": "#CC969B"
           },
           "keyword.allocation.cod": {
-            "color": "#C5DC68",
-            "font_weight": 700
+            "color": "#A2AC81",
+            "font_weight": 400
           },
           "variable.special.cod-symbol": {
-            "color": "#F58FA1"
+            "color": "#E3AFBD"
           },
           "operator.cod": {
-            "color": "#91A7C4"
+            "color": "#98A8BF"
           }
         }
       }
