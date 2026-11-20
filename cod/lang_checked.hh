@@ -9798,18 +9798,11 @@ class ScalarChecker {
   static void schedule_ordinary_operands(CheckedOperation &operation, const std::vector<size_t> &slots) {
     for (const auto slot : slots) operation.operand_preparation.push_back({CheckedOperation::OperandPreparation::Kind::ordinary, slot});
   }
-  static bool aggregate_argument(const Type &type) {
-    return type.kind == Type::product || type.kind == Type::array;
-  }
   static void check_written_operand_type(const Type &type, ArgumentMode mode, const Location &at, bool aggregate_borrows) {
-    if (scalar_type(type) || (aggregate_borrows && mode == ArgumentMode::borrowed_read && aggregate_argument(type))) return;
+    const bool aggregate = type.kind == Type::product || type.kind == Type::array;
+    const bool borrowed = mode == ArgumentMode::borrowed_read || mode == ArgumentMode::borrowed_ref;
+    if (scalar_type(type) || (aggregate_borrows && aggregate && borrowed)) return;
     implementation_gap(at, "written argument preparation requires scalar inputs");
-  }
-  static void check_readonly_here_aggregates(const CheckedMethod &receiver, const std::vector<Type> &arguments,
-                                            const Location &at) {
-    for (size_t i = 0; i < arguments.size(); ++i)
-      if (aggregate_argument(arguments[i]) && !receiver.input_parameters()[i].read_only)
-        implementation_gap(at, "an aggregate argument at a direct here call requires a readonly parameter");
   }
   CheckedOperation check_written_operand(const Expression &operand, ArgumentMode mode, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, bool aggregate_borrows = false) {
@@ -9899,7 +9892,6 @@ class ScalarChecker {
     }
     const auto selected = select_method(binding.candidates, arguments, expr.at, expr.text, {}, access, owners, &state, true, true);
     const auto &receiver = program_.methods[selected];
-    check_readonly_here_aggregates(receiver, arguments, expr.at);
     if (state.method && program_.methods[*state.method].source->kind == Form::Kind::function &&
         receiver.source->kind != Form::Kind::function) fail(expr.at, "a function cannot invoke a procedure");
     if (!completes) complete_written_arguments(receiver, arguments, operands);
@@ -13701,11 +13693,11 @@ class ScalarChecker {
     std::vector<Type> arguments(count);
     std::vector<CheckedOperation> views(count);
     bool completes = true;
-    const bool direct_body = syntax.body && !terminal && !explicit_here;
+    const bool aggregate_borrows = !terminal && here_count == 1 && (syntax.body || forwards_here(target));
     for (const auto [kind, slot] : operation.operand_preparation) {
       if (kind == PreparationKind::ordinary) {
         const auto mode = modes[slot];
-        views[slot] = check_written_operand(*operands[slot], mode, supplier, operations, direct_body);
+        views[slot] = check_written_operand(*operands[slot], mode, supplier, operations, aggregate_borrows);
         arguments[slot] = views[slot].type;
         operation.arguments[slot] = {mode, arguments[slot]};
         completes = completes && arguments[slot] != Type::never;
@@ -13728,7 +13720,6 @@ class ScalarChecker {
     }
     const auto selected = select_method(candidates, arguments, expr.at, target.text, {}, access_of(views), owners_of(views), nullptr, true, true);
     const auto &receiver = program_.methods[selected];
-    if (direct_body) check_readonly_here_aggregates(receiver, arguments, expr.at);
     if (checking_method_ && checking_method_->source->kind == Form::Kind::function && receiver.source->kind != Form::Kind::function)
       fail(expr.at, "a function cannot invoke a procedure");
     if (!completes) {

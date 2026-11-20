@@ -1,0 +1,18 @@
+using "SourceStorage.cod" SourceBytes;
+using "ParserStorage.cod" Tokens;
+using "ParserStorage.cod" ExprNodes;
+using "Frontend.cod" FrontendResult;
+using "Frontend.cod" read_expression;
+using "Lowering.cod" lower_expression;
+
+# The caller keeps the source and scratch buffers live. Invalid source leaves
+# the diagnostic in result and makes no backend calls.
+proc compile_expression(here emit(ordinal:u64, kind:u8, number:u64, left:u64, right:u64) -> bool,
+                        source:const SourceBytes in S, ref tokens:Tokens in T,
+                        ref nodes:ExprNodes in N, ref result:FrontendResult in R) -> bool
+    where {const owner S, owner T, owner N, owner R} {
+    if (!read_expression(source, tokens, nodes, result)) { return false; } else {};
+    return lower_expression(emit, nodes, result.tree);
+}
+
+export compile_expression;
