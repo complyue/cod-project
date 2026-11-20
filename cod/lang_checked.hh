@@ -7120,12 +7120,25 @@ class ScalarChecker {
       const bool direct = field.storage == PlaceKind::value;
       if (direct && item->binding != "<-") fail(item->at, "a direct product field requires bits transfer '<-'");
       if (!direct && item->binding != "=") fail(item->at, "a reference field initializer requires binding '='");
-      if (direct && field.type.kind == Type::product) implementation_gap(item->at, "whole-product field initialization");
-      if (!initialized.insert(index).second && (direct ? readonly_field(field) : field.source->fixed_binding))
-        fail(item->at, "readonly field '" + item->text + "' is initialized more than once");
+      if (!initialized.insert(index).second) {
+        if (direct ? readonly_field(field) : field.source->fixed_binding)
+          fail(item->at, "readonly field '" + item->text + "' is initialized more than once");
+        if (direct && field.type.kind == Type::product) implementation_gap(item->at, "repeated inline product initialization");
+      }
       order.push_back(index);
     }
     return order;
+  }
+  static const Expression &inline_product_initializer(const Expression &item) {
+    const auto &input = *item.children.front();
+    if (input.kind != Expression::Kind::make_object)
+      implementation_gap(item.at, "whole-product field initialization without an explicit nested make");
+    if (!input.initializer_block)
+      fail(input.at, "an inline product field requires a complete make initializer block");
+    return input;
+  }
+  static void require_inline_product_type(const Type &constructed, const Type &declared, const Location &at) {
+    if (constructed != declared) fail(at, "nested make must match the inline field's declared product type");
   }
   static void complete_product(const CheckedSchema &schema, const std::vector<size_t> &order, const Location &at) {
     const std::set<size_t> initialized(order.begin(), order.end());
@@ -7935,6 +7948,61 @@ class ScalarChecker {
   }
   Type evidence_annotation(const Type &type, const TypeEvidenceState &state) const {
     return state.method ? substitute(type, program_.methods[*state.method], state.substitutions, true) : resolve_type(type);
+  }
+  bool query_product_initializers(const Expression &expr, const Type &type, const QueryProductPlace &product,
+                                  TypeEvidenceState &state, bool track_places, bool reached = true) const {
+    const auto &schema = product_schema(type, expr.at);
+    if (!expr.owner_name.empty() && expr.owner_name != "here" && state.required &&
+        compare_owners(owner_evidence(expr.owner_name, state, expr.at), state.full_scope_owner, &state) != OwnerMatch::satisfied)
+      implementation_gap(expr.at, "product construction outside the current lexical owner");
+    const auto order = product_initializers(schema, expr);
+    bool completes = true;
+    for (size_t i = 0; i < order.size(); ++i) {
+      const auto &item = *expr.children[i];
+      const auto &field = schema.fields[order[i]];
+      const auto member = product.field(type.identity, order[i]);
+      const bool direct = field.storage == PlaceKind::value;
+      if (direct && field.type.kind == Type::product) {
+        const auto &nested = inline_product_initializer(item);
+        const auto constructed = evidence_annotation(*nested.annotation, state);
+        if (state.required || constructed.kind == Type::product) require_inline_product_type(constructed, field.type, nested.at);
+        if (constructed == field.type)
+          completes = query_product_initializers(nested, constructed, member, state, track_places, reached && completes) && completes;
+        continue;
+      }
+      const auto value = type_evidence(*item.children.front(), state, false, nullptr, nullptr,
+          ExpectedTypeUse::materialization, reached && completes, direct ? EvidenceRead::payload : EvidenceRead::target);
+      if (state.required && value && *value != Type::never) {
+        if (direct) transfer_type(*value, field.type, item.at);
+        else rebind_type(field.type, *value, item.at);
+      }
+      if (track_places && reached && completes && value && *value != Type::never) {
+        if (direct) {
+          if (field.type == Type::boolean) state.selections.write_boolean({member}, state.target.branches);
+        } else {
+          const auto &source = state.value;
+          if (source.view != true || source.mixed_view)
+            implementation_gap(item.at, "reference field initialization requires an existing target or null");
+          rebind_access(field.source->read_only, source.read_only.value_or(true), item.at);
+          if ((*value != Type::null_ref || source.owner) &&
+              compare_owners(source.owner, state.full_scope_owner, &state) != OwnerMatch::satisfied)
+            fail(item.at, "reference field target must share the containing product's owner");
+          if (field.storage == PlaceKind::reference) {
+            if (source.nullable && state.target.presence != TargetPresence::present)
+              fail(item.at, "ref field requires a proven non-null target");
+            require_type_initialized(state, state.target, "ref field target", item.at);
+          }
+          state.selections.assign({member, {member}}, state.target);
+        }
+        state.selections.initialize(EvidencePlaces{member});
+      }
+      completes = completes && value != Type::never;
+    }
+    if (completes && expr.initializer_block) {
+      complete_product(schema, order, expr.at);
+      if (track_places && reached && schema.fields.empty()) state.selections.initialize(EvidencePlaces{product});
+    }
+    return completes;
   }
   static bool type_loop_control(const Expression *declaration) {
     return declaration && (declaration->kind == Expression::Kind::range_for || declaration->kind == Expression::Kind::fold);
@@ -10510,11 +10578,7 @@ class ScalarChecker {
     case K::make_object: {
       const auto type = evidence_annotation(*expr.annotation, state);
       if (type.kind != Type::product && !state.required) return {};
-      const auto &schema = product_schema(type, expr.at);
-      if (!expr.owner_name.empty() && expr.owner_name != "here" && state.required &&
-          compare_owners(owner_evidence(expr.owner_name, state, expr.at), state.full_scope_owner, &state) != OwnerMatch::satisfied)
-        implementation_gap(expr.at, "product construction outside the current lexical owner");
-      const auto order = product_initializers(schema, expr);
+      product_schema(type, expr.at);
       const bool track_places = state.checks_initialization() && state.selections.tracking;
       const QueryProductPlace product{&expr, type.identity, {}};
       if (track_places) {
@@ -10524,48 +10588,10 @@ class ScalarChecker {
             })) implementation_gap(expr.at, "recursive activation shares an abstract product origin in typeof");
         reserve_query_product(state.selections, product, expr.at);
       }
-      bool completes = true;
-      for (size_t i = 0; i < order.size(); ++i) {
-        const auto &item = *expr.children[i];
-        const auto &field = schema.fields[order[i]];
-        const bool direct = field.storage == PlaceKind::value;
-        const auto value = type_evidence(*item.children.front(), state, false, nullptr, nullptr,
-            ExpectedTypeUse::materialization, completes, direct ? EvidenceRead::payload : EvidenceRead::target);
-        if (state.required && value && *value != Type::never) {
-          if (direct) transfer_type(*value, field.type, item.at);
-          else rebind_type(field.type, *value, item.at);
-        }
-        if (track_places && completes && value && *value != Type::never) {
-          const auto member = product.field(type.identity, order[i]);
-          if (direct) {
-            if (field.type == Type::boolean) state.selections.write_boolean({member}, state.target.branches);
-          } else {
-            const auto &source = state.value;
-            if (source.view != true || source.mixed_view)
-              implementation_gap(item.at, "reference field initialization requires an existing target or null");
-            rebind_access(field.source->read_only, source.read_only.value_or(true), item.at);
-            if ((*value != Type::null_ref || source.owner) &&
-                compare_owners(source.owner, state.full_scope_owner, &state) != OwnerMatch::satisfied)
-              fail(item.at, "reference field target must share the containing product's owner");
-            if (field.storage == PlaceKind::reference) {
-              if (source.nullable && state.target.presence != TargetPresence::present)
-                fail(item.at, "ref field requires a proven non-null target");
-              require_type_initialized(state, state.target, "ref field target", item.at);
-            }
-            state.selections.assign({member, {member}}, state.target);
-          }
-          state.selections.initialize(EvidencePlaces{member});
-        }
-        completes = completes && value != Type::never;
-      }
-      if (!completes) return Type::never;
-      if (expr.initializer_block) complete_product(schema, order, expr.at);
+      if (!query_product_initializers(expr, type, product, state, track_places)) return Type::never;
       view = {false, true, {}, state.full_scope_owner};
       target_facts.presence = TargetPresence::present;
-      if (track_places) {
-        target_facts.places.insert(product);
-        if (expr.initializer_block && schema.fields.empty()) state.selections.initialize(target_facts.places);
-      }
+      if (track_places) target_facts.places.insert(product);
       return type;
     }
     case K::transfer: case K::rebind: {
@@ -15156,6 +15182,84 @@ class ScalarChecker {
     operation.native_acquisition = std::move(acquisition);
     return operation;
   }
+  CheckedOperation check_product_construction(const Expression &expr, const Type &type, CheckedInstance *instance,
+      std::map<const Expression *, CheckedOperation> &operations, std::optional<size_t> destination = {}, bool read = false) {
+    const auto &schema = product_schema(type, expr.at);
+    if (read) implementation_gap(expr.at, "reading a whole product as an independent value");
+    const auto owner = destination ? storage(*destination).scope : cleanup_scope_;
+    if (!expr.owner_name.empty()) {
+      const auto selected = expr.owner_name == "here" ? cleanup_scope_ : named_owner(expr.owner_name, expr.at);
+      if (const_owner(selected)) fail(expr.at, "const owner cannot allocate product storage");
+      if (destination && compare_owners(selected, owner) != OwnerMatch::satisfied)
+        fail(expr.at, "nested make owner must match the containing product's owner");
+      if (!destination && selected != owner) implementation_gap(expr.at, "product construction outside the current lexical owner");
+    }
+    const auto order = product_initializers(schema, expr);
+    const auto root = destination ? *destination : reserve_product(type, expr.at);
+    CheckedOperation operation;
+    operation.type = operation.operand_type = type;
+    operation.view = true;
+    select_targets(operation, {root});
+    operation.owners = {storage(root).scope};
+    for (size_t i = 0; i < order.size(); ++i) {
+      const auto &item = *expr.children[i];
+      const auto index = order[i];
+      const auto &member = schema.fields[index];
+      const bool direct = member.storage == PlaceKind::value;
+      const auto place = storage(root).fields[index];
+      CheckedOperation field;
+      field.operand_type = member.type;
+      field.product_field = index;
+      const bool inline_product = direct && member.type.kind == Type::product;
+      Type supplied;
+      if (inline_product) {
+        const auto &nested = inline_product_initializer(item);
+        const auto constructed = resolve_annotation(*nested.annotation, instance);
+        require_inline_product_type(constructed, member.type, nested.at);
+        auto initialized = check_product_construction(nested, constructed, instance, operations, place);
+        supplied = initialized.type;
+        operations.insert_or_assign(&nested, std::move(initialized));
+      } else supplied = check(*item.children.front(), instance, operations, direct);
+      field.type = supplied == Type::never ? Type{Type::never} : field.operand_type;
+      operations.insert_or_assign(&item, std::move(field));
+      if (supplied == Type::never) {
+        operation.type = Type::never;
+        lexical_.live = false;
+        continue;
+      }
+      if (inline_product) continue;
+      if (direct) transfer_type(supplied, member.type, item.at);
+      if (operation.type == Type::never) continue;
+      const auto &source = operations.at(item.children.front().get());
+      if (!direct) {
+        if (!source.view || source.mixed_view)
+          implementation_gap(item.at, "reference field initialization requires an existing target or null");
+        rebind_type(member.type, supplied, item.at);
+        rebind_access(member.source->read_only, source.read_only, item.at);
+        require_live_view(source, item.at);
+        if (std::ranges::any_of(source.owners, [&](size_t owner) {
+              return compare_owners(owner, storage(root).scope) != OwnerMatch::satisfied;
+            })) fail(item.at, "reference field target must share the containing product's owner");
+        if (member.storage == PlaceKind::reference) {
+          if (proving_ && validating_ && lexical_.live && source.targets.contains(null_target))
+            fail(item.at, "ref field requires a proven non-null target");
+          require_initialized(source, item.at, "ref field target");
+        }
+        assign_targets(storage(place).binding, source, snapshot_selection(source, item.at));
+      }
+      initialize(place);
+      if (direct && member.type == Type::boolean) {
+        CheckedOperation target;
+        select_targets(target, {place});
+        write_predicate(target, predicate_of(operations.at(item.children.front().get())), item.at);
+      }
+    }
+    if (expr.initializer_block && operation.type != Type::never) {
+      complete_product(schema, order, expr.at);
+      initialize(root);
+    }
+    return operation;
+  }
   Type check(const Expression &expr, CheckedInstance *instance,
              std::map<const Expression *, CheckedOperation> &operations, bool read = true, bool discard = false,
              const Type *expected = nullptr, ExpectedTypeUse expected_use = ExpectedTypeUse::materialization,
@@ -16309,67 +16413,7 @@ class ScalarChecker {
     case K::make_owned_handle:
       implementation_gap(expr.at, "C handle acquisition outside a direct lexical owned handle initializer");
     case K::make_object: {
-      const auto type = resolve_annotation(*expr.annotation, instance);
-      const auto &schema = product_schema(type, expr.at);
-      if (read && !discard) implementation_gap(expr.at, "reading a whole product as an independent value");
-      if (!expr.owner_name.empty() && expr.owner_name != "here") {
-        const auto owner = named_owner(expr.owner_name, expr.at);
-        if (const_owner(owner)) fail(expr.at, "const owner cannot allocate product storage");
-        if (owner != cleanup_scope_) implementation_gap(expr.at, "product construction outside the current lexical owner");
-      }
-      const auto order = product_initializers(schema, expr);
-      const auto root = reserve_product(type, expr.at);
-      operation.type = operation.operand_type = type;
-      operation.view = true;
-      select_targets(operation, {root});
-      operation.owners = {storage(root).scope};
-      for (size_t i = 0; i < order.size(); ++i) {
-        const auto &item = *expr.children[i];
-        const auto index = order[i];
-        const auto &member = schema.fields[index];
-        const bool direct = member.storage == PlaceKind::value;
-        CheckedOperation field;
-        field.operand_type = member.type;
-        field.product_field = index;
-        const auto supplied = check(*item.children.front(), instance, operations, direct);
-        field.type = supplied == Type::never ? Type{Type::never} : field.operand_type;
-        operations.insert_or_assign(&item, std::move(field));
-        if (supplied == Type::never) {
-          operation.type = Type::never;
-          lexical_.live = false;
-          continue;
-        }
-        if (direct) transfer_type(supplied, member.type, item.at);
-        if (operation.type == Type::never) continue;
-        const auto place = storage(root).fields[index];
-        const auto &source = operations.at(item.children.front().get());
-        if (!direct) {
-          if (!source.view || source.mixed_view)
-            implementation_gap(item.at, "reference field initialization requires an existing target or null");
-          rebind_type(member.type, supplied, item.at);
-          rebind_access(member.source->read_only, source.read_only, item.at);
-          require_live_view(source, item.at);
-          if (std::ranges::any_of(source.owners, [&](size_t owner) {
-                return compare_owners(owner, storage(root).scope) != OwnerMatch::satisfied;
-              })) fail(item.at, "reference field target must share the containing product's owner");
-          if (member.storage == PlaceKind::reference) {
-            if (proving_ && validating_ && lexical_.live && source.targets.contains(null_target))
-              fail(item.at, "ref field requires a proven non-null target");
-            require_initialized(source, item.at, "ref field target");
-          }
-          assign_targets(storage(place).binding, source, snapshot_selection(source, item.at));
-        }
-        initialize(place);
-        if (direct && member.type == Type::boolean) {
-          CheckedOperation target;
-          select_targets(target, {place});
-          write_predicate(target, predicate_of(operations.at(item.children.front().get())), item.at);
-        }
-      }
-      if (expr.initializer_block && operation.type != Type::never) {
-        complete_product(schema, order, expr.at);
-        initialize(root);
-      }
+      operation = check_product_construction(expr, resolve_annotation(*expr.annotation, instance), instance, operations, {}, read && !discard);
       break;
     }
     case K::index: {
