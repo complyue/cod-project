@@ -5,6 +5,11 @@
 <a id="h-hlvm-candidate-20261120"></a>
 **H-HLVM-CANDIDATE-20261120.** In the project chat, the project user proposed `hlvm-basic` for running BASIC source or saving a DBMR to run later, with the prerequisite “要等 CoD 基本的 lexer/parser 已经通了的情况下再推进”, then asked to record the idea in a planning document. The [application note](applications/README.md#deferred-application-hlvm-basic) applies the executor and editable program graph from [*Algebraic Effects Is All You Need*](papers/AlgebraicEffectsIsAllYouNeed.md) to BASIC. It does not change the compiler roadmap or authorize implementation.
 
+## 2026-11-19 — Preserve proofs through embedded reference chains in queries
+
+<a id="k-queried-embedded-chains-20261119"></a>
+**K-QUERIED-EMBEDDED-CHAINS-20261119.** D-17r135→136 and registry r1007→1008 continue P-564–P-566 under [H-FULL-SCOPE-IMPLEMENTATION-20261118](#h-full-scope-implementation-20261118), [H-445](#h-445) and [H-478](#h-478). The seed carries address and referent proofs through successive embedded loads across checked scopes and helper calls. A rebind changes the current path, while a previously prepared borrow retains its selected target. This preserves borrowed target identity, actual owners, nonexecuting inspection and evaluation order under C-63/C-65/C-72/C-84 and charter §§3.2–3.3/4.3/6.3/8/12. Prior coverage at `8dca5bf2c70e0b5ff9d8a6ad658ab748c7ce8cb5:design/ExceptionControl.md`.
+
 ## 2026-11-19 — Preserve returned embedded referents in queries
 
 <a id="k-queried-returned-referents-20261119"></a>

@@ -1104,7 +1104,8 @@ class ScalarChecker {
       ++writes;
       const auto known = selected.presence;
       const auto written = [&](const EvidenceSlot &slot) {
-        return may_overlap(footprints.at(slot), selection.footprint);
+        const auto footprint = footprints.find(slot);
+        return footprint == footprints.end() || may_overlap(footprint->second, selection.footprint);
       };
       const auto retain_fields = [&](SelectedProductFields &fields) {
         fields = expand_fields(fields);
@@ -1540,7 +1541,7 @@ class ScalarChecker {
     std::map<EvidenceSlot, ObservationPaths> targets;
     QuerySelections::Uninitialized uninitialized;
     ObservationPaths absent;
-    SelectedProductFields input_projections;
+    std::map<SelectedProductFields::value_type, size_t> field_projections;
     ProductFieldPaths initialized_fields;
     // The return holds the prepared value. A mutable slot still matches
     // that value only if writes have left the observation intact.
@@ -1548,6 +1549,17 @@ class ScalarChecker {
     const Expression *saved_selection = nullptr;
     bool operator==(const TypeBorrowedReturn &) const = default;
 
+    template <typename Key>
+    static void keep_agreement(std::map<Key, size_t> &observed, const std::map<Key, size_t> &other) {
+      for (auto item = observed.begin(); item != observed.end();) {
+        const auto agreement = other.find(item->first);
+        if (agreement == other.end()) item = observed.erase(item);
+        else {
+          item->second = std::min(item->second, agreement->second);
+          ++item;
+        }
+      }
+    }
     static TypeBorrowedReturn capture(const TargetEvidence &target, const QuerySelections &flow) {
       TypeBorrowedReturn result;
       const auto selection = flow.selection_outcomes(target);
@@ -1564,10 +1576,11 @@ class ScalarChecker {
       auto reaching = flow.outcome(selection, true);
       if (!reaching) return result;
       reaching.presence.clear();
-      result.input_projections = QuerySelections::field_origins(target);
-      std::erase_if(result.input_projections, [](const auto &field) {
-        return !std::holds_alternative<QueryInputTarget>(field.first);
-      });
+      for (const auto &[slot, path] : QuerySelections::field_origins(target))
+        if (std::holds_alternative<QueryInputTarget>(slot) ||
+            (!path.empty() && (std::holds_alternative<QueryProjectedSlot>(slot) ||
+                              std::holds_alternative<QueryProductPlace>(slot))))
+          result.field_projections.emplace(std::pair{slot, path}, flow.writes);
       result.initialized_fields = flow.ready_fields(target);
       const bool initialized = flow.selection_initialized(target);
       for (const auto &place : target.places) {
@@ -1584,23 +1597,16 @@ class ScalarChecker {
 
     void merge(const TypeBorrowedReturn &other) {
       if (targets.empty()) {
-        input_projections = other.input_projections;
+        field_projections = other.field_projections;
         initialized_fields = other.initialized_fields;
       } else if (!other.targets.empty()) {
-        input_projections = QuerySelections::common_slots(std::move(input_projections), other.input_projections);
+        keep_agreement(field_projections, other.field_projections);
         initialized_fields = QuerySelections::common_slots(std::move(initialized_fields), other.initialized_fields);
       }
       for (const auto &[place, reaching] : other.targets) targets[place].join(reaching);
       for (const auto &[place, missing] : other.uninitialized) uninitialized[place].join(missing);
       absent.join(other.absent);
-      for (auto slot = exact_selections.begin(); slot != exact_selections.end();) {
-        const auto right = other.exact_selections.find(slot->first);
-        if (right == other.exact_selections.end()) slot = exact_selections.erase(slot);
-        else {
-          slot->second = std::min(slot->second, right->second);
-          ++slot;
-        }
-      }
+      keep_agreement(exact_selections, other.exact_selections);
       if (saved_selection != other.saved_selection) saved_selection = nullptr;
     }
     TargetEvidence observe(const QuerySelections &flow) const {
@@ -1627,7 +1633,8 @@ class ScalarChecker {
       for (const auto &[slot, revision] : exact_selections)
         if (!flow.changed_since(slot, revision)) selected.same_selected.insert(slot);
       if (!selected.places.empty()) {
-        selected.field_selections = input_projections;
+        for (const auto &[field, revision] : field_projections)
+          if (!flow.changed_since(field.first, revision)) selected.field_selections.insert(field);
         selected.initialized_fields = flow.ready_fields(selected);
         selected.initialized_fields.insert(initialized_fields.begin(), initialized_fields.end());
       }
@@ -7878,18 +7885,89 @@ class ScalarChecker {
     }
   };
   using QueryInputField = std::pair<size_t, ProductFieldPath>;
-  using QueryDeliveredSlots = std::map<QueryInputField, EvidenceSlot>;
+  using QueryProjectionRoot = std::variant<size_t, QueryProductPlace>;
+  struct QuerySlotPath {
+    QueryProjectionRoot root;
+    // Each segment selects a slot. The next segment starts at the value
+    // loaded from that slot on the same flow.
+    std::vector<ProductFieldPath> segments;
+    auto operator<=>(const QuerySlotPath &) const = default;
+  };
+  using QueryDeliveredSlots = std::map<QuerySlotPath, EvidenceSlot>;
+  struct QueryProjectionGraph {
+    std::map<EvidenceSlot, SelectedProductFields> successors;
+
+    explicit QueryProjectionGraph(const QuerySelections &flow) {
+      for (const auto &[slot, origins] : flow.projected_slots)
+        for (const auto &[base, path] : flow.expand_fields(origins))
+          successors[base].emplace(slot, path);
+    }
+    void paths(QueryProjectionRoot root, const SelectedProductFields &seeds, QueryDeliveredSlots &paths) const {
+      EvidencePlaces visited;
+      std::deque<std::pair<EvidenceSlot, QuerySlotPath>> pending;
+      const auto follow = [&](const EvidenceSlot &base, const ProductFieldPath &prefix, const QuerySlotPath &path) {
+        const auto next = successors.find(base);
+        if (next == successors.end()) return;
+        for (const auto &[slot, field] : next->second) {
+          if (field.size() <= prefix.size() || !std::equal(prefix.begin(), prefix.end(), field.begin()) ||
+              !visited.insert(slot).second) continue;
+          auto projected = path;
+          projected.segments.emplace_back(field.begin() + prefix.size(), field.end());
+          paths.try_emplace(projected, slot);
+          pending.emplace_back(slot, std::move(projected));
+        }
+      };
+      for (const auto &[base, prefix] : seeds) follow(base, prefix, {root, {}});
+      while (!pending.empty()) {
+        auto [slot, path] = std::move(pending.front());
+        pending.pop_front();
+        follow(slot, {}, path);
+      }
+    }
+  };
+  static std::optional<TargetEvidence> query_projection_receiver(const QuerySelections &flow, const QuerySlotPath &field,
+      const std::vector<TargetEvidence> &operands, const QueryDeliveredSlots &delivered) {
+    std::optional<EvidenceSlot> source;
+    if (field.segments.size() == 1) {
+      if (const auto *input = std::get_if<size_t>(&field.root)) return operands.at(*input);
+      source = std::get<QueryProductPlace>(field.root);
+    } else {
+      auto parent = field;
+      parent.segments.pop_back();
+      if (const auto slot = delivered.find(parent); slot != delivered.end()) source = slot->second;
+    }
+    if (!source) return {};
+    const auto footprint = flow.footprints.find(*source);
+    if (footprint == flow.footprints.end()) return {};
+    return flow.selected_target({*source, footprint->second});
+  }
+  static EvidenceSelection resolve_query_projection(QuerySelections &flow, const QuerySlotPath &field,
+      const TargetEvidence &receiver, const EvidencePlaces &places, bool repeated) {
+    SelectedProductFields origins;
+    const auto &path = field.segments.back();
+    for (auto [slot, prefix] : QuerySelections::field_origins(receiver)) {
+      prefix.insert(prefix.end(), path.begin(), path.end());
+      origins.emplace(std::move(slot), std::move(prefix));
+    }
+    return flow.project_slot(std::move(origins), places, repeated);
+  }
   struct QueryProductResult {
     QueryCallSelection selection;
-    std::set<QueryInputField> input_projections, loaded_projections;
+    std::set<QueryInputField> input_projections;
+    std::set<QuerySlotPath> loaded_projections;
+    std::set<std::pair<QuerySlotPath, ProductFieldPath>> loaded_fields;
     EvidencePlaces loaded_slots;
     std::set<size_t> exact_inputs;
     bool initialized = false;
     bool operator==(const QueryProductResult &) const = default;
     void merge(const QueryProductResult &other) {
-      if (selection.presence == TargetPresence::absent) input_projections = other.input_projections;
-      else if (other.selection.presence != TargetPresence::absent)
+      if (selection.presence == TargetPresence::absent) {
+        input_projections = other.input_projections;
+        loaded_fields = other.loaded_fields;
+      } else if (other.selection.presence != TargetPresence::absent) {
         input_projections = QuerySelections::common_slots(std::move(input_projections), other.input_projections);
+        loaded_fields = QuerySelections::common_slots(std::move(loaded_fields), other.loaded_fields);
+      }
       // Null is a value here. An explicit null result can differ from the
       // reference currently stored in a slot.
       loaded_projections = QuerySelections::common_slots(std::move(loaded_projections), other.loaded_projections);
@@ -7920,6 +7998,13 @@ class ScalarChecker {
         if (flow.footprints.contains(slot)) connect(slot);
       for (const auto &field : loaded_projections)
         if (const auto slot = delivered.find(field); slot != delivered.end()) connect(slot->second);
+      for (const auto &[field, path] : loaded_fields) {
+        std::optional<EvidenceSlot> source;
+        if (field.segments.empty()) source = std::get<QueryProductPlace>(field.root);
+        else if (const auto slot = delivered.find(field); slot != delivered.end()) source = slot->second;
+        if (source && flow.footprints.contains(*source))
+          for (const auto &same : flow.same_selected(*source)) selected.field_selections.emplace(same, path);
+      }
     }
   };
   struct QueryCallProjection {
@@ -7951,7 +8036,7 @@ class ScalarChecker {
     std::map<size_t, QueryCallSelection> operands;
     std::map<size_t, size_t> shared_selections;
     std::map<EvidenceSlot, QueryCallSelection> slots;
-    std::map<QueryInputField, QueryCallProjection> projections;
+    std::map<QuerySlotPath, QueryCallProjection> projections;
     EvidencePlaces places, unwritten;
     EvidenceSlot input_witness(size_t input) const {
       const auto shared = shared_selections.find(input);
@@ -7962,7 +8047,7 @@ class ScalarChecker {
   struct QueryCallEffects {
     EvidencePlaces initialized;
     std::map<EvidenceSlot, QueryCallSelection> slots;
-    std::map<QueryInputField, QueryCallProjection> projections;
+    std::map<QuerySlotPath, QueryCallProjection> projections;
     // An absent receiver imposes no readiness requirement on this outcome.
     std::map<size_t, ProductFieldPaths> input_fields;
     EvidencePlaces rebound, boolean_writes;
@@ -7990,21 +8075,21 @@ class ScalarChecker {
     void apply(QuerySelections &flow, const std::vector<TargetEvidence> &operands, bool repeated,
                QueryDeliveredSlots *delivered = nullptr) const {
       const auto before = flow.writes;
-      std::vector<std::pair<EvidenceSelection, const QueryCallProjection *>> projected;
+      QueryDeliveredSlots projected;
+      const auto resolve = [&](const QuerySlotPath &field, const QueryCallProjection &summary) {
+        const auto receiver = query_projection_receiver(flow, field, operands, projected);
+        if (!receiver || flow.reachable(flow.selection_outcomes(*receiver), false)) return;
+        const auto selection = resolve_query_projection(flow, field, *receiver, summary.places, repeated);
+        if (selection.slot && std::holds_alternative<QueryProjectedSlot>(*selection.slot))
+          projected.emplace(field, *selection.slot);
+      };
+      // A prepared operand retains its original value. Addresses through
+      // live embedded loads depend on the completed writes below.
+      const auto from_operand = [](const QuerySlotPath &field) {
+        return field.segments.size() == 1 && std::holds_alternative<size_t>(field.root);
+      };
       for (const auto &[field, summary] : projections) {
-        const auto &[input, path] = field;
-        const auto &operand = operands.at(input);
-        if (flow.reachable(flow.selection_outcomes(operand), false)) continue;
-        SelectedProductFields origins;
-        for (auto [slot, prefix] : QuerySelections::field_origins(operand)) {
-          prefix.insert(prefix.end(), path.begin(), path.end());
-          origins.emplace(std::move(slot), std::move(prefix));
-        }
-        auto selection = flow.project_slot(std::move(origins), summary.places, repeated);
-        if (selection.slot && std::holds_alternative<QueryProjectedSlot>(*selection.slot)) {
-          if (delivered) delivered->emplace(field, *selection.slot);
-          projected.emplace_back(std::move(selection), &summary);
-        }
+        if (from_operand(field)) resolve(field, summary);
       }
       for (const auto &[input, fields] : input_fields)
         if (!fields.empty()) flow.initialize_present_fields(operands.at(input), fields);
@@ -8012,8 +8097,12 @@ class ScalarChecker {
         if (!selection.initialized_fields.empty() && !rebound.contains(slot))
           flow.initialize_present_fields(flow.selected_target({slot, {slot}}), selection.initialized_fields);
       for (const auto &slot : rebound) flow.assign({slot, {slot}}, slots.at(slot).evidence());
-      for (const auto &[selection, summary] : projected)
-        summary->publish(flow, selection, !flow.changed_since(*selection.slot, before));
+      for (const auto &[field, summary] : projections) {
+        if (!from_operand(field)) resolve(field, summary);
+        if (const auto slot = projected.find(field); slot != projected.end())
+          summary.publish(flow, {slot->second, summary.places}, !flow.changed_since(slot->second, before));
+      }
+      if (delivered) *delivered = std::move(projected);
       for (const auto &place : initialized) flow.uninitialized.erase(place);
       if (unknown_boolean_write || !boolean_writes.empty())
         flow.write_boolean(unknown_boolean_write ? EvidencePlaces{} : boolean_writes, {});
@@ -8116,23 +8205,22 @@ class ScalarChecker {
         }
       }
     }
-    for (const auto &[input, operand] : storage.operands) {
-      if (arguments[input].kind != Type::product || operand.presence == TargetPresence::absent) continue;
-      const auto roots = flow.expand_fields(QuerySelections::field_origins(operands[input]));
-      for (const auto &[slot, origins] : flow.projected_slots) {
-        const auto fields = flow.expand_fields(origins);
-        for (const auto &[root, prefix] : roots)
-          for (const auto &[anchor, path] : fields) {
-            if (root != anchor || path.size() <= prefix.size() ||
-                !std::equal(prefix.begin(), prefix.end(), path.begin())) continue;
-            ProductFieldPath relative(path.begin() + prefix.size(), path.end());
-            const auto [entry, inserted] =
-                storage.projections.try_emplace({input, std::move(relative)}, QueryCallProjection::observe(flow, slot));
-            if (inserted && entry->second.value.presence != TargetPresence::absent)
-              pending.insert(entry->second.value.places.begin(), entry->second.value.places.end());
-          }
+    const QueryProjectionGraph graph(flow);
+    const auto import_projections = [&](QueryProjectionRoot root, const SelectedProductFields &seeds) {
+      QueryDeliveredSlots paths;
+      graph.paths(root, seeds, paths);
+      for (const auto &[field, slot] : paths) {
+        const auto [entry, inserted] = storage.projections.try_emplace(field, QueryCallProjection::observe(flow, slot));
+        if (!inserted) continue;
+        const auto &projection = entry->second;
+        pending.insert(projection.places.begin(), projection.places.end());
+        if (projection.value.presence != TargetPresence::absent)
+          pending.insert(projection.value.places.begin(), projection.value.places.end());
       }
-    }
+    };
+    for (const auto &[input, operand] : storage.operands)
+      if (arguments[input].kind == Type::product && operand.presence != TargetPresence::absent)
+        import_projections(input, flow.expand_fields(QuerySelections::field_origins(operands[input])));
     while (!pending.empty()) {
       auto place = pending.extract(pending.begin()).value();
       if (!storage.places.insert(place).second) continue;
@@ -8151,6 +8239,7 @@ class ScalarChecker {
           pending.insert(selected.places.begin(), selected.places.end());
         }
         storage.slots.emplace(place, QueryCallSelection{selected.places, selected.presence, flow.ready_fields(selected)});
+        if (selected.presence != TargetPresence::absent) import_projections(*product, {{place, {}}});
       }
     }
     return storage;
@@ -8265,11 +8354,21 @@ class ScalarChecker {
         body.selections.bind(parameter.name, i, std::move(input));
         if (prepared[i] == Type::boolean) body.selections.borrowed_booleans.insert(place);
       }
-      if (inputs.storage) for (const auto &[field, summary] : inputs.storage->projections) {
-        const auto &[input, path] = field;
-        auto selection = body.selections.project_slot({{inputs.storage->input_witness(input), path}}, summary.places, false);
-        if (selection.slot && std::holds_alternative<QueryProjectedSlot>(*selection.slot))
+      if (inputs.storage && !inputs.storage->projections.empty()) {
+        std::vector<TargetEvidence> entry(prepared.size());
+        for (const auto &[input, actual] : inputs.storage->operands) {
+          const auto witness = inputs.storage->input_witness(input);
+          entry[input] = body.selections.selected_target({witness, {witness}});
+        }
+        QueryDeliveredSlots imported;
+        for (const auto &[field, summary] : inputs.storage->projections) {
+          const auto receiver = query_projection_receiver(body.selections, field, entry, imported);
+          if (!receiver || receiver->presence == TargetPresence::absent) continue;
+          const auto selection = resolve_query_projection(body.selections, field, *receiver, summary.places, false);
+          if (!selection.slot || !std::holds_alternative<QueryProjectedSlot>(*selection.slot)) continue;
           summary.publish(body.selections, selection);
+          imported.emplace(field, *selection.slot);
+        }
       }
       const auto completion = type_evidence(*method.source->body, body, false, nullptr, nullptr,
                                             ExpectedTypeUse::materialization, true, EvidenceRead::discarded);
@@ -8280,6 +8379,7 @@ class ScalarChecker {
         if (!path.state.complete) return {};
         const auto &selections = path.state.selections;
         const auto reaching = selections.reach_condition();
+        QueryDeliveredSlots projected_paths;
         if (inputs.storage) {
           QueryCallEffects effects;
           for (const auto &place : inputs.storage->unwritten)
@@ -8298,16 +8398,21 @@ class ScalarChecker {
             if (selections.reachable(selections.selection_outcomes(target), true))
               effects.input_fields.emplace(input, selections.ready_fields(target));
           }
-          for (const auto &[slot, origins] : selections.projected_slots) {
+          const QueryProjectionGraph graph(selections);
+          for (const auto &[input, actual] : inputs.storage->operands) {
+            if (prepared[input].kind != Type::product) continue;
+            const auto witness = inputs.storage->input_witness(input);
+            graph.paths(input, {{witness, {}}}, projected_paths);
+          }
+          for (const auto &[slot, actual] : inputs.storage->slots)
+            if (const auto *physical = std::get_if<QueryProductPlace>(&slot))
+              graph.paths(*physical, {{slot, {}}}, projected_paths);
+          for (const auto &[field, slot] : projected_paths) {
             const auto summary = QueryCallProjection::observe(selections, slot);
             if (!std::ranges::all_of(summary.places, [&](const auto &place) { return inputs.storage->slots.contains(place); }) ||
                 !std::ranges::all_of(summary.value.places, [&](const auto &place) { return inputs.storage->places.contains(place); }))
               continue;
-            for (const auto &[root, field] : selections.expand_fields(origins))
-              if (const auto *input = std::get_if<QueryInputTarget>(&root)) {
-                const auto [entry, inserted] = effects.projections.try_emplace({input->ordinal, field}, summary);
-                if (!inserted) entry->second.merge(summary);
-              }
+            effects.projections.emplace(field, summary);
           }
           for (const auto &place : selections.payload_writes.places)
             if (inputs.storage->places.contains(place)) effects.boolean_writes.insert(place);
@@ -8330,16 +8435,22 @@ class ScalarChecker {
             returned.selection.presence = observed.presence;
             returned.selection.initialized_fields = observed.initialized_fields;
             returned.initialized = observed.initialized;
-            for (const auto &[slot, field] : observed.field_selections)
-              returned.input_projections.emplace(std::get<QueryInputTarget>(slot).ordinal, field);
+            for (const auto &[slot, field] : observed.field_selections) {
+              if (const auto *input = std::get_if<QueryInputTarget>(&slot))
+                returned.input_projections.emplace(input->ordinal, field);
+              else if (const auto *physical = std::get_if<QueryProductPlace>(&slot);
+                       physical && inputs.storage->slots.contains(slot))
+                returned.loaded_fields.emplace(QuerySlotPath{*physical, {}}, field);
+              else
+                for (const auto &[projection, selected_slot] : projected_paths)
+                  if (selected_slot == slot) returned.loaded_fields.emplace(projection, field);
+            }
             for (const auto &slot : observed.same_selected) {
               if (const auto *input = std::get_if<QueryInputTarget>(&slot)) returned.exact_inputs.insert(input->ordinal);
               if (inputs.storage->slots.contains(slot)) returned.loaded_slots.insert(slot);
-              if (const auto origins = selections.projected_slots.find(slot); origins != selections.projected_slots.end())
-                for (const auto &[root, field] : selections.expand_fields(origins->second))
-                  if (const auto *input = std::get_if<QueryInputTarget>(&root))
-                    returned.loaded_projections.emplace(input->ordinal, field);
             }
+            for (const auto &[field, slot] : projected_paths)
+              if (observed.same_selected.contains(slot)) returned.loaded_projections.insert(field);
           } else {
             std::set<size_t> exact;
             for (const auto &slot : observed.same_selected)
@@ -8570,7 +8681,7 @@ class ScalarChecker {
     return slots;
   }
   static void project_scope_slots(QuerySelections &caller, const QuerySelections &body,
-                                  const PresenceSlotMap &slots, size_t first_observation, size_t before) {
+                                  PresenceSlotMap &slots, size_t first_observation, size_t before) {
     const auto remap = [&](const SelectedProductFields &fields) {
       SelectedProductFields mapped;
       for (const auto &[local, path] : body.expand_fields(fields))
@@ -8578,14 +8689,24 @@ class ScalarChecker {
           for (const auto &slot : found->second) mapped.emplace(slot, path);
       return mapped;
     };
-    for (const auto &[slot, origins] : body.projected_slots) {
-      auto projected = remap(origins);
-      if (projected.empty()) continue;
+    EvidencePlaces exported;
+    bool progress;
+    do {
+      progress = false;
+      for (const auto &[slot, origins] : body.projected_slots) {
+        if (exported.contains(slot) || remap(origins).empty()) continue;
+        const auto &places = body.footprints.at(slot);
+        if (!std::ranges::all_of(places, [&](const auto &place) { return caller.footprints.contains(place); })) continue;
+        caller.footprints.try_emplace(slot, places);
+        exported.insert(slot);
+        slots[slot].insert(slot);
+        progress = true;
+      }
+    } while (progress);
+    for (const auto &slot : exported) {
       const auto &places = body.footprints.at(slot);
-      if (!std::ranges::all_of(places, [&](const auto &place) { return caller.footprints.contains(place); })) continue;
       const EvidenceSelection selection{slot, places};
-      caller.footprints.try_emplace(slot, places);
-      caller.projected_slots.insert_or_assign(slot, std::move(projected));
+      caller.projected_slots.insert_or_assign(slot, remap(body.projected_slots.at(slot)));
       auto value = body.selected_target(selection);
       value.initialized = body.selection_initialized(value);
       value.initialized_fields = body.ready_fields(value);
@@ -8703,6 +8824,15 @@ class ScalarChecker {
         if (state.checks_initialization()) {
           body.selections.projected_slots = state.selections.projected_slots;
           body.selections.initialized_projected_slots = state.selections.initialized_projected_slots;
+          // A stored reference can carry observations of caller bindings
+          // that the scope does not mention by name.
+          for (const auto &[slot, footprint] : state.selections.footprints) {
+            if (!std::holds_alternative<QueryProductPlace>(slot) && !std::holds_alternative<QueryProjectedSlot>(slot)) continue;
+            const auto selected = state.selections.selected_target({slot, footprint});
+            for (const auto &same : selected.same_selected) retain_witness(same);
+            for (const auto &[base, path] : selected.field_selections) retain_witness(base);
+            if (selected.presence_proof) retain_observed(*selected.presence_proof);
+          }
           for (const auto &[slot, origins] : body.selections.projected_slots)
             for (const auto &[root, path] : origins) retain_witness(root);
         }
@@ -8817,8 +8947,8 @@ class ScalarChecker {
                 caller.selections.initialized_selections.insert(place);
           }
           const auto before = caller.selections.writes;
-          const auto exported = project_scope_bindings(caller.selections, outcome.state.selections, live_bindings,
-                                                        exported_slots, first_local_observation);
+          auto exported = project_scope_bindings(caller.selections, outcome.state.selections, live_bindings,
+                                                 exported_slots, first_local_observation);
           if (state.checks_initialization())
             project_scope_slots(caller.selections, outcome.state.selections, exported, first_local_observation, before);
           for (auto reason : outcome.reasons) {
