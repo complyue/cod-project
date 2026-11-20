@@ -215,9 +215,11 @@ The [booter expression entry](../../../applications/cod-booter/src/Compiler.cod)
 
 The expression entry also offers scratch planning over the same source borrow. The lexer supplies the token count including EOF, a conservative node capacity and the first lexical diagnostic with its byte span. A lexical failure leaves both capacities zero. The private C region helper plans aligned byte extents for those arrays before acquiring exact backing under one owner. The seed uses the same helper to allocate its mapped-source line table.
 
-The scratch driver registers release before invoking the work callback with the planned capacities. Lexical failure returns before registration. A registration failure prevents acquisition. Once work begins, release runs on scope exit, including when the reserve request fails and leaves the provider's allocation empty.
+The scratch driver registers release before invoking the work callback with the planned capacities. Lexical failure returns before registration. A registration failure prevents acquisition. Once work begins, release runs on scope exit, including when the reserve request fails and leaves the provider's allocation empty. The driver returns the work status through cleanup.
 
 The native expression driver parses before opening an LLVM session. It registers release before opening and calls the verification and output callback only after all lowering operations succeed. In the mapped-source fixture that callback uses the [C object emitter](../../../cod/lang_llvm_object_c.h) to select a target, verify the module and emit native object bytes. The linker consumes the object produced by the callback. Release runs after a partial opening failure or a rejected lowering, target selection, verification, emission or write.
+
+On normal completion the native driver distinguishes rejected input, unsupported forms, session opening, lowering and finish failures. It retains the backend's finish code and records the failing lowering ordinal and source byte when a node was selected. A caller can read those values after scratch storage has been released. Lexical failure during scratch planning uses the plan's diagnostic and source span.
 
 The expression parser retains each arithmetic operator's byte offset alongside the full expression span. Lowering passes that offset to the backend for checked `u64` addition and multiplication, so a generated overflow reports the operator that failed.
 

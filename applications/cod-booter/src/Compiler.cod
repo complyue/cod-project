@@ -9,6 +9,7 @@ using "ParserStorage.cod" ExprNodes;
 using "ParserStorage.cod" name_node;
 using "ParserStorage.cod" call_node;
 using "ParserStorage.cod" deferred_call_node;
+using "ParserStorage.cod" no_node;
 using "Frontend.cod" FrontendResult;
 using "Frontend.cod" read_expression;
 using "Lowering.cod" lower_expression;
@@ -20,6 +21,21 @@ data ExpressionScratchPlan {
     diagnostic_first:u64;
     diagnostic_past:u64;
 }
+
+data NativeExpressionResult {
+    frontend:FrontendResult;
+    rejected_node:u64;
+    rejected_at:u64;
+    backend_status:u8;
+}
+
+func native_complete() -> u8 { return 0u8; }
+func native_source_rejected() -> u8 { return 1u8; }
+func native_form_unsupported() -> u8 { return 2u8; }
+func native_open_failed() -> u8 { return 3u8; }
+func native_lowering_failed() -> u8 { return 4u8; }
+func native_finish_failed() -> u8 { return 5u8; }
+func native_scratch_failed() -> u8 { return 6u8; }
 
 func count_tokens(source:const SourceBytes in S, ref token:Token in T) -> u64
     where {const owner S, owner T} {
@@ -58,9 +74,9 @@ func plan_expression_scratch(source:const SourceBytes in S, ref scratch:Expressi
 }
 
 func prepare_native_expression(source:const SourceBytes in S, ref tokens:Tokens in T,
-                               ref nodes:ExprNodes in N, ref result:FrontendResult in R) -> bool
+                               ref nodes:ExprNodes in N, ref result:FrontendResult in R) -> u8
     where {const owner S, owner T, owner N, owner R} {
-    if (!read_expression(source, tokens, nodes, result)) { return false; } else {};
+    if (!read_expression(source, tokens, nodes, result)) { return native_source_rejected(); } else {};
     # Source order identifies the enclosing unavailable form even though the
     # parser stores its children first.
     val supported <- true;
@@ -73,7 +89,8 @@ func prepare_native_expression(source:const SourceBytes in S, ref tokens:Tokens 
             (supported <- false):void;
         } else {};
     };
-    return supported;
+    if (!supported) { return native_form_unsupported(); } else {};
+    return native_complete();
 }
 
 # The caller keeps the source and scratch buffers live. A syntax error or
@@ -83,39 +100,61 @@ proc compile_expression(here emit(ordinal:u64, kind:u8, number:u64, left:u64, ri
                         source:const SourceBytes in S, ref tokens:Tokens in T,
                         ref nodes:ExprNodes in N, ref result:FrontendResult in R) -> bool
     where {const owner S, owner T, owner N, owner R} {
-    if (!prepare_native_expression(source, tokens, nodes, result)) { return false; } else {};
-    return lower_expression(emit, nodes, result.tree);
+    if (prepare_native_expression(source, tokens, nodes, result) != native_complete()) { return false; } else {};
+    val rejected_node <- no_node();
+    return lower_expression(emit, nodes, result.tree, rejected_node);
 }
 
 # The backend callbacks share one native session. Release also accepts a
-# partially opened session. Finish verifies the module before writing output.
+# partially opened session. Finish returns zero on success and a backend
+# diagnostic code on failure. Interpret the report after a normal completion.
 proc compile_native_expression(here begin() -> bool,
                                here emit(ordinal:u64, kind:u8, number:u64, left:u64, right:u64,
                                          operation_at:u64) -> bool,
-                               here finish() -> bool,
+                               here finish() -> u8,
                                here release() -> void,
                                source:const SourceBytes in S, ref tokens:Tokens in T,
-                               ref nodes:ExprNodes in N, ref result:FrontendResult in R) -> bool
+                               ref nodes:ExprNodes in N, ref result:NativeExpressionResult in R) -> u8
     where {const owner S, owner T, owner N, owner R} {
-    if (!prepare_native_expression(source, tokens, nodes, result)) { return false; } else {};
+    result.rejected_node <- no_node();
+    result.rejected_at <- no_node();
+    result.backend_status <- 0u8;
+    val preparation <- prepare_native_expression(source, tokens, nodes, result.frontend);
+    if (preparation != native_complete()) { return preparation; } else {};
     defer { release(); };
-    if (!begin()) { return false; } else {};
-    if (!lower_expression(emit, nodes, result.tree)) { return false; } else {};
-    return finish();
+    if (!begin()) { return native_open_failed(); } else {};
+    if (!lower_expression(emit, nodes, result.frontend.tree, result.rejected_node)) {
+        if (result.rejected_node != no_node()) {
+            (result.rejected_at <- nodes[result.rejected_node].operation_at):void;
+        } else {};
+        return native_lowering_failed();
+    } else {};
+    result.backend_status <- finish();
+    if (result.backend_status != 0u8) { return native_finish_failed(); } else {};
+    return native_complete();
 }
 
 # The callbacks share one scratch allocation. Work keeps its buffer borrows
-# within the call. Release accepts an empty allocation if acquisition fails.
-proc compile_with_scratch(here work(token_count:u64, node_capacity:u64) -> bool,
+# within the call and supplies the pipeline status. Release accepts an empty
+# allocation if acquisition fails.
+proc compile_with_scratch(here work(token_count:u64, node_capacity:u64) -> u8,
                           here release() -> void,
-                          source:const SourceBytes in S, ref plan:ExpressionScratchPlan in P) -> bool
+                          source:const SourceBytes in S, ref plan:ExpressionScratchPlan in P) -> u8
     where {const owner S, owner P} {
-    if (!plan_expression_scratch(source, plan)) { return false; } else {};
+    if (!plan_expression_scratch(source, plan)) { return native_source_rejected(); } else {};
     defer { release(); };
     return work(plan.token_count, plan.node_capacity);
 }
 
 export ExpressionScratchPlan;
+export NativeExpressionResult;
+export native_complete;
+export native_source_rejected;
+export native_form_unsupported;
+export native_open_failed;
+export native_lowering_failed;
+export native_finish_failed;
+export native_scratch_failed;
 export plan_expression_scratch;
 export compile_expression;
 export compile_native_expression;
