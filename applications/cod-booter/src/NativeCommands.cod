@@ -1,0 +1,82 @@
+# Compiler-private commands for constructing LLVM functions and basic blocks.
+# A word slot is local to one generated activation. Branches name blocks,
+# and invocations consume preceding argument commands in source order.
+# A checked binary command writes a value and a separate overflow flag.
+data NativeCommand {
+    opcode:u8;
+    a:u64;
+    b:u64;
+    c:u64;
+    d:u64;
+}
+array NativeCommands[u64]:NativeCommand;
+
+data NativePlan {
+    used:u64;
+    labels:u64;
+    slots:u64;
+    diagnostic:u8;
+    node:u64;
+}
+
+func declare_function() -> u8 { return 1u8; }
+func begin_function() -> u8 { return 2u8; }
+func position_block() -> u8 { return 3u8; }
+func jump() -> u8 { return 4u8; }
+func branch_equal() -> u8 { return 5u8; }
+func word_constant() -> u8 { return 6u8; }
+func copy_word() -> u8 { return 7u8; }
+func place_address() -> u8 { return 8u8; }
+func load_target() -> u8 { return 9u8; }
+func store_target() -> u8 { return 10u8; }
+func checked_add() -> u8 { return 11u8; }
+func checked_multiply() -> u8 { return 12u8; }
+func receive_parameter() -> u8 { return 13u8; }
+func pass_argument() -> u8 { return 14u8; }
+func invoke_function() -> u8 { return 15u8; }
+func print_word() -> u8 { return 16u8; }
+func return_outcome() -> u8 { return 17u8; }
+func finish_program() -> u8 { return 18u8; }
+
+# Internal outcome words. Zero denotes success. Fatal numeric failures
+# bypass language catches and still leave through the activation cleanup.
+func returned_word() -> u64 { return 0u64; }
+func pending_category() -> u64 { return 1u64; }
+func pending_site() -> u64 { return 2u64; }
+func call_category() -> u64 { return 3u64; }
+func call_site() -> u64 { return 4u64; }
+func overflow_flag() -> u64 { return 5u64; }
+func slot(node:u64) -> u64 { return node + 6u64; }
+func addition_overflow() -> u64 { return 18446744073709551615u64; }
+func multiplication_overflow() -> u64 { return 18446744073709551614u64; }
+
+export NativeCommand;
+export NativeCommands;
+export NativePlan;
+export declare_function;
+export begin_function;
+export position_block;
+export jump;
+export branch_equal;
+export word_constant;
+export copy_word;
+export place_address;
+export load_target;
+export store_target;
+export checked_add;
+export checked_multiply;
+export receive_parameter;
+export pass_argument;
+export invoke_function;
+export print_word;
+export return_outcome;
+export finish_program;
+export returned_word;
+export pending_category;
+export pending_site;
+export call_category;
+export call_site;
+export overflow_flag;
+export slot;
+export addition_overflow;
+export multiplication_overflow;

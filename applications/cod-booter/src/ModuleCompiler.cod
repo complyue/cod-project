@@ -1,0 +1,38 @@
+using "SourceStorage.cod" SourceBytes;
+using "ParserStorage.cod" Tokens;
+using "ParserStorage.cod" ExprNodes;
+using "ParserStorage.cod" no_node;
+using "ModuleExports.cod" ModuleExports;
+using "ModuleExports.cod" SelectedExports;
+using "NameResolution.cod" NameBindings;
+using "NameResolution.cod" NameWork;
+using "OperandChecking.cod" OperandFacts;
+using "OperandChecking.cod" CallOwners;
+using "CompletionChecking.cod" CompletionSites;
+using "ModuleFrontend.cod" ModuleBindingResult;
+using "ModuleFrontend.cod" analyze_module_completion;
+using "NativeCommands.cod" NativeCommands;
+using "NativeCommands.cod" NativePlan;
+using "ModuleLowering.cod" lower_native_module;
+
+# The mapped revision and all working buffers remain live through lowering.
+# Only successful completion publishes commands for native construction.
+func compile_module_commands(source:const SourceBytes in S, ref tokens:Tokens in T, ref nodes:ExprNodes in N,
+                             spellings:const SourceBytes in B, exports:const ModuleExports in E,
+                             ref selected:SelectedExports in X, ref bindings:NameBindings in Y,
+                             ref work:NameWork in W, ref facts:OperandFacts in F, ref owners:CallOwners in O,
+                             ref sites:CompletionSites in K, ref commands:NativeCommands in C,
+                             ref plan:NativePlan in P, ref report:ModuleBindingResult in R) -> bool
+    where {const owner S, owner T, owner N, const owner B, const owner E, owner X, owner Y, owner W,
+           owner F, owner O, owner K, owner C, owner P, owner R} {
+    plan.used <- 0u64;
+    plan.labels <- 0u64;
+    plan.slots <- 0u64;
+    plan.diagnostic <- 0u8;
+    plan.node <- no_node();
+    if (!analyze_module_completion(source, tokens, nodes, spellings, exports, selected, bindings,
+                                   work, facts, owners, sites, report)) { return false; } else {};
+    return lower_native_module(nodes, report.frontend.tree, bindings, work, facts, sites, commands, plan);
+}
+
+export compile_module_commands;
