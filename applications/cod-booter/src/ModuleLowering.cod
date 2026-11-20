@@ -22,6 +22,7 @@ using "ParserStorage.cod" call_node;
 using "ParserStorage.cod" behave_node;
 using "ParserStorage.cod" deferred_call_node;
 using "ParserStorage.cod" deferred_block_node;
+using "ParserStorage.cod" discard_node;
 using "ParserStorage.cod" return_node;
 using "ParserStorage.cod" throw_node;
 using "ExpressionParser.cod" ParseResult;
@@ -34,6 +35,7 @@ using "OperandChecking.cod" OperandFacts;
 using "OperandChecking.cod" scalar_u64;
 using "OperandChecking.cod" independent_value;
 using "OperandChecking.cod" writable_place;
+using "OperandChecking.cod" nullable_ptr;
 using "CompletionChecking.cod" CompletionSites;
 using "CompletionChecking.cod" can_continue;
 using "CompletionChecking.cod" present_target;
@@ -335,7 +337,7 @@ func lower_list(nodes:const ExprNodes in N, names:const NameBindings in B, links
     for (unused in 0u64 .. syntax_len(nodes)) {
         if (item == no_node() || !state.live || plan.diagnostic != 0u8) { return; } else {};
         expression <- nodes[item].right;
-        if (facts[item].kind == scalar_u64()) {
+        if (facts[item].kind == scalar_u64() && facts[item].discarded_result == 0u8) {
             lower_bits(nodes, names, links, facts, sites, code, plan, state, expression);
             if (state.live && item == tail && destination != no_node()) {
                 emit(code, plan, copy_word(), destination, slot(expression));
@@ -353,7 +355,9 @@ func lower_try_arm(nodes:const ExprNodes in N, names:const NameBindings in B, li
     where {const owner N, const owner B, const owner L, const owner F, const owner S, owner C, owner P, owner R} {
     lower_node(nodes, names, links, facts, sites, code, plan, state, arm);
     if (!state.live || plan.diagnostic != 0u8) { return false; } else {};
-    if (facts[at].kind == scalar_u64()) { emit(code, plan, copy_word(), slot(at), slot(arm)); } else {};
+    if (facts[at].kind == scalar_u64() && facts[at].discarded_result == 0u8) {
+        emit(code, plan, copy_word(), slot(at), slot(arm));
+    } else {};
     finish_block(code, plan, state, next);
     return true;
 }
@@ -518,7 +522,9 @@ func lower_node(nodes:const ExprNodes in N, names:const NameBindings in B, links
         return;
     } else {};
     if (kind == block_node()) {
-        val destination <- if (facts[at].kind == scalar_u64()) { slot(at) } else { no_node() };
+        val destination <- if (facts[at].kind == scalar_u64() && facts[at].discarded_result == 0u8) {
+            slot(at)
+        } else { no_node() };
         lower_list(nodes, names, links, facts, sites, code, plan, state, nodes[at].left, destination);
         return;
     } else {};
@@ -528,12 +534,17 @@ func lower_node(nodes:const ExprNodes in N, names:const NameBindings in B, links
     } else {};
     if (kind == group_node()) {
         val inside <- nodes[at].left;
-        if (facts[at].kind == scalar_u64()) {
+        val used <- facts[at].kind == scalar_u64() && facts[at].discarded_result == 0u8;
+        if (used && facts[at].reception != nullable_ptr()) {
             lower_bits(nodes, names, links, facts, sites, code, plan, state, inside);
-            if (state.live) { emit(code, plan, copy_word(), slot(at), slot(inside)); } else {};
         } else {
             lower_node(nodes, names, links, facts, sites, code, plan, state, inside);
         };
+        if (state.live && used) { emit(code, plan, copy_word(), slot(at), slot(inside)); } else {};
+        return;
+    } else {};
+    if (kind == discard_node()) {
+        lower_node(nodes, names, links, facts, sites, code, plan, state, nodes[at].left);
         return;
     } else {};
     if (kind == val_binding_node() || kind == ptr_binding_node()) {

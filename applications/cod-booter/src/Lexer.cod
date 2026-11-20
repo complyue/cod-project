@@ -109,6 +109,14 @@ func proc_word(source:const SourceBytes in S, token:const Token in T) -> bool
         source[first + 2u64] == 111u8 && source[first + 3u64] == 99u8; # o c
 }
 
+func void_word(source:const SourceBytes in S, token:const Token in T) -> bool
+    where {const owner S, const owner T} {
+    if (!identifier_width(token, 4u64)) { return false; } else {};
+    val first <- token.first;
+    return source[first] == 118u8 && source[first + 1u64] == 111u8 && # v o
+        source[first + 2u64] == 105u8 && source[first + 3u64] == 100u8; # i d
+}
+
 func in_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
     if (!identifier_width(token, 2u64)) { return false; } else {};
@@ -428,6 +436,7 @@ export throw_word;
 export using_word;
 export symbol_word;
 export proc_word;
+export void_word;
 export in_word;
 export owner_word;
 export where_word;

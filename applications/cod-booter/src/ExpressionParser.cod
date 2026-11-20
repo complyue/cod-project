@@ -32,6 +32,7 @@ using "ParserStorage.cod" null_node;
 using "ParserStorage.cod" return_node;
 using "ParserStorage.cod" owned_type_node;
 using "ParserStorage.cod" discarded_guard_result;
+using "ParserStorage.cod" discard_node;
 using "ParserStorage.cod" no_node;
 using "Lexer.cod" identifier;
 using "Lexer.cod" integer_literal;
@@ -49,6 +50,7 @@ using "Lexer.cod" ptr_word;
 using "Lexer.cod" val_word;
 using "Lexer.cod" null_word;
 using "Lexer.cod" return_word;
+using "Lexer.cod" void_word;
 
 data ParseResult {
     next:u64;
@@ -78,6 +80,7 @@ func expected_symbol() -> u8 { return 18u8; }
 func expected_name() -> u8 { return 19u8; }
 func expected_type() -> u8 { return 20u8; }
 func expected_binding_operator() -> u8 { return 21u8; }
+func unsupported_typed_expression() -> u8 { return 26u8; }
 
 func punct_at(source:const SourceBytes in S, tokens:const Tokens in T,
               at:u64, past:u64) -> u8 where {const owner S, const owner T} {
@@ -628,9 +631,9 @@ func parse_calls(source:const SourceBytes in S, tokens:const Tokens in T,
     };
 }
 
-func parse_expression_at(source:const SourceBytes in S, tokens:const Tokens in T,
-                         ref nodes:ExprNodes in A, ref result:ParseResult in R,
-                         past:u64, minimum:u8) -> void
+func parse_expression_operand(source:const SourceBytes in S, tokens:const Tokens in T,
+                              ref nodes:ExprNodes in A, ref result:ParseResult in R,
+                              past:u64, minimum:u8) -> void
     where {const owner S, const owner T, owner A, owner R} {
     parse_primary(source, tokens, nodes, result, past);
     if (result.diagnostic != 0u8) { return; } else {};
@@ -642,11 +645,35 @@ func parse_expression_at(source:const SourceBytes in S, tokens:const Tokens in T
     if (!punct_pair_at(source, tokens, assignment, past, 60u8, 45u8)) { return; } else {}; # '<-'
     val destination <- result.root;
     result.next <- assignment + 1u64;
-    parse_expression_at(source, tokens, nodes, result, past, 1u8);
+    parse_expression_operand(source, tokens, nodes, result, past, 1u8);
     if (result.diagnostic != 0u8) { return; } else {};
     val source_node <- result.root;
     append_node(nodes, result, transfer_node(), nodes[destination].first, nodes[source_node].past,
                 0u64, destination, source_node, tokens[assignment].first);
+}
+
+func parse_expression_at(source:const SourceBytes in S, tokens:const Tokens in T,
+                         ref nodes:ExprNodes in A, ref result:ParseResult in R,
+                         past:u64, minimum:u8) -> void
+    where {const owner S, const owner T, owner A, owner R} {
+    parse_expression_operand(source, tokens, nodes, result, past, minimum);
+    if (result.diagnostic != 0u8 || minimum != 1u8) { return; } else {};
+    val colon <- result.next;
+    if (punct_at(source, tokens, colon, past) != 58u8) { return; } else {}; # ':'
+    val annotation <- colon + 1u64;
+    result.next <- annotation;
+    if (annotation >= past || tokens[annotation].kind != identifier()) {
+        result.diagnostic <- expected_type();
+        return;
+    } else {};
+    if (!void_word(source, tokens[annotation])) {
+        result.diagnostic <- unsupported_typed_expression();
+        return;
+    } else {};
+    val operand <- result.root;
+    append_node(nodes, result, discard_node(), nodes[operand].first, tokens[annotation].past,
+                0u64, operand, no_node(), tokens[colon].first);
+    if (result.diagnostic == 0u8) { (result.next <- annotation + 1u64):void; } else {};
 }
 
 func parse_binary(source:const SourceBytes in S, tokens:const Tokens in T,

@@ -8,6 +8,7 @@ using "ParserStorage.cod" block_item_node;
 using "ParserStorage.cod" full_scope_node;
 using "ParserStorage.cod" try_node;
 using "ParserStorage.cod" catch_clause_node;
+using "ParserStorage.cod" catch_handler_node;
 using "ParserStorage.cod" finally_clause_node;
 using "ParserStorage.cod" procedure_node;
 using "ParserStorage.cod" parameter_node;
@@ -36,6 +37,7 @@ using "ParserStorage.cod" throw_node;
 using "ParserStorage.cod" deferred_call_node;
 using "ParserStorage.cod" deferred_block_node;
 using "ParserStorage.cod" discarded_guard_result;
+using "ParserStorage.cod" discard_node;
 using "ExpressionParser.cod" ParseResult;
 using "NameResolution.cod" NameBindings;
 using "NameResolution.cod" NameWork;
@@ -62,6 +64,7 @@ data OperandFact {
     reception:u8;
     checked_exception:u8;
     needs_target:u8;
+    discarded_result:u8;
     owner:u64;
     identity:u64;
 }
@@ -368,11 +371,11 @@ func check_symbolic_call(nodes:const ExprNodes in N, names:const NameBindings in
     return 0u8;
 }
 
-func result_kind(nodes:const ExprNodes in N, ref facts:OperandFacts in F, value:u64) -> u8
+func result_kind(nodes:const ExprNodes in N, ref facts:OperandFacts in F, value:u64, read:bool) -> u8
     where {const owner N, owner F} {
     if (value == no_node()) { return void_result(); } else {};
     val kind <- facts[value].kind;
-    if (kind == scalar_u64() && require_bits(nodes, facts, value) != 0u8) { return 0u8; } else {};
+    if (read && kind == scalar_u64() && require_bits(nodes, facts, value) != 0u8) { return 0u8; } else {};
     if (kind == scalar_u64() || kind == void_result() || kind == never_result()) { return kind; } else {};
     return 0u8;
 }
@@ -383,8 +386,8 @@ func set_result(ref facts:OperandFacts in F, at:u64, kind:u8) -> void where {own
     };
 }
 
-# List entries carry the reached normal tail type. Every evaluated scalar
-# statement reads its target, including when its value is discarded.
+# List entries carry the reached normal tail type. Explicit discard still
+# checks that type, without imposing a read of the tail's target.
 func check_sequence_item(nodes:const ExprNodes in N, ref facts:OperandFacts in F, at:u64) -> void
     where {const owner N, owner F} {
     val previous <- nodes[at].left;
@@ -395,7 +398,7 @@ func check_sequence_item(nodes:const ExprNodes in N, ref facts:OperandFacts in F
     val expression <- nodes[at].right;
     val kind <- void_result();
     if (nodes[expression].kind != val_binding_node() && nodes[expression].kind != ptr_binding_node()) {
-        (kind <- result_kind(nodes, facts, expression)):void;
+        (kind <- result_kind(nodes, facts, expression, facts[at].discarded_result == 0u8)):void;
     } else {};
     set_result(facts, at, kind);
 }
@@ -477,7 +480,7 @@ func check_return(nodes:const ExprNodes in N, names:const NameBindings in B, ref
     val scope <- names[at].scope;
     val value <- nodes[at].left;
     if (nodes[scope].kind == module_node()) { return wrong_return_type(); } else {};
-    if (nodes[scope].kind == full_scope_node()) { return merge_result(facts, scope, result_kind(nodes, facts, value)); } else {};
+    if (nodes[scope].kind == full_scope_node()) { return merge_result(facts, scope, result_kind(nodes, facts, value, true)); } else {};
     if (nodes[scope].kind != procedure_node()) { return unproved_result_contract(); } else {};
     if (value != no_node() && facts[value].kind == never_result()) { return 0u8; } else {};
     if (facts[scope].kind == void_result()) {
@@ -495,8 +498,13 @@ func check_numeric_expression(nodes:const ExprNodes in N, ref facts:OperandFacts
     val left <- nodes[at].left;
     if (kind == group_node()) {
         val inside <- facts[left].kind;
-        if (inside == void_result() || inside == never_result() || inside == exception_type()) {
+        if (inside == void_result() || inside == never_result() || inside == exception_type() ||
+            facts[left].reception == nullable_ptr()) {
             copy_fact(facts, at, left);
+            return 0u8;
+        } else {};
+        if (inside == scalar_u64() && facts[at].discarded_result != 0u8) {
+            scalar_fact(facts, at, independent_value(), no_node());
             return 0u8;
         } else {};
     } else {};
@@ -507,6 +515,14 @@ func check_numeric_expression(nodes:const ExprNodes in N, ref facts:OperandFacts
         if (diagnostic != 0u8) { return diagnostic; } else {};
     } else {};
     scalar_fact(facts, at, independent_value(), no_node());
+    return 0u8;
+}
+
+func check_explicit_discard(nodes:const ExprNodes in N, ref facts:OperandFacts in F, at:u64) -> u8
+    where {const owner N, owner F} {
+    val kind <- result_kind(nodes, facts, nodes[at].left, false);
+    if (kind == 0u8) { return unproved_operand(); } else {};
+    set_result(facts, at, if (kind == never_result()) { kind } else { void_result() });
     return 0u8;
 }
 
@@ -552,6 +568,7 @@ func check_operand(nodes:const ExprNodes in N, names:const NameBindings in B, li
     if (kind == block_node()) { set_result(facts, at, sequence_result(facts, nodes[at].left)); return 0u8; } else {};
     if (kind == full_scope_node()) { return check_scope_tail(nodes, facts, at); } else {};
     if (kind == try_node()) { return check_try_result(nodes, links, facts, at); } else {};
+    if (kind == discard_node()) { return check_explicit_discard(nodes, facts, at); } else {};
     if (kind == return_node()) {
         val diagnostic <- check_return(nodes, names, facts, at);
         if (diagnostic == 0u8) { set_result(facts, at, never_result()); } else {};
@@ -564,6 +581,29 @@ func check_operand(nodes:const ExprNodes in N, names:const NameBindings in B, li
     } else {};
     if (kind == deferred_call_node() || kind == deferred_block_node()) { only_void(facts, at); } else {};
     return 0u8;
+}
+
+func discard_result(ref facts:OperandFacts in F, at:u64) -> void where {owner F} {
+    if (at == no_node()) { return; } else {};
+    facts[at].discarded_result <- 1u8;
+    return;
+}
+
+# Carry discard through parentheses, a grouping block's tail and the
+# normal arms of a guard. Argument and arithmetic operands and independent
+# invocations still establish results required by their own operations.
+func prepare_result_use(nodes:const ExprNodes in N, ref facts:OperandFacts in F, at:u64) -> void
+    where {const owner N, owner F} {
+    val kind <- nodes[at].kind;
+    if (kind == discard_node()) { discard_result(facts, nodes[at].left); return; } else {};
+    if (facts[at].discarded_result == 0u8) { return; } else {};
+    if (kind == group_node() || kind == block_node() || kind == try_node() ||
+        kind == catch_clause_node() || kind == finally_clause_node()) {
+        discard_result(facts, nodes[at].left);
+    } else {};
+    if (kind == block_item_node() || kind == try_node() || kind == catch_clause_node() || kind == catch_handler_node()) {
+        discard_result(facts, nodes[at].right);
+    } else {};
 }
 
 # Operands and declarations refer to the bound syntax and its owner sites.
@@ -587,6 +627,7 @@ func check_module_operands(nodes:const ExprNodes in N, tree:const ParseResult in
     for (at in 0u64 .. tree.used) {
         set_fact(facts, at, 0u8, 0u8, no_node(), 0u64, 0u8);
         facts[at].needs_target <- 0u8;
+        facts[at].discarded_result <- 0u8;
         owners[at].call_site <- no_node();
         owners[at].actual_owner <- no_node();
     };
@@ -596,6 +637,9 @@ func check_module_operands(nodes:const ExprNodes in N, tree:const ParseResult in
             check_signature(nodes, names, links, selected, facts, report, at, tree.used);
             if (report.diagnostic != 0u8) { return false; } else {};
         } else {};
+    };
+    for (offset in 0u64 .. tree.used) {
+        prepare_result_use(nodes, facts, tree.used - 1u64 - offset);
     };
     # The syntax puts operands before their operation and local declarations
     # before uses. Procedure contracts are already available for forward calls.
