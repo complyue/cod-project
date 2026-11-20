@@ -15327,7 +15327,8 @@ class ScalarChecker {
     }
     case K::grouped: {
       const auto &operand = *expr.children.front();
-      operation.type = check(operand, instance, operations, false, discard, expected, expected_use);
+      operation.type = check(operand, instance, operations, false, discard, expected, expected_use,
+          false, IndexedUse::immediate_target);
       if (operation.type == Type::never) break;
       const auto &source = operations.at(&operand);
       const auto result = group_result(operation.type, source.view, source.nullable_view, source.mixed_view);
@@ -15338,6 +15339,7 @@ class ScalarChecker {
         if (read && operation.type == Type::null_ref)
           implementation_gap(expr.at, "untyped null in a payload expression; bind a typed ptr view first");
         view(source);
+        operation.indexed_target = source.indexed_target;
         operation.slots.clear();
         operation.fixed_binding = false;
       }
@@ -15353,7 +15355,8 @@ class ScalarChecker {
     case K::typed_expression: {
       if (*expr.annotation != Type::void_type) implementation_gap(expr.at, "non-void expression conversion or assertion");
       const auto &operand = *expr.children.front();
-      const auto type = check(operand, instance, operations, false);
+      const auto type = check(operand, instance, operations, false, false, nullptr,
+          ExpectedTypeUse::materialization, false, IndexedUse::immediate_target);
       if (type == Type::null_ref) fail(expr.at, "explicit discard requires an independently typed operand");
       require_live_view(operations.at(&operand), operand.at);
       operation.type = type == Type::never ? Type{Type::never} : Type{Type::void_type};
