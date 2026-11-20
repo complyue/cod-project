@@ -5730,8 +5730,9 @@ class ScalarChecker {
           fail(field.at, "duplicate here input name '" + field.name + "'");
         const auto type = resolve_type(field.type, &receiver);
         const auto mode = argument_mode(field);
-        const bool readonly_array = type.kind == Type::array && mode == ArgumentMode::borrowed_ref && field.read_only;
-        signature_type(receiver, type, field.at, false, readonly_array);
+        const bool array_ref = type.kind == Type::array && mode == ArgumentMode::borrowed_ref &&
+            (field.read_only || indexed_product(program_.arrays.at(type.identity).element, field.at));
+        signature_type(receiver, type, field.at, false, array_ref);
         result.push_back({labelled ? field.name : std::string{}, type, mode,
                           owner_role(field.owner, field.at), field.read_only});
       }
@@ -6116,13 +6117,13 @@ class ScalarChecker {
       const auto &parameter = parameter_at(definition, i);
       const auto mode = argument_mode(parameter);
       const auto &element = program_.arrays.at(arguments[i].identity).element;
-      const bool here_read = definition.scope_inputs && definition.scope_inputs->here_reception &&
-          i < definition.scope_inputs->here_reception->selected.size() &&
-          mode == ArgumentMode::borrowed_ref && parameter.read_only;
-      const bool readable = mode == ArgumentMode::borrowed_read && parameter.read_only;
       const bool writable = mode == ArgumentMode::borrowed_ref && !parameter.read_only && indexed_product(element, at);
+      const bool here_borrow = definition.scope_inputs && definition.scope_inputs->here_reception &&
+          i < definition.scope_inputs->here_reception->selected.size() &&
+          mode == ArgumentMode::borrowed_ref && (parameter.read_only || writable);
+      const bool readable = mode == ArgumentMode::borrowed_read && parameter.read_only;
       const bool ordinary = !definition.scope_inputs && (readable || writable);
-      if ((!here_read && !ordinary) || definition.source->symbolic || caller_bindings(definition))
+      if ((!here_borrow && !ordinary) || definition.source->symbolic || caller_bindings(definition))
         implementation_gap(at, "array parameters require readonly borrows or writable refs to initialized numeric products");
     }
     const auto &supplied = program_.query_environments[query_environment].result;
@@ -12979,10 +12980,10 @@ class ScalarChecker {
       const auto parameter = substitute(component.type, receiver, bindings, true);
       const bool scalar_input = scalar_type(parameter) &&
           (component.mode == ArgumentMode::value || component.mode == ArgumentMode::borrowed_ref);
-      const bool readonly_array = parameter.kind == Type::array && component.mode == ArgumentMode::borrowed_ref &&
-          component.read_only && component.owner.has_value();
-      if (!scalar_input && !readonly_array)
-        implementation_gap(at, "here invocation requires supported scalar inputs or readonly array refs");
+      const bool array_ref = parameter.kind == Type::array && component.mode == ArgumentMode::borrowed_ref &&
+          component.owner && (component.read_only || indexed_product(program_.arrays.at(parameter.identity).element, at));
+      if (!scalar_input && !array_ref)
+        implementation_gap(at, "here invocation requires supported scalar inputs or borrowed arrays with an established owner and supported access");
       type.parameters.push_back(parameter);
       type.const_views.push_back(component.read_only);
       type.argument_modes.push_back(component.mode);
