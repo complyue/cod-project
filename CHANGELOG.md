@@ -5,6 +5,11 @@
 <a id="h-hlvm-candidate-20261120"></a>
 **H-HLVM-CANDIDATE-20261120.** In the project chat, the project user proposed `hlvm-basic` for running BASIC source or saving a DBMR to run later, with the prerequisite “要等 CoD 基本的 lexer/parser 已经通了的情况下再推进”, then asked to record the idea in a planning document. The [application note](applications/README.md#deferred-application-hlvm-basic) applies the executor and editable program graph from [*Algebraic Effects Is All You Need*](papers/AlgebraicEffectsIsAllYouNeed.md) to BASIC. It does not change the compiler roadmap or authorize implementation.
 
+## 2026-11-19 — Update borrowed slot rebinding coverage
+
+<a id="k-borrowed-embedded-slot-effects-20261119"></a>
+**K-BORROWED-EMBEDDED-SLOT-EFFECTS-20261119.** D-28r40→41 and registry r993→994 update the [lexical product coverage reference](design/RegionalAndLexicalStorageRefactor.md#lexical-adts-as-part-of-the-complete-model) under [H-478](#h-478), [H-437](#h-437) and [H-562](#h-562). Same-owner rebinding preserves the slot, its selected target and completion-specific readiness under C-65/C-72/C-93 and charter §§3.3/6.3/12. Physical layouts, prepared invocation proof and broader qualification retain their recorded scope. Prior coverage at `c8b32ff074c001283e52b6dbd1f2c8f5771254d2:design/RegionalAndLexicalStorageRefactor.md`.
+
 ## 2026-11-19 — Update borrowed reference-field coverage
 
 <a id="k-borrowed-reference-fields-20261119"></a>

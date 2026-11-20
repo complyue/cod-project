@@ -263,10 +263,49 @@ runner.CASES = {
         'proc run()->void{val target<-7u64;val other<-11u64;ref item=make Box {value=target;};'
         'defer read(item);item.value=other;return;}run();',
         2, "", "deferred product borrow with a mutable embedded selection"),
-    "borrowed_product_rebinding_requires_slot_effects": (
+    "borrowed_product_rebinding_changes_the_caller_slot": (PRELUDE +
         'data Box {ptr value:u64;}proc update(ref source:Box in O,ref target:u64 in O) where {owner O}{source.value=target;return;}'
-        'val first<-7u64;val second<-11u64;ref item=make Box {value=first;};update(item,second);',
-        2, "", "rebinding an embedded slot through a borrowed product"),
+        'val first<-7u64;val second<-11u64;ref item=make Box {value=first;};update(item,second);'
+        'behave @print(item.value);behave @print((item.value is second));', 0, "11\ntrue\n", ""),
+    "borrowed_product_slot_write_survives_exceptional_completion": (PRELUDE +
+        'using "std:exceptions" NullPointerException;data Box {ptr selected:u64;}'
+        'proc replace(ref entry:Box in O,ref replacement:u64 in O,ptr missing:u64 in O) throws NullPointerException where {owner O}{'
+        'entry.selected=replacement;missing;return;}'
+        'val first<-7u64;val second<-11u64;ptr absent:u64=null in here;ref item=make Box {selected=first;};'
+        'try{replace(item,second,absent);}catch(e:const NullPointerException){behave @print(item.selected);};',
+        0, "11\n", ""),
+    "borrowed_product_paths_can_rebind_the_same_runtime_slot": (PRELUDE +
+        'data Box {ref selected:u64;}func replace(ref left:Box in O,ref right:Box in O,ref replacement:u64 in O)->u64 where {owner O}{'
+        'left.selected=replacement;return right.selected;}'
+        'val first<-7u64;val second<-11u64;ref item=make Box {selected=first;};'
+        'behave @print(replace(item,item,second));behave @print(item.selected);', 0, "11\n11\n", ""),
+    "borrowed_slot_rebinding_invalidates_the_old_selection_on_overlapping_paths": (
+        'data Box {ref selected:bool;}proc replace(ref left:Box in O,ref right:Box in O,ref replacement:bool in O) where {owner O}{'
+        'right.selected<-false;replacement<-true;left.selected=replacement;val missing<-make local u64;'
+        'if(right.selected){missing;{}}else{};return;}'
+        'val first<-false;val second<-true;ref item=make Box {selected=first;};replace(item,item,second);',
+        2, "", "before definite initialization"),
+    "borrowed_product_rebinding_does_not_initialize_the_new_referent": (
+        'data Box {ptr selected:u64;}proc replace(ref item:Box in O,ptr replacement:u64 in O) where {owner O}{'
+        'item.selected=replacement;return;}val first<-7u64;val incomplete<-make local u64;'
+        'ref item=make Box {selected=first;};replace(item,incomplete);item.selected;',
+        2, "", "before definite initialization"),
+    "nullable_product_argument_may_skip_a_slot_write": (
+        'data Box {ptr selected:u64;}proc replace(ptr entry:Box in O,ref replacement:u64 in O) where {owner O}{'
+        'if(entry is null){return;}else{};entry.selected=replacement;return;}'
+        'proc run(flag:bool)->void{val incomplete<-make local u64;val second<-11u64;ref item=make Box {selected=incomplete;};'
+        'ptr conditional=if(flag){item}else{null in here};replace(conditional,second);item.selected;return;}run(false);',
+        2, "", "before definite initialization"),
+    "direct_call_initializes_a_reserved_embedded_slot": (PRELUDE +
+        'data Box {ptr selected:u64;}proc replace(ptr entry:Box in O,ref replacement:u64 in O) where {owner O}{'
+        'if(entry is null){return;}else{};entry.selected=replacement;return;}'
+        'val second<-11u64;ptr item=make Box;replace(item,second);behave @print(item.selected);', 0, "11\n", ""),
+    "slot_update_through_nested_product_keeps_preexisting_view": (PRELUDE +
+        'data Box {ref selected:u64;}data Root {ref child:Box;}'
+        'proc replace(ref entry:Root in O,ref replacement:u64 in O) where {owner O}{entry.child.selected=replacement;return;}'
+        'val first<-7u64;val second<-11u64;ref item=make Box {selected=first;};ref saved=item.selected;'
+        'ref outer=make Root {child=item;};replace(outer,second);behave @print(saved);behave @print(item.selected);',
+        0, "7\n11\n", ""),
 }
 runner.CASE_ARGUMENTS = {"shadow_error": ["-Werror=shadow"], "unrelated_warning_error": ["-Werror=missing-return"]}
 runner.EXTRA_SOURCES = [Path(__file__)]
