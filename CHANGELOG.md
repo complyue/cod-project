@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-20 — Connect builtin lookup and rejection reporting to the first launcher
+
+<a id="k-booter-catalog-diagnostic-20261120"></a>
+**K-BOOTER-CATALOG-DIAGNOSTIC-20261120.** Agent continuity assessment, interop r13→14 and registry r1023→1024, under [H-BOOTER-C-HANDLES-20261120](#h-booter-c-handles-20261120), [H-BOOTER-C-DECLARATIONS-20261120](#h-booter-c-declarations-20261120) and [H-BOOTER-EXCEPTIONS-DIAGNOSTICS-20261120](#h-booter-exceptions-diagnostics-20261120). The first launcher applies the existing synchronous borrow and diagnostic-result contracts to one catalog loan and a caller-owned bits result. The private transport preserves compiler outcomes, source lifetimes and the existing scope of diagnostic analysis. Prior profile at `c9c3e22c0be8d28b76dd7af5581432f7c493f08e:applications/cod-booter/docs/LLVMInterop.md`.
+
 ## 2026-11-20 — Generate the typed SourceRevision failure interface
 
 <a id="h-source-revision-failure-20261120"></a>
