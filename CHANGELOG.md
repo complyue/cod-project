@@ -5,6 +5,11 @@
 <a id="h-hlvm-candidate-20261120"></a>
 **H-HLVM-CANDIDATE-20261120.** In the project chat, the project user proposed `hlvm-basic` for running BASIC source or saving a DBMR to run later, with the prerequisite “要等 CoD 基本的 lexer/parser 已经通了的情况下再推进”, then asked to record the idea in a planning document. The [application note](applications/README.md#deferred-application-hlvm-basic) applies the executor and editable program graph from [*Algebraic Effects Is All You Need*](papers/AlgebraicEffectsIsAllYouNeed.md) to BASIC. It does not change the compiler roadmap or authorize implementation.
 
+## 2026-11-19 — Preserve prepared Boolean conditions in queried helpers
+
+<a id="k-query-prepared-boolean-20261119"></a>
+**K-QUERY-PREPARED-BOOLEAN-20261119.** D-17r140→141 and registry r1012→1013 continue P-564–P-566 under [H-FULL-SCOPE-IMPLEMENTATION-20261118](#h-full-scope-implementation-20261118), [H-445](#h-445) and [H-478](#h-478). Field readiness through query calls and cleanup can depend on the prepared Boolean value even after the source slot changes. This preserves nonexecuting inspection and selected-target readiness under C-63/C-65/C-72/C-84 and charter §§3.2–3.3/4.3/6.3/8/12. Prior coverage at `3cfec2e291c237d9a78e1f603dd98122e2a0c2a8:design/ExceptionControl.md`.
+
 ## 2026-11-19 — Keep guarded readiness on a saved executable receiver
 
 <a id="k-saved-embedded-receiver-20261119"></a>

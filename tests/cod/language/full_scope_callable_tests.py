@@ -54,6 +54,16 @@ WRITE_INLINE_HOLDER = ('proc fill(ptr p:Outer in O)->void where {owner O}{'
                        'if(p is null){return;}else{};if(p.child is null){return;}else{};p.child.payload.leaf<-7u64;return;}')
 READ_INLINE_HOLDER = ('proc peek(ptr p:Outer in O)->u64 where {owner O}{if(p is null){return 0u64;}else{};'
                        'if(p.child is null){return 0u64;}else{};return p.child.payload.leaf;}')
+WRITE_INLINE_WHEN_ENABLED = ('proc fill(ptr p:Outer in O,skip:bool)->void where {owner O}{'
+                             'if(p is null){return;}else{};if(p.child is null){return;}else{};'
+                             'if(skip){return;}else{};p.child.payload.leaf<-7u64;return;}')
+WRITE_INLINE_WITH_TWO_FLAGS = ('proc fill(ptr p:Outer in O,skip:bool,other:bool)->void where {owner O}{'
+                               'if(p is null){return;}else{};if(p.child is null){return;}else{};'
+                               'if(skip && other){return;}else{};p.child.payload.leaf<-7u64;return;}')
+WRITE_REFERENT_WHEN_ENABLED = ('proc fill(ptr p:Outer in O,skip:bool,spare:bool)->void where {owner O}{'
+                               'if(p is null){return;}else{};if(p.child is null){return;}else{};'
+                               'if(p.child.selected is null){return;}else{};'
+                               'if(skip){return;}else{};p.child.selected<-7u64;return;}')
 WRITE_NESTED_HOLDER = ('proc fill(ptr p:Outer in O)->void where {owner O}{'
                        'if(p is null){return;}else{};if(p.child is null){return;}else{};'
                        'if(p.child.selected is null){return;}else{};p.child.selected<-7u64;return;}')
@@ -1609,11 +1619,11 @@ runner.CASES = {
         IO + QUERY_HOLDER + QUERY_OUTER + QUERY_PRODUCT_FLAGS + WRITE_NESTED_HOLDER + READ_NESTED_HOLDER +
         query(QUERY_NULLABLE_CHAIN + 'fill(chosen);return peek(chosen);') + 'behave @print(result);', 0, '4\n', ''),
     'query_guard_does_not_prove_a_write_skipped_by_a_present_path': (
-        QUERY_HOLDER + QUERY_OUTER + QUERY_PRODUCT_FLAGS +
+        IO + QUERY_HOLDER + QUERY_OUTER +
         'proc fill(ptr p:Outer in O,skip:bool)->void where {owner O}{if(p is null){return;}else{};'
         'if(p.child is null){return;}else{};if(p.child.selected is null){return;}else{};'
         'if(skip){return;}else{};p.child.selected<-7u64;return;}' +
-        query(QUERY_NULLABLE_CHAIN + 'fill(chosen,pick_other);' + READ_GUARDED_CHAIN),
+        query_with_flag_inputs(QUERY_NULLABLE_CHAIN + 'fill(chosen,skip);' + READ_GUARDED_CHAIN),
         2, '', "read of 'a' before definite initialization"),
     'query_guard_after_rebinding_does_not_prove_a_write_to_an_earlier_candidate': (
         QUERY_HOLDER + QUERY_OUTER + QUERY_PRODUCT_FLAGS + WRITE_NESTED_HOLDER +
@@ -1652,6 +1662,38 @@ runner.CASES = {
         IO + QUERY_INLINE_HOLDER + QUERY_OUTER + WRITE_INLINE_HOLDER + READ_INLINE_HOLDER +
         query_with_flag_inputs(QUERY_INLINE_RECEIVERS + '{{defer fill(chosen);return;}};return peek(chosen);'),
         0, '4\n', ''),
+    'query_helper_proves_inline_write_with_prepared_boolean_constant': (
+        IO + QUERY_INLINE_HOLDER + QUERY_OUTER + WRITE_INLINE_WHEN_ENABLED +
+        query_with_flag_inputs(QUERY_INLINE_RECEIVERS + 'fill(chosen,false);' + READ_GUARDED_INLINE),
+        0, '4\n', ''),
+    'query_prepared_boolean_guards_write_to_selected_inline_field': (
+        IO + QUERY_INLINE_HOLDER + QUERY_OUTER + WRITE_INLINE_WHEN_ENABLED +
+        query_with_flag_inputs(QUERY_INLINE_RECEIVERS + 'fill(chosen,skip);if(skip){return 0u64;}else{};' +
+                               READ_GUARDED_INLINE), 0, '4\n', ''),
+    'query_two_prepared_booleans_preserve_combined_write_condition': (
+        IO + QUERY_INLINE_HOLDER + QUERY_OUTER + WRITE_INLINE_WITH_TWO_FLAGS +
+        query_with_flag_inputs(QUERY_INLINE_RECEIVERS + 'fill(chosen,skip,pick_left);'
+                               'if(skip && pick_left){return 0u64;}else{};' + READ_GUARDED_INLINE), 0, '4\n', ''),
+    'query_unrelated_boolean_cannot_discharge_combined_write_condition': (
+        IO + QUERY_INLINE_HOLDER + QUERY_OUTER + WRITE_INLINE_WITH_TWO_FLAGS +
+        query_with_flag_inputs(QUERY_INLINE_RECEIVERS + 'fill(chosen,skip,pick_left);'
+                               'if(pick_other){return 0u64;}else{};' + READ_GUARDED_INLINE),
+        2, '', "read of 'leaf' before definite initialization"),
+    'query_deferred_helper_preserves_prepared_boolean_after_source_write': (
+        IO + QUERY_INLINE_HOLDER + QUERY_OUTER + WRITE_INLINE_WHEN_ENABLED +
+        query_with_flag_inputs(QUERY_INLINE_RECEIVERS + 'val argument<-skip;val saved<-argument;'
+                               '{{defer fill(chosen,argument);argument<-false;return;}};'
+                               'if(saved){return 0u64;}else{};' + READ_GUARDED_INLINE), 0, '4\n', ''),
+    'query_boolean_operand_is_prepared_before_later_operand_writes_its_source': (
+        IO + QUERY_HOLDER + QUERY_OUTER + WRITE_REFERENT_WHEN_ENABLED +
+        query_with_flag_inputs(QUERY_NULLABLE_CHAIN_CHOICES + 'val argument<-skip;val saved<-argument;'
+                               'fill(chosen,argument,{{argument<-false;return true;}});'
+                               'if(saved){return 0u64;}else{};' + READ_GUARDED_CHAIN), 0, '4\n', ''),
+    'query_rewritten_boolean_does_not_prove_earlier_helper_write': (
+        IO + QUERY_INLINE_HOLDER + QUERY_OUTER + WRITE_INLINE_WHEN_ENABLED +
+        query_with_flag_inputs(QUERY_INLINE_RECEIVERS + 'val argument<-skip;fill(chosen,argument);'
+                               'argument<-false;if(argument){return 0u64;}else{};' + READ_GUARDED_INLINE),
+        2, '', "read of 'leaf' before definite initialization"),
     'query_prepared_assignment_retains_the_guarded_inline_destination': (
         IO + QUERY_INLINE_HOLDER + QUERY_OUTER +
         query_with_flag_inputs(QUERY_INLINE_RECEIVERS +
