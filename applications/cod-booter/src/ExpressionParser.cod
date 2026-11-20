@@ -23,6 +23,13 @@ using "ParserStorage.cod" finally_clause_node;
 using "ParserStorage.cod" symbol_node;
 using "ParserStorage.cod" behave_node;
 using "ParserStorage.cod" throw_node;
+using "ParserStorage.cod" transfer_node;
+using "ParserStorage.cod" typed_name_node;
+using "ParserStorage.cod" val_binding_node;
+using "ParserStorage.cod" ptr_binding_node;
+using "ParserStorage.cod" null_node;
+using "ParserStorage.cod" return_node;
+using "ParserStorage.cod" owned_type_node;
 using "ParserStorage.cod" no_node;
 using "Lexer.cod" identifier;
 using "Lexer.cod" integer_literal;
@@ -35,6 +42,11 @@ using "Lexer.cod" const_word;
 using "Lexer.cod" behave_word;
 using "Lexer.cod" throw_word;
 using "Lexer.cod" symbol_name;
+using "Lexer.cod" in_word;
+using "Lexer.cod" ptr_word;
+using "Lexer.cod" val_word;
+using "Lexer.cod" null_word;
+using "Lexer.cod" return_word;
 
 data ParseResult {
     next:u64;
@@ -61,6 +73,9 @@ func expected_catch_name() -> u8 { return 15u8; }
 func expected_catch_const() -> u8 { return 16u8; }
 func catch_all_must_be_last() -> u8 { return 17u8; }
 func expected_symbol() -> u8 { return 18u8; }
+func expected_name() -> u8 { return 19u8; }
+func expected_type() -> u8 { return 20u8; }
+func expected_binding_operator() -> u8 { return 21u8; }
 
 func punct_at(source:const SourceBytes in S, tokens:const Tokens in T,
               at:u64, past:u64) -> u8 where {const owner S, const owner T} {
@@ -68,6 +83,14 @@ func punct_at(source:const SourceBytes in S, tokens:const Tokens in T,
     val first <- tokens[at].first;
     if (tokens[at].past - first != 1u64) { return 0u8; } else {};
     return source[first];
+}
+
+func punct_pair_at(source:const SourceBytes in S, tokens:const Tokens in T,
+                   at:u64, past:u64, left:u8, right:u8) -> bool
+    where {const owner S, const owner T} {
+    if (at >= past || tokens[at].kind != punctuation()) { return false; } else {};
+    val first <- tokens[at].first;
+    return tokens[at].past - first == 2u64 && source[first] == left && source[first + 1u64] == right;
 }
 
 func append_decimal_digit(ref number:u64 in N, byte:u8) -> bool where {owner N} {
@@ -225,12 +248,12 @@ func parse_block(source:const SourceBytes in S, tokens:const Tokens in T,
     (result.diagnostic <- expected_block_close()):void;
 }
 
-func parse_catch_name(tokens:const Tokens in T, ref nodes:ExprNodes in A,
-                      ref result:ParseResult in R, past:u64) -> bool
+func parse_identifier(tokens:const Tokens in T, ref nodes:ExprNodes in A,
+                      ref result:ParseResult in R, past:u64, missing:u8) -> bool
     where {const owner T, owner A, owner R} {
     val at <- result.next;
     if (at >= past || tokens[at].kind != identifier()) {
-        result.diagnostic <- expected_catch_name();
+        result.diagnostic <- missing;
         return false;
     } else {};
     val first <- tokens[at].first;
@@ -249,7 +272,7 @@ func parse_catch_binding(source:const SourceBytes in S, tokens:const Tokens in T
         return;
     } else {};
     result.next <- open + 1u64;
-    if (!parse_catch_name(tokens, nodes, result, past)) { return; } else {};
+    if (!parse_identifier(tokens, nodes, result, past, expected_catch_name())) { return; } else {};
     val name <- result.root;
     val type_name <- no_node();
     if (punct_at(source, tokens, result.next, past) == 58u8) { # ':'
@@ -259,7 +282,7 @@ func parse_catch_binding(source:const SourceBytes in S, tokens:const Tokens in T
             return;
         } else {};
         result.next <- result.next + 1u64;
-        if (!parse_catch_name(tokens, nodes, result, past)) { return; } else {};
+        if (!parse_identifier(tokens, nodes, result, past, expected_catch_name())) { return; } else {};
         (type_name <- result.root):void;
     } else {};
     val close <- result.next;
@@ -375,21 +398,90 @@ func parse_behave(source:const SourceBytes in S, tokens:const Tokens in T,
     append_node(nodes, result, behave_node(), first, end, 0u64, callee, arguments, first);
 }
 
-func parse_throw(source:const SourceBytes in S, tokens:const Tokens in T,
-                 ref nodes:ExprNodes in A, ref result:ParseResult in R, past:u64) -> void
+func parse_completion(source:const SourceBytes in S, tokens:const Tokens in T,
+                      ref nodes:ExprNodes in A, ref result:ParseResult in R,
+                      past:u64, kind:u8) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val at <- result.next;
     val first <- tokens[at].first;
     result.next <- at + 1u64;
     val following <- punct_at(source, tokens, result.next, past);
     if (following == 59u8 || following == 125u8) { # ';' or '}'
-        append_node(nodes, result, throw_node(), first, tokens[at].past, 0u64, no_node(), no_node(), first);
+        append_node(nodes, result, kind, first, tokens[at].past, 0u64, no_node(), no_node(), first);
         return;
     } else {};
     parse_expression_at(source, tokens, nodes, result, past, 1u8);
     if (result.diagnostic != 0u8) { return; } else {};
     val operand <- result.root;
-    append_node(nodes, result, throw_node(), first, nodes[operand].past, 0u64, operand, no_node(), first);
+    append_node(nodes, result, kind, first, nodes[operand].past, 0u64, operand, no_node(), first);
+}
+
+func parse_binding_name(source:const SourceBytes in S, tokens:const Tokens in T,
+                        ref nodes:ExprNodes in A, ref result:ParseResult in R,
+                        past:u64, require_type:bool) -> bool
+    where {const owner S, const owner T, owner A, owner R} {
+    if (!parse_identifier(tokens, nodes, result, past, expected_name())) { return false; } else {};
+    if (punct_at(source, tokens, result.next, past) != 58u8) { # ':'
+        if (require_type) { result.diagnostic <- expected_type(); return false; } else {};
+        return true;
+    } else {};
+    val name <- result.root;
+    val colon <- tokens[result.next].first;
+    result.next <- result.next + 1u64;
+    if (!parse_identifier(tokens, nodes, result, past, expected_type())) { return false; } else {};
+    val annotation <- result.root;
+    if (result.next < past && in_word(source, tokens[result.next])) {
+        val anchor <- tokens[result.next].first;
+        result.next <- result.next + 1u64;
+        if (!parse_identifier(tokens, nodes, result, past, expected_name())) { return false; } else {};
+        val owner_name <- result.root;
+        append_node(nodes, result, owned_type_node(), nodes[annotation].first, nodes[owner_name].past,
+                    0u64, annotation, owner_name, anchor);
+        if (result.diagnostic != 0u8) { return false; } else {};
+        (annotation <- result.root):void;
+    } else {};
+    append_node(nodes, result, typed_name_node(), nodes[name].first, nodes[annotation].past,
+                0u64, name, annotation, colon);
+    return result.diagnostic == 0u8;
+}
+
+func parse_local_binding(source:const SourceBytes in S, tokens:const Tokens in T,
+                         ref nodes:ExprNodes in A, ref result:ParseResult in R,
+                         past:u64, pointer:bool) -> void
+    where {const owner S, const owner T, owner A, owner R} {
+    val first <- tokens[result.next].first;
+    result.next <- result.next + 1u64;
+    if (!parse_binding_name(source, tokens, nodes, result, past, pointer)) { return; } else {};
+    val binding <- result.root;
+    val assignment <- result.next;
+    val valid <- if (pointer) {
+        punct_at(source, tokens, assignment, past) == 61u8 # '='
+    } else {
+        punct_pair_at(source, tokens, assignment, past, 60u8, 45u8) # '<-'
+    };
+    if (!valid) { result.diagnostic <- expected_binding_operator(); return; } else {};
+    result.next <- assignment + 1u64;
+    parse_expression_at(source, tokens, nodes, result, past, 1u8);
+    if (result.diagnostic != 0u8) { return; } else {};
+    val initializer <- result.root;
+    val kind <- if (pointer) { ptr_binding_node() } else { val_binding_node() };
+    append_node(nodes, result, kind, first, nodes[initializer].past, 0u64, binding, initializer, tokens[assignment].first);
+}
+
+func parse_null(source:const SourceBytes in S, tokens:const Tokens in T,
+                ref nodes:ExprNodes in A, ref result:ParseResult in R, past:u64) -> void
+    where {const owner S, const owner T, owner A, owner R} {
+    val at <- result.next;
+    val first <- tokens[at].first;
+    result.next <- at + 1u64;
+    if (result.next < past && in_word(source, tokens[result.next])) {
+        result.next <- result.next + 1u64;
+        if (!parse_identifier(tokens, nodes, result, past, expected_name())) { return; } else {};
+        val owner_name <- result.root;
+        append_node(nodes, result, null_node(), first, nodes[owner_name].past, 0u64, owner_name, no_node(), first);
+        return;
+    } else {};
+    append_node(nodes, result, null_node(), first, tokens[at].past, 0u64, no_node(), no_node(), first);
 }
 
 func parse_primary(source:const SourceBytes in S, tokens:const Tokens in T,
@@ -403,7 +495,17 @@ func parse_primary(source:const SourceBytes in S, tokens:const Tokens in T,
         return;
     } else {};
     if (try_word(source, tokens[at])) { parse_try(source, tokens, nodes, result, past); return; } else {};
-    if (throw_word(source, tokens[at])) { parse_throw(source, tokens, nodes, result, past); return; } else {};
+    if (throw_word(source, tokens[at])) {
+        parse_completion(source, tokens, nodes, result, past, throw_node());
+        return;
+    } else {};
+    if (return_word(source, tokens[at])) {
+        parse_completion(source, tokens, nodes, result, past, return_node());
+        return;
+    } else {};
+    if (val_word(source, tokens[at])) { parse_local_binding(source, tokens, nodes, result, past, false); return; } else {};
+    if (ptr_word(source, tokens[at])) { parse_local_binding(source, tokens, nodes, result, past, true); return; } else {};
+    if (null_word(source, tokens[at])) { parse_null(source, tokens, nodes, result, past); return; } else {};
     if (behave_word(source, tokens[at])) { parse_behave(source, tokens, nodes, result, past); return; } else {};
     if (tokens[at].kind == symbol_name()) { (parse_symbol(tokens, nodes, result, past)):void; return; } else {};
     if (punct_at(source, tokens, at, past) == 123u8) { # '{'
@@ -509,12 +611,34 @@ func parse_expression_at(source:const SourceBytes in S, tokens:const Tokens in T
     if (result.diagnostic != 0u8) { return; } else {};
     parse_calls(source, tokens, nodes, result, past);
     if (result.diagnostic != 0u8) { return; } else {};
+    parse_binary(source, tokens, nodes, result, past, minimum);
+    if (result.diagnostic != 0u8 || minimum != 1u8) { return; } else {};
+    val assignment <- result.next;
+    if (!punct_pair_at(source, tokens, assignment, past, 60u8, 45u8)) { return; } else {}; # '<-'
+    val destination <- result.root;
+    result.next <- assignment + 1u64;
+    parse_expression_at(source, tokens, nodes, result, past, 1u8);
+    if (result.diagnostic != 0u8) { return; } else {};
+    val source_node <- result.root;
+    append_node(nodes, result, transfer_node(), nodes[destination].first, nodes[source_node].past,
+                0u64, destination, source_node, tokens[assignment].first);
+}
 
+func parse_binary(source:const SourceBytes in S, tokens:const Tokens in T,
+                  ref nodes:ExprNodes in A, ref result:ParseResult in R,
+                  past:u64, minimum:u8) -> void
+    where {const owner S, const owner T, owner A, owner R} {
     # Every accepted operator advances next. An error leaves next at the
     # failing token so the caller can recover or report its source span.
     for (unused in result.next .. past) {
         if (!parse_infix(source, tokens, nodes, result, past, minimum)) { return; } else {};
     };
+}
+
+func parse_next_expression(source:const SourceBytes in S, tokens:const Tokens in T,
+                           ref nodes:ExprNodes in A, ref result:ParseResult in R, past:u64) -> void
+    where {const owner S, const owner T, owner A, owner R} {
+    parse_expression_at(source, tokens, nodes, result, past, 1u8);
 }
 
 func parse_infix(source:const SourceBytes in S, tokens:const Tokens in T,
@@ -565,3 +689,13 @@ export reset_parse_result;
 export unexpected_token;
 export expected_deferred_call;
 export unsupported_deferred_form;
+export punct_at;
+export punct_pair_at;
+export append_node;
+export parse_identifier;
+export parse_symbol;
+export parse_binding_name;
+export parse_block;
+export parse_next_expression;
+export expected_name;
+export expected_type;

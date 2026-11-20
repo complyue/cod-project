@@ -7,6 +7,7 @@ using "ExpressionParser.cod" ParseResult;
 using "ExpressionParser.cod" parse_expression;
 using "ExpressionParser.cod" reset_parse_result;
 using "ExpressionParser.cod" unexpected_token;
+using "ModuleParser.cod" parse_module;
 
 data FrontendResult {
     scan:ScanResult;
@@ -15,11 +16,8 @@ data FrontendResult {
     diagnostic_past:u64;
 }
 
-# The source and both initialized buffers remain live for the call. A failed
-# read supplies a half-open source span, including a zero-width span at EOF.
-func read_expression(source:const SourceBytes in S, ref tokens:Tokens in T,
-                     ref nodes:ExprNodes in N, ref result:FrontendResult in R) -> bool
-    where {const owner S, owner T, owner N, owner R} {
+func scan_source(source:const SourceBytes in S, ref tokens:Tokens in T,
+                 ref result:FrontendResult in R) -> bool where {const owner S, owner T, owner R} {
     scan_tokens(source, tokens, result.scan);
     result.diagnostic_first <- 0u64;
     result.diagnostic_past <- 0u64;
@@ -35,8 +33,11 @@ func read_expression(source:const SourceBytes in S, ref tokens:Tokens in T,
         return false;
     } else {};
 
-    val eof <- result.scan.used - 1u64;
-    parse_expression(source, tokens, nodes, 0u64, eof, result.tree);
+    return true;
+}
+
+func finish_read(tokens:const Tokens in T, eof:u64, ref result:FrontendResult in R) -> bool
+    where {const owner T, owner R} {
     if (result.tree.diagnostic == 0u8) {
         if (result.tree.next == eof) { return true; } else {};
         (result.tree.diagnostic <- unexpected_token()):void;
@@ -46,5 +47,26 @@ func read_expression(source:const SourceBytes in S, ref tokens:Tokens in T,
     return false;
 }
 
+# The source and both initialized buffers remain live for the call. A failed
+# read supplies a half-open source span, including a zero-width span at EOF.
+func read_expression(source:const SourceBytes in S, ref tokens:Tokens in T,
+                     ref nodes:ExprNodes in N, ref result:FrontendResult in R) -> bool
+    where {const owner S, owner T, owner N, owner R} {
+    if (!scan_source(source, tokens, result)) { return false; } else {};
+    val eof <- result.scan.used - 1u64;
+    parse_expression(source, tokens, nodes, 0u64, eof, result.tree);
+    return finish_read(tokens, eof, result);
+}
+
+func read_module(source:const SourceBytes in S, ref tokens:Tokens in T,
+                 ref nodes:ExprNodes in N, ref result:FrontendResult in R) -> bool
+    where {const owner S, owner T, owner N, owner R} {
+    if (!scan_source(source, tokens, result)) { return false; } else {};
+    val eof <- result.scan.used - 1u64;
+    parse_module(source, tokens, nodes, eof, result.tree);
+    return finish_read(tokens, eof, result);
+}
+
 export FrontendResult;
 export read_expression;
+export read_module;

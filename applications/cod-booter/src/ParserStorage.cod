@@ -32,6 +32,26 @@ func finally_clause_node() -> u8 { return 16u8; }
 func symbol_node() -> u8 { return 17u8; }
 func behave_node() -> u8 { return 18u8; }
 func throw_node() -> u8 { return 19u8; }
+func transfer_node() -> u8 { return 20u8; }
+func typed_name_node() -> u8 { return 21u8; }
+func val_binding_node() -> u8 { return 22u8; }
+func ptr_binding_node() -> u8 { return 23u8; }
+func null_node() -> u8 { return 24u8; }
+func return_node() -> u8 { return 25u8; }
+func module_node() -> u8 { return 26u8; }
+func module_item_node() -> u8 { return 27u8; }
+func using_node() -> u8 { return 28u8; }
+func module_path_node() -> u8 { return 29u8; }
+func procedure_node() -> u8 { return 30u8; }
+func procedure_head_node() -> u8 { return 31u8; }
+func parameter_node() -> u8 { return 32u8; }
+func ref_parameter_node() -> u8 { return 33u8; }
+func ptr_parameter_node() -> u8 { return 34u8; }
+func val_parameter_node() -> u8 { return 35u8; }
+func owned_type_node() -> u8 { return 36u8; }
+func result_clause_node() -> u8 { return 37u8; }
+func throws_clause_node() -> u8 { return 38u8; }
+func owner_clause_node() -> u8 { return 39u8; }
 
 func no_node() -> u64 { return 18446744073709551615u64; }
 
@@ -66,4 +86,24 @@ export finally_clause_node;
 export symbol_node;
 export behave_node;
 export throw_node;
+export transfer_node;
+export typed_name_node;
+export val_binding_node;
+export ptr_binding_node;
+export null_node;
+export return_node;
+export module_node;
+export module_item_node;
+export using_node;
+export module_path_node;
+export procedure_node;
+export procedure_head_node;
+export parameter_node;
+export ref_parameter_node;
+export ptr_parameter_node;
+export val_parameter_node;
+export owned_type_node;
+export result_clause_node;
+export throws_clause_node;
+export owner_clause_node;
 export no_node;
