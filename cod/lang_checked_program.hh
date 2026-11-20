@@ -56,7 +56,6 @@ inline std::vector<size_t> here_owner_inputs(const Type &invocation) {
     if (invocation.owners[i] == inputs.size() + 1) inputs.push_back(i);
   return inputs;
 }
-inline Type exception_type(size_t category) { return {Type::exception, exception_categories.at(category).name, category}; }
 inline bool accepts_exception(const Type &source, const Type &target) {
   return source.kind == Type::exception && target.kind == Type::exception && (!target.identity || source == target);
 }
@@ -66,13 +65,6 @@ inline bool transfers_value(const Type &from, const Type &to) {
 }
 inline bool accepts_argument(const Type &source, const Type &target, ArgumentMode mode) {
   return mode == ArgumentMode::value ? transfers_value(source, target) : source == target;
-}
-inline std::set<size_t> exception_possibilities(const Type &type) {
-  if (type.kind != Type::exception) return {};
-  if (type.identity) return {type.identity};
-  std::set<size_t> result;
-  for (size_t i = 1; i < exception_categories.size(); ++i) result.insert(i);
-  return result;
 }
 
 enum class HereExit : std::uint8_t { break_call = 1, return_supplier, failure };
@@ -633,6 +625,10 @@ struct CheckedFamily {
 
 struct CheckedProgram {
   struct Initializer { size_t module; const Expression *expression; };
+  std::vector<CheckedExceptionCategory> exception_types = intrinsic_exception_types();
+  Type exception_type(size_t category) const {
+    return {Type::exception, std::string(exception_types.at(category).name), category};
+  }
   std::vector<CheckedSchema> schemas;
   std::vector<CheckedArray> arrays;
   std::vector<CheckedSymbol> symbols;

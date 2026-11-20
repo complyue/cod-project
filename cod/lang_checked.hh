@@ -71,6 +71,14 @@ struct LexicalState {
 
 class ScalarChecker {
   CheckedProgram program_;
+  Type exception_type(size_t category) const { return program_.exception_type(category); }
+  std::set<size_t> exception_possibilities(const Type &type) const {
+    if (type.kind != Type::exception) return {};
+    if (type.identity) return {type.identity};
+    std::set<size_t> result;
+    for (size_t category = 1; category < program_.exception_types.size(); ++category) result.insert(category);
+    return result;
+  }
   using CallableChoices = std::vector<std::map<const Expression *, std::set<size_t>>>;
   CallableChoices callable_choices_;
   size_t checking_context_ = 0;
@@ -309,7 +317,7 @@ class ScalarChecker {
     std::set<size_t> bindings, required;
   };
   CatchCapture *captures_ = nullptr;
-  CleanupEquations cleanup_;
+  CleanupEquations cleanup_{program_.exception_types};
   size_t cleanup_scope_ = 0;
   const Expression *prepared_call_ = nullptr;
   std::set<size_t> deferred_inputs_;
@@ -318,7 +326,7 @@ class ScalarChecker {
     CompletionInputs present, absent;
     std::optional<CleanupEquations::Targets> borrowed_selection{};
   } return_inputs_;
-  size_t next_finalizer_input_ = 2 * CleanupEquations::deferred_return_offset;
+  size_t next_finalizer_input_ = 0;
   std::vector<CallEffects::ReadSite> read_sites_;
   std::vector<Location> declared_sites_;
   std::map<const Expression *, size_t> declared_requirements_;
@@ -2708,8 +2716,8 @@ class ScalarChecker {
   bool mutable_payload_target(size_t place) const {
     return storage(place).borrowed || !storage(place).read_only;
   }
-  static ExceptionFacts stored_exceptions(size_t place, const Type &type,
-                                          const std::map<size_t, ExceptionFacts> &values) {
+  ExceptionFacts stored_exceptions(size_t place, const Type &type,
+                                   const std::map<size_t, ExceptionFacts> &values) const {
     const auto found = values.find(place);
     return found == values.end() ? exception_possibilities(type) : found->second;
   }
@@ -2722,7 +2730,7 @@ class ScalarChecker {
     const auto seed = [&](size_t place) {
       const auto &target = storage(place);
       if (target.type.kind == Type::exception && mutable_payload_target(place))
-        values[place] = ExceptionFacts::payload(place, action).restricted(exception_possibilities(target.type));
+        values[place] = ExceptionFacts::payload(place, exception_possibilities(target.type), action);
     };
     for (const auto place : lexical_.available) seed(place);
     if (proving_) for (size_t place = 0; place < catalog_storage_.size(); ++place)
@@ -3616,13 +3624,13 @@ class ScalarChecker {
     state.returned.enter_initialization(initialization_frame());
     state.returned.initialize(state.initialized, state.selections);
   }
-  static std::set<size_t> call_reasons(const std::set<size_t> &declared_categories) {
+  std::set<size_t> call_reasons(const std::set<size_t> &declared_categories) const {
     std::set<size_t> reasons{0, 2};
-    for (size_t category = 1; category < exception_categories.size(); ++category)
-      if (!exception_categories[category].checked || declared_categories.contains(category)) reasons.insert(3 + category);
+    for (size_t category = 1; category < program_.exception_types.size(); ++category)
+      if (!program_.exception_types[category].checked || declared_categories.contains(category)) reasons.insert(Completion::failure(category).reason);
     return reasons;
   }
-  static std::set<size_t> call_reasons(const CheckedMethod &method) {
+  std::set<size_t> call_reasons(const CheckedMethod &method) const {
     return call_reasons(method.throws_categories);
   }
   static bool caller_bindings(const CheckedMethod &method) {
@@ -3763,7 +3771,7 @@ class ScalarChecker {
     std::map<size_t, CleanupEquations::Effects> effects;
     for (const auto reason : reasons) {
       const auto found = target.initialized.find(reason);
-      auto &effect = effects.emplace(reason, CleanupEquations::Effects{reads, {}}).first->second;
+      auto &effect = effects.emplace(reason, cleanup_.preserve_pending(CleanupEquations::Effects{reads, {}})).first->second;
       effect.symbols = target.symbols;
       if (!slots.all) if (const auto outcome = target.present.find(reason); outcome != target.present.end())
         for (const auto parameter : outcome->second) {
@@ -3943,7 +3951,7 @@ class ScalarChecker {
       fail(at, "ref argument requires a proven non-null target");
     if (mode == ArgumentMode::borrowed_ref) require_initialized(view, at, "ref argument");
   }
-  static std::set<size_t> call_reasons(const Type &contract) {
+  std::set<size_t> call_reasons(const Type &contract) const {
     std::set<size_t> categories;
     for (const auto &failure : contract.throws_types) {
       const auto selected = exception_possibilities(failure); categories.insert(selected.begin(), selected.end());
@@ -3959,7 +3967,7 @@ class ScalarChecker {
       // The declaration supplies checked obligations independently of the
       // concrete body's executable failures.
       const auto completion = Completion{reason};
-      const bool checked = completion.exception() && exception_categories.at(reason - 3).checked;
+      const bool checked = completion.exception() && program_.exception_types.at(completion.category()).checked;
       return completion.failed() && !checked && !effects.escaping_failures.contains(reason);
     });
     return reasons;
@@ -4323,7 +4331,7 @@ class ScalarChecker {
       }
       if (checked_entry) {
         // An entry check can fail before the selected method mutates any slot.
-        auto &failed = operation.invocation[3 + exception_id(ExceptionCategory::null_pointer)];
+        auto &failed = operation.invocation[Completion::failure(exception_id(ExceptionCategory::null_pointer)).reason];
         failed.initialized.clear();
         failed.selections.merge({});
       }
@@ -4456,13 +4464,13 @@ class ScalarChecker {
         lexical_ = before; apply_invocation(reason, effects);
         const auto completion = Completion{reason, false};
         const bool scope_failure = immediate_scope && completion.exception() &&
-            (exception_categories.at(reason - 3).checked || declares_root(contract.throws_types));
+            (program_.exception_types.at(completion.category()).checked || declares_root(contract.throws_types));
         if (completion.protected_here() && operation.supplied_here) {
           if (deliver_here_completion(expr, operation)) here_break = lexical_;
           if (read_effects(operation.supplied_here->instance).propagates_outer_here_transfer)
             note_abrupt(expr.at, {}, completion);
         }
-        else note_abrupt(expr.at, completion.exception() ? std::set<size_t>{reason - 3} : std::set<size_t>{},
+        else note_abrupt(expr.at, completion.exception() ? std::set<size_t>{completion.category()} : std::set<size_t>{},
                          completion, scope_failure);
       }
       lexical_ = before; apply_invocation(0, operation.invocation.at(0));
@@ -4945,16 +4953,16 @@ class ScalarChecker {
                    bool receiver_transfer_pending = false) {
     if (!lexical_.live) return;
     const auto categories = exceptions.possibilities();
-    if (!categories.empty()) completion.reason = 3 + *categories.begin();
+    if (!categories.empty()) completion.reason = Completion::failure(*categories.begin()).reason;
     if (!abrupt_) {
       if (!proving_) return;
       if (here_exit == HereExit::return_supplier) observed_.returns_from_supplier = true;
       if (here_exit == HereExit::break_call) observed_.breaks_here_call = true;
-      for (const auto category : categories) if (exception_categories.at(category).checked) {
+      for (const auto category : categories) if (program_.exception_types.at(category).checked) {
         if (checking_method_ && (checking_method_->source->implicit_scope || checking_method_->here_group))
           observed_.scope_checked_failures.insert(category);
         else if (validating_ && (!checking_method_ || !checking_method_->throws_categories.contains(category)))
-          fail(at, "checked exception '" + std::string(exception_categories[category].name) + "' requires a covering catch or throws declaration");
+          fail(at, "checked exception '" + std::string(program_.exception_types[category].name) + "' requires a covering catch or throws declaration");
       }
       return;
     }
@@ -5272,7 +5280,7 @@ class ScalarChecker {
       }
       std::vector<Completion> inputs;
       if (path.exceptions.empty()) inputs.push_back(path.completion);
-      else for (const auto category : path.exceptions.possibilities()) inputs.push_back({3 + category, path.completion.returned});
+      else for (const auto category : path.exceptions.possibilities()) inputs.push_back(Completion::failure(category, path.completion.returned));
       for (const auto input : inputs) for (const auto &[encoded, effects] : cleanup_.apply(queue, input)) {
         declared.insert(effects.declared_failures.begin(), effects.declared_failures.end());
         const auto completion = Completion::from(encoded);
@@ -5283,8 +5291,8 @@ class ScalarChecker {
         state.exceptions = path.state.input_facts.at(origin).exceptions;
         for (auto &[read, requirement] : state.requirements)
           requirement.inputs = intersect(requirement.inputs, state.inputs);
-        auto pending = input.exception() ? path.exceptions.restricted({input.reason - 3}) : ExceptionFacts{};
-        if (input.exception() && pending.empty()) pending = {input.reason - 3};
+        auto pending = input.exception() ? path.exceptions.restricted({input.category()}) : ExceptionFacts{};
+        if (input.exception() && pending.empty()) pending = {input.category()};
         auto payloads = state.exceptions;
         // Empty provisional value summaries do not establish non-returning
         // behavior. Only a substituted, explicit failure relation can exclude
@@ -5338,7 +5346,7 @@ class ScalarChecker {
           if (effects.observes_return && needs_deferred_delivery)
             implementation_gap(path.at, "return inspection requires independent deferred failure delivery on this path");
           const bool checked_body_failure = input.exception() &&
-              (exception_categories.at(input.reason - 3).checked || !flow.declared.empty());
+              (program_.exception_types.at(input.category()).checked || !flow.declared.empty());
           const bool guards_checked_body = effects.guarded_pending_failure &&
               (path.immediate_scope_failure || (checked_body_failure && checking_method_ && checking_method_->source->implicit_scope));
           if (effects.needs_checked_cleanup_proof || guards_checked_body)
@@ -5347,10 +5355,10 @@ class ScalarChecker {
         applied.transform_conditions([&](const auto &clauses) {
           return CleanupEquations::substitute_boolean_payloads(clauses, resolve_boolean, true);
         });
-        auto failure = completion.exception() ? applied.thrown.restricted({completion.reason - 3}) : ExceptionFacts{};
+        auto failure = completion.exception() ? applied.thrown.restricted({completion.category()}) : ExceptionFacts{};
         if (completion.exception() && failure.empty()) {
           if (!effects.unknown_thrown) continue;
-          failure = {completion.reason - 3};
+          failure = {completion.category()};
         }
         apply_effects(state, applied, at);
         state.input_facts = {{origin, state.input_facts.at(origin)}};
@@ -6032,7 +6040,7 @@ class ScalarChecker {
       if (method.source->kind != declaration.source->kind)
         fail(method.source->at, "implementation kind does not satisfy callable declaration");
       for (const auto category : method.throws_categories)
-        if (exception_categories[category].checked && !declaration.throws_categories.contains(category))
+        if (program_.exception_types[category].checked && !declaration.throws_categories.contains(category))
           fail(method.source->at, "implementation exposes a checked exception outside its callable declaration");
       obligations.push_back({&declaration, std::move(overlap->substitutions), covers_types, covers_types &&
           access == AccessCoverage::contained && implies_owners(method, declaration)});
@@ -6329,7 +6337,7 @@ class ScalarChecker {
     auto candidates = values;
     for (const auto kind : {Type::uint8, Type::uint32, Type::uint64, Type::integer, Type::float32, Type::float64})
       candidates.push_back(Type{kind});
-    candidates.push_back(exception_type(0));
+    candidates.emplace_back(Type::exception, exception_categories.front().name);
     std::vector<Type> common;
     for (const auto &candidate : candidates)
       if (std::find(common.begin(), common.end(), candidate) == common.end() &&
@@ -6411,8 +6419,8 @@ class ScalarChecker {
                                   const std::vector<CheckedOperation> &views = {}) {
     const auto failures = builtin_declarations(expr, arguments, operation.type, destinations, access_of(views), owners_of(views));
     if (failures.empty()) return;
-    operation.invocation.try_emplace(0);
-    for (const auto category : failures) operation.invocation.try_emplace(3 + category);
+    operation.invocation.try_emplace(0, cleanup_.preserve_pending({}));
+    for (const auto category : failures) operation.invocation.try_emplace(Completion::failure(category).reason, cleanup_.preserve_pending({}));
     if (&expr != prepared_call_) note_abrupt(expr.at, failures);
   }
   void check_eager(const Expression &expr, std::string_view name, const std::vector<Type> &arguments,
@@ -6425,10 +6433,10 @@ class ScalarChecker {
     if (types.result == Type::never) return;
     if (types.unary && name == "!")
       operation.predicate = predicate(Predicate::Kind::negation, predicate_of(views.front()));
-    operation.invocation.emplace(0, CleanupEquations::Effects{});
+    operation.invocation.emplace(0, cleanup_.preserve_pending({}));
     check_builtin_declarations(expr, arguments, operation, false, views);
     if (types.failing) {
-      operation.invocation.emplace(2, CleanupEquations::Effects{});
+      operation.invocation.emplace(2, cleanup_.preserve_pending({}));
       if (&expr != prepared_call_) note_abrupt(expr.at);
     }
   }
@@ -7423,7 +7431,7 @@ class ScalarChecker {
       note_type_allocation(state);
   }
   template <typename Callable>
-  static void note_type_call(const TypeEvidenceState &state, const Callable &callable) {
+  void note_type_call(const TypeEvidenceState &state, const Callable &callable) const {
     if (!state.exits) return;
     auto reasons = call_reasons(callable);
     reasons.erase(0);
@@ -7441,8 +7449,8 @@ class ScalarChecker {
     }
   }
   template <typename Callable>
-  static void record_type_call(const Expression &expr, TypeEvidenceState &state, const Callable &callable,
-                               bool explicit_effects) {
+  void record_type_call(const Expression &expr, TypeEvidenceState &state, const Callable &callable,
+                        bool explicit_effects) const {
     if (state.preparing(expr) || state.exits) {
       if (state.root_failure_covered == false && declares_root(callable.throws_types))
         require_type_root_failure(state, expr.at);
@@ -7530,9 +7538,9 @@ class ScalarChecker {
       return (!environment.bindings.contains(capture.name) && !lexical_self(capture.name, environment.method)) || independent(capture);
     });
   }
-  static std::set<size_t> deferred_outcomes() {
+  std::set<size_t> deferred_outcomes() const {
     std::set<size_t> outcomes{0, 2};
-    for (size_t category = 1; category < exception_categories.size(); ++category)
+    for (size_t category = 1; category < program_.exception_types.size(); ++category)
       outcomes.insert(Completion::failure(category).reason);
     return outcomes;
   }
@@ -7545,14 +7553,14 @@ class ScalarChecker {
     state.selections.deferred_return |= may_replace;
     if (state.deferred) state.deferred_queue = state.deferred->push(state, entry, may_replace, std::move(effects));
   }
-  static void note_type_failure(const TypeEvidenceState &state, const Type &failure) {
+  void note_type_failure(const TypeEvidenceState &state, const Type &failure) const {
     if (!state.exits) return;
     std::set<size_t> reasons;
     for (const auto category : exception_possibilities(failure))
       reasons.insert(Completion::failure(category).reason);
     merge_type_exits(*state.exits, std::move(reasons), state);
   }
-  static void note_type_failures(const TypeEvidenceState &state, const std::vector<Type> &failures) {
+  void note_type_failures(const TypeEvidenceState &state, const std::vector<Type> &failures) const {
     for (const auto &failure : failures)
       note_type_failure(state, failure);
   }
@@ -7916,9 +7924,12 @@ class ScalarChecker {
   }
   static std::optional<TypeEvidenceState> take_type_catch(TypeEvidenceExits &incoming, const Type &type) {
     std::optional<TypeEvidenceState> selected;
-    const auto reason = Completion::failure(type.identity).reason;
+    const auto matches = [&](size_t outcome) {
+      const Completion completion{outcome};
+      return completion.exception() && (!type.identity || completion.category() == type.identity);
+    };
     for (auto &path : incoming.paths)
-      if (std::erase_if(path.reasons, [&](size_t outcome) { return outcome >= 3 && (!type.identity || outcome == reason); }))
+      if (std::erase_if(path.reasons, matches))
         selected = selected ? merge_evidence(std::move(*selected), path.state) : path.state;
     return selected;
   }
@@ -9986,9 +9997,9 @@ class ScalarChecker {
     for (const auto &path : callback_exits.paths) for (const auto reason : path.reasons) {
       const Completion completion{reason};
       if (!completion.exception()) continue;
-      const auto category = reason - 3;
-      if (exception_categories[category].checked && !signature.throws_categories.contains(category))
-        fail(supplied.at, "checked exception '" + std::string(exception_categories[category].name) + "' requires a covering catch or throws declaration");
+      const auto category = completion.category();
+      if (program_.exception_types[category].checked && !signature.throws_categories.contains(category))
+        fail(supplied.at, "checked exception '" + std::string(program_.exception_types[category].name) + "' requires a covering catch or throws declaration");
     }
     return completes ? *receiving.type : Type{Type::never};
   }
@@ -11924,7 +11935,7 @@ class ScalarChecker {
     return result;
   }
   using InputDomains = std::vector<std::vector<Type>>;
-  static InputDomains input_domains(const Type &view, const Location &at) {
+  InputDomains input_domains(const Type &view, const Location &at) const {
     signature_type(CheckedMethod{}, view, at);
     // Cover every admitted input, independently of observed invocations.
     // This finite proof does not define a general family representation.
@@ -12173,13 +12184,13 @@ class ScalarChecker {
     }
     return resolve_type(std::move(type));
   }
-  static bool satisfies_callable_view(Type contract, const Type &view, const Location &at) {
+  bool satisfies_callable_view(Type contract, const Type &view, const Location &at) const {
     std::set<size_t> allowed;
     for (const auto &failure : view.throws_types) {
       const auto categories = exception_possibilities(failure); allowed.insert(categories.begin(), categories.end());
     }
     for (const auto &failure : contract.throws_types) for (const auto category : exception_possibilities(failure))
-      if (exception_categories[category].checked && !allowed.contains(category))
+      if (program_.exception_types[category].checked && !allowed.contains(category))
         fail(at, "callable view omits a required checked exception");
     contract.throws_types = view.throws_types;
     // Semantic selection precedes value preparation; borrowed targets remain exact.
@@ -12878,7 +12889,7 @@ class ScalarChecker {
       if (lexical_.live && body.requires_deferred_failure_delivery) observed_.requires_deferred_failure_delivery = true;
       if (protected_here || !body.requires_deferred_failure_delivery) std::erase_if(reasons, [&](size_t reason) {
         const auto completion = Completion{reason};
-        const bool checked = completion.exception() && exception_categories.at(reason - 3).checked;
+        const bool checked = completion.exception() && program_.exception_types.at(completion.category()).checked;
         return completion.failed() && !checked && (protected_here || !body.escaping_failures.contains(reason));
       });
       if (body.propagates_here_transfer || (protected_here && (!body.escaping_failures.empty() || body.requires_deferred_failure_delivery)))
@@ -13611,7 +13622,7 @@ class ScalarChecker {
     const auto receiver = lexical_;
     for (const auto reason : body.escaping_failures) {
       const auto completion = Completion{reason};
-      note_abrupt(expr.at, completion.exception() ? std::set<size_t>{reason - 3} : std::set<size_t>{}, completion);
+      note_abrupt(expr.at, completion.exception() ? std::set<size_t>{completion.category()} : std::set<size_t>{}, completion);
     }
     if (body.returns_from_supplier) {
       lexical_.returned = {};
@@ -14485,8 +14496,8 @@ class ScalarChecker {
       const auto arrive = [&](Completion reason, const ExceptionFacts &exceptions) {
         for (const bool returned : {false, true}) {
           if (returned && !observes_return) break;
-          const auto input = CleanupEquations::deferred_input({reason.reason, returned}, true, observes_return);
-          const auto normal = CleanupEquations::deferred_input({0, returned}, true, observes_return);
+          const auto input = cleanup_.deferred_input({reason.reason, returned}, true, observes_return);
+          const auto normal = cleanup_.deferred_input({0, returned}, true, observes_return);
           auto state = before;
           state.inputs = {input};
           state.input_facts = {{input, before.input_facts.at(normal)}};
@@ -14494,8 +14505,8 @@ class ScalarChecker {
           incoming.paths.push_back({std::move(state), exceptions, expr.at, reason});
         }
       };
-      for (size_t category = 1; category < exception_categories.size(); ++category)
-        arrive(Completion::failure(category), ExceptionFacts::arrival(action).restricted({category}));
+      for (size_t category = 1; category < program_.exception_types.size(); ++category)
+        arrive(Completion::failure(category), ExceptionFacts::arrival({category}, action));
       arrive({2, false}, {});
     }
     abrupt_ = &incoming;
@@ -15267,8 +15278,8 @@ class ScalarChecker {
         operation.exceptions = exception_possibilities(operation.type); operation.builtin = BuiltinOperation::cause_at;
         if (completes) {
           const auto bounds = exception_id(ExceptionCategory::index_out_of_bounds);
-          operation.invocation.try_emplace(0);
-          operation.invocation.try_emplace(3 + bounds);
+          operation.invocation.try_emplace(0, cleanup_.preserve_pending({}));
+          operation.invocation.try_emplace(Completion::failure(bounds).reason, cleanup_.preserve_pending({}));
           if (&expr != prepared_call_) note_abrupt(expr.at, {bounds});
         }
         break;
@@ -16234,15 +16245,15 @@ class ScalarChecker {
         return_inputs_ = {{}, {0}};
         lexical_.inputs = {0};
         if (summary.observes_return) {
-          lexical_.inputs.insert(CleanupEquations::deferred_return_offset);
-          return_inputs_.present.insert(CleanupEquations::deferred_return_offset);
+          lexical_.inputs.insert(cleanup_.deferred_return_offset());
+          return_inputs_.present.insert(cleanup_.deferred_return_offset());
           if (instance && instance->result.borrowed())
             return_inputs_.borrowed_selection = CleanupEquations::Targets{{}, {}, {CleanupEquations::pending_return_selection}};
         }
         lexical_.selections = {};
         lexical_.input_facts = {{0, {lexical_.initialized, {}, incoming, {{cleanup_scope_, 0}}, lexical_.present}}};
         if (summary.observes_return)
-          lexical_.input_facts.emplace(CleanupEquations::deferred_return_offset, lexical_.input_facts.at(0));
+          lexical_.input_facts.emplace(cleanup_.deferred_return_offset(), lexical_.input_facts.at(0));
         lexical_.requirements.clear();
         lexical_.returned = {};
         lexical_.live = true;
@@ -16254,7 +16265,8 @@ class ScalarChecker {
         for (const auto &path : flow.paths) {
           for (const auto input : path.state.inputs) {
             const auto queue = path.state.input_facts.at(input).queues.at(cleanup_scope_);
-            CleanupEquations::Effects effects{{}, path.state.input_facts.at(input).initialized, path.state.returned, path.state.input_facts.at(input).selections};
+            auto effects = cleanup_.preserve_pending(CleanupEquations::Effects{{}, path.state.input_facts.at(input).initialized,
+                path.state.returned, path.state.input_facts.at(input).selections});
             effects.action_reaching = CleanupEquations::boolean_conditions(path_conditions(path.state));
             for (const auto place : path.state.available) if (!effects.initialized.contains(place)) {
               auto missing = missing_initialization(path.state, place);
@@ -16278,7 +16290,7 @@ class ScalarChecker {
             else for (const auto category : path.exceptions.possibilities()) {
               auto failed = effects;
               failed.thrown = path.exceptions.restricted({category});
-              summary.paths.push_back({input, {3 + category, path.completion.returned}, queue, std::move(failed)});
+              summary.paths.push_back({input, Completion::failure(category, path.completion.returned), queue, std::move(failed)});
             }
           }
         }
@@ -16304,10 +16316,11 @@ class ScalarChecker {
         if (!call.invocation.empty()) {
           for (const auto &[reason, effects] : call.invocation) {
             auto invoked = effects;
-            if (reason >= 3) invoked.thrown = {reason - 3};
-            summary.paths.push_back({0, {reason, false}, 0, std::move(invoked)});
+            const Completion completion{reason};
+            if (completion.exception()) invoked.thrown = {completion.category()};
+            summary.paths.push_back({0, completion, 0, std::move(invoked)});
           }
-        } else summary.paths.push_back({0, {0, false}, 0});
+        } else summary.paths.push_back({0, {0, false}, 0, cleanup_.preserve_pending({})});
       }
       summary.enforce_checked_boundary = (checking_method_ && checking_method_->source->implicit_scope) ||
           deferred_actions_with_checked_scopes_.contains(action);
@@ -16510,13 +16523,13 @@ class ScalarChecker {
       catalog_bindings_.clear();
       rebound_.clear(); payload_writes_ = {}; loop_states_.clear(); deferred_product_writes_.clear();
     }
-    lexical_ = {}; cleanup_ = {}; scope_storage_.clear(); checked_scope_owners_.clear(); read_sites_.clear(); external_owners_.clear();
+    lexical_ = {}; cleanup_ = CleanupEquations{program_.exception_types}; scope_storage_.clear(); checked_scope_owners_.clear(); read_sites_.clear(); external_owners_.clear();
     declared_sites_.clear(); declared_requirements_.clear();
     deferred_actions_with_checked_scopes_.clear();
     loop_controls_.clear(); delayed_controls_.clear(); deferred_inputs_.clear(); active_loops_.clear();
     caught_.reset(); catch_bindings_.clear(); caught_inputs_.clear();
     captures_ = nullptr; delayed_ = false; deferred_action_.reset(); return_inputs_ = {}; prepared_call_ = nullptr;
-    next_finalizer_input_ = 2 * CleanupEquations::deferred_return_offset;
+    next_finalizer_input_ = 2 * cleanup_.deferred_return_offset();
     cleanup_scope_ = 0; next_scope_ = 1;
     next_target_version_ = 0;
     next_selection_identity_ = 0; selection_sources_.clear(); incoming_selections_.clear(); product_selections_.clear();
@@ -16914,10 +16927,10 @@ class ScalarChecker {
         // whether a particular native body can elide the acquisition.
         if (std::any_of(instance.environment.begin(), instance.environment.end(),
               [](const auto &capture) { return capture.type.kind == Type::procedure; }))
-          observe_outcome(3 + exception_id(ExceptionCategory::out_of_memory), incoming);
+          observe_outcome(Completion::failure(exception_id(ExceptionCategory::out_of_memory)).reason, incoming);
         for (const auto requirement : outcomes.declared) note_declared(requirement);
         if (completion != Type::never && lexical_.live)
-          observe_outcome(requires_return ? 3 + exception_id(ExceptionCategory::missing_return) : 0, lexical_);
+          observe_outcome(requires_return ? Completion::failure(exception_id(ExceptionCategory::missing_return)).reason : 0, lexical_);
         const auto normal = lexical_;
         for (const auto &path : outcomes.paths) {
           observe_outcome(path.completion.reason == 1 ? 0 : path.completion.reason, path.state);

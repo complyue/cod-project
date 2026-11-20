@@ -12,6 +12,7 @@
 #include <map>
 #include <optional>
 #include <set>
+#include <span>
 #include <utility>
 #include <vector>
 
@@ -103,16 +104,11 @@ struct ExceptionFacts {
   static ExceptionFacts input(size_t ordinal, const std::set<size_t> &categories) {
     ExceptionFacts result; result.add({Origin::Kind::input, {}, ordinal}, categories); return result;
   }
-  static ExceptionFacts payload(size_t place, std::optional<size_t> action = {}) {
-    ExceptionFacts result;
-    for (size_t category = 1; category < exception_categories.size(); ++category)
-      result.add({Origin::Kind::payload, action, place}, {category});
-    return result;
+  static ExceptionFacts payload(size_t place, const std::set<size_t> &categories, std::optional<size_t> action = {}) {
+    ExceptionFacts result; result.add({Origin::Kind::payload, action, place}, categories); return result;
   }
-  static ExceptionFacts arrival(std::optional<size_t> action = {}) {
-    ExceptionFacts result;
-    for (size_t category = 1; category < exception_categories.size(); ++category)
-      result.add({Origin::Kind::arrival, action}, {category});
+  static ExceptionFacts arrival(const std::set<size_t> &categories, std::optional<size_t> action = {}) {
+    ExceptionFacts result; result.add({Origin::Kind::arrival, action}, categories);
     return result;
   }
   void merge(const ExceptionFacts &other) { for (const auto &[origin, categories] : other.terms) add(origin, categories); }
@@ -206,13 +202,14 @@ struct ExceptionFacts {
 enum class CleanupBoundary { ordinary_finally, deferred };
 
 struct Completion {
-  static constexpr size_t protected_transfer = 3 + exception_categories.size();
-  // Normal, enclosing return, terminal numeric failure, an intrinsic
-  // category, or a protected completion targeting a here supplier.
+  // Zero through three are control states. Concrete exception categories
+  // start at one and occupy reasons above that range.
+  static constexpr size_t protected_transfer = 3;
   size_t reason = 0;
   bool returned = false;
-  static Completion failure(size_t category) { return {3 + category, false}; }
-  bool exception() const { return reason >= 3 && reason < protected_transfer; }
+  static Completion failure(size_t category, bool returned = false) { return {protected_transfer + category, returned}; }
+  bool exception() const { return reason > protected_transfer; }
+  size_t category() const { return reason - protected_transfer; }
   bool failed() const { return reason == 2 || exception(); }
   bool protected_here() const { return reason == protected_transfer; }
   size_t index() const { return 2 * reason + returned; }
@@ -221,13 +218,18 @@ struct Completion {
 
 class CleanupEquations {
 public:
+  explicit CleanupEquations(std::span<const CheckedExceptionCategory> exception_types)
+      : exception_types_(exception_types) {
+    for (size_t category = 1; category < exception_types_.size(); ++category)
+      categories_.insert(category);
+  }
   // This entry selector belongs to the pending completion, outside lexical binding IDs.
   static constexpr size_t pending_return_selection = null_target;
-  static constexpr size_t deferred_return_offset = exception_categories.size() + 1;
-  static size_t deferred_input(Completion completion, bool guarded, bool observes_return) {
+  size_t deferred_return_offset() const { return exception_types_.size() + 1; }
+  size_t deferred_input(Completion completion, bool guarded, bool observes_return) const {
     const auto arrival = !guarded || !completion.failed() ? 0 :
-        completion.reason == 2 ? exception_categories.size() : completion.reason - 3;
-    return arrival + (observes_return && completion.returned ? deferred_return_offset : 0);
+        completion.reason == 2 ? exception_types_.size() : completion.category();
+    return arrival + (observes_return && completion.returned ? deferred_return_offset() : 0);
   }
   using BooleanPayload = std::pair<std::optional<size_t>, size_t>;
   using BindingSnapshot = std::pair<size_t, std::set<size_t>>;
@@ -1176,7 +1178,7 @@ public:
     Selections selections{};
     // Cleanup may require current bindings; its own installations restore before it returns.
     std::set<size_t> symbols{};
-    ExceptionFacts thrown = ExceptionFacts::arrival();
+    ExceptionFacts thrown{};
     bool unknown_thrown = false;
     // Omitted targets preserve their incoming payloads.
     std::map<size_t, ExceptionFacts> payloads{};
@@ -1248,6 +1250,10 @@ public:
     }
   };
   struct Path { size_t input; Completion completion; size_t queue; Effects effects{}; };
+  Effects preserve_pending(Effects effects) const {
+    effects.thrown = ExceptionFacts::arrival(categories_);
+    return effects;
+  }
   struct Action {
     bool guarded = false;
     std::vector<Path> paths;
@@ -1279,9 +1285,16 @@ private:
   std::vector<Queue> queues_{{}};
   std::vector<Action> actions_;
   std::set<size_t> observed_inputs_, observed_references_;
-  static constexpr size_t states = 2 * (Completion::protected_transfer + 1);
+  std::span<const CheckedExceptionCategory> exception_types_;
+  std::set<size_t> categories_;
   std::vector<std::optional<size_t>> reads_;
   using Outcomes = std::map<size_t, Effects>;
+  std::map<size_t, Outcomes> identities_;
+  const Outcomes &identity(size_t completion) {
+    auto [entry, inserted] = identities_.try_emplace(completion);
+    if (inserted) entry->second.emplace(completion, preserve_pending({}));
+    return entry->second;
+  }
   using QueueState = std::pair<size_t, size_t>;
   struct SolvedState {
     Outcomes outcomes;
@@ -1369,7 +1382,7 @@ private:
       result.transform_conditions([&](const auto &clauses) { return conjoin_conditions(clauses, result.reaching); });
     return result;
   }
-  static bool merge(std::map<size_t, Effects> &result, size_t completion, const Effects &effects) {
+  bool merge(std::map<size_t, Effects> &result, size_t completion, const Effects &effects) const {
     if (!effects.selections.possible || effects.reaching.empty()) return false;
     auto [found, inserted] = result.try_emplace(completion, effects);
     if (inserted) return true;
@@ -1413,10 +1426,10 @@ private:
     known.thrown.merge(effects.thrown);
     known.unknown_thrown = known.unknown_thrown || effects.unknown_thrown;
     for (auto &[target, value] : known.payloads)
-      if (!effects.payloads.contains(target)) value.merge(ExceptionFacts::payload(target));
+      if (!effects.payloads.contains(target)) value.merge(ExceptionFacts::payload(target, categories_));
     for (const auto &[target, value] : effects.payloads) {
       const auto [found, inserted] = known.payloads.try_emplace(target, value);
-      if (inserted) found->second.merge(ExceptionFacts::payload(target));
+      if (inserted) found->second.merge(ExceptionFacts::payload(target, categories_));
       else found->second.merge(value);
     }
     for (auto &[target, value] : known.booleans)
@@ -1513,12 +1526,7 @@ public:
   }
   void backedge(size_t header, size_t body) { solved_.clear(); queues_.at(header).previous.push_back(body); }
   const Outcomes &apply(size_t queue, Completion input) {
-    static const auto identity = [] {
-      std::vector<Outcomes> relation(states);
-      for (size_t state = 0; state < states; ++state) relation[state].emplace(state, Effects{});
-      return relation;
-    }();
-    if (!queue) return identity.at(input.index());
+    if (!queue) return identity(input.index());
     const QueueState root{queue, input.index()};
     const auto [entry, inserted] = solved_.try_emplace(root);
     if (!inserted) return entry->second.outcomes;
@@ -1534,7 +1542,7 @@ public:
       const auto [conditions, project] = reaching.try_emplace(id);
       if (project) conditions->second = queue_conditions(node.reaching);
       const auto require = [&](size_t dependency, size_t completion) -> const Outcomes & {
-        if (!dependency) return identity.at(completion);
+        if (!dependency) return identity(completion);
         const QueueState needed{dependency, completion};
         const auto [found, fresh] = solved_.try_emplace(needed);
         found->second.dependents.insert(key);
@@ -1543,7 +1551,7 @@ public:
       };
       bool changed = false;
       if (!node.action) {
-        Effects known{{}, node.initialized};
+        auto known = preserve_pending(Effects{{}, node.initialized});
         known.uninitialized = node.uninitialized;
         known.reaching = conditions->second;
         known.selections.initialized_captures = node.initialized_captures;
@@ -1567,7 +1575,7 @@ public:
           // checked failures produced by an action. Retain potential
           // guarded dispatch on the separate ordinary body failure too.
           if (action.enforce_checked_boundary &&
-              ((path.completion.exception() && exception_categories.at(path.completion.reason - 3).checked) || !effects.declared_failures.empty()))
+              ((path.completion.exception() && exception_types_[path.completion.category()].checked) || !effects.declared_failures.empty()))
             effects.needs_checked_cleanup_proof = true;
           if (action.guarded && incoming.failed()) effects.guarded_pending_failure = true;
           effects.observes_return |= action.observes_return;
@@ -1578,7 +1586,7 @@ public:
             invoked.enter_initialization(action_frame(*node.action));
             invoked.enter_selection_guards(*node.action);
             const auto arrival = incoming.exception()
-                ? ExceptionFacts::arrival().restricted({incoming.reason - 3}) : ExceptionFacts{};
+                ? ExceptionFacts::arrival({incoming.category()}) : ExceptionFacts{};
             invoked.transform_values([&](const auto &value) { return value.enter(*node.action, arrival); });
             invoked.transform_conditions([&](const auto &clauses) { return enter_conditions(clauses, *node.action); });
             invoked.action_reaching = enter_conditions(invoked.action_reaching, *node.action);

@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string_view>
+#include <vector>
 
 namespace cod::language {
 
@@ -34,6 +35,18 @@ inline constexpr std::array exception_categories{
 #undef COD_LANG_EXCEPTION_DESCRIPTOR
 };
 inline constexpr size_t concrete_exception_count = exception_categories.size() - 1;
+
+struct CheckedExceptionCategory {
+  std::string_view name;
+  bool checked;
+};
+
+inline std::vector<CheckedExceptionCategory> intrinsic_exception_types() {
+  std::vector<CheckedExceptionCategory> types;
+  types.reserve(exception_categories.size());
+  for (const auto &category : exception_categories) types.push_back({category.name, category.checked});
+  return types;
+}
 
 static_assert([] {
   for (size_t i = 0; i < exception_categories.size(); ++i) {

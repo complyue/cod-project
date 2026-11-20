@@ -274,7 +274,7 @@ class LLVMEmission {
     auto *result = load(saved); if (result_type == scalar_) value_owners_[result] = saved; return result;
   }
   unsigned tag(const Type &type) {
-    const auto nominal_base = 8 + exception_categories.size();
+    const auto nominal_base = 8 + program_->exception_types.size();
     if (type.kind == Type::product) return nominal_base + type.identity;
     const auto array_base = nominal_base + program_->schemas.size();
     if (type.kind == Type::array) return array_base + type.identity;
@@ -898,8 +898,8 @@ class LLVMEmission {
               admitted[i].kind == Type::exception && !admitted[i].identity) {
             auto *category = b_.CreateExtractValue(unpack(arguments[i], admitted[i]), 0);
             auto *valid = b_.CreateAnd(b_.CreateICmpUGT(category, integer(0)),
-                                      b_.CreateICmpULT(category, integer(exception_categories.size())));
-            auto *identity = b_.CreateAdd(b_.CreateTrunc(category, b_.getInt32Ty()), b_.getInt32(tag(exception_type(0))));
+                                      b_.CreateICmpULT(category, integer(program_->exception_types.size())));
+            auto *identity = b_.CreateAdd(b_.CreateTrunc(category, b_.getInt32Ty()), b_.getInt32(tag(program_->exception_type(0))));
             arguments[i] = b_.CreateInsertValue(arguments[i], b_.CreateSelect(valid, identity, b_.getInt32(0)), 1);
           }
         auto *result = choose(expr, arguments, selections, outcome_, [&](const Choice &selected) {
@@ -1038,7 +1038,7 @@ class LLVMEmission {
           llvm::Value *result = llvm::UndefValue::get(exception_);
           result = b_.CreateInsertValue(result, b_.CreateExtractValue(loaded, 4), 0);
           for (unsigned i = 0; i < 4; ++i) result = b_.CreateInsertValue(result, b_.CreateExtractValue(loaded, i), i + 1);
-          return outcome(pack(result, exception_type(0)), integer(0), integer(0), null_pointer());
+          return outcome(pack(result, program_->exception_type(0)), integer(0), integer(0), null_pointer());
         };
         if (!bounds_checks_) return selected();
         auto *valid = block("bounds.valid"), *invalid = block("bounds.failure"), *done = block("bounds.done");
@@ -2336,11 +2336,11 @@ class LLVMEmission {
     case K::raise: {
       llvm::Value *value = expr.children.empty() ? load(storage_.at(*fact.place)) : emit_expression(*expr.children[0]);
       if (!reachable()) return nullptr;
-      value = unpack(value, exception_type(0));
+      value = unpack(value, program_->exception_type(0));
       if (expr.children.size() == 2) {
         auto *cause = emit_expression(*expr.children[1]);
         if (!reachable()) return nullptr;
-        cause = unpack(cause, exception_type(0));
+        cause = unpack(cause, program_->exception_type(0));
         auto *status = slot(b_.getInt64Ty(), "exception.chain.status");
         b_.CreateStore(integer(0), status);
         std::vector<llvm::Value *> operands;
