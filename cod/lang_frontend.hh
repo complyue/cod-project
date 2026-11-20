@@ -3,7 +3,9 @@
 
 #include "lang_llvm.hh"
 #include "lang_checked.hh"
+#include "lang_c_provider.hh"
 
+#include <optional>
 #include <set>
 #include <string>
 #include <vector>
@@ -16,6 +18,7 @@ struct Compilation {
   std::vector<std::string> warnings;
   std::string llvm_ir;
   std::string bitcode;
+  std::optional<NativeProviderFiles> providers;
 };
 
 class Compiler {
@@ -26,7 +29,7 @@ public:
   explicit Compiler(WarningOptions warnings = {}, bool specialize = true, bool bounds_checks = true)
       : warnings_(std::move(warnings)), specialize_(specialize), bounds_checks_(bounds_checks) {}
 
-  Compilation compile(const std::filesystem::path &entry, bool emit_text, bool emit_bitcode) {
+  Compilation compile(const std::filesystem::path &entry, bool emit_text, bool emit_bitcode, bool emit_providers = false) {
     const auto source = ModuleLoader{}.load(entry);
     auto checked = ScalarChecker{}.check(source);
     std::vector<std::string> warnings;
@@ -40,6 +43,7 @@ public:
     for (const auto &module : source.modules) result.scanned_modules.push_back(module.path.string());
     for (const auto module : checked.execution_order) result.execution_order.push_back(source.modules[module].path.string());
     result.warnings = std::move(warnings); result.llvm_ir = std::move(text); result.bitcode = std::move(bitcode);
+    if (emit_providers) result.providers = emit_native_providers(checked);
     return result;
   }
 };

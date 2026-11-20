@@ -1,0 +1,12 @@
+using "std:exceptions" Exception;
+
+data "C" Path;
+data "C" SourceRevision;
+data SourceOpenException <: Exception { os_error:u64; }
+
+proc "C" SourceRevision(handle path:Path in A) throws SourceOpenException
+    where {const owner A};
+
+export Path;
+export SourceRevision;
+export SourceOpenException;

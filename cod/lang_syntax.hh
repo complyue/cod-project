@@ -405,6 +405,7 @@ struct Form {
   bool operation = false;
   bool alias_operation = false;
   bool c_data = false;
+  bool c_linkage = false;
   std::vector<SymbolMapping> mappings;
   std::vector<UnitSelection> units;
   std::vector<Parameter> parameters;
@@ -816,13 +817,14 @@ class Parser {
     }
     return parse_type();
   }
-  Parameter parameter_declaration() {
+  Parameter parameter_declaration(bool c_linkage = false) {
     const bool fixed_binding = take("const");
     const bool owned_region = take("owned");
     const bool regional = take("region");
     if (owned_region && !regional) fail(peek().at, "owned requires a region declaration");
     std::string mode;
-    if (!regional && (is("ptr") || is("ref") || is("val"))) mode = tokens_[cursor_++].text;
+    if (!regional && (is("ptr") || is("ref") || is("val") || (c_linkage && is("handle"))))
+      mode = tokens_[cursor_++].text;
     auto param = value_name();
     Parameter parameter{param.text, Type::void_type, param.at, false, {}};
     parameter.fixed_binding = fixed_binding;
@@ -950,6 +952,12 @@ class Parser {
     const bool function = take("function") || take("func");
     if (!function && !(inline_effect && peek().kind == TokenKind::symbol) && !take("proc")) expect("procedure");
     form.kind = function ? Form::Kind::function : Form::Kind::procedure;
+    if (peek().kind == TokenKind::string) {
+      const auto linkage = name(TokenKind::string);
+      if (linkage.text != "C" || function || inline_effect || expression_form)
+        fail(linkage.at, "C linkage requires a module-level proc \"C\" declaration or definition");
+      form.c_linkage = true;
+    }
     form.symbolic = !function && peek().kind == TokenKind::symbol;
     if (!(expression_form && (is("(") || is("["))))
       form.name = form.symbolic ? name(TokenKind::symbol).text : lexical_name(&form.operation).text;
@@ -975,7 +983,7 @@ class Parser {
             if (!pipeline && !form.parameters.empty() && !form.parameters.back().here)
               fail(peek().at, "here callable parameters must precede ordinary parameters");
             form.parameters.push_back(here_parameter());
-          } else form.parameters.push_back(parameter_declaration());
+          } else form.parameters.push_back(parameter_declaration(form.c_linkage));
         } while (take(","));
         expect(")");
       }
@@ -1031,7 +1039,7 @@ class Parser {
     const bool declaration = take(";");
     if (declaration && !parameter_list) fail(form.at, "a callable declaration requires a parameter list");
     if (inline_effect && !form.result_type) form.result_type = Type::void_type;
-    if (declaration && !form.result_type)
+    if (declaration && !form.result_type && !form.c_linkage)
       fail(form.at, "a callable declaration requires an explicit result type");
     if (declaration && form.conversion)
       fail(form.at, "a conversion requires an implemented function method");

@@ -258,6 +258,17 @@ struct CheckedArray {
   Type element;
 };
 
+struct CheckedNativeConstructor {
+  struct Input {
+    Type type;
+    std::optional<size_t> owner;
+  };
+  const Form *source;
+  Type handle;
+  std::vector<Input> inputs;
+  std::optional<Type> failure;
+};
+
 struct CheckedBinding {
   Type type;
   bool read_only;
@@ -645,6 +656,7 @@ struct CheckedProgram {
   }
   std::vector<CheckedSchema> schemas;
   std::vector<CheckedArray> arrays;
+  std::vector<CheckedNativeConstructor> native_constructors;
   std::vector<CheckedSymbol> symbols;
   std::deque<CheckedFamily> families;
   std::vector<QueryEnvironment> query_environments{{}};

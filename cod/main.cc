@@ -72,7 +72,7 @@ struct CodReplConfig {
 };
 
 struct LanguageEmission {
-  std::optional<fs::path> ir, bitcode, runtime;
+  std::optional<fs::path> ir, bitcode, runtime, providers;
   bool specialize = true;
   bool bounds_checks = true;
 };
@@ -196,6 +196,7 @@ static void printUsage(const char *prog_name) {
             << "  --emit-llvm FILE    Save directly emitted textual LLVM IR\n"
             << "  --emit-bc FILE      Save directly emitted LLVM bitcode\n"
             << "  --emit-runtime FILE Save native system services for external linking\n"
+            << "  --emit-c-provider DIR  Generate the checked C constructor header and stubs\n"
             << "  --no-specialize    Validate CoD calls through general native implementations\n"
             << "  --no-bounds-checks Assume source builtin indices are in range\n"
             << "  --warnings-as-errors  Treat all CoD language warnings as errors\n"
@@ -634,7 +635,7 @@ int CodTool::compileLanguage(const CodReplConfig &config, const fs::path &entry,
                             const LanguageEmission &emission, const cod::language::WarningOptions &warnings) const {
   try {
     auto compilation = cod::language::Compiler{warnings, emission.specialize, emission.bounds_checks}.compile(fs::absolute(entry),
-        emission.ir.has_value(), !check_only || emission.bitcode.has_value());
+        emission.ir.has_value(), !check_only || emission.bitcode.has_value(), emission.providers.has_value());
     for (const auto &warning : compilation.warnings) std::cerr << warning << '\n';
     if (config.verbose) {
       for (const auto &module : compilation.scanned_modules)
@@ -651,6 +652,12 @@ int CodTool::compileLanguage(const CodReplConfig &config, const fs::path &entry,
     if (emission.ir) write(*emission.ir, compilation.llvm_ir);
     if (emission.bitcode) write(*emission.bitcode, compilation.bitcode);
     if (emission.runtime) write(*emission.runtime, cod::language::native_runtime_source());
+    if (emission.providers) {
+      using Files = cod::language::NativeProviderFiles;
+      fs::create_directories(*emission.providers);
+      write(*emission.providers / Files::header_name, compilation.providers->header);
+      write(*emission.providers / Files::stubs_name, compilation.providers->stubs);
+    }
     if (check_only) return 0;
 
     llvm::SmallString<256> directory;
@@ -890,12 +897,14 @@ int main(int argc, const char **argv) {
       warnings.errors.insert(cod::language::Warning::unused_capture);
     } else if (arg == "-Werror=missing-return") {
       warnings.errors.insert(cod::language::Warning::missing_return);
-    } else if (arg == "--emit-llvm" || arg == "--emit-bc" || arg == "--emit-runtime") {
+    } else if (arg == "--emit-llvm" || arg == "--emit-bc" || arg == "--emit-runtime" || arg == "--emit-c-provider") {
       if (i + 1 >= argc) {
         std::cerr << "Error: " << arg << " requires a path\n";
         return 1;
       }
-      (arg == "--emit-llvm" ? emission.ir : arg == "--emit-bc" ? emission.bitcode : emission.runtime) = fs::absolute(argv[++i]);
+      auto &output = arg == "--emit-llvm" ? emission.ir : arg == "--emit-bc" ? emission.bitcode :
+          arg == "--emit-runtime" ? emission.runtime : emission.providers;
+      output = fs::absolute(argv[++i]);
     } else if (arg == "-e" || arg == "--eval") {
       if (i + 1 >= argc) {
         std::cerr << "Error: " << arg << " requires an expression argument\n";
@@ -945,7 +954,7 @@ int main(int argc, const char **argv) {
     std::cerr << "Error: CoD warning options require --run or --check\n";
     return 1;
   }
-  if (emission.ir || emission.bitcode || emission.runtime || !emission.specialize || !emission.bounds_checks) {
+  if (emission.ir || emission.bitcode || emission.runtime || emission.providers || !emission.specialize || !emission.bounds_checks) {
     std::cerr << "Error: language emission options require --run or --check\n";
     return 1;
   }

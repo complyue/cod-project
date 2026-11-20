@@ -17560,6 +17560,79 @@ class ScalarChecker {
         fail(schemas[i].source->at, "inline fields of '" + schemas[i].source->name + "' have no finite layout");
   }
 
+  static bool c_failure_field(std::string_view name) {
+    constexpr std::string_view keywords[]{"alignas", "alignof", "auto", "bool", "break", "case", "char", "const",
+        "constexpr", "continue", "default", "do", "double", "else", "enum", "extern", "false", "float", "for", "goto",
+        "if", "inline", "int", "long", "nullptr", "register", "restrict", "return", "short", "signed", "sizeof",
+        "static", "static_assert", "struct", "switch", "thread_local", "true", "typedef", "typeof", "typeof_unqual",
+        "union", "unsigned", "void", "volatile", "while"};
+    // The provider header includes stddef.h and stdint.h. Reserved identifier
+    // forms and their macro namespaces cannot be used as native member names.
+    return !name.starts_with('_') && !name.starts_with("INT") && !name.starts_with("UINT") &&
+        !name.starts_with("PTRDIFF_") && !name.starts_with("SIZE_") && !name.starts_with("WCHAR_") &&
+        !name.starts_with("WINT_") && !name.starts_with("SIG_ATOMIC_") && name != "NULL" &&
+        std::ranges::find(keywords, name) == std::end(keywords);
+  }
+  void register_native_constructor(const Form &form, const SourceModule &source) {
+    if (form.body) implementation_gap(form.at, "C-callable procedure definitions");
+    const auto handle = resolve_type(Type{Type::named, form.name});
+    if (handle.kind != Type::c_type_marker)
+      implementation_gap(form.at, "C providers other than constructors of fieldless data \"C\" types");
+    const auto *declaration = program_.schemas.at(handle.identity).source;
+    if (std::ranges::none_of(source.forms, [&](const auto &candidate) { return candidate.get() == declaration; }))
+      implementation_gap(form.at, "C constructors declared outside their handle type's defining module");
+    if (form.symbolic || form.operation || form.result_type || !form.type_parameters.empty() || form.explicit_captures)
+      fail(form.at, "a C handle constructor requires a named, bodyless declaration without an explicit result or type parameters");
+    if (std::ranges::any_of(program_.native_constructors, [&](const auto &existing) { return existing.handle == handle; }))
+      implementation_gap(form.at, "multiple C constructor declarations for '" + handle.name + "'");
+    CheckedNativeConstructor constructor{&form, handle, {}, {}};
+    std::set<std::string> names;
+    for (const auto &parameter : form.parameters) {
+      if (!names.insert(parameter.name).second) fail(parameter.at, "duplicate constructor parameter name");
+      if (parameter.here || parameter.variadic || parameter.automatic_conversion)
+        implementation_gap(parameter.at, "here, variadic or conversion parameters of C constructors");
+      const auto type = resolve_type(parameter.type);
+      std::optional<size_t> role;
+      if (parameter.declaration_kind == "handle") {
+        if (type.kind != Type::c_type_marker) fail(parameter.at, "handle parameter requires a fieldless data \"C\" type");
+        const auto owner = std::ranges::find(form.owner_parameters, parameter.owner, &OwnerParameter::name);
+        if (owner == form.owner_parameters.end() || owner->root || owner->explicit_parameter)
+          fail(parameter.at, "C handle parameter requires a declared owner");
+        role = std::distance(form.owner_parameters.begin(), owner);
+      } else {
+        if (!parameter.owner.empty() || (parameter.declaration_kind != "val" && !parameter.declaration_kind.empty()))
+          fail(parameter.at, "C constructor parameters receive bits or a borrowed handle");
+        reject_c_type_payload(type, parameter.at);
+        if (type.kind == Type::exception) fail(parameter.at, "an exception object is not a C constructor bits argument");
+        if (!scalar_type(type)) implementation_gap(parameter.at, "C constructor bits arguments other than direct scalars");
+      }
+      constructor.inputs.push_back({type, role});
+    }
+    for (size_t i = 0; i < form.owner_parameters.size(); ++i)
+      if (std::ranges::none_of(constructor.inputs, [&](const auto &input) { return input.owner == i; }))
+        implementation_gap(form.owner_parameters[i].at, "a C constructor owner without a supplying handle parameter");
+    if (!form.throws_types.empty()) {
+      const auto type = resolve_type(form.throws_types.front());
+      if (!nominal_exception(type)) implementation_gap(form.at, "C constructor failures other than a concrete library-defined exception");
+      const auto &schema = scalar_exception_schema(type, form.at);
+      for (const auto &field : schema.fields)
+        if (!c_failure_field(field.source->name)) implementation_gap(field.source->at, "a reserved C name in a generated failure payload");
+      constructor.failure = type;
+    }
+    program_.native_constructors.push_back(std::move(constructor));
+  }
+  void check_native_type_names() const {
+    std::map<std::string_view, size_t> handles;
+    for (const auto &constructor : program_.native_constructors) {
+      const auto record = [&](const Type &type) {
+        const auto [entry, inserted] = handles.try_emplace(type.name, type.identity);
+        if (!inserted && entry->second != type.identity)
+          implementation_gap(constructor.source->at, "distinct C handle types with the same generated C name '" + type.name + "'");
+      };
+      record(constructor.handle);
+      for (const auto &input : constructor.inputs) if (input.owner) record(input.type);
+    }
+  }
   void register_module(const SourceModule &source, std::optional<size_t> &print_symbol,
                        std::optional<Location> &unsupported_here) {
     const auto &forms = source.forms;
@@ -17584,6 +17657,10 @@ class ScalarChecker {
     std::vector<const Form *> definitions;
     for (const auto &form : forms) {
       if (source.dependencies.contains(form.get())) continue;
+      if (form->c_linkage) {
+        register_native_constructor(*form, source);
+        continue;
+      }
       if (form->kind == Form::Kind::expression || form->kind == Form::Kind::export_resource ||
           form->kind == Form::Kind::data || form->kind == Form::Kind::region_definition || form->kind == Form::Kind::array)
         continue;
@@ -17822,6 +17899,7 @@ public:
       const ModuleLookup lookup(module_, module);
       register_module(source.modules[module], print_symbol, unsupported_here);
     }
+    check_native_type_names();
     for (auto &method : program_.methods)
       method.throws_categories = declared_exception_categories(method.throws_types);
     for (auto &family : program_.families)
