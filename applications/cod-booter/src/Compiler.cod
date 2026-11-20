@@ -1,9 +1,57 @@
 using "SourceStorage.cod" SourceBytes;
+using "SourceStorage.cod" Token;
+using "SourceStorage.cod" len;
+using "Lexer.cod" scan_token;
+using "Lexer.cod" end_of_source;
+using "Lexer.cod" unsupported_byte;
 using "ParserStorage.cod" Tokens;
 using "ParserStorage.cod" ExprNodes;
 using "Frontend.cod" FrontendResult;
 using "Frontend.cod" read_expression;
 using "Lowering.cod" lower_expression;
+
+data ExpressionScratchPlan {
+    token_count:u64;
+    node_capacity:u64;
+    diagnostic:u8;
+    diagnostic_first:u64;
+    diagnostic_past:u64;
+}
+
+func count_tokens(source:const SourceBytes in S, ref token:Token in T) -> u64
+    where {const owner S, owner T} {
+    val next <- 0u64;
+    val bytes <- len(source);
+    # Each non-EOF token advances by at least one byte.
+    for (index in 0u64 .. bytes) {
+        scan_token(source, next, token);
+        if (token.kind == end_of_source() || token.kind >= unsupported_byte()) { return index; } else {};
+        (next <- token.past):void;
+    };
+    return bytes;
+}
+
+# Plan buffers before acquiring scratch storage. Each node is introduced by
+# one distinct non-EOF token: a literal, operator or opening parenthesis.
+func plan_expression_scratch(source:const SourceBytes in S, ref scratch:ExpressionScratchPlan in R) -> bool
+    where {const owner S, owner R} {
+    scratch.token_count <- 0u64;
+    scratch.node_capacity <- 0u64;
+    scratch.diagnostic <- 0u8;
+    scratch.diagnostic_first <- 0u64;
+    scratch.diagnostic_past <- 0u64;
+    ref token = make Token { kind <- end_of_source(); first <- 0u64; past <- 0u64; };
+    val count <- count_tokens(source, token);
+    if (token.kind >= unsupported_byte()) {
+        scratch.diagnostic <- token.kind;
+        scratch.diagnostic_first <- token.first;
+        scratch.diagnostic_past <- token.past;
+        return false;
+    } else {};
+    scratch.token_count <- count + 1u64;
+    scratch.node_capacity <- count;
+    return true;
+}
 
 # The caller keeps the source and scratch buffers live. Invalid source leaves
 # the diagnostic in result and makes no backend calls.
@@ -15,4 +63,6 @@ proc compile_expression(here emit(ordinal:u64, kind:u8, number:u64, left:u64, ri
     return lower_expression(emit, nodes, result.tree);
 }
 
+export ExpressionScratchPlan;
+export plan_expression_scratch;
 export compile_expression;
