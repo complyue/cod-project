@@ -76,6 +76,7 @@ data LoweringState {
     active_scope:u64;
     exception_target:u64;
     return_target:u64;
+    return_slot:u64;
     return_ready:u64;
     caught_failure:u64;
     live:bool;
@@ -135,11 +136,12 @@ func finish_block(ref code:NativeCommands in C, ref plan:NativePlan in P, ref st
     return;
 }
 
-func enter_prepared_return(ref code:NativeCommands in C, ref plan:NativePlan in P, ref state:LoweringState in R,
-                           returned:u64, continuation:u64) -> void where {owner C, owner P, owner R} {
+func forward_return(ref code:NativeCommands in C, ref plan:NativePlan in P, ref state:LoweringState in R,
+                    returned:u64, continuation:u64, prepared:u64, ready:u64) -> void where {owner C, owner P, owner R} {
     if (returned == continuation) { return; } else {};
     position(code, plan, state, returned);
-    emit(code, plan, word_constant(), state.return_ready, 1u64);
+    if (prepared != no_node()) { emit(code, plan, copy_word(), state.return_slot, prepared); } else {};
+    if (ready != no_node()) { emit(code, plan, word_constant(), ready, 1u64); } else {};
     finish_block(code, plan, state, continuation);
 }
 
@@ -385,7 +387,8 @@ func lower_handlers(nodes:const ExprNodes in N, names:const NameBindings in B, l
 # and failure edges leave through the already-restored enclosing targets.
 func lower_finally(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                    facts:const OperandFacts in F, sites:const CompletionSites in S, ref code:NativeCommands in C,
-                   ref plan:NativePlan in P, ref state:LoweringState in R, body:u64, returned:u64, next:u64) -> bool
+                   ref plan:NativePlan in P, ref state:LoweringState in R, body:u64,
+                   returned:u64, forward_to:u64, next:u64) -> bool
     where {const owner N, const owner B, const owner L, const owner F, const owner S, owner C, owner P, owner R} {
     val saved <- save_failure(code, plan);
     emit(code, plan, word_constant(), pending_category(), 0u64);
@@ -393,12 +396,12 @@ func lower_finally(nodes:const ExprNodes in N, names:const NameBindings in B, li
     if (!state.live || plan.diagnostic != 0u8) { return false; } else {};
     restore_failure(code, plan, saved);
     if (next == no_node()) {
-        command(code, plan, branch_equal(), saved, 0u64, state.return_target, state.exception_target);
+        command(code, plan, branch_equal(), saved, 0u64, forward_to, state.exception_target);
     } else {
         val succeeded <- new_block(plan);
         command(code, plan, branch_equal(), saved, 0u64, succeeded, state.exception_target);
         position(code, plan, state, succeeded);
-        command(code, plan, branch_equal(), returned, 0u64, next, state.return_target);
+        command(code, plan, branch_equal(), returned, 0u64, next, forward_to);
     };
     state.live <- false;
     return true;
@@ -413,16 +416,24 @@ func lower_try(nodes:const ExprNodes in N, names:const NameBindings in B, links:
     val has_catches <- nodes[first_item(nodes, last)].kind == catch_clause_node();
     val outer_exception <- state.exception_target;
     val outer_return <- state.return_target;
+    val outer_slot <- state.return_slot;
     val returned_earlier <- state.local_return;
     val join <- new_block(plan);
     val after_arm <- join;
     val returned <- no_node();
     val on_return <- no_node();
+    val prepared <- no_node();
     if (has_finally) {
         after_arm <- new_block(plan);
         on_return <- new_block(plan);
         returned <- new_slot(plan);
         state.return_target <- on_return;
+        # The protected return becomes visible to the outer destination
+        # only if the finalizer preserves it.
+        if (outer_slot != no_node()) {
+            prepared <- new_slot(plan);
+            (state.return_slot <- prepared):void;
+        } else {};
         state.local_return <- false;
         emit(code, plan, word_constant(), returned, 0u64);
     } else {};
@@ -433,6 +444,7 @@ func lower_try(nodes:const ExprNodes in N, names:const NameBindings in B, links:
     val handled <- lower_handlers(nodes, names, links, facts, sites, code, plan, state, at, after_arm);
     state.exception_target <- outer_exception;
     state.return_target <- outer_return;
+    state.return_slot <- outer_slot;
     val normal <- body || handled;
     if (has_finally) {
         val pending_return <- state.local_return;
@@ -442,7 +454,10 @@ func lower_try(nodes:const ExprNodes in N, names:const NameBindings in B, links:
         finish_block(code, plan, state, after_arm);
         position(code, plan, state, after_arm);
         val next <- if (normal) { join } else { no_node() };
-        val preserved <- lower_finally(nodes, names, links, facts, sites, code, plan, state, nodes[last].right, returned, next);
+        val forward_to <- if (prepared != no_node()) { new_block(plan) } else { outer_return };
+        val preserved <- lower_finally(nodes, names, links, facts, sites, code, plan, state,
+                                       nodes[last].right, returned, forward_to, next);
+        forward_return(code, plan, state, forward_to, outer_return, prepared, no_node());
         state.local_return <- state.local_return || (pending_return && preserved);
         (normal <- normal && preserved):void;
     } else {};
@@ -468,11 +483,10 @@ func lower_return(nodes:const ExprNodes in N, names:const NameBindings in B, lin
     where {const owner N, const owner B, const owner L, const owner F, const owner S, owner C, owner P, owner R} {
     val value <- nodes[at].left;
     if (value != no_node()) {
-        if (facts[state.active_scope].kind == scalar_u64()) {
+        if (state.return_slot != no_node()) {
             lower_bits(nodes, names, links, facts, sites, code, plan, state, value);
             if (!state.live) { return; } else {};
-            val destination <- if (state.active_scope == state.active_function) { returned_word() } else { slot(state.active_scope) };
-            emit(code, plan, copy_word(), destination, slot(value));
+            emit(code, plan, copy_word(), state.return_slot, slot(value));
         } else {
             lower_node(nodes, names, links, facts, sites, code, plan, state, value);
             if (!state.live) { return; } else {};
@@ -594,9 +608,8 @@ func lower_delayed_block(nodes:const ExprNodes in N, names:const NameBindings in
     val saved <- save_failure(code, plan);
     emit(code, plan, word_constant(), pending_category(), 0u64);
     state.exception_target <- next;
-    val returned <- if (state.return_ready != no_node() && state.active_scope == state.active_function) {
-        new_block(plan)
-    } else { next };
+    val ready <- if (state.active_scope == state.active_function) { state.return_ready } else { no_node() };
+    val returned <- if (ready != no_node()) { new_block(plan) } else { next };
     state.return_target <- returned;
     state.caught_failure <- no_node();
     lower_node(nodes, names, links, facts, sites, code, plan, state, body);
@@ -607,7 +620,7 @@ func lower_delayed_block(nodes:const ExprNodes in N, names:const NameBindings in
         restore_failure(code, plan, saved);
         finish_block(code, plan, state, next);
     } else {};
-    enter_prepared_return(code, plan, state, returned, next);
+    forward_return(code, plan, state, returned, next, no_node(), ready);
 }
 
 func drain_scope(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L, facts:const OperandFacts in F,
@@ -656,14 +669,16 @@ func lower_full_scope(nodes:const ExprNodes in N, names:const NameBindings in B,
     val outer_scope <- state.active_scope;
     val outer_exception <- state.exception_target;
     val outer_return_target <- state.return_target;
+    val outer_return_slot <- state.return_slot;
     val outer_return <- state.local_return;
     val cleanup <- new_block(plan);
     state.active_scope <- scope;
     state.exception_target <- cleanup;
     state.return_target <- cleanup;
+    val destination <- if (facts[scope].kind == scalar_u64()) { slot(scope) } else { no_node() };
+    state.return_slot <- destination;
     state.local_return <- false;
     initialize_defer_flags(sites, code, plan, scope, syntax_len(nodes));
-    val destination <- if (facts[scope].kind == scalar_u64()) { slot(scope) } else { no_node() };
     lower_list(nodes, names, links, facts, sites, code, plan, state, nodes[scope].left, destination);
     if (plan.diagnostic != 0u8) { return; } else {};
     val normal <- state.live || state.local_return;
@@ -674,6 +689,7 @@ func lower_full_scope(nodes:const ExprNodes in N, names:const NameBindings in B,
     state.active_scope <- outer_scope;
     state.exception_target <- outer_exception;
     state.return_target <- outer_return_target;
+    state.return_slot <- outer_return_slot;
     state.local_return <- outer_return;
     if (!resumes) { finish_block(code, plan, state, outer_exception); return; } else {};
     val ready <- new_block(plan);
@@ -692,9 +708,10 @@ func lower_activation(nodes:const ExprNodes in N, names:const NameBindings in B,
     val cleanup <- new_block(plan);
     val returned <- if (falls_through) { new_block(plan) } else { cleanup };
     val return_ready <- if (falls_through) { new_slot(plan) } else { no_node() };
+    val return_slot <- if (facts[scope].kind == scalar_u64()) { returned_word() } else { no_node() };
     ref state = make LoweringState {
         active_function <- scope; active_scope <- scope; exception_target <- cleanup;
-        return_target <- returned; return_ready <- return_ready;
+        return_target <- returned; return_slot <- return_slot; return_ready <- return_ready;
         caught_failure <- no_node(); live <- true; local_return <- false;
     };
     emit(code, plan, begin_function(), scope, entry);
@@ -719,7 +736,7 @@ func lower_activation(nodes:const ExprNodes in N, names:const NameBindings in B,
         } else {};
         finish_block(code, plan, state, cleanup);
     } else {};
-    enter_prepared_return(code, plan, state, returned, cleanup);
+    forward_return(code, plan, state, returned, cleanup, no_node(), return_ready);
     position(code, plan, state, cleanup);
     drain_scope(nodes, names, links, facts, sites, code, plan, state, scope);
     if (falls_through) {

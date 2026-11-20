@@ -54,6 +54,7 @@ func throws_clause_node() -> u8 { return 38u8; }
 func owner_clause_node() -> u8 { return 39u8; }
 func deferred_block_node() -> u8 { return 40u8; }
 
+func discarded_guard_result() -> u64 { return 1u64; }
 func no_node() -> u64 { return 18446744073709551615u64; }
 
 func len(tokens:const Tokens in T) -> u64 where {const owner T} {
@@ -108,4 +109,5 @@ export result_clause_node;
 export throws_clause_node;
 export owner_clause_node;
 export deferred_block_node;
+export discarded_guard_result;
 export no_node;

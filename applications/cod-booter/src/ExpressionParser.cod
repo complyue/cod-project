@@ -31,6 +31,7 @@ using "ParserStorage.cod" ptr_binding_node;
 using "ParserStorage.cod" null_node;
 using "ParserStorage.cod" return_node;
 using "ParserStorage.cod" owned_type_node;
+using "ParserStorage.cod" discarded_guard_result;
 using "ParserStorage.cod" no_node;
 using "Lexer.cod" identifier;
 using "Lexer.cod" integer_literal;
@@ -165,13 +166,16 @@ func parse_defer(source:const SourceBytes in S, tokens:const Tokens in T,
         parse_block(source, tokens, nodes, result, past);
         if (result.diagnostic != 0u8) { return; } else {};
         val body <- result.root;
-        val following <- result.next;
-        if (following < past && (catch_word(source, tokens[following]) || finally_word(source, tokens[following]))) {
-            result.diagnostic <- unsupported_deferred_form();
-            return;
+        val last <- parse_guard_clauses(source, tokens, nodes, result, past);
+        if (result.diagnostic != 0u8) { return; } else {};
+        if (last != no_node()) {
+            val first <- nodes[body].first;
+            append_node(nodes, result, try_node(), first, nodes[last].past, discarded_guard_result(), body, last, first);
+            if (result.diagnostic != 0u8) { return; } else {};
         } else {};
-        append_node(nodes, result, deferred_block_node(), keyword, nodes[body].past,
-                    0u64, body, no_node(), keyword);
+        val action <- result.root;
+        append_node(nodes, result, deferred_block_node(), keyword, nodes[action].past,
+                    0u64, action, no_node(), keyword);
         return;
     } else {};
     if (operand_start < past && (catch_word(source, tokens[operand_start]) || finally_word(source, tokens[operand_start]))) {
@@ -345,6 +349,25 @@ func parse_catches(source:const SourceBytes in S, tokens:const Tokens in T,
     return last;
 }
 
+func parse_guard_clauses(source:const SourceBytes in S, tokens:const Tokens in T,
+                         ref nodes:ExprNodes in A, ref result:ParseResult in R, past:u64) -> u64
+    where {const owner S, const owner T, owner A, owner R} {
+    val last <- parse_catches(source, tokens, nodes, result, past);
+    if (result.diagnostic != 0u8) { return no_node(); } else {};
+    if (result.next < past && finally_word(source, tokens[result.next])) {
+        val finally_first <- tokens[result.next].first;
+        result.next <- result.next + 1u64;
+        parse_block(source, tokens, nodes, result, past);
+        if (result.diagnostic != 0u8) { return no_node(); } else {};
+        val cleanup <- result.root;
+        append_node(nodes, result, finally_clause_node(), finally_first, nodes[cleanup].past,
+                    0u64, last, cleanup, finally_first);
+        if (result.diagnostic != 0u8) { return no_node(); } else {};
+        return result.root;
+    } else {};
+    return last;
+}
+
 func parse_try(source:const SourceBytes in S, tokens:const Tokens in T,
                ref nodes:ExprNodes in A, ref result:ParseResult in R, past:u64) -> void
     where {const owner S, const owner T, owner A, owner R} {
@@ -354,19 +377,8 @@ func parse_try(source:const SourceBytes in S, tokens:const Tokens in T,
     parse_block(source, tokens, nodes, result, past);
     if (result.diagnostic != 0u8) { return; } else {};
     val body <- result.root;
-    val last <- parse_catches(source, tokens, nodes, result, past);
+    val last <- parse_guard_clauses(source, tokens, nodes, result, past);
     if (result.diagnostic != 0u8) { return; } else {};
-    if (result.next < past && finally_word(source, tokens[result.next])) {
-        val finally_first <- tokens[result.next].first;
-        result.next <- result.next + 1u64;
-        parse_block(source, tokens, nodes, result, past);
-        if (result.diagnostic != 0u8) { return; } else {};
-        val cleanup <- result.root;
-        append_node(nodes, result, finally_clause_node(), finally_first, nodes[cleanup].past,
-                    0u64, last, cleanup, finally_first);
-        if (result.diagnostic != 0u8) { return; } else {};
-        (last <- result.root):void;
-    } else {};
     if (last == no_node()) {
         result.next <- begin;
         result.diagnostic <- expected_try_clause();

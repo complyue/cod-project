@@ -35,6 +35,7 @@ using "ParserStorage.cod" return_node;
 using "ParserStorage.cod" throw_node;
 using "ParserStorage.cod" deferred_call_node;
 using "ParserStorage.cod" deferred_block_node;
+using "ParserStorage.cod" discarded_guard_result;
 using "ExpressionParser.cod" ParseResult;
 using "NameResolution.cod" NameBindings;
 using "NameResolution.cod" NameWork;
@@ -52,6 +53,7 @@ using "ModuleExports.cod" SelectedExports;
 using "ModuleExports.cod" exception_type_export;
 using "ModuleExports.cod" symbol_export;
 using "ModuleExports.cod" print_export_identity;
+using "ModuleExports.cod" exception_root_identity;
 
 # An owner is a lexical scope or an owner parameter's declaration. Exception
 # type identity alone does not establish the incoming object's owner.
@@ -103,6 +105,7 @@ func unproved_call_target() -> u8 { return 11u8; }
 func operand_storage_exhausted() -> u8 { return 12u8; }
 func invalid_operand_tree() -> u8 { return 13u8; }
 func wrong_finally_result() -> u8 { return 14u8; }
+func duplicate_catch_category() -> u8 { return 15u8; }
 
 func set_fact(ref facts:OperandFacts in F, at:u64, kind:u8, reception:u8,
               owner_site:u64, identity:u64, checked_exception:u8) -> void where {owner F} {
@@ -411,9 +414,15 @@ func merge_result(ref facts:OperandFacts in F, at:u64, kind:u8) -> u8 where {own
     return 0u8;
 }
 
+func merge_guard_result(ref facts:OperandFacts in F, at:u64, arm:u64, discard:bool) -> u8 where {owner F} {
+    val kind <- facts[arm].kind;
+    return merge_result(facts, at, if (discard && kind == scalar_u64()) { void_result() } else { kind });
+}
+
 func check_try_result(nodes:const ExprNodes in N, links:const NameWork in L, ref facts:OperandFacts in F, at:u64) -> u8
     where {const owner N, const owner L, owner F} {
-    val diagnostic <- merge_result(facts, at, facts[nodes[at].left].kind);
+    val discard <- nodes[at].number == discarded_guard_result();
+    val diagnostic <- merge_guard_result(facts, at, nodes[at].left, discard);
     if (diagnostic != 0u8) { return diagnostic; } else {};
     val clause <- first_item(nodes, nodes[at].right);
     val arm <- no_node();
@@ -425,7 +434,7 @@ func check_try_result(nodes:const ExprNodes in N, links:const NameWork in L, ref
         } else {};
         arm <- nodes[clause].right;
         if (nodes[clause].kind == catch_clause_node()) {
-            diagnostic <- merge_result(facts, at, facts[nodes[arm].right].kind);
+            diagnostic <- merge_guard_result(facts, at, nodes[arm].right, discard);
             if (diagnostic != 0u8) { return diagnostic; } else {};
         } else {
             kind <- facts[arm].kind;
@@ -435,6 +444,25 @@ func check_try_result(nodes:const ExprNodes in N, links:const NameWork in L, ref
         (clause <- links[clause].next):void;
     };
     return unproved_result_contract();
+}
+
+func catch_category(nodes:const ExprNodes in N, facts:const OperandFacts in F, clause:u64) -> u64
+    where {const owner N, const owner F} {
+    val binding <- nodes[nodes[clause].right].left;
+    val identity <- facts[binding].identity;
+    return if (identity == no_node()) { exception_root_identity() } else { identity };
+}
+
+func check_catch_clause(nodes:const ExprNodes in N, facts:const OperandFacts in F, at:u64) -> u8
+    where {const owner N, const owner F} {
+    val category <- catch_category(nodes, facts, at);
+    val previous <- nodes[at].left;
+    for (unused in 0u64 .. at) {
+        if (previous == no_node()) { return 0u8; } else {};
+        if (catch_category(nodes, facts, previous) == category) { return duplicate_catch_category(); } else {};
+        (previous <- nodes[previous].left):void;
+    };
+    return 0u8;
 }
 
 func check_scope_tail(nodes:const ExprNodes in N, ref facts:OperandFacts in F, scope:u64) -> u8
@@ -497,6 +525,7 @@ func check_operand(nodes:const ExprNodes in N, names:const NameBindings in B, li
         set_fact(facts, at, exception_type(), readonly_exception(), no_node(), no_node(), 0u8);
         return 0u8;
     } else {};
+    if (kind == catch_clause_node()) { return check_catch_clause(nodes, facts, at); } else {};
     if (names[at].scope == no_node()) { return 0u8; } else {};
     if (kind == literal_node()) { scalar_fact(facts, at, independent_value(), no_node()); return 0u8; } else {};
     if (kind == name_node()) {
