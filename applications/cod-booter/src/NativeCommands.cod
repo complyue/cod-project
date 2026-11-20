@@ -1,4 +1,6 @@
 # Compiler-private commands for constructing LLVM functions and basic blocks.
+# Each declaration has one activation body. Declarations let later-built
+# bodies refer to one another.
 # A word slot is local to one generated activation. Branches name blocks,
 # and invocations consume preceding argument commands in source order.
 # A checked binary command writes a value and a separate overflow flag.

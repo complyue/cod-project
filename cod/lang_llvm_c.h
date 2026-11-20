@@ -16,6 +16,7 @@ typedef struct cod_llvm_session {
 /* Open into an empty owner. Release the session even if opening stops
    after acquiring only some of its handles. */
 static inline bool cod_llvm_session_open(cod_llvm_session *session, const char *module_name) {
+  if (session->context || session->module || session->builder) return false;
   session->context = LLVMContextCreate();
   if (!session->context) return false;
   session->module = LLVMModuleCreateWithNameInContext(module_name, session->context);

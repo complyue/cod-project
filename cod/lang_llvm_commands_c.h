@@ -24,14 +24,20 @@ typedef struct cod_llvm_command {
   uint64_t a, b, c, d;
 } cod_llvm_command;
 
+typedef struct cod_llvm_function {
+  LLVMValueRef value;
+  bool begun;
+} cod_llvm_function;
+
 typedef struct cod_llvm_construction {
   cod_llvm_session *session;
   LLVMTypeRef word, result;
-  LLVMValueRef *functions, *slots, *arguments;
+  cod_llvm_function *functions;
+  LLVMValueRef *slots, *arguments;
   LLVMBasicBlockRef *blocks;
   LLVMValueRef current, print, format;
   LLVMBasicBlockRef entry;
-  size_t label_count, slot_count;
+  size_t label_count, slot_count, functions_to_begin;
   unsigned argument_count, argument_capacity;
 } cod_llvm_construction;
 
@@ -111,10 +117,10 @@ static inline void cod_llvm_finish_program(cod_llvm_construction *state, uint64_
 }
 
 static inline bool cod_llvm_invoke_words(cod_llvm_construction *state, cod_llvm_command command) {
-  if (command.a >= state->label_count || !state->functions[command.a] ||
+  if (command.a >= state->label_count || !state->functions[command.a].value ||
       command.b >= state->slot_count || command.c >= state->slot_count || command.d >= state->slot_count)
     return false;
-  LLVMValueRef function = state->functions[command.a];
+  LLVMValueRef function = state->functions[command.a].value;
   LLVMTypeRef type = LLVMGlobalGetValueType(function);
   if (LLVMGetReturnType(type) != state->result || state->argument_count != LLVMCountParams(function))
     return false;
@@ -135,9 +141,13 @@ static inline bool cod_llvm_construct_command(cod_llvm_construction *state, cod_
     return false;
   if (command.opcode == COD_LLVM_DECLARE) return true;
   if (command.opcode == COD_LLVM_BEGIN) {
-    if (a >= state->label_count || !state->functions[a]) return false;
-    state->current = state->functions[a];
+    if (a >= state->label_count) return false;
+    cod_llvm_function *function = &state->functions[a];
+    if (!function->value || function->begun) return false;
+    state->current = function->value;
     if (!cod_llvm_local_block(state, b) || LLVMGetEntryBasicBlock(state->current) != state->blocks[b]) return false;
+    function->begun = true;
+    --state->functions_to_begin;
     state->entry = state->blocks[b];
     memset(state->slots, 0, slots * sizeof(*state->slots));
     LLVMClearInsertionPosition(builder);
@@ -238,12 +248,13 @@ static inline bool cod_llvm_construct_command(cod_llvm_construction *state, cod_
   }
 }
 
-/* Consume the private checked command stream. Own the LLVM session outside
-   this call and discard it on failure. Object emission verifies the IR. */
+/* Construct one checked program in a fresh LLVM session. Every declared
+   function has a body, including the entry. The caller releases the session
+   on failure. Object emission verifies complete blocks and the resulting IR. */
 static inline bool cod_llvm_construct_words(cod_llvm_session *session, const cod_llvm_command *commands,
     size_t count, size_t labels, size_t slots) {
   if (!session || !session->builder || !session->context || !session->module ||
-      !commands || !count || !labels || !slots) return false;
+      LLVMGetFirstFunction(session->module) || !commands || !count || !labels || !slots) return false;
   unsigned arity = 1;
   for (size_t i = 0; i < count; ++i) {
     if (commands[i].opcode != COD_LLVM_DECLARE) continue;
@@ -269,7 +280,7 @@ static inline bool cod_llvm_construct_words(cod_llvm_session *session, const cod
   for (size_t i = 0; i < count; ++i) {
     cod_llvm_command command = commands[i];
     if (command.opcode != COD_LLVM_DECLARE) continue;
-    if (command.a >= labels || state.functions[command.a]) goto done;
+    if (command.a >= labels || state.functions[command.a].value) goto done;
     bool entry = command.c != 0;
     if (entry && (entry_declared || command.b != 0)) goto done;
     LLVMTypeRef result = entry ? LLVMInt32TypeInContext(session->context) : state.result;
@@ -278,7 +289,8 @@ static inline bool cod_llvm_construct_words(cod_llvm_session *session, const cod
     snprintf(name, sizeof(name), "cod.proc.%" PRIu64, command.a);
     LLVMValueRef function = LLVMAddFunction(session->module, entry ? "main" : name, signature);
     if (!entry) LLVMSetLinkage(function, LLVMInternalLinkage);
-    state.functions[command.a] = function;
+    state.functions[command.a].value = function;
+    ++state.functions_to_begin;
     entry_declared = entry_declared || entry;
   }
   if (!entry_declared) goto done;
@@ -286,13 +298,13 @@ static inline bool cod_llvm_construct_words(cod_llvm_session *session, const cod
   for (size_t i = 0; i < count; ++i) {
     cod_llvm_command command = commands[i];
     if (command.opcode != COD_LLVM_POSITION) continue;
-    if (command.a >= labels || command.b >= labels || !state.functions[command.b] || state.blocks[command.a])
+    if (command.a >= labels || command.b >= labels || !state.functions[command.b].value || state.blocks[command.a])
       goto done;
-    state.blocks[command.a] = LLVMAppendBasicBlockInContext(session->context, state.functions[command.b], "");
+    state.blocks[command.a] = LLVMAppendBasicBlockInContext(session->context, state.functions[command.b].value, "");
   }
   for (size_t i = 0; i < count; ++i)
     if (!cod_llvm_construct_command(&state, commands[i])) goto done;
-  success = state.argument_count == 0;
+  success = state.argument_count == 0 && state.functions_to_begin == 0;
 
 done:
   free(parameters);
