@@ -5,6 +5,11 @@
 <a id="h-hlvm-candidate-20261120"></a>
 **H-HLVM-CANDIDATE-20261120.** In the project chat, the project user proposed `hlvm-basic` for running BASIC source or saving a DBMR to run later, with the prerequisite “要等 CoD 基本的 lexer/parser 已经通了的情况下再推进”, then asked to record the idea in a planning document. The [application note](applications/README.md#deferred-application-hlvm-basic) applies the executor and editable program graph from [*Algebraic Effects Is All You Need*](papers/AlgebraicEffectsIsAllYouNeed.md) to BASIC. It does not change the compiler roadmap or authorize implementation.
 
+## 2026-11-19 — Update deferred field lifetime coverage
+
+<a id="k-deferred-live-ancestors-20261119"></a>
+**K-DEFERRED-LIVE-ANCESTORS-20261119.** D-28r43→44 and registry r996→997 continue [lexical product coverage](design/RegionalAndLexicalStorageRefactor.md#lexical-adts-as-part-of-the-complete-model) under [H-356](#h-356), [H-478](#h-478), [H-437](#h-437), [H-562](#h-562) and [D-17-DEFER-CHECKS](design/DesignAuthorityRegistry.md#d-17-defer-checks). Invocation can reach a same-owner ancestor allocated after registration once that ancestor is selected. A failure before rebinding retains the selection already established on the failure path. Failed registration leaves [successful registrations] eligible(design/ExceptionControl.md#when-a-defer-pass-cannot-publish-its-aggregate). This preserves readiness, actual ownership and effect order under C-63/C-65/C-72/C-93 and charter §§3.3/6.3/12. Correlated write proofs and full physical layouts retain their recorded scope. Prior coverage at `14b7486dc241d1dacf25a4e0560a2b9eb91dff59:design/RegionalAndLexicalStorageRefactor.md`.
+
 ## 2026-11-19 — Update deferred product projection coverage
 
 <a id="k-deferred-product-projections-20261119"></a>

@@ -192,6 +192,7 @@ class ScalarChecker {
   CallEffects observed_;
   std::vector<std::set<size_t>> possible_targets_, possible_null_sources_, target_dependencies_;
   std::vector<CheckedStorage> catalog_storage_;
+  std::vector<CheckedBinding> catalog_bindings_;
   size_t next_target_version_ = 0;
   size_t next_selection_identity_ = 0;
   std::map<size_t, std::set<size_t>> selection_sources_;
@@ -1775,6 +1776,9 @@ class ScalarChecker {
   const CheckedStorage &storage(size_t place) const {
     return place < storage_->size() ? storage_->at(place) : catalog_storage_.at(place);
   }
+  const CheckedBinding &binding(size_t id) const {
+    return id < bindings_->size() ? bindings_->at(id) : catalog_bindings_.at(id);
+  }
   std::set<size_t> target_owners(const std::set<size_t> &targets) const {
     std::set<size_t> owners;
     for (const auto place : targets) if (place != null_target) owners.insert(storage(place).scope);
@@ -1840,7 +1844,7 @@ class ScalarChecker {
   std::set<size_t> physical_slots(const std::set<size_t> &slots) const {
     std::set<size_t> result;
     for (const auto id : slots) {
-      const auto &selection = bindings_->at(id).selection;
+      const auto &selection = binding(id).selection;
       if (selection.empty()) result.insert(id);
       else result.insert(selection.begin(), selection.end());
     }
@@ -1850,7 +1854,7 @@ class ScalarChecker {
     auto result = physical_slots(slots);
     const auto physical = result;
     for (const auto id : physical) {
-      const auto &overlaps = bindings_->at(id).overlaps;
+      const auto &overlaps = binding(id).overlaps;
       result.insert(overlaps.begin(), overlaps.end());
     }
     return result;
@@ -2071,7 +2075,7 @@ class ScalarChecker {
         requirement.selection = view.binding ? view.binding : std::optional<size_t>{id};
         requirement.entry_initialized = initialized;
         requirement.entry_nonnull = initialized;
-        if (paths) if (const auto slot = bindings_->at(id).embedded_slot) {
+        if (paths) if (const auto slot = binding(id).embedded_slot) {
           if (const auto path = paths->find(*slot); path != paths->end()) requirement.when = path->second;
         }
       }
@@ -2645,6 +2649,7 @@ class ScalarChecker {
       for (const auto &call : deferred_product_writes_) changed |= discover_product_writes(call);
     } while (changed);
     catalog_storage_ = *storage_;
+    catalog_bindings_ = *bindings_;
     resolve_payload_writes(payload_writes_);
     for (auto &[expr, loop] : loop_states_) {
       for (const auto binding : loop.bindings)
@@ -3231,43 +3236,49 @@ class ScalarChecker {
         }
         auto owners = destination.type == Type::void_type ? target_owners(selected.places) : std::set<size_t>{};
         if (destination.type == Type::void_type) for (const auto entry : selected.entries) {
-          const auto &incoming = lexical_.owners.at(entry);
+          const auto known = lexical_.owners.find(entry);
+          // A future embedded slot shares its container's actual owner.
+          const auto &incoming = known != lexical_.owners.end() ? known->second : binding(entry).place_owners;
           owners.insert(incoming.begin(), incoming.end());
         }
-        for (const auto &[binding, current] : lexical_.targets) {
-          if (intersect(written, physical_slots({binding})).empty()) continue;
-          if (const auto slot = bindings_->at(binding).embedded_slot; slot && storage(*slot).borrowed &&
-              !std::ranges::includes(lexical_.owners.at(binding), owners))
+        std::set<size_t> affected;
+        for (const auto &[id, current] : lexical_.targets)
+          if (!intersect(written, physical_slots({id})).empty()) affected.insert(id);
+        if (deferred) for (const auto id : written)
+          if (const auto slot = binding(id).embedded_slot; slot && !storage(*slot).borrowed) affected.insert(id);
+        for (const auto id : affected) {
+          if (const auto slot = binding(id).embedded_slot; slot && storage(*slot).borrowed &&
+              !std::ranges::includes(lexical_.owners.at(id), owners))
             implementation_gap(at, "embedded slot overlap with an unproved owner equality");
           if (immediate_scope) {
-            effects.selections.initialized.erase(binding);
-            effects.selections.initialized_if.erase(binding);
+            effects.selections.initialized.erase(id);
+            effects.selections.initialized_if.erase(id);
           }
           auto update = selected;
-          if (destination.slots.size() != 1 || !destination.slots.contains(binding) ||
-              (destination.type == Type::void_type && destination.targets.contains(null_target))) update.entries.insert(binding);
-          effects.selections.targets[binding].merge(update);
-          effects.selections.invalidated.insert(binding);
+          if (destination.slots.size() != 1 || !destination.slots.contains(id) ||
+              (destination.type == Type::void_type && destination.targets.contains(null_target))) update.entries.insert(id);
+          effects.selections.targets[id].merge(update);
+          effects.selections.invalidated.insert(id);
           if (!proving_) {
-            possible_targets_.at(binding).insert(selected.places.begin(), selected.places.end());
+            possible_targets_.at(id).insert(selected.places.begin(), selected.places.end());
             if (selected.nullable()) {
-              possible_targets_.at(binding).insert(null_target);
+              possible_targets_.at(id).insert(null_target);
               for (const auto input : targets.null_sources) {
-                if (input == null_target) possible_null_sources_.at(binding).insert(null_target);
+                if (input == null_target) possible_null_sources_.at(id).insert(null_target);
                 else if (slots.contains(input)) {
                   for (const auto slot : physical_slots(views.at(input).slots))
-                    possible_null_sources_.at(binding).insert(possible_null_sources_.at(slot).begin(), possible_null_sources_.at(slot).end());
+                    possible_null_sources_.at(id).insert(possible_null_sources_.at(slot).begin(), possible_null_sources_.at(slot).end());
                 } else {
                   const auto &sources = views.at(input).null_sources;
-                  possible_null_sources_.at(binding).insert(sources.begin(), sources.end());
+                  possible_null_sources_.at(id).insert(sources.begin(), sources.end());
                 }
               }
             }
             for (const auto input : targets.targets) {
               const auto &origins = views.at(input).origins;
-              target_dependencies_.at(binding).insert(origins.begin(), origins.end());
+              target_dependencies_.at(id).insert(origins.begin(), origins.end());
             }
-            record_rebinding(binding, deferred);
+            record_rebinding(id, deferred);
           }
         }
       }
@@ -3387,6 +3398,20 @@ class ScalarChecker {
       deferred_product_writes_.push_back(std::move(writes));
     }
   }
+  CheckedOperation invocation_referent(CheckedOperation slot, const CheckedSchema::Field &field) const {
+    // The path describes a slot at invocation. Its storage may be created
+    // after registration, and readiness is proved at the eventual read.
+    auto targets = possible_selections(slot.slots, intersect(slot.targets, {null_target}));
+    slot.origins = slot.slots;
+    slot.selection_identity.reset();
+    slot.nullness.reset();
+    slot.null_sources.clear();
+    slot.initialization.reset();
+    slot.type = field.type;
+    slot.nullable_view = field.storage == PlaceKind::pointer;
+    select_targets(slot, targets);
+    return slot;
+  }
   std::vector<CheckedOperation> project_call_fields(const std::vector<ProductInput> &fields,
       const std::vector<CheckedOperation> &operands, const Location &at, bool at_invocation, InvocationSlots &invocation_slots) {
     auto projected = operands;
@@ -3413,31 +3438,21 @@ class ScalarChecker {
       const bool changing = at_invocation && (parent_paths || std::ranges::any_of(slot.slots,
           [&](size_t binding) { return rebound_.contains(binding); }));
       const bool absent_parent = slot.targets.contains(null_target);
-      auto referent = select_product_reference(std::move(slot), *field.description, at, true, true);
+      auto referent = changing ? invocation_referent(std::move(slot), *field.description) :
+          select_product_reference(std::move(slot), *field.description, at, true, true);
       if (changing) {
         invocation_slots.projected.emplace(input, InvocationSlots::Projection{referent.slots, absent_parent, field.parent});
         if (field.type().kind == Type::product) {
-          // Widen only the invocation-time geometry. Registration facts
-          // about the currently selected product cannot follow a rebind.
-          auto targets = possible_selections(referent.slots, intersect(referent.targets, {null_target}));
-          for (const auto target : targets)
-            if (target != null_target && !lexical_.available.contains(target))
-              implementation_gap(at, "deferred product borrow with unproved invocation-time storage lifetime");
-          referent.selection_identity.reset();
-          referent.nullness.reset();
-          referent.null_sources.clear();
-          referent.initialization.reset();
-          select_targets(referent, targets);
           auto &paths = invocation_slots.paths[input];
-          for (const auto binding : referent.slots) {
+          for (const auto id : referent.slots) {
             const CleanupEquations::ConditionClauses *parent = nullptr;
             if (parent_paths) {
-              const auto slot = bindings_->at(binding).embedded_slot.value();
+              const auto slot = binding(id).embedded_slot.value();
               if (const auto path = parent_paths->find(slot); path != parent_paths->end()) parent = &path->second;
             }
-            for (const auto target : possible_targets_.at(binding)) if (target != null_target) {
+            for (const auto target : possible_targets_.at(id)) if (target != null_target) {
               CleanupEquations::ConditionFacts selected;
-              selected.conditions.add({{}, binding, target, true});
+              selected.conditions.add({{}, id, target, true});
               if (!parent) CleanupEquations::add_condition(paths[target], std::move(selected));
               else for (auto facts : *parent) {
                 facts.append(selected);
@@ -14203,6 +14218,7 @@ class ScalarChecker {
     storage.clear(); bindings.clear(); operations.clear(); definitions_.clear();
     if (!proving) {
       possible_targets_.clear(); possible_null_sources_.clear(); target_dependencies_.clear(); catalog_storage_.clear();
+      catalog_bindings_.clear();
       rebound_.clear(); payload_writes_ = {}; loop_states_.clear(); deferred_product_writes_.clear();
     }
     lexical_ = {}; cleanup_ = {}; scope_storage_.clear(); checked_scope_owners_.clear(); read_sites_.clear(); external_owners_.clear();

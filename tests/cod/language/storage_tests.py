@@ -389,6 +389,40 @@ runner.CASES = {
         'if(entry.child is null){return;}else{};behave @print(entry.child.value);return;}'
         'proc run()->void{ref first=make Leaf {value<-7u64;};ptr second=make Leaf;ref item=make Box {child=first;};'
         'defer inspect(item);defer{item.child=second;};return;}run();', 2, "", "initialization"),
+    "deferred_product_reader_uses_the_live_ancestor_after_later_initialization": (PRELUDE +
+        'using "std:exceptions" NullPointerException;data Leaf {value:u64;}data Box {ref child:Leaf;}'
+        'func prepare(flag:bool)->u64 throws NullPointerException{'
+        'if(flag){ptr absent:u64=null in here;return absent;}else{};return 19u64;}'
+        'proc inspect(ref entry:const Box in O) where {const owner O}{behave @print(entry.child.value);return;}'
+        'proc run(flag:bool)->void throws NullPointerException{ref first=make Leaf {value<-7u64;};'
+        'ref item=make Box {child=first;};defer inspect(item);ref next=make Leaf {value<-prepare(flag);};item.child=next;return;}'
+        'try{run(true);}catch(e:const NullPointerException){behave @print(31u64);};'
+        'try{run(false);}catch(e:const NullPointerException){behave @print(41u64);};', 0, "7\n31\n19\n", ""),
+    "deferred_product_rebinding_reaches_a_reference_slot_allocated_after_registration": (PRELUDE +
+        'data Leaf {ref value:u64;}data Box {ref child:Leaf;}'
+        'proc inspect(ref entry:const Box in O) where {const owner O}{behave @print(entry.child.value);return;}'
+        'proc replace(ref entry:Box in O,ref replacement:u64 in O) where {owner O}{entry.child.value=replacement;return;}'
+        'proc run()->void{val initial<-7u64;val replacement<-19u64;ref first=make Leaf {value=initial;};'
+        'ref item=make Box {child=first;};defer inspect(item);defer replace(item,replacement);'
+        'ref next=make Leaf {value=initial;};item.child=next;return;}run();', 0, "19\n", ""),
+    "deferred_product_read_checks_an_ancestor_allocated_after_registration": (PRELUDE +
+        'data Leaf {value:u64;}data Box {ptr child:Leaf;}'
+        'proc inspect(ref entry:const Box in O) where {const owner O}{'
+        'if(entry.child is null){return;}else{};behave @print(entry.child.value);return;}'
+        'proc run()->void{ref first=make Leaf {value<-7u64;};ref item=make Box {child=first;};'
+        'defer inspect(item);ptr next=make Leaf;item.child=next;return;}run();', 2, "", "initialization"),
+    "deferred_product_read_can_use_the_ancestor_selected_by_a_registered_action": (PRELUDE +
+        'data Leaf {value:u64;}data Box {ptr child:Leaf;}'
+        'proc inspect(ref entry:const Box in O) where {const owner O}{'
+        'if(entry.child is null){return;}else{};behave @print(entry.child.value);return;}'
+        'proc run()->void{ptr first=make Leaf;ref second=make Leaf {value<-19u64;};ref item=make Box {child=null;};'
+        'defer inspect(item);defer{item.child=second;};item.child=first;return;}run();', 0, "19\n", ""),
+    "deferred_product_read_cannot_depend_on_a_later_registration_succeeding": (PRELUDE +
+        'data Leaf {value:u64;}data Box {ptr child:Leaf;}'
+        'proc inspect(ref entry:const Box in O) where {const owner O}{'
+        'if(entry.child is null){return;}else{};behave @print(entry.child.value);return;}'
+        'proc run()->void{ptr first=make Leaf;ref second=make Leaf {value<-19u64;};ref item=make Box {child=first;};'
+        'defer inspect(item);defer{item.child=second;};return;}run();', 2, "", "initialization"),
 }
 runner.CASE_ARGUMENTS = {"shadow_error": ["-Werror=shadow"], "unrelated_warning_error": ["-Werror=missing-return"]}
 runner.EXTRA_SOURCES = [Path(__file__)]
