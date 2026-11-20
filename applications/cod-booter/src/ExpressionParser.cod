@@ -11,10 +11,14 @@ using "ParserStorage.cod" group_node;
 using "ParserStorage.cod" name_node;
 using "ParserStorage.cod" call_node;
 using "ParserStorage.cod" argument_node;
+using "ParserStorage.cod" deferred_call_node;
 using "ParserStorage.cod" no_node;
 using "Lexer.cod" identifier;
 using "Lexer.cod" integer_literal;
 using "Lexer.cod" punctuation;
+using "Lexer.cod" defer_word;
+using "Lexer.cod" catch_word;
+using "Lexer.cod" finally_word;
 
 data ParseResult {
     next:u64;
@@ -30,6 +34,8 @@ func literal_too_large() -> u8 { return 4u8; }
 func node_storage_exhausted() -> u8 { return 5u8; }
 func unexpected_token() -> u8 { return 6u8; }
 func expected_argument_separator() -> u8 { return 7u8; }
+func expected_deferred_call() -> u8 { return 8u8; }
+func unsupported_deferred_form() -> u8 { return 9u8; }
 
 func punct_at(source:const SourceBytes in S, tokens:const Tokens in T,
               at:u64, past:u64) -> u8 where {const owner S, const owner T} {
@@ -90,12 +96,51 @@ func precedence(op:u8) -> u8 {
     return 0u8;
 }
 
+func outer_invocation(nodes:const ExprNodes in A, root:u64) -> u64 where {const owner A} {
+    val at <- root;
+    for (unused in 0u64 .. root + 1u64) {
+        if (nodes[at].kind == call_node()) { return at; } else {};
+        if (nodes[at].kind != group_node()) { return no_node(); } else {};
+        (at <- nodes[at].left):void;
+    };
+    return no_node();
+}
+
+func parse_deferred_call(source:const SourceBytes in S, tokens:const Tokens in T,
+                         ref nodes:ExprNodes in A, ref result:ParseResult in R, past:u64) -> void
+    where {const owner S, const owner T, owner A, owner R} {
+    val keyword <- tokens[result.next].first;
+    val operand_start <- result.next + 1u64;
+    result.next <- operand_start;
+    if (operand_start < past && (punct_at(source, tokens, operand_start, past) == 123u8 || # '{'
+        catch_word(source, tokens[operand_start]) || finally_word(source, tokens[operand_start]))) {
+        result.diagnostic <- unsupported_deferred_form();
+        return;
+    } else {};
+    parse_expression_at(source, tokens, nodes, result, past, 1u8);
+    if (result.diagnostic != 0u8) { return; } else {};
+    val operand <- result.root;
+    val invocation <- outer_invocation(nodes, operand);
+    if (invocation == no_node()) {
+        result.next <- operand_start;
+        result.diagnostic <- expected_deferred_call();
+        return;
+    } else {};
+    # Keep the operand's syntax and identify the one invocation that waits.
+    append_node(nodes, result, deferred_call_node(), keyword, nodes[operand].past,
+                0u64, operand, invocation, keyword);
+}
+
 func parse_primary(source:const SourceBytes in S, tokens:const Tokens in T,
                    ref nodes:ExprNodes in A, ref result:ParseResult in R, past:u64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val at <- result.next;
     if (at >= past) { result.diagnostic <- expected_operand(); return; } else {};
     val first <- tokens[at].first;
+    if (defer_word(source, tokens[at])) {
+        parse_deferred_call(source, tokens, nodes, result, past);
+        return;
+    } else {};
     if (punct_at(source, tokens, at, past) == 40u8) { # '('
         result.next <- at + 1u64;
         parse_expression_at(source, tokens, nodes, result, past, 1u8);
@@ -249,3 +294,5 @@ export ParseResult;
 export parse_expression;
 export reset_parse_result;
 export unexpected_token;
+export expected_deferred_call;
+export unsupported_deferred_form;

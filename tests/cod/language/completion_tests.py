@@ -19,6 +19,21 @@ runner.CASES = {
     "generic_replacement": (PRINT + 'func f(x:T)->const T where T {try{return x;}finally{return x+x;}} behave @print(f(3u64));behave @print(f(1.5f32));', 0, "6\n3\n", ""),
     "finally_registration": (OBSERVE + '{{defer observe(1);try{defer observe(2);observe(3);}finally{defer observe(4);observe(5);};observe(6);}};', 0, "3\n5\n6\n4\n2\n1\n", ""),
     "deferred_late_read": (OBSERVE + '{{val n<-1;defer observe(n);defer{observe(n);};n<-2:void;}};', 0, "2\n1\n", ""),
+    "deferred_grouped_call_on_failure": (
+        OBSERVE + 'using "std:exceptions" NullPointerException;'
+        'proc prepare()->i64{observe(10);return 20;}'
+        'proc f()->void throws NullPointerException{'
+        'defer ((observe(prepare())));observe(15);ptr absent:i64 = null in here;observe(absent);return;}'
+        'try{f();observe(99);}catch(failure:const NullPointerException){observe(30);};',
+        0, "10\n15\n20\n30\n", ""),
+    "deferred_grouped_noncall": ('defer ((1));', 2, "", "defer requires a callable invocation"),
+    "deferred_grouped_scalar": (
+        OBSERVE + 'proc compute()->i64{observe(20);return 42;}{{defer ((compute()));observe(10);}};',
+        0, "10\n20\n", ""),
+    "deferred_grouped_borrowed_result": (
+        'func selected(ref value:i64 in R)->ref i64 in R where {owner R}{return value;}'
+        'val value<-17;defer ((selected(value)));',
+        2, "", "parenthesized deferred result projection"),
     "deferred_return_snapshot": (OBSERVE + 'proc f()->const i64{val n<-1;defer{observe(n);};defer{n<-2;};return n;} behave @print(f());', 0, "2\n1\n", ""),
     "deferred_return": (OBSERVE + 'proc f()->const i64{defer observe(1);defer{return 2;};return 3;} behave @print(f());', 0, "1\n2\n", ""),
     "deferred_fallthrough_return": (OBSERVE + 'proc f()->const i64{defer{return 2;};} behave @print(f());', 0, "2\n", ""),

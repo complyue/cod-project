@@ -325,6 +325,7 @@ struct Expression {
   bool fixed_binding = false;
   bool read_only = false;
   bool scoped = false;
+  bool grouped_deferred_call = false;
   std::string declaration_kind = {};
   std::string owner_name = {};
   std::shared_ptr<ReceivingHeader> receiving = {};
@@ -1264,6 +1265,11 @@ class Parser {
           expr->children.push_back(make(Expression::Kind::block, token));
         } else {
           auto call = expression();
+          expr->grouped_deferred_call = call->kind == Expression::Kind::grouped;
+          while (call->kind == Expression::Kind::grouped) {
+            auto inner = std::move(call->children.front());
+            call = std::move(inner);
+          }
           const auto kind = call->kind;
           if (kind != Expression::Kind::call && kind != Expression::Kind::value_call &&
               kind != Expression::Kind::perform && kind != Expression::Kind::behave)

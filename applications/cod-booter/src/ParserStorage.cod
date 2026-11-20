@@ -20,6 +20,7 @@ func group_node() -> u8 { return 4u8; }
 func name_node() -> u8 { return 5u8; }
 func call_node() -> u8 { return 6u8; }
 func argument_node() -> u8 { return 7u8; }
+func deferred_call_node() -> u8 { return 8u8; }
 
 func no_node() -> u64 { return 18446744073709551615u64; }
 
@@ -42,4 +43,5 @@ export group_node;
 export name_node;
 export call_node;
 export argument_node;
+export deferred_call_node;
 export no_node;

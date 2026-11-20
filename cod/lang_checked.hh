@@ -7100,6 +7100,11 @@ class ScalarChecker {
     if (!view || scalar_type(type) || type.kind == Type::procedure) return GroupResult::value;
     return GroupResult::unsupported;
   }
+  static void require_deferred_group_result(const Expression &expr, const Type &type, bool view) {
+    if (!expr.grouped_deferred_call || type == Type::void_type || type == Type::never) return;
+    // A projection of the returned view would belong to cleanup execution.
+    if (view || !scalar_type(type)) implementation_gap(expr.at, "parenthesized deferred result projection");
+  }
   static bool independent_scalar_conditional(const Type &type, std::optional<bool> yes_view,
                                              std::optional<bool> no_view, bool mixed) {
     return scalar_type(type) && yes_view && no_view && (mixed || *yes_view != *no_view);
@@ -10588,6 +10593,7 @@ class ScalarChecker {
           auto effects = std::move(state.prepared_call->effects);
           state.prepared_call = std::move(outer_preparation);
           if (preparation == Type::never) return Type::never;
+          if (preparation) require_deferred_group_result(expr, *preparation, state.value.view.value_or(true));
           if (effects.outcomes.empty()) {
             effects.outcomes = deferred_outcomes();
             effects.opaque = true;
@@ -10633,7 +10639,11 @@ class ScalarChecker {
         return Type::void_type;
       }
       if (!state.returns || expr.children.front()->kind != K::block) {
-        if (expr.children.front()->kind != K::block && child(0) == Type::never) return Type::never;
+        if (expr.children.front()->kind != K::block) {
+          const auto preparation = child(0);
+          if (preparation == Type::never) return Type::never;
+          if (preparation && state.required) require_deferred_group_result(expr, *preparation, state.value.view.value_or(true));
+        }
         return Type::void_type;
       }
       [[fallthrough]];
@@ -16249,6 +16259,7 @@ class ScalarChecker {
         prepared_call_ = prepared;
         const auto &call = operations.at(expr.children.front().get());
         if (completed == Type::never) { operation.type = Type::never; break; }
+        require_deferred_group_result(expr, completed, call.view);
         if (!call.invocation.empty()) {
           for (const auto &[reason, effects] : call.invocation) {
             auto invoked = effects;
