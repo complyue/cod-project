@@ -102,6 +102,11 @@ struct CheckedOperation {
     auto operator<=>(const NativeAcquisition &) const = default;
   };
   std::optional<NativeAcquisition> native_acquisition;
+  struct NativeHereCall {
+    size_t operation, place, owner;
+    auto operator<=>(const NativeHereCall &) const = default;
+  };
+  std::optional<NativeHereCall> native_here_call;
   std::optional<size_t> binding;
   // Immutable selected reference, independent of the mutable binding version.
   std::optional<size_t> selection_identity;
@@ -661,6 +666,12 @@ struct CheckedFamily {
   std::string operation;
 };
 
+struct CheckedNativeHereOperation {
+  CheckedMethod contract;
+  Type handle;
+  std::vector<Type> arrays;
+};
+
 struct CheckedProgram {
   struct Initializer { size_t module; const Expression *expression; };
   std::vector<CheckedExceptionCategory> exception_types = intrinsic_exception_types();
@@ -677,6 +688,7 @@ struct CheckedProgram {
   std::vector<CheckedArray> arrays;
   std::vector<CheckedNativeConstructor> native_constructors;
   std::vector<CheckedNativeEntry> native_entries;
+  std::vector<CheckedNativeHereOperation> native_here_operations;
   std::vector<CheckedSymbol> symbols;
   std::deque<CheckedFamily> families;
   std::vector<QueryEnvironment> query_environments{{}};
