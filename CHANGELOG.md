@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-20 — Use scoped native handles in the first booter
+
+<a id="h-booter-c-handles-20261120"></a>
+**H-BOOTER-C-HANDLES-20261120.** The project user confirmed the first-booter native boundary in the [C interop side chat](codex://threads/01a1f94d-2093-7e31-8dd2-d34fbf7d9d07), relayed to mainline on 2026-11-20 America/Los_Angeles. They specified “CoD和C函数，都是 here-call 语义互相调用，各自范围内都可以假定 "direct lexical access" 安全。”, “`owned` `handle` 才自动清理吧，归为 `owner` kind”, and “普通 `handle in oh` 应是包含它自己的 64bit值以及 `oh` 的 64bit 值，这样单独传递给 C 时能提供完整上下文。” They also confirmed lexical-only owners, CoD-declared bits-or-handle constructor parameters, generated CType constructor/destructor stubs and provider-owned disposable children. They accepted recursively bits-only by-value C records with “认同，这是个好办法。” Interop r10, roadmap r19 and registry r1020 apply the decision through the existing C-80/C-65 value path in P-642/P-646/P-647. The fieldless CType and scoped handle contract supersede the launcher-lent opaque control records and returned cleanup callable in the former native proposal. Exact operation declarations, callback owner binding, C calling convention, destructor failure policy and build configuration remain open. Former candidate at `75b1df29653ec8abda733e05f7c2a902e3e0795a:applications/cod-booter/docs/LLVMInterop.md`.
+
 ## 2026-11-20 — Put the first generated C provider profile up for review
 
 <a id="k-booter-c-profile-20261120"></a>

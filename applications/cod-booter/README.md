@@ -1,6 +1,6 @@
 # CoD booter: a compiler application written in CoD
 
-Roadmap revision: 18 · Recorded: 2026-11-20 · Phase: initial seed delivery through alternating booter and seed development.
+Roadmap revision: 19 · Recorded: 2026-11-20 · Phase: initial seed delivery through alternating booter and seed development.
 
 ## Design authority
 
@@ -10,14 +10,13 @@ Roadmap revision: 18 · Recorded: 2026-11-20 · Phase: initial seed delivery thr
 
 - **Diagnostics and booter exception handling.** [H-BOOTER-EXCEPTIONS-DIAGNOSTICS-20261120](../../CHANGELOG.md#h-booter-exceptions-diagnostics-20261120) confirms the bootstrap exception-handling responsibility, diagnostic scope and repository placement at r17. [D-20-DIAGNOSTICS](../../design/DesignAuthorityRegistry.md#d-20-diagnostics) and [D-20-REPOSITORIES](../../design/DesignAuthorityRegistry.md#d-20-repositories) apply P-586/P-627/P-628 and the [stage-policy baseline](../../CHANGELOG.md#h-compiler-diagnostics-20261119). Under charter sections 6.3, 8.1 and 12, check observable exception behavior in the booter and assign analysis for detailed explanations to the production compiler.
 
-- **Generated C providers.** [D-20-C-PROVIDERS](../../design/DesignAuthorityRegistry.md#d-20-c-providers) and [H-BOOTER-GENERATED-C-20261120](../../CHANGELOG.md#h-booter-generated-c-20261120) select checked CoD declarations as the source of the initial provider contract. This continues P-642 under charter §§4.3/6.3/12 by preserving actual owners and making the first native workflow reproducible from reviewable CoD. [The interop profile](docs/LLVMInterop.md#generated-c-providers-for-the-first-booter) records the selected direction and remaining review.
+- **Generated C providers.** [D-20-C-PROVIDERS](../../design/DesignAuthorityRegistry.md#d-20-c-providers) and [H-BOOTER-GENERATED-C-20261120](../../CHANGELOG.md#h-booter-generated-c-20261120) select checked CoD declarations as the source of the initial provider contract. [D-20-C-HANDLES](../../design/DesignAuthorityRegistry.md#d-20-c-handles) and [H-BOOTER-C-HANDLES-20261120](../../CHANGELOG.md#h-booter-c-handles-20261120) select synchronous here calls, lexical native owners and bits-only records for this workflow. P-642/P-646/P-647 connect the first native run to reviewable CoD, actual owner checks and exact cleanup under charter §§4.3, 6.3, 8.1 and 12. [The interop profile](docs/LLVMInterop.md#first-declaration-profile-for-review) records the remaining declaration, calling-convention and build decisions.
 
 - **Next-stage roadmap.** [D-20-REPOSITORIES](../../design/DesignAuthorityRegistry.md#d-20-repositories) records the [toolchain roles](../../CHANGELOG.md#h-toolchain-repositories-20261118). At r12 the [repository split decision](../../CHANGELOG.md#h-lang-repository-20261119) assigns the shared language specification to `cod-lang` and all five repositories to the same GitHub organization. Both compiler implementations refer language decisions to that specification. C-80/P-317 supplies the planning rationale and P-586 records dependencies. At r8, [D-20-NATIVE-C](../../design/DesignAuthorityRegistry.md#d-20-native-c) records the [human decision](../../CHANGELOG.md#h-native-c-interface-20261118) to implement new CoD native components in C and expose a C interface. C-80 and charter §§4.3/6.3 connect seed and self-hosted clients to the same runtime semantics. Assess each operation against its CoD lifetime, visibility and failure guarantees. The detailed ABI and migration plan remain open. Revision 10 applies [H-DBMR-IMMUTABLE-20261119](../../CHANGELOG.md#h-dbmr-immutable-20261119) to the C provider. Verify private construction, readonly opens and complete publication from RAM or file-backed storage.
 
-- **Output-contract continuity:** [H-571](../../CHANGELOG.md#h-571)/[K-OUTPUT-ACCEPT-20261117](../../CHANGELOG.md#k-output-accept-20261117) covers document-set r4→5. D-22’s selected init declared-place roles replace a separate out spelling; native handle storage, target-initializing helper syntax, ownership and provider proof remain pending. Preserve C-81/C-65, charter §§4.3/6.3/8/12, D-16 and existing D-17 call/block timing. No application implementation, physical ABI or broader qualification follows; pipeline semantics are unchanged.
+- **Output initialization.** [D-22](../../design/DesignAuthorityRegistry.md#d-22-init-places) governs calls that initialize an ordinary caller place under C-81/C-65 and charter §§4.3, 6.3, 8 and 12. The first native workflow uses the scoped handle contract for resource acquisition and disposal.
 
-- **Registry / scope:** [D-20](../../design/DesignAuthorityRegistry.md#d-20), roadmap revision 18. The pipeline and interop documents retain their own qualified scopes. Detailed application mechanisms remain `pending-human`. D-17 governs the selected defer call/block rule.
-- **Human baseline:** [H-353](../../CHANGELOG.md#h-353) requests a parallel compiler application, CoD-native design, regional stage caches and incremental LLVM bindings, with documentation only at this stage. [H-354](../../CHANGELOG.md#h-354) identifies output-initialization and uninitialized-handle storage requirements; H-571 supplies the current init language roles, while handle classification remains pending. [H-355](../../CHANGELOG.md#h-355) supplies registration-time terminology. [H-356](../../CHANGELOG.md#h-356) selects call/block defer timing and immediate language implementation; [K-515](../../CHANGELOG.md#k-515) records this application-plan update.
+- **Registry and scope.** [D-20](../../design/DesignAuthorityRegistry.md#d-20), roadmap revision 19. The pipeline and interop documents retain their scoped qualification. [H-353](../../CHANGELOG.md#h-353) supplies the compiler application baseline. [H-356](../../CHANGELOG.md#h-356) supplies the selected defer call/block timing. Detailed application contracts beyond the confirmed scopes remain `pending-human`.
 - **Value:** C-80/P-314–P-318 connects inspectable compiler semantics to C-01, reusable structured artifacts to C-05, and native integration to C-02/C-11/C-79. The charter's §§2, 5.3–5.4, 6–7 and 12 provide the context; detailed derivation and trade-offs remain pending.
 - **Boundaries / acceptance:** preserve regional relocation, owner/access checks, independent module worlds and explicit TLS effects where used. Keep confirmed direction, proposals and missing evidence distinguishable. Native ABI, toolchain operations and performance claims require their own authorization or evidence.
 
@@ -47,7 +46,7 @@ Initial delivery requires the seed to reproducibly build and run the first CoD-w
 
 Representative source and invalid-input cases must behave as specified, and the booter source must pass the readability review. The booter's first self-build is a downstream milestone. DBMR persistence and broader LLVM binding coverage are separate from initial delivery.
 
-Build the initial booter with statically linked C providers. Checked CoD declarations define the required behavior interfaces. The seed and booter derive equivalent C contracts and generate provider headers and stubs as part of the C native components. Separate handwritten C supplies the operations and their resource protocols. The first profile uses the indexed source, in-memory region and LLVM operations above, including synchronous callbacks. CoD controls source opening and release with the same scoped discipline as the LLVM session.
+Build the initial booter with statically linked C providers generated from checked CoD declarations. The seed and booter derive equivalent C contracts, including native handle constructor and destructor stubs. Separate handwritten C supplies the operations and their resource protocols. Calls in both directions use synchronous here semantics. CoD acquires the source, scratch backing and LLVM resources under lexical ownership with scope-exit destruction. See the [native handle and C record rules](docs/LLVMInterop.md#native-handles-and-c-records) for borrowed values and by-value records.
 
 ## Next-stage repositories and native runtime
 
@@ -82,7 +81,7 @@ The future compiler in `e-wrks/cod` owns full diagnostics, including extra passe
 | Document | Responsibility |
 | --- | --- |
 | [Compiler artifacts and pipeline](docs/CompilerPipeline.md) | Stage boundaries, regional representations, DBMR reuse, module worlds and compilation scale. |
-| [LLVM bindings and native resources](docs/LLVMInterop.md) | Selective bindings, opaque handles, owner-aware initialization and registration-time evaluation within `defer`. |
+| [LLVM bindings and native resources](docs/LLVMInterop.md) | Generated C providers, synchronous here calls, scoped handles and the first native workload. |
 
 Reusable language decisions belong in the relevant `design/` contracts after discussion. These application documents describe requirements and candidate uses without silently extending those contracts. The application name does not refer to the repository's existing native toolchain bootstrap scripts.
 
@@ -114,10 +113,8 @@ Measure **steady-state throughput** on warmed, equivalent workloads and report a
 | Topic | Planning position | Still needed |
 | --- | --- | --- |
 | Stage caches | Preserve suitable regional results directly as DBMR. | Stage-specific dependency/compatibility rules, publication behavior and measured payoff. |
-| LLVM surface | Bind APIs as compiler operations need them. | First end-to-end operation, provider boundary, typed ownership/error signatures. |
-| Native handles | Investigate pointer-backed opaque CoD handles with scoped release. | Storage admissibility, native dependency lifetimes, release authority and invalidation. |
-| Initialization | Use D-22’s explicit init-place contract and checked actual owner/access. | Select the handle’s storage category and allocation/declaration form; prove initialization and release obligations on all completion paths. |
-| One-line cleanup | Use `defer init(...)()` under D-17's selected call/block timing. | Native cleanup capture/release contract, leak-free registration failure and actual binding evidence. |
+| LLVM surface | Bind APIs as compiler operations need them. | Checked declarations and generated provider evidence from the first workload. |
+| Native handles | Use [lexical owners and explicit borrowed handles](docs/LLVMInterop.md#native-handles-and-c-records). | Concrete C declarations, callback owner binding, view transport, target layout, destructor failure policy and the authorized build graph. |
 
 Current implementation evidence belongs with the booter workloads and the seed capabilities they exercise.
 
