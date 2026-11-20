@@ -2232,6 +2232,44 @@ class LLVMEmission {
       b_.CreateBr(control_->exit);
       return nullptr;
     }
+    case K::index: {
+      const auto &array = *expr.children[0];
+      auto *view = emit_expression(array, Projection::target);
+      if (!reachable()) return nullptr;
+      view = checked_address(view, array, expr.at);
+      const auto &index_expr = *expr.children[1];
+      auto *index_value = emit_expression(index_expr);
+      if (!reachable()) return nullptr;
+      std::map<std::pair<size_t, Type::Kind>, std::vector<size_t>> alternatives;
+      for (size_t i = 0; i < contexts_.size(); ++i) {
+        const auto &access = contexts_[i].at(&expr);
+        if (access.type != Type::never)
+          alternatives[{access.operand_type.identity, contexts_[i].at(&index_expr).type.kind}].push_back(i);
+      }
+      return contextual_value(expr, alternatives, "array.element", [&](const auto &selection) -> llvm::Value * {
+        const auto &[schema, index_kind] = selection;
+        const auto &shape = program_->arrays.at(schema);
+        auto *index = b_.CreateZExtOrTrunc(convert(index_value, Type{index_kind}, shape.index), b_.getInt64Ty());
+        if (bounds_checks_) {
+          auto *length = b_.CreateLoad(b_.getInt64Ty(), b_.CreateStructGEP(array_view_, view, 1), "array.length");
+          auto *in_range = b_.CreateICmpULT(index, length);
+          if (shape.index == Type::integer)
+            in_range = b_.CreateAnd(in_range, b_.CreateICmpSGE(index, integer(0)));
+          auto *valid = block("bounds.valid"), *invalid = block("bounds.failure");
+          b_.CreateCondBr(in_range, valid, invalid);
+          b_.SetInsertPoint(invalid);
+          save_abrupt(outcome(empty_scalar(), integer(exception_id(ExceptionCategory::index_out_of_bounds)),
+                             integer(site(expr.at)), null_pointer(), index, length));
+          b_.CreateBr(control_->exit);
+          b_.SetInsertPoint(valid);
+        }
+        if (read && discard) return empty_scalar();
+        auto *data = b_.CreateLoad(b_.getPtrTy(), b_.CreateStructGEP(array_view_, view, 0), "array.data");
+        auto *element = native_type(shape.element);
+        auto *address = b_.CreateGEP(element, data, index);
+        return read ? pack(b_.CreateLoad(element, address), shape.element) : address;
+      }, read ? static_cast<llvm::Type *>(scalar_) : b_.getPtrTy());
+    }
     case K::field: {
       if (fact.product_field) {
         const auto &parent = *expr.children.front();

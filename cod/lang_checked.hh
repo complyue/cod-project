@@ -6856,6 +6856,18 @@ class ScalarChecker {
     if (type.kind != Type::array || !borrowed)
       fail(at, "intrinsic (len) requires a borrowed array");
   }
+  const CheckedArray &array_read_shape(const Type &type, bool view, bool read_only, const Location &at) const {
+    if (type.kind != Type::array) implementation_gap(at, "indexed operation on '" + type_name(type) + "'");
+    const auto &array = program_.arrays.at(type.identity);
+    if (!view || !read_only || !scalar_type(array.element))
+      implementation_gap(at, "indexed reads require a readonly borrowed array of scalar elements");
+    return array;
+  }
+  static void check_array_index(const CheckedArray &array, const Type &index, const Location &at) {
+    if (!transfers_value(index, array.index))
+      fail(at, "index for array '" + array.source->name + "' requires '" + type_name(array.index) +
+               "', found '" + type_name(index) + "'");
+  }
   const CheckedSchema &product_schema(const Type &type, const Location &at) const {
     if (type.kind != Type::product) implementation_gap(at, "ordinary construction requires a supported product type");
     return program_.schemas.at(type.identity);
@@ -10033,7 +10045,7 @@ class ScalarChecker {
       }
       if (!state.validating_body) switch (expr.kind) {
       case K::integer: case K::real: case K::boolean: case K::return_test: case K::null_ref: case K::name: case K::symbol:
-      case K::unary: case K::binary: case K::call: case K::value_call: case K::behave: case K::perform: case K::field:
+      case K::unary: case K::binary: case K::call: case K::value_call: case K::behave: case K::perform: case K::field: case K::index:
       case K::conditional: case K::block: case K::grouped: case K::transfer: case K::rebind: case K::typed_expression:
       case K::make_object: break;
       case K::callable:
@@ -11348,6 +11360,31 @@ class ScalarChecker {
         result = type->type;
       }
       return result;
+    }
+    case K::index: {
+      const auto source = child(0, false, true, EvidenceRead::target);
+      const CheckedArray *shape = nullptr;
+      const auto array = state.value;
+      if (source && source != Type::never) {
+        if (state.required) {
+          if (!state.validating_body && read != EvidenceRead::payload && read != EvidenceRead::discarded)
+            implementation_gap(expr.at, "borrowing an indexed array element");
+          shape = &array_read_shape(*source, array.view == true && !array.mixed_view, array.read_only == true, expr.at);
+        } else if (source->kind == Type::array) shape = &program_.arrays.at(source->identity);
+        if (shape) {
+          require_type_initialized(state, state.target, "array operand", expr.at);
+          read_type_target(state, state.value, state.target);
+        }
+      }
+      const auto index = child(1, false, source != Type::never);
+      if (source == Type::never || index == Type::never) return Type::never;
+      if (!shape || !index) return {};
+      if (state.required) check_array_index(*shape, *index, expr.children[1]->at);
+      record_type_invocation(expr, state, {0, Completion::failure(exception_id(ExceptionCategory::index_out_of_bounds)).reason}, true);
+      view = {true, true, {}, array.owner};
+      target_facts.initialized = true;
+      target_facts.presence = TargetPresence::present;
+      return shape->element;
     }
     case K::field: {
       const auto type = child(0, false, true, EvidenceRead::target);
@@ -15961,6 +15998,30 @@ class ScalarChecker {
         complete_product(schema, order, expr.at);
         initialize(root);
       }
+      break;
+    }
+    case K::index: {
+      const auto source = child(0, false);
+      const CheckedArray *shape = nullptr;
+      if (source != Type::never) {
+        const auto &array = operations.at(expr.children.front().get());
+        shape = &array_read_shape(source, array.view && !array.mixed_view, array.read_only, expr.at);
+        require_live_view(array, expr.at);
+        read_view(array, expr.at, "array operand");
+      }
+      const auto index = child(1);
+      if (!shape || index == Type::never) { operation.type = Type::never; break; }
+      if (!read || write_slot) implementation_gap(expr.at, "borrowing an indexed array element");
+      check_array_index(*shape, index, expr.children[1]->at);
+      operation.type = shape->element;
+      operation.operand_type = source;
+      // Value consumers still select overloads using the underlying readonly target.
+      const auto &array = operations.at(expr.children.front().get());
+      require_live_view(array, expr.at);
+      operation.view = operation.read_only = true;
+      operation.owners = array.owners;
+      operation.initialization = CleanupEquations::Initialization{};
+      note_abrupt(expr.at, {exception_id(ExceptionCategory::index_out_of_bounds)});
       break;
     }
     case K::field: {

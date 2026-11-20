@@ -1,0 +1,258 @@
+using "SourceStorage.cod" SourceBytes;
+using "SourceStorage.cod" Token;
+using "SourceStorage.cod" len;
+
+func end_of_source() -> u8 { return 0u8; }
+func identifier() -> u8 { return 1u8; }
+func symbol_name() -> u8 { return 2u8; }
+func integer_literal() -> u8 { return 3u8; }
+func real_literal() -> u8 { return 4u8; }
+func module_path() -> u8 { return 5u8; }
+func punctuation() -> u8 { return 6u8; }
+
+func unsupported_byte() -> u8 { return 7u8; }
+func missing_symbol_name() -> u8 { return 8u8; }
+func missing_exponent_digits() -> u8 { return 9u8; }
+func unterminated_module_path() -> u8 { return 10u8; }
+func newline_in_module_path() -> u8 { return 11u8; }
+func invalid_module_path_escape() -> u8 { return 12u8; }
+func reserved_fraction_operator() -> u8 { return 13u8; }
+func legacy_type_separator() -> u8 { return 14u8; }
+
+func digit(byte:u8) -> bool {
+    # ASCII '0' to '9'.
+    return byte >= 48u8 && byte <= 57u8;
+}
+
+func name_start(byte:u8) -> bool {
+    # ASCII letters and underscore.
+    return (byte >= 65u8 && byte <= 90u8) ||
+        (byte >= 97u8 && byte <= 122u8) || byte == 95u8;
+}
+
+func whitespace(byte:u8) -> bool {
+    return byte == 32u8 || (byte >= 9u8 && byte <= 13u8);
+}
+
+func skip_trivia(source:const SourceBytes in S, first:u64, past:u64) -> u64 where {const owner S} {
+    val comment <- false;
+    val byte <- 0u8;
+    for (at in first .. past) {
+        byte <- source[at];
+        # A newline ends a comment. '#' starts one anywhere outside a path.
+        comment <- byte != 10u8 && (comment || byte == 35u8);
+        if (!comment && !whitespace(byte)) { return at; } else {};
+    };
+    return past;
+}
+
+func name_end(source:const SourceBytes in S, first:u64, past:u64) -> u64 where {const owner S} {
+    val byte <- 0u8;
+    for (at in first .. past) {
+        byte <- source[at];
+        if (!(name_start(byte) || digit(byte))) { return at; } else {};
+    };
+    return past;
+}
+
+func digits_end(source:const SourceBytes in S, first:u64, past:u64) -> u64 where {const owner S} {
+    for (at in first .. past) {
+        if (!digit(source[at])) { return at; } else {};
+    };
+    return past;
+}
+
+# Zero is a sentinel for lookahead only. scan_token still diagnoses a zero
+# byte when it is present in the input itself.
+func lookahead(source:const SourceBytes in S, at:u64, past:u64) -> u8 where {const owner S} {
+    if (at >= past) { return 0u8; } else {};
+    return source[at];
+}
+
+func numeral_end(source:const SourceBytes in S, first:u64, past:u64,
+                  ref token:Token in T) -> void where {const owner S, owner T} {
+    val at <- digits_end(source, first + 1u64, past);
+    val real <- false;
+    val byte <- lookahead(source, at, past);
+    if (byte == 46u8 && digit(lookahead(source, at + 1u64, past))) { # '.'
+        at <- digits_end(source, at + 2u64, past);
+        real <- true;
+        (byte <- lookahead(source, at, past)):void;
+    } else {};
+    if (byte == 101u8 || byte == 69u8) { # 'e' or 'E'
+        real <- true;
+        at <- at + 1u64;
+        byte <- lookahead(source, at, past);
+        if (byte == 43u8 || byte == 45u8) { # '+' or '-'
+            at <- at + 1u64;
+            (byte <- lookahead(source, at, past)):void;
+        } else {};
+        if (!digit(byte)) {
+            token.kind <- missing_exponent_digits();
+            token.past <- at;
+            return;
+        } else {};
+        at <- digits_end(source, at + 1u64, past);
+        (byte <- lookahead(source, at, past)):void;
+    } else {};
+
+    if (byte == 102u8 || (!real && byte == 117u8)) { # 'f' or 'u'
+        val width <- lookahead(source, at + 1u64, past);
+        if (byte == 117u8 && width == 56u8) { # 'u8'
+            (at <- at + 2u64):void;
+        } else {};
+        if (width == 51u8 || width == 54u8) { # '3' or '6'
+            val tail <- lookahead(source, at + 2u64, past);
+            if ((width == 51u8 && tail == 50u8) || (width == 54u8 && tail == 52u8)) {
+                real <- real || byte == 102u8;
+                (at <- at + 3u64):void;
+            } else {};
+        } else {};
+    } else {};
+    token.kind <- if (real) { real_literal() } else { integer_literal() };
+    token.past <- at;
+    return;
+}
+
+func quoted_path_end(source:const SourceBytes in S, first:u64, past:u64,
+                      ref token:Token in T) -> void where {const owner S, owner T} {
+    val escaped <- false;
+    val byte <- 0u8;
+    for (at in first + 1u64 .. past) {
+        byte <- source[at];
+        if (escaped) {
+            if (byte != 34u8 && byte != 92u8) { # '"' or backslash
+                token.kind <- invalid_module_path_escape();
+                token.past <- at + 1u64;
+                return;
+            } else {};
+            escaped <- false;
+        } else {
+            if (byte == 34u8) {
+                token.kind <- module_path();
+                token.past <- at + 1u64;
+                return;
+            } else {};
+            if (byte == 10u8) {
+                token.kind <- newline_in_module_path();
+                token.past <- at;
+                return;
+            } else {};
+            escaped <- byte == 92u8;
+        };
+    };
+    token.kind <- if (escaped) { invalid_module_path_escape() } else { unterminated_module_path() };
+    token.past <- past;
+    return;
+}
+
+func punctuation_width(first:u8, second:u8, third:u8) -> u64 {
+    val less <- 60u8;
+    val greater <- 62u8;
+    val equals <- 61u8;
+    val minus <- 45u8;
+    val dot <- 46u8;
+    val pipe <- 124u8;
+    val ampersand <- 38u8;
+    val bang <- 33u8;
+    val dollar <- 36u8;
+    val colon <- 58u8;
+
+    # ...  <=>  <->
+    if ((first == dot && second == dot && third == dot) ||
+        (first == less && (second == equals || second == minus) && third == greater)) {
+        return 3u64;
+    } else {};
+    # -> == != <= >= && || <- <: .. => |> <| !> <! $> <$
+    if ((second == greater && (first == minus || first == equals || first == pipe ||
+                               first == bang || first == dollar)) ||
+        (second == equals && (first == equals || first == bang || first == less || first == greater)) ||
+        (first == second && (first == dot || first == ampersand || first == pipe)) ||
+        (first == less && (second == minus || second == colon || second == pipe ||
+                           second == bang || second == dollar))) {
+        return 2u64;
+    } else {};
+    # () {} [] ; , : . + - * / % < > = !
+    if (first == 40u8 || first == 41u8 || first == 123u8 || first == 125u8 ||
+        first == 91u8 || first == 93u8 || first == 59u8 || first == 44u8 ||
+        first == colon || first == dot || first == 43u8 || first == minus ||
+        first == 42u8 || first == 47u8 || first == 37u8 ||
+        first == less || first == greater || first == equals || first == bang) {
+        return 1u64;
+    } else {};
+    return 0u64;
+}
+
+# The source is a stable bounded byte view. The caller owns its lifetime.
+# After a normal token, use token.past as the next first offset.
+func scan_token(source:const SourceBytes in S, first:u64,
+                ref token:Token in T) -> void where {const owner S, owner T} {
+    val past <- len(source);
+    val start <- skip_trivia(source, first, past);
+    token.first <- start;
+    token.past <- start;
+    if (start >= past) {
+        token.kind <- end_of_source();
+        return;
+    } else {};
+    val byte <- source[start];
+    if (name_start(byte)) {
+        token.kind <- identifier();
+        token.past <- name_end(source, start + 1u64, past);
+        return;
+    } else {};
+    if (byte == 64u8) { # '@'
+        if (name_start(lookahead(source, start + 1u64, past))) {
+            token.kind <- symbol_name();
+            token.past <- name_end(source, start + 2u64, past);
+        } else {
+            token.kind <- missing_symbol_name();
+            token.past <- start + 1u64;
+        };
+        return;
+    } else {};
+    if (digit(byte)) {
+        numeral_end(source, start, past, token);
+        return;
+    } else {};
+    if (byte == 34u8) { # '"'
+        quoted_path_end(source, start, past, token);
+        return;
+    } else {};
+    val second_at <- start + 1u64;
+    val second <- lookahead(source, second_at, past);
+    if (byte == 47u8 && second == 47u8) { # '//'
+        token.kind <- reserved_fraction_operator();
+        token.past <- start + 2u64;
+        return;
+    } else {};
+    if (byte == 58u8 && second == 58u8) { # '::'
+        token.kind <- legacy_type_separator();
+        token.past <- start + 2u64;
+        return;
+    } else {};
+    val third <- if (second_at < past) { lookahead(source, second_at + 1u64, past) } else { 0u8 };
+    val width <- punctuation_width(byte, second, third);
+    token.kind <- if (width == 0u64) { unsupported_byte() } else { punctuation() };
+    token.past <- start + (if (width == 0u64) { 1u64 } else { width });
+    return;
+}
+
+export SourceBytes;
+export Token;
+export scan_token;
+export end_of_source;
+export identifier;
+export symbol_name;
+export integer_literal;
+export real_literal;
+export module_path;
+export punctuation;
+export unsupported_byte;
+export missing_symbol_name;
+export missing_exponent_digits;
+export unterminated_module_path;
+export newline_in_module_path;
+export invalid_module_path_escape;
+export reserved_fraction_operator;
+export legacy_type_separator;
