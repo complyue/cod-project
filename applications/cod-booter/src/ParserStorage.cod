@@ -54,6 +54,16 @@ func throws_clause_node() -> u8 { return 38u8; }
 func owner_clause_node() -> u8 { return 39u8; }
 func deferred_block_node() -> u8 { return 40u8; }
 func discard_node() -> u8 { return 41u8; }
+func bool_node() -> u8 { return 42u8; }
+func compare_node() -> u8 { return 43u8; }
+func conditional_node() -> u8 { return 44u8; }
+
+func equal_words() -> u64 { return 0u64; }
+func unequal_words() -> u64 { return 1u64; }
+func less_words() -> u64 { return 2u64; }
+func at_most_words() -> u64 { return 3u64; }
+func greater_words() -> u64 { return 4u64; }
+func at_least_words() -> u64 { return 5u64; }
 
 func discarded_guard_result() -> u64 { return 1u64; }
 func procedure_definition() -> u64 { return 0u64; }
@@ -117,6 +127,15 @@ export throws_clause_node;
 export owner_clause_node;
 export deferred_block_node;
 export discard_node;
+export bool_node;
+export compare_node;
+export conditional_node;
+export equal_words;
+export unequal_words;
+export less_words;
+export at_most_words;
+export greater_words;
+export at_least_words;
 export discarded_guard_result;
 export procedure_definition;
 export function_definition;

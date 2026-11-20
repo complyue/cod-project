@@ -16,7 +16,7 @@ typedef enum cod_llvm_command_kind {
   COD_LLVM_BRANCH_EQUAL, COD_LLVM_WORD, COD_LLVM_COPY, COD_LLVM_ADDRESS,
   COD_LLVM_LOAD_TARGET, COD_LLVM_STORE_TARGET, COD_LLVM_ADD, COD_LLVM_MULTIPLY,
   COD_LLVM_PARAMETER, COD_LLVM_ARGUMENT, COD_LLVM_INVOKE, COD_LLVM_PRINT,
-  COD_LLVM_RETURN, COD_LLVM_FINISH
+  COD_LLVM_RETURN, COD_LLVM_FINISH, COD_LLVM_COMPARE
 } cod_llvm_command_kind;
 
 typedef struct cod_llvm_command {
@@ -180,6 +180,16 @@ static inline bool cod_llvm_construct_command(cod_llvm_construction *state, cod_
         LLVMBuildStore(builder, cod_llvm_read_word(state, b), target);
       }
       return true;
+    case COD_LLVM_COMPARE: {
+      const LLVMIntPredicate predicates[] = {
+        LLVMIntEQ, LLVMIntNE, LLVMIntULT, LLVMIntULE, LLVMIntUGT, LLVMIntUGE
+      };
+      if (a >= slots || b >= slots || c >= slots || d >= sizeof(predicates) / sizeof(predicates[0])) return false;
+      LLVMValueRef comparison = LLVMBuildICmp(builder, predicates[d], cod_llvm_read_word(state, b),
+          cod_llvm_read_word(state, c), "");
+      cod_llvm_write_word(state, a, LLVMBuildZExt(builder, comparison, state->word, ""));
+      return true;
+    }
     case COD_LLVM_ADD:
     case COD_LLVM_MULTIPLY: {
       if (a >= slots || b >= slots || c >= slots || d >= slots) return false;

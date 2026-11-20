@@ -18,6 +18,8 @@ using "ParserStorage.cod" finally_clause_node;
 using "ParserStorage.cod" deferred_call_node;
 using "ParserStorage.cod" deferred_block_node;
 using "ParserStorage.cod" discard_node;
+using "ParserStorage.cod" compare_node;
+using "ParserStorage.cod" conditional_node;
 using "ParserStorage.cod" return_node;
 using "ParserStorage.cod" throw_node;
 using "ParserStorage.cod" group_node;
@@ -134,7 +136,7 @@ func inherit_context(ref sites:CompletionSites in X, parent:u64, child:u64, guar
 func binary_context(kind:u8) -> bool {
     return kind == module_item_node() || kind == block_item_node() || kind == argument_node() ||
         kind == catch_clause_node() || kind == call_node() || kind == behave_node() ||
-        kind == transfer_node() || kind == add_node() || kind == multiply_node();
+        kind == transfer_node() || kind == add_node() || kind == multiply_node() || kind == compare_node();
 }
 
 func prepare_context(nodes:const ExprNodes in N, facts:const OperandFacts in F,
@@ -178,6 +180,12 @@ func prepare_context(nodes:const ExprNodes in N, facts:const OperandFacts in F,
     if (kind == deferred_call_node()) {
         sites[nodes[at].right].registration <- at;
         inherit_context(sites, at, nodes[at].left, guard, incoming, replacing);
+        return;
+    } else {};
+    if (kind == conditional_node()) {
+        inherit_context(sites, at, nodes[at].left, guard, incoming, replacing);
+        inherit_context(sites, at, nodes[at].right, guard, incoming, replacing);
+        inherit_context(sites, at, nodes[at].number, guard, incoming, replacing);
         return;
     } else {};
     if (binary_context(kind)) {
@@ -329,8 +337,12 @@ func operands_can_complete(nodes:const ExprNodes in N, sites:const CompletionSit
     where {const owner N, const owner X} {
     val kind <- nodes[at].kind;
     if (kind == block_item_node() || kind == argument_node() || kind == add_node() ||
-        kind == multiply_node() || kind == transfer_node() || kind == call_node() || kind == behave_node()) {
+        kind == multiply_node() || kind == compare_node() || kind == transfer_node() || kind == call_node() || kind == behave_node()) {
         return can_continue(sites, nodes[at].left) && can_continue(sites, nodes[at].right);
+    } else {};
+    if (kind == conditional_node()) {
+        return can_continue(sites, nodes[at].left) &&
+            (can_continue(sites, nodes[at].right) || can_continue(sites, nodes[at].number));
     } else {};
     if (kind == full_scope_node()) {
         return sites[at].local_return != 0u8 || can_continue(sites, nodes[at].left);

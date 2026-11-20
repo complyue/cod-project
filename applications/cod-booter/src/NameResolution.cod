@@ -30,6 +30,9 @@ using "ParserStorage.cod" argument_node;
 using "ParserStorage.cod" deferred_call_node;
 using "ParserStorage.cod" deferred_block_node;
 using "ParserStorage.cod" discard_node;
+using "ParserStorage.cod" bool_node;
+using "ParserStorage.cod" compare_node;
+using "ParserStorage.cod" conditional_node;
 using "ParserStorage.cod" block_node;
 using "ParserStorage.cod" full_scope_node;
 using "ParserStorage.cod" block_item_node;
@@ -85,6 +88,7 @@ func exception_binding() -> u8 { return 7u8; }
 func builtin_u64() -> u8 { return 8u8; }
 func builtin_void() -> u8 { return 9u8; }
 func lexical_owner() -> u8 { return 10u8; }
+func builtin_bool() -> u8 { return 11u8; }
 
 func unresolved_name() -> u8 { return 1u8; }
 func expected_symbol_binding() -> u8 { return 2u8; }
@@ -193,6 +197,11 @@ func resolve_type_name(source:const SourceBytes in S, nodes:const ExprNodes in N
     if (length == 4u64 && source[first] == 118u8 && source[first + 1u64] == 111u8 &&
         source[first + 2u64] == 105u8 && source[first + 3u64] == 100u8) { # void
         remember(bindings, name, no_node(), builtin_void());
+        return;
+    } else {};
+    if (length == 4u64 && source[first] == 98u8 && source[first + 1u64] == 111u8 &&
+        source[first + 2u64] == 111u8 && source[first + 3u64] == 108u8) { # bool
+        remember(bindings, name, no_node(), builtin_bool());
         return;
     } else {};
     val found <- lookup(source, nodes, work, name, 0u64, state.module_names);
@@ -395,7 +404,7 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
     if (at == no_node()) { return; } else {};
     bindings[at].scope <- state.scope_node;
     val kind <- nodes[at].kind;
-    if (kind == literal_node()) { return; } else {};
+    if (kind == literal_node() || kind == bool_node()) { return; } else {};
     if (kind == name_node() || kind == symbol_node()) {
         resolve_value(source, nodes, bindings, work, state, at);
         return;
@@ -403,6 +412,18 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
     if (kind == block_node()) { resolve_list(source, nodes, bindings, work, state, nodes[at].left); return; } else {};
     if (kind == full_scope_node()) { resolve_full_scope(source, nodes, bindings, work, state, at); return; } else {};
     if (kind == try_node()) { resolve_try(source, nodes, bindings, work, state, at); return; } else {};
+    if (kind == conditional_node()) {
+        resolve_expression(source, nodes, bindings, work, state, nodes[at].left);
+        if (state.diagnostic != 0u8) { return; } else {};
+        val guarded <- state.guarded;
+        state.guarded <- true;
+        resolve_expression(source, nodes, bindings, work, state, nodes[at].right);
+        if (state.diagnostic == 0u8) {
+            resolve_expression(source, nodes, bindings, work, state, nodes[at].number);
+        } else {};
+        state.guarded <- guarded;
+        return;
+    } else {};
     if (kind == val_binding_node() || kind == ptr_binding_node()) {
         resolve_local(source, nodes, bindings, work, state, at);
         return;
@@ -424,7 +445,7 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
         if (state.diagnostic == 0u8) { resolve_list(source, nodes, bindings, work, state, nodes[at].right); } else {};
         return;
     } else {};
-    if (kind == add_node() || kind == multiply_node() || kind == transfer_node()) {
+    if (kind == add_node() || kind == multiply_node() || kind == compare_node() || kind == transfer_node()) {
         resolve_expression(source, nodes, bindings, work, state, nodes[at].left);
         if (state.diagnostic == 0u8) { resolve_expression(source, nodes, bindings, work, state, nodes[at].right); } else {};
         return;
@@ -594,6 +615,7 @@ export owner_binding;
 export exception_binding;
 export builtin_u64;
 export builtin_void;
+export builtin_bool;
 export lexical_owner;
 export unresolved_name;
 export expected_symbol_binding;

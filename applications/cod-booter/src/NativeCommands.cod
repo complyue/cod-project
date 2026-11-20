@@ -37,6 +37,7 @@ func invoke_function() -> u8 { return 15u8; }
 func print_word() -> u8 { return 16u8; }
 func return_outcome() -> u8 { return 17u8; }
 func finish_program() -> u8 { return 18u8; }
+func compare_words() -> u8 { return 19u8; }
 
 # Internal outcome words. Zero denotes success. Fatal numeric failures
 # bypass language catches and still leave through the activation cleanup.
@@ -71,6 +72,7 @@ export invoke_function;
 export print_word;
 export return_outcome;
 export finish_program;
+export compare_words;
 export returned_word;
 export pending_category;
 export pending_site;
