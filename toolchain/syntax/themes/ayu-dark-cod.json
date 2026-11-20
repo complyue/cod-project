@@ -54,7 +54,7 @@
         "scrollbar.thumb.border": "#2d2f34ff",
         "scrollbar.track.background": "#00000000",
         "scrollbar.track.border": "#1b1e24ff",
-        "editor.foreground": "#e6e0d4ff",
+        "editor.foreground": "#fff0b8ff",
         "editor.background": "#0d1016ff",
         "editor.gutter.background": "#0d1016ff",
         "editor.subheader.background": "#1f2127ff",
@@ -233,7 +233,7 @@
             "font_weight": null
           },
           "function": {
-            "color": "#e0c7a8ff",
+            "color": "#ffeedaff",
             "font_style": null,
             "font_weight": null
           },
@@ -243,7 +243,7 @@
             "font_weight": null
           },
           "keyword": {
-            "color": "#c59d88ff",
+            "color": "#d1a994ff",
             "font_style": null,
             "font_weight": null
           },
@@ -268,7 +268,7 @@
             "font_weight": null
           },
           "number": {
-            "color": "#d2a6ffff",
+            "color": "#eedfffff",
             "font_style": null,
             "font_weight": null
           },
@@ -303,12 +303,12 @@
             "font_weight": null
           },
           "punctuation.bracket": {
-            "color": "#9ba8baff",
+            "color": "#abb9cbff",
             "font_style": null,
             "font_weight": null
           },
           "punctuation.delimiter": {
-            "color": "#9ba8baff",
+            "color": "#abb9cbff",
             "font_style": null,
             "font_weight": null
           },
@@ -378,20 +378,20 @@
             "font_weight": 700
           },
           "type": {
-            "color": "#b9dbeeff",
+            "color": "#dcf3ffff",
             "font_style": null,
             "font_weight": null
           },
           "type.builtin": {
-            "color": "#92aabdff"
+            "color": "#a1b9cdff"
           },
           "variable": {
-            "color": "#e6e0d4ff",
+            "color": "#fff0b8ff",
             "font_style": null,
             "font_weight": null
           },
           "variable.parameter": {
-            "color": "#ddd1efff",
+            "color": "#f3ebffff",
             "font_style": null,
             "font_weight": null
           },
@@ -411,29 +411,29 @@
             "font_weight": null
           },
           "keyword.control.cod": {
-            "color": "#C39E89"
+            "color": "#D0AA95"
           },
           "keyword.module.cod": {
-            "color": "#B7A47F",
+            "color": "#C4B08B",
             "font_style": "italic",
             "font_weight": 400
           },
           "keyword.declaration.cod": {
-            "color": "#8FAFA1",
+            "color": "#9EBEB0",
             "font_weight": 400
           },
           "keyword.modifier.const.cod": {
-            "color": "#CC969B"
+            "color": "#D7A0A5"
           },
           "keyword.allocation.cod": {
-            "color": "#A2AC81",
+            "color": "#AEB78D",
             "font_weight": 400
           },
           "variable.special.cod-symbol": {
-            "color": "#E3AFBD"
+            "color": "#FFDDE6"
           },
           "operator.cod": {
-            "color": "#98A8BF"
+            "color": "#A7B7CF"
           }
         }
       }

@@ -23,7 +23,7 @@ Fully quit and restart Zed, then open `showcase.cod`. The language indicator sho
 
 ## Optional Zed theme: Ayu Dark CoD
 
-[Ayu Dark CoD](themes/ayu-dark-cod.json) is a standalone theme based on the [Ayu Dark theme shipped with Zed 1.29.2](https://github.com/zed-industries/zed/blob/v1.29.2/assets/themes/ayu/ayu.json) ([MIT license](themes/ayu-dark-cod.LICENSE)). It keeps the original UI palette and puts identifiers in the foreground. Keywords, built-in types, CoD operators, and bracket and delimiter punctuation sit at about 80% of the ordinary identifier foreground’s perceptual lightness. Keyword groups retain distinct hues without extra bold weight, and module directives are italic.
+[Ayu Dark CoD](themes/ayu-dark-cod.json) is a standalone theme based on the [Ayu Dark theme shipped with Zed 1.29.2](https://github.com/zed-industries/zed/blob/v1.29.2/assets/themes/ayu/ayu.json) ([MIT license](themes/ayu-dark-cod.LICENSE)). It keeps the original UI palette and lime-green strings. Ordinary identifiers use a bright warm foreground, with similarly bright colors for type names, `@symbols`, and numbers. Keywords, built-in types, CoD operators, brackets, and delimiters sit at about 80% of the identifier foreground’s estimated visual brightness. Keyword groups retain distinct hues without extra bold weight, and module directives are italic.
 
 Install the grammar as above, then copy just the theme JSON into Zed's user themes directory. On macOS or Linux, from the repository root:
 
