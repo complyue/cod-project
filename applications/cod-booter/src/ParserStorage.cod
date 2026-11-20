@@ -60,6 +60,14 @@ func conditional_node() -> u8 { return 44u8; }
 func logical_not_node() -> u8 { return 45u8; }
 func logical_and_node() -> u8 { return 46u8; }
 func logical_or_node() -> u8 { return 47u8; }
+func subtract_node() -> u8 { return 48u8; }
+func divide_node() -> u8 { return 49u8; }
+func remainder_node() -> u8 { return 50u8; }
+
+func integer_arithmetic(kind:u8) -> bool {
+    return kind == add_node() || kind == subtract_node() || kind == multiply_node() ||
+        kind == divide_node() || kind == remainder_node();
+}
 
 func logical_binary(kind:u8) -> bool {
     return kind == logical_and_node() || kind == logical_or_node();
@@ -146,6 +154,10 @@ export conditional_node;
 export logical_not_node;
 export logical_and_node;
 export logical_or_node;
+export subtract_node;
+export divide_node;
+export remainder_node;
+export integer_arithmetic;
 export logical_binary;
 export skips_right;
 export equal_words;

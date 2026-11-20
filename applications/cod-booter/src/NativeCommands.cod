@@ -3,7 +3,7 @@
 # bodies refer to one another.
 # A word slot is local to one generated activation. Branches name blocks,
 # and invocations consume preceding argument commands in source order.
-# A checked binary command writes a value and a separate overflow flag.
+# A checked arithmetic command writes a value and a separate fault category.
 data NativeCommand {
     opcode:u8;
     a:u64;
@@ -40,6 +40,11 @@ func print_word() -> u8 { return 16u8; }
 func return_outcome() -> u8 { return 17u8; }
 func finish_program() -> u8 { return 18u8; }
 func compare_words() -> u8 { return 19u8; }
+func checked_subtract() -> u8 { return 20u8; }
+func checked_divide() -> u8 { return 21u8; }
+func checked_remainder() -> u8 { return 22u8; }
+# Operands are the category slot, the handler search block, and the bypass block.
+func branch_catchable() -> u8 { return 23u8; }
 
 # Internal outcome words. Zero denotes success. Fatal numeric failures
 # bypass language catches and still leave through the activation cleanup.
@@ -48,10 +53,8 @@ func pending_category() -> u64 { return 1u64; }
 func pending_site() -> u64 { return 2u64; }
 func call_category() -> u64 { return 3u64; }
 func call_site() -> u64 { return 4u64; }
-func overflow_flag() -> u64 { return 5u64; }
+func arithmetic_fault() -> u64 { return 5u64; }
 func slot(node:u64) -> u64 { return node + 6u64; }
-func addition_overflow() -> u64 { return 18446744073709551615u64; }
-func multiplication_overflow() -> u64 { return 18446744073709551614u64; }
 
 export NativeCommand;
 export NativeCommands;
@@ -75,12 +78,14 @@ export print_word;
 export return_outcome;
 export finish_program;
 export compare_words;
+export checked_subtract;
+export checked_divide;
+export checked_remainder;
+export branch_catchable;
 export returned_word;
 export pending_category;
 export pending_site;
 export call_category;
 export call_site;
-export overflow_flag;
+export arithmetic_fault;
 export slot;
-export addition_overflow;
-export multiplication_overflow;

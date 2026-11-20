@@ -21,8 +21,7 @@ using "ParserStorage.cod" name_node;
 using "ParserStorage.cod" symbol_node;
 using "ParserStorage.cod" literal_node;
 using "ParserStorage.cod" group_node;
-using "ParserStorage.cod" add_node;
-using "ParserStorage.cod" multiply_node;
+using "ParserStorage.cod" integer_arithmetic;
 using "ParserStorage.cod" transfer_node;
 using "ParserStorage.cod" call_node;
 using "ParserStorage.cod" behave_node;
@@ -448,7 +447,7 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
         if (state.diagnostic == 0u8) { resolve_list(source, nodes, bindings, work, state, nodes[at].right); } else {};
         return;
     } else {};
-    if (kind == add_node() || kind == multiply_node() || kind == compare_node() || kind == transfer_node() ||
+    if (integer_arithmetic(kind) || kind == compare_node() || kind == transfer_node() ||
         logical_binary(kind)) {
         resolve_expression(source, nodes, bindings, work, state, nodes[at].left);
         if (state.diagnostic != 0u8) { return; } else {};

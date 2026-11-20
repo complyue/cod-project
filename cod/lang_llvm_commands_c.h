@@ -16,8 +16,19 @@ typedef enum cod_llvm_command_kind {
   COD_LLVM_BRANCH_EQUAL, COD_LLVM_WORD, COD_LLVM_COPY, COD_LLVM_ADDRESS,
   COD_LLVM_LOAD_TARGET, COD_LLVM_STORE_TARGET, COD_LLVM_ADD, COD_LLVM_MULTIPLY,
   COD_LLVM_PARAMETER, COD_LLVM_ARGUMENT, COD_LLVM_INVOKE, COD_LLVM_PRINT,
-  COD_LLVM_RETURN, COD_LLVM_FINISH, COD_LLVM_COMPARE
+  COD_LLVM_RETURN, COD_LLVM_FINISH, COD_LLVM_COMPARE, COD_LLVM_SUBTRACT,
+  COD_LLVM_DIVIDE, COD_LLVM_REMAINDER, COD_LLVM_BRANCH_CATCHABLE
 } cod_llvm_command_kind;
+
+/* Arithmetic faults occupy the top of the outcome category range. */
+typedef enum cod_llvm_arithmetic_fault {
+  COD_LLVM_FAULT_ADD, COD_LLVM_FAULT_MULTIPLY, COD_LLVM_FAULT_SUBTRACT,
+  COD_LLVM_FAULT_ZERO_DIVISOR, COD_LLVM_FAULT_COUNT
+} cod_llvm_arithmetic_fault;
+
+static inline uint64_t cod_llvm_fault_category(cod_llvm_arithmetic_fault fault) {
+  return UINT64_MAX - (uint64_t)fault;
+}
 
 typedef struct cod_llvm_command {
   uint8_t opcode;
@@ -104,16 +115,60 @@ static inline void cod_llvm_finish_program(cod_llvm_construction *state, uint64_
   LLVMTypeRef params[] = {i32, LLVMPointerTypeInContext(session->context, 0)};
   LLVMTypeRef printer = LLVMFunctionType(i32, params, 2, 1);
   LLVMValueRef dprintf_function = LLVMAddFunction(session->module, "dprintf", printer);
-  LLVMValueRef unhandled = LLVMBuildGlobalStringPtr(builder, "byte %" PRIu64 ": unhandled CoD exception %" PRIu64 "\n", "");
-  LLVMValueRef addition = LLVMBuildGlobalStringPtr(builder, "byte %" PRIu64 ": u64 addition overflow\n", "");
-  LLVMValueRef multiplication = LLVMBuildGlobalStringPtr(builder, "byte %" PRIu64 ": u64 multiplication overflow\n", "");
-  LLVMValueRef is_add = LLVMBuildICmp(builder, LLVMIntEQ, category, cod_llvm_word(state, UINT64_MAX), "");
-  LLVMValueRef is_mul = LLVMBuildICmp(builder, LLVMIntEQ, category, cod_llvm_word(state, UINT64_MAX - 1), "");
-  LLVMValueRef other = LLVMBuildSelect(builder, is_mul, multiplication, unhandled, "");
-  LLVMValueRef format = LLVMBuildSelect(builder, is_add, addition, other, "");
+  const char *const fault_formats[COD_LLVM_FAULT_COUNT] = {
+    [COD_LLVM_FAULT_ADD] = "byte %" PRIu64 ": u64 addition overflow\n",
+    [COD_LLVM_FAULT_MULTIPLY] = "byte %" PRIu64 ": u64 multiplication overflow\n",
+    [COD_LLVM_FAULT_SUBTRACT] = "byte %" PRIu64 ": u64 subtraction overflow\n",
+    [COD_LLVM_FAULT_ZERO_DIVISOR] = "byte %" PRIu64 ": division by zero\n",
+  };
+  LLVMValueRef format = LLVMBuildGlobalStringPtr(builder, "byte %" PRIu64 ": unhandled CoD exception %" PRIu64 "\n", "");
+  for (int fault = 0; fault < COD_LLVM_FAULT_COUNT; ++fault) {
+    LLVMValueRef fault_format = LLVMBuildGlobalStringPtr(builder, fault_formats[fault], "");
+    LLVMValueRef matches = LLVMBuildICmp(builder, LLVMIntEQ, category,
+        cod_llvm_word(state, cod_llvm_fault_category(fault)), "");
+    format = LLVMBuildSelect(builder, matches, fault_format, format, "");
+  }
   LLVMValueRef args[] = {LLVMConstInt(i32, 2, 0), format, cod_llvm_read_word(state, site_slot), category};
   LLVMBuildCall2(builder, printer, dprintf_function, args, 4, "");
   LLVMBuildRet(builder, LLVMConstInt(i32, 70, 0));
+}
+
+static inline bool cod_llvm_checked_arithmetic(cod_llvm_construction *state, cod_llvm_command command) {
+  const size_t slots = state->slot_count;
+  if (command.a >= slots || command.b >= slots || command.c >= slots || command.d >= slots)
+    return false;
+
+  LLVMBuilderRef builder = state->session->builder;
+  LLVMValueRef left = cod_llvm_read_word(state, command.b);
+  LLVMValueRef right = cod_llvm_read_word(state, command.c);
+  LLVMValueRef value, failed;
+  cod_llvm_arithmetic_fault fault;
+  if (command.opcode == COD_LLVM_DIVIDE || command.opcode == COD_LLVM_REMAINDER) {
+    fault = COD_LLVM_FAULT_ZERO_DIVISOR;
+    failed = LLVMBuildICmp(builder, LLVMIntEQ, right, cod_llvm_word(state, 0), "");
+    /* The CoD command stream takes the fault exit before using this value. */
+    LLVMValueRef divisor = LLVMBuildSelect(builder, failed, cod_llvm_word(state, 1), right, "");
+    value = command.opcode == COD_LLVM_DIVIDE ? LLVMBuildUDiv(builder, left, divisor, "")
+                                             : LLVMBuildURem(builder, left, divisor, "");
+  } else {
+    const char *name;
+    switch (command.opcode) {
+      case COD_LLVM_ADD: fault = COD_LLVM_FAULT_ADD; name = "llvm.uadd.with.overflow"; break;
+      case COD_LLVM_MULTIPLY: fault = COD_LLVM_FAULT_MULTIPLY; name = "llvm.umul.with.overflow"; break;
+      case COD_LLVM_SUBTRACT: fault = COD_LLVM_FAULT_SUBTRACT; name = "llvm.usub.with.overflow"; break;
+      default: return false;
+    }
+    unsigned intrinsic = LLVMLookupIntrinsicID(name, strlen(name));
+    if (!intrinsic) return false;
+    LLVMValueRef outcome = cod_llvm_build_checked_integer(builder, state->session->module, intrinsic, left, right);
+    value = LLVMBuildExtractValue(builder, outcome, 0, "");
+    failed = LLVMBuildExtractValue(builder, outcome, 1, "");
+  }
+  LLVMValueRef category = LLVMBuildSelect(builder, failed, cod_llvm_word(state, cod_llvm_fault_category(fault)),
+      cod_llvm_word(state, 0), "");
+  cod_llvm_write_word(state, command.a, value);
+  cod_llvm_write_word(state, command.d, category);
+  return true;
 }
 
 static inline bool cod_llvm_invoke_words(cod_llvm_construction *state, cod_llvm_command command) {
@@ -171,6 +226,15 @@ static inline bool cod_llvm_construct_command(cod_llvm_construction *state, cod_
       LLVMBuildCondBr(builder, LLVMBuildICmp(builder, LLVMIntEQ, cod_llvm_read_word(state, a),
           cod_llvm_word(state, b), ""), state->blocks[c], state->blocks[d]);
       return true;
+    case COD_LLVM_BRANCH_CATCHABLE: {
+      if (a >= slots || !cod_llvm_local_block(state, b) || !cod_llvm_local_block(state, c)) return false;
+      LLVMValueRef category = cod_llvm_read_word(state, a);
+      LLVMValueRef failed = LLVMBuildICmp(builder, LLVMIntNE, category, cod_llvm_word(state, 0), "");
+      LLVMValueRef language_exception = LLVMBuildICmp(builder, LLVMIntULT, category,
+          cod_llvm_word(state, cod_llvm_fault_category(COD_LLVM_FAULT_COUNT - 1)), "");
+      LLVMBuildCondBr(builder, LLVMBuildAnd(builder, failed, language_exception, ""), state->blocks[b], state->blocks[c]);
+      return true;
+    }
     case COD_LLVM_WORD:
       if (a >= slots) return false;
       cod_llvm_write_word(state, a, cod_llvm_word(state, b));
@@ -201,19 +265,11 @@ static inline bool cod_llvm_construct_command(cod_llvm_construction *state, cod_
       return true;
     }
     case COD_LLVM_ADD:
-    case COD_LLVM_MULTIPLY: {
-      if (a >= slots || b >= slots || c >= slots || d >= slots) return false;
-      const char *name = command.opcode == COD_LLVM_ADD ? "llvm.uadd.with.overflow" : "llvm.umul.with.overflow";
-      unsigned intrinsic = LLVMLookupIntrinsicID(name, strlen(name));
-      if (!intrinsic) return false;
-      LLVMValueRef left = cod_llvm_read_word(state, b);
-      LLVMValueRef right = cod_llvm_read_word(state, c);
-      LLVMValueRef outcome = cod_llvm_build_checked_integer(builder, state->session->module, intrinsic, left, right);
-      cod_llvm_write_word(state, a, LLVMBuildExtractValue(builder, outcome, 0, ""));
-      LLVMValueRef overflow = LLVMBuildExtractValue(builder, outcome, 1, "");
-      cod_llvm_write_word(state, d, LLVMBuildZExt(builder, overflow, state->word, ""));
-      return true;
-    }
+    case COD_LLVM_MULTIPLY:
+    case COD_LLVM_SUBTRACT:
+    case COD_LLVM_DIVIDE:
+    case COD_LLVM_REMAINDER:
+      return cod_llvm_checked_arithmetic(state, command);
     case COD_LLVM_PARAMETER:
       if (a >= slots || b >= LLVMCountParams(state->current)) return false;
       cod_llvm_write_word(state, a, LLVMGetParam(state->current, (unsigned)b));

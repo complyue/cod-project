@@ -15,8 +15,11 @@ using "ParserStorage.cod" name_node;
 using "ParserStorage.cod" group_node;
 using "ParserStorage.cod" val_binding_node;
 using "ParserStorage.cod" ptr_binding_node;
-using "ParserStorage.cod" add_node;
 using "ParserStorage.cod" multiply_node;
+using "ParserStorage.cod" subtract_node;
+using "ParserStorage.cod" divide_node;
+using "ParserStorage.cod" remainder_node;
+using "ParserStorage.cod" integer_arithmetic;
 using "ParserStorage.cod" transfer_node;
 using "ParserStorage.cod" call_node;
 using "ParserStorage.cod" behave_node;
@@ -61,6 +64,7 @@ using "NativeCommands.cod" begin_function;
 using "NativeCommands.cod" position_block;
 using "NativeCommands.cod" jump;
 using "NativeCommands.cod" branch_equal;
+using "NativeCommands.cod" branch_catchable;
 using "NativeCommands.cod" compare_words;
 using "NativeCommands.cod" word_constant;
 using "NativeCommands.cod" copy_word;
@@ -69,6 +73,9 @@ using "NativeCommands.cod" load_target;
 using "NativeCommands.cod" store_target;
 using "NativeCommands.cod" checked_add;
 using "NativeCommands.cod" checked_multiply;
+using "NativeCommands.cod" checked_subtract;
+using "NativeCommands.cod" checked_divide;
+using "NativeCommands.cod" checked_remainder;
 using "NativeCommands.cod" receive_parameter;
 using "NativeCommands.cod" pass_argument;
 using "NativeCommands.cod" invoke_function;
@@ -80,10 +87,8 @@ using "NativeCommands.cod" pending_category;
 using "NativeCommands.cod" pending_site;
 using "NativeCommands.cod" call_category;
 using "NativeCommands.cod" call_site;
-using "NativeCommands.cod" overflow_flag;
+using "NativeCommands.cod" arithmetic_fault;
 using "NativeCommands.cod" slot;
-using "NativeCommands.cod" addition_overflow;
-using "NativeCommands.cod" multiplication_overflow;
 
 data LoweringState {
     active_function:u64;
@@ -192,11 +197,8 @@ func lower_dispatch(nodes:const ExprNodes in N, links:const NameWork in L,
                     ref plan:NativePlan in P, ref state:LoweringState in R, at:u64) -> void
     where {const owner N, const owner L, const owner F, owner C, owner P, owner R} {
     position(code, plan, state, at);
-    val non_add <- new_block(plan);
     val ordinary <- new_block(plan);
-    command(code, plan, branch_equal(), pending_category(), addition_overflow(), state.exception_target, non_add);
-    position(code, plan, state, non_add);
-    command(code, plan, branch_equal(), pending_category(), multiplication_overflow(), state.exception_target, ordinary);
+    command(code, plan, branch_catchable(), pending_category(), ordinary, state.exception_target, 0u64);
     position(code, plan, state, ordinary);
     val clause <- first_item(nodes, nodes[at].right);
     val handler <- no_node();
@@ -351,14 +353,18 @@ func lower_binary(nodes:const ExprNodes in N, names:const NameBindings in B, lin
         command(code, plan, compare_words(), slot(at), slot(left), slot(right), nodes[at].number);
         return;
     } else {};
-    val opcode <- if (kind == add_node()) { checked_add() } else { checked_multiply() };
-    val failure <- if (kind == add_node()) { addition_overflow() } else { multiplication_overflow() };
-    command(code, plan, opcode, slot(at), slot(left), slot(right), overflow_flag());
+    val opcode <- checked_add();
+    if (kind == multiply_node()) { (opcode <- checked_multiply()):void; } else {};
+    if (kind == subtract_node()) { (opcode <- checked_subtract()):void; } else {};
+    if (kind == divide_node()) { (opcode <- checked_divide()):void; } else {};
+    if (kind == remainder_node()) { (opcode <- checked_remainder()):void; } else {};
+    command(code, plan, opcode, slot(at), slot(left), slot(right), arithmetic_fault());
     val ready <- new_block(plan);
     val failed <- new_block(plan);
-    command(code, plan, branch_equal(), overflow_flag(), 0u64, ready, failed);
+    command(code, plan, branch_equal(), arithmetic_fault(), 0u64, ready, failed);
     position(code, plan, state, failed);
-    source_failure(code, plan, failure, nodes[at].operation_at);
+    emit(code, plan, copy_word(), pending_category(), arithmetic_fault());
+    emit(code, plan, word_constant(), pending_site(), nodes[at].operation_at);
     finish_block(code, plan, state, state.exception_target);
     position(code, plan, state, ready);
 }
@@ -663,7 +669,7 @@ func lower_expression(nodes:const ExprNodes in N, names:const NameBindings in B,
         lower_binding(nodes, names, links, facts, sites, code, plan, state, at);
         return;
     } else {};
-    if (kind == add_node() || kind == multiply_node() || kind == transfer_node() || kind == compare_node()) {
+    if (integer_arithmetic(kind) || kind == transfer_node() || kind == compare_node()) {
         lower_binary(nodes, names, links, facts, sites, code, plan, state, at);
         return;
     } else {};

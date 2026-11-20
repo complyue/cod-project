@@ -7,6 +7,9 @@ using "ParserStorage.cod" len;
 using "ParserStorage.cod" literal_node;
 using "ParserStorage.cod" add_node;
 using "ParserStorage.cod" multiply_node;
+using "ParserStorage.cod" subtract_node;
+using "ParserStorage.cod" divide_node;
+using "ParserStorage.cod" remainder_node;
 using "ParserStorage.cod" group_node;
 using "ParserStorage.cod" name_node;
 using "ParserStorage.cod" call_node;
@@ -796,7 +799,10 @@ func parse_infix(source:const SourceBytes in S, tokens:const Tokens in T,
         (binding <- 2u8):void;
     } else {};
     if (op == 42u8) { kind <- multiply_node(); (binding <- 6u8):void; } else {};
+    if (op == 47u8) { kind <- divide_node(); (binding <- 6u8):void; } else {};
+    if (op == 37u8) { kind <- remainder_node(); (binding <- 6u8):void; } else {};
     if (op == 43u8) { kind <- add_node(); (binding <- 5u8):void; } else {};
+    if (op == 45u8) { kind <- subtract_node(); (binding <- 5u8):void; } else {};
     if (predicate != no_node()) {
         binding <- if (predicate <= unequal_words()) { 3u8 } else { 4u8 };
         {};

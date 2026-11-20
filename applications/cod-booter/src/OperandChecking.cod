@@ -28,8 +28,7 @@ using "ParserStorage.cod" literal_node;
 using "ParserStorage.cod" name_node;
 using "ParserStorage.cod" null_node;
 using "ParserStorage.cod" group_node;
-using "ParserStorage.cod" add_node;
-using "ParserStorage.cod" multiply_node;
+using "ParserStorage.cod" integer_arithmetic;
 using "ParserStorage.cod" transfer_node;
 using "ParserStorage.cod" call_node;
 using "ParserStorage.cod" behave_node;
@@ -643,11 +642,15 @@ func check_numeric_expression(nodes:const ExprNodes in N, ref facts:OperandFacts
         set_result(facts, at, inside);
         return 0u8;
     } else {};
-    val diagnostic <- require_bits(nodes, facts, left);
-    if (diagnostic != 0u8) { return diagnostic; } else {};
-    diagnostic <- require_bits(nodes, facts, nodes[at].right);
-    if (diagnostic != 0u8) { return diagnostic; } else {};
-    scalar_fact(facts, at, independent_value(), no_node());
+    val right <- nodes[at].right;
+    val left_completes <- facts[left].kind != never_result();
+    val right_completes <- facts[right].kind != never_result();
+    val left_diagnostic <- if (left_completes) { require_bits(nodes, facts, left) } else { 0u8 };
+    if (left_diagnostic != 0u8) { return left_diagnostic; } else {};
+    val right_diagnostic <- if (right_completes) { require_bits(nodes, facts, right) } else { 0u8 };
+    if (right_diagnostic != 0u8) { return right_diagnostic; } else {};
+    if (!left_completes || !right_completes) { set_result(facts, at, never_result()); }
+    else { scalar_fact(facts, at, independent_value(), no_node()); };
     return 0u8;
 }
 
@@ -706,7 +709,7 @@ func check_operand(nodes:const ExprNodes in N, names:const NameBindings in B, li
         return 0u8;
     } else {};
     if (kind == val_binding_node() || kind == ptr_binding_node()) { return check_local(nodes, names, facts, at); } else {};
-    if (kind == add_node() || kind == multiply_node() || kind == group_node()) {
+    if (integer_arithmetic(kind) || kind == group_node()) {
         return check_numeric_expression(nodes, facts, at, kind);
     } else {};
     if (kind == transfer_node()) { return check_transfer(nodes, facts, at); } else {};
