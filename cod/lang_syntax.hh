@@ -251,7 +251,7 @@ inline bool widens(Type from, Type to) {
 }
 inline std::string type_name(const Type &type) {
   switch (type.kind) {
-  case Type::native_handle: return "handle " + type.name;
+  case Type::native_handle: return (type.owned ? "owned handle " : "handle ") + type.name;
   case Type::integer: return "i64";
   case Type::uint8: return "u8";
   case Type::uint32: return "u32";
@@ -312,7 +312,7 @@ struct Expression {
                     try_scope, handler, raise, return_value, deferred, make_region, touch, effect_group, transfer, procedure_effect,
                     pointer_group, pointer, make_local, rebind, region_binding, callable, alias, capture_owner,
                     here_body, named_argument, break_value, continue_value, typed_expression, return_tail,
-                    processor_composition, pipeline, here_binding, make_object };
+                    processor_composition, pipeline, here_binding, make_object, native_handle_binding, make_owned_handle };
   Kind kind;
   Location at;
   std::string text;
@@ -1225,6 +1225,18 @@ class Parser {
       expr->definition = std::move(definition);
       return expr;
     }
+    if ((is("owned") && is("handle", 1)) || (is("const") && is("owned", 1) && is("handle", 2))) {
+      const bool fixed = take("const");
+      expect("owned");
+      expect("handle");
+      auto expr = make(Expression::Kind::native_handle_binding, value_name());
+      expr->fixed_binding = fixed;
+      type_separator();
+      expr->annotation = parse_type();
+      expect("<-");
+      expr->children.push_back(expression());
+      return expr;
+    }
     if (is("owned") || (is("region") && !is("(", 1)) ||
         (is("const") && (is("owned", 1) || is("region", 1)))) {
       const bool fixed_binding = take("const");
@@ -1239,6 +1251,14 @@ class Parser {
       return expr;
     }
     if (take("make")) {
+      if (is("owned") && is("handle", 1)) {
+        expect("owned");
+        expect("handle");
+        auto expr = make(Expression::Kind::make_owned_handle, token);
+        expr->annotation = Type{Type::named, ordinary_name().text};
+        arguments(*expr, false);
+        return expr;
+      }
       if (take("local")) {
         auto expr = make(Expression::Kind::make_local, token);
         if (take("typeof")) {
@@ -1802,7 +1822,8 @@ class Parser {
     if (expr.kind == K::deferred && draining)
       fail(expr.at, "defer cannot register work into its currently draining scope\n" +
           location_text(*draining) + ": note: enclosing deferred execution begins here");
-    const bool declaration = expr.kind == K::pointer_group || expr.kind == K::region_binding || expr.kind == K::here_binding ||
+    const bool declaration = expr.kind == K::pointer_group || expr.kind == K::region_binding ||
+        expr.kind == K::native_handle_binding || expr.kind == K::here_binding ||
         expr.kind == K::alias || (expr.kind == K::callable && !expr.definition->name.empty());
     if (deferred && declaration)
       fail(expr.at, "a deferred-block variable declaration requires a nested explicit {{ ... }} scope");

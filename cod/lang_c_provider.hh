@@ -28,6 +28,10 @@ inline const char *provider_scalar(const Type &type) {
 }
 
 inline std::string provider_borrow(const Type &handle) { return "cod_native_" + handle.name + "_borrow"; }
+enum class NativeStatus : unsigned { ok, failure, boundary_error };
+inline std::string native_constructor_prefix(const Type &handle) { return "cod_native_" + handle.name; }
+inline std::string native_construct_name(const Type &handle) { return native_constructor_prefix(handle) + "_construct"; }
+inline std::string native_destroy_name(const Type &handle) { return native_constructor_prefix(handle) + "_destroy"; }
 inline std::string native_entry_name(const Form &form) { return "cod_native_" + form.name + "_entry"; }
 inline std::string native_entry_body_name(const Form &form) { return native_entry_name(form) + "_body"; }
 
@@ -93,12 +97,9 @@ extern "C" {
 
 typedef uint32_t cod_native_status;
 enum {
-    COD_NATIVE_OK = 0,
-    COD_NATIVE_FAILURE = 1,
-    COD_NATIVE_BOUNDARY_ERROR = 2
-};
-
-)C";
+)C" << "    COD_NATIVE_OK = " << static_cast<unsigned>(NativeStatus::ok)
+     << ",\n    COD_NATIVE_FAILURE = " << static_cast<unsigned>(NativeStatus::failure)
+     << ",\n    COD_NATIVE_BOUNDARY_ERROR = " << static_cast<unsigned>(NativeStatus::boundary_error) << "\n};\n\n";
   stubs << "#include \"" << NativeProviderFiles::header_name << "\"\n#include <stddef.h>\n\n";
 
   if (std::ranges::any_of(program.native_entries, [&](const auto &entry) {
@@ -126,8 +127,9 @@ typedef struct cod_native_loan {
   if (!emitted_borrows.empty()) stubs << '\n';
 
   for (const auto &constructor : program.native_constructors) {
-    const auto prefix = "cod_native_" + constructor.handle.name;
-    const auto failure = prefix + "_failure";
+    const auto failure = native_constructor_prefix(constructor.handle) + "_failure";
+    const auto construct_name = native_construct_name(constructor.handle);
+    const auto destroy_name = native_destroy_name(constructor.handle);
     const CheckedSchema *schema = nullptr;
     if (constructor.failure) {
       schema = &program.schemas.at(*program.exception_types.at(constructor.failure->identity).schema);
@@ -141,7 +143,7 @@ typedef struct cod_native_loan {
 
     const auto construct = [&](bool implementation) {
       std::ostringstream declaration;
-      declaration << "cod_native_status " << prefix << "_construct" << (implementation ? "_impl" : "") << '(';
+      declaration << "cod_native_status " << construct_name << (implementation ? "_impl" : "") << '(';
       for (size_t i = 0; i < constructor.inputs.size(); ++i) {
         const auto &input = constructor.inputs[i];
         if (input.owner) {
@@ -155,8 +157,8 @@ typedef struct cod_native_loan {
       declaration << ')';
       return std::move(declaration).str();
     };
-    const auto destroy = "void " + prefix + "_destroy(uint64_t resource)";
-    const auto destroy_impl = "void " + prefix + "_destroy_impl(uint64_t resource)";
+    const auto destroy = "void " + destroy_name + "(uint64_t resource)";
+    const auto destroy_impl = "void " + destroy_name + "_impl(uint64_t resource)";
     const auto boundary = construct(false);
     header << boundary << ";\n" << destroy << ";\n"
            << construct(true) << ";\n" << destroy_impl << ";\n\n";
@@ -176,7 +178,7 @@ typedef struct cod_native_loan {
     }
     stubs << "    uint64_t acquired = 0;\n";
     if (schema) stubs << "    " << failure << " reported = {0};\n";
-    stubs << "    const cod_native_status status = " << prefix << "_construct_impl(";
+    stubs << "    const cod_native_status status = " << construct_name << "_impl(";
     for (size_t i = 0; i < constructor.inputs.size(); ++i)
       stubs << (constructor.inputs[i].owner ? "*" : "") << "arg" << i << ", ";
     stubs << "&acquired" << (schema ? ", &reported" : "") << ");\n"
@@ -188,7 +190,7 @@ typedef struct cod_native_loan {
       stubs << "        *error = reported;\n        return status;\n    }\n";
     }
     stubs << "    return COD_NATIVE_BOUNDARY_ERROR;\n}\n\n"
-          << destroy << " {\n    " << prefix << "_destroy_impl(resource);\n}\n\n";
+          << destroy << " {\n    " << destroy_name << "_impl(resource);\n}\n\n";
   }
   for (const auto &entry : program.native_entries) emit_c_entry(entry, *program.methods.at(entry.method).source, header, stubs);
   header << "#ifdef __cplusplus\n}\n#endif\n\n#endif\n";
