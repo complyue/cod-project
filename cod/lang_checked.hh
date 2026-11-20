@@ -408,6 +408,7 @@ class ScalarChecker {
   // separate. Independent conditional writes need one decision per reference.
   struct ObservationDecisions {
     using Condition = size_t;
+    struct WorkLimit {};
     struct Node {
       size_t observation;
       Condition when_false, when_true;
@@ -419,14 +420,24 @@ class ScalarChecker {
     std::vector<Node> nodes;
     std::map<Node, Condition> indexed;
     std::map<std::pair<Condition, Condition>, Condition> intersections;
+    std::optional<size_t> work_remaining;
 
     static Condition negate(Condition value) { return value ^ 1; }
+    void spend_work() {
+      if (!work_remaining) return;
+      if (!*work_remaining) throw WorkLimit{};
+      --*work_remaining;
+    }
     Condition decision(size_t observation, Condition when_false, Condition when_true) {
       if (when_false == when_true) return when_true;
       const auto flipped = when_true & 1;
       const Node node{observation, when_false ^ flipped, when_true ^ flipped};
+      if (work_remaining && !*work_remaining && !indexed.contains(node)) throw WorkLimit{};
       const auto [entry, inserted] = indexed.try_emplace(node, 2 * (nodes.size() + 1));
-      if (inserted) nodes.push_back(node);
+      if (inserted) {
+        spend_work();
+        nodes.push_back(node);
+      }
       return entry->second ^ flipped;
     }
     Node split(Condition condition) const {
@@ -439,6 +450,7 @@ class ScalarChecker {
       if (left == right || left == 1) return right;
       const auto key = std::pair{left, right};
       if (const auto known = intersections.find(key); known != intersections.end()) return known->second;
+      spend_work();
       const auto a = split(left), b = split(right);
       const auto observation = std::min(a.observation, b.observation);
       const auto no = both(a.observation == observation ? a.when_false : left,
@@ -450,13 +462,25 @@ class ScalarChecker {
       return result;
     }
     Condition either(Condition left, Condition right) { return negate(both(negate(left), negate(right))); }
-    Condition project(Condition value, size_t first, std::map<Condition, Condition> &known) {
+    enum class Projection { retain, forget, forget_suffix };
+    template <typename Classify>
+    Condition project(Condition value, std::map<Condition, Condition> &known, const Classify &classify) {
       if (value < 2) return value;
       const auto node = split(value);
-      if (node.observation >= first) return 1;
+      const auto action = classify(node.observation);
+      if (action == Projection::forget_suffix) return 1;
       if (const auto found = known.find(value); found != known.end()) return found->second;
-      const auto no = project(node.when_false, first, known), yes = project(node.when_true, first, known);
-      const auto result = decision(node.observation, no, yes);
+      const auto no = project(node.when_false, known, classify), yes = project(node.when_true, known, classify);
+      const auto result = action == Projection::forget ? either(no, yes) : decision(node.observation, no, yes);
+      known.emplace(value, result);
+      return result;
+    }
+    Condition import(const ObservationDecisions &source, Condition value, size_t offset, std::map<Condition, Condition> &known) {
+      if (value < 2) return value;
+      if (const auto found = known.find(value); found != known.end()) return found->second;
+      const auto node = source.split(value);
+      const auto no = import(source, node.when_false, offset, known), yes = import(source, node.when_true, offset, known);
+      const auto result = decision(node.observation + offset, no, yes);
       known.emplace(value, result);
       return result;
     }
@@ -565,17 +589,21 @@ class ScalarChecker {
     template <typename Predicate> void forget_presence(Predicate removed) {
       std::erase_if(presence, [&](const auto &fact) { return removed(fact.first); });
     }
-    void forget_observations(size_t first) {
+    template <typename Classify> void project_observations(const Classify &classify) {
       if (!decisions) return;
       std::map<Condition, Condition> known;
-      const auto projected = decisions->project(reachable, first, known);
+      const auto projected = decisions->project(reachable, known, classify);
       const auto must_hold = [&](Condition condition) {
-        const auto counterexample = decisions->project(both(reachable, negate(condition)), first, known);
+        const auto counterexample = decisions->project(both(reachable, negate(condition)), known, classify);
         return both(projected, negate(counterexample));
       };
       for (auto &[slot, fact] : presence) fact = {must_hold(fact.present), must_hold(fact.absent)};
       reachable = projected;
       std::erase_if(presence, [](const auto &entry) { return entry.second == Outcomes{}; });
+    }
+    void forget_observations(size_t first) {
+      using Projection = ObservationDecisions::Projection;
+      project_observations([&](size_t id) { return id < first ? Projection::retain : Projection::forget_suffix; });
     }
     ObservationPaths remap(const PresenceSlotMap &slots) const {
       return map_presence([&](const auto &slot, const auto &accept) {
@@ -8129,7 +8157,7 @@ class ScalarChecker {
   };
   using QueryDeliveredSlots = std::map<QuerySlotPath, EvidenceSlot>;
   using QueryPresenceKey = std::variant<QueryInputTarget, QueryProductPlace, QuerySlotPath>;
-  using QueryPresenceFacts = std::map<QueryPresenceKey, TargetPresence>;
+  using QueryGuardSlots = std::map<QueryPresenceKey, EvidencePlaces>;
 
   // Query calls have separate observation arenas. Normalize an outcome to
   // decisions on prepared Boolean parameters and address paths visible to
@@ -8142,37 +8170,135 @@ class ScalarChecker {
     auto operator<=>(const QueryCallGuard &) const = default;
   };
 
-  static QueryCallGuard summarize_query_guard(ObservationPaths paths, size_t first_local,
+  static QueryGuardSlots query_guard_slots(
       const std::map<EvidenceSlot, QueryCallSelection> &physical_slots, const QueryDeliveredSlots &projections) {
+    QueryGuardSlots slots;
+    for (const auto &[slot, selection] : physical_slots)
+      if (const auto *physical = std::get_if<QueryProductPlace>(&slot)) slots[*physical].insert(slot);
+    for (const auto &[path, slot] : projections) slots[path].insert(slot);
+    return slots;
+  }
+
+  static QueryCallGuard summarize_query_guard(ObservationPaths paths, size_t first_local, const QueryGuardSlots &slots) {
     paths.forget_observations(first_local);
     QueryCallGuard result;
-    for (const auto &[slot, facts] : paths.presence) {
-      if (const auto *input = std::get_if<QueryInputTarget>(&slot)) result.presence.emplace(*input, facts);
-      if (const auto *physical = std::get_if<QueryProductPlace>(&slot); physical && physical_slots.contains(slot))
-        result.presence.emplace(*physical, facts);
-    }
-    for (const auto &[path, slot] : projections)
-      if (const auto facts = paths.presence.find(slot); facts != paths.presence.end()) result.presence.emplace(path, facts->second);
+    for (const auto &[key, sources] : slots)
+      for (const auto &slot : sources)
+        if (const auto facts = paths.presence.find(slot); facts != paths.presence.end()) {
+          auto &outcomes = result.presence[key];
+          outcomes.present = paths.either(outcomes.present, facts->second.present);
+          outcomes.absent = paths.either(outcomes.absent, facts->second.absent);
+        }
     ObservationDecisions normalized;
     std::map<QueryCallGuard::Condition, QueryCallGuard::Condition> mapped;
-    const auto copy = [&](const auto &self, QueryCallGuard::Condition source) -> QueryCallGuard::Condition {
-      if (source < 2) return source;
-      if (const auto found = mapped.find(source); found != mapped.end()) return found->second;
-      const auto node = paths.decisions->split(source);
-      const auto no = self(self, node.when_false);
-      const auto yes = self(self, node.when_true);
-      const auto value = normalized.decision(node.observation, no, yes);
-      mapped.emplace(source, value);
-      return value;
+    const auto copy = [&](QueryCallGuard::Condition value) {
+      return value < 2 ? value : normalized.import(*paths.decisions, value, 0, mapped);
     };
-    result.reachable = copy(copy, paths.reachable);
+    result.reachable = copy(paths.reachable);
     for (auto &[slot, facts] : result.presence) {
-      facts.present = copy(copy, facts.present);
-      facts.absent = copy(copy, facts.absent);
+      facts.present = copy(facts.present);
+      facts.absent = copy(facts.absent);
     }
     result.nodes = std::move(normalized.nodes);
     return result;
   }
+
+  struct QueryBooleanInput {
+    std::optional<bool> constant;
+    size_t observation;
+    bool inverted = false;
+    bool operator==(const QueryBooleanInput &) const = default;
+  };
+
+  // Express caller paths using the values visible to the invocation. Place
+  // formal decisions before private caller decisions, and eliminate a private
+  // decision as soon as no later operand constrains it.
+  struct QueryEntryGuards {
+    static constexpr size_t work_limit = 65536;
+    using Projection = ObservationDecisions::Projection;
+    using Condition = ObservationDecisions::Condition;
+    struct Operand {
+      ObservationPaths relation;
+      std::set<size_t> private_decisions;
+    };
+    size_t arity;
+    std::shared_ptr<ObservationDecisions> decisions = std::make_shared<ObservationDecisions>();
+    std::map<Condition, Condition> copied;
+    std::map<size_t, size_t> last_use;
+    std::vector<Operand> bindings;
+
+    QueryEntryGuards(const std::vector<TargetEvidence> &operands, const std::map<size_t, QueryBooleanInput> &booleans) :
+        arity(operands.size()) {
+      // A projected relation can be wider than every individual operand.
+      // Exhausting the workspace falls back to the original presence proof.
+      decisions->work_remaining = work_limit;
+      try { bind(operands, booleans); }
+      catch (const ObservationDecisions::WorkLimit &) { bindings.clear(); }
+    }
+    void bind(const std::vector<TargetEvidence> &operands, const std::map<size_t, QueryBooleanInput> &booleans) {
+      for (const auto &[input, value] : booleans) {
+        const auto &branches = operands[input].branches;
+        if (value.constant || value.observation != input || !branches) continue;
+        const auto formal = PresenceBranches::observed(decisions, input);
+        auto relation = lift(branches->at(false));
+        relation.conjoin(formal.at(false));
+        auto yes = lift(branches->at(true));
+        yes.conjoin(formal.at(true));
+        relation.join(yes);
+        if (relation == ObservationPaths::unconditional()) continue;
+        std::set<Condition> visited;
+        std::set<size_t> used;
+        const auto count = [&](const auto &self, Condition condition) -> void {
+          if (condition < 2 || !visited.insert(condition & ~Condition{1}).second) return;
+          const auto node = decisions->split(condition);
+          if (node.observation >= arity) used.insert(node.observation);
+          self(self, node.when_false);
+          self(self, node.when_true);
+        };
+        count(count, relation.reachable);
+        for (const auto &[slot, fact] : relation.presence) {
+          count(count, fact.present);
+          count(count, fact.absent);
+        }
+        bindings.push_back({std::move(relation), std::move(used)});
+      }
+      // Adjacent constraints on the same caller decision can eliminate it
+      // before introducing unrelated formal decisions.
+      std::stable_sort(bindings.begin(), bindings.end(), [](const Operand &left, const Operand &right) {
+        return left.private_decisions < right.private_decisions;
+      });
+      for (size_t i = 0; i < bindings.size(); ++i) {
+        for (const auto observation : bindings[i].private_decisions) last_use[observation] = i;
+        bindings[i].private_decisions.clear();
+      }
+      for (const auto &[observation, binding] : last_use) bindings[binding].private_decisions.insert(observation);
+    }
+    ObservationPaths lift(ObservationPaths paths) {
+      const auto copy = [&](Condition value) {
+        return value < 2 ? value : decisions->import(*paths.decisions, value, arity, copied);
+      };
+      paths.reachable = copy(paths.reachable);
+      for (auto &[slot, fact] : paths.presence) fact = {copy(fact.present), copy(fact.absent)};
+      paths.decisions = decisions;
+      return paths;
+    }
+    QueryCallGuard project(ObservationPaths paths, const QueryGuardSlots &slots) {
+      if (!bindings.empty() && paths && paths != ObservationPaths::unconditional()) try {
+        auto projected = lift(paths);
+        projected.project_observations([&](size_t id) {
+          return id >= arity && !last_use.contains(id) ? Projection::forget : Projection::retain;
+        });
+        for (const auto &[relation, expired] : bindings) {
+          projected.conjoin(relation);
+          if (!expired.empty()) projected.project_observations([&](size_t id) {
+            return expired.contains(id) ? Projection::forget : Projection::retain;
+          });
+        }
+        return summarize_query_guard(std::move(projected), arity, slots);
+      } catch (const ObservationDecisions::WorkLimit &) { bindings.clear(); }
+      return summarize_query_guard(std::move(paths), 0, slots);
+    }
+  };
 
   template <typename RestoreInput>
   static EvidencePlaces restore_query_presence(const QuerySelections &flow, const QueryPresenceKey &key,
@@ -8224,31 +8350,15 @@ class ScalarChecker {
     return result;
   }
 
-  static QueryPresenceFacts summarize_query_presence(const PresenceFacts &facts,
-      const std::map<EvidenceSlot, QueryCallSelection> &physical_slots, const QueryDeliveredSlots &projections) {
-    QueryPresenceFacts summary;
-    if (facts.empty()) return summary;
-    for (const auto &[slot, presence] : facts) {
-      if (const auto *input = std::get_if<QueryInputTarget>(&slot)) summary.emplace(*input, presence);
-      if (const auto *physical = std::get_if<QueryProductPlace>(&slot); physical && physical_slots.contains(slot))
-        summary.emplace(*physical, presence);
-    }
-    for (const auto &[path, slot] : projections)
-      if (const auto fact = facts.find(slot); fact != facts.end()) summary.emplace(path, fact->second);
-    return summary;
+  static TargetEvidence query_guard_receiver(const QuerySelections &flow, const QueryPresenceKey &key,
+      const std::vector<TargetEvidence> &operands, const QueryDeliveredSlots &projections) {
+    if (const auto *input = std::get_if<QueryInputTarget>(&key)) return operands.at(input->ordinal);
+    const auto slots = restore_query_presence(flow, key, projections, [](size_t) { return EvidencePlaces{}; });
+    if (slots.empty()) return {};
+    const auto &slot = *slots.begin();
+    return flow.selected_target({slot, flow.footprints.at(slot)});
   }
-  template <typename RestoreInput>
-  static void restrict_query_hazard(QuerySelections &flow, ObservationPaths &missing, const QueryPresenceFacts &summary,
-      const QueryDeliveredSlots &projections, RestoreInput restore_input) {
-    PresenceFacts facts;
-    for (const auto &[key, presence] : summary)
-      for (const auto &slot : restore_query_presence(flow, key, projections, restore_input)) facts.emplace(slot, presence);
-    if (facts.empty()) return;
-    ObservationPaths guard;
-    guard.decisions = flow.observation_decisions;
-    guard.add({{}, std::move(facts)});
-    missing.conjoin(guard);
-  }
+
   struct QueryProjectionGraph {
     std::map<EvidenceSlot, SelectedProductFields> successors;
 
@@ -8388,16 +8498,17 @@ class ScalarChecker {
     }
   };
   struct QueryCallStorage {
-    std::map<size_t, std::optional<bool>> boolean_operands;
+    std::map<size_t, QueryBooleanInput> boolean_operands;
     std::map<size_t, QueryCallSelection> operands;
     std::map<size_t, size_t> shared_selections;
     std::map<EvidenceSlot, QueryCallSelection> slots;
     std::map<QuerySlotPath, QueryCallProjection> projections;
     EvidencePlaces places;
-    std::map<EvidenceSlot, QueryPresenceFacts> unwritten;
-    EvidenceSlot input_witness(size_t input) const {
+    std::map<EvidenceSlot, QueryCallGuard> unwritten;
+    std::map<QueryPresenceKey, std::map<ProductFieldPath, QueryCallGuard>> guarded_fields;
+    QueryInputTarget input_witness(size_t input) const {
       const auto shared = shared_selections.find(input);
-      return QueryInputTarget{shared == shared_selections.end() ? input : shared->second};
+      return {shared == shared_selections.end() ? input : shared->second};
     }
     bool operator==(const QueryCallStorage &) const = default;
   };
@@ -8509,10 +8620,6 @@ class ScalarChecker {
         return slots;
       };
       for (const auto &[receiver, fields] : guarded_fields) {
-        TargetEvidence target;
-        if (const auto *input = std::get_if<QueryInputTarget>(&receiver)) target = prepared.at(input->ordinal);
-        else for (const auto &slot : restore_query_presence(flow, receiver, projected, restore_input))
-          target = flow.selected_target({slot, flow.footprints.at(slot)});
         ProductFieldGuards guards;
         for (const auto &[field, candidates] : fields) {
           ObservationPaths missing;
@@ -8520,7 +8627,7 @@ class ScalarChecker {
             missing.join(restore_query_guard(flow, guard, prepared, projected, restore_input));
           guards.emplace(field, std::move(missing));
         }
-        flow.initialize_guarded_fields(std::move(target), guards);
+        flow.initialize_guarded_fields(query_guard_receiver(flow, receiver, prepared, projected), guards);
       }
       for (const auto &[place, summary] : unwritten) {
         const auto found = flow.uninitialized.find(place);
@@ -8606,10 +8713,25 @@ class ScalarChecker {
       const auto &operand = operands[i];
       if (argument_mode(parameter_at(method, i)) == ArgumentMode::value) {
         if (arguments[i] == Type::boolean) {
-          std::optional<bool> known;
-          if (!flow.reachable(operand.branches, true)) known = false;
-          else if (!flow.reachable(operand.branches, false)) known = true;
-          storage.boolean_operands.emplace(i, known);
+          QueryBooleanInput value{{}, i};
+          if (!flow.reachable(operand.branches, true)) value.constant = false;
+          else if (!flow.reachable(operand.branches, false)) value.constant = true;
+          else if (operand.branches) {
+            auto overlap = flow.outcome(operand.branches, true);
+            overlap.conjoin(operand.branches->at(false));
+            // Identical overlapping outcomes do not prove two operands equal.
+            if (!overlap) for (const auto &[prior, prior_value] : storage.boolean_operands) {
+              const auto &previous = operands[prior].branches;
+              if (prior_value.constant || !previous) continue;
+              const bool inverse = previous->at(true) == operand.branches->at(false) &&
+                  previous->at(false) == operand.branches->at(true);
+              if (!inverse && previous != operand.branches) continue;
+              value.observation = prior_value.observation;
+              value.inverted = prior_value.inverted != inverse;
+              break;
+            }
+          }
+          storage.boolean_operands.emplace(i, value);
         }
         continue;
       }
@@ -8679,22 +8801,29 @@ class ScalarChecker {
         if (selected.presence != TargetPresence::absent) import_projections(*product, {{place, {}}});
       }
     }
-    for (auto &[place, presence] : storage.unwritten) {
+    auto slots = query_guard_slots(storage.slots, imported_paths);
+    for (const auto &[input, operand] : storage.operands) {
+      const auto &actual = operands[input];
+      auto &sources = slots[storage.input_witness(input)];
+      sources.insert(actual.same_selected.begin(), actual.same_selected.end());
+      if (actual.selection.slot) sources.insert(*actual.selection.slot);
+    }
+    QueryEntryGuards guards(operands, storage.boolean_operands);
+    for (auto &[place, guard] : storage.unwritten) {
       auto missing = flow.uninitialized.at(place);
       missing.conjoin(reaching);
-      const auto facts = missing.known_presence();
-      presence = summarize_query_presence(facts, storage.slots, imported_paths);
-      // Only the entry value of a prepared operand crosses the call.
-      std::erase_if(presence, [](const auto &fact) { return std::holds_alternative<QueryInputTarget>(fact.first); });
-      for (const auto &[input, operand] : storage.operands) {
-        auto matching = operands.at(input).same_selected;
-        if (operands.at(input).selection.slot) matching.insert(*operands.at(input).selection.slot);
-        for (const auto &slot : matching) {
-          const auto fact = facts.find(slot);
-          if (fact == facts.end()) continue;
-          presence.emplace(std::get<QueryInputTarget>(storage.input_witness(input)), fact->second);
-          break;
-        }
+      guard = guards.project(std::move(missing), slots);
+    }
+    for (const auto &[receiver, sources] : slots) {
+      const auto target = query_guard_receiver(flow, receiver, operands, imported_paths);
+      const auto fields = flow.field_guards(target);
+      if (fields.empty()) continue;
+      const auto ready = flow.ready_fields(target);
+      for (auto [field, missing] : fields) {
+        if (ready.contains(field) || (field.empty() && flow.selection_initialized(target))) continue;
+        missing.conjoin(reaching);
+        auto guard = guards.project(std::move(missing), slots);
+        if (guard != QueryCallGuard{}) storage.guarded_fields[receiver].emplace(std::move(field), std::move(guard));
       }
     }
     return storage;
@@ -8779,9 +8908,11 @@ class ScalarChecker {
           if (prepared[i] == Type::boolean) {
             body.selections.value_places.emplace(parameter.name, EvidencePlaces{i});
             if (inputs.storage) {
-              const auto known = inputs.storage->boolean_operands.at(i);
-              body.selections.booleans.emplace(i, known ? PresenceBranches::constant(*known) :
-                  PresenceBranches::observed(body.selections.observation_decisions, i));
+              const auto value = inputs.storage->boolean_operands.at(i);
+              auto proof = value.constant ? PresenceBranches::constant(*value.constant) :
+                  PresenceBranches::observed(body.selections.observation_decisions, value.observation);
+              if (value.inverted) std::swap(proof.when_true, proof.when_false);
+              body.selections.booleans.emplace(i, std::move(proof));
             }
           }
           continue;
@@ -8820,8 +8951,10 @@ class ScalarChecker {
       }
       if (inputs.storage) {
         std::vector<TargetEvidence> entry(prepared.size());
+        for (const auto &[input, constant] : inputs.storage->boolean_operands)
+          entry[input].branches = body.selections.booleans.at(input);
         for (const auto &[input, actual] : inputs.storage->operands) {
-          const auto witness = inputs.storage->input_witness(input);
+          const EvidenceSlot witness = inputs.storage->input_witness(input);
           entry[input] = body.selections.selected_target({witness, {witness}});
         }
         QueryDeliveredSlots imported;
@@ -8833,11 +8966,18 @@ class ScalarChecker {
           summary.publish(body.selections, selection);
           imported.emplace(field, *selection.slot);
         }
-        for (const auto &[place, presence] : inputs.storage->unwritten)
-          restrict_query_hazard(body.selections, body.selections.uninitialized.at(place), presence, imported, [&](size_t input) {
-            const EvidenceSlot witness = QueryInputTarget{input};
-            return body.selections.entry_selections.contains(witness) ? EvidencePlaces{witness} : EvidencePlaces{};
-          });
+        const auto restore_input = [&](size_t input) {
+          const EvidenceSlot witness = QueryInputTarget{input};
+          return body.selections.entry_selections.contains(witness) ? EvidencePlaces{witness} : EvidencePlaces{};
+        };
+        for (const auto &[place, guard] : inputs.storage->unwritten)
+          body.selections.uninitialized.at(place) = restore_query_guard(body.selections, guard, entry, imported, restore_input);
+        for (const auto &[receiver, fields] : inputs.storage->guarded_fields) {
+          ProductFieldGuards guards;
+          for (const auto &[field, guard] : fields)
+            guards.emplace(field, restore_query_guard(body.selections, guard, entry, imported, restore_input));
+          body.selections.initialize_guarded_fields(query_guard_receiver(body.selections, receiver, entry, imported), guards);
+        }
       }
       const auto completion = type_evidence(*method.source->body, body, false, nullptr, nullptr,
                                             ExpectedTypeUse::materialization, true, EvidenceRead::discarded);
@@ -8883,6 +9023,11 @@ class ScalarChecker {
             effects.projections.emplace(field, summary);
             exported_paths.emplace(field, slot);
           }
+          auto guard_slots = query_guard_slots(inputs.storage->slots, exported_paths);
+          for (const auto &[input, actual] : inputs.storage->operands) {
+            const auto witness = inputs.storage->input_witness(input);
+            guard_slots[witness].insert(witness);
+          }
           const auto completed_path = selections.outcome({}, true);
           const auto summarize_fields = [&](const QueryPresenceKey &receiver, const EvidenceSlot &slot) {
             if (selections.presence({slot, {}}) == TargetPresence::absent) return;
@@ -8891,14 +9036,14 @@ class ScalarChecker {
             for (auto &[field, missing] : selections.field_guards(target)) {
               if (ready.contains(field) || (field.empty() && selections.selection_initialized(target))) continue;
               missing.conjoin(completed_path);
-              auto guard = summarize_query_guard(std::move(missing), first_local_observation, inputs.storage->slots, exported_paths);
+              auto guard = summarize_query_guard(std::move(missing), first_local_observation, guard_slots);
               if (guard != QueryCallGuard{}) effects.guarded_fields[receiver][field].insert(std::move(guard));
             }
           };
           if (!selections.guarded_fields.empty()) {
             for (const auto &[input, actual] : inputs.storage->operands) if (prepared[input].kind == Type::product) {
               const auto witness = inputs.storage->input_witness(input);
-              summarize_fields(std::get<QueryInputTarget>(witness), witness);
+              summarize_fields(witness, witness);
             }
             for (const auto &[slot, actual] : inputs.storage->slots)
               if (const auto *fixed = std::get_if<QueryProductPlace>(&slot)) summarize_fields(*fixed, slot);
@@ -8911,7 +9056,7 @@ class ScalarChecker {
             auto missing = found->second;
             missing.conjoin(completed_path);
             if (!missing) continue;
-            summary.insert(summarize_query_guard(std::move(missing), first_local_observation, inputs.storage->slots, exported_paths));
+            summary.insert(summarize_query_guard(std::move(missing), first_local_observation, guard_slots));
           }
           for (const auto &place : selections.payload_writes.places)
             if (inputs.storage->places.contains(place)) effects.boolean_writes.insert(place);

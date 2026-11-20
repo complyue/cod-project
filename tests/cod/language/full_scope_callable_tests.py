@@ -54,6 +54,9 @@ WRITE_INLINE_HOLDER = ('proc fill(ptr p:Outer in O)->void where {owner O}{'
                        'if(p is null){return;}else{};if(p.child is null){return;}else{};p.child.payload.leaf<-7u64;return;}')
 READ_INLINE_HOLDER = ('proc peek(ptr p:Outer in O)->u64 where {owner O}{if(p is null){return 0u64;}else{};'
                        'if(p.child is null){return 0u64;}else{};return p.child.payload.leaf;}')
+READ_INLINE_WHEN_ENABLED = ('proc peek(ptr p:Outer in O,skip:bool)->u64 where {owner O}{'
+                            'if(p is null){return 0u64;}else{};if(skip){return 0u64;}else{};'
+                            'if(p.child is null){return 0u64;}else{};return p.child.payload.leaf;}')
 WRITE_INLINE_WHEN_ENABLED = ('proc fill(ptr p:Outer in O,skip:bool)->void where {owner O}{'
                              'if(p is null){return;}else{};if(p.child is null){return;}else{};'
                              'if(skip){return;}else{};p.child.payload.leaf<-7u64;return;}')
@@ -1670,6 +1673,32 @@ runner.CASES = {
         IO + QUERY_INLINE_HOLDER + QUERY_OUTER + WRITE_INLINE_WHEN_ENABLED +
         query_with_flag_inputs(QUERY_INLINE_RECEIVERS + 'fill(chosen,skip);if(skip){return 0u64;}else{};' +
                                READ_GUARDED_INLINE), 0, '4\n', ''),
+    'query_reader_can_test_the_prepared_boolean_it_receives': (
+        IO + QUERY_INLINE_HOLDER + QUERY_OUTER + WRITE_INLINE_WHEN_ENABLED + READ_INLINE_WHEN_ENABLED +
+        query_with_flag_inputs(QUERY_INLINE_RECEIVERS + 'fill(chosen,skip);return peek(chosen,skip);'), 0, '4\n', ''),
+    'query_reader_with_independent_boolean_cannot_use_writer_guard': (
+        IO + QUERY_INLINE_HOLDER + QUERY_OUTER + WRITE_INLINE_WHEN_ENABLED + READ_INLINE_WHEN_ENABLED +
+        query_with_flag_inputs(QUERY_INLINE_RECEIVERS + 'fill(chosen,skip);return peek(chosen,pick_left);'),
+        2, '', "read of 'leaf' before definite initialization"),
+    'query_reader_can_use_compound_prepared_boolean': (
+        IO + QUERY_INLINE_HOLDER + QUERY_OUTER + WRITE_INLINE_WITH_TWO_FLAGS + READ_INLINE_WHEN_ENABLED +
+        query_with_flag_inputs(QUERY_INLINE_RECEIVERS + 'fill(chosen,skip,pick_left);return peek(chosen,skip && pick_left);'),
+        0, '4\n', ''),
+    'query_reader_guard_must_cover_every_path_on_which_writer_skipped': (
+        IO + QUERY_INLINE_HOLDER + QUERY_OUTER + WRITE_INLINE_WHEN_ENABLED + READ_INLINE_WHEN_ENABLED +
+        query_with_flag_inputs(QUERY_INLINE_RECEIVERS + 'fill(chosen,skip);return peek(chosen,skip && pick_left);'),
+        2, '', "read of 'leaf' before definite initialization"),
+    'query_reader_can_forward_guard_from_a_deferred_writer': (
+        IO + QUERY_INLINE_HOLDER + QUERY_OUTER + WRITE_INLINE_WHEN_ENABLED + READ_INLINE_WHEN_ENABLED +
+        'proc relay(ptr p:Outer in O,skip:bool)->u64 where {owner O}{return peek(p,skip);}' +
+        query_with_flag_inputs(QUERY_INLINE_RECEIVERS + 'val flag<-skip;val saved<-flag;'
+                               '{{defer fill(chosen,flag);flag<-false;return;}};return relay(chosen,saved);'),
+        0, '4\n', ''),
+    'query_reader_cannot_use_guard_after_overwriting_its_formal': (
+        IO + QUERY_INLINE_HOLDER + QUERY_OUTER + WRITE_INLINE_WHEN_ENABLED +
+        READ_INLINE_WHEN_ENABLED.replace('if(skip)', 'skip<-false;if(skip)') +
+        query_with_flag_inputs(QUERY_INLINE_RECEIVERS + 'fill(chosen,skip);return peek(chosen,skip);'),
+        2, '', "read of 'leaf' before definite initialization"),
     'query_two_prepared_booleans_preserve_combined_write_condition': (
         IO + QUERY_INLINE_HOLDER + QUERY_OUTER + WRITE_INLINE_WITH_TWO_FLAGS +
         query_with_flag_inputs(QUERY_INLINE_RECEIVERS + 'fill(chosen,skip,pick_left);'
