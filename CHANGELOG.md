@@ -5,6 +5,11 @@
 <a id="h-hlvm-candidate-20261120"></a>
 **H-HLVM-CANDIDATE-20261120.** In the project chat, the project user proposed `hlvm-basic` for running BASIC source or saving a DBMR to run later, with the prerequisite “要等 CoD 基本的 lexer/parser 已经通了的情况下再推进”, then asked to record the idea in a planning document. The [application note](applications/README.md#deferred-application-hlvm-basic) applies the executor and editable program graph from [*Algebraic Effects Is All You Need*](papers/AlgebraicEffectsIsAllYouNeed.md) to BASIC. It does not change the compiler roadmap or authorize implementation.
 
+## 2026-11-19 — Keep guarded readiness on a saved executable receiver
+
+<a id="k-saved-embedded-receiver-20261119"></a>
+**K-SAVED-EMBEDDED-RECEIVER-20261119.** D-17r139→140 and registry r1011→1012 continue P-564–P-566 under [H-FULL-SCOPE-IMPLEMENTATION-20261118](#h-full-scope-implementation-20261118), [H-439](#h-439), [H-445](#h-445) and [H-478](#h-478). Checking a named reference can recover readiness established through a different expression that selected the same value. Rebinding a slot leaves earlier observations attached to the reference they tested. This preserves actual owners, checked dereference and ordinary cleanup under C-63/C-65/C-72/C-95 and charter §§3.2–3.3/4.3/6.3/8/12. Prior coverage at `953b1804d2e34c09a6b69934defcedec97270269:design/ExceptionControl.md`.
+
 ## 2026-11-19 — Check guarded inline writes in executable code
 
 <a id="k-executable-embedded-selection-20261119"></a>

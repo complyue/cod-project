@@ -4865,6 +4865,8 @@ class ScalarChecker {
     const bool null = value == test.null_when_true;
     CleanupEquations::ConditionFacts tested;
     (null ? tested.absent_bindings : tested.bindings).emplace(test.binding, test.versions);
+    if (targets.contains(null_target))
+      tested.conditions.add({{}, lexical_.selection_identities.at(test.binding), null_target, null, true});
     if (const auto condition = deferred_selection_condition(test.binding, null_target, null))
       tested.conditions.add(*condition);
     lexical_.predicate_conditions = CleanupEquations::conjoin_conditions(lexical_.predicate_conditions, {tested});
@@ -4973,20 +4975,25 @@ class ScalarChecker {
     if (view.targets.empty()) return view.nullness ? boolean_predicate(*view.nullness) : nullptr;
     if (!view.targets.contains(null_target)) return constant_predicate(false);
     if (view.targets.size() == 1) return constant_predicate(true);
-    if (view.nullness) return boolean_predicate(*view.nullness);
-    auto proof = std::make_shared<Predicate>();
-    proof->kind = view.binding ? Predicate::Kind::null_test : Predicate::Kind::presence;
-    if (view.binding) proof->test = {*view.binding, view.selection_versions};
-    proof->results[false].insert({selected_input(view.targets), {}});
-    if (!view.binding && view.embedded_slot_selection && view.selection_identity) {
-      for (const bool absent : {false, true}) {
-        CleanupEquations::ConditionFacts facts;
-        if (!absent) facts.present = selected_input(view.targets);
-        facts.conditions.add({{}, *view.selection_identity, null_target, absent, true});
-        proof->results[absent] = {std::move(facts)};
-      }
+    std::shared_ptr<const Predicate> proof;
+    if (view.nullness) proof = boolean_predicate(*view.nullness);
+    else {
+      auto test = std::make_shared<Predicate>();
+      test->kind = view.binding ? Predicate::Kind::null_test : Predicate::Kind::presence;
+      if (view.binding) test->test = {*view.binding, view.selection_versions};
+      test->results[false].insert({selected_input(view.targets), {}});
+      proof = std::move(test);
     }
-    return proof;
+    if (!view.selection_identity) return proof;
+    // A versioned slot can be refined while it still holds this value.
+    // The observation of the copied reference itself survives rebinding.
+    CleanupEquations::BooleanValue observations;
+    for (const bool absent : {false, true}) {
+      CleanupEquations::ConditionFacts facts;
+      facts.conditions.add({{}, *view.selection_identity, null_target, absent, true});
+      observations[absent].insert(std::move(facts));
+    }
+    return constrain_predicate(proof, observations);
   }
   std::shared_ptr<const Predicate> identity_predicate(const CheckedOperation &left, const CheckedOperation &right) const {
     const auto owners = compare_owners(one_owner(left), one_owner(right));

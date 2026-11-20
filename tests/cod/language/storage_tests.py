@@ -27,6 +27,9 @@ CHOOSE_EMBEDDED_BOX = (
 )
 WRITE_SELECTED_LEAF = 'if(chosen.child is null){}else{chosen.child.value<-7u64;{}};'
 READ_SELECTED_LEAF = 'if(chosen.child is null){return 0u64;}else{return chosen.child.value;};'
+PREPARE_SELECTED_LEAF = 'if(chosen.child is null){}else{defer (<-)(chosen.child.value,7u64);{}};'
+READ_SAVED_LEAF = 'if(saved is null){return 0u64;}else{return saved.value;};'
+PREPARE_THEN_REBIND_CHILD = '{{' + PREPARE_SELECTED_LEAF + 'chosen.child=replacement;return;}};'
 FILL_SELECTED_BOX = (
     'proc fill(ptr item:Box in O)->void where {owner O}{'
     'if(item is null){return;}else{};if(item.child is null){return;}else{};item.child.value<-7u64;return;}'
@@ -204,8 +207,7 @@ runner.CASES = {
         0, "7\n7\n0\n", ""),
     "conditional_prepared_write_initializes_the_same_embedded_field": (
         DEFERRED_LEAF + selected_box_program(
-            '{{if(chosen.child is null){}else{defer (<-)(chosen.child.value,7u64);{}};return;}};'
-            + READ_SELECTED_LEAF
+            '{{' + PREPARE_SELECTED_LEAF + 'return;}};' + READ_SELECTED_LEAF
         ), 0, "7\n7\n0\n", ""),
     "conditional_prepared_write_requires_registration_on_each_present_path": (
         DEFERRED_LEAF + selected_box_program(
@@ -220,9 +222,33 @@ runner.CASES = {
     "a_saved_embedded_receiver_survives_rebinding_its_slot": (
         DEFERRED_LEAF + selected_box_program(
             'ptr saved=chosen.child;ptr replacement=make Leaf;chosen.child=replacement;'
-            'if(saved is null){}else{saved.value<-7u64;{}};'
-            'if(saved is null){return 0u64;}else{return saved.value;};'
+            'if(saved is null){}else{saved.value<-7u64;{}};' + READ_SAVED_LEAF
         ), 0, "7\n7\n0\n", ""),
+    "saved_receiver_uses_guarded_cleanup_write_after_embedded_rebinding": (
+        DEFERRED_LEAF + selected_box_program(
+            'ptr saved=chosen.child;ptr replacement=make Leaf;'
+            + PREPARE_THEN_REBIND_CHILD + READ_SAVED_LEAF
+        ), 0, "7\n7\n0\n", ""),
+    "saved_receiver_uses_guarded_write_before_a_deferred_rebind": (
+        DEFERRED_LEAF + selected_box_program(
+            'ptr saved=chosen.child;ptr replacement=make Leaf;{{defer (=)(chosen.child,replacement);'
+            + PREPARE_SELECTED_LEAF + 'return;}};' + READ_SAVED_LEAF
+        ), 0, "7\n7\n0\n", ""),
+    "stored_null_guard_keeps_the_saved_receiver_observation": (
+        DEFERRED_LEAF + selected_box_program(
+            'ptr saved=chosen.child;val was_present<-saved is not null;ptr replacement=make Leaf;'
+            + PREPARE_THEN_REBIND_CHILD + 'if(was_present){return saved.value;}else{return 0u64;};'
+        ), 0, "7\n7\n0\n", ""),
+    "saved_receiver_guard_cannot_initialize_a_rebound_candidate": (
+        DEFERRED_LEAF + selected_box_program(
+            'ptr saved=chosen.child;ptr replacement=make Leaf;'
+            + PREPARE_THEN_REBIND_CHILD + 'saved=first;' + READ_SAVED_LEAF
+        ), 2, "", "read of 'value' before definite initialization"),
+    "stored_null_guard_cannot_initialize_a_rebound_saved_receiver": (
+        DEFERRED_LEAF + selected_box_program(
+            'ptr saved=chosen.child;val was_present<-saved is not null;ptr replacement=make Leaf;'
+            + PREPARE_THEN_REBIND_CHILD + 'saved=replacement;if(was_present){return saved.value;}else{return 0u64;};'
+        ), 2, "", "read of 'value' before definite initialization"),
     "a_guarded_embedded_read_requires_every_present_path_to_write": (
         DEFERRED_LEAF + selected_box_program(
             'if(chosen.child is null){}else{if(skip){}else{chosen.child.value<-7u64;{}};{}};'
