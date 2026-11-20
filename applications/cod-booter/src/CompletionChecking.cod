@@ -39,6 +39,7 @@ using "OperandChecking.cod" nullable_ptr;
 using "OperandChecking.cod" never_result;
 using "ModuleExports.cod" exception_root_identity;
 using "ModuleExports.cod" null_pointer_identity;
+using "ModuleExports.cod" missing_return_identity;
 
 data CompletionSite {
     event:u8;
@@ -48,6 +49,7 @@ data CompletionSite {
     retains_caught:u8;
     forwarded_operand:u8;
     in_delayed_body:u8;
+    may_miss_return:u8;
     guarded_by:u64;
     incoming_handler:u64;
     throws_clause:u64;
@@ -59,6 +61,8 @@ data CompletionSite {
     previous_defer:u64;
     last_defer:u64;
     replacing_try:u64;
+    missing_return_user:u64;
+    missing_return_work:u64;
 }
 array CompletionSites[u64]:CompletionSite;
 
@@ -94,6 +98,7 @@ func initialize_site(ref sites:CompletionSites in X, at:u64) -> void where {owne
     sites[at].retains_caught <- 0u8;
     sites[at].forwarded_operand <- 0u8;
     sites[at].in_delayed_body <- 0u8;
+    sites[at].may_miss_return <- 0u8;
     sites[at].guarded_by <- no_node();
     sites[at].incoming_handler <- no_node();
     sites[at].throws_clause <- no_node();
@@ -105,6 +110,8 @@ func initialize_site(ref sites:CompletionSites in X, at:u64) -> void where {owne
     sites[at].previous_defer <- no_node();
     sites[at].last_defer <- no_node();
     sites[at].replacing_try <- no_node();
+    sites[at].missing_return_user <- no_node();
+    sites[at].missing_return_work <- no_node();
     return;
 }
 
@@ -451,6 +458,94 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
     return 0u8;
 }
 
+# Every normal fallthrough crosses the direct items of the procedure body.
+# A delayed block registered there that has no ordinary continuation
+# replaces fallthrough. Any escaping language failure from it is checked
+# separately against the drain's own coverage.
+func has_terminal_defer(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
+                        body:u64, used:u64) -> bool
+    where {const owner N, const owner L, const owner F} {
+    if (nodes[body].kind != block_node()) { return false; } else {};
+    val item <- first_item(nodes, nodes[body].left);
+    val expression <- no_node();
+    for (unused in 0u64 .. used) {
+        if (item == no_node()) { return false; } else {};
+        expression <- nodes[item].right;
+        if (nodes[expression].kind == deferred_block_node() && facts[nodes[expression].left].kind == never_result()) {
+            return true;
+        } else {};
+        (item <- links[item].next):void;
+    };
+    return false;
+}
+
+func enqueue_return_failure(ref sites:CompletionSites in X, definition:u64, count:u64) -> u64 where {owner X} {
+    if (sites[definition].may_miss_return != 0u8) { return count; } else {};
+    sites[definition].may_miss_return <- 1u8;
+    sites[count].missing_return_work <- definition;
+    return count + 1u64;
+}
+
+func propagate_return_failure(nodes:const ExprNodes in N, names:const NameBindings in B, ref sites:CompletionSites in X,
+                               ref report:CompletionCheckResult in R, definition:u64, queued:u64, used:u64) -> u64
+    where {const owner N, const owner B, owner X, owner R} {
+    val count <- queued;
+    val use <- sites[definition].missing_return_user;
+    val caller <- no_node();
+    for (unused in 0u64 .. used) {
+        if (use == no_node()) { return count; } else {};
+        if (sites[use].registration != no_node() || sites[use].in_delayed_body != 0u8) {
+            report.node <- use;
+            report.diagnostic <- unproved_deferred_error();
+            return no_node();
+        } else {};
+        caller <- enclosing_callable(nodes, names, names[use].scope);
+        if (nodes[caller].kind == procedure_node()) { (count <- enqueue_return_failure(sites, caller, count)):void; } else {};
+        (use <- sites[use].missing_return_user):void;
+    };
+    return count;
+}
+
+# An unchecked missing return may cross ordinary calls. Follow reverse
+# call edges to closure before admitting a deferred invocation, where a
+# residual failure would require the deferred-error queue.
+func check_missing_return_paths(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
+                                facts:const OperandFacts in F, ref sites:CompletionSites in X,
+                                ref report:CompletionCheckResult in R, used:u64) -> bool
+    where {const owner N, const owner B, const owner L, const owner F, owner X, owner R} {
+    val count <- 0u64;
+    val definition <- no_node();
+    for (at in 0u64 .. used) {
+        if (nodes[at].kind == procedure_node() && can_continue(sites, nodes[at].right) &&
+            !has_terminal_defer(nodes, links, facts, nodes[at].right, used)) {
+            (count <- enqueue_return_failure(sites, at, count)):void;
+        } else {};
+        if (nodes[at].kind == throw_node() && sites[at].category == missing_return_identity()) {
+            definition <- enclosing_callable(nodes, names, names[at].scope);
+            if (sites[at].destination == definition && nodes[definition].kind == procedure_node()) {
+                (count <- enqueue_return_failure(sites, definition, count)):void;
+            } else {};
+        } else {};
+    };
+    if (count == 0u64) { return true; } else {};
+    for (at in 0u64 .. used) {
+        if (nodes[at].kind == call_node() && can_continue(sites, at) &&
+            (sites[at].registration != no_node() || (sites[at].replacing_try == no_node() &&
+             matching_handler(nodes, links, facts, sites, at, missing_return_identity(), used) == no_node()))) {
+            definition <- names[nodes[at].left].declaration;
+            sites[at].missing_return_user <- sites[definition].missing_return_user;
+            sites[definition].missing_return_user <- at;
+            {};
+        } else {};
+    };
+    for (item in 0u64 .. used) {
+        if (item == count) { return true; } else {};
+        count <- propagate_return_failure(nodes, names, sites, report, sites[item].missing_return_work, count, used);
+        if (count == no_node()) { return false; } else {};
+    };
+    return true;
+}
+
 # The inputs are the same bound module revision. Cleanup links describe
 # candidates in reverse registration order. Taking a link on an actual exit
 # still depends on whether its registration succeeded on the executed path.
@@ -485,13 +580,14 @@ func check_module_completion(nodes:const ExprNodes in N, tree:const ParseResult 
         report.diagnostic <- check_event(nodes, names, links, facts, sites, at, tree.used);
         if (report.diagnostic != 0u8) { report.node <- at; return false; } else {};
     };
-    return true;
+    return check_missing_return_paths(nodes, names, links, facts, sites, report, tree.used);
 }
 
 export CompletionSite;
 export CompletionSites;
 export CompletionCheckResult;
 export check_module_completion;
+export can_continue;
 export possible_failure;
 export definite_failure;
 export callable_return;

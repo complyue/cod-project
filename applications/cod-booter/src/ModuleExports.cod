@@ -37,6 +37,7 @@ func symbol_export() -> u8 { return 2u8; }
 func print_export_identity() -> u64 { return 0u64; }
 func exception_root_identity() -> u64 { return 0u64; }
 func null_pointer_identity() -> u64 { return 4u64; }
+func missing_return_identity() -> u64 { return 5u64; }
 
 func unproved_module_exports() -> u8 { return 1u8; }
 func missing_module_export() -> u8 { return 2u8; }
@@ -152,6 +153,7 @@ export symbol_export;
 export print_export_identity;
 export exception_root_identity;
 export null_pointer_identity;
+export missing_return_identity;
 export unproved_module_exports;
 export missing_module_export;
 export wrong_export_kind;

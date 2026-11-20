@@ -35,10 +35,12 @@ using "OperandChecking.cod" scalar_u64;
 using "OperandChecking.cod" independent_value;
 using "OperandChecking.cod" writable_place;
 using "CompletionChecking.cod" CompletionSites;
+using "CompletionChecking.cod" can_continue;
 using "CompletionChecking.cod" present_target;
 using "CompletionChecking.cod" absent_target;
 using "ModuleExports.cod" exception_root_identity;
 using "ModuleExports.cod" null_pointer_identity;
+using "ModuleExports.cod" missing_return_identity;
 using "NativeCommands.cod" NativeCommands;
 using "NativeCommands.cod" NativePlan;
 using "NativeCommands.cod" declare_function;
@@ -74,6 +76,7 @@ data LoweringState {
     active_scope:u64;
     exception_target:u64;
     return_target:u64;
+    return_ready:u64;
     caught_failure:u64;
     live:bool;
     local_return:bool;
@@ -130,6 +133,14 @@ func finish_block(ref code:NativeCommands in C, ref plan:NativePlan in P, ref st
     emit(code, plan, jump(), destination, 0u64);
     state.live <- false;
     return;
+}
+
+func enter_prepared_return(ref code:NativeCommands in C, ref plan:NativePlan in P, ref state:LoweringState in R,
+                           returned:u64, continuation:u64) -> void where {owner C, owner P, owner R} {
+    if (returned == continuation) { return; } else {};
+    position(code, plan, state, returned);
+    emit(code, plan, word_constant(), state.return_ready, 1u64);
+    finish_block(code, plan, state, continuation);
 }
 
 func source_failure(ref code:NativeCommands in C, ref plan:NativePlan in P, category:u64, at:u64) -> void
@@ -583,7 +594,10 @@ func lower_delayed_block(nodes:const ExprNodes in N, names:const NameBindings in
     val saved <- save_failure(code, plan);
     emit(code, plan, word_constant(), pending_category(), 0u64);
     state.exception_target <- next;
-    state.return_target <- next;
+    val returned <- if (state.return_ready != no_node() && state.active_scope == state.active_function) {
+        new_block(plan)
+    } else { next };
+    state.return_target <- returned;
     state.caught_failure <- no_node();
     lower_node(nodes, names, links, facts, sites, code, plan, state, body);
     state.exception_target <- exception_target;
@@ -593,6 +607,7 @@ func lower_delayed_block(nodes:const ExprNodes in N, names:const NameBindings in
         restore_failure(code, plan, saved);
         finish_block(code, plan, state, next);
     } else {};
+    enter_prepared_return(code, plan, state, returned, next);
 }
 
 func drain_scope(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L, facts:const OperandFacts in F,
@@ -671,19 +686,24 @@ func lower_activation(nodes:const ExprNodes in N, names:const NameBindings in B,
                       ref code:NativeCommands in C, ref plan:NativePlan in P, scope:u64) -> void
     where {const owner N, const owner B, const owner L, const owner F, const owner S, owner C, owner P} {
     plan.node <- scope;
+    val program <- nodes[scope].kind == module_node();
+    val falls_through <- !program && can_continue(sites, nodes[scope].right);
     val entry <- new_block(plan);
     val cleanup <- new_block(plan);
+    val returned <- if (falls_through) { new_block(plan) } else { cleanup };
+    val return_ready <- if (falls_through) { new_slot(plan) } else { no_node() };
     ref state = make LoweringState {
         active_function <- scope; active_scope <- scope; exception_target <- cleanup;
-        return_target <- cleanup; caught_failure <- no_node(); live <- true; local_return <- false;
+        return_target <- returned; return_ready <- return_ready;
+        caught_failure <- no_node(); live <- true; local_return <- false;
     };
     emit(code, plan, begin_function(), scope, entry);
     position(code, plan, state, entry);
     emit(code, plan, word_constant(), pending_category(), 0u64);
     emit(code, plan, word_constant(), pending_site(), 0u64);
     emit(code, plan, word_constant(), returned_word(), 0u64);
+    if (falls_through) { emit(code, plan, word_constant(), return_ready, 0u64); } else {};
     initialize_defer_flags(sites, code, plan, scope, syntax_len(nodes));
-    val program <- nodes[scope].kind == module_node();
     if (program) {
         lower_list(nodes, names, links, facts, sites, code, plan, state, nodes[scope].left, no_node());
     } else {
@@ -692,15 +712,28 @@ func lower_activation(nodes:const ExprNodes in N, names:const NameBindings in B,
     };
     if (plan.diagnostic != 0u8) { return; } else {};
     if (state.live) {
-        if (!program) {
+        if (!program && !falls_through) {
             plan.diagnostic <- unproved_procedure_completion();
             plan.node <- scope;
             return;
         } else {};
         finish_block(code, plan, state, cleanup);
     } else {};
+    enter_prepared_return(code, plan, state, returned, cleanup);
     position(code, plan, state, cleanup);
     drain_scope(nodes, names, links, facts, sites, code, plan, state, scope);
+    if (falls_through) {
+        val normal <- new_block(plan);
+        val missing <- new_block(plan);
+        val done <- new_block(plan);
+        command(code, plan, branch_equal(), pending_category(), 0u64, normal, done);
+        position(code, plan, state, normal);
+        command(code, plan, branch_equal(), return_ready, 0u64, missing, done);
+        position(code, plan, state, missing);
+        source_failure(code, plan, missing_return_identity(), nodes[scope].first);
+        finish_block(code, plan, state, done);
+        position(code, plan, state, done);
+    } else {};
     val finish <- if (program) { finish_program() } else { return_outcome() };
     command(code, plan, finish, returned_word(), pending_category(), pending_site(), 0u64);
 }
