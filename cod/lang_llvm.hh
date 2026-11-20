@@ -2637,18 +2637,8 @@ class LLVMEmission {
     }
     case K::make_object: {
       auto *address = storage_.at(*fact.place);
-      auto *layout = product_layout(fact.operand_type.identity);
-      const auto &schema = program_->schemas.at(fact.operand_type.identity);
-      for (const auto &initializer : expr.children) {
-        const auto &input = *initializer->children.front();
-        const auto index = *contexts_.front().at(initializer.get()).product_field;
-        const bool direct = schema.fields[index].storage == PlaceKind::value;
-        auto *value = emit_expression(input, direct ? Projection::value : Projection::target);
-        if (!reachable()) return nullptr;
-        auto *field = b_.CreateStructGEP(layout, address, index);
-        if (direct) assign_place(field, convert_result(*initializer, input, value), *initializer, &CheckedOperation::operand_type);
-        else b_.CreateStore(value, field);
-      }
+      emit_product_initializers(expr, address);
+      if (!reachable()) return nullptr;
       return read ? empty_scalar() : address;
     }
     case K::raise: {
@@ -2717,6 +2707,27 @@ class LLVMEmission {
       });
     }
     default: throw std::logic_error("unchecked expression reached LLVM emission");
+    }
+  }
+  void emit_product_initializers(const Expression &expr, llvm::Value *address) {
+    const auto schema_id = contexts_.front().at(&expr).operand_type.identity;
+    auto *layout = product_layout(schema_id);
+    const auto &schema = program_->schemas.at(schema_id);
+    for (const auto &initializer : expr.children) {
+      const auto &input = *initializer->children.front();
+      const auto index = *contexts_.front().at(initializer.get()).product_field;
+      const auto &member = schema.fields[index];
+      const bool direct = member.storage == PlaceKind::value;
+      if (direct && member.type.kind == Type::product) {
+        emit_product_initializers(input, b_.CreateStructGEP(layout, address, index));
+      } else {
+        auto *value = emit_expression(input, direct ? Projection::value : Projection::target);
+        if (!reachable()) return;
+        auto *field = b_.CreateStructGEP(layout, address, index);
+        if (direct) assign_place(field, convert_result(*initializer, input, value), *initializer, &CheckedOperation::operand_type);
+        else b_.CreateStore(value, field);
+      }
+      if (!reachable()) return;
     }
   }
   llvm::Function *declare(const std::string &name, const CallLayout &layout) {
