@@ -21,15 +21,29 @@
 #include <functional>
 #include <iterator>
 #include <memory>
+#include <new>
 #include <string>
 #include <utility>
 
 namespace cod::language {
 
 class LLVMEmission {
-  llvm::LLVMContext context_;
-  llvm::Module module_{"cod.program", context_};
-  llvm::IRBuilder<> b_{context_};
+  struct ResourceSession {
+    cod_llvm_session handles{};
+    ResourceSession() = default;
+    ResourceSession(const ResourceSession &) = delete;
+    ResourceSession &operator=(const ResourceSession &) = delete;
+    ~ResourceSession() { cod_llvm_session_release(&handles); }
+    llvm::LLVMContext &open() {
+      if (!cod_llvm_session_open(&handles, "cod.program")) throw std::bad_alloc{};
+      return *llvm::unwrap(handles.context);
+    }
+  };
+  // Construct the owner before opening, so partial acquisition unwinds too.
+  ResourceSession resources_;
+  llvm::LLVMContext &context_ = resources_.open();
+  llvm::Module &module_ = *llvm::unwrap(resources_.handles.module);
+  llvm::IRBuilder<> &b_ = *llvm::unwrap(resources_.handles.builder);
   // Private execution-local value transport. Callable environments are complete
   // scope-owned images; they are not regional-storable bits.
   llvm::StructType *exception_ = llvm::StructType::get(context_, std::vector<llvm::Type *>(5, b_.getInt64Ty()));
