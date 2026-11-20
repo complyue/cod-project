@@ -1,0 +1,131 @@
+using "SourceStorage.cod" SourceBytes;
+using "ParserStorage.cod" Tokens;
+using "ParserStorage.cod" ExprNodes;
+using "ParserStorage.cod" no_node;
+using "ModuleExports.cod" ModuleExports;
+using "ModuleExports.cod" SelectedExports;
+using "NameResolution.cod" NameBindings;
+using "NameResolution.cod" NameWork;
+using "OperandChecking.cod" OperandFacts;
+using "OperandChecking.cod" CallOwners;
+using "CompletionChecking.cod" CompletionSites;
+using "ModuleFrontend.cod" ModuleBindingResult;
+using "NativeCommands.cod" NativeCommands;
+using "NativeCommands.cod" NativePlan;
+using "ModuleCompiler.cod" compile_module_commands;
+using "ModuleLowering.cod" native_unsupported;
+using "Compiler.cod" ExpressionScratchPlan;
+using "Compiler.cod" plan_expression_scratch;
+using "Compiler.cod" native_complete;
+using "Compiler.cod" native_source_rejected;
+using "Compiler.cod" native_form_unsupported;
+using "Compiler.cod" native_open_failed;
+using "Compiler.cod" native_lowering_failed;
+using "Compiler.cod" native_finish_failed;
+using "Compiler.cod" native_scratch_failed;
+
+data ModuleWorkspacePlan {
+    source:ExpressionScratchPlan;
+    commands:u64;
+}
+
+data NativeModuleResult {
+    analysis:ModuleBindingResult;
+    plan:NativePlan;
+    backend_status:u8;
+    rejected_first:u64;
+    rejected_past:u64;
+}
+
+func native_source_open_failed() -> u8 { return 7u8; }
+
+# Opening and lending the source revision are separate operations. The
+# provider keeps the mapping and line index live throughout work.
+proc compile_with_module_source(here open() -> u8, here work() -> u8, here release() -> void,
+                                ref source_status:u8 in R) -> u8 where {owner R} {
+    source_status <- 0u8;
+    defer { release(); };
+    source_status <- open();
+    if (source_status != 0u8) { return native_source_open_failed(); } else {};
+    return work();
+}
+
+# A module root uses the EOF token. Each other syntax node uses one
+# non-EOF token. Lowering emits each guard dispatch and callable prologue
+# once and each deferred call's preparation and invocation once.
+func plan_module_workspace(source:const SourceBytes in S, ref workspace:ModuleWorkspacePlan in W) -> u8
+    where {const owner S, owner W} {
+    workspace.commands <- 0u64;
+    if (!plan_expression_scratch(source, workspace.source)) { return native_source_rejected(); } else {};
+    workspace.source.node_capacity <- workspace.source.token_count;
+    val commands_per_node <- 32u64;
+    if (workspace.source.node_capacity > 18446744073709551615u64 / commands_per_node) {
+        return native_scratch_failed();
+    } else {};
+    workspace.commands <- workspace.source.node_capacity * commands_per_node;
+    return native_complete();
+}
+
+# Work owns no scratch after it returns. Release accepts an empty
+# allocation and runs even when work fails or leaves exceptionally.
+proc compile_with_module_workspace(here work(tokens:u64, nodes:u64, commands:u64) -> u8,
+                                   here release() -> void, source:const SourceBytes in S,
+                                   ref workspace:ModuleWorkspacePlan in W) -> u8
+    where {const owner S, owner W} {
+    val status <- plan_module_workspace(source, workspace);
+    if (status != native_complete()) { return status; } else {};
+    defer { release(); };
+    return work(workspace.source.token_count, workspace.source.node_capacity, workspace.commands);
+}
+
+func retain_rejection(nodes:const ExprNodes in N, ref result:NativeModuleResult in R) -> u8
+    where {const owner N, owner R} {
+    if (result.analysis.stage != 0u8) {
+        result.rejected_first <- result.analysis.frontend.diagnostic_first;
+        result.rejected_past <- result.analysis.frontend.diagnostic_past;
+        return native_source_rejected();
+    } else {};
+    if (result.plan.node != no_node()) {
+        result.rejected_first <- nodes[result.plan.node].first;
+        (result.rejected_past <- nodes[result.plan.node].past):void;
+    } else {};
+    if (result.plan.diagnostic == native_unsupported()) { return native_form_unsupported(); } else {};
+    return native_lowering_failed();
+}
+
+# Construct borrows the initialized command prefix under the scratch
+# owner's lifetime. The session can own a partially acquired resource.
+proc compile_native_module(here begin() -> bool,
+                           here construct(ref rows:const NativeCommands in C, used:u64, labels:u64, slots:u64) -> u8,
+                           here finish() -> u8, here release() -> void,
+                           source:const SourceBytes in S, ref tokens:Tokens in T, ref nodes:ExprNodes in N,
+                           spellings:const SourceBytes in B, exports:const ModuleExports in E,
+                           ref selected:SelectedExports in X, ref bindings:NameBindings in Y,
+                           ref names:NameWork in W, ref facts:OperandFacts in F, ref owners:CallOwners in O,
+                           ref sites:CompletionSites in K, ref commands:NativeCommands in C,
+                           ref result:NativeModuleResult in R) -> u8
+    where {const owner S, owner T, owner N, const owner B, const owner E, owner X, owner Y,
+           owner W, owner F, owner O, owner K, owner C, owner R} {
+    result.backend_status <- 0u8;
+    result.rejected_first <- no_node();
+    result.rejected_past <- no_node();
+    if (!compile_module_commands(source, tokens, nodes, spellings, exports, selected, bindings, names,
+                                 facts, owners, sites, commands, result.plan, result.analysis)) {
+        return retain_rejection(nodes, result);
+    } else {};
+    defer { release(); };
+    if (!begin()) { return native_open_failed(); } else {};
+    result.backend_status <- construct(commands, result.plan.used, result.plan.labels, result.plan.slots);
+    if (result.backend_status != 0u8) { return native_lowering_failed(); } else {};
+    result.backend_status <- finish();
+    if (result.backend_status != 0u8) { return native_finish_failed(); } else {};
+    return native_complete();
+}
+
+export ModuleWorkspacePlan;
+export NativeModuleResult;
+export native_source_open_failed;
+export compile_with_module_source;
+export plan_module_workspace;
+export compile_with_module_workspace;
+export compile_native_module;

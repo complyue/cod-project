@@ -12,6 +12,10 @@ PTR_RESULT = 'proc run(ref picked:u64 in O,ptr spare:u64 in O)->ptr u64 in O whe
 PTR_RESULT_INPUTS = 'val value_input<-7u64,uninitialized_input<-make local u64;'
 OBSERVE_PTR_RESULT = ('if returning (ptr saved){if(saved is not null){behave @print(saved);}'
                       'else{behave @print(0u64);};}')
+READONLY_HERE_ARRAY = ('array Rows[u64]:u64;'
+                       'func inspect(here read(ref view:const Rows in O)->u64,rows:const Rows in O)->u64 '
+                       'where {const owner O}{return read(rows);}'
+                       'func through(rows:const Rows in O)->u64 where {const owner O}{return inspect(rows)')
 READ_PTR_RESULT = 'defer{' + OBSERVE_PTR_RESULT + '};'
 WRITE_PTR_RESULT = 'defer{if returning (ptr saved){if(saved is not null){saved<-9u64;{}}else{}}};'
 GUARDED_QUERY = ('using "std:exceptions" NullPointerException;val e<-make local NullPointerException;')
@@ -358,6 +362,14 @@ runner.CASES = {
         'func relay(here body(ref item:u64 in P)->void,ref source:u64 in P)->void where {owner P}{body(source);return;}'
         'func outer(here body(ref item:u64 in O)->void,ref source:u64 in O)->void where {owner O}{relay(body,source);return;}'
         'val target<-2u64;outer(target)(ref item=)=>{item<-item+3u64;};behave @print(target);',0,'5\n',''),
+    'readonly_here_array_receives_ref': (READONLY_HERE_ARRAY+
+        '(view)=>{{return intrinsic (len)(view)+view[1u64];}};}export through;',0,'',''),
+    'readonly_here_array_cannot_strengthen_access': (READONLY_HERE_ARRAY+
+        '(view:Rows)=>{{return intrinsic (len)(view);}};}export through;',
+        2,'','here body header access does not match the selected contract'),
+    'readonly_here_array_cannot_snapshot_whole_value': (READONLY_HERE_ARRAY+
+        '(val view<-)=>{return intrinsic (len)(view);};}export through;',
+        2,'','receiving a here array as an independent value'),
     'borrowed_here_forwarding_rejects_new_invocation_owner': (
         'func relay(here body(ref item:u64 in here)->void)->void{val local<-1u64;body(local);return;}'
         'func outer(here body(ref item:u64 in here)->void)->void{relay(body);return;}outer()(ref item=)=>{};',
