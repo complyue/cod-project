@@ -169,7 +169,7 @@ inline std::vector<Token> tokenize(const std::shared_ptr<const IndexedSource> &r
   return tokens;
 }
 
-enum class ArgumentMode { value, borrowed_read, borrowed_ref, borrowed_ptr };
+enum class ArgumentMode { value, borrowed_read, borrowed_ref, borrowed_ptr, borrowed_handle };
 
 struct Type {
   enum Kind { integer, uint8, uint32, uint64, boolean, void_type, procedure, float32, float64,
@@ -818,13 +818,13 @@ class Parser {
     }
     return parse_type();
   }
-  Parameter parameter_declaration(bool c_linkage = false) {
+  Parameter parameter_declaration(bool native_handles = false) {
     const bool fixed_binding = take("const");
     const bool owned_region = take("owned");
     const bool regional = take("region");
     if (owned_region && !regional) fail(peek().at, "owned requires a region declaration");
     std::string mode;
-    if (!regional && (is("ptr") || is("ref") || is("val") || (c_linkage && is("handle"))))
+    if (!regional && (is("ptr") || is("ref") || is("val") || (native_handles && is("handle") && !is(":", 1))))
       mode = tokens_[cursor_++].text;
     auto param = value_name();
     Parameter parameter{param.text, Type::void_type, param.at, false, {}};
@@ -984,7 +984,7 @@ class Parser {
             if (!pipeline && !form.parameters.empty() && !form.parameters.back().here)
               fail(peek().at, "here callable parameters must precede ordinary parameters");
             form.parameters.push_back(here_parameter());
-          } else form.parameters.push_back(parameter_declaration(form.c_linkage));
+          } else form.parameters.push_back(parameter_declaration(true));
         } while (take(","));
         expect(")");
       }
