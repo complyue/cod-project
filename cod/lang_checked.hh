@@ -72,11 +72,24 @@ struct LexicalState {
 class ScalarChecker {
   CheckedProgram program_;
   Type exception_type(size_t category) const { return program_.exception_type(category); }
+  static std::set<size_t> concrete_categories(size_t count) {
+    std::set<size_t> result;
+    for (size_t category = 1; category < count; ++category) result.insert(category);
+    return result;
+  }
   std::set<size_t> exception_possibilities(const Type &type) const {
     if (type.kind != Type::exception) return {};
-    if (type.identity) return {type.identity};
+    return type.identity ? std::set<size_t>{type.identity} : concrete_categories(program_.exception_types.size());
+  }
+  static std::set<size_t> exception_value_categories(const Type &type) {
+    // Until owned exception lowering is available, ordinary exception value slots are intrinsic packets.
+    if (type.kind != Type::exception || nominal_exception(type)) return {};
+    return type.identity ? std::set<size_t>{type.identity} : concrete_categories(exception_categories.size());
+  }
+  std::set<size_t> declared_exception_categories(const std::vector<Type> &types) const {
+    if (declares_root(types)) return concrete_categories(program_.exception_types.size());
     std::set<size_t> result;
-    for (size_t category = 1; category < program_.exception_types.size(); ++category) result.insert(category);
+    for (const auto &type : types) if (type.kind == Type::exception) result.insert(type.identity);
     return result;
   }
   using CallableChoices = std::vector<std::map<const Expression *, std::set<size_t>>>;
@@ -2512,8 +2525,9 @@ class ScalarChecker {
       fail(at, "fold body does not satisfy the accumulator type");
   }
   static void check_catch_category(const Type &type, std::set<size_t> &handled, const Location &at) {
-    if (type.kind != Type::exception) fail(at, "catch requires a selected intrinsic exception type");
+    if (type.kind != Type::exception) fail(at, "catch requires a selected exception type");
     if (!handled.insert(type.identity).second) fail(at, "duplicate exception category in catch clauses");
+    if (nominal_exception(type)) implementation_gap(at, "typed catches of library-defined exceptions require owned exception lowering");
   }
   static void check_guarded_result(const Type &body, const Type &handler, const Location &at) {
     if (body != Type::never && handler != Type::never && body != handler)
@@ -2719,7 +2733,7 @@ class ScalarChecker {
   ExceptionFacts stored_exceptions(size_t place, const Type &type,
                                    const std::map<size_t, ExceptionFacts> &values) const {
     const auto found = values.find(place);
-    return found == values.end() ? exception_possibilities(type) : found->second;
+    return found == values.end() ? exception_value_categories(type) : found->second;
   }
   void assign_exceptions(size_t place, const ExceptionFacts &value) {
     for (const auto input : lexical_.inputs) lexical_.input_facts[input].exceptions[place] = value;
@@ -2730,7 +2744,7 @@ class ScalarChecker {
     const auto seed = [&](size_t place) {
       const auto &target = storage(place);
       if (target.type.kind == Type::exception && mutable_payload_target(place))
-        values[place] = ExceptionFacts::payload(place, exception_possibilities(target.type), action);
+        values[place] = ExceptionFacts::payload(place, exception_value_categories(target.type), action);
     };
     for (const auto place : lexical_.available) seed(place);
     if (proving_) for (size_t place = 0; place < catalog_storage_.size(); ++place)
@@ -3952,11 +3966,7 @@ class ScalarChecker {
     if (mode == ArgumentMode::borrowed_ref) require_initialized(view, at, "ref argument");
   }
   std::set<size_t> call_reasons(const Type &contract) const {
-    std::set<size_t> categories;
-    for (const auto &failure : contract.throws_types) {
-      const auto selected = exception_possibilities(failure); categories.insert(selected.begin(), selected.end());
-    }
-    return call_reasons(categories);
+    return call_reasons(declared_exception_categories(contract.throws_types));
   }
   std::set<size_t> direct_call_reasons(const Type &contract, const CallEffects &effects) {
     auto reasons = call_reasons(contract);
@@ -4223,7 +4233,7 @@ class ScalarChecker {
       exception_inputs.reserve(views.size());
       for (size_t i = 0; i < views.size(); ++i) {
         const bool borrowed = borrowed_input(i);
-        exception_inputs.push_back(borrowed ? invocation_slots.contains(i) ? ExceptionFacts{exception_possibilities(input_type(i))}
+        exception_inputs.push_back(borrowed ? invocation_slots.contains(i) ? ExceptionFacts{exception_value_categories(input_type(i))}
             : stored_exceptions(views[i], entry_payloads) : views[i].exceptions);
       }
     }
@@ -4248,7 +4258,7 @@ class ScalarChecker {
     }
     operation.type = *contract.target;
     if (operation.type.kind == Type::exception)
-      operation.exceptions = operation.type.identity ? ExceptionFacts{exception_possibilities(operation.type)}
+      operation.exceptions = operation.type.identity ? ExceptionFacts{exception_value_categories(operation.type)}
           : summary.returned.value.substitute(exception_inputs);
     for (size_t i = 0; i < arguments.size(); ++i) {
       if (arguments[i].kind != Type::procedure || contract.owners.empty() || !contract.owners[i]) continue;
@@ -4360,14 +4370,14 @@ class ScalarChecker {
         // These calls retain binding slots whose invocation-time selections
         // still need a payload/selection correlation proof.
         for (auto &[place, value] : payloads)
-          if (written_targets.contains(place)) value = exception_possibilities(storage(place).type);
+          if (written_targets.contains(place)) value = exception_value_categories(storage(place).type);
       } else {
         // Publish simultaneous postconditions after weakening other possible
         // aliases. Sequential strong writes would lose same-target alternatives.
         std::map<size_t, ExceptionFacts> definite;
         for (size_t i = 0; i < views.size(); ++i) {
           if (input_type(i).kind != Type::exception || !borrowed_input(i)) continue;
-          auto value = ExceptionFacts{exception_possibilities(input_type(i))};
+          auto value = ExceptionFacts{exception_value_categories(input_type(i))};
           const auto outcome = summary.payloads.find(reason);
           const bool writes = summary.written_inputs.contains(i);
           // An empty outcome for an unchanged input carries no postcondition.
@@ -5298,7 +5308,7 @@ class ScalarChecker {
         // behavior. Only a substituted, explicit failure relation can exclude
         // an exceptional outcome.
         for (auto &[place, value] : payloads)
-          if (value.empty()) value = exception_possibilities(storage(place).type);
+          if (value.empty()) value = exception_value_categories(storage(place).type);
         auto applied = effects;
         const auto observed_selection = cleanup_.project_observed_return(applied, state.returned, state.selections);
         applied.resolve_conditions([&](size_t binding) -> std::optional<CleanupEquations::Targets> {
@@ -5413,13 +5423,16 @@ class ScalarChecker {
         return fact.builtin_name == "-" ? std::uint64_t{0} - *value : *value;
     return {};
   }
-  Type resolve_local_type(const Type &type, const CheckedInstance *instance, const Location &at,
-                          bool product_view = false) const {
-    Type resolved;
+  Type resolve_annotation(const Type &type, const CheckedInstance *instance) const {
     if (instance) {
       const auto &method = program_.methods[instance->method];
-      resolved = substitute(type, method, instance->substitutions);
-    } else resolved = resolve_type(type);
+      return substitute(type, method, instance->substitutions);
+    }
+    return resolve_type(type);
+  }
+  Type resolve_local_type(const Type &type, const CheckedInstance *instance, const Location &at,
+                          bool product_view = false) const {
+    auto resolved = resolve_annotation(type, instance);
     reject_c_type_payload(resolved, at);
     if (!lexical_value_type(resolved) && !(product_view && resolved.kind == Type::product))
       implementation_gap(at, "non-value local storage type '" + type_name(type) + "'");
@@ -5707,6 +5720,7 @@ class ScalarChecker {
   static void signature_type(const CheckedMethod &method, const Type &type, const Location &at, bool result = false,
                              bool borrowed_target = false) {
     reject_c_type_payload(type, at);
+    if (nominal_exception(type)) implementation_gap(at, "library-defined exception arguments and results require an owner-aware signature");
     if (bits_type(type) || binder(method, type) || (result && type == Type::void_type)) return;
     if (borrowed_target && (type.kind == Type::product || (!result && type.kind == Type::array))) return;
     if (type.kind == Type::array)
@@ -5720,7 +5734,7 @@ class ScalarChecker {
       if (type.owners.empty() && !type.value_result)
         implementation_gap(at, "callable result mode without an owner or explicit generic value contract");
       for (const auto &failure : type.throws_types)
-        if (failure.kind != Type::exception) implementation_gap(at, "callable view throws require intrinsic exceptions");
+        if (failure.kind != Type::exception) fail(at, "callable view throws require selected exception types");
       return;
     }
     implementation_gap(at, "non-scalar signature type '" + type_name(type) + "'");
@@ -5779,11 +5793,11 @@ class ScalarChecker {
     }
     for (const auto &failure : source.throws_types) {
       const auto type = resolve_type(failure, &receiver);
-      if (type.kind != Type::exception) implementation_gap(formal.at, "here throws contracts require selected intrinsic exception types");
+      if (type.kind != Type::exception) fail(formal.at, "here throws contracts require selected exception types");
       contract.throws_root |= !type.identity;
-      const auto categories = exception_possibilities(type);
-      contract.throws_categories.insert(categories.begin(), categories.end());
+      if (type.identity) contract.throws_categories.insert(type.identity);
     }
+    if (contract.throws_root) contract.throws_categories.clear();
     return contract;
   }
   static bool bind_type(const CheckedMethod &method, const Type &pattern, const Type &actual, Substitutions &substitutions, bool parameter = false) {
@@ -6910,6 +6924,7 @@ class ScalarChecker {
   }
   const CheckedSchema &product_schema(const Type &type, const Location &at) const {
     reject_c_type_payload(type, at);
+    if (nominal_exception(type)) fail(at, "use exception construction for '" + type.name + "'");
     if (type.kind != Type::product) implementation_gap(at, "ordinary construction requires a supported product type");
     return program_.schemas.at(type.identity);
   }
@@ -11950,7 +11965,7 @@ class ScalarChecker {
         for (const auto kind : {Type::boolean, Type::uint8, Type::uint32, Type::uint64, Type::integer, Type::float32, Type::float64})
           if (transfers_value(kind, parameter)) domain.push_back(kind);
       } else if (parameter.kind == Type::exception) {
-        for (const auto category : exception_possibilities(parameter)) domain.push_back(exception_type(category));
+        for (const auto category : exception_value_categories(parameter)) domain.push_back(exception_type(category));
       } else if (parameter.kind == Type::procedure) domain.push_back(parameter);
       else implementation_gap(at, "unproved callable family input domain");
       domains.push_back(std::move(domain));
@@ -12559,11 +12574,7 @@ class ScalarChecker {
   size_t scope_profile(CheckedMethod::ScopeInputs inputs, ResultContract result = {}, std::vector<Type> failures = {},
                        std::optional<CheckedMethod::HereGroupResults> group = {}) {
     auto &profiles = scope_profiles_[inputs.lexical_method];
-    std::set<size_t> throws_categories;
-    for (const auto &failure : failures) {
-      const auto categories = exception_possibilities(failure);
-      throws_categories.insert(categories.begin(), categories.end());
-    }
+    auto throws_categories = declared_exception_categories(failures);
     for (const auto id : profiles) {
       const auto &method = program_.methods[id];
       if (method.result != result || method.throws_categories != throws_categories || method.throws_types != failures ||
@@ -13561,7 +13572,8 @@ class ScalarChecker {
       const Substitutions &bindings, const CheckedHereContract &expected, const Location &at) const {
     if (!prepared_source_contract(expected)) return false;
     const auto &method = program_.methods[instance.method];
-    return method.throws_categories == expected.throws_categories && declares_root(method.throws_types) == expected.throws_root &&
+    return declares_root(method.throws_types) == expected.throws_root &&
+        (expected.throws_root || method.throws_categories == expected.throws_categories) &&
         matches_here_protocol(method, method.here.front(), instance.substitutions, receiver, expected.here.front(), bindings, at);
   }
   void require_prepared_source_contract(const CheckedOperation::PreparedProducer &source, const CheckedMethod &receiver,
@@ -14066,14 +14078,10 @@ class ScalarChecker {
     if (pipeline.terminal) {
       for (const auto category : read_effects(*pipeline.terminal).scope_checked_failures) {
         if (category) failures.insert(category);
-        else {
-          throws_root = true;
-          failures = exception_possibilities(exception_type(0));
-          break;
-        }
+        else { throws_root = true; break; }
       }
     }
-    if (failures != expected.throws_categories || throws_root != expected.throws_root)
+    if (throws_root != expected.throws_root || (!throws_root && failures != expected.throws_categories))
       fail(at, "open pipeline checked failures do not match the selected here contract");
   }
   void check_bound_pipeline(const Expression &expr, const HereInvocation &syntax, size_t slot, CheckedInstance *supplier,
@@ -14527,9 +14535,7 @@ class ScalarChecker {
       const auto &handler = *expr.children[i];
       if (handler.kind == Expression::Kind::block) { finalizer = &handler; break; }
       program_.exception_values = true;
-      const auto type = !handler.annotation ? exception_type(0) : instance
-          ? substitute(*handler.annotation, program_.methods[instance->method], instance->substitutions)
-          : resolve_type(*handler.annotation);
+      const auto type = handler.annotation ? resolve_annotation(*handler.annotation, instance) : exception_type(0);
       check_catch_category(type, handled, handler.at);
       if (!type.identity) incoming.declared.clear();
       std::vector<LexicalState> entries;
@@ -14559,7 +14565,7 @@ class ScalarChecker {
       const auto id = declare(handler.text, type, true, true, handler.at);
       lexical_.scopes.back().declarations = false;
       initialize(id);
-      assign_exceptions(id, categories.empty() ? exception_possibilities(type) : categories);
+      assign_exceptions(id, categories.empty() ? exception_value_categories(type) : categories);
       auto active = caught_; caught_ = id; catch_bindings_.insert(id);
       caught_inputs_[id] = std::move(category_inputs);
       AbruptFlow handler_exits{before.scopes.size(), {}};
@@ -15275,7 +15281,7 @@ class ScalarChecker {
         if (arguments.size() != 2 || arguments[0].kind != Type::exception || arguments[1] != Type::uint64)
           fail(expr.at, "cause_at requires an exception and a u64 index");
         operation.type = completes ? exception_type(0) : Type{Type::never};
-        operation.exceptions = exception_possibilities(operation.type); operation.builtin = BuiltinOperation::cause_at;
+        operation.exceptions = exception_value_categories(operation.type); operation.builtin = BuiltinOperation::cause_at;
         if (completes) {
           const auto bounds = exception_id(ExceptionCategory::index_out_of_bounds);
           operation.invocation.try_emplace(0, cleanup_.preserve_pending({}));
@@ -15338,7 +15344,7 @@ class ScalarChecker {
       } else {
         require_symbol(lexical_, *operation.symbol, expr.at);
         operation.type = expr.kind == K::touch ? Type{Type::void_type} : *symbol.type;
-        operation.exceptions = exception_possibilities(operation.type);
+        operation.exceptions = exception_value_categories(operation.type);
       }
       break;
     }
@@ -15610,7 +15616,7 @@ class ScalarChecker {
           lexical_.expired_bindings.insert(loop.expired.begin(), loop.expired.end());
         }
         for (const auto input : lexical_.inputs) for (auto &[id, categories] : lexical_.input_facts[input].exceptions)
-          if (!proving_ || loop.writes.places.contains(id)) categories = exception_possibilities(storage(id).type);
+          if (!proving_ || loop.writes.places.contains(id)) categories = exception_value_categories(storage(id).type);
         if (!proving_) lexical_.predicates.clear();
         else for (const auto place : loop.writes.places) lexical_.predicates.erase(place);
         active_loops_.push_back(&expr);
@@ -15625,7 +15631,7 @@ class ScalarChecker {
       if (fold) {
         operation.accumulator = declare(expr.binding, accumulator, true, true, expr.at);
         initialize(*operation.accumulator);
-        assign_exceptions(*operation.accumulator, exception_possibilities(accumulator));
+        assign_exceptions(*operation.accumulator, exception_value_categories(accumulator));
         loop_controls_.insert(*operation.accumulator);
       }
       const auto body = child(fold ? 3 : 2, true, !fold);
@@ -15657,7 +15663,7 @@ class ScalarChecker {
       join(body_state, body_exits, empty_state, empty_exits, expr.at);
       operation.type = body_exits && empty_exits ? Type{Type::never} : fold ? accumulator : Type{Type::void_type};
       operation.operand_type = index;
-      operation.exceptions = exception_possibilities(operation.type);
+      operation.exceptions = exception_value_categories(operation.type);
       break;
     }
     case K::pointer_group: {
@@ -15759,7 +15765,7 @@ class ScalarChecker {
           place = declare(declaration->text, type, read_only, value, declaration->at);
           bindings_->back().fixed = expr.fixed_binding;
           if (initialized && completes) initialize(*place);
-          if (type.kind == Type::exception) assign_exceptions(*place, initialized ? source.exceptions : exception_possibilities(type));
+          if (type.kind == Type::exception) assign_exceptions(*place, initialized ? source.exceptions : exception_value_categories(type));
           if (type == Type::boolean && initialized && completes) {
             CheckedOperation target; target.type = type; target.place = place; target.targets = {*place};
             write_predicate(target, predicate_of(source), declaration->at);
@@ -16032,7 +16038,7 @@ class ScalarChecker {
       break;
     }
     case K::make_object: {
-      const auto type = resolve_local_type(*expr.annotation, instance, expr.at, true);
+      const auto type = resolve_annotation(*expr.annotation, instance);
       const auto &schema = product_schema(type, expr.at);
       if (read && !discard) implementation_gap(expr.at, "reading a whole product as an independent value");
       if (!expr.owner_name.empty() && expr.owner_name != "here") {
@@ -16188,7 +16194,7 @@ class ScalarChecker {
       const auto binding = expr.children.empty() ? caught_ : expr.children[0]->kind == K::name ? operations.at(expr.children[0].get()).place : std::optional<size_t>{};
       // An empty provisional result summary is not a non-returning contract.
       auto thrown = operation.exceptions;
-      if (thrown.empty()) thrown = exception_possibilities(type);
+      if (thrown.empty()) thrown = exception_value_categories(type);
       const auto categories = thrown.possibilities();
       if (binding && caught_inputs_.contains(*binding)) {
         const auto inputs = lexical_.inputs;
@@ -16628,7 +16634,7 @@ class ScalarChecker {
       if (!storage(place).borrowed || storage(place).type.kind != Type::exception) continue;
       const auto value = state.exceptions.find(place);
       observed_.payloads[reason][p].merge(value == state.exceptions.end()
-          ? ExceptionFacts{exception_possibilities(storage(place).type)} : value->second);
+          ? ExceptionFacts{exception_value_categories(storage(place).type)} : value->second);
     }
     visit_binding_inputs([&](size_t p, size_t binding) {
       const auto [result, first] = observed_.bindings[reason].try_emplace(p);
@@ -16666,7 +16672,7 @@ class ScalarChecker {
         for (const auto place : state.returned.targets) if (place != null_target) {
           const auto found = state.exceptions.find(place);
           observed_.returned.value.merge(found == state.exceptions.end()
-              ? ExceptionFacts{exception_possibilities(storage(place).type)} : found->second);
+              ? ExceptionFacts{exception_value_categories(storage(place).type)} : found->second);
         }
       } else observed_.returned.value.merge(state.returned.value);
     }
@@ -16836,7 +16842,7 @@ class ScalarChecker {
         }
         if (mode != ArgumentMode::borrowed_ptr || (live_value && method.supplied_scope)) entry.initialized.insert(id);
         if (instance.arguments[p].kind == Type::exception)
-          entry.exceptions.emplace(id, ExceptionFacts::input(p, exception_possibilities(instance.arguments[p])));
+          entry.exceptions.emplace(id, ExceptionFacts::input(p, exception_value_categories(instance.arguments[p])));
         if (instance.arguments[p] == Type::boolean) seed_boolean_input(id, p);
       }
       bind_product_inputs(instance, method.at, entry);
@@ -17348,14 +17354,16 @@ class ScalarChecker {
       const bool product = form->kind == Form::Kind::data;
       const bool array = form->kind == Form::Kind::array;
       if (!product && !array && form->kind != Form::Kind::region_definition) continue;
-      if (form->parent_type) implementation_gap(form->at, "data declarations with a parent type");
       const bool marker = form->c_data && form->parameters.empty();
       const auto kind = array ? Type::array : marker ? Type::c_type_marker : product ? Type::product : Type::region_schema;
-      const Type type{kind, form->name, array ? program_.arrays.size() : program_.schemas.size()};
+      if (form->parent_type && (!product || form->c_data))
+        implementation_gap(form->at, "a parent type on this data layout");
+      const auto type = form->parent_type ? program_.append_exception_type(*form)
+          : Type{kind, form->name, array ? program_.arrays.size() : program_.schemas.size()};
       if (!module_names().types.emplace(form->name, type).second)
         fail(form->at, "duplicate type binding '" + form->name + "'");
       if (array) program_.arrays.push_back({form.get(), *form->index_type, *form->result_type});
-      else program_.schemas.push_back({form.get(), {}, kind == Type::product});
+      else if (!form->parent_type) program_.schemas.push_back({form.get(), {}, kind == Type::product});
     }
     for (auto &array : std::span(program_.arrays).subspan(first_array)) {
       array.index = resolve_type(std::move(array.index));
@@ -17373,6 +17381,8 @@ class ScalarChecker {
     if (!count) return;
     auto schemas = std::span(program_.schemas).subspan(first);
     for (auto &schema : schemas) {
+      if (schema.source->parent_type && resolve_type(*schema.source->parent_type) != exception_type(0))
+        implementation_gap(schema.source->at, "data conformance other than a checked exception with parent Exception");
       std::set<std::string> names;
       for (const auto &field : schema.source->parameters) {
         if (!names.insert(field.name).second)
@@ -17570,9 +17580,7 @@ class ScalarChecker {
       if (prepared.result.type) signature_type(prepared, *prepared.result.type, form->at, true, prepared.result.borrowed());
       for (const auto &type : form->throws_types) {
         const auto resolved = resolve_type(type);
-        if (resolved.kind != Type::exception) implementation_gap(form->at, "throws contracts require selected intrinsic exception types");
-        const auto categories = exception_possibilities(resolved);
-        prepared.throws_categories.insert(categories.begin(), categories.end());
+        if (resolved.kind != Type::exception) fail(form->at, "throws contracts require selected exception types");
         prepared.throws_types.push_back(resolved);
       }
       std::set<std::string> names;
@@ -17686,6 +17694,11 @@ public:
       const ModuleLookup lookup(module_, module);
       register_module(source.modules[module], print_symbol, unsupported_here);
     }
+    for (auto &method : program_.methods)
+      method.throws_categories = declared_exception_categories(method.throws_types);
+    for (auto &family : program_.families)
+      for (auto &declaration : family.declarations)
+        declaration.throws_categories = declared_exception_categories(declaration.throws_types);
     for (const auto &method : program_.methods)
       if (!method.here.empty() && method.result.type && method.type_parameters.empty())
         check_declared_results(method, method.result, declared_results(method, method.parameters));

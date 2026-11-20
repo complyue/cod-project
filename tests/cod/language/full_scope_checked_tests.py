@@ -218,7 +218,7 @@ runner.CASES = {
         'try{take({{throw e;}});{}}catch(caught:const NullPointerException){};',
         'cannot establish a parameter type for an abruptly completing operand'),
     'query_checks_catch_category': (query('try{}catch(e:const u64){};return 7u64;'),
-        2, '', 'catch requires a selected intrinsic exception type'),
+        2, '', 'catch requires a selected exception type'),
     'query_rejects_unwritten_private_storage': (
         query(UNWRITTEN+'return local;'), 2, '', UNINITIALIZED_LOCAL),
     'query_checks_read_after_separate_abrupt_arm': (
@@ -475,7 +475,7 @@ runner.CASES = {
     'query_matches_root_and_untyped_catch_category': (query('try{}catch(e:const Exception){}catch(f){};return 7u64;'),
         2, '', 'duplicate exception category in catch clauses'),
     'query_checks_deferred_catch_category': (query('defer catch(e:const u64){};return 7u64;'),
-        2, '', 'catch requires a selected intrinsic exception type'),
+        2, '', 'catch requires a selected exception type'),
     'query_rejects_repeated_deferred_catch_category': (query('defer catch(e:const NullPointerException){}'
         'catch(f:const NullPointerException){};return 7u64;'), 2, '', 'duplicate exception category in catch clauses'),
     'query_checks_guarded_arm_types': (query('try{true}catch(e:const NullPointerException){7u64};return 6u64;'),

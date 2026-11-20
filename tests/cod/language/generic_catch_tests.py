@@ -34,7 +34,7 @@ runner.CASES = {
     'generic_rethrow_sibling_exclusion': (IO + ERRORS + 'func probe(e:T)->const i64 where T{try{try{throw e;}catch(x:const T){throw;}catch(x){return 99;};}catch(x:const T){return 8;};}behave @print(probe(missing_error()));behave @print(probe(null_error()));', 0, '8\n8\n', WARN),
     'generic_name_shadows_exception_alias': (IO + ERRORS + 'func probe(e:MissingReturnError)->const u64 where MissingReturnError{try{throw e;}catch(x:const MissingReturnError){return x.category;};}behave @print(probe(null_error()));', 0, '4\n', WARN),
     'duplicate_after_substitution': (ERRORS + 'func probe(a:T,b:U)->void where {T,U}{try{}catch(x:const T){}catch(x:const U){};}probe(missing_error(),missing_error());', 2, '', 'duplicate exception category'),
-    'nonexception_substitution': ('func probe(x:T)->void where T{try{}catch(e:const T){};}probe(1);', 2, '', 'catch requires a selected intrinsic exception type'),
+    'nonexception_substitution': ('func probe(x:T)->void where T{try{}catch(e:const T){};}probe(1);', 2, '', 'catch requires a selected exception type'),
     'common_exception_typed_catch': (IO + ERRORS + 'func probe(e:T)->const u64 where T{try{throw e;}catch(x:const T){return x.category;};}val common:Exception<-missing_error();behave @print(probe(common));', 0, '5\n', WARN),
     'undetermined_handler_type': ('func probe()->void where T{try{}catch(x:const T){};}probe();', 2, '', 'type parameter is not determined'),
     'checked_rethrow_obligation': (ERRORS + 'func probe(e:T)->void where T{try{throw e;}catch(x:const T){throw;};}probe(null_error());', 2, '', 'requires a covering catch or throws declaration'),

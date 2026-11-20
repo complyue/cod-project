@@ -27,7 +27,10 @@ namespace cod::language {
 }
 
 inline bool scalar_type(const Type &type) { return numeric(type) || type == Type::boolean; }
-inline bool bits_type(const Type &type) { return scalar_type(type) || type.kind == Type::exception; }
+inline bool nominal_exception(const Type &type) {
+  return type.kind == Type::exception && type.identity >= exception_categories.size();
+}
+inline bool bits_type(const Type &type) { return scalar_type(type) || (type.kind == Type::exception && !nominal_exception(type)); }
 inline bool lexical_value_type(const Type &type) { return bits_type(type) || type.kind == Type::procedure; }
 enum class BuiltinOperation { none, unary, binary, identity, cause_at, array_length, reference_swap, bits_swap, print };
 inline bool eager_operation(std::string_view name) {
@@ -59,7 +62,10 @@ inline std::vector<size_t> here_owner_inputs(const Type &invocation) {
 inline bool accepts_exception(const Type &source, const Type &target) {
   return source.kind == Type::exception && target.kind == Type::exception && (!target.identity || source == target);
 }
-inline bool transfers_bits(const Type &source, const Type &target) { return widens(source, target) || accepts_exception(source, target); }
+inline bool transfers_bits(const Type &source, const Type &target) {
+  return !nominal_exception(source) && !nominal_exception(target) &&
+      (widens(source, target) || accepts_exception(source, target));
+}
 inline bool transfers_value(const Type &from, const Type &to) {
   return from.kind == Type::procedure || to.kind == Type::procedure ? from == to : transfers_bits(from, to);
 }
@@ -448,6 +454,7 @@ struct CheckedHereContract {
   bool labelled = false;
   Component result;
   std::optional<std::vector<Component>> feedback;
+  // Concrete categories only. A root contract covers the final program catalog.
   std::set<size_t> throws_categories;
   bool throws_root = false;
   bool operator==(const CheckedHereContract &) const = default;
@@ -628,6 +635,12 @@ struct CheckedProgram {
   std::vector<CheckedExceptionCategory> exception_types = intrinsic_exception_types();
   Type exception_type(size_t category) const {
     return {Type::exception, std::string(exception_types.at(category).name), category};
+  }
+  Type append_exception_type(const Form &source) {
+    const auto category = exception_types.size();
+    exception_types.push_back({source.name, true, schemas.size()});
+    schemas.push_back({&source, {}, false});
+    return exception_type(category);
   }
   std::vector<CheckedSchema> schemas;
   std::vector<CheckedArray> arrays;

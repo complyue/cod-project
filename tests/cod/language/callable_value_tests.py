@@ -91,7 +91,7 @@ runner.CASES = {
     'loop_direct_callable_declaration': (INC+'for(i in 0..3){func f=inc;};',2,'','nested per-iteration'),
     'defer_direct_callable_declaration': (INC+'defer{func f=inc;};',2,'','nested explicit'),
     'nested_function_parameter': ('func apply(f:func(T)->const T,x:T)->const T where T{return f(x);}',0,'',''),
-    'view_requires_valid_throw_contract': (INC+'func f:func(i64)->const i64 throws UnknownException=inc;',2,'','callable view throws require intrinsic exceptions'),
+    'view_requires_valid_throw_contract': (INC+'func f:func(i64)->const i64 throws UnknownException=inc;',2,'','callable view throws require selected exception types'),
     'view_cannot_borrow_method_type_binder': ('func id(x:T)->const T where T{return x;}func f:func(T)->const T=id;',2,'','non-scalar signature type'),
     'nested_result_requires_determined_type': ('func factory(x:U)->func()->const T where {U,T}{}factory(1);',2,'','type parameter is not determined'),
 }

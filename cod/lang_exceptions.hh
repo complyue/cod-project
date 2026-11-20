@@ -6,6 +6,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -39,6 +40,7 @@ inline constexpr size_t concrete_exception_count = exception_categories.size() -
 struct CheckedExceptionCategory {
   std::string_view name;
   bool checked;
+  std::optional<size_t> schema = {};
 };
 
 inline std::vector<CheckedExceptionCategory> intrinsic_exception_types() {
