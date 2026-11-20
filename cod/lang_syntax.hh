@@ -404,6 +404,7 @@ struct Form {
   bool conversion = false;
   bool operation = false;
   bool alias_operation = false;
+  bool c_data = false;
   std::vector<SymbolMapping> mappings;
   std::vector<UnitSelection> units;
   std::vector<Parameter> parameters;
@@ -1911,9 +1912,18 @@ public:
         const bool data = region || take("data");
         if (!data) expect("type");
         form->kind = region ? Form::Kind::region_definition : Form::Kind::data;
+        if (!region && data && peek().kind == TokenKind::string) {
+          const auto linkage = name(TokenKind::string);
+          if (linkage.text != "C") fail(linkage.at, "expected \"C\" as the data linkage");
+          form->c_data = true;
+        }
         form->name = ordinary_name().text;
         if (take("<:")) form->parent_type = parse_type();
         if (!is("{")) {
+          if (form->c_data) {
+            if (is(";")) fail(start.at, "seed implementation gap: fieldless data \"C\" declaration");
+            fail(peek().at, "expected a brace body for a data \"C\" record");
+          }
           if (data && !form->parent_type)
             fail(start.at, "a head-only data declaration requires an abstract parent");
           form->kind = data ? Form::Kind::conformance : Form::Kind::abstract_type;

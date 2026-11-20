@@ -17326,6 +17326,8 @@ class ScalarChecker {
       const bool array = form->kind == Form::Kind::array;
       if (!product && !array && form->kind != Form::Kind::region_definition) continue;
       if (form->parent_type) implementation_gap(form->at, "data declarations with a parent type");
+      if (form->c_data && form->parameters.empty())
+        implementation_gap(form->at, "fieldless data \"C\" declaration");
       const auto kind = array ? Type::array : product ? Type::product : Type::region_schema;
       const Type type{kind, form->name, array ? program_.arrays.size() : program_.schemas.size()};
       if (!module_names().types.emplace(form->name, type).second)
@@ -17354,6 +17356,8 @@ class ScalarChecker {
         const auto storage = place_kind(field.declaration_kind.empty() || field.declaration_kind == "val",
                                         field.declaration_kind == "ref");
         auto type = resolve_type(field.type);
+        if (schema.source->c_data && storage != PlaceKind::value)
+          fail(field.at, "data \"C\" requires by-value bits fields");
         if (type.kind == Type::region_schema) fail(field.at, "a region schema does not name a field payload type");
         if (!scalar_type(type) && type.kind != Type::product)
           implementation_gap(field.at, "field representation for type '" + type_name(type) + "'");
@@ -17370,8 +17374,11 @@ class ScalarChecker {
     for (size_t i = 0; i < count; ++i) {
       for (const auto &field : schemas[i].fields) {
         if (field.storage != PlaceKind::value || field.type.kind != Type::product) continue;
-        if (!program_.schemas[field.type.identity].bits)
+        if (!program_.schemas[field.type.identity].bits) {
+          if (schemas[i].source->c_data)
+            fail(field.source->at, "data \"C\" requires recursively bits-only fields");
           implementation_gap(field.source->at, "inline field with a reference-bearing product");
+        }
         if (field.type.identity >= first) {
           ++pending[i];
           dependents[field.type.identity - first].push_back(i);
