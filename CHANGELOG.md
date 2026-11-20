@@ -5,6 +5,11 @@
 <a id="h-hlvm-candidate-20261120"></a>
 **H-HLVM-CANDIDATE-20261120.** In the project chat, the project user proposed `hlvm-basic` for running BASIC source or saving a DBMR to run later, with the prerequisite “要等 CoD 基本的 lexer/parser 已经通了的情况下再推进”, then asked to record the idea in a planning document. The [application note](applications/README.md#deferred-application-hlvm-basic) applies the executor and editable program graph from [*Algebraic Effects Is All You Need*](papers/AlgebraicEffectsIsAllYouNeed.md) to BASIC. It does not change the compiler roadmap or authorize implementation.
 
+## 2026-11-19 — Update deferred field rebinding coverage
+
+<a id="k-deferred-slot-destinations-20261119"></a>
+**K-DEFERRED-SLOT-DESTINATIONS-20261119.** D-28r44→45 and registry r997→998 continue [lexical product coverage](design/RegionalAndLexicalStorageRefactor.md#lexical-adts-as-part-of-the-complete-model) under [H-356](#h-356), [H-437](#h-437), [H-445](#h-445), [H-478](#h-478) and [D-17-DEFER-CHECKS](design/DesignAuthorityRegistry.md#d-17-defer-checks). The checker follows the invocation path to publish the selected slot's new reference and preserves the entry reference where cleanup skips the slot. This preserves actual ownership, readiness, cleanup order and failed-registration coverage under C-63/C-65/C-72/C-93 and charter §§3.3/6.3/12. Ambiguous destination proofs and full physical layouts retain their recorded scope. Prior coverage at `bdbdc8cba16529f9f0507c82ed0cfa0a2335562d:design/RegionalAndLexicalStorageRefactor.md`.
+
 ## 2026-11-19 — Update deferred field lifetime coverage
 
 <a id="k-deferred-live-ancestors-20261119"></a>

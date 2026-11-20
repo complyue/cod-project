@@ -238,7 +238,11 @@ class ScalarChecker {
     Location at;
   };
   std::vector<DeferredProductWrites> deferred_product_writes_;
-  using ProjectionPaths = std::map<size_t, CleanupEquations::ConditionClauses>;
+  struct ProjectionPaths {
+    std::map<size_t, CleanupEquations::ConditionClauses> places;
+    // True when the root and every step identify the invoked destination.
+    bool complete = false;
+  };
   struct LoopState {
     size_t first, last;
     std::set<size_t> bindings, rebound, expired;
@@ -2050,7 +2054,8 @@ class ScalarChecker {
     return cleanup_.read(place);
   }
   CleanupEquations::Reads prepared_binding_reads(const CheckedOperation &view, const Location &at,
-      bool nonnull = false, const std::set<size_t> &initialized = {}, const ProjectionPaths *paths = nullptr) {
+      bool nonnull = false, const std::set<size_t> &initialized = {}, const ProjectionPaths *paths = nullptr,
+      bool projected = false) {
     CleanupEquations::Reads reads;
     if (!proving_) return reads;
     const auto incoming = physical_slots(view.slots);
@@ -2075,8 +2080,13 @@ class ScalarChecker {
         requirement.selection = view.binding ? view.binding : std::optional<size_t>{id};
         requirement.entry_initialized = initialized;
         requirement.entry_nonnull = initialized;
-        if (paths) if (const auto slot = binding(id).embedded_slot) {
-          if (const auto path = paths->find(*slot); path != paths->end()) requirement.when = path->second;
+        if (projected) if (const auto slot = binding(id).embedded_slot) {
+          if (paths) if (const auto path = paths->places.find(*slot); path != paths->places.end()) requirement.when = path->second;
+          if (!storage(*slot).borrowed) {
+            CleanupEquations::ConditionFacts selected;
+            selected.conditions.add({{}, id, place, true});
+            requirement.when = CleanupEquations::conjoin_conditions(requirement.when, {selected});
+          }
         }
       }
     }
@@ -3096,7 +3106,7 @@ class ScalarChecker {
         }
         const auto projection = slots.projected.find(parameter);
         const auto *paths = projection == slots.projected.end() ? nullptr : slots.path(projection->second.slot_input);
-        auto required = prepared_binding_reads(view, at, false, initialized, paths);
+        auto required = prepared_binding_reads(view, at, false, initialized, paths, projection != slots.projected.end());
         for (auto &[read, requirement] : required) {
           requirement.when = CleanupEquations::conjoin_conditions(requirement.when, when);
           requirement.initialized = known;
@@ -3123,7 +3133,7 @@ class ScalarChecker {
           requirement.when = CleanupEquations::conjoin_conditions(requirement.when, {*condition});
         }
         if (const auto *paths = slots.path(parameter))
-          if (const auto path = paths->find(place); path != paths->end())
+          if (const auto path = paths->places.find(place); path != paths->places.end())
             requirement.when = CleanupEquations::conjoin_conditions(requirement.when, path->second);
       }
     }
@@ -3255,8 +3265,20 @@ class ScalarChecker {
             effects.selections.initialized_if.erase(id);
           }
           auto update = selected;
-          if (destination.slots.size() != 1 || !destination.slots.contains(id) ||
-              (destination.type == Type::void_type && destination.targets.contains(null_target))) update.entries.insert(id);
+          const bool may_preserve = destination.slots.size() != 1 || !destination.slots.contains(id) ||
+              (destination.type == Type::void_type && destination.targets.contains(null_target));
+          if (may_preserve) {
+            CleanupEquations::Targets preserved{{}, {}, {id}};
+            if (const auto *paths = slots.path(parameter); paths && paths->complete && destination.slots.contains(id)) {
+              if (const auto slot = binding(id).embedded_slot; slot && !storage(*slot).borrowed) {
+                if (const auto path = paths->places.find(*slot); path != paths->places.end()) {
+                  update.restrict_to(path->second);
+                  preserved.restrict_to(CleanupEquations::exclude_selection_paths(path->second));
+                }
+              }
+            }
+            update.merge(preserved);
+          }
           effects.selections.targets[id].merge(update);
           effects.selections.invalidated.insert(id);
           if (!proving_) {
@@ -3427,9 +3449,10 @@ class ScalarChecker {
         }
         if (parent_paths) {
           auto &paths = invocation_slots.paths[input];
-          for (const auto &[container, alternatives] : *parent_paths)
+          paths.complete = parent_paths->complete;
+          for (const auto &[container, alternatives] : parent_paths->places)
             for (const auto &facts : alternatives)
-              CleanupEquations::add_condition(paths[storage(container).fields[field.field]], facts);
+              CleanupEquations::add_condition(paths.places[storage(container).fields[field.field]], facts);
         }
         projected.push_back(std::move(place));
         continue;
@@ -3438,25 +3461,31 @@ class ScalarChecker {
       const bool changing = at_invocation && (parent_paths || std::ranges::any_of(slot.slots,
           [&](size_t binding) { return rebound_.contains(binding); }));
       const bool absent_parent = slot.targets.contains(null_target);
+      const bool complete = parent_paths ? parent_paths->complete : slot.place.has_value();
       auto referent = changing ? invocation_referent(std::move(slot), *field.description) :
           select_product_reference(std::move(slot), *field.description, at, true, true);
       if (changing) {
         invocation_slots.projected.emplace(input, InvocationSlots::Projection{referent.slots, absent_parent, field.parent});
         if (field.type().kind == Type::product) {
           auto &paths = invocation_slots.paths[input];
+          paths.complete = complete && std::ranges::none_of(referent.slots, [&](size_t id) {
+            const auto slot = binding(id).embedded_slot.value();
+            return storage(slot).borrowed;
+          });
           for (const auto id : referent.slots) {
             const CleanupEquations::ConditionClauses *parent = nullptr;
             if (parent_paths) {
               const auto slot = binding(id).embedded_slot.value();
-              if (const auto path = parent_paths->find(slot); path != parent_paths->end()) parent = &path->second;
+              if (const auto path = parent_paths->places.find(slot); path != parent_paths->places.end()) parent = &path->second;
+              else paths.complete = false;
             }
             for (const auto target : possible_targets_.at(id)) if (target != null_target) {
               CleanupEquations::ConditionFacts selected;
               selected.conditions.add({{}, id, target, true});
-              if (!parent) CleanupEquations::add_condition(paths[target], std::move(selected));
+              if (!parent) CleanupEquations::add_condition(paths.places[target], std::move(selected));
               else for (auto facts : *parent) {
                 facts.append(selected);
-                CleanupEquations::add_condition(paths[target], std::move(facts));
+                CleanupEquations::add_condition(paths.places[target], std::move(facts));
               }
             }
           }
@@ -4572,7 +4601,7 @@ class ScalarChecker {
         const auto observed_selection = cleanup_.project_observed_return(applied, state.returned, state.selections);
         applied.resolve_conditions([&](size_t binding) -> std::optional<CleanupEquations::Targets> {
           if (binding == CleanupEquations::pending_return_selection) return observed_selection;
-          if (deferred_action_) return state.selections.substitute({{}, {}, {binding}});
+          if (deferred_action_) return state.selections.selection_on_exit(binding);
           const auto found = state.targets.find(binding);
           if (found == state.targets.end()) return {};
           auto selected = selection_targets(found->second, state.null_sources.at(binding));

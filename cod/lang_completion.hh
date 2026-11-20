@@ -54,23 +54,26 @@ struct SelectionConditions {
     for (auto term : terms) { if (term.action == action) term.action.reset(); result.add(term); }
     return result;
   }
+  template <typename Target> void substitute(SelectionCondition term, const std::optional<Target> &selected,
+                                             std::optional<size_t> action) {
+    if (!selected) return;
+    if (const auto entry = selected->single_entry()) {
+      term.action = action; term.binding = *entry; add(term);
+    } else if (selected->entries.empty()) {
+      const bool null = term.target == null_target;
+      if (null && selected->places.empty() && !selected->nullable()) return;
+      const bool contains = null ? selected->nullable() : selected->places.contains(term.target);
+      const bool exact = contains && (null ? selected->places.empty() :
+          selected->places.size() == 1 && !selected->nullable());
+      if ((!contains && term.equal) || (exact && !term.equal)) possible = false;
+    }
+    // Wider selections cannot establish this equality or its negation.
+  }
   template <typename Resolve> SelectionConditions through(const Resolve &resolve, std::optional<size_t> action = {}) const {
     SelectionConditions result; result.possible = possible;
-    for (auto term : terms) {
-      if (term.immutable || term.action) { result.add(term); continue; }
-      const auto selected = resolve(term.binding);
-      if (!selected) continue;
-      if (const auto entry = selected->single_entry()) {
-        term.action = action; term.binding = *entry; result.add(term);
-      } else if (selected->entries.empty()) {
-        const bool null = term.target == null_target;
-        if (null && selected->places.empty() && !selected->nullable()) continue;
-        const bool contains = null ? selected->nullable() : selected->places.contains(term.target);
-        const bool exact = contains && (null ? selected->places.empty() :
-            selected->places.size() == 1 && !selected->nullable());
-        if ((!contains && term.equal) || (exact && !term.equal)) result.possible = false;
-      }
-      // Wider selections cannot establish this equality or its negation.
+    for (const auto &term : terms) {
+      if (term.immutable || term.action) result.add(term);
+      else result.substitute(term, resolve(term.binding), action);
     }
     return result;
   }
@@ -496,6 +499,8 @@ public:
     return output;
   }
   struct Targets {
+    enum class Origin { place, absence, entry };
+    using Alternative = std::pair<Origin, size_t>;
     // Physical cells only; absence cannot justify initializing a cell.
     std::set<size_t> places;
     // Immutable nullable inputs, or null_target for independent absence.
@@ -505,6 +510,9 @@ public:
     // Observations of direct alternatives expressed in immutable input facts.
     // Entry selections contribute their own observations when substituted.
     std::optional<BooleanValue> nullness{};
+    // Necessary conditions relative to the entry of this relation. An
+    // unguarded alternative is feasible without additional evidence.
+    std::map<Alternative, ConditionClauses> guards{};
     bool operator==(const Targets &) const = default;
     bool nullable() const { return !null_sources.empty(); }
     std::optional<size_t> single_entry() const {
@@ -527,7 +535,58 @@ public:
       }
       return result;
     }
+    template <typename Visit> void alternatives(const Visit &visit) const {
+      for (const auto id : places) visit(Alternative{Origin::place, id});
+      for (const auto id : null_sources) visit(Alternative{Origin::absence, id});
+      for (const auto id : entries) visit(Alternative{Origin::entry, id});
+    }
+    bool contains(Alternative alternative) const {
+      const auto [origin, id] = alternative;
+      switch (origin) {
+      case Origin::place: return places.contains(id);
+      case Origin::absence: return null_sources.contains(id);
+      case Origin::entry: return entries.contains(id);
+      }
+      return false;
+    }
+    void erase(Alternative alternative) {
+      const auto [origin, id] = alternative;
+      switch (origin) {
+      case Origin::place: places.erase(id); break;
+      case Origin::absence: null_sources.erase(id); break;
+      case Origin::entry: entries.erase(id); break;
+      }
+      guards.erase(alternative);
+    }
+    template <typename Transform> void transform_guards(const Transform &transform) {
+      for (auto it = guards.begin(); it != guards.end();) {
+        auto conditions = transform(it->second);
+        if (conditions.empty()) {
+          const auto alternative = it++->first;
+          erase(alternative);
+        } else if (unconditional(conditions)) it = guards.erase(it);
+        else { it->second = std::move(conditions); ++it; }
+      }
+    }
+    void restrict_to(const ConditionClauses &conditions) {
+      if (unconditional(conditions)) return;
+      alternatives([&](auto alternative) { guards.try_emplace(alternative, ConditionClauses{ConditionFacts{}}); });
+      transform_guards([&](const auto &paths) { return conjoin_conditions(paths, conditions); });
+    }
     void merge(const Targets &other) {
+      if (!guards.empty() || !other.guards.empty()) other.alternatives([&](auto alternative) {
+        const auto current = guards.find(alternative);
+        const auto incoming = other.guards.find(alternative);
+        if (!contains(alternative)) {
+          if (incoming != other.guards.end()) guards.emplace(alternative, incoming->second);
+        } else if (current != guards.end()) {
+          if (incoming == other.guards.end()) guards.erase(current);
+          else {
+            for (const auto &facts : incoming->second) add_condition(current->second, facts);
+            if (unconditional(current->second)) guards.erase(current);
+          }
+        }
+      });
       if (nullness || other.nullness) {
         auto proof = null_observations();
         merge_boolean(proof, other.null_observations());
@@ -538,6 +597,80 @@ public:
       entries.insert(other.entries.begin(), other.entries.end());
     }
   };
+  // Substitute each selection test through the relation that precedes it.
+  // Guards supplied by that relation already describe its own entry, so
+  // they must not be substituted through the same relation a second time.
+  template <typename Resolve> static ConditionClauses through_selections(const ConditionClauses &clauses,
+      const Resolve &resolve, std::optional<size_t> action = {}) {
+    ConditionClauses result;
+    for (auto facts : clauses) {
+      const auto observed = std::move(facts.conditions);
+      facts.conditions = {};
+      facts.conditions.possible = observed.possible;
+      std::optional<ConditionClauses> selected_paths;
+      const auto require = [&](const ConditionClauses &choices) {
+        selected_paths = selected_paths ? conjoin_conditions(*selected_paths, choices) : choices;
+      };
+      for (const auto &term : observed.terms) {
+        if (term.immutable || term.action) { facts.conditions.add(term); continue; }
+        const auto selected = resolve(term.binding);
+        if (selected && !selected->guards.empty()) {
+          ConditionClauses choices;
+          selected->alternatives([&](auto alternative) {
+            const auto [origin, id] = alternative;
+            if (origin != Targets::Origin::entry) {
+              const auto candidate = origin == Targets::Origin::absence ? null_target : id;
+              if ((candidate == term.target) != term.equal) return;
+            }
+            ConditionFacts test;
+            if (origin == Targets::Origin::entry) test.conditions.add({action, id, term.target, term.equal});
+            const auto guard = selected->guards.find(alternative);
+            if (guard == selected->guards.end()) add_condition(choices, std::move(test));
+            else for (auto path : guard->second) {
+              if (action) {
+                SelectionConditions named;
+                for (auto condition : path.conditions.terms) {
+                  if (!condition.immutable && !condition.action) condition.action = action;
+                  named.add(condition);
+                }
+                path.conditions = std::move(named);
+              }
+              path.append(test);
+              add_condition(choices, std::move(path));
+            }
+          });
+          require(choices);
+        } else {
+          facts.conditions.substitute(term, selected, action);
+          if (term.target != null_target || !selected || !selected->entries.empty() ||
+              (selected->places.empty() && !selected->nullable())) continue;
+          const auto proof = selected->null_observations();
+          const auto path = proof.find(term.equal);
+          require(path == proof.end() ? ConditionClauses{} : path->second);
+        }
+      }
+      if (!selected_paths) add_condition(result, std::move(facts));
+      else for (auto path : *selected_paths) {
+        path.append(facts);
+        add_condition(result, std::move(path));
+      }
+    }
+    return result;
+  }
+  static ConditionClauses exclude_selection_paths(const ConditionClauses &paths) {
+    ConditionClauses complement{ConditionFacts{}};
+    for (const auto &path : paths) {
+      ConditionClauses different;
+      for (auto term : path.conditions.terms) {
+        term.equal = !term.equal;
+        ConditionFacts facts;
+        facts.conditions.add(term);
+        add_condition(different, std::move(facts));
+      }
+      complement = conjoin_conditions(complement, different);
+    }
+    return complement;
+  }
   struct InitializationInput {
     size_t id;
     // Absent means the incoming selection of this relation. A captured frame
@@ -632,6 +765,7 @@ public:
         if (null) {
           if (!selected.nullable() || !selected.entries.empty()) {
             selected.null_sources.insert(null_target);
+            selected.guards.erase({Targets::Origin::absence, null_target});
             selected.nullness.reset();
           }
           if (selected.nullness) selected.nullness->erase(false);
@@ -641,6 +775,7 @@ public:
           selected.null_sources.clear();
           if (selected.nullness) selected.nullness->erase(true);
         }
+        std::erase_if(selected.guards, [&](const auto &guard) { return !selected.contains(guard.first); });
       }
     }
     void test(size_t id, bool null) {
@@ -664,12 +799,36 @@ public:
       for (const auto id : next.nonnull_inputs) test(id, false);
     }
     void invalidate(size_t id) { initialized.erase(id); initialized_if.erase(id); invalidated.insert(id); targets.erase(id); }
+    std::optional<Targets> selection_on_exit(size_t id) const {
+      if (const auto found = targets.find(id); found != targets.end()) return found->second;
+      if (invalidated.contains(id)) return {};
+      return Targets{{}, {}, {id}};
+    }
     std::optional<Targets> substitute(const Targets &next) const {
-      Targets result{next.places, next.null_sources, {}, next.nullness};
-      for (const auto entry : next.entries) {
-        if (const auto previous = targets.find(entry); previous != targets.end()) result.merge(previous->second);
+      std::optional<Targets> guarded;
+      if (!next.guards.empty()) {
+        guarded = next;
+        guarded->transform_guards([&](const auto &paths) {
+          return through_selections(paths, [&](size_t id) { return selection_on_exit(id); });
+        });
+      }
+      const auto &incoming = guarded ? *guarded : next;
+      Targets result{incoming.places, incoming.null_sources, {}, incoming.nullness};
+      for (const auto &guard : incoming.guards)
+        if (guard.first.first != Targets::Origin::entry) result.guards.insert(guard);
+      for (const auto entry : incoming.entries) {
+        const auto guard = incoming.guards.find({Targets::Origin::entry, entry});
+        if (guard != incoming.guards.end()) {
+          auto selected = selection_on_exit(entry);
+          if (!selected) return {};
+          selected->restrict_to(guard->second);
+          result.merge(*selected);
+        } else if (const auto previous = targets.find(entry); previous != targets.end()) result.merge(previous->second);
         else if (invalidated.contains(entry)) return {};
-        else result.entries.insert(entry);
+        else {
+          result.entries.insert(entry);
+          result.guards.erase({Targets::Origin::entry, entry});
+        }
       }
       return result;
     }
@@ -772,10 +931,10 @@ public:
         if (const auto next = other.targets.find(it->first); next != other.targets.end()) {
           it->second.merge(next->second); ++it;
         } else if (other.invalidated.contains(it->first)) it = targets.erase(it);
-        else { it->second.entries.insert(it->first); ++it; }
+        else { it->second.merge(Targets{{}, {}, {it->first}}); ++it; }
       }
       for (const auto &[id, target] : other.targets) if (!before.targets.contains(id) && !before.invalidated.contains(id)) {
-        auto merged = target; merged.entries.insert(id);
+        auto merged = target; merged.merge(Targets{{}, {}, {id}});
         targets.emplace(id, std::move(merged));
       }
     }
@@ -1039,6 +1198,10 @@ public:
     ConditionClauses reaching{ConditionFacts{}};
     // Necessary Boolean observations for this completion, relative to action entry.
     ConditionClauses action_reaching{ConditionFacts{}};
+    void enter_selection_guards(size_t action) {
+      for (auto &[id, selected] : selections.targets)
+        selected.transform_guards([&](const auto &paths) { return enter_conditions(paths, action); });
+    }
     void enter_initialization(size_t frame) {
       selections.enter_initialization(frame);
       returned.enter_initialization(frame);
@@ -1081,30 +1244,7 @@ public:
     template <typename Resolve> void resolve_conditions(const Resolve &resolve, std::optional<size_t> action = {}) {
       const auto transform = [&](const auto &conditions) { return conditions.through(resolve, action); };
       transform_values([&](const auto &value) { return value.transform_conditions(transform); });
-      transform_conditions([&](const auto &clauses) {
-        ConditionClauses result;
-        for (auto facts : clauses) {
-          const auto observed = std::move(facts.conditions);
-          facts.conditions = transform(observed);
-          if (!facts.conditions.possible) continue;
-          std::optional<ConditionClauses> selected_paths;
-          for (const auto &term : observed.terms) {
-            if (term.immutable || term.action || term.target != null_target) continue;
-            const auto selected = resolve(term.binding);
-            if (!selected || !selected->entries.empty() || (selected->places.empty() && !selected->nullable())) continue;
-            const auto proof = selected->null_observations();
-            const auto path = proof.find(term.equal);
-            const auto alternatives = path == proof.end() ? ConditionClauses{} : path->second;
-            selected_paths = selected_paths ? conjoin_conditions(*selected_paths, alternatives) : alternatives;
-          }
-          if (!selected_paths) add_condition(result, std::move(facts));
-          else for (auto path : *selected_paths) {
-            path.append(facts);
-            add_condition(result, std::move(path));
-          }
-        }
-        return result;
-      });
+      transform_conditions([&](const auto &clauses) { return through_selections(clauses, resolve, action); });
     }
   };
   struct Path { size_t input; Completion completion; size_t queue; Effects effects{}; };
@@ -1193,7 +1333,7 @@ private:
     const auto observed = project_observed_return(next, first.returned, first.selections);
     next.resolve_conditions([&](size_t binding) -> std::optional<Targets> {
       if (binding == pending_return_selection) return observed;
-      return first.selections.substitute({{}, {}, {binding}});
+      return first.selections.selection_on_exit(binding);
     });
     next.transform_values([&](const auto &value) { return value.through(first.payloads, first.thrown); },
         [&](const auto &value) { return value.through(first.payloads, first.thrown, false, true); });
@@ -1432,6 +1572,7 @@ public:
           for (const auto &[intermediate, nested] : require(path.queue, next.index())) {
             auto invoked = compose(effects, nested);
             invoked.enter_initialization(action_frame(*node.action));
+            invoked.enter_selection_guards(*node.action);
             const auto arrival = incoming.exception()
                 ? ExceptionFacts::arrival().restricted({incoming.reason - 3}) : ExceptionFacts{};
             invoked.transform_values([&](const auto &value) { return value.enter(*node.action, arrival); });

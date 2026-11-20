@@ -423,6 +423,56 @@ runner.CASES = {
         'if(entry.child is null){return;}else{};behave @print(entry.child.value);return;}'
         'proc run()->void{ptr first=make Leaf;ref second=make Leaf {value<-19u64;};ref item=make Box {child=first;};'
         'defer inspect(item);defer{item.child=second;};return;}run();', 2, "", "initialization"),
+    "deferred_product_rebinding_replaces_the_selected_slot": (PRELUDE +
+        'data Leaf {ptr value:u64;}data Box {ref child:Leaf;}'
+        'proc change(ref entry:Box in O,ref replacement:u64 in O) where {owner O}{entry.child.value=replacement;return;}'
+        'proc inspect(ref entry:const Leaf in O) where {const owner O}{'
+        'if(entry.value is null){return;}else{};behave @print(entry.value);return;}'
+        'proc run()->void{val missing<-make local u64;val ready<-19u64;ref first=make Leaf {value=ready;};'
+        'ref second=make Leaf {value=ready;};ref item=make Box {child=first;};defer inspect(second);'
+        'defer change(item,ready);item.child=second;second.value=missing;return;}run();', 0, "19\n", ""),
+    "deferred_product_rebinding_keeps_an_untouched_slot_readable": (PRELUDE +
+        'data Leaf {ptr value:u64;}data Box {ref child:Leaf;}'
+        'proc change(ref entry:Box in O,ptr replacement:u64 in O) where {owner O}{entry.child.value=replacement;return;}'
+        'proc inspect(ref entry:const Leaf in O) where {const owner O}{'
+        'if(entry.value is null){return;}else{};behave @print(entry.value);return;}'
+        'proc run()->void{val missing<-make local u64;val ready<-19u64;ref first=make Leaf {value=ready;};'
+        'ref second=make Leaf {value=ready;};ref item=make Box {child=second;};defer inspect(second);'
+        'defer change(item,missing);item.child=first;return;}run();', 0, "19\n", ""),
+    "deferred_product_rebinding_cannot_discharge_an_unselected_slot": (PRELUDE +
+        'data Leaf {ptr value:u64;}data Box {ref child:Leaf;}'
+        'proc change(ref entry:Box in O,ref replacement:u64 in O) where {owner O}{entry.child.value=replacement;return;}'
+        'proc inspect(ref entry:const Leaf in O) where {const owner O}{'
+        'if(entry.value is null){return;}else{};behave @print(entry.value);return;}'
+        'proc run()->void{val missing<-make local u64;val ready<-19u64;ref first=make Leaf {value=ready;};'
+        'ref second=make Leaf {value=ready;};ref item=make Box {child=second;};defer inspect(second);'
+        'defer change(item,ready);item.child=first;second.value=missing;return;}run();', 2, "", "initialization"),
+    "deferred_product_rebinding_uses_the_ancestor_selected_by_earlier_cleanup": (PRELUDE +
+        'data Leaf {ptr value:u64;}data Box {ref child:Leaf;}'
+        'proc change(ref entry:Box in O,ref replacement:u64 in O) where {owner O}{entry.child.value=replacement;return;}'
+        'proc inspect(ref entry:const Leaf in O) where {const owner O}{'
+        'if(entry.value is null){return;}else{};behave @print(entry.value);return;}'
+        'proc run()->void{val missing<-make local u64;val ready<-19u64;ref first=make Leaf {value=ready;};'
+        'ref second=make Leaf {value=ready;};ref item=make Box {child=first;};defer inspect(second);'
+        'defer change(item,ready);defer{item.child=second;};second.value=missing;return;}run();', 0, "19\n", ""),
+    "deferred_product_rebindings_compose_in_invocation_order": (PRELUDE +
+        'data Leaf {ptr value:u64;}data Box {ref child:Leaf;}'
+        'proc change(ref entry:Box in O,ptr replacement:u64 in O) where {owner O}{entry.child.value=replacement;return;}'
+        'proc inspect(ref entry:const Leaf in O) where {const owner O}{'
+        'if(entry.value is null){return;}else{};behave @print(entry.value);return;}'
+        'proc run()->void{val missing<-make local u64;val ready<-19u64;ref first=make Leaf {value=ready;};'
+        'ref second=make Leaf {value=ready;};ref item=make Box {child=first;};defer inspect(second);'
+        'defer change(item,ready);defer change(item,missing);item.child=second;second.value=missing;return;}run();',
+        0, "19\n", ""),
+    "deferred_product_rebinding_has_no_destination_through_a_null_ancestor": (PRELUDE +
+        'data Leaf {ptr value:u64;}data Box {ptr child:Leaf;}'
+        'proc change(ref entry:Box in O,ref replacement:u64 in O) where {owner O}{'
+        'if(entry.child is null){return;}else{};entry.child.value=replacement;return;}'
+        'proc inspect(ref entry:const Leaf in O) where {const owner O}{'
+        'if(entry.value is null){return;}else{};behave @print(entry.value);return;}'
+        'proc run()->void{val missing<-make local u64;val ready<-19u64;ref second=make Leaf {value=ready;};'
+        'ref item=make Box {child=second;};defer inspect(second);defer change(item,ready);'
+        'item.child=null;second.value=missing;return;}run();', 2, "", "initialization"),
 }
 runner.CASE_ARGUMENTS = {"shadow_error": ["-Werror=shadow"], "unrelated_warning_error": ["-Werror=missing-return"]}
 runner.EXTRA_SOURCES = [Path(__file__)]
