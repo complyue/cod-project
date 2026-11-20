@@ -708,6 +708,7 @@ class ScalarChecker {
     // Private storage with a reaching path on which its payload is unwritten.
     Uninitialized uninitialized;
     EvidencePlaces initialized_selections;
+    // Relative fields are ready whenever this selection has a target.
     std::map<EvidenceSlot, ProductFieldPaths> initialized_fields;
     std::map<EvidenceSlot, SelectedProductFields> selected_fields;
     // These paths identify the selected reference slot itself. Its value
@@ -1277,6 +1278,27 @@ class ScalarChecker {
       missing.conjoin(reaching);
       return static_cast<bool>(missing);
     }
+    void merge_field_initialization(const QuerySelections &other) {
+      // A null receiver cannot select a field. A receiver that can be
+      // present still needs the proof on both incoming paths.
+      for (auto field = initialized_fields.begin(); field != initialized_fields.end();) {
+        const EvidenceSelection receiver{field->first, {}};
+        if (other.presence(receiver) == TargetPresence::absent) {
+          if (presence(receiver) == TargetPresence::absent) field = initialized_fields.erase(field);
+          else ++field;
+          continue;
+        }
+        const auto right = other.initialized_fields.find(field->first);
+        if (right != other.initialized_fields.end()) field->second = common_slots(std::move(field->second), right->second);
+        if (right == other.initialized_fields.end() || field->second.empty()) field = initialized_fields.erase(field);
+        else ++field;
+      }
+      for (const auto &[slot, fields] : other.initialized_fields) {
+        const EvidenceSelection receiver{slot, {}};
+        if (presence(receiver) == TargetPresence::absent && other.presence(receiver) != TargetPresence::absent)
+          initialized_fields.insert_or_assign(slot, fields);
+      }
+    }
     void merge_initialization(const QuerySelections &other) {
       if (!other.initialization_reachable) return;
       if (!initialization_reachable) {
@@ -1289,12 +1311,7 @@ class ScalarChecker {
       }
       initialized_selections = common_slots(std::move(initialized_selections), other.initialized_selections);
       initialized_projected_slots = common_slots(std::move(initialized_projected_slots), other.initialized_projected_slots);
-      for (auto field = initialized_fields.begin(); field != initialized_fields.end();) {
-        const auto ready = other.initialized_fields.find(field->first);
-        if (ready != other.initialized_fields.end()) field->second = common_slots(std::move(field->second), ready->second);
-        if (ready == other.initialized_fields.end() || field->second.empty()) field = initialized_fields.erase(field);
-        else ++field;
-      }
+      merge_field_initialization(other);
       if (uninitialized.empty() && other.uninitialized.empty()) return;
       const auto left_path = outcome({}, true), right_path = other.outcome({}, true);
       for (auto &[place, missing] : uninitialized) missing.conjoin(left_path);
@@ -7437,19 +7454,31 @@ class ScalarChecker {
     for (const auto &slot : target.same_selected) if (std::holds_alternative<PreparedEntryTarget>(slot)) return slot;
     return {};
   }
-  static void capture_preparation_targets(const Expression &entry, TypeEvidenceState &state) {
+  void capture_preparation_targets(const Expression &entry, TypeEvidenceState &state) const {
     if (!state.deferred || !state.required || !state.checks_initialization() || state.repeated_observations) return;
     auto &selections = state.selections;
     size_t ordinal = 0;
     // Capture once before a fork. Each arm can then use the same target
     // identity even when only one of them registers an action.
-    for (const auto &[name, binding] : selections.bindings) {
-      if (!binding.slot) continue;
-      auto target = selections.selected_target(binding);
-      if (target.places.empty() || selections.selection_initialized(target) || prepared_entry_target(target)) continue;
+    const auto capture = [&](const EvidenceSelection &selection) {
+      if (!selection.slot) return;
+      auto target = selections.selected_target(selection);
+      if (target.places.empty() || prepared_entry_target(target)) return;
+      // A readable receiver selection can have outstanding inline fields.
+      if (selections.selection_initialized(target) && std::ranges::none_of(target.places, [&](const auto &place) {
+            const auto *product = std::get_if<QueryProductPlace>(&place);
+            return product && inline_query_product(*product).has_value();
+          })) return;
       EvidenceSlot snapshot = PreparedEntryTarget{&entry, ordinal++};
       while (selections.footprints.contains(snapshot)) snapshot = PreparedEntryTarget{&entry, ordinal++};
       selections.save_selection(snapshot, std::move(target));
+    };
+    for (const auto &[name, binding] : selections.bindings) capture(binding);
+    // A guard may have selected an embedded reference without naming its
+    // receiver separately. Prepared fields need the same shared witness.
+    for (const auto &[slot, footprint] : selections.footprints) {
+      if (std::holds_alternative<QueryProductPlace>(slot) || selections.projected_slots.contains(slot))
+        capture({slot, footprint});
     }
   }
   static std::optional<EvidenceSlot> save_prepared_type_target(TypeEvidenceState &state,

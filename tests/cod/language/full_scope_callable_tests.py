@@ -43,9 +43,17 @@ QUERY_OUTER_CHOICE = ('ptr left=make Outer;ptr right=make Outer;'
 QUERY_NESTED_HOLDERS = (QUERY_OUTER_CHOICE + 'val a<-make local u64;val b<-make local u64;'
                         'first_child.selected=a;second_child.selected=b;')
 QUERY_NULLABLE_CHAIN = QUERY_NESTED_HOLDERS + 'right.child=null in here;'
-QUERY_NULLABLE_CHAIN_CHOICES = (QUERY_NESTED_HOLDERS + 'ptr empty=make Outer;empty.child=null in here;'
-                                'chosen=if(pick_other){empty}else{chosen};')
+QUERY_OPTIONAL_OUTER = 'ptr empty=make Outer;empty.child=null in here;chosen=if(pick_other){empty}else{chosen};'
+QUERY_NULLABLE_CHAIN_CHOICES = QUERY_NESTED_HOLDERS + QUERY_OPTIONAL_OUTER
 READ_GUARDED_CHAIN = 'if(chosen.child is null){return 0u64;}else{return chosen.child.selected;};'
+QUERY_INLINE_HOLDER = 'data Payload {leaf:u64;other:u64;}data Holder {payload:Payload;}'
+QUERY_INLINE_RECEIVERS = QUERY_OUTER_CHOICE + QUERY_OPTIONAL_OUTER
+READ_GUARDED_INLINE = 'if(chosen.child is null){return 0u64;}else{return chosen.child.payload.leaf;};'
+WRITE_GUARDED_INLINE = 'if(chosen.child is not null){chosen.child.payload.leaf<-7u64;{}}else{};'
+WRITE_INLINE_HOLDER = ('proc fill(ptr p:Outer in O)->void where {owner O}{'
+                       'if(p is null){return;}else{};if(p.child is null){return;}else{};p.child.payload.leaf<-7u64;return;}')
+READ_INLINE_HOLDER = ('proc peek(ptr p:Outer in O)->u64 where {owner O}{if(p is null){return 0u64;}else{};'
+                       'if(p.child is null){return 0u64;}else{};return p.child.payload.leaf;}')
 WRITE_NESTED_HOLDER = ('proc fill(ptr p:Outer in O)->void where {owner O}{'
                        'if(p is null){return;}else{};if(p.child is null){return;}else{};'
                        'if(p.child.selected is null){return;}else{};p.child.selected<-7u64;return;}')
@@ -1633,6 +1641,48 @@ runner.CASES = {
         query_with_flag_inputs(QUERY_NULLABLE_CHAIN_CHOICES + 'fill(chosen);' + QUERY_NESTED_REPLACEMENT +
                                'chosen.child=replacement;' + READ_GUARDED_CHAIN),
         2, '', "read of 'fresh' before definite initialization"),
+    'query_dynamic_guard_preserves_readiness_of_a_nested_inline_field': (
+        IO + QUERY_INLINE_HOLDER + QUERY_OUTER +
+        query_with_flag_inputs(QUERY_INLINE_RECEIVERS + WRITE_GUARDED_INLINE + READ_GUARDED_INLINE), 0, '4\n', ''),
+    'query_scope_carries_guarded_inline_readiness_to_the_caller': (
+        IO + QUERY_INLINE_HOLDER + QUERY_OUTER +
+        query_with_flag_inputs(QUERY_INLINE_RECEIVERS + '{{' + WRITE_GUARDED_INLINE + 'return;}};' +
+                               READ_GUARDED_INLINE), 0, '4\n', ''),
+    'query_guarded_inline_write_reaches_a_second_helper_after_cleanup': (
+        IO + QUERY_INLINE_HOLDER + QUERY_OUTER + WRITE_INLINE_HOLDER + READ_INLINE_HOLDER +
+        query_with_flag_inputs(QUERY_INLINE_RECEIVERS + '{{defer fill(chosen);return;}};return peek(chosen);'),
+        0, '4\n', ''),
+    'query_prepared_assignment_retains_the_guarded_inline_destination': (
+        IO + QUERY_INLINE_HOLDER + QUERY_OUTER +
+        query_with_flag_inputs(QUERY_INLINE_RECEIVERS +
+                               '{{if(chosen.child is null){}else{defer (<-)(chosen.child.payload.leaf,7u64);{}};return;}};' +
+                               READ_GUARDED_INLINE), 0, '4\n', ''),
+    'query_prepared_inline_assignment_leaves_a_rebound_destination_unwritten': (
+        IO + QUERY_INLINE_HOLDER + QUERY_OUTER +
+        query_with_flag_inputs(QUERY_INLINE_RECEIVERS + 'ptr replacement=make Holder;'
+                               '{{if(chosen.child is null){}else{defer (<-)(chosen.child.payload.leaf,7u64);{}};'
+                               'chosen.child=replacement;return;}};' + READ_GUARDED_INLINE),
+        2, '', "read of 'leaf' before definite initialization"),
+    'query_saved_receiver_keeps_guarded_cleanup_readiness_after_rebinding': (
+        IO + QUERY_INLINE_HOLDER + QUERY_OUTER +
+        query_with_flag_inputs(QUERY_INLINE_RECEIVERS + 'ptr saved=chosen.child;ptr replacement=make Holder;'
+                               '{{if(chosen.child is null){}else{defer (<-)(chosen.child.payload.leaf,7u64);{}};'
+                               'chosen.child=replacement;return;}};'
+                               'if(saved is null){return 0u64;}else{return saved.payload.leaf;};'), 0, '4\n', ''),
+    'query_inline_field_must_be_written_on_each_present_path': (
+        IO + QUERY_INLINE_HOLDER + QUERY_OUTER +
+        query_with_flag_inputs(QUERY_INLINE_RECEIVERS + 'if(chosen.child is null){}else{'
+                               'if(skip){}else{chosen.child.payload.leaf<-7u64;{}};{}};' + READ_GUARDED_INLINE),
+        2, '', "read of 'leaf' before definite initialization"),
+    'query_guarded_inline_write_leaves_sibling_unwritten': (
+        IO + QUERY_INLINE_HOLDER + QUERY_OUTER + WRITE_INLINE_HOLDER +
+        query_with_flag_inputs(QUERY_INLINE_RECEIVERS + 'fill(chosen);'
+                               'if(chosen.child is null){return 0u64;}else{return chosen.child.payload.other;};'),
+        2, '', "read of 'other' before definite initialization"),
+    'query_guarded_inline_write_does_not_follow_a_rebind_to_a_previous_candidate': (
+        IO + QUERY_INLINE_HOLDER + QUERY_OUTER + WRITE_INLINE_HOLDER +
+        query_with_flag_inputs(QUERY_INLINE_RECEIVERS + 'fill(chosen);chosen.child=first_child;' + READ_GUARDED_INLINE),
+        2, '', "read of 'leaf' before definite initialization"),
     'query_helper_write_through_embedded_slots_leaves_another_chain_unwritten': (
         QUERY_HOLDER + QUERY_OUTER + QUERY_PRODUCT_FLAGS + WRITE_NESTED_HOLDER +
         query(QUERY_NESTED_HOLDERS + 'fill(chosen);return right.child.selected;'),
