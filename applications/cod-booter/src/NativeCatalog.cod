@@ -1,0 +1,10 @@
+using "SourceStorage.cod" SourceBytes;
+using "ModuleExports.cod" ModuleExports;
+
+data "C" IntrinsicCatalog;
+proc "C" IntrinsicCatalog();
+proc "C" catalog_use(here work(ref spellings:const SourceBytes in B, ref exports:const ModuleExports in B) -> u8,
+                     handle catalog:IntrinsicCatalog in B) -> u8 where {const owner B};
+
+export IntrinsicCatalog;
+export catalog_use;
