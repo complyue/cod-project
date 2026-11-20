@@ -1,0 +1,116 @@
+using "NativeSource.cod" Path;
+using "NativeSource.cod" SourceRevision;
+using "NativeSource.cod" SourceOpenException;
+using "NativeSourceUse.cod" source_use;
+using "NativeScratch.cod" Scratch;
+using "NativeScratch.cod" ScratchOpenException;
+using "NativeScratch.cod" scratch_use;
+using "NativeLLVM.cod" LLVMSession;
+using "NativeLLVM.cod" LLVMOpenException;
+using "NativeLLVM.cod" llvm_construct;
+using "NativeLLVM.cod" llvm_verify;
+using "NativeLLVM.cod" llvm_emit_object;
+using "SourceStorage.cod" SourceBytes;
+using "ParserStorage.cod" Tokens;
+using "ParserStorage.cod" ExprNodes;
+using "ParserStorage.cod" no_node;
+using "TokenBuffer.cod" ScanResult;
+using "ExpressionParser.cod" ParseResult;
+using "Frontend.cod" FrontendResult;
+using "ModuleExports.cod" ModuleExports;
+using "ModuleExports.cod" SelectedExports;
+using "NameResolution.cod" NameBindings;
+using "NameResolution.cod" NameWork;
+using "OperandChecking.cod" OperandFacts;
+using "OperandChecking.cod" CallOwners;
+using "CompletionChecking.cod" CompletionSites;
+using "ModuleFrontend.cod" ModuleBindingResult;
+using "ModuleCompiler.cod" compile_module_commands;
+using "NativeCommands.cod" NativeCommands;
+using "NativeCommands.cod" NativePlan;
+using "ModuleLowering.cod" native_unsupported;
+using "ModuleDriver.cod" ModuleWorkspacePlan;
+using "ModuleDriver.cod" plan_module_workspace;
+using "ModuleDriver.cod" native_source_open_failed;
+using "Compiler.cod" ExpressionScratchPlan;
+using "Compiler.cod" native_complete;
+using "Compiler.cod" native_source_rejected;
+using "Compiler.cod" native_form_unsupported;
+using "Compiler.cod" native_open_failed;
+using "Compiler.cod" native_lowering_failed;
+using "Compiler.cod" native_finish_failed;
+using "Compiler.cod" native_scratch_failed;
+
+proc write_object(handle output:Path in A, commands:const NativeCommands in W, plan:const NativePlan in P) -> u8
+    where {const owner A, const owner W, const owner P} {
+    try {
+        owned handle session:LLVMSession <- make owned handle LLVMSession();
+        if (llvm_construct(session, commands, plan.used, plan.labels, plan.slots) != 0u8) {
+            return native_lowering_failed();
+        } else {};
+        if (llvm_verify(session) != 0u8) { return native_finish_failed(); } else {};
+        if (llvm_emit_object(session, output) != 0u8) { return native_finish_failed(); } else {};
+        return native_complete();
+    } catch (error:LLVMOpenException) { return native_open_failed(); }
+}
+
+proc lower_object(source:const SourceBytes in S, spellings:const SourceBytes in B, exports:const ModuleExports in B,
+                  handle output:Path in A, ref tokens:Tokens in W, ref nodes:ExprNodes in W,
+                  ref selected:SelectedExports in W, ref bindings:NameBindings in W, ref names:NameWork in W,
+                  ref facts:OperandFacts in W, ref owners:CallOwners in W, ref sites:CompletionSites in W,
+                  ref commands:NativeCommands in W) -> u8
+    where {const owner S, const owner B, const owner A, owner W} {
+    ref analysis = make ModuleBindingResult {
+        frontend <- make FrontendResult {
+            scan <- make ScanResult { used <- 0u64; next <- 0u64; complete <- false; invalid_source <- false; };
+            tree <- make ParseResult { next <- 0u64; used <- 0u64; root <- no_node(); diagnostic <- 0u8; };
+            diagnostic_first <- 0u64;
+            diagnostic_past <- 0u64;
+        };
+        stage <- 0u8;
+        diagnostic <- 0u8;
+        related_first <- no_node();
+    };
+    ref plan = make NativePlan { used <- 0u64; labels <- 0u64; slots <- 0u64; diagnostic <- 0u8; node <- no_node(); };
+    if (!compile_module_commands(source, tokens, nodes, spellings, exports, selected, bindings, names,
+                                 facts, owners, sites, commands, plan, analysis)) {
+        if (analysis.stage != 0u8) { return native_source_rejected(); } else {};
+        if (plan.diagnostic == native_unsupported()) { return native_form_unsupported(); } else {};
+        return native_lowering_failed();
+    } else {};
+    return write_object(output, commands, plan);
+}
+
+proc compile_revision(source:const SourceBytes in S, spellings:const SourceBytes in B, exports:const ModuleExports in B,
+                      handle output:Path in A) -> u8 where {const owner S, const owner B, const owner A} {
+    ref workspace = make ModuleWorkspacePlan {
+        source <- make ExpressionScratchPlan {
+            token_count <- 0u64; node_capacity <- 0u64; diagnostic <- 0u8;
+            diagnostic_first <- 0u64; diagnostic_past <- 0u64;
+        };
+        commands <- 0u64;
+    };
+    val planned <- plan_module_workspace(source, workspace);
+    if (planned != native_complete()) { return planned; } else {};
+    try {
+        owned handle scratch:Scratch <- make owned handle Scratch(workspace.source.token_count,
+            workspace.source.node_capacity, workspace.commands);
+        return scratch_use(scratch) (tokens, nodes, selected, bindings, names, facts, owners, sites, commands) => {
+            continue lower_object(source, spellings, exports, output, tokens, nodes, selected, bindings, names,
+                                  facts, owners, sites, commands);
+        };
+    } catch (error:ScratchOpenException) { return native_scratch_failed(); }
+}
+
+proc compile_object(handle input:Path in A, handle output:Path in A,
+                    spellings:const SourceBytes in B, exports:const ModuleExports in B) -> u8
+    where {const owner A, const owner B} {
+    try {
+        owned handle source:SourceRevision <- make owned handle SourceRevision(input);
+        return source_use(source) (bytes, lines) => {
+            continue compile_revision(bytes, spellings, exports, output);
+        };
+    } catch (error:SourceOpenException) { return native_source_open_failed(); }
+}
+
+export compile_object;

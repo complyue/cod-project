@@ -45,6 +45,7 @@ struct CheckedArgument {
 };
 inline ArgumentMode argument_mode(const Parameter &parameter) {
   if (parameter.owner.empty()) return ArgumentMode::value;
+  if (parameter.declaration_kind == "handle") return ArgumentMode::borrowed_handle;
   if (parameter.declaration_kind == "ptr") return ArgumentMode::borrowed_ptr;
   if (parameter.declaration_kind == "ref") return ArgumentMode::borrowed_ref;
   return ArgumentMode::borrowed_read;

@@ -385,11 +385,15 @@ class ScalarChecker {
   using Access = std::vector<std::optional<bool>>;
   // Only a known argument or return contract can supply an implicit callable's result.
   enum class ExpectedTypeUse { materialization, callable_result };
-  enum class EvidenceRead { payload, target, projection, binding_slot, discarded };
+  enum class EvidenceRead { payload, target, projection, binding_slot, discarded, native_loan };
   enum class BindingUse { ordinary, exception_field, native_loan };
   enum class IndexedUse { value_only, immediate_target };
   static ExpectedTypeUse expected_type_use(ArgumentMode mode) {
     return mode == ArgumentMode::value ? ExpectedTypeUse::callable_result : ExpectedTypeUse::materialization;
+  }
+  static EvidenceRead argument_evidence_read(ArgumentMode mode) {
+    if (mode == ArgumentMode::borrowed_handle) return EvidenceRead::native_loan;
+    return mode == ArgumentMode::value || mode == ArgumentMode::borrowed_read ? EvidenceRead::payload : EvidenceRead::target;
   }
   static const Type *callable_expectation(const Type *type) {
     return type && type->kind == Type::procedure ? type : nullptr;
@@ -5473,6 +5477,22 @@ class ScalarChecker {
   static bool matches_native_handle(const Type &type, const Type &marker) {
     return type.kind == Type::native_handle && type.identity == marker.identity;
   }
+  CheckedOperation check_handle_loan(const Expression &operand, std::map<const Expression *, CheckedOperation> &operations) {
+    const auto &name = native_loan_source(operand);
+    const auto binding = lexical_.lookup(name.text);
+    if (!binding || bindings_->at(*binding).type.kind != Type::native_handle)
+      fail(name.at, "a borrowed handle parameter requires a lexical native handle");
+    const auto value = read_binding(name, true, binding, BindingUse::native_loan);
+    if (value.type.owned)
+      implementation_gap(name.at, "reborrowing an owned native handle for an ordinary CoD parameter");
+    if (!value.place || !one_owner(value))
+      implementation_gap(name.at, "a native handle argument without one proven live owner");
+    for (auto *part = &operand;; part = part->children.front().get()) {
+      operations.insert_or_assign(part, value);
+      if (part == &name) break;
+    }
+    return value;
+  }
   Type resolve_local_type(const Type &type, const CheckedInstance *instance, const Location &at,
                           bool product_view = false) const {
     auto resolved = resolve_annotation(type, instance);
@@ -9980,6 +10000,7 @@ class ScalarChecker {
     for (const auto slot : slots) operation.operand_preparation.push_back({CheckedOperation::OperandPreparation::Kind::ordinary, slot});
   }
   static void check_written_operand_type(const Type &type, ArgumentMode mode, const Location &at, bool aggregate_borrows) {
+    if (mode == ArgumentMode::borrowed_handle && type.kind == Type::native_handle && !type.owned) return;
     const bool aggregate = type.kind == Type::product || type.kind == Type::array;
     const bool borrowed = mode == ArgumentMode::borrowed_read || mode == ArgumentMode::borrowed_ref;
     if (scalar_type(type) || (aggregate_borrows && aggregate && borrowed)) return;
@@ -9987,6 +10008,7 @@ class ScalarChecker {
   }
   CheckedOperation check_written_operand(const Expression &operand, ArgumentMode mode, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, bool aggregate_borrows = false) {
+    if (mode == ArgumentMode::borrowed_handle) return check_handle_loan(operand, operations);
     const auto type = check(operand, instance, operations, mode == ArgumentMode::value, false, nullptr, expected_type_use(mode));
     const auto &view = operations.at(&operand);
     if (type != Type::never) {
@@ -10058,7 +10080,8 @@ class ScalarChecker {
       const auto &operand = written_ordinary_operand(*expr.children[i]);
       const auto slot = binding.slots[i];
       const auto mode = binding.modes[slot];
-      const auto read = mode == ArgumentMode::value ? EvidenceRead::payload : EvidenceRead::target;
+      const auto read = mode == ArgumentMode::borrowed_handle ? EvidenceRead::native_loan :
+          mode == ArgumentMode::value ? EvidenceRead::payload : EvidenceRead::target;
       const auto type = *type_evidence(operand, state, false, nullptr, nullptr, expected_type_use(mode), completes, read);
       if (type == Type::never) completes = false;
       else {
@@ -10334,7 +10357,7 @@ class ScalarChecker {
         if (!state.validating_body) check_query_binding(expr.text, expr.at);
       }
       if (const auto found = state.bindings.find(expr.text); found != state.bindings.end() && !state.definitions.contains(expr.text)) {
-        if (state.required && found->second && found->second->kind == Type::native_handle)
+        if (state.required && found->second && found->second->kind == Type::native_handle && read != EvidenceRead::native_loan)
           implementation_gap(expr.at, "an opaque C handle used outside a checked native operation");
         if (state.required && found->second && nominal_exception(*found->second) && read != EvidenceRead::projection)
           implementation_gap(expr.at, "use of an owned exception outside direct field selection");
@@ -10356,6 +10379,13 @@ class ScalarChecker {
       return {};
     }
     case K::grouped: {
+      if (read == EvidenceRead::native_loan) {
+        const auto type = type_evidence(*expr.children.front(), state, contextual, expected, alternatives,
+                                        expected_use, true, read, joining);
+        view = state.value;
+        target_facts = state.target;
+        return type;
+      }
       const auto type = type_evidence(*expr.children.front(), state, contextual, expected, alternatives,
                                       expected_use, true, EvidenceRead::target, joining);
       if (!type || type == Type::never) return type;
@@ -11191,9 +11221,7 @@ class ScalarChecker {
           parameter = argument_preparation(expr, name, arguments, evidence, access, owners, state.required, &state);
         const auto *expected_argument = parameter.type ? &*parameter.type : nullptr;
         const auto use = expected_type_use(parameter.mode);
-        const auto operand_read = !swap_operation(name) &&
-            (parameter.mode == ArgumentMode::value || parameter.mode == ArgumentMode::borrowed_read) ?
-                EvidenceRead::payload : EvidenceRead::target;
+        const auto operand_read = swap_operation(name) ? EvidenceRead::target : argument_evidence_read(parameter.mode);
         auto type = evidence[i].type;
         auto selected = hinted_views[i];
         TargetEvidence selected_target = hinted_targets.empty() ? TargetEvidence{} : std::move(hinted_targets[i]);
@@ -13373,13 +13401,16 @@ class ScalarChecker {
         inputs.owner_names.emplace(name, capture_owner(named_owner(name, capture.at), capture.at));
         continue;
       }
+      const bool handle = source.type.kind == Type::native_handle && !source.type.owned;
       const bool readonly_array = source.type.kind == Type::array && !source.value_binding && source.read_only;
-      if (source.alias || !source.selection.empty() || (!numeric(source.type) && !readonly_array) ||
-          (!source.value_binding && (source.nullable || !source.read_only)))
+      if (source.alias || !source.selection.empty() || (!numeric(source.type) && !readonly_array && !handle) ||
+          (!source.value_binding && (source.nullable || (!source.read_only && !handle))))
         implementation_gap(capture.at, "here access requires a numeric val or initialized readonly reference slot with stable storage");
       const auto &operand = scope_operand(base, capture);
-      const auto type = check(operand, supplier, operations, false);
+      if (handle) check_handle_loan(operand, operations);
+      else check(operand, supplier, operations, false);
       const auto view = operations.at(&operand);
+      const auto &type = view.type;
       if (view.targets.contains(null_target) || view.owners.size() != 1 ||
           (source.value_binding && (view.targets.size() != 1 || !view.place || storage(*view.place).borrowed)))
         implementation_gap(capture.at, "here access requires an initialized selection with one established owner");
@@ -13392,7 +13423,7 @@ class ScalarChecker {
         implementation_gap(capture.at, "here access to a slot without definite initialization at supply");
       const auto role = capture_owner(*view.owners.begin(), capture.at);
       Parameter input{name, type, capture.at, false, {}};
-      input.declaration_kind = source.value_binding ? "ptr" : "ref";
+      input.declaration_kind = handle ? "handle" : source.value_binding ? "ptr" : "ref";
       input.owner = inputs.owners.at(role).name;
       input.read_only = view.read_only;
       input.fixed_binding = view.fixed_binding;
@@ -13400,7 +13431,7 @@ class ScalarChecker {
       if (source.value_binding) {
         inputs.live_values.insert(ordinal);
         inputs.place_owners[ordinal].insert(role);
-      } else {
+      } else if (!handle) {
         inputs.live_bindings.insert(ordinal);
         for (const auto owner : source.place_owners)
           inputs.place_owners[ordinal].insert(capture_owner(owner, capture.at));
@@ -15185,7 +15216,10 @@ class ScalarChecker {
     auto [body, returning] = demand_supplied_here(*expr.children.back(), callback, signature,
         {owner}, native.contract.result, instance, operations, native.contract.source->owner_parameters.front().read_only);
     if (returning) implementation_gap(expr.at, "return inspection through a native here operation");
-    if (std::ranges::any_of(body.places, [&](const Expression *capture) { return !operations.at(capture).read_only; }))
+    if (std::ranges::any_of(body.places, [&](const Expression *capture) {
+          const auto &view = operations.at(capture);
+          return !view.read_only && (view.type.kind != Type::native_handle || !const_owner(*one_owner(view)));
+        }))
       implementation_gap(expr.at, "a writable captured supplier place in a native here operation");
     CheckedOperation operation;
     operation.native_here_call = CheckedOperation::NativeHereCall{id, *value.place, owner};
@@ -15691,9 +15725,13 @@ class ScalarChecker {
         // A builtin's passing mode is established. Retain context for missing
         // input evidence without pre-analyzing every normally producing operand.
         auto before = declared_builtin && !preparation.type ? std::optional{evidence_state()} : std::nullopt;
-        const auto argument = check(*expr.children[i], instance, operations, mode == ArgumentMode::value, false,
-            preparation.type ? &*preparation.type : nullptr, expected_type_use(mode), false,
-            mode == ArgumentMode::value ? IndexedUse::value_only : IndexedUse::immediate_target);
+        const auto &operand = *expr.children[i];
+        if (mode == ArgumentMode::borrowed_handle && &expr == prepared_call_)
+          implementation_gap(operand.at, "native handles in deferred call operands");
+        const auto argument = mode == ArgumentMode::borrowed_handle ? check_handle_loan(operand, operations).type :
+            check(operand, instance, operations, mode == ArgumentMode::value, false,
+                  preparation.type ? &*preparation.type : nullptr, expected_type_use(mode), false,
+                  mode == ArgumentMode::value ? IndexedUse::value_only : IndexedUse::immediate_target);
         if (argument == Type::never) {
           if (before) {
             evidence = argument_evidence(expr, std::move(*before), i);
@@ -15710,7 +15748,8 @@ class ScalarChecker {
           completes = false;
         } else {
           arguments.push_back(argument);
-          if (mode == ArgumentMode::value || (argument.kind != Type::product && argument.kind != Type::array))
+          if (mode == ArgumentMode::value ||
+              (mode != ArgumentMode::borrowed_handle && argument.kind != Type::product && argument.kind != Type::array))
             require_value(argument, expr.at);
         }
         operation.arguments.push_back({mode, arguments.back()});
@@ -17261,7 +17300,7 @@ class ScalarChecker {
           owners.clear();
           for (const auto role : profile->place_owners.at(p)) owners.insert(null_target - 1 - role);
         }
-        bindings_->back().fixed = parameter.fixed_binding;
+        bindings_->back().fixed = parameter.fixed_binding || mode == ArgumentMode::borrowed_handle;
         bindings_->back().requires_initialized = parameter.declaration_kind == "ref";
         bindings_->back().nullable = !live_value && mode == ArgumentMode::borrowed_ptr;
         bindings_->back().callable_value = instance.arguments[p].kind == Type::procedure && (parameter.owner.empty() || live_value);
@@ -18213,8 +18252,16 @@ class ScalarChecker {
         if (!parameter.owner.empty() && !owners.contains(parameter.owner)) fail(parameter.at, "unknown parameter owner '" + parameter.owner + "'");
         if (parameter.variadic && form->body) implementation_gap(parameter.at, "variadic method bodies");
         if (parameter.automatic_conversion) implementation_gap(parameter.at, "automatic parameter conversion contract");
-        if (form->c_linkage && parameter.declaration_kind == "handle") {
-          prepared.parameters.push_back(native_handle_type(resolve_signature(parameter.type), false));
+        if (parameter.declaration_kind == "handle") {
+          if (form->kind != Form::Kind::procedure || form->symbolic || !operation.empty() || lexical_methods_.contains(form))
+            implementation_gap(parameter.at, "native handle parameters outside named CoD procedures");
+          const auto marker = resolve_signature(parameter.type);
+          if (marker.kind != Type::c_type_marker)
+            fail(parameter.at, "handle parameter requires a fieldless data \"C\" type");
+          const auto owner = std::ranges::find(prepared.input_owners(), parameter.owner, &OwnerParameter::name);
+          if (owner == prepared.input_owners().end() || owner->root || owner->explicit_parameter)
+            fail(parameter.at, "native handle parameter requires a declared owner");
+          prepared.parameters.push_back(native_handle_type(marker, false));
           continue;
         }
         prepared.parameters.push_back(resolve_signature(parameter.type));
