@@ -5557,8 +5557,10 @@ class ScalarChecker {
     for (size_t i = 0; i < arguments.size(); ++i) if (arguments[i].kind == Type::product) {
       const auto &parameter = parameter_at(definition, i);
       const auto mode = argument_mode(parameter);
-      if (mode == ArgumentMode::value || definition.scope_inputs || definition.source->symbolic || caller_bindings(definition))
-        implementation_gap(at, "product parameters require a borrowed target in an ordinary direct call");
+      const bool live_slot = definition.scope_inputs && definition.scope_inputs->live_bindings.contains(i);
+      if (mode == ArgumentMode::value || (definition.scope_inputs && !live_slot) ||
+          definition.source->symbolic || caller_bindings(definition))
+        implementation_gap(at, "product parameters require an ordinary borrowed target or a live lexical reference slot");
     }
     if (result.contract->type->kind == Type::product) {
       if (!result.contract->borrowed()) implementation_gap(at, "whole-product value results");
@@ -6293,6 +6295,8 @@ class ScalarChecker {
     return field.source->read_only || field.source->fixed_binding;
   }
   static void check_product_owner_roles(const CheckedMethod &method, const std::vector<Type> &types) {
+    // Lexical scopes retain the supplying activation's owner capabilities.
+    if (method.scope_inputs) return;
     if (std::ranges::none_of(types, [](const auto &type) { return type.kind == Type::product; })) return;
     for (const auto &owner : method.input_owners()) if (!owner.read_only) {
       bool product = false, writable = false;
@@ -10594,13 +10598,31 @@ class ScalarChecker {
     CleanupEquations::ConditionFacts::close_equalities(groups);
     return groups;
   }
-  void scope_input_observations(CheckedMethod::ScopeInputs &inputs, const std::vector<CheckedOperation> &views,
-                                const Location &at) {
+  void scope_input_observations(CheckedMethod::ScopeInputs &inputs, const std::vector<Type> &arguments,
+                                const std::vector<CheckedOperation> &views, const Location &at) {
+    std::map<size_t, std::set<size_t>> embedded_places;
     for (const auto left : inputs.live_bindings) {
       const auto possible = overlapping_slots(views[left].slots);
       for (const auto right : inputs.live_bindings)
         if (right > left && !intersect(possible, physical_slots(views[right].slots)).empty())
           inputs.overlapping_input_bindings.emplace(left, right);
+      if (std::ranges::any_of(possible, [&](size_t id) { return binding(id).embedded_slot.has_value(); }))
+        embedded_places.emplace(left, physical_slots(views[left].slots));
+    }
+    if (!embedded_places.empty()) {
+      const auto fields = product_inputs(arguments, at);
+      InvocationSlots slots{};
+      const auto projected = project_call_fields(fields, views, at, false, slots);
+      // A caller's declared place can designate a slot also reached through
+      // a product field in this body.
+      for (size_t i = 0; i < fields.size(); ++i) {
+        if (fields[i].role != ProductInput::Role::slot) continue;
+        const auto field = arguments.size() + i;
+        const auto possible = overlapping_slots(projected[field].slots);
+        for (const auto &[input, places] : embedded_places)
+          if (!intersect(possible, places).empty())
+            inputs.overlapping_input_bindings.emplace(input, field);
+      }
     }
     // Deferred selection bounds are complete after target discovery.
     if (proving_ || !delayed_) for (size_t i = 0; i < views.size(); ++i) {
@@ -10707,7 +10729,7 @@ class ScalarChecker {
       const auto &operand = scope_operand(method_id, capture);
       const auto type = check(operand, instance, operations, independent);
       auto view = operations.at(&operand);
-      if (!lexical_value_type(type))
+      if (!lexical_value_type(type) && !(live_binding && type.kind == Type::product))
         implementation_gap(capture.at, "full-scope input requires an admitted target or independent value type");
       parameter.read_only = view.read_only;
       if (!independent) {
@@ -10750,7 +10772,7 @@ class ScalarChecker {
     for (const auto &query : method.queries)
       if (const auto slot = here_slot(query.name)) retain_lexical_here(inputs, operation.scope_here, query, *slot, owner_role);
     scope_owner_relations(inputs, operation.scope_owners);
-    scope_input_observations(inputs, views, expr.at);
+    scope_input_observations(inputs, arguments, views, expr.at);
     const auto profile = scope_profile(std::move(inputs));
     std::optional<ResultContract> supplied;
     if (expected) {
@@ -14715,8 +14737,8 @@ class ScalarChecker {
         for (const auto &owner : checking_method_->input_owners())
           instance.frame.owners.try_emplace(external_owners_.at(owner.name), null_target);
         for (const auto [a, b] : checking_method_->scope_inputs->overlapping_input_bindings) {
-          const auto left = storage(instance.frame.inputs.at(a).place).binding;
-          const auto right = storage(instance.frame.inputs.at(b).place).binding;
+          const auto left = storage(input_place(a)).binding;
+          const auto right = storage(input_place(b)).binding;
           bindings_->at(left).overlaps.insert(right);
           bindings_->at(right).overlaps.insert(left);
         }

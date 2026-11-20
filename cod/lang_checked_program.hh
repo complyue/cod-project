@@ -523,6 +523,7 @@ struct CheckedMethod {
     // Several lexical names can designate one transported place.
     std::map<std::string, PlaceAccess> place_access;
     std::map<size_t, std::set<size_t>> place_owners;
+    // Slot relationships can include projected product input ordinals.
     std::set<std::pair<size_t, size_t>> overlapping_input_bindings;
     // Entry observations use input ordinals until the body allocates local slots.
     std::set<std::pair<size_t, size_t>> disjoint_input_targets;

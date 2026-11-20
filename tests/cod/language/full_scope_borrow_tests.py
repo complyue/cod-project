@@ -19,6 +19,12 @@ SLOT_CALLS = ('val x<-1,y<-7;ptr p=x,q=y;'
               'try{p<=>p;}catch(e:const NullPointerException){behave @print(8);};behave @print(p is null);'
               'p=x;try{p<=>q;}catch(e:const NullPointerException){behave @print(9);};'
               'behave @print(p is null);behave @print(q is null);')
+BOX = 'data Box {value:u64;}'
+BOXES = 'ref left=make Box {value<-7u64;};ref right=make Box {value<-19u64;};ptr chosen=left;'
+EMBEDDED_BOX = BOX + 'data Outer {ptr child:Box;}'
+EMBEDDED_PLACE = 'ref parent=make Outer {child=ready;};ptr var slot->parent.child;'
+PAIR = 'data Pair {first:u64;second:u64;}'
+UNFINISHED_PAIR = 'ptr item=make Pair;item.first<-7u64;'
 
 
 def query(body):
@@ -61,6 +67,48 @@ runner.CASES = {
         '{{p<-8u64;}};behave @print(source);', 0, '8\n', ''),
     'ptr_read_requires_payload_initialization': ('val source<-make local u64;ptr p:u64=source;{{return p;}};', 2, '',
         'initialization'),
+    'product_field_write_follows_outer_slot_rebinding': (IO + BOX + 'proc run()->void{' + BOXES +
+        '{{chosen=right;chosen.value<-23u64;}};'
+        'behave @print(left.value);behave @print(right.value);behave @print(chosen.value);return;}run();',
+        0, '7\n23\n23\n', ''),
+    'product_field_write_initializes_outer_storage': (IO + PAIR + 'proc run()->void{' + UNFINISHED_PAIR +
+        '{{item.second<-19u64;}};behave @print(item.first);behave @print(item.second);return;}run();',
+        0, '7\n19\n', ''),
+    'product_field_read_checks_its_own_initialization': (IO + PAIR + 'proc run()->void{' + UNFINISHED_PAIR +
+        '{{behave @print(item.second);}};return;}run();', 2, '', 'initialization'),
+    'product_slot_updates_survive_local_return_and_cleanup': (IO + BOX + 'proc run()->void{' + BOXES +
+        'val result<-{{defer{chosen=right;chosen.value<-23u64;};return chosen.value;}};'
+        'behave @print(result);behave @print(chosen.value);behave @print(left.value);return;}run();',
+        0, '7\n23\n7\n', ''),
+    'deferred_scope_uses_the_live_product_slot': (IO + BOX + 'proc run()->void{' + BOXES +
+        'defer{behave @print(left.value);behave @print(right.value);};'
+        'defer {{chosen.value<-23u64;}};chosen=right;return;}run();', 0, '7\n23\n', ''),
+    'product_slot_rebinding_survives_a_checked_failure': (IO + NPE + BOX + 'proc run(flag:bool)->void{' + BOXES +
+        'ptr absent:Box=null in here;ptr probe=if(flag){left}else{absent};'
+        'try{ {{chosen=right;behave @print(probe.value);}}; }'
+        'catch(e:const NullPointerException){behave @print(chosen.value);};'
+        'behave @print(chosen.value);return;}run(true);run(false);', 0, '7\n19\n19\n19\n', ''),
+    'product_field_write_after_a_checked_failure_supplies_no_readiness': (
+        IO + NPE + PAIR + 'proc run(flag:bool)->void{' + UNFINISHED_PAIR +
+        'ptr absent:Pair=null in here;ptr probe=if(flag){item}else{absent};'
+        'try{ {{behave @print(probe.first);item.second<-19u64;return;}}; }'
+        'catch(e:const NullPointerException){behave @print(item.second);};return;}run(false);',
+        2, '', 'initialization'),
+    'full_scope_query_does_not_rebind_the_product_slot': (IO + BOX + 'proc run()->void{' + BOXES +
+        'val inspected<-make local typeof({{chosen=right;return chosen.value;}}){23u64};'
+        'behave @print(inspected);behave @print(chosen.value);return;}run();', 0, '23\n7\n', ''),
+    'scope_can_read_a_readonly_product_in_a_writable_owner': (IO + BOX +
+        'ref item:const Box=make Box {value<-7u64;};behave @print({{return item.value;}});', 0, '7\n', ''),
+    'scope_cannot_rebind_a_product_slot_to_its_own_storage': (BOX + 'proc run()->void{' + BOXES +
+        '{{ref inner=make Box {value<-23u64;};chosen=inner;return;}};return;}run();', 2, '', 'owner'),
+    'product_field_read_observes_rebinding_through_a_declared_place': (
+        IO + EMBEDDED_BOX + 'proc run()->void{ref ready=make Box {value<-7u64;};ptr unready=make Box;' +
+        EMBEDDED_PLACE + '{{slot=unready;if(parent.child is not null){behave @print(parent.child.value);}else{};return;}};'
+        'return;}run();', 2, '', 'initialization'),
+    'declared_place_read_observes_null_rebound_through_a_product_field': (
+        IO + NPE + EMBEDDED_BOX + 'proc run()->void{ref ready=make Box {value<-7u64;};' + EMBEDDED_PLACE +
+        'try{ {{parent.child=null;behave @print(slot.value);return;}}; }'
+        'catch(e:const NullPointerException){behave @print(e.category);};return;}run();', 0, '4\n', ''),
     'same_target_inputs_observe_writes': (IO+'ref a:u64=1u64;ref p:u64=a;ref q:u64=a;'
         '{{behave @print(p is q);p<-7u64;behave @print(q);}};behave @print(a);', 0, 'true\n7\n7\n', ''),
     'same_actual_owner_in_forwarded_call': (IO+SELECT+'ref a:u64=1u64;ref b:u64=2u64;'

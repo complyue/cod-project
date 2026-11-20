@@ -5,6 +5,11 @@
 <a id="h-hlvm-candidate-20261120"></a>
 **H-HLVM-CANDIDATE-20261120.** In the project chat, the project user proposed `hlvm-basic` for running BASIC source or saving a DBMR to run later, with the prerequisite “要等 CoD 基本的 lexer/parser 已经通了的情况下再推进”, then asked to record the idea in a planning document. The [application note](applications/README.md#deferred-application-hlvm-basic) applies the executor and editable program graph from [*Algebraic Effects Is All You Need*](papers/AlgebraicEffectsIsAllYouNeed.md) to BASIC. It does not change the compiler roadmap or authorize implementation.
 
+## 2026-11-19 — Check live lexical product slots in full scopes
+
+<a id="k-full-scope-product-slots-20261119"></a>
+**K-FULL-SCOPE-PRODUCT-SLOTS-20261119.** D-17r128→129 and registry r1000→1001 continue P-564–P-566 under [H-FULL-SCOPE-IMPLEMENTATION-20261118](#h-full-scope-implementation-20261118), [H-CALLABLE-MODEL-20261118](#h-callable-model-20261118) and [H-478](#h-478). The seed checks projected lexical product fields through a full scope's live inputs. Possible overlap between a declared place and an embedded field follows the same slot effects as other live inputs. This preserves access, actual owners, field readiness and local cleanup under C-63/C-65/C-73/C-75/C-84 and charter §§3.2–3.3/4.3/6.3/8/12. Prior coverage at `027c8e56cb605d0b55395b17998e5708fc087971:design/ExceptionControl.md`.
+
 ## 2026-11-19 — Prove shared saved receiver choices during cleanup
 
 <a id="k-deferred-saved-receiver-20261119"></a>
