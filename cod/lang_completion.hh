@@ -1404,7 +1404,10 @@ private:
     known.observes_return = previous_return_observation || effects.observes_return;
     known.raises_deferred_failure = previous_deferred_failure || effects.raises_deferred_failure;
     for (const auto &[read, before] : effects.reads) merge_read(known.reads, read, before);
-    combine_initialization(known.initialized, known.uninitialized, effects.initialized, effects.uninitialized, true);
+    // A queue arm with no writer can leave a place uninitialized only
+    // on paths that reach that arm.
+    combine_initialization(known.initialized, known.uninitialized, effects.initialized, effects.uninitialized,
+                           true, &previous_reaching, &effects.reaching);
     std::erase_if(known.present, [&](size_t id) { return !effects.present.contains(id); });
     known.returned.merge(effects.returned);
     known.thrown.merge(effects.thrown);
@@ -1439,10 +1442,11 @@ private:
         previous_reaching != known.reaching || previous_action_reaching != known.action_reaching;
   }
 public:
-  void observe_input_conditions(const ConditionClauses &paths) {
+  void observe_input_conditions(const ConditionClauses &paths, bool observe_booleans = true) {
     bool changed = false;
     for (const auto &path : paths) {
-      for (const auto &[input, value] : path.inputs) changed = observed_inputs_.insert(input).second || changed;
+      if (observe_booleans)
+        for (const auto &[input, value] : path.inputs) changed = observed_inputs_.insert(input).second || changed;
       for (const auto place : path.present) changed = observed_references_.insert(place).second || changed;
       for (const auto place : path.absent) changed = observed_references_.insert(place).second || changed;
     }

@@ -208,6 +208,8 @@ class ScalarChecker {
   std::map<std::tuple<BooleanDecision::Origin, size_t, size_t, size_t>, size_t> conditional_selections_;
   std::map<size_t, size_t> incoming_selections_;
   std::map<std::pair<size_t, size_t>, size_t> product_selections_;
+  using SelectedSlotValues = std::vector<std::pair<size_t, size_t>>;
+  std::map<std::pair<size_t, SelectedSlotValues>, size_t> embedded_reference_selections_;
   std::vector<size_t> input_field_places_;
   std::map<size_t, size_t> input_field_roots_;
   std::map<size_t, size_t> input_slot_referents_;
@@ -2455,7 +2457,7 @@ class ScalarChecker {
       if (!proving_) record_rebinding(id, deferred);
     }
   }
-  CheckedOperation current_selection(CheckedOperation view, const Location &at) const {
+  CheckedOperation current_selection(CheckedOperation view, const Location &at) {
     reference_destination(view, at);
     return selection_state(std::move(view), at);
   }
@@ -2529,7 +2531,7 @@ class ScalarChecker {
     };
     exchange(left, right); exchange(right, left);
   }
-  CheckedOperation selection_state(CheckedOperation view, const Location &at) const {
+  CheckedOperation selection_state(CheckedOperation view, const Location &at) {
     require_slots_live(view.slots, at, "aliased binding's lexical scope has ended");
     view.targets.clear(); view.null_sources.clear(); view.owners.clear(); view.selection_versions.clear();
     view.selection_identity.reset();
@@ -2549,6 +2551,25 @@ class ScalarChecker {
       view.constrain_initialization(selection_initialization(lexical_, id));
     }
     if (identities.size() == 1) view.selection_identity = *identities.begin();
+    else if (view.embedded_slot_selection && !identities.empty()) {
+      // The same address selection loads the same value while each slot
+      // retains its observed value. A different address or a rebind can
+      // preserve the candidate targets while changing the selected value.
+      SelectedSlotValues values;
+      values.reserve(view.slots.size());
+      for (const auto slot : view.slots) values.emplace_back(slot, lexical_.selection_identities.at(slot));
+      const auto [entry, inserted] =
+          embedded_reference_selections_.try_emplace({*view.embedded_slot_selection, std::move(values)});
+      if (inserted) {
+        std::set<size_t> sources;
+        for (const auto identity : identities) {
+          const auto &selected = selection_sources_.at(identity);
+          sources.insert(selected.begin(), selected.end());
+        }
+        entry->second = new_selection_identity(std::move(sources));
+      }
+      view.selection_identity = entry->second;
+    }
     select_targets(view, view.targets);
     require_live_view(view, at);
     return view;
@@ -2908,9 +2929,17 @@ class ScalarChecker {
         if (!slots.contains(parameter) && view.binding) facts.absent_bindings.emplace(*view.binding, view.selection_versions);
       }
       if (!slots.all) for (const bool null : {false, true})
-        for (const auto parameter : null ? known.absent : known.present)
-          if (const auto saved = slots.saved_nullable_inputs.find(parameter); saved != slots.saved_nullable_inputs.end())
+        for (const auto parameter : null ? known.absent : known.present) {
+          if (const auto saved = slots.saved_nullable_inputs.find(parameter); saved != slots.saved_nullable_inputs.end()) {
             facts.conditions.add({{}, saved->second, null_target, null, true});
+          } else if (!slots.contains(parameter)) {
+            // A projected input may have an observed value without a
+            // single lexical binding whose version can carry this fact.
+            const auto &view = views.at(parameter);
+            if (view.selection_identity && view.targets.contains(null_target))
+              facts.conditions.add({{}, *view.selection_identity, null_target, null, true});
+          }
+        }
       CleanupEquations::ConditionClauses clauses;
       CleanupEquations::add_condition(clauses, std::move(facts));
       for (const auto parameter : observed_selections)
@@ -4949,6 +4978,14 @@ class ScalarChecker {
     proof->kind = view.binding ? Predicate::Kind::null_test : Predicate::Kind::presence;
     if (view.binding) proof->test = {*view.binding, view.selection_versions};
     proof->results[false].insert({selected_input(view.targets), {}});
+    if (!view.binding && view.embedded_slot_selection && view.selection_identity) {
+      for (const bool absent : {false, true}) {
+        CleanupEquations::ConditionFacts facts;
+        if (!absent) facts.present = selected_input(view.targets);
+        facts.conditions.add({{}, *view.selection_identity, null_target, absent, true});
+        proof->results[absent] = {std::move(facts)};
+      }
+    }
     return proof;
   }
   std::shared_ptr<const Predicate> identity_predicate(const CheckedOperation &left, const CheckedOperation &right) const {
@@ -5064,11 +5101,17 @@ class ScalarChecker {
   void dereference(const CheckedOperation &view, const Location &at) {
     if (view.targets.contains(null_target)) {
       const auto before = lexical_;
-      if (view.binding) refine_test({*view.binding, view.selection_versions}, true);
+      const auto projected = !view.binding && view.embedded_slot_selection && view.selection_identity
+          ? null_predicate(view) : nullptr;
+      const auto refine = [&](bool absent) {
+        if (view.binding) refine_test({*view.binding, view.selection_versions}, absent);
+        else if (projected) refine_predicate(projected, absent, at);
+        else if (!absent && view.targets.size() == 1) lexical_.live = false;
+      };
+      refine(true);
       note_abrupt(at, {exception_id(ExceptionCategory::null_pointer)});
       lexical_ = before;
-      if (view.binding) refine_test({*view.binding, view.selection_versions}, false);
-      else if (view.targets.size() == 1) lexical_.live = false;
+      refine(false);
     }
     record_presence(view.targets);
     refine_known_bindings();
@@ -15615,10 +15658,17 @@ class ScalarChecker {
       }
       summary.enforce_checked_boundary = (checking_method_ && checking_method_->source->implicit_scope) ||
           deferred_actions_with_checked_scopes_.contains(action);
+      const bool writes_storage = std::ranges::any_of(summary.paths, [](const auto &path) {
+        return !path.effects.payload_writes.empty() &&
+            (!path.effects.initialized.empty() || !path.effects.uninitialized.empty());
+      });
       cleanup_.define(action, std::move(summary));
       note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
       if (lexical_.live) {
         const auto reaching = CleanupEquations::stable_input_conditions(path_conditions(lexical_));
+        // When only the present arm registers a writer, the missing write
+        // on the other arm is conditional on the corresponding entry value.
+        if (writes_storage) cleanup_.observe_input_conditions(reaching, false);
         for (const auto input : lexical_.inputs) {
           auto &queue = lexical_.input_facts.at(input).queues.at(cleanup_scope_);
           queue = cleanup_.push(queue, action, reaching);
@@ -15815,6 +15865,7 @@ class ScalarChecker {
     cleanup_scope_ = 0; next_scope_ = 1;
     next_target_version_ = 0;
     next_selection_identity_ = 0; selection_sources_.clear(); incoming_selections_.clear(); product_selections_.clear();
+    embedded_reference_selections_.clear();
     input_field_places_.clear(); input_field_roots_.clear(); input_slot_referents_.clear(); return_selection_actions_.clear();
     next_boolean_observation_ = 0; conditional_selections_.clear();
   }

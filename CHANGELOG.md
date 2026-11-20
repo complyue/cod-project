@@ -5,6 +5,11 @@
 <a id="h-hlvm-candidate-20261120"></a>
 **H-HLVM-CANDIDATE-20261120.** In the project chat, the project user proposed `hlvm-basic` for running BASIC source or saving a DBMR to run later, with the prerequisite “要等 CoD 基本的 lexer/parser 已经通了的情况下再推进”, then asked to record the idea in a planning document. The [application note](applications/README.md#deferred-application-hlvm-basic) applies the executor and editable program graph from [*Algebraic Effects Is All You Need*](papers/AlgebraicEffectsIsAllYouNeed.md) to BASIC. It does not change the compiler roadmap or authorize implementation.
 
+## 2026-11-19 — Check guarded inline writes in executable code
+
+<a id="k-executable-embedded-selection-20261119"></a>
+**K-EXECUTABLE-EMBEDDED-SELECTION-20261119.** D-17r138→139 and registry r1010→1011 continue P-564–P-566 under [H-FULL-SCOPE-IMPLEMENTATION-20261118](#h-full-scope-implementation-20261118), [H-439](#h-439), [H-445](#h-445) and [H-478](#h-478). An executable load retains the same observed reference when the selected address and its slot values are unchanged. Calls and cleanup carry the conditions under which a field remains unwritten. This preserves actual-owner identity, checked dereference and ordinary cleanup under C-63/C-65/C-72/C-95 and charter §§3.2–3.3/4.3/6.3/8/12. Prior coverage at `9f0939fe822f9490de71421fabea19e0e58ea233:design/ExceptionControl.md`.
+
 ## 2026-11-19 — Retain guarded inline field readiness in queries
 
 <a id="k-queried-guarded-inline-fields-20261119"></a>

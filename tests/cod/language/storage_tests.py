@@ -20,6 +20,27 @@ SELECTED_BOX = DEFERRED_LEAF_CALLS + (
     'ptr chosen=if(flag){left}else{right};'
 )
 REPLACE_BOTH_CHILDREN = 'ptr second=make Leaf;ptr third=make Leaf;left.child=second;right.child=third;'
+CHOOSE_EMBEDDED_BOX = (
+    'ptr first=make Leaf;ptr second=make Leaf;ptr left=make Box;ptr right=make Box;ptr empty=make Box;'
+    'left.child=first;right.child=second;empty.child=null in here;'
+    'ptr nonempty=if(left_path){left}else{right};ptr chosen=if(empty_path){empty}else{nonempty};'
+)
+WRITE_SELECTED_LEAF = 'if(chosen.child is null){}else{chosen.child.value<-7u64;{}};'
+READ_SELECTED_LEAF = 'if(chosen.child is null){return 0u64;}else{return chosen.child.value;};'
+FILL_SELECTED_BOX = (
+    'proc fill(ptr item:Box in O)->void where {owner O}{'
+    'if(item is null){return;}else{};if(item.child is null){return;}else{};item.child.value<-7u64;return;}'
+)
+
+
+def selected_box_program(body):
+    return (
+        'proc observe(left_path:bool,empty_path:bool,skip:bool)->void{val result<-{{'
+        + CHOOSE_EMBEDDED_BOX + body + '}};behave @print(result);return;}'
+        'observe(true,false,false);observe(false,false,false);observe(true,true,false);'
+    )
+
+
 runner.CASES = {
     "storage": (None, 0, "3\n4\n4\n3\n9\n3\n3\n2\n15\n7.5\n5\n6\n7\n8\n11\ntrue\n3\n12\n3\n2\n13\n", ""),
     "storage_shadow": (None, 0, "12\n11\n10\n", "[-Wshadow]"),
@@ -169,6 +190,52 @@ runner.CASES = {
         'proc run(flag:bool)->void{ptr first=make Counter;ptr second=make Counter;'
         'ptr chosen=if(flag){first}else{second};establish(chosen);chosen=second;chosen.count;return;}run(false);',
         2, "", "read of 'count' before definite initialization"),
+    "repeated_dynamic_embedded_loads_share_guarded_field_readiness": (
+        DEFERRED_LEAF + selected_box_program(WRITE_SELECTED_LEAF + READ_SELECTED_LEAF),
+        0, "7\n7\n0\n", ""),
+    "guarded_embedded_write_crosses_an_immediate_scope": (
+        DEFERRED_LEAF + selected_box_program('{{' + WRITE_SELECTED_LEAF + 'return;}};' + READ_SELECTED_LEAF),
+        0, "7\n7\n0\n", ""),
+    "guarded_embedded_write_crosses_a_named_helper": (
+        DEFERRED_LEAF + FILL_SELECTED_BOX + selected_box_program('fill(chosen);' + READ_SELECTED_LEAF),
+        0, "7\n7\n0\n", ""),
+    "guarded_embedded_write_crosses_a_deferred_helper": (
+        DEFERRED_LEAF + FILL_SELECTED_BOX + selected_box_program('{{defer fill(chosen);return;}};' + READ_SELECTED_LEAF),
+        0, "7\n7\n0\n", ""),
+    "conditional_prepared_write_initializes_the_same_embedded_field": (
+        DEFERRED_LEAF + selected_box_program(
+            '{{if(chosen.child is null){}else{defer (<-)(chosen.child.value,7u64);{}};return;}};'
+            + READ_SELECTED_LEAF
+        ), 0, "7\n7\n0\n", ""),
+    "conditional_prepared_write_requires_registration_on_each_present_path": (
+        DEFERRED_LEAF + selected_box_program(
+            '{{if(chosen.child is null){}else{if(skip){}else{defer (<-)(chosen.child.value,7u64);{}};{}};return;}};'
+            + READ_SELECTED_LEAF
+        ), 2, "", "read of 'value' before definite initialization"),
+    "dynamic_embedded_load_keeps_checked_null_failure": (
+        DEFERRED_LEAF + 'using "std:exceptions" NullPointerException;' + selected_box_program(
+            'try{chosen.child.value<-7u64;return chosen.child.value;}'
+            'catch(e:const NullPointerException){return 0u64;};'
+        ), 0, "7\n7\n0\n", ""),
+    "a_saved_embedded_receiver_survives_rebinding_its_slot": (
+        DEFERRED_LEAF + selected_box_program(
+            'ptr saved=chosen.child;ptr replacement=make Leaf;chosen.child=replacement;'
+            'if(saved is null){}else{saved.value<-7u64;{}};'
+            'if(saved is null){return 0u64;}else{return saved.value;};'
+        ), 0, "7\n7\n0\n", ""),
+    "a_guarded_embedded_read_requires_every_present_path_to_write": (
+        DEFERRED_LEAF + selected_box_program(
+            'if(chosen.child is null){}else{if(skip){}else{chosen.child.value<-7u64;{}};{}};'
+            + READ_SELECTED_LEAF
+        ), 2, "", "read of 'value' before definite initialization"),
+    "embedded_load_identity_distinguishes_exchanged_slot_values": (
+        DEFERRED_LEAF + selected_box_program(
+            WRITE_SELECTED_LEAF + 'left.child=second;right.child=first;' + READ_SELECTED_LEAF
+        ), 2, "", "read of 'value' before definite initialization"),
+    "embedded_guard_does_not_follow_an_independent_receiver_choice": (
+        DEFERRED_LEAF + selected_box_program(
+            WRITE_SELECTED_LEAF + 'ptr independent=if(skip){left}else{right};return independent.child.value;'
+        ), 2, "", "read of 'value' before definite initialization"),
     "lexical_product_embedded_binding_and_explicit_place_alias": (PRELUDE +
         'data Entry {tag:u64;ptr selected:u64;}val first<-17u64;val second<-21u64;'
         'ref item=make Entry {tag<-3u64;selected=first;};ptr var field->item.selected;'
