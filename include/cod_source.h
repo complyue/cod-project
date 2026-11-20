@@ -2,6 +2,8 @@
 #ifndef COD_SOURCE_H
 #define COD_SOURCE_H
 
+#include "cod_region_storage.h"
+
 #include <errno.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -46,7 +48,8 @@ typedef enum cod_source_status {
   COD_SOURCE_SYSTEM_ERROR,
   COD_SOURCE_NOT_REGULAR,
   COD_SOURCE_TOO_LARGE,
-  COD_SOURCE_NO_MEMORY
+  COD_SOURCE_NO_MEMORY,
+  COD_SOURCE_CHANGED
 } cod_source_status;
 
 typedef struct cod_source_error {
@@ -58,6 +61,7 @@ typedef struct cod_source_revision cod_source_revision;
 
 struct cod_source_revision {
   cod_source_view view;
+  cod_region_storage line_storage;
 };
 
 static inline void cod_source_release(cod_source_revision *source) {
@@ -69,7 +73,7 @@ static inline void cod_source_release(cod_source_revision *source) {
     munmap((void *)source->view.bytes, source->view.size);
 #endif
   }
-  free((void *)source->view.lines);
+  cod_region_storage_release(&source->line_storage);
   free(source);
 }
 
@@ -166,32 +170,34 @@ static inline cod_source_status cod_source_map_file(cod_source_revision *source,
 }
 
 static inline cod_source_status cod_source_index_lines(cod_source_revision *source) {
-  const size_t limit = SIZE_MAX / sizeof(cod_source_span);
+  const unsigned char *bytes = source->view.bytes;
+  const size_t size = source->view.size;
+  if (size > (size_t)PTRDIFF_MAX) return COD_SOURCE_TOO_LARGE;
+  size_t count = 1;
+  for (size_t offset = 0; offset < size; ++offset) count += bytes[offset] == '\n';
+  if (count > (size_t)PTRDIFF_MAX / sizeof(cod_source_span)) return COD_SOURCE_TOO_LARGE;
+
+  const cod_region_storage_status opened = cod_region_storage_open(&source->line_storage, count * sizeof(cod_source_span));
+  if (opened == COD_REGION_STORAGE_NO_MEMORY) return COD_SOURCE_NO_MEMORY;
+  if (opened != COD_REGION_STORAGE_OK) return COD_SOURCE_TOO_LARGE;
+#ifdef __cplusplus
+  const size_t alignment = alignof(cod_source_span);
+#else
+  const size_t alignment = _Alignof(cod_source_span);
+#endif
+  cod_region_extent index;
+  if (cod_region_storage_reserve(&source->line_storage, count, sizeof(cod_source_span), alignment, &index) !=
+      COD_REGION_STORAGE_OK) return COD_SOURCE_TOO_LARGE;
+  cod_source_span *lines = (cod_source_span *)cod_region_storage_address(&source->line_storage, index);
+
   size_t first = 0;
-  size_t capacity = 0;
-  size_t count = 0;
-  cod_source_span *lines = NULL;
-  for (;;) {
-    if (count == capacity) {
-      if (capacity == limit) {
-        free(lines);
-        return COD_SOURCE_TOO_LARGE;
-      }
-      capacity = capacity ? (capacity <= limit / 2 ? capacity * 2 : limit) : 1;
-      cod_source_span *more = (cod_source_span *)realloc(lines, capacity * sizeof(*lines));
-      if (!more) {
-        free(lines);
-        return COD_SOURCE_NO_MEMORY;
-      }
-      lines = more;
-    }
-    const unsigned char *lf = first < source->view.size
-        ? (const unsigned char *)memchr(source->view.bytes + first, '\n', source->view.size - first) : NULL;
-    const size_t past = lf ? (size_t)(lf - source->view.bytes) : source->view.size;
-    lines[count].first = first;
-    lines[count++].past = past;
-    if (!lf) break;
-    first = past + 1;
+  for (size_t line = 0; line < count; ++line) {
+    const unsigned char *lf = first < size ? (const unsigned char *)memchr(bytes + first, '\n', size - first) : NULL;
+    if ((lf != NULL) != (line + 1 < count)) return COD_SOURCE_CHANGED;
+    const size_t past = lf ? (size_t)(lf - bytes) : size;
+    lines[line].first = first;
+    lines[line].past = past;
+    if (lf) first = past + 1;
   }
   source->view.lines = lines;
   source->view.line_count = count;
@@ -211,6 +217,8 @@ static inline cod_source_revision *cod_source_open_readonly(const char *path, co
   }
   cod_source_view empty = {NULL, 0, NULL, 0};
   source->view = empty;
+  cod_region_storage empty_storage = {NULL, 0, 0};
+  source->line_storage = empty_storage;
   error->status = cod_source_map_file(source, path, &error->system_error);
   if (error->status == COD_SOURCE_OK) error->status = cod_source_index_lines(source);
   if (error->status == COD_SOURCE_OK) return source;

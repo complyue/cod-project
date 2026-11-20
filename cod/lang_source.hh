@@ -35,6 +35,7 @@ public:
     case COD_SOURCE_NOT_REGULAR: throw std::system_error(std::make_error_code(std::errc::invalid_argument));
     case COD_SOURCE_TOO_LARGE: throw std::system_error(std::make_error_code(std::errc::file_too_large));
     case COD_SOURCE_NO_MEMORY: throw std::system_error(std::make_error_code(std::errc::not_enough_memory));
+    case COD_SOURCE_CHANGED: throw std::runtime_error("source changed while building its line index");
     }
   }
 
