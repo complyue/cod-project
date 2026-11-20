@@ -1,4 +1,7 @@
 using "SourceStorage.cod" SourceBytes;
+using "SourceStorage.cod" SourceLines;
+using "SourceStorage.cod" SourcePosition;
+using "SourceStorage.cod" locate_source_position;
 using "ParserStorage.cod" Tokens;
 using "ParserStorage.cod" ExprNodes;
 using "ParserStorage.cod" no_node;
@@ -35,6 +38,9 @@ data NativeModuleResult {
     backend_status:u8;
     rejected_first:u64;
     rejected_past:u64;
+    first_position:SourcePosition;
+    past_position:SourcePosition;
+    related_position:SourcePosition;
 }
 
 func native_source_open_failed() -> u8 { return 7u8; }
@@ -66,16 +72,46 @@ func plan_module_workspace(source:const SourceBytes in S, ref workspace:ModuleWo
     return native_complete();
 }
 
-# Work owns no scratch after it returns. Release accepts an empty
-# allocation and runs even when work fails or leaves exceptionally.
+func clear_rejection(ref result:NativeModuleResult in R) -> void where {owner R} {
+    result.rejected_first <- no_node();
+    result.rejected_past <- no_node();
+    result.first_position.line <- 0u64;
+    result.first_position.column <- 0u64;
+    result.past_position.line <- 0u64;
+    result.past_position.column <- 0u64;
+    result.related_position.line <- 0u64;
+    result.related_position.column <- 0u64;
+    return;
+}
+
+# The source revision and its index outlive scratch. Retain only numeric
+# positions after the revision is released by the outer driver.
 proc compile_with_module_workspace(here work(tokens:u64, nodes:u64, commands:u64) -> u8,
-                                   here release() -> void, source:const SourceBytes in S,
-                                   ref workspace:ModuleWorkspacePlan in W) -> u8
-    where {const owner S, owner W} {
+                                   here release() -> void, source:const SourceBytes in S, lines:const SourceLines in S,
+                                   ref workspace:ModuleWorkspacePlan in W, ref result:NativeModuleResult in R) -> u8
+    where {const owner S, owner W, owner R} {
+    clear_rejection(result);
+    result.analysis.stage <- 0u8;
+    result.analysis.diagnostic <- 0u8;
+    result.analysis.related_first <- no_node();
+    result.backend_status <- 0u8;
+    result.plan.used <- 0u64;
+    result.plan.diagnostic <- 0u8;
     val status <- plan_module_workspace(source, workspace);
-    if (status != native_complete()) { return status; } else {};
-    defer { release(); };
-    return work(workspace.source.token_count, workspace.source.node_capacity, workspace.commands);
+    if (status == native_complete()) {
+        defer { release(); };
+        (status <- work(workspace.source.token_count, workspace.source.node_capacity, workspace.commands)):void;
+    } else {
+        if (status == native_source_rejected()) {
+            result.rejected_first <- workspace.source.diagnostic_first;
+            result.rejected_past <- workspace.source.diagnostic_past;
+            {};
+        } else {};
+    };
+    locate_source_position(source, lines, result.rejected_first, result.first_position);
+    locate_source_position(source, lines, result.rejected_past, result.past_position);
+    locate_source_position(source, lines, result.analysis.related_first, result.related_position);
+    return status;
 }
 
 func retain_rejection(nodes:const ExprNodes in N, ref result:NativeModuleResult in R) -> u8
@@ -107,8 +143,7 @@ proc compile_native_module(here begin() -> bool,
     where {const owner S, owner T, owner N, const owner B, const owner E, owner X, owner Y,
            owner W, owner F, owner O, owner K, owner C, owner R} {
     result.backend_status <- 0u8;
-    result.rejected_first <- no_node();
-    result.rejected_past <- no_node();
+    clear_rejection(result);
     if (!compile_module_commands(source, tokens, nodes, spellings, exports, selected, bindings, names,
                                  facts, owners, sites, commands, result.plan, result.analysis)) {
         return retain_rejection(nodes, result);
