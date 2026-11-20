@@ -1,0 +1,153 @@
+using "SourceStorage.cod" SourceBytes;
+using "ParserStorage.cod" ExprNodes;
+using "ParserStorage.cod" len as syntax_len;
+using "ParserStorage.cod" no_node;
+using "ParserStorage.cod" module_node;
+using "ParserStorage.cod" using_node;
+using "ParserStorage.cod" symbol_node;
+using "ExpressionParser.cod" ParseResult;
+
+# The provider keeps these offsets within its immutable spelling bytes. The
+# pair of kind and identity selects one published object.
+data ModuleExport {
+    module_first:u64;
+    module_past:u64;
+    name_first:u64;
+    name_past:u64;
+    identity:u64;
+    kind:u8;
+    checked:u8;
+}
+array ModuleExports[u64]:ModuleExport;
+
+data SelectedExport {
+    identity:u64;
+    kind:u8;
+    checked:u8;
+}
+array SelectedExports[u64]:SelectedExport;
+
+data ExportResolutionResult {
+    diagnostic:u8;
+    node:u64;
+}
+
+func exception_type_export() -> u8 { return 1u8; }
+func symbol_export() -> u8 { return 2u8; }
+
+func unproved_module_exports() -> u8 { return 1u8; }
+func missing_module_export() -> u8 { return 2u8; }
+func wrong_export_kind() -> u8 { return 3u8; }
+func export_storage_exhausted() -> u8 { return 4u8; }
+func invalid_export_tree() -> u8 { return 5u8; }
+
+func same_name(source:const SourceBytes in S, first:u64, past:u64,
+               spellings:const SourceBytes in B, name_first:u64, name_past:u64) -> bool
+    where {const owner S, const owner B} {
+    val length <- past - first;
+    if (length != name_past - name_first) { return false; } else {};
+    for (offset in 0u64 .. length) {
+        if (source[first + offset] != spellings[name_first + offset]) { return false; } else {};
+    };
+    return true;
+}
+
+func same_module_path(source:const SourceBytes in S, first:u64, past:u64,
+                      spellings:const SourceBytes in B, module_first:u64, module_past:u64) -> bool
+    where {const owner S, const owner B} {
+    # The lexer has already validated the quotes and escapes. Decode as we
+    # compare so the source can stay mapped and neither spelling is rebuilt.
+    val position <- first + 1u64;
+    val close_quote <- past - 1u64;
+    for (at in module_first .. module_past) {
+        if (position >= close_quote) { return false; } else {};
+        if (source[position] == 92u8) { (position <- position + 1u64):void; } else {}; # backslash
+        if (source[position] != spellings[at]) { return false; } else {};
+        (position <- position + 1u64):void;
+    };
+    return position == close_quote;
+}
+
+func remember(ref selected:SelectedExports in R, at:u64, identity:u64, kind:u8, checked:u8) -> void
+    where {owner R} {
+    selected[at].identity <- identity;
+    selected[at].kind <- kind;
+    selected[at].checked <- checked;
+    return;
+}
+
+func resolve_selection(source:const SourceBytes in S, nodes:const ExprNodes in N, site:u64,
+                       spellings:const SourceBytes in B, exports:const ModuleExports in E,
+                       ref selected:SelectedExports in R) -> u8
+    where {const owner S, const owner N, const owner B, const owner E, owner R} {
+    val path <- nodes[site].left;
+    val name <- nodes[site].right;
+    val symbolic <- nodes[name].kind == symbol_node();
+    val name_first <- nodes[name].first + if (symbolic) { 1u64 } else { 0u64 };
+    val name_past <- nodes[name].past;
+    val path_first <- nodes[path].first;
+    val path_past <- nodes[path].past;
+    val diagnostic <- unproved_module_exports();
+    for (at in 0u64 .. intrinsic (len)(exports)) {
+        if (same_module_path(source, path_first, path_past, spellings,
+                             exports[at].module_first, exports[at].module_past)) {
+            if (same_name(source, name_first, name_past, spellings, exports[at].name_first, exports[at].name_past)) {
+                if (symbolic == (exports[at].kind == symbol_export())) {
+                    remember(selected, site, exports[at].identity, exports[at].kind, exports[at].checked);
+                    return 0u8;
+                } else {};
+                (diagnostic <- wrong_export_kind()):void;
+            } else {
+                if (diagnostic == unproved_module_exports()) { (diagnostic <- missing_module_export()):void; } else {};
+            };
+        } else {};
+    };
+    return diagnostic;
+}
+
+# Consume a successful module parse and a complete publication table for each
+# supplied module. A name binding that identifies a using site can read that
+# site's selected identity. On failure, only the diagnostic is available.
+func resolve_module_exports(source:const SourceBytes in S, nodes:const ExprNodes in N, tree:const ParseResult in T,
+                            spellings:const SourceBytes in B, exports:const ModuleExports in E,
+                            ref selected:SelectedExports in X, ref report:ExportResolutionResult in R) -> bool
+    where {const owner S, const owner N, const owner T, const owner B, const owner E, owner X, owner R} {
+    report.node <- no_node();
+    report.diagnostic <- invalid_export_tree();
+    if (tree.diagnostic != 0u8 || tree.used == 0u64 || tree.used > syntax_len(nodes) ||
+        tree.root != tree.used - 1u64 || nodes[tree.root].kind != module_node()) { return false; } else {};
+    if (intrinsic (len)(selected) < tree.used) {
+        report.diagnostic <- export_storage_exhausted();
+        return false;
+    } else {};
+    for (at in 0u64 .. tree.used) {
+        remember(selected, at, 0u64, 0u8, 0u8);
+        if (nodes[at].kind == using_node()) {
+            report.diagnostic <- resolve_selection(source, nodes, at, spellings, exports, selected);
+            if (report.diagnostic != 0u8) {
+                report.node <- if (report.diagnostic == unproved_module_exports()) {
+                    nodes[at].left
+                } else {
+                    nodes[at].right
+                };
+                return false;
+            } else {};
+        } else {};
+    };
+    report.diagnostic <- 0u8;
+    return true;
+}
+
+export ModuleExport;
+export ModuleExports;
+export SelectedExport;
+export SelectedExports;
+export ExportResolutionResult;
+export resolve_module_exports;
+export exception_type_export;
+export symbol_export;
+export unproved_module_exports;
+export missing_module_export;
+export wrong_export_kind;
+export export_storage_exhausted;
+export invalid_export_tree;

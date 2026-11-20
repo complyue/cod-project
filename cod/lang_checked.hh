@@ -17366,7 +17366,7 @@ class ScalarChecker {
       if (const auto dependency = source.dependencies.find(form.get()); dependency != source.dependencies.end())
         select_module_resource(*form, dependency->second);
     for (const auto &form : forms) {
-      if ((form->kind != Form::Kind::using_resource && form->kind != Form::Kind::import_resource) || form->path != "std:exceptions" || form->using_symbol) continue;
+      if ((form->kind != Form::Kind::using_resource && form->kind != Form::Kind::import_resource) || form->path != COD_LANG_EXCEPTION_MODULE || form->using_symbol) continue;
       const auto found = std::find_if(exception_categories.begin(), exception_categories.end(), [&](const ExceptionDescriptor &entry) { return form->name == entry.name; });
       if (found == exception_categories.end()) fail(form->at, "unknown intrinsic exception selection '" + form->name + "'");
       const auto type = exception_type(exception_id(found->category));
@@ -17386,11 +17386,11 @@ class ScalarChecker {
       if (form->kind == Form::Kind::expression || form->kind == Form::Kind::export_resource ||
           form->kind == Form::Kind::data || form->kind == Form::Kind::region_definition || form->kind == Form::Kind::array)
         continue;
-      if ((form->kind == Form::Kind::using_resource || form->kind == Form::Kind::import_resource) && form->path == "std:exceptions" && !form->using_symbol) continue;
-      if (form->kind == Form::Kind::using_resource && form->using_symbol && form->path == "std:io" && form->name == "print") {
+      if ((form->kind == Form::Kind::using_resource || form->kind == Form::Kind::import_resource) && form->path == COD_LANG_EXCEPTION_MODULE && !form->using_symbol) continue;
+      if (form->kind == Form::Kind::using_resource && form->using_symbol && form->path == COD_LANG_IO_MODULE && form->name == COD_LANG_PRINT_NAME) {
         if (!print_symbol) {
           print_symbol = program_.symbols.size();
-          program_.symbols.push_back({{}, true, "print"});
+          program_.symbols.push_back({{}, true, COD_LANG_PRINT_NAME});
         }
         if (!module_names().symbols.emplace(form->alias, *print_symbol).second) fail(form->at, "duplicate print symbol binding");
         continue;

@@ -1,0 +1,68 @@
+using "SourceStorage.cod" SourceBytes;
+using "ParserStorage.cod" Tokens;
+using "ParserStorage.cod" ExprNodes;
+using "ParserStorage.cod" no_node;
+using "Frontend.cod" FrontendResult;
+using "Frontend.cod" read_module;
+using "ModuleExports.cod" ModuleExports;
+using "ModuleExports.cod" SelectedExports;
+using "ModuleExports.cod" ExportResolutionResult;
+using "ModuleExports.cod" resolve_module_exports;
+using "NameResolution.cod" NameBindings;
+using "NameResolution.cod" NameWork;
+using "NameResolution.cod" NameResolutionResult;
+using "NameResolution.cod" resolve_module_names;
+
+data ModuleBindingResult {
+    frontend:FrontendResult;
+    stage:u8;
+    diagnostic:u8;
+}
+
+func module_read_failed() -> u8 { return 1u8; }
+func module_selection_failed() -> u8 { return 2u8; }
+func module_binding_failed() -> u8 { return 3u8; }
+
+func binding_diagnostic(nodes:const ExprNodes in N, ref result:ModuleBindingResult in R,
+                        stage:u8, diagnostic:u8, at:u64) -> void where {const owner N, owner R} {
+    result.stage <- stage;
+    result.diagnostic <- diagnostic;
+    result.frontend.diagnostic_first <- no_node();
+    result.frontend.diagnostic_past <- no_node();
+    if (at != no_node()) {
+        result.frontend.diagnostic_first <- nodes[at].first;
+        (result.frontend.diagnostic_past <- nodes[at].past):void;
+    } else {};
+}
+
+# Keep the source revision and immutable catalog live. A successful read
+# gives lexical declaration indices and the published objects they select.
+func bind_module(source:const SourceBytes in S, ref tokens:Tokens in T, ref nodes:ExprNodes in N,
+                 spellings:const SourceBytes in B, exports:const ModuleExports in E,
+                 ref selected:SelectedExports in X, ref bindings:NameBindings in Y,
+                 ref work:NameWork in W, ref result:ModuleBindingResult in R) -> bool
+    where {const owner S, owner T, owner N, const owner B, const owner E, owner X, owner Y, owner W, owner R} {
+    result.stage <- 0u8;
+    result.diagnostic <- 0u8;
+    if (!read_module(source, tokens, nodes, result.frontend)) {
+        result.stage <- module_read_failed();
+        return false;
+    } else {};
+    ref publication = make ExportResolutionResult { diagnostic <- 0u8; node <- no_node(); };
+    if (!resolve_module_exports(source, nodes, result.frontend.tree, spellings, exports, selected, publication)) {
+        binding_diagnostic(nodes, result, module_selection_failed(), publication.diagnostic, publication.node);
+        return false;
+    } else {};
+    ref names = make NameResolutionResult { diagnostic <- 0u8; node <- no_node(); };
+    if (!resolve_module_names(source, nodes, result.frontend.tree, bindings, work, names)) {
+        binding_diagnostic(nodes, result, module_binding_failed(), names.diagnostic, names.node);
+        return false;
+    } else {};
+    return true;
+}
+
+export ModuleBindingResult;
+export bind_module;
+export module_read_failed;
+export module_selection_failed;
+export module_binding_failed;
