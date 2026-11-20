@@ -26,6 +26,9 @@ READ_QUERY_PAIR = ('func inspect(ptr p:const Pair in O)->u64 where {const owner 
                    'if(p is null){return 0u64;}else{};return p.second;}')
 WRITE_QUERY_PAIR = ('proc populate(ptr p:Pair in O)->void where {owner O}{'
                     'if(p is null){return;}else{};p.second<-7u64;return;}')
+QUERY_PRODUCT_CHOICE = ('ptr left=make Pair;ptr right=make Pair;'
+                        'ptr selected=if(pick_left){left}else{right};')
+QUERY_PRODUCT_FLAGS = 'val pick_left<-true;val pick_other<-false;'
 WRITE_QUERY_HOLDER = ('proc populate(ref p:Holder in O)->void where {owner O}{'
                       'if(p.selected is null){return;}else{};p.selected<-7u64;return;}')
 QUERY_CALL_FAILURE = ('using "std:exceptions" NullPointerException;'
@@ -1276,6 +1279,53 @@ runner.CASES = {
     'query_helper_write_does_not_initialize_a_sibling': (
         QUERY_PAIR + WRITE_QUERY_PAIR + query('ptr item=make Pair;populate(item);return item.first;'),
         2, '', "read of 'first' before definite initialization"),
+    'query_write_prepares_field_of_selected_product': (
+        IO + QUERY_PAIR + QUERY_PRODUCT_FLAGS +
+        query(QUERY_PRODUCT_CHOICE + 'selected.second<-7u64;return selected.second;') +
+        'behave @print(result);', 0, '4\n', ''),
+    'query_product_field_proof_follows_retained_selection': (
+        IO + QUERY_PAIR + QUERY_PRODUCT_FLAGS +
+        query(QUERY_PRODUCT_CHOICE +
+              'ptr retained=selected;selected.second<-7u64;selected=right;return retained.second;') +
+        'behave @print(result);', 0, '4\n', ''),
+    'query_same_product_candidates_do_not_prove_same_selection': (
+        QUERY_PAIR + QUERY_PRODUCT_FLAGS +
+        query(QUERY_PRODUCT_CHOICE + 'ptr other=if(pick_other){left}else{right};'
+              'selected.second<-7u64;return other.second;'), 2, '', 'initialization'),
+    'query_product_field_proof_does_not_follow_rebound_selection': (
+        QUERY_PAIR + QUERY_PRODUCT_FLAGS +
+        query(QUERY_PRODUCT_CHOICE + 'selected.second<-7u64;selected=right;return selected.second;'),
+        2, '', 'initialization'),
+    'query_helpers_share_the_selected_product_field_proof': (
+        IO + QUERY_PAIR + QUERY_PRODUCT_FLAGS + READ_QUERY_PAIR + WRITE_QUERY_PAIR +
+        query(QUERY_PRODUCT_CHOICE + 'ptr retained=selected;populate(selected);selected=right;return inspect(retained);') +
+        'behave @print(result);', 0, '4\n', ''),
+    'query_helper_write_leaves_other_product_candidate_unproved': (
+        QUERY_PAIR + QUERY_PRODUCT_FLAGS + READ_QUERY_PAIR + WRITE_QUERY_PAIR +
+        query(QUERY_PRODUCT_CHOICE + 'populate(selected);return inspect(right);'), 2, '', 'initialization'),
+    'query_helper_formals_can_share_the_same_selected_product': (
+        IO + QUERY_PAIR + QUERY_PRODUCT_FLAGS + READ_QUERY_PAIR + WRITE_QUERY_PAIR +
+        'proc prepare_then_read(ptr p:Pair in O,ptr other:const Pair in O)->u64 where {owner O}{'
+        'populate(p);return inspect(other);}' +
+        query(QUERY_PRODUCT_CHOICE + 'return prepare_then_read(selected,selected);') +
+        'behave @print(result);', 0, '4\n', ''),
+    'query_product_field_proof_projects_through_inline_children': (
+        IO + QUERY_PAIR + QUERY_PRODUCT_FLAGS + 'data Outer {child:Pair;}' + READ_QUERY_PAIR + WRITE_QUERY_PAIR +
+        query('ptr left=make Outer;ptr right=make Outer;ptr selected=if(pick_left){left}else{right};'
+              'populate(selected.child);return inspect(selected.child);') +
+        'behave @print(result);', 0, '4\n', ''),
+    'query_product_field_cleanup_keeps_registration_selection': (
+        IO + QUERY_PAIR + QUERY_PRODUCT_FLAGS + READ_QUERY_PAIR + WRITE_QUERY_PAIR +
+        query(QUERY_PRODUCT_CHOICE + 'ptr retained=selected;{{defer populate(selected);selected=right;return;}};'
+              'return inspect(retained);') + 'behave @print(result);', 0, '4\n', ''),
+    'query_product_field_cleanup_leaves_rebound_selection_unproved': (
+        QUERY_PAIR + QUERY_PRODUCT_FLAGS + READ_QUERY_PAIR + WRITE_QUERY_PAIR +
+        query(QUERY_PRODUCT_CHOICE + '{{defer populate(selected);selected=right;return;}};return inspect(selected);'),
+        2, '', 'initialization'),
+    'query_prepared_transfer_writes_field_of_saved_product': (
+        IO + QUERY_PAIR + QUERY_PRODUCT_FLAGS +
+        query(QUERY_PRODUCT_CHOICE + 'ptr retained=selected;{{defer (<-)(selected.second,7u64);selected=right;return;}};'
+              'return retained.second;') + 'behave @print(result);', 0, '4\n', ''),
     'query_recursive_helper_preserves_field_writes': (
         IO + QUERY_PAIR + 'proc populate(ptr p:Pair in O,n:u64)->void where {owner O}{'
         'if(p is null){return;}else{};if(n==0u64){p.second<-7u64;return;}else{};populate(p,n-1u64);return;}' +
