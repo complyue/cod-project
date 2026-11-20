@@ -258,11 +258,10 @@ runner.CASES = {
         'data Box {ref selected:u64;}func value(ref source:const Box in O,ignored:u64)->u64 where {const owner O}{return source.selected;}'
         'val first<-7u64;val second<-11u64;ref item=make Box {selected=first;};'
         'behave @print(value(item,{item.selected=second;0u64}));', 0, "11\n", ""),
-    "deferred_product_call_cannot_assume_a_rebound_field_selection": (PRELUDE +
+    "deferred_product_call_reads_the_invocation_time_field_selection": (PRELUDE +
         'data Box {ref value:u64;}proc read(ref source:const Box in O) where {const owner O}{behave @print(source.value);return;}'
         'proc run()->void{val target<-7u64;val other<-11u64;ref item=make Box {value=target;};'
-        'defer read(item);item.value=other;return;}run();',
-        2, "", "deferred product borrow with a mutable embedded selection"),
+        'defer read(item);item.value=other;return;}run();', 0, "11\n", ""),
     "borrowed_product_rebinding_changes_the_caller_slot": (PRELUDE +
         'data Box {ptr value:u64;}proc update(ref source:Box in O,ref target:u64 in O) where {owner O}{source.value=target;return;}'
         'val first<-7u64;val second<-11u64;ref item=make Box {value=first;};update(item,second);'
@@ -306,6 +305,47 @@ runner.CASES = {
         'val first<-7u64;val second<-11u64;ref item=make Box {selected=first;};ref saved=item.selected;'
         'ref outer=make Root {child=item;};replace(outer,second);behave @print(saved);behave @print(item.selected);',
         0, "7\n11\n", ""),
+    "deferred_product_call_rebinds_saved_container_with_saved_replacement": (PRELUDE +
+        'data Box {ref selected:u64;}'
+        'proc replace(ref box:Box in O,ref replacement:u64 in O) where {owner O}{box.selected=replacement;return;}'
+        'proc run()->void{val first<-7u64;val second<-11u64;val third<-13u64;'
+        'ref a=make Box {selected=first;};ref b=make Box {selected=third;};ref destination=a;ref argument=second;'
+        'defer{behave @print(a.selected);behave @print(b.selected);};defer replace(destination,argument);'
+        'destination=b;argument=third;return;}run();', 0, "11\n13\n", ""),
+    "deferred_product_assignment_uses_source_slot_at_invocation": (PRELUDE +
+        'data Box {ref source:u64;ref destination:u64;}'
+        'proc set_target(ref entry:Box in O) where {owner O}{entry.destination=entry.source;return;}'
+        'proc run()->void{val first<-7u64;val second<-11u64;val third<-13u64;'
+        'ref item=make Box {source=first;destination=third;};defer{behave @print(item.destination);};'
+        'defer set_target(item);item.source=second;return;}run();', 0, "11\n", ""),
+    "deferred_product_read_checks_the_new_referent": (PRELUDE +
+        'data Box {ptr selected:u64;}proc read(ref entry:const Box in O) where {const owner O}{'
+        'if(entry.selected is null){return;}else{};behave @print(entry.selected);return;}'
+        'proc run()->void{val first<-7u64;val missing<-make local u64;ref item=make Box {selected=first;};'
+        'defer read(item);item.selected=missing;return;}run();',
+        2, "", "initialization"),
+    "deferred_product_read_skips_the_old_unready_target_when_the_slot_is_null": (PRELUDE +
+        'data Box {ptr selected:u64;}proc read(ref entry:const Box in O) where {const owner O}{'
+        'if(entry.selected is null){behave @print(5u64);return;}else{};behave @print(entry.selected);return;}'
+        'proc run()->void{val missing<-make local u64;ref item=make Box {selected=missing;};'
+        'defer read(item);item.selected=null;return;}run();', 0, "5\n", ""),
+    "deferred_product_read_observes_an_earlier_running_cleanup": (PRELUDE +
+        'data Box {ref selected:u64;}proc read(ref entry:const Box in O) where {const owner O}{behave @print(entry.selected);return;}'
+        'proc run()->void{val first<-7u64;val second<-11u64;ref item=make Box {selected=first;};'
+        'defer read(item);defer{item.selected=second;};return;}run();', 0, "11\n", ""),
+    "deferred_product_call_initializes_the_late_referent_only": (PRELUDE +
+        'using "std:exceptions" OutOfMemoryError;data Box {ptr selected:u64;}'
+        'proc fill(ref entry:Box in O) where {owner O}{if(entry.selected is null){return;}else{};entry.selected<-19u64;return;}'
+        'proc run()->void{val first<-7u64;val later<-make local u64;ref item=make Box {selected=first;};'
+        'defer{behave @print(first);behave @print(later);}catch(e:const OutOfMemoryError){return;};'
+        'defer fill(item);item.selected=later;return;}run();', 0, "7\n19\n", ""),
+    "deferred_product_write_does_not_initialize_the_saved_reference": (PRELUDE +
+        'data Box {ptr selected:u64;}'
+        'proc fill_and_read(ref entry:Box in O,ptr observed:u64 in O) where {owner O}{'
+        'if(entry.selected is not null){entry.selected<-19u64;{}}else{};'
+        'if(observed is not null){behave @print(observed);}else{};return;}'
+        'proc run()->void{val missing<-make local u64;val replacement<-7u64;ref item=make Box {selected=missing;};'
+        'defer fill_and_read(item,missing);item.selected=replacement;return;}run();', 2, "", "initialization"),
 }
 runner.CASE_ARGUMENTS = {"shadow_error": ["-Werror=shadow"], "unrelated_warning_error": ["-Werror=missing-return"]}
 runner.EXTRA_SOURCES = [Path(__file__)]
