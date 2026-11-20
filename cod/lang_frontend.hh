@@ -19,6 +19,7 @@ struct Compilation {
   std::string llvm_ir;
   std::string bitcode;
   std::optional<NativeProviderFiles> providers;
+  bool native_library = false;
 };
 
 class Compiler {
@@ -44,6 +45,7 @@ public:
     for (const auto module : checked.execution_order) result.execution_order.push_back(source.modules[module].path.string());
     result.warnings = std::move(warnings); result.llvm_ir = std::move(text); result.bitcode = std::move(bitcode);
     if (emit_providers) result.providers = emit_native_providers(checked);
+    result.native_library = !checked.native_entries.empty();
     return result;
   }
 };

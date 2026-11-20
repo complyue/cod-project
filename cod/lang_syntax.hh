@@ -174,7 +174,7 @@ enum class ArgumentMode { value, borrowed_read, borrowed_ref, borrowed_ptr };
 struct Type {
   enum Kind { integer, uint8, uint32, uint64, boolean, void_type, procedure, float32, float64,
               named, unit, quantity, product, region_schema, region, regional, array, reference, null_ref, abstract_type, arguments, parameter,
-              exception, never, c_type_marker };
+              exception, never, c_type_marker, native_handle };
   Kind kind;
   std::string name;
   size_t identity = 0;
@@ -251,6 +251,7 @@ inline bool widens(Type from, Type to) {
 }
 inline std::string type_name(const Type &type) {
   switch (type.kind) {
+  case Type::native_handle: return "handle " + type.name;
   case Type::integer: return "i64";
   case Type::uint8: return "u8";
   case Type::uint32: return "u32";

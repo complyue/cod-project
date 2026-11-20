@@ -10205,6 +10205,8 @@ class ScalarChecker {
         if (!state.validating_body) check_query_binding(expr.text, expr.at);
       }
       if (const auto found = state.bindings.find(expr.text); found != state.bindings.end() && !state.definitions.contains(expr.text)) {
+        if (state.required && found->second && found->second->kind == Type::native_handle)
+          implementation_gap(expr.at, "an opaque C handle used outside a checked native operation");
         if (state.required && found->second && nominal_exception(*found->second) && read != EvidenceRead::projection)
           implementation_gap(expr.at, "use of an owned exception outside direct field selection");
         view = state.views.at(expr.text);
@@ -14915,6 +14917,7 @@ class ScalarChecker {
     const auto &slot = (*bindings_)[*binding];
     if (slot.owner_binding) fail(expr.at, "owner binding '" + expr.text + "' is not a scalar value");
     if (slot.pipeline) fail(expr.at, "a bounded here binding requires a pipeline connection or consumer");
+    if (slot.type.kind == Type::native_handle) implementation_gap(expr.at, "an opaque C handle used outside a checked native operation");
     const auto selected = slot.alias.value_or(*binding);
     require_slots_live({selected}, expr.at, "aliased binding's lexical scope has ended");
     if (lexical_.live && lexical_.expired_bindings.contains(selected))
@@ -17573,24 +17576,13 @@ class ScalarChecker {
         !name.starts_with("WINT_") && !name.starts_with("SIG_ATOMIC_") && name != "NULL" &&
         std::ranges::find(keywords, name) == std::end(keywords);
   }
-  void register_native_constructor(const Form &form, const SourceModule &source) {
-    if (form.body) implementation_gap(form.at, "C-callable procedure definitions");
-    const auto handle = resolve_type(Type{Type::named, form.name});
-    if (handle.kind != Type::c_type_marker)
-      implementation_gap(form.at, "C providers other than constructors of fieldless data \"C\" types");
-    const auto *declaration = program_.schemas.at(handle.identity).source;
-    if (std::ranges::none_of(source.forms, [&](const auto &candidate) { return candidate.get() == declaration; }))
-      implementation_gap(form.at, "C constructors declared outside their handle type's defining module");
-    if (form.symbolic || form.operation || form.result_type || !form.type_parameters.empty() || form.explicit_captures)
-      fail(form.at, "a C handle constructor requires a named, bodyless declaration without an explicit result or type parameters");
-    if (std::ranges::any_of(program_.native_constructors, [&](const auto &existing) { return existing.handle == handle; }))
-      implementation_gap(form.at, "multiple C constructor declarations for '" + handle.name + "'");
-    CheckedNativeConstructor constructor{&form, handle, {}, {}};
+  std::vector<CheckedNativeInput> checked_native_inputs(const Form &form, const std::string &boundary) const {
+    std::vector<CheckedNativeInput> inputs;
     std::set<std::string> names;
     for (const auto &parameter : form.parameters) {
-      if (!names.insert(parameter.name).second) fail(parameter.at, "duplicate constructor parameter name");
+      if (!names.insert(parameter.name).second) fail(parameter.at, "duplicate " + boundary + " parameter name");
       if (parameter.here || parameter.variadic || parameter.automatic_conversion)
-        implementation_gap(parameter.at, "here, variadic or conversion parameters of C constructors");
+        implementation_gap(parameter.at, "here, variadic or conversion parameters of a " + boundary);
       const auto type = resolve_type(parameter.type);
       std::optional<size_t> role;
       if (parameter.declaration_kind == "handle") {
@@ -17601,16 +17593,30 @@ class ScalarChecker {
         role = std::distance(form.owner_parameters.begin(), owner);
       } else {
         if (!parameter.owner.empty() || (parameter.declaration_kind != "val" && !parameter.declaration_kind.empty()))
-          fail(parameter.at, "C constructor parameters receive bits or a borrowed handle");
+          fail(parameter.at, boundary + " parameters receive bits or a borrowed handle");
         reject_c_type_payload(type, parameter.at);
-        if (type.kind == Type::exception) fail(parameter.at, "an exception object is not a C constructor bits argument");
-        if (!scalar_type(type)) implementation_gap(parameter.at, "C constructor bits arguments other than direct scalars");
+        if (type.kind == Type::exception) fail(parameter.at, "an exception object is not a " + boundary + " bits argument");
+        if (!scalar_type(type)) implementation_gap(parameter.at, boundary + " bits arguments other than direct scalars");
       }
-      constructor.inputs.push_back({type, role});
+      inputs.push_back({type, role});
     }
     for (size_t i = 0; i < form.owner_parameters.size(); ++i)
-      if (std::ranges::none_of(constructor.inputs, [&](const auto &input) { return input.owner == i; }))
-        implementation_gap(form.owner_parameters[i].at, "a C constructor owner without a supplying handle parameter");
+      if (std::ranges::none_of(inputs, [&](const auto &input) { return input.owner == i; }))
+        implementation_gap(form.owner_parameters[i].at, "a " + boundary + " owner without a supplying handle parameter");
+    return inputs;
+  }
+  void register_native_constructor(const Form &form, const SourceModule &source) {
+    const auto handle = resolve_type(Type{Type::named, form.name});
+    if (handle.kind != Type::c_type_marker)
+      implementation_gap(form.at, "C providers other than constructors of fieldless data \"C\" types");
+    const auto *declaration = program_.schemas.at(handle.identity).source;
+    if (std::ranges::none_of(source.forms, [&](const auto &candidate) { return candidate.get() == declaration; }))
+      implementation_gap(form.at, "C constructors declared outside their handle type's defining module");
+    if (form.symbolic || form.operation || form.result_type || !form.type_parameters.empty() || form.explicit_captures)
+      fail(form.at, "a C handle constructor requires a named, bodyless declaration without an explicit result or type parameters");
+    if (std::ranges::any_of(program_.native_constructors, [&](const auto &existing) { return existing.handle == handle; }))
+      implementation_gap(form.at, "multiple C constructor declarations for '" + handle.name + "'");
+    CheckedNativeConstructor constructor{&form, handle, checked_native_inputs(form, "C constructor"), {}};
     if (!form.throws_types.empty()) {
       const auto type = resolve_type(form.throws_types.front());
       if (!nominal_exception(type)) implementation_gap(form.at, "C constructor failures other than a concrete library-defined exception");
@@ -17623,14 +17629,20 @@ class ScalarChecker {
   }
   void check_native_type_names() const {
     std::map<std::string_view, size_t> handles;
+    const auto record = [&](const Type &type, const Location &at) {
+      const auto [entry, inserted] = handles.try_emplace(type.name, type.identity);
+      if (!inserted && entry->second != type.identity)
+        implementation_gap(at, "distinct C handle types with the same generated C name '" + type.name + "'");
+    };
     for (const auto &constructor : program_.native_constructors) {
-      const auto record = [&](const Type &type) {
-        const auto [entry, inserted] = handles.try_emplace(type.name, type.identity);
-        if (!inserted && entry->second != type.identity)
-          implementation_gap(constructor.source->at, "distinct C handle types with the same generated C name '" + type.name + "'");
-      };
-      record(constructor.handle);
-      for (const auto &input : constructor.inputs) if (input.owner) record(input.type);
+      record(constructor.handle, constructor.source->at);
+      for (const auto &input : constructor.inputs) if (input.owner) record(input.type, constructor.source->at);
+    }
+    std::set<std::string_view> entries;
+    for (const auto &entry : program_.native_entries) {
+      const auto &form = *program_.methods.at(entry.method).source;
+      if (!entries.insert(form.name).second) fail(form.at, "conflicting C entry name '" + form.name + "'");
+      for (const auto &input : entry.inputs) if (input.owner) record(input.type, form.at);
     }
   }
   void register_module(const SourceModule &source, std::optional<size_t> &print_symbol,
@@ -17657,7 +17669,7 @@ class ScalarChecker {
     std::vector<const Form *> definitions;
     for (const auto &form : forms) {
       if (source.dependencies.contains(form.get())) continue;
-      if (form->c_linkage) {
+      if (form->c_linkage && !form->body) {
         register_native_constructor(*form, source);
         continue;
       }
@@ -17708,6 +17720,13 @@ class ScalarChecker {
     for (const auto &form : forms) if (form->body)
       collect(*form->body, form->kind == Form::Kind::expression ? nullptr : form.get());
     for (const auto *form : definitions) {
+      std::vector<CheckedNativeInput> native_inputs;
+      if (form->c_linkage) {
+        if (form->symbolic || form->operation || !form->type_parameters.empty() || form->explicit_captures ||
+            !form->result_type || !form->result_owner.empty() || !form->throws_types.empty())
+          implementation_gap(form->at, "a C entry requires a concrete named signature with a scalar or void result and internal checked failure handling");
+        native_inputs = checked_native_inputs(*form, "C entry");
+      }
       const auto *here = !form->parameters.empty() && form->parameters.front().here ? &form->parameters.front() : nullptr;
       std::string operation = form->operation ? form->name : "";
       if (!form->symbolic && !lexical_methods_.contains(form))
@@ -17797,6 +17816,12 @@ class ScalarChecker {
         if (!parameter.owner.empty() && !owners.contains(parameter.owner)) fail(parameter.at, "unknown parameter owner '" + parameter.owner + "'");
         if (parameter.variadic && form->body) implementation_gap(parameter.at, "variadic method bodies");
         if (parameter.automatic_conversion) implementation_gap(parameter.at, "automatic parameter conversion contract");
+        if (form->c_linkage && parameter.declaration_kind == "handle") {
+          auto handle = resolve_signature(parameter.type);
+          handle.kind = Type::native_handle;
+          prepared.parameters.push_back(std::move(handle));
+          continue;
+        }
         prepared.parameters.push_back(resolve_signature(parameter.type));
         const auto mode = argument_mode(parameter);
         signature_type(prepared, prepared.parameters.back(), parameter.at, false, mode != ArgumentMode::value);
@@ -17850,6 +17875,11 @@ class ScalarChecker {
         continue;
       }
       const auto id = program_.methods.size();
+      if (form->c_linkage) {
+        if (!scalar_type(*prepared.result.type) && *prepared.result.type != Type::void_type)
+          implementation_gap(form->at, "C entry results other than direct scalars or void");
+        program_.native_entries.push_back({id, std::move(native_inputs), *prepared.result.type});
+      }
       prepared.definition = id;
       std::vector<size_t> local_family;
       auto &family = prepared.family ? program_.families[*prepared.family].methods : local_family;
@@ -17911,6 +17941,8 @@ public:
     if (unsupported_here) implementation_gap(*unsupported_here, "this receiving pattern for a here body");
     prepare_interpretations();
     plan_initialization(source);
+    if (!program_.native_entries.empty() && !program_.initializers.empty())
+      implementation_gap(program_.initializers.front().expression->at, "module initialization in a C entry library");
     for (size_t i = 0; i < program_.methods.size(); ++i) {
       const auto &method = *program_.methods[i].source;
       if (program_.methods[i].definition != i || !method.type_parameters.empty() || lexical_methods_.contains(&method)) continue;
@@ -17964,6 +17996,11 @@ public:
               instance.bindings[i].selection.empty() != first.bindings[i].selection.empty())
             implementation_gap(method.source->at, "generic instances with different lexical binding layouts");
       }
+    }
+    for (const auto &entry : program_.native_entries) {
+      const auto &method = program_.methods.at(entry.method);
+      if (!method.captures.empty() || !method.retained_types.empty() || method.declaration_context())
+        implementation_gap(method.source->at, "a C entry with an additional lexical calling context");
     }
     return std::move(program_);
   }

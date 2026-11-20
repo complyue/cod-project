@@ -1,6 +1,7 @@
 //===--- lang_llvm.hh - Checked scalar native emission --------------===//
 #pragma once
 
+#include "lang_c_provider.hh"
 #include "lang_checked_program.hh"
 #include "lang_exceptions.hh"
 #include "lang_llvm_c.h"
@@ -2812,6 +2813,89 @@ class LLVMEmission {
         {category, where, load(completion_.requested), load(completion_.available), load(completion_.cause)});
     b_.CreateUnreachable();
   }
+  llvm::BasicBlock *emit_exit_diagnostics(const std::string &recovered) {
+    auto *fatal = block("fatal"), *exception = block("exception"), *normal = block(recovered);
+    b_.CreateCondBr(b_.CreateICmpNE(load(completion_.fatal), null_pointer()), fatal, exception);
+    b_.SetInsertPoint(fatal);
+    clear_failure_owner();
+    b_.CreateCall(runtime("cod_lang_fail", b_.getVoidTy(), {b_.getPtrTy()}), {load(completion_.fatal)});
+    b_.CreateUnreachable();
+    b_.SetInsertPoint(exception);
+    auto *uncaught = block("uncaught");
+    b_.CreateCondBr(b_.CreateICmpNE(load(completion_.category), integer(0)), uncaught, normal);
+    b_.SetInsertPoint(uncaught);
+    emit_uncaught_failure();
+    return normal;
+  }
+  llvm::Type *c_scalar_type(const Type &type) {
+    return type == Type::boolean ? b_.getInt8Ty() : native_type(type);
+  }
+  void emit_native_entry(const CheckedNativeEntry &entry, llvm::GlobalVariable *active) {
+    const auto &method = program_->methods.at(entry.method);
+    const auto &form = *method.source;
+    const bool returns_value = entry.result != Type::void_type;
+    std::vector<llvm::Type *> types;
+    for (const auto &input : entry.inputs)
+      types.push_back(input.owner ? b_.getPtrTy() : c_scalar_type(input.type));
+    types.insert(types.end(), form.owner_parameters.size() + returns_value, b_.getPtrTy());
+    auto *bridge = llvm::Function::Create(llvm::FunctionType::get(b_.getVoidTy(), types, false),
+        llvm::GlobalValue::ExternalLinkage, native_entry_body_name(form), module_);
+    for (size_t i = 0; i < entry.inputs.size(); ++i)
+      if (entry.inputs[i].type == Type::uint8 || entry.inputs[i].type == Type::boolean)
+        bridge->addParamAttr(i, llvm::Attribute::ZExt);
+    begin(bridge, {}, {});
+    auto *nested = b_.CreateLoad(b_.getInt1Ty(), active);
+    b_.CreateStore(b_.getTrue(), active);
+    std::vector<llvm::Value *> arguments;
+    for (size_t i = 0; i < entry.inputs.size(); ++i) {
+      const auto &input = entry.inputs[i];
+      auto *supplied = bridge->getArg(i);
+      if (input.owner)
+        arguments.push_back(b_.CreateInsertValue(empty_scalar(), b_.CreatePtrToInt(supplied, b_.getInt64Ty()), 0));
+      else arguments.push_back(pack(supplied, input.type));
+    }
+    for (const auto &[owner, input] : input_frame(entry.method).owners) {
+      const auto role = null_target - 1 - owner;
+      arguments.push_back(bridge->getArg(entry.inputs.size() + role));
+    }
+    auto *outcome = b_.CreateCall(general_.at(entry.method), arguments);
+    auto *completed = block("entry.completed");
+    b_.CreateCondBr(abrupt_outcome(outcome), finish_, completed);
+    b_.SetInsertPoint(finish_);
+    save_abrupt(outcome);
+    if (protected_outcomes_) discard_transfer_failure(load(completion_.transfer), null_pointer());
+    b_.SetInsertPoint(emit_exit_diagnostics("entry.escaped.transfer"));
+    b_.CreateCall(runtime("cod_lang_fail", b_.getVoidTy(), {b_.getPtrTy()}),
+        {b_.CreateGlobalString("protected completion escaped its supplying call")});
+    b_.CreateUnreachable();
+    b_.SetInsertPoint(completed);
+    if (returns_value) {
+      auto *result = unpack(b_.CreateExtractValue(outcome, 0), entry.result);
+      if (entry.result == Type::boolean) result = b_.CreateZExt(result, b_.getInt8Ty());
+      b_.CreateStore(result, bridge->getArg(types.size() - 1));
+    }
+    auto *release = block("entry.release.causes"), *returned = block("entry.return");
+    b_.CreateStore(nested, active);
+    b_.CreateCondBr(nested, returned, release);
+    b_.SetInsertPoint(release);
+    b_.CreateCall(runtime("cod_lang_exception_finish", b_.getVoidTy(), {}));
+    b_.CreateBr(returned);
+    b_.SetInsertPoint(returned);
+    b_.CreateRetVoid();
+  }
+  void emit_main() {
+    auto *main = llvm::Function::Create(llvm::FunctionType::get(b_.getInt32Ty(), false),
+        llvm::GlobalValue::ExternalLinkage, "main", module_);
+    std::vector<const Expression *> initializers;
+    for (const auto &initializer : program_->initializers) initializers.push_back(initializer.expression);
+    begin(main, program_->entry_storage, program_->entry_bindings);
+    contexts_ = {{&program_->entry}};
+    call_scope(initializers, Location{});
+    b_.SetInsertPoint(finish_);
+    b_.SetInsertPoint(emit_exit_diagnostics("normal"));
+    b_.CreateCall(runtime("cod_lang_exception_finish", b_.getVoidTy(), {}));
+    b_.CreateRet(b_.getInt32(0));
+  }
 
 public:
   std::pair<std::string, std::string> emit(const CheckedProgram &program, bool emit_text, bool emit_bitcode, bool specialize = true, bool bounds_checks = true) {
@@ -2843,6 +2927,7 @@ public:
       if (!program.methods[i].scope_inputs && program.methods[i].here_targets.empty() &&
           !program.methods[i].has_higher_order_here() && !program.methods[i].instances.empty())
         retain_method(i);
+    for (const auto &entry : program.native_entries) retain_method(entry.method);
     std::set<size_t> used_symbols;
     std::set<size_t> here_instances;
     std::set<size_t> prepared_sources;
@@ -2944,23 +3029,14 @@ public:
       body(general_[i], method, {});
       if (specialize) for (const auto id : method.instances) body(specialized_[id], method, id);
     }
-    auto *main = llvm::Function::Create(llvm::FunctionType::get(b_.getInt32Ty(), false), llvm::GlobalValue::ExternalLinkage, "main", module_);
-    std::vector<const Expression *> initializers;
-    for (const auto &initializer : program.initializers) initializers.push_back(initializer.expression);
-    begin(main, program.entry_storage, program.entry_bindings); contexts_ = {{&program.entry}}; call_scope(initializers, Location{});
-    b_.SetInsertPoint(finish_);
-    auto *fatal = block("fatal"), *exception = block("exception"), *normal = block("normal");
-    b_.CreateCondBr(b_.CreateICmpNE(load(completion_.fatal), null_pointer()), fatal, exception);
-    b_.SetInsertPoint(fatal);
-    clear_failure_owner();
-    b_.CreateCall(runtime("cod_lang_fail", b_.getVoidTy(), {b_.getPtrTy()}), {load(completion_.fatal)}); b_.CreateUnreachable();
-    b_.SetInsertPoint(exception);
-    auto *uncaught = block("uncaught");
-    b_.CreateCondBr(b_.CreateICmpNE(load(completion_.category), integer(0)), uncaught, normal);
-    b_.SetInsertPoint(uncaught);
-    emit_uncaught_failure();
-    b_.SetInsertPoint(normal);
-    b_.CreateCall(runtime("cod_lang_exception_finish", b_.getVoidTy(), {})); b_.CreateRet(b_.getInt32(0));
+    if (program.native_entries.empty()) emit_main();
+    else {
+      // Nested crossings share the supplying execution's exception history.
+      auto *active = new llvm::GlobalVariable(module_, b_.getInt1Ty(), false, llvm::GlobalValue::InternalLinkage,
+          b_.getFalse(), "cod.native.entry.active");
+      active->setThreadLocalMode(llvm::GlobalVariable::GeneralDynamicTLSModel);
+      for (const auto &entry : program.native_entries) emit_native_entry(entry, active);
+    }
     emit_sites();
     std::string errors;
     llvm::raw_string_ostream diagnostics_out(errors);

@@ -196,7 +196,7 @@ static void printUsage(const char *prog_name) {
             << "  --emit-llvm FILE    Save directly emitted textual LLVM IR\n"
             << "  --emit-bc FILE      Save directly emitted LLVM bitcode\n"
             << "  --emit-runtime FILE Save native system services for external linking\n"
-            << "  --emit-c-provider DIR  Generate the checked C constructor header and stubs\n"
+            << "  --emit-c-provider DIR  Generate the checked C boundary header and stubs\n"
             << "  --no-specialize    Validate CoD calls through general native implementations\n"
             << "  --no-bounds-checks Assume source builtin indices are in range\n"
             << "  --warnings-as-errors  Treat all CoD language warnings as errors\n"
@@ -659,6 +659,8 @@ int CodTool::compileLanguage(const CodReplConfig &config, const fs::path &entry,
       write(*emission.providers / Files::stubs_name, compilation.providers->stubs);
     }
     if (check_only) return 0;
+    if (compilation.native_library)
+      throw std::runtime_error("a C entry library requires a linked native launcher; emit it with --check");
 
     llvm::SmallString<256> directory;
     const auto model = (fs::temp_directory_path() / "cod-language").string();
