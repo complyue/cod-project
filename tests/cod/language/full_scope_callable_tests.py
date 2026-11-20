@@ -29,6 +29,13 @@ WRITE_QUERY_PAIR = ('proc populate(ptr p:Pair in O)->void where {owner O}{'
 QUERY_PRODUCT_CHOICE = ('ptr left=make Pair;ptr right=make Pair;'
                         'ptr selected=if(pick_left){left}else{right};')
 QUERY_PRODUCT_FLAGS = 'val pick_left<-true;val pick_other<-false;'
+PROJECT_QUERY_FIELD = ('func project_field(ptr p:Pair in O)->ptr u64 in O where {owner O}{'
+                       'if(p is null){return null in O;}else{};return p.second;}')
+MAYBE_QUERY_FIELD = ('func maybe_field(ptr p:Pair in O,enabled:bool)->ptr u64 in O where {owner O}{'
+                     'if(enabled){if(p is null){return null in O;}else{};return p.second;}'
+                     'else{return null in O;};}')
+WRITE_QUERY_FIELD = ('proc fill_field(ptr field:u64 in O)->void where {owner O}{'
+                     'if(field is null){return;}else{};field<-7u64;return;}')
 WRITE_QUERY_HOLDER = ('proc populate(ref p:Holder in O)->void where {owner O}{'
                       'if(p.selected is null){return;}else{};p.selected<-7u64;return;}')
 QUERY_CALL_FAILURE = ('using "std:exceptions" NullPointerException;'
@@ -1326,6 +1333,66 @@ runner.CASES = {
         IO + QUERY_PAIR + QUERY_PRODUCT_FLAGS +
         query(QUERY_PRODUCT_CHOICE + 'ptr retained=selected;{{defer (<-)(selected.second,7u64);selected=right;return;}};'
               'return retained.second;') + 'behave @print(result);', 0, '4\n', ''),
+    'query_write_through_borrow_prepares_its_selected_field': (
+        IO + QUERY_PAIR + QUERY_PRODUCT_FLAGS +
+        query(QUERY_PRODUCT_CHOICE + 'ptr field=selected.second;field<-7u64;return selected.second;') +
+        'behave @print(result);', 0, '4\n', ''),
+    'query_borrow_follows_a_retained_receiver': (
+        IO + QUERY_PAIR + QUERY_PRODUCT_FLAGS +
+        query(QUERY_PRODUCT_CHOICE + 'ptr field=selected.second;ptr retained=selected;'
+              'selected=right;field<-7u64;return retained.second;') + 'behave @print(result);', 0, '4\n', ''),
+    'query_borrow_write_does_not_reach_a_rebound_receiver': (
+        QUERY_PAIR + QUERY_PRODUCT_FLAGS +
+        query(QUERY_PRODUCT_CHOICE + 'ptr field=selected.second;selected=right;field<-7u64;return selected.second;'),
+        2, '', "read of 'second' before definite initialization"),
+    'query_rebound_borrow_does_not_prepare_the_earlier_field': (
+        QUERY_PAIR + QUERY_PRODUCT_FLAGS +
+        query(QUERY_PRODUCT_CHOICE + 'ptr field=selected.second;field=right.first;field<-7u64;return selected.second;'),
+        2, '', "read of 'second' before definite initialization"),
+    'query_helper_can_return_a_borrow_of_the_selected_field': (
+        IO + QUERY_PAIR + QUERY_PRODUCT_FLAGS + PROJECT_QUERY_FIELD +
+        'func forward_field(ptr p:Pair in O)->ptr u64 in O where {owner O}{return project_field(p);}' +
+        query(QUERY_PRODUCT_CHOICE + 'ptr field=forward_field(selected);field<-7u64;return selected.second;') +
+        'behave @print(result);', 0, '4\n', ''),
+    'query_scalar_helper_can_forward_a_borrow_of_the_selected_field': (
+        IO + QUERY_PAIR + QUERY_PRODUCT_FLAGS +
+        'func forward_field(ptr p:u64 in O)->ptr u64 in O where {owner O}{return p;}' +
+        query(QUERY_PRODUCT_CHOICE + 'ptr field=forward_field(selected.second);field<-7u64;return selected.second;') +
+        'behave @print(result);', 0, '4\n', ''),
+    'query_helper_result_write_does_not_reach_a_rebound_receiver': (
+        QUERY_PAIR + QUERY_PRODUCT_FLAGS + PROJECT_QUERY_FIELD +
+        query(QUERY_PRODUCT_CHOICE + 'ptr field=project_field(selected);selected=right;field<-7u64;return selected.second;'),
+        2, '', "read of 'second' before definite initialization"),
+    'query_conditional_write_through_a_nullable_borrow_leaves_the_field_unproved': (
+        QUERY_PAIR + QUERY_PRODUCT_FLAGS + MAYBE_QUERY_FIELD + WRITE_QUERY_FIELD +
+        query(QUERY_PRODUCT_CHOICE + 'ptr field=maybe_field(selected,pick_other);fill_field(field);return selected.second;'),
+        2, '', "read of 'second' before definite initialization"),
+    'query_proved_present_borrowed_field_can_be_prepared_by_a_helper': (
+        IO + QUERY_PAIR + QUERY_PRODUCT_FLAGS + MAYBE_QUERY_FIELD + WRITE_QUERY_FIELD +
+        query(QUERY_PRODUCT_CHOICE + 'ptr field=maybe_field(selected,pick_left);if(field is null){return 0u64;}else{};'
+              'fill_field(field);return selected.second;') + 'behave @print(result);', 0, '4\n', ''),
+    'query_correlated_field_writes_prepare_a_complete_product': (
+        IO + QUERY_PAIR + QUERY_PRODUCT_FLAGS +
+        query(QUERY_PRODUCT_CHOICE + 'selected.first<-1u64;selected.second<-2u64;'
+              'ref complete=selected;return complete.second;') + 'behave @print(result);', 0, '4\n', ''),
+    'query_complete_product_still_requires_an_unwritten_sibling': (
+        QUERY_PAIR + QUERY_PRODUCT_FLAGS +
+        query(QUERY_PRODUCT_CHOICE + 'selected.first<-1u64;ref complete=selected;return complete.first;'),
+        2, '', "read of 'second' before definite initialization"),
+    'query_complete_product_checks_required_referents_separately': (
+        QUERY_PAIR + QUERY_PRODUCT_FLAGS + 'data Box {head:u64;ref required:Pair;}' +
+        query('ptr left=make Box;ptr right=make Box;ptr missing=make Pair;left.required=missing;right.required=missing;'
+              'ptr selected=if(pick_left){left}else{right};selected.head<-7u64;ref complete=selected;return complete.head;'),
+        2, '', "read of 'first' before definite initialization"),
+    'query_nested_scope_can_write_through_the_borrow_of_a_selected_field': (
+        IO + QUERY_PAIR + QUERY_PRODUCT_FLAGS +
+        query(QUERY_PRODUCT_CHOICE + 'ptr field=selected.second;{{field<-7u64;return;}};return selected.second;') +
+        'behave @print(result);', 0, '4\n', ''),
+    'query_prepared_transfer_can_write_through_the_borrow_of_a_selected_field': (
+        IO + QUERY_PAIR + QUERY_PRODUCT_FLAGS +
+        query(QUERY_PRODUCT_CHOICE + 'ptr field=selected.second;ptr retained=selected;'
+              '{{defer (<-)(field,7u64);selected=right;return;}};return retained.second;') +
+        'behave @print(result);', 0, '4\n', ''),
     'query_recursive_helper_preserves_field_writes': (
         IO + QUERY_PAIR + 'proc populate(ptr p:Pair in O,n:u64)->void where {owner O}{'
         'if(p is null){return;}else{};if(n==0u64){p.second<-7u64;return;}else{};populate(p,n-1u64);return;}' +
