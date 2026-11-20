@@ -824,17 +824,17 @@ class LLVMEmission {
     llvm::IRBuilder<> body(llvm::BasicBlock::Create(context_, "entry", bridge));
     auto *state = bridge->getArg(0);
     auto *views = bridge->getArg(1);
-    auto *arrays = llvm::StructType::get(context_, std::vector<llvm::Type *>(native.arrays.size(), array_view_));
+    auto *arrays = llvm::StructType::get(context_, std::vector<llvm::Type *>(native.arrays().size(), array_view_));
     auto *callback = body.CreateLoad(here_, body.CreateStructGEP(frame, state, 0));
     std::vector<llvm::Value *> arguments;
-    for (size_t i = 0; i < native.arrays.size(); ++i) {
+    for (size_t i = 0; i < native.arrays().size(); ++i) {
       auto *address = body.CreateStructGEP(arrays, views, i);
       auto *view = body.CreateInsertValue(empty_scalar(), body.CreatePtrToInt(address, body.getInt64Ty()), 0);
-      arguments.push_back(body.CreateInsertValue(view, body.getInt32(tag(native.arrays[i])), 1));
+      arguments.push_back(body.CreateInsertValue(view, body.getInt32(tag(native.arrays()[i].type)), 1));
     }
     arguments.push_back(body.CreateLoad(pointer, body.CreateStructGEP(frame, state, 1)));
     arguments.push_back(body.CreateExtractValue(callback, 1));
-    std::vector<llvm::Type *> types(native.arrays.size(), scalar_);
+    std::vector<llvm::Type *> types(native.arrays().size(), scalar_);
     types.insert(types.end(), 2, pointer);
     auto *outcome = body.CreateCall(llvm::FunctionType::get(outcome_, types, false), body.CreateExtractValue(callback, 0), arguments);
     auto *abrupt = body.CreateOr(body.CreateICmpNE(body.CreateExtractValue(outcome, 1), integer(0)),
@@ -3250,6 +3250,20 @@ public:
     if (emit_text) { llvm::raw_string_ostream output(text); module_.print(output, nullptr); }
     if (emit_bitcode) { llvm::raw_string_ostream output(bitcode); llvm::WriteBitcodeToFile(module_, output); }
     return {std::move(text), std::move(bitcode)};
+  }
+  NativeRowLayouts provider_row_layouts() {
+    NativeRowLayouts result;
+    const auto &data = module_.getDataLayout();
+    for (const auto &native : program_->native_here_operations) for (const auto &input : native.arrays()) {
+      const auto &element = program_->arrays.at(input.type.identity).element;
+      if (element.kind != Type::product || result.contains(element.identity)) continue;
+      auto *row = product_layout(element.identity);
+      const auto *layout = data.getStructLayout(row);
+      NativeRowLayout measured{data.getTypeAllocSize(row).getFixedValue(), data.getABITypeAlign(row).value(), {}};
+      for (size_t i = 0; i < row->getNumElements(); ++i) measured.offsets.push_back(layout->getElementOffset(i));
+      result.emplace(element.identity, std::move(measured));
+    }
+    return result;
   }
 };
 

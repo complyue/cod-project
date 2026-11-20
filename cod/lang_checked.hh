@@ -6196,9 +6196,11 @@ class ScalarChecker {
       const bool here_borrow = definition.scope_inputs && definition.scope_inputs->here_reception &&
           i < definition.scope_inputs->here_reception->selected.size() &&
           mode == ArgumentMode::borrowed_ref && (parameter.read_only || writable);
+      const bool captured_array = definition.scope_inputs && definition.scope_inputs->here_reception &&
+          definition.scope_inputs->live_bindings.contains(i) && mode == ArgumentMode::borrowed_ref && parameter.read_only;
       const bool readable = mode == ArgumentMode::borrowed_read && parameter.read_only;
       const bool ordinary = !definition.scope_inputs && (readable || writable);
-      if ((!here_borrow && !ordinary) || definition.source->symbolic || caller_bindings(definition))
+      if ((!here_borrow && !captured_array && !ordinary) || definition.source->symbolic || caller_bindings(definition))
         implementation_gap(at, "array parameters require readonly borrows or writable refs to initialized numeric products");
     }
     const auto &supplied = program_.query_environments[query_environment].result;
@@ -13253,7 +13255,8 @@ class ScalarChecker {
   }
   std::pair<CheckedOperation::SuppliedHere, std::optional<size_t>> demand_supplied_here(const Expression &body, const Type &contract,
       const CheckedHereContract &signature, std::vector<std::optional<size_t>> owners, const ResultContract &receiving,
-      CheckedInstance *supplier, std::map<const Expression *, CheckedOperation> &operations) {
+      CheckedInstance *supplier, std::map<const Expression *, CheckedOperation> &operations,
+      std::optional<bool> native_owner_read_only = {}) {
     if (!body.definition) implementation_gap(body.at, "this receiving pattern for a here body");
     const auto &definition = *body.definition;
     std::optional<CheckedMethod::HereGroupResults> group;
@@ -13281,7 +13284,7 @@ class ScalarChecker {
     const auto add_owner = [&](const Location &at, bool read_only) {
       inputs.owners.push_back({"$scope.owner." + std::to_string(inputs.owners.size()), {}, at, false, read_only});
     };
-    for (const auto actual : owners) add_owner(body.at, actual && const_owner(*actual));
+    for (const auto actual : owners) add_owner(body.at, native_owner_read_only.value_or(actual && const_owner(*actual)));
     std::vector<Type> arguments;
     arguments.reserve(parameters.size());
     for (size_t i = 0; i < parameters.size(); ++i) {
@@ -13327,7 +13330,8 @@ class ScalarChecker {
         inputs.owner_names.emplace(name, capture_owner(named_owner(name, capture.at), capture.at));
         continue;
       }
-      if (source.alias || !source.selection.empty() || !numeric(source.type) ||
+      const bool readonly_array = source.type.kind == Type::array && !source.value_binding && source.read_only;
+      if (source.alias || !source.selection.empty() || (!numeric(source.type) && !readonly_array) ||
           (!source.value_binding && (source.nullable || !source.read_only)))
         implementation_gap(capture.at, "here access requires a numeric val or initialized readonly reference slot with stable storage");
       const auto &operand = scope_operand(base, capture);
@@ -15082,7 +15086,7 @@ class ScalarChecker {
     const auto &signature = native.contract.here.front();
     const auto callback = here_value_signature(native.contract, signature, {}, expr.at);
     auto [body, returning] = demand_supplied_here(*expr.children.back(), callback, signature,
-        {owner}, native.contract.result, instance, operations);
+        {owner}, native.contract.result, instance, operations, native.contract.source->owner_parameters.front().read_only);
     if (returning) implementation_gap(expr.at, "return inspection through a native here operation");
     if (std::ranges::any_of(body.places, [&](const Expression *capture) { return !operations.at(capture).read_only; }))
       implementation_gap(expr.at, "a writable captured supplier place in a native here operation");
@@ -17824,13 +17828,15 @@ class ScalarChecker {
     if (form.symbolic || form.operation || form.explicit_captures || !form.type_parameters.empty() ||
         !form.result_owner.empty() || !form.throws_types.empty() || resolve_type(*form.result_type) != Type::uint8 ||
         form.parameters.size() != 2 || form.owner_parameters.size() != 1)
-      implementation_gap(form.at, "C here providers outside the first readonly-array and u8 profile");
+      implementation_gap(form.at, "C here providers outside the first array and u8 profile");
     const auto &role = form.owner_parameters.front();
     const auto &handle = form.parameters.back();
     const auto type = resolve_type(handle.type);
-    if (!role.read_only || role.root || role.explicit_parameter || handle.declaration_kind != "handle" ||
+    if (role.root || role.explicit_parameter || handle.declaration_kind != "handle" ||
         handle.here || handle.variadic || handle.automatic_conversion || handle.owner != role.name || type.kind != Type::c_type_marker)
-      implementation_gap(form.at, "C here provider requires one borrowed handle with an established readonly owner");
+      implementation_gap(form.at, "C here provider requires one borrowed handle with an established owner");
+    if (handle.read_only && !role.read_only)
+      fail(handle.at, "a readonly native handle cannot establish a writable provider owner");
     CheckedNativeHereOperation native;
     native.handle = type;
     auto &contract = native.contract;
@@ -17840,17 +17846,19 @@ class ScalarChecker {
     contract.here.push_back(here_contract(contract, form.parameters.front()));
     const auto &here = contract.here.front();
     if (here.inputs.empty() || here.labelled || !here.here.empty() || here.feedback || here.result.owner || here.result.type != Type::uint8)
-      implementation_gap(form.at, "C here provider requires an ordered readonly array callback with u8 feedback");
+      implementation_gap(form.at, "C here provider requires an ordered array callback with u8 feedback");
     for (const auto &input : here.inputs) {
-      if (input.type.kind != Type::array || input.mode != ArgumentMode::borrowed_ref || !input.read_only || input.owner != 1)
-        implementation_gap(form.at, "C here array inputs must share the handle's readonly owner");
+      if (input.type.kind != Type::array || input.mode != ArgumentMode::borrowed_ref || input.owner != 1)
+        implementation_gap(form.at, "C here array inputs must share the handle's owner");
+      if (role.read_only && !input.read_only)
+        fail(form.at, "a readonly native owner cannot supply a writable array loan");
       const auto &array = program_.arrays.at(input.type.identity);
-      if (array.index != Type::uint64 || (array.element != Type::uint8 &&
-          (array.element.kind != Type::product || program_.schemas.at(array.element.identity).fields.empty() ||
+      const bool readonly_bits = input.read_only && numeric(array.element);
+      if (array.index != Type::uint64 || (!readonly_bits &&
+          (!indexed_product(array.element, form.at) || program_.schemas.at(array.element.identity).fields.empty() ||
            !std::ranges::all_of(program_.schemas.at(array.element.identity).fields, [](const auto &field) {
-             return field.storage == PlaceKind::value && field.type == Type::uint64 && c_failure_field(field.source->name);
-           })))) implementation_gap(form.at, "C here arrays outside the u64-indexed byte or u64-record profile");
-      native.arrays.push_back(input.type);
+             return c_failure_field(field.source->name);
+           })))) implementation_gap(form.at, "C here arrays outside the u64-indexed scalar and numeric record profile");
     }
     if (!module_names().native_here_operations.emplace(form.name, program_.native_here_operations.size()).second)
       fail(form.at, "conflicting native provider name '" + form.name + "'");

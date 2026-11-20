@@ -669,7 +669,7 @@ struct CheckedFamily {
 struct CheckedNativeHereOperation {
   CheckedMethod contract;
   Type handle;
-  std::vector<Type> arrays;
+  const auto &arrays() const { return contract.here.front().inputs; }
 };
 
 struct CheckedProgram {
