@@ -13693,7 +13693,11 @@ class ScalarChecker {
     std::vector<Type> arguments(count);
     std::vector<CheckedOperation> views(count);
     bool completes = true;
-    const bool aggregate_borrows = !terminal && here_count == 1 && (syntax.body || forwards_here(target));
+    const bool lexical_forwarding = !supplied && explicit_here != 0 &&
+        std::ranges::all_of(operands_written.first(explicit_here), [&](const Expr &operand) {
+          return operand->kind == Expression::Kind::name && here_slot(operand->text).has_value();
+        });
+    const bool aggregate_borrows = lexical_forwarding || (!terminal && syntax.body && here_count == 1);
     for (const auto [kind, slot] : operation.operand_preparation) {
       if (kind == PreparationKind::ordinary) {
         const auto mode = modes[slot];

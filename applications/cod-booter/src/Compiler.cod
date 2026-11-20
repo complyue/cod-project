@@ -64,6 +64,18 @@ proc compile_expression(here emit(ordinal:u64, kind:u8, number:u64, left:u64, ri
     return lower_expression(emit, nodes, result.tree);
 }
 
+# The callbacks share one scratch allocation. Work keeps its buffer borrows
+# within the call. Release accepts an empty allocation if acquisition fails.
+proc compile_with_scratch(here work(token_count:u64, node_capacity:u64) -> bool,
+                          here release() -> void,
+                          source:const SourceBytes in S, ref plan:ExpressionScratchPlan in P) -> bool
+    where {const owner S, owner P} {
+    if (!plan_expression_scratch(source, plan)) { return false; } else {};
+    defer { release(); };
+    return work(plan.token_count, plan.node_capacity);
+}
+
 export ExpressionScratchPlan;
 export plan_expression_scratch;
 export compile_expression;
+export compile_with_scratch;
