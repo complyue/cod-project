@@ -7,6 +7,10 @@ using "ParserStorage.cod" group_node;
 using "ParserStorage.cod" no_node;
 using "ExpressionParser.cod" ParseResult;
 
+func arithmetic_node(kind:u8) -> bool {
+    return kind == literal_node() || kind == add_node() || kind == multiply_node() || kind == group_node();
+}
+
 func node_ready(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
     val operation_at <- nodes[at].operation_at;
     if (operation_at < nodes[at].first || operation_at >= nodes[at].past) { return false; } else {};
@@ -40,3 +44,4 @@ proc lower_expression(here emit(ordinal:u64, kind:u8, number:u64, left:u64, righ
 }
 
 export lower_expression;
+export arithmetic_node;

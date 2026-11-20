@@ -21,6 +21,17 @@ func name_node() -> u8 { return 5u8; }
 func call_node() -> u8 { return 6u8; }
 func argument_node() -> u8 { return 7u8; }
 func deferred_call_node() -> u8 { return 8u8; }
+func block_node() -> u8 { return 9u8; }
+func full_scope_node() -> u8 { return 10u8; }
+func block_item_node() -> u8 { return 11u8; }
+func try_node() -> u8 { return 12u8; }
+func catch_clause_node() -> u8 { return 13u8; }
+func catch_handler_node() -> u8 { return 14u8; }
+func catch_binding_node() -> u8 { return 15u8; }
+func finally_clause_node() -> u8 { return 16u8; }
+func symbol_node() -> u8 { return 17u8; }
+func behave_node() -> u8 { return 18u8; }
+func throw_node() -> u8 { return 19u8; }
 
 func no_node() -> u64 { return 18446744073709551615u64; }
 
@@ -44,4 +55,15 @@ export name_node;
 export call_node;
 export argument_node;
 export deferred_call_node;
+export block_node;
+export full_scope_node;
+export block_item_node;
+export try_node;
+export catch_clause_node;
+export catch_handler_node;
+export catch_binding_node;
+export finally_clause_node;
+export symbol_node;
+export behave_node;
+export throw_node;
 export no_node;
