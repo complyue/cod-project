@@ -12,6 +12,7 @@ using "ParserStorage.cod" name_node;
 using "ParserStorage.cod" call_node;
 using "ParserStorage.cod" argument_node;
 using "ParserStorage.cod" deferred_call_node;
+using "ParserStorage.cod" deferred_block_node;
 using "ParserStorage.cod" block_node;
 using "ParserStorage.cod" full_scope_node;
 using "ParserStorage.cod" block_item_node;
@@ -154,14 +155,26 @@ func outer_invocation(nodes:const ExprNodes in A, root:u64) -> u64 where {const 
     return no_node();
 }
 
-func parse_deferred_call(source:const SourceBytes in S, tokens:const Tokens in T,
+func parse_defer(source:const SourceBytes in S, tokens:const Tokens in T,
                          ref nodes:ExprNodes in A, ref result:ParseResult in R, past:u64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val keyword <- tokens[result.next].first;
     val operand_start <- result.next + 1u64;
     result.next <- operand_start;
-    if (operand_start < past && (punct_at(source, tokens, operand_start, past) == 123u8 || # '{'
-        catch_word(source, tokens[operand_start]) || finally_word(source, tokens[operand_start]))) {
+    if (punct_at(source, tokens, operand_start, past) == 123u8) { # '{'
+        parse_block(source, tokens, nodes, result, past);
+        if (result.diagnostic != 0u8) { return; } else {};
+        val body <- result.root;
+        val following <- result.next;
+        if (following < past && (catch_word(source, tokens[following]) || finally_word(source, tokens[following]))) {
+            result.diagnostic <- unsupported_deferred_form();
+            return;
+        } else {};
+        append_node(nodes, result, deferred_block_node(), keyword, nodes[body].past,
+                    0u64, body, no_node(), keyword);
+        return;
+    } else {};
+    if (operand_start < past && (catch_word(source, tokens[operand_start]) || finally_word(source, tokens[operand_start]))) {
         result.diagnostic <- unsupported_deferred_form();
         return;
     } else {};
@@ -491,7 +504,7 @@ func parse_primary(source:const SourceBytes in S, tokens:const Tokens in T,
     if (at >= past) { result.diagnostic <- expected_operand(); return; } else {};
     val first <- tokens[at].first;
     if (defer_word(source, tokens[at])) {
-        parse_deferred_call(source, tokens, nodes, result, past);
+        parse_defer(source, tokens, nodes, result, past);
         return;
     } else {};
     if (try_word(source, tokens[at])) { parse_try(source, tokens, nodes, result, past); return; } else {};

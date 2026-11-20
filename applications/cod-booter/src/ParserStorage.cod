@@ -52,6 +52,7 @@ func owned_type_node() -> u8 { return 36u8; }
 func result_clause_node() -> u8 { return 37u8; }
 func throws_clause_node() -> u8 { return 38u8; }
 func owner_clause_node() -> u8 { return 39u8; }
+func deferred_block_node() -> u8 { return 40u8; }
 
 func no_node() -> u64 { return 18446744073709551615u64; }
 
@@ -106,4 +107,5 @@ export owned_type_node;
 export result_clause_node;
 export throws_clause_node;
 export owner_clause_node;
+export deferred_block_node;
 export no_node;

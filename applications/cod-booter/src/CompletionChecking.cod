@@ -15,6 +15,7 @@ using "ParserStorage.cod" catch_clause_node;
 using "ParserStorage.cod" catch_handler_node;
 using "ParserStorage.cod" finally_clause_node;
 using "ParserStorage.cod" deferred_call_node;
+using "ParserStorage.cod" deferred_block_node;
 using "ParserStorage.cod" return_node;
 using "ParserStorage.cod" throw_node;
 using "ParserStorage.cod" group_node;
@@ -46,6 +47,7 @@ data CompletionSite {
     local_return:u8;
     retains_caught:u8;
     forwarded_operand:u8;
+    in_delayed_body:u8;
     guarded_by:u64;
     incoming_handler:u64;
     throws_clause:u64;
@@ -91,6 +93,7 @@ func initialize_site(ref sites:CompletionSites in X, at:u64) -> void where {owne
     sites[at].local_return <- 0u8;
     sites[at].retains_caught <- 0u8;
     sites[at].forwarded_operand <- 0u8;
+    sites[at].in_delayed_body <- 0u8;
     sites[at].guarded_by <- no_node();
     sites[at].incoming_handler <- no_node();
     sites[at].throws_clause <- no_node();
@@ -105,13 +108,14 @@ func initialize_site(ref sites:CompletionSites in X, at:u64) -> void where {owne
     return;
 }
 
-func inherit_context(ref sites:CompletionSites in X, child:u64, guarded_by:u64, incoming_handler:u64,
+func inherit_context(ref sites:CompletionSites in X, parent:u64, child:u64, guarded_by:u64, incoming_handler:u64,
                      replacing_try:u64) -> void
     where {owner X} {
     if (child == no_node()) { return; } else {};
     sites[child].guarded_by <- guarded_by;
     sites[child].incoming_handler <- incoming_handler;
     sites[child].replacing_try <- replacing_try;
+    sites[child].in_delayed_body <- sites[parent].in_delayed_body;
     return;
 }
 
@@ -128,12 +132,18 @@ func prepare_context(nodes:const ExprNodes in N, facts:const OperandFacts in F,
     val guard <- sites[at].guarded_by;
     val incoming <- sites[at].incoming_handler;
     val replacing <- sites[at].replacing_try;
+    if (kind == deferred_block_node()) {
+        val body <- nodes[at].left;
+        inherit_context(sites, at, body, no_node(), no_node(), no_node());
+        sites[body].in_delayed_body <- 1u8;
+        return;
+    } else {};
     if (kind == finally_clause_node()) {
-        inherit_context(sites, nodes[at].left, guard, incoming, replacing);
+        inherit_context(sites, at, nodes[at].left, guard, incoming, replacing);
         if (replacing != no_node() && nodes[replacing].right == at) {
             (replacing <- sites[replacing].replacing_try):void;
         } else {};
-        inherit_context(sites, nodes[at].right, guard, incoming, replacing);
+        inherit_context(sites, at, nodes[at].right, guard, incoming, replacing);
         return;
     } else {};
     if (kind == try_node()) {
@@ -141,35 +151,35 @@ func prepare_context(nodes:const ExprNodes in N, facts:const OperandFacts in F,
         if (nodes[last].kind == finally_clause_node() && facts[nodes[last].right].kind == never_result()) {
             (replacing <- at):void;
         } else {};
-        inherit_context(sites, nodes[at].left, at, incoming, replacing);
-        inherit_context(sites, last, guard, incoming, replacing);
+        inherit_context(sites, at, nodes[at].left, at, incoming, replacing);
+        inherit_context(sites, at, last, guard, incoming, replacing);
         return;
     } else {};
     if (kind == procedure_node()) {
-        inherit_context(sites, nodes[at].right, no_node(), no_node(), no_node());
+        inherit_context(sites, at, nodes[at].right, no_node(), no_node(), no_node());
         return;
     } else {};
     if (kind == catch_handler_node()) {
-        inherit_context(sites, nodes[at].right, guard, at, replacing);
+        inherit_context(sites, at, nodes[at].right, guard, at, replacing);
         return;
     } else {};
     if (kind == deferred_call_node()) {
         sites[nodes[at].right].registration <- at;
-        inherit_context(sites, nodes[at].left, guard, incoming, replacing);
+        inherit_context(sites, at, nodes[at].left, guard, incoming, replacing);
         return;
     } else {};
     if (binary_context(kind)) {
-        inherit_context(sites, nodes[at].left, guard, incoming, replacing);
-        inherit_context(sites, nodes[at].right, guard, incoming, replacing);
+        inherit_context(sites, at, nodes[at].left, guard, incoming, replacing);
+        inherit_context(sites, at, nodes[at].right, guard, incoming, replacing);
         return;
     } else {};
     if (kind == val_binding_node() || kind == ptr_binding_node()) {
-        inherit_context(sites, nodes[at].right, guard, incoming, replacing);
+        inherit_context(sites, at, nodes[at].right, guard, incoming, replacing);
         return;
     } else {};
     if (kind == module_node() || kind == block_node() || kind == full_scope_node() ||
         kind == group_node() || kind == return_node() || kind == throw_node()) {
-        inherit_context(sites, nodes[at].left, guard, incoming, replacing);
+        inherit_context(sites, at, nodes[at].left, guard, incoming, replacing);
     } else {};
 }
 
@@ -244,6 +254,11 @@ func route_failure(nodes:const ExprNodes in N, names:const NameBindings in B, li
     if (replacing != no_node()) {
         record_exit(sites, at, event, category, nodes[replacing].right, scope, names[replacing].scope);
         return 0u8;
+    } else {};
+    if (sites[at].in_delayed_body != 0u8) {
+        return if (checked != 0u8 || category == exception_root_identity()) {
+            uncovered_deferred_failure()
+        } else { unproved_deferred_error() };
     } else {};
     val boundary <- enclosing_callable(nodes, names, scope);
     if (checked != 0u8 || category == exception_root_identity()) {
@@ -418,7 +433,10 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
     } else {};
     val kind <- nodes[at].kind;
     if (kind == call_node()) { return check_call_completion(nodes, names, links, facts, sites, at, used); } else {};
-    if (kind == deferred_call_node()) { record_registration(names, sites, at); return 0u8; } else {};
+    if (kind == deferred_call_node() || kind == deferred_block_node()) {
+        record_registration(names, sites, at);
+        return 0u8;
+    } else {};
     if (kind == throw_node()) {
         sites[at].can_continue <- 0u8;
         return check_throw_completion(nodes, names, links, facts, sites, at, used);

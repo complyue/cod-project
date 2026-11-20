@@ -24,6 +24,7 @@ data ModuleBindingResult {
     frontend:FrontendResult;
     stage:u8;
     diagnostic:u8;
+    related_first:u64;
 }
 
 func module_read_failed() -> u8 { return 1u8; }
@@ -53,6 +54,7 @@ func bind_module(source:const SourceBytes in S, ref tokens:Tokens in T, ref node
     where {const owner S, owner T, owner N, const owner B, const owner E, owner X, owner Y, owner W, owner R} {
     result.stage <- 0u8;
     result.diagnostic <- 0u8;
+    result.related_first <- no_node();
     if (!read_module(source, tokens, nodes, result.frontend)) {
         result.stage <- module_read_failed();
         return false;
@@ -62,9 +64,10 @@ func bind_module(source:const SourceBytes in S, ref tokens:Tokens in T, ref node
         binding_diagnostic(nodes, result, module_selection_failed(), publication.diagnostic, publication.node);
         return false;
     } else {};
-    ref names = make NameResolutionResult { diagnostic <- 0u8; node <- no_node(); };
+    ref names = make NameResolutionResult { diagnostic <- 0u8; node <- no_node(); enclosing_defer <- no_node(); };
     if (!resolve_module_names(source, nodes, result.frontend.tree, bindings, work, names)) {
         binding_diagnostic(nodes, result, module_binding_failed(), names.diagnostic, names.node);
+        if (names.enclosing_defer != no_node()) { result.related_first <- nodes[names.enclosing_defer].first; {}; } else {};
         return false;
     } else {};
     return true;

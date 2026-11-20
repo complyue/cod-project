@@ -27,6 +27,7 @@ using "ParserStorage.cod" call_node;
 using "ParserStorage.cod" behave_node;
 using "ParserStorage.cod" argument_node;
 using "ParserStorage.cod" deferred_call_node;
+using "ParserStorage.cod" deferred_block_node;
 using "ParserStorage.cod" block_node;
 using "ParserStorage.cod" full_scope_node;
 using "ParserStorage.cod" block_item_node;
@@ -57,6 +58,7 @@ array NameWork[u64]:NameWorkSlot;
 data NameResolutionResult {
     diagnostic:u8;
     node:u64;
+    enclosing_defer:u64;
 }
 
 data NameState {
@@ -64,9 +66,11 @@ data NameState {
     first:u64;
     module_names:u64;
     scope_node:u64;
+    delayed:u64;
     guarded:bool;
     diagnostic:u8;
     failed_node:u64;
+    enclosing_defer:u64;
 }
 
 func ordinary_selection() -> u8 { return 1u8; }
@@ -89,6 +93,8 @@ func unproved_module_binding() -> u8 { return 6u8; }
 func unproved_guard_binding() -> u8 { return 7u8; }
 func invalid_module_tree() -> u8 { return 8u8; }
 func name_storage_exhausted() -> u8 { return 9u8; }
+func nested_defer_in_drain() -> u8 { return 10u8; }
+func declaration_in_deferred_group() -> u8 { return 11u8; }
 
 func reject_name(ref state:NameState in R, node:u64, diagnostic:u8) -> void where {owner R} {
     state.diagnostic <- diagnostic;
@@ -274,13 +280,16 @@ func resolve_full_scope(source:const SourceBytes in S, nodes:const ExprNodes in 
     val first <- state.first;
     val scope_node <- state.scope_node;
     val guarded <- state.guarded;
+    val delayed <- state.delayed;
     state.first <- used;
     state.scope_node <- scope;
     state.guarded <- false;
+    state.delayed <- no_node();
     resolve_list(source, nodes, bindings, work, state, nodes[scope].left);
     state.used <- used;
     state.first <- first;
     state.scope_node <- scope_node;
+    state.delayed <- delayed;
     (state.guarded <- guarded):void;
 }
 
@@ -335,6 +344,11 @@ func resolve_try(source:const SourceBytes in S, nodes:const ExprNodes in N, ref 
 func resolve_local(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
                     ref work:NameWork in W, ref state:NameState in R, at:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
+    if (state.delayed != no_node()) {
+        reject_name(state, at, declaration_in_deferred_group());
+        state.enclosing_defer <- state.delayed;
+        return;
+    } else {};
     if (state.guarded) { reject_name(state, at, unproved_guard_binding()); return; } else {};
     val binding <- nodes[at].left;
     resolve_annotation(source, nodes, bindings, work, state, binding);
@@ -342,6 +356,20 @@ func resolve_local(source:const SourceBytes in S, nodes:const ExprNodes in N, re
     resolve_expression(source, nodes, bindings, work, state, nodes[at].right);
     if (state.diagnostic != 0u8) { return; } else {};
     declare_name(source, nodes, bindings, work, state, binder_name(nodes, binding), at, local_binding(), duplicate_binding());
+}
+
+func resolve_defer(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
+                   ref work:NameWork in W, ref state:NameState in R, at:u64) -> void
+    where {const owner S, const owner N, owner B, owner W, owner R} {
+    if (state.delayed != no_node()) {
+        reject_name(state, at, nested_defer_in_drain());
+        state.enclosing_defer <- state.delayed;
+        return;
+    } else {};
+    if (nodes[at].kind == deferred_block_node()) { state.delayed <- at; {}; } else {};
+    resolve_expression(source, nodes, bindings, work, state, nodes[at].left);
+    state.delayed <- no_node();
+    return;
 }
 
 func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
@@ -366,7 +394,11 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
         if (nodes[at].left != no_node()) { resolve_owner(source, nodes, bindings, work, state, nodes[at].left); } else {};
         return;
     } else {};
-    if (kind == group_node() || kind == deferred_call_node() || kind == return_node() || kind == throw_node()) {
+    if (kind == deferred_call_node() || kind == deferred_block_node()) {
+        resolve_defer(source, nodes, bindings, work, state, at);
+        return;
+    } else {};
+    if (kind == group_node() || kind == return_node() || kind == throw_node()) {
         resolve_expression(source, nodes, bindings, work, state, nodes[at].left);
         return;
     } else {};
@@ -495,6 +527,7 @@ func resolve_module_names(source:const SourceBytes in S, nodes:const ExprNodes i
                            ref report:NameResolutionResult in R) -> bool
     where {const owner S, const owner N, const owner T, owner B, owner W, owner R} {
     report.node <- no_node();
+    report.enclosing_defer <- no_node();
     report.diagnostic <- invalid_module_tree();
     if (tree.diagnostic != 0u8 || tree.used == 0u64 || tree.used > syntax_len(nodes) ||
         tree.root != tree.used - 1u64 || nodes[tree.root].kind != module_node()) { return false; } else {};
@@ -509,7 +542,8 @@ func resolve_module_names(source:const SourceBytes in S, nodes:const ExprNodes i
     link_entries(nodes, work, tree.used);
     ref state = make NameState {
         used <- 0u64; first <- 0u64; module_names <- 0u64; scope_node <- tree.root;
-        guarded <- false; diagnostic <- 0u8; failed_node <- no_node();
+        delayed <- no_node(); guarded <- false; diagnostic <- 0u8;
+        failed_node <- no_node(); enclosing_defer <- no_node();
     };
     val first <- first_item(nodes, nodes[tree.root].left);
     register_module(source, nodes, bindings, work, state, first);
@@ -523,6 +557,7 @@ func resolve_module_names(source:const SourceBytes in S, nodes:const ExprNodes i
         resolve_module_bodies(source, nodes, bindings, work, state, first, false);
     } else {};
     report.node <- state.failed_node;
+    report.enclosing_defer <- state.enclosing_defer;
     report.diagnostic <- state.diagnostic;
     return state.diagnostic == 0u8;
 }
@@ -552,5 +587,7 @@ export unproved_module_binding;
 export unproved_guard_binding;
 export invalid_module_tree;
 export name_storage_exhausted;
+export nested_defer_in_drain;
+export declaration_in_deferred_group;
 export first_item;
 export procedure_head;

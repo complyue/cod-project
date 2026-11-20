@@ -34,6 +34,7 @@ using "ParserStorage.cod" behave_node;
 using "ParserStorage.cod" return_node;
 using "ParserStorage.cod" throw_node;
 using "ParserStorage.cod" deferred_call_node;
+using "ParserStorage.cod" deferred_block_node;
 using "ExpressionParser.cod" ParseResult;
 using "NameResolution.cod" NameBindings;
 using "NameResolution.cod" NameWork;
@@ -532,7 +533,7 @@ func check_operand(nodes:const ExprNodes in N, names:const NameBindings in B, li
         if (operand != no_node() && facts[operand].kind != exception_type()) { return expected_exception_type(); } else {};
         set_result(facts, at, never_result());
     } else {};
-    if (kind == deferred_call_node()) { only_void(facts, at); } else {};
+    if (kind == deferred_call_node() || kind == deferred_block_node()) { only_void(facts, at); } else {};
     return 0u8;
 }
 
