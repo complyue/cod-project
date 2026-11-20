@@ -42,9 +42,16 @@ QUERY_OUTER_CHOICE = ('ptr left=make Outer;ptr right=make Outer;'
                       'ptr chosen=if(pick_left){left}else{right};')
 QUERY_NESTED_HOLDERS = (QUERY_OUTER_CHOICE + 'val a<-make local u64;val b<-make local u64;'
                         'first_child.selected=a;second_child.selected=b;')
+QUERY_NULLABLE_CHAIN = QUERY_NESTED_HOLDERS + 'right.child=null in here;'
+QUERY_NULLABLE_CHAIN_CHOICES = (QUERY_NESTED_HOLDERS + 'ptr empty=make Outer;empty.child=null in here;'
+                                'chosen=if(pick_other){empty}else{chosen};')
+READ_GUARDED_CHAIN = 'if(chosen.child is null){return 0u64;}else{return chosen.child.selected;};'
 WRITE_NESTED_HOLDER = ('proc fill(ptr p:Outer in O)->void where {owner O}{'
                        'if(p is null){return;}else{};if(p.child is null){return;}else{};'
                        'if(p.child.selected is null){return;}else{};p.child.selected<-7u64;return;}')
+READ_NESTED_HOLDER = ('proc peek(ptr p:Outer in O)->u64 where {owner O}{if(p is null){return 0u64;}else{};'
+                      'if(p.child is null){return 0u64;}else{};'
+                      'if(p.child.selected is null){return 0u64;}else{};return p.child.selected;}')
 RETURN_NESTED_HOLDER = ('func deep(ptr p:Outer in O)->ptr u64 in O where {owner O}{'
                         'if(p is null){return null in O;}else{};if(p.child is null){return null in O;}else{};'
                         'return p.child.selected;}')
@@ -75,6 +82,11 @@ READ_QUERY_AFTER_FAILURE = ('ptr item=make Pair;try{populate(item);}'
 
 def query(body):
     return 'val result<-make local typeof({{' + body + '}}){4u64};'
+
+
+def query_with_flag_inputs(body):
+    return ('proc probe(pick_left:bool,pick_other:bool,skip:bool)->void{' + query(body) +
+            'behave @print(result);return;}probe(true,false,false);')
 
 
 def shared_pointer_cleanup(body):
@@ -1578,6 +1590,49 @@ runner.CASES = {
         IO + QUERY_HOLDER + QUERY_OUTER + QUERY_PRODUCT_FLAGS + WRITE_NESTED_HOLDER +
         query(QUERY_NESTED_HOLDERS + 'fill(chosen);return chosen.child.selected;') +
         'behave @print(result);', 0, '4\n', ''),
+    'query_scope_preserves_a_write_guarded_by_an_embedded_reference': (
+        IO + QUERY_HOLDER + QUERY_OUTER + QUERY_PRODUCT_FLAGS +
+        query(QUERY_NULLABLE_CHAIN + '{{if(chosen.child is null){}else{chosen.child.selected<-7u64;{}};return;}};' +
+              READ_GUARDED_CHAIN) + 'behave @print(result);', 0, '4\n', ''),
+    'query_helper_preserves_a_write_guarded_by_an_embedded_reference': (
+        IO + QUERY_HOLDER + QUERY_OUTER + QUERY_PRODUCT_FLAGS + WRITE_NESTED_HOLDER +
+        query(QUERY_NULLABLE_CHAIN + 'fill(chosen);' + READ_GUARDED_CHAIN) + 'behave @print(result);', 0, '4\n', ''),
+    'query_guarded_write_remains_available_to_the_next_helper': (
+        IO + QUERY_HOLDER + QUERY_OUTER + QUERY_PRODUCT_FLAGS + WRITE_NESTED_HOLDER + READ_NESTED_HOLDER +
+        query(QUERY_NULLABLE_CHAIN + 'fill(chosen);return peek(chosen);') + 'behave @print(result);', 0, '4\n', ''),
+    'query_guard_does_not_prove_a_write_skipped_by_a_present_path': (
+        QUERY_HOLDER + QUERY_OUTER + QUERY_PRODUCT_FLAGS +
+        'proc fill(ptr p:Outer in O,skip:bool)->void where {owner O}{if(p is null){return;}else{};'
+        'if(p.child is null){return;}else{};if(p.child.selected is null){return;}else{};'
+        'if(skip){return;}else{};p.child.selected<-7u64;return;}' +
+        query(QUERY_NULLABLE_CHAIN + 'fill(chosen,pick_other);' + READ_GUARDED_CHAIN),
+        2, '', "read of 'a' before definite initialization"),
+    'query_guard_after_rebinding_does_not_prove_a_write_to_an_earlier_candidate': (
+        QUERY_HOLDER + QUERY_OUTER + QUERY_PRODUCT_FLAGS + WRITE_NESTED_HOLDER +
+        query(QUERY_NULLABLE_CHAIN + 'fill(chosen);chosen.child=first_child;' + READ_GUARDED_CHAIN),
+        2, '', "read of 'a' before definite initialization"),
+    'query_scope_preserves_a_guarded_write_to_either_selected_referent': (
+        IO + QUERY_HOLDER + QUERY_OUTER +
+        query_with_flag_inputs(QUERY_NULLABLE_CHAIN_CHOICES +
+                               '{{if(chosen.child is null){}else{chosen.child.selected<-7u64;{}};return;}};' +
+                               READ_GUARDED_CHAIN), 0, '4\n', ''),
+    'query_guarded_write_to_either_selected_referent_reaches_the_next_helper': (
+        IO + QUERY_HOLDER + QUERY_OUTER + WRITE_NESTED_HOLDER + READ_NESTED_HOLDER +
+        query_with_flag_inputs(QUERY_NULLABLE_CHAIN_CHOICES + 'fill(chosen);return peek(chosen);'), 0, '4\n', ''),
+    'query_prepared_helper_preserves_guarded_readiness_after_cleanup': (
+        IO + QUERY_HOLDER + QUERY_OUTER + WRITE_NESTED_HOLDER +
+        query_with_flag_inputs(QUERY_NULLABLE_CHAIN_CHOICES + '{{defer fill(chosen);return;}};' + READ_GUARDED_CHAIN),
+        0, '4\n', ''),
+    'query_dynamic_guard_does_not_hide_an_unwritten_nonnull_path': (
+        IO + QUERY_HOLDER + QUERY_OUTER +
+        query_with_flag_inputs(QUERY_NULLABLE_CHAIN_CHOICES + 'if(chosen.child is null){}else{'
+                               'if(skip){}else{chosen.child.selected<-7u64;{}};{}};' + READ_GUARDED_CHAIN),
+        2, '', "read of 'a' before definite initialization"),
+    'query_dynamic_guard_does_not_prove_the_rebound_referent_ready': (
+        IO + QUERY_HOLDER + QUERY_OUTER + WRITE_NESTED_HOLDER +
+        query_with_flag_inputs(QUERY_NULLABLE_CHAIN_CHOICES + 'fill(chosen);' + QUERY_NESTED_REPLACEMENT +
+                               'chosen.child=replacement;' + READ_GUARDED_CHAIN),
+        2, '', "read of 'fresh' before definite initialization"),
     'query_helper_write_through_embedded_slots_leaves_another_chain_unwritten': (
         QUERY_HOLDER + QUERY_OUTER + QUERY_PRODUCT_FLAGS + WRITE_NESTED_HOLDER +
         query(QUERY_NESTED_HOLDERS + 'fill(chosen);return right.child.selected;'),
