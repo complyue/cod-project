@@ -9,6 +9,7 @@ data ExprNode {
     number:u64;
     left:u64;
     right:u64;
+    operation_at:u64;
 }
 array ExprNodes[u64]:ExprNode;
 

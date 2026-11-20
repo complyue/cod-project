@@ -7,6 +7,8 @@ using "ParserStorage.cod" group_node;
 using "ExpressionParser.cod" ParseResult;
 
 func node_ready(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
+    val operation_at <- nodes[at].operation_at;
+    if (operation_at < nodes[at].first || operation_at >= nodes[at].past) { return false; } else {};
     val kind <- nodes[at].kind;
     if (kind == literal_node()) { return true; } else {};
     if (kind == group_node()) { return nodes[at].left < at; } else {};
@@ -16,16 +18,17 @@ func node_ready(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N
     return false;
 }
 
-# Emit in postorder so both operands of a binary operation are already available.
-# A backend can stop immediately by returning false.
-proc lower_expression(here emit(ordinal:u64, kind:u8, number:u64, left:u64, right:u64) -> bool,
+# Emit in postorder so both operands are available. The backend emits checked
+# arithmetic and reports runtime overflow at the operator's byte offset.
+proc lower_expression(here emit(ordinal:u64, kind:u8, number:u64, left:u64, right:u64,
+                               operation_at:u64) -> bool,
                       nodes:const ExprNodes in N, tree:const ParseResult in R) -> bool
     where {const owner N, const owner R} {
     if (tree.diagnostic != 0u8 || tree.used == 0u64 || tree.used > len(nodes)) { return false; } else {};
     if (tree.root != tree.used - 1u64) { return false; } else {};
     for (at in 0u64 .. tree.used) {
         if (!node_ready(nodes, at)) { return false; } else {};
-        if (!emit(at, nodes[at].kind, nodes[at].number, nodes[at].left, nodes[at].right)) {
+        if (!emit(at, nodes[at].kind, nodes[at].number, nodes[at].left, nodes[at].right, nodes[at].operation_at)) {
             return false;
         } else {};
     };

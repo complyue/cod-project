@@ -60,7 +60,7 @@ func parse_literal(source:const SourceBytes in S, token:const Token in T,
 
 func append_node(ref nodes:ExprNodes in A, ref result:ParseResult in R,
                  kind:u8, first:u64, past:u64, number:u64, left:u64,
-                 right:u64) -> void where {owner A, owner R} {
+                 right:u64, operation_at:u64) -> void where {owner A, owner R} {
     val id <- result.used;
     if (id >= len(nodes)) {
         result.diagnostic <- node_storage_exhausted();
@@ -72,6 +72,7 @@ func append_node(ref nodes:ExprNodes in A, ref result:ParseResult in R,
     nodes[id].number <- number;
     nodes[id].left <- left;
     nodes[id].right <- right;
+    nodes[id].operation_at <- operation_at;
     result.root <- id;
     result.used <- id + 1u64;
     return;
@@ -89,6 +90,7 @@ func parse_expression_at(source:const SourceBytes in S, tokens:const Tokens in T
     where {const owner S, const owner T, owner A, owner R} {
     val at <- result.next;
     if (at >= past) { result.diagnostic <- expected_operand(); return; } else {};
+    val first <- tokens[at].first;
     if (punct_at(source, tokens, at, past) == 40u8) { # '('
         result.next <- at + 1u64;
         parse_expression_at(source, tokens, nodes, result, past, 1u8);
@@ -99,7 +101,7 @@ func parse_expression_at(source:const SourceBytes in S, tokens:const Tokens in T
             return;
         } else {};
         val inner <- result.root;
-        append_node(nodes, result, group_node(), tokens[at].first, tokens[close].past, 0u64, inner, 0u64);
+        append_node(nodes, result, group_node(), first, tokens[close].past, 0u64, inner, 0u64, first);
         if (result.diagnostic != 0u8) { return; } else {};
         (result.next <- close + 1u64):void;
     } else {
@@ -109,7 +111,7 @@ func parse_expression_at(source:const SourceBytes in S, tokens:const Tokens in T
         } else {};
         val number <- parse_literal(source, tokens[at], result);
         if (result.diagnostic != 0u8) { return; } else {};
-        append_node(nodes, result, literal_node(), tokens[at].first, tokens[at].past, number, 0u64, 0u64);
+        append_node(nodes, result, literal_node(), first, tokens[at].past, number, 0u64, 0u64, first);
         if (result.diagnostic != 0u8) { return; } else {};
         (result.next <- at + 1u64):void;
     };
@@ -127,13 +129,14 @@ func parse_infix(source:const SourceBytes in S, tokens:const Tokens in T,
     where {const owner S, const owner T, owner A, owner R} {
     val binding <- precedence(punct_at(source, tokens, result.next, past));
     if (binding < minimum) { return false; } else {};
+    val operation_at <- tokens[result.next].first;
     val left <- result.root;
     result.next <- result.next + 1u64;
     parse_expression_at(source, tokens, nodes, result, past, binding + 1u8);
     if (result.diagnostic != 0u8) { return false; } else {};
     val right <- result.root;
     val kind <- if (binding == 1u8) { add_node() } else { multiply_node() };
-    append_node(nodes, result, kind, nodes[left].first, nodes[right].past, 0u64, left, right);
+    append_node(nodes, result, kind, nodes[left].first, nodes[right].past, 0u64, left, right, operation_at);
     return result.diagnostic == 0u8;
 }
 
