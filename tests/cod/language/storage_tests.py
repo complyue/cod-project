@@ -473,6 +473,71 @@ runner.CASES = {
         'proc run()->void{val missing<-make local u64;val ready<-19u64;ref second=make Leaf {value=ready;};'
         'ref item=make Box {child=second;};defer inspect(second);defer change(item,ready);'
         'item.child=null;second.value=missing;return;}run();', 2, "", "initialization"),
+    "deferred_product_write_initializes_a_late_payload": (PRELUDE +
+        'data Leaf {value:u64;}data Box {ptr child:Leaf;}'
+        'proc fill(ref entry:Box in O) where {owner O}{if(entry.child is null){return;}else{};entry.child.value<-19u64;return;}'
+        'proc inspect(ref entry:const Box in O) where {const owner O}{'
+        'if(entry.child is null){return;}else{};behave @print(entry.child.value);return;}'
+        'proc run()->void{ref first=make Leaf {value<-7u64;};ref item=make Box {child=first;};defer inspect(item);'
+        'defer fill(item);ptr second=make Leaf;item.child=second;return;}run();', 0, "19\n", ""),
+    "deferred_product_write_cannot_initialize_an_unselected_payload": (PRELUDE +
+        'data Leaf {value:u64;}data Box {ptr child:Leaf;}'
+        'proc fill(ref entry:Box in O) where {owner O}{if(entry.child is null){return;}else{};entry.child.value<-19u64;return;}'
+        'proc inspect(ref entry:const Box in O) where {const owner O}{'
+        'if(entry.child is null){return;}else{};behave @print(entry.child.value);return;}'
+        'proc run(flag:bool)->void{ref first=make Leaf {value<-7u64;};ref item=make Box {child=first;};'
+        'ref writer=make Box {child=first;};defer inspect(item);defer fill(writer);ptr second=make Leaf;'
+        'item.child=second;if(flag){writer.child=second;{}}else{};return;}run(false);', 2, "", "initialization"),
+    "deferred_product_binding_can_initialize_a_later_slot": (PRELUDE +
+        'data Leaf {ptr value:u64;}data Box {ptr child:Leaf;}'
+        'proc fill(ref entry:Box in O,ptr replacement:u64 in O) where {owner O}{'
+        'if(entry.child is null){return;}else{};entry.child.value=replacement;return;}'
+        'proc inspect(ref entry:const Box in O) where {const owner O}{if(entry.child is null){return;}else{};'
+        'if(entry.child.value is null){return;}else{};behave @print(entry.child.value);return;}'
+        'proc run()->void{val ready<-19u64;ref first=make Leaf {value=ready;};ref item=make Box {child=first;};'
+        'defer inspect(item);defer fill(item,ready);ptr second=make Leaf;item.child=second;return;}run();', 0, "19\n", ""),
+    "deferred_product_binding_does_not_initialize_the_referent": (PRELUDE +
+        'data Leaf {ptr value:u64;}data Box {ptr child:Leaf;}'
+        'proc fill(ref entry:Box in O,ptr replacement:u64 in O) where {owner O}{'
+        'if(entry.child is null){return;}else{};entry.child.value=replacement;return;}'
+        'proc inspect(ref entry:const Box in O) where {const owner O}{if(entry.child is null){return;}else{};'
+        'if(entry.child.value is null){return;}else{};behave @print(entry.child.value);return;}'
+        'proc run()->void{val ready<-19u64;ref first=make Leaf {value=ready;};ref item=make Box {child=first;};'
+        'val missing<-make local u64;defer inspect(item);defer fill(item,missing);ptr second=make Leaf;'
+        'item.child=second;return;}run();', 2, "", "initialization"),
+    "deferred_product_read_cannot_depend_on_a_fallible_write_succeeding": (PRELUDE +
+        'data Leaf {value:u64;}data Box {ptr child:Leaf;}proc noop()->void{return;}'
+        'proc fill(ref entry:Box in O) where {owner O}{if(entry.child is null){return;}else{};'
+        'defer noop();entry.child.value<-19u64;return;}'
+        'proc inspect(ref entry:const Box in O) where {const owner O}{'
+        'if(entry.child is null){return;}else{};behave @print(entry.child.value);return;}'
+        'proc run()->void{ref first=make Leaf {value<-7u64;};ref item=make Box {child=first;};defer inspect(item);'
+        'defer fill(item);ptr second=make Leaf;item.child=second;return;}run();', 2, "", "initialization"),
+    "different_saved_receivers_can_initialize_the_same_payload": (PRELUDE +
+        'data Leaf {value:u64;}data Box {ptr child:Leaf;}'
+        'proc fill(ref entry:Box in O) where {owner O}{if(entry.child is null){return;}else{};entry.child.value<-19u64;return;}'
+        'proc inspect(ref entry:const Box in O) where {const owner O}{'
+        'if(entry.child is null){return;}else{};behave @print(entry.child.value);return;}'
+        'proc run(flag:bool)->void{ref first=make Leaf {value<-7u64;};ref item=make Box {child=first;};'
+        'ref alternate=make Box {child=first;};ptr chosen=if(flag){item}else{alternate};defer inspect(item);defer fill(chosen);'
+        'ptr second=make Leaf;item.child=second;alternate.child=second;return;}run(true);run(false);', 0, "19\n19\n", ""),
+    "convergent_rebinding_uses_the_saved_receiver_choices": (PRELUDE +
+        'data Leaf {ptr value:u64;}data Box {ref child:Leaf;}'
+        'proc change(ref entry:Box in O,ref replacement:u64 in O) where {owner O}{entry.child.value=replacement;return;}'
+        'proc inspect(ref entry:const Leaf in O) where {const owner O}{'
+        'if(entry.value is null){return;}else{};behave @print(entry.value);return;}'
+        'proc run(flag:bool)->void{val missing<-make local u64;val ready<-19u64;ref first=make Leaf {value=ready;};'
+        'ref second=make Leaf {value=ready;};ref left=make Box {child=first;};ref right=make Box {child=first;};'
+        'ptr chosen=if(flag){left}else{right};ref later=make Box {child=first;};defer inspect(second);defer change(chosen,ready);'
+        'left.child=second;right.child=second;chosen=later;second.value=missing;return;}run(true);run(false);', 0, "19\n19\n", ""),
+    "a_nullable_ancestor_in_one_saved_receiver_can_skip_initialization": (PRELUDE +
+        'data Leaf {value:u64;}data Box {ptr child:Leaf;}'
+        'proc fill(ref entry:Box in O) where {owner O}{if(entry.child is null){return;}else{};entry.child.value<-19u64;return;}'
+        'proc inspect(ref entry:const Box in O) where {const owner O}{'
+        'if(entry.child is null){return;}else{};behave @print(entry.child.value);return;}'
+        'proc run(flag:bool)->void{ref first=make Leaf {value<-7u64;};ref item=make Box {child=first;};'
+        'ref alternate=make Box {child=first;};ptr chosen=if(flag){item}else{alternate};defer inspect(item);defer fill(chosen);'
+        'ptr second=make Leaf;item.child=second;alternate.child=null;return;}run(false);', 2, "", "initialization"),
 }
 runner.CASE_ARGUMENTS = {"shadow_error": ["-Werror=shadow"], "unrelated_warning_error": ["-Werror=missing-return"]}
 runner.EXTRA_SOURCES = [Path(__file__)]

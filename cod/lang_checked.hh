@@ -239,9 +239,34 @@ class ScalarChecker {
   };
   std::vector<DeferredProductWrites> deferred_product_writes_;
   struct ProjectionPaths {
-    std::map<size_t, CleanupEquations::ConditionClauses> places;
-    // True when the root and every step identify the invoked destination.
+    using Places = std::map<size_t, CleanupEquations::ConditionClauses>;
+    Places places;
+    // Candidate slots at the first invocation-time step. The saved receiver
+    // already chose one, but the caller may have evidence for only the set.
+    std::map<size_t, Places> starting_slots;
+    // True when the paths for each starting slot describe its concrete destinations.
     bool complete = false;
+    // Without a place, find the paths that reach no destination at all.
+    CleanupEquations::ConditionClauses may_skip(std::optional<size_t> place = {}) const {
+      const auto missing = [&](const Places &paths) {
+        if (place) {
+          const auto found = paths.find(*place);
+          return found == paths.end() ? CleanupEquations::ConditionClauses{CleanupEquations::ConditionFacts{}} :
+              CleanupEquations::exclude_selection_paths(found->second);
+        }
+        CleanupEquations::ConditionClauses selected;
+        for (const auto &[destination, alternatives] : paths)
+          for (const auto &facts : alternatives) CleanupEquations::add_condition(selected, facts);
+        return CleanupEquations::exclude_selection_paths(selected);
+      };
+      if (starting_slots.empty()) return missing(places);
+      CleanupEquations::ConditionClauses skipped;
+      for (const auto &[slot, paths] : starting_slots) {
+        for (const auto &facts : missing(paths)) CleanupEquations::add_condition(skipped, facts);
+        if (CleanupEquations::unconditional(skipped)) break;
+      }
+      return skipped;
+    }
   };
   struct LoopState {
     size_t first, last;
@@ -2420,6 +2445,37 @@ class ScalarChecker {
       return *found->second.bindings.begin();
     }
   };
+  CleanupEquations::ConditionClauses projected_presence(size_t input, const InvocationSlots &slots, bool null) const {
+    const auto &projection = slots.projected.at(input);
+    const auto observe = [&](size_t id) {
+      CleanupEquations::ConditionFacts facts;
+      facts.conditions.add({{}, id, null_target, null});
+      return facts;
+    };
+    if (const auto id = slots.exact(input)) return {observe(*id)};
+    if (std::ranges::any_of(projection.bindings, [&](size_t id) {
+          const auto slot = binding(id).embedded_slot.value();
+          return storage(slot).borrowed;
+        })) return {CleanupEquations::ConditionFacts{}};
+    const auto *parents = slots.path(projection.slot_input);
+    CleanupEquations::ConditionClauses alternatives;
+    if (null && projection.absent_parent) {
+      if (!parents || !parents->complete) return {CleanupEquations::ConditionFacts{}};
+      alternatives = parents->may_skip();
+    }
+    for (const auto id : projection.bindings) {
+      const auto slot = binding(id).embedded_slot.value();
+      if (parents) if (const auto path = parents->places.find(slot); path != parents->places.end()) {
+        for (auto facts : path->second) {
+          facts.append(observe(id));
+          CleanupEquations::add_condition(alternatives, std::move(facts));
+        }
+        continue;
+      }
+      CleanupEquations::add_condition(alternatives, observe(id));
+    }
+    return alternatives;
+  }
   CleanupEquations::ConditionClauses instantiate_conditions(const CleanupEquations::ConditionClauses &alternatives,
       const std::vector<CleanupEquations::BooleanValue> &inputs, const std::vector<CheckedOperation> &views,
       const InvocationSlots &slots, const std::vector<ExceptionFacts> &exceptions = {}) const {
@@ -2433,10 +2489,7 @@ class ScalarChecker {
           })) continue;
       for (const auto parameter : known.present) {
         const auto &view = views.at(parameter);
-        if (slots.projected.contains(parameter)) {
-          if (const auto binding = slots.exact(parameter)) facts.conditions.add({{}, *binding, null_target, false});
-          continue;
-        }
+        if (slots.projected.contains(parameter)) continue;
         const auto present = selected_input(view.targets);
         facts.present.insert(present.begin(), present.end());
         if (!slots.contains(parameter) && view.binding) facts.bindings.emplace(*view.binding, view.selection_versions);
@@ -2460,20 +2513,22 @@ class ScalarChecker {
       // Caller-slot invocations do not provide a stable selection snapshot here.
       for (const auto parameter : known.absent) {
         const auto &view = views.at(parameter);
-        if (slots.projected.contains(parameter)) {
-          if (const auto binding = slots.exact(parameter)) facts.conditions.add({{}, *binding, null_target, true});
-        } else if (!slots.contains(parameter) && view.binding) facts.absent_bindings.emplace(*view.binding, view.selection_versions);
+        if (!slots.contains(parameter) && view.binding) facts.absent_bindings.emplace(*view.binding, view.selection_versions);
       }
       CleanupEquations::ConditionClauses clauses;
       CleanupEquations::add_condition(clauses, std::move(facts));
       for (const auto parameter : observed_selections)
         clauses = CleanupEquations::conjoin_conditions(clauses, selection_bounds(views.at(parameter)));
       for (const bool null : {false, true})
-        for (const auto parameter : null ? known.absent : known.present) if (!slots.contains(parameter) && views.at(parameter).nullness) {
-          const auto &value = *views[parameter].nullness;
-          const auto found = value.find(null);
-          clauses = found == value.end() ? CleanupEquations::ConditionClauses{} :
-              CleanupEquations::conjoin_conditions(clauses, found->second);
+        for (const auto parameter : null ? known.absent : known.present) {
+          if (slots.projected.contains(parameter)) {
+            clauses = CleanupEquations::conjoin_conditions(clauses, projected_presence(parameter, slots, null));
+          } else if (!slots.contains(parameter) && views.at(parameter).nullness) {
+            const auto &value = *views[parameter].nullness;
+            const auto found = value.find(null);
+            clauses = found == value.end() ? CleanupEquations::ConditionClauses{} :
+                CleanupEquations::conjoin_conditions(clauses, found->second);
+          }
         }
       for (const auto parameter : known.absent) if (!slots.contains(parameter))
         clauses = CleanupEquations::conjoin_conditions(clauses, absence_conditions(views.at(parameter).null_sources));
@@ -2711,11 +2766,16 @@ class ScalarChecker {
   }
   void initialize_targets(const CheckedOperation &view, std::set<size_t> &initialized,
       CleanupEquations::MissingInitialization &missing,
-      const CleanupEquations::ConditionClauses &unwritten = {}) const {
+      const CleanupEquations::ConditionClauses &unwritten = {}, const ProjectionPaths *paths = nullptr) const {
     auto targets = view.targets; targets.erase(null_target);
     for (const auto place : targets) {
       auto absent = unwritten;
-      if (targets.size() != 1) {
+      if (paths) {
+        const auto path = paths->places.find(place);
+        if (path == paths->places.end()) continue;
+        for (const auto &facts : paths->may_skip(place))
+          CleanupEquations::add_condition(absent, facts);
+      } else if (targets.size() != 1) {
         const auto condition = selected_target(view, place, false);
         if (!condition) continue;
         CleanupEquations::add_condition(absent, *condition);
@@ -2724,6 +2784,13 @@ class ScalarChecker {
           CleanupEquations::missing_initialization(place, initialized, missing));
     }
     CleanupEquations::resolve_initialization(initialized, missing);
+  }
+  void initialize_invocation_targets(size_t input, const std::vector<CheckedOperation> &views, const InvocationSlots &slots,
+      std::set<size_t> &initialized, CleanupEquations::MissingInitialization &missing,
+      const CleanupEquations::ConditionClauses &unwritten = {}) const {
+    if (const auto *paths = slots.path(input); paths && paths->complete)
+      initialize_targets(views.at(input), initialized, missing, unwritten, paths);
+    else if (!slots.contains(input)) initialize_targets(views.at(input), initialized, missing, unwritten);
   }
   void initialize_selection(LexicalState &state, size_t id) {
     state.selections.initialize(id);
@@ -3087,11 +3154,11 @@ class ScalarChecker {
       auto before = preceding;
       CleanupEquations::MissingInitialization missing;
       std::set<size_t> known;
-      for (const auto parameter : before) if (!slots.contains(parameter)) initialize_targets(views.at(parameter), known, missing);
+      for (const auto parameter : before) initialize_invocation_targets(parameter, views, slots, known, missing);
       for (const auto &[other, clauses] : conditional) {
         auto absent = instantiate_conditions(clauses, booleans, views, slots, exceptions);
         if (absent.empty()) before.insert(other);
-        if (!slots.contains(other)) initialize_targets(views.at(other), known, missing, absent);
+        initialize_invocation_targets(other, views, slots, known, missing, absent);
       }
       const auto &view = views.at(parameter);
       if (slots.contains(parameter)) {
@@ -3153,8 +3220,8 @@ class ScalarChecker {
         }
       if (found != target.initialized.end()) for (const auto parameter : found->second) {
         const auto &view = views.at(parameter);
+        initialize_invocation_targets(parameter, views, slots, effect.initialized, effect.uninitialized);
         if (!slots.contains(parameter)) {
-          initialize_targets(view, effect.initialized, effect.uninitialized);
           // An invariant preparation retains its selection through later rebinds.
           initialize_call_selection(effect.selections, view, prepared);
         }
@@ -3168,9 +3235,14 @@ class ScalarChecker {
       }
       if (const auto outcome = target.uninitialized.find(reason); outcome != target.uninitialized.end())
         for (const auto &[parameter, missing] : outcome->second) {
+          if (!slots.contains(parameter)) continue;
+          if (const auto *paths = slots.path(parameter); paths && paths->complete) {
+            const auto when = instantiate_conditions(missing, booleans, views, slots, exceptions);
+            initialize_invocation_targets(parameter, views, slots, effect.initialized, effect.uninitialized, when);
+          }
           // When only a null input can lack a write, its invocation-time
           // target is initialized if present, independently of slot updates.
-          if (!slots.contains(parameter) || !initialized_when_present(parameter, missing)) continue;
+          if (!initialized_when_present(parameter, missing)) continue;
           const auto selected = physical_slots(views.at(parameter).slots);
           if (slots.projected.contains(parameter)) {
             if (const auto binding = slots.exact(parameter)) effect.selections.entry_initialized.insert(*binding);
@@ -3273,7 +3345,7 @@ class ScalarChecker {
               if (const auto slot = binding(id).embedded_slot; slot && !storage(*slot).borrowed) {
                 if (const auto path = paths->places.find(*slot); path != paths->places.end()) {
                   update.restrict_to(path->second);
-                  preserved.restrict_to(CleanupEquations::exclude_selection_paths(path->second));
+                  preserved.restrict_to(paths->may_skip(*slot));
                 }
               }
             }
@@ -3450,9 +3522,14 @@ class ScalarChecker {
         if (parent_paths) {
           auto &paths = invocation_slots.paths[input];
           paths.complete = parent_paths->complete;
-          for (const auto &[container, alternatives] : parent_paths->places)
-            for (const auto &facts : alternatives)
-              CleanupEquations::add_condition(paths.places[storage(container).fields[field.field]], facts);
+          const auto project = [&](const ProjectionPaths::Places &containers, ProjectionPaths::Places &fields) {
+            for (const auto &[container, alternatives] : containers)
+              for (const auto &facts : alternatives)
+                CleanupEquations::add_condition(fields[storage(container).fields[field.field]], facts);
+          };
+          project(parent_paths->places, paths.places);
+          for (const auto &[slot, containers] : parent_paths->starting_slots)
+            project(containers, paths.starting_slots[slot]);
         }
         projected.push_back(std::move(place));
         continue;
@@ -3461,32 +3538,41 @@ class ScalarChecker {
       const bool changing = at_invocation && (parent_paths || std::ranges::any_of(slot.slots,
           [&](size_t binding) { return rebound_.contains(binding); }));
       const bool absent_parent = slot.targets.contains(null_target);
-      const bool complete = parent_paths ? parent_paths->complete : slot.place.has_value();
+      const bool complete = parent_paths ? parent_paths->complete : !slot.targets.empty();
+      const bool multiple_starts = !parent_paths && !slot.place;
       auto referent = changing ? invocation_referent(std::move(slot), *field.description) :
           select_product_reference(std::move(slot), *field.description, at, true, true);
       if (changing) {
         invocation_slots.projected.emplace(input, InvocationSlots::Projection{referent.slots, absent_parent, field.parent});
-        if (field.type().kind == Type::product) {
-          auto &paths = invocation_slots.paths[input];
-          paths.complete = complete && std::ranges::none_of(referent.slots, [&](size_t id) {
-            const auto slot = binding(id).embedded_slot.value();
-            return storage(slot).borrowed;
-          });
-          for (const auto id : referent.slots) {
-            const CleanupEquations::ConditionClauses *parent = nullptr;
-            if (parent_paths) {
-              const auto slot = binding(id).embedded_slot.value();
-              if (const auto path = parent_paths->places.find(slot); path != parent_paths->places.end()) parent = &path->second;
-              else paths.complete = false;
-            }
-            for (const auto target : possible_targets_.at(id)) if (target != null_target) {
-              CleanupEquations::ConditionFacts selected;
-              selected.conditions.add({{}, id, target, true});
-              if (!parent) CleanupEquations::add_condition(paths.places[target], std::move(selected));
-              else for (auto facts : *parent) {
+        auto &paths = invocation_slots.paths[input];
+        paths.complete = complete;
+        if (parent_paths) {
+          for (const auto &[start, candidates] : parent_paths->starting_slots) paths.starting_slots.try_emplace(start);
+        } else if (multiple_starts && absent_parent) paths.starting_slots.try_emplace(null_target);
+        for (const auto id : referent.slots) {
+          const auto slot = binding(id).embedded_slot.value();
+          paths.complete &= !storage(slot).borrowed;
+          if (multiple_starts) paths.starting_slots.try_emplace(slot);
+          const CleanupEquations::ConditionClauses *parent = nullptr;
+          if (parent_paths) {
+            if (const auto path = parent_paths->places.find(slot); path != parent_paths->places.end()) parent = &path->second;
+            else paths.complete = false;
+          }
+          for (const auto target : possible_targets_.at(id)) if (target != null_target) {
+            CleanupEquations::ConditionFacts selected;
+            selected.conditions.add({{}, id, target, true});
+            const auto extend = [&](ProjectionPaths::Places &places, const CleanupEquations::ConditionClauses *parents) {
+              if (!parents) CleanupEquations::add_condition(places[target], selected);
+              else for (auto facts : *parents) {
                 facts.append(selected);
-                CleanupEquations::add_condition(paths.places[target], std::move(facts));
+                CleanupEquations::add_condition(places[target], std::move(facts));
               }
+            };
+            extend(paths.places, parent);
+            if (multiple_starts) extend(paths.starting_slots.at(slot), nullptr);
+            if (parent_paths) for (const auto &[start, candidates] : parent_paths->starting_slots) {
+              if (const auto path = candidates.find(slot); path != candidates.end())
+                extend(paths.starting_slots.at(start), &path->second);
             }
           }
         }
@@ -3605,7 +3691,7 @@ class ScalarChecker {
           unwritten = CleanupEquations::conjoin_conditions(unwritten, condition);
         }
         const auto when = instantiate_conditions(unwritten, boolean_inputs, views, invocation_slots, exception_inputs);
-        initialize_targets(view, effects.initialized, effects.uninitialized, when);
+        initialize_invocation_targets(parameter, views, invocation_slots, effects.initialized, effects.uninitialized, when);
         const auto ready_if_present = [&] {
           return std::ranges::all_of(unwritten, [&](const auto &facts) {
             return std::ranges::any_of(same_target, [&](size_t input) { return facts.absent.contains(input); });

@@ -5,6 +5,11 @@
 <a id="h-hlvm-candidate-20261120"></a>
 **H-HLVM-CANDIDATE-20261120.** In the project chat, the project user proposed `hlvm-basic` for running BASIC source or saving a DBMR to run later, with the prerequisite “要等 CoD 基本的 lexer/parser 已经通了的情况下再推进”, then asked to record the idea in a planning document. The [application note](applications/README.md#deferred-application-hlvm-basic) applies the executor and editable program graph from [*Algebraic Effects Is All You Need*](papers/AlgebraicEffectsIsAllYouNeed.md) to BASIC. It does not change the compiler roadmap or authorize implementation.
 
+## 2026-11-19 — Update deferred field initialization coverage
+
+<a id="k-deferred-path-initialization-20261119"></a>
+**K-DEFERRED-PATH-INITIALIZATION-20261119.** D-28r45→46 and registry r998→999 continue [lexical product coverage](design/RegionalAndLexicalStorageRefactor.md#consequences-of-one-nominal-adt) under [H-356](#h-356), [H-437](#h-437), [H-445](#h-445), [H-478](#h-478) and [D-17-DEFER-CHECKS](design/DesignAuthorityRegistry.md#d-17-defer-checks). Invocation paths distinguish a selected slot's readiness from its referent's readiness. A destination can be proved when every saved receiver reaches it and the completion establishes the write. Preserve actual ownership, failure order and readiness under C-63/C-65/C-72/C-93 and charter §§3.3/6.3/12. Correlation between saved choices and physical layout qualification retain their recorded scope. Prior coverage at `85b0618c3a101c3728f169ca6c2d6f8533f3266b:design/RegionalAndLexicalStorageRefactor.md`.
+
 ## 2026-11-19 — Update deferred field rebinding coverage
 
 <a id="k-deferred-slot-destinations-20261119"></a>
