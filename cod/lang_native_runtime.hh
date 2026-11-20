@@ -94,6 +94,7 @@ void *cod_lang_defer_allocate(std::uint64_t bytes, std::uint64_t *status) {
   return record;
 }
 void cod_lang_defer_free(void *record) { std::free(record); }
+void cod_lang_release_exception_owner(void *owner) { std::free(owner); }
 std::uint64_t cod_lang_exception_chain(std::uint64_t category, std::uint64_t site,
                                        std::uint64_t requested, std::uint64_t available,
                                        std::uint64_t cause, std::uint64_t *status) {
@@ -157,6 +158,12 @@ std::uint64_t cod_lang_exception_cause(std::uint64_t cause, std::uint64_t index,
     print("caused by", value);
     cause = value.cause;
   }
+  cod_lang_exception_finish();
+  std::exit(70);
+}
+[[noreturn]] void cod_lang_uncaught_nominal(const char *name, std::uint64_t site) {
+  if (const char *context = cod_lang_exception_site(site)) std::fprintf(stderr, "%s: ", context);
+  std::fprintf(stderr, "uncaught %s\n", name);
   cod_lang_exception_finish();
   std::exit(70);
 }
