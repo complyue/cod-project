@@ -32,6 +32,7 @@ using "ExpressionParser.cod" ParseResult;
 using "NameResolution.cod" NameBindings;
 using "NameResolution.cod" NameWork;
 using "NameResolution.cod" first_item;
+using "NameResolution.cod" exception_binding;
 using "OperandChecking.cod" OperandFacts;
 using "OperandChecking.cod" nullable_ptr;
 using "OperandChecking.cod" never_result;
@@ -43,6 +44,8 @@ data CompletionSite {
     presence:u8;
     can_continue:u8;
     local_return:u8;
+    retains_caught:u8;
+    forwarded_operand:u8;
     guarded_by:u64;
     incoming_handler:u64;
     throws_clause:u64;
@@ -78,12 +81,16 @@ func unproved_rethrow_capture() -> u8 { return 5u8; }
 func completion_storage_exhausted() -> u8 { return 7u8; }
 func invalid_completion_tree() -> u8 { return 8u8; }
 func unproved_incoming_exception() -> u8 { return 9u8; }
+func unproved_throw_operand() -> u8 { return 10u8; }
+func unproved_caught_handoff() -> u8 { return 11u8; }
 
 func initialize_site(ref sites:CompletionSites in X, at:u64) -> void where {owner X} {
     sites[at].event <- 0u8;
     sites[at].presence <- 0u8;
     sites[at].can_continue <- 1u8;
     sites[at].local_return <- 0u8;
+    sites[at].retains_caught <- 0u8;
+    sites[at].forwarded_operand <- 0u8;
     sites[at].guarded_by <- no_node();
     sites[at].incoming_handler <- no_node();
     sites[at].throws_clause <- no_node();
@@ -326,21 +333,64 @@ func check_call_completion(nodes:const ExprNodes in N, names:const NameBindings 
     return route_failure(nodes, names, links, facts, sites, at, used, category, checked, possible_failure());
 }
 
+func caught_operand(nodes:const ExprNodes in N, names:const NameBindings in B, at:u64, binding:u64) -> u64
+    where {const owner N, const owner B} {
+    val operand <- at;
+    for (unused in 0u64 .. at + 1u64) {
+        if (nodes[operand].kind != group_node()) {
+            if (nodes[operand].kind == name_node() && names[operand].kind == exception_binding() &&
+                names[operand].declaration == binding) { return operand; } else {};
+            return no_node();
+        } else {};
+        (operand <- nodes[operand].left):void;
+    };
+    return no_node();
+}
+
+func handoff_leaves_handler(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
+                            sites:const CompletionSites in X, at:u64, handler:u64, category:u64, used:u64) -> bool
+    where {const owner N, const owner L, const owner F, const owner X} {
+    val guard <- sites[at].guarded_by;
+    val clause <- no_node();
+    # A guard contained in the handler precedes it in postorder. Declared
+    # root evidence may reach any local catch. A local finally can replace
+    # the outgoing failure or use the holder while propagation owns it.
+    for (unused in 0u64 .. used) {
+        if (guard >= handler) { return true; } else {};
+        if (clause == no_node()) { (clause <- first_item(nodes, nodes[guard].right)):void; } else {};
+        if (nodes[clause].kind == finally_clause_node() || category == no_node() ||
+            category == exception_root_identity()) { return false; } else {};
+        if (covers(facts[nodes[nodes[clause].right].left].identity, category)) { return false; } else {};
+        clause <- links[clause].next;
+        if (clause == no_node()) { (guard <- sites[guard].guarded_by):void; } else {};
+    };
+    return false;
+}
+
 func check_throw_completion(nodes:const ExprNodes in N, names:const NameBindings in B,
                             links:const NameWork in L, facts:const OperandFacts in F,
                             ref sites:CompletionSites in X, at:u64, used:u64) -> u8
     where {const owner N, const owner B, const owner L, const owner F, owner X} {
-    val evidence <- nodes[at].left;
-    if (evidence == no_node()) {
-        val incoming <- sites[at].incoming_handler;
-        if (incoming == no_node()) { return missing_rethrow_context(); } else {};
-        if (names[nodes[incoming].right].scope != names[at].scope) { return unproved_rethrow_capture(); } else {};
-        (evidence <- nodes[incoming].left):void;
+    val operand <- nodes[at].left;
+    val incoming <- sites[at].incoming_handler;
+    if (incoming == no_node()) {
+        return if (operand == no_node()) { missing_rethrow_context() } else { unproved_throw_operand() };
     } else {};
-    val category <- facts[evidence].identity;
+    val binding <- nodes[incoming].left;
+    if (operand == no_node() && names[nodes[incoming].right].scope != names[at].scope) {
+        return unproved_rethrow_capture();
+    } else {};
+    val name <- if (operand == no_node()) { no_node() } else { caught_operand(nodes, names, operand, binding) };
+    if (operand != no_node() && name == no_node()) { return unproved_throw_operand(); } else {};
+    val category <- facts[binding].identity;
+    if (!handoff_leaves_handler(nodes, links, facts, sites, at, incoming, category, used)) {
+        return unproved_caught_handoff();
+    } else {};
+    sites[incoming].retains_caught <- 1u8;
+    if (name != no_node()) { sites[name].forwarded_operand <- 1u8; {}; } else {};
     if (category != no_node()) {
         return route_failure(nodes, names, links, facts, sites, at, used, category,
-                             facts[evidence].checked_exception, definite_failure());
+                             facts[binding].checked_exception, definite_failure());
     } else {};
     # A catch without a type annotation can have narrower incoming failures.
     # Accept a route covering the root, or report the missing incoming proof.
@@ -438,3 +488,5 @@ export unproved_rethrow_capture;
 export completion_storage_exhausted;
 export invalid_completion_tree;
 export unproved_incoming_exception;
+export unproved_throw_operand;
+export unproved_caught_handoff;

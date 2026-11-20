@@ -73,6 +73,7 @@ data LoweringState {
     active_scope:u64;
     exception_target:u64;
     return_target:u64;
+    caught_failure:u64;
     live:bool;
     local_return:bool;
 }
@@ -139,6 +140,20 @@ func source_failure(ref code:NativeCommands in C, ref plan:NativePlan in P, cate
 func invocation_failure(ref code:NativeCommands in C, ref plan:NativePlan in P) -> void where {owner C, owner P} {
     emit(code, plan, copy_word(), pending_category(), call_category());
     emit(code, plan, copy_word(), pending_site(), call_site());
+}
+
+func save_failure(ref code:NativeCommands in C, ref plan:NativePlan in P) -> u64 where {owner C, owner P} {
+    val category <- new_slot(plan);
+    val site <- new_slot(plan);
+    emit(code, plan, copy_word(), category, pending_category());
+    emit(code, plan, copy_word(), site, pending_site());
+    return category;
+}
+
+func restore_failure(ref code:NativeCommands in C, ref plan:NativePlan in P, saved:u64) -> void
+    where {owner C, owner P} {
+    emit(code, plan, copy_word(), pending_category(), saved);
+    emit(code, plan, copy_word(), pending_site(), saved + 1u64);
 }
 
 # One dispatch block per guard keeps the same source-order handler walk for
@@ -337,15 +352,18 @@ func lower_handlers(nodes:const ExprNodes in N, names:const NameBindings in B, l
     val clause <- first_item(nodes, nodes[at].right);
     if (nodes[clause].kind != catch_clause_node()) { return false; } else {};
     lower_dispatch(nodes, links, facts, code, plan, state, at);
+    val enclosing_failure <- state.caught_failure;
     val handler <- no_node();
     for (unused in 0u64 .. syntax_len(nodes)) {
         if (plan.diagnostic != 0u8 || clause == no_node() || nodes[clause].kind != catch_clause_node()) { return normal; } else {};
         handler <- nodes[clause].right;
         position(code, plan, state, handler);
+        state.caught_failure <- if (sites[handler].retains_caught != 0u8) { save_failure(code, plan) } else { no_node() };
         emit(code, plan, word_constant(), pending_category(), 0u64);
         if (lower_try_arm(nodes, names, links, facts, sites, code, plan, state, nodes[handler].right, at, next)) {
             (normal <- true):void;
         } else {};
+        state.caught_failure <- enclosing_failure;
         (clause <- links[clause].next):void;
     };
     return normal;
@@ -357,20 +375,16 @@ func lower_finally(nodes:const ExprNodes in N, names:const NameBindings in B, li
                    facts:const OperandFacts in F, sites:const CompletionSites in S, ref code:NativeCommands in C,
                    ref plan:NativePlan in P, ref state:LoweringState in R, body:u64, returned:u64, next:u64) -> bool
     where {const owner N, const owner B, const owner L, const owner F, const owner S, owner C, owner P, owner R} {
-    val category <- new_slot(plan);
-    val site <- new_slot(plan);
-    emit(code, plan, copy_word(), category, pending_category());
-    emit(code, plan, copy_word(), site, pending_site());
+    val saved <- save_failure(code, plan);
     emit(code, plan, word_constant(), pending_category(), 0u64);
     lower_node(nodes, names, links, facts, sites, code, plan, state, body);
     if (!state.live || plan.diagnostic != 0u8) { return false; } else {};
-    emit(code, plan, copy_word(), pending_category(), category);
-    emit(code, plan, copy_word(), pending_site(), site);
+    restore_failure(code, plan, saved);
     if (next == no_node()) {
-        command(code, plan, branch_equal(), category, 0u64, state.return_target, state.exception_target);
+        command(code, plan, branch_equal(), saved, 0u64, state.return_target, state.exception_target);
     } else {
         val succeeded <- new_block(plan);
-        command(code, plan, branch_equal(), category, 0u64, succeeded, state.exception_target);
+        command(code, plan, branch_equal(), saved, 0u64, succeeded, state.exception_target);
         position(code, plan, state, succeeded);
         command(code, plan, branch_equal(), returned, 0u64, next, state.return_target);
     };
@@ -518,6 +532,11 @@ func lower_node(nodes:const ExprNodes in N, names:const NameBindings in B, links
         return;
     } else {};
     if (kind == return_node()) { lower_return(nodes, names, links, facts, sites, code, plan, state, at); return; } else {};
+    if (kind == throw_node() && state.caught_failure != no_node()) {
+        restore_failure(code, plan, state.caught_failure);
+        finish_block(code, plan, state, state.exception_target);
+        return;
+    } else {};
     plan.diagnostic <- native_unsupported();
     return;
 }
@@ -627,7 +646,7 @@ func lower_activation(nodes:const ExprNodes in N, names:const NameBindings in B,
     val cleanup <- new_block(plan);
     ref state = make LoweringState {
         active_function <- scope; active_scope <- scope; exception_target <- cleanup;
-        return_target <- cleanup; live <- true; local_return <- false;
+        return_target <- cleanup; caught_failure <- no_node(); live <- true; local_return <- false;
     };
     emit(code, plan, begin_function(), scope, entry);
     position(code, plan, state, entry);
@@ -657,11 +676,9 @@ func lower_activation(nodes:const ExprNodes in N, names:const NameBindings in B,
     command(code, plan, finish, returned_word(), pending_category(), pending_site(), 0u64);
 }
 
-func module_command_supported(nodes:const ExprNodes in N, names:const NameBindings in B, at:u64) -> bool
-    where {const owner N, const owner B} {
-    val kind <- nodes[at].kind;
-    if (kind == throw_node()) { return false; } else {};
-    return names[at].scope == no_node() || names[at].kind != exception_binding();
+func module_command_supported(names:const NameBindings in B, sites:const CompletionSites in S, at:u64) -> bool
+    where {const owner B, const owner S} {
+    return names[at].scope == no_node() || names[at].kind != exception_binding() || sites[at].forwarded_operand != 0u8;
 }
 
 # Consume one successful checked revision. The caller may publish commands
@@ -683,7 +700,7 @@ func lower_native_module(nodes:const ExprNodes in N, tree:const ParseResult in T
     plan.slots <- slot(tree.used);
     for (at in 0u64 .. tree.used) {
         plan.node <- at;
-        if (!module_command_supported(nodes, names, at)) { plan.diagnostic <- native_unsupported(); return false; } else {};
+        if (!module_command_supported(names, sites, at)) { plan.diagnostic <- native_unsupported(); return false; } else {};
         if (nodes[at].kind == procedure_node()) {
             command(code, plan, declare_function(), at, formal_count(nodes, procedure_head(nodes, at)), 0u64, 0u64);
             if (plan.diagnostic != 0u8) { return false; } else {};

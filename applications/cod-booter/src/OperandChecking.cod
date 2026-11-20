@@ -464,9 +464,12 @@ func check_return(nodes:const ExprNodes in N, names:const NameBindings in B, ref
 func check_numeric_expression(nodes:const ExprNodes in N, ref facts:OperandFacts in F, at:u64, kind:u8) -> u8
     where {const owner N, owner F} {
     val left <- nodes[at].left;
-    if (kind == group_node() && (facts[left].kind == void_result() || facts[left].kind == never_result())) {
-        set_result(facts, at, facts[left].kind);
-        return 0u8;
+    if (kind == group_node()) {
+        val inside <- facts[left].kind;
+        if (inside == void_result() || inside == never_result() || inside == exception_type()) {
+            copy_fact(facts, at, left);
+            return 0u8;
+        } else {};
     } else {};
     val diagnostic <- require_bits(nodes, facts, left);
     if (diagnostic != 0u8) { return diagnostic; } else {};
