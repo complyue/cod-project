@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-20 — Put the first generated C provider profile up for review
+
+<a id="k-booter-c-profile-20261120"></a>
+**K-BOOTER-C-PROFILE-20261120.** Agent continuity assessment under [H-BOOTER-GENERATED-C-20261120](#h-booter-generated-c-20261120). Interop r8→9 and registry r1018→1019 retain the confirmed direction under C-80/P-642 and charter §§4.3/6.3/12. The [candidate profile](applications/cod-booter/docs/LLVMInterop.md#first-declaration-profile-for-review) specifies proposed declarations, actual callback owner origins, C adaptation, scoped completion and generation-before-link ordering for the existing first workload. The candidate mechanisms and P-644/P-645 remain pending-human. Native state representation outside the profile, permanent ABI, dynamic loading and build-configuration authorization retain their boundaries. Prior direction at `c2a1e86a1d0b2864296d4313f8273d6dd86968cf:applications/cod-booter/docs/LLVMInterop.md`.
+
 ## 2026-11-20 — Generate the booter’s C providers from CoD declarations
 
 <a id="h-booter-generated-c-20261120"></a>
