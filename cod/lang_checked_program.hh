@@ -90,6 +90,18 @@ struct CheckedOperation {
   std::optional<size_t> place;
   std::optional<size_t> product_field;
   std::optional<size_t> exception_owner;
+  struct NativeAcquisition {
+    struct Loan {
+      size_t binding, place;
+      bool owned;
+      auto operator<=>(const Loan &) const = default;
+    };
+    size_t constructor;
+    const Expression *initializer;
+    std::vector<std::optional<Loan>> loans;
+    auto operator<=>(const NativeAcquisition &) const = default;
+  };
+  std::optional<NativeAcquisition> native_acquisition;
   std::optional<size_t> binding;
   // Immutable selected reference, independent of the mutable binding version.
   std::optional<size_t> selection_identity;

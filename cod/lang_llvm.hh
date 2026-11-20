@@ -144,10 +144,11 @@ class LLVMEmission {
   std::vector<Location> sites_;
   enum class Projection { value, target, slot, receiver };
   static bool carries_value(Projection projection) { return projection == Projection::value || projection == Projection::receiver; }
-  struct Deferred {
+  struct CleanupAction {
     const Expression *action;
     llvm::StructType *layout;
     std::set<size_t> captures;
+    std::optional<size_t> native_constructor = {};
   };
   struct Control {
     Control *parent;
@@ -161,10 +162,10 @@ class LLVMEmission {
     Scope *parent;
     llvm::BasicBlock *cleanup;
     llvm::AllocaInst *head;
-    std::vector<Deferred> deferred;
+    std::vector<CleanupAction> actions;
     Lifetime values;
   };
-  llvm::StructType *deferred_header_ = llvm::StructType::get(context_, {b_.getPtrTy(), b_.getInt64Ty()});
+  llvm::StructType *cleanup_header_ = llvm::StructType::get(context_, {b_.getPtrTy(), b_.getInt64Ty()});
   Scope *scope_ = nullptr;
   struct Choice {
     std::vector<Type> inputs;
@@ -280,7 +281,7 @@ class LLVMEmission {
   }
   unsigned tag(const Type &type) {
     const auto nominal_base = 8 + program_->exception_types.size();
-    if (type.kind == Type::product) return nominal_base + type.identity;
+    if (type.kind == Type::product || type.kind == Type::native_handle) return nominal_base + type.identity;
     const auto array_base = nominal_base + program_->schemas.size();
     if (type.kind == Type::array) return array_base + type.identity;
     if (type.kind == Type::procedure) {
@@ -548,7 +549,8 @@ class LLVMEmission {
         b_.CreateExtractValue(value, 2), b_.CreateExtractValue(value, 3), b_.CreateExtractValue(value, 4), nullptr, owner));
     b_.CreateBr(control_->exit);
   }
-  llvm::Value *construct_exception(const Expression &expr, size_t category) {
+  template <typename Initialize>
+  void raise_constructed_exception(const Location &at, size_t category, const Initialize &emit_fields) {
     auto *layout = product_layout(*program_->exception_types.at(category).schema);
     auto *capacity = integer(100 * 1024 * 1024);
     auto *size = llvm::ConstantExpr::getSizeOf(layout);
@@ -556,34 +558,39 @@ class LLVMEmission {
     b_.CreateCondBr(b_.CreateICmpULE(size, capacity), allocate, insufficient);
     b_.SetInsertPoint(insufficient);
     save_abrupt(outcome(empty_scalar(), integer(exception_id(ExceptionCategory::region_capacity_exceeded)),
-                        integer(site(expr.at)), null_pointer(), size, capacity));
+                        integer(site(at)), null_pointer(), size, capacity));
     b_.CreateBr(control_->exit);
     b_.SetInsertPoint(allocate);
     auto *owner = b_.CreateCall(runtime("malloc", b_.getPtrTy(), {b_.getInt64Ty()}), {capacity}, "exception.region");
     auto *initialize = block("exception.initialize"), *unavailable = block("exception.unavailable");
     b_.CreateCondBr(b_.CreateIsNotNull(owner), initialize, unavailable);
     b_.SetInsertPoint(unavailable);
-    fail_path(ExceptionCategory::out_of_memory, expr.at);
+    fail_path(ExceptionCategory::out_of_memory, at);
     b_.SetInsertPoint(initialize);
     Control construction{control_, block("exception.abandoned")};
     control_ = &construction;
-    for (const auto &initializer : expr.children) {
-      const auto &input = *initializer->children.front();
-      auto *value = emit_expression(input);
-      if (!reachable()) break;
-      const auto index = *contexts_.front().at(initializer.get()).product_field;
-      assign_place(b_.CreateStructGEP(layout, owner, index), convert_result(*initializer, input, value),
-                   *initializer, &CheckedOperation::operand_type);
-    }
+    emit_fields(layout, owner);
     control_ = construction.parent;
     if (reachable()) {
-      save_abrupt(outcome(empty_scalar(), integer(category), integer(site(expr.at)), null_pointer(),
+      save_abrupt(outcome(empty_scalar(), integer(category), integer(site(at)), null_pointer(),
                           nullptr, nullptr, nullptr, nullptr, owner));
       b_.CreateBr(control_->exit);
     }
     b_.SetInsertPoint(construction.exit);
     release_failure_owner(b_, owner);
     b_.CreateBr(control_->exit);
+  }
+  llvm::Value *construct_exception(const Expression &expr, size_t category) {
+    raise_constructed_exception(expr.at, category, [&](llvm::StructType *layout, llvm::Value *owner) {
+      for (const auto &initializer : expr.children) {
+        const auto &input = *initializer->children.front();
+        auto *value = emit_expression(input);
+        if (!reachable()) break;
+        const auto index = *contexts_.front().at(initializer.get()).product_field;
+        assign_place(b_.CreateStructGEP(layout, owner, index), convert_result(*initializer, input, value),
+                     *initializer, &CheckedOperation::operand_type);
+      }
+    });
     return nullptr;
   }
   void require(llvm::Value *condition, const Location &at, const std::string &message) {
@@ -1183,8 +1190,15 @@ class LLVMEmission {
     b_.SetInsertPoint(good);
     return b_.CreateExtractValue(result, 0);
   }
-  void collect_deferred(const Expression &expr, Scope &scope) {
-    for (const auto &child : expr.children) collect_deferred(*child, scope);
+  void collect_cleanup(const Expression &expr, Scope &scope) {
+    for (const auto &child : expr.children) collect_cleanup(*child, scope);
+    if (expr.kind == Expression::Kind::native_handle_binding) {
+      std::set<size_t> constructors;
+      for (const auto &context : contexts_) constructors.insert(context.at(&expr).native_acquisition->constructor);
+      for (const auto id : constructors)
+        scope.actions.push_back({&expr, llvm::StructType::get(context_, {cleanup_header_, b_.getInt64Ty()}), {}, id});
+      return;
+    }
     if (expr.kind != Expression::Kind::deferred) return;
     const auto &body = *expr.children.front();
     if (body.kind != Expression::Kind::block && std::all_of(contexts_.begin(), contexts_.end(),
@@ -1192,10 +1206,14 @@ class LLVMEmission {
     std::set<std::set<size_t>> layouts;
     for (const auto &context : contexts_) layouts.insert(context.at(&expr).captures);
     for (const auto &captures : layouts) {
-      std::vector<llvm::Type *> fields{deferred_header_};
+      std::vector<llvm::Type *> fields{cleanup_header_};
       fields.insert(fields.end(), body.kind == Expression::Kind::block ? captures.size() : prepared_count(body), scalar_);
-      scope.deferred.push_back({&expr, llvm::StructType::get(context_, fields), captures});
+      scope.actions.push_back({&expr, llvm::StructType::get(context_, fields), captures});
     }
+  }
+  void prepare_cleanup_record(llvm::Value *record, size_t action) {
+    b_.CreateStore(load(scope_->head), b_.CreateStructGEP(cleanup_header_, record, 0));
+    b_.CreateStore(integer(action), b_.CreateStructGEP(cleanup_header_, record, 1));
   }
   void complete_cleanup(const std::function<void()> &emit, CleanupBoundary boundary, bool handles_failure = false) {
     // Suspend the pending completion while cleanup executes its own control flow.
@@ -1269,18 +1287,28 @@ class LLVMEmission {
   }
   void drain(Scope &scope) {
     b_.SetInsertPoint(scope.cleanup);
-    if (scope.deferred.empty()) return;
+    if (scope.actions.empty()) return;
     auto *pop = block("defer.pop"), *done = block("defer.done"), *invalid = block("defer.invalid");
     auto *record = load(scope.head);
     b_.CreateCondBr(b_.CreateICmpEQ(record, null_pointer()), done, pop);
     b_.SetInsertPoint(pop);
-    auto *previous = b_.CreateLoad(b_.getPtrTy(), b_.CreateStructGEP(deferred_header_, record, 0));
-    auto *action = b_.CreateLoad(b_.getInt64Ty(), b_.CreateStructGEP(deferred_header_, record, 1));
+    auto *previous = b_.CreateLoad(b_.getPtrTy(), b_.CreateStructGEP(cleanup_header_, record, 0));
+    auto *action = b_.CreateLoad(b_.getInt64Ty(), b_.CreateStructGEP(cleanup_header_, record, 1));
     b_.CreateStore(previous, scope.head);
-    auto *dispatch = b_.CreateSwitch(action, invalid, scope.deferred.size());
+    auto *dispatch = b_.CreateSwitch(action, invalid, scope.actions.size());
     const auto release = runtime("cod_lang_defer_free", b_.getVoidTy(), {b_.getPtrTy()});
-    for (size_t i = 0; i < scope.deferred.size(); ++i) {
-      const auto &descriptor = scope.deferred[i];
+    for (size_t i = 0; i < scope.actions.size(); ++i) {
+      const auto &descriptor = scope.actions[i];
+      if (descriptor.native_constructor) {
+        auto *destroy = block("native.destroy");
+        dispatch->addCase(integer(i), destroy);
+        b_.SetInsertPoint(destroy);
+        auto *resource = b_.CreateLoad(b_.getInt64Ty(), b_.CreateStructGEP(descriptor.layout, record, 1));
+        const auto &handle = program_->native_constructors.at(*descriptor.native_constructor).handle;
+        b_.CreateCall(runtime(native_destroy_name(handle), b_.getVoidTy(), {b_.getInt64Ty()}), {resource});
+        b_.CreateBr(scope.cleanup);
+        continue;
+      }
       const auto &body = *descriptor.action->children.front();
       auto *run = block("defer.invoke");
       dispatch->addCase(integer(i), run);
@@ -1347,7 +1375,8 @@ class LLVMEmission {
       b_.SetInsertPoint(replace); save_abrupt(result); b_.CreateBr(scope.cleanup);
     }
     b_.SetInsertPoint(invalid);
-    b_.CreateCall(release, {record});
+    if (std::ranges::none_of(scope.actions, [](const auto &action) { return action.native_constructor.has_value(); }))
+      b_.CreateCall(release, {record});
     save_abrupt(outcome(empty_scalar(), integer(exception_id(ExceptionCategory::unsound_runtime_typing)), integer(0), null_pointer()));
     b_.CreateBr(scope.cleanup);
     b_.SetInsertPoint(done);
@@ -1449,7 +1478,7 @@ class LLVMEmission {
     scope_ = &scope;
     temporaries_ = &scope.values;
     b_.CreateStore(null_pointer(), scope.head);
-    for (const auto *expr : expressions) collect_deferred(*expr, scope);
+    for (const auto *expr : expressions) collect_cleanup(*expr, scope);
     const auto effects = save_effects(expressions);
     const bool supplies_value = feedback && *feedback != Type::void_type;
     auto *value = sequence(expressions, Projection::value, !supplies_value);
@@ -1470,6 +1499,86 @@ class LLVMEmission {
       save_abrupt(outcome(empty_scalar(), integer(exception_id(ExceptionCategory::missing_return)), integer(site(at)), null_pointer()));
     }
     b_.CreateBr(finish_);
+  }
+  llvm::Value *acquire_native_handle(const Expression &binding, size_t place,
+                                     const CheckedOperation::NativeAcquisition &plan) {
+    const auto &expr = *plan.initializer;
+    const auto &constructor = program_->native_constructors.at(plan.constructor);
+    std::vector<llvm::Type *> types;
+    std::vector<llvm::Value *> arguments;
+    for (size_t i = 0; i < constructor.inputs.size(); ++i) {
+      const auto &input = constructor.inputs[i];
+      if (const auto &loan = plan.loans.at(i)) {
+        auto *address = binding_address(loan->binding, loan->place);
+        if (loan->owned) {
+          auto *pair = llvm::StructType::get(context_, {b_.getInt64Ty(), b_.getInt64Ty()});
+          auto *resource = b_.CreateLoad(b_.getInt64Ty(), address);
+          address = slot(pair, "native.reborrow");
+          for (unsigned word = 0; word < 2; ++word)
+            b_.CreateStore(resource, b_.CreateStructGEP(pair, address, word));
+        }
+        arguments.push_back(address);
+        types.push_back(b_.getPtrTy());
+      } else {
+        const auto &operand = *expr.children[i];
+        auto *value = emit_expression(operand);
+        if (!reachable()) return nullptr;
+        auto *boundary = c_scalar_type(input.type);
+        arguments.push_back(choose(operand, {value}, choices(operand, {&operand}), boundary, [&](const Choice &choice) {
+          auto *converted = convert(value, choice.inputs.front(), input.type);
+          return input.type == Type::boolean ? b_.CreateZExt(converted, boundary) : converted;
+        }));
+        types.push_back(boundary);
+      }
+    }
+    auto *resource = storage_.at(place);
+    arguments.push_back(resource);
+    types.push_back(b_.getPtrTy());
+    llvm::AllocaInst *error = nullptr;
+    const CheckedSchema *failure = nullptr;
+    if (constructor.failure) {
+      failure = &program_->schemas.at(*program_->exception_types.at(constructor.failure->identity).schema);
+      std::vector<llvm::Type *> fields;
+      for (const auto &field : failure->fields) fields.push_back(c_scalar_type(field.type));
+      if (fields.empty()) fields.push_back(b_.getInt8Ty());
+      error = slot(llvm::StructType::get(context_, fields), "native.failure.payload");
+      types.push_back(b_.getPtrTy());
+      arguments.push_back(error);
+    }
+    auto *status = b_.CreateCall(runtime(native_construct_name(constructor.handle), b_.getInt32Ty(), types), arguments);
+    for (size_t i = 0; i < constructor.inputs.size(); ++i)
+      if (types[i] == b_.getInt8Ty()) status->addParamAttr(i, llvm::Attribute::ZExt);
+    auto *ready = block("native.acquired"), *invalid = block("native.invalid");
+    auto *select = b_.CreateSwitch(status, invalid, 1 + bool(failure));
+    select->addCase(b_.getInt32(static_cast<unsigned>(NativeStatus::ok)), ready);
+    if (failure) {
+      auto *failed = block("native.failure");
+      select->addCase(b_.getInt32(static_cast<unsigned>(NativeStatus::failure)), failed);
+      b_.SetInsertPoint(failed);
+      auto *payload = llvm::cast<llvm::StructType>(error->getAllocatedType());
+      raise_constructed_exception(expr.at, constructor.failure->identity, [&](llvm::StructType *layout, llvm::Value *owner) {
+        for (size_t i = 0; i < failure->fields.size(); ++i) {
+          const auto &type = failure->fields[i].type;
+          llvm::Value *value = b_.CreateLoad(c_scalar_type(type), b_.CreateStructGEP(payload, error, i));
+          if (type == Type::boolean) value = b_.CreateTrunc(value, b_.getInt1Ty());
+          b_.CreateStore(value, b_.CreateStructGEP(layout, owner, i));
+        }
+      });
+    }
+    b_.SetInsertPoint(invalid);
+    fail_path(ExceptionCategory::system, expr.at, b_.CreateGlobalString(location_text(expr.at) + ": invalid C constructor completion"));
+    b_.SetInsertPoint(ready);
+    const auto action = std::ranges::find_if(scope_->actions, [&](const auto &item) {
+      return item.action == &binding && item.native_constructor == plan.constructor;
+    });
+    if (action == scope_->actions.end()) throw std::logic_error("uncollected native handle release");
+    // Direct declarations execute once per owning scope activation. Their
+    // cleanup record is already reserved when native acquisition succeeds.
+    auto *record = slot(action->layout, "native.cleanup");
+    prepare_cleanup_record(record, std::distance(scope_->actions.begin(), action));
+    b_.CreateStore(load(resource), b_.CreateStructGEP(action->layout, record, 1));
+    b_.CreateStore(record, scope_->head);
+    return empty_scalar();
   }
   llvm::Value *emit_finally(const Expression &expr, Projection projection, bool discard = false, llvm::Value *skip_body = nullptr) {
     const bool read = carries_value(projection);
@@ -2432,6 +2541,16 @@ class LLVMEmission {
       if (expr.text == "cause_count") field = b_.CreateCall(runtime("cod_lang_exception_count", b_.getInt64Ty(), {b_.getInt64Ty()}), {field});
       return pack(field, Type::uint64);
     }
+    case K::native_handle_binding: {
+      std::map<std::pair<size_t, CheckedOperation::NativeAcquisition>, std::vector<size_t>> plans;
+      for (size_t i = 0; i < contexts_.size(); ++i) {
+        const auto &acquisition = contexts_[i].at(&expr);
+        plans[{*acquisition.place, *acquisition.native_acquisition}].push_back(i);
+      }
+      return contextual_value(expr, plans, "native.acquire", [&](const auto &selected) {
+        return temporary_scope(expr.at, scalar_, [&] { return acquire_native_handle(expr, selected.first, selected.second); });
+      });
+    }
     case K::make_object: {
       auto *address = storage_.at(*fact.place);
       auto *layout = product_layout(fact.operand_type.identity);
@@ -2492,10 +2611,10 @@ class LLVMEmission {
       if (body.kind == K::block) for (const auto id : fact.captures) arguments.push_back(load(storage_.at(id)));
       else arguments = prepare_arguments(body, true);
       if (!reachable()) return nullptr;
-      auto record = std::find_if(scope_->deferred.begin(), scope_->deferred.end(), [&](const Deferred &entry) {
+      auto record = std::find_if(scope_->actions.begin(), scope_->actions.end(), [&](const CleanupAction &entry) {
         return entry.action == &expr && entry.captures == fact.captures;
       });
-      if (record == scope_->deferred.end()) throw std::logic_error("uncollected deferred action");
+      if (record == scope_->actions.end()) throw std::logic_error("uncollected deferred action");
       auto *status = slot(b_.getInt64Ty(), "defer.status");
       b_.CreateStore(integer(0), status);
       const auto bytes = module_.getDataLayout().getTypeAllocSize(record->layout).getFixedValue();
@@ -2504,8 +2623,7 @@ class LLVMEmission {
       b_.CreateCondBr(b_.CreateICmpEQ(prepared, null_pointer()), failed, ready);
       b_.SetInsertPoint(failed); fail_path(ExceptionCategory::out_of_memory, expr.at);
       b_.SetInsertPoint(ready);
-      b_.CreateStore(load(scope_->head), b_.CreateStructGEP(deferred_header_, prepared, 0));
-      b_.CreateStore(integer(std::distance(scope_->deferred.begin(), record)), b_.CreateStructGEP(deferred_header_, prepared, 1));
+      prepare_cleanup_record(prepared, std::distance(scope_->actions.begin(), record));
       for (size_t i = 0; i < arguments.size(); ++i) {
         b_.CreateStore(arguments[i], b_.CreateStructGEP(record->layout, prepared, i + 1));
         take_value(arguments[i]);
@@ -2658,6 +2776,7 @@ class LLVMEmission {
       else for (const auto type : storage_types[i]) formats.insert(place_format(type));
       llvm::Type *layout = scalar_;
       if (binding.type.kind == Type::product) layout = product_layout(binding.type.identity);
+      else if (binding.type.kind == Type::native_handle && binding.type.owned) layout = b_.getInt64Ty();
       else if (!formats.contains(Type::void_type))
         layout = formats.size() == 1 ? native_type(Type{*formats.begin()}) : b_.getInt64Ty();
       auto *place = binding.borrowed || binding.subobject ? nullptr : slot(layout, binding.name + ".storage");
@@ -2850,8 +2969,10 @@ class LLVMEmission {
     for (size_t i = 0; i < entry.inputs.size(); ++i) {
       const auto &input = entry.inputs[i];
       auto *supplied = bridge->getArg(i);
-      if (input.owner)
-        arguments.push_back(b_.CreateInsertValue(empty_scalar(), b_.CreatePtrToInt(supplied, b_.getInt64Ty()), 0));
+      if (input.owner) {
+        auto *view = b_.CreateInsertValue(empty_scalar(), b_.CreatePtrToInt(supplied, b_.getInt64Ty()), 0);
+        arguments.push_back(b_.CreateInsertValue(view, b_.getInt32(tag(method.parameters[i])), 1));
+      }
       else arguments.push_back(pack(supplied, input.type));
     }
     for (const auto &[owner, input] : input_frame(entry.method).owners) {
