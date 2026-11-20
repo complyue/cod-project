@@ -235,14 +235,33 @@ func require_target(nodes:const ExprNodes in N, facts:const OperandFacts in F,
     position(code, plan, state, ready);
 }
 
-func lower_bits(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
-                facts:const OperandFacts in F, sites:const CompletionSites in S,
-                ref code:NativeCommands in C, ref plan:NativePlan in P, ref state:LoweringState in R, at:u64) -> void
+func lower_node(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
+                facts:const OperandFacts in F, sites:const CompletionSites in S, ref code:NativeCommands in C,
+                ref plan:NativePlan in P, ref state:LoweringState in R, at:u64) -> void
+    where {const owner N, const owner B, const owner L, const owner F, const owner S, owner C, owner P, owner R} {
+    lower_expression(nodes, names, links, facts, sites, code, plan, state, at, false);
+}
+
+func lower_completed_bits(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
+                          facts:const OperandFacts in F, sites:const CompletionSites in S, ref code:NativeCommands in C,
+                          ref plan:NativePlan in P, ref state:LoweringState in R, at:u64) -> void
     where {const owner N, const owner B, const owner L, const owner F, const owner S, owner C, owner P, owner R} {
     lower_node(nodes, names, links, facts, sites, code, plan, state, at);
     if (!state.live || facts[at].reception == independent_value()) { return; } else {};
     require_target(nodes, facts, sites, code, plan, state, at);
     if (state.live) { emit(code, plan, load_target(), slot(at), slot(at)); } else {};
+}
+
+func lower_bits(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
+                facts:const OperandFacts in F, sites:const CompletionSites in S, ref code:NativeCommands in C,
+                ref plan:NativePlan in P, ref state:LoweringState in R, at:u64) -> void
+    where {const owner N, const owner B, const owner L, const owner F, const owner S, owner C, owner P, owner R} {
+    val kind <- nodes[at].kind;
+    if (facts[at].reception != nullable_ptr() && (kind == block_node() || kind == conditional_node() || kind == try_node())) {
+        lower_expression(nodes, names, links, facts, sites, code, plan, state, at, true);
+    } else {
+        lower_completed_bits(nodes, names, links, facts, sites, code, plan, state, at);
+    };
 }
 
 func prepare_arguments(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
@@ -340,7 +359,7 @@ func lower_binary(nodes:const ExprNodes in N, names:const NameBindings in B, lin
 
 func lower_list(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                 facts:const OperandFacts in F, sites:const CompletionSites in S, ref code:NativeCommands in C,
-                ref plan:NativePlan in P, ref state:LoweringState in R, tail:u64, destination:u64) -> void
+                ref plan:NativePlan in P, ref state:LoweringState in R, tail:u64, destination:u64, read_result:bool) -> void
     where {const owner N, const owner B, const owner L, const owner F, const owner S, owner C, owner P, owner R} {
     val item <- first_item(nodes, tail);
     val expression <- no_node();
@@ -348,7 +367,7 @@ func lower_list(nodes:const ExprNodes in N, names:const NameBindings in B, links
         if (item == no_node() || !state.live || plan.diagnostic != 0u8) { return; } else {};
         expression <- nodes[item].right;
         if (scalar_kind(facts[item].kind) && facts[item].discarded_result == 0u8) {
-            if (facts[item].arm_result != 0u8) {
+            if (facts[item].arm_result != 0u8 && !(read_result && item == tail)) {
                 lower_node(nodes, names, links, facts, sites, code, plan, state, expression);
             } else {
                 lower_bits(nodes, names, links, facts, sites, code, plan, state, expression);
@@ -363,15 +382,22 @@ func lower_list(nodes:const ExprNodes in N, names:const NameBindings in B, links
     };
 }
 
-func lower_conditional_arm(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
-                           facts:const OperandFacts in F, sites:const CompletionSites in S, ref code:NativeCommands in C,
-                           ref plan:NativePlan in P, ref state:LoweringState in R, arm:u64, at:u64, next:u64) -> bool
+func lower_result_arm(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
+                      facts:const OperandFacts in F, sites:const CompletionSites in S, ref code:NativeCommands in C,
+                      ref plan:NativePlan in P, ref state:LoweringState in R,
+                      arm:u64, at:u64, next:u64, read_result:bool) -> bool
     where {const owner N, const owner B, const owner L, const owner F, const owner S, owner C, owner P, owner R} {
     val used <- scalar_kind(facts[at].kind) && facts[at].discarded_result == 0u8;
-    if (used && scalar_kind(facts[arm].kind) && facts[at].reception == independent_value()) {
-        lower_bits(nodes, names, links, facts, sites, code, plan, state, arm);
+    val has_result <- used && scalar_kind(facts[arm].kind);
+    if (has_result && nodes[at].kind == conditional_node() && facts[at].reception == independent_value()) {
+        # A mixed conditional reads a selected target after the arm completes.
+        lower_completed_bits(nodes, names, links, facts, sites, code, plan, state, arm);
     } else {
-        lower_node(nodes, names, links, facts, sites, code, plan, state, arm);
+        if (has_result && read_result) {
+            lower_bits(nodes, names, links, facts, sites, code, plan, state, arm);
+        } else {
+            lower_node(nodes, names, links, facts, sites, code, plan, state, arm);
+        };
     };
     if (!state.live || plan.diagnostic != 0u8) { return false; } else {};
     if (used) { emit(code, plan, copy_word(), slot(at), slot(arm)); } else {};
@@ -381,7 +407,7 @@ func lower_conditional_arm(nodes:const ExprNodes in N, names:const NameBindings 
 
 func lower_conditional(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                        facts:const OperandFacts in F, sites:const CompletionSites in S, ref code:NativeCommands in C,
-                       ref plan:NativePlan in P, ref state:LoweringState in R, at:u64) -> void
+                       ref plan:NativePlan in P, ref state:LoweringState in R, at:u64, read_result:bool) -> void
     where {const owner N, const owner B, const owner L, const owner F, const owner S, owner C, owner P, owner R} {
     val condition <- nodes[at].left;
     lower_bits(nodes, names, links, facts, sites, code, plan, state, condition);
@@ -391,28 +417,17 @@ func lower_conditional(nodes:const ExprNodes in N, names:const NameBindings in B
     val joined <- new_block(plan);
     command(code, plan, branch_equal(), slot(condition), 0u64, no, yes);
     position(code, plan, state, yes);
-    val yes_continues <- lower_conditional_arm(nodes, names, links, facts, sites, code, plan, state, nodes[at].right, at, joined);
+    val yes_continues <- lower_result_arm(nodes, names, links, facts, sites, code, plan, state,
+                                         nodes[at].right, at, joined, read_result);
     position(code, plan, state, no);
-    val no_continues <- lower_conditional_arm(nodes, names, links, facts, sites, code, plan, state, nodes[at].number, at, joined);
+    val no_continues <- lower_result_arm(nodes, names, links, facts, sites, code, plan, state,
+                                        nodes[at].number, at, joined, read_result);
     if (yes_continues || no_continues) { position(code, plan, state, joined); } else {};
-}
-
-func lower_try_arm(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
-                   facts:const OperandFacts in F, sites:const CompletionSites in S, ref code:NativeCommands in C,
-                   ref plan:NativePlan in P, ref state:LoweringState in R, arm:u64, at:u64, next:u64) -> bool
-    where {const owner N, const owner B, const owner L, const owner F, const owner S, owner C, owner P, owner R} {
-    lower_node(nodes, names, links, facts, sites, code, plan, state, arm);
-    if (!state.live || plan.diagnostic != 0u8) { return false; } else {};
-    if (scalar_kind(facts[at].kind) && facts[at].discarded_result == 0u8) {
-        emit(code, plan, copy_word(), slot(at), slot(arm));
-    } else {};
-    finish_block(code, plan, state, next);
-    return true;
 }
 
 func lower_handlers(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                     facts:const OperandFacts in F, sites:const CompletionSites in S, ref code:NativeCommands in C,
-                    ref plan:NativePlan in P, ref state:LoweringState in R, at:u64, next:u64) -> bool
+                    ref plan:NativePlan in P, ref state:LoweringState in R, at:u64, next:u64, read_result:bool) -> bool
     where {const owner N, const owner B, const owner L, const owner F, const owner S, owner C, owner P, owner R} {
     val normal <- false;
     val clause <- first_item(nodes, nodes[at].right);
@@ -426,7 +441,8 @@ func lower_handlers(nodes:const ExprNodes in N, names:const NameBindings in B, l
         position(code, plan, state, handler);
         state.caught_failure <- if (sites[handler].retains_caught != 0u8) { save_failure(code, plan) } else { no_node() };
         emit(code, plan, word_constant(), pending_category(), 0u64);
-        if (lower_try_arm(nodes, names, links, facts, sites, code, plan, state, nodes[handler].right, at, next)) {
+        if (lower_result_arm(nodes, names, links, facts, sites, code, plan, state,
+                             nodes[handler].right, at, next, read_result)) {
             (normal <- true):void;
         } else {};
         state.caught_failure <- enclosing_failure;
@@ -461,7 +477,7 @@ func lower_finally(nodes:const ExprNodes in N, names:const NameBindings in B, li
 
 func lower_try(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                facts:const OperandFacts in F, sites:const CompletionSites in S, ref code:NativeCommands in C,
-               ref plan:NativePlan in P, ref state:LoweringState in R, at:u64) -> void
+               ref plan:NativePlan in P, ref state:LoweringState in R, at:u64, read_result:bool) -> void
     where {const owner N, const owner B, const owner L, const owner F, const owner S, owner C, owner P, owner R} {
     val last <- nodes[at].right;
     val has_finally <- nodes[last].kind == finally_clause_node();
@@ -491,9 +507,9 @@ func lower_try(nodes:const ExprNodes in N, names:const NameBindings in B, links:
     } else {};
     val on_failure <- if (has_finally) { after_arm } else { outer_exception };
     state.exception_target <- if (has_catches) { at } else { on_failure };
-    val body <- lower_try_arm(nodes, names, links, facts, sites, code, plan, state, nodes[at].left, at, after_arm);
+    val body <- lower_result_arm(nodes, names, links, facts, sites, code, plan, state, nodes[at].left, at, after_arm, read_result);
     state.exception_target <- on_failure;
-    val handled <- lower_handlers(nodes, names, links, facts, sites, code, plan, state, at, after_arm);
+    val handled <- lower_handlers(nodes, names, links, facts, sites, code, plan, state, at, after_arm, read_result);
     state.exception_target <- outer_exception;
     state.return_target <- outer_return;
     state.return_slot <- outer_slot;
@@ -549,9 +565,9 @@ func lower_return(nodes:const ExprNodes in N, names:const NameBindings in B, lin
     finish_block(code, plan, state, state.return_target);
 }
 
-func lower_node(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
-                facts:const OperandFacts in F, sites:const CompletionSites in S, ref code:NativeCommands in C,
-                ref plan:NativePlan in P, ref state:LoweringState in R, at:u64) -> void
+func lower_expression(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
+                      facts:const OperandFacts in F, sites:const CompletionSites in S, ref code:NativeCommands in C,
+                      ref plan:NativePlan in P, ref state:LoweringState in R, at:u64, read_result:bool) -> void
     where {const owner N, const owner B, const owner L, const owner F, const owner S, owner C, owner P, owner R} {
     if (!state.live || plan.diagnostic != 0u8) { return; } else {};
     plan.node <- at;
@@ -573,7 +589,7 @@ func lower_node(nodes:const ExprNodes in N, names:const NameBindings in B, links
         val destination <- if (scalar_kind(facts[at].kind) && facts[at].discarded_result == 0u8) {
             slot(at)
         } else { no_node() };
-        lower_list(nodes, names, links, facts, sites, code, plan, state, nodes[at].left, destination);
+        lower_list(nodes, names, links, facts, sites, code, plan, state, nodes[at].left, destination, read_result);
         return;
     } else {};
     if (kind == full_scope_node()) {
@@ -603,7 +619,10 @@ func lower_node(nodes:const ExprNodes in N, names:const NameBindings in B, links
         lower_binary(nodes, names, links, facts, sites, code, plan, state, at);
         return;
     } else {};
-    if (kind == conditional_node()) { lower_conditional(nodes, names, links, facts, sites, code, plan, state, at); return; } else {};
+    if (kind == conditional_node()) {
+        lower_conditional(nodes, names, links, facts, sites, code, plan, state, at, read_result);
+        return;
+    } else {};
     if (kind == call_node() || kind == behave_node()) {
         lower_call(nodes, names, links, facts, sites, code, plan, state, at);
         return;
@@ -615,7 +634,7 @@ func lower_node(nodes:const ExprNodes in N, names:const NameBindings in B, links
     } else {};
     if (kind == deferred_block_node()) { emit(code, plan, word_constant(), slot(at), 1u64); return; } else {};
     if (kind == try_node()) {
-        lower_try(nodes, names, links, facts, sites, code, plan, state, at);
+        lower_try(nodes, names, links, facts, sites, code, plan, state, at, read_result);
         return;
     } else {};
     if (kind == return_node()) { lower_return(nodes, names, links, facts, sites, code, plan, state, at); return; } else {};
@@ -739,7 +758,7 @@ func lower_full_scope(nodes:const ExprNodes in N, names:const NameBindings in B,
     state.return_slot <- destination;
     state.local_return <- false;
     initialize_defer_flags(sites, code, plan, scope, syntax_len(nodes));
-    lower_list(nodes, names, links, facts, sites, code, plan, state, nodes[scope].left, destination);
+    lower_list(nodes, names, links, facts, sites, code, plan, state, nodes[scope].left, destination, false);
     if (plan.diagnostic != 0u8) { return; } else {};
     val normal <- state.live || state.local_return;
     if (state.live) { finish_block(code, plan, state, cleanup); } else {};
@@ -784,7 +803,7 @@ func lower_activation(nodes:const ExprNodes in N, names:const NameBindings in B,
     if (check_return) { emit(code, plan, word_constant(), return_ready, 0u64); } else {};
     initialize_defer_flags(sites, code, plan, scope, syntax_len(nodes));
     if (program) {
-        lower_list(nodes, names, links, facts, sites, code, plan, state, nodes[scope].left, no_node());
+        lower_list(nodes, names, links, facts, sites, code, plan, state, nodes[scope].left, no_node(), false);
     } else {
         receive_formals(nodes, links, code, plan, callable_head(nodes, scope));
         lower_node(nodes, names, links, facts, sites, code, plan, state, body);

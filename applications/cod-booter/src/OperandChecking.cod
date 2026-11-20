@@ -456,37 +456,27 @@ func merge_result(ref facts:OperandFacts in F, at:u64, kind:u8) -> u8 where {own
     return 0u8;
 }
 
-func merge_guard_result(ref facts:OperandFacts in F, at:u64, arm:u64, discard:bool) -> u8 where {owner F} {
-    val kind <- facts[arm].kind;
-    if (facts[at].arm_result != 0u8 && scalar_kind(kind) && facts[arm].reception != independent_value()) {
-        return unproved_result_contract();
-    } else {};
-    return merge_result(facts, at, if (discard && scalar_kind(kind)) { void_result() } else { kind });
-}
-
-func check_conditional(nodes:const ExprNodes in N, ref facts:OperandFacts in F, at:u64) -> u8
+func merge_arm_result(nodes:const ExprNodes in N, ref facts:OperandFacts in F, at:u64, arm:u64) -> u8
     where {const owner N, owner F} {
-    val condition <- nodes[at].left;
-    if (facts[condition].kind == never_result()) { set_result(facts, at, never_result()); return 0u8; } else {};
-    if (require_typed_bits(nodes, facts, condition, scalar_bool()) != 0u8) { return expected_boolean_condition(); } else {};
-    val yes <- nodes[at].right;
-    val no <- nodes[at].number;
-    val kind <- facts[yes].kind;
-    if (kind == 0u8 || facts[no].kind == 0u8) { return unproved_result_contract(); } else {};
-    if (kind == never_result()) { copy_fact(facts, at, no); return 0u8; } else {};
-    if (facts[no].kind == never_result()) { copy_fact(facts, at, yes); return 0u8; } else {};
-    if (kind != facts[no].kind) { return unproved_result_contract(); } else {};
-    val left <- facts[yes].reception;
-    val right <- facts[no].reception;
+    val kind <- facts[arm].kind;
+    if (kind == 0u8) { return unproved_result_contract(); } else {};
+    if (kind == never_result()) { return 0u8; } else {};
+    if (facts[at].kind == 0u8) {
+        copy_fact(facts, at, arm);
+        return 0u8;
+    } else {};
+    if (kind != facts[at].kind) { return unproved_result_contract(); } else {};
+    val left <- facts[at].reception;
+    val right <- facts[arm].reception;
     val nullable <- left == nullable_ptr() || right == nullable_ptr();
     if (kind == void_result() || left == independent_value() || right == independent_value()) {
         if (nullable) { return unproved_nonnull_borrow(); } else {};
         set_result(facts, at, kind);
         return 0u8;
     } else {};
-    val owner_site <- facts[yes].owner;
-    if (owner_site == no_node() || facts[no].owner == no_node()) { return unproved_owner(); } else {};
-    if (owner_site != facts[no].owner) { return owner_conflict(nodes, owner_site, facts[no].owner); } else {};
+    val owner_site <- facts[at].owner;
+    if (owner_site == no_node() || facts[arm].owner == no_node()) { return unproved_owner(); } else {};
+    if (owner_site != facts[arm].owner) { return owner_conflict(nodes, owner_site, facts[arm].owner); } else {};
     val readonly <- left == readonly_place() || right == readonly_place();
     if (readonly && nullable) { return unproved_result_contract(); } else {};
     val reception <- if (readonly) { readonly_place() } else { if (nullable) { nullable_ptr() } else { borrowed_ref() } };
@@ -494,10 +484,39 @@ func check_conditional(nodes:const ExprNodes in N, ref facts:OperandFacts in F, 
     return 0u8;
 }
 
+func check_conditional(nodes:const ExprNodes in N, ref facts:OperandFacts in F, at:u64) -> u8
+    where {const owner N, owner F} {
+    val condition <- nodes[at].left;
+    if (facts[condition].kind == never_result()) { set_result(facts, at, never_result()); return 0u8; } else {};
+    if (require_typed_bits(nodes, facts, condition, scalar_bool()) != 0u8) { return expected_boolean_condition(); } else {};
+    val diagnostic <- merge_arm_result(nodes, facts, at, nodes[at].right);
+    if (diagnostic != 0u8) { return diagnostic; } else {};
+    diagnostic <- merge_arm_result(nodes, facts, at, nodes[at].number);
+    if (diagnostic == 0u8 && facts[at].kind == 0u8) { set_result(facts, at, never_result()); } else {};
+    return diagnostic;
+}
+
+func merge_guard_result(nodes:const ExprNodes in N, ref facts:OperandFacts in F, at:u64, arm:u64, discard:bool) -> u8
+    where {const owner N, owner F} {
+    val kind <- facts[arm].kind;
+    if (discard && scalar_kind(kind)) { return merge_result(facts, at, void_result()); } else {};
+    if (facts[at].arm_result == 0u8 || !scalar_kind(kind)) { return merge_result(facts, at, kind); } else {};
+    if (facts[arm].reception == nullable_ptr() && facts[at].discarded_result == 0u8) {
+        return unproved_nonnull_borrow();
+    } else {};
+    # A native result slot can hold either bits or a target. A guard with
+    # both would need to retain that distinction until its finalizer exits.
+    if (scalar_kind(facts[at].kind) &&
+        ((facts[at].reception == independent_value()) != (facts[arm].reception == independent_value()))) {
+        return unproved_result_contract();
+    } else {};
+    return merge_arm_result(nodes, facts, at, arm);
+}
+
 func check_try_result(nodes:const ExprNodes in N, links:const NameWork in L, ref facts:OperandFacts in F, at:u64) -> u8
     where {const owner N, const owner L, owner F} {
     val discard <- nodes[at].number == discarded_guard_result();
-    val diagnostic <- merge_guard_result(facts, at, nodes[at].left, discard);
+    val diagnostic <- merge_guard_result(nodes, facts, at, nodes[at].left, discard);
     if (diagnostic != 0u8) { return diagnostic; } else {};
     val clause <- first_item(nodes, nodes[at].right);
     val arm <- no_node();
@@ -509,7 +528,7 @@ func check_try_result(nodes:const ExprNodes in N, links:const NameWork in L, ref
         } else {};
         arm <- nodes[clause].right;
         if (nodes[clause].kind == catch_clause_node()) {
-            diagnostic <- merge_guard_result(facts, at, nodes[arm].right, discard);
+            diagnostic <- merge_guard_result(nodes, facts, at, nodes[arm].right, discard);
             if (diagnostic != 0u8) { return diagnostic; } else {};
         } else {
             kind <- facts[arm].kind;

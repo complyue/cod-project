@@ -120,3 +120,7 @@ Measure **steady-state throughput** on warmed, equivalent workloads and report a
 | One-line cleanup | Use `defer init(...)()` under D-17's selected call/block timing. | Native cleanup capture/release contract, leak-free registration failure and actual binding evidence. |
 
 Current implementation evidence belongs with the booter workloads and the seed capabilities they exercise.
+
+### Guarded scalar results
+
+The native module compiler can retain a compatible non-null scalar target from a `try` used as a conditional arm. A value read within the guard prepares its bits before `finally`. When the enclosing conditional joins the guarded target with independent bits, it reads the selected target after the guard completes. The current subset requires one result category across the completing branches of that guard. It admits a nullable target from a guarded arm under explicit discard.
