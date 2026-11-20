@@ -10950,10 +10950,15 @@ class ScalarChecker {
       if (local && !implicit && target && target->kind == Type::procedure)
         note_type_allocation(state);
       if (!local && !expr.intrinsic && state.exits) note_family_type_capture(state, named_family(expr.text, &state));
+      const bool ordered = state.required || state.selections.tracking;
       auto probe = state;
-      probe.required = false;
-      probe.exits = nullptr;
-      probe.initialization = TypeEvidenceState::InitializationCheck::suppressed;
+      // Only a traversal followed by ordered checking is speculative.
+      // Result inference carries the operand traversal into the continuation.
+      if (ordered) {
+        probe.required = false;
+        probe.exits = nullptr;
+        probe.initialization = TypeEvidenceState::InitializationCheck::suppressed;
+      }
       std::vector<ArgumentEvidence> evidence(expr.children.size());
       std::vector<ViewEvidence> hinted_views(expr.children.size());
       std::vector<TargetEvidence> hinted_targets;
@@ -10969,8 +10974,7 @@ class ScalarChecker {
         if (!hinted_targets.empty()) hinted_targets[i] = probe.target;
         if (!evidence[i].type) unresolved.emplace(i, std::move(before));
       }
-      const bool ordered = state.required || state.selections.tracking;
-      if (!ordered) state = probe;
+      if (!ordered) state = std::move(probe);
       std::vector<Type> arguments;
       Access access;
       Owners owners;

@@ -124,6 +124,13 @@ runner.CASES = {
     'function_tail_and_explicit_return_share_inference': (IO+
         'func sample(flag:bool){if(flag){return 3u32;}else{};12u64;}'
         'behave @print(sample(true));behave @print(sample(false));', 0, '3\n12\n', ''),
+    'function_tail_after_a_named_call_supplies_result_evidence': (IO+IDENTITY+
+        'func sample(n:u64){identity(n);n+1u64;}behave @print(sample(6u64));', 0, '7\n', ''),
+    'conditional_full_scope_tail_is_delivered_after_selected_cleanup': (IO+
+        'proc show(val n:u64)->void{behave @print(n);return;}'
+        'proc select(flag:bool)->u64{return if(flag){{defer show(2u64);show(1u64);7u64;}}'
+        'else{{defer show(4u64);show(3u64);9u64;}};}'
+        'show(select(true));show(select(false));', 0, '1\n2\n7\n3\n4\n9\n', ''),
     'recursive_function_tail_has_independent_anchor': (IO+
         'func sum_to(n:u64){if(n==0u64){return 0u64;}else{};n+sum_to(n-1u64)}'
         'behave @print(sum_to(4u64));', 0, '10\n', ''),
