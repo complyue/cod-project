@@ -219,6 +219,25 @@ class ScalarChecker {
       origins.insert(target.origins.begin(), target.origins.end());
     }
   } payload_writes_;
+  struct ProductInput {
+    enum class Role { direct, slot, referent };
+    size_t parent, field;
+    const CheckedSchema::Field *description;
+    Role role;
+    const Type &type() const {
+      static const Type slot_type = Type::void_type;
+      return role == Role::slot ? slot_type : description->type;
+    }
+  };
+  struct DeferredProductWrites {
+    std::vector<PayloadWrites> operands;
+    std::vector<ProductInput> fields;
+    std::map<size_t, std::set<size_t>> bindings;
+    std::set<size_t> payloads;
+    Location at;
+  };
+  std::vector<DeferredProductWrites> deferred_product_writes_;
+  using ProjectionPaths = std::map<size_t, CleanupEquations::ConditionClauses>;
   struct LoopState {
     size_t first, last;
     std::set<size_t> bindings, rebound, expired;
@@ -2027,7 +2046,7 @@ class ScalarChecker {
     return cleanup_.read(place);
   }
   CleanupEquations::Reads prepared_binding_reads(const CheckedOperation &view, const Location &at,
-      bool nonnull = false, const std::set<size_t> &initialized = {}) {
+      bool nonnull = false, const std::set<size_t> &initialized = {}, const ProjectionPaths *paths = nullptr) {
     CleanupEquations::Reads reads;
     if (!proving_) return reads;
     const auto incoming = physical_slots(view.slots);
@@ -2052,6 +2071,9 @@ class ScalarChecker {
         requirement.selection = view.binding ? view.binding : std::optional<size_t>{id};
         requirement.entry_initialized = initialized;
         requirement.entry_nonnull = initialized;
+        if (paths) if (const auto slot = bindings_->at(id).embedded_slot) {
+          if (const auto path = paths->find(*slot); path != paths->end()) requirement.when = path->second;
+        }
       }
     }
     return reads;
@@ -2365,9 +2387,24 @@ class ScalarChecker {
     }
   }
   struct InvocationSlots {
+    struct Projection {
+      std::set<size_t> bindings;
+      bool absent_parent;
+      size_t slot_input;
+    };
     bool all;
-    std::set<size_t> projected;
+    std::map<size_t, Projection> projected;
+    std::map<size_t, ProjectionPaths> paths;
     bool contains(size_t input) const { return all || projected.contains(input); }
+    const ProjectionPaths *path(size_t input) const {
+      const auto found = paths.find(input);
+      return found == paths.end() ? nullptr : &found->second;
+    }
+    std::optional<size_t> exact(size_t input) const {
+      const auto found = projected.find(input);
+      if (found == projected.end() || found->second.absent_parent || found->second.bindings.size() != 1) return {};
+      return *found->second.bindings.begin();
+    }
   };
   CleanupEquations::ConditionClauses instantiate_conditions(const CleanupEquations::ConditionClauses &alternatives,
       const std::vector<CleanupEquations::BooleanValue> &inputs, const std::vector<CheckedOperation> &views,
@@ -2383,7 +2420,7 @@ class ScalarChecker {
       for (const auto parameter : known.present) {
         const auto &view = views.at(parameter);
         if (slots.projected.contains(parameter)) {
-          facts.conditions.add({{}, view.binding.value(), null_target, false});
+          if (const auto binding = slots.exact(parameter)) facts.conditions.add({{}, *binding, null_target, false});
           continue;
         }
         const auto present = selected_input(view.targets);
@@ -2409,8 +2446,9 @@ class ScalarChecker {
       // Caller-slot invocations do not provide a stable selection snapshot here.
       for (const auto parameter : known.absent) {
         const auto &view = views.at(parameter);
-        if (slots.projected.contains(parameter)) facts.conditions.add({{}, view.binding.value(), null_target, true});
-        else if (!slots.contains(parameter) && view.binding) facts.absent_bindings.emplace(*view.binding, view.selection_versions);
+        if (slots.projected.contains(parameter)) {
+          if (const auto binding = slots.exact(parameter)) facts.conditions.add({{}, *binding, null_target, true});
+        } else if (!slots.contains(parameter) && view.binding) facts.absent_bindings.emplace(*view.binding, view.selection_versions);
       }
       CleanupEquations::ConditionClauses clauses;
       CleanupEquations::add_condition(clauses, std::move(facts));
@@ -2534,6 +2572,64 @@ class ScalarChecker {
             return payload_targets_may_share(target, place);
           })) writes.places.insert(place);
   }
+  std::set<size_t> possible_selections(const std::set<size_t> &bindings, std::set<size_t> selected = {}) const {
+    for (const auto binding : bindings) {
+      const auto &targets = possible_targets_.at(binding);
+      selected.insert(targets.begin(), targets.end());
+    }
+    return selected;
+  }
+  std::set<size_t> product_field_targets(const std::set<size_t> &containers, size_t index, const Location &at,
+                                         bool preserve_null) const {
+    std::set<size_t> places;
+    for (const auto place : containers) {
+      if (place == null_target) {
+        if (preserve_null) places.insert(place);
+      } else {
+        const auto &fields = storage(place).fields;
+        if (index >= fields.size()) implementation_gap(at, "product target with unproved field storage");
+        places.insert(fields[index]);
+      }
+    }
+    return places;
+  }
+  std::set<size_t> embedded_bindings(const std::set<size_t> &slots) const {
+    std::set<size_t> bindings;
+    for (const auto slot : slots) if (slot != null_target) bindings.insert(storage(slot).binding);
+    return bindings;
+  }
+  bool discover_product_writes(const DeferredProductWrites &call) {
+    std::vector<std::set<size_t>> inputs;
+    for (const auto &root : call.operands) inputs.push_back(possible_selections(root.origins, root.places));
+    for (const auto &field : call.fields) {
+      const auto &parent = inputs[field.parent];
+      if (field.role == ProductInput::Role::referent)
+        inputs.push_back(possible_selections(embedded_bindings(parent), intersect(parent, {null_target})));
+      else inputs.push_back(product_field_targets(parent, field.field, call.at, true));
+    }
+    bool changed = false;
+    for (const auto &[destination, sources] : call.bindings) {
+      const auto slots = overlapping_slots(embedded_bindings(inputs[destination]));
+      std::set<size_t> selected;
+      for (const auto source : sources) {
+        if (source == null_target) selected.insert(null_target);
+        else selected.insert(inputs[source].begin(), inputs[source].end());
+      }
+      for (const auto slot : slots) {
+        rebound_.insert(slot);
+        auto &bound = possible_targets_.at(slot);
+        const auto before = bound.size();
+        bound.insert(selected.begin(), selected.end());
+        // Discovery knows which slots a path can reach. The checked call
+        // relation supplies finer null provenance when it is available.
+        if (selected.contains(null_target)) changed |= possible_null_sources_.at(slot).insert(null_target).second;
+        changed |= before != bound.size();
+      }
+    }
+    for (const auto input : call.payloads)
+      payload_writes_.places.insert(inputs[input].begin(), inputs[input].end());
+    return changed;
+  }
   void solve_targets() {
     bool changed;
     do {
@@ -2546,6 +2642,7 @@ class ScalarChecker {
         possible_null_sources_[i].insert(possible_null_sources_[source].begin(), possible_null_sources_[source].end());
         changed = changed || nulls != possible_null_sources_[i].size();
       }
+      for (const auto &call : deferred_product_writes_) changed |= discover_product_writes(call);
     } while (changed);
     catalog_storage_ = *storage_;
     resolve_payload_writes(payload_writes_);
@@ -2738,11 +2835,15 @@ class ScalarChecker {
   }
   static std::optional<CleanupEquations::Initialization> instantiate_initialization(
       const std::optional<CleanupEquations::Initialization> &conditions, const std::vector<CheckedOperation> &views,
-      const std::set<size_t> &late = {}, std::optional<size_t> snapshot_frame = {}) {
+      const InvocationSlots &slots = {}, std::optional<size_t> snapshot_frame = {}) {
     if (!conditions) return {};
     CleanupEquations::Initialization result;
     for (const auto &input : *conditions) {
-      if (late.contains(input.id)) { result.emplace(views.at(input.id).binding.value()); continue; }
+      if (const auto late = slots.projected.find(input.id); late != slots.projected.end()) {
+        if (late->second.absent_parent) return {};
+        for (const auto binding : late->second.bindings) result.emplace(binding);
+        continue;
+      }
       const auto &source = views.at(input.id).initialization;
       if (!source) return {};
       if (snapshot_frame) {
@@ -2981,12 +3082,18 @@ class ScalarChecker {
       if (slots.contains(parameter)) {
         std::set<size_t> initialized;
         for (const auto other : before) if (slots.contains(other)) {
-          const auto selected = physical_slots(views.at(other).slots);
-          if (selected.size() == 1) initialized.insert(*selected.begin());
+          if (slots.projected.contains(other)) {
+            if (const auto binding = slots.exact(other)) initialized.insert(*binding);
+          } else {
+            const auto selected = physical_slots(views.at(other).slots);
+            if (selected.size() == 1) initialized.insert(*selected.begin());
+          }
         }
-        auto required = prepared_binding_reads(view, at, false, initialized);
+        const auto projection = slots.projected.find(parameter);
+        const auto *paths = projection == slots.projected.end() ? nullptr : slots.path(projection->second.slot_input);
+        auto required = prepared_binding_reads(view, at, false, initialized, paths);
         for (auto &[read, requirement] : required) {
-          requirement.when = when;
+          requirement.when = CleanupEquations::conjoin_conditions(requirement.when, when);
           requirement.initialized = known;
           requirement.uninitialized = missing;
         }
@@ -2994,7 +3101,7 @@ class ScalarChecker {
         continue;
       }
       if (view.initialized_target()) continue;
-      auto initialization = instantiate_initialization(initialized_inputs, views, slots.projected, initialization_frame());
+      auto initialization = instantiate_initialization(initialized_inputs, views, slots, initialization_frame());
       if (initialization && initialization->empty()) continue;
       const bool same_selection = std::any_of(before.begin(), before.end(), [&](size_t other) {
         return !slots.contains(other) && same_selected_reference(view, views.at(other));
@@ -3010,6 +3117,9 @@ class ScalarChecker {
         if (const auto condition = selected_target(view, place, true)) {
           requirement.when = CleanupEquations::conjoin_conditions(requirement.when, {*condition});
         }
+        if (const auto *paths = slots.path(parameter))
+          if (const auto path = paths->find(place); path != paths->end())
+            requirement.when = CleanupEquations::conjoin_conditions(requirement.when, path->second);
       }
     }
     std::map<size_t, CleanupEquations::Effects> effects;
@@ -3020,7 +3130,7 @@ class ScalarChecker {
       if (!slots.all) if (const auto outcome = target.present.find(reason); outcome != target.present.end())
         for (const auto parameter : outcome->second) {
           if (slots.projected.contains(parameter)) {
-            effect.selections.entry_nonnull.insert(views.at(parameter).binding.value());
+            if (const auto binding = slots.exact(parameter)) effect.selections.entry_nonnull.insert(*binding);
             continue;
           }
           const auto present = selected_input(views.at(parameter).targets);
@@ -3034,8 +3144,8 @@ class ScalarChecker {
           initialize_call_selection(effect.selections, view, prepared);
         }
         const auto selected = physical_slots(view.slots);
-        const auto binding = slots.contains(parameter) ? (selected.size() == 1 ? std::optional<size_t>{*selected.begin()} : std::nullopt)
-                                   : selection(view);
+        const auto binding = slots.projected.contains(parameter) ? slots.exact(parameter) :
+            slots.all ? (selected.size() == 1 ? std::optional<size_t>{*selected.begin()} : std::nullopt) : selection(view);
         if (binding) {
           if (slots.contains(parameter)) effect.selections.initialize(*binding);
           if (!slots.projected.contains(parameter)) effect.selections.refine(*binding, false);
@@ -3047,7 +3157,9 @@ class ScalarChecker {
           // target is initialized if present, independently of slot updates.
           if (!slots.contains(parameter) || !initialized_when_present(parameter, missing)) continue;
           const auto selected = physical_slots(views.at(parameter).slots);
-          if (selected.size() == 1) effect.selections.entry_initialized.insert(*selected.begin());
+          if (slots.projected.contains(parameter)) {
+            if (const auto binding = slots.exact(parameter)) effect.selections.entry_initialized.insert(*binding);
+          } else if (selected.size() == 1) effect.selections.entry_initialized.insert(*selected.begin());
         }
     }
     return effects;
@@ -3107,6 +3219,8 @@ class ScalarChecker {
           else if (slots.contains(input)) {
             const auto incoming = physical_slots(views.at(input).slots);
             selected.entries.insert(incoming.begin(), incoming.end());
+            if (const auto projection = slots.projected.find(input); projection != slots.projected.end() && projection->second.absent_parent)
+              selected.null_sources.insert(null_target);
           } else {
             const auto &view = views.at(input);
             if (view.targets.contains(null_target)) {
@@ -3260,6 +3374,83 @@ class ScalarChecker {
       if (scope > cleanup) fail(at, "deferred borrowed argument does not outlive its cleanup scope");
     }
   }
+  void discover_deferred_product_call(const std::vector<ProductInput> &fields, const std::vector<CheckedOperation> &operands,
+                                      const CallEffects &summary, const Location &at) {
+    DeferredProductWrites writes{{}, fields, {}, {}, at};
+    for (const auto &[destination, sources] : summary.binding_sources)
+      if (destination >= operands.size()) writes.bindings.emplace(destination, sources);
+    for (const auto input : summary.written_inputs)
+      if (input >= operands.size()) writes.payloads.insert(input);
+    if (!writes.bindings.empty() || !writes.payloads.empty()) {
+      writes.operands.resize(operands.size());
+      for (size_t i = 0; i < operands.size(); ++i) writes.operands[i].include(operands[i]);
+      deferred_product_writes_.push_back(std::move(writes));
+    }
+  }
+  std::vector<CheckedOperation> project_call_fields(const std::vector<ProductInput> &fields,
+      const std::vector<CheckedOperation> &operands, const Location &at, bool at_invocation, InvocationSlots &invocation_slots) {
+    auto projected = operands;
+    for (const auto &field : fields) {
+      const auto input = projected.size();
+      const auto *parent_paths = invocation_slots.path(field.parent);
+      if (field.role != ProductInput::Role::referent) {
+        auto place = project_product(projected.at(field.parent), field.field, at, true);
+        place.type = field.type();
+        if (field.role == ProductInput::Role::slot) {
+          place.slots = embedded_bindings(place.targets);
+          if (place.place) place.binding = storage(*place.place).binding;
+        }
+        if (parent_paths) {
+          auto &paths = invocation_slots.paths[input];
+          for (const auto &[container, alternatives] : *parent_paths)
+            for (const auto &facts : alternatives)
+              CleanupEquations::add_condition(paths[storage(container).fields[field.field]], facts);
+        }
+        projected.push_back(std::move(place));
+        continue;
+      }
+      auto slot = projected.at(field.parent);
+      const bool changing = at_invocation && (parent_paths || std::ranges::any_of(slot.slots,
+          [&](size_t binding) { return rebound_.contains(binding); }));
+      const bool absent_parent = slot.targets.contains(null_target);
+      auto referent = select_product_reference(std::move(slot), *field.description, at, true, true);
+      if (changing) {
+        invocation_slots.projected.emplace(input, InvocationSlots::Projection{referent.slots, absent_parent, field.parent});
+        if (field.type().kind == Type::product) {
+          // Widen only the invocation-time geometry. Registration facts
+          // about the currently selected product cannot follow a rebind.
+          auto targets = possible_selections(referent.slots, intersect(referent.targets, {null_target}));
+          for (const auto target : targets)
+            if (target != null_target && !lexical_.available.contains(target))
+              implementation_gap(at, "deferred product borrow with unproved invocation-time storage lifetime");
+          referent.selection_identity.reset();
+          referent.nullness.reset();
+          referent.null_sources.clear();
+          referent.initialization.reset();
+          select_targets(referent, targets);
+          auto &paths = invocation_slots.paths[input];
+          for (const auto binding : referent.slots) {
+            const CleanupEquations::ConditionClauses *parent = nullptr;
+            if (parent_paths) {
+              const auto slot = bindings_->at(binding).embedded_slot.value();
+              if (const auto path = parent_paths->find(slot); path != parent_paths->end()) parent = &path->second;
+            }
+            for (const auto target : possible_targets_.at(binding)) if (target != null_target) {
+              CleanupEquations::ConditionFacts selected;
+              selected.conditions.add({{}, binding, target, true});
+              if (!parent) CleanupEquations::add_condition(paths[target], std::move(selected));
+              else for (auto facts : *parent) {
+                facts.append(selected);
+                CleanupEquations::add_condition(paths[target], std::move(facts));
+              }
+            }
+          }
+        }
+      }
+      projected.push_back(std::move(referent));
+    }
+    return projected;
+  }
   void finish_call(const Expression &expr, const Type &contract, const CallEffects &summary,
       const std::set<size_t> &reasons, const std::vector<Type> &arguments,
       const std::vector<CheckedOperation> &operands, CheckedOperation &operation, bool read, bool discard,
@@ -3269,33 +3460,10 @@ class ScalarChecker {
     const bool embedded_updates = std::ranges::any_of(summary.binding_sources, [&](const auto &effect) {
       return effect.first >= arguments.size();
     });
-    std::set<size_t> late_referents;
-    std::vector<CheckedOperation> projected;
-    if (!fields.empty()) {
-      projected = operands;
-      for (const auto &field : fields) {
-        if (field.role != ProductInput::Role::referent) {
-          auto place = project_product(projected.at(field.parent), field.field, expr.at, true);
-          place.type = field.type();
-          if (field.role == ProductInput::Role::slot) {
-            for (const auto target : place.targets) if (target != null_target) place.slots.insert(storage(target).binding);
-            if (place.place) place.binding = storage(*place.place).binding;
-          }
-          projected.push_back(std::move(place));
-          continue;
-        }
-        auto slot = projected.at(field.parent);
-        const bool changing = prepared && proving_ && std::ranges::any_of(slot.targets, [&](size_t place) {
-              return place != null_target && rebound_.contains(storage(place).binding);
-            });
-        if (changing) {
-          if (!slot.place || !scalar_type(field.type()))
-            implementation_gap(expr.at, "deferred product borrow with an unproved invocation-time field projection");
-          late_referents.insert(projected.size());
-        }
-        projected.push_back(select_product_reference(std::move(slot), *field.description, expr.at, true, true));
-      }
-    }
+    InvocationSlots invocation_slots{};
+    if (prepared && !proving_ && !fields.empty()) discover_deferred_product_call(fields, operands, summary, expr.at);
+    const auto projected = fields.empty() ? std::vector<CheckedOperation>{} :
+        project_call_fields(fields, operands, expr.at, prepared && proving_, invocation_slots);
     const auto &views = fields.empty() ? operands : projected;
     const auto borrowed_input = [&](size_t i) {
       return i >= arguments.size() || (!contract.owners.empty() && contract.owners[i]);
@@ -3310,9 +3478,10 @@ class ScalarChecker {
     const bool has_invocation_time_slots = !immediate_scope && !summary.bindings.empty() &&
         std::ranges::any_of(operation.arguments, [](const auto &argument) { return argument.binding_slot; });
     const bool prepared_slots = prepared && has_invocation_time_slots;
-    const InvocationSlots invocation_slots{prepared_slots, late_referents};
-    const InvocationSlots observed_slots{has_invocation_time_slots, late_referents};
-    const bool late_payloads = prepared_slots || !late_referents.empty();
+    invocation_slots.all = prepared_slots;
+    auto observed_slots = invocation_slots;
+    observed_slots.all = has_invocation_time_slots;
+    const bool late_payloads = prepared_slots || !invocation_slots.projected.empty();
     const bool conditional_call = !summary.uninitialized.empty() || std::any_of(summary.reads.begin(), summary.reads.end(),
         [](const auto &read) { return !read.uninitialized.empty() || read.when != CleanupEquations::ConditionClauses{CleanupEquations::ConditionFacts{}}; });
     const auto entry_payloads = prepared ? incoming_payloads() : lexical_.exceptions;
@@ -3425,7 +3594,7 @@ class ScalarChecker {
     if (prepared_slots) {
       CleanupEquations::Reads reads;
       bool checked_entry = false;
-      for (size_t i = 0; i < views.size(); ++i) {
+      for (size_t i = 0; i < arguments.size(); ++i) {
         const auto mode = operation.arguments.at(i).mode;
         if (mode == ArgumentMode::borrowed_ptr) continue;
         const auto required = prepared_binding_reads(views[i], expr.at, mode == ArgumentMode::borrowed_ref);
@@ -5957,16 +6126,6 @@ class ScalarChecker {
       if (product && !writable) fail(owner.at, "readonly product inputs require 'const owner " + owner.name + "'");
     }
   }
-  struct ProductInput {
-    enum class Role { direct, slot, referent };
-    size_t parent, field;
-    const CheckedSchema::Field *description;
-    Role role;
-    const Type &type() const {
-      static const Type slot_type = Type::void_type;
-      return role == Role::slot ? slot_type : description->type;
-    }
-  };
   std::vector<ProductInput> product_inputs(const std::vector<Type> &arguments, const Location &at) const {
     std::vector<ProductInput> fields;
     const auto input_type = [&](size_t input) -> const Type & {
@@ -5999,16 +6158,7 @@ class ScalarChecker {
                                     bool preserve_null = false) {
     const auto &schema = product_schema(parent.type, at);
     const auto &field = schema.fields.at(index);
-    std::set<size_t> places;
-    for (const auto place : parent.targets) {
-      if (place == null_target) {
-        if (preserve_null) places.insert(place);
-        continue;
-      }
-      if (storage(place).fields.size() != schema.fields.size())
-        implementation_gap(at, "product target with unproved field storage");
-      places.insert(storage(place).fields[index]);
-    }
+    const auto places = product_field_targets(parent.targets, index, at, preserve_null);
     CheckedOperation result;
     select_targets(result, places);
     if (places.contains(null_target)) {
@@ -14053,7 +14203,7 @@ class ScalarChecker {
     storage.clear(); bindings.clear(); operations.clear(); definitions_.clear();
     if (!proving) {
       possible_targets_.clear(); possible_null_sources_.clear(); target_dependencies_.clear(); catalog_storage_.clear();
-      rebound_.clear(); payload_writes_ = {}; loop_states_.clear();
+      rebound_.clear(); payload_writes_ = {}; loop_states_.clear(); deferred_product_writes_.clear();
     }
     lexical_ = {}; cleanup_ = {}; scope_storage_.clear(); checked_scope_owners_.clear(); read_sites_.clear(); external_owners_.clear();
     declared_sites_.clear(); declared_requirements_.clear();

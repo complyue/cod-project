@@ -346,6 +346,49 @@ runner.CASES = {
         'if(observed is not null){behave @print(observed);}else{};return;}'
         'proc run()->void{val missing<-make local u64;val replacement<-7u64;ref item=make Box {selected=missing;};'
         'defer fill_and_read(item,missing);item.selected=replacement;return;}run();', 2, "", "initialization"),
+    "deferred_product_read_retains_the_selected_container": (PRELUDE +
+        'data Box {ref value:u64;}proc print_value(ref entry:const Box in O) where {const owner O}{behave @print(entry.value);return;}'
+        'proc run(flag:bool)->void{val first<-7u64;val second<-11u64;val final_a<-19u64;val final_b<-23u64;'
+        'ref a=make Box {value=first;};ref b=make Box {value=second;};ptr chosen=if(flag){a}else{b};'
+        'defer print_value(chosen);chosen=b;a.value=final_a;b.value=final_b;return;}run(true);run(false);',
+        0, "19\n23\n", ""),
+    "deferred_product_rebinding_writes_only_the_saved_container": (PRELUDE +
+        'data Box {ref value:u64;}proc change(ref entry:Box in O,ref replacement:u64 in O) where {owner O}{entry.value=replacement;return;}'
+        'proc run(flag:bool)->void{val first<-7u64;val second<-11u64;val third<-19u64;'
+        'ref a=make Box {value=first;};ref b=make Box {value=second;};ptr chosen=if(flag){a}else{b};'
+        'defer{behave @print(a.value);behave @print(b.value);};defer change(chosen,third);chosen=b;return;}run(true);run(false);',
+        0, "19\n11\n7\n19\n", ""),
+    "deferred_product_rebinding_follows_a_changed_ancestor": (PRELUDE +
+        'data Leaf {ref value:u64;}data Box {ref child:Leaf;}'
+        'proc change(ref entry:Box in O,ref replacement:u64 in O) where {owner O}{entry.child.value=replacement;return;}'
+        'proc run()->void{val first<-7u64;val second<-11u64;val third<-19u64;'
+        'ref a=make Leaf {value=first;};ref b=make Leaf {value=second;};ref item=make Box {child=a;};'
+        'defer{behave @print(a.value);behave @print(b.value);};defer change(item,third);item.child=b;return;}run();',
+        0, "7\n19\n", ""),
+    "deferred_product_read_requires_the_selected_container_field_to_be_readable": (PRELUDE +
+        'data Box {ptr value:u64;}proc print_value(ref entry:const Box in O) where {const owner O}{'
+        'if(entry.value is null){return;}else{};behave @print(entry.value);return;}'
+        'proc run(flag:bool)->void{val first<-7u64;val second<-11u64;val missing<-make local u64;'
+        'ref a=make Box {value=first;};ref b=make Box {value=missing;};ptr chosen=if(flag){a}else{b};'
+        'defer print_value(chosen);chosen=a;a.value=second;return;}run(false);', 2, "", "initialization"),
+    "deferred_product_rebinding_does_not_initialize_another_candidate_slot": (PRELUDE +
+        'data Box {ptr value:u64;}proc change(ptr entry:Box in O,ref replacement:u64 in O) where {owner O}{'
+        'if(entry is not null){entry.value=replacement;{}}else{};return;}'
+        'proc run(flag:bool)->void{val first<-7u64;ptr a=make Box {value=null;};ptr b=make Box;'
+        'ptr chosen=if(flag){a}else{b};defer{behave @print((b.value is null));};defer change(chosen,first);return;}run(true);',
+        2, "", "initialization"),
+    "deferred_product_read_requires_only_the_invocation_time_ancestor": (PRELUDE +
+        'data Leaf {value:u64;}data Box {ptr child:Leaf;}'
+        'proc inspect(ref entry:const Box in O) where {const owner O}{'
+        'if(entry.child is null){return;}else{};behave @print(entry.child.value);return;}'
+        'proc run()->void{ptr first=make Leaf;ref second=make Leaf {value<-19u64;};ref item=make Box {child=first;};'
+        'defer inspect(item);item.child=second;return;}run();', 0, "19\n", ""),
+    "deferred_product_read_rejects_the_invocation_time_unready_ancestor": (PRELUDE +
+        'data Leaf {value:u64;}data Box {ptr child:Leaf;}'
+        'proc inspect(ref entry:const Box in O) where {const owner O}{'
+        'if(entry.child is null){return;}else{};behave @print(entry.child.value);return;}'
+        'proc run()->void{ref first=make Leaf {value<-7u64;};ptr second=make Leaf;ref item=make Box {child=first;};'
+        'defer inspect(item);defer{item.child=second;};return;}run();', 2, "", "initialization"),
 }
 runner.CASE_ARGUMENTS = {"shadow_error": ["-Werror=shadow"], "unrelated_warning_error": ["-Werror=missing-return"]}
 runner.EXTRA_SOURCES = [Path(__file__)]

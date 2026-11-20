@@ -5,6 +5,11 @@
 <a id="h-hlvm-candidate-20261120"></a>
 **H-HLVM-CANDIDATE-20261120.** In the project chat, the project user proposed `hlvm-basic` for running BASIC source or saving a DBMR to run later, with the prerequisite “要等 CoD 基本的 lexer/parser 已经通了的情况下再推进”, then asked to record the idea in a planning document. The [application note](applications/README.md#deferred-application-hlvm-basic) applies the executor and editable program graph from [*Algebraic Effects Is All You Need*](papers/AlgebraicEffectsIsAllYouNeed.md) to BASIC. It does not change the compiler roadmap or authorize implementation.
 
+## 2026-11-19 — Update deferred product projection coverage
+
+<a id="k-deferred-product-projections-20261119"></a>
+**K-DEFERRED-PRODUCT-PROJECTIONS-20261119.** D-28r42→43 and registry r995→996 continue [lexical product coverage](design/RegionalAndLexicalStorageRefactor.md#lexical-adts-as-part-of-the-complete-model) under [H-356](#h-356), [H-478](#h-478), [H-437](#h-437), [H-562](#h-562) and [D-17-DEFER-CHECKS](design/DesignAuthorityRegistry.md#d-17-defer-checks). Finite field paths follow the receiver saved at preparation and the product references selected at invocation. Preserve actual ownership, slot and referent readiness, and source effect order under C-63/C-65/C-72/C-93 and charter §§3.3/6.3/12. Branch-correlated projection proofs and full physical layouts retain their existing qualification. Prior coverage at `ec268d8858e644c5c85835858576e30e04c9096b:design/RegionalAndLexicalStorageRefactor.md`.
+
 ## 2026-11-19 — Update deferred product field coverage
 
 <a id="k-deferred-embedded-slot-effects-20261119"></a>

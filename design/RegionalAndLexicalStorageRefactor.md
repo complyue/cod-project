@@ -1,10 +1,10 @@
 # Regional and lexical storage: reference-model refactoring
 
-Design revision: 42 · Recorded: 2026-11-19 · Status: one-ADT placement and scoped storage semantics selected; complete layout, encoding, backend and implementation contracts remain under review.
+Design revision: 43 · Recorded: 2026-11-19 · Status: one-ADT placement and scoped storage semantics selected; complete layout, encoding, backend and implementation contracts remain under review.
 
 ## Design authority
 
-- **Lexical product coverage.** [K-DEFERRED-EMBEDDED-SLOT-EFFECTS-20261119](../CHANGELOG.md#k-deferred-embedded-slot-effects-20261119) continues the lexical ADT section under H-478, H-437, H-562 and [D-17-DEFER-CHECKS](DesignAuthorityRegistry.md#d-17-defer-checks). The [seed coverage](../tests/cod/language/README.md) records fixed lexical reference fields, finite-component readiness, ordinary call effects and invocation-time field access through a saved deferred receiver. Preserve actual owner, separate slot and referent readiness, and registration-time preparation under H-356. The full layout, transport and storage contracts retain their existing qualifications.
+- **Lexical product coverage.** [K-DEFERRED-PRODUCT-PROJECTIONS-20261119](../CHANGELOG.md#k-deferred-product-projections-20261119) continues the lexical ADT section under H-478, H-437, H-562 and [D-17-DEFER-CHECKS](DesignAuthorityRegistry.md#d-17-defer-checks). The [seed coverage](../tests/cod/language/README.md) records fixed lexical reference fields, finite-component readiness, ordinary call effects and finite invocation-time field paths through a saved deferred receiver. Preserve actual owner, separate slot and referent readiness, and registration-time preparation under H-356. The full layout, transport and storage contracts retain their existing qualifications.
 
 [H-MAKE-LEXICAL-DEFAULT-20261119](../CHANGELOG.md#h-make-lexical-default-20261119) updates P-352/P-418 for [one ADT across placements](#lexical-adts-as-part-of-the-complete-model) at r37. [D-22-MAKE-OWNER](DesignAuthorityRegistry.md#d-22-make-owner) supplies the current full lexical scope for an ordinary `make` with no contextual owner. Same-owner edges, layout, readiness and all escaping borrows still require their ordinary proofs.
 
