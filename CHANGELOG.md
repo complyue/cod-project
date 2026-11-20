@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-20 — Generate the typed SourceRevision failure interface
+
+<a id="h-source-revision-failure-20261120"></a>
+**H-SOURCE-REVISION-FAILURE-20261120.** The project user confirmed in the [SourceRevision side chat](codex://threads/01a1fa14-0ba6-7140-b34d-f0e8b86c9974) on 2026-11-20 (America/Los_Angeles), “同意，通知主线按这个方案推进：从 CoD 的 `SourceOpenException` 类型和 `SourceRevision` 的 `throws` 声明生成失败接口，手写 C 保存 `os_error` 并完成回滚，生成的 adapter 构造并抛出 owned exception。” Interop r13 and registry r1023 apply D-20-C-ACQUISITION under C-80/P-644/P-645. The checked exception identity and payload drive generation. The handwritten provider retains the native rollback responsibility. Permanent ABI, general fallible destruction and build configuration retain separate scope. The prior contract is at `2eb9d9027eaea20d52a64eb112cdc42dd2d064e3:applications/cod-booter/docs/LLVMInterop.md`.
+
 ## 2026-11-20 — Confirm C declaration direction and failed acquisition
 
 <a id="h-booter-c-declarations-20261120"></a>
