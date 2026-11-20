@@ -1,0 +1,25 @@
+using "std:exceptions" Exception;
+using "ParserStorage.cod" Tokens;
+using "ParserStorage.cod" ExprNodes;
+using "ModuleExports.cod" SelectedExports;
+using "NameResolution.cod" NameBindings;
+using "NameResolution.cod" NameWork;
+using "OperandChecking.cod" OperandFacts;
+using "OperandChecking.cod" CallOwners;
+using "CompletionChecking.cod" CompletionSites;
+using "NativeCommands.cod" NativeCommands;
+
+data "C" Scratch;
+data ScratchOpenException <: Exception { status:u32; }
+
+proc "C" Scratch(val tokens:u64, val nodes:u64, val commands:u64) throws ScratchOpenException;
+
+proc "C" scratch_use(
+    here work(ref tokens:Tokens in W, ref nodes:ExprNodes in W, ref selected:SelectedExports in W,
+              ref names:NameBindings in W, ref names_work:NameWork in W, ref operands:OperandFacts in W,
+              ref calls:CallOwners in W, ref completion:CompletionSites in W, ref commands:NativeCommands in W) -> u8,
+    handle scratch:Scratch in W) -> u8 where {owner W};
+
+export Scratch;
+export ScratchOpenException;
+export scratch_use;
