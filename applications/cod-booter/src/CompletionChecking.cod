@@ -34,6 +34,7 @@ using "NameResolution.cod" NameWork;
 using "NameResolution.cod" first_item;
 using "OperandChecking.cod" OperandFacts;
 using "OperandChecking.cod" nullable_ptr;
+using "OperandChecking.cod" never_result;
 using "ModuleExports.cod" exception_root_identity;
 using "ModuleExports.cod" null_pointer_identity;
 
@@ -52,6 +53,7 @@ data CompletionSite {
     registration:u64;
     previous_defer:u64;
     last_defer:u64;
+    replacing_try:u64;
 }
 array CompletionSites[u64]:CompletionSite;
 
@@ -73,7 +75,6 @@ func uncovered_deferred_failure() -> u8 { return 2u8; }
 func unproved_deferred_error() -> u8 { return 3u8; }
 func missing_rethrow_context() -> u8 { return 4u8; }
 func unproved_rethrow_capture() -> u8 { return 5u8; }
-func unproved_finally_completion() -> u8 { return 6u8; }
 func completion_storage_exhausted() -> u8 { return 7u8; }
 func invalid_completion_tree() -> u8 { return 8u8; }
 func unproved_incoming_exception() -> u8 { return 9u8; }
@@ -93,14 +94,17 @@ func initialize_site(ref sites:CompletionSites in X, at:u64) -> void where {owne
     sites[at].registration <- no_node();
     sites[at].previous_defer <- no_node();
     sites[at].last_defer <- no_node();
+    sites[at].replacing_try <- no_node();
     return;
 }
 
-func inherit_context(ref sites:CompletionSites in X, child:u64, guarded_by:u64, incoming_handler:u64) -> void
+func inherit_context(ref sites:CompletionSites in X, child:u64, guarded_by:u64, incoming_handler:u64,
+                     replacing_try:u64) -> void
     where {owner X} {
     if (child == no_node()) { return; } else {};
     sites[child].guarded_by <- guarded_by;
     sites[child].incoming_handler <- incoming_handler;
+    sites[child].replacing_try <- replacing_try;
     return;
 }
 
@@ -110,44 +114,56 @@ func binary_context(kind:u8) -> bool {
         kind == transfer_node() || kind == add_node() || kind == multiply_node();
 }
 
-func prepare_context(nodes:const ExprNodes in N, ref sites:CompletionSites in X, at:u64) -> u8
-    where {const owner N, owner X} {
+func prepare_context(nodes:const ExprNodes in N, facts:const OperandFacts in F,
+                     ref sites:CompletionSites in X, at:u64) -> void
+    where {const owner N, const owner F, owner X} {
     val kind <- nodes[at].kind;
     val guard <- sites[at].guarded_by;
     val incoming <- sites[at].incoming_handler;
-    if (kind == finally_clause_node()) { return unproved_finally_completion(); } else {};
+    val replacing <- sites[at].replacing_try;
+    if (kind == finally_clause_node()) {
+        inherit_context(sites, nodes[at].left, guard, incoming, replacing);
+        if (replacing != no_node() && nodes[replacing].right == at) {
+            (replacing <- sites[replacing].replacing_try):void;
+        } else {};
+        inherit_context(sites, nodes[at].right, guard, incoming, replacing);
+        return;
+    } else {};
     if (kind == try_node()) {
-        inherit_context(sites, nodes[at].left, at, incoming);
-        inherit_context(sites, nodes[at].right, guard, incoming);
-        return 0u8;
+        val last <- nodes[at].right;
+        if (nodes[last].kind == finally_clause_node() && facts[nodes[last].right].kind == never_result()) {
+            (replacing <- at):void;
+        } else {};
+        inherit_context(sites, nodes[at].left, at, incoming, replacing);
+        inherit_context(sites, last, guard, incoming, replacing);
+        return;
     } else {};
     if (kind == procedure_node()) {
-        inherit_context(sites, nodes[at].right, no_node(), no_node());
-        return 0u8;
+        inherit_context(sites, nodes[at].right, no_node(), no_node(), no_node());
+        return;
     } else {};
     if (kind == catch_handler_node()) {
-        inherit_context(sites, nodes[at].right, guard, at);
-        return 0u8;
+        inherit_context(sites, nodes[at].right, guard, at, replacing);
+        return;
     } else {};
     if (kind == deferred_call_node()) {
         sites[nodes[at].right].registration <- at;
-        inherit_context(sites, nodes[at].left, guard, incoming);
-        return 0u8;
+        inherit_context(sites, nodes[at].left, guard, incoming, replacing);
+        return;
     } else {};
     if (binary_context(kind)) {
-        inherit_context(sites, nodes[at].left, guard, incoming);
-        inherit_context(sites, nodes[at].right, guard, incoming);
-        return 0u8;
+        inherit_context(sites, nodes[at].left, guard, incoming, replacing);
+        inherit_context(sites, nodes[at].right, guard, incoming, replacing);
+        return;
     } else {};
     if (kind == val_binding_node() || kind == ptr_binding_node()) {
-        inherit_context(sites, nodes[at].right, guard, incoming);
-        return 0u8;
+        inherit_context(sites, nodes[at].right, guard, incoming, replacing);
+        return;
     } else {};
     if (kind == module_node() || kind == block_node() || kind == full_scope_node() ||
         kind == group_node() || kind == return_node() || kind == throw_node()) {
-        inherit_context(sites, nodes[at].left, guard, incoming);
+        inherit_context(sites, nodes[at].left, guard, incoming, replacing);
     } else {};
-    return 0u8;
 }
 
 func declared_throw(nodes:const ExprNodes in N, definition:u64) -> u64 where {const owner N} {
@@ -175,19 +191,21 @@ func covers(caught:u64, category:u64) -> bool {
 }
 
 func matching_handler(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
-                      sites:const CompletionSites in X, guarding:u64, category:u64, used:u64) -> u64
+                      sites:const CompletionSites in X, at:u64, category:u64, used:u64) -> u64
     where {const owner N, const owner L, const owner F, const owner X} {
-    val guard <- guarding;
+    val guard <- sites[at].guarded_by;
+    val replacing <- sites[at].replacing_try;
     val clause <- no_node();
     val handler <- no_node();
     for (unused in 0u64 .. used) {
-        if (guard == no_node()) { return no_node(); } else {};
+        # An enclosing guard follows the intervening finalizer's try in postorder.
+        if (guard == no_node() || guard > replacing) { return no_node(); } else {};
         if (clause == no_node()) { (clause <- first_item(nodes, nodes[guard].right)):void; } else {};
-        if (clause != no_node()) {
+        if (clause != no_node() && nodes[clause].kind == catch_clause_node()) {
             handler <- nodes[clause].right;
             if (covers(facts[nodes[handler].left].identity, category)) { return handler; } else {};
             (clause <- links[clause].next):void;
-        } else {};
+        } else { (clause <- no_node()):void; };
         if (clause == no_node()) { (guard <- sites[guard].guarded_by):void; } else {};
     };
     return no_node();
@@ -210,9 +228,14 @@ func route_failure(nodes:const ExprNodes in N, names:const NameBindings in B, li
                    category:u64, checked:u8, event:u8) -> u8
     where {const owner N, const owner B, const owner L, const owner F, owner X} {
     val scope <- names[at].scope;
-    val handler <- matching_handler(nodes, links, facts, sites, sites[at].guarded_by, category, used);
+    val handler <- matching_handler(nodes, links, facts, sites, at, category, used);
     if (handler != no_node()) {
         record_exit(sites, at, event, category, handler, scope, names[nodes[handler].right].scope);
+        return 0u8;
+    } else {};
+    val replacing <- sites[at].replacing_try;
+    if (replacing != no_node()) {
+        record_exit(sites, at, event, category, nodes[replacing].right, scope, names[replacing].scope);
         return 0u8;
     } else {};
     val boundary <- enclosing_callable(nodes, names, scope);
@@ -356,6 +379,7 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
         sites[scope].local_return <- 1u8;
         record_exit(sites, at, callable_return(), no_node(), scope, scope, no_node());
     } else {};
+    if (facts[at].kind == never_result()) { sites[at].can_continue <- 0u8; {}; } else {};
     return 0u8;
 }
 
@@ -387,8 +411,7 @@ func check_module_completion(nodes:const ExprNodes in N, tree:const ParseResult 
     # before the child is visited. Ordinary brace groups keep that context.
     for (offset in 0u64 .. tree.used) {
         site <- tree.root - offset;
-        report.diagnostic <- prepare_context(nodes, sites, site);
-        if (report.diagnostic != 0u8) { report.node <- site; return false; } else {};
+        prepare_context(nodes, facts, sites, site);
     };
     for (at in 0u64 .. tree.used) {
         report.diagnostic <- check_event(nodes, names, links, facts, sites, at, tree.used);
@@ -412,7 +435,6 @@ export uncovered_deferred_failure;
 export unproved_deferred_error;
 export missing_rethrow_context;
 export unproved_rethrow_capture;
-export unproved_finally_completion;
 export completion_storage_exhausted;
 export invalid_completion_tree;
 export unproved_incoming_exception;
