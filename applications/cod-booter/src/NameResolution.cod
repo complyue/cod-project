@@ -43,6 +43,8 @@ using "ExpressionParser.cod" ParseResult;
 data NameBinding {
     kind:u8;
     declaration:u64;
+    # Expressions record the full lexical scope that contains them.
+    scope:u64;
 }
 array NameBindings[u64]:NameBinding;
 
@@ -346,6 +348,7 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
                          ref work:NameWork in W, ref state:NameState in R, at:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     if (at == no_node()) { return; } else {};
+    bindings[at].scope <- state.scope_node;
     val kind <- nodes[at].kind;
     if (kind == literal_node()) { return; } else {};
     if (kind == name_node() || kind == symbol_node()) {
@@ -501,6 +504,7 @@ func resolve_module_names(source:const SourceBytes in S, nodes:const ExprNodes i
     } else {};
     for (at in 0u64 .. tree.used) {
         remember(bindings, at, no_node(), 0u8);
+        bindings[at].scope <- no_node();
     };
     link_entries(nodes, work, tree.used);
     ref state = make NameState {
@@ -548,3 +552,5 @@ export unproved_module_binding;
 export unproved_guard_binding;
 export invalid_module_tree;
 export name_storage_exhausted;
+export first_item;
+export procedure_head;

@@ -34,6 +34,7 @@ data ExportResolutionResult {
 
 func exception_type_export() -> u8 { return 1u8; }
 func symbol_export() -> u8 { return 2u8; }
+func print_export_identity() -> u64 { return 0u64; }
 
 func unproved_module_exports() -> u8 { return 1u8; }
 func missing_module_export() -> u8 { return 2u8; }
@@ -146,6 +147,7 @@ export ExportResolutionResult;
 export resolve_module_exports;
 export exception_type_export;
 export symbol_export;
+export print_export_identity;
 export unproved_module_exports;
 export missing_module_export;
 export wrong_export_kind;

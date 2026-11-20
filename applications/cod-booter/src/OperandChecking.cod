@@ -1,0 +1,499 @@
+using "ParserStorage.cod" ExprNodes;
+using "ParserStorage.cod" len as syntax_len;
+using "ParserStorage.cod" no_node;
+using "ParserStorage.cod" module_node;
+using "ParserStorage.cod" procedure_node;
+using "ParserStorage.cod" parameter_node;
+using "ParserStorage.cod" ref_parameter_node;
+using "ParserStorage.cod" ptr_parameter_node;
+using "ParserStorage.cod" val_parameter_node;
+using "ParserStorage.cod" owner_clause_node;
+using "ParserStorage.cod" result_clause_node;
+using "ParserStorage.cod" throws_clause_node;
+using "ParserStorage.cod" catch_binding_node;
+using "ParserStorage.cod" typed_name_node;
+using "ParserStorage.cod" owned_type_node;
+using "ParserStorage.cod" val_binding_node;
+using "ParserStorage.cod" ptr_binding_node;
+using "ParserStorage.cod" literal_node;
+using "ParserStorage.cod" name_node;
+using "ParserStorage.cod" null_node;
+using "ParserStorage.cod" group_node;
+using "ParserStorage.cod" add_node;
+using "ParserStorage.cod" multiply_node;
+using "ParserStorage.cod" transfer_node;
+using "ParserStorage.cod" call_node;
+using "ParserStorage.cod" behave_node;
+using "ParserStorage.cod" return_node;
+using "ParserStorage.cod" throw_node;
+using "ParserStorage.cod" deferred_call_node;
+using "ExpressionParser.cod" ParseResult;
+using "NameResolution.cod" NameBindings;
+using "NameResolution.cod" NameWork;
+using "NameResolution.cod" first_item;
+using "NameResolution.cod" procedure_head;
+using "NameResolution.cod" builtin_u64;
+using "NameResolution.cod" builtin_void;
+using "NameResolution.cod" ordinary_selection;
+using "NameResolution.cod" symbolic_selection;
+using "NameResolution.cod" procedure_binding;
+using "NameResolution.cod" formal_binding;
+using "NameResolution.cod" local_binding;
+using "NameResolution.cod" exception_binding;
+using "ModuleExports.cod" SelectedExports;
+using "ModuleExports.cod" exception_type_export;
+using "ModuleExports.cod" symbol_export;
+using "ModuleExports.cod" print_export_identity;
+
+# An owner is a lexical scope or an owner parameter's declaration. Exception
+# type identity alone does not establish the incoming object's owner.
+data OperandFact {
+    kind:u8;
+    reception:u8;
+    checked_exception:u8;
+    needs_target:u8;
+    owner:u64;
+    identity:u64;
+}
+array OperandFacts[u64]:OperandFact;
+
+data OwnerEvidence {
+    call_site:u64;
+    actual_owner:u64;
+}
+array CallOwners[u64]:OwnerEvidence;
+
+data OperandCheckResult {
+    diagnostic:u8;
+    node:u64;
+}
+
+func void_result() -> u8 { return 1u8; }
+func scalar_u64() -> u8 { return 2u8; }
+func exception_type() -> u8 { return 3u8; }
+func null_literal() -> u8 { return 4u8; }
+
+func independent_value() -> u8 { return 1u8; }
+func writable_place() -> u8 { return 2u8; }
+func borrowed_ref() -> u8 { return 3u8; }
+func nullable_ptr() -> u8 { return 4u8; }
+func readonly_place() -> u8 { return 5u8; }
+func readonly_exception() -> u8 { return 6u8; }
+
+func unproved_operand() -> u8 { return 1u8; }
+func wrong_operand_type() -> u8 { return 2u8; }
+func expected_exception_type() -> u8 { return 3u8; }
+func unproved_result_contract() -> u8 { return 4u8; }
+func unproved_owner() -> u8 { return 5u8; }
+func incompatible_owner() -> u8 { return 6u8; }
+func expected_writable_place() -> u8 { return 7u8; }
+func unproved_nonnull_borrow() -> u8 { return 8u8; }
+func wrong_argument_count() -> u8 { return 9u8; }
+func wrong_return_type() -> u8 { return 10u8; }
+func unproved_call_target() -> u8 { return 11u8; }
+func operand_storage_exhausted() -> u8 { return 12u8; }
+func invalid_operand_tree() -> u8 { return 13u8; }
+
+func set_fact(ref facts:OperandFacts in F, at:u64, kind:u8, reception:u8,
+              owner_site:u64, identity:u64, checked_exception:u8) -> void where {owner F} {
+    facts[at].kind <- kind;
+    facts[at].reception <- reception;
+    facts[at].owner <- owner_site;
+    facts[at].identity <- identity;
+    facts[at].checked_exception <- checked_exception;
+    return;
+}
+
+func scalar_fact(ref facts:OperandFacts in F, at:u64, reception:u8, owner_site:u64) -> void where {owner F} {
+    set_fact(facts, at, scalar_u64(), reception, owner_site, 0u64, 0u8);
+}
+
+func copy_fact(ref facts:OperandFacts in F, destination:u64, source:u64) -> void where {owner F} {
+    set_fact(facts, destination, facts[source].kind, facts[source].reception, facts[source].owner,
+             facts[source].identity, facts[source].checked_exception);
+}
+
+func only_void(ref facts:OperandFacts in F, at:u64) -> void where {owner F} {
+    set_fact(facts, at, void_result(), 0u8, no_node(), 0u64, 0u8);
+}
+
+func require_bits(nodes:const ExprNodes in N, ref facts:OperandFacts in F, operand:u64) -> u8
+    where {const owner N, owner F} {
+    if (nodes[operand].kind == val_binding_node() || nodes[operand].kind == ptr_binding_node()) {
+        return unproved_operand();
+    } else {};
+    if (facts[operand].kind == 0u8) { return unproved_operand(); } else {};
+    if (facts[operand].kind != scalar_u64()) { return wrong_operand_type(); } else {};
+    if (facts[operand].reception == nullable_ptr()) {
+        facts[operand].needs_target <- 1u8;
+        return 0u8;
+    } else {};
+    return 0u8;
+}
+
+func owner_conflict(nodes:const ExprNodes in N, first:u64, second:u64) -> u8 where {const owner N} {
+    if (nodes[first].kind == owner_clause_node() || nodes[second].kind == owner_clause_node()) {
+        return unproved_owner();
+    } else {};
+    return incompatible_owner();
+}
+
+func exception_annotation(names:const NameBindings in N, selected:const SelectedExports in E,
+                          ref facts:OperandFacts in F, annotation:u64, at:u64) -> u8
+    where {const owner N, const owner E, owner F} {
+    if (names[annotation].kind != ordinary_selection()) { return expected_exception_type(); } else {};
+    val site <- names[annotation].declaration;
+    if (selected[site].kind != exception_type_export()) { return expected_exception_type(); } else {};
+    set_fact(facts, at, exception_type(), readonly_exception(), no_node(),
+             selected[site].identity, selected[site].checked);
+    return 0u8;
+}
+
+func check_formal(nodes:const ExprNodes in N, names:const NameBindings in B, ref facts:OperandFacts in F,
+                  formal:u64, definition:u64) -> u8 where {const owner N, const owner B, owner F} {
+    val form <- nodes[formal].kind;
+    val annotation <- nodes[nodes[formal].right].right;
+    if (nodes[annotation].kind == owned_type_node()) {
+        if (form != ref_parameter_node() && form != ptr_parameter_node()) { return unproved_operand(); } else {};
+        if (names[nodes[annotation].left].kind != builtin_u64()) { return unproved_operand(); } else {};
+        val owner_site <- names[nodes[annotation].right].declaration;
+        val reception <- if (form == ref_parameter_node()) { borrowed_ref() } else { nullable_ptr() };
+        scalar_fact(facts, formal, reception, owner_site);
+        # In this syntax subset an explicit ref or ptr target is writable.
+        facts[owner_site].owner <- definition;
+        return 0u8;
+    } else {};
+    if (form != parameter_node() && form != val_parameter_node()) { return unproved_operand(); } else {};
+    if (names[annotation].kind != builtin_u64()) { return unproved_operand(); } else {};
+    scalar_fact(facts, formal, writable_place(), definition);
+    return 0u8;
+}
+
+func check_formals(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
+                   ref facts:OperandFacts in F, ref report:OperandCheckResult in R,
+                   definition:u64, tail:u64, used:u64) -> void
+    where {const owner N, const owner B, const owner L, owner F, owner R} {
+    val formal <- first_item(nodes, tail);
+    for (unused in 0u64 .. used) {
+        if (formal == no_node()) { return; } else {};
+        report.diagnostic <- check_formal(nodes, names, facts, formal, definition);
+        if (report.diagnostic != 0u8) { report.node <- formal; return; } else {};
+        (formal <- links[formal].next):void;
+    };
+}
+
+func check_signature_clauses(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
+                             selected:const SelectedExports in E, ref facts:OperandFacts in F,
+                             ref report:OperandCheckResult in R, definition:u64, first:u64, used:u64) -> void
+    where {const owner N, const owner B, const owner L, const owner E, owner F, owner R} {
+    val clause <- first;
+    val annotation <- no_node();
+    for (unused in 0u64 .. used) {
+        if (clause == no_node()) { return; } else {};
+        annotation <- nodes[clause].right;
+        if (nodes[clause].kind == result_clause_node()) {
+            if (names[annotation].kind == builtin_void()) {
+                only_void(facts, definition);
+            } else {
+                if (names[annotation].kind != builtin_u64()) {
+                    report.node <- annotation;
+                    report.diagnostic <- unproved_result_contract();
+                    return;
+                } else {};
+                scalar_fact(facts, definition, independent_value(), no_node());
+            };
+        } else {
+            if (nodes[clause].kind == throws_clause_node()) {
+                report.diagnostic <- exception_annotation(names, selected, facts, annotation, clause);
+                if (report.diagnostic != 0u8) { report.node <- annotation; return; } else {};
+            } else {
+                if (facts[clause].owner != definition) {
+                    report.node <- annotation;
+                    report.diagnostic <- unproved_owner();
+                    return;
+                } else {};
+            };
+        };
+        (clause <- links[clause].next):void;
+    };
+}
+
+func check_signature(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
+                     selected:const SelectedExports in E, ref facts:OperandFacts in F,
+                     ref report:OperandCheckResult in R, definition:u64, used:u64) -> void
+    where {const owner N, const owner B, const owner L, const owner E, owner F, owner R} {
+    val head <- procedure_head(nodes, definition);
+    check_formals(nodes, names, links, facts, report, definition, nodes[head].right, used);
+    if (report.diagnostic != 0u8) { return; } else {};
+    check_signature_clauses(nodes, names, links, selected, facts, report, definition, links[head].next, used);
+    if (report.diagnostic == 0u8 && facts[definition].kind == 0u8) {
+        report.node <- head;
+        (report.diagnostic <- unproved_result_contract()):void;
+    } else {};
+}
+
+func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, ref facts:OperandFacts in F,
+                  at:u64) -> u8 where {const owner N, const owner B, owner F} {
+    val binding <- nodes[at].left;
+    val initializer <- nodes[at].right;
+    val annotation <- no_node();
+    if (nodes[binding].kind == typed_name_node()) { (annotation <- nodes[binding].right):void; } else {};
+    if (nodes[at].kind == val_binding_node()) {
+        if (annotation != no_node() && names[annotation].kind != builtin_u64()) { return unproved_operand(); } else {};
+        val diagnostic <- require_bits(nodes, facts, initializer);
+        if (diagnostic != 0u8) { return diagnostic; } else {};
+        scalar_fact(facts, at, writable_place(), names[at].scope);
+        return 0u8;
+    } else {};
+    val owner_site <- facts[initializer].owner;
+    val type_name <- annotation;
+    if (nodes[annotation].kind == owned_type_node()) {
+        val declared_owner <- names[nodes[annotation].right].declaration;
+        if (owner_site != no_node() && owner_site != declared_owner) {
+            return owner_conflict(nodes, owner_site, declared_owner);
+        } else {};
+        owner_site <- declared_owner;
+        (type_name <- nodes[annotation].left):void;
+    } else {};
+    if (names[type_name].kind != builtin_u64()) { return unproved_operand(); } else {};
+    if (facts[initializer].kind != null_literal()) {
+        if (facts[initializer].kind != scalar_u64() || facts[initializer].reception == independent_value()) {
+            return unproved_operand();
+        } else {};
+        if (facts[initializer].reception == readonly_place()) { return expected_writable_place(); } else {};
+    } else {};
+    if (owner_site == no_node()) { return unproved_owner(); } else {};
+    scalar_fact(facts, at, nullable_ptr(), owner_site);
+    return 0u8;
+}
+
+func check_transfer(nodes:const ExprNodes in N, ref facts:OperandFacts in F, at:u64) -> u8
+    where {const owner N, owner F} {
+    val destination <- nodes[at].left;
+    val supplied <- nodes[at].right;
+    val reception <- facts[destination].reception;
+    if (facts[destination].kind != scalar_u64()) { return unproved_operand(); } else {};
+    if (reception != writable_place() && reception != borrowed_ref() && reception != nullable_ptr()) {
+        return expected_writable_place();
+    } else {};
+    val diagnostic <- require_bits(nodes, facts, destination);
+    if (diagnostic != 0u8) { return diagnostic; } else {};
+    diagnostic <- require_bits(nodes, facts, supplied);
+    if (diagnostic != 0u8) { return diagnostic; } else {};
+    scalar_fact(facts, at, readonly_place(), facts[destination].owner);
+    return 0u8;
+}
+
+func check_argument(nodes:const ExprNodes in N, ref facts:OperandFacts in F, ref owners:CallOwners in O,
+                     argument:u64, formal:u64, invocation:u64) -> u8 where {const owner N, owner F, owner O} {
+    val actual <- nodes[argument].right;
+    val wanted <- facts[formal].reception;
+    if (wanted == writable_place()) {
+        val diagnostic <- require_bits(nodes, facts, actual);
+        if (diagnostic != 0u8) { return diagnostic; } else {};
+        scalar_fact(facts, argument, independent_value(), no_node());
+        return 0u8;
+    } else {};
+    if (nodes[actual].kind == val_binding_node() || nodes[actual].kind == ptr_binding_node() ||
+        facts[actual].kind == 0u8 || facts[actual].kind == null_literal()) { return unproved_operand(); } else {};
+    if (facts[actual].kind != scalar_u64()) { return wrong_operand_type(); } else {};
+    val reception <- facts[actual].reception;
+    if (wanted == borrowed_ref() && reception == nullable_ptr()) { return unproved_nonnull_borrow(); } else {};
+    if (reception == independent_value()) { return unproved_owner(); } else {};
+    if (reception == readonly_place()) { return expected_writable_place(); } else {};
+    val owner_parameter <- facts[formal].owner;
+    val actual_owner <- facts[actual].owner;
+    if (actual_owner == no_node()) { return unproved_owner(); } else {};
+    if (owners[owner_parameter].call_site == invocation && owners[owner_parameter].actual_owner != actual_owner) {
+        return owner_conflict(nodes, owners[owner_parameter].actual_owner, actual_owner);
+    } else {};
+    owners[owner_parameter].call_site <- invocation;
+    owners[owner_parameter].actual_owner <- actual_owner;
+    scalar_fact(facts, argument, wanted, actual_owner);
+    return 0u8;
+}
+
+func check_direct_call(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
+                       ref facts:OperandFacts in F, ref owners:CallOwners in O, at:u64, used:u64) -> u8
+    where {const owner N, const owner B, const owner L, owner F, owner O} {
+    val callee <- nodes[at].left;
+    if (names[callee].kind != procedure_binding()) { return unproved_call_target(); } else {};
+    val definition <- names[callee].declaration;
+    val head <- procedure_head(nodes, definition);
+    val formal <- first_item(nodes, nodes[head].right);
+    val argument <- first_item(nodes, nodes[at].right);
+    val diagnostic <- 0u8;
+    for (unused in 0u64 .. used) {
+        if (formal == no_node() || argument == no_node()) {
+            if (formal != argument) { return wrong_argument_count(); } else {};
+            copy_fact(facts, at, definition);
+            return 0u8;
+        } else {};
+        diagnostic <- check_argument(nodes, facts, owners, argument, formal, at);
+        if (diagnostic != 0u8) { return diagnostic; } else {};
+        formal <- links[formal].next;
+        (argument <- links[argument].next):void;
+    };
+    return invalid_operand_tree();
+}
+
+func check_symbolic_call(nodes:const ExprNodes in N, names:const NameBindings in B,
+                         selected:const SelectedExports in E, ref facts:OperandFacts in F, at:u64) -> u8
+    where {const owner N, const owner B, const owner E, owner F} {
+    val callee <- nodes[at].left;
+    if (names[callee].kind != symbolic_selection()) { return unproved_call_target(); } else {};
+    val site <- names[callee].declaration;
+    if (selected[site].kind != symbol_export() || selected[site].identity != print_export_identity()) {
+        return unproved_call_target();
+    } else {};
+    val argument <- nodes[at].right;
+    if (argument == no_node() || nodes[argument].left != no_node()) { return wrong_argument_count(); } else {};
+    val diagnostic <- require_bits(nodes, facts, nodes[argument].right);
+    if (diagnostic != 0u8) { return diagnostic; } else {};
+    scalar_fact(facts, argument, independent_value(), no_node());
+    only_void(facts, at);
+    return 0u8;
+}
+
+func check_return(nodes:const ExprNodes in N, names:const NameBindings in B, ref facts:OperandFacts in F,
+                   at:u64) -> u8 where {const owner N, const owner B, owner F} {
+    val scope <- names[at].scope;
+    if (nodes[scope].kind == module_node()) { return wrong_return_type(); } else {};
+    if (nodes[scope].kind != procedure_node()) { return unproved_result_contract(); } else {};
+    val value <- nodes[at].left;
+    if (facts[scope].kind == void_result()) {
+        if (value != no_node()) { return wrong_return_type(); } else {};
+        return 0u8;
+    } else {};
+    if (value == no_node()) { return wrong_return_type(); } else {};
+    val diagnostic <- require_bits(nodes, facts, value);
+    if (diagnostic == wrong_operand_type()) { return wrong_return_type(); } else {};
+    return diagnostic;
+}
+
+func check_numeric_expression(nodes:const ExprNodes in N, ref facts:OperandFacts in F, at:u64, kind:u8) -> u8
+    where {const owner N, owner F} {
+    val left <- nodes[at].left;
+    if (kind == group_node() && facts[left].kind == void_result()) { only_void(facts, at); return 0u8; } else {};
+    val diagnostic <- require_bits(nodes, facts, left);
+    if (diagnostic != 0u8) { return diagnostic; } else {};
+    if (kind != group_node()) {
+        diagnostic <- require_bits(nodes, facts, nodes[at].right);
+        if (diagnostic != 0u8) { return diagnostic; } else {};
+    } else {};
+    scalar_fact(facts, at, independent_value(), no_node());
+    return 0u8;
+}
+
+func check_operand(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
+                   selected:const SelectedExports in E, ref facts:OperandFacts in F, ref owners:CallOwners in O,
+                   at:u64, used:u64) -> u8
+    where {const owner N, const owner B, const owner L, const owner E, owner F, owner O} {
+    val kind <- nodes[at].kind;
+    if (kind == catch_binding_node()) {
+        val annotation <- nodes[at].right;
+        if (annotation != no_node()) { return exception_annotation(names, selected, facts, annotation, at); } else {};
+        set_fact(facts, at, exception_type(), readonly_exception(), no_node(), no_node(), 0u8);
+        return 0u8;
+    } else {};
+    if (names[at].scope == no_node()) { return 0u8; } else {};
+    if (kind == literal_node()) { scalar_fact(facts, at, independent_value(), no_node()); return 0u8; } else {};
+    if (kind == name_node()) {
+        val binding <- names[at].kind;
+        if (binding == formal_binding() || binding == local_binding() || binding == exception_binding()) {
+            copy_fact(facts, at, names[at].declaration);
+        } else {};
+        return 0u8;
+    } else {};
+    if (kind == null_node()) {
+        val owner_name <- nodes[at].left;
+        val owner_site <- no_node();
+        if (owner_name != no_node()) { (owner_site <- names[owner_name].declaration):void; } else {};
+        set_fact(facts, at, null_literal(), 0u8, owner_site, 0u64, 0u8);
+        return 0u8;
+    } else {};
+    if (kind == val_binding_node() || kind == ptr_binding_node()) { return check_local(nodes, names, facts, at); } else {};
+    if (kind == add_node() || kind == multiply_node() || kind == group_node()) {
+        return check_numeric_expression(nodes, facts, at, kind);
+    } else {};
+    if (kind == transfer_node()) { return check_transfer(nodes, facts, at); } else {};
+    if (kind == call_node()) { return check_direct_call(nodes, names, links, facts, owners, at, used); } else {};
+    if (kind == behave_node()) { return check_symbolic_call(nodes, names, selected, facts, at); } else {};
+    if (kind == return_node()) { return check_return(nodes, names, facts, at); } else {};
+    if (kind == throw_node()) {
+        val operand <- nodes[at].left;
+        if (operand != no_node() && facts[operand].kind != exception_type()) { return expected_exception_type(); } else {};
+    } else {};
+    if (kind == deferred_call_node()) { only_void(facts, at); } else {};
+    return 0u8;
+}
+
+# Operands and declarations refer to the bound syntax and its owner sites.
+# Target-access demands are recorded for the completion pass, where flow can
+# prove a target present or propagate a possible checked failure.
+func check_module_operands(nodes:const ExprNodes in N, tree:const ParseResult in T,
+                           names:const NameBindings in B, links:const NameWork in L,
+                           selected:const SelectedExports in E, ref facts:OperandFacts in F,
+                           ref owners:CallOwners in O, ref report:OperandCheckResult in R) -> bool
+    where {const owner N, const owner T, const owner B, const owner L, const owner E, owner F, owner O, owner R} {
+    report.node <- no_node();
+    report.diagnostic <- invalid_operand_tree();
+    if (tree.diagnostic != 0u8 || tree.used == 0u64 || tree.used > syntax_len(nodes) ||
+        tree.root != tree.used - 1u64 || nodes[tree.root].kind != module_node()) { return false; } else {};
+    if (intrinsic (len)(names) < tree.used || intrinsic (len)(links) < tree.used ||
+        intrinsic (len)(selected) < tree.used || intrinsic (len)(facts) < tree.used ||
+        intrinsic (len)(owners) < tree.used) {
+        report.diagnostic <- operand_storage_exhausted();
+        return false;
+    } else {};
+    for (at in 0u64 .. tree.used) {
+        set_fact(facts, at, 0u8, 0u8, no_node(), 0u64, 0u8);
+        facts[at].needs_target <- 0u8;
+        owners[at].call_site <- no_node();
+        owners[at].actual_owner <- no_node();
+    };
+    report.diagnostic <- 0u8;
+    for (at in 0u64 .. tree.used) {
+        if (nodes[at].kind == procedure_node()) {
+            check_signature(nodes, names, links, selected, facts, report, at, tree.used);
+            if (report.diagnostic != 0u8) { return false; } else {};
+        } else {};
+    };
+    # The syntax puts operands before their operation and local declarations
+    # before uses. Procedure contracts are already available for forward calls.
+    for (at in 0u64 .. tree.used) {
+        report.diagnostic <- check_operand(nodes, names, links, selected, facts, owners, at, tree.used);
+        if (report.diagnostic != 0u8) { report.node <- at; return false; } else {};
+    };
+    return true;
+}
+
+export OperandFact;
+export OperandFacts;
+export OwnerEvidence;
+export CallOwners;
+export OperandCheckResult;
+export check_module_operands;
+export void_result;
+export scalar_u64;
+export exception_type;
+export null_literal;
+export independent_value;
+export writable_place;
+export borrowed_ref;
+export nullable_ptr;
+export readonly_place;
+export readonly_exception;
+export unproved_operand;
+export wrong_operand_type;
+export expected_exception_type;
+export unproved_result_contract;
+export unproved_owner;
+export incompatible_owner;
+export expected_writable_place;
+export unproved_nonnull_borrow;
+export wrong_argument_count;
+export wrong_return_type;
+export unproved_call_target;
+export operand_storage_exhausted;
+export invalid_operand_tree;

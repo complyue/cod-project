@@ -12,6 +12,10 @@ using "NameResolution.cod" NameBindings;
 using "NameResolution.cod" NameWork;
 using "NameResolution.cod" NameResolutionResult;
 using "NameResolution.cod" resolve_module_names;
+using "OperandChecking.cod" OperandFacts;
+using "OperandChecking.cod" CallOwners;
+using "OperandChecking.cod" OperandCheckResult;
+using "OperandChecking.cod" check_module_operands;
 
 data ModuleBindingResult {
     frontend:FrontendResult;
@@ -22,6 +26,7 @@ data ModuleBindingResult {
 func module_read_failed() -> u8 { return 1u8; }
 func module_selection_failed() -> u8 { return 2u8; }
 func module_binding_failed() -> u8 { return 3u8; }
+func module_operands_failed() -> u8 { return 4u8; }
 
 func binding_diagnostic(nodes:const ExprNodes in N, ref result:ModuleBindingResult in R,
                         stage:u8, diagnostic:u8, at:u64) -> void where {const owner N, owner R} {
@@ -61,8 +66,29 @@ func bind_module(source:const SourceBytes in S, ref tokens:Tokens in T, ref node
     return true;
 }
 
+# A successful operand analysis supplies the facts for checking completion.
+func analyze_module_operands(source:const SourceBytes in S, ref tokens:Tokens in T, ref nodes:ExprNodes in N,
+                             spellings:const SourceBytes in B, exports:const ModuleExports in E,
+                             ref selected:SelectedExports in X, ref bindings:NameBindings in Y,
+                             ref work:NameWork in W, ref facts:OperandFacts in F,
+                             ref owners:CallOwners in O, ref result:ModuleBindingResult in R) -> bool
+    where {const owner S, owner T, owner N, const owner B, const owner E, owner X, owner Y, owner W,
+           owner F, owner O, owner R} {
+    if (!bind_module(source, tokens, nodes, spellings, exports, selected, bindings, work, result)) {
+        return false;
+    } else {};
+    ref operands = make OperandCheckResult { diagnostic <- 0u8; node <- no_node(); };
+    if (!check_module_operands(nodes, result.frontend.tree, bindings, work, selected, facts, owners, operands)) {
+        binding_diagnostic(nodes, result, module_operands_failed(), operands.diagnostic, operands.node);
+        return false;
+    } else {};
+    return true;
+}
+
 export ModuleBindingResult;
 export bind_module;
 export module_read_failed;
 export module_selection_failed;
 export module_binding_failed;
+export module_operands_failed;
+export analyze_module_operands;
