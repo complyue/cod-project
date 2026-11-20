@@ -13,18 +13,6 @@ typedef struct cod_llvm_session {
   LLVMBuilderRef builder;
 } cod_llvm_session;
 
-/* Open into an empty owner. Release the session even if opening stops
-   after acquiring only some of its handles. */
-static inline bool cod_llvm_session_open(cod_llvm_session *session, const char *module_name) {
-  if (session->context || session->module || session->builder) return false;
-  session->context = LLVMContextCreate();
-  if (!session->context) return false;
-  session->module = LLVMModuleCreateWithNameInContext(module_name, session->context);
-  if (!session->module) return false;
-  session->builder = LLVMCreateBuilderInContext(session->context);
-  return session->builder != NULL;
-}
-
 static inline void cod_llvm_session_release(cod_llvm_session *session) {
   if (session->builder) LLVMDisposeBuilder(session->builder);
   if (session->module) LLVMDisposeModule(session->module);
@@ -32,6 +20,21 @@ static inline void cod_llvm_session_release(cod_llvm_session *session) {
   session->builder = NULL;
   session->module = NULL;
   session->context = NULL;
+}
+
+/* Publish a complete session into an empty owner. Acquisition retains and
+   releases the partial session locally on failure. */
+static inline bool cod_llvm_session_open(cod_llvm_session *session, const char *module_name) {
+  if (session->context || session->module || session->builder) return false;
+  cod_llvm_session acquired = {LLVMContextCreate(), NULL, NULL};
+  if (acquired.context) acquired.module = LLVMModuleCreateWithNameInContext(module_name, acquired.context);
+  if (acquired.module) acquired.builder = LLVMCreateBuilderInContext(acquired.context);
+  if (!acquired.builder) {
+    cod_llvm_session_release(&acquired);
+    return false;
+  }
+  *session = acquired;
+  return true;
 }
 
 /* Form the LLVM {result, overflow} value for the selected integer intrinsic.
