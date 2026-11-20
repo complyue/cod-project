@@ -21,6 +21,15 @@ FINALLY_READ = 'finally{late;{}};return late;'
 QUERY_EVIDENCE = 'typeof requires a known declaration or operand type'
 QUERY_PAIR = 'data Pair {first:u64;second:u64;}'
 QUERY_HOLDER = 'data Holder {ptr selected:u64;}'
+QUERY_HOLDER_CHOICE = ('ptr left=make Holder;ptr right=make Holder;'
+                       'val a<-make local u64;val b<-make local u64;val ready<-7u64;'
+                       'ptr chosen=if(pick_left){left}else{right};')
+QUERY_BOUND_HOLDERS = QUERY_HOLDER_CHOICE + 'left.selected=a;right.selected=b;'
+READ_SELECTED_HOLDER = ('func peek(ptr p:const Holder in O)->u64 where {const owner O}{'
+                        'if(p is null){return 0u64;}else{};'
+                        'if(p.selected is null){return 0u64;}else{};return p.selected;}')
+REBIND_SELECTED_HOLDER = ('proc redirect(ptr p:Holder in O,ptr target:u64 in O)->void where {owner O}{'
+                          'if(p is null){return;}else{};p.selected=target;return;}')
 QUERY_NODE = 'data Node {value:u64;ref next:Node;}'
 READ_QUERY_PAIR = ('func inspect(ptr p:const Pair in O)->u64 where {const owner O}{'
                    'if(p is null){return 0u64;}else{};return p.second;}')
@@ -1393,6 +1402,78 @@ runner.CASES = {
         query(QUERY_PRODUCT_CHOICE + 'ptr field=selected.second;ptr retained=selected;'
               '{{defer (<-)(field,7u64);selected=right;return;}};return retained.second;') +
         'behave @print(result);', 0, '4\n', ''),
+    'query_first_bind_initializes_the_selected_embedded_slot': (
+        IO + QUERY_HOLDER + QUERY_PRODUCT_FLAGS +
+        query(QUERY_HOLDER_CHOICE + 'chosen.selected=ready;return chosen.selected;') +
+        'behave @print(result);', 0, '4\n', ''),
+    'query_first_bind_leaves_another_embedded_slot_unproved': (
+        QUERY_HOLDER + QUERY_PRODUCT_FLAGS +
+        query(QUERY_HOLDER_CHOICE + 'chosen.selected=ready;return right.selected;'),
+        2, '', "read of 'selected' before definite initialization"),
+    'query_first_bind_does_not_initialize_the_embedded_slots_referent': (
+        QUERY_HOLDER + QUERY_PRODUCT_FLAGS +
+        query(QUERY_HOLDER_CHOICE + 'chosen.selected=a;return chosen.selected;'),
+        2, '', "read of 'a' before definite initialization"),
+    'query_selected_embedded_slot_reads_its_new_referent_after_rebind': (
+        IO + QUERY_HOLDER + QUERY_PRODUCT_FLAGS +
+        query(QUERY_BOUND_HOLDERS + 'chosen.selected=ready;return chosen.selected;') +
+        'behave @print(result);', 0, '4\n', ''),
+    'query_selected_embedded_slot_can_prepare_its_current_referent': (
+        IO + QUERY_HOLDER + QUERY_PRODUCT_FLAGS +
+        query(QUERY_BOUND_HOLDERS + 'chosen.selected<-7u64;return chosen.selected;') +
+        'behave @print(result);', 0, '4\n', ''),
+    'query_overlapping_rebind_invalidates_the_selected_slots_referent': (
+        QUERY_HOLDER + QUERY_PRODUCT_FLAGS +
+        query(QUERY_BOUND_HOLDERS + 'chosen.selected=ready;right.selected=b;return chosen.selected;'),
+        2, '', "read of 'b' before definite initialization"),
+    'query_independent_choices_do_not_share_embedded_slot_writes': (
+        QUERY_HOLDER + QUERY_PRODUCT_FLAGS +
+        query(QUERY_BOUND_HOLDERS + 'ptr other=if(pick_other){left}else{right};'
+              'chosen.selected=ready;return other.selected;'), 2, '', 'initialization'),
+    'query_rebinding_embedded_slot_preserves_an_earlier_borrow': (
+        IO + QUERY_HOLDER + QUERY_PRODUCT_FLAGS +
+        query(QUERY_BOUND_HOLDERS + 'ptr saved=chosen.selected;chosen.selected=ready;saved<-7u64;return saved;') +
+        'behave @print(result);', 0, '4\n', ''),
+    'query_write_through_earlier_borrow_leaves_new_referent_unwritten': (
+        QUERY_HOLDER + QUERY_PRODUCT_FLAGS +
+        query(QUERY_BOUND_HOLDERS + 'val new_cell<-make local u64;ptr saved=chosen.selected;'
+              'chosen.selected=new_cell;saved<-7u64;return chosen.selected;'),
+        2, '', "read of 'new_cell' before definite initialization"),
+    'query_join_keeps_the_same_selected_embedded_slot': (
+        IO + QUERY_HOLDER + QUERY_PRODUCT_FLAGS +
+        query(QUERY_HOLDER_CHOICE + 'if(pick_other){chosen.selected=ready;}else{chosen.selected=ready;};'
+              'return chosen.selected;') + 'behave @print(result);', 0, '4\n', ''),
+    'query_full_scope_publishes_a_first_bind_to_the_selected_slot': (
+        IO + QUERY_HOLDER + QUERY_PRODUCT_FLAGS +
+        query(QUERY_HOLDER_CHOICE + '{{chosen.selected=ready;return;}};return chosen.selected;') +
+        'behave @print(result);', 0, '4\n', ''),
+    'query_deferred_bind_keeps_the_selected_embedded_slot_address': (
+        IO + QUERY_HOLDER + QUERY_PRODUCT_FLAGS +
+        query(QUERY_BOUND_HOLDERS + 'ptr kept=chosen;{{defer (=)(chosen.selected,ready);chosen=right;return;}};'
+              'return kept.selected;') + 'behave @print(result);', 0, '4\n', ''),
+    'query_deferred_bind_does_not_follow_the_rebound_receiver': (
+        QUERY_HOLDER + QUERY_PRODUCT_FLAGS +
+        query(QUERY_BOUND_HOLDERS + '{{defer (=)(chosen.selected,ready);chosen=right;return;}};'
+              'return chosen.selected;'), 2, '', "read of 'b' before definite initialization"),
+    'query_named_helper_reads_the_dynamically_prepared_slot': (
+        IO + QUERY_HOLDER + QUERY_PRODUCT_FLAGS + READ_SELECTED_HOLDER +
+        query(QUERY_HOLDER_CHOICE + 'chosen.selected=ready;return peek(chosen);') +
+        'behave @print(result);', 0, '4\n', ''),
+    'query_named_helper_prepares_the_callers_selected_slot': (
+        IO + QUERY_HOLDER + QUERY_PRODUCT_FLAGS + REBIND_SELECTED_HOLDER +
+        query(QUERY_HOLDER_CHOICE + 'redirect(chosen,ready);return chosen.selected;') +
+        'behave @print(result);', 0, '4\n', ''),
+    'query_read_only_helper_preserves_an_earlier_borrow_of_the_current_referent': (
+        IO + QUERY_HOLDER + QUERY_PRODUCT_FLAGS +
+        'proc probe(ptr p:const Holder in O)->void where {const owner O}{'
+        'if(p is null){return;}else{};if(p.selected is null){return;}else{};return;}' +
+        query(QUERY_BOUND_HOLDERS + 'ptr saved=chosen.selected;probe(chosen);saved<-7u64;return chosen.selected;') +
+        'behave @print(result);', 0, '4\n', ''),
+    'query_deferred_helper_checks_the_slot_at_invocation': (
+        QUERY_HOLDER + QUERY_PRODUCT_FLAGS + READ_SELECTED_HOLDER +
+        query(QUERY_HOLDER_CHOICE + 'chosen.selected=ready;'
+              '{{defer peek(chosen);chosen.selected=a;return;}};return 0u64;'),
+        2, '', "read of 'a' before definite initialization"),
     'query_recursive_helper_preserves_field_writes': (
         IO + QUERY_PAIR + 'proc populate(ptr p:Pair in O,n:u64)->void where {owner O}{'
         'if(p is null){return;}else{};if(n==0u64){p.second<-7u64;return;}else{};populate(p,n-1u64);return;}' +
