@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-20 — Generate the booter’s C providers from CoD declarations
+
+<a id="h-booter-generated-c-20261120"></a>
+**H-BOOTER-GENERATED-C-20261120.** The project user in the [native integration side chat](codex://threads/01a1f931-0426-7402-921e-d41a96ae1ea3), recorded 2026-11-20 America/Los_Angeles, specified “CoD语法声明要求的C行为接口， seed/booter 根据CoD接口声明，generate C stubs，作为 C native components 代码的一部分，剩余功能填充代码手写实现”, then confirmed “同意，通知主线按此执行。” Roadmap r18, interop r8 and registry r1018 apply the direction to the first booter's indexed source, in-memory regions and LLVM operations. The seed and booter derive the same C contract from checked declarations. Generated headers and stubs handle adaptation and enforceable checks. Separate handwritten C implements the operations and resource protocols. The initial scope uses static linkage and synchronous callbacks, with source lifetime managed in CoD like the LLVM session. This supersedes the proposed booter-specific bridge as the shipping path. Declaration syntax, ABI/lowering and build ordering require review. No build configuration change was authorized. Prior interop scope at `c71da4288fd8ffa40234eae5686d418b00a2328f:applications/cod-booter/docs/LLVMInterop.md`.
+
 ## 2026-11-20 — Keep the booter and its exception-handling work in cod-seed
 
 <a id="h-booter-exceptions-diagnostics-20261120"></a>
