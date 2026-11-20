@@ -42,6 +42,9 @@ using "ParserStorage.cod" discard_node;
 using "ParserStorage.cod" bool_node;
 using "ParserStorage.cod" compare_node;
 using "ParserStorage.cod" conditional_node;
+using "ParserStorage.cod" logical_not_node;
+using "ParserStorage.cod" logical_binary;
+using "ParserStorage.cod" skips_right;
 using "ParserStorage.cod" unequal_words;
 using "ExpressionParser.cod" ParseResult;
 using "NameResolution.cod" NameBindings;
@@ -496,6 +499,28 @@ func check_conditional(nodes:const ExprNodes in N, ref facts:OperandFacts in F, 
     return diagnostic;
 }
 
+func check_logical(nodes:const ExprNodes in N, ref facts:OperandFacts in F, at:u64) -> u8
+    where {const owner N, owner F} {
+    val left <- nodes[at].left;
+    val abrupt <- facts[left].kind == never_result();
+    val diagnostic <- 0u8;
+    if (!abrupt) {
+        diagnostic <- require_typed_bits(nodes, facts, left, scalar_bool());
+        if (diagnostic != 0u8) { return diagnostic; } else {};
+    } else {};
+    if (logical_binary(nodes[at].kind)) {
+        val right <- nodes[at].right;
+        if (facts[right].kind == never_result()) {
+            (abrupt <- abrupt || (nodes[left].kind == bool_node() && !skips_right(nodes, at))):void;
+        } else {
+            diagnostic <- require_typed_bits(nodes, facts, right, scalar_bool());
+            if (diagnostic != 0u8) { return diagnostic; } else {};
+        };
+    } else {};
+    set_result(facts, at, if (abrupt) { never_result() } else { scalar_bool() });
+    return 0u8;
+}
+
 func merge_guard_result(nodes:const ExprNodes in N, ref facts:OperandFacts in F, at:u64, arm:u64, discard:bool) -> u8
     where {const owner N, owner F} {
     val kind <- facts[arm].kind;
@@ -686,6 +711,7 @@ func check_operand(nodes:const ExprNodes in N, names:const NameBindings in B, li
     } else {};
     if (kind == transfer_node()) { return check_transfer(nodes, facts, at); } else {};
     if (kind == compare_node()) { return check_comparison(nodes, facts, at); } else {};
+    if (kind == logical_not_node() || logical_binary(kind)) { return check_logical(nodes, facts, at); } else {};
     if (kind == call_node()) { return check_direct_call(nodes, names, links, facts, owners, at, used); } else {};
     if (kind == behave_node()) { return check_symbolic_call(nodes, names, selected, facts, at); } else {};
     if (kind == block_node()) {

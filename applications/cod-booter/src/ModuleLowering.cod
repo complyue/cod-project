@@ -26,6 +26,11 @@ using "ParserStorage.cod" discard_node;
 using "ParserStorage.cod" bool_node;
 using "ParserStorage.cod" compare_node;
 using "ParserStorage.cod" conditional_node;
+using "ParserStorage.cod" logical_not_node;
+using "ParserStorage.cod" logical_and_node;
+using "ParserStorage.cod" logical_binary;
+using "ParserStorage.cod" skips_right;
+using "ParserStorage.cod" equal_words;
 using "ParserStorage.cod" return_node;
 using "ParserStorage.cod" throw_node;
 using "ExpressionParser.cod" ParseResult;
@@ -45,6 +50,7 @@ using "CompletionChecking.cod" can_continue;
 using "CompletionChecking.cod" can_miss_return;
 using "CompletionChecking.cod" present_target;
 using "CompletionChecking.cod" absent_target;
+using "CompletionChecking.cod" skipped_operand;
 using "ModuleExports.cod" exception_root_identity;
 using "ModuleExports.cod" null_pointer_identity;
 using "ModuleExports.cod" missing_return_identity;
@@ -357,6 +363,48 @@ func lower_binary(nodes:const ExprNodes in N, names:const NameBindings in B, lin
     position(code, plan, state, ready);
 }
 
+func lower_logical(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
+                   facts:const OperandFacts in F, sites:const CompletionSites in S, ref code:NativeCommands in C,
+                   ref plan:NativePlan in P, ref state:LoweringState in R, at:u64) -> void
+    where {const owner N, const owner B, const owner L, const owner F, const owner S, owner C, owner P, owner R} {
+    val left <- nodes[at].left;
+    lower_bits(nodes, names, links, facts, sites, code, plan, state, left);
+    if (!state.live || plan.diagnostic != 0u8) { return; } else {};
+    if (nodes[at].kind == logical_not_node()) {
+        val zero <- new_slot(plan);
+        emit(code, plan, word_constant(), zero, 0u64);
+        command(code, plan, compare_words(), slot(at), slot(left), zero, equal_words());
+        return;
+    } else {};
+    val right <- nodes[at].right;
+    if (nodes[left].kind == bool_node()) {
+        if (skips_right(nodes, at)) {
+            emit(code, plan, copy_word(), slot(at), slot(left));
+        } else {
+            lower_bits(nodes, names, links, facts, sites, code, plan, state, right);
+            if (state.live) { emit(code, plan, copy_word(), slot(at), slot(right)); } else {};
+        };
+        return;
+    } else {};
+    val selected <- new_block(plan);
+    val skipped <- new_block(plan);
+    val joined <- new_block(plan);
+    val and_operator <- nodes[at].kind == logical_and_node();
+    val on_false <- if (and_operator) { skipped } else { selected };
+    val on_true <- if (and_operator) { selected } else { skipped };
+    command(code, plan, branch_equal(), slot(left), 0u64, on_false, on_true);
+    position(code, plan, state, selected);
+    lower_bits(nodes, names, links, facts, sites, code, plan, state, right);
+    if (state.live) {
+        emit(code, plan, copy_word(), slot(at), slot(right));
+        finish_block(code, plan, state, joined);
+    } else {};
+    position(code, plan, state, skipped);
+    emit(code, plan, copy_word(), slot(at), slot(left));
+    finish_block(code, plan, state, joined);
+    position(code, plan, state, joined);
+}
+
 func lower_list(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                 facts:const OperandFacts in F, sites:const CompletionSites in S, ref code:NativeCommands in C,
                 ref plan:NativePlan in P, ref state:LoweringState in R, tail:u64, destination:u64, read_result:bool) -> void
@@ -619,6 +667,10 @@ func lower_expression(nodes:const ExprNodes in N, names:const NameBindings in B,
         lower_binary(nodes, names, links, facts, sites, code, plan, state, at);
         return;
     } else {};
+    if (kind == logical_not_node() || logical_binary(kind)) {
+        lower_logical(nodes, names, links, facts, sites, code, plan, state, at);
+        return;
+    } else {};
     if (kind == conditional_node()) {
         lower_conditional(nodes, names, links, facts, sites, code, plan, state, at, read_result);
         return;
@@ -839,7 +891,8 @@ func lower_activation(nodes:const ExprNodes in N, names:const NameBindings in B,
 
 func module_command_supported(names:const NameBindings in B, sites:const CompletionSites in S, at:u64) -> bool
     where {const owner B, const owner S} {
-    return names[at].scope == no_node() || names[at].kind != exception_binding() || sites[at].forwarded_operand != 0u8;
+    return sites[at].event == skipped_operand() || names[at].scope == no_node() ||
+        names[at].kind != exception_binding() || sites[at].forwarded_operand != 0u8;
 }
 
 # Consume one successful checked revision. The caller may publish commands

@@ -20,6 +20,10 @@ using "ParserStorage.cod" deferred_block_node;
 using "ParserStorage.cod" discard_node;
 using "ParserStorage.cod" compare_node;
 using "ParserStorage.cod" conditional_node;
+using "ParserStorage.cod" bool_node;
+using "ParserStorage.cod" logical_not_node;
+using "ParserStorage.cod" logical_binary;
+using "ParserStorage.cod" skips_right;
 using "ParserStorage.cod" return_node;
 using "ParserStorage.cod" throw_node;
 using "ParserStorage.cod" group_node;
@@ -81,6 +85,7 @@ data CompletionCheckResult {
 func possible_failure() -> u8 { return 1u8; }
 func definite_failure() -> u8 { return 2u8; }
 func callable_return() -> u8 { return 3u8; }
+func skipped_operand() -> u8 { return 4u8; }
 
 func present_target() -> u8 { return 1u8; }
 func absent_target() -> u8 { return 2u8; }
@@ -130,6 +135,7 @@ func inherit_context(ref sites:CompletionSites in X, parent:u64, child:u64, guar
     sites[child].incoming_handler <- incoming_handler;
     sites[child].replacing_try <- replacing_try;
     sites[child].in_delayed_body <- sites[parent].in_delayed_body;
+    if (sites[parent].event == skipped_operand()) { (sites[child].event <- skipped_operand()):void; } else {};
     return;
 }
 
@@ -188,6 +194,16 @@ func prepare_context(nodes:const ExprNodes in N, facts:const OperandFacts in F,
         inherit_context(sites, at, nodes[at].number, guard, incoming, replacing);
         return;
     } else {};
+    if (logical_binary(kind)) {
+        val left <- nodes[at].left;
+        val right <- nodes[at].right;
+        inherit_context(sites, at, left, guard, incoming, replacing);
+        inherit_context(sites, at, right, guard, incoming, replacing);
+        if (facts[left].kind == never_result() || skips_right(nodes, at)) {
+            (sites[right].event <- skipped_operand()):void;
+        } else {};
+        return;
+    } else {};
     if (binary_context(kind)) {
         inherit_context(sites, at, nodes[at].left, guard, incoming, replacing);
         inherit_context(sites, at, nodes[at].right, guard, incoming, replacing);
@@ -198,7 +214,8 @@ func prepare_context(nodes:const ExprNodes in N, facts:const OperandFacts in F,
         return;
     } else {};
     if (kind == module_node() || kind == block_node() || kind == full_scope_node() ||
-        kind == group_node() || kind == discard_node() || kind == return_node() || kind == throw_node()) {
+        kind == group_node() || kind == discard_node() || kind == return_node() || kind == throw_node() ||
+        kind == logical_not_node()) {
         inherit_context(sites, at, nodes[at].left, guard, incoming, replacing);
     } else {};
 }
@@ -344,11 +361,16 @@ func operands_can_complete(nodes:const ExprNodes in N, sites:const CompletionSit
         return can_continue(sites, nodes[at].left) &&
             (can_continue(sites, nodes[at].right) || can_continue(sites, nodes[at].number));
     } else {};
+    if (logical_binary(kind)) {
+        val left <- nodes[at].left;
+        if (!can_continue(sites, left)) { return false; } else {};
+        return nodes[left].kind != bool_node() || skips_right(nodes, at) || can_continue(sites, nodes[at].right);
+    } else {};
     if (kind == full_scope_node()) {
         return sites[at].local_return != 0u8 || can_continue(sites, nodes[at].left);
     } else {};
     if (kind == group_node() || kind == discard_node() || kind == block_node() ||
-        kind == throw_node() || kind == return_node() || kind == deferred_call_node()) {
+        kind == throw_node() || kind == return_node() || kind == deferred_call_node() || kind == logical_not_node()) {
         return can_continue(sites, nodes[at].left);
     } else {};
     if (kind == val_binding_node() || kind == ptr_binding_node()) {
@@ -444,6 +466,10 @@ func check_throw_completion(nodes:const ExprNodes in N, names:const NameBindings
 func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                  facts:const OperandFacts in F, ref sites:CompletionSites in X, at:u64, used:u64) -> u8
     where {const owner N, const owner B, const owner L, const owner F, owner X} {
+    if (sites[at].event == skipped_operand()) {
+        sites[at].can_continue <- 0u8;
+        return 0u8;
+    } else {};
     record_presence(nodes, names, facts, sites, at);
     if (!operands_can_complete(nodes, sites, at)) {
         sites[at].can_continue <- 0u8;
@@ -611,6 +637,7 @@ export can_miss_return;
 export possible_failure;
 export definite_failure;
 export callable_return;
+export skipped_operand;
 export present_target;
 export absent_target;
 export unknown_target;

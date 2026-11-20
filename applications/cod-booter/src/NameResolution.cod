@@ -33,6 +33,8 @@ using "ParserStorage.cod" discard_node;
 using "ParserStorage.cod" bool_node;
 using "ParserStorage.cod" compare_node;
 using "ParserStorage.cod" conditional_node;
+using "ParserStorage.cod" logical_not_node;
+using "ParserStorage.cod" logical_binary;
 using "ParserStorage.cod" block_node;
 using "ParserStorage.cod" full_scope_node;
 using "ParserStorage.cod" block_item_node;
@@ -436,7 +438,8 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
         resolve_defer(source, nodes, bindings, work, state, at);
         return;
     } else {};
-    if (kind == group_node() || kind == discard_node() || kind == return_node() || kind == throw_node()) {
+    if (kind == group_node() || kind == discard_node() || kind == return_node() || kind == throw_node() ||
+        kind == logical_not_node()) {
         resolve_expression(source, nodes, bindings, work, state, nodes[at].left);
         return;
     } else {};
@@ -445,9 +448,14 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
         if (state.diagnostic == 0u8) { resolve_list(source, nodes, bindings, work, state, nodes[at].right); } else {};
         return;
     } else {};
-    if (kind == add_node() || kind == multiply_node() || kind == compare_node() || kind == transfer_node()) {
+    if (kind == add_node() || kind == multiply_node() || kind == compare_node() || kind == transfer_node() ||
+        logical_binary(kind)) {
         resolve_expression(source, nodes, bindings, work, state, nodes[at].left);
-        if (state.diagnostic == 0u8) { resolve_expression(source, nodes, bindings, work, state, nodes[at].right); } else {};
+        if (state.diagnostic != 0u8) { return; } else {};
+        val enclosing_guard <- state.guarded;
+        state.guarded <- enclosing_guard || logical_binary(kind);
+        resolve_expression(source, nodes, bindings, work, state, nodes[at].right);
+        state.guarded <- enclosing_guard;
         return;
     } else {};
     reject_name(state, at, invalid_module_tree());

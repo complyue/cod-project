@@ -144,6 +144,13 @@ func false_word(source:const SourceBytes in S, token:const Token in T) -> bool
         source[first + 3u64] == 115u8 && source[first + 4u64] == 101u8;
 }
 
+func not_word(source:const SourceBytes in S, token:const Token in T) -> bool
+    where {const owner S, const owner T} {
+    if (!identifier_width(token, 3u64)) { return false; } else {};
+    val first <- token.first;
+    return source[first] == 110u8 && source[first + 1u64] == 111u8 && source[first + 2u64] == 116u8; # n o t
+}
+
 func void_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
     if (!identifier_width(token, 4u64)) { return false; } else {};
@@ -476,6 +483,7 @@ export if_word;
 export else_word;
 export true_word;
 export false_word;
+export not_word;
 export void_word;
 export in_word;
 export owner_word;

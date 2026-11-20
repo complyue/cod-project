@@ -57,6 +57,19 @@ func discard_node() -> u8 { return 41u8; }
 func bool_node() -> u8 { return 42u8; }
 func compare_node() -> u8 { return 43u8; }
 func conditional_node() -> u8 { return 44u8; }
+func logical_not_node() -> u8 { return 45u8; }
+func logical_and_node() -> u8 { return 46u8; }
+func logical_or_node() -> u8 { return 47u8; }
+
+func logical_binary(kind:u8) -> bool {
+    return kind == logical_and_node() || kind == logical_or_node();
+}
+
+func skips_right(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
+    val left <- nodes[at].left;
+    if (nodes[left].kind != bool_node()) { return false; } else {};
+    return (nodes[left].number == 0u64) == (nodes[at].kind == logical_and_node());
+}
 
 func equal_words() -> u64 { return 0u64; }
 func unequal_words() -> u64 { return 1u64; }
@@ -130,6 +143,11 @@ export discard_node;
 export bool_node;
 export compare_node;
 export conditional_node;
+export logical_not_node;
+export logical_and_node;
+export logical_or_node;
+export logical_binary;
+export skips_right;
 export equal_words;
 export unequal_words;
 export less_words;

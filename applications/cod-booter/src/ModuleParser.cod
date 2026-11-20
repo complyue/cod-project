@@ -68,7 +68,7 @@ func parse_selection(source:const SourceBytes in S, tokens:const Tokens in T,
     if (symbolic) {
         if (!parse_symbol(tokens, nodes, result, past)) { return; } else {};
     } else {
-        if (!parse_identifier(tokens, nodes, result, past, expected_name())) { return; } else {};
+        if (!parse_identifier(source, tokens, nodes, result, past, expected_name())) { return; } else {};
     };
     val selection <- result.root;
     append_node(nodes, result, using_node(), first, nodes[selection].past, 0u64, path_node, selection, first);
@@ -114,7 +114,7 @@ func parse_parameters(source:const SourceBytes in S, tokens:const Tokens in T,
 func parse_callable_head(source:const SourceBytes in S, tokens:const Tokens in T,
                           ref nodes:ExprNodes in A, ref result:ParseResult in R, past:u64) -> void
     where {const owner S, const owner T, owner A, owner R} {
-    if (!parse_identifier(tokens, nodes, result, past, expected_name())) { return; } else {};
+    if (!parse_identifier(source, tokens, nodes, result, past, expected_name())) { return; } else {};
     val name <- result.root;
     val open <- result.next;
     if (punct_at(source, tokens, open, past) != 40u8) { # '('
@@ -131,13 +131,13 @@ func parse_callable_head(source:const SourceBytes in S, tokens:const Tokens in T
 }
 
 # Each header clause links to the preceding header node and its own operand.
-func parse_type_clause(tokens:const Tokens in T, ref nodes:ExprNodes in A,
+func parse_type_clause(source:const SourceBytes in S, tokens:const Tokens in T, ref nodes:ExprNodes in A,
                        ref result:ParseResult in R, past:u64, kind:u8) -> bool
-    where {const owner T, owner A, owner R} {
+    where {const owner S, const owner T, owner A, owner R} {
     val previous <- result.root;
     val first <- tokens[result.next].first;
     result.next <- result.next + 1u64;
-    if (!parse_identifier(tokens, nodes, result, past, expected_type())) { return false; } else {};
+    if (!parse_identifier(source, tokens, nodes, result, past, expected_type())) { return false; } else {};
     val annotation <- result.root;
     append_node(nodes, result, kind, first, nodes[annotation].past, 0u64, previous, annotation, first);
     return result.diagnostic == 0u8;
@@ -153,7 +153,7 @@ func parse_owner_clause(source:const SourceBytes in S, tokens:const Tokens in T,
     } else {};
     val previous <- result.root;
     result.next <- at + 1u64;
-    if (!parse_identifier(tokens, nodes, result, past, expected_name())) { return false; } else {};
+    if (!parse_identifier(source, tokens, nodes, result, past, expected_name())) { return false; } else {};
     val owner_name <- result.root;
     val first <- tokens[at].first;
     append_node(nodes, result, owner_clause_node(), first, nodes[owner_name].past, 0u64, previous, owner_name, first);
@@ -188,18 +188,18 @@ func parse_callable(source:const SourceBytes in S, tokens:const Tokens in T,
     parse_callable_head(source, tokens, nodes, result, past);
     if (result.diagnostic != 0u8) { return; } else {};
     if (punct_pair_at(source, tokens, result.next, past, 45u8, 62u8)) { # '->'
-        if (!parse_type_clause(tokens, nodes, result, past, result_clause_node())) { return; } else {};
+        if (!parse_type_clause(source, tokens, nodes, result, past, result_clause_node())) { return; } else {};
     } else {};
     val leading_throws <- result.next < past && throws_word(source, tokens[result.next]);
     if (leading_throws) {
-        if (!parse_type_clause(tokens, nodes, result, past, throws_clause_node())) { return; } else {};
+        if (!parse_type_clause(source, tokens, nodes, result, past, throws_clause_node())) { return; } else {};
     } else {};
     if (result.next < past && where_word(source, tokens[result.next])) {
         parse_owner_clauses(source, tokens, nodes, result, past);
         if (result.diagnostic != 0u8) { return; } else {};
     } else {};
     if (!leading_throws && result.next < past && throws_word(source, tokens[result.next])) {
-        if (!parse_type_clause(tokens, nodes, result, past, throws_clause_node())) { return; } else {};
+        if (!parse_type_clause(source, tokens, nodes, result, past, throws_clause_node())) { return; } else {};
     } else {};
     val header <- result.root;
     parse_block(source, tokens, nodes, result, past);
