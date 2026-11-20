@@ -5690,9 +5690,9 @@ class ScalarChecker {
          std::any_of(type.parameters.begin(), type.parameters.end(), [&](const auto &p) { return nested_binder(method, p); }));
   }
   static void signature_type(const CheckedMethod &method, const Type &type, const Location &at, bool result = false,
-                             bool borrowed_product = false) {
+                             bool borrowed_target = false) {
     if (bits_type(type) || binder(method, type) || (result && type == Type::void_type)) return;
-    if (borrowed_product && type.kind == Type::product) return;
+    if (borrowed_target && (type.kind == Type::product || (!result && type.kind == Type::array))) return;
     if (type.kind == Type::array)
       implementation_gap(at, "array parameter or result of type '" + type_name(type) + "'");
     if (type.kind == Type::procedure && type.target) {
@@ -6109,10 +6109,16 @@ class ScalarChecker {
       fail(at, "compiler resource limit: 4096 scalar checking obligations while preparing '" + definition.source->name + "'");
     const auto substitutions = match(definition, arguments, retained);
     if (!substitutions) throw std::logic_error("unchecked method demand");
+    for (size_t i = 0; i < arguments.size(); ++i) if (arguments[i].kind == Type::array) {
+      const auto &parameter = parameter_at(definition, i);
+      if (argument_mode(parameter) != ArgumentMode::borrowed_read || !parameter.read_only ||
+          definition.scope_inputs || definition.source->symbolic || caller_bindings(definition))
+        implementation_gap(at, "array parameters require ordinary readonly borrows");
+    }
     const auto &supplied = program_.query_environments[query_environment].result;
     const auto result = supplied ? ResultEvidence{supplied, ResultOrigin::supplied} :
         require_result(method, arguments, retained, at, state);
-    check_product_owner_roles(definition, arguments);
+    check_aggregate_owner_roles(definition, arguments);
     for (size_t i = 0; i < arguments.size(); ++i) if (arguments[i].kind == Type::product) {
       const auto &parameter = parameter_at(definition, i);
       const auto mode = argument_mode(parameter);
@@ -6124,6 +6130,8 @@ class ScalarChecker {
     if (result.contract->type->kind == Type::product) {
       if (!result.contract->borrowed()) implementation_gap(at, "whole-product value results");
     }
+    if (result.contract->type->kind == Type::array)
+      implementation_gap(at, "array results");
     check_declared_results(definition, *result.contract, declared);
     definition.contextual_result = definition.contextual_result || supplied.has_value();
     const auto id = program_.instances.size();
@@ -6841,6 +6849,13 @@ class ScalarChecker {
     if (expr.text != "category" && expr.text != "site" && expr.text != "requested" && expr.text != "available" && expr.text != "cause_count")
       fail(expr.at, "unknown intrinsic exception field '" + expr.text + "'");
   }
+  static bool array_length_query(const Expression &expr) {
+    return expr.kind == Expression::Kind::call && expr.intrinsic && expr.text == "len";
+  }
+  static void check_array_length_type(const Type &type, bool borrowed, const Location &at) {
+    if (type.kind != Type::array || !borrowed)
+      fail(at, "intrinsic (len) requires a borrowed array");
+  }
   const CheckedSchema &product_schema(const Type &type, const Location &at) const {
     if (type.kind != Type::product) implementation_gap(at, "ordinary construction requires a supported product type");
     return program_.schemas.at(type.identity);
@@ -6853,19 +6868,21 @@ class ScalarChecker {
   static bool readonly_field(const CheckedSchema::Field &field) {
     return field.source->read_only || field.source->fixed_binding;
   }
-  static void check_product_owner_roles(const CheckedMethod &method, const std::vector<Type> &types) {
+  static void check_aggregate_owner_roles(const CheckedMethod &method, const std::vector<Type> &types) {
     // Lexical scopes retain the supplying activation's owner capabilities.
     if (method.scope_inputs) return;
-    if (std::ranges::none_of(types, [](const auto &type) { return type.kind == Type::product; })) return;
+    if (std::ranges::none_of(types, [](const auto &type) { return type.kind == Type::product || type.kind == Type::array; })) return;
     for (const auto &owner : method.input_owners()) if (!owner.read_only) {
-      bool product = false, writable = false;
+      bool product = false, array = false, writable = false;
       for (size_t i = 0; i < types.size(); ++i) {
         const auto &parameter = parameter_at(method, i);
         if (parameter.owner != owner.name) continue;
         product |= types[i].kind == Type::product;
+        array |= types[i].kind == Type::array;
         writable |= !parameter.read_only;
       }
       if (product && !writable) fail(owner.at, "readonly product inputs require 'const owner " + owner.name + "'");
+      if (array && !writable) fail(owner.at, "readonly array inputs require 'const owner " + owner.name + "'");
     }
   }
   std::vector<ProductInput> product_inputs(const std::vector<Type> &arguments, const Location &at) const {
@@ -10819,6 +10836,16 @@ class ScalarChecker {
       }
       [[fallthrough]];
     case K::unary: case K::call: case K::value_call: case K::behave: case K::perform: {
+      if (array_length_query(expr)) {
+        if (expr.children.size() != 1) fail(expr.at, "intrinsic (len) requires one array operand");
+        if (state.preparing(expr)) fail(expr.at, "defer call requires a procedure");
+        const auto type = child(0, false, true, EvidenceRead::target);
+        if (!type || type == Type::never) return type;
+        if (state.required) check_array_length_type(*type, state.value.view == true && !state.value.mixed_view, expr.at);
+        require_type_initialized(state, state.target, "array operand", expr.at);
+        read_type_target(state, state.value, state.target);
+        return Type::uint64;
+      }
       const bool invokes = !state.preparing(expr);
       std::optional<Type> target;
       bool local = false, implicit = false, independent_callee = false;
@@ -14700,8 +14727,9 @@ class ScalarChecker {
     operation.read_only = slot.read_only;
     operation.fixed_binding = slot.fixed;
     operation.view = true;
-    if (read && operation.type.kind == Type::product)
-      implementation_gap(expr.at, "reading a whole product as an independent value");
+    if (read && (operation.type.kind == Type::product || operation.type.kind == Type::array))
+      implementation_gap(expr.at, operation.type.kind == Type::array ? "reading a whole array as an independent value"
+                                                                      : "reading a whole product as an independent value");
     operation.initialization = selection_initialization(lexical_, selected);
     if (read) dereference(operation, expr.at);
     for (const auto place : operation.targets) {
@@ -15045,6 +15073,20 @@ class ScalarChecker {
         check_value_call(expr, target.type, offset, instance, operations, operation, read, discard);
         break;
       }
+      if (array_length_query(expr)) {
+        if (expr.children.size() != 1) fail(expr.at, "intrinsic (len) requires one array operand");
+        if (&expr == prepared_call_) fail(expr.at, "defer call requires a procedure");
+        const auto type = child(0, false);
+        operation.type = type == Type::never ? Type{Type::never} : Type{Type::uint64};
+        operation.builtin = BuiltinOperation::array_length;
+        if (type != Type::never) {
+          const auto &array = operations.at(expr.children.front().get());
+          check_array_length_type(type, array.view && !array.mixed_view, expr.at);
+          require_live_view(array, expr.at);
+          read_view(array, expr.at, "array operand");
+        }
+        break;
+      }
       if (expr.intrinsic && !eager && expr.text != "cause_at")
         implementation_gap(expr.at, "explicit intrinsic has no implemented builtin '" + expr.text + "'");
       if (expr.kind == K::call && !expr.intrinsic && std::ranges::any_of(expr.children,
@@ -15088,7 +15130,8 @@ class ScalarChecker {
           completes = false;
         } else {
           arguments.push_back(argument);
-          if (mode == ArgumentMode::value || argument.kind != Type::product) require_value(argument, expr.at);
+          if (mode == ArgumentMode::value || (argument.kind != Type::product && argument.kind != Type::array))
+            require_value(argument, expr.at);
         }
         operation.arguments.push_back({mode, arguments.back()});
         if (mode == ArgumentMode::value && argument.kind == Type::procedure)
@@ -17364,7 +17407,7 @@ class ScalarChecker {
         const auto mode = argument_mode(parameter);
         signature_type(prepared, prepared.parameters.back(), parameter.at, false, mode != ArgumentMode::value);
       }
-      check_product_owner_roles(prepared, prepared.parameters);
+      check_aggregate_owner_roles(prepared, prepared.parameters);
       for (const auto &parameter : form->type_parameters)
         if (parameter.bound) implementation_gap(parameter.at, "bounded type parameters");
       std::optional<size_t> symbol;

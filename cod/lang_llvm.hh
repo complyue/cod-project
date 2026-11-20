@@ -33,6 +33,7 @@ class LLVMEmission {
   // scope-owned images; they are not regional-storable bits.
   llvm::StructType *exception_ = llvm::StructType::get(context_, std::vector<llvm::Type *>(5, b_.getInt64Ty()));
   llvm::StructType *scalar_ = llvm::StructType::create(context_, {b_.getInt64Ty(), b_.getInt32Ty()}, "cod.scalar");
+  llvm::StructType *array_view_ = llvm::StructType::create(context_, {b_.getPtrTy(), b_.getInt64Ty()}, "cod.array.view");
   llvm::StructType *outcome_ = llvm::StructType::create(context_,
       {scalar_, b_.getInt64Ty(), b_.getInt64Ty(), b_.getPtrTy(), b_.getInt64Ty(), b_.getInt64Ty(), b_.getInt64Ty()}, "cod.outcome");
   llvm::StructType *here_ = llvm::StructType::create(context_, {b_.getPtrTy(), b_.getPtrTy()}, "cod.here");
@@ -260,11 +261,13 @@ class LLVMEmission {
   unsigned tag(const Type &type) {
     const auto nominal_base = 8 + exception_categories.size();
     if (type.kind == Type::product) return nominal_base + type.identity;
+    const auto array_base = nominal_base + program_->schemas.size();
+    if (type.kind == Type::array) return array_base + type.identity;
     if (type.kind == Type::procedure) {
       const auto found = std::find(callable_types_.begin(), callable_types_.end(), type);
       const auto id = std::distance(callable_types_.begin(), found);
       if (found == callable_types_.end()) callable_types_.push_back(type);
-      return nominal_base + program_->schemas.size() + id;
+      return array_base + program_->arrays.size() + id;
     }
     switch (type.kind) {
     case Type::integer: return 1; case Type::uint8: return 2; case Type::uint32: return 3;
@@ -2043,6 +2046,15 @@ class LLVMEmission {
       [[fallthrough]];
     }
     case K::value_call: case K::call: case K::behave: case K::perform: case K::pipeline: case K::processor_composition: {
+      if (fact.builtin == BuiltinOperation::array_length) {
+        const auto &operand = *expr.children.front();
+        auto *address = emit_expression(operand, Projection::target);
+        if (!reachable()) return nullptr;
+        address = checked_address(address, operand, expr.at);
+        if (discard) return empty_scalar();
+        auto *length = b_.CreateLoad(b_.getInt64Ty(), b_.CreateStructGEP(array_view_, address, 1), "array.length");
+        return pack(length, Type::uint64);
+      }
       return temporary_scope(expr.at, !fact.borrowed_result || read ? scalar_ : static_cast<llvm::Type *>(b_.getPtrTy()), [&]() -> llvm::Value * {
         // An entry-time supplied body leaves its slot empty during preparation.
         std::vector<llvm::Value *> here_values(fact.here_arguments.size());
