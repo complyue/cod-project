@@ -5,6 +5,16 @@
 <a id="h-hlvm-candidate-20261120"></a>
 **H-HLVM-CANDIDATE-20261120.** In the project chat, the project user proposed `hlvm-basic` for running BASIC source or saving a DBMR to run later, with the prerequisite “要等 CoD 基本的 lexer/parser 已经通了的情况下再推进”, then asked to record the idea in a planning document. The [application note](applications/README.md#deferred-application-hlvm-basic) applies the executor and editable program graph from [*Algebraic Effects Is All You Need*](papers/AlgebraicEffectsIsAllYouNeed.md) to BASIC. It does not change the compiler roadmap or authorize implementation.
 
+## 2026-11-19 — Require the booter’s C-native execution path
+
+<a id="h-booter-native-minimum-20261119"></a>
+**H-BOOTER-NATIVE-MINIMUM-20261119.** Project user in the [booter scope side chat](codex://threads/01a1f792-b3c0-7e52-a1a5-6bd2f41f2b20), recorded 2026-11-19 America/Los_Angeles, says “C接口和LLVM binding应该是booter必须的；C native components，包括基本的region支持等，应该在当前目标之内” and directs “文档明确落实，通知主线”. This refines [H-BOOTER-DRIVEN-SEED-20261119](#h-booter-driven-seed-20261119) in roadmap r15→16 and registry r1015→1016, P-642/P-643. Initial delivery exercises CoD’s C interface, the C-native in-memory region service and the minimal LLVM bindings used by the booter. Concrete ABI, DBMR persistence and broader bindings retain separate scope.
+
+## 2026-11-19 — Make the initial booter the seed delivery scope
+
+<a id="h-booter-driven-seed-20261119"></a>
+**H-BOOTER-DRIVEN-SEED-20261119.** Project user in the [booter scope side chat](codex://threads/01a1f792-b3c0-7e52-a1a5-6bd2f41f2b20), recorded 2026-11-19 America/Los_Angeles. The user confirms “交替推进 booter 和 seed 的开发，以交付可用 seed 为当前目标” and “booter 开发的便利性可以舍弃，但是结果代码的可读性不可舍弃”, then excludes “业务原型app，几篇论文的原型实现”. D-20 roadmap r14→15 records the minimum seed scope from the first booter’s basic workflow, with readable idiomatic CoD and a reproducible build and run. Registry r1014→1015, P-642/P-643 record the workload-based delivery path. The fail-stop option discussed for the seed-built booter leaves accepted language contracts binding. Individual feature mechanisms, provider ABI and later application work retain separate scopes. Prior roadmap at `d8787ccaefd6172391cf12e8429209969c086f0c:applications/cod-booter/README.md`.
+
 ## 2026-11-19 — Carry conditional field readiness into queried helpers
 
 <a id="k-query-input-guards-20261119"></a>

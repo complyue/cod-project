@@ -1,10 +1,12 @@
 # CoD booter: a compiler application written in CoD
 
-Roadmap revision: 14 · Recorded: 2026-11-19 · Phase: application and repository planning.
+Roadmap revision: 16 · Recorded: 2026-11-19 · Phase: initial seed delivery through alternating booter and seed development.
 
 ## Design authority
 
-- **Checked DBMR program revisions.** [D-20](../../design/DesignAuthorityRegistry.md#d-20) and [K-TYPED-DBMR-PROGRAM-OVERVIEW-20261119](../../CHANGELOG.md#k-typed-dbmr-program-overview-20261119) record the research checkpoint within the existing application planning scope. Revision 14 uses the CoD source listing as its acceptance workload. [Continuity](../../CHANGELOG.md#k-warehouse-cod-source-20261119). It applies the charter’s source and edit loop and native execution goals (§§6.3/7/8/10/12) through C-01/C-02/C-05/C-06 and the existing C-80/P-314–P-318 plan. Check graph/source correspondence, safe publication, equivalent execution observations and distinct performance measures. Graph schemas, editing APIs, specialization policy and implementation qualification remain open.
+- **Initial seed delivery.** [D-20-BOOTSTRAP](../../design/DesignAuthorityRegistry.md#d-20-bootstrap), r16, covers [the seed scope and acceptance](#initial-seed-delivery). [H-BOOTER-DRIVEN-SEED-20261119](../../CHANGELOG.md#h-booter-driven-seed-20261119) confirms the booter-driven delivery priority and source-readability requirement. [H-BOOTER-NATIVE-MINIMUM-20261119](../../CHANGELOG.md#h-booter-native-minimum-20261119) confirms the shared C interface, basic C-native region support and minimal LLVM bindings as required for delivery. P-642 connects C-80 to charter §§4.3/6.3/8.1/12 through explicit native lifetimes, correct execution, readable CoD source and end-to-end evidence. P-643 records governing contracts. The exact provider ABI and operations beyond the booter's needs retain their own review boundaries.
+
+- **Checked DBMR program revisions.** [D-20](../../design/DesignAuthorityRegistry.md#d-20) records this separate research checkpoint. The [CoD source listing](../../CHANGELOG.md#k-warehouse-cod-source-20261119) supplies the research workload. [Authority record](../../CHANGELOG.md#k-typed-dbmr-program-overview-20261119). The checkpoint applies the charter’s source and edit loop and native execution goals (§§6.3/7/8/10/12) through C-01/C-02/C-05/C-06 and the existing C-80/P-314–P-318 plan. Check graph/source correspondence, safe publication, equivalent execution observations and distinct performance measures. Graph schemas, editing APIs, specialization policy and implementation qualification remain open.
 
 - **Diagnostics across the toolchain.** [D-20-DIAGNOSTICS](../../design/DesignAuthorityRegistry.md#d-20-diagnostics), r11, records the [project-wide stage decision](../../CHANGELOG.md#h-compiler-diagnostics-20261119). P-627/P-628 connect C-80 and charter §§6.3/8.1/12 to a sound bootstrap compiler and actionable diagnostics in the CoD-written compiler. For each feature, check source correctness and place analysis done solely for diagnostic quality in the appropriate stage.
 
@@ -12,18 +14,36 @@ Roadmap revision: 14 · Recorded: 2026-11-19 · Phase: application and repositor
 
 - **Output-contract continuity:** [H-571](../../CHANGELOG.md#h-571)/[K-OUTPUT-ACCEPT-20261117](../../CHANGELOG.md#k-output-accept-20261117) covers document-set r4→5. D-22’s selected init declared-place roles replace a separate out spelling; native handle storage, target-initializing helper syntax, ownership and provider proof remain pending. Preserve C-81/C-65, charter §§4.3/6.3/8/12, D-16 and existing D-17 call/block timing. No application implementation, physical ABI or broader qualification follows; pipeline semantics are unchanged.
 
-- **Registry / scope:** [D-20](../../design/DesignAuthorityRegistry.md#d-20), roadmap revision 14. The pipeline and LLVM interop documents retain their own scoped revisions. Detailed application designs are `pending-human`; the selected defer call/block rule is governed by D-17, not by a broader implementation qualification of this set.
+- **Registry / scope:** [D-20](../../design/DesignAuthorityRegistry.md#d-20), roadmap revision 16. The pipeline and LLVM interop documents retain their own scoped revisions. Detailed application designs are `pending-human`. D-17 governs the selected defer call/block rule.
 - **Human baseline:** [H-353](../../CHANGELOG.md#h-353) requests a parallel compiler application, CoD-native design, regional stage caches and incremental LLVM bindings, with documentation only at this stage. [H-354](../../CHANGELOG.md#h-354) identifies output-initialization and uninitialized-handle storage requirements; H-571 supplies the current init language roles, while handle classification remains pending. [H-355](../../CHANGELOG.md#h-355) supplies registration-time terminology. [H-356](../../CHANGELOG.md#h-356) selects call/block defer timing and immediate language implementation; [K-515](../../CHANGELOG.md#k-515) records this application-plan update.
 - **Value:** C-80/P-314–P-318 connects inspectable compiler semantics to C-01, reusable structured artifacts to C-05, and native integration to C-02/C-11/C-79. The charter's §§2, 5.3–5.4, 6–7 and 12 provide the context; detailed derivation and trade-offs remain pending.
-- **Boundaries / acceptance:** preserve regional relocation, owner/access checks, independent module worlds and explicit TLS effects. Keep confirmed direction, proposals and missing evidence distinguishable. D-17 supplies the separately authorized defer work. No compiler-application source port, native ABI, toolchain/bootstrap operation or performance claim is authorized by this plan.
+- **Boundaries / acceptance:** preserve regional relocation, owner/access checks, independent module worlds and explicit TLS effects where used. Keep confirmed direction, proposals and missing evidence distinguishable. Native ABI, toolchain operations and performance claims require their own authorization or evidence.
 
 ## Purpose
 
-Use compiler construction as a second application alongside [steady-snn](../steady-snn/docs/README.md). Progressively write CoD's tokenizer, parser, analyzer and compilation pipeline in CoD, selecting and binding LLVM APIs as real compiler operations require them. The eventual objective is a CoD compiler capable of compiling its own CoD implementation, with native services remaining at explicit boundaries.
+Use the CoD-written compiler as the seed's first implementation workload. Progressively write CoD's tokenizer, parser, analyzer and compilation pipeline in CoD, selecting and binding LLVM APIs as real compiler operations require them. The eventual objective is a CoD compiler capable of compiling its own CoD implementation, with native services at explicit boundaries.
 
 The unit of design is the compiler operation and its data, not a C++ class translated into CoD. Existing C++ code can supply the seed compiler, implementation evidence and a behavioral comparison. Its container choices, frontend/backend coupling and internal helper structure do not prescribe the new application's architecture. The language contracts remain authoritative when an existing implementation disagrees.
 
-This application should expose useful language opportunities through real work: typed source positions and indices, ADT-based syntax and diagnostics, identity-based module information, regional intermediate artifacts, owner-checked operations and scoped native resources. A feature needs a concrete compiler use and a demonstrated reduction in complexity or cost; a compiler pilot is not a reason to add a general framework in advance.
+Compiler operations give concrete uses for typed source positions and indices, ADT-based syntax and diagnostics, identity-based module information, regional intermediate artifacts, owner-checked operations and scoped native resources. Evaluate each capability through the compiler operation it expresses.
+
+## Initial seed delivery
+
+Deliver a usable seed that supports the basic development workflow for the first CoD-written booter. Its minimum implementation scope comes from that booter's real source and end-to-end build and execution. Business application prototypes and research paper prototypes belong to separate work. Their semantic requirements, implementation and acceptance are outside the current seed goal.
+
+Alternate small booter and seed increments. Start with the CoD lexer and parser on representative source. Write the next booter operation in clear CoD, build and run it with the seed, then add the smallest coherent seed capabilities that operation needs. Repeat through checking and native output as the initial booter takes shape. Reuse existing seed capabilities and validate accepted programs against the applicable language contracts.
+
+Conveniences such as inference or shorthand can wait when explicit source is clear. Readability is a delivery requirement. The booter should express its compiler operations using CoD's types, ownership, scoped resources and explicit effects where those features make the program clearer or enforce a relevant invariant. A workaround that obscures the algorithm or discards those benefits is grounds to extend the required seed subset. Review real booter source alongside the native result.
+
+Expected failures, including invalid input, can use explicit diagnostic results. Unrecoverable compiler faults may report their location and terminate the seed-built booter, with a core dump where enabled. Full recoverable exception handling, cause chains and exceptional unwinding enter the initial workload only if the booter requires them. Programs that require an unsupported behavior get a compiler diagnostic. Required checks and ordinary scope cleanup for accepted programs follow the existing language contracts.
+
+Initial delivery requires the seed to reproducibly build and run the first CoD-written booter against CoD's shared C interface. The booter must demonstrate all of the following in its workload.
+
+- Call the C-native components it uses through that interface, with the applicable owner, access and resource lifetime checks.
+- Create an in-memory region, allocate compiler data in it and release it through the C region service. The region service supplies the basic operations the booter uses under CoD's ownership and relocation rules.
+- Use the minimal LLVM bindings exposed through C to verify and emit runnable native output. Run a representative program and check its behavior and the release of native resources on supported completion paths.
+
+Representative source and invalid-input cases must behave as specified, and the booter source must pass the readability review. The booter's first self-build is a downstream milestone. DBMR persistence and broader LLVM binding coverage are separate from initial delivery.
 
 ## Next-stage repositories and native runtime
 
@@ -32,7 +52,7 @@ All five planned repositories will live in the [e-wrks GitHub organization](http
 | Planned repository | Responsibility |
 | --- | --- |
 | `cod-lang` | CoD language design and the authoritative language specification shared by both compilers. |
-| `cod-seed` | The seed compiler in C++. CoD's native components, including the region core and LLVM bindings, are implemented in C in the next stage. |
+| `cod-seed` | The seed compiler in C++. The initial booter uses the C-native region core and LLVM bindings through the shared C interface. |
 | `cod` | The CoD compiler written in CoD. The seed builds the initial compiler, which can then compile its own sources. |
 | `codup` | Toolchain version management in the role of rustup. CoD package dependency resolution and lockfiles have their own [codp design](../../design/CodProjectStructureAndPkgMgmt.md). |
 | `codmate` | The Language Server Protocol server and IDE plugins. |
@@ -41,11 +61,11 @@ After the split, a change to what a CoD program means belongs in `cod-lang`. Eac
 
 New CoD native components are written in C. The CoD native interface is C-based. The C++ seed, the CoD-written compiler and foreign adapters consume the same interface. Specify each operation from the runtime behavior its callers need. C++ classes, templates and exception propagation are internal to C++ clients or dependencies. This choice covers CoD’s LLVM bindings as well as region support.
 
-For example, the region service must [publish a newly created disk-backed region](../../design/ConstructionAndAcquisition.md#publishing-a-newly-created-dbmr) only after initialization and preserve an existing destination in a race. Create private staging on the target filesystem, reject mismatched destinations, and verify the destination at the instant another process can open it. A killed builder and two publishers racing for the same name must preserve every previously published image. The C++ region and DBMR code is historical reference for this work. Its call sequence, object layout and file representation impose no compatibility requirement on the new components.
+At the separate DBMR checkpoint, the region service must [publish a newly created disk-backed region](../../design/ConstructionAndAcquisition.md#publishing-a-newly-created-dbmr) only after initialization and preserve an existing destination in a race. Create private staging on the target filesystem, reject mismatched destinations, and verify the destination at the instant another process can open it. A killed builder and two publishers racing for the same name must preserve every previously published image. The C++ region and DBMR code is historical reference. The new components follow the CoD operation contracts.
 
 For exception regions, distinguish fixed logical capacity, address-space reservation, backing enabled on demand and resident pages. Choose target VM operations behind the interface. Preserve owner identity and locators while enabling pages, and release acquired resources exactly once on partial failure. The C runtime must release owned exception-array members as well as the aggregate region. The native provider should support the [exception capacity rules](../../design/ExceptionControl.md#image-setting-for-exception-region-capacity), including site budgets if their syntax is adopted. Measure virtual address space and resident use separately on target systems.
 
-Deferred work includes specifying the region and LLVM binding interfaces the two compilers actually need, checking that both toolchains agree on those interfaces, and choosing toolchain distribution and editor integration details when those repositories are established. The plan leaves repository creation, source migration and the current bootstrap independent of this design record.
+Specify and check the initial region and LLVM operations alongside the booter increments that use them. Broader interfaces, toolchain distribution and editor integration have separate planning and acceptance. Repository creation, source migration and toolchain operations retain their own authorization.
 
 ### Diagnostics by compiler stage
 
@@ -64,17 +84,16 @@ Reusable language decisions belong in the relevant `design/` contracts after dis
 
 ## Proposed progression
 
-The immediate language prerequisite is [D-17's scope/defer implementation](../../design/ExceptionControl.md#immediate-implementation-and-acceptance): `defer init(...)()` evaluates acquisition and saves its returned callable now, then invokes it at scope exit. `defer { ... }` delays the whole block. This work does not need to wait for the application's cache schemas, native-handle representation or native init-place integration.
-
-These are planning checkpoints, not an approved implementation schedule. A checkpoint can advance only when its necessary language/runtime contract is selected and qualified.
+Use the initial seed delivery scope to select work at each checkpoint. The feature and runtime contracts needed by each implementation retain their own qualification. For example, when a booter operation needs [D-17 scoped cleanup](../../design/ExceptionControl.md#immediate-implementation-and-acceptance), `defer init(...)()` evaluates acquisition and saves its returned callable now, then invokes it at scope exit. `defer { ... }` delays the whole block.
 
 | Checkpoint | Useful result | Evidence to seek |
 | --- | --- | --- |
-| Regional frontend | CoD tokenization and parsing produce inspectable source-linked artifacts. | Correct tokens, syntax and diagnostics on representative CoD modules; measured storage and processing cost. |
-| Persistent reuse | Selected stage artifacts save as DBMR and load in a fresh process. | Equivalent observations after relocation; changed inputs or incompatible formats cannot cause stale reuse; separately measured load/validation and recomputation cost. |
-| Semantic pipeline | CoD builds module worlds and analyzes demanded calls with explicit identities and context. | Multi-module aliases, methods, owners and effects agree with accepted language contracts; cache reuse preserves the selected world. |
-| Native execution | A small selected LLVM binding surface supports verification and executable output. | Generated program behavior and exceptional native-resource cleanup; frontend and LLVM time/memory reported separately. |
-| Self-hosting | The CoD compiler builds its CoD implementation through the selected native boundary. | Seed-built and self-built compilers agree on relevant compilation outcomes; repeatability, diagnostics and large-program costs assessed. |
+| Basic frontend | CoD tokenization and parsing produce inspectable source-linked artifacts. | Correct tokens, syntax and diagnostics on representative CoD modules, with readable, typed booter source. |
+| Basic C-native region support | The booter builds temporary compiler data in an in-memory region through the shared C interface. | Observe allocation, owner and lifetime checks, and region release. |
+| Semantic pipeline | CoD builds module worlds and analyzes demanded calls with explicit identities and context. | Module identity, selected methods, owners and effects agree with accepted language contracts. |
+| Native execution | The booter uses a small C-facing LLVM binding surface to verify and emit executable output. | Observe generated program behavior and native resource release on the supported completion paths. Measure frontend and LLVM time and memory separately. |
+| Self-hosting | The CoD compiler builds its CoD implementation through the selected native boundary. | Compare seed-built and self-built compilers on relevant compilation outcomes, repeatability, diagnostics and large-program costs. |
+| Persistent reuse, when justified by the compiler workload | Selected stage artifacts save as DBMR and load in a fresh process. | Compare observations after relocation. Reject stale or incompatible artifacts. Measure loading, validation and recomputation costs separately. |
 
 Full LLVM coverage, byte-identical compiler binaries, independent module compilation, distributed builds and an immediate replacement of the seed compiler are not checkpoint requirements. Exact acceptance corpora and supported language scope remain to be selected. Large multi-module programs and deep dependency graphs matter alongside small examples; a demonstration alone is not self-hosting or performance acceptance.
 
@@ -96,4 +115,4 @@ Measure **steady-state throughput** on warmed, equivalent workloads and report a
 | Initialization | Use D-22’s explicit init-place contract and checked actual owner/access. | Select the handle’s storage category and allocation/declaration form; prove initialization and release obligations on all completion paths. |
 | One-line cleanup | Use `defer init(...)()` under D-17's selected call/block timing. | Native cleanup capture/release contract, leak-free registration failure and actual binding evidence. |
 
-No implementation, cache artifact, LLVM binding or runtime validation is supplied by this planning document set.
+Current implementation evidence belongs with the booter workloads and the seed capabilities they exercise.
