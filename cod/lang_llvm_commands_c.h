@@ -304,18 +304,28 @@ static inline bool cod_llvm_construct_command(cod_llvm_construction *state, cod_
   }
 }
 
-/* Construct one checked program in a fresh LLVM session. Every declared
+static inline cod_llvm_command cod_llvm_word_record(const void *records, size_t index) {
+  cod_llvm_command command;
+  memcpy(&command, (const unsigned char *)records + index * sizeof(command), sizeof(command));
+  return command;
+}
+
+/* The caller supplies contiguous, initialized records with the layout of
+   cod_llvm_command. Access through bytes permits generated C record types.
+   Construct one checked program in a fresh LLVM session. Every declared
    function has a body, including the entry. The caller releases the session
    on failure. Object emission verifies complete blocks and the resulting IR. */
-static inline bool cod_llvm_construct_words(cod_llvm_session *session, const cod_llvm_command *commands,
+static inline bool cod_llvm_construct_word_records(cod_llvm_session *session, const void *records,
     size_t count, size_t labels, size_t slots) {
   if (!session || !session->builder || !session->context || !session->module ||
-      LLVMGetFirstFunction(session->module) || !commands || !count || !labels || !slots) return false;
+      LLVMGetFirstFunction(session->module) || !records || !count || count > PTRDIFF_MAX / sizeof(cod_llvm_command) ||
+      !labels || !slots) return false;
   unsigned arity = 1;
   for (size_t i = 0; i < count; ++i) {
-    if (commands[i].opcode != COD_LLVM_DECLARE) continue;
-    if (commands[i].b > UINT_MAX || commands[i].b > count) return false;
-    if (commands[i].b > arity) arity = (unsigned)commands[i].b;
+    const cod_llvm_command command = cod_llvm_word_record(records, i);
+    if (command.opcode != COD_LLVM_DECLARE) continue;
+    if (command.b > UINT_MAX || command.b > count) return false;
+    if (command.b > arity) arity = (unsigned)command.b;
   }
   cod_llvm_construction state = {
     .session = session, .word = LLVMInt64TypeInContext(session->context),
@@ -334,7 +344,7 @@ static inline bool cod_llvm_construct_words(cod_llvm_session *session, const cod
   for (unsigned i = 0; i < arity; ++i) parameters[i] = state.word;
   bool entry_declared = false;
   for (size_t i = 0; i < count; ++i) {
-    cod_llvm_command command = commands[i];
+    const cod_llvm_command command = cod_llvm_word_record(records, i);
     if (command.opcode != COD_LLVM_DECLARE) continue;
     if (command.a >= labels || state.functions[command.a].value) goto done;
     bool entry = command.c != 0;
@@ -352,14 +362,14 @@ static inline bool cod_llvm_construct_words(cod_llvm_session *session, const cod
   if (!entry_declared) goto done;
 
   for (size_t i = 0; i < count; ++i) {
-    cod_llvm_command command = commands[i];
+    const cod_llvm_command command = cod_llvm_word_record(records, i);
     if (command.opcode != COD_LLVM_POSITION) continue;
     if (command.a >= labels || command.b >= labels || !state.functions[command.b].value || state.blocks[command.a])
       goto done;
     state.blocks[command.a] = LLVMAppendBasicBlockInContext(session->context, state.functions[command.b].value, "");
   }
   for (size_t i = 0; i < count; ++i)
-    if (!cod_llvm_construct_command(&state, commands[i])) goto done;
+    if (!cod_llvm_construct_command(&state, cod_llvm_word_record(records, i))) goto done;
   success = state.argument_count == 0 && state.functions_to_begin == 0;
 
 done:
@@ -369,6 +379,11 @@ done:
   free(state.blocks);
   free(state.functions);
   return success;
+}
+
+static inline bool cod_llvm_construct_words(cod_llvm_session *session, const cod_llvm_command *commands,
+    size_t count, size_t labels, size_t slots) {
+  return cod_llvm_construct_word_records(session, commands, count, labels, slots);
 }
 
 #endif

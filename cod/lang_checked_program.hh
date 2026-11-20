@@ -90,18 +90,24 @@ struct CheckedOperation {
   std::optional<size_t> place;
   std::optional<size_t> product_field;
   std::optional<size_t> exception_owner;
+  struct NativeHandleLoan {
+    size_t binding, place;
+    bool owned;
+    auto operator<=>(const NativeHandleLoan &) const = default;
+  };
   struct NativeAcquisition {
-    struct Loan {
-      size_t binding, place;
-      bool owned;
-      auto operator<=>(const Loan &) const = default;
-    };
     size_t constructor;
     const Expression *initializer;
-    std::vector<std::optional<Loan>> loans;
+    std::vector<std::optional<NativeHandleLoan>> loans;
     auto operator<=>(const NativeAcquisition &) const = default;
   };
   std::optional<NativeAcquisition> native_acquisition;
+  struct NativeCall {
+    size_t operation;
+    std::vector<std::optional<NativeHandleLoan>> loans;
+    auto operator<=>(const NativeCall &) const = default;
+  };
+  std::optional<NativeCall> native_call;
   struct NativeHereCall {
     size_t operation, place, owner;
     auto operator<=>(const NativeHereCall &) const = default;
@@ -666,9 +672,11 @@ struct CheckedFamily {
   std::string operation;
 };
 
-struct CheckedNativeHereOperation {
+struct CheckedNativeOperation {
   CheckedMethod contract;
-  Type handle;
+  std::vector<CheckedNativeInput> inputs;
+  bool has_here() const { return !contract.here.empty(); }
+  const Type &here_handle() const { return inputs.front().type; }
   const auto &arrays() const { return contract.here.front().inputs; }
 };
 
@@ -688,7 +696,7 @@ struct CheckedProgram {
   std::vector<CheckedArray> arrays;
   std::vector<CheckedNativeConstructor> native_constructors;
   std::vector<CheckedNativeEntry> native_entries;
-  std::vector<CheckedNativeHereOperation> native_here_operations;
+  std::vector<CheckedNativeOperation> native_operations;
   std::vector<CheckedSymbol> symbols;
   std::deque<CheckedFamily> families;
   std::vector<QueryEnvironment> query_environments{{}};

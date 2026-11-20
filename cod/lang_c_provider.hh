@@ -41,39 +41,50 @@ inline std::string native_construct_name(const Type &handle) { return native_con
 inline std::string native_destroy_name(const Type &handle) { return native_constructor_prefix(handle) + "_destroy"; }
 inline std::string native_entry_name(const Form &form) { return "cod_native_" + form.name + "_entry"; }
 inline std::string native_entry_body_name(const Form &form) { return native_entry_name(form) + "_body"; }
-inline std::string native_here_name(const CheckedNativeHereOperation &operation) {
+inline std::string native_operation_name(const CheckedNativeOperation &operation) {
   return "cod_native_" + operation.contract.source->name;
 }
 
-inline void emit_c_here(const CheckedProgram &program, const CheckedNativeHereOperation &operation, const NativeRowLayouts &layouts,
+inline std::string emit_c_view(const CheckedProgram &program, const Type &type, bool read_only, const std::string &name,
+                               size_t index, const NativeRowLayouts &layouts, std::ostringstream &header,
+                               std::ostringstream &stubs) {
+  const auto &array = program.arrays.at(type.identity);
+  const auto suffix = std::to_string(index);
+  std::string element;
+  if (array.element.kind == Type::product) {
+    element = name + "_row" + suffix;
+    const auto &fields = program.schemas.at(array.element.identity).fields;
+    header << "typedef struct " << element << " {\n";
+    for (const auto &field : fields) header << "    " << provider_scalar(field.type) << ' ' << field.source->name << ";\n";
+    header << "} " << element << ";\n";
+    const auto &layout = layouts.at(array.element.identity);
+    stubs << "_Static_assert(sizeof(" << element << ") == " << layout.size << " && _Alignof(" << element << ") == "
+          << layout.alignment << ", \"unexpected native row layout\");\n";
+    for (size_t f = 0; f < fields.size(); ++f)
+      stubs << "_Static_assert(offsetof(" << element << ", " << fields[f].source->name << ") == "
+            << layout.offsets.at(f) << ", \"unexpected native row offset\");\n";
+  } else element = provider_scalar(array.element);
+  const auto view = name + "_view" + suffix;
+  header << "typedef struct " << view << " {\n    " << (read_only ? "const " : "") << element
+         << " *base;\n    uint64_t count;\n} " << view << ";\n";
+  stubs << "_Static_assert(sizeof(" << view << ") == 2 * sizeof(uint64_t) && offsetof(" << view
+        << ", count) == sizeof(uint64_t), \"unexpected native view layout\");\n";
+  return element;
+}
+
+inline std::string invalid_c_view(const std::string &base, const std::string &count, const std::string &element) {
+  return count + " > (uint64_t)PTRDIFF_MAX / sizeof(*" + base + ") || (" + count +
+         " && (!" + base + " || (uintptr_t)" + base + " % _Alignof(" + element + ")))";
+}
+
+inline void emit_c_here(const CheckedProgram &program, const CheckedNativeOperation &operation, const NativeRowLayouts &layouts,
                         std::ostringstream &header, std::ostringstream &stubs) {
-  const auto name = native_here_name(operation);
-  const auto handle = provider_borrow(operation.handle);
+  const auto name = native_operation_name(operation);
+  const auto handle = provider_borrow(operation.here_handle());
   std::vector<std::string> views;
   for (size_t i = 0; i < operation.arrays().size(); ++i) {
     const auto &input = operation.arrays()[i];
-    const auto &array = program.arrays.at(input.type.identity);
-    const auto suffix = std::to_string(i);
-    std::string element;
-    if (array.element.kind == Type::product) {
-      element = name + "_row" + suffix;
-      const auto &fields = program.schemas.at(array.element.identity).fields;
-      header << "typedef struct " << element << " {\n";
-      for (const auto &field : fields) header << "    " << provider_scalar(field.type) << ' ' << field.source->name << ";\n";
-      header << "} " << element << ";\n";
-      const auto &layout = layouts.at(array.element.identity);
-      stubs << "_Static_assert(sizeof(" << element << ") == " << layout.size << " && _Alignof(" << element << ") == "
-            << layout.alignment << ", \"unexpected native row layout\");\n";
-      for (size_t f = 0; f < fields.size(); ++f)
-        stubs << "_Static_assert(offsetof(" << element << ", " << fields[f].source->name << ") == "
-              << layout.offsets.at(f) << ", \"unexpected native row offset\");\n";
-    } else element = provider_scalar(array.element);
-    const auto view = name + "_view" + suffix;
-    header << "typedef struct " << view << " {\n    " << (input.read_only ? "const " : "") << element
-           << " *base;\n    uint64_t count;\n} " << view << ";\n";
-    stubs << "_Static_assert(sizeof(" << view << ") == 2 * sizeof(uint64_t) && offsetof(" << view
-          << ", count) == sizeof(uint64_t), \"unexpected native view layout\");\n";
-    views.push_back(element);
+    views.push_back(emit_c_view(program, input.type, input.read_only, name, i, layouts, header, stubs));
   }
   const auto arrays = name + "_arrays", callback = name + "_callback", state = name + "_state";
   header << "typedef struct " << arrays << " {\n";
@@ -96,10 +107,9 @@ inline void emit_c_here(const CheckedProgram &program, const CheckedNativeHereOp
         << "    if (state->completion != COD_NATIVE_HERE_VALUE) return state->completion;\n"
         << "    if (!views || !feedback) return state->completion = COD_NATIVE_HERE_INVALID;\n";
   for (size_t i = 0; i < views.size(); ++i) {
-    auto view = "views->array" + std::to_string(i);
-    stubs << "    if (" << view << ".count > (uint64_t)PTRDIFF_MAX / sizeof(*" << view << ".base) ||\n"
-          << "        (" << view << ".count && (!" << view << ".base || (uintptr_t)" << view << ".base % _Alignof(" << views[i] << "))))\n"
-          << "        return state->completion = COD_NATIVE_HERE_INVALID;\n";
+    const auto view = "views->array" + std::to_string(i);
+    stubs << "    if (" << invalid_c_view(view + ".base", view + ".count", views[i])
+          << ") return state->completion = COD_NATIVE_HERE_INVALID;\n";
   }
   stubs << "    if (!" << name << "_validate_impl(state->handle, views)) return state->completion = COD_NATIVE_HERE_INVALID;\n"
         << "    return state->completion = state->body(state->context, views, feedback);\n}\n\n"
@@ -112,6 +122,52 @@ inline void emit_c_here(const CheckedProgram &program, const CheckedNativeHereOp
         << "    *completion = state.completion;\n"
         << "    if (state.completion == COD_NATIVE_HERE_VALUE && status == COD_NATIVE_OK) *value = result;\n"
         << "    return state.completion == COD_NATIVE_HERE_INVALID ? COD_NATIVE_BOUNDARY_ERROR : status;\n}\n\n";
+}
+
+inline void emit_c_call(const CheckedProgram &program, const CheckedNativeOperation &operation, const NativeRowLayouts &layouts,
+                        std::ostringstream &header, std::ostringstream &stubs) {
+  const auto name = native_operation_name(operation);
+  std::ostringstream boundary, implementation, arguments, checks;
+  boundary << "cod_native_status " << name << "_call(";
+  implementation << "cod_native_status " << name << "_impl(";
+  std::map<size_t, std::string> first_handle;
+  for (size_t i = 0; i < operation.inputs.size(); ++i) {
+    const auto &input = operation.inputs[i];
+    const auto suffix = std::to_string(i);
+    const auto arg = "arg" + suffix;
+    std::string type;
+    if (input.type.kind == Type::array) {
+      const auto element = emit_c_view(program, input.type, true, name, i, layouts, header, stubs);
+      type = name + "_view" + suffix;
+      checks << "    if (!" << arg << " || " << invalid_c_view(arg + "->base", arg + "->count", element)
+             << ") return COD_NATIVE_BOUNDARY_ERROR;\n";
+    } else if (input.owner) {
+      type = provider_borrow(input.type);
+      checks << "    if (!" << arg;
+      const auto [first, inserted] = first_handle.try_emplace(*input.owner, arg);
+      if (!inserted) checks << " || " << arg << "->owner != " << first->second << "->owner";
+      checks << ") return COD_NATIVE_BOUNDARY_ERROR;\n";
+    } else {
+      type = provider_scalar(input.type);
+      if (input.type == Type::boolean)
+        checks << "    if (" << arg << " > 1) return COD_NATIVE_BOUNDARY_ERROR;\n";
+    }
+    if (input.owner) boundary << "const " << type << " *" << arg << ", ";
+    else boundary << type << ' ' << arg << ", ";
+    implementation << type << ' ' << arg << ", ";
+    if (input.owner) arguments << '*';
+    arguments << arg << ", ";
+  }
+  boundary << "uint8_t *value)";
+  implementation << "uint8_t *value)";
+  header << boundary.str() << ";\n" << implementation.str() << ";\n\n";
+  stubs << boundary.str() << " {\n"
+        << "    if (!value) return COD_NATIVE_BOUNDARY_ERROR;\n" << checks.str()
+        << "    uint8_t result = 0;\n"
+        << "    const cod_native_status status = " << name << "_impl(" << arguments.str() << "&result);\n"
+        << "    if (status != COD_NATIVE_OK) return COD_NATIVE_BOUNDARY_ERROR;\n"
+        << "    *value = result;\n"
+        << "    return COD_NATIVE_OK;\n}\n\n";
 }
 
 inline void emit_c_entry(const CheckedNativeEntry &entry, const Form &form,
@@ -180,7 +236,7 @@ enum {
      << ",\n    COD_NATIVE_FAILURE = " << static_cast<unsigned>(NativeStatus::failure)
      << ",\n    COD_NATIVE_BOUNDARY_ERROR = " << static_cast<unsigned>(NativeStatus::boundary_error) << "\n};\n\n";
   stubs << "#include \"" << NativeProviderFiles::header_name << "\"\n#include <stddef.h>\n\n";
-  if (!program.native_here_operations.empty())
+  if (std::ranges::any_of(program.native_operations, &CheckedNativeOperation::has_here))
     header << "typedef uint32_t cod_native_here_step;\nenum {\n"
            << "    COD_NATIVE_HERE_VALUE = " << static_cast<unsigned>(NativeHereStep::value) << ",\n"
            << "    COD_NATIVE_HERE_PROTECTED = " << static_cast<unsigned>(NativeHereStep::protected_completion) << ",\n"
@@ -199,7 +255,7 @@ typedef struct cod_native_loan {
   std::set<size_t> emitted_borrows;
   const auto emit_borrows = [&](const std::vector<CheckedNativeInput> &inputs) {
     for (const auto &input : inputs) {
-      if (!input.owner || !emitted_borrows.insert(input.type.identity).second) continue;
+      if (input.type.kind != Type::c_type_marker || !emitted_borrows.insert(input.type.identity).second) continue;
       const auto borrow = provider_borrow(input.type);
       header << "typedef struct " << borrow << " {\n    uint64_t payload;\n    uint64_t owner;\n} " << borrow << ";\n\n";
       stubs << "_Static_assert(sizeof(" << borrow << ") == 2 * sizeof(uint64_t) &&\n"
@@ -208,8 +264,8 @@ typedef struct cod_native_loan {
   };
   for (const auto &constructor : program.native_constructors) emit_borrows(constructor.inputs);
   for (const auto &entry : program.native_entries) emit_borrows(entry.inputs);
-  for (const auto &native : program.native_here_operations)
-    emit_borrows({CheckedNativeInput{native.handle, 0}});
+  for (const auto &native : program.native_operations)
+    emit_borrows(native.inputs);
   if (!emitted_borrows.empty()) stubs << '\n';
 
   for (const auto &constructor : program.native_constructors) {
@@ -279,7 +335,10 @@ typedef struct cod_native_loan {
           << destroy << " {\n    " << destroy_name << "_impl(resource);\n}\n\n";
   }
   for (const auto &entry : program.native_entries) emit_c_entry(entry, *program.methods.at(entry.method).source, header, stubs);
-  for (const auto &native : program.native_here_operations) emit_c_here(program, native, layouts, header, stubs);
+  for (const auto &native : program.native_operations) {
+    if (native.has_here()) emit_c_here(program, native, layouts, header, stubs);
+    else emit_c_call(program, native, layouts, header, stubs);
+  }
   header << "#ifdef __cplusplus\n}\n#endif\n\n#endif\n";
   return {std::move(header).str(), std::move(stubs).str()};
 }
