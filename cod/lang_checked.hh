@@ -112,7 +112,7 @@ class ScalarChecker {
   }
   struct ModuleNames {
     std::map<std::string, size_t> callables;
-    std::map<std::string, size_t> native_here_operations;
+    std::map<std::string, size_t> native_operations;
     std::map<size_t, size_t> imports;
     std::set<std::string> imported_aliases;
     std::map<size_t, std::map<std::string, Location>> extensions;
@@ -122,7 +122,7 @@ class ScalarChecker {
     std::set<std::string> selected_callables, values;
     std::map<std::string, Type> types;
     struct Resource {
-      enum class Kind { symbol, callable, type, native_here } kind;
+      enum class Kind { symbol, callable, type, native_operation } kind;
       size_t symbol = 0;
       std::optional<size_t> family;
       Type type;
@@ -5725,7 +5725,7 @@ class ScalarChecker {
           lexical_self(capture.name, checking_instance_ ? std::optional<size_t>{checking_instance_->method} : std::nullopt) ||
           std::any_of(query_environment().bindings.begin(), query_environment().bindings.end(), [&](const auto &binding) { return binding.name == capture.name; }) ||
           (!module_names().callables.contains(capture.name) && !has_declarations(capture.name) && !module_names().symbols.contains(capture.name) &&
-           !module_names().native_here_operations.contains(capture.name) &&
+           !module_names().native_operations.contains(capture.name) &&
            capture.name != "cause_at");
     };
     if (source.explicit_captures) {
@@ -10152,10 +10152,27 @@ class ScalarChecker {
                                      bool contextual, const Type *expected, std::vector<Type> *alternatives,
                                      ExpectedTypeUse expected_use, EvidenceRead read, bool joining) const {
     using K = Expression::Kind;
-    if (expr.kind == K::call && !expr.intrinsic) if (const auto native = native_here_operation(expr.text, &state)) {
-      if (!expr.has_here_body()) fail(expr.at, "C provider requires a directly supplied here body");
-      if (state.required && !state.validating_body) implementation_gap(expr.at, "type inspection of a native here call");
-      return program_.native_here_operations[*native].contract.result.type;
+    if (expr.kind == K::call && !expr.intrinsic) if (const auto native = native_operation(expr.text, &state)) {
+      const auto &operation = program_.native_operations[*native];
+      if (operation.has_here()) {
+        if (!expr.has_here_body()) fail(expr.at, "C provider requires a directly supplied here body");
+        if (state.required && !state.validating_body) implementation_gap(expr.at, "type inspection of a native here call");
+      } else {
+        if (state.required && !state.validating_body) implementation_gap(expr.at, "type inspection of a C provider call");
+        if (expr.has_here_body() || expr.children.size() != operation.inputs.size())
+          fail(expr.at, "arguments do not match the C provider declaration");
+        bool completes = true;
+        for (size_t i = 0; i < operation.inputs.size(); ++i) {
+          const auto &input = operation.inputs[i];
+          if (input.type.kind == Type::c_type_marker) continue;
+          const auto type = type_evidence(*expr.children[i], state, false, nullptr, nullptr,
+              ExpectedTypeUse::materialization, completes,
+              input.type.kind == Type::array ? EvidenceRead::target : EvidenceRead::payload);
+          completes = completes && type != Type::never;
+        }
+        if (!completes) return Type::never;
+      }
+      return operation.contract.result.type;
     }
     if (state.here_control && (expr.kind == K::deferred || expr.kind == K::make_local || expr.kind == K::make_object || expr.kind == K::make_region ||
         expr.kind == K::native_handle_binding || expr.kind == K::make_owned_handle ||
@@ -15086,25 +15103,79 @@ class ScalarChecker {
       implementation_gap(expr.at, "materialization of a compile-time symbol object");
     return read_binding(expr, read);
   }
-  std::optional<size_t> native_here_operation(const std::string &name, const TypeEvidenceState *state = nullptr) const {
+  std::optional<size_t> native_operation(const std::string &name, const TypeEvidenceState *state = nullptr) const {
     if (state ? state->bindings.contains(name) || state->definitions.contains(name) || state->lexical_here.contains(name)
               : lexical_.lookup(name).has_value() || active_here(name)) return {};
-    const auto found = module_names().native_here_operations.find(name);
-    return found == module_names().native_here_operations.end() ? std::nullopt : std::optional{found->second};
+    const auto found = module_names().native_operations.find(name);
+    return found == module_names().native_operations.end() ? std::nullopt : std::optional{found->second};
+  }
+  CheckedOperation check_native_call(const Expression &expr, size_t id, CheckedInstance *instance,
+                                     std::map<const Expression *, CheckedOperation> &operations) {
+    const auto &native = program_.native_operations.at(id);
+    const auto &form = *native.contract.source;
+    if (expr.has_here_body() || expr.children.size() != native.inputs.size())
+      fail(expr.at, "arguments do not match the C provider declaration");
+    if (&expr == prepared_call_ || delayed_)
+      implementation_gap(expr.at, "deferred invocation of a C provider");
+    CheckedOperation operation;
+    operation.type = *native.contract.result.type;
+    auto &call = operation.native_call.emplace();
+    call.operation = id;
+    call.loans.resize(native.inputs.size());
+    std::map<size_t, size_t> owners;
+    const auto bind = [&](size_t role, std::optional<size_t> actual, const Location &at) {
+      const auto &name = form.owner_parameters[role].name;
+      if (!actual) fail(at, "C provider argument for owner '" + name + "' requires a proven actual owner");
+      const auto [known, first] = owners.try_emplace(role, *actual);
+      if (!first && known->second != *actual)
+        fail(at, "C provider arguments for owner '" + name + "' require the same actual owner");
+    };
+    for (size_t i = 0; i < native.inputs.size(); ++i) {
+      const auto &operand = *expr.children[i];
+      const auto &input = native.inputs[i];
+      if (input.type.kind == Type::c_type_marker) {
+        const auto &source = native_loan_source(operand);
+        const auto binding = lexical_.lookup(source.text);
+        if (!binding || !matches_native_handle(bindings_->at(*binding).type, input.type))
+          fail(source.at, "C provider requires a handle of type '" + input.type.name + "'");
+        const auto value = read_binding(source, true, binding, BindingUse::native_loan);
+        if (!value.place || (value.type.owned && !native_resource_owners_.contains(*value.place)))
+          implementation_gap(source.at, "a C handle borrow without a direct native binding");
+        const auto actual = value.type.owned ? std::optional{native_resource_owners_.at(*value.place)} : one_owner(value);
+        if (!form.owner_parameters[*input.owner].read_only &&
+            (value.read_only || (!value.type.owned && actual && const_owner(*actual))))
+          fail(source.at, "readonly handle cannot supply a writable C provider owner");
+        bind(*input.owner, actual, source.at);
+        call.loans[i] = CheckedOperation::NativeHandleLoan{*value.binding, *value.place, value.type.owned};
+      } else {
+        const bool array = input.type.kind == Type::array;
+        const auto type = check(operand, instance, operations, !array);
+        if (type == Type::never) {
+          operation.type = Type::never;
+          lexical_.live = false;
+        } else if (array) {
+          const auto &view = operations.at(&operand);
+          if (type != input.type || !view.view || view.mixed_view)
+            fail(operand.at, "C provider requires a storage view of array '" + input.type.name + "'");
+          require_live_view(view, operand.at);
+          read_view(view, operand.at, "C provider array operand");
+          bind(*input.owner, one_owner(view), operand.at);
+        } else transfer_type(type, input.type, operand.at);
+      }
+    }
+    return operation;
   }
   CheckedOperation check_native_here(const Expression &expr, size_t id, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, bool read, bool discard) {
-    const auto &native = program_.native_here_operations.at(id);
-    if (checking_method_ && checking_method_->source->kind == Form::Kind::function)
-      fail(expr.at, "a function cannot invoke a C provider procedure");
+    const auto &native = program_.native_operations.at(id);
     if (!expr.has_here_body() || expr.children.size() != 2)
       fail(expr.at, "C provider requires an owning handle and one directly supplied here body");
     if (&expr == prepared_call_ || delayed_)
       implementation_gap(expr.at, "deferred invocation of a native here operation");
     const auto &source = native_loan_source(*expr.children.front());
     const auto binding = lexical_.lookup(source.text);
-    if (!binding || !matches_native_handle(bindings_->at(*binding).type, native.handle) || !bindings_->at(*binding).type.owned)
-      fail(source.at, "C provider requires a reborrow of the owning '" + native.handle.name + "' handle");
+    if (!binding || !matches_native_handle(bindings_->at(*binding).type, native.here_handle()) || !bindings_->at(*binding).type.owned)
+      fail(source.at, "C provider requires a reborrow of the owning '" + native.here_handle().name + "' handle");
     const auto value = read_binding(source, true, binding, BindingUse::native_loan);
     if (!value.place || !native_resource_owners_.contains(*value.place))
       implementation_gap(source.at, "native here invocation without the actual owning handle");
@@ -15142,7 +15213,7 @@ class ScalarChecker {
     for (size_t i = 0; i < constructor.inputs.size(); ++i) {
       const auto &operand = *initializer.children[i];
       const auto &input = constructor.inputs[i];
-      std::optional<CheckedOperation::NativeAcquisition::Loan> loan;
+      std::optional<CheckedOperation::NativeHandleLoan> loan;
       if (input.owner) {
         const auto &source = native_loan_source(operand);
         const auto binding = lexical_.lookup(source.text);
@@ -15159,7 +15230,7 @@ class ScalarChecker {
         const auto [known, first] = owners.try_emplace(*input.owner, provenance);
         if (!first && known->second != provenance)
           fail(source.at, "C constructor arguments for owner '" + role.name + "' require one proven actual owner");
-        loan = CheckedOperation::NativeAcquisition::Loan{*value.binding, *value.place, value.type.owned};
+        loan = CheckedOperation::NativeHandleLoan{*value.binding, *value.place, value.type.owned};
       } else {
         const auto type = check(operand, instance, operations);
         if (type == Type::never) { completes = false; lexical_.live = false; }
@@ -15272,8 +15343,14 @@ class ScalarChecker {
          expr.kind == K::allocate || (expr.kind != K::return_test && expr.owner_name == "here")))
       implementation_gap(expr.at, "supplier-owned allocation, owner selection or defer from a here group");
     if (expr.spread) implementation_gap(expr.at, "spread arguments");
-    if (expr.kind == K::call && !expr.intrinsic) if (const auto native = native_here_operation(expr.text))
-      return operations.insert_or_assign(&expr, check_native_here(expr, *native, instance, operations, read, discard)).first->second.type;
+    if (expr.kind == K::call && !expr.intrinsic) if (const auto native = native_operation(expr.text)) {
+      if (checking_method_ && checking_method_->source->kind == Form::Kind::function)
+        fail(expr.at, "a function cannot invoke a C provider procedure");
+      auto call = program_.native_operations[*native].has_here()
+          ? check_native_here(expr, *native, instance, operations, read, discard)
+          : check_native_call(expr, *native, instance, operations);
+      return operations.insert_or_assign(&expr, std::move(call)).first->second.type;
+    }
     if (expr.kind == K::here_binding) {
       check_pipeline_binding(expr, instance, operations, operation);
       return operations.insert_or_assign(&expr, std::move(operation)).first->second.type;
@@ -17608,8 +17685,8 @@ class ScalarChecker {
       }
       if (receiver_import) module_names().selected_symbols.erase(resource.symbol);
       else module_names().selected_symbols.insert(resource.symbol);
-    } else if (resource.kind == Resource::Kind::native_here) {
-      const auto [binding, inserted] = module_names().native_here_operations.emplace(form.alias, *resource.native_operation);
+    } else if (resource.kind == Resource::Kind::native_operation) {
+      const auto [binding, inserted] = module_names().native_operations.emplace(form.alias, *resource.native_operation);
       if (!inserted && binding->second != *resource.native_operation)
         fail(form.at, "conflicting native provider selection '" + form.alias + "'");
     } else if (resource.kind == Resource::Kind::type) {
@@ -17639,8 +17716,8 @@ class ScalarChecker {
         resource.kind = Resource::Kind::callable; resource.family = found->second;
       } else if (const auto found = module_names().types.find(form->name); found != module_names().types.end()) {
         resource.kind = Resource::Kind::type; resource.type = found->second;
-      } else if (const auto native = module_names().native_here_operations.find(form->name); native != module_names().native_here_operations.end()) {
-        resource.kind = Resource::Kind::native_here; resource.native_operation = native->second;
+      } else if (const auto native = module_names().native_operations.find(form->name); native != module_names().native_operations.end()) {
+        resource.kind = Resource::Kind::native_operation; resource.native_operation = native->second;
       } else fail(form->at, "unknown exported resource '" + form->name + "'");
       publish(form->name, resource, form->at);
     }
@@ -17817,7 +17894,17 @@ class ScalarChecker {
         !name.starts_with("WINT_") && !name.starts_with("SIG_ATOMIC_") && name != "NULL" &&
         std::ranges::find(keywords, name) == std::end(keywords);
   }
-  std::vector<CheckedNativeInput> checked_native_inputs(const Form &form, const std::string &boundary) const {
+  void check_native_array(const Type &type, bool read_only, const Location &at) const {
+    const auto &array = program_.arrays.at(type.identity);
+    const bool readonly_bits = read_only && numeric(array.element);
+    if (array.index != Type::uint64 || (!readonly_bits &&
+        (!indexed_product(array.element, at) || program_.schemas.at(array.element.identity).fields.empty() ||
+         !std::ranges::all_of(program_.schemas.at(array.element.identity).fields, [](const auto &field) {
+           return c_failure_field(field.source->name);
+         })))) implementation_gap(at, "C array loans outside the u64-indexed scalar and numeric record profile");
+  }
+  std::vector<CheckedNativeInput> checked_native_inputs(const Form &form, const std::string &boundary,
+                                                        bool readonly_arrays = false) const {
     std::vector<CheckedNativeInput> inputs;
     std::set<std::string> names;
     for (const auto &parameter : form.parameters) {
@@ -17826,15 +17913,26 @@ class ScalarChecker {
         implementation_gap(parameter.at, "here, variadic or conversion parameters of a " + boundary);
       const auto type = resolve_type(parameter.type);
       std::optional<size_t> role;
-      if (parameter.declaration_kind == "handle") {
-        if (type.kind != Type::c_type_marker) fail(parameter.at, "handle parameter requires a fieldless data \"C\" type");
+      const bool handle = parameter.declaration_kind == "handle";
+      const bool array = readonly_arrays && parameter.declaration_kind == "ref" && type.kind == Type::array;
+      if (handle || array) {
         const auto owner = std::ranges::find(form.owner_parameters, parameter.owner, &OwnerParameter::name);
         if (owner == form.owner_parameters.end() || owner->root || owner->explicit_parameter)
-          fail(parameter.at, "C handle parameter requires a declared owner");
+          fail(parameter.at, "C borrow requires a declared owner");
+        if (handle && type.kind != Type::c_type_marker)
+          fail(parameter.at, "handle parameter requires a fieldless data \"C\" type");
+        if (array) {
+          if (!owner->read_only || !parameter.read_only)
+            implementation_gap(parameter.at, "C operation array loans other than readonly views under a const owner");
+          check_native_array(type, true, parameter.at);
+        }
+        if (readonly_arrays && handle && parameter.read_only && !owner->read_only)
+          fail(parameter.at, "a readonly native handle cannot establish a writable provider owner");
         role = std::distance(form.owner_parameters.begin(), owner);
       } else {
         if (!parameter.owner.empty() || (parameter.declaration_kind != "val" && !parameter.declaration_kind.empty()))
-          fail(parameter.at, boundary + " parameters receive bits or a borrowed handle");
+          fail(parameter.at, boundary + (readonly_arrays ? " parameters receive bits, a borrowed handle or a readonly array view"
+                                                         : " parameters receive bits or a borrowed handle"));
         reject_c_type_payload(type, parameter.at);
         if (type.kind == Type::exception) fail(parameter.at, "an exception object is not a " + boundary + " bits argument");
         if (!scalar_type(type)) implementation_gap(parameter.at, boundary + " bits arguments other than direct scalars");
@@ -17843,13 +17941,13 @@ class ScalarChecker {
     }
     for (size_t i = 0; i < form.owner_parameters.size(); ++i)
       if (std::ranges::none_of(inputs, [&](const auto &input) { return input.owner == i; }))
-        implementation_gap(form.owner_parameters[i].at, "a " + boundary + " owner without a supplying handle parameter");
+        implementation_gap(form.owner_parameters[i].at, "a " + boundary + " owner without a supplying borrow");
     return inputs;
   }
   void register_native_constructor(const Form &form, const SourceModule &source) {
     const auto handle = resolve_type(Type{Type::named, form.name});
     if (handle.kind != Type::c_type_marker)
-      implementation_gap(form.at, "C providers other than constructors of fieldless data \"C\" types");
+      implementation_gap(form.at, "a C operation without an explicit result or a fieldless CType constructor");
     const auto *declaration = program_.schemas.at(handle.identity).source;
     if (std::ranges::none_of(source.forms, [&](const auto &candidate) { return candidate.get() == declaration; }))
       implementation_gap(form.at, "C constructors declared outside their handle type's defining module");
@@ -17868,6 +17966,23 @@ class ScalarChecker {
     }
     program_.native_constructors.push_back(std::move(constructor));
   }
+  void add_native_operation(CheckedNativeOperation native) {
+    const auto &form = *native.contract.source;
+    if (!module_names().native_operations.emplace(form.name, program_.native_operations.size()).second)
+      fail(form.at, "conflicting native provider name '" + form.name + "'");
+    program_.native_operations.push_back(std::move(native));
+  }
+  void register_native_call(const Form &form) {
+    if (form.symbolic || form.operation || form.explicit_captures || !form.type_parameters.empty() ||
+        !form.result_owner.empty() || !form.throws_types.empty() || resolve_type(*form.result_type) != Type::uint8)
+      implementation_gap(form.at, "C operations outside the first nonthrowing u8 result profile");
+    CheckedNativeOperation native;
+    native.contract.source = &form;
+    native.contract.module = module_;
+    native.contract.result.type = Type::uint8;
+    native.inputs = checked_native_inputs(form, "C operation", true);
+    add_native_operation(std::move(native));
+  }
   void register_native_here(const Form &form) {
     if (form.symbolic || form.operation || form.explicit_captures || !form.type_parameters.empty() ||
         !form.result_owner.empty() || !form.throws_types.empty() || resolve_type(*form.result_type) != Type::uint8 ||
@@ -17881,8 +17996,8 @@ class ScalarChecker {
       implementation_gap(form.at, "C here provider requires one borrowed handle with an established owner");
     if (handle.read_only && !role.read_only)
       fail(handle.at, "a readonly native handle cannot establish a writable provider owner");
-    CheckedNativeHereOperation native;
-    native.handle = type;
+    CheckedNativeOperation native;
+    native.inputs.push_back({type, 0});
     auto &contract = native.contract;
     contract.source = &form;
     contract.module = module_;
@@ -17896,17 +18011,9 @@ class ScalarChecker {
         implementation_gap(form.at, "C here array inputs must share the handle's owner");
       if (role.read_only && !input.read_only)
         fail(form.at, "a readonly native owner cannot supply a writable array loan");
-      const auto &array = program_.arrays.at(input.type.identity);
-      const bool readonly_bits = input.read_only && numeric(array.element);
-      if (array.index != Type::uint64 || (!readonly_bits &&
-          (!indexed_product(array.element, form.at) || program_.schemas.at(array.element.identity).fields.empty() ||
-           !std::ranges::all_of(program_.schemas.at(array.element.identity).fields, [](const auto &field) {
-             return c_failure_field(field.source->name);
-           })))) implementation_gap(form.at, "C here arrays outside the u64-indexed scalar and numeric record profile");
+      check_native_array(input.type, input.read_only, form.at);
     }
-    if (!module_names().native_here_operations.emplace(form.name, program_.native_here_operations.size()).second)
-      fail(form.at, "conflicting native provider name '" + form.name + "'");
-    program_.native_here_operations.push_back(std::move(native));
+    add_native_operation(std::move(native));
   }
   void check_native_type_names() const {
     std::map<std::string_view, size_t> handles;
@@ -17926,10 +18033,11 @@ class ScalarChecker {
       for (const auto &input : entry.inputs) if (input.owner) record(input.type, form.at);
     }
     std::set<std::string_view> operations;
-    for (const auto &native : program_.native_here_operations) {
+    for (const auto &native : program_.native_operations) {
       const auto &form = *native.contract.source;
       if (!operations.insert(form.name).second) fail(form.at, "conflicting C provider name '" + form.name + "'");
-      record(native.handle, form.at);
+      for (const auto &input : native.inputs)
+        if (input.type.kind == Type::c_type_marker) record(input.type, form.at);
     }
   }
   void register_module(const SourceModule &source, std::optional<size_t> &print_symbol,
@@ -17957,8 +18065,9 @@ class ScalarChecker {
     for (const auto &form : forms) {
       if (source.dependencies.contains(form.get())) continue;
       if (form->c_linkage && !form->body) {
-        if (form->result_type && !form->parameters.empty() && form->parameters.front().here) register_native_here(*form);
-        else register_native_constructor(*form, source);
+        if (!form->result_type) register_native_constructor(*form, source);
+        else if (!form->parameters.empty() && form->parameters.front().here) register_native_here(*form);
+        else register_native_call(*form);
         continue;
       }
       if (form->kind == Form::Kind::expression || form->kind == Form::Kind::export_resource ||
@@ -18198,9 +18307,9 @@ class ScalarChecker {
     for (const auto &[name, type] : module_names().types)
       if (module_names().symbols.contains(name) || module_names().callables.contains(name))
         implementation_gap({source.path.string()}, "same-scope type and callable/symbol bindings");
-    for (const auto &[name, operation] : module_names().native_here_operations)
+    for (const auto &[name, operation] : module_names().native_operations)
       if (module_names().types.contains(name) || module_names().callables.contains(name) || module_names().symbols.contains(name))
-        fail(program_.native_here_operations[operation].contract.source->at, "native provider conflicts with the binding '" + name + "'");
+        fail(program_.native_operations[operation].contract.source->at, "native provider conflicts with the binding '" + name + "'");
     for (const auto &[family, aliases] : module_names().extensions) if (aliases.size() > 1) {
       std::string message = "one callable identity is extended through multiple aliases:";
       for (const auto &[name, at] : aliases) message += " '" + name + "' at " + location_text(at);

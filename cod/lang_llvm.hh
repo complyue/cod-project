@@ -815,8 +815,60 @@ class LLVMEmission {
     for (unsigned word = 0; word < 2; ++word) b_.CreateStore(resource, b_.CreateStructGEP(pair, view, word));
     return view;
   }
-  llvm::Function *native_here_bridge(const CheckedNativeHereOperation &native, llvm::StructType *frame) {
-    const auto name = native_here_name(native) + "_bridge";
+  llvm::Value *native_handle_argument(const CheckedOperation::NativeHandleLoan &loan) {
+    auto *address = binding_address(loan.binding, loan.place);
+    return loan.owned ? native_reborrow(b_.CreateLoad(b_.getInt64Ty(), address)) : address;
+  }
+  llvm::Value *native_scalar_argument(const Expression &operand, const Type &type) {
+    auto *value = emit_expression(operand);
+    if (!reachable()) return nullptr;
+    auto *boundary = c_scalar_type(type);
+    return choose(operand, {value}, choices(operand, {&operand}), boundary, [&](const Choice &choice) {
+      auto *converted = convert(value, choice.inputs.front(), type);
+      return type == Type::boolean ? b_.CreateZExt(converted, boundary) : converted;
+    });
+  }
+  llvm::Value *emit_native_call(const Expression &expr) {
+    std::map<CheckedOperation::NativeCall, std::vector<size_t>> alternatives;
+    for (size_t i = 0; i < contexts_.size(); ++i)
+      alternatives[*contexts_[i].at(&expr).native_call].push_back(i);
+    return contextual_value(expr, alternatives, "native.call", [&](const auto &call) -> llvm::Value * {
+      const auto &native = program_->native_operations.at(call.operation);
+      std::vector<llvm::Value *> arguments;
+      std::vector<llvm::Type *> types;
+      for (size_t i = 0; i < native.inputs.size(); ++i) {
+        const auto &input = native.inputs[i];
+        const auto &operand = *expr.children[i];
+        llvm::Value *argument;
+        if (const auto &loan = call.loans.at(i)) {
+          argument = native_handle_argument(*loan);
+        } else if (input.type.kind == Type::array) {
+          argument = emit_expression(operand, Projection::target);
+          if (!reachable()) return nullptr;
+          argument = checked_address(argument, operand, operand.at);
+        } else {
+          argument = native_scalar_argument(operand, input.type);
+          if (!reachable()) return nullptr;
+        }
+        arguments.push_back(argument);
+        types.push_back(argument->getType());
+      }
+      auto *value = slot(b_.getInt8Ty(), "native.call.value");
+      arguments.push_back(value);
+      types.push_back(b_.getPtrTy());
+      auto *status = b_.CreateCall(runtime(native_operation_name(native) + "_call", b_.getInt32Ty(), types), arguments);
+      for (size_t i = 0; i < native.inputs.size(); ++i)
+        if (types[i] == b_.getInt8Ty()) status->addParamAttr(i, llvm::Attribute::ZExt);
+      auto *ready = block("native.call.success"), *invalid = block("native.call.invalid");
+      b_.CreateCondBr(b_.CreateICmpEQ(status, b_.getInt32(static_cast<unsigned>(NativeStatus::ok))), ready, invalid);
+      b_.SetInsertPoint(invalid);
+      fail_path(ExceptionCategory::system, expr.at, b_.CreateGlobalString(location_text(expr.at) + ": invalid native provider status"));
+      b_.SetInsertPoint(ready);
+      return pack(load(value), Type::uint8);
+    });
+  }
+  llvm::Function *native_here_bridge(const CheckedNativeOperation &native, llvm::StructType *frame) {
+    const auto name = native_operation_name(native) + "_bridge";
     if (auto *existing = module_.getFunction(name)) return existing;
     auto *pointer = b_.getPtrTy();
     auto *bridge = llvm::Function::Create(llvm::FunctionType::get(b_.getInt32Ty(), {pointer, pointer, pointer}, false),
@@ -860,7 +912,7 @@ class LLVMEmission {
     }
     return contextual_value(expr, alternatives, "native.here", [&](const auto &selected) -> llvm::Value * {
       const auto &[call, body] = selected;
-      const auto &native = program_->native_here_operations.at(call.operation);
+      const auto &native = program_->native_operations.at(call.operation);
       auto *borrow = native_reborrow(load(storage_.at(call.place)));
       auto *callback = prepare_here(body, expr.at);
       auto *frame = llvm::StructType::get(context_, {here_, b_.getPtrTy(), outcome_});
@@ -870,7 +922,7 @@ class LLVMEmission {
       auto *completion = slot(b_.getInt32Ty(), "native.here.completion");
       b_.CreateStore(b_.getInt32(static_cast<unsigned>(NativeHereStep::invalid)), completion);
       auto *value = slot(b_.getInt8Ty(), "native.here.value");
-      auto *status = b_.CreateCall(runtime(native_here_name(native) + "_call", b_.getInt32Ty(),
+      auto *status = b_.CreateCall(runtime(native_operation_name(native) + "_call", b_.getInt32Ty(),
           std::vector<llvm::Type *>(5, b_.getPtrTy())), {borrow, native_here_bridge(native, frame), state, completion, value});
       auto *step = load(completion);
       auto *abrupt = block("native.here.protected"), *ordinary = block("native.here.ordinary"), *done = block("native.here.outcome");
@@ -1597,20 +1649,13 @@ class LLVMEmission {
     for (size_t i = 0; i < constructor.inputs.size(); ++i) {
       const auto &input = constructor.inputs[i];
       if (const auto &loan = plan.loans.at(i)) {
-        auto *address = binding_address(loan->binding, loan->place);
-        if (loan->owned) address = native_reborrow(b_.CreateLoad(b_.getInt64Ty(), address));
-        arguments.push_back(address);
+        arguments.push_back(native_handle_argument(*loan));
         types.push_back(b_.getPtrTy());
       } else {
-        const auto &operand = *expr.children[i];
-        auto *value = emit_expression(operand);
+        auto *value = native_scalar_argument(*expr.children[i], input.type);
         if (!reachable()) return nullptr;
-        auto *boundary = c_scalar_type(input.type);
-        arguments.push_back(choose(operand, {value}, choices(operand, {&operand}), boundary, [&](const Choice &choice) {
-          auto *converted = convert(value, choice.inputs.front(), input.type);
-          return input.type == Type::boolean ? b_.CreateZExt(converted, boundary) : converted;
-        }));
-        types.push_back(boundary);
+        arguments.push_back(value);
+        types.push_back(value->getType());
       }
     }
     auto *resource = storage_.at(place);
@@ -2208,6 +2253,8 @@ class LLVMEmission {
     const bool read = carries_value(projection);
     using K = Expression::Kind;
     const auto &fact = contexts_.front().at(&expr);
+    if (fact.native_call)
+      return temporary_scope(expr.at, scalar_, [&] { return emit_native_call(expr); });
     if (fact.native_here_call)
       return temporary_scope(expr.at, scalar_, [&] { return emit_native_here(expr); });
     if (fact.argument_sources) {
@@ -3265,14 +3312,19 @@ public:
   NativeRowLayouts provider_row_layouts() {
     NativeRowLayouts result;
     const auto &data = module_.getDataLayout();
-    for (const auto &native : program_->native_here_operations) for (const auto &input : native.arrays()) {
-      const auto &element = program_->arrays.at(input.type.identity).element;
-      if (element.kind != Type::product || result.contains(element.identity)) continue;
+    const auto measure = [&](const Type &type) {
+      if (type.kind != Type::array) return;
+      const auto &element = program_->arrays.at(type.identity).element;
+      if (element.kind != Type::product || result.contains(element.identity)) return;
       auto *row = product_layout(element.identity);
       const auto *layout = data.getStructLayout(row);
       NativeRowLayout measured{data.getTypeAllocSize(row).getFixedValue(), data.getABITypeAlign(row).value(), {}};
       for (size_t i = 0; i < row->getNumElements(); ++i) measured.offsets.push_back(layout->getElementOffset(i));
       result.emplace(element.identity, std::move(measured));
+    };
+    for (const auto &native : program_->native_operations) {
+      if (native.has_here()) for (const auto &input : native.arrays()) measure(input.type);
+      else for (const auto &input : native.inputs) measure(input.type);
     }
     return result;
   }
