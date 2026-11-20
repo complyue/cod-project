@@ -4,6 +4,10 @@ using "ParserStorage.cod" Tokens;
 using "ParserStorage.cod" ExprNode;
 using "ParserStorage.cod" ExprNodes;
 using "ParserStorage.cod" len;
+using "ParserStorage.cod" literal_node;
+using "ParserStorage.cod" add_node;
+using "ParserStorage.cod" multiply_node;
+using "ParserStorage.cod" group_node;
 using "Lexer.cod" integer_literal;
 using "Lexer.cod" punctuation;
 
@@ -14,15 +18,12 @@ data ParseResult {
     diagnostic:u8;
 }
 
-func literal_node() -> u8 { return 1u8; }
-func add_node() -> u8 { return 2u8; }
-func multiply_node() -> u8 { return 3u8; }
-func group_node() -> u8 { return 4u8; }
 func expected_operand() -> u8 { return 1u8; }
 func expected_close() -> u8 { return 2u8; }
 func expected_u64() -> u8 { return 3u8; }
 func literal_too_large() -> u8 { return 4u8; }
 func node_storage_exhausted() -> u8 { return 5u8; }
+func unexpected_token() -> u8 { return 6u8; }
 
 func punct_at(source:const SourceBytes in S, tokens:const Tokens in T,
               at:u64, past:u64) -> u8 where {const owner S, const owner T} {
@@ -136,16 +137,21 @@ func parse_infix(source:const SourceBytes in S, tokens:const Tokens in T,
     return result.diagnostic == 0u8;
 }
 
+func reset_parse_result(first:u64, ref result:ParseResult in R) -> void where {owner R} {
+    result.next <- first;
+    result.used <- 0u64;
+    result.root <- 0u64;
+    result.diagnostic <- 0u8;
+    return;
+}
+
 # Tokens come from the indexed lexer over source. The caller supplies
 # initialized node storage and receives a root index or a diagnostic at next.
 func parse_expression(source:const SourceBytes in S, tokens:const Tokens in T,
                       ref nodes:ExprNodes in A, first:u64, past:u64,
                       ref result:ParseResult in R) -> void
     where {const owner S, const owner T, owner A, owner R} {
-    result.next <- first;
-    result.used <- 0u64;
-    result.root <- 0u64;
-    result.diagnostic <- 0u8;
+    reset_parse_result(first, result);
     if (first > past || past > len(tokens)) {
         result.diagnostic <- expected_operand();
         return;
@@ -158,3 +164,5 @@ export ExprNode;
 export ExprNodes;
 export ParseResult;
 export parse_expression;
+export reset_parse_result;
+export unexpected_token;

@@ -1,0 +1,50 @@
+using "SourceStorage.cod" SourceBytes;
+using "ParserStorage.cod" Tokens;
+using "ParserStorage.cod" ExprNodes;
+using "TokenBuffer.cod" ScanResult;
+using "TokenBuffer.cod" scan_tokens;
+using "ExpressionParser.cod" ParseResult;
+using "ExpressionParser.cod" parse_expression;
+using "ExpressionParser.cod" reset_parse_result;
+using "ExpressionParser.cod" unexpected_token;
+
+data FrontendResult {
+    scan:ScanResult;
+    tree:ParseResult;
+    diagnostic_first:u64;
+    diagnostic_past:u64;
+}
+
+# The source and both initialized buffers remain live for the call. A failed
+# read supplies a half-open source span, including a zero-width span at EOF.
+func read_expression(source:const SourceBytes in S, ref tokens:Tokens in T,
+                     ref nodes:ExprNodes in N, ref result:FrontendResult in R) -> bool
+    where {const owner S, owner T, owner N, owner R} {
+    scan_tokens(source, tokens, result.scan);
+    result.diagnostic_first <- 0u64;
+    result.diagnostic_past <- 0u64;
+    if (!result.scan.complete) {
+        reset_parse_result(0u64, result.tree);
+        if (result.scan.invalid_source) {
+            result.diagnostic_first <- tokens[result.scan.used - 1u64].first;
+            (result.diagnostic_past <- tokens[result.scan.used - 1u64].past):void;
+        } else {
+            result.diagnostic_first <- result.scan.next;
+            (result.diagnostic_past <- result.scan.next):void;
+        };
+        return false;
+    } else {};
+
+    val eof <- result.scan.used - 1u64;
+    parse_expression(source, tokens, nodes, 0u64, eof, result.tree);
+    if (result.tree.diagnostic == 0u8) {
+        if (result.tree.next == eof) { return true; } else {};
+        (result.tree.diagnostic <- unexpected_token()):void;
+    } else {};
+    result.diagnostic_first <- tokens[result.tree.next].first;
+    result.diagnostic_past <- tokens[result.tree.next].past;
+    return false;
+}
+
+export FrontendResult;
+export read_expression;

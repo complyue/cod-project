@@ -1,0 +1,35 @@
+using "ParserStorage.cod" ExprNodes;
+using "ParserStorage.cod" len;
+using "ParserStorage.cod" literal_node;
+using "ParserStorage.cod" add_node;
+using "ParserStorage.cod" multiply_node;
+using "ParserStorage.cod" group_node;
+using "ExpressionParser.cod" ParseResult;
+
+func node_ready(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
+    val kind <- nodes[at].kind;
+    if (kind == literal_node()) { return true; } else {};
+    if (kind == group_node()) { return nodes[at].left < at; } else {};
+    if (kind == add_node() || kind == multiply_node()) {
+        return nodes[at].left < at && nodes[at].right < at;
+    } else {};
+    return false;
+}
+
+# Emit in postorder so both operands of a binary operation are already available.
+# A backend can stop immediately by returning false.
+proc lower_expression(here emit(ordinal:u64, kind:u8, number:u64, left:u64, right:u64) -> bool,
+                      nodes:const ExprNodes in N, tree:const ParseResult in R) -> bool
+    where {const owner N, const owner R} {
+    if (tree.diagnostic != 0u8 || tree.used == 0u64 || tree.used > len(nodes)) { return false; } else {};
+    if (tree.root != tree.used - 1u64) { return false; } else {};
+    for (at in 0u64 .. tree.used) {
+        if (!node_ready(nodes, at)) { return false; } else {};
+        if (!emit(at, nodes[at].kind, nodes[at].number, nodes[at].left, nodes[at].right)) {
+            return false;
+        } else {};
+    };
+    return true;
+}
+
+export lower_expression;

@@ -12,6 +12,11 @@ data ExprNode {
 }
 array ExprNodes[u64]:ExprNode;
 
+func literal_node() -> u8 { return 1u8; }
+func add_node() -> u8 { return 2u8; }
+func multiply_node() -> u8 { return 3u8; }
+func group_node() -> u8 { return 4u8; }
+
 func len(tokens:const Tokens in T) -> u64 where {const owner T} {
     return intrinsic (len)(tokens);
 }
@@ -24,3 +29,7 @@ export Tokens;
 export ExprNode;
 export ExprNodes;
 export len;
+export literal_node;
+export add_node;
+export multiply_node;
+export group_node;
