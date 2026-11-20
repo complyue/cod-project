@@ -41,6 +41,7 @@ data CompletionSite {
     event:u8;
     presence:u8;
     can_continue:u8;
+    local_return:u8;
     guarded_by:u64;
     incoming_handler:u64;
     throws_clause:u64;
@@ -81,6 +82,7 @@ func initialize_site(ref sites:CompletionSites in X, at:u64) -> void where {owne
     sites[at].event <- 0u8;
     sites[at].presence <- 0u8;
     sites[at].can_continue <- 1u8;
+    sites[at].local_return <- 0u8;
     sites[at].guarded_by <- no_node();
     sites[at].incoming_handler <- no_node();
     sites[at].throws_clause <- no_node();
@@ -271,7 +273,10 @@ func operands_can_complete(nodes:const ExprNodes in N, sites:const CompletionSit
         kind == multiply_node() || kind == transfer_node() || kind == call_node() || kind == behave_node()) {
         return can_continue(sites, nodes[at].left) && can_continue(sites, nodes[at].right);
     } else {};
-    if (kind == group_node() || kind == block_node() || kind == full_scope_node() ||
+    if (kind == full_scope_node()) {
+        return sites[at].local_return != 0u8 || can_continue(sites, nodes[at].left);
+    } else {};
+    if (kind == group_node() || kind == block_node() ||
         kind == throw_node() || kind == return_node() || kind == deferred_call_node()) {
         return can_continue(sites, nodes[at].left);
     } else {};
@@ -348,6 +353,7 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
     if (kind == return_node()) {
         sites[at].can_continue <- 0u8;
         val scope <- names[at].scope;
+        sites[scope].local_return <- 1u8;
         record_exit(sites, at, callable_return(), no_node(), scope, scope, no_node());
     } else {};
     return 0u8;

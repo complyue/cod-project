@@ -2,6 +2,8 @@ using "ParserStorage.cod" ExprNodes;
 using "ParserStorage.cod" len as syntax_len;
 using "ParserStorage.cod" no_node;
 using "ParserStorage.cod" module_node;
+using "ParserStorage.cod" block_node;
+using "ParserStorage.cod" full_scope_node;
 using "ParserStorage.cod" procedure_node;
 using "ParserStorage.cod" parameter_node;
 using "ParserStorage.cod" ref_parameter_node;
@@ -355,12 +357,64 @@ func check_symbolic_call(nodes:const ExprNodes in N, names:const NameBindings in
     return 0u8;
 }
 
+# An implicit callable can retain an independent scalar across its drain.
+# A void exit contributes only void evidence, and an abrupt path supplies
+# no implicit tail value.
+func scope_result(nodes:const ExprNodes in N, ref facts:OperandFacts in F, scope:u64, value:u64) -> u8
+    where {const owner N, owner F} {
+    val kind <- void_result();
+    if (value != no_node()) {
+        if (facts[value].kind == scalar_u64()) {
+            val diagnostic <- require_bits(nodes, facts, value);
+            if (diagnostic != 0u8) { return diagnostic; } else {};
+            (kind <- scalar_u64()):void;
+        } else {
+            if (facts[value].kind != void_result()) { return unproved_result_contract(); } else {};
+        };
+    } else {};
+    if (facts[scope].kind != 0u8 && facts[scope].kind != kind) { return unproved_result_contract(); } else {};
+    if (kind == scalar_u64()) {
+        scalar_fact(facts, scope, independent_value(), no_node());
+    } else {
+        only_void(facts, scope);
+    };
+    return 0u8;
+}
+
+func check_scope_tail(nodes:const ExprNodes in N, links:const NameWork in L,
+                      ref facts:OperandFacts in F, scope:u64) -> u8
+    where {const owner N, const owner L, owner F} {
+    val tail <- nodes[scope].left;
+    if (tail == no_node()) { return scope_result(nodes, facts, scope, no_node()); } else {};
+    val item <- first_item(nodes, tail);
+    val expression <- no_node();
+    val kind <- 0u8;
+    for (unused in 0u64 .. syntax_len(nodes)) {
+        expression <- nodes[item].right;
+        kind <- nodes[expression].kind;
+        if (kind == throw_node() || kind == return_node()) {
+            if (facts[scope].kind == 0u8) { only_void(facts, scope); } else {};
+            return 0u8;
+        } else {};
+        if (item == tail) {
+            if (kind == val_binding_node() || kind == ptr_binding_node() ||
+                (kind == block_node() && nodes[expression].left == no_node())) {
+                return scope_result(nodes, facts, scope, no_node());
+            } else {};
+            return scope_result(nodes, facts, scope, expression);
+        } else {};
+        (item <- links[item].next):void;
+    };
+    return unproved_result_contract();
+}
+
 func check_return(nodes:const ExprNodes in N, names:const NameBindings in B, ref facts:OperandFacts in F,
                    at:u64) -> u8 where {const owner N, const owner B, owner F} {
     val scope <- names[at].scope;
-    if (nodes[scope].kind == module_node()) { return wrong_return_type(); } else {};
-    if (nodes[scope].kind != procedure_node()) { return unproved_result_contract(); } else {};
     val value <- nodes[at].left;
+    if (nodes[scope].kind == module_node()) { return wrong_return_type(); } else {};
+    if (nodes[scope].kind == full_scope_node()) { return scope_result(nodes, facts, scope, value); } else {};
+    if (nodes[scope].kind != procedure_node()) { return unproved_result_contract(); } else {};
     if (facts[scope].kind == void_result()) {
         if (value != no_node()) { return wrong_return_type(); } else {};
         return 0u8;
@@ -420,6 +474,7 @@ func check_operand(nodes:const ExprNodes in N, names:const NameBindings in B, li
     if (kind == call_node()) { return check_direct_call(nodes, names, links, facts, owners, at, used); } else {};
     if (kind == behave_node()) { return check_symbolic_call(nodes, names, selected, facts, at); } else {};
     if (kind == return_node()) { return check_return(nodes, names, facts, at); } else {};
+    if (kind == full_scope_node()) { return check_scope_tail(nodes, links, facts, at); } else {};
     if (kind == throw_node()) {
         val operand <- nodes[at].left;
         if (operand != no_node() && facts[operand].kind != exception_type()) { return expected_exception_type(); } else {};
