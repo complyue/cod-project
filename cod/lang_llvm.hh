@@ -809,6 +809,94 @@ class LLVMEmission {
       b_.CreateStore(here_arguments_.at(body.lexical_here[i]), b_.CreateStructGEP(entry.activation, activation, here_begin + i));
     return b_.CreateInsertValue(value, activation, 1);
   }
+  llvm::AllocaInst *native_reborrow(llvm::Value *resource) {
+    auto *pair = llvm::StructType::get(context_, {b_.getInt64Ty(), b_.getInt64Ty()});
+    auto *view = slot(pair, "native.reborrow");
+    for (unsigned word = 0; word < 2; ++word) b_.CreateStore(resource, b_.CreateStructGEP(pair, view, word));
+    return view;
+  }
+  llvm::Function *native_here_bridge(const CheckedNativeHereOperation &native, llvm::StructType *frame) {
+    const auto name = native_here_name(native) + "_bridge";
+    if (auto *existing = module_.getFunction(name)) return existing;
+    auto *pointer = b_.getPtrTy();
+    auto *bridge = llvm::Function::Create(llvm::FunctionType::get(b_.getInt32Ty(), {pointer, pointer, pointer}, false),
+        llvm::GlobalValue::InternalLinkage, name, module_);
+    llvm::IRBuilder<> body(llvm::BasicBlock::Create(context_, "entry", bridge));
+    auto *state = bridge->getArg(0);
+    auto *views = bridge->getArg(1);
+    auto *arrays = llvm::StructType::get(context_, std::vector<llvm::Type *>(native.arrays.size(), array_view_));
+    auto *callback = body.CreateLoad(here_, body.CreateStructGEP(frame, state, 0));
+    std::vector<llvm::Value *> arguments;
+    for (size_t i = 0; i < native.arrays.size(); ++i) {
+      auto *address = body.CreateStructGEP(arrays, views, i);
+      auto *view = body.CreateInsertValue(empty_scalar(), body.CreatePtrToInt(address, body.getInt64Ty()), 0);
+      arguments.push_back(body.CreateInsertValue(view, body.getInt32(tag(native.arrays[i])), 1));
+    }
+    arguments.push_back(body.CreateLoad(pointer, body.CreateStructGEP(frame, state, 1)));
+    arguments.push_back(body.CreateExtractValue(callback, 1));
+    std::vector<llvm::Type *> types(native.arrays.size(), scalar_);
+    types.insert(types.end(), 2, pointer);
+    auto *outcome = body.CreateCall(llvm::FunctionType::get(outcome_, types, false), body.CreateExtractValue(callback, 0), arguments);
+    auto *abrupt = body.CreateOr(body.CreateICmpNE(body.CreateExtractValue(outcome, 1), integer(0)),
+                                  body.CreateIsNotNull(body.CreateExtractValue(outcome, 3)));
+    if (protected_outcomes_) abrupt = body.CreateOr(abrupt, body.CreateIsNotNull(body.CreateExtractValue(outcome, 7)));
+    auto *forward = llvm::BasicBlock::Create(context_, "callback.protected", bridge);
+    auto *normal = llvm::BasicBlock::Create(context_, "callback.value", bridge);
+    body.CreateCondBr(abrupt, forward, normal);
+    body.SetInsertPoint(forward);
+    body.CreateStore(outcome, body.CreateStructGEP(frame, state, 2));
+    body.CreateRet(body.getInt32(static_cast<unsigned>(NativeHereStep::protected_completion)));
+    body.SetInsertPoint(normal);
+    body.CreateStore(body.CreateTrunc(body.CreateExtractValue(outcome, {0, 0}), body.getInt8Ty()), bridge->getArg(2));
+    body.CreateRet(body.getInt32(static_cast<unsigned>(NativeHereStep::value)));
+    return bridge;
+  }
+  llvm::Value *emit_native_here(const Expression &expr) {
+    using Call = std::pair<CheckedOperation::NativeHereCall, CheckedOperation::SuppliedHere>;
+    std::map<Call, std::vector<size_t>> alternatives;
+    for (size_t i = 0; i < contexts_.size(); ++i) {
+      const auto &fact = contexts_[i].at(&expr);
+      alternatives[{*fact.native_here_call, *fact.supplied_here}].push_back(i);
+    }
+    return contextual_value(expr, alternatives, "native.here", [&](const auto &selected) -> llvm::Value * {
+      const auto &[call, body] = selected;
+      const auto &native = program_->native_here_operations.at(call.operation);
+      auto *borrow = native_reborrow(load(storage_.at(call.place)));
+      auto *callback = prepare_here(body, expr.at);
+      auto *frame = llvm::StructType::get(context_, {here_, b_.getPtrTy(), outcome_});
+      auto *state = slot(frame, "native.here.context");
+      b_.CreateStore(callback, b_.CreateStructGEP(frame, state, 0));
+      b_.CreateStore(owner_identity(call.owner, expr.at), b_.CreateStructGEP(frame, state, 1));
+      auto *completion = slot(b_.getInt32Ty(), "native.here.completion");
+      b_.CreateStore(b_.getInt32(static_cast<unsigned>(NativeHereStep::invalid)), completion);
+      auto *value = slot(b_.getInt8Ty(), "native.here.value");
+      auto *status = b_.CreateCall(runtime(native_here_name(native) + "_call", b_.getInt32Ty(),
+          std::vector<llvm::Type *>(5, b_.getPtrTy())), {borrow, native_here_bridge(native, frame), state, completion, value});
+      auto *step = load(completion);
+      auto *abrupt = block("native.here.protected"), *ordinary = block("native.here.ordinary"), *done = block("native.here.outcome");
+      b_.CreateCondBr(b_.CreateICmpEQ(step, b_.getInt32(static_cast<unsigned>(NativeHereStep::protected_completion))), abrupt, ordinary);
+      b_.SetInsertPoint(abrupt);
+      auto *protected_result = b_.CreateLoad(outcome_, b_.CreateStructGEP(frame, state, 2));
+      b_.CreateBr(done);
+      b_.SetInsertPoint(ordinary);
+      auto *success = block("native.here.success"), *invalid = block("native.here.invalid");
+      b_.CreateCondBr(b_.CreateAnd(b_.CreateICmpEQ(step, b_.getInt32(static_cast<unsigned>(NativeHereStep::value))),
+          b_.CreateICmpEQ(status, b_.getInt32(static_cast<unsigned>(NativeStatus::ok)))), success, invalid);
+      b_.SetInsertPoint(invalid);
+      fail_path(ExceptionCategory::system, expr.at, b_.CreateGlobalString(location_text(expr.at) + ": invalid native callback or provider status"));
+      b_.SetInsertPoint(success);
+      auto *ordinary_result = outcome(pack(load(value), Type::uint8), integer(0), integer(0), null_pointer());
+      b_.CreateBr(done);
+      b_.SetInsertPoint(done);
+      auto *result = b_.CreatePHI(outcome_, 2);
+      result->addIncoming(protected_result, abrupt);
+      result->addIncoming(ordinary_result, success);
+      llvm::Value *completed = result;
+      if (here_entries_.at(body.instance).group)
+        completed = consume_here_transfer(result, b_.CreateExtractValue(callback, 1), expr.at);
+      return propagate(completed);
+    });
+  }
   llvm::Value *native_call(const Expression &expr, llvm::Function *target, size_t method, std::vector<llvm::Value *> prepared,
                            const std::vector<llvm::Value *> &captured = {}, std::optional<size_t> instance = {},
                            const Type *callable_view = nullptr, llvm::AllocaInst *here_site = nullptr,
@@ -1510,13 +1598,7 @@ class LLVMEmission {
       const auto &input = constructor.inputs[i];
       if (const auto &loan = plan.loans.at(i)) {
         auto *address = binding_address(loan->binding, loan->place);
-        if (loan->owned) {
-          auto *pair = llvm::StructType::get(context_, {b_.getInt64Ty(), b_.getInt64Ty()});
-          auto *resource = b_.CreateLoad(b_.getInt64Ty(), address);
-          address = slot(pair, "native.reborrow");
-          for (unsigned word = 0; word < 2; ++word)
-            b_.CreateStore(resource, b_.CreateStructGEP(pair, address, word));
-        }
+        if (loan->owned) address = native_reborrow(b_.CreateLoad(b_.getInt64Ty(), address));
         arguments.push_back(address);
         types.push_back(b_.getPtrTy());
       } else {
@@ -2126,6 +2208,8 @@ class LLVMEmission {
     const bool read = carries_value(projection);
     using K = Expression::Kind;
     const auto &fact = contexts_.front().at(&expr);
+    if (fact.native_here_call)
+      return temporary_scope(expr.at, scalar_, [&] { return emit_native_here(expr); });
     if (fact.argument_sources) {
       using Layout = std::tuple<std::vector<const Expression *>, std::vector<CheckedOperation::OperandPreparation>,
                                 std::optional<CheckedOperation::PipelinePreparation>>;
