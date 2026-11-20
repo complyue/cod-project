@@ -8,6 +8,11 @@ using "ParserStorage.cod" literal_node;
 using "ParserStorage.cod" add_node;
 using "ParserStorage.cod" multiply_node;
 using "ParserStorage.cod" group_node;
+using "ParserStorage.cod" name_node;
+using "ParserStorage.cod" call_node;
+using "ParserStorage.cod" argument_node;
+using "ParserStorage.cod" no_node;
+using "Lexer.cod" identifier;
 using "Lexer.cod" integer_literal;
 using "Lexer.cod" punctuation;
 
@@ -24,6 +29,7 @@ func expected_u64() -> u8 { return 3u8; }
 func literal_too_large() -> u8 { return 4u8; }
 func node_storage_exhausted() -> u8 { return 5u8; }
 func unexpected_token() -> u8 { return 6u8; }
+func expected_argument_separator() -> u8 { return 7u8; }
 
 func punct_at(source:const SourceBytes in S, tokens:const Tokens in T,
               at:u64, past:u64) -> u8 where {const owner S, const owner T} {
@@ -84,9 +90,8 @@ func precedence(op:u8) -> u8 {
     return 0u8;
 }
 
-func parse_expression_at(source:const SourceBytes in S, tokens:const Tokens in T,
-                         ref nodes:ExprNodes in A, ref result:ParseResult in R,
-                         past:u64, minimum:u8) -> void
+func parse_primary(source:const SourceBytes in S, tokens:const Tokens in T,
+                   ref nodes:ExprNodes in A, ref result:ParseResult in R, past:u64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val at <- result.next;
     if (at >= past) { result.diagnostic <- expected_operand(); return; } else {};
@@ -104,17 +109,92 @@ func parse_expression_at(source:const SourceBytes in S, tokens:const Tokens in T
         append_node(nodes, result, group_node(), first, tokens[close].past, 0u64, inner, 0u64, first);
         if (result.diagnostic != 0u8) { return; } else {};
         (result.next <- close + 1u64):void;
-    } else {
-        if (tokens[at].kind != integer_literal()) {
-            result.diagnostic <- expected_operand();
-            return;
-        } else {};
+        return;
+    } else {};
+    if (tokens[at].kind == integer_literal()) {
         val number <- parse_literal(source, tokens[at], result);
         if (result.diagnostic != 0u8) { return; } else {};
         append_node(nodes, result, literal_node(), first, tokens[at].past, number, 0u64, 0u64, first);
-        if (result.diagnostic != 0u8) { return; } else {};
-        (result.next <- at + 1u64):void;
+    } else {
+        if (tokens[at].kind != identifier()) { result.diagnostic <- expected_operand(); return; } else {};
+        append_node(nodes, result, name_node(), first, tokens[at].past, 0u64, 0u64, 0u64, first);
     };
+    if (result.diagnostic == 0u8) { (result.next <- at + 1u64):void; } else {};
+}
+
+# Each argument entry links to its preceding prefix on the left and its
+# argument expression on the right. The call links to the final entry.
+func parse_argument(source:const SourceBytes in S, tokens:const Tokens in T,
+                    ref nodes:ExprNodes in A, ref result:ParseResult in R,
+                    first:u64, previous:u64, past:u64) -> bool
+    where {const owner S, const owner T, owner A, owner R} {
+    parse_expression_at(source, tokens, nodes, result, past, 1u8);
+    if (result.diagnostic != 0u8) { return false; } else {};
+    val argument <- result.root;
+    append_node(nodes, result, argument_node(), first, nodes[argument].past,
+                0u64, previous, argument, nodes[argument].first);
+    return result.diagnostic == 0u8;
+}
+
+func parse_arguments(source:const SourceBytes in S, tokens:const Tokens in T,
+                     ref nodes:ExprNodes in A, ref result:ParseResult in R, past:u64) -> u64
+    where {const owner S, const owner T, owner A, owner R} {
+    val start <- result.next;
+    if (start >= past) { result.diagnostic <- expected_operand(); return no_node(); } else {};
+    val prefix <- no_node();
+    val list_first <- tokens[start].first;
+    val separator <- 0u8;
+    for (unused in start .. past) {
+        if (!parse_argument(source, tokens, nodes, result, list_first, prefix, past)) { return no_node(); } else {};
+        prefix <- result.root;
+        separator <- punct_at(source, tokens, result.next, past);
+        if (separator == 41u8) { return prefix; } else {}; # ')'
+        if (separator != 44u8) { # ','
+            result.diagnostic <- expected_argument_separator();
+            return no_node();
+        } else {};
+        (result.next <- result.next + 1u64):void;
+    };
+    result.diagnostic <- expected_operand();
+    return no_node();
+}
+
+func parse_call(source:const SourceBytes in S, tokens:const Tokens in T,
+                ref nodes:ExprNodes in A, ref result:ParseResult in R, past:u64) -> bool
+    where {const owner S, const owner T, owner A, owner R} {
+    val open <- result.next;
+    if (punct_at(source, tokens, open, past) != 40u8) { return false; } else {}; # '('
+    val callee <- result.root;
+    result.next <- open + 1u64;
+    val arguments <- no_node();
+    if (punct_at(source, tokens, result.next, past) != 41u8) { # ')'
+        arguments <- parse_arguments(source, tokens, nodes, result, past);
+        if (result.diagnostic != 0u8) { return false; } else {};
+    } else {};
+    val close <- result.next;
+    append_node(nodes, result, call_node(), nodes[callee].first, tokens[close].past,
+                0u64, callee, arguments, tokens[open].first);
+    if (result.diagnostic != 0u8) { return false; } else {};
+    result.next <- close + 1u64;
+    return true;
+}
+
+func parse_calls(source:const SourceBytes in S, tokens:const Tokens in T,
+                 ref nodes:ExprNodes in A, ref result:ParseResult in R, past:u64) -> void
+    where {const owner S, const owner T, owner A, owner R} {
+    for (unused in result.next .. past) {
+        if (!parse_call(source, tokens, nodes, result, past)) { return; } else {};
+    };
+}
+
+func parse_expression_at(source:const SourceBytes in S, tokens:const Tokens in T,
+                         ref nodes:ExprNodes in A, ref result:ParseResult in R,
+                         past:u64, minimum:u8) -> void
+    where {const owner S, const owner T, owner A, owner R} {
+    parse_primary(source, tokens, nodes, result, past);
+    if (result.diagnostic != 0u8) { return; } else {};
+    parse_calls(source, tokens, nodes, result, past);
+    if (result.diagnostic != 0u8) { return; } else {};
 
     # Every accepted operator advances next. An error leaves next at the
     # failing token so the caller can recover or report its source span.

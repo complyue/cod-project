@@ -6,6 +6,8 @@ using "Lexer.cod" end_of_source;
 using "Lexer.cod" unsupported_byte;
 using "ParserStorage.cod" Tokens;
 using "ParserStorage.cod" ExprNodes;
+using "ParserStorage.cod" name_node;
+using "ParserStorage.cod" call_node;
 using "Frontend.cod" FrontendResult;
 using "Frontend.cod" read_expression;
 using "Lowering.cod" lower_expression;
@@ -32,7 +34,8 @@ func count_tokens(source:const SourceBytes in S, ref token:Token in T) -> u64
 }
 
 # Plan buffers before acquiring scratch storage. Each node is introduced by
-# one distinct non-EOF token: a literal, operator or opening parenthesis.
+# one distinct non-EOF token. A call uses its closing parenthesis and its
+# argument entries use the opening parenthesis and comma separators.
 func plan_expression_scratch(source:const SourceBytes in S, ref scratch:ExpressionScratchPlan in R) -> bool
     where {const owner S, owner R} {
     scratch.token_count <- 0u64;
@@ -53,14 +56,29 @@ func plan_expression_scratch(source:const SourceBytes in S, ref scratch:Expressi
     return true;
 }
 
-# The caller keeps the source and scratch buffers live. Invalid source leaves
-# the diagnostic in result and makes no backend calls.
+func prepare_native_expression(source:const SourceBytes in S, ref tokens:Tokens in T,
+                               ref nodes:ExprNodes in N, ref result:FrontendResult in R) -> bool
+    where {const owner S, owner T, owner N, owner R} {
+    if (!read_expression(source, tokens, nodes, result)) { return false; } else {};
+    # Calls need resolved, checked callees before native emission can start.
+    for (at in 0u64 .. result.tree.used) {
+        if (nodes[at].kind == name_node() || nodes[at].kind == call_node()) {
+            result.diagnostic_first <- nodes[at].first;
+            result.diagnostic_past <- nodes[at].past;
+            return false;
+        } else {};
+    };
+    return true;
+}
+
+# The caller keeps the source and scratch buffers live. A syntax error or
+# unsupported expression leaves its span in result before any backend call.
 proc compile_expression(here emit(ordinal:u64, kind:u8, number:u64, left:u64, right:u64,
                                  operation_at:u64) -> bool,
                         source:const SourceBytes in S, ref tokens:Tokens in T,
                         ref nodes:ExprNodes in N, ref result:FrontendResult in R) -> bool
     where {const owner S, owner T, owner N, owner R} {
-    if (!read_expression(source, tokens, nodes, result)) { return false; } else {};
+    if (!prepare_native_expression(source, tokens, nodes, result)) { return false; } else {};
     return lower_expression(emit, nodes, result.tree);
 }
 
@@ -74,7 +92,7 @@ proc compile_native_expression(here begin() -> bool,
                                source:const SourceBytes in S, ref tokens:Tokens in T,
                                ref nodes:ExprNodes in N, ref result:FrontendResult in R) -> bool
     where {const owner S, owner T, owner N, owner R} {
-    if (!read_expression(source, tokens, nodes, result)) { return false; } else {};
+    if (!prepare_native_expression(source, tokens, nodes, result)) { return false; } else {};
     defer { release(); };
     if (!begin()) { return false; } else {};
     if (!lower_expression(emit, nodes, result.tree)) { return false; } else {};
