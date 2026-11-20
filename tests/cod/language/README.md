@@ -166,7 +166,7 @@ D-21r15/H-375–H-378/P-333/P-337 preserves a callable’s selected interpretati
 
 ## Current implementation boundary
 
-The seed maps regular source files read-only and indexes all line boundaries before lexing. Tokens use half-open byte spans tied to the source mapping. The parser preserves its separate token cursor, and diagnostics derive byte columns from the indexed source, including at end of input.
+The seed's indexed source provider exposes a C-compatible view of a regular file's read-only mapping and its line table. The owner keeps both buffers live through parsing. Tokens use half-open byte spans tied to that revision. The parser preserves its separate token cursor, and diagnostics derive byte columns from the line table, including at end of input.
 
 Composition and generator-shaped attachment overloads can use scalar operands and initialized readonly borrows. Composition runs during preparation and can supply an ordinary value or a borrowed result. Attachment prepares its operands and runs when a consumer opens the traversal. Inline connections, saved attachments, and explicit operator calls preserve written preparation order and select the same methods across mirrored spellings. A structural chain can use the builtin when no ordinary overload applies. Whole-traversal terminals take one bounded producer and one ordinary scalar sink operand, check the source protocol and owner witnesses, and return their ordinary result even for an empty traversal. Regional functor construction and computed receivers, callable-data terminal roles, and pipeline type queries remain implementation work for the composite workload. [Composite pipeline contract](../../../design/ProducersAndTransformers.md#composite-implementation-target)
 
