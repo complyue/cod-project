@@ -12,6 +12,11 @@ CALL_SCORE = 'behave @print(behave @score(1u64));'
 GATED_INSTALLATION = 'symbol @gate:bool;effect @gate<-true;'
 
 runner.CASES = {
+    'empty_regular_source': ('', 0, '', ''),
+    'lexical_error_uses_byte_column_after_crlf': (
+        '# first line\r\n\t~', 2, '', 'unsupported character in CoD source'),
+    'eof_location_keeps_the_empty_line_after_a_terminal_lf': (
+        'func unfinished()->void {\n', 2, '', 'unterminated scope'),
     'private_helper_keeps_source_context': ({
         'base.cod': BASE,
         'main.cod': IO + 'using "base.cod" relay;func score(x:u64)->u64{return 9u64;}behave @print(relay(1u64));behave @print(score(1u64));',
@@ -228,6 +233,10 @@ runner.CASES = {
     }, 0, '', ''),
 }
 runner.CASE_ARGUMENTS = {}
+runner.CASE_LOCATIONS = {
+    'lexical_error_uses_byte_column_after_crlf': (2, 2),
+    'eof_location_keeps_the_empty_line_after_a_terminal_lf': (2, 1),
+}
 runner.EXTRA_SOURCES = [Path(__file__)]
 
 if __name__ == '__main__':

@@ -3,8 +3,6 @@
 
 #include "lang_syntax.hh"
 
-#include <fstream>
-#include <iterator>
 #include <map>
 #include <set>
 
@@ -12,6 +10,7 @@ namespace cod::language {
 
 struct SourceModule {
   std::filesystem::path path;
+  std::shared_ptr<const IndexedSource> source;
   std::vector<std::unique_ptr<Form>> forms;
   std::map<const Form *, size_t> dependencies;
 };
@@ -37,13 +36,15 @@ class ModuleLoader {
         fail(at, "micro-dispatch implementation gap: cyclic module construction remains unproved; this is not a language restriction");
       return found->second;
     }
-    std::ifstream input(resolved, std::ios::binary);
-    if (!input) fail(at, "cannot read CoD source '" + resolved.string() + "'");
-    const std::string source{std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
-    if (input.bad()) fail(at, "failed while reading CoD source '" + resolved.string() + "'");
+    std::shared_ptr<const IndexedSource> source;
+    try {
+      source = std::make_shared<IndexedSource>(resolved);
+    } catch (const std::system_error &error) {
+      fail(at, "cannot read CoD source '" + resolved.string() + "': " + error.code().message());
+    }
     const auto id = program_.modules.size();
     paths_.emplace(resolved, id);
-    program_.modules.push_back({resolved, Parser(source, resolved.string()).parse(), {}});
+    program_.modules.push_back({resolved, source, Parser(source).parse(), {}});
     scanning_.insert(id);
     pending_.push_back({id});
     return id;

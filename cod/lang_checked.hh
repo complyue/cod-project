@@ -181,7 +181,7 @@ class ScalarChecker {
   std::map<const Form *, std::set<std::string>> enclosing_names_;
   std::set<const Form *> warned_captures_;
   std::set<size_t> warned_missing_return_;
-  std::set<std::tuple<std::string, unsigned, unsigned, std::string>> warned_shadow_;
+  std::set<std::tuple<std::string, size_t, std::string>> warned_shadow_;
   LexicalState lexical_;
   std::vector<CheckedStorage> *storage_ = nullptr;
   std::vector<CheckedBinding> *bindings_ = nullptr;
@@ -2246,7 +2246,7 @@ class ScalarChecker {
          lexical_self(name, checking_instance_->method) || module_names().values.contains(name))) ||
         module_names().callables.contains(name) || module_names().symbols.contains(name) ||
         module_names().types.contains(name);
-    if (outer && warned_shadow_.emplace(at.file, at.line, at.column, name).second)
+    if (outer && warned_shadow_.emplace(at.filename(), at.span.first, name).second)
       program_.warnings.push_back({Warning::shadow, at, "declaration shadows outer binding '" + name + "'"});
   }
   size_t new_selection_identity(std::set<size_t> sources = {null_target}) {

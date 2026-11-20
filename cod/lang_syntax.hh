@@ -1,6 +1,8 @@
 //===--- lang_syntax.hh - CoD source-language prototype syntax ------===//
 #pragma once
 
+#include "lang_source.hh"
+
 #include <algorithm>
 #include <cctype>
 #include <compare>
@@ -16,17 +18,6 @@
 #include <vector>
 
 namespace cod::language {
-
-struct Location {
-  std::string file;
-  unsigned line = 1;
-  unsigned column = 1;
-  auto operator<=>(const Location &) const = default;
-};
-
-inline std::string location_text(const Location &at) {
-  return at.file + ":" + std::to_string(at.line) + ":" + std::to_string(at.column);
-}
 
 [[noreturn]] inline void fail(const Location &at, const std::string &message) {
   throw std::runtime_error(location_text(at) + ": " + message);
@@ -61,108 +52,103 @@ inline std::optional<PipelineOperator> pipeline_operator(std::string_view spelli
   return {};
 }
 
-inline std::vector<Token> tokenize(const std::string &source, const std::string &file) {
+inline std::vector<Token> tokenize(const std::shared_ptr<const IndexedSource> &revision) {
+  const auto source = revision->bytes();
   std::vector<Token> tokens;
-  Location at{file};
   size_t cursor = 0;
-  auto advance = [&]() {
-    if (source[cursor++] == '\n') {
-      ++at.line;
-      at.column = 1;
-    } else {
-      ++at.column;
-    }
+  const auto emit = [&](TokenKind kind, std::string text, size_t first) {
+    tokens.push_back({kind, std::move(text), {{}, revision, {first, cursor}}});
   };
   auto identifier = [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; };
   while (cursor < source.size()) {
     const char c = source[cursor];
     if (std::isspace(static_cast<unsigned char>(c))) {
-      advance();
+      ++cursor;
       continue;
     }
     if (c == '#') {
       while (cursor < source.size() && source[cursor] != '\n')
-        advance();
+        ++cursor;
       continue;
     }
     if (c == '/' && cursor + 1 < source.size() && source[cursor + 1] == '/')
-      fail(at, "'//' is reserved for fraction construction; use '#' for line comments");
+      fail({{}, revision, {cursor, cursor + 2}}, "'//' is reserved for fraction construction; use '#' for line comments");
     if (source.compare(cursor, 2, "::") == 0)
-      fail(at, "use a single colon for type annotations, or -> for callable results");
-    const auto start = at;
+      fail({{}, revision, {cursor, cursor + 2}}, "use a single colon for type annotations, or -> for callable results");
     const auto offset = cursor;
+    const Location start{{}, revision, {offset, offset + 1}};
     if (c == '@' || std::isalpha(static_cast<unsigned char>(c)) || c == '_') {
       const bool symbol = c == '@';
       if (symbol) {
-        advance();
+        ++cursor;
         if (cursor == source.size() ||
             !(std::isalpha(static_cast<unsigned char>(source[cursor])) || source[cursor] == '_'))
           fail(start, "expected a symbol name after '@'");
       }
       const auto name_start = cursor;
       while (cursor < source.size() && identifier(source[cursor]))
-        advance();
-      tokens.push_back({symbol ? TokenKind::symbol : TokenKind::identifier,
-                        source.substr(name_start, cursor - name_start), start});
+        ++cursor;
+      emit(symbol ? TokenKind::symbol : TokenKind::identifier,
+           std::string(source.substr(name_start, cursor - name_start)), offset);
       continue;
     }
     if (std::isdigit(static_cast<unsigned char>(c))) {
       while (cursor < source.size() && std::isdigit(static_cast<unsigned char>(source[cursor])))
-        advance();
+        ++cursor;
       bool real = false;
       if (cursor + 1 < source.size() && source[cursor] == '.' &&
           std::isdigit(static_cast<unsigned char>(source[cursor + 1]))) {
         real = true;
-        advance();
-        while (cursor < source.size() && std::isdigit(static_cast<unsigned char>(source[cursor]))) advance();
+        ++cursor;
+        while (cursor < source.size() && std::isdigit(static_cast<unsigned char>(source[cursor]))) ++cursor;
       }
       if (cursor < source.size() && (source[cursor] == 'e' || source[cursor] == 'E')) {
         real = true;
-        advance();
-        if (cursor < source.size() && (source[cursor] == '+' || source[cursor] == '-')) advance();
+        ++cursor;
+        if (cursor < source.size() && (source[cursor] == '+' || source[cursor] == '-')) ++cursor;
         if (cursor == source.size() || !std::isdigit(static_cast<unsigned char>(source[cursor])))
           fail(start, "expected exponent digits");
-        while (cursor < source.size() && std::isdigit(static_cast<unsigned char>(source[cursor]))) advance();
+        while (cursor < source.size() && std::isdigit(static_cast<unsigned char>(source[cursor]))) ++cursor;
       }
       if (source.compare(cursor, 3, "f32") == 0 || source.compare(cursor, 3, "f64") == 0) {
         real = true;
-        advance(); advance(); advance();
+        cursor += 3;
       }
-      if (!real && source.compare(cursor, 2, "u8") == 0) { advance(); advance(); }
+      if (!real && source.compare(cursor, 2, "u8") == 0) cursor += 2;
       else if (!real && (source.compare(cursor, 3, "u32") == 0 || source.compare(cursor, 3, "u64") == 0)) {
-        advance(); advance(); advance();
+        cursor += 3;
       }
-      tokens.push_back({real ? TokenKind::real : TokenKind::integer, source.substr(offset, cursor - offset), start});
+      emit(real ? TokenKind::real : TokenKind::integer, std::string(source.substr(offset, cursor - offset)), offset);
       continue;
     }
     if (c == '"') {
-      advance();
+      ++cursor;
       std::string value;
       while (cursor < source.size() && source[cursor] != '"') {
         char next = source[cursor];
         if (next == '\n')
           fail(start, "newline in module path");
         if (next == '\\') {
-          advance();
+          ++cursor;
           if (cursor == source.size() || (source[cursor] != '\\' && source[cursor] != '"'))
             fail(start, "module paths support only escaped backslash or quote");
           next = source[cursor];
         }
         value += next;
-        advance();
+        ++cursor;
       }
       if (cursor == source.size())
         fail(start, "unterminated module path");
-      advance();
-      tokens.push_back({TokenKind::string, std::move(value), start});
+      ++cursor;
+      emit(TokenKind::string, std::move(value), offset);
       continue;
     }
     std::string punctuation(1, c);
     if (source.compare(cursor, 3, "...") == 0 || source.compare(cursor, 3, "<=>") == 0 ||
         source.compare(cursor, 3, "<->") == 0) {
       const auto triple = source.substr(cursor, 3);
-      advance(); advance(); advance();
-      tokens.push_back({TokenKind::punctuation, triple, start});
+      cursor += 3;
+      emit(TokenKind::punctuation, std::string(triple), offset);
       continue;
     }
     if (cursor + 1 < source.size()) {
@@ -171,15 +157,15 @@ inline std::vector<Token> tokenize(const std::string &source, const std::string 
           pair == "&&" || pair == "||" || pair == "<-" || pair == "<:" || pair == ".." || pair == "=>" ||
           pipeline_operator(pair)) {
         punctuation = pair;
-        advance();
+        ++cursor;
       }
     }
     if (std::string("(){}[];,:.+-*/%<>=!").find(c) == std::string::npos && punctuation.size() != 2)
       fail(start, "unsupported character in CoD source");
-    advance();
-    tokens.push_back({TokenKind::punctuation, punctuation, start});
+    ++cursor;
+    emit(TokenKind::punctuation, std::move(punctuation), offset);
   }
-  tokens.push_back({TokenKind::end, "", at});
+  emit(TokenKind::end, "", cursor);
   return tokens;
 }
 
@@ -344,6 +330,7 @@ struct Expression {
   std::shared_ptr<ReceivingHeader> receiving = {};
   std::unique_ptr<PipelineEndpoints> endpoints = {};
   bool initializer_block = false;
+  SourceSpan span = {};
   // A supplied body is stored after the written operands. It binds slot one.
   bool has_here_body() const { return !children.empty() && children.back()->kind == Kind::here_body; }
   bool inspects_return(bool binds_payload = false) const;
@@ -435,6 +422,7 @@ struct Form {
   std::optional<Type> index_type;
   std::optional<Type> parent_type;
   Expr body;
+  SourceSpan span = {};
 
   bool requires_explicit_return() const { return kind == Kind::procedure && !implicit_scope && !supplied_scope; }
   bool returns_tail_value() const { return !supplied_group && (kind == Kind::function || implicit_scope || supplied_scope); }
@@ -543,7 +531,9 @@ class Parser {
   Expr finish(Expr expression) {
     // Cache only complete nodes. Check incremental left/postfix trees before
     // recursive consumers or destruction can encounter an excessive depth.
-    std::vector<std::pair<const Expression *, bool>> work{{expression.get(), false}};
+    if (!depths_.contains(expression.get()))
+      expression->span.past = std::max(expression->span.past, tokens_[cursor_ - 1].at.span.past);
+    std::vector<std::pair<Expression *, bool>> work{{expression.get(), false}};
     while (!work.empty()) {
       const auto [node, ready] = work.back(); work.pop_back();
       if (depths_.contains(node)) continue;
@@ -554,14 +544,23 @@ class Parser {
         continue;
       }
       size_t depth = 1;
-      for (const auto &child : node->children) depth = std::max(depth, depths_.at(child.get()) + 1);
+      for (const auto &child : node->children) {
+        depth = std::max(depth, depths_.at(child.get()) + 1);
+        node->span.first = std::min(node->span.first, child->span.first);
+        node->span.past = std::max(node->span.past, child->span.past);
+      }
       const auto include_type = [&](const Type &type) { depth = std::max(depth, type_depth(type, node->at) + 1); };
       if (node->annotation) include_type(*node->annotation);
       if (node->receiving) for (const auto &item : node->receiving->items)
         if (item.annotation) include_type(*item.annotation);
       if (node->definition) {
-        const auto &definition = *node->definition;
-        if (definition.body) depth = std::max(depth, depths_.at(definition.body.get()) + 1);
+        auto &definition = *node->definition;
+        definition.span = node->span;
+        if (definition.body) {
+          depth = std::max(depth, depths_.at(definition.body.get()) + 1);
+          definition.span.past = std::max(definition.span.past, definition.body->span.past);
+          node->span.past = definition.span.past;
+        }
         for (const auto &parameter : definition.parameters) depth = std::max(depth, parameter_depth(parameter) + 1);
         for (const auto &parameter : definition.type_parameters) if (parameter.bound) include_type(*parameter.bound);
         for (const auto &parameter : definition.owner_parameters) if (parameter.root) include_type(*parameter.root);
@@ -747,6 +746,7 @@ class Parser {
   void type_separator() { expect(":"); }
   Expr make(Expression::Kind kind, const Token &token) {
     auto expression = std::make_unique<Expression>(Expression{kind, token.at, token.text, {}, {}, {}, false, {}});
+    expression->span = token.at.span;
     depths_.erase(expression.get());
     return expression;
   }
@@ -1490,8 +1490,9 @@ class Parser {
     const ParseEntry entry(recursion_, peek().at, "an expression");
     auto operand = expression_impl(minimum, attachment, owner_projection);
     if (minimum != 0 || !type_suffix || !is(":")) return finish(std::move(operand));
+    operand = finish(std::move(operand));
     auto typed = make(Expression::Kind::typed_expression, expect(":"));
-    typed->children.push_back(finish(std::move(operand)));
+    typed->children.push_back(std::move(operand));
     typed->annotation = parse_type();
     return finish(std::move(typed));
   }
@@ -1632,8 +1633,7 @@ class Parser {
   }
   Expr block_impl() {
     auto result = make(Expression::Kind::block, expect("{"));
-    result->scoped = is("{") && peek().at.line == result->at.line &&
-        peek().at.column == result->at.column + 1;
+    result->scoped = is("{") && peek().at.span.first == result->at.span.past;
     if (result->scoped) expect("{");
     while (!take("}")) {
       if (peek().kind == TokenKind::end) fail(peek().at, "unterminated scope");
@@ -1664,6 +1664,7 @@ class Parser {
     auto tail = std::make_unique<Expression>();
     tail->kind = K::return_tail;
     tail->at = result->at;
+    tail->span = result->span;
     tail->children.push_back(std::move(result));
     result = std::move(tail);
   }
@@ -1684,6 +1685,7 @@ class Parser {
       auto definition = std::make_shared<Form>();
       definition->kind = callable_kind == Form::Kind::function ? Form::Kind::function : Form::Kind::procedure;
       definition->at = expr.at;
+      definition->span = expr.span;
       definition->supplied_scope = true;
       definition->supplied_group = !expr.scoped;
       for (const auto &item : expr.receiving->items) {
@@ -1702,10 +1704,12 @@ class Parser {
         auto delivery = std::make_unique<Expression>();
         delivery->kind = K::transfer;
         delivery->at = single->at;
+        delivery->span = single->at.span;
         for (const auto &name : {single->name, parameter.name}) {
           auto operand = std::make_unique<Expression>();
           operand->kind = K::name;
           operand->at = single->at;
+          operand->span = single->at.span;
           operand->text = name;
           delivery->children.push_back(std::move(operand));
         }
@@ -1725,6 +1729,7 @@ class Parser {
       // Keep block-defer preparation delayed after its full scope becomes a call.
       auto body = std::make_unique<Expression>();
       body->kind = K::block; body->at = expr.children.front()->at;
+      body->span = expr.children.front()->span;
       body->children.push_back(std::move(expr.children.front()));
       expr.children.front() = std::move(body);
     }
@@ -1732,14 +1737,17 @@ class Parser {
     auto definition = std::make_shared<Form>();
     definition->kind = callable_kind == Form::Kind::function ? Form::Kind::function : Form::Kind::procedure;
     definition->at = expr.at;
+    definition->span = expr.span;
     definition->implicit_scope = true;
     definition->body = std::make_unique<Expression>(std::move(expr));
     definition->body->scoped = false;
     normalize_return_tail(*definition);
     expr = Expression{};
     expr.kind = K::value_call; expr.at = definition->at;
+    expr.span = definition->span;
     auto callable = std::make_unique<Expression>();
     callable->kind = K::callable; callable->at = definition->at;
+    callable->span = definition->span;
     callable->definition = std::move(definition);
     expr.children.push_back(std::move(callable));
   }
@@ -1792,8 +1800,8 @@ class Parser {
   }
 
 public:
-  Parser(const std::string &source, const std::string &file)
-      : tokens_(tokenize(source, file)), right_paren_(tokens_.size(), tokens_.size()) {
+  explicit Parser(const std::shared_ptr<const IndexedSource> &source)
+      : tokens_(tokenize(source)), right_paren_(tokens_.size(), tokens_.size()) {
     std::vector<size_t> open;
     for (size_t i = 0; i < tokens_.size(); ++i) if (tokens_[i].kind == TokenKind::punctuation) {
       if (tokens_[i].text == "(") open.push_back(i);
@@ -1806,6 +1814,10 @@ public:
 
   std::vector<std::unique_ptr<Form>> parse() {
     std::vector<std::unique_ptr<Form>> forms;
+    const auto append = [&](std::unique_ptr<Form> form) {
+      form->span = {form->at.span.first, tokens_[cursor_ - 1].at.span.past};
+      forms.push_back(std::move(form));
+    };
     while (peek().kind != TokenKind::end) {
       auto start = peek();
       auto form = std::make_unique<Form>();
@@ -1818,7 +1830,7 @@ public:
           form->symbolic = peek().kind == TokenKind::symbol;
           form->name = form->symbolic ? name(TokenKind::symbol).text : lexical_name(&form->operation).text;
           expect(";");
-          forms.push_back(std::move(form));
+          append(std::move(form));
           continue;
         }
       }
@@ -1846,7 +1858,7 @@ public:
             }
             const auto owner = take("in") ? ordinary_name().text : std::string{};
             declarations.emplace_back(declaration.get(), owner);
-            forms.push_back(std::move(declaration));
+            append(std::move(declaration));
           } while (take(","));
           if (take("where")) {
             expect("{"); expect("region");
@@ -1864,6 +1876,8 @@ public:
               if (!owner.empty()) fail(declaration->at, "symbol owner requires a where {region ...} declaration");
           }
           expect(";");
+          for (const auto &[declaration, name] : declarations)
+            declaration->span.past = tokens_[cursor_ - 1].at.span.past;
           continue;
         }
         expect(";");
@@ -1894,7 +1908,7 @@ public:
             fail(start.at, "a head-only data declaration requires an abstract parent");
           form->kind = data ? Form::Kind::conformance : Form::Kind::abstract_type;
           expect(";");
-          forms.push_back(std::move(form));
+          append(std::move(form));
           continue;
         }
         if (!data)
@@ -1956,7 +1970,7 @@ public:
           } while (take(","));
           expect("}");
           expect(";");
-          forms.push_back(std::move(form));
+          append(std::move(form));
           continue;
         }
         if (take("symbol")) {
@@ -1983,7 +1997,7 @@ public:
         form->body = expression();
         expect(";");
       }
-      forms.push_back(std::move(form));
+      append(std::move(form));
       depths_.clear();
     }
     for (const auto &form : forms) if (form->body) {
