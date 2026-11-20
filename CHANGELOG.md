@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-20 — Confirm C declaration direction and failed acquisition
+
+<a id="h-booter-c-declarations-20261120"></a>
+**H-BOOTER-C-DECLARATIONS-20261120.** The project user confirmed both decisions in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-20 (America/Los_Angeles): “`make` 失败就抛 ctor 声明的异常，C 先清理已取得的资源。`proc "C"` 按有没有 body 区分方向，不另加 entry 关键词。” Interop r11→12, roadmap r19→20 and registry r1021→1022 qualify D-20-C-DECLARATIONS and D-20-C-ACQUISITION under C-80/P-644/P-645. A bodyless declaration selects the C provider, a definition with a body exposes CoD to C, and a failed constructor raises its declared failure after native rollback. The worked source, scratch and LLVM calls continue the scoped handle and completion contracts. Permanent ABI, general fallible destruction and build configuration retain separate scope. Prior profile at `3ba49f4ac29887a1ac5cf3ca0589987087d96225:applications/cod-booter/docs/LLVMInterop.md`.
+
 ## 2026-11-20 — Acquire and release the first LLVM binding through typed handles
 
 <a id="h-booter-llvm-handles-20261120"></a>
