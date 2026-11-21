@@ -309,12 +309,12 @@ struct PipelineEndpoints {
 
 struct Expression {
   enum class Kind { integer, real, boolean, name, symbol, unary, binary, call, value_call, perform, behave, effect,
-                    block, grouped, conditional, return_test, field, range_for, fold, allocate, index, null_ref,
+                    block, grouped, conditional, return_test, field, range_for, index, null_ref,
                     try_scope, handler, raise, return_value, deferred, make_region, touch, effect_group, transfer, procedure_effect,
-                    pointer_group, pointer, make_local, rebind, region_binding, callable, alias, capture_owner,
+                    pointer_group, pointer, rebind, region_binding, callable, alias, capture_owner,
                     here_body, named_argument, break_value, continue_value, typed_expression, return_tail,
                     processor_composition, pipeline, here_binding, make_object, native_handle_binding, make_owned_handle, make_borrowed_handle,
-                    exception_binding, make_exception };
+                    exception_binding, make_exception, rethrow_from };
   enum class ExceptionPlacement { default_region, capacity, cause };
   Kind kind;
   Location at;
@@ -466,8 +466,7 @@ inline int binary_precedence(const std::string &op) {
 }
 
 inline bool intrinsic_name(std::string_view name) {
-  return name == "cause_at" || name == "region" || name == "deref" || name == "ref_at" || name == "store" ||
-         name == "setfield" || name == "scalar" || name == "i64" || name == "u8" ||
+  return name == "region" || name == "deref" || name == "scalar" || name == "i64" || name == "u8" ||
          name == "u32" || name == "u64" || name == "f32" || name == "f64";
 }
 
@@ -476,16 +475,20 @@ inline bool explicit_query_intrinsic_name(std::string_view name) {
 }
 
 inline bool expression_keyword(std::string_view name) {
-  return name == "true" || name == "false" || name == "null" || name == "alloc" || name == "is" || name == "not" ||
-         name == "for" || name == "fold" || name == "var" || name == "let" || name == "effect" ||
+  return name == "true" || name == "false" || name == "null" || name == "is" || name == "not" ||
+         name == "for" || name == "var" || name == "effect" ||
          name == "perform" || name == "behave" || name == "if" || name == "procedure" ||
          name == "function" || name == "func" || name == "proc" || name == "global" || name == "symbol" ||
-         name == "try" || name == "catch" || name == "finally" || name == "throw" || name == "return" || name == "defer" || name == "from" ||
-         name == "val" || name == "ref" || name == "throws" || name == "make" || name == "touch" || name == "ptr" || name == "typeof" || name == "intrinsic" || name == "const";
+         name == "try" || name == "catch" || name == "finally" || name == "throw" || name == "return" || name == "defer" ||
+         name == "val" || name == "ref" || name == "make" || name == "touch" || name == "ptr" || name == "typeof" || name == "intrinsic" || name == "const";
+}
+
+inline bool lexical_module_name(std::string_view name) {
+  return name == "type" || name == "data" || name == "unit" || name == "array";
 }
 
 inline bool module_keyword(std::string_view name) {
-  return name == "type" || name == "data" || name == "regional" || name == "unit" || name == "array" ||
+  return lexical_module_name(name) ||
          name == "using" || name == "import" || name == "mixin" || name == "export" || name == "conversion";
 }
 
@@ -640,9 +643,10 @@ class Parser {
       fail(peek().at, kind == TokenKind::symbol ? "expected a symbol name" : "expected a lexical name");
     return tokens_[cursor_++];
   }
-  Token ordinary_name() {
+  Token ordinary_name(bool lexical_value = false) {
     auto token = name(TokenKind::identifier);
-    if (expression_keyword(token.text) || module_keyword(token.text) || intrinsic_name(token.text) ||
+    if (expression_keyword(token.text) || (module_keyword(token.text) && !(lexical_value && lexical_module_name(token.text))) ||
+        intrinsic_name(token.text) ||
         token.text == "bool" || token.text == "void" || token.text == "ref")
       fail(token.at, "reserved keyword '" + token.text + "' cannot be used as an ordinary name");
     return token;
@@ -650,7 +654,7 @@ class Parser {
   Token value_name() {
     if (expression_keyword(peek().text))
       fail(peek().at, "reserved expression name '" + peek().text + "' cannot declare a lexical value");
-    return ordinary_name();
+    return ordinary_name(true);
   }
   static bool operation_token(const Token &token) {
     return (token.kind == TokenKind::identifier && (intrinsic_name(token.text) || token.text == "not" || identity_operation(token.text))) ||
@@ -798,24 +802,21 @@ class Parser {
     expect("(");
     if (!take(")")) {
       do {
-        if (expr.kind == Expression::Kind::call && expr.text == "setfield" && expr.children.size() == 1)
-          expr.children.push_back(make(Expression::Kind::name, field_name()));
-        else {
-          Expr argument;
-          if (!named || !is("->")) {
-            argument = expression(0, HereAttachment::immediate, !named);
-            argument->spread = take("...");
-          }
-          if (named && take("->")) {
-            auto selected = make(Expression::Kind::named_argument, ordinary_name());
-            if (argument) selected->children.push_back(std::move(argument));
-            else if (labelled_yield) fail(selected->at, "a labelled yield operand cannot request a default");
-            argument = std::move(selected);
-          } else if (labelled_yield) {
-            fail(argument->at, "a labelled yield requires a label for every operand");
-          }
-          expr.children.push_back(std::move(argument));
+        Expr argument;
+        if (!named || !is("->")) {
+          argument = expression(0, HereAttachment::immediate, !named);
+          argument->spread = take("...");
         }
+        if (named && take("->")) {
+          const bool construction = expr.kind == Expression::Kind::make_object || expr.kind == Expression::Kind::make_exception;
+          auto selected = make(Expression::Kind::named_argument, construction ? field_name() : value_name());
+          if (argument) selected->children.push_back(std::move(argument));
+          else if (labelled_yield) fail(selected->at, "a labelled yield operand cannot request a default");
+          argument = std::move(selected);
+        } else if (labelled_yield) {
+          fail(argument->at, "a labelled yield requires a label for every operand");
+        }
+        expr.children.push_back(std::move(argument));
       } while (take(","));
       expect(")");
     }
@@ -833,7 +834,7 @@ class Parser {
   }
   Type signature_type(bool &read_only, std::string &mode, bool native_handles = false) {
     if (is("ptr") || is("ref") || is("val") || (native_handles && is("handle") && !is("in", 1) && !is("where", 1) &&
-        !is("throws", 1) &&
+        (!is("throws", 1) || is("in", 2)) &&
         tokens_[cursor_ + 1].kind == TokenKind::identifier)) mode = tokens_[cursor_++].text;
     read_only = take("const");
     if ((is("exception") && is(":", 1)) || ownership_qualifier("exception")) {
@@ -1344,7 +1345,7 @@ class Parser {
       return expr;
     }
     if (take("make")) {
-      if (is("exception") && tokens_[cursor_ + 1].kind == TokenKind::identifier && !is("in", 1) && !is("from", 1)) {
+      if (is("exception") && tokens_[cursor_ + 1].kind == TokenKind::identifier && !is("in", 1)) {
         expect("exception");
         return exception_construction(token);
       }
@@ -1359,16 +1360,6 @@ class Parser {
           expect("in");
           expr->owner_name = ordinary_name().text;
         }
-        return expr;
-      }
-      if (take("local")) {
-        auto expr = make(Expression::Kind::make_local, token);
-        if (take("typeof")) {
-          expect("(");
-          expr->children.push_back(expression());
-          expect(")");
-        } else expr->annotation = parse_type();
-        if (is("{")) expr->children.push_back(block());
         return expr;
       }
       const bool legacy_region = is("(", 1) && is("capacity", 2) && is("=", 3);
@@ -1426,14 +1417,37 @@ class Parser {
       if (!deferred && expr->children.size() == 1) fail(token.at, "try requires catch, finally, or both");
       return expr;
     }
+    if (is("rethrow") && is("from", 1)) {
+      expect("rethrow");
+      expect("from");
+      auto expr = make(Expression::Kind::rethrow_from, token);
+      expr->children.push_back(expression());
+      return expr;
+    }
     if (take("throw")) {
       auto expr = make(Expression::Kind::raise, token);
       if (peek().kind == TokenKind::identifier && is("{", 1)) {
         expr->annotation = parse_type();
         field_initializers(*expr);
       } else if (!is(";") && !is("}")) {
-        expr->children.push_back(expression());
-        if (take("from")) expr->children.push_back(expression());
+        auto value = expression();
+        if (take("from")) {
+          auto cause = expression(0, value->kind == Expression::Kind::name ? HereAttachment::initializer_operand : HereAttachment::immediate);
+          if (value->kind == Expression::Kind::name && is("{")) {
+            auto constructed = make(Expression::Kind::make_exception, token);
+            constructed->annotation = Type{Type::named, value->text};
+            constructed->initializer_block = true;
+            constructed->exception_placement = Expression::ExceptionPlacement::cause;
+            field_initializers(*constructed);
+            constructed->children.push_back(std::move(cause));
+            expr->children.push_back(std::move(constructed));
+            return expr;
+          }
+          expr->children.push_back(std::move(value));
+          expr->children.push_back(std::move(cause));
+        } else {
+          expr->children.push_back(std::move(value));
+        }
       }
       return expr;
     }
@@ -1448,39 +1462,17 @@ class Parser {
       if (!is(";") && !is("}")) expr->children.push_back(expression());
       return expr;
     }
-    if (take("alloc")) {
-      const bool symbolic = peek().kind == TokenKind::symbol;
-      auto owner = make(symbolic ? Expression::Kind::symbol : Expression::Kind::name,
-                        symbolic ? name(TokenKind::symbol) : value_name());
-      auto expr = make(Expression::Kind::allocate, name(TokenKind::identifier));
-      expr->children.push_back(std::move(owner));
-      arguments(*expr);
-      return expr;
-    }
-    if (is("for") || is("fold")) {
-      const bool fold = take("fold");
-      if (!fold) expect("for");
-      if (!fold && !is("(")) return generator_for(token.at);
+    if (take("for")) {
+      if (!is("(")) return generator_for(token.at);
       expect("(");
-      auto expr = make(fold ? Expression::Kind::fold : Expression::Kind::range_for,
-                       value_name());
+      auto expr = make(Expression::Kind::range_for, value_name());
       expect("in");
       expr->children.push_back(expression());
       expect("..");
       expr->children.push_back(expression());
-      if (fold) {
-        expect(",");
-        expr->binding = value_name().text;
-        if (expr->text == expr->binding) fail(expr->at, "range and accumulator names must differ");
-        expect("=");
-        expr->children.push_back(expression());
-      }
       expect(")");
       expr->children.push_back(block());
-      if (take("else")) {
-        if (fold) fail(token.at, "else belongs to a range for; fold already has an initial accumulator");
-        expr->children.push_back(block());
-      }
+      if (take("else")) expr->children.push_back(block());
       return expr;
     }
     const size_t qualifier = is("const") ? 1 : 0;
@@ -1523,7 +1515,7 @@ class Parser {
       } while (take(","));
       return group;
     }
-    if (is("let") || is("var"))
+    if (is("var"))
       fail(token.at, "use ref/ptr for reference bindings or val for independent bits storage");
 
     if (take("effect")) {
@@ -1931,8 +1923,7 @@ class Parser {
     if (handoff && declaration)
       fail(expr.at, "a here-body variable declaration requires a nested explicit {{ ... }} scope");
     for (size_t i = 0; i < expr.children.size(); ++i) {
-      const bool loop_body = (expr.kind == K::range_for && i >= 2) ||
-                            (expr.kind == K::fold && i == 3);
+      const bool loop_body = expr.kind == K::range_for && i >= 2;
       const bool deferred_body = expr.kind == K::deferred && expr.children.front()->kind == K::block;
       const auto child_returning = deferred_body && returning != ReturnContext::module ? ReturnContext::deferred : returning;
       validate_explicit_scopes(*expr.children[i], child_returning, loop_body || iteration, deferred_body || deferred,
@@ -1982,7 +1973,8 @@ public:
       const bool region_symbol = is("region") && is("symbol", 1);
       if (region_symbol) expect("region");
       if (take("symbol")) {
-        if (take("from")) {
+        if (is("from") && tokens_[cursor_ + 1].kind == TokenKind::string) {
+          expect("from");
           if (region_symbol) fail(start.at, "use 'symbol from' to select a symbol identity; 'region symbol' declares one");
           form->kind = Form::Kind::symbol_from;
           resource(*form, true);
@@ -1991,7 +1983,7 @@ public:
           do {
             auto declaration = std::make_unique<Form>();
             declaration->kind = Form::Kind::symbol;
-            const auto token = name(peek().kind == TokenKind::symbol ? TokenKind::symbol : TokenKind::identifier);
+            const auto token = peek().kind == TokenKind::symbol ? name(TokenKind::symbol) : ordinary_name();
             declaration->name = token.text;
             declaration->at = token.at;
             if (region_symbol) {
@@ -2026,11 +2018,13 @@ public:
           continue;
         }
         expect(";");
-      } else if (take("unit")) {
+      } else if (is("unit") && tokens_[cursor_ + 1].kind == TokenKind::identifier) {
+        expect("unit");
         form->kind = Form::Kind::unit;
         form->name = ordinary_name().text;
         expect(";");
-      } else if (take("array")) {
+      } else if (is("array") && tokens_[cursor_ + 1].kind == TokenKind::identifier) {
+        expect("array");
         form->kind = Form::Kind::array;
         form->name = ordinary_name().text;
         expect("[");
@@ -2039,9 +2033,9 @@ public:
         type_separator();
         form->result_type = parse_type();
         expect(";");
-      } else if (is("type") || is("data") || is("regional") ||
+      } else if (((is("type") || is("data")) && tokens_[cursor_ + 1].kind == TokenKind::identifier) ||
+                 (is("data") && tokens_[cursor_ + 1].kind == TokenKind::string) ||
                  (is("region") && tokens_[cursor_ + 1].kind == TokenKind::identifier && is("{", 2))) {
-        if (is("regional")) fail(start.at, "regional type is not a declaration; use data for a regional representation");
         const bool region = take("region");
         const bool data = region || take("data");
         if (!data) expect("type");
@@ -2127,8 +2121,8 @@ public:
           form->path = name(TokenKind::string).text;
           expect("{");
           do {
-            auto source = name(TokenKind::identifier);
-            auto local = take("as") ? name(TokenKind::identifier).text : source.text;
+            auto source = ordinary_name();
+            auto local = take("as") ? ordinary_name().text : source.text;
             form->units.push_back({source.text, local, source.at});
           } while (take(","));
           expect("}");
@@ -2155,7 +2149,6 @@ public:
         }
         expect(";");
       } else {
-        if (is("let")) fail(peek().at, "module values require an explicit bits global declaration");
         form->kind = Form::Kind::expression;
         form->body = expression();
         expect(";");

@@ -58,6 +58,11 @@ static const char *unsupported_source_form(uint32_t code) {
     case 38: return "field selection";
     case 39: return "readonly reference parameter or const callable owner";
     case 40: return "bodyless deferred exception handler";
+    case 41: return "lexical callable value";
+    case 42: return "throw with an explicit cause";
+    case 43: return "braced exception construction in throw";
+    case 44: return "rethrow with an explicit cause";
+    case 45: return "named call argument";
     default: return NULL;
     }
 }

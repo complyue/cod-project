@@ -1,3 +1,8 @@
+using "ParserStorage.cod" callable_local_node;
+using "ParserStorage.cod" throw_with_cause_node;
+using "ParserStorage.cod" throw_named_node;
+using "ParserStorage.cod" rethrow_from_node;
+using "ParserStorage.cod" named_argument_node;
 using "ParserStorage.cod" exception_local_node;
 using "ParserStorage.cod" bodyless_defer_node;
 using "ParserStorage.cod" exception_parameter_node;
@@ -95,6 +100,11 @@ func unsupported_source_form(nodes:const ExprNodes in N, at:u64) -> u8 where {co
     if (kind == make_named_node()) { return 37u8; } else {};
     if (kind == field_access_node()) { return 38u8; } else {};
     if (kind == bodyless_defer_node()) { return 40u8; } else {};
+    if (kind == callable_local_node()) { return 41u8; } else {};
+    if (kind == throw_with_cause_node()) { return 42u8; } else {};
+    if (kind == throw_named_node()) { return 43u8; } else {};
+    if (kind == rethrow_from_node()) { return 44u8; } else {};
+    if (kind == named_argument_node()) { return 45u8; } else {};
     if (kind == readonly_ref_parameter_node() || (kind == owner_clause_node() && nodes[at].number == 2u64)) {
         return 39u8;
     } else {};

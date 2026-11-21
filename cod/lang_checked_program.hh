@@ -32,7 +32,7 @@ inline bool nominal_exception(const Type &type) {
 }
 inline bool bits_type(const Type &type) { return scalar_type(type) || (type.kind == Type::exception && !nominal_exception(type)); }
 inline bool lexical_value_type(const Type &type) { return bits_type(type) || type.kind == Type::procedure; }
-enum class BuiltinOperation { none, unary, binary, identity, cause_at, array_length, reference_swap, bits_swap, print };
+enum class BuiltinOperation { none, unary, binary, identity, array_length, reference_swap, bits_swap, print };
 inline bool eager_operation(std::string_view name) {
   return name == "+" || name == "-" || name == "*" || name == "/" || name == "%" || name == "!" ||
       name == "==" || name == "!=" || name == "<" || name == ">" || name == "<=" || name == ">=";
@@ -108,7 +108,6 @@ struct CheckedOperation {
   std::set<size_t> targets, owners, origins, selection_versions;
   // Formal nullable inputs, or null_target for an independently absent view.
   std::set<size_t> null_sources;
-  std::optional<size_t> accumulator;
   bool read_only = false;
   bool fixed_binding = false;
   bool view = false;
@@ -118,7 +117,6 @@ struct CheckedOperation {
   bool nullable_view = false;
   std::uint64_t integer = 0;
   bool minimum_literal = false;
-  bool initializes = false;
   ExceptionFacts exceptions;
   std::set<size_t> captures;
   std::optional<size_t> captured_place;
@@ -780,7 +778,7 @@ inline CheckedBody checked_body(const CheckedProgram &program, const CheckedMeth
       source = std::move(targets);
     };
     const auto lower = [&](auto &&self, CheckedOperation &operation) -> void {
-      optional(operation.place); optional(operation.callable_place); optional(operation.accumulator); optional(operation.captured_place);
+      optional(operation.place); optional(operation.callable_place); optional(operation.captured_place);
       optional(operation.exception_owner);
       set(operation.targets); set(operation.callable_targets); set(operation.captures);
       for (auto &capture : operation.callable_captures) self(self, capture);

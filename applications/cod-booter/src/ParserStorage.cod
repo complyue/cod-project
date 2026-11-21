@@ -91,6 +91,11 @@ func field_access_node() -> u8 { return 73u8; }
 func readonly_ref_parameter_node() -> u8 { return 74u8; }
 func bodyless_defer_node() -> u8 { return 75u8; }
 
+func callable_local_node() -> u8 { return 76u8; }
+func throw_with_cause_node() -> u8 { return 77u8; }
+func throw_named_node() -> u8 { return 78u8; }
+func rethrow_from_node() -> u8 { return 79u8; }
+
 func integer_arithmetic(kind:u8) -> bool {
     return kind == add_node() || kind == subtract_node() || kind == multiply_node() ||
         kind == divide_node() || kind == remainder_node();
@@ -225,3 +230,7 @@ export named_argument_node;
 export field_access_node;
 export readonly_ref_parameter_node;
 export bodyless_defer_node;
+export callable_local_node;
+export throw_with_cause_node;
+export throw_named_node;
+export rethrow_from_node;
