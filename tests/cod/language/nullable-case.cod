@@ -31,6 +31,21 @@ proc replace_source(ptr source:bool in O, replacement:bool in O) -> u64 where {o
     };
 }
 
+proc query_only(ptr subject:const bool in O) -> u64 where {const owner O} {
+    return case subject of {
+        (null) -> { 41u64 };
+        () -> {{
+            make typeof({{
+                behave @print(99u64);
+                case subject of {
+                    (true) -> { 1u64 };
+                    (false) -> { 2u64 };
+                }
+            }}) { 42u64 };
+        }};
+    };
+}
+
 val yes <- true;
 val no <- false;
 ptr missing_bool:bool = null in here;
@@ -46,3 +61,6 @@ behave @print(classify_status(start));
 behave @print(classify_status(missing_status));
 
 behave @print(replace_source(missing_bool, yes));
+
+behave @print(query_only(missing_bool));
+behave @print(query_only(yes));
