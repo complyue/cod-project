@@ -114,6 +114,8 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: unsupported intrinsic syntax, expected 'intrinsic (len)(array)'\n", stderr);
     else if (diagnostic->stage == 1 && diagnostic->code == 44)
         fputs(": error: expected ',' or '}' after module selection\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 77)
+        fputs(": error: catch annotation must name an exception type\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 13)
         fputs(": error: this module declaration is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 49)
