@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-21 — Native handle type declarations and nested resource ownership
+
+<a id="h-handle-type-within-20261121"></a>
+**H-HANDLE-TYPE-WITHIN-20261121.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-21 (America/Los_Angeles), the project user specified `handle type S;`, `handle type T in S;`, their respective owning and borrowed constructions, and `proc "C" S(handle within:C)` for nested owning acquisition: “CoD要保障先 `make` 的handle后释放，确保内层资源总是先于外层容器释放。” Interop r19/D-15r60/registry r1037 apply the fieldless spelling under D-20-C-HANDLES/P-646–P-647 and existing module publication. Nonempty C records retain their bits-only contract. When asked about an attached page acquired after a nested owning transaction, the user clarified “只有 `make own handle ...` 分配的 `own handle ...` 才归 CoD 负责释放”. D-20-HANDLE-WITHIN/P-670–P-671 qualifies parent liveness through child destruction and reverse successful acquisition order for CoD owners cleaned up together. Attached backing remains the C provider’s responsibility. Prior declaration contract at `4e5a10202e2a08e3a51272e0824d761b75e7492b:applications/cod-booter/docs/LLVMInterop.md`, “Declaring and borrowing native handles”.
+
 ## 2026-11-21 — Owner-qualified ref formals and checked selection at the call site
 
 <a id="h-owner-ref-argument-20261121"></a>

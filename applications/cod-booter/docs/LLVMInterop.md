@@ -1,8 +1,10 @@
 # Native C providers, LLVM bindings and scoped cleanup
 
-Revision 18 · 2026-11-21 · Confirmed for the first booter: synchronous calls, scoped native handles, LLVM session ownership, C declaration direction, typed `SourceRevision` failure generation and declared owner CTypes for borrowed handles.
+Revision 19 · 2026-11-21 · Confirmed for the first booter: synchronous calls, scoped native handles, LLVM session ownership, C declaration direction, typed `SourceRevision` failure generation and declared owner CTypes for borrowed handles.
 
 ## Design authority
+
+[D-20-C-HANDLES](../../../design/DesignAuthorityRegistry.md#d-20-c-handles) at r19 covers the fieldless `handle type` declarations and their two construction forms under [H-HANDLE-TYPE-WITHIN-20261121](../../../CHANGELOG.md#h-handle-type-within-20261121) and P-646/P-647. Check owner and borrow-only CTypes, ordinary lending, foreign-supplied handles and recursively bits-only C records. [D-20-HANDLE-WITHIN](../../../design/DesignAuthorityRegistry.md#d-20-handle-within) covers [dependent owning acquisition](#dependent-owning-handle-construction) under C-80/C-65. The user requires the particular container to survive its child's destruction. CoD registers destruction only for successful `make own handle` acquisitions. Check successful and failed acquisition of three levels, reverse cleanup of siblings, two live containers of the same type, and the absence of CoD cleanup for a borrowed view.
 
 [D-20-C-ENUM](../../../design/DesignAuthorityRegistry.md#d-20-c-enum) at r18 applies the [delegated enum review](../../../CHANGELOG.md#k-typed-enum-review-20261121) to by-value compiler status exchange. P-660/P-661 connect the checked declaration to matching C stubs. Acceptance validates actual codes on normal delivery, preserves protected completion and exercises the source-open failure path. Shared foreign storage and permanent ABI are separate.
 
@@ -25,7 +27,7 @@ For [enum arguments, results and normal feedback](../../../design/TypedEnums.md#
 
 ## Native handles and C records
 
-A fieldless `data "C"` declaration identifies a nominal CType for native handle construction. The marker is used in signatures and has no by-value record role. Each native handle payload is an opaque 64-bit word. CoD declares each constructor's parameters under the bits-or-handle rule. Generate C stubs for declared constructors and a disposal hook for CoD-owned resources. Handwritten C implements the resource operations.
+A fieldless `handle type` declaration identifies a nominal native resource type. Its public identity carries the associated constructor contracts through module selection, including a renamed re-export. Declare a C-layout record with fields as `data "C" Record { ... }`. Each native handle payload is an opaque 64-bit word. CoD declares each constructor's parameters under the bits-or-handle rule. Generate C stubs for declared constructors and a disposal hook for CoD-owned resources. Handwritten C implements the resource operations.
 
 - `make own handle SomeCType(...)` acquires an `own handle`. It is an owner kind, subject to the lexical-variable-only ownership rule used for `own region`. At scope exit, the owning variable releases the resource it still owns through the generated destructor stub. An owning handle cannot be a field.
 - `make handle View(...) in oh` constructs a borrow under the actual live owner `oh` of the CType declared by `View`. The borrow carries no independent destruction responsibility. When creating the borrow also creates a native child requiring disposal, the provider attaches the child to `oh` before publishing the loan. The provider preserves the child's native dependencies for the duration of that loan.
@@ -36,11 +38,11 @@ The lexical storage lifetime, the actual resource owner and the dependencies of 
 
 ### Declaring and borrowing native handles
 
-A borrow-only fieldless CType names its owning CType in its declaration. Here `LLVMSession` is a nominal type. At the use site, `session` is one live instance. Ordinary module lookup resolves the type identities.
+`handle type S;` declares a nominal resource type. CoD constructs an owning instance with `make own handle S(...)`. For `handle type T in S;`, CoD constructs a borrow with `make handle T(...) in s` under a live actual owner of type S. The opposite construction in either case rejects. A declaration alone supplies no constructor. Lending an existing owner to a handle formal and receiving a native loan at a C entry create no new owning instance. Here `LLVMSession` is a nominal type. At the use site, `session` is one live instance. Ordinary module lookup resolves the type identities.
 
 ```cod
-data "C" LLVMSession;
-data "C" ModuleView in LLVMSession;
+handle type LLVMSession;
+handle type ModuleView in LLVMSession;
 proc "C" ModuleView(val index:u64);
 proc "C" inspect_module(handle view:ModuleView in O) where {const owner O};
 
@@ -55,13 +57,55 @@ A borrow's C representation supplies its own opaque payload and the actual owner
 The launcher can use ordinary fieldless CTypes for the owners of foreign-supplied borrows.
 
 ```cod
-data "C" LauncherPaths;
-data "C" Path in LauncherPaths;
-data "C" LauncherDiagnostics;
-data "C" DiagnosticDestination in LauncherDiagnostics;
+handle type LauncherPaths;
+handle type Path in LauncherPaths;
+handle type LauncherDiagnostics;
+handle type DiagnosticDestination in LauncherDiagnostics;
 ```
 
 The private marker names describe what C owns during this invocation. The launcher lends one actual path owner A for both paths and a separate writable record owner D. In the [launcher entry](../src/CompilerCLI.cod), the two occurrences of `Path in A` constrain A to `LauncherPaths`. The diagnostic parameter constrains D to `LauncherDiagnostics`. The generated adapter binds the incoming owner evidence for A and D separately and checks agreement for the two uses of A. The native caller supplies truthful typed provenance and valid backing and keeps both loans live through the synchronous call. The boundary words alone cannot authenticate arbitrary C input. Merely naming an owner CType grants no constructor, allocation or disposal permission. The entry borrows both owners. The launcher retains responsibility for their storage. A host payload may differ from its owner word, as it does for a path; equality for the current diagnostic record is a private provider convention.
+
+### Dependent owning handle construction
+
+```cod
+handle type Database;
+handle type Transaction;
+handle type Cursor;
+handle type CachedPage in Database;
+
+proc "C" Database();
+proc "C" Transaction(handle within:Database);
+proc "C" Cursor(handle within:Transaction);
+proc "C" CachedPage(val index:u64);
+
+proc scan() -> void {
+    own handle db:Database <- make own handle Database();
+    own handle tx:Transaction <- make own handle Transaction(db);
+    own handle cursor:Cursor <- make own handle Cursor(tx);
+    return;
+}
+```
+
+The `within` contract borrows the selected container through destruction of the newly acquired resource. The caller retains responsibility for `db`. Each successful owning construction establishes its own release obligation. Both a normal return and an escaping exception after all three acquisitions release cursor, transaction, then database. During each child destructor its specific parent is still live. If cursor construction fails, C unwinds the acquired prefix of that construction before reporting the declared failure. CoD schedules no cursor destructor. The live transaction and database follow their own scope exits, including when the failure is caught inside their scope.
+
+Check this relationship against the selected constructor signature and the actual parent instance. A second live database of the same type cannot keep this transaction alive. A borrow supplied by a helper or synchronous `here` invocation can serve as the parent when its proved loan covers child destruction. Reject any escape, replacement or consumption that could destroy the parent first. Ordinary parent borrowing continues while the child is live, subject to access and provider operation contracts. Lexically nested owning locals can use their existing cleanup registrations. The ordering rule and static checks do not require a process-wide resource registry.
+
+In the constructor form `proc "C" S(handle within:C);`, the indicated parameter borrows the actual container through destruction of S. The call passes the existing `c` to `make own handle S(c)` as a borrow. The named constructor contract supplies the lifetime check at the call site, including across module boundaries. Native access still follows the declared capabilities. Publication preserves that role for the selected constructor. An ordinary handle argument can be needed only during acquisition. For instance, the [source provider](../native/source_provider.c) uses `Path` to open a revision. Its [destructor](../../../include/cod_source.h) releases the mapping and line storage; it has no use for the filename. If S requires a parent, every construction path for S must provide one. The first native profile already admits one constructor declaration per CType.
+
+**Who releases the resource.** Only a successful `make own handle` establishes a CoD handle cleanup. Each cleanup scope runs its live owning handle destructors exactly once in reverse order of successful acquisition. Each enclosing owner survives the complete destruction of its dependent resources. New bindings of existing borrows, ordinary handle arguments, native entry loans and `make handle ... in owner` establish no CoD destructor. A generated owning destructor can call the C provider, which releases its own attached resources. A constructor that returns a view of existing storage may have nothing new to dispose.
+
+```cod
+own handle db:Database <- make own handle Database();
+{{
+    own handle tx:Transaction <- make own handle Transaction(db);
+    handle page:CachedPage in db = make handle CachedPage(0u64) in db;
+}};  # CoD destroys tx. The page binding goes out of scope.
+# If the provider attached page backing to db, it still belongs to db.
+```
+
+For two owning transactions acquired against the same database and drained together, the second transaction is destroyed first. If a later acquisition fails, only previously published owning handles appear in that scope's cleanup. Verify both normal and exceptional exits and observe the C provider's cleanup of attached backing separately from CoD's owning destructor calls.
+
+The seed and booter migration replaces fieldless `data "C"` declarations in both parsers, checked module interfaces, real booter sources and fixtures. Keep the nonempty bits-record grammar and its layout checks. A generated stub can accept the same borrowed handle words for the `within` argument. The additional requirement is proving the parent loan lasts through destruction.
 
 ### Borrowed handle locals and results
 
@@ -102,12 +146,12 @@ The first generated boundary serves the indexed source, scratch and LLVM operati
 
 ### Declarations and the first host call
 
-**Direction of a checked declaration.** A bodyless `proc "C"` declares a C-provided operation. A `proc "C"` with a CoD body defines an entry that C can call through its generated adapter. Ordinary module lookup resolves the declaration and signature, and the generator diagnoses conflicting definitions of the same boundary identity. An unmarked CoD declaration or module export alone has no C linkage. A bodyless constructor named for a fieldless CType declares its admitted arguments and failures. The generator also emits one disposal hook per owning CType for the provider to implement.
+**Direction of a checked declaration.** A bodyless `proc "C"` declares a C-provided operation. A `proc "C"` with a CoD body defines an entry that C can call through its generated adapter. Ordinary module lookup resolves the declaration and signature, and the generator diagnoses conflicting definitions of the same boundary identity. An unmarked CoD declaration or module export alone has no C linkage. A bodyless constructor named for a `handle type` declares its admitted arguments and failures. The generator also emits one disposal hook per owning CType for the provider to implement.
 
 ```cod
-data "C" LauncherPaths;
-data "C" Path in LauncherPaths;
-data "C" SourceRevision;
+handle type LauncherPaths;
+handle type Path in LauncherPaths;
+handle type SourceRevision;
 data SourceOpenException <: Exception { os_error:u64; }
 
 proc "C" SourceRevision(handle path:Path in A) throws SourceOpenException
@@ -179,7 +223,7 @@ The proposed build starts with the existing seed, checks the declarations, gener
 The first shipped booter uses a scoped native `IntrinsicCatalog`. Its checked synchronous use operation lends the spelling bytes and export rows together. Both readonly views belong to the same actual catalog owner B for the duration of the callback. A row’s module and name spans index those exact bytes. Each span must satisfy `first <= past <= byte_count`. Seed and booter consume one canonical definition of spellings, kinds, identities and checkedness. The owner may lend immutable static backing directly. See the [builtin definitions](../../../cod/lang_intrinsic_catalog.h) and the [CoD row layout](../src/ModuleExports.cod).
 
 ```cod
-data "C" IntrinsicCatalog;
+handle type IntrinsicCatalog;
 proc "C" IntrinsicCatalog();
 proc "C" catalog_use(
     here work(ref spellings:const SourceBytes in B, ref exports:const ModuleExports in B) -> u8,

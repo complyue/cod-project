@@ -1,8 +1,10 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 59 · Recorded: 2026-11-21 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 60 · Recorded: 2026-11-21 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
+
+[D-15-PUBLIC-SOURCE](DesignAuthorityRegistry.md#d-15-public-source) at r60 applies the existing publication rule to a named `handle type` under [H-HANDLE-TYPE-WITHIN-20261121](../CHANGELOG.md#h-handle-type-within-20261121). P-662/P-663 preserve nominal identity and constructor contracts through selections and renamed re-exports. Check two different defining modules with identically spelled handle types.
 
 [D-15-PUBLIC-SOURCE](DesignAuthorityRegistry.md#d-15-public-source), P-662/P-663, covers [definition-site export and grouped selection](#public-definitions-and-grouped-selections) at r59. [H-MODULE-SOURCE-STYLE-20261121](../CHANGELOG.md#h-module-source-style-20261121) establishes readable public definitions and source-grouped dependencies for the booter. Publication, selection grants, privacy and module initialization follow the individual operations. Check equivalent publication and lookup in both bootstrap compilers.
 
@@ -316,7 +318,7 @@ export data SourcePosition {
 using "SourceStorage.cod" { SourceBytes, SourceLines, SourcePosition };
 ```
 
-The prefix publishes the same local identity that a separate `export name;` would publish after the declaration. This includes named `data`, `array`, `func`, `proc` and `enum` definitions. It applies to a foreign-marked declaration with a separately publishable identity under its existing rules, including a local `data "C"` or `proc "C"` declaration. Marking one method publishes its complete locally resolved callable family. Likewise a public type carries its existing constructors, methods or member table according to that type's contract. A private definition sharing only a foreign object's spelling cannot publish that foreign object by accident. Use the [publication-only re-export](#publication-only-re-export) when the public identity comes from upstream.
+The prefix publishes the same local identity that a separate `export name;` would publish after the declaration. This includes named `data`, `array`, `func`, `proc`, `enum` and `handle type` declarations. It applies to a foreign-marked declaration with a separately publishable identity under its existing rules, including a local `data "C"` or `proc "C"` declaration. Marking one method publishes its complete locally resolved callable family. Likewise a public type carries its existing constructors, methods or member table according to that type's contract. A private definition sharing only a foreign object's spelling cannot publish that foreign object by accident. Use the [publication-only re-export](#publication-only-re-export) when the public identity comes from upstream.
 
 The prefix applies to a declaration that has a single publishable name, including a named overload family. Anonymous forms, expressions, initializer blocks and individual fields have no such publication. Split a declaration of multiple independent identities when their visibility differs, or select them using standalone exports. Prefixing a declaration adds no initialization, repeats no method body and confers no additional extension grant. Existing `export name;`, `export from` and `export import` retain their uses and privacy checks.
 
