@@ -449,7 +449,16 @@ struct ResultContract {
 };
 // Declaration evidence has no runtime payload or authority to access retained storage.
 struct QueryEnvironment {
+  struct ScopeSelection {
+    std::string place;
+    std::optional<bool> present;
+    std::optional<size_t> live_input;
+    std::set<size_t> overlapping_inputs, same_selection_inputs;
+    std::set<std::string> same_selection_places;
+    bool operator==(const ScopeSelection &) const = default;
+  };
   std::vector<QueryBinding> bindings;
+  std::map<std::string, ScopeSelection> scope_selections;
   std::set<std::string> symbol_shadows;
   std::vector<std::vector<OwnerMatch>> owners;
   std::vector<std::vector<OwnerMatch>> scope_owners;

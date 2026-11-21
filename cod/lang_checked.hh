@@ -249,6 +249,7 @@ class ScalarChecker {
   using SelectedSlotValues = std::vector<std::pair<size_t, size_t>>;
   std::map<std::pair<size_t, SelectedSlotValues>, size_t> embedded_reference_selections_;
   std::vector<size_t> input_field_places_;
+  size_t scope_entry_version_limit_ = 0;
   std::map<size_t, size_t> input_field_roots_;
   std::map<size_t, size_t> input_slot_referents_;
   std::set<size_t> rebound_;
@@ -10152,7 +10153,8 @@ class ScalarChecker {
     }
     const bool abrupt = result.always_throws && (state.returns || joining);
     if (abrupt && state.returns) state.returns->saw_throw = true;
-    const auto &captures = free_bindings(*callee.definition).captures;
+    const auto &dependencies = free_bindings(*callee.definition);
+    const auto &captures = dependencies.captures;
     for (const auto &capture : captures) check_type_capture(state, capture.name, capture.at);
     std::vector<EvidencePlaces> writable_booleans;
     if (state.selections.tracking) for (const auto &capture : captures) {
@@ -10238,10 +10240,10 @@ class ScalarChecker {
           for (const auto &[slot, origins] : body.selections.projected_slots)
             for (const auto &[root, path] : origins) retain_witness(root);
         }
-        for (const auto &capture : captures) {
-          const auto &name = capture.name;
-          const auto view = body.views.find(name);
-          if (view == body.views.end()) continue;
+        const auto import = [&](const std::string &name) {
+          const auto found = body.views.find(name);
+          if (found == body.views.end()) return;
+          const auto &view = found->second;
           auto source = named_type_target(state, name);
           source.initialized_fields = state.selections.ready_fields(source);
           source.guarded_fields = state.selections.field_guards(source);
@@ -10251,7 +10253,7 @@ class ScalarChecker {
               type && type->kind == Type::product && source.presence != TargetPresence::absent)
             source.places = {QueryProductPlace{nullptr, type->identity, {}, true}};
           const EvidenceSlot local = std::pair{callee.definition.get(), name};
-          if (view->second.value_binding == true) {
+          if (view.value_binding == true) {
             body.selections.value_places.emplace(name, source.places);
             if (const auto &place = source.selection.slot; place && state.checks_initialization()) {
               if (live_value_places.insert(*place).second) {
@@ -10284,7 +10286,11 @@ class ScalarChecker {
           for (const auto &place : source.places)
             if (const auto found = state.selections.booleans.find(place); found != state.selections.booleans.end())
               imported_booleans.insert(*found);
-        }
+        };
+        for (const auto &capture : captures) import(capture.name);
+        for (const auto &query : dependencies.queries)
+          if (!body.selections.bindings.contains(query.name) && !body.selections.value_places.contains(query.name))
+            import(query.name);
         for (auto first = live_bindings.begin(); first != live_bindings.end(); ++first)
           for (auto second = std::next(first); second != live_bindings.end(); ++second)
             if (state.selections.may_overlap(first->second.footprint, second->second.footprint)) {
@@ -12490,6 +12496,100 @@ class ScalarChecker {
       return {};
     }
   }
+  EvidenceSelection lexical_selection(size_t handle, const std::set<size_t> &physical) const {
+    if (physical.size() == 1) handle = *physical.begin();
+    return {handle, EvidencePlaces(physical.begin(), physical.end())};
+  }
+  EvidencePlaces lexical_boolean_targets(size_t slot, const Type &type) const {
+    EvidencePlaces result;
+    if (type != Type::boolean) return result;
+    if (const auto targets = lexical_.targets.find(slot); targets != lexical_.targets.end()) {
+      for (const auto place : targets->second) {
+        if (place == null_target) continue;
+        if (storage(place).borrowed) return {};
+        result.insert(place);
+      }
+    }
+    return result;
+  }
+  void observe_lexical_selection(QuerySelections &flow, const EvidenceSelection &selection, const Type &type) const {
+    const auto remember = [&](const EvidenceSlot &slot) {
+      const auto id = std::get<size_t>(slot);
+      if (const auto targets = lexical_.targets.find(id); targets != lexical_.targets.end() && !targets->second.empty()) {
+        if (!targets->second.contains(null_target)) flow.facts[slot] = TargetPresence::present;
+        else if (targets->second.size() == 1) flow.facts[slot] = TargetPresence::absent;
+      }
+      const auto known = lexical_boolean_targets(id, type);
+      if (!known.empty()) flow.targets[slot] = known;
+    };
+    for (const auto &slot : selection.footprint) {
+      flow.footprints[slot] = {slot};
+      for (const auto other : bindings_->at(std::get<size_t>(slot)).overlaps)
+        flow.possible_overlap[slot].insert(other);
+      remember(slot);
+    }
+    flow.footprints[*selection.slot] = selection.footprint;
+    remember(*selection.slot);
+  }
+  void restore_scope_query_selections(TypeEvidenceState &state) const {
+    if (query_environment().scope_selections.empty()) return;
+    auto &flow = state.selections;
+    const auto input_binding = [&](size_t ordinal) { return storage(input_place(ordinal)).binding; };
+    const auto unchanged = [&](size_t ordinal) {
+      const auto versions = lexical_.target_versions.find(input_binding(ordinal));
+      return versions != lexical_.target_versions.end() &&
+          std::ranges::all_of(versions->second, [&](size_t id) { return id < scope_entry_version_limit_; });
+    };
+    struct QueryPlace {
+      EvidenceSlot slot;
+      bool unchanged;
+    };
+    std::map<std::string, QueryPlace> places;
+    for (const auto &[name, retained] : query_environment().scope_selections) {
+      const auto type = state.bindings.find(name);
+      if (type == state.bindings.end()) continue;
+      if (retained.live_input) {
+        const auto id = input_binding(*retained.live_input);
+        auto selection = lexical_selection(id, physical_slots({id}));
+        observe_lexical_selection(flow, selection, *type->second);
+        places.try_emplace(retained.place, QueryPlace{*selection.slot, unchanged(*retained.live_input)});
+        flow.bindings.emplace(name, std::move(selection));
+        continue;
+      }
+      const EvidenceSlot slot = retained.place;
+      const bool pristine = std::ranges::all_of(retained.overlapping_inputs, unchanged);
+      if (!places.contains(retained.place)) {
+        TargetEvidence target;
+        if (pristine && retained.present)
+          target.presence = *retained.present ? TargetPresence::present : TargetPresence::absent;
+        flow.save_selection(slot, std::move(target));
+        for (const auto input : retained.overlapping_inputs) {
+          const EvidenceSlot affected = input_binding(input);
+          flow.possible_overlap[slot].insert(affected);
+          flow.possible_overlap[affected].insert(slot);
+        }
+        places.emplace(retained.place, QueryPlace{slot, pristine});
+      }
+      flow.bindings.emplace(name, EvidenceSelection{slot, {slot}});
+    }
+    for (const auto &[name, retained] : query_environment().scope_selections) {
+      if (!flow.bindings.contains(name)) continue;
+      const auto &place = places.at(retained.place);
+      if (!place.unchanged) continue;
+      EvidencePlaces same;
+      for (const auto input : retained.same_selection_inputs) if (unchanged(input)) {
+        const auto id = input_binding(input);
+        const auto selection = lexical_selection(id, physical_slots({id}));
+        observe_lexical_selection(flow, selection, *state.bindings.at(name));
+        same.insert(*selection.slot);
+      }
+      for (const auto &other : retained.same_selection_places)
+        if (const auto found = places.find(other); found != places.end() && found->second.unchanged)
+          same.insert(found->second.slot);
+      flow.retain_selection(place.slot, std::move(same));
+    }
+  }
+
   TypeEvidenceState evidence_state(bool retained_only = false, const std::set<std::string> *names = nullptr,
                                   bool track_selection = false) const {
     TypeEvidenceState state;
@@ -12507,6 +12607,7 @@ class ScalarChecker {
       state.views[binding.name] = binding.view;
       if (binding.owner_binding) state.owner_bindings[binding.name] = *binding.owner_binding;
     }
+    if (track_selection) restore_scope_query_selections(state);
     const auto retain_binding = [&](const std::string &name, size_t id) {
       const auto &binding = bindings_->at(id);
       state.selections.remove_binding(name);
@@ -12548,44 +12649,15 @@ class ScalarChecker {
         for (const auto owner : bindings_->at(slot).place_owners) state.views.at(name).place_owners.insert(owner);
       state.views.at(name).storage_kind = binding.kind();
       if (!track_selection || binding.owner_binding || physical_selection.empty()) return;
-      const auto places = [&](size_t slot) {
-        EvidencePlaces result;
-        if (binding.type != Type::boolean) return result;
-        if (const auto targets = lexical_.targets.find(slot); targets != lexical_.targets.end()) {
-          for (const auto place : targets->second) {
-            if (place == null_target) continue;
-            if (storage(place).borrowed) return EvidencePlaces{};
-            result.insert(place);
-          }
-        }
-        return result;
-      };
       if (binding.value_binding) {
         if (physical_selection.size() == 1) {
-          auto known = places(*physical_selection.begin());
+          auto known = lexical_boolean_targets(*physical_selection.begin(), binding.type);
           if (!known.empty()) state.selections.value_places.emplace(name, std::move(known));
         }
         return;
       }
-      const auto remember = [&](size_t slot) {
-        if (const auto targets = lexical_.targets.find(slot); targets != lexical_.targets.end() && !targets->second.empty()) {
-          if (!targets->second.contains(null_target)) state.selections.facts[slot] = TargetPresence::present;
-          else if (targets->second.size() == 1) state.selections.facts[slot] = TargetPresence::absent;
-        }
-        const auto known = places(slot);
-        if (!known.empty()) state.selections.targets[slot] = known;
-      };
-      const auto handle = physical_selection.size() == 1 ? *physical_selection.begin() : binding.alias.value_or(id);
-      EvidenceSelection selection{handle, {}};
-      for (const auto slot : physical_selection) {
-        selection.footprint.insert(slot);
-        state.selections.footprints[slot] = {slot};
-        const auto &overlapping = bindings_->at(slot).overlaps;
-        for (const auto other : overlapping) state.selections.possible_overlap[slot].insert(other);
-        remember(slot);
-      }
-      state.selections.footprints[handle] = selection.footprint;
-      remember(handle);
+      auto selection = lexical_selection(binding.alias.value_or(id), physical_selection);
+      observe_lexical_selection(state.selections, selection, binding.type);
       state.selections.bindings[name] = std::move(selection);
     };
     if (retained_only) {
@@ -12707,11 +12779,13 @@ class ScalarChecker {
     return state;
   }
   size_t retain_query_environment(const CheckedMethod &method, const std::optional<ResultContract> &result = {},
-                                  const TypeEvidenceState *declaration = nullptr, const std::vector<size_t> &scope_owners = {}) {
+                                  const TypeEvidenceState *declaration = nullptr, const std::vector<size_t> &scope_owners = {},
+                                  std::map<std::string, QueryEnvironment::ScopeSelection> scope_selections = {}) {
     const auto &symbols = free_bindings(*method.source).symbols;
     if (method.queries.empty() && symbols.empty() && !result) return 0;
     QueryEnvironment environment;
     environment.result = result;
+    environment.scope_selections = std::move(scope_selections);
     const auto state = declaration ? *declaration : evidence_state();
     if (lexical_methods_.contains(method.source))
       for (const auto &symbol : symbols)
@@ -13581,6 +13655,58 @@ class ScalarChecker {
         inputs.boolean_conditions.emplace(input, std::move(proof));
     }
   }
+  std::map<std::string, QueryEnvironment::ScopeSelection> scope_query_selections(
+      const CheckedMethod &method, const TypeEvidenceState &caller, const CheckedMethod::ScopeInputs &inputs,
+      const std::vector<Type> &arguments, const std::vector<CheckedOperation> &views, const Location &at) {
+    const auto &selections = caller.selections;
+    std::map<std::string, QueryEnvironment::ScopeSelection> result;
+    std::map<EvidenceSlot, std::string> places;
+    for (const auto &query : method.queries) {
+      const auto binding = selections.bindings.find(query.name);
+      if (binding == selections.bindings.end() || !binding->second.slot) continue;
+      const auto &view = caller.views.at(query.name);
+      if (!view.nullable || view.value_binding == true) continue;
+      places.try_emplace(*binding->second.slot, query.name);
+      result.try_emplace(query.name);
+    }
+    if (result.empty()) return result;
+
+    std::map<size_t, EvidenceSelection> live;
+    const auto add_input = [&](size_t ordinal, const CheckedOperation &view) {
+      auto physical = physical_slots(view.slots);
+      if (physical.empty()) return;
+      const auto handle = view.binding ? lexical_selection(*view.binding, physical) :
+          physical.size() == 1 ? lexical_selection(*physical.begin(), physical) :
+          EvidenceSelection{{}, EvidencePlaces(physical.begin(), physical.end())};
+      live.emplace(ordinal, handle);
+    };
+    for (const auto input : inputs.live_bindings) add_input(input, views[input]);
+    const auto fields = product_inputs(arguments, at);
+    if (std::ranges::any_of(fields, [](const auto &field) { return field.role == ProductInput::Role::slot; })) {
+      InvocationSlots slots{};
+      const auto projected = project_call_fields(fields, views, at, false, slots);
+      for (size_t i = 0; i < fields.size(); ++i) if (fields[i].role == ProductInput::Role::slot) {
+        const auto input = arguments.size() + i;
+        add_input(input, projected[input]);
+      }
+    }
+    for (auto &[name, retained] : result) {
+      const auto &selection = selections.bindings.at(name);
+      retained.place = places.at(*selection.slot);
+      const auto same = selections.same_selected(*selection.slot);
+      const auto presence = selections.presence(selection);
+      if (presence != TargetPresence::unknown) retained.present = presence == TargetPresence::present;
+      for (const auto &[index, input] : live) {
+        if (input == selection && !retained.live_input) retained.live_input = index;
+        if (input.slot && same.contains(*input.slot)) retained.same_selection_inputs.insert(index);
+        if (selections.may_overlap(selection.footprint, input.footprint)) retained.overlapping_inputs.insert(index);
+      }
+      for (const auto &slot : same) if (slot != *selection.slot)
+        if (const auto found = places.find(slot); found != places.end()) retained.same_selection_places.insert(found->second);
+    }
+    return result;
+  }
+
   void check_scope_call(const Expression &expr, size_t method_id, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation, bool read, bool discard,
       const Type *expected, std::optional<LexicalState> *case_scan = nullptr) {
@@ -13662,6 +13788,7 @@ class ScalarChecker {
       if (const auto slot = here_slot(query.name)) retain_lexical_here(inputs, operation.scope_here, query, *slot, owner_role);
     scope_owner_relations(inputs, operation.scope_owners);
     scope_input_observations(inputs, arguments, views, expr.at);
+    auto scope_selections = scope_query_selections(method, state, inputs, arguments, views, expr.at);
     const auto profile = scope_profile(std::move(inputs));
     std::optional<ResultContract> supplied;
     bool always_throws = false;
@@ -13670,7 +13797,8 @@ class ScalarChecker {
       if (result.origin == ResultOrigin::supplied) supplied = result.contract;
       always_throws = result.always_throws;
     }
-    const auto query = retain_query_environment(program_.methods[profile], supplied, &state, operation.scope_owners);
+    const auto query = retain_query_environment(program_.methods[profile], supplied, &state, operation.scope_owners,
+                                                 std::move(scope_selections));
     const auto target = demand(profile, arguments, expr.at, {}, retained, query, &state);
     operation.callee = target;
     const auto &selected = program_.instances[target];
@@ -18050,6 +18178,7 @@ class ScalarChecker {
     next_finalizer_input_ = 2 * cleanup_.deferred_return_offset();
     cleanup_scope_ = 0; next_scope_ = 1;
     next_target_version_ = 0;
+    scope_entry_version_limit_ = 0;
     next_selection_identity_ = 0; selection_sources_.clear(); incoming_selections_.clear(); product_selections_.clear();
     embedded_reference_selections_.clear();
     input_field_places_.clear(); input_field_roots_.clear(); input_slot_referents_.clear(); return_selection_actions_.clear();
@@ -18420,6 +18549,7 @@ class ScalarChecker {
               bindings_->at(left).read_only == bindings_->at(right).read_only)
             bindings_->at(left).overlaps.insert(right);
         }
+      scope_entry_version_limit_ = next_target_version_;
       refresh_input_facts(lexical_);
       AbruptFlow flow{1, {}}, outcomes{1, {}};
       abrupt_ = &flow;

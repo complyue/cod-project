@@ -12,7 +12,7 @@
   {
     "file": "nullable-case.cod",
     "exit": 0,
-    "stdout": "11\n12\n13\n21\n22\n23\n31\n34\n"
+    "stdout": "11\n12\n13\n21\n22\n23\n31\n34\n41\n42\n"
   },
   {
     "file": "nullable-case-missing-null.cod",
