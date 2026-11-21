@@ -1,11 +1,8 @@
 using "SourceStorage.cod" SourceBytes;
-using "ParserStorage.cod" Tokens;
-using "ParserStorage.cod" len;
-using "Lexer.cod" scan_token;
-using "Lexer.cod" end_of_source;
-using "Lexer.cod" unsupported_byte;
+using "ParserStorage.cod" { Tokens, len };
+using "Lexer.cod" { scan_token, end_of_source, unsupported_byte };
 
-data ScanResult {
+export data ScanResult {
     used:u64;
     next:u64;
     complete:bool;
@@ -14,8 +11,8 @@ data ScanResult {
 
 # The caller supplies initialized token storage. The produced token prefix
 # includes either EOF or the token that describes the first lexical error.
-func scan_tokens(source:const SourceBytes in S, ref tokens:Tokens in T,
-                 ref result:ScanResult in R) -> void where {const owner S, owner T, owner R} {
+export func scan_tokens(source:const SourceBytes in S, tokens:Tokens in T,
+                        result:ScanResult in R) -> void where {const owner S, owner T, owner R} {
     result.used <- 0u64;
     result.next <- 0u64;
     result.complete <- false;
@@ -36,5 +33,3 @@ func scan_tokens(source:const SourceBytes in S, ref tokens:Tokens in T,
 }
 
 export Tokens;
-export ScanResult;
-export scan_tokens;

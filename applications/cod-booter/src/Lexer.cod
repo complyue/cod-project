@@ -1,29 +1,28 @@
-using "SourceStorage.cod" SourceBytes;
-using "SourceStorage.cod" Token;
+using "SourceStorage.cod" { SourceBytes, Token };
 using "SourceAccess.cod" len;
 
-func end_of_source() -> u8 { return 0u8; }
-func identifier() -> u8 { return 1u8; }
-func symbol_name() -> u8 { return 2u8; }
-func integer_literal() -> u8 { return 3u8; }
-func real_literal() -> u8 { return 4u8; }
-func module_path() -> u8 { return 5u8; }
-func punctuation() -> u8 { return 6u8; }
+export func end_of_source() -> u8 { return 0u8; }
+export func identifier() -> u8 { return 1u8; }
+export func symbol_name() -> u8 { return 2u8; }
+export func integer_literal() -> u8 { return 3u8; }
+export func real_literal() -> u8 { return 4u8; }
+export func module_path() -> u8 { return 5u8; }
+export func punctuation() -> u8 { return 6u8; }
 
-func unsupported_byte() -> u8 { return 7u8; }
-func missing_symbol_name() -> u8 { return 8u8; }
-func missing_exponent_digits() -> u8 { return 9u8; }
-func unterminated_module_path() -> u8 { return 10u8; }
-func newline_in_module_path() -> u8 { return 11u8; }
-func invalid_module_path_escape() -> u8 { return 12u8; }
-func reserved_fraction_operator() -> u8 { return 13u8; }
-func legacy_type_separator() -> u8 { return 14u8; }
+export func unsupported_byte() -> u8 { return 7u8; }
+export func missing_symbol_name() -> u8 { return 8u8; }
+export func missing_exponent_digits() -> u8 { return 9u8; }
+export func unterminated_module_path() -> u8 { return 10u8; }
+export func newline_in_module_path() -> u8 { return 11u8; }
+export func invalid_module_path_escape() -> u8 { return 12u8; }
+export func reserved_fraction_operator() -> u8 { return 13u8; }
+export func legacy_type_separator() -> u8 { return 14u8; }
 
 func identifier_width(token:const Token in T, width:u64) -> bool where {const owner T} {
     return token.kind == identifier() && token.past - token.first == width;
 }
 
-func exception_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func exception_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
     val first <- token.first;
     return identifier_width(token, 9u64) &&
@@ -32,14 +31,14 @@ func exception_word(source:const SourceBytes in S, token:const Token in T) -> bo
         source[first + 6u64] == 105u8 && source[first + 7u64] == 111u8 && source[first + 8u64] == 110u8;
 }
 
-func own_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func own_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
     val first <- token.first;
     return identifier_width(token, 3u64) &&
         source[first] == 111u8 && source[first + 1u64] == 119u8 && source[first + 2u64] == 110u8;
 }
 
-func make_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func make_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
     val first <- token.first;
     return identifier_width(token, 4u64) &&
@@ -47,7 +46,7 @@ func make_word(source:const SourceBytes in S, token:const Token in T) -> bool
         source[first + 3u64] == 101u8;
 }
 
-func from_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func from_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
     val first <- token.first;
     return identifier_width(token, 4u64) &&
@@ -55,7 +54,7 @@ func from_word(source:const SourceBytes in S, token:const Token in T) -> bool
         source[first + 3u64] == 109u8;
 }
 
-func region_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func region_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
     val first <- token.first;
     return identifier_width(token, 6u64) &&
@@ -63,7 +62,7 @@ func region_word(source:const SourceBytes in S, token:const Token in T) -> bool
         source[first + 3u64] == 105u8 && source[first + 4u64] == 111u8 && source[first + 5u64] == 110u8;
 }
 
-func capacity_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func capacity_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
     val first <- token.first;
     return identifier_width(token, 8u64) &&
@@ -72,27 +71,27 @@ func capacity_word(source:const SourceBytes in S, token:const Token in T) -> boo
         source[first + 6u64] == 116u8 && source[first + 7u64] == 121u8;
 }
 
-func defer_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func defer_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
-    if (!identifier_width(token, 5u64)) { return false; } else {};
+    if (!identifier_width(token, 5u64)) return false;
     val first <- token.first;
     return source[first] == 100u8 && source[first + 1u64] == 101u8 && # d e
         source[first + 2u64] == 102u8 && source[first + 3u64] == 101u8 && # f e
         source[first + 4u64] == 114u8; # r
 }
 
-func catch_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func catch_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
-    if (!identifier_width(token, 5u64)) { return false; } else {};
+    if (!identifier_width(token, 5u64)) return false;
     val first <- token.first;
     return source[first] == 99u8 && source[first + 1u64] == 97u8 && # c a
         source[first + 2u64] == 116u8 && source[first + 3u64] == 99u8 && # t c
         source[first + 4u64] == 104u8; # h
 }
 
-func finally_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func finally_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
-    if (!identifier_width(token, 7u64)) { return false; } else {};
+    if (!identifier_width(token, 7u64)) return false;
     val first <- token.first;
     return source[first] == 102u8 && source[first + 1u64] == 105u8 && # f i
         source[first + 2u64] == 110u8 && source[first + 3u64] == 97u8 && # n a
@@ -100,86 +99,86 @@ func finally_word(source:const SourceBytes in S, token:const Token in T) -> bool
         source[first + 6u64] == 121u8; # y
 }
 
-func try_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func try_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
-    if (!identifier_width(token, 3u64)) { return false; } else {};
+    if (!identifier_width(token, 3u64)) return false;
     val first <- token.first;
     return source[first] == 116u8 && source[first + 1u64] == 114u8 && source[first + 2u64] == 121u8; # t r y
 }
 
-func const_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func const_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
-    if (!identifier_width(token, 5u64)) { return false; } else {};
+    if (!identifier_width(token, 5u64)) return false;
     val first <- token.first;
     return source[first] == 99u8 && source[first + 1u64] == 111u8 && # c o
         source[first + 2u64] == 110u8 && source[first + 3u64] == 115u8 && source[first + 4u64] == 116u8; # n s t
 }
 
-func behave_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func behave_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
-    if (!identifier_width(token, 6u64)) { return false; } else {};
+    if (!identifier_width(token, 6u64)) return false;
     val first <- token.first;
     return source[first] == 98u8 && source[first + 1u64] == 101u8 && # b e
         source[first + 2u64] == 104u8 && source[first + 3u64] == 97u8 && # h a
         source[first + 4u64] == 118u8 && source[first + 5u64] == 101u8; # v e
 }
 
-func throw_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func throw_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
-    if (!identifier_width(token, 5u64)) { return false; } else {};
+    if (!identifier_width(token, 5u64)) return false;
     val first <- token.first;
     return source[first] == 116u8 && source[first + 1u64] == 104u8 && # t h
         source[first + 2u64] == 114u8 && source[first + 3u64] == 111u8 && source[first + 4u64] == 119u8; # r o w
 }
 
-func using_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func using_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
-    if (!identifier_width(token, 5u64)) { return false; } else {};
+    if (!identifier_width(token, 5u64)) return false;
     val first <- token.first;
     return source[first] == 117u8 && source[first + 1u64] == 115u8 && # u s
         source[first + 2u64] == 105u8 && source[first + 3u64] == 110u8 && # i n
         source[first + 4u64] == 103u8; # g
 }
 
-func as_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func as_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
     val first <- token.first;
     return identifier_width(token, 2u64) && source[first] == 97u8 && source[first + 1u64] == 115u8;
 }
 
-func symbol_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func symbol_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
-    if (!identifier_width(token, 6u64)) { return false; } else {};
+    if (!identifier_width(token, 6u64)) return false;
     val first <- token.first;
     return source[first] == 115u8 && source[first + 1u64] == 121u8 && # s y
         source[first + 2u64] == 109u8 && source[first + 3u64] == 98u8 && # m b
         source[first + 4u64] == 111u8 && source[first + 5u64] == 108u8; # o l
 }
 
-func proc_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func proc_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
-    if (!identifier_width(token, 4u64)) { return false; } else {};
+    if (!identifier_width(token, 4u64)) return false;
     val first <- token.first;
     return source[first] == 112u8 && source[first + 1u64] == 114u8 && # p r
         source[first + 2u64] == 111u8 && source[first + 3u64] == 99u8; # o c
 }
 
-func func_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func func_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
-    if (!identifier_width(token, 4u64)) { return false; } else {};
+    if (!identifier_width(token, 4u64)) return false;
     val first <- token.first;
     return source[first] == 102u8 && source[first + 1u64] == 117u8 && # f u
         source[first + 2u64] == 110u8 && source[first + 3u64] == 99u8; # n c
 }
 
-func array_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func array_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
     val first <- token.first;
     return identifier_width(token, 5u64) && source[first] == 97u8 && source[first + 1u64] == 114u8 &&
         source[first + 2u64] == 114u8 && source[first + 3u64] == 97u8 && source[first + 4u64] == 121u8; # a r r a y
 }
 
-func data_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func data_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
     val first <- token.first;
     return identifier_width(token, 4u64) && source[first] == 100u8 && source[first + 1u64] == 97u8 &&
@@ -228,7 +227,7 @@ func conversion_word(source:const SourceBytes in S, token:const Token in T) -> b
         source[first + 9u64] == 110u8; # conversion
 }
 
-func rethrow_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func rethrow_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
     val first <- token.first;
     return identifier_width(token, 7u64) &&
@@ -251,7 +250,7 @@ func touch_word(source:const SourceBytes in S, token:const Token in T) -> bool
         source[first + 3u64] == 99u8 && source[first + 4u64] == 104u8; # touch
 }
 
-func intrinsic_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func intrinsic_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
     val first <- token.first;
     return identifier_width(token, 9u64) &&
@@ -260,14 +259,14 @@ func intrinsic_word(source:const SourceBytes in S, token:const Token in T) -> bo
         source[first + 6u64] == 115u8 && source[first + 7u64] == 105u8 && source[first + 8u64] == 99u8;
 }
 
-func len_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func len_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
     val first <- token.first;
     return identifier_width(token, 3u64) &&
         source[first] == 108u8 && source[first + 1u64] == 101u8 && source[first + 2u64] == 110u8;
 }
 
-func reserved_value_name(source:const SourceBytes in S, token:const Token in T) -> bool
+export func reserved_value_name(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
     return module_only_name(source, token) || touch_word(source, token) || intrinsic_word(source, token) ||
         true_word(source, token) || false_word(source, token) || null_word(source, token) || not_word(source, token) ||
@@ -277,11 +276,11 @@ func reserved_value_name(source:const SourceBytes in S, token:const Token in T) 
         defer_word(source, token) || if_word(source, token) || for_word(source, token) || behave_word(source, token);
 }
 
-func reserved_lexical_binder(source:const SourceBytes in S, token:const Token in T) -> bool
+export func reserved_lexical_binder(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
     if (reserved_value_name(source, token) || void_word(source, token) || typeof_word(source, token) ||
-        region_word(source, token) || symbol_word(source, token)) { return true; } else {};
-    if (token.kind != identifier()) { return false; } else {};
+        region_word(source, token) || symbol_word(source, token)) return true;
+    if (token.kind != identifier()) return false;
     val at <- token.first;
     val width <- token.past - at;
     if (width == 2u64) {
@@ -304,14 +303,13 @@ func reserved_lexical_binder(source:const SourceBytes in S, token:const Token in
         return source[at] == 100u8 && source[at + 1u64] == 101u8 && source[at + 2u64] == 114u8 &&
             source[at + 3u64] == 101u8 && source[at + 4u64] == 102u8;
     } else {};
-    if (width == 6u64) {
+    if (width == 6u64)
         return (source[at] == 101u8 && source[at + 1u64] == 102u8 && source[at + 2u64] == 102u8 && # effect
             source[at + 3u64] == 101u8 && source[at + 4u64] == 99u8 && source[at + 5u64] == 116u8) ||
             (source[at] == 103u8 && source[at + 1u64] == 108u8 && source[at + 2u64] == 111u8 && # global
             source[at + 3u64] == 98u8 && source[at + 4u64] == 97u8 && source[at + 5u64] == 108u8) ||
             (source[at] == 115u8 && source[at + 1u64] == 99u8 && source[at + 2u64] == 97u8 && # scalar
             source[at + 3u64] == 108u8 && source[at + 4u64] == 97u8 && source[at + 5u64] == 114u8);
-    } else {};
     if (width == 7u64) { # perform
         return source[at] == 112u8 && source[at + 1u64] == 101u8 && source[at + 2u64] == 114u8 &&
             source[at + 3u64] == 102u8 && source[at + 4u64] == 111u8 && source[at + 5u64] == 114u8 &&
@@ -322,21 +320,20 @@ func reserved_lexical_binder(source:const SourceBytes in S, token:const Token in
             source[at + 3u64] == 99u8 && source[at + 4u64] == 116u8 && source[at + 5u64] == 105u8 &&
             source[at + 6u64] == 111u8 && source[at + 7u64] == 110u8;
     } else {};
-    if (width == 9u64) {
+    if (width == 9u64)
         return (source[at] == 112u8 && source[at + 1u64] == 114u8 && source[at + 2u64] == 111u8 && # procedure
             source[at + 3u64] == 99u8 && source[at + 4u64] == 101u8 && source[at + 5u64] == 100u8 &&
             source[at + 6u64] == 117u8 && source[at + 7u64] == 114u8 && source[at + 8u64] == 101u8);
-    } else {};
     return false;
 }
 
-func reserved_module_name(source:const SourceBytes in S, token:const Token in T) -> bool
+export func reserved_module_name(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
     return reserved_value_name(source, token) || data_word(source, token) || type_word(source, token) ||
         unit_word(source, token) || array_word(source, token);
 }
 
-func export_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func export_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
     val first <- token.first;
     return identifier_width(token, 6u64) && source[first] == 101u8 && source[first + 1u64] == 120u8 &&
@@ -344,7 +341,7 @@ func export_word(source:const SourceBytes in S, token:const Token in T) -> bool
         source[first + 4u64] == 114u8 && source[first + 5u64] == 116u8; # e x p o r t
 }
 
-func handle_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func handle_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
     val first <- token.first;
     return identifier_width(token, 6u64) && source[first] == 104u8 && source[first + 1u64] == 97u8 &&
@@ -352,31 +349,31 @@ func handle_word(source:const SourceBytes in S, token:const Token in T) -> bool
         source[first + 4u64] == 108u8 && source[first + 5u64] == 101u8; # h a n d l e
 }
 
-func here_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func here_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
     val first <- token.first;
     return identifier_width(token, 4u64) && source[first] == 104u8 && source[first + 1u64] == 101u8 &&
         source[first + 2u64] == 114u8 && source[first + 3u64] == 101u8; # h e r e
 }
 
-func c_linkage(source:const SourceBytes in S, token:const Token in T) -> bool
+export func c_linkage(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
     return token.kind == module_path() && token.past - token.first == 3u64 && source[token.first + 1u64] == 67u8; # "C"
 }
 
-func if_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func if_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
     return identifier_width(token, 2u64) && source[token.first] == 105u8 && source[token.first + 1u64] == 102u8;
 }
 
-func for_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func for_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
     val first <- token.first;
     return identifier_width(token, 3u64) &&
         source[first] == 102u8 && source[first + 1u64] == 111u8 && source[first + 2u64] == 114u8;
 }
 
-func continue_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func continue_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
     val first <- token.first;
     return identifier_width(token, 8u64) &&
@@ -385,7 +382,7 @@ func continue_word(source:const SourceBytes in S, token:const Token in T) -> boo
         source[first + 6u64] == 117u8 && source[first + 7u64] == 101u8;
 }
 
-func break_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func break_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
     val first <- token.first;
     return identifier_width(token, 5u64) &&
@@ -393,117 +390,117 @@ func break_word(source:const SourceBytes in S, token:const Token in T) -> bool
         source[first + 3u64] == 97u8 && source[first + 4u64] == 107u8;
 }
 
-func else_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func else_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
-    if (!identifier_width(token, 4u64)) { return false; } else {};
+    if (!identifier_width(token, 4u64)) return false;
     val first <- token.first;
     return source[first] == 101u8 && source[first + 1u64] == 108u8 && source[first + 2u64] == 115u8 && source[first + 3u64] == 101u8;
 }
 
-func true_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func true_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
-    if (!identifier_width(token, 4u64)) { return false; } else {};
+    if (!identifier_width(token, 4u64)) return false;
     val first <- token.first;
     return source[first] == 116u8 && source[first + 1u64] == 114u8 && source[first + 2u64] == 117u8 && source[first + 3u64] == 101u8;
 }
 
-func false_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func false_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
-    if (!identifier_width(token, 5u64)) { return false; } else {};
+    if (!identifier_width(token, 5u64)) return false;
     val first <- token.first;
     return source[first] == 102u8 && source[first + 1u64] == 97u8 && source[first + 2u64] == 108u8 &&
         source[first + 3u64] == 115u8 && source[first + 4u64] == 101u8;
 }
 
-func not_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func not_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
-    if (!identifier_width(token, 3u64)) { return false; } else {};
+    if (!identifier_width(token, 3u64)) return false;
     val first <- token.first;
     return source[first] == 110u8 && source[first + 1u64] == 111u8 && source[first + 2u64] == 116u8; # n o t
 }
 
-func void_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func void_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
-    if (!identifier_width(token, 4u64)) { return false; } else {};
+    if (!identifier_width(token, 4u64)) return false;
     val first <- token.first;
     return source[first] == 118u8 && source[first + 1u64] == 111u8 && # v o
         source[first + 2u64] == 105u8 && source[first + 3u64] == 100u8; # i d
 }
 
-func typeof_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func typeof_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
-    if (!identifier_width(token, 6u64)) { return false; } else {};
+    if (!identifier_width(token, 6u64)) return false;
     val first <- token.first;
     return source[first] == 116u8 && source[first + 1u64] == 121u8 && source[first + 2u64] == 112u8 &&
         source[first + 3u64] == 101u8 && source[first + 4u64] == 111u8 && source[first + 5u64] == 102u8; # typeof
 }
 
-func in_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func in_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
-    if (!identifier_width(token, 2u64)) { return false; } else {};
+    if (!identifier_width(token, 2u64)) return false;
     val first <- token.first;
     return source[first] == 105u8 && source[first + 1u64] == 110u8; # i n
 }
 
-func owner_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func owner_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
-    if (!identifier_width(token, 5u64)) { return false; } else {};
+    if (!identifier_width(token, 5u64)) return false;
     val first <- token.first;
     return source[first] == 111u8 && source[first + 1u64] == 119u8 && # o w
         source[first + 2u64] == 110u8 && source[first + 3u64] == 101u8 && # n e
         source[first + 4u64] == 114u8; # r
 }
 
-func where_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func where_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
-    if (!identifier_width(token, 5u64)) { return false; } else {};
+    if (!identifier_width(token, 5u64)) return false;
     val first <- token.first;
     return source[first] == 119u8 && source[first + 1u64] == 104u8 && # w h
         source[first + 2u64] == 101u8 && source[first + 3u64] == 114u8 && # e r
         source[first + 4u64] == 101u8; # e
 }
 
-func throws_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func throws_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
-    if (!identifier_width(token, 6u64)) { return false; } else {};
+    if (!identifier_width(token, 6u64)) return false;
     val first <- token.first;
     return source[first] == 116u8 && source[first + 1u64] == 104u8 && # t h
         source[first + 2u64] == 114u8 && source[first + 3u64] == 111u8 && # r o
         source[first + 4u64] == 119u8 && source[first + 5u64] == 115u8; # w s
 }
 
-func ptr_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func ptr_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
-    if (!identifier_width(token, 3u64)) { return false; } else {};
+    if (!identifier_width(token, 3u64)) return false;
     val first <- token.first;
     return source[first] == 112u8 && source[first + 1u64] == 116u8 && source[first + 2u64] == 114u8; # p t r
 }
 
-func ref_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func ref_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
-    if (!identifier_width(token, 3u64)) { return false; } else {};
+    if (!identifier_width(token, 3u64)) return false;
     val first <- token.first;
     return source[first] == 114u8 && source[first + 1u64] == 101u8 && source[first + 2u64] == 102u8; # r e f
 }
 
-func val_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func val_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
-    if (!identifier_width(token, 3u64)) { return false; } else {};
+    if (!identifier_width(token, 3u64)) return false;
     val first <- token.first;
     return source[first] == 118u8 && source[first + 1u64] == 97u8 && source[first + 2u64] == 108u8; # v a l
 }
 
-func null_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func null_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
-    if (!identifier_width(token, 4u64)) { return false; } else {};
+    if (!identifier_width(token, 4u64)) return false;
     val first <- token.first;
     return source[first] == 110u8 && source[first + 1u64] == 117u8 && # n u
         source[first + 2u64] == 108u8 && source[first + 3u64] == 108u8; # l l
 }
 
-func return_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func return_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
-    if (!identifier_width(token, 6u64)) { return false; } else {};
+    if (!identifier_width(token, 6u64)) return false;
     val first <- token.first;
     return source[first] == 114u8 && source[first + 1u64] == 101u8 && # r e
         source[first + 2u64] == 116u8 && source[first + 3u64] == 117u8 && # t u
@@ -532,7 +529,7 @@ func skip_trivia(source:const SourceBytes in S, first:u64, past:u64) -> u64 wher
         byte <- source[at];
         # A newline ends a comment. '#' starts one anywhere outside a path.
         comment <- byte != 10u8 && (comment || byte == 35u8);
-        if (!comment && !whitespace(byte)) { return at; } else {};
+        if (!comment && !whitespace(byte)) return at;
     };
     return past;
 }
@@ -541,14 +538,14 @@ func name_end(source:const SourceBytes in S, first:u64, past:u64) -> u64 where {
     val byte <- 0u8;
     for (at in first .. past) {
         byte <- source[at];
-        if (!(name_start(byte) || digit(byte))) { return at; } else {};
+        if (!(name_start(byte) || digit(byte))) return at;
     };
     return past;
 }
 
 func digits_end(source:const SourceBytes in S, first:u64, past:u64) -> u64 where {const owner S} {
     for (at in first .. past) {
-        if (!digit(source[at])) { return at; } else {};
+        if (!digit(source[at])) return at;
     };
     return past;
 }
@@ -556,12 +553,12 @@ func digits_end(source:const SourceBytes in S, first:u64, past:u64) -> u64 where
 # Zero is a sentinel for lookahead only. scan_token still diagnoses a zero
 # byte when it is present in the input itself.
 func lookahead(source:const SourceBytes in S, at:u64, past:u64) -> u8 where {const owner S} {
-    if (at >= past) { return 0u8; } else {};
+    if (at >= past) return 0u8;
     return source[at];
 }
 
 func numeral_end(source:const SourceBytes in S, first:u64, past:u64,
-                  ref token:Token in T) -> void where {const owner S, owner T} {
+                  token:Token in T) -> void where {const owner S, owner T} {
     val at <- digits_end(source, first + 1u64, past);
     val real <- false;
     val byte <- lookahead(source, at, past);
@@ -606,7 +603,7 @@ func numeral_end(source:const SourceBytes in S, first:u64, past:u64,
 }
 
 func quoted_path_end(source:const SourceBytes in S, first:u64, past:u64,
-                      ref token:Token in T) -> void where {const owner S, owner T} {
+                      token:Token in T) -> void where {const owner S, owner T} {
     val escaped <- false;
     val byte <- 0u8;
     for (at in first + 1u64 .. past) {
@@ -651,33 +648,30 @@ func punctuation_width(first:u8, second:u8, third:u8) -> u64 {
 
     # ...  <=>  <->
     if ((first == dot && second == dot && third == dot) ||
-        (first == less && (second == equals || second == minus) && third == greater)) {
+        (first == less && (second == equals || second == minus) && third == greater))
         return 3u64;
-    } else {};
     # -> == != <= >= && || <- <: .. => |> <| !> <! $> <$
     if ((second == greater && (first == minus || first == equals || first == pipe ||
                                first == bang || first == dollar)) ||
         (second == equals && (first == equals || first == bang || first == less || first == greater)) ||
         (first == second && (first == dot || first == ampersand || first == pipe)) ||
         (first == less && (second == minus || second == colon || second == pipe ||
-                           second == bang || second == dollar))) {
+                           second == bang || second == dollar)))
         return 2u64;
-    } else {};
     # () {} [] ; , : . + - * / % < > = !
     if (first == 40u8 || first == 41u8 || first == 123u8 || first == 125u8 ||
         first == 91u8 || first == 93u8 || first == 59u8 || first == 44u8 ||
         first == colon || first == dot || first == 43u8 || first == minus ||
         first == 42u8 || first == 47u8 || first == 37u8 ||
-        first == less || first == greater || first == equals || first == bang) {
+        first == less || first == greater || first == equals || first == bang)
         return 1u64;
-    } else {};
     return 0u64;
 }
 
 # The source is a stable bounded byte view. The caller owns its lifetime.
 # After a normal token, use token.past as the next first offset.
-func scan_token(source:const SourceBytes in S, first:u64,
-                ref token:Token in T) -> void where {const owner S, owner T} {
+export func scan_token(source:const SourceBytes in S, first:u64,
+                       token:Token in T) -> void where {const owner S, owner T} {
     val past <- len(source);
     val start <- skip_trivia(source, first, past);
     token.first <- start;
@@ -731,68 +725,3 @@ func scan_token(source:const SourceBytes in S, first:u64,
 
 export SourceBytes;
 export Token;
-export scan_token;
-export end_of_source;
-export identifier;
-export symbol_name;
-export integer_literal;
-export real_literal;
-export module_path;
-export punctuation;
-export unsupported_byte;
-export missing_symbol_name;
-export missing_exponent_digits;
-export unterminated_module_path;
-export newline_in_module_path;
-export invalid_module_path_escape;
-export reserved_fraction_operator;
-export legacy_type_separator;
-export defer_word;
-export intrinsic_word;
-export len_word;
-export catch_word;
-export finally_word;
-export try_word;
-export const_word;
-export behave_word;
-export throw_word;
-export using_word;
-export as_word;
-export symbol_word;
-export proc_word;
-export func_word;
-export data_word;
-export array_word;
-export export_word;
-export handle_word;
-export here_word;
-export c_linkage;
-export if_word;
-export for_word;
-export continue_word;
-export break_word;
-export else_word;
-export true_word;
-export false_word;
-export not_word;
-export void_word;
-export in_word;
-export owner_word;
-export where_word;
-export throws_word;
-export ptr_word;
-export ref_word;
-export val_word;
-export null_word;
-export return_word;
-export typeof_word;
-export exception_word;
-export own_word;
-export make_word;
-export from_word;
-export region_word;
-export capacity_word;
-export reserved_value_name;
-export reserved_lexical_binder;
-export reserved_module_name;
-export rethrow_word;

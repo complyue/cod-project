@@ -1,7 +1,6 @@
 using "ModuleGraph.cod" check_graph_module;
 using "NativeSource.cod" Path;
-using "NativeCatalog.cod" IntrinsicCatalog;
-using "NativeCatalog.cod" catalog_use;
+using "NativeCatalog.cod" { IntrinsicCatalog, catalog_use };
 using "NativeDiagnostics.cod" DiagnosticDestination;
 using "ObjectCompiler.cod" compile_object;
 

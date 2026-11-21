@@ -6,16 +6,16 @@ using "ParserStorage.cod" no_node;
 # A word slot is local to one generated activation. Branches name blocks,
 # and invocations consume preceding argument commands in source order.
 # A checked arithmetic command writes a value and a separate fault category.
-data NativeCommand {
+export data NativeCommand {
     opcode:u8;
     a:u64;
     b:u64;
     c:u64;
     d:u64;
 }
-array NativeCommands[u64]:NativeCommand;
+export array NativeCommands[u64]:NativeCommand;
 
-data NativePlan {
+export data NativePlan {
     used:u64;
     labels:u64;
     slots:u64;
@@ -23,103 +23,61 @@ data NativePlan {
     node:u64;
 }
 
-func declare_function() -> u8 { return 1u8; }
-func begin_function() -> u8 { return 2u8; }
-func position_block() -> u8 { return 3u8; }
-func jump() -> u8 { return 4u8; }
-func branch_equal() -> u8 { return 5u8; }
-func word_constant() -> u8 { return 6u8; }
-func copy_word() -> u8 { return 7u8; }
-func place_address() -> u8 { return 8u8; }
-func load_target() -> u8 { return 9u8; }
-func store_target() -> u8 { return 10u8; }
-func checked_add() -> u8 { return 11u8; }
-func checked_multiply() -> u8 { return 12u8; }
-func receive_parameter() -> u8 { return 13u8; }
-func pass_argument() -> u8 { return 14u8; }
-func invoke_function() -> u8 { return 15u8; }
-func print_word() -> u8 { return 16u8; }
-func return_outcome() -> u8 { return 17u8; }
-func finish_program() -> u8 { return 18u8; }
-func compare_words() -> u8 { return 19u8; }
-func checked_subtract() -> u8 { return 20u8; }
-func checked_divide() -> u8 { return 21u8; }
-func checked_remainder() -> u8 { return 22u8; }
+export func declare_function() -> u8 { return 1u8; }
+export func begin_function() -> u8 { return 2u8; }
+export func position_block() -> u8 { return 3u8; }
+export func jump() -> u8 { return 4u8; }
+export func branch_equal() -> u8 { return 5u8; }
+export func word_constant() -> u8 { return 6u8; }
+export func copy_word() -> u8 { return 7u8; }
+export func place_address() -> u8 { return 8u8; }
+export func load_target() -> u8 { return 9u8; }
+export func store_target() -> u8 { return 10u8; }
+export func checked_add() -> u8 { return 11u8; }
+export func checked_multiply() -> u8 { return 12u8; }
+export func receive_parameter() -> u8 { return 13u8; }
+export func pass_argument() -> u8 { return 14u8; }
+export func invoke_function() -> u8 { return 15u8; }
+export func print_word() -> u8 { return 16u8; }
+export func return_outcome() -> u8 { return 17u8; }
+export func finish_program() -> u8 { return 18u8; }
+export func compare_words() -> u8 { return 19u8; }
+export func checked_subtract() -> u8 { return 20u8; }
+export func checked_divide() -> u8 { return 21u8; }
+export func checked_remainder() -> u8 { return 22u8; }
 # Operands are the category slot, the handler search block, and the bypass block.
-func branch_catchable() -> u8 { return 23u8; }
+export func branch_catchable() -> u8 { return 23u8; }
 
 # The checker's private defer slots use ordinary word and branch operations
 # at the LLVM boundary. Their distinct roles allow control-flow proofs.
-func write_defer_flag() -> u8 { return 24u8; }
-func branch_if_unregistered() -> u8 { return 25u8; }
+export func write_defer_flag() -> u8 { return 24u8; }
+export func branch_if_unregistered() -> u8 { return 25u8; }
 
 # Compile-time facts about a local's storage binding. They share the
 # initialization checker with reservation operations and have no native form.
-func unbind_local() -> u8 { return 26u8; }
-func bind_local() -> u8 { return 27u8; }
-func use_local() -> u8 { return 28u8; }
-func local_binding_fact(opcode:u8) -> bool { return opcode >= unbind_local() && opcode <= use_local(); }
+export func unbind_local() -> u8 { return 26u8; }
+export func bind_local() -> u8 { return 27u8; }
+export func use_local() -> u8 { return 28u8; }
+export func local_binding_fact(opcode:u8) -> bool { return opcode >= unbind_local() && opcode <= use_local(); }
 
 # Internal outcome words. Zero denotes success. Fatal numeric failures
 # bypass language catches and still leave through the activation cleanup.
-func returned_word() -> u64 { return 0u64; }
-func pending_category() -> u64 { return 1u64; }
-func pending_site() -> u64 { return 2u64; }
-func call_category() -> u64 { return 3u64; }
-func call_site() -> u64 { return 4u64; }
-func arithmetic_fault() -> u64 { return 5u64; }
-func slot(node:u64) -> u64 { return node + 6u64; }
+export func returned_word() -> u64 { return 0u64; }
+export func pending_category() -> u64 { return 1u64; }
+export func pending_site() -> u64 { return 2u64; }
+export func call_category() -> u64 { return 3u64; }
+export func call_site() -> u64 { return 4u64; }
+export func arithmetic_fault() -> u64 { return 5u64; }
+export func slot(node:u64) -> u64 { return node + 6u64; }
 
 # Before native verification, storage operations and binding facts can carry
 # the relevant construction or declaration index plus one in c and source node in d.
 # Initialization checking consumes those fields before the provider sees them.
-func reservation_tag(reservation:u64) -> u64 {
+export func reservation_tag(reservation:u64) -> u64 {
     return if (reservation == no_node()) { 0u64 } else { reservation + 1u64 };
 }
 
-func initialization_access(opcode:u8) -> bool {
+export func initialization_access(opcode:u8) -> bool {
     return opcode == place_address() || opcode == store_target() || opcode == load_target() ||
         opcode == copy_word() || local_binding_fact(opcode);
 }
-
-export NativeCommand;
-export NativeCommands;
-export NativePlan;
-export declare_function;
-export begin_function;
-export position_block;
-export jump;
-export branch_equal;
-export word_constant;
-export copy_word;
-export place_address;
-export load_target;
-export store_target;
-export checked_add;
-export checked_multiply;
-export receive_parameter;
-export pass_argument;
-export invoke_function;
-export print_word;
-export return_outcome;
-export finish_program;
-export compare_words;
-export checked_subtract;
-export checked_divide;
-export checked_remainder;
-export branch_catchable;
-export write_defer_flag;
-export branch_if_unregistered;
-export unbind_local;
-export bind_local;
-export use_local;
-export local_binding_fact;
-export returned_word;
-export pending_category;
-export pending_site;
-export call_category;
-export call_site;
-export arithmetic_fault;
-export slot;
-export reservation_tag;
-export initialization_access;

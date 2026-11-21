@@ -1,13 +1,9 @@
 using "std:exceptions" Exception;
 
 data "C" LauncherPaths;
-data "C" Path in LauncherPaths;
-data "C" SourceRevision;
-data SourceOpenException <: Exception { os_error:u64; }
+export data "C" Path in LauncherPaths;
+export data "C" SourceRevision;
+export data SourceOpenException <: Exception { os_error:u64; }
 
 proc "C" SourceRevision(handle path:Path in A) throws SourceOpenException
     where {const owner A};
-
-export Path;
-export SourceRevision;
-export SourceOpenException;

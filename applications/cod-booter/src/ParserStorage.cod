@@ -1,8 +1,8 @@
 using "SourceStorage.cod" Token;
 
-array Tokens[u64]:Token;
+export array Tokens[u64]:Token;
 
-data ExprNode {
+export data ExprNode {
     kind:u8;
     first:u64;
     past:u64;
@@ -11,310 +11,185 @@ data ExprNode {
     right:u64;
     operation_at:u64;
 }
-array ExprNodes[u64]:ExprNode;
+export array ExprNodes[u64]:ExprNode;
 
-func literal_node() -> u8 { return 1u8; }
-func add_node() -> u8 { return 2u8; }
-func multiply_node() -> u8 { return 3u8; }
-func group_node() -> u8 { return 4u8; }
-func name_node() -> u8 { return 5u8; }
-func call_node() -> u8 { return 6u8; }
-func argument_node() -> u8 { return 7u8; }
-func checked_ref_argument(nodes:const ExprNodes in N, argument:u64) -> bool where {const owner N} {
+export func literal_node() -> u8 { return 1u8; }
+export func add_node() -> u8 { return 2u8; }
+export func multiply_node() -> u8 { return 3u8; }
+export func group_node() -> u8 { return 4u8; }
+export func name_node() -> u8 { return 5u8; }
+export func call_node() -> u8 { return 6u8; }
+export func argument_node() -> u8 { return 7u8; }
+export func checked_ref_argument(nodes:const ExprNodes in N, argument:u64) -> bool where {const owner N} {
     return nodes[argument].kind == argument_node() && nodes[argument].number != 0u64;
 }
-func deferred_call_node() -> u8 { return 8u8; }
-func block_node() -> u8 { return 9u8; }
-func full_scope_node() -> u8 { return 10u8; }
-func block_item_node() -> u8 { return 11u8; }
-func try_node() -> u8 { return 12u8; }
-func catch_clause_node() -> u8 { return 13u8; }
-func catch_handler_node() -> u8 { return 14u8; }
-func catch_binding_node() -> u8 { return 15u8; }
-func finally_clause_node() -> u8 { return 16u8; }
-func symbol_node() -> u8 { return 17u8; }
-func behave_node() -> u8 { return 18u8; }
-func throw_node() -> u8 { return 19u8; }
-func transfer_node() -> u8 { return 20u8; }
-func typed_name_node() -> u8 { return 21u8; }
-func val_binding_node() -> u8 { return 22u8; }
-func ptr_binding_node() -> u8 { return 23u8; }
-func null_node() -> u8 { return 24u8; }
-func return_node() -> u8 { return 25u8; }
-func module_node() -> u8 { return 26u8; }
-func module_item_node() -> u8 { return 27u8; }
-func using_node() -> u8 { return 28u8; }
-func module_path_node() -> u8 { return 29u8; }
-func callable_node() -> u8 { return 30u8; }
-func callable_head_node() -> u8 { return 31u8; }
-func parameter_node() -> u8 { return 32u8; }
-func ref_parameter_node() -> u8 { return 33u8; }
-func ptr_parameter_node() -> u8 { return 34u8; }
-func val_parameter_node() -> u8 { return 35u8; }
-func owned_type_node() -> u8 { return 36u8; }
-func result_clause_node() -> u8 { return 37u8; }
-func throws_clause_node() -> u8 { return 38u8; }
-func owner_clause_node() -> u8 { return 39u8; }
-func deferred_block_node() -> u8 { return 40u8; }
-func discard_node() -> u8 { return 41u8; }
-func bool_node() -> u8 { return 42u8; }
-func compare_node() -> u8 { return 43u8; }
-func conditional_node() -> u8 { return 44u8; }
-func logical_not_node() -> u8 { return 45u8; }
-func logical_and_node() -> u8 { return 46u8; }
-func logical_or_node() -> u8 { return 47u8; }
-func subtract_node() -> u8 { return 48u8; }
-func divide_node() -> u8 { return 49u8; }
-func remainder_node() -> u8 { return 50u8; }
-func c_handle_type_node() -> u8 { return 51u8; }
-func c_procedure_node() -> u8 { return 52u8; }
-func handle_parameter_node() -> u8 { return 53u8; }
-func here_parameter_node() -> u8 { return 54u8; }
-func data_record_node() -> u8 { return 55u8; }
-func c_record_node() -> u8 { return 56u8; }
-func data_parent_node() -> u8 { return 57u8; }
-func export_node() -> u8 { return 58u8; }
-func array_declaration_node() -> u8 { return 59u8; }
-func array_shape_node() -> u8 { return 60u8; }
+export func deferred_call_node() -> u8 { return 8u8; }
+export func block_node() -> u8 { return 9u8; }
+export func full_scope_node() -> u8 { return 10u8; }
+export func block_item_node() -> u8 { return 11u8; }
+export func try_node() -> u8 { return 12u8; }
+export func catch_clause_node() -> u8 { return 13u8; }
+export func catch_handler_node() -> u8 { return 14u8; }
+export func catch_binding_node() -> u8 { return 15u8; }
+export func finally_clause_node() -> u8 { return 16u8; }
+export func symbol_node() -> u8 { return 17u8; }
+export func behave_node() -> u8 { return 18u8; }
+export func throw_node() -> u8 { return 19u8; }
+export func transfer_node() -> u8 { return 20u8; }
+export func typed_name_node() -> u8 { return 21u8; }
+export func val_binding_node() -> u8 { return 22u8; }
+export func ptr_binding_node() -> u8 { return 23u8; }
+export func null_node() -> u8 { return 24u8; }
+export func return_node() -> u8 { return 25u8; }
+export func module_node() -> u8 { return 26u8; }
+export func module_item_node() -> u8 { return 27u8; }
+export func using_node() -> u8 { return 28u8; }
+export func module_path_node() -> u8 { return 29u8; }
+export func callable_node() -> u8 { return 30u8; }
+export func callable_head_node() -> u8 { return 31u8; }
+export func parameter_node() -> u8 { return 32u8; }
+export func ref_parameter_node() -> u8 { return 33u8; }
+export func ptr_parameter_node() -> u8 { return 34u8; }
+export func val_parameter_node() -> u8 { return 35u8; }
+export func owned_type_node() -> u8 { return 36u8; }
+export func result_clause_node() -> u8 { return 37u8; }
+export func throws_clause_node() -> u8 { return 38u8; }
+export func owner_clause_node() -> u8 { return 39u8; }
+export func deferred_block_node() -> u8 { return 40u8; }
+export func discard_node() -> u8 { return 41u8; }
+export func bool_node() -> u8 { return 42u8; }
+export func compare_node() -> u8 { return 43u8; }
+export func conditional_node() -> u8 { return 44u8; }
+export func logical_not_node() -> u8 { return 45u8; }
+export func logical_and_node() -> u8 { return 46u8; }
+export func logical_or_node() -> u8 { return 47u8; }
+export func subtract_node() -> u8 { return 48u8; }
+export func divide_node() -> u8 { return 49u8; }
+export func remainder_node() -> u8 { return 50u8; }
+export func c_handle_type_node() -> u8 { return 51u8; }
+export func c_procedure_node() -> u8 { return 52u8; }
+export func handle_parameter_node() -> u8 { return 53u8; }
+export func here_parameter_node() -> u8 { return 54u8; }
+export func data_record_node() -> u8 { return 55u8; }
+export func c_record_node() -> u8 { return 56u8; }
+export func data_parent_node() -> u8 { return 57u8; }
+export func export_node() -> u8 { return 58u8; }
+export func array_declaration_node() -> u8 { return 59u8; }
+export func array_shape_node() -> u8 { return 60u8; }
 
-func exception_local_node() -> u8 { return 61u8; }
-func exception_parameter_node() -> u8 { return 62u8; }
-func exception_result_node() -> u8 { return 63u8; }
-func ref_local_node() -> u8 { return 64u8; }
-func ref_result_node() -> u8 { return 65u8; }
-func make_exception_node() -> u8 { return 66u8; }
-func make_named_node() -> u8 { return 67u8; }
-func construction_payload_node() -> u8 { return 68u8; }
-func field_initializer_node() -> u8 { return 69u8; }
-func capacity_placement_node() -> u8 { return 70u8; }
-func cause_placement_node() -> u8 { return 71u8; }
-func named_argument_node() -> u8 { return 72u8; }
+export func exception_local_node() -> u8 { return 61u8; }
+export func exception_parameter_node() -> u8 { return 62u8; }
+export func exception_result_node() -> u8 { return 63u8; }
+export func ref_local_node() -> u8 { return 64u8; }
+export func ref_result_node() -> u8 { return 65u8; }
+export func make_exception_node() -> u8 { return 66u8; }
+export func make_named_node() -> u8 { return 67u8; }
+export func construction_payload_node() -> u8 { return 68u8; }
+export func field_initializer_node() -> u8 { return 69u8; }
+export func capacity_placement_node() -> u8 { return 70u8; }
+export func cause_placement_node() -> u8 { return 71u8; }
+export func named_argument_node() -> u8 { return 72u8; }
 
-func field_access_node() -> u8 { return 73u8; }
-func bodyless_defer_node() -> u8 { return 75u8; }
+export func field_access_node() -> u8 { return 73u8; }
+export func bodyless_defer_node() -> u8 { return 75u8; }
 
-func callable_local_node() -> u8 { return 76u8; }
-func throw_with_cause_node() -> u8 { return 77u8; }
-func throw_named_node() -> u8 { return 78u8; }
-func rethrow_from_node() -> u8 { return 79u8; }
-func construction_type_query_node() -> u8 { return 80u8; }
-func initializer_assignment_node() -> u8 { return 81u8; }
-func range_node() -> u8 { return 82u8; }
-func range_header_node() -> u8 { return 83u8; }
-func owning_handle_local_node() -> u8 { return 84u8; }
-func borrowed_handle_local_node() -> u8 { return 85u8; }
-func make_own_handle_node() -> u8 { return 86u8; }
-func make_borrowed_handle_node() -> u8 { return 87u8; }
-func here_call_node() -> u8 { return 88u8; }
-func here_body_node() -> u8 { return 89u8; }
-func here_receiver_node() -> u8 { return 90u8; }
-func continue_node() -> u8 { return 91u8; }
-func break_node() -> u8 { return 92u8; }
-func narrow_integer_node() -> u8 { return 93u8; }
-func index_access_node() -> u8 { return 94u8; }
-func array_length_node() -> u8 { return 95u8; }
-func export_from_node() -> u8 { return 96u8; }
+export func callable_local_node() -> u8 { return 76u8; }
+export func throw_with_cause_node() -> u8 { return 77u8; }
+export func throw_named_node() -> u8 { return 78u8; }
+export func rethrow_from_node() -> u8 { return 79u8; }
+export func construction_type_query_node() -> u8 { return 80u8; }
+export func initializer_assignment_node() -> u8 { return 81u8; }
+export func range_node() -> u8 { return 82u8; }
+export func range_header_node() -> u8 { return 83u8; }
+export func owning_handle_local_node() -> u8 { return 84u8; }
+export func borrowed_handle_local_node() -> u8 { return 85u8; }
+export func make_own_handle_node() -> u8 { return 86u8; }
+export func make_borrowed_handle_node() -> u8 { return 87u8; }
+export func here_call_node() -> u8 { return 88u8; }
+export func here_body_node() -> u8 { return 89u8; }
+export func here_receiver_node() -> u8 { return 90u8; }
+export func continue_node() -> u8 { return 91u8; }
+export func break_node() -> u8 { return 92u8; }
+export func narrow_integer_node() -> u8 { return 93u8; }
+export func index_access_node() -> u8 { return 94u8; }
+export func array_length_node() -> u8 { return 95u8; }
+export func export_from_node() -> u8 { return 96u8; }
 
-func module_selection(kind:u8) -> bool {
+export func module_selection(kind:u8) -> bool {
     return kind == using_node() || kind == export_from_node();
 }
 
-func local_storage_binding(kind:u8) -> bool {
+export func local_storage_binding(kind:u8) -> bool {
     return kind == val_binding_node() || kind == ref_local_node() || kind == ptr_binding_node();
 }
 
-func handle_local(kind:u8) -> bool {
+export func handle_local(kind:u8) -> bool {
     return kind == owning_handle_local_node() || kind == borrowed_handle_local_node();
 }
 
-func handle_construction(kind:u8) -> bool {
+export func handle_construction(kind:u8) -> bool {
     return kind == make_own_handle_node() || kind == make_borrowed_handle_node();
 }
 
-func literal_range(nodes:const ExprNodes in N, header:u64) -> bool where {const owner N} {
+export func literal_range(nodes:const ExprNodes in N, header:u64) -> bool where {const owner N} {
     return nodes[nodes[header].left].kind == literal_node() && nodes[nodes[header].right].kind == literal_node();
 }
 
-func nonempty_literal_range(nodes:const ExprNodes in N, header:u64) -> bool where {const owner N} {
+export func nonempty_literal_range(nodes:const ExprNodes in N, header:u64) -> bool where {const owner N} {
     return nodes[nodes[header].left].number < nodes[nodes[header].right].number;
 }
 
-func integer_arithmetic(kind:u8) -> bool {
+export func integer_arithmetic(kind:u8) -> bool {
     return kind == add_node() || kind == subtract_node() || kind == multiply_node() ||
         kind == divide_node() || kind == remainder_node();
 }
 
-func logical_binary(kind:u8) -> bool {
+export func logical_binary(kind:u8) -> bool {
     return kind == logical_and_node() || kind == logical_or_node();
 }
 
-func is_transfer(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
+export func is_transfer(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
     val kind <- nodes[at].kind;
     return kind == transfer_node() || (kind == initializer_assignment_node() && nodes[at].number == 0u64);
 }
 
-func construction_body(nodes:const ExprNodes in N, at:u64) -> u64 where {const owner N} {
+export func construction_body(nodes:const ExprNodes in N, at:u64) -> u64 where {const owner N} {
     val payload <- nodes[at].right;
-    if (nodes[payload].number == 2u64) { return nodes[payload].left; } else {};
+    if (nodes[payload].number == 2u64) return nodes[payload].left;
     return no_node();
 }
 
-func reserves_storage(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
+export func reserves_storage(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
     return nodes[at].kind == make_named_node() && nodes[nodes[at].right].number == 0u64;
 }
 
-func skips_right(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
+export func skips_right(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
     val left <- nodes[at].left;
-    if (nodes[left].kind != bool_node()) { return false; } else {};
+    if (nodes[left].kind != bool_node()) return false;
     return (nodes[left].number == 0u64) == (nodes[at].kind == logical_and_node());
 }
 
-func equal_words() -> u64 { return 0u64; }
-func unequal_words() -> u64 { return 1u64; }
-func less_words() -> u64 { return 2u64; }
-func at_most_words() -> u64 { return 3u64; }
-func greater_words() -> u64 { return 4u64; }
-func at_least_words() -> u64 { return 5u64; }
+export func equal_words() -> u64 { return 0u64; }
+export func unequal_words() -> u64 { return 1u64; }
+export func less_words() -> u64 { return 2u64; }
+export func at_most_words() -> u64 { return 3u64; }
+export func greater_words() -> u64 { return 4u64; }
+export func at_least_words() -> u64 { return 5u64; }
 
-func discarded_guard_result() -> u64 { return 1u64; }
-func procedure_definition() -> u64 { return 0u64; }
-func function_definition() -> u64 { return 1u64; }
-func readonly_declaration() -> u64 { return 1u64; }
-func no_node() -> u64 { return 18446744073709551615u64; }
+export func discarded_guard_result() -> u64 { return 1u64; }
+export func procedure_definition() -> u64 { return 0u64; }
+export func function_definition() -> u64 { return 1u64; }
+export func readonly_declaration() -> u64 { return 1u64; }
+export func no_node() -> u64 { return 18446744073709551615u64; }
 
-func is_function(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
+export func is_function(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
     return at != no_node() && nodes[at].kind == callable_node() && nodes[at].number == function_definition();
 }
 
-func len(tokens:const Tokens in T) -> u64 where {const owner T} {
+export func len(tokens:const Tokens in T) -> u64 where {const owner T} {
     return intrinsic (len)(tokens);
 }
 
 func len(nodes:const ExprNodes in N) -> u64 where {const owner N} {
     return intrinsic (len)(nodes);
 }
-
-export Tokens;
-export ExprNode;
-export ExprNodes;
-export len;
-export literal_node;
-export add_node;
-export multiply_node;
-export group_node;
-export name_node;
-export call_node;
-export argument_node;
-export checked_ref_argument;
-export deferred_call_node;
-export block_node;
-export full_scope_node;
-export block_item_node;
-export try_node;
-export catch_clause_node;
-export catch_handler_node;
-export catch_binding_node;
-export finally_clause_node;
-export symbol_node;
-export behave_node;
-export throw_node;
-export transfer_node;
-export typed_name_node;
-export val_binding_node;
-export ptr_binding_node;
-export null_node;
-export return_node;
-export module_node;
-export module_item_node;
-export using_node;
-export module_path_node;
-export callable_node;
-export callable_head_node;
-export parameter_node;
-export ref_parameter_node;
-export ptr_parameter_node;
-export val_parameter_node;
-export owned_type_node;
-export result_clause_node;
-export throws_clause_node;
-export owner_clause_node;
-export deferred_block_node;
-export discard_node;
-export bool_node;
-export compare_node;
-export conditional_node;
-export range_node;
-export range_header_node;
-export owning_handle_local_node;
-export borrowed_handle_local_node;
-export make_own_handle_node;
-export make_borrowed_handle_node;
-export here_call_node;
-export here_body_node;
-export here_receiver_node;
-export continue_node;
-export break_node;
-export narrow_integer_node;
-export handle_local;
-export handle_construction;
-export literal_range;
-export nonempty_literal_range;
-export logical_not_node;
-export logical_and_node;
-export logical_or_node;
-export subtract_node;
-export divide_node;
-export remainder_node;
-export c_handle_type_node;
-export c_procedure_node;
-export handle_parameter_node;
-export here_parameter_node;
-export data_record_node;
-export c_record_node;
-export data_parent_node;
-export export_node;
-export array_declaration_node;
-export array_shape_node;
-export readonly_declaration;
-export integer_arithmetic;
-export logical_binary;
-export skips_right;
-export equal_words;
-export unequal_words;
-export less_words;
-export at_most_words;
-export greater_words;
-export at_least_words;
-export discarded_guard_result;
-export procedure_definition;
-export function_definition;
-export is_function;
-export no_node;
-export exception_local_node;
-export exception_parameter_node;
-export exception_result_node;
-export ref_local_node;
-export local_storage_binding;
-export ref_result_node;
-export make_exception_node;
-export make_named_node;
-export construction_payload_node;
-export field_initializer_node;
-export capacity_placement_node;
-export cause_placement_node;
-export named_argument_node;
-export field_access_node;
-export index_access_node;
-export array_length_node;
-export export_from_node;
-export module_selection;
-export bodyless_defer_node;
-export callable_local_node;
-export throw_with_cause_node;
-export throw_named_node;
-export rethrow_from_node;
-export construction_type_query_node;
-export initializer_assignment_node;
-export is_transfer;
-export construction_body;
-export reserves_storage;
