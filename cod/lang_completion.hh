@@ -202,14 +202,16 @@ struct ExceptionFacts {
 enum class CleanupBoundary { ordinary_finally, deferred };
 
 struct Completion {
-  // Zero through three are control states. Concrete exception categories
-  // start at one and occupy reasons above that range.
+  // Control states precede the concrete exception reasons.
   static constexpr size_t protected_transfer = 3;
+  static constexpr size_t case_break = 4;
+  static constexpr size_t case_scan = 5;
+  static constexpr size_t exception_base = case_scan;
   size_t reason = 0;
   bool returned = false;
-  static Completion failure(size_t category, bool returned = false) { return {protected_transfer + category, returned}; }
-  bool exception() const { return reason > protected_transfer; }
-  size_t category() const { return reason - protected_transfer; }
+  static Completion failure(size_t category, bool returned = false) { return {exception_base + category, returned}; }
+  bool exception() const { return reason > exception_base; }
+  size_t category() const { return reason - exception_base; }
   bool failed() const { return reason == 2 || exception(); }
   bool protected_here() const { return reason == protected_transfer; }
   size_t index() const { return 2 * reason + returned; }

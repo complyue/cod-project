@@ -316,7 +316,7 @@ struct Expression {
                     here_body, named_argument, break_value, continue_value, typed_expression, return_tail,
                     processor_composition, pipeline, here_binding, make_object, native_handle_binding, make_owned_handle, make_borrowed_handle,
                     exception_binding, make_exception, rethrow_from, case_expression, case_arm,
-                    case_fallthrough, case_failure };
+                    case_break, case_fallthrough, case_failure };
   enum class ExceptionPlacement { default_region, capacity, cause };
   Kind kind;
   Location at;
@@ -333,6 +333,7 @@ struct Expression {
   bool read_only = false;
   bool scoped = false;
   bool case_resumes = false;
+  bool case_breaks = false;
   bool grouped_deferred_call = false;
   bool repeated_defer_registration = true;
   std::string declaration_kind = {};
@@ -2048,7 +2049,7 @@ class Parser {
     definition->at = expr.at;
     definition->span = expr.span;
     definition->implicit_scope = true;
-    definition->case_scan_scope = !expr.children.empty() && expr.children.back()->kind == K::case_fallthrough;
+    definition->case_scan_scope = expr.case_resumes;
     definition->body = std::make_unique<Expression>(std::move(expr));
     definition->body->scoped = false;
     normalize_return_tail(*definition);
@@ -2065,14 +2066,14 @@ class Parser {
   static void validate_explicit_scopes(Expression &expr, ReturnContext returning,
                                        bool iteration = false, bool deferred = false,
                                        const Location *draining = nullptr, const ReceivingHeader *handoff = nullptr,
-                                       bool case_body = false, bool arm_body = false, bool direct_fallthrough = false) {
+                                       Expression *case_body = nullptr, Expression *arm_body = nullptr, bool attached_arm = false) {
     using K = Expression::Kind;
     if ((expr.kind == K::block || expr.kind == K::here_body) && expr.scoped) {
       iteration = deferred = false;
       draining = nullptr;
       handoff = nullptr;
-      case_body = false;
-      arm_body = false;
+      case_body = nullptr;
+      if (!attached_arm) arm_body = nullptr;
       returning = ReturnContext::callable;
     }
     if (expr.kind == K::return_test && returning != ReturnContext::deferred)
@@ -2081,21 +2082,24 @@ class Parser {
       fail(expr.at, "a return pattern binding requires val, ref, ptr or a complete type annotation");
     if (expr.kind == K::here_body && !expr.scoped) {
       handoff = expr.receiving.get();
-      case_body = false;
-      arm_body = false;
+      case_body = nullptr;
+      arm_body = nullptr;
     }
-    if (expr.kind == K::case_fallthrough && !direct_fallthrough) {
+    if (expr.kind == K::case_fallthrough) {
       if (!arm_body) fail(expr.at, "'fallthrough' requires an active case arm");
-      fail(expr.at, "nested case fallthrough is outside the supported seed profile");
+      arm_body->case_resumes = true;
     }
     if (expr.kind == K::break_value || expr.kind == K::continue_value) {
       if (case_body) {
         if (expr.kind == K::continue_value) fail(expr.at, "'continue' cannot cross a case body");
-        fail(expr.at, "case break is outside the supported seed profile");
+        expr.kind = K::case_break;
+        case_body->case_breaks = true;
+      } else {
+        if (!handoff) fail(expr.at, expr.kind == K::break_value ? "'break' requires an active case or single-brace here body"
+                                                             : "'continue' requires an active single-brace here body");
+        if (handoff->from_for && expr.kind == K::break_value && !expr.children.empty())
+          fail(expr.at, "a generator for loop requires bare 'break'");
       }
-      if (!handoff) fail(expr.at, "'" + expr.text + "' requires an active single-brace here body");
-      if (handoff->from_for && expr.kind == K::break_value && !expr.children.empty())
-        fail(expr.at, "a generator for loop requires bare 'break'");
     }
     if (expr.kind == K::deferred) {
       if (draining)
@@ -2114,7 +2118,7 @@ class Parser {
       fail(expr.at, "effect installation in a deferred block requires a nested explicit {{ ... }} scope");
     if (iteration && declaration)
       fail(expr.at, "a loop-body variable declaration requires a nested per-iteration {{ ... }} scope");
-    if (arm_body && declaration)
+    if (arm_body && !arm_body->scoped && declaration)
       fail(expr.at, "a case-arm variable declaration requires a nested explicit {{ ... }} scope");
     if (handoff && declaration)
       fail(expr.at, "a here-body variable declaration requires a nested explicit {{ ... }} scope");
@@ -2125,14 +2129,12 @@ class Parser {
       const bool case_item = expr.kind == K::case_expression && i != 0;
       const bool selected_arm = expr.kind == K::case_arm && i + 1 == expr.children.size();
       auto &child = *expr.children[i];
-      const bool arm_fallthrough = selected_arm && child.kind == K::block &&
-          !child.children.empty() && child.children.back()->kind == K::case_fallthrough;
-      if (arm_fallthrough) expr.case_resumes = true;
-      const bool direct = expr.kind == K::block && direct_fallthrough && i + 1 == expr.children.size();
+      const bool delayed_entry = expr.kind == K::deferred && (i != 0 || deferred_body);
       validate_explicit_scopes(child, child_returning, loop_body || iteration, deferred_body || deferred,
-          deferred_body ? &expr.at : draining, loop_body || deferred_body || case_item ? nullptr : handoff,
-          !loop_body && !deferred_body && (case_item || case_body),
-          !deferred_body && !case_item && (selected_arm || arm_body), direct || arm_fallthrough);
+          deferred_body ? &expr.at : draining, delayed_entry || loop_body || case_item ? nullptr : handoff,
+          delayed_entry || loop_body ? nullptr : case_item ? &expr : case_body,
+          delayed_entry || case_item ? nullptr : selected_arm ? &child : arm_body, selected_arm);
+      if (selected_arm) expr.case_resumes = child.case_resumes;
     }
     // A callable body executes in its own call scope, independently of where
     // its value is constructed. Loops inside it still need explicit scopes.
