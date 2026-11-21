@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-21 — Name the static type of a catch binding
+
+<a id="k-catch-root-spelling-20261121"></a>
+**K-CATCH-ROOT-SPELLING-20261121.** Editorial continuity for D-17-EXCEPTION-BINDINGS, r145→146 and registry r1029→1030, following the user's terminology correction in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50). Use “omitted type annotation” for the spelling and “root catch” for the match. `catch (e)` binds an owning `Exception` under [H-CATCH-HOLDER-ONLY-20261121](#h-catch-holder-only-20261121). Baseline at `588bf6ec712a3f4f04b0d9d48b6e6858dd2c629f:design/ExceptionControl.md`, §Exception declarations and catch bindings. The combined registry is r1031 after integration with the independent native-runtime records.
+
 ## 2026-11-21 — Share the C language runtime and build native components independently
 
 <a id="h-shared-c-runtime-20261121"></a>
