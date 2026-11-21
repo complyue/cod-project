@@ -2,7 +2,7 @@ using "SourceStorage.cod" SourceBytes;
 using "ParserStorage.cod" {
     ExprNodes, no_node, group_node, name_node, owned_type_node, typed_name_node, data_parent_node,
     make_named_node, field_access_node, enum_declaration_node, type_assertion_node, literal_node,
-    narrow_integer_node, bool_node,
+    narrow_integer_node, bool_node, call_node, here_call_node,
 };
 using "NameResolution.cod" {
     NameBindings, NameWork, first_item, record_declaration, formal_binding, local_binding,
@@ -121,9 +121,12 @@ func trace_type(source:const SourceBytes in S, nodes:const ExprNodes in N, names
         result.identity <- 0u64;
         return true;
     } else {};
-    if (kind == type_assertion_node()) {
-        if (work[at].value_kind != enum_type()) return false;
-        return describe_type(nodes, names, selected, nodes[at].right, 0u64, result);
+    if (kind == call_node() || kind == here_call_node() || kind == type_assertion_node()) {
+        if (work[at].value_kind == 0u8) return false;
+        result.kind <- work[at].value_kind;
+        result.defining_module <- work[at].value_module;
+        result.identity <- work[at].value_identity;
+        return true;
     } else {};
     if (kind == make_named_node())
         return describe_type(nodes, names, selected, nodes[at].left, 0u64, result);
@@ -153,10 +156,16 @@ func trace_type(source:const SourceBytes in S, nodes:const ExprNodes in N, names
     } else {};
     if (binding != local_binding()) return false;
     val local <- nodes[declaration].left;
-    if (nodes[local].kind == typed_name_node())
-        return describe_type(nodes, names, selected, nodes[local].right, 0u64, result);
     val initializer <- nodes[declaration].right;
     if (initializer == no_node() || initializer >= at) return false;
+    if (nodes[local].kind == typed_name_node()) {
+        if (!describe_type(nodes, names, selected, nodes[local].right, 0u64, result)) return false;
+        if (result.kind != enum_type()) return true;
+        val defining_module <- result.defining_module;
+        val identity <- result.identity;
+        return trace_type(source, nodes, names, selected, work, spellings, interfaces, initializer, result) &&
+            result.kind == enum_type() && result.defining_module == defining_module && result.identity == identity;
+    } else {};
     return trace_type(source, nodes, names, selected, work, spellings, interfaces, initializer, result);
 }
 
@@ -200,7 +209,9 @@ func check_enum_assertion(source:const SourceBytes in S, nodes:const ExprNodes i
         if (actual.kind != enum_type() || actual.defining_module != wanted.defining_module || actual.identity != wanted.identity)
             return enum_assertion_failure(report, incompatible_enum_assertion(), operand);
     };
-    work[at].value_kind <- enum_type();
+    work[at].value_kind <- wanted.kind;
+    work[at].value_module <- wanted.defining_module;
+    work[at].value_identity <- wanted.identity;
     return true;
 }
 
@@ -216,16 +227,21 @@ export func check_enum_assertions(source:const SourceBytes in S, nodes:const Exp
     return true;
 }
 
-export func prepare_projection_types(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B,
+export func prepare_native_operand_types(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B,
                                      selected:const SelectedExports in E, work:NameWork in W,
                                      spellings:const SourceBytes in P, interfaces:const ModuleInterfaces in I, used:u64)
     where {const owner S, const owner N, const owner B, const owner E, owner W, const owner P, const owner I} {
     ref result = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64; };
+    val kind <- 0u8;
     for (at in 0u64 .. used) {
-        if (nodes[at].kind == field_access_node() &&
-            trace_type(source, nodes, names, selected, work, spellings, interfaces, at, result) &&
-            native_scalar(result.kind)) {
-            (work[at].value_kind <- result.kind):void;
+        kind <- nodes[at].kind;
+        if ((kind == field_access_node() || (kind == name_node() && names[at].kind != 0u8)) &&
+            trace_type(source, nodes, names, selected, work, spellings, interfaces, at, result)) {
+            if (result.kind == enum_type() || (kind == field_access_node() && native_scalar(result.kind))) {
+                work[at].value_kind <- result.kind;
+                work[at].value_module <- result.defining_module;
+                (work[at].value_identity <- result.identity):void;
+            } else {};
         } else {};
     };
 }

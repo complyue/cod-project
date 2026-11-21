@@ -3,9 +3,10 @@ using "NativeSource.cod" Path;
 using "NativeCatalog.cod" { IntrinsicCatalog, catalog_use };
 using "NativeDiagnostics.cod" DiagnosticDestination;
 using "ObjectCompiler.cod" compile_object;
+using "CompilerStatus.cod" CompilerStatus;
 
 proc "C" compile_cli(handle input:Path in A, handle output:Path in A,
-                     handle diagnostic:DiagnosticDestination in D) -> u8 where {const owner A, owner D} {
+                     handle diagnostic:DiagnosticDestination in D) -> CompilerStatus where {const owner A, owner D} {
     own handle catalog:IntrinsicCatalog <- make own handle IntrinsicCatalog();
     return catalog_use(catalog) (spellings, exports) => {
         continue compile_object(input, output, diagnostic, spellings, exports);

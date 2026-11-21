@@ -196,6 +196,8 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: operand does not have the asserted enum type\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 87)
         fputs(": error: the enum assertion operand's type remains unproved\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 88)
+        fputs(": error: native here feedback must have the declared enum type\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 20)
         fputs(": error: narrow integer execution is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 21)
@@ -233,7 +235,10 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
                 input, diagnostic->related.line, diagnostic->related.column);
 }
 
-static cod_native_status compile(const char *source, const char *object, cod_booter_diagnostic *diagnostic, uint8_t *status) {
+typedef cod_enum_CompilerStatusx2ecod_14_CompilerStatus compiler_status;
+
+static cod_native_status compile(const char *source, const char *object, cod_booter_diagnostic *diagnostic,
+                                 compiler_status *status) {
     *diagnostic = (cod_booter_diagnostic){0};
     const char *arguments[] = {source, object};
     const cod_native_loan paths = {arguments, (uint64_t)(uintptr_t)arguments};
@@ -269,11 +274,12 @@ int main(int argc, char **argv) {
     }
 
     cod_booter_diagnostic diagnostic;
-    uint8_t status = 0;
+    compiler_status status;
     if (compile(argv[1], argv[2], &diagnostic, &status) != COD_NATIVE_OK) {
         fputs("cod-booter: invalid native entry\n", stderr);
         return 70;
     }
-    if (status) report(argv[1], status, &diagnostic);
+    if (status != cod_enum_CompilerStatusx2ecod_14_CompilerStatus_member_Complete)
+        report(argv[1], status, &diagnostic);
     return status;
 }

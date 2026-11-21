@@ -23,6 +23,9 @@
 <a id="k-typed-enum-review-20261121"></a>
 **K-TYPED-ENUM-REVIEW-20261121.** The delegated [design review](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) qualifies D-07-ENUM and D-20-C-ENUM at enum r1, D-07r201 / interop r18 / registry r1032 (P-658–P-661). It resolves numbering, member lookup and coverage, by-value membership validation and invalid-code handling. The CLI also returns code 7 from `761ce948fef0e35cbe404c7bc3631358c86994a6:applications/cod-booter/src/ModuleDriver.cod`. Implementation and build configuration are distinct; shared native storage and permanent ABI remain outside this decision.
 
+<a id="k-enum-status-wiring"></a>
+**K-ENUM-STATUS-WIRING.** D-07-ENUM and D-20-C-ENUM continue from enum r2 to r3 at registry r1036. Update workload references to the shared `CompilerStatus` declaration. Nominal identity, all eight outcomes and the separate completion channels preserve the value path in P-658–P-661 and charter §§3.2, 6.3, 8.1 and 12. The previous text is at `3e463ba0bf87f33bdadeff286a247167ef59c285:design/TypedEnums.md`, “First workload and acceptance”.
+
 ## 2026-11-21 — Name the static type of a catch binding
 
 <a id="k-catch-root-spelling-20261121"></a>
