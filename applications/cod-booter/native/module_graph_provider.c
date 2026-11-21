@@ -9,10 +9,11 @@
 #include <stdbool.h>
 #include <string.h>
 
-enum { frame_arrays = 6, max_active_modules = 128 };
+enum { frame_arrays = 7, max_active_modules = 128 };
 enum { scratch_failed = 6, source_open_failed = 7, invalid_boundary = 70 };
 
 typedef cod_native_graph_frame_use_row5 export_row;
+typedef cod_native_graph_frame_use_row9 constructor_row;
 
 #define CATALOG_FIELD(field) \
     _Static_assert(offsetof(export_row, field) == offsetof(cod_lang_intrinsic_export, field), "graph catalog row offset")
@@ -48,6 +49,8 @@ typedef struct {
     size_t spelling_count, spelling_capacity;
     export_row *exports;
     size_t export_count, export_capacity;
+    constructor_row *constructors;
+    size_t constructor_count, constructor_capacity;
 } module_graph;
 
 typedef struct {
@@ -66,7 +69,7 @@ static const struct {
     size_t size, alignment;
 } frame_layout[frame_arrays] = {
 #define ROW(i) {sizeof(cod_native_graph_frame_use_row##i), _Alignof(cod_native_graph_frame_use_row##i)}
-    ROW(0), ROW(1), ROW(2), ROW(3), ROW(4), ROW(5),
+    ROW(0), ROW(1), ROW(2), ROW(3), ROW(4), ROW(5), ROW(9),
 #undef ROW
 };
 
@@ -121,6 +124,8 @@ static cod_native_graph_frame_use_arrays frame_views(module_frame *frame) {
         {&frame->progress, 1},
         {graph->spellings, graph->spelling_count},
         {(const void *)graph->exports, graph->export_count},
+        {frame_array(frame, 6), frame->nodes},
+        {(const void *)graph->constructors, graph->constructor_count},
     };
 }
 
@@ -131,7 +136,7 @@ int cod_native_graph_frame_use_validate_impl(cod_native_ModuleFrame_borrow handl
     const cod_native_graph_frame_use_arrays expected = frame_views(frame);
 #define MATCH(i) (offered->array##i.base == expected.array##i.base && offered->array##i.count == expected.array##i.count)
     return MATCH(0) && MATCH(1) && MATCH(2) && MATCH(3) && MATCH(4) &&
-           MATCH(5) && MATCH(6) && MATCH(7) && MATCH(8);
+           MATCH(5) && MATCH(6) && MATCH(7) && MATCH(8) && MATCH(9) && MATCH(10);
 #undef MATCH
 }
 
@@ -285,13 +290,17 @@ cod_native_status cod_native_follow_graph_dependencies_impl(cod_native_ModuleFra
 cod_native_status cod_native_commit_graph_exports_impl(cod_native_ModuleFrame_borrow handle,
     cod_native_commit_graph_exports_view1 source, uint8_t *status) {
     module_frame *frame = frame_from_handle(handle);
-    if (!frame || frame->views_live || frame->progress.count > frame->nodes) return COD_NATIVE_BOUNDARY_ERROR;
+    if (!frame || frame->views_live || frame->progress.count > frame->nodes ||
+        frame->progress.constructor_count > frame->nodes) return COD_NATIVE_BOUNDARY_ERROR;
     const export_row *staged = frame_array(frame, 5);
     module_graph *graph = frame->graph;
     size_t spelling_end = graph->spelling_count;
     const size_t count = (size_t)frame->progress.count;
+    const size_t constructor_count = (size_t)frame->progress.constructor_count;
     *status = COD_REGION_STORAGE_TOO_LARGE;
-    if (count > SIZE_MAX - graph->export_count) return COD_NATIVE_OK;
+    if (count > SIZE_MAX - graph->export_count || constructor_count > SIZE_MAX - graph->constructor_count) {
+        return COD_NATIVE_OK;
+    }
     for (size_t i = 0; i < count; ++i) {
         if (staged[i].publishing_module != frame->module + 1 || staged[i].name_first > staged[i].name_past ||
             staged[i].name_past > source.count) return COD_NATIVE_BOUNDARY_ERROR;
@@ -306,6 +315,14 @@ cod_native_status cod_native_commit_graph_exports_impl(cod_native_ModuleFrame_bo
     export_row *exports = reserve(graph->exports, &graph->export_capacity, graph->export_count + count, sizeof(*exports));
     if (!exports) return COD_NATIVE_OK;
     graph->exports = exports;
+    if (constructor_count) {
+        constructor_row *constructors = reserve(graph->constructors, &graph->constructor_capacity,
+                                                graph->constructor_count + constructor_count, sizeof(*constructors));
+        if (!constructors) return COD_NATIVE_OK;
+        graph->constructors = constructors;
+        memcpy(constructors + graph->constructor_count, frame_array(frame, 6), constructor_count * sizeof(*constructors));
+        graph->constructor_count += constructor_count;
+    }
     for (size_t i = 0; i < count; ++i) {
         export_row row = staged[i];
         const size_t width = (size_t)(row.name_past - row.name_first);
@@ -348,6 +365,7 @@ uint8_t cod_booter_check_declarations(const char *input, cod_booter_diagnostic *
     for (size_t i = 0; i < graph.module_count; ++i) free(graph.modules[i].path);
     free(graph.modules);
     free(graph.exports);
+    free(graph.constructors);
     free(graph.spellings);
     return status;
 }
