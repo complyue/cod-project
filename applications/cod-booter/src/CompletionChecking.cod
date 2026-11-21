@@ -20,6 +20,10 @@ using "ParserStorage.cod" deferred_block_node;
 using "ParserStorage.cod" discard_node;
 using "ParserStorage.cod" compare_node;
 using "ParserStorage.cod" conditional_node;
+using "ParserStorage.cod" range_node;
+using "ParserStorage.cod" range_header_node;
+using "ParserStorage.cod" literal_range;
+using "ParserStorage.cod" nonempty_literal_range;
 using "ParserStorage.cod" bool_node;
 using "ParserStorage.cod" logical_not_node;
 using "ParserStorage.cod" logical_binary;
@@ -199,6 +203,24 @@ func prepare_context(nodes:const ExprNodes in N, facts:const OperandFacts in F,
         inherit_context(sites, at, nodes[at].number, guard, incoming, replacing);
         return;
     } else {};
+    if (kind == range_node()) {
+        val empty <- nodes[at].number;
+        inherit_context(sites, at, left, guard, incoming, replacing);
+        inherit_context(sites, at, right, guard, incoming, replacing);
+        inherit_context(sites, at, empty, guard, incoming, replacing);
+        val bounds_stop <- facts[nodes[left].left].kind == never_result() || facts[nodes[left].right].kind == never_result();
+        val literal <- literal_range(nodes, left);
+        val nonempty <- literal && nonempty_literal_range(nodes, left);
+        if (bounds_stop || (literal && !nonempty)) { (sites[right].event <- skipped_operand()):void; } else {};
+        if (empty != no_node() && (bounds_stop || nonempty)) { (sites[empty].event <- skipped_operand()):void; } else {};
+        return;
+    } else {};
+    if (kind == range_header_node()) {
+        inherit_context(sites, at, left, guard, incoming, replacing);
+        inherit_context(sites, at, right, guard, incoming, replacing);
+        if (facts[left].kind == never_result()) { (sites[right].event <- skipped_operand()):void; } else {};
+        return;
+    } else {};
     if (logical_binary(kind)) {
         inherit_context(sites, at, left, guard, incoming, replacing);
         inherit_context(sites, at, right, guard, incoming, replacing);
@@ -370,6 +392,16 @@ func operands_can_complete(nodes:const ExprNodes in N, sites:const CompletionSit
     if (kind == conditional_node()) {
         return can_continue(sites, nodes[at].left) &&
             (can_continue(sites, nodes[at].right) || can_continue(sites, nodes[at].number));
+    } else {};
+    if (kind == range_node()) {
+        val header <- nodes[at].left;
+        if (!can_continue(sites, nodes[header].left) || !can_continue(sites, nodes[header].right)) { return false; } else {};
+        val body_continues <- can_continue(sites, nodes[at].right);
+        val empty_continues <- can_continue(sites, nodes[at].number);
+        if (literal_range(nodes, header)) {
+            return if (nonempty_literal_range(nodes, header)) { body_continues } else { empty_continues };
+        } else {};
+        return body_continues || empty_continues;
     } else {};
     if (logical_binary(kind)) {
         val left <- nodes[at].left;

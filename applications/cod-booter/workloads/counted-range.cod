@@ -1,0 +1,18 @@
+using symbol "std:io" @print;
+
+proc report_offsets(val first:u64, val past:u64) -> void {
+    val total <- 0u64;
+    val last <- make u64;
+    for (offset in first .. past) {
+        (total <- total + offset):void;
+        (last <- offset):void;
+    } else {
+        (last <- 20u64):void;
+    };
+    behave @print(total);
+    behave @print(last);
+    return;
+}
+
+report_offsets(2u64, 5u64);
+report_offsets(0u64, 0u64);

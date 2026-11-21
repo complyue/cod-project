@@ -129,6 +129,26 @@ func registration_value(code:const NativeCommands in C, history:u64, flag:u64) -
     return no_node();
 }
 
+func matching_registration_values(code:const NativeCommands in C, first:u64, second:u64) -> bool
+    where {const owner C} {
+    val update <- first;
+    val flag <- no_node();
+    for (unused in 0u64 .. intrinsic (len)(code)) {
+        if (update == no_node() || update == second) { return true; } else {};
+        flag <- code[update].b;
+        if (registration_value(code, first, flag) != registration_value(code, second, flag)) { return false; } else {};
+        (update <- code[update].a):void;
+    };
+    return false;
+}
+
+# A completed iteration can restore exactly the original flags through
+# different writes. Merge those paths by the current flag values.
+func same_registrations(code:const NativeCommands in C, first:u64, second:u64) -> bool where {const owner C} {
+    return first == second ||
+        (matching_registration_values(code, first, second) && matching_registration_values(code, second, first));
+}
+
 func record_registration(ref code:NativeCommands in C, ref flow:RegistrationFlow in F,
                          ref history:u64 in H, flag:u64, value:u64) -> bool where {owner C, owner F, owner H} {
     if (registration_value(code, history, flag) == value) { return true; } else {};
@@ -164,7 +184,7 @@ func schedule_path(ref code:NativeCommands in C, plan:const NativePlan in P, ref
             flow.free_row <- flow.free_row + 1u64;
             return true;
         } else {};
-        if (code[previous].b == history && code[previous].opcode == ready) { return true; } else {};
+        if (code[previous].opcode == ready && same_registrations(code, code[previous].b, history)) { return true; } else {};
         (previous <- code[previous].c):void;
     };
     return false;

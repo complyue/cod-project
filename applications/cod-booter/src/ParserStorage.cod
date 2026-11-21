@@ -97,6 +97,16 @@ func throw_named_node() -> u8 { return 78u8; }
 func rethrow_from_node() -> u8 { return 79u8; }
 func construction_type_query_node() -> u8 { return 80u8; }
 func initializer_assignment_node() -> u8 { return 81u8; }
+func range_node() -> u8 { return 82u8; }
+func range_header_node() -> u8 { return 83u8; }
+
+func literal_range(nodes:const ExprNodes in N, header:u64) -> bool where {const owner N} {
+    return nodes[nodes[header].left].kind == literal_node() && nodes[nodes[header].right].kind == literal_node();
+}
+
+func nonempty_literal_range(nodes:const ExprNodes in N, header:u64) -> bool where {const owner N} {
+    return nodes[nodes[header].left].number < nodes[nodes[header].right].number;
+}
 
 func integer_arithmetic(kind:u8) -> bool {
     return kind == add_node() || kind == subtract_node() || kind == multiply_node() ||
@@ -201,6 +211,10 @@ export discard_node;
 export bool_node;
 export compare_node;
 export conditional_node;
+export range_node;
+export range_header_node;
+export literal_range;
+export nonempty_literal_range;
 export logical_not_node;
 export logical_and_node;
 export logical_or_node;
