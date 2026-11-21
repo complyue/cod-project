@@ -1,32 +1,24 @@
 using "SourceStorage.cod" SourceBytes;
-using "ParserStorage.cod" Tokens;
-using "ParserStorage.cod" ExprNodes;
-using "ParserStorage.cod" no_node;
-using "ModuleExports.cod" ModuleExports;
-using "ModuleExports.cod" SelectedExports;
-using "NameResolution.cod" NameBindings;
-using "NameResolution.cod" NameWork;
-using "OperandChecking.cod" OperandFacts;
-using "OperandChecking.cod" CallOwners;
+using "ParserStorage.cod" { Tokens, ExprNodes, no_node };
+using "ModuleExports.cod" { ModuleExports, SelectedExports };
+using "NameResolution.cod" { NameBindings, NameWork };
+using "OperandChecking.cod" { OperandFacts, CallOwners };
 using "CompletionChecking.cod" CompletionSites;
-using "ModuleFrontend.cod" ModuleBindingResult;
-using "ModuleFrontend.cod" analyze_module_completion;
-using "ModuleFrontend.cod" binding_diagnostic;
-using "ModuleFrontend.cod" module_completion_failed;
-using "NativeCommands.cod" NativeCommands;
-using "NativeCommands.cod" NativePlan;
+using "ModuleFrontend.cod" {
+    ModuleBindingResult, analyze_module_completion, binding_diagnostic, module_completion_failed,
+};
+using "NativeCommands.cod" { NativeCommands, NativePlan };
 using "ModuleLowering.cod" lower_native_module;
-using "InitializationChecking.cod" InitializationResult;
-using "InitializationChecking.cod" check_native_initialization;
+using "InitializationChecking.cod" { InitializationResult, check_native_initialization };
 
 # The mapped revision and all working buffers remain live through lowering.
 # Only successful completion publishes commands for native construction.
-func compile_module_commands(source:const SourceBytes in S, ref tokens:Tokens in T, ref nodes:ExprNodes in N,
-                             spellings:const SourceBytes in B, exports:const ModuleExports in E,
-                             ref selected:SelectedExports in X, ref bindings:NameBindings in Y,
-                             ref work:NameWork in W, ref facts:OperandFacts in F, ref owners:CallOwners in O,
-                             ref sites:CompletionSites in K, ref commands:NativeCommands in C,
-                             ref plan:NativePlan in P, ref report:ModuleBindingResult in R) -> bool
+export func compile_module_commands(source:const SourceBytes in S, tokens:Tokens in T, nodes:ExprNodes in N,
+                                    spellings:const SourceBytes in B, exports:const ModuleExports in E,
+                                    selected:SelectedExports in X, bindings:NameBindings in Y,
+                                    work:NameWork in W, facts:OperandFacts in F, owners:CallOwners in O,
+                                    sites:CompletionSites in K, commands:NativeCommands in C,
+                                    plan:NativePlan in P, report:ModuleBindingResult in R) -> bool
     where {const owner S, owner T, owner N, const owner B, const owner E, owner X, owner Y, owner W,
            owner F, owner O, owner K, owner C, owner P, owner R} {
     plan.used <- 0u64;
@@ -35,8 +27,8 @@ func compile_module_commands(source:const SourceBytes in S, ref tokens:Tokens in
     plan.diagnostic <- 0u8;
     plan.node <- no_node();
     if (!analyze_module_completion(source, tokens, nodes, spellings, exports, selected, bindings,
-                                   work, facts, owners, sites, report)) { return false; } else {};
-    if (!lower_native_module(nodes, report.frontend.tree, bindings, work, facts, sites, commands, plan)) { return false; } else {};
+                                   work, facts, owners, sites, report)) return false;
+    if (!lower_native_module(nodes, report.frontend.tree, bindings, work, facts, sites, commands, plan)) return false;
     ref initialization = make InitializationResult { diagnostic <- 0u8; node <- no_node(); };
     if (!check_native_initialization(commands, plan, initialization)) {
         binding_diagnostic(nodes, report, module_completion_failed(), initialization.diagnostic, initialization.node);
@@ -44,5 +36,3 @@ func compile_module_commands(source:const SourceBytes in S, ref tokens:Tokens in
     } else {};
     return true;
 }
-
-export compile_module_commands;

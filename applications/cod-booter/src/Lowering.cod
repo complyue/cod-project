@@ -1,38 +1,33 @@
-using "ParserStorage.cod" ExprNodes;
-using "ParserStorage.cod" len;
-using "ParserStorage.cod" literal_node;
-using "ParserStorage.cod" add_node;
-using "ParserStorage.cod" multiply_node;
-using "ParserStorage.cod" group_node;
-using "ParserStorage.cod" no_node;
+using "ParserStorage.cod" {
+    ExprNodes, len, literal_node, add_node, multiply_node, group_node, no_node,
+};
 using "ExpressionParser.cod" ParseResult;
 
-func arithmetic_node(kind:u8) -> bool {
+export func arithmetic_node(kind:u8) -> bool {
     return kind == literal_node() || kind == add_node() || kind == multiply_node() || kind == group_node();
 }
 
 func node_ready(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
     val operation_at <- nodes[at].operation_at;
-    if (operation_at < nodes[at].first || operation_at >= nodes[at].past) { return false; } else {};
+    if (operation_at < nodes[at].first || operation_at >= nodes[at].past) return false;
     val kind <- nodes[at].kind;
-    if (kind == literal_node()) { return true; } else {};
-    if (kind == group_node()) { return nodes[at].left < at; } else {};
-    if (kind == add_node() || kind == multiply_node()) {
+    if (kind == literal_node()) return true;
+    if (kind == group_node()) return nodes[at].left < at;
+    if (kind == add_node() || kind == multiply_node())
         return nodes[at].left < at && nodes[at].right < at;
-    } else {};
     return false;
 }
 
 # Emit in postorder so both operands are available. The backend emits checked
 # arithmetic and reports runtime overflow at the operator's byte offset.
-proc lower_expression(here emit(ordinal:u64, kind:u8, number:u64, left:u64, right:u64,
-                               operation_at:u64) -> bool,
-                      nodes:const ExprNodes in N, tree:const ParseResult in R,
-                      ref rejected_node:u64 in D) -> bool
+export proc lower_expression(here emit(ordinal:u64, kind:u8, number:u64, left:u64, right:u64,
+                                      operation_at:u64) -> bool,
+                             nodes:const ExprNodes in N, tree:const ParseResult in R,
+                             rejected_node:u64 in D) -> bool
     where {const owner N, const owner R, owner D} {
     rejected_node <- no_node();
-    if (tree.diagnostic != 0u8 || tree.used == 0u64 || tree.used > len(nodes)) { return false; } else {};
-    if (tree.root != tree.used - 1u64) { return false; } else {};
+    if (tree.diagnostic != 0u8 || tree.used == 0u64 || tree.used > len(nodes)) return false;
+    if (tree.root != tree.used - 1u64) return false;
     for (at in 0u64 .. tree.used) {
         if (!node_ready(nodes, at) ||
             !emit(at, nodes[at].kind, nodes[at].number, nodes[at].left, nodes[at].right, nodes[at].operation_at)) {
@@ -42,6 +37,3 @@ proc lower_expression(here emit(ordinal:u64, kind:u8, number:u64, left:u64, righ
     };
     return true;
 }
-
-export lower_expression;
-export arithmetic_node;

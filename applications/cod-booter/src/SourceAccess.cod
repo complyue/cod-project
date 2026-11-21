@@ -1,8 +1,6 @@
-using "SourceStorage.cod" SourceBytes;
-using "SourceStorage.cod" SourceLines;
-using "SourceStorage.cod" SourcePosition;
+using "SourceStorage.cod" { SourceBytes, SourceLines, SourcePosition };
 
-func len(source:const SourceBytes in S) -> u64 where {const owner S} {
+export func len(source:const SourceBytes in S) -> u64 where {const owner S} {
     return intrinsic (len)(source);
 }
 
@@ -10,26 +8,23 @@ func len(source:const SourceBytes in S) -> u64 where {const owner S} {
 # final line after LF. The preceding row covers the byte position of LF.
 func line_at(lines:const SourceLines in S, offset:u64, lower:u64, upper:u64) -> u64
     where {const owner S} {
-    if (upper - lower == 1u64) { return lower; } else {};
+    if (upper - lower == 1u64) return lower;
     val middle <- lower + (upper - lower) / 2u64;
-    if (lines[middle].first <= offset) { return line_at(lines, offset, middle, upper); } else {};
+    if (lines[middle].first <= offset) return line_at(lines, offset, middle, upper);
     return line_at(lines, offset, lower, middle);
 }
 
-func locate_source_position(source:const SourceBytes in S, lines:const SourceLines in S,
-                            offset:u64, ref position:SourcePosition in P) -> void
+export func locate_source_position(source:const SourceBytes in S, lines:const SourceLines in S,
+                                   offset:u64, position:SourcePosition in P) -> void
     where {const owner S, owner P} {
     position.line <- 0u64;
     position.column <- 0u64;
     val count <- intrinsic (len)(lines);
-    if (offset > len(source) || count == 0u64) { return; } else {};
+    if (offset > len(source) || count == 0u64) return;
     val line <- line_at(lines, offset, 0u64, count);
     val first <- lines[line].first;
-    if (offset < first || offset > lines[line].past) { return; } else {};
+    if (offset < first || offset > lines[line].past) return;
     position.line <- line + 1u64;
     position.column <- offset - first + 1u64;
     return;
 }
-
-export len;
-export locate_source_position;

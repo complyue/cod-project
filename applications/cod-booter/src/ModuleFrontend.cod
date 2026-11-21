@@ -1,86 +1,54 @@
-using "ParserStorage.cod" callable_local_node;
-using "ParserStorage.cod" throw_with_cause_node;
-using "ParserStorage.cod" throw_named_node;
-using "ParserStorage.cod" rethrow_from_node;
-using "ParserStorage.cod" named_argument_node;
-using "ParserStorage.cod" exception_local_node;
-using "ParserStorage.cod" bodyless_defer_node;
-using "ParserStorage.cod" exception_parameter_node;
-using "ParserStorage.cod" exception_result_node;
-using "ParserStorage.cod" ref_result_node;
-using "ParserStorage.cod" make_exception_node;
-using "ParserStorage.cod" make_named_node;
-using "ParserStorage.cod" construction_body;
-using "ParserStorage.cod" reserves_storage;
-using "ParserStorage.cod" construction_type_query_node;
-using "ParserStorage.cod" name_node;
-using "ParserStorage.cod" literal_node;
-using "ParserStorage.cod" bool_node;
-using "ParserStorage.cod" field_access_node;
-using "ParserStorage.cod" index_access_node;
-using "ParserStorage.cod" array_length_node;
-using "ParserStorage.cod" catch_binding_node;
-using "ParserStorage.cod" handle_local;
-using "ParserStorage.cod" handle_construction;
-using "ParserStorage.cod" handle_parameter_node;
-using "ParserStorage.cod" here_parameter_node;
-using "ParserStorage.cod" here_call_node;
+using "ParserStorage.cod" {
+    callable_local_node, throw_with_cause_node, throw_named_node, rethrow_from_node,
+    named_argument_node, exception_local_node, bodyless_defer_node, exception_parameter_node,
+    exception_result_node, ref_result_node, make_exception_node, make_named_node, construction_body,
+    reserves_storage, construction_type_query_node, name_node, literal_node, bool_node,
+    field_access_node, index_access_node, array_length_node, catch_binding_node, handle_local,
+    handle_construction, handle_parameter_node, here_parameter_node, here_call_node, Tokens,
+    ExprNodes, no_node,
+};
 using "SourceStorage.cod" SourceBytes;
-using "ParserStorage.cod" Tokens;
-using "ParserStorage.cod" ExprNodes;
-using "ParserStorage.cod" no_node;
-using "Frontend.cod" FrontendResult;
-using "Frontend.cod" read_module;
+using "Frontend.cod" { FrontendResult, read_module };
 using "ExpressionParser.cod" ParseResult;
-using "ModuleExports.cod" ModuleExports;
-using "ModuleExports.cod" SelectedExports;
-using "ModuleExports.cod" ExportResolutionResult;
-using "ModuleExports.cod" resolve_module_exports;
-using "ModuleExports.cod" prepare_module_dependencies;
-using "ModuleExports.cod" export_storage_exhausted;
-using "NameResolution.cod" NameBindings;
-using "NameResolution.cod" NameWork;
-using "NameResolution.cod" NameResolutionResult;
-using "NameResolution.cod" unsupported_module_declaration;
-using "NameResolution.cod" unsupported_ordinary_construction;
-using "NameResolution.cod" declaration_requires_native_output;
-using "NameResolution.cod" first_item;
-using "NameResolution.cod" resolve_module_names;
-using "NativeDeclarations.cod" NativeDeclarationResult;
-using "NativeDeclarations.cod" check_native_declarations;
-using "NativeDeclarations.cod" declared_exception_type;
-using "OperandChecking.cod" OperandFacts;
-using "OperandChecking.cod" CallOwners;
-using "OperandChecking.cod" OperandCheckResult;
-using "OperandChecking.cod" check_module_operands;
-using "CompletionChecking.cod" CompletionSites;
-using "CompletionChecking.cod" CompletionCheckResult;
-using "CompletionChecking.cod" check_module_completion;
+using "ModuleExports.cod" {
+    ModuleExports, SelectedExports, ExportResolutionResult, resolve_module_exports,
+    prepare_module_dependencies, export_storage_exhausted,
+};
+using "NameResolution.cod" {
+    NameBindings, NameWork, NameResolutionResult, unsupported_module_declaration,
+    unsupported_ordinary_construction, declaration_requires_native_output, first_item,
+    resolve_module_names,
+};
+using "NativeDeclarations.cod" {
+    NativeDeclarationResult, check_native_declarations, declared_exception_type,
+};
+using "OperandChecking.cod" { OperandFacts, CallOwners, OperandCheckResult, check_module_operands };
+using "CompletionChecking.cod" { CompletionSites, CompletionCheckResult, check_module_completion };
 
-data ModuleBindingResult {
+export data ModuleBindingResult {
     frontend:FrontendResult;
     stage:u8;
     diagnostic:u8;
     related_first:u64;
 }
 
-func module_read_failed() -> u8 { return 1u8; }
-func module_selection_failed() -> u8 { return 2u8; }
-func module_binding_failed() -> u8 { return 3u8; }
-func module_operands_failed() -> u8 { return 4u8; }
-func module_completion_failed() -> u8 { return 5u8; }
+export func module_read_failed() -> u8 { return 1u8; }
+export func module_selection_failed() -> u8 { return 2u8; }
+export func module_binding_failed() -> u8 { return 3u8; }
+export func module_operands_failed() -> u8 { return 4u8; }
+export func module_completion_failed() -> u8 { return 5u8; }
 func unsupported_array_length() -> u8 { return 74u8; }
 func unsupported_ordinary_here() -> u8 { return 76u8; }
 func invalid_catch_annotation() -> u8 { return 77u8; }
 
-func rejected_unsupported_declaration(result:const ModuleBindingResult in R) -> bool where {const owner R} {
+export func rejected_unsupported_declaration(result:const ModuleBindingResult in R) -> bool where {const owner R} {
     return result.stage == module_binding_failed() &&
         (result.diagnostic == unsupported_module_declaration() || result.diagnostic == unsupported_array_length() ||
          (result.diagnostic >= 28u8 && result.diagnostic <= 40u8));
 }
 
-func binding_diagnostic(nodes:const ExprNodes in N, ref result:ModuleBindingResult in R,
-                        stage:u8, diagnostic:u8, at:u64) -> void where {const owner N, owner R} {
+export func binding_diagnostic(nodes:const ExprNodes in N, result:ModuleBindingResult in R,
+                               stage:u8, diagnostic:u8, at:u64) -> void where {const owner N, owner R} {
     result.stage <- stage;
     result.diagnostic <- diagnostic;
     result.frontend.diagnostic_first <- no_node();
@@ -96,10 +64,10 @@ func first_extended_declaration(nodes:const ExprNodes in N, work:const NameWork 
     val item <- first_item(nodes, nodes[tree.root].left);
     val form <- no_node();
     for (unused in 0u64 .. tree.used) {
-        if (item == no_node()) { return no_node(); } else {};
+        if (item == no_node()) return no_node();
         form <- nodes[item].right;
-        if (nodes[item].number != 0u64 || declaration_requires_native_output(nodes[form].kind)) { return form; } else {};
-        (item <- work[item].next):void;
+        if (nodes[item].number != 0u64 || declaration_requires_native_output(nodes[form].kind)) return form;
+        item <- work[item].next;
     };
     return no_node();
 }
@@ -109,15 +77,15 @@ func uses_native_boundary(nodes:const ExprNodes in N, used:u64) -> bool where {c
     for (at in 0u64 .. used) {
         kind <- nodes[at].kind;
         if (handle_local(kind) || handle_construction(kind) || kind == handle_parameter_node() ||
-            kind == here_call_node()) { return true; } else {};
+            kind == here_call_node()) return true;
     };
     return false;
 }
 
 func supported_construction_shape(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
-    if (construction_body(nodes, at) == no_node() && !reserves_storage(nodes, at)) { return false; } else {};
+    if (construction_body(nodes, at) == no_node() && !reserves_storage(nodes, at)) return false;
     val requested <- nodes[at].left;
-    if (nodes[requested].kind != construction_type_query_node()) { return true; } else {};
+    if (nodes[requested].kind != construction_type_query_node()) return true;
     val subject <- nodes[nodes[requested].left].kind;
     return subject == name_node() || subject == literal_node() || subject == bool_node();
 }
@@ -125,32 +93,31 @@ func supported_construction_shape(nodes:const ExprNodes in N, at:u64) -> bool wh
 # Declaration checking can resolve projection operands without emitting an address.
 func unsupported_source_form(nodes:const ExprNodes in N, at:u64, emit_object:bool) -> u8 where {const owner N} {
     val kind <- nodes[at].kind;
-    if (kind == exception_local_node()) { return 28u8; } else {};
-    if (kind == exception_parameter_node()) { return 29u8; } else {};
-    if (kind == exception_result_node()) { return 30u8; } else {};
-    if (kind == make_exception_node()) { return 33u8; } else {};
-    if (kind == ref_result_node()) { return 35u8; } else {};
-    if (kind == make_named_node() && !supported_construction_shape(nodes, at)) { return unsupported_ordinary_construction(); } else {};
-    if (emit_object && kind == field_access_node()) { return 38u8; } else {};
-    if (emit_object && kind == index_access_node()) { return 39u8; } else {};
-    if (emit_object && kind == array_length_node()) { return unsupported_array_length(); } else {};
-    if (kind == bodyless_defer_node()) { return 40u8; } else {};
-    if (kind == callable_local_node()) { return 41u8; } else {};
-    if (kind == throw_with_cause_node()) { return 42u8; } else {};
-    if (kind == throw_named_node()) { return 43u8; } else {};
-    if (kind == rethrow_from_node()) { return 44u8; } else {};
-    if (kind == named_argument_node()) { return 45u8; } else {};
-    if (emit_object && kind == catch_binding_node() && nodes[at].number == 0u64 && nodes[at].right != no_node()) {
+    if (kind == exception_local_node()) return 28u8;
+    if (kind == exception_parameter_node()) return 29u8;
+    if (kind == exception_result_node()) return 30u8;
+    if (kind == make_exception_node()) return 33u8;
+    if (kind == ref_result_node()) return 35u8;
+    if (kind == make_named_node() && !supported_construction_shape(nodes, at)) return unsupported_ordinary_construction();
+    if (emit_object && kind == field_access_node()) return 38u8;
+    if (emit_object && kind == index_access_node()) return 39u8;
+    if (emit_object && kind == array_length_node()) return unsupported_array_length();
+    if (kind == bodyless_defer_node()) return 40u8;
+    if (kind == callable_local_node()) return 41u8;
+    if (kind == throw_with_cause_node()) return 42u8;
+    if (kind == throw_named_node()) return 43u8;
+    if (kind == rethrow_from_node()) return 44u8;
+    if (kind == named_argument_node()) return 45u8;
+    if (emit_object && kind == catch_binding_node() && nodes[at].number == 0u64 && nodes[at].right != no_node())
         return 36u8;
-    } else {};
     return 0u8;
 }
 
 # Find the first unsupported source form by byte position, including headers
 # and enclosing constructs whose syntax is stored after their operands.
-func check_source_profile(nodes:const ExprNodes in N, used:u64, emit_object:bool, ref result:ModuleBindingResult in R) -> bool
+func check_source_profile(nodes:const ExprNodes in N, used:u64, emit_object:bool, result:ModuleBindingResult in R) -> bool
     where {const owner N, owner R} {
-    if (used > intrinsic (len)(nodes)) { return true; } else {};
+    if (used > intrinsic (len)(nodes)) return true;
     val first <- no_node();
     val cause <- 0u8;
     val next <- 0u8;
@@ -169,15 +136,15 @@ func check_source_profile(nodes:const ExprNodes in N, used:u64, emit_object:bool
 }
 
 # Bind the retained syntax against the dependency targets discovered for it.
-func bind_parsed_module(source:const SourceBytes in S, nodes:const ExprNodes in N,
-                        spellings:const SourceBytes in B, exports:const ModuleExports in E,
-                        ref selected:SelectedExports in X, ref bindings:NameBindings in Y,
-                        ref work:NameWork in W, emit_object:bool, ref result:ModuleBindingResult in R) -> bool
+export func bind_parsed_module(source:const SourceBytes in S, nodes:const ExprNodes in N,
+                               spellings:const SourceBytes in B, exports:const ModuleExports in E,
+                               selected:SelectedExports in X, bindings:NameBindings in Y,
+                               work:NameWork in W, emit_object:bool, result:ModuleBindingResult in R) -> bool
     where {const owner S, const owner N, const owner B, const owner E, owner X, owner Y, owner W, owner R} {
     result.stage <- 0u8;
     result.diagnostic <- 0u8;
     result.related_first <- no_node();
-    if (!check_source_profile(nodes, result.frontend.tree.used, emit_object, result)) { return false; } else {};
+    if (!check_source_profile(nodes, result.frontend.tree.used, emit_object, result)) return false;
     ref publication = make ExportResolutionResult { diagnostic <- 0u8; node <- no_node(); };
     if (!resolve_module_exports(source, nodes, result.frontend.tree, spellings, exports, selected, publication)) {
         binding_diagnostic(nodes, result, module_selection_failed(), publication.diagnostic, publication.node);
@@ -208,10 +175,10 @@ func bind_parsed_module(source:const SourceBytes in S, nodes:const ExprNodes in 
 }
 
 # Read a standalone module with the builtin catalog.
-func bind_module(source:const SourceBytes in S, ref tokens:Tokens in T, ref nodes:ExprNodes in N,
-                 spellings:const SourceBytes in B, exports:const ModuleExports in E,
-                 ref selected:SelectedExports in X, ref bindings:NameBindings in Y,
-                 ref work:NameWork in W, ref result:ModuleBindingResult in R) -> bool
+export func bind_module(source:const SourceBytes in S, tokens:Tokens in T, nodes:ExprNodes in N,
+                        spellings:const SourceBytes in B, exports:const ModuleExports in E,
+                        selected:SelectedExports in X, bindings:NameBindings in Y,
+                        work:NameWork in W, result:ModuleBindingResult in R) -> bool
     where {const owner S, owner T, owner N, const owner B, const owner E, owner X, owner Y, owner W, owner R} {
     result.diagnostic <- 0u8;
     result.related_first <- no_node();
@@ -227,16 +194,15 @@ func bind_module(source:const SourceBytes in S, ref tokens:Tokens in T, ref node
 }
 
 # A successful operand analysis supplies the facts for checking completion.
-func analyze_module_operands(source:const SourceBytes in S, ref tokens:Tokens in T, ref nodes:ExprNodes in N,
-                             spellings:const SourceBytes in B, exports:const ModuleExports in E,
-                             ref selected:SelectedExports in X, ref bindings:NameBindings in Y,
-                             ref work:NameWork in W, ref facts:OperandFacts in F,
-                             ref owners:CallOwners in O, ref result:ModuleBindingResult in R) -> bool
+export func analyze_module_operands(source:const SourceBytes in S, tokens:Tokens in T, nodes:ExprNodes in N,
+                                    spellings:const SourceBytes in B, exports:const ModuleExports in E,
+                                    selected:SelectedExports in X, bindings:NameBindings in Y,
+                                    work:NameWork in W, facts:OperandFacts in F,
+                                    owners:CallOwners in O, result:ModuleBindingResult in R) -> bool
     where {const owner S, owner T, owner N, const owner B, const owner E, owner X, owner Y, owner W,
            owner F, owner O, owner R} {
-    if (!bind_module(source, tokens, nodes, spellings, exports, selected, bindings, work, result)) {
+    if (!bind_module(source, tokens, nodes, spellings, exports, selected, bindings, work, result))
         return false;
-    } else {};
     val declaration <- first_extended_declaration(nodes, work, result.frontend.tree);
     if (declaration != no_node()) {
         binding_diagnostic(nodes, result, module_binding_failed(), unsupported_module_declaration(), declaration);
@@ -256,16 +222,15 @@ func analyze_module_operands(source:const SourceBytes in S, ref tokens:Tokens in
     return true;
 }
 
-func analyze_module_completion(source:const SourceBytes in S, ref tokens:Tokens in T, ref nodes:ExprNodes in N,
-                               spellings:const SourceBytes in B, exports:const ModuleExports in E,
-                               ref selected:SelectedExports in X, ref bindings:NameBindings in Y,
-                               ref work:NameWork in W, ref facts:OperandFacts in F, ref owners:CallOwners in O,
-                               ref sites:CompletionSites in C, ref result:ModuleBindingResult in R) -> bool
+export func analyze_module_completion(source:const SourceBytes in S, tokens:Tokens in T, nodes:ExprNodes in N,
+                                      spellings:const SourceBytes in B, exports:const ModuleExports in E,
+                                      selected:SelectedExports in X, bindings:NameBindings in Y,
+                                      work:NameWork in W, facts:OperandFacts in F, owners:CallOwners in O,
+                                      sites:CompletionSites in C, result:ModuleBindingResult in R) -> bool
     where {const owner S, owner T, owner N, const owner B, const owner E, owner X, owner Y, owner W,
            owner F, owner O, owner C, owner R} {
-    if (!analyze_module_operands(source, tokens, nodes, spellings, exports, selected, bindings, work, facts, owners, result)) {
+    if (!analyze_module_operands(source, tokens, nodes, spellings, exports, selected, bindings, work, facts, owners, result))
         return false;
-    } else {};
     ref completion = make CompletionCheckResult { diagnostic <- 0u8; node <- no_node(); };
     if (!check_module_completion(nodes, result.frontend.tree, bindings, work, facts, sites, completion)) {
         binding_diagnostic(nodes, result, module_completion_failed(), completion.diagnostic, completion.node);
@@ -273,16 +238,3 @@ func analyze_module_completion(source:const SourceBytes in S, ref tokens:Tokens 
     } else {};
     return true;
 }
-
-export ModuleBindingResult;
-export bind_module;
-export bind_parsed_module;
-export module_read_failed;
-export module_selection_failed;
-export module_binding_failed;
-export module_operands_failed;
-export analyze_module_operands;
-export module_completion_failed;
-export binding_diagnostic;
-export rejected_unsupported_declaration;
-export analyze_module_completion;

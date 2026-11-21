@@ -1,53 +1,33 @@
-using "NativeSource.cod" Path;
-using "NativeSource.cod" SourceRevision;
-using "NativeSource.cod" SourceOpenException;
+using "NativeSource.cod" { Path, SourceRevision, SourceOpenException };
 using "NativeSourceUse.cod" source_use;
-using "NativeScratch.cod" Scratch;
-using "NativeScratch.cod" ScratchOpenException;
-using "NativeScratch.cod" scratch_use;
-using "NativeLLVM.cod" LLVMSession;
-using "NativeLLVM.cod" LLVMOpenException;
-using "NativeLLVM.cod" llvm_construct;
-using "NativeLLVM.cod" llvm_verify;
-using "NativeLLVM.cod" llvm_emit_object;
-using "NativeDiagnostics.cod" DiagnosticDestination;
-using "NativeDiagnostics.cod" report_rejection;
-using "NativeDiagnostics.cod" report_source_open_error;
-using "NativeDiagnostics.cod" report_backend_error;
-using "NativeDiagnostics.cod" report_scratch_error;
-using "SourceStorage.cod" SourceBytes;
-using "SourceStorage.cod" SourceLines;
-using "ParserStorage.cod" Tokens;
-using "ParserStorage.cod" ExprNodes;
-using "ParserStorage.cod" no_node;
+using "NativeScratch.cod" { Scratch, ScratchOpenException, scratch_use };
+using "NativeLLVM.cod" {
+    LLVMSession, LLVMOpenException, llvm_construct, llvm_verify, llvm_emit_object,
+};
+using "NativeDiagnostics.cod" {
+    DiagnosticDestination, report_rejection, report_source_open_error, report_backend_error,
+    report_scratch_error,
+};
+using "SourceStorage.cod" { SourceBytes, SourceLines };
+using "ParserStorage.cod" { Tokens, ExprNodes, no_node };
 using "TokenBuffer.cod" ScanResult;
 using "ExpressionParser.cod" ParseResult;
 using "Frontend.cod" FrontendResult;
-using "ModuleExports.cod" ModuleExports;
-using "ModuleExports.cod" SelectedExports;
-using "NameResolution.cod" NameBindings;
-using "NameResolution.cod" NameWork;
-using "OperandChecking.cod" OperandFacts;
-using "OperandChecking.cod" CallOwners;
+using "ModuleExports.cod" { ModuleExports, SelectedExports };
+using "NameResolution.cod" { NameBindings, NameWork };
+using "OperandChecking.cod" { OperandFacts, CallOwners };
 using "CompletionChecking.cod" CompletionSites;
-using "ModuleFrontend.cod" ModuleBindingResult;
-using "ModuleFrontend.cod" module_read_failed;
-using "ModuleFrontend.cod" rejected_unsupported_declaration;
+using "ModuleFrontend.cod" {
+    ModuleBindingResult, module_read_failed, rejected_unsupported_declaration,
+};
 using "ModuleCompiler.cod" compile_module_commands;
-using "NativeCommands.cod" NativeCommands;
-using "NativeCommands.cod" NativePlan;
+using "NativeCommands.cod" { NativeCommands, NativePlan };
 using "ModuleLowering.cod" native_unsupported;
-using "ModuleDriver.cod" ModuleWorkspacePlan;
-using "ModuleDriver.cod" plan_module_workspace;
-using "ModuleDriver.cod" native_source_open_failed;
-using "Compiler.cod" ExpressionScratchPlan;
-using "Compiler.cod" native_complete;
-using "Compiler.cod" native_source_rejected;
-using "Compiler.cod" native_form_unsupported;
-using "Compiler.cod" native_open_failed;
-using "Compiler.cod" native_lowering_failed;
-using "Compiler.cod" native_finish_failed;
-using "Compiler.cod" native_scratch_failed;
+using "ModuleDriver.cod" { ModuleWorkspacePlan, plan_module_workspace, native_source_open_failed };
+using "Compiler.cod" {
+    ExpressionScratchPlan, native_complete, native_source_rejected, native_form_unsupported,
+    native_open_failed, native_lowering_failed, native_finish_failed, native_scratch_failed,
+};
 
 proc write_object(handle output:Path in A, handle diagnostic:DiagnosticDestination in D,
                   commands:const NativeCommands in W, plan:const NativePlan in P) -> u8
@@ -79,10 +59,10 @@ proc write_object(handle output:Path in A, handle diagnostic:DiagnosticDestinati
 proc lower_object(source:const SourceBytes in S, lines:const SourceLines in S,
                   spellings:const SourceBytes in B, exports:const ModuleExports in B,
                   handle output:Path in A, handle diagnostic:DiagnosticDestination in D,
-                  ref tokens:Tokens in W, ref nodes:ExprNodes in W,
-                  ref selected:SelectedExports in W, ref bindings:NameBindings in W, ref names:NameWork in W,
-                  ref facts:OperandFacts in W, ref owners:CallOwners in W, ref sites:CompletionSites in W,
-                  ref commands:NativeCommands in W) -> u8
+                  tokens:Tokens in W, nodes:ExprNodes in W,
+                  selected:SelectedExports in W, bindings:NameBindings in W, names:NameWork in W,
+                  facts:OperandFacts in W, owners:CallOwners in W, sites:CompletionSites in W,
+                  commands:NativeCommands in W) -> u8
     where {const owner S, const owner B, const owner A, owner D, owner W} {
     ref analysis = make ModuleBindingResult {
         frontend <- make FrontendResult {
@@ -103,7 +83,7 @@ proc lower_object(source:const SourceBytes in S, lines:const SourceLines in S,
                         else { analysis.diagnostic };
             report_rejection(source, lines, diagnostic, analysis.stage, code, analysis.frontend.diagnostic_first,
                              analysis.frontend.diagnostic_past, analysis.related_first);
-            if (rejected_unsupported_declaration(analysis)) { return native_form_unsupported(); } else {};
+            if (rejected_unsupported_declaration(analysis)) return native_form_unsupported();
             return native_source_rejected();
         } else {};
         val first <- no_node();
@@ -113,7 +93,7 @@ proc lower_object(source:const SourceBytes in S, lines:const SourceLines in S,
             (past <- nodes[plan.node].past):void;
         } else {};
         report_rejection(source, lines, diagnostic, 0u8, plan.diagnostic, first, past, no_node());
-        if (plan.diagnostic == native_unsupported()) { return native_form_unsupported(); } else {};
+        if (plan.diagnostic == native_unsupported()) return native_form_unsupported();
         return native_lowering_failed();
     } else {};
     return write_object(output, diagnostic, commands, plan);
@@ -151,9 +131,9 @@ proc compile_revision(source:const SourceBytes in S, lines:const SourceLines in 
     }
 }
 
-proc compile_object(handle input:Path in A, handle output:Path in A,
-                    handle diagnostic:DiagnosticDestination in D,
-                    spellings:const SourceBytes in B, exports:const ModuleExports in B) -> u8
+export proc compile_object(handle input:Path in A, handle output:Path in A,
+                           handle diagnostic:DiagnosticDestination in D,
+                           spellings:const SourceBytes in B, exports:const ModuleExports in B) -> u8
     where {const owner A, const owner B, owner D} {
     try {
         own handle source:SourceRevision <- make own handle SourceRevision(input);
@@ -165,5 +145,3 @@ proc compile_object(handle input:Path in A, handle output:Path in A,
         return native_source_open_failed();
     }
 }
-
-export compile_object;

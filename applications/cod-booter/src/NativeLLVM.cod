@@ -2,18 +2,12 @@ using "std:exceptions" Exception;
 using "NativeCommands.cod" NativeCommands;
 using "NativeSource.cod" Path;
 
-data "C" LLVMSession;
-data LLVMOpenException <: Exception { status:u8; }
+export data "C" LLVMSession;
+export data LLVMOpenException <: Exception { status:u8; }
 
 proc "C" LLVMSession() throws LLVMOpenException;
-proc "C" llvm_construct(handle session:LLVMSession in L, ref rows:const NativeCommands in W,
-                        used:u64, labels:u64, slots:u64) -> u8 where {owner L, const owner W};
-proc "C" llvm_verify(handle session:LLVMSession in L) -> u8 where {const owner L};
-proc "C" llvm_emit_object(handle session:LLVMSession in L, handle output:Path in A) -> u8
+export proc "C" llvm_construct(handle session:LLVMSession in L, ref rows:const NativeCommands in W,
+                               used:u64, labels:u64, slots:u64) -> u8 where {owner L, const owner W};
+export proc "C" llvm_verify(handle session:LLVMSession in L) -> u8 where {const owner L};
+export proc "C" llvm_emit_object(handle session:LLVMSession in L, handle output:Path in A) -> u8
     where {owner L, const owner A};
-
-export LLVMSession;
-export LLVMOpenException;
-export llvm_construct;
-export llvm_verify;
-export llvm_emit_object;

@@ -1,43 +1,28 @@
-using "NativeSource.cod" Path;
-using "NativeSource.cod" SourceRevision;
-using "NativeSource.cod" SourceOpenException;
+using "NativeSource.cod" { Path, SourceRevision, SourceOpenException };
 using "NativeSourceUse.cod" source_use;
-using "NativeDiagnostics.cod" DiagnosticDestination;
-using "NativeDiagnostics.cod" report_rejection;
-using "NativeDiagnostics.cod" report_source_open_error;
-using "NativeDiagnostics.cod" report_scratch_error;
-using "SourceStorage.cod" SourceBytes;
-using "SourceStorage.cod" SourceLines;
-using "ParserStorage.cod" Tokens;
-using "ParserStorage.cod" ExprNodes;
-using "ParserStorage.cod" no_node;
+using "NativeDiagnostics.cod" {
+    DiagnosticDestination, report_rejection, report_source_open_error, report_scratch_error,
+};
+using "SourceStorage.cod" { SourceBytes, SourceLines };
+using "ParserStorage.cod" { Tokens, ExprNodes, no_node };
 using "TokenBuffer.cod" ScanResult;
 using "ExpressionParser.cod" ParseResult;
-using "Frontend.cod" FrontendResult;
-using "Frontend.cod" read_module;
-using "ModuleExportStorage.cod" ModuleExports;
-using "ModuleExportStorage.cod" NativeInterfaces;
-using "ModuleExports.cod" SelectedExports;
-using "ModuleExports.cod" next_module_dependency;
-using "ModuleExports.cod" prepare_module_dependencies;
-using "ModuleFrontend.cod" ModuleBindingResult;
-using "ModuleFrontend.cod" bind_parsed_module;
-using "ModuleFrontend.cod" module_read_failed;
-using "ModuleFrontend.cod" module_binding_failed;
-using "ModuleFrontend.cod" module_selection_failed;
-using "NameResolution.cod" NameBindings;
-using "NameResolution.cod" NameWork;
-using "NativeDeclarations.cod" ModulePublication;
-using "NativeDeclarations.cod" NativeDeclarationResult;
-using "NativeDeclarations.cod" check_selected_interfaces;
-using "NativeDeclarations.cod" publish_interfaces;
-using "NativeDeclarations.cod" publish_module_exports;
-using "Compiler.cod" ExpressionScratchPlan;
-using "Compiler.cod" native_complete;
-using "Compiler.cod" native_source_rejected;
-using "Compiler.cod" native_scratch_failed;
-using "ModuleDriver.cod" native_source_open_failed;
-using "ModuleDriver.cod" plan_module_source;
+using "Frontend.cod" { FrontendResult, read_module };
+using "ModuleExportStorage.cod" { ModuleExports, NativeInterfaces };
+using "ModuleExports.cod" { SelectedExports, next_module_dependency, prepare_module_dependencies };
+using "ModuleFrontend.cod" {
+    ModuleBindingResult, bind_parsed_module, module_read_failed, module_binding_failed,
+    module_selection_failed,
+};
+using "NameResolution.cod" { NameBindings, NameWork };
+using "NativeDeclarations.cod" {
+    ModulePublication, NativeDeclarationResult, check_selected_interfaces, publish_interfaces,
+    publish_module_exports,
+};
+using "Compiler.cod" {
+    ExpressionScratchPlan, native_complete, native_source_rejected, native_scratch_failed,
+};
+using "ModuleDriver.cod" { native_source_open_failed, plan_module_source };
 
 data "C" ModuleFrame;
 
@@ -69,8 +54,8 @@ proc "C" commit_graph_exports(handle frame:ModuleFrame in W, ref source:const So
 
 proc discover_graph_dependencies(source:const SourceBytes in S, lines:const SourceLines in S,
                                  handle frame:ModuleFrame in W, handle diagnostic:DiagnosticDestination in D,
-                                 ref tokens:Tokens in T, ref nodes:ExprNodes in T, ref selected:SelectedExports in T,
-                                 ref progress:ModuleProgressRows in T) -> u8
+                                 tokens:Tokens in T, nodes:ExprNodes in T, selected:SelectedExports in T,
+                                 progress:ModuleProgressRows in T) -> u8
     where {const owner S, owner W, owner D, owner T} {
     ref result = make FrontendResult {
         scan <- make ScanResult { used <- 0u64; next <- 0u64; complete <- false; invalid_source <- false; };
@@ -92,7 +77,7 @@ proc discover_graph_dependencies(source:const SourceBytes in S, lines:const Sour
     val path <- no_node();
     val status <- 0u8;
     for (unused in 0u64 .. result.tree.used) {
-        if (site == no_node()) { return native_complete(); } else {};
+        if (site == no_node()) return native_complete();
         path <- nodes[site].left;
         status <- remember_graph_dependency(frame, source, site, nodes[path].first, nodes[path].past);
         if (status != 0u8) {
@@ -100,17 +85,17 @@ proc discover_graph_dependencies(source:const SourceBytes in S, lines:const Sour
                              nodes[path].first, nodes[path].past, no_node());
             return native_source_rejected();
         } else {};
-        (site <- next_module_dependency(source, nodes, result.tree.used, site + 1u64)):void;
+        site <- next_module_dependency(source, nodes, result.tree.used, site + 1u64);
     };
     return native_complete();
 }
 
 proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in S,
                        handle diagnostic:DiagnosticDestination in D, nodes:const ExprNodes in W,
-                       ref selected:SelectedExports in W, ref names:NameBindings in W, ref work:NameWork in W,
-                       ref staged:ModuleExports in W, ref progress:ModuleProgressRows in W,
+                       selected:SelectedExports in W, names:NameBindings in W, work:NameWork in W,
+                       staged:ModuleExports in W, progress:ModuleProgressRows in W,
                        spellings:const SourceBytes in W, published:const ModuleExports in W,
-                       ref staged_interfaces:NativeInterfaces in W, published_interfaces:const NativeInterfaces in W) -> u8
+                       staged_interfaces:NativeInterfaces in W, published_interfaces:const NativeInterfaces in W) -> u8
     where {const owner S, owner D, owner W} {
     ref result = make ModuleBindingResult {
         frontend <- make FrontendResult {
@@ -176,20 +161,19 @@ proc check_graph_revision(source:const SourceBytes in S, lines:const SourceLines
     val parsed <- graph_frame_use(frame) (tokens, nodes, selected, names, work, staged, progress, spellings, published, interfaces, contracts) => {
         continue discover_graph_dependencies(source, lines, frame, diagnostic, tokens, nodes, selected, progress);
     };
-    if (parsed != native_complete()) { return parsed; } else {};
+    if (parsed != native_complete()) return parsed;
     val followed:const u8 <- follow_graph_dependencies(frame);
-    if (followed != 0u8) {
+    if (followed != 0u8)
         return graph_frame_use(frame) (tokens, nodes, selected, names, work, staged, progress, spellings, published, interfaces, contracts) => {
             report_rejection(source, lines, diagnostic, module_selection_failed(), followed,
                              progress[0u64].failed_first, progress[0u64].failed_past, no_node());
             continue native_source_rejected();
         };
-    } else {};
     val checked <- graph_frame_use(frame) (tokens, nodes, selected, names, work, staged, progress, spellings, published, interfaces, contracts) => {
         continue bind_graph_module(source, lines, diagnostic, nodes, selected, names, work,
                                    staged, progress, spellings, published, interfaces, contracts);
     };
-    if (checked != native_complete()) { return checked; } else {};
+    if (checked != native_complete()) return checked;
     val committed <- commit_graph_exports(frame, source);
     if (committed != 0u8) {
         report_scratch_error(diagnostic, committed);
@@ -198,8 +182,8 @@ proc check_graph_revision(source:const SourceBytes in S, lines:const SourceLines
     return native_complete();
 }
 
-proc "C" check_graph_module(handle input:Path in A, handle frame:ModuleFrame in W,
-                             handle diagnostic:DiagnosticDestination in D) -> u8
+export proc "C" check_graph_module(handle input:Path in A, handle frame:ModuleFrame in W,
+                                    handle diagnostic:DiagnosticDestination in D) -> u8
     where {const owner A, owner W, owner D} {
     try {
         own handle revision:SourceRevision <- make own handle SourceRevision(input);
@@ -211,5 +195,3 @@ proc "C" check_graph_module(handle input:Path in A, handle frame:ModuleFrame in 
         return native_source_open_failed();
     }
 }
-
-export check_graph_module;

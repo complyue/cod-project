@@ -1,6 +1,6 @@
 # The name span and any builtin path span belong to the catalog's spelling
 # bytes. A source export names its publishing module independently of origin.
-data ModuleExport {
+export data ModuleExport {
     module_first:u64;
     module_past:u64;
     name_first:u64;
@@ -14,12 +14,12 @@ data ModuleExport {
     owner_identity:u64;
     shape:u8;
 }
-array ModuleExports[u64]:ModuleExport;
+export array ModuleExports[u64]:ModuleExport;
 
 # An interface header has parameter_kind zero. Its parameter records follow
 # in declaration order. A here operation lists its supplier, then receivers.
 # Both declarations and nominal types retain their defining-module identity.
-data NativeInterfaceRow {
+export data NativeInterfaceRow {
     defining_module:u64;
     declaration:u64;
     parameter_count:u64;
@@ -32,9 +32,4 @@ data NativeInterfaceRow {
     target_readonly:u8;
     owner_readonly:u8;
 }
-array NativeInterfaces[u64]:NativeInterfaceRow;
-
-export ModuleExport;
-export ModuleExports;
-export NativeInterfaceRow;
-export NativeInterfaces;
+export array NativeInterfaces[u64]:NativeInterfaceRow;

@@ -1,82 +1,25 @@
 using "SourceStorage.cod" SourceBytes;
-using "ParserStorage.cod" ExprNodes;
-using "ParserStorage.cod" len as syntax_len;
-using "ParserStorage.cod" no_node;
-using "ParserStorage.cod" module_node;
-using "ParserStorage.cod" module_item_node;
-using "ParserStorage.cod" using_node;
-using "ParserStorage.cod" export_from_node;
-using "ParserStorage.cod" callable_node;
-using "ParserStorage.cod" callable_head_node;
-using "ParserStorage.cod" c_handle_type_node;
-using "ParserStorage.cod" c_procedure_node;
-using "ParserStorage.cod" data_record_node;
-using "ParserStorage.cod" c_record_node;
-using "ParserStorage.cod" data_parent_node;
-using "ParserStorage.cod" export_node;
-using "ParserStorage.cod" handle_parameter_node;
-using "ParserStorage.cod" here_parameter_node;
-using "ParserStorage.cod" array_declaration_node;
-using "ParserStorage.cod" is_function;
-using "ParserStorage.cod" parameter_node;
-using "ParserStorage.cod" ref_parameter_node;
-using "ParserStorage.cod" ptr_parameter_node;
-using "ParserStorage.cod" val_parameter_node;
-using "ParserStorage.cod" result_clause_node;
-using "ParserStorage.cod" throws_clause_node;
-using "ParserStorage.cod" owner_clause_node;
-using "ParserStorage.cod" readonly_declaration;
-using "ParserStorage.cod" typed_name_node;
-using "ParserStorage.cod" owned_type_node;
-using "ParserStorage.cod" name_node;
-using "ParserStorage.cod" field_access_node;
-using "ParserStorage.cod" index_access_node;
-using "ParserStorage.cod" array_length_node;
-using "ParserStorage.cod" symbol_node;
-using "ParserStorage.cod" literal_node;
-using "ParserStorage.cod" group_node;
-using "ParserStorage.cod" integer_arithmetic;
-using "ParserStorage.cod" is_transfer;
-using "ParserStorage.cod" make_named_node;
-using "ParserStorage.cod" construction_body;
-using "ParserStorage.cod" construction_type_query_node;
-using "ParserStorage.cod" initializer_assignment_node;
-using "ParserStorage.cod" call_node;
-using "ParserStorage.cod" behave_node;
-using "ParserStorage.cod" argument_node;
-using "ParserStorage.cod" deferred_call_node;
-using "ParserStorage.cod" deferred_block_node;
-using "ParserStorage.cod" discard_node;
-using "ParserStorage.cod" bool_node;
-using "ParserStorage.cod" compare_node;
-using "ParserStorage.cod" conditional_node;
-using "ParserStorage.cod" range_node;
-using "ParserStorage.cod" handle_local;
-using "ParserStorage.cod" handle_construction;
-using "ParserStorage.cod" owning_handle_local_node;
-using "ParserStorage.cod" make_borrowed_handle_node;
-using "ParserStorage.cod" here_call_node;
-using "ParserStorage.cod" here_receiver_node;
-using "ParserStorage.cod" break_node;
-using "ParserStorage.cod" continue_node;
-using "ParserStorage.cod" narrow_integer_node;
-using "ParserStorage.cod" logical_not_node;
-using "ParserStorage.cod" logical_binary;
-using "ParserStorage.cod" block_node;
-using "ParserStorage.cod" full_scope_node;
-using "ParserStorage.cod" block_item_node;
-using "ParserStorage.cod" try_node;
-using "ParserStorage.cod" catch_clause_node;
-using "ParserStorage.cod" finally_clause_node;
-using "ParserStorage.cod" null_node;
-using "ParserStorage.cod" return_node;
-using "ParserStorage.cod" throw_node;
-using "ParserStorage.cod" local_storage_binding;
+using "ParserStorage.cod" {
+    ExprNodes, len as syntax_len, no_node, module_node, module_item_node, using_node,
+    export_from_node, callable_node, callable_head_node, c_handle_type_node, c_procedure_node,
+    data_record_node, c_record_node, data_parent_node, export_node, handle_parameter_node,
+    here_parameter_node, array_declaration_node, is_function, parameter_node, ref_parameter_node,
+    ptr_parameter_node, val_parameter_node, result_clause_node, throws_clause_node,
+    owner_clause_node, readonly_declaration, typed_name_node, owned_type_node, name_node,
+    field_access_node, index_access_node, array_length_node, symbol_node, literal_node, group_node,
+    integer_arithmetic, is_transfer, make_named_node, construction_body,
+    construction_type_query_node, initializer_assignment_node, call_node, behave_node,
+    argument_node, deferred_call_node, deferred_block_node, discard_node, bool_node, compare_node,
+    conditional_node, range_node, handle_local, handle_construction, owning_handle_local_node,
+    make_borrowed_handle_node, here_call_node, here_receiver_node, break_node, continue_node,
+    narrow_integer_node, logical_not_node, logical_binary, block_node, full_scope_node,
+    block_item_node, try_node, catch_clause_node, finally_clause_node, null_node, return_node,
+    throw_node, local_storage_binding,
+};
 using "ExpressionParser.cod" ParseResult;
-using "ModuleExports.cod" SelectedExports;
-using "ModuleExports.cod" record_export;
+using "ModuleExports.cod" { SelectedExports, record_export };
 
-data NameBinding {
+export data NameBinding {
     kind:u8;
     # A using node records the category supplied by its checked export.
     imported_kind:u8;
@@ -88,17 +31,17 @@ data NameBinding {
     guarded_local_link:u64;
     handle_guard:u64;
 }
-array NameBindings[u64]:NameBinding;
+export array NameBindings[u64]:NameBinding;
 
-data NameWorkSlot {
+export data NameWorkSlot {
     active:u64;
     next:u64;
     call_result:u8;
     expects_here:u8;
 }
-array NameWork[u64]:NameWorkSlot;
+export array NameWork[u64]:NameWorkSlot;
 
-data NameResolutionResult {
+export data NameResolutionResult {
     diagnostic:u8;
     node:u64;
     enclosing_defer:u64;
@@ -120,50 +63,50 @@ data NameState {
     enclosing_defer:u64;
 }
 
-func ordinary_selection() -> u8 { return 1u8; }
-func symbolic_selection() -> u8 { return 2u8; }
-func callable_binding() -> u8 { return 3u8; }
-func formal_binding() -> u8 { return 4u8; }
-func local_binding() -> u8 { return 5u8; }
-func owner_binding() -> u8 { return 6u8; }
-func exception_binding() -> u8 { return 7u8; }
-func builtin_u64() -> u8 { return 8u8; }
-func builtin_void() -> u8 { return 9u8; }
-func lexical_owner() -> u8 { return 10u8; }
-func builtin_bool() -> u8 { return 11u8; }
-func c_handle_type() -> u8 { return 12u8; }
-func record_type() -> u8 { return 13u8; }
-func c_constructor() -> u8 { return 14u8; }
-func c_operation() -> u8 { return 15u8; }
-func c_entry() -> u8 { return 16u8; }
-func builtin_u8() -> u8 { return 17u8; }
-func builtin_u32() -> u8 { return 18u8; }
-func builtin_i64() -> u8 { return 19u8; }
-func builtin_f32() -> u8 { return 20u8; }
-func builtin_f64() -> u8 { return 21u8; }
-func array_type() -> u8 { return 22u8; }
-func loop_index() -> u8 { return 23u8; }
-func handle_binding() -> u8 { return 24u8; }
-func here_receiver_binding() -> u8 { return 25u8; }
+export func ordinary_selection() -> u8 { return 1u8; }
+export func symbolic_selection() -> u8 { return 2u8; }
+export func callable_binding() -> u8 { return 3u8; }
+export func formal_binding() -> u8 { return 4u8; }
+export func local_binding() -> u8 { return 5u8; }
+export func owner_binding() -> u8 { return 6u8; }
+export func exception_binding() -> u8 { return 7u8; }
+export func builtin_u64() -> u8 { return 8u8; }
+export func builtin_void() -> u8 { return 9u8; }
+export func lexical_owner() -> u8 { return 10u8; }
+export func builtin_bool() -> u8 { return 11u8; }
+export func c_handle_type() -> u8 { return 12u8; }
+export func record_type() -> u8 { return 13u8; }
+export func c_constructor() -> u8 { return 14u8; }
+export func c_operation() -> u8 { return 15u8; }
+export func c_entry() -> u8 { return 16u8; }
+export func builtin_u8() -> u8 { return 17u8; }
+export func builtin_u32() -> u8 { return 18u8; }
+export func builtin_i64() -> u8 { return 19u8; }
+export func builtin_f32() -> u8 { return 20u8; }
+export func builtin_f64() -> u8 { return 21u8; }
+export func array_type() -> u8 { return 22u8; }
+export func loop_index() -> u8 { return 23u8; }
+export func handle_binding() -> u8 { return 24u8; }
+export func here_receiver_binding() -> u8 { return 25u8; }
 
-func native_scalar(kind:u8) -> bool {
+export func native_scalar(kind:u8) -> bool {
     return kind == builtin_u64() || kind == builtin_bool() || (kind >= builtin_u8() && kind <= builtin_f64());
 }
 
-func unresolved_name() -> u8 { return 1u8; }
-func expected_symbol_binding() -> u8 { return 2u8; }
-func expected_type_binding() -> u8 { return 3u8; }
-func expected_owner_binding() -> u8 { return 4u8; }
-func duplicate_binding() -> u8 { return 5u8; }
-func unproved_module_binding() -> u8 { return 6u8; }
-func unproved_guard_binding() -> u8 { return 7u8; }
-func invalid_module_tree() -> u8 { return 8u8; }
-func name_storage_exhausted() -> u8 { return 9u8; }
-func nested_defer_in_drain() -> u8 { return 10u8; }
-func declaration_in_deferred_group() -> u8 { return 11u8; }
+export func unresolved_name() -> u8 { return 1u8; }
+export func expected_symbol_binding() -> u8 { return 2u8; }
+export func expected_type_binding() -> u8 { return 3u8; }
+export func expected_owner_binding() -> u8 { return 4u8; }
+export func duplicate_binding() -> u8 { return 5u8; }
+export func unproved_module_binding() -> u8 { return 6u8; }
+export func unproved_guard_binding() -> u8 { return 7u8; }
+export func invalid_module_tree() -> u8 { return 8u8; }
+export func name_storage_exhausted() -> u8 { return 9u8; }
+export func nested_defer_in_drain() -> u8 { return 10u8; }
+export func declaration_in_deferred_group() -> u8 { return 11u8; }
 func dynamic_symbol_in_function() -> u8 { return 12u8; }
-func unsupported_module_declaration() -> u8 { return 13u8; }
-func unsupported_ordinary_construction() -> u8 { return 37u8; }
+export func unsupported_module_declaration() -> u8 { return 13u8; }
+export func unsupported_ordinary_construction() -> u8 { return 37u8; }
 func unsupported_initializer_rebind() -> u8 { return 46u8; }
 func unsupported_repeated_defer() -> u8 { return 47u8; }
 func unsupported_repeated_construction() -> u8 { return 48u8; }
@@ -175,21 +118,21 @@ func missing_here_control() -> u8 { return 62u8; }
 func unsupported_here_group_storage() -> u8 { return 63u8; }
 func owner_without_input() -> u8 { return 72u8; }
 func owner_without_writable_input() -> u8 { return 73u8; }
-func expected_value_binding() -> u8 { return 14u8; }
+export func expected_value_binding() -> u8 { return 14u8; }
 
-func reject_name(ref state:NameState in R, node:u64, diagnostic:u8) -> void where {owner R} {
+func reject_name(state:NameState in R, node:u64, diagnostic:u8) -> void where {owner R} {
     state.diagnostic <- diagnostic;
     (state.failed_node <- node):void;
 }
 
-func remember(ref bindings:NameBindings in B, at:u64, declaration:u64, kind:u8) -> void where {owner B} {
+func remember(bindings:NameBindings in B, at:u64, declaration:u64, kind:u8) -> void where {owner B} {
     bindings[at].kind <- kind;
     bindings[at].declaration <- declaration;
     return;
 }
 
 func spelling_start(nodes:const ExprNodes in N, at:u64) -> u64 where {const owner N} {
-    if (nodes[at].kind == symbol_node()) { return nodes[at].first + 1u64; } else {};
+    if (nodes[at].kind == symbol_node()) return nodes[at].first + 1u64;
     return nodes[at].first;
 }
 
@@ -198,9 +141,9 @@ func same_name(source:const SourceBytes in S, nodes:const ExprNodes in N, left:u
     val start <- spelling_start(nodes, left);
     val other <- spelling_start(nodes, right);
     val length <- nodes[left].past - start;
-    if (length != nodes[right].past - other) { return false; } else {};
+    if (length != nodes[right].past - other) return false;
     for (offset in 0u64 .. length) {
-        if (source[start + offset] != source[other + offset]) { return false; } else {};
+        if (source[start + offset] != source[other + offset]) return false;
     };
     return true;
 }
@@ -210,13 +153,13 @@ func lookup(source:const SourceBytes in S, nodes:const ExprNodes in N, work:cons
     val candidate <- no_node();
     for (offset in 0u64 .. past - first) {
         candidate <- work[past - offset - 1u64].active;
-        if (same_name(source, nodes, name, candidate)) { return candidate; } else {};
+        if (same_name(source, nodes, name, candidate)) return candidate;
     };
     return no_node();
 }
 
-func declare_name(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
-                   ref work:NameWork in W, ref state:NameState in R, name:u64, declaration:u64, kind:u8,
+func declare_name(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                   work:NameWork in W, state:NameState in R, name:u64, declaration:u64, kind:u8,
                    duplicate:u8) -> void where {const owner S, const owner N, owner B, owner W, owner R} {
     if (lookup(source, nodes, work, name, state.first, state.used) != no_node()) {
         reject_name(state, name, duplicate);
@@ -233,8 +176,8 @@ func handle_available(nodes:const ExprNodes in N, bindings:const NameBindings in
     return guard == no_node() || (nodes[guard].first <= nodes[use].first && nodes[use].past <= nodes[guard].past);
 }
 
-func resolve_value(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
-                    work:const NameWork in W, ref state:NameState in R, name:u64) -> void
+func resolve_value(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                    work:const NameWork in W, state:NameState in R, name:u64) -> void
     where {const owner S, const owner N, owner B, const owner W, owner R} {
     val found <- lookup(source, nodes, work, name, 0u64, state.used);
     if (found == no_node()) { reject_name(state, name, unresolved_name()); return; } else {};
@@ -258,8 +201,8 @@ func resolve_value(source:const SourceBytes in S, nodes:const ExprNodes in N, re
     remember(bindings, name, declaration, kind);
 }
 
-func resolve_owner(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
-                    work:const NameWork in W, ref state:NameState in R, name:u64) -> void
+func resolve_owner(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                    work:const NameWork in W, state:NameState in R, name:u64) -> void
     where {const owner S, const owner N, owner B, const owner W, owner R} {
     val first <- nodes[name].first;
     # The explicit lexical owner 'here' denotes this full scope.
@@ -278,33 +221,32 @@ func scalar_name(source:const SourceBytes in S, nodes:const ExprNodes in N, name
     where {const owner S, const owner N} {
     val first <- nodes[name].first;
     val length <- nodes[name].past - first;
-    if (length == 3u64 && source[first] == 117u8 && source[first + 1u64] == 54u8 && source[first + 2u64] == 52u8) {
+    if (length == 3u64 && source[first] == 117u8 && source[first + 1u64] == 54u8 && source[first + 2u64] == 52u8)
         return builtin_u64();
-    } else {};
     if (length == 4u64) {
         if (source[first] == 118u8 && source[first + 1u64] == 111u8 &&
-            source[first + 2u64] == 105u8 && source[first + 3u64] == 100u8) { return builtin_void(); } else {};
+            source[first + 2u64] == 105u8 && source[first + 3u64] == 100u8) return builtin_void();
         if (source[first] == 98u8 && source[first + 1u64] == 111u8 &&
-            source[first + 2u64] == 111u8 && source[first + 3u64] == 108u8) { return builtin_bool(); } else {};
+            source[first + 2u64] == 111u8 && source[first + 3u64] == 108u8) return builtin_bool();
     } else {};
-    if (length == 2u64 && source[first] == 117u8 && source[first + 1u64] == 56u8) { return builtin_u8(); } else {};
-    if (length != 3u64) { return 0u8; } else {};
+    if (length == 2u64 && source[first] == 117u8 && source[first + 1u64] == 56u8) return builtin_u8();
+    if (length != 3u64) return 0u8;
     val initial <- source[first];
     val tens <- source[first + 1u64];
     val ones <- source[first + 2u64];
     if (tens == 51u8 && ones == 50u8) { # 32
-        if (initial == 117u8) { return builtin_u32(); } else {};
-        if (initial == 102u8) { return builtin_f32(); } else {};
+        if (initial == 117u8) return builtin_u32();
+        if (initial == 102u8) return builtin_f32();
     } else {};
     if (tens == 54u8 && ones == 52u8) { # 64
-        if (initial == 105u8) { return builtin_i64(); } else {};
-        if (initial == 102u8) { return builtin_f64(); } else {};
+        if (initial == 105u8) return builtin_i64();
+        if (initial == 102u8) return builtin_f64();
     } else {};
     return 0u8;
 }
 
-func resolve_type_name(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
-                        work:const NameWork in W, ref state:NameState in R, name:u64) -> void
+func resolve_type_name(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                        work:const NameWork in W, state:NameState in R, name:u64) -> void
     where {const owner S, const owner N, owner B, const owner W, owner R} {
     val built_in <- scalar_name(source, nodes, name);
     if (built_in != 0u8) {
@@ -321,10 +263,10 @@ func resolve_type_name(source:const SourceBytes in S, nodes:const ExprNodes in N
     remember(bindings, name, bindings[found].declaration, kind);
 }
 
-func resolve_annotation(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
-                         work:const NameWork in W, ref state:NameState in R, binding:u64) -> void
+func resolve_annotation(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                         work:const NameWork in W, state:NameState in R, binding:u64) -> void
     where {const owner S, const owner N, owner B, const owner W, owner R} {
-    if (nodes[binding].kind != typed_name_node()) { return; } else {};
+    if (nodes[binding].kind != typed_name_node()) return;
     val annotation <- nodes[binding].right;
     if (nodes[annotation].kind != owned_type_node()) {
         resolve_type_name(source, nodes, bindings, work, state, annotation);
@@ -337,7 +279,7 @@ func resolve_annotation(source:const SourceBytes in S, nodes:const ExprNodes in 
 }
 
 func binder_name(nodes:const ExprNodes in N, binding:u64) -> u64 where {const owner N} {
-    if (nodes[binding].kind == typed_name_node()) { return nodes[binding].left; } else {};
+    if (nodes[binding].kind == typed_name_node()) return nodes[binding].left;
     return binding;
 }
 
@@ -354,7 +296,7 @@ func list_entry(kind:u8) -> bool {
         kind == here_receiver_node() || formal(kind);
 }
 
-func link_entries(nodes:const ExprNodes in N, ref work:NameWork in W, used:u64) -> void
+func link_entries(nodes:const ExprNodes in N, work:NameWork in W, used:u64) -> void
     where {const owner N, owner W} {
     val previous <- no_node();
     for (at in 0u64 .. used) {
@@ -366,67 +308,67 @@ func link_entries(nodes:const ExprNodes in N, ref work:NameWork in W, used:u64) 
     };
 }
 
-func first_item(nodes:const ExprNodes in N, tail:u64) -> u64 where {const owner N} {
-    if (tail == no_node()) { return tail; } else {};
+export func first_item(nodes:const ExprNodes in N, tail:u64) -> u64 where {const owner N} {
+    if (tail == no_node()) return tail;
     val current <- tail;
     for (unused in 0u64 .. tail + 1u64) {
-        if (nodes[current].left == no_node()) { return current; } else {};
-        (current <- nodes[current].left):void;
+        if (nodes[current].left == no_node()) return current;
+        current <- nodes[current].left;
     };
     return no_node();
 }
 
-func signature_head(nodes:const ExprNodes in N, tail:u64) -> u64 where {const owner N} {
+export func signature_head(nodes:const ExprNodes in N, tail:u64) -> u64 where {const owner N} {
     val header <- tail;
     for (unused in 0u64 .. tail + 1u64) {
-        if (nodes[header].kind == callable_head_node()) { return header; } else {};
-        (header <- nodes[header].left):void;
+        if (nodes[header].kind == callable_head_node()) return header;
+        header <- nodes[header].left;
     };
     return no_node();
 }
 
-func callable_head(nodes:const ExprNodes in N, definition:u64) -> u64 where {const owner N} {
+export func callable_head(nodes:const ExprNodes in N, definition:u64) -> u64 where {const owner N} {
     return signature_head(nodes, nodes[definition].left);
 }
 
-func signature_clause(nodes:const ExprNodes in N, tail:u64, kind:u8) -> u64 where {const owner N} {
+export func signature_clause(nodes:const ExprNodes in N, tail:u64, kind:u8) -> u64 where {const owner N} {
     val clause <- tail;
     for (unused in 0u64 .. tail + 1u64) {
-        if (nodes[clause].kind == kind) { return clause; } else {};
-        if (nodes[clause].kind == callable_head_node()) { return no_node(); } else {};
-        (clause <- nodes[clause].left):void;
+        if (nodes[clause].kind == kind) return clause;
+        if (nodes[clause].kind == callable_head_node()) return no_node();
+        clause <- nodes[clause].left;
     };
     return no_node();
 }
 
-func enclosing_callable(nodes:const ExprNodes in N, names:const NameBindings in B, scope:u64) -> u64
+export func enclosing_callable(nodes:const ExprNodes in N, names:const NameBindings in B, scope:u64) -> u64
     where {const owner N, const owner B} {
-    if (scope == no_node()) { return scope; } else {};
+    if (scope == no_node()) return scope;
     val site <- scope;
     for (unused in 0u64 .. syntax_len(nodes)) {
-        if (site == no_node() || nodes[site].kind != full_scope_node()) { return site; } else {};
-        (site <- names[site].scope):void;
+        if (site == no_node() || nodes[site].kind != full_scope_node()) return site;
+        site <- names[site].scope;
     };
     return no_node();
 }
 
 # Lists link forward in the temporary workspace. Traversing a wide block or
 # parameter list does not recurse through its preceding siblings.
-func resolve_list(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
-                   ref work:NameWork in W, ref state:NameState in R, tail:u64) -> void
+func resolve_list(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                   work:NameWork in W, state:NameState in R, tail:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     val item <- first_item(nodes, tail);
     for (unused in 0u64 .. syntax_len(nodes)) {
-        if (item == no_node()) { return; } else {};
+        if (item == no_node()) return;
         bindings[item].scope <- state.scope_node;
         resolve_expression(source, nodes, bindings, work, state, nodes[item].right);
-        if (state.diagnostic != 0u8 || item == tail) { return; } else {};
-        (item <- work[item].next):void;
+        if (state.diagnostic != 0u8 || item == tail) return;
+        item <- work[item].next;
     };
 }
 
-func resolve_full_scope(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
-                        ref work:NameWork in W, ref state:NameState in R, scope:u64, first_local:u64) -> void
+func resolve_full_scope(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                        work:NameWork in W, state:NameState in R, scope:u64, first_local:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     val used <- state.used;
     val first <- state.first;
@@ -457,14 +399,14 @@ func resolve_full_scope(source:const SourceBytes in S, nodes:const ExprNodes in 
     (state.guard <- guard):void;
 }
 
-func resolve_handler(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
-                      ref work:NameWork in W, ref state:NameState in R, handler:u64) -> void
+func resolve_handler(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                      work:NameWork in W, state:NameState in R, handler:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     val binding <- nodes[handler].left;
     val annotation <- nodes[binding].right;
     if (annotation != no_node()) {
         resolve_type_name(source, nodes, bindings, work, state, annotation);
-        if (state.diagnostic != 0u8) { return; } else {};
+        if (state.diagnostic != 0u8) return;
     } else {};
     val used <- state.used;
     val first <- state.first;
@@ -477,12 +419,12 @@ func resolve_handler(source:const SourceBytes in S, nodes:const ExprNodes in N, 
     (state.first <- first):void;
 }
 
-func resolve_clauses(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
-                      ref work:NameWork in W, ref state:NameState in R, tail:u64) -> void
+func resolve_clauses(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                      work:NameWork in W, state:NameState in R, tail:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     val clause <- first_item(nodes, tail);
     for (unused in 0u64 .. syntax_len(nodes)) {
-        if (clause == no_node()) { return; } else {};
+        if (clause == no_node()) return;
         if (nodes[clause].kind == catch_clause_node()) {
             state.guard <- nodes[nodes[clause].right].right;
             resolve_handler(source, nodes, bindings, work, state, nodes[clause].right);
@@ -490,13 +432,13 @@ func resolve_clauses(source:const SourceBytes in S, nodes:const ExprNodes in N, 
             state.guard <- nodes[clause].right;
             resolve_expression(source, nodes, bindings, work, state, nodes[clause].right);
         };
-        if (state.diagnostic != 0u8 || clause == tail) { return; } else {};
-        (clause <- work[clause].next):void;
+        if (state.diagnostic != 0u8 || clause == tail) return;
+        clause <- work[clause].next;
     };
 }
 
-func resolve_try(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
-                  ref work:NameWork in W, ref state:NameState in R, at:u64) -> void
+func resolve_try(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                  work:NameWork in W, state:NameState in R, at:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     val guard <- state.guard;
     val body <- nodes[at].left;
@@ -508,7 +450,7 @@ func resolve_try(source:const SourceBytes in S, nodes:const ExprNodes in N, ref 
     (state.guard <- guard):void;
 }
 
-func local_declaration_allowed(ref state:NameState in R, at:u64) -> bool where {owner R} {
+func local_declaration_allowed(state:NameState in R, at:u64) -> bool where {owner R} {
     if (state.delayed != no_node()) {
         reject_name(state, at, declaration_in_deferred_group());
         state.enclosing_defer <- state.delayed;
@@ -519,15 +461,15 @@ func local_declaration_allowed(ref state:NameState in R, at:u64) -> bool where {
     return true;
 }
 
-func resolve_local(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
-                   ref work:NameWork in W, ref state:NameState in R, at:u64) -> void
+func resolve_local(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                   work:NameWork in W, state:NameState in R, at:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
-    if (!local_declaration_allowed(state, at)) { return; } else {};
+    if (!local_declaration_allowed(state, at)) return;
     val binding <- nodes[at].left;
     resolve_annotation(source, nodes, bindings, work, state, binding);
-    if (state.diagnostic != 0u8) { return; } else {};
+    if (state.diagnostic != 0u8) return;
     resolve_expression(source, nodes, bindings, work, state, nodes[at].right);
-    if (state.diagnostic != 0u8) { return; } else {};
+    if (state.diagnostic != 0u8) return;
     declare_name(source, nodes, bindings, work, state, binder_name(nodes, binding), at, local_binding(), duplicate_binding());
     if (state.diagnostic == 0u8 && state.guard != no_node()) {
         val scope <- state.scope_node;
@@ -537,8 +479,8 @@ func resolve_local(source:const SourceBytes in S, nodes:const ExprNodes in N, re
     } else {};
 }
 
-func resolve_handle_owner(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
-                          work:const NameWork in W, ref state:NameState in R, name:u64, lexical:bool) -> void
+func resolve_handle_owner(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                          work:const NameWork in W, state:NameState in R, name:u64, lexical:bool) -> void
     where {const owner S, const owner N, owner B, const owner W, owner R} {
     val found <- lookup(source, nodes, work, name, 0u64, state.used);
     if (found == no_node()) { reject_name(state, name, unresolved_name()); return; } else {};
@@ -554,30 +496,30 @@ func resolve_handle_owner(source:const SourceBytes in S, nodes:const ExprNodes i
     } else { reject_name(state, name, expected_owner_binding()); };
 }
 
-func resolve_handle_local(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
-                          ref work:NameWork in W, ref state:NameState in R, at:u64) -> void
+func resolve_handle_local(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                          work:NameWork in W, state:NameState in R, at:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
-    if (!local_declaration_allowed(state, at)) { return; } else {};
+    if (!local_declaration_allowed(state, at)) return;
     val binding <- nodes[at].left;
     val annotation <- nodes[binding].right;
     val explicit_owner <- nodes[annotation].kind == owned_type_node();
     val marker <- if (explicit_owner) { (nodes[annotation].left) } else { annotation };
     resolve_type_name(source, nodes, bindings, work, state, marker);
-    if (state.diagnostic != 0u8) { return; } else {};
+    if (state.diagnostic != 0u8) return;
     if (explicit_owner) {
         resolve_handle_owner(source, nodes, bindings, work, state, nodes[annotation].right, false);
-        if (state.diagnostic != 0u8) { return; } else {};
+        if (state.diagnostic != 0u8) return;
     } else {};
     resolve_expression(source, nodes, bindings, work, state, nodes[at].right);
-    if (state.diagnostic != 0u8) { return; } else {};
+    if (state.diagnostic != 0u8) return;
     declare_name(source, nodes, bindings, work, state, binder_name(nodes, binding), at, handle_binding(), duplicate_binding());
     # A use within the same guard follows its successful binding. A sibling
     # or joined path needs a proof beyond source containment.
     if (state.diagnostic == 0u8) { (bindings[at].handle_guard <- state.guard):void; } else {};
 }
 
-func resolve_handle_construction(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
-                                 ref work:NameWork in W, ref state:NameState in R, at:u64) -> void
+func resolve_handle_construction(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                                 work:NameWork in W, state:NameState in R, at:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     if (state.delayed != no_node()) {
         reject_name(state, at, declaration_in_deferred_group());
@@ -591,16 +533,16 @@ func resolve_handle_construction(source:const SourceBytes in S, nodes:const Expr
         return;
     } else {};
     resolve_type_name(source, nodes, bindings, work, state, nodes[at].left);
-    if (state.diagnostic != 0u8) { return; } else {};
+    if (state.diagnostic != 0u8) return;
     if (nodes[at].kind == make_borrowed_handle_node()) {
         resolve_handle_owner(source, nodes, bindings, work, state, nodes[at].number, true);
-        if (state.diagnostic != 0u8) { return; } else {};
+        if (state.diagnostic != 0u8) return;
     } else {};
     resolve_list(source, nodes, bindings, work, state, nodes[at].right);
 }
 
-func resolve_defer(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
-                   ref work:NameWork in W, ref state:NameState in R, at:u64) -> void
+func resolve_defer(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                   work:NameWork in W, state:NameState in R, at:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     if (state.delayed != no_node()) {
         reject_name(state, at, nested_defer_in_drain());
@@ -615,28 +557,28 @@ func resolve_defer(source:const SourceBytes in S, nodes:const ExprNodes in N, re
     return;
 }
 
-func resolve_record_initializer(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
-                                 ref work:NameWork in W, ref state:NameState in R, body:u64) -> void
+func resolve_record_initializer(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                                 work:NameWork in W, state:NameState in R, body:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
-    if (body == no_node()) { return; } else {};
+    if (body == no_node()) return;
     val tail <- nodes[body].left;
     val item <- first_item(nodes, tail);
     val field <- no_node();
     for (unused in 0u64 .. syntax_len(nodes)) {
-        if (item == no_node()) { return; } else {};
+        if (item == no_node()) return;
         field <- nodes[item].right;
         if (nodes[field].kind != initializer_assignment_node() || nodes[nodes[field].left].kind != name_node()) {
             reject_name(state, field, unsupported_ordinary_construction());
             return;
         } else {};
         resolve_expression(source, nodes, bindings, work, state, nodes[field].right);
-        if (state.diagnostic != 0u8 || item == tail) { return; } else {};
-        (item <- work[item].next):void;
+        if (state.diagnostic != 0u8 || item == tail) return;
+        item <- work[item].next;
     };
 }
 
-func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
-                          ref work:NameWork in W, ref state:NameState in R, at:u64) -> void
+func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                          work:NameWork in W, state:NameState in R, at:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     if (state.delayed != no_node()) {
         reject_name(state, at, declaration_in_deferred_group());
@@ -651,7 +593,7 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
         resolve_expression(source, nodes, bindings, work, state, nodes[requested].left);
     } else {
         resolve_type_name(source, nodes, bindings, work, state, requested);
-        if (state.diagnostic != 0u8) { return; } else {};
+        if (state.diagnostic != 0u8) return;
         val kind <- bindings[requested].kind;
         val definition <- bindings[requested].declaration;
         record_initializer <- (kind == record_type() && nodes[nodes[definition].left].kind != data_parent_node()) ||
@@ -661,11 +603,11 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
             return;
         } else {};
     };
-    if (state.diagnostic != 0u8) { return; } else {};
+    if (state.diagnostic != 0u8) return;
     val owner_name <- nodes[nodes[at].right].right;
     if (owner_name != no_node()) {
         resolve_owner(source, nodes, bindings, work, state, owner_name);
-        if (state.diagnostic != 0u8) { return; } else {};
+        if (state.diagnostic != 0u8) return;
     } else {};
     val body <- construction_body(nodes, at);
     if (record_initializer) {
@@ -673,15 +615,15 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
     } else { resolve_expression(source, nodes, bindings, work, state, body); };
 }
 
-func resolve_range(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
-                   ref work:NameWork in W, ref state:NameState in R, at:u64) -> void
+func resolve_range(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                   work:NameWork in W, state:NameState in R, at:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     val header <- nodes[at].left;
     bindings[header].scope <- state.scope_node;
     resolve_expression(source, nodes, bindings, work, state, nodes[header].left);
-    if (state.diagnostic != 0u8) { return; } else {};
+    if (state.diagnostic != 0u8) return;
     resolve_expression(source, nodes, bindings, work, state, nodes[header].right);
-    if (state.diagnostic != 0u8) { return; } else {};
+    if (state.diagnostic != 0u8) return;
 
     val used <- state.used;
     val first <- state.first;
@@ -706,38 +648,38 @@ func resolve_range(source:const SourceBytes in S, nodes:const ExprNodes in N, re
     (state.loop_arm <- enclosing_arm):void;
 }
 
-func resolve_here_receivers(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
-                            ref work:NameWork in W, ref state:NameState in R, tail:u64) -> void
+func resolve_here_receivers(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                            work:NameWork in W, state:NameState in R, tail:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     val receiver <- first_item(nodes, tail);
     val binding <- no_node();
     val annotation <- no_node();
     for (unused in 0u64 .. syntax_len(nodes)) {
-        if (receiver == no_node()) { return; } else {};
+        if (receiver == no_node()) return;
         binding <- nodes[receiver].right;
         if (nodes[binding].kind == typed_name_node()) {
             annotation <- nodes[binding].right;
             if (nodes[annotation].kind == owned_type_node()) {
                 resolve_type_name(source, nodes, bindings, work, state, nodes[annotation].left);
-                if (state.diagnostic != 0u8) { return; } else {};
+                if (state.diagnostic != 0u8) return;
                 resolve_handle_owner(source, nodes, bindings, work, state, nodes[annotation].right, false);
             } else {
                 resolve_type_name(source, nodes, bindings, work, state, annotation);
             };
-            if (state.diagnostic != 0u8) { return; } else {};
+            if (state.diagnostic != 0u8) return;
         } else {};
         declare_name(source, nodes, bindings, work, state, binder_name(nodes, binding),
                      receiver, here_receiver_binding(), duplicate_binding());
-        if (state.diagnostic != 0u8) { return; } else {};
-        (receiver <- work[receiver].next):void;
+        if (state.diagnostic != 0u8) return;
+        receiver <- work[receiver].next;
     };
 }
 
-func resolve_here_call(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
-                       ref work:NameWork in W, ref state:NameState in R, at:u64) -> void
+func resolve_here_call(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                       work:NameWork in W, state:NameState in R, at:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     resolve_expression(source, nodes, bindings, work, state, nodes[at].left);
-    if (state.diagnostic != 0u8) { return; } else {};
+    if (state.diagnostic != 0u8) return;
     val supplied <- nodes[at].right;
     val body <- nodes[supplied].right;
     val first <- state.first;
@@ -762,13 +704,13 @@ func resolve_here_call(source:const SourceBytes in S, nodes:const ExprNodes in N
     (state.handoff <- target):void;
 }
 
-func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
-                         ref work:NameWork in W, ref state:NameState in R, at:u64) -> void
+func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                         work:NameWork in W, state:NameState in R, at:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
-    if (at == no_node()) { return; } else {};
+    if (at == no_node()) return;
     bindings[at].scope <- state.scope_node;
     val kind <- nodes[at].kind;
-    if (kind == literal_node() || kind == narrow_integer_node() || kind == bool_node()) { return; } else {};
+    if (kind == literal_node() || kind == narrow_integer_node() || kind == bool_node()) return;
     if (kind == name_node() || kind == symbol_node()) {
         resolve_value(source, nodes, bindings, work, state, at);
         return;
@@ -786,7 +728,7 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
     } else {};
     if (kind == conditional_node()) {
         resolve_expression(source, nodes, bindings, work, state, nodes[at].left);
-        if (state.diagnostic != 0u8) { return; } else {};
+        if (state.diagnostic != 0u8) return;
         val guard <- state.guard;
         val chosen <- nodes[at].right;
         state.guard <- chosen;
@@ -836,7 +778,7 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
     if (integer_arithmetic(kind) || kind == compare_node() || kind == index_access_node() || is_transfer(nodes, at) ||
         logical_binary(kind)) {
         resolve_expression(source, nodes, bindings, work, state, nodes[at].left);
-        if (state.diagnostic != 0u8) { return; } else {};
+        if (state.diagnostic != 0u8) return;
         val enclosing_guard <- state.guard;
         if (logical_binary(kind)) { (state.guard <- nodes[at].right):void; } else {};
         resolve_expression(source, nodes, bindings, work, state, nodes[at].right);
@@ -846,25 +788,24 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
     reject_name(state, at, invalid_module_tree());
 }
 
-func record_declaration(kind:u8) -> bool {
+export func record_declaration(kind:u8) -> bool {
     return kind == data_record_node() || kind == c_record_node();
 }
 
-func declaration_requires_native_output(kind:u8) -> bool {
+export func declaration_requires_native_output(kind:u8) -> bool {
     return kind == c_handle_type_node() || record_declaration(kind) || kind == array_declaration_node() ||
         kind == c_procedure_node() || kind == export_node() || kind == export_from_node();
 }
 
 func type_declaration_name(nodes:const ExprNodes in N, form:u64) -> u64 where {const owner N} {
     val head <- nodes[form].left;
-    if (nodes[head].kind == data_parent_node()) { return nodes[head].left; } else {};
+    if (nodes[head].kind == data_parent_node()) return nodes[head].left;
     return head;
 }
 
-func definition_name(nodes:const ExprNodes in N, form:u64) -> u64 where {const owner N} {
-    if (nodes[form].kind == callable_node() || nodes[form].kind == c_procedure_node()) {
+export func definition_name(nodes:const ExprNodes in N, form:u64) -> u64 where {const owner N} {
+    if (nodes[form].kind == callable_node() || nodes[form].kind == c_procedure_node())
         return nodes[callable_head(nodes, form)].left;
-    } else {};
     return type_declaration_name(nodes, form);
 }
 
@@ -874,8 +815,8 @@ func same_selected_identity(selected:const SelectedExports in E, left:u64, right
         selected[left].origin_module == selected[right].origin_module && selected[left].identity == selected[right].identity;
 }
 
-func register_module(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
-                      selected:const SelectedExports in E, ref work:NameWork in W, ref state:NameState in R,
+func register_module(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                      selected:const SelectedExports in E, work:NameWork in W, state:NameState in R,
                       first:u64, allow_families:bool) -> void
     where {const owner S, const owner N, owner B, const owner E, owner W, owner R} {
     val item <- first;
@@ -885,7 +826,7 @@ func register_module(source:const SourceBytes in S, nodes:const ExprNodes in N, 
     val found <- no_node();
     val kind <- ordinary_selection();
     for (unused in 0u64 .. syntax_len(nodes)) {
-        if (item == no_node()) { return; } else {};
+        if (item == no_node()) return;
         form <- nodes[item].right;
         form_kind <- nodes[form].kind;
         if (form_kind == c_handle_type_node() || record_declaration(form_kind) || form_kind == array_declaration_node()) {
@@ -916,13 +857,13 @@ func register_module(source:const SourceBytes in S, nodes:const ExprNodes in N, 
             };
             remember(bindings, form, bindings[name].declaration, callable_binding());
         } else {};
-        if (state.diagnostic != 0u8) { return; } else {};
-        (item <- work[item].next):void;
+        if (state.diagnostic != 0u8) return;
+        item <- work[item].next;
     };
 }
 
-func register_c_procedure(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
-                          ref work:NameWork in W, ref state:NameState in R, form:u64) -> void
+func register_c_procedure(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                          work:NameWork in W, state:NameState in R, form:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     val header <- nodes[form].left;
     val name <- nodes[signature_head(nodes, header)].left;
@@ -940,82 +881,82 @@ func register_c_procedure(source:const SourceBytes in S, nodes:const ExprNodes i
     remember(bindings, form, form, kind);
 }
 
-func register_native_procedures(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
-                                ref work:NameWork in W, ref state:NameState in R, first:u64) -> void
+func register_native_procedures(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                                work:NameWork in W, state:NameState in R, first:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     val item <- first;
     val form <- no_node();
     for (unused in 0u64 .. syntax_len(nodes)) {
-        if (item == no_node()) { return; } else {};
+        if (item == no_node()) return;
         form <- nodes[item].right;
         if (nodes[form].kind == c_procedure_node()) {
             register_c_procedure(source, nodes, bindings, work, state, form);
-            if (state.diagnostic != 0u8) { return; } else {};
+            if (state.diagnostic != 0u8) return;
         } else {};
-        (item <- work[item].next):void;
+        item <- work[item].next;
     };
 }
 
-func register_owners(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
-                      ref work:NameWork in W, ref state:NameState in R, head:u64) -> void
+func register_owners(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                      work:NameWork in W, state:NameState in R, head:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     val clause <- work[head].next;
     for (unused in 0u64 .. syntax_len(nodes)) {
-        if (clause == no_node()) { return; } else {};
+        if (clause == no_node()) return;
         if (nodes[clause].kind == owner_clause_node()) {
             declare_name(source, nodes, bindings, work, state, nodes[clause].right, clause, owner_binding(), duplicate_binding());
-            if (state.diagnostic != 0u8) { return; } else {};
+            if (state.diagnostic != 0u8) return;
         } else {};
-        (clause <- work[clause].next):void;
+        clause <- work[clause].next;
     };
 }
 
-func resolve_header_types(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
-                           work:const NameWork in W, ref state:NameState in R, head:u64) -> void
+func resolve_header_types(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                           work:const NameWork in W, state:NameState in R, head:u64) -> void
     where {const owner S, const owner N, owner B, const owner W, owner R} {
     val clause <- work[head].next;
     for (unused in 0u64 .. syntax_len(nodes)) {
-        if (clause == no_node()) { return; } else {};
+        if (clause == no_node()) return;
         if (nodes[clause].kind != owner_clause_node()) {
             resolve_type_name(source, nodes, bindings, work, state, nodes[clause].right);
-            if (state.diagnostic != 0u8) { return; } else {};
+            if (state.diagnostic != 0u8) return;
         } else {};
-        (clause <- work[clause].next):void;
+        clause <- work[clause].next;
     };
 }
 
-func resolve_formals(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
-                      ref work:NameWork in W, ref state:NameState in R, first:u64) -> void
+func resolve_formals(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                      work:NameWork in W, state:NameState in R, first:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     val parameter <- first;
     val binding <- no_node();
     for (unused in 0u64 .. syntax_len(nodes)) {
-        if (parameter == no_node()) { return; } else {};
+        if (parameter == no_node()) return;
         if (nodes[parameter].kind == here_parameter_node()) {
             resolve_here_formal(source, nodes, bindings, work, state, parameter);
         } else {
             binding <- nodes[parameter].right;
             resolve_annotation(source, nodes, bindings, work, state, binding);
-            if (state.diagnostic != 0u8) { return; } else {};
+            if (state.diagnostic != 0u8) return;
             declare_name(source, nodes, bindings, work, state, binder_name(nodes, binding),
                          parameter, formal_binding(), duplicate_binding());
         };
-        if (state.diagnostic != 0u8) { return; } else {};
-        (parameter <- work[parameter].next):void;
+        if (state.diagnostic != 0u8) return;
+        parameter <- work[parameter].next;
     };
 }
 
-func resolve_here_formal(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
-                         ref work:NameWork in W, ref state:NameState in R, callback_entry:u64) -> void
+func resolve_here_formal(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                         work:NameWork in W, state:NameState in R, callback_entry:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     val callback <- signature_head(nodes, nodes[callback_entry].right);
     val enclosing_first <- state.first;
     val enclosing_used <- state.used;
     state.first <- enclosing_used;
     resolve_header_types(source, nodes, bindings, work, state, callback);
-    if (state.diagnostic != 0u8) { return; } else {};
+    if (state.diagnostic != 0u8) return;
     resolve_formals(source, nodes, bindings, work, state, first_item(nodes, nodes[callback].right));
-    if (state.diagnostic != 0u8) { return; } else {};
+    if (state.diagnostic != 0u8) return;
     state.first <- enclosing_first;
     state.used <- enclosing_used;
     # Only the callback's name enters the receiver's parameter scope.
@@ -1029,57 +970,57 @@ func has_owner_input(nodes:const ExprNodes in N, bindings:const NameBindings in 
     val binding <- no_node();
     val annotation <- no_node();
     for (unused in 0u64 .. syntax_len(nodes)) {
-        if (input == no_node()) { return false; } else {};
+        if (input == no_node()) return false;
         if (nodes[input].kind != here_parameter_node()) {
             binding <- nodes[input].right;
             annotation <- nodes[binding].right;
             if (nodes[annotation].kind == owned_type_node() &&
                 bindings[nodes[annotation].right].declaration == clause &&
-                (readonly_owner || nodes[binding].number != readonly_declaration())) { return true; } else {};
+                (readonly_owner || nodes[binding].number != readonly_declaration())) return true;
         } else {};
-        (input <- work[input].next):void;
+        input <- work[input].next;
     };
     return false;
 }
 
 func check_owner_inputs(nodes:const ExprNodes in N, bindings:const NameBindings in B, work:const NameWork in W,
-                        ref state:NameState in R, head:u64) -> void
+                        state:NameState in R, head:u64) -> void
     where {const owner N, const owner B, const owner W, owner R} {
     val first <- first_item(nodes, nodes[head].right);
     val clause <- work[head].next;
     for (unused in 0u64 .. syntax_len(nodes)) {
-        if (clause == no_node()) { return; } else {};
+        if (clause == no_node()) return;
         if (nodes[clause].kind == owner_clause_node() && !has_owner_input(nodes, bindings, work, first, clause)) {
             reject_name(state, clause, if (nodes[clause].number == readonly_declaration()) {
                 owner_without_input()
             } else { owner_without_writable_input() });
             return;
         } else {};
-        (clause <- work[clause].next):void;
+        clause <- work[clause].next;
     };
 }
 
-func resolve_callable(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
-                      ref work:NameWork in W, ref state:NameState in R, definition:u64) -> void
+func resolve_callable(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                      work:NameWork in W, state:NameState in R, definition:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     val head <- callable_head(nodes, definition);
     val native <- nodes[definition].kind == c_procedure_node();
     state.scope_node <- definition;
     register_owners(source, nodes, bindings, work, state, head);
-    if (state.diagnostic != 0u8) { return; } else {};
+    if (state.diagnostic != 0u8) return;
     resolve_header_types(source, nodes, bindings, work, state, head);
-    if (state.diagnostic != 0u8) { return; } else {};
+    if (state.diagnostic != 0u8) return;
     resolve_formals(source, nodes, bindings, work, state, first_item(nodes, nodes[head].right));
     if (state.diagnostic == 0u8 && !native) { check_owner_inputs(nodes, bindings, work, state, head); } else {};
-    if (state.diagnostic != 0u8) { return; } else {};
+    if (state.diagnostic != 0u8) return;
     if (nodes[definition].right != no_node()) {
         resolve_expression(source, nodes, bindings, work, state, nodes[definition].right);
     } else {};
     (state.used <- state.module_names):void;
 }
 
-func resolve_type_declaration(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
-                              ref work:NameWork in W, ref state:NameState in R, form:u64) -> void
+func resolve_type_declaration(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                              work:NameWork in W, state:NameState in R, form:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     if (nodes[form].kind == c_handle_type_node()) {
         if (nodes[form].right != no_node()) {
@@ -1096,14 +1037,14 @@ func resolve_type_declaration(source:const SourceBytes in S, nodes:const ExprNod
     val header <- nodes[form].left;
     if (nodes[header].kind == data_parent_node()) {
         resolve_type_name(source, nodes, bindings, work, state, nodes[header].right);
-        if (state.diagnostic != 0u8) { return; } else {};
+        if (state.diagnostic != 0u8) return;
     } else {};
     resolve_formals(source, nodes, bindings, work, state, first_item(nodes, nodes[form].right));
     (state.used <- state.module_names):void;
 }
 
-func resolve_module_form(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
-                         ref work:NameWork in W, ref state:NameState in R, form:u64, definitions:bool) -> void
+func resolve_module_form(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                         work:NameWork in W, state:NameState in R, form:u64, definitions:bool) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     val kind <- nodes[form].kind;
     if (!definitions) {
@@ -1132,30 +1073,30 @@ func resolve_module_form(source:const SourceBytes in S, nodes:const ExprNodes in
     } else {};
 }
 
-func resolve_module_bodies(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
-                           ref work:NameWork in W, ref state:NameState in R, first:u64, definitions:bool) -> void
+func resolve_module_bodies(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                           work:NameWork in W, state:NameState in R, first:u64, definitions:bool) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     val item <- first;
     for (unused in 0u64 .. syntax_len(nodes)) {
-        if (item == no_node()) { return; } else {};
+        if (item == no_node()) return;
         resolve_module_form(source, nodes, bindings, work, state, nodes[item].right, definitions);
-        if (state.diagnostic != 0u8) { return; } else {};
-        (item <- work[item].next):void;
+        if (state.diagnostic != 0u8) return;
+        item <- work[item].next;
     };
 }
 
 # Consume a successful parse from the same source revision. Both work arrays
 # need one element per syntax node. A populated binding identifies a declaration
 # in the syntax buffer or a builtin kind. On failure, use only the diagnostic.
-func resolve_module_names(source:const SourceBytes in S, nodes:const ExprNodes in N, tree:const ParseResult in T,
-                           selected:const SelectedExports in E, ref bindings:NameBindings in B, ref work:NameWork in W,
-                           declarations_only:bool, ref report:NameResolutionResult in R) -> bool
+export func resolve_module_names(source:const SourceBytes in S, nodes:const ExprNodes in N, tree:const ParseResult in T,
+                                  selected:const SelectedExports in E, bindings:NameBindings in B, work:NameWork in W,
+                                  declarations_only:bool, report:NameResolutionResult in R) -> bool
     where {const owner S, const owner N, const owner T, const owner E, owner B, owner W, owner R} {
     report.node <- no_node();
     report.enclosing_defer <- no_node();
     report.diagnostic <- invalid_module_tree();
     if (tree.diagnostic != 0u8 || tree.used == 0u64 || tree.used > syntax_len(nodes) ||
-        tree.root != tree.used - 1u64 || nodes[tree.root].kind != module_node()) { return false; } else {};
+        tree.root != tree.used - 1u64 || nodes[tree.root].kind != module_node()) return false;
     if (intrinsic (len)(bindings) < tree.used || intrinsic (len)(work) < tree.used ||
         intrinsic (len)(selected) < tree.used) {
         report.diagnostic <- name_storage_exhausted();
@@ -1193,58 +1134,3 @@ func resolve_module_names(source:const SourceBytes in S, nodes:const ExprNodes i
     report.diagnostic <- state.diagnostic;
     return state.diagnostic == 0u8;
 }
-
-export NameBindings;
-export definition_name;
-export NameBinding;
-export NameWork;
-export NameWorkSlot;
-export NameResolutionResult;
-export resolve_module_names;
-export ordinary_selection;
-export symbolic_selection;
-export callable_binding;
-export formal_binding;
-export local_binding;
-export loop_index;
-export handle_binding;
-export here_receiver_binding;
-export owner_binding;
-export exception_binding;
-export builtin_u64;
-export builtin_void;
-export builtin_bool;
-export c_handle_type;
-export record_type;
-export c_constructor;
-export c_operation;
-export c_entry;
-export native_scalar;
-export builtin_u8;
-export builtin_u32;
-export builtin_i64;
-export builtin_f32;
-export builtin_f64;
-export array_type;
-export lexical_owner;
-export unresolved_name;
-export expected_symbol_binding;
-export expected_type_binding;
-export expected_owner_binding;
-export duplicate_binding;
-export unproved_module_binding;
-export unproved_guard_binding;
-export invalid_module_tree;
-export name_storage_exhausted;
-export nested_defer_in_drain;
-export declaration_in_deferred_group;
-export unsupported_module_declaration;
-export unsupported_ordinary_construction;
-export expected_value_binding;
-export first_item;
-export callable_head;
-export signature_head;
-export signature_clause;
-export declaration_requires_native_output;
-export record_declaration;
-export enclosing_callable;

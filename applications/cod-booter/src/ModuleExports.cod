@@ -1,16 +1,11 @@
 using "SourceStorage.cod" SourceBytes;
-using "ParserStorage.cod" ExprNodes;
-using "ParserStorage.cod" len as syntax_len;
-using "ParserStorage.cod" no_node;
-using "ParserStorage.cod" module_node;
-using "ParserStorage.cod" module_selection;
-using "ParserStorage.cod" symbol_node;
+using "ParserStorage.cod" {
+    ExprNodes, len as syntax_len, no_node, module_node, module_selection, symbol_node,
+};
 using "ExpressionParser.cod" ParseResult;
+using "ModuleExportStorage.cod" { ModuleExport, ModuleExports };
 
-using "ModuleExportStorage.cod" ModuleExport;
-using "ModuleExportStorage.cod" ModuleExports;
-
-data SelectedExport {
+export data SelectedExport {
     # Input from dependency discovery. Zero selects the builtin namespace.
     dependency_module:u64;
     identity:u64;
@@ -21,38 +16,38 @@ data SelectedExport {
     owner_identity:u64;
     shape:u8;
 }
-array SelectedExports[u64]:SelectedExport;
+export array SelectedExports[u64]:SelectedExport;
 
-data ExportResolutionResult {
+export data ExportResolutionResult {
     diagnostic:u8;
     node:u64;
 }
 
-func exception_type_export() -> u8 { return 1u8; }
-func symbol_export() -> u8 { return 2u8; }
-func native_handle_export() -> u8 { return 3u8; }
-func record_export() -> u8 { return 4u8; }
-func array_export() -> u8 { return 5u8; }
-func nominal_exception_export() -> u8 { return 6u8; }
-func callable_export() -> u8 { return 7u8; }
-func print_export_identity() -> u64 { return 0u64; }
-func exception_root_identity() -> u64 { return 0u64; }
-func null_pointer_identity() -> u64 { return 4u64; }
-func missing_return_identity() -> u64 { return 5u64; }
+export func exception_type_export() -> u8 { return 1u8; }
+export func symbol_export() -> u8 { return 2u8; }
+export func native_handle_export() -> u8 { return 3u8; }
+export func record_export() -> u8 { return 4u8; }
+export func array_export() -> u8 { return 5u8; }
+export func nominal_exception_export() -> u8 { return 6u8; }
+export func callable_export() -> u8 { return 7u8; }
+export func print_export_identity() -> u64 { return 0u64; }
+export func exception_root_identity() -> u64 { return 0u64; }
+export func null_pointer_identity() -> u64 { return 4u64; }
+export func missing_return_identity() -> u64 { return 5u64; }
 
-func unproved_module_exports() -> u8 { return 1u8; }
-func missing_module_export() -> u8 { return 2u8; }
-func wrong_export_kind() -> u8 { return 3u8; }
-func export_storage_exhausted() -> u8 { return 4u8; }
-func invalid_export_tree() -> u8 { return 5u8; }
+export func unproved_module_exports() -> u8 { return 1u8; }
+export func missing_module_export() -> u8 { return 2u8; }
+export func wrong_export_kind() -> u8 { return 3u8; }
+export func export_storage_exhausted() -> u8 { return 4u8; }
+export func invalid_export_tree() -> u8 { return 5u8; }
 
-func same_name(source:const SourceBytes in S, first:u64, past:u64,
-               spellings:const SourceBytes in B, name_first:u64, name_past:u64) -> bool
+export func same_name(source:const SourceBytes in S, first:u64, past:u64,
+                      spellings:const SourceBytes in B, name_first:u64, name_past:u64) -> bool
     where {const owner S, const owner B} {
     val length <- past - first;
-    if (length != name_past - name_first) { return false; } else {};
+    if (length != name_past - name_first) return false;
     for (offset in 0u64 .. length) {
-        if (source[first + offset] != spellings[name_first + offset]) { return false; } else {};
+        if (source[first + offset] != spellings[name_first + offset]) return false;
     };
     return true;
 }
@@ -65,10 +60,10 @@ func same_module_path(source:const SourceBytes in S, first:u64, past:u64,
     val position <- first + 1u64;
     val close_quote <- past - 1u64;
     for (at in module_first .. module_past) {
-        if (position >= close_quote) { return false; } else {};
+        if (position >= close_quote) return false;
         if (source[position] == 92u8) { (position <- position + 1u64):void; } else {}; # backslash
-        if (source[position] != spellings[at]) { return false; } else {};
-        (position <- position + 1u64):void;
+        if (source[position] != spellings[at]) return false;
+        position <- position + 1u64;
     };
     return position == close_quote;
 }
@@ -80,26 +75,26 @@ func builtin_path(source:const SourceBytes in S, first:u64, past:u64) -> bool wh
         source[first + 3u64] == 100u8 && source[first + 4u64] == 58u8;
 }
 
-func next_module_dependency(source:const SourceBytes in S, nodes:const ExprNodes in N, used:u64, start:u64) -> u64
+export func next_module_dependency(source:const SourceBytes in S, nodes:const ExprNodes in N, used:u64, start:u64) -> u64
     where {const owner S, const owner N} {
-    if (used > syntax_len(nodes) || start >= used) { return no_node(); } else {};
+    if (used > syntax_len(nodes) || start >= used) return no_node();
     val path <- no_node();
     for (at in start .. used) {
         if (module_selection(nodes[at].kind)) {
             path <- nodes[at].left;
-            if (!builtin_path(source, nodes[path].first, nodes[path].past)) { return at; } else {};
+            if (!builtin_path(source, nodes[path].first, nodes[path].past)) return at;
         } else {};
     };
     return no_node();
 }
 
-func prepare_module_dependencies(ref selected:SelectedExports in R, used:u64) -> bool where {owner R} {
-    if (used > intrinsic (len)(selected)) { return false; } else {};
-    for (at in 0u64 .. used) { (selected[at].dependency_module <- 0u64):void; };
+export func prepare_module_dependencies(selected:SelectedExports in R, used:u64) -> bool where {owner R} {
+    if (used > intrinsic (len)(selected)) return false;
+    for (at in 0u64 .. used) { selected[at].dependency_module <- 0u64; };
     return true;
 }
 
-func clear_selection(ref selected:SelectedExports in R, at:u64) -> void
+func clear_selection(selected:SelectedExports in R, at:u64) -> void
     where {owner R} {
     selected[at].identity <- 0u64;
     selected[at].kind <- 0u8;
@@ -110,7 +105,7 @@ func clear_selection(ref selected:SelectedExports in R, at:u64) -> void
     (selected[at].shape <- 0u8):void;
 }
 
-func select_export(exports:const ModuleExports in E, row:u64, ref selected:SelectedExports in R, at:u64) -> void
+func select_export(exports:const ModuleExports in E, row:u64, selected:SelectedExports in R, at:u64) -> void
     where {const owner E, owner R} {
     selected[at].identity <- exports[row].identity;
     selected[at].kind <- exports[row].kind;
@@ -123,7 +118,7 @@ func select_export(exports:const ModuleExports in E, row:u64, ref selected:Selec
 
 func resolve_selection(source:const SourceBytes in S, nodes:const ExprNodes in N, site:u64,
                        spellings:const SourceBytes in B, exports:const ModuleExports in E,
-                       ref selected:SelectedExports in R) -> u8
+                       selected:SelectedExports in R) -> u8
     where {const owner S, const owner N, const owner B, const owner E, owner R} {
     val path <- nodes[site].left;
     val name <- nodes[site].right;
@@ -135,7 +130,7 @@ func resolve_selection(source:const SourceBytes in S, nodes:const ExprNodes in N
     val dependency <- selected[site].dependency_module;
     val intrinsic_path <- builtin_path(source, path_first, path_past);
     if ((dependency == 0u64 && !intrinsic_path) || dependency == no_node() ||
-        (dependency != 0u64 && intrinsic_path)) { return unproved_module_exports(); } else {};
+        (dependency != 0u64 && intrinsic_path)) return unproved_module_exports();
     val diagnostic <- if (dependency == 0u64) { unproved_module_exports() } else { missing_module_export() };
     for (at in 0u64 .. intrinsic (len)(exports)) {
         if (exports[at].kind != 0u8 && exports[at].publishing_module == dependency &&
@@ -160,14 +155,14 @@ func resolve_selection(source:const SourceBytes in S, nodes:const ExprNodes in N
 # Consume a successful parse and the supplied dependency targets. The
 # publication table carries a checked prefix for those module identities.
 # On failure only the diagnostic is available.
-func resolve_module_exports(source:const SourceBytes in S, nodes:const ExprNodes in N, tree:const ParseResult in T,
-                            spellings:const SourceBytes in B, exports:const ModuleExports in E,
-                            ref selected:SelectedExports in X, ref report:ExportResolutionResult in R) -> bool
+export func resolve_module_exports(source:const SourceBytes in S, nodes:const ExprNodes in N, tree:const ParseResult in T,
+                                   spellings:const SourceBytes in B, exports:const ModuleExports in E,
+                                   selected:SelectedExports in X, report:ExportResolutionResult in R) -> bool
     where {const owner S, const owner N, const owner T, const owner B, const owner E, owner X, owner R} {
     report.node <- no_node();
     report.diagnostic <- invalid_export_tree();
     if (tree.diagnostic != 0u8 || tree.used == 0u64 || tree.used > syntax_len(nodes) ||
-        tree.root != tree.used - 1u64 || nodes[tree.root].kind != module_node()) { return false; } else {};
+        tree.root != tree.used - 1u64 || nodes[tree.root].kind != module_node()) return false;
     if (intrinsic (len)(selected) < tree.used) {
         report.diagnostic <- export_storage_exhausted();
         return false;
@@ -192,26 +187,3 @@ func resolve_module_exports(source:const SourceBytes in S, nodes:const ExprNodes
 
 export ModuleExport;
 export ModuleExports;
-export SelectedExport;
-export SelectedExports;
-export ExportResolutionResult;
-export resolve_module_exports;
-export same_name;
-export next_module_dependency;
-export prepare_module_dependencies;
-export exception_type_export;
-export symbol_export;
-export native_handle_export;
-export record_export;
-export array_export;
-export nominal_exception_export;
-export callable_export;
-export print_export_identity;
-export exception_root_identity;
-export null_pointer_identity;
-export missing_return_identity;
-export unproved_module_exports;
-export missing_module_export;
-export wrong_export_kind;
-export export_storage_exhausted;
-export invalid_export_tree;
