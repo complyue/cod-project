@@ -95,6 +95,8 @@ func callable_local_node() -> u8 { return 76u8; }
 func throw_with_cause_node() -> u8 { return 77u8; }
 func throw_named_node() -> u8 { return 78u8; }
 func rethrow_from_node() -> u8 { return 79u8; }
+func construction_type_query_node() -> u8 { return 80u8; }
+func initializer_assignment_node() -> u8 { return 81u8; }
 
 func integer_arithmetic(kind:u8) -> bool {
     return kind == add_node() || kind == subtract_node() || kind == multiply_node() ||
@@ -234,3 +236,5 @@ export callable_local_node;
 export throw_with_cause_node;
 export throw_named_node;
 export rethrow_from_node;
+export construction_type_query_node;
+export initializer_assignment_node;

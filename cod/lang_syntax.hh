@@ -11,6 +11,7 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -338,12 +339,26 @@ struct Expression {
   SourceSpan span = {};
   bool constructor_arguments = false;
   bool construction_type_query = false;
+  bool construction_label = false;
   // An explicit placement operand follows the initializer operands in children.
   ExceptionPlacement exception_placement = ExceptionPlacement::default_region;
-  const Expression *value_initializer() const {
+  const Expression *construction_initializer() const {
     const auto index = construction_type_query ? 1u : 0u;
     return initializer_block && children.size() > index && children[index]->kind == Kind::block
         ? children[index].get() : nullptr;
+  }
+  std::span<const std::unique_ptr<Expression>> initializer_items() const {
+    if (kind != Kind::make_object) return children;
+    const auto *block = construction_initializer();
+    if (!block) return {};
+    return block->children;
+  }
+  const Expression *initializer_field_label() const {
+    if (kind == Kind::field && !binding.empty()) return this;
+    if (kind != Kind::transfer && kind != Kind::rebind) return nullptr;
+    const auto *label = children.front().get();
+    while (label->kind == Kind::grouped) label = label->children.front().get();
+    return label->construction_label ? label : nullptr;
   }
   // A supplied body is stored after the written operands. It binds slot one.
   bool has_here_body() const { return !children.empty() && children.back()->kind == Kind::here_body; }
@@ -1241,12 +1256,24 @@ class Parser {
   }
 
   bool starts_field_initializer() const {
-    size_t field = 1;
+    size_t field = 0;
     while (is("(", field)) ++field;
     if (tokens_[cursor_ + field].kind != TokenKind::identifier) return false;
-    for (size_t close = 0; close + 1 < field; ++close)
-      if (!is(")", field + 1 + close)) return false;
-    return is("<-", field * 2) || is("=", field * 2);
+    for (size_t close = 1; close <= field; ++close)
+      if (!is(")", field + close)) return false;
+    return is("<-", field * 2 + 1) || is("=", field * 2 + 1);
+  }
+  Expr construction_label() {
+    const ParseEntry entry(recursion_, peek().at, "an initializer label");
+    if (is("(")) {
+      auto group = make(Expression::Kind::grouped, expect("("));
+      group->children.push_back(construction_label());
+      expect(")");
+      return finish(std::move(group));
+    }
+    auto label = make(Expression::Kind::name, name(TokenKind::identifier));
+    label->construction_label = true;
+    return finish(std::move(label));
   }
 
   Expr exception_construction(const Token &token) {
@@ -1405,14 +1432,8 @@ class Parser {
         if (expr->constructor_arguments) return expr;
         if (!is("{")) return expr;
         expr->initializer_block = true;
-        if (expr->construction_type_query || expr->annotation->kind != Type::named ||
-            (!is("}", 1) && !starts_field_initializer())) {
-          // The attached braces supply a value and introduce no full lexical owner.
-          auto initializer = block();
-          if (initializer->scoped) fail(initializer->at, "use an ordinary initializer block after make");
-          expr->children.push_back(std::move(initializer));
-          return expr;
-        }
+        expr->children.push_back(block(true));
+        return expr;
       }
       field_initializers(*expr);
       return expr;
@@ -1654,9 +1675,9 @@ class Parser {
     fail(token.at, "expected an expression; symbolic writes require 'effect'");
   }
   Expr expression(int minimum = 0, HereAttachment attachment = HereAttachment::immediate,
-                  bool owner_projection = true, bool type_suffix = true) {
+                  bool owner_projection = true, bool type_suffix = true, Expr prefix = {}) {
     const ParseEntry entry(recursion_, peek().at, "an expression");
-    auto operand = expression_impl(minimum, attachment, owner_projection);
+    auto operand = expression_impl(minimum, attachment, owner_projection, std::move(prefix));
     if (minimum != 0 || !type_suffix || !is(":")) return finish(std::move(operand));
     operand = finish(std::move(operand));
     auto typed = make(Expression::Kind::typed_expression, expect(":"));
@@ -1719,10 +1740,10 @@ class Parser {
     }
     return node;
   }
-  Expr expression_impl(int minimum, HereAttachment attachment, bool owner_projection) {
+  Expr expression_impl(int minimum, HereAttachment attachment, bool owner_projection, Expr prefix) {
     const bool attach = attachment == HereAttachment::immediate;
     const bool pipeline_operand = attachment == HereAttachment::pipeline_body;
-    auto left = primary(attachment, owner_projection);
+    auto left = prefix ? std::move(prefix) : primary(attachment, owner_projection);
     while (true) {
       if (attach && accepts_supplied_body(*left) && (is("{") || here_header())) {
         trailing_body(*left);
@@ -1795,17 +1816,19 @@ class Parser {
     }
     return left;
   }
-  Expr block() {
+  Expr block(bool initializer = false) {
     const ParseEntry entry(recursion_, peek().at, "a block");
-    return finish(block_impl());
+    return finish(block_impl(initializer));
   }
-  Expr block_impl() {
+  Expr block_impl(bool initializer) {
     auto result = make(Expression::Kind::block, expect("{"));
     result->scoped = is("{") && peek().at.span.first == result->at.span.past;
+    if (initializer && result->scoped) fail(result->at, "use an ordinary initializer block after make");
     if (result->scoped) expect("{");
     while (!take("}")) {
       if (peek().kind == TokenKind::end) fail(peek().at, "unterminated scope");
-      result->children.push_back(expression());
+      auto label = initializer && starts_field_initializer() ? construction_label() : Expr{};
+      result->children.push_back(expression(0, HereAttachment::immediate, true, true, std::move(label)));
       if (!is("}")) expect(";");
       else take(";");
     }

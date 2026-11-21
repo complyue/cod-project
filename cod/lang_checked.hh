@@ -5598,6 +5598,18 @@ class ScalarChecker {
       default: break;
       }
       if (expr.kind == K::make_borrowed_handle) use(expr.owner_name, expr.at, bound, query);
+      if (expr.kind == K::make_object && !expr.constructor_arguments) {
+        if (expr.construction_type_query) visit(*expr.children.front(), bound, true);
+        if (const auto *block = expr.construction_initializer()) {
+          // A field list has no lexical lookups at its labels. For a named
+          // scalar instantiation, the same syntax can write an available slot.
+          if (expr.annotation && expr.annotation->kind == Type::named &&
+              std::ranges::all_of(block->children, [](const auto &item) { return item->initializer_field_label() != nullptr; })) {
+            for (const auto &item : block->children) visit(*item->children.back(), bound, query);
+          } else visit(*block, bound, query);
+        }
+        return;
+      }
       if (expr.definition) {
         const auto &nested = *expr.definition;
         const auto &dependencies = free_bindings(nested);
@@ -7136,23 +7148,26 @@ class ScalarChecker {
   static std::vector<size_t> product_initializers(const CheckedSchema &schema, const Expression &expr) {
     std::set<size_t> initialized;
     std::vector<size_t> order;
-    for (const auto &item : expr.children) {
-      const auto index = product_field(schema, *item);
+    for (const auto &item : expr.initializer_items()) {
+      const auto *label = item->initializer_field_label();
+      if (!label) fail(item->at, "product make requires named field initializers");
+      const auto index = product_field(schema, *label);
       const auto &field = schema.fields[index];
       const bool direct = field.storage == PlaceKind::value;
-      if (direct && item->binding != "<-") fail(item->at, "a direct product field requires bits transfer '<-'");
-      if (!direct && item->binding != "=") fail(item->at, "a reference field initializer requires binding '='");
+      const bool rebind = item->kind == Expression::Kind::rebind || item->binding == "=";
+      if (direct && rebind) fail(label->at, "a direct product field requires bits transfer '<-'");
+      if (!direct && !rebind) fail(label->at, "a reference field initializer requires binding '='");
       if (!initialized.insert(index).second) {
         if (direct ? readonly_field(field) : field.source->fixed_binding)
-          fail(item->at, "readonly field '" + item->text + "' is initialized more than once");
-        if (direct && field.type.kind == Type::product) implementation_gap(item->at, "repeated inline product initialization");
+          fail(label->at, "readonly field '" + label->text + "' is initialized more than once");
+        if (direct && field.type.kind == Type::product) implementation_gap(label->at, "repeated inline product initialization");
       }
       order.push_back(index);
     }
     return order;
   }
   static const Expression &inline_product_initializer(const Expression &item) {
-    const auto &input = *item.children.front();
+    const auto &input = *item.children.back();
     if (input.kind != Expression::Kind::make_object)
       implementation_gap(item.at, "whole-product field initialization without an explicit nested make");
     if (input.construction_type_query) implementation_gap(input.at, "inline product construction through typeof");
@@ -7986,18 +8001,15 @@ class ScalarChecker {
     query.delayed_controls.clear();
     return type_evidence(*expr.children.front(), query);
   }
-  static const Expression *require_scalar_initializer(const Expression &expr) {
-    if (!expr.initializer_block) return nullptr;
-    const auto *initializer = expr.value_initializer();
-    if (!initializer) {
-      if (!expr.children.empty()) implementation_gap(expr.at, "a named scalar initializer beginning with a field-shaped assignment");
-      fail(expr.at, "scalar make requires an initializer block yielding one bits value");
-    }
-    return initializer;
-  }
   static bool reserves_value_receiver(const Expression &group, const Expression &initializer) {
     return group.declaration_kind == "val" && initializer.kind == Expression::Kind::make_object &&
         !initializer.initializer_block && !initializer.constructor_arguments;
+  }
+  static void check_scalar_initializer_label(const Expression &label) {
+    const auto &name = label.text;
+    if (expression_keyword(name) || (module_keyword(name) && !lexical_module_name(name)) || intrinsic_name(name) ||
+        name == "bool" || name == "void" || name == "region")
+      fail(label.at, "expected a lexical assignment destination in scalar initializer");
   }
   bool query_product_initializers(const Expression &expr, const Type &type, const QueryProductPlace &product,
                                   TypeEvidenceState &state, bool track_places, bool reached = true) const {
@@ -8006,9 +8018,11 @@ class ScalarChecker {
         compare_owners(owner_evidence(expr.owner_name, state, expr.at), state.full_scope_owner, &state) != OwnerMatch::satisfied)
       implementation_gap(expr.at, "product construction outside the current lexical owner");
     const auto order = product_initializers(schema, expr);
+    const auto items = expr.initializer_items();
     bool completes = true;
     for (size_t i = 0; i < order.size(); ++i) {
-      const auto &item = *expr.children[i];
+      const auto &item = *items[i];
+      const auto &at = item.initializer_field_label()->at;
       const auto &field = schema.fields[order[i]];
       const auto member = product.field(type.identity, order[i]);
       const bool direct = field.storage == PlaceKind::value;
@@ -8020,11 +8034,11 @@ class ScalarChecker {
           completes = query_product_initializers(nested, constructed, member, state, track_places, reached && completes) && completes;
         continue;
       }
-      const auto value = type_evidence(*item.children.front(), state, false, nullptr, nullptr,
+      const auto value = type_evidence(*item.children.back(), state, false, nullptr, nullptr,
           ExpectedTypeUse::materialization, reached && completes, direct ? EvidenceRead::payload : EvidenceRead::target);
       if (state.required && value && *value != Type::never) {
-        if (direct) transfer_type(*value, field.type, item.at);
-        else rebind_type(field.type, *value, item.at);
+        if (direct) transfer_type(*value, field.type, at);
+        else rebind_type(field.type, *value, at);
       }
       if (track_places && reached && completes && value && *value != Type::never) {
         if (direct) {
@@ -8032,15 +8046,15 @@ class ScalarChecker {
         } else {
           const auto &source = state.value;
           if (source.view != true || source.mixed_view)
-            implementation_gap(item.at, "reference field initialization requires an existing target or null");
-          rebind_access(field.source->read_only, source.read_only.value_or(true), item.at);
+            implementation_gap(at, "reference field initialization requires an existing target or null");
+          rebind_access(field.source->read_only, source.read_only.value_or(true), at);
           if ((*value != Type::null_ref || source.owner) &&
               compare_owners(source.owner, state.full_scope_owner, &state) != OwnerMatch::satisfied)
-            fail(item.at, "reference field target must share the containing product's owner");
+            fail(at, "reference field target must share the containing product's owner");
           if (field.storage == PlaceKind::reference) {
             if (source.nullable && state.target.presence != TargetPresence::present)
-              fail(item.at, "ref field requires a proven non-null target");
-            require_type_initialized(state, state.target, "ref field target", item.at);
+              fail(at, "ref field requires a proven non-null target");
+            require_type_initialized(state, state.target, "ref field target", at);
           }
           state.selections.assign({member, {member}}, state.target);
         }
@@ -10374,6 +10388,13 @@ class ScalarChecker {
     case K::touch: return Type::void_type;
     case K::name: {
       if (!state.complete) return {};
+      if (expr.construction_label) {
+        check_scalar_initializer_label(expr);
+        if (!state.bindings.contains(expr.text)) {
+          if (state.required) implementation_gap(expr.at, "initializer assignment requires an available lexical binding");
+          return {};
+        }
+      }
       const auto *expected_callable = callable_expectation(expected);
       check_type_capture(state, expr.text, expr.at);
       if (state.required) {
@@ -10660,7 +10681,7 @@ class ScalarChecker {
           if (compare_owners(selected, state.full_scope_owner, &state) != OwnerMatch::satisfied)
             implementation_gap(expr.at, "construction outside the current lexical owner");
         }
-        if (const auto *initializer = require_scalar_initializer(expr)) {
+        if (const auto *initializer = expr.construction_initializer()) {
           const auto value = type_evidence(*initializer, state);
           if (value == Type::never) return Type::never;
           if (state.required) transfer_type(*value, type, initializer->at);
@@ -10682,7 +10703,6 @@ class ScalarChecker {
       if (type.kind != Type::product && !state.required) return {};
       product_schema(type, expr.at);
       if (expr.construction_type_query) implementation_gap(expr.at, "product construction through typeof");
-      if (expr.value_initializer()) fail(expr.at, "product make requires named field initializers");
       const QueryProductPlace product{&expr, type.identity, {}};
       if (track_places) {
         if (std::ranges::any_of(state.imported_storage, [&](const auto &place) {
@@ -15417,7 +15437,7 @@ class ScalarChecker {
   }
   CheckedOperation check_scalar_construction(const Expression &expr, const Type &type, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, bool read, const Expression *receiver) {
-    const auto *initializer = require_scalar_initializer(expr);
+    const auto *initializer = expr.construction_initializer();
     const auto place = reserve_lexical_construction(type, expr.at, receiver);
     auto operation = construction_target(place, type);
     if (initializer) {
@@ -15438,13 +15458,14 @@ class ScalarChecker {
     const auto &schema = product_schema(type, expr.at);
     if (read) implementation_gap(expr.at, "reading a whole product as an independent value");
     if (expr.construction_type_query) implementation_gap(expr.at, "product construction through typeof");
-    if (expr.value_initializer()) fail(expr.at, "product make requires named field initializers");
     if (destination) check_construction_owner(expr, storage(*destination).scope);
     const auto order = product_initializers(schema, expr);
+    const auto items = expr.initializer_items();
     const auto root = destination ? *destination : reserve_product(type, expr.at);
     auto operation = construction_target(root, type);
     for (size_t i = 0; i < order.size(); ++i) {
-      const auto &item = *expr.children[i];
+      const auto &item = *items[i];
+      const auto &at = item.initializer_field_label()->at;
       const auto index = order[i];
       const auto &member = schema.fields[index];
       const bool direct = member.storage == PlaceKind::value;
@@ -15461,7 +15482,7 @@ class ScalarChecker {
         auto initialized = check_product_construction(nested, constructed, instance, operations, place);
         supplied = initialized.type;
         operations.insert_or_assign(&nested, std::move(initialized));
-      } else supplied = check(*item.children.front(), instance, operations, direct);
+      } else supplied = check(*item.children.back(), instance, operations, direct);
       field.type = supplied == Type::never ? Type{Type::never} : field.operand_type;
       operations.insert_or_assign(&item, std::move(field));
       if (supplied == Type::never) {
@@ -15470,30 +15491,30 @@ class ScalarChecker {
         continue;
       }
       if (inline_product) continue;
-      if (direct) transfer_type(supplied, member.type, item.at);
+      if (direct) transfer_type(supplied, member.type, at);
       if (operation.type == Type::never) continue;
-      const auto &source = operations.at(item.children.front().get());
+      const auto &source = operations.at(item.children.back().get());
       if (!direct) {
         if (!source.view || source.mixed_view)
-          implementation_gap(item.at, "reference field initialization requires an existing target or null");
-        rebind_type(member.type, supplied, item.at);
-        rebind_access(member.source->read_only, source.read_only, item.at);
-        require_live_view(source, item.at);
+          implementation_gap(at, "reference field initialization requires an existing target or null");
+        rebind_type(member.type, supplied, at);
+        rebind_access(member.source->read_only, source.read_only, at);
+        require_live_view(source, at);
         if (std::ranges::any_of(source.owners, [&](size_t owner) {
               return compare_owners(owner, storage(root).scope) != OwnerMatch::satisfied;
-            })) fail(item.at, "reference field target must share the containing product's owner");
+            })) fail(at, "reference field target must share the containing product's owner");
         if (member.storage == PlaceKind::reference) {
           if (proving_ && validating_ && lexical_.live && source.targets.contains(null_target))
-            fail(item.at, "ref field requires a proven non-null target");
-          require_initialized(source, item.at, "ref field target");
+            fail(at, "ref field requires a proven non-null target");
+          require_initialized(source, at, "ref field target");
         }
-        assign_targets(storage(place).binding, source, snapshot_selection(source, item.at));
+        assign_targets(storage(place).binding, source, snapshot_selection(source, at));
       }
       initialize(place);
       if (direct && member.type == Type::boolean) {
         CheckedOperation target;
         select_targets(target, {place});
-        write_predicate(target, predicate_of(operations.at(item.children.front().get())), item.at);
+        write_predicate(target, predicate_of(source), at);
       }
     }
     if (expr.initializer_block && operation.type != Type::never) {
@@ -15683,6 +15704,10 @@ class ScalarChecker {
       if (!expr.owner_name.empty()) operation.owners = {expr.owner_name == "here" ? cleanup_scope_ : named_owner(expr.owner_name, expr.at)};
       break;
     case K::name:
+      if (expr.construction_label) {
+        check_scalar_initializer_label(expr);
+        if (!lexical_.lookup(expr.text)) implementation_gap(expr.at, "initializer assignment requires an available lexical binding");
+      }
       if (native_loan == NativeLoanContext::borrow) {
         if (const auto binding = lexical_.lookup(expr.text); binding && bindings_->at(*binding).type.kind == Type::native_handle) {
           operation = read_native_loan(expr, *binding);
