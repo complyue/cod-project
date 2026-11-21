@@ -15,6 +15,7 @@ using "NameResolution.cod" { NameBindings, NameWork, first_item, callable_head, 
 using "OperandChecking.cod" {
     OperandFacts, scalar_kind, has_value_tail, independent_value, local_place, nullable_ptr,
     unreachable_case_item, misses_case_arm, tests_case_arm, case_guard_passes, case_guard_declines, case_guard_tests,
+    case_resumes_after_cleanup,
 };
 using "CompletionChecking.cod" {
     CompletionSites, can_continue, can_miss_return, present_target, absent_target, skipped_operand,
@@ -24,7 +25,7 @@ using "ModuleExports.cod" {
 };
 using "NativeCommands.cod" {
     NativeCommands, NativePlan, declare_function, begin_function, position_block, jump,
-    branch_equal, branch_catchable, write_defer_flag, branch_if_unregistered, unbind_local,
+    branch_equal, branch_catchable, write_flow_flag, branch_on_flow_flag, unbind_local,
     bind_local, use_local, compare_words, word_constant, copy_word, place_address, load_target,
     store_target, checked_add, checked_multiply, checked_subtract, checked_divide,
     checked_remainder, receive_parameter, pass_argument, invoke_function, print_word,
@@ -42,6 +43,9 @@ data LoweringState {
     caught_failure:u64;
     live:bool;
     local_return:bool;
+    scope_cleanup:u64;
+    scope_scan_flag:u64;
+    scope_scan_pending:bool;
     case_index:u64;
     case_join:u64;
     case_arm:u64;
@@ -926,8 +930,18 @@ func lower_expression(nodes:const ExprNodes in N, names:const NameBindings in B,
             plan.diagnostic <- native_unsupported();
             return;
         } else {};
-        state.case_resumed <- true;
-        finish_block(code, plan, state, state.case_next);
+        if (sites[at].cleanup_first == no_node()) {
+            state.case_resumed <- true;
+            finish_block(code, plan, state, state.case_next);
+        } else {
+            if (sites[at].cleanup_first != state.active_scope || state.scope_scan_flag == no_node()) {
+                plan.diagnostic <- native_unsupported();
+                return;
+            } else {};
+            state.scope_scan_pending <- true;
+            emit(code, plan, write_flow_flag(), state.scope_scan_flag, 1u64);
+            finish_block(code, plan, state, state.scope_cleanup);
+        };
         return;
     } else {};
     if (kind == case_failure_node()) {
@@ -942,10 +956,10 @@ func lower_expression(nodes:const ExprNodes in N, names:const NameBindings in B,
     } else {};
     if (kind == deferred_call_node()) {
         prepare_arguments(nodes, names, links, facts, sites, code, plan, state, nodes[at].right);
-        if (state.live) { emit(code, plan, write_defer_flag(), slot(at), 1u64); } else {};
+        if (state.live) { emit(code, plan, write_flow_flag(), slot(at), 1u64); } else {};
         return;
     } else {};
-    if (kind == deferred_block_node()) { emit(code, plan, write_defer_flag(), slot(at), 1u64); return; } else {};
+    if (kind == deferred_block_node()) { emit(code, plan, write_flow_flag(), slot(at), 1u64); return; } else {};
     if (kind == try_node()) {
         lower_try(nodes, names, links, facts, sites, code, plan, state, at, read_result);
         return;
@@ -985,7 +999,7 @@ func initialize_defer_flags(sites:const CompletionSites in S, code:NativeCommand
     val action <- sites[scope].last_defer;
     for (unused in 0u64 .. used) {
         if (action == no_node()) return;
-        emit(code, plan, write_defer_flag(), slot(action), 0u64);
+        emit(code, plan, write_flow_flag(), slot(action), 0u64);
         action <- sites[action].previous_defer;
     };
 }
@@ -1001,7 +1015,8 @@ func lower_delayed_block(nodes:const ExprNodes in N, names:const NameBindings in
     emit(code, plan, word_constant(), pending_category(), 0u64);
     state.exception_target <- next;
     val ready <- if (state.active_scope == state.active_function) { state.return_ready } else { no_node() };
-    val returned <- if (ready != no_node()) { new_block(plan) } else { next };
+    val scan_flag <- state.scope_scan_flag;
+    val returned <- if (ready != no_node() || scan_flag != no_node()) { new_block(plan) } else { next };
     state.return_target <- returned;
     state.caught_failure <- no_node();
     lower_node(nodes, names, links, facts, sites, code, plan, state, body);
@@ -1012,7 +1027,13 @@ func lower_delayed_block(nodes:const ExprNodes in N, names:const NameBindings in
         restore_failure(code, plan, saved);
         finish_block(code, plan, state, next);
     } else {};
-    forward_return(code, plan, state, returned, next, no_node(), ready);
+    if (scan_flag != no_node()) {
+        # This edge is reached only once a replacement return has been
+        # prepared and delivered by its enclosing guards and finalizers.
+        position(code, plan, state, returned);
+        emit(code, plan, write_flow_flag(), scan_flag, 0u64);
+        finish_block(code, plan, state, next);
+    } else { forward_return(code, plan, state, returned, next, no_node(), ready); };
 }
 
 func drain_scope(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L, facts:const OperandFacts in F,
@@ -1028,9 +1049,9 @@ func drain_scope(nodes:const ExprNodes in N, names:const NameBindings in B, link
         if (action == no_node() || plan.diagnostic != 0u8) return;
         invoke_block <- new_block(plan);
         next <- new_block(plan);
-        command(code, plan, branch_if_unregistered(), slot(action), 0u64, next, invoke_block);
+        command(code, plan, branch_on_flow_flag(), slot(action), 0u64, next, invoke_block);
         position(code, plan, state, invoke_block);
-        emit(code, plan, write_defer_flag(), slot(action), 0u64);
+        emit(code, plan, write_flow_flag(), slot(action), 0u64);
         if (nodes[action].kind == deferred_block_node()) {
             lower_delayed_block(nodes, names, links, facts, sites, code, plan, state, nodes[action].left, next);
         } else {
@@ -1063,8 +1084,18 @@ func lower_full_scope(nodes:const ExprNodes in N, names:const NameBindings in B,
     val outer_return_target <- state.return_target;
     val outer_return_slot <- state.return_slot;
     val outer_return <- state.local_return;
+    val outer_cleanup <- state.scope_cleanup;
+    val outer_scan_flag <- state.scope_scan_flag;
+    val outer_scan_pending <- state.scope_scan_pending;
     val cleanup <- new_block(plan);
+    val arm <- state.case_arm;
+    val takes_scan <- arm != no_node() && nodes[arm].right == scope && facts[scope].case_resume != 0u8;
+    val scan_flag <- if (takes_scan) { new_slot(plan) } else { no_node() };
     state.active_scope <- scope;
+    state.scope_cleanup <- cleanup;
+    state.scope_scan_flag <- scan_flag;
+    state.scope_scan_pending <- false;
+    if (takes_scan) { emit(code, plan, write_flow_flag(), scan_flag, 0u64); } else {};
     state.exception_target <- cleanup;
     state.return_target <- cleanup;
     val destination <- if (scalar_kind(facts[scope].kind)) { slot(scope) } else { no_node() };
@@ -1075,6 +1106,7 @@ func lower_full_scope(nodes:const ExprNodes in N, names:const NameBindings in B,
     lower_list(nodes, names, links, facts, sites, code, plan, state, nodes[scope].left, destination, false);
     if (plan.diagnostic != 0u8) return;
     val normal <- state.live || state.local_return;
+    val scan_pending <- state.scope_scan_pending && facts[arm].case_resume == case_resumes_after_cleanup();
     if (state.live) { finish_block(code, plan, state, cleanup); } else {};
     position(code, plan, state, cleanup);
     drain_scope(nodes, names, links, facts, sites, code, plan, state, scope);
@@ -1084,10 +1116,23 @@ func lower_full_scope(nodes:const ExprNodes in N, names:const NameBindings in B,
     state.return_target <- outer_return_target;
     state.return_slot <- outer_return_slot;
     state.local_return <- outer_return;
-    if (!resumes) { finish_block(code, plan, state, outer_exception); return; } else {};
+    state.scope_cleanup <- outer_cleanup;
+    state.scope_scan_flag <- outer_scan_flag;
+    state.scope_scan_pending <- outer_scan_pending;
+    if (!resumes && !scan_pending) { finish_block(code, plan, state, outer_exception); return; } else {};
     val ready <- new_block(plan);
     command(code, plan, branch_equal(), pending_category(), 0u64, ready, outer_exception);
     position(code, plan, state, ready);
+    if (scan_pending) {
+        state.case_resumed <- true;
+        if (!resumes) {
+            finish_block(code, plan, state, state.case_next);
+        } else {
+            val completed <- new_block(plan);
+            command(code, plan, branch_on_flow_flag(), scan_flag, 0u64, completed, state.case_next);
+            position(code, plan, state, completed);
+        };
+    } else {};
 }
 
 func lower_activation(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
@@ -1108,6 +1153,7 @@ func lower_activation(nodes:const ExprNodes in N, names:const NameBindings in B,
         active_function <- scope; active_scope <- scope; exception_target <- cleanup;
         return_target <- returned; return_slot <- return_slot; return_ready <- return_ready;
         caught_failure <- no_node(); live <- true; local_return <- false;
+        scope_cleanup <- no_node(); scope_scan_flag <- no_node(); scope_scan_pending <- false;
         case_index <- no_node(); case_join <- no_node(); case_arm <- no_node(); case_next <- no_node();
         case_read <- false; case_completed <- false; case_resumed <- false;
     };

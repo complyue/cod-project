@@ -24,7 +24,7 @@ using "NativeDeclarations.cod" {
 };
 using "OperandChecking.cod" {
     OperandFacts, CallOwners, OperandCheckResult, check_module_operands,
-    unsupported_case_subject, unsupported_case_pattern, unsupported_case_scope_transfer,
+    unsupported_case_subject, unsupported_case_pattern,
 };
 using "CompletionChecking.cod" {
     CompletionSites, CompletionCheckResult, check_module_completion, unsupported_case_transfer,
@@ -48,8 +48,7 @@ func invalid_catch_annotation() -> u8 { return 77u8; }
 
 export func rejected_unsupported_declaration(result:const ModuleBindingResult in R) -> bool where {const owner R} {
     if (result.stage == module_operands_failed())
-        return result.diagnostic == unsupported_case_subject() || result.diagnostic == unsupported_case_pattern() ||
-            result.diagnostic == unsupported_case_scope_transfer();
+        return result.diagnostic == unsupported_case_subject() || result.diagnostic == unsupported_case_pattern();
     if (result.stage == module_completion_failed()) return result.diagnostic == unsupported_case_transfer();
     return result.stage == module_binding_failed() &&
         (result.diagnostic == unsupported_module_declaration() || result.diagnostic == unsupported_array_length() ||
