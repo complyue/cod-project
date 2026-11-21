@@ -10,6 +10,17 @@
     "stdout": "6\n4\n"
   },
   {
+    "file": "nullable-case.cod",
+    "exit": 0,
+    "stdout": "11\n12\n13\n21\n22\n23\n31\n34\n"
+  },
+  {
+    "file": "nullable-case-missing-null.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "value case may finish without a result"
+  },
+  {
     "file": "contextual-own-calls.cod",
     "exit": 0,
     "stdout": "6\n",
