@@ -1,0 +1,37 @@
+using symbol "std:io" @print;
+
+func classify_present(subject:const bool in O) -> u64 where {const owner O} {
+    return if (subject) { 11u64 } else { 12u64 };
+}
+
+func classify_bool(ptr subject:const bool in O) -> u64 where {const owner O} {
+    return case subject of {
+        (true) -> { classify_present(subject) };
+        (null) -> { 13u64 };
+        () -> { classify_present(subject) };
+    };
+}
+
+enum Status:u64 { Start = 0; Done = 18446744073709551615; Finished = Done; }
+
+func classify_status(ptr subject:const Status in O) -> u64 where {const owner O} {
+    return case subject of {
+        (Finished) -> { 21u64 };
+        (Start) -> { 22u64 };
+        (null) -> { 23u64 };
+    };
+}
+
+val yes <- true;
+val no <- false;
+ptr missing_bool:bool = null in here;
+behave @print(classify_bool(yes));
+behave @print(classify_bool(no));
+behave @print(classify_bool(missing_bool));
+
+val done <- Done:Status;
+val start <- Start:Status;
+ptr missing_status:Status = null in here;
+behave @print(classify_status(done));
+behave @print(classify_status(start));
+behave @print(classify_status(missing_status));

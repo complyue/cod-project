@@ -225,7 +225,7 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
     else if (diagnostic->stage == 4 && diagnostic->code == 21)
         fputs(": error: const owner cannot supply allocation access to the callee\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 23)
-        fputs(": error: native case requires a nonnullable bool or enum subject in this compiler profile\n", stderr);
+        fputs(": error: native case requires a Boolean, enum, or null subject in this compiler profile\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 24)
         fputs(": error: native case pattern is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 25)
