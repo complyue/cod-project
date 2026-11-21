@@ -808,8 +808,10 @@ class Parser {
     }
     return type;
   }
-  Type signature_type(bool &read_only, std::string &mode) {
-    if (is("ptr") || is("ref") || is("val")) mode = tokens_[cursor_++].text;
+  Type signature_type(bool &read_only, std::string &mode, bool native_handles = false) {
+    if (is("ptr") || is("ref") || is("val") || (native_handles && is("handle") && !is("in", 1) && !is("where", 1) &&
+        !is("throws", 1) &&
+        tokens_[cursor_ + 1].kind == TokenKind::identifier)) mode = tokens_[cursor_++].text;
     read_only = take("const");
     if (is("region") || is("owned")) {
       if (read_only) fail(peek().at, "region target const belongs after the root annotation colon");
@@ -848,6 +850,8 @@ class Parser {
       fail(at, "a val result has no owner association; use ref T in O for a borrowed result");
     if ((mode == "ref" || mode == "ptr") && owner.empty())
       fail(at, "a ref/ptr result requires an explicit external owner: use in O");
+    if (mode == "handle" && owner.empty())
+      fail(at, "a handle result requires an explicit input owner: use in O");
   }
   std::vector<Parameter> protocol_fields() {
     expect("{");
@@ -1001,7 +1005,7 @@ class Parser {
     if (preceding_where) generic_clause(form);
     if (is("yields")) generator_contract(form);
     else if (take("->")) {
-      form.result_type = signature_type(form.result_const, form.result_kind);
+      form.result_type = signature_type(form.result_const, form.result_kind, true);
       if (take("in")) form.result_owner = ordinary_name().text;
     }
     result_kind(form.result_kind, form.result_owner, form.at);

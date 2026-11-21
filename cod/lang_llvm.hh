@@ -61,7 +61,8 @@ class LLVMEmission {
   // Transient native parameter roles shared by declarations, calls and entry.
   struct CallLayout {
     size_t operands = 0, owners = 0, captures = 0, retained = 0;
-    bool declaration_context = false, destination = false;
+    bool declaration_context = false;
+    bool callable_destination = false, native_borrow_destination = false;
     size_t here_formals = 0;
     bool here_group = false;
     size_t lexical_here = 0;
@@ -69,7 +70,9 @@ class LLVMEmission {
     size_t retained_begin() const { return captures_index() + (captures != 0); }
     size_t query_index() const { return retained_begin() + retained; }
     size_t result_index() const { return query_index() + declaration_context; }
-    size_t here_index() const { return result_index() + destination; }
+    size_t native_result_index() const { return result_index() + callable_destination; }
+    bool has_result_destination() const { return callable_destination || native_borrow_destination; }
+    size_t here_index() const { return native_result_index() + native_borrow_destination; }
     size_t here_count() const { return here_formals + lexical_here; }
     size_t parameter_count() const { return here_index() + here_count() + here_group; }
   };
@@ -995,7 +998,11 @@ class LLVMEmission {
       if (!instance && !query_environment_) throw std::logic_error("native call lacks its declaration evidence context");
       prepared.push_back(instance ? b_.getInt32(program_->instances[*instance].query_environment) : query_environment_);
     }
-    if (layout.destination) { destination = slot(scalar_, "callable.result"); prepared.push_back(destination); }
+    if (layout.callable_destination) {
+      destination = slot(scalar_, "callable.result");
+      prepared.push_back(destination);
+    }
+    if (layout.native_borrow_destination) prepared.push_back(slot(native_handle_pair(), "native.call.result"));
     llvm::Value *callee = target;
     if (here_values.size() != layout.here_formals)
       throw std::logic_error("native call disagrees with its here parameter roles");
@@ -2601,8 +2608,17 @@ class LLVMEmission {
       if (!expr.children.empty()) {
         value = emit_expression(*expr.children.front(), fact.borrowed_result ? Projection::target : Projection::value);
         if (!reachable()) return nullptr;
-        if (fact.borrowed_result) value = pack_view(value, expr, true);
-        else value = convert_result(expr, *expr.children.front(), value);
+        if (fact.borrowed_result) {
+          if (fact.operand_type.kind == Type::native_handle) {
+            // Cleanup can replace a pending return. Its selected descriptor
+            // must survive until the callable commits that completion.
+            auto *pair = native_handle_pair();
+            auto *pending = slot(pair, "native.pending.return");
+            b_.CreateStore(b_.CreateLoad(pair, value), pending);
+            value = pending;
+          }
+          value = pack_view(value, expr, true);
+        } else value = convert_result(expr, *expr.children.front(), value);
       }
       if (fact.here_exit) {
         if (!here_destination_) throw std::logic_error("here group has no protected destination");
@@ -2829,7 +2845,8 @@ class LLVMEmission {
     parameters.insert(parameters.end(), layout.owners, b_.getPtrTy());
     if (layout.captures) parameters.push_back(b_.getPtrTy());
     parameters.insert(parameters.end(), layout.retained + layout.declaration_context, b_.getInt32Ty());
-    if (layout.destination) parameters.push_back(b_.getPtrTy());
+    if (layout.callable_destination) parameters.push_back(b_.getPtrTy());
+    if (layout.native_borrow_destination) parameters.push_back(b_.getPtrTy());
     parameters.insert(parameters.end(), layout.here_count(), here_);
     if (layout.here_group) parameters.push_back(b_.getPtrTy());
     return llvm::Function::Create(llvm::FunctionType::get(outcome_, parameters, false),
@@ -2838,7 +2855,7 @@ class LLVMEmission {
   void declare_prepared_source(size_t id) {
     const auto &instance = program_->instances.at(id);
     const auto &layout = call_layouts_.at(instance.method);
-    if (layout.captures || layout.retained || layout.declaration_context || layout.destination ||
+    if (layout.captures || layout.retained || layout.declaration_context || layout.has_result_destination() ||
         !layout.here_formals || layout.here_formals > 2 || layout.lexical_here || layout.here_group)
       throw std::logic_error("unexpected parameter role in prepared producer");
     auto *entry = llvm::Function::Create(llvm::FunctionType::get(outcome_, {here_, b_.getPtrTy()}, false),
@@ -2872,7 +2889,7 @@ class LLVMEmission {
     const auto offered = reception.offered;
     const auto places = layout.operands - reception.selected.size();
     const auto handed_owners = inputs.here_input_owners;
-    if (layout.captures || layout.retained || layout.declaration_context || layout.destination || layout.here_formals)
+    if (layout.captures || layout.retained || layout.declaration_context || layout.has_result_destination() || layout.here_formals)
       throw std::logic_error("unexpected parameter role in supplied here body");
     // The activation starts with the transfer record. Its address identifies
     // the originating call across every forwarding receiver.
@@ -3084,8 +3101,38 @@ class LLVMEmission {
       b_.CreateCondBr(discard, failed, ready);
       b_.SetInsertPoint(failed); clear_value(completion_.value); b_.CreateBr(ready); b_.SetInsertPoint(ready);
     }
-    if (call.destination) b_.CreateStore(load(completion_.value), function->getArg(call.result_index()));
-    b_.CreateRet(outcome(load(completion_.value), load(completion_.category), load(completion_.site), load(completion_.fatal),
+    auto *value = load(completion_.value);
+    if (call.native_borrow_destination && (!instance || layout.result.native_borrow())) {
+      llvm::Value *native = b_.getTrue();
+      if (!instance && std::ranges::any_of(method.instances, [&](size_t id) {
+            return !program_->instances[id].result.native_borrow();
+          })) {
+        auto *identity = b_.CreateExtractValue(value, 1);
+        native = b_.getFalse();
+        for (const auto id : method.instances) {
+          const auto &result = program_->instances[id].result;
+          if (result.native_borrow())
+            native = b_.CreateOr(native, b_.CreateICmpEQ(identity, b_.getInt32(tag(*result.type))));
+        }
+      }
+      auto *ready = b_.CreateAnd(native, b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(1)));
+      auto *unpublished_value = b_.CreateSelect(native, empty_scalar(), value);
+      auto *publish = block("native.return.publish"), *done = block("native.return.complete");
+      auto *unpublished = b_.GetInsertBlock();
+      b_.CreateCondBr(ready, publish, done);
+      b_.SetInsertPoint(publish);
+      auto *destination = function->getArg(call.native_result_index());
+      b_.CreateStore(b_.CreateLoad(native_handle_pair(), view_address(value)), destination);
+      auto *result = b_.CreateInsertValue(value, b_.CreatePtrToInt(destination, b_.getInt64Ty()), 0);
+      b_.CreateBr(done);
+      b_.SetInsertPoint(done);
+      auto *delivered = b_.CreatePHI(scalar_, 2);
+      delivered->addIncoming(unpublished_value, unpublished);
+      delivered->addIncoming(result, publish);
+      value = delivered;
+    }
+    if (call.callable_destination) b_.CreateStore(value, function->getArg(call.result_index()));
+    b_.CreateRet(outcome(value, load(completion_.category), load(completion_.site), load(completion_.fatal),
         load(completion_.requested), load(completion_.available), load(completion_.cause),
         protected_outcomes_ ? load(completion_.transfer) : nullptr, owned_failures_ ? load(completion_.failure_owner) : nullptr));
   }
@@ -3298,13 +3345,15 @@ public:
       if (!emitted_methods[i]) continue;
       const auto &method = program.methods[i];
       const auto &frame = input_frame(i);
-      const bool destination = std::any_of(method.instances.begin(), method.instances.end(), [&](size_t id) {
-        const auto &result = program.instances[id].result;
-        return !result.borrowed() && result.type->kind == Type::procedure;
-      });
       call_layouts_[i] = {frame.inputs.size(), frame.owners.size(), method.captures.size(),
-          method.retained_types.size(), method.declaration_context(), destination, method.here.size(), method.here_group.has_value(),
+          method.retained_types.size(), method.declaration_context(), false, false, method.here.size(), method.here_group.has_value(),
           method.here_inputs() - method.here.size()};
+      auto &call = call_layouts_[i];
+      for (const auto id : method.instances) {
+        const auto &result = program.instances[id].result;
+        call.callable_destination |= !result.borrowed() && result.type->kind == Type::procedure;
+        call.native_borrow_destination |= result.native_borrow();
+      }
     }
     general_.resize(program.methods.size()); specialized_.resize(program.instances.size());
     for (size_t i = 0; i < program.methods.size(); ++i) {
