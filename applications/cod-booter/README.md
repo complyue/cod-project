@@ -1,8 +1,10 @@
 # CoD booter: a compiler application written in CoD
 
-Roadmap revision: 23 · Recorded: 2026-11-21 · Phase: initial seed delivery through alternating booter and seed development.
+Roadmap revision: 24 · Recorded: 2026-11-21 · Phase: initial seed delivery through alternating booter and seed development.
 
 ## Design authority
+
+- [D-20-HANDLE-EFFECT](../../design/DesignAuthorityRegistry.md#d-20-handle-effect) at r24 covers the first object writer’s [scoped LLVM session](docs/LLVMInterop.md#owning-native-handle-effects) under [H-NATIVE-HANDLE-EFFECT-20261121](../../CHANGELOG.md#h-native-handle-effect-20261121), P-672/P-673. Check the same actual session across CoD helper calls in both frontends, typed construction failure and exact scope cleanup. C operations still take checked borrows.
 
 - [D-20-SHARED-RUNTIME](../../design/DesignAuthorityRegistry.md#d-20-shared-runtime) and [D-20-NATIVE-BUILD](../../design/DesignAuthorityRegistry.md#d-20-native-build), roadmap r23, apply the [runtime](../../CHANGELOG.md#h-shared-c-runtime-20261121) and [native build](../../CHANGELOG.md#h-native-build-boundary-20261121) decisions. P-654–P-657 connect reusable native implementations to consistent execution and verifiable compiler boundaries under charter §§4.3, 6.3 and 12. Check the same archive through seed execution and the seed-built booter, link emitted code without LLVM, and build reusable components without building either compiler. Existing language contracts and application adapter ownership continue. Permanent ABI and distribution retain their own scope.
 
@@ -50,7 +52,7 @@ Initial delivery requires the seed to reproducibly build and run the first CoD-w
 
 Representative source and invalid-input cases must behave as specified, and the booter source must pass the readability review. The booter's first self-build is a downstream milestone. DBMR persistence and broader LLVM binding coverage are separate from initial delivery.
 
-Build the initial booter with statically linked C providers generated from checked CoD declarations. The seed and booter derive equivalent C contracts, including native handle constructor and destructor stubs. Separate handwritten C supplies the operations and their resource protocols. Calls in both directions use synchronous here semantics. CoD acquires the source, scratch backing and LLVM resources under lexical ownership with scope-exit destruction. See the [native handle and C record rules](docs/LLVMInterop.md#native-handles-and-c-records) for borrowed values and by-value records.
+Build the initial booter with statically linked C providers generated from checked CoD declarations. The seed and booter derive equivalent C contracts, including native handle constructor and destructor stubs. Separate handwritten C supplies the operations and their resource protocols. Calls in both directions use synchronous here semantics. CoD scopes the ownership of source, scratch and LLVM resources. The object writer can install the LLVM session as an owning effect for procedures that need it. See the [native handle and C record rules](docs/LLVMInterop.md#native-handles-and-c-records) for borrowed values and by-value records.
 
 ### Exception syntax in both frontends
 
@@ -154,7 +156,7 @@ Measure **steady-state throughput** on warmed, equivalent workloads and report a
 | --- | --- | --- |
 | Stage caches | Preserve suitable regional results directly as DBMR. | Stage-specific dependency/compatibility rules, publication behavior and measured payoff. |
 | LLVM surface | Bind APIs as compiler operations need them. | Checked declarations and generated provider evidence from the first workload. |
-| Native handles | Use [lexical owners and explicit borrowed handles](docs/LLVMInterop.md#native-handles-and-c-records). | Generated evidence for actual owner binding and bounded views, target layout, general fallible disposal and the build graph. |
+| Native handles | Use [scoped owners and explicit borrowed handles](docs/LLVMInterop.md#native-handles-and-c-records). | Generated evidence for actual owner binding and bounded views, target layout, general fallible disposal and the build graph. |
 
 Current implementation evidence belongs with the booter workloads and the seed capabilities they exercise.
 
