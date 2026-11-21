@@ -29,7 +29,10 @@ using "ParserStorage.cod" name_node;
 using "ParserStorage.cod" null_node;
 using "ParserStorage.cod" group_node;
 using "ParserStorage.cod" integer_arithmetic;
-using "ParserStorage.cod" transfer_node;
+using "ParserStorage.cod" is_transfer;
+using "ParserStorage.cod" make_named_node;
+using "ParserStorage.cod" construction_body;
+using "ParserStorage.cod" construction_type_query_node;
 using "ParserStorage.cod" call_node;
 using "ParserStorage.cod" behave_node;
 using "ParserStorage.cod" return_node;
@@ -282,36 +285,65 @@ func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, ref 
                   at:u64) -> u8 where {const owner N, const owner B, owner F} {
     val binding <- nodes[at].left;
     val initializer <- nodes[at].right;
-    val annotation <- no_node();
-    if (nodes[binding].kind == typed_name_node()) { (annotation <- nodes[binding].right):void; } else {};
-    if (nodes[at].kind == val_binding_node()) {
-        val value_kind <- if (annotation == no_node()) { (facts[initializer].kind) } else { declared_scalar(names[annotation].kind) };
-        if (annotation != no_node() && value_kind == 0u8) { return unproved_operand(); } else {};
+    val type_name <- no_node();
+    if (nodes[binding].kind == typed_name_node()) { (type_name <- nodes[binding].right):void; } else {};
+    val required_owner <- no_node();
+    val value_binding <- nodes[at].kind == val_binding_node();
+    if (type_name != no_node() && nodes[type_name].kind == owned_type_node()) {
+        if (value_binding) { return unproved_operand(); } else {};
+        required_owner <- names[nodes[type_name].right].declaration;
+        (type_name <- nodes[type_name].left):void;
+    } else {};
+    val declared_kind <- if (type_name == no_node()) { 0u8 } else { declared_scalar(names[type_name].kind) };
+    if (declared_kind == 0u8 && (type_name != no_node() || !value_binding)) { return unproved_operand(); } else {};
+    if (facts[initializer].kind == never_result()) {
+        if (required_owner != no_node() && nodes[initializer].kind == make_named_node() &&
+            required_owner != names[initializer].scope) {
+            return owner_conflict(nodes, names[initializer].scope, required_owner);
+        } else {};
+        set_result(facts, at, never_result());
+        return 0u8;
+    } else {};
+    if (value_binding) {
+        val value_kind <- if (declared_kind == 0u8) { (facts[initializer].kind) } else { declared_kind };
         val diagnostic <- require_typed_bits(nodes, facts, initializer, value_kind);
         if (diagnostic != 0u8) { return diagnostic; } else {};
         set_fact(facts, at, value_kind, writable_place(), names[at].scope, 0u64, 0u8);
         return 0u8;
     } else {};
     val owner_site <- facts[initializer].owner;
-    val type_name <- annotation;
-    if (nodes[annotation].kind == owned_type_node()) {
-        val declared_owner <- names[nodes[annotation].right].declaration;
-        if (owner_site != no_node() && owner_site != declared_owner) {
-            return owner_conflict(nodes, owner_site, declared_owner);
+    if (required_owner != no_node()) {
+        if (owner_site != no_node() && owner_site != required_owner) {
+            return owner_conflict(nodes, owner_site, required_owner);
         } else {};
-        owner_site <- declared_owner;
-        (type_name <- nodes[annotation].left):void;
+        (owner_site <- required_owner):void;
     } else {};
-    val kind <- declared_scalar(names[type_name].kind);
-    if (kind == 0u8) { return unproved_operand(); } else {};
     if (facts[initializer].kind != null_literal()) {
-        if (facts[initializer].kind != kind || facts[initializer].reception == independent_value()) {
+        if (facts[initializer].kind != declared_kind || facts[initializer].reception == independent_value()) {
             return unproved_operand();
         } else {};
         if (facts[initializer].reception == readonly_place()) { return expected_writable_place(); } else {};
     } else {};
     if (owner_site == no_node()) { return unproved_owner(); } else {};
-    set_fact(facts, at, kind, nullable_ptr(), owner_site, 0u64, 0u8);
+    set_fact(facts, at, declared_kind, nullable_ptr(), owner_site, 0u64, 0u8);
+    return 0u8;
+}
+
+func check_construction(nodes:const ExprNodes in N, names:const NameBindings in B,
+                        ref facts:OperandFacts in F, at:u64) -> u8 where {const owner N, const owner B, owner F} {
+    val requested <- nodes[at].left;
+    val kind <- if (nodes[requested].kind == construction_type_query_node()) {
+        (facts[nodes[requested].left].kind)
+    } else { declared_scalar(names[requested].kind) };
+    if (!scalar_kind(kind)) { return unproved_operand(); } else {};
+    val owner_site <- names[at].scope;
+    val explicit_owner <- nodes[nodes[at].right].right;
+    if (explicit_owner != no_node() && names[explicit_owner].declaration != owner_site) { return unproved_owner(); } else {};
+    val body <- construction_body(nodes, at);
+    if (facts[body].kind == never_result()) { set_result(facts, at, never_result()); return 0u8; } else {};
+    val diagnostic <- require_typed_bits(nodes, facts, body, kind);
+    if (diagnostic != 0u8) { return diagnostic; } else {};
+    set_fact(facts, at, kind, borrowed_ref(), owner_site, 0u64, 0u8);
     return 0u8;
 }
 
@@ -348,7 +380,6 @@ func check_argument(nodes:const ExprNodes in N, ref facts:OperandFacts in F, ref
         facts[actual].kind == 0u8 || facts[actual].kind == null_literal()) { return unproved_operand(); } else {};
     if (facts[actual].kind != kind) { return wrong_operand_type(); } else {};
     val reception <- facts[actual].reception;
-    if (wanted == borrowed_ref() && reception == nullable_ptr()) { return unproved_nonnull_borrow(); } else {};
     if (reception == independent_value()) { return unproved_owner(); } else {};
     if (reception == readonly_place()) { return expected_writable_place(); } else {};
     val owner_parameter <- facts[formal].owner;
@@ -433,6 +464,7 @@ func check_sequence_item(nodes:const ExprNodes in N, ref facts:OperandFacts in F
         return;
     } else {};
     val expression <- nodes[at].right;
+    if (facts[expression].kind == never_result()) { set_result(facts, at, never_result()); return; } else {};
     val kind <- void_result();
     if (nodes[expression].kind != val_binding_node() && nodes[expression].kind != ptr_binding_node()) {
         if (facts[at].arm_result != 0u8 && scalar_kind(facts[expression].kind)) {
@@ -709,10 +741,11 @@ func check_operand(nodes:const ExprNodes in N, names:const NameBindings in B, li
         return 0u8;
     } else {};
     if (kind == val_binding_node() || kind == ptr_binding_node()) { return check_local(nodes, names, facts, at); } else {};
+    if (kind == make_named_node()) { return check_construction(nodes, names, facts, at); } else {};
     if (integer_arithmetic(kind) || kind == group_node()) {
         return check_numeric_expression(nodes, facts, at, kind);
     } else {};
-    if (kind == transfer_node()) { return check_transfer(nodes, facts, at); } else {};
+    if (is_transfer(nodes, at)) { return check_transfer(nodes, facts, at); } else {};
     if (kind == compare_node()) { return check_comparison(nodes, facts, at); } else {};
     if (kind == logical_not_node() || logical_binary(kind)) { return check_logical(nodes, facts, at); } else {};
     if (kind == call_node()) { return check_direct_call(nodes, names, links, facts, owners, at, used); } else {};

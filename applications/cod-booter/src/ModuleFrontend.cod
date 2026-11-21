@@ -11,6 +11,11 @@ using "ParserStorage.cod" ref_local_node;
 using "ParserStorage.cod" ref_result_node;
 using "ParserStorage.cod" make_exception_node;
 using "ParserStorage.cod" make_named_node;
+using "ParserStorage.cod" construction_body;
+using "ParserStorage.cod" construction_type_query_node;
+using "ParserStorage.cod" name_node;
+using "ParserStorage.cod" literal_node;
+using "ParserStorage.cod" bool_node;
 using "ParserStorage.cod" field_access_node;
 using "ParserStorage.cod" readonly_ref_parameter_node;
 using "ParserStorage.cod" owner_clause_node;
@@ -32,6 +37,7 @@ using "NameResolution.cod" NameBindings;
 using "NameResolution.cod" NameWork;
 using "NameResolution.cod" NameResolutionResult;
 using "NameResolution.cod" unsupported_module_declaration;
+using "NameResolution.cod" unsupported_ordinary_construction;
 using "NameResolution.cod" declaration_requires_native_output;
 using "NameResolution.cod" first_item;
 using "NameResolution.cod" resolve_module_names;
@@ -88,6 +94,14 @@ func first_extended_declaration(nodes:const ExprNodes in N, work:const NameWork 
     return no_node();
 }
 
+func supported_construction_shape(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
+    if (construction_body(nodes, at) == no_node()) { return false; } else {};
+    val requested <- nodes[at].left;
+    if (nodes[requested].kind != construction_type_query_node()) { return true; } else {};
+    val subject <- nodes[nodes[requested].left].kind;
+    return subject == name_node() || subject == literal_node() || subject == bool_node();
+}
+
 # The parsed modes remain available when the checked backend cannot use them.
 func unsupported_source_form(nodes:const ExprNodes in N, at:u64) -> u8 where {const owner N} {
     val kind <- nodes[at].kind;
@@ -97,7 +111,7 @@ func unsupported_source_form(nodes:const ExprNodes in N, at:u64) -> u8 where {co
     if (kind == make_exception_node()) { return 33u8; } else {};
     if (kind == ref_local_node()) { return 34u8; } else {};
     if (kind == ref_result_node()) { return 35u8; } else {};
-    if (kind == make_named_node()) { return 37u8; } else {};
+    if (kind == make_named_node() && !supported_construction_shape(nodes, at)) { return unsupported_ordinary_construction(); } else {};
     if (kind == field_access_node()) { return 38u8; } else {};
     if (kind == bodyless_defer_node()) { return 40u8; } else {};
     if (kind == callable_local_node()) { return 41u8; } else {};

@@ -63,6 +63,7 @@ static const char *unsupported_source_form(uint32_t code) {
     case 43: return "braced exception construction in throw";
     case 44: return "rethrow with an explicit cause";
     case 45: return "named call argument";
+    case 46: return "reference assignment in a construction initializer";
     default: return NULL;
     }
 }
@@ -88,6 +89,8 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fprintf(stderr, ": error: %s is outside the supported compiler profile\n", unsupported);
     else if (diagnostic->stage == 3 && diagnostic->code == 13)
         fputs(": error: this module declaration is outside the supported compiler profile\n", stderr);
+    else if (diagnostic->stage == 5 && diagnostic->code == 12)
+        fputs(": error: ref argument requires a proven non-null target\n", stderr);
     else if (diagnostic->stage == 2 && diagnostic->code == module_cycle_unproved)
         fputs(": error: cyclic module construction remains unproved\n", stderr);
     else if (diagnostic->stage == 2 && diagnostic->code == module_dependency_rejected)
