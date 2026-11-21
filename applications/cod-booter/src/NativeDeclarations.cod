@@ -1,0 +1,416 @@
+using "ParserStorage.cod" ExprNodes;
+using "ParserStorage.cod" no_node;
+using "ParserStorage.cod" c_handle_type_node;
+using "ParserStorage.cod" c_record_node;
+using "ParserStorage.cod" c_procedure_node;
+using "ParserStorage.cod" array_declaration_node;
+using "ParserStorage.cod" data_parent_node;
+using "ParserStorage.cod" owned_type_node;
+using "ParserStorage.cod" ref_parameter_node;
+using "ParserStorage.cod" ptr_parameter_node;
+using "ParserStorage.cod" parameter_node;
+using "ParserStorage.cod" val_parameter_node;
+using "ParserStorage.cod" handle_parameter_node;
+using "ParserStorage.cod" here_parameter_node;
+using "ParserStorage.cod" owner_clause_node;
+using "ParserStorage.cod" result_clause_node;
+using "ParserStorage.cod" throws_clause_node;
+using "NameResolution.cod" NameBindings;
+using "NameResolution.cod" NameWork;
+using "NameResolution.cod" first_item;
+using "NameResolution.cod" signature_head;
+using "NameResolution.cod" signature_clause;
+using "NameResolution.cod" record_declaration;
+using "NameResolution.cod" c_handle_type;
+using "NameResolution.cod" record_type;
+using "NameResolution.cod" array_type;
+using "NameResolution.cod" c_constructor;
+using "NameResolution.cod" c_operation;
+using "NameResolution.cod" owner_binding;
+using "NameResolution.cod" ordinary_selection;
+using "NameResolution.cod" native_scalar;
+using "NameResolution.cod" builtin_bool;
+using "NameResolution.cod" builtin_u8;
+using "NameResolution.cod" builtin_u32;
+using "NameResolution.cod" builtin_u64;
+using "NameResolution.cod" builtin_i64;
+using "NameResolution.cod" builtin_void;
+using "ModuleExports.cod" SelectedExports;
+using "ModuleExports.cod" exception_type_export;
+using "ModuleExports.cod" exception_root_identity;
+
+data NativeDeclarationResult {
+    diagnostic:u8;
+    node:u64;
+}
+
+func invalid_native_owner_type() -> u8 { return 16u8; }
+func invalid_record_field() -> u8 { return 17u8; }
+func recursive_record_layout() -> u8 { return 18u8; }
+func invalid_native_failure() -> u8 { return 19u8; }
+func native_owner_required() -> u8 { return 20u8; }
+func mixed_native_owner_types() -> u8 { return 21u8; }
+func invalid_native_parameter() -> u8 { return 22u8; }
+func invalid_native_result() -> u8 { return 23u8; }
+func duplicate_native_constructor() -> u8 { return 24u8; }
+func invalid_native_access() -> u8 { return 25u8; }
+func invalid_native_callback() -> u8 { return 26u8; }
+func invalid_array_shape() -> u8 { return 27u8; }
+
+func reject_declaration(ref report:NativeDeclarationResult in R, at:u64, cause:u8) -> void where {owner R} {
+    report.diagnostic <- cause;
+    (report.node <- at):void;
+}
+
+func passed_by_reference(kind:u8) -> bool {
+    return kind == ref_parameter_node() || kind == ptr_parameter_node();
+}
+
+func numeric_native(kind:u8) -> bool { return native_scalar(kind) && kind != builtin_bool(); }
+
+func exception_selection(names:const NameBindings in B, selected:const SelectedExports in E, at:u64) -> bool
+    where {const owner B, const owner E} {
+    return names[at].kind == ordinary_selection() && selected[names[at].declaration].kind == exception_type_export();
+}
+
+func exception_record(nodes:const ExprNodes in N, record:u64) -> bool where {const owner N} {
+    return nodes[nodes[record].left].kind == data_parent_node();
+}
+
+func uses_direct_scalars(nodes:const ExprNodes in N, names:const NameBindings in B,
+                         fields:u64, numeric_only:bool) -> bool where {const owner N, const owner B} {
+    val field <- fields;
+    val declared_type <- 0u8;
+    for (unused in 0u64 .. intrinsic (len)(nodes)) {
+        if (field == no_node()) { return true; } else {};
+        declared_type <- names[nodes[nodes[field].right].right].kind;
+        if (passed_by_reference(nodes[field].kind) || !native_scalar(declared_type) || (numeric_only && !numeric_native(declared_type))) {
+            return false;
+        } else {};
+        (field <- nodes[field].left):void;
+    };
+    return false;
+}
+
+# A record form has a layout fact distinct from the binding on its name.
+# The parent and field cursor use that form's workspace slot during the walk.
+func visiting_bits() -> u8 { return 23u8; }
+func visiting_references() -> u8 { return 24u8; }
+func finite_bits() -> u8 { return 25u8; }
+func finite_references() -> u8 { return 26u8; }
+
+func visit_record(nodes:const ExprNodes in N, ref names:NameBindings in B, ref work:NameWork in W,
+                  record:u64, parent:u64) -> void where {const owner N, owner B, owner W} {
+    names[record].kind <- visiting_bits();
+    work[record].active <- parent;
+    (work[record].next <- first_item(nodes, nodes[record].right)):void;
+}
+
+func check_record(nodes:const ExprNodes in N, ref names:NameBindings in B, ref work:NameWork in W,
+                  start:u64, used:u64, ref report:NativeDeclarationResult in R) -> void
+    where {const owner N, owner B, owner W, owner R} {
+    if (names[start].kind != 0u8) { return; } else {};
+    visit_record(nodes, names, work, start, no_node());
+    val record <- start;
+    val field <- no_node();
+    val declared_type <- no_node();
+    val target <- no_node();
+    val kind <- 0u8;
+    val references <- false;
+    # A field can be visited twice, once before and once after its dependency.
+    for (unused in 0u64 .. used * 2u64) {
+        if (record == no_node()) { return; } else {};
+        field <- work[record].next;
+        if (field == no_node()) {
+            names[record].kind <- if (names[record].kind == visiting_bits()) { finite_bits() } else { finite_references() };
+            (record <- work[record].active):void;
+        } else {
+            declared_type <- nodes[nodes[field].right].right;
+            kind <- names[declared_type].kind;
+            references <- passed_by_reference(nodes[field].kind);
+            if (!native_scalar(kind) && kind != record_type()) {
+                reject_declaration(report, declared_type, invalid_record_field());
+                return;
+            } else {};
+            target <- names[declared_type].declaration;
+            if (kind == record_type() && exception_record(nodes, target)) {
+                reject_declaration(report, declared_type, invalid_record_field());
+                return;
+            } else {};
+            if (kind == record_type() && !references && names[target].kind == 0u8) {
+                visit_record(nodes, names, work, target, record);
+                (record <- target):void;
+            } else {
+                if (kind == record_type() && !references) {
+                    if (names[target].kind == visiting_bits() || names[target].kind == visiting_references()) {
+                        reject_declaration(report, declared_type, recursive_record_layout());
+                        return;
+                    } else {};
+                    (references <- names[target].kind == finite_references()):void;
+                } else {};
+                if (references && nodes[record].kind == c_record_node()) {
+                    reject_declaration(report, field, invalid_record_field());
+                    return;
+                } else {};
+                if (references) { (names[record].kind <- visiting_references()):void; } else {};
+                (work[record].next <- work[field].next):void;
+            };
+        };
+    };
+    reject_declaration(report, start, recursive_record_layout());
+}
+
+func check_type_declaration(nodes:const ExprNodes in N, names:const NameBindings in B,
+                            selected:const SelectedExports in E, form:u64,
+                            ref report:NativeDeclarationResult in R) -> void
+    where {const owner N, const owner B, const owner E, owner R} {
+    val kind <- nodes[form].kind;
+    if (kind == c_handle_type_node()) {
+        val owner <- nodes[form].right;
+        if (owner != no_node() &&
+            (names[owner].kind != c_handle_type() || nodes[names[owner].declaration].right != no_node())) {
+            reject_declaration(report, owner, invalid_native_owner_type());
+        } else {};
+        return;
+    } else {};
+    if (kind == array_declaration_node()) {
+        val shape <- nodes[form].right;
+        val index <- names[nodes[shape].left].kind;
+        val element <- nodes[shape].right;
+        val element_kind <- names[element].kind;
+        val integral <- index == builtin_u8() || index == builtin_u32() || index == builtin_u64() || index == builtin_i64();
+        val product <- element_kind == record_type() && !exception_record(nodes, names[element].declaration);
+        if (!integral || (!native_scalar(element_kind) && !product)) {
+            reject_declaration(report, shape, invalid_array_shape());
+        } else {};
+        return;
+    } else {};
+    if (record_declaration(kind) && exception_record(nodes, form)) {
+        val parent <- nodes[nodes[form].left].right;
+        if (!exception_selection(names, selected, parent) ||
+            selected[names[parent].declaration].identity != exception_root_identity()) {
+            reject_declaration(report, parent, invalid_native_failure());
+        } else {};
+    } else {};
+}
+
+func native_array_view(nodes:const ExprNodes in N, names:const NameBindings in B, at:u64, readonly:bool) -> bool
+    where {const owner N, const owner B} {
+    if (names[at].kind != array_type()) { return false; } else {};
+    val shape <- nodes[names[at].declaration].right;
+    if (names[nodes[shape].left].kind != builtin_u64()) { return false; } else {};
+    val element <- nodes[shape].right;
+    if (readonly && numeric_native(names[element].kind)) { return true; } else {};
+    if (names[element].kind != record_type()) { return false; } else {};
+    val record <- names[element].declaration;
+    return !exception_record(nodes, record) && nodes[record].right != no_node() &&
+        uses_direct_scalars(nodes, names, nodes[record].right, true);
+}
+
+func check_c_argument(nodes:const ExprNodes in N, names:const NameBindings in B, ref work:NameWork in W,
+                      parameter:u64, direction:u8, ref report:NativeDeclarationResult in R) -> void
+    where {const owner N, const owner B, owner W, owner R} {
+    val mode <- nodes[parameter].kind;
+    val binding <- nodes[parameter].right;
+    val annotation <- nodes[binding].right;
+    if (mode != handle_parameter_node() && mode != ref_parameter_node()) {
+        if ((mode != val_parameter_node() && mode != parameter_node()) || !native_scalar(names[annotation].kind)) {
+            reject_declaration(report, parameter, invalid_native_parameter());
+        } else {};
+        return;
+    } else {};
+    if (nodes[annotation].kind != owned_type_node() || names[nodes[annotation].right].kind != owner_binding()) {
+        reject_declaration(report, annotation, native_owner_required());
+        return;
+    } else {};
+    val declared_type <- nodes[annotation].left;
+    val role <- names[nodes[annotation].right].declaration;
+    val readonly <- nodes[binding].number != 0u64;
+    if (mode == ref_parameter_node()) {
+        if (direction != c_operation() || !readonly || nodes[role].number == 0u64 || !native_array_view(nodes, names, declared_type, true)) {
+            reject_declaration(report, parameter, invalid_native_parameter());
+        } else {
+            if (work[role].active == no_node()) { (work[role].active <- role):void; } else {};
+        };
+        return;
+    } else {};
+    if (names[declared_type].kind != c_handle_type()) {
+        reject_declaration(report, declared_type, invalid_native_parameter());
+        return;
+    } else {};
+    if (direction == c_operation() && readonly && nodes[role].number == 0u64) {
+        reject_declaration(report, parameter, invalid_native_access());
+        return;
+    } else {};
+    val handle <- names[declared_type].declaration;
+    val parent <- nodes[handle].right;
+    val root <- handle;
+    if (parent != no_node()) { (root <- names[parent].declaration):void; } else {};
+    val other <- work[role].active;
+    if (other != no_node() && other != role && other != root) {
+        reject_declaration(report, parameter, mixed_native_owner_types());
+        return;
+    } else {};
+    (work[role].active <- root):void;
+}
+
+func check_c_callback(nodes:const ExprNodes in N, names:const NameBindings in B, work:const NameWork in W,
+                      selected:const SelectedExports in E, callback:u64, supplier:u64,
+                      ref report:NativeDeclarationResult in R) -> void
+    where {const owner N, const owner B, const owner W, const owner E, owner R} {
+    val annotation <- nodes[nodes[supplier].right].right;
+    val handle <- names[nodes[annotation].left].declaration;
+    val role <- names[nodes[annotation].right].declaration;
+    if (nodes[handle].right != no_node()) {
+        reject_declaration(report, supplier, invalid_native_callback());
+        return;
+    } else {};
+    val signature <- nodes[callback].right;
+    val feedback <- signature_clause(nodes, signature, result_clause_node());
+    if (feedback == no_node() || names[nodes[feedback].right].kind != builtin_u8()) {
+        reject_declaration(report, callback, invalid_native_callback());
+        return;
+    } else {};
+    val failure <- signature_clause(nodes, signature, throws_clause_node());
+    if (failure != no_node()) {
+        val declared_type <- nodes[failure].right;
+        if (!exception_selection(names, selected, declared_type) &&
+            (names[declared_type].kind != record_type() || !exception_record(nodes, names[declared_type].declaration))) {
+            reject_declaration(report, declared_type, invalid_native_failure());
+            return;
+        } else {};
+    } else {};
+    val parameter <- first_item(nodes, nodes[signature_head(nodes, signature)].right);
+    if (parameter == no_node()) {
+        reject_declaration(report, callback, invalid_native_callback());
+        return;
+    } else {};
+    val binding <- no_node();
+    val view <- no_node();
+    val readonly <- false;
+    for (unused in 0u64 .. intrinsic (len)(nodes)) {
+        if (parameter == no_node()) { return; } else {};
+        binding <- nodes[parameter].right;
+        view <- nodes[binding].right;
+        readonly <- nodes[binding].number != 0u64;
+        if (nodes[parameter].kind != ref_parameter_node() || nodes[view].kind != owned_type_node() ||
+            names[nodes[view].right].declaration != role || !native_array_view(nodes, names, nodes[view].left, readonly)) {
+            reject_declaration(report, parameter, invalid_native_callback());
+            return;
+        } else {};
+        if (!readonly && nodes[role].number != 0u64) {
+            reject_declaration(report, parameter, invalid_native_access());
+            return;
+        } else {};
+        (parameter <- work[parameter].next):void;
+    };
+}
+
+func check_c_arguments(nodes:const ExprNodes in N, names:const NameBindings in B, ref work:NameWork in W,
+                       first:u64, direction:u8, ref report:NativeDeclarationResult in R) -> void
+    where {const owner N, const owner B, owner W, owner R} {
+    val parameter <- first;
+    for (unused in 0u64 .. intrinsic (len)(nodes)) {
+        if (parameter == no_node()) { return; } else {};
+        check_c_argument(nodes, names, work, parameter, direction, report);
+        if (report.diagnostic != 0u8) { return; } else {};
+        (parameter <- work[parameter].next):void;
+    };
+}
+
+func check_c_procedure(nodes:const ExprNodes in N, names:const NameBindings in B, ref work:NameWork in W,
+                       selected:const SelectedExports in E, form:u64, ref report:NativeDeclarationResult in R) -> void
+    where {const owner N, const owner B, owner W, const owner E, owner R} {
+    val direction <- names[form].kind;
+    val header <- nodes[form].left;
+    val head <- signature_head(nodes, header);
+    val result <- signature_clause(nodes, header, result_clause_node());
+    val failure <- signature_clause(nodes, header, throws_clause_node());
+    val result_kind <- builtin_void();
+    if (result != no_node()) { (result_kind <- names[nodes[result].right].kind):void; } else {};
+    if (direction == c_constructor()) {
+        val handle <- names[form].declaration;
+        if (work[handle].active != no_node()) {
+            reject_declaration(report, form, duplicate_native_constructor());
+            return;
+        } else {};
+        work[handle].active <- form;
+        if (failure != no_node()) {
+            val declared_type <- nodes[failure].right;
+            if (names[declared_type].kind != record_type() || !exception_record(nodes, names[declared_type].declaration) ||
+                !uses_direct_scalars(nodes, names, nodes[names[declared_type].declaration].right, false)) {
+                reject_declaration(report, declared_type, invalid_native_failure());
+                return;
+            } else {};
+        } else {};
+    } else {
+        val valid <- if (direction == c_operation()) {
+            result_kind == builtin_u8() || result_kind == builtin_void()
+        } else { result != no_node() && (native_scalar(result_kind) || result_kind == builtin_void()) };
+        if (failure != no_node()) {
+            reject_declaration(report, failure, invalid_native_failure());
+            return;
+        } else {};
+        if (!valid) {
+            reject_declaration(report, if (result == no_node()) { form } else { result }, invalid_native_result());
+            return;
+        } else {};
+    };
+    val first <- first_item(nodes, nodes[head].right);
+    val parameter <- first;
+    val callback <- no_node();
+    if (first != no_node() && nodes[first].kind == here_parameter_node()) {
+        parameter <- work[first].next;
+        if (direction != c_operation() || result_kind != builtin_u8() || parameter == no_node() ||
+            nodes[parameter].kind != handle_parameter_node() || work[parameter].next != no_node()) {
+            reject_declaration(report, first, invalid_native_callback());
+            return;
+        } else {};
+        (callback <- first):void;
+    } else {};
+    check_c_arguments(nodes, names, work, parameter, direction, report);
+    if (report.diagnostic != 0u8) { return; } else {};
+    if (callback != no_node()) {
+        check_c_callback(nodes, names, work, selected, callback, work[callback].next, report);
+        if (report.diagnostic != 0u8) { return; } else {};
+    } else {};
+    val clause <- work[head].next;
+    for (unused in 0u64 .. intrinsic (len)(nodes)) {
+        if (clause == no_node()) { return; } else {};
+        if (nodes[clause].kind == owner_clause_node() && work[clause].active == no_node()) {
+            reject_declaration(report, clause, native_owner_required());
+            return;
+        } else {};
+        (clause <- work[clause].next):void;
+    };
+}
+
+# Name binding supplies declaration identities and finishes using the active
+# name table before these checks reuse its workspace.
+func check_native_declarations(nodes:const ExprNodes in N, ref names:NameBindings in B, ref work:NameWork in W,
+                               selected:const SelectedExports in E, used:u64, ref report:NativeDeclarationResult in R) -> bool
+    where {const owner N, owner B, owner W, const owner E, owner R} {
+    report.diagnostic <- 0u8;
+    report.node <- no_node();
+    for (at in 0u64 .. used) { (work[at].active <- no_node()):void; };
+    for (at in 0u64 .. used) {
+        check_type_declaration(nodes, names, selected, at, report);
+        if (report.diagnostic != 0u8) { return false; } else {};
+    };
+    for (at in 0u64 .. used) {
+        if (record_declaration(nodes[at].kind)) {
+            check_record(nodes, names, work, at, used, report);
+            if (report.diagnostic != 0u8) { return false; } else {};
+        } else {};
+    };
+    for (at in 0u64 .. used) {
+        if (nodes[at].kind == c_procedure_node()) {
+            check_c_procedure(nodes, names, work, selected, at, report);
+            if (report.diagnostic != 0u8) { return false; } else {};
+        } else {};
+    };
+    return true;
+}
+
+export NativeDeclarationResult;
+export check_native_declarations;
