@@ -1,8 +1,10 @@
 # CoD exception control and regional cleanup
 
-Design revision: 142 · Recorded: 2026-11-19 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; full-scope control and live lexical input contracts; current implementation availability is recorded in the source capability reference.
+Design revision: 143 · Recorded: 2026-11-21 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; full-scope control and live lexical input contracts; current implementation availability is recorded in the source capability reference.
 
 ## Design authority
+
+[D-10-OWN-QUALIFIER](DesignAuthorityRegistry.md#d-10-own-qualifier) and [H-CONTEXTUAL-OWN-20261121](../CHANGELOG.md#h-contextual-own-20261121) cover the spelling of the optional qualifier on already admitted owning exception declarations and catches at r143.
 
 [H-ORDINARY-NAMES-20261119](../CHANGELOG.md#h-ordinary-names-20261119) covers the loop-control lifetime examples at r128, continuing the existing defer and bounds contracts under [D-10-ORDINARY-NAMES](DesignAuthorityRegistry.md#d-10-ordinary-names).
 
@@ -26,7 +28,7 @@ Design revision: 142 · Recorded: 2026-11-19 · Status: confirmed bounded except
 
 - **Construction at a throw site.** [H-THROW-INITIALIZER-20261118](../CHANGELOG.md#h-throw-initializer-20261118) selects `throw T { ... }` for allocation, field initialization and propagation of a fresh exception. [D-17-RETHROW](DesignAuthorityRegistry.md#d-17-rethrow) and D-17-EXCEPTION-OWNER preserve existing propagation, creation-time provenance and owner identity under C-63/C-65 and charter §§3.3/4.3/6.3/8. [D-22](ConstructionAndAcquisition.md#typed-reservation-and-completed-construction) supplies field readiness, order and transfer. Acceptance below covers successful, empty and failing initialization. [H-MAKE-EXCEPTION-20261118](../CHANGELOG.md#h-make-exception-20261118) and [D-17-MAKE-EXCEPTION](DesignAuthorityRegistry.md#d-17-make-exception) settle fresh normal construction, optional capacity, complete initialization, owning delivery and a later throw of the identical object. D-22r49 applies that distinction to ordinary data construction. Source scope only.
 
-- **Exception storage and application payloads.** [H-EXCEPTION-OBJECT-OWNER-20261118](../CHANGELOG.md#h-exception-object-owner-20261118) selects owner-bound, non-bits exception objects, transfer of program state and release after the last owner dependency. [D-17-EXCEPTION-OWNER](DesignAuthorityRegistry.md#d-17-exception-owner), r112, scopes the [result and release rules](#exception-object-owners-and-release). C-54/C-63/C-65 and charter §§3.2–3.3/4.1/4.3/6.3/8 link inspectable exception identity to explicit storage responsibility. D-14, D-22-TRANSFER, D-22-RESULT-OWNERS and D-28-OWNERS constrain target identity and transfer. H-269 preserves retained causes. The source rule supersedes independent exception-bits inputs. [H-CATCH-OWNER-TRANSFER-20261118](../CHANGELOG.md#h-catch-owner-transfer-20261118) selects a writable typed catch with an explicit owner, ordinary allocation in that owner and graph/bits transfer. [H-EXCEPTION-FIELD-OWNERS-20261118](../CHANGELOG.md#h-exception-field-owners-20261118) covers every user-defined reference field and bidirectional transfer. [H-EXCEPTION-MAKE-SCOPE-20261118](../CHANGELOG.md#h-exception-make-scope-20261118) assigns exception construction to an on-demand virtual handling scope. [K-EXPLICIT-EXCEPTION-OWNERS-20261118](../CHANGELOG.md#k-explicit-exception-owners-20261118) derives [explicit catch and result owners](#exception-owners-across-callable-boundaries) from these contracts. [H-SAME-OWNER-CAUSE-20261118](../CHANGELOG.md#h-same-owner-cause-20261118) requires one actual owner per cause chain. [Release responsibility](#who-releases-the-exception-handling-scope) covers managed lifetime and unique scope handoff. [H-EXCEPTION-WHOLE-OWNER-20261118](../CHANGELOG.md#h-exception-whole-owner-20261118) establishes that either owning spelling carries the entire scope, including allocation access for application payloads. [H-EXCEPTION-HOLDER-20261118](../CHANGELOG.md#h-exception-holder-20261118) selects the explicit owning declaration and catch. The [holder, borrow and target declarations](#exception-declarations-and-catch-bindings) distinguish whole-scope handoff from target access. [H-EXCEPTION-DECL-OWNED-20261118](../CHANGELOG.md#h-exception-decl-owned-20261118) makes `owned` optional on exception variables and parameters. Borrows use `ref ... in ...`. [K-EXCEPTION-SCENARIOS-20261118](../CHANGELOG.md#k-exception-scenarios-20261118) applies those rules to [calls, control flow and retention](#exception-ownership-across-control-flow). The source choices identified there, catch shorthand and the full implementation/value path remain under review.
+- **Exception storage and application payloads.** [H-EXCEPTION-OBJECT-OWNER-20261118](../CHANGELOG.md#h-exception-object-owner-20261118) selects owner-bound, non-bits exception objects, transfer of program state and release after the last owner dependency. [D-17-EXCEPTION-OWNER](DesignAuthorityRegistry.md#d-17-exception-owner), r112, scopes the [result and release rules](#exception-object-owners-and-release). C-54/C-63/C-65 and charter §§3.2–3.3/4.1/4.3/6.3/8 link inspectable exception identity to explicit storage responsibility. D-14, D-22-TRANSFER, D-22-RESULT-OWNERS and D-28-OWNERS constrain target identity and transfer. H-269 preserves retained causes. The source rule supersedes independent exception-bits inputs. [H-CATCH-OWNER-TRANSFER-20261118](../CHANGELOG.md#h-catch-owner-transfer-20261118) selects a writable typed catch with an explicit owner, ordinary allocation in that owner and graph/bits transfer. [H-EXCEPTION-FIELD-OWNERS-20261118](../CHANGELOG.md#h-exception-field-owners-20261118) covers every user-defined reference field and bidirectional transfer. [H-EXCEPTION-MAKE-SCOPE-20261118](../CHANGELOG.md#h-exception-make-scope-20261118) assigns exception construction to an on-demand virtual handling scope. [K-EXPLICIT-EXCEPTION-OWNERS-20261118](../CHANGELOG.md#k-explicit-exception-owners-20261118) derives [explicit catch and result owners](#exception-owners-across-callable-boundaries) from these contracts. [H-SAME-OWNER-CAUSE-20261118](../CHANGELOG.md#h-same-owner-cause-20261118) requires one actual owner per cause chain. [Release responsibility](#who-releases-the-exception-handling-scope) covers managed lifetime and unique scope handoff. [H-EXCEPTION-WHOLE-OWNER-20261118](../CHANGELOG.md#h-exception-whole-owner-20261118) establishes that either owning spelling carries the entire scope, including allocation access for application payloads. [H-EXCEPTION-HOLDER-20261118](../CHANGELOG.md#h-exception-holder-20261118) selects the explicit owning declaration and catch. The [holder, borrow and target declarations](#exception-declarations-and-catch-bindings) distinguish whole-scope handoff from target access. [H-EXCEPTION-DECL-OWNED-20261118](../CHANGELOG.md#h-exception-decl-owned-20261118) makes the explicit ownership qualifier optional on exception variables and parameters. Borrows use `ref ... in ...`. [K-EXCEPTION-SCENARIOS-20261118](../CHANGELOG.md#k-exception-scenarios-20261118) applies those rules to [calls, control flow and retention](#exception-ownership-across-control-flow). The source choices identified there, catch shorthand and the full implementation/value path remain under review.
 
 - **Cause and tip reference modes.** [H-CAUSE-PTR-TIP-REF-20261118](../CHANGELOG.md#h-cause-ptr-tip-ref-20261118) specifies the r97 field modes under D-17-RETHROW/P-464–P-466 and D-17-CATCH-WRAPPERS/P-470–P-472. Both target Exception. A nullable cause and non-null tip make absence explicit and preserve the identity of each selected exception. H-515 and H-CATCH-TIP-20261118 govern field immutability and catch selection. D-14 and D-17/H-313 govern owner and null checks. Charter §§3.2–3.3/4.3/6.3/8 connects those guarantees to typed reporting. Acceptance below covers absent and present causes, unwrapped and wrapped tips, and readonly access. Physical backing and general implementation qualification remain open.
 
@@ -345,7 +347,7 @@ The named constructor's semantic type determines matching and checkedness. A che
 
 ### Exception as an owned region and a selected target
 
-This design review uses ordinary region ownership for the complete lifetime. In the proposed grammar, write `exception e:T` in a declaration or parameter, `-> exception :T` for an owning result, and `catch (e:T)` to receive the same kind of holder. Whether to omit the redundant `owned` spelling in declarations remains a separate grammar decision. A catch also has its existing incoming-tip context. A nonconsuming helper declares `ref x:const T in O` or its writable counterpart. A fresh, cause-less construction establishes a distinct logical region on each execution. Its backing and layout can be optimized subject to ordinary owner identity, observable failure and lifetime rules.
+This design review uses ordinary region ownership for the complete lifetime. In the proposed grammar, write `exception e:T` in a declaration or parameter, `-> exception :T` for an owning result, and `catch (e:T)` to receive the same kind of holder. Whether to omit the redundant `own` spelling in declarations remains a separate grammar decision. A catch also has its existing incoming-tip context. A nonconsuming helper declares `ref x:const T in O` or its writable counterpart. A fresh, cause-less construction establishes a distinct logical region on each execution. Its backing and layout can be optimized subject to ordinary owner identity, observable failure and lifetime rules.
 
 **What the holder contains.** The semantic pair is an owned region `er` and a non-null locator for the selected `T` in that region. `in e` identifies `er`. The concrete exception and its regional business payload live in er. Creation-site trace retention follows the separate OOM diagnostic contract. For a structural root sketch use `region ExceptionStorage { ref root:Exception; }`. `Exception` is an abstract, non-bits type. An inline `val root:Exception` cannot hold every concrete exception's fields under the [ordinary root rules](ConstructionAndAcquisition.md#region-construction-and-named-root-initializers). The implementation allocates the concrete subtype and binds a root reference to it. These are internal operations. Application code does not receive a rebindable root, an independently consumable region handle or general permission to construct an exception with `make T in er`. A holder transfer keeps the selected locator and its actual owner together.
 
@@ -521,15 +523,15 @@ A pending throw, handler or normal-result destination must hand off responsibili
 
 #### Exception declarations and catch bindings
 
-`owned exception e:T` designates an exception object of type T and holds its entire handling scope. In a field selection, e denotes the selected object. In `in e`, e denotes the actual owner of that object and all other targets allocated there. Distinct exceptions in a cause chain can share that owner while retaining distinct object identities. A wrapper's cause and the matched exception can therefore supply different targets with the same lifetime.
+`own exception e:T` designates an exception object of type T and holds its entire handling scope. In a field selection, e denotes the selected object. In `in e`, e denotes the actual owner of that object and all other targets allocated there. Distinct exceptions in a cause chain can share that owner while retaining distinct object identities. A wrapper's cause and the matched exception can therefore supply different targets with the same lifetime.
 
 | Declaration | Local use | As a callable parameter |
 | --- | --- | --- |
-| `exception e:T` or `owned exception e:T` | The two declarations are equivalent. Initialize or transfer the selected object and its single scope cleanup obligation with `<-`. Use `in e` to name the handling owner. | Both are consuming parameters. The caller relinquishes the holder at callee entry after successful argument preparation. The callee must release it or transfer it onward on every exit. |
+| `exception e:T` or `own exception e:T` | The two declarations are equivalent. Initialize or transfer the selected object and its single scope cleanup obligation with `<-`. Use `in e` to name the handling owner. | Both are consuming parameters. The caller relinquishes the holder at callee entry after successful argument preparation. The callee must release it or transfer it onward on every exit. |
 | `ref w:T in O` or `ref w:const T in O` | Bind a non-null target in the named owner with `=`. Target access follows the declared type. The holder covering the borrow must remain live. | Borrow the target under the declared owner and access relationship. A helper may inspect or update permitted fields. The caller retains release responsibility. |
 
 ```cod
-catch (owned exception e:UploadInterrupted) {
+catch (own exception e:UploadInterrupted) {
     ref w:const Exception in e = e.tip;
     report(w);
     e.plan = make RetryPlan in e {
@@ -548,7 +550,7 @@ The existing explicit borrowed catch `catch (ref e:T in ex) where {owner ex}` na
 
 A compiler-managed alternative for the bounded factory example is a caller cleanup slot associated with the reference result. Local throw/catch would use the slot only when needed, the caller would release it on discard or exit, and forwarding the only live result would forward the cleanup obligation. This avoids a new source spelling while retaining a real owner internally. Independently stored views and deferred entries still need a covering holder for their admitted uses. Any runtime bookkeeping used to establish that coverage must preserve a single release obligation per actual owner. Static elision or this slot alone supplies no general release proof. Same-owner cause links require no per-link reference counting.
 
-The H-EXCEPTION-FACTORY-20261118 factory illustrates the normal result handoff. When the result carries the sole release obligation, an `owned exception` result delivers the complete scope. An ordinary borrow with independently live backing carries its ordinary lifetime constraint. The source contract for the existing factory result and the accounting for deferred aggregates containing independent failures must both support the whole-scope handoff required by an owning catch.
+The H-EXCEPTION-FACTORY-20261118 factory illustrates the normal result handoff. When the result carries the sole release obligation, an `own exception` result delivers the complete scope. An ordinary borrow with independently live backing carries its ordinary lifetime constraint. The source contract for the existing factory result and the accounting for deferred aggregates containing independent failures must both support the whole-scope handoff required by an owning catch.
 
 **Recovery state carried during propagation.** When a multipart upload fails, the storage layer knows the upload ID and which parts the server acknowledged. The job layer knows the job ID. The retry worker needs all three after the request region has ended. The storage layer constructs `UploadInterrupted` with the upload ID, a receipt graph explicitly transferred from request storage into the exception owner, and a nullable `plan` initially set to null. The job layer installs its recovery plan on that same exception.
 
@@ -612,7 +614,7 @@ proc send_failure(id:u64, exception failure:UploadInterrupted) throws UploadInte
 
 proc fail_job() throws UploadInterrupted {
     try { upload_parts(); }
-    catch (owned exception e:UploadInterrupted) {
+    catch (own exception e:UploadInterrupted) {
         send_failure(e.upload_id, e);
     }
 }
@@ -623,10 +625,10 @@ Here the first argument prepares independent bits. The second transfers responsi
 A nested catch makes the handoff observable even when both handlers are in one callable:
 
 ```cod
-catch (owned exception outer:UploadInterrupted) {
+catch (own exception outer:UploadInterrupted) {
     val id:u64 <- outer.upload_id;
     try { throw outer; }   # Successful throw transfers the holder to propagation here.
-    catch (owned exception inner:UploadInterrupted) { report(inner.tip); }
+    catch (own exception inner:UploadInterrupted) { report(inner.tip); }
     audit_id(id);          # Valid. id holds independent bits.
     report(outer.tip);     # Reject. The throw already consumed outer.
 }
@@ -757,7 +759,7 @@ The current context is the nearest lexically enclosing catch available at the op
 
 CoD provides `try`, `catch` and `finally` control in the accepted contract. Ultimate out-of-memory failure is an **unchecked exception**: calling allocation does not require a checked-error result, a `throws` declaration or an enclosing catch merely to compile. A caller may catch the failure; otherwise it propagates toward the execution boundary. Unchecked does not mean ignoring ownership validity or turning invalid references into runtime exceptions.
 
-`make` continues to produce its normal `owned region :Root` result when construction succeeds. OOM is an exceptional exit, not an implicit null owner or a mandatory optional/result wrapper. H-265 does not select automatic allocation retries, region growth, compaction or a process recovery policy. “Ultimate” failure describes exhaustion after any separately defined policy has failed; no such policy is introduced here.
+`make` continues to produce its normal `own region :Root` result when construction succeeds. OOM is an exceptional exit, not an implicit null owner or a mandatory optional/result wrapper. H-265 does not select automatic allocation retries, region growth, compaction or a process recovery policy. “Ultimate” failure describes exhaustion after any separately defined policy has failed; no such policy is introduced here.
 
 The initial error taxonomy distinguishes `OutOfMemoryError` (the memory provider cannot supply storage), `RegionCapacityExceededError` (placement exceeds an existing region's fixed budget), and `InvalidCapacityError` (an invalid or unrepresentable capacity request). All three are unchecked; none implies automatic growth or retry.
 
@@ -1289,7 +1291,7 @@ The exception identities are explicitly selected into the module before use:
 
 ```text
 try {
-  owned region packet:Packet <-
+  own region packet:Packet <-
     make region Packet(bytes -> capacity) { sequence <- initial };
   process_packet(packet)
 } catch (error : const OutOfMemoryError) {
@@ -1383,10 +1385,10 @@ The borrowed and consuming call forms are:
 
 ```text
 function edit(region packet:Packet) -> void { ... }
-function transform(owned region packet:Packet) -> owned region :Packet { ... }
+function transform(own region packet:Packet) -> own region :Packet { ... }
 
 edit(packet); # Borrow; the caller still owns packet.
-owned region next:Packet <- transform(packet);
+own region next:Packet <- transform(packet);
 # packet is consumed after callee entry; next owns the successful result.
 ```
 

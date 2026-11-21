@@ -1,8 +1,10 @@
 # CoD construction, bits ADTs and region acquisition
 
-Design revision: 65 · Recorded: 2026-11-19 · Status: DBMR design confirmed (modes, publication and image completion); logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
+Design revision: 66 · Recorded: 2026-11-21 · Status: DBMR design confirmed (modes, publication and image completion); logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
 
 ## Design authority
+
+[D-10-OWN-QUALIFIER](DesignAuthorityRegistry.md#d-10-own-qualifier) and [H-CONTEXTUAL-OWN-20261121](../CHANGELOG.md#h-contextual-own-20261121) cover the ownership qualifier in the construction and receiving examples at r66.
 
 [H-ORDINARY-NAMES-20261119](../CHANGELOG.md#h-ordinary-names-20261119) covers placement of existing object and named-array constructions at r65 under [D-10-ORDINARY-NAMES](DesignAuthorityRegistry.md#d-10-ordinary-names).
 
@@ -174,11 +176,11 @@ H-594 allows a structural result contract to name an owned-region output as the 
 
 ```cod
 proc build() -> {
-    arena:owned region:Graph;
+    arena:own region:Graph;
     ref root:Node in arena;
 };
 
-{ owned region storage:Graph <- arena; ref start = root; } := build();
+{ own region storage:Graph <- arena; ref start = root; } := build();
 ```
 
 Here `arena` denotes the actual region returned by this invocation. It does not denote the lexical storage of the owning handle, the nominal root type Graph or a union of possible owners. The producer must prove that root's selected target belongs to that region. An admissible existing owned region may be returned; the declaration does not require fresh allocation. Receiver renaming preserves the same actual owner dependency, so start depends on the region held by storage, not on the spelling arena.
@@ -191,7 +193,7 @@ Independent value reception illustrates why the criterion is lifetime rather tha
 
 ```cod
 proc make_number() -> {
-    arena:owned region:Number;
+    arena:own region:Number;
     ref value:u64 in arena;
 };
 
@@ -570,7 +572,7 @@ Illustrative candidate source, not current parser acceptance:
 ref p:Point = make Point { x <- 1; y <- 2 };
 ref n:Node in r = make Node in r { ... };
 ref bad:Node in r = make Node in s { ... }; # Reject distinct actual owners.
-owned region arena:Root <- make region Root(bytes -> capacity) { ... };
+own region arena:Root <- make region Root(bytes -> capacity) { ... };
 ```
 
 Completed construction must preserve initializer order and effects and publish only a valid initialized result. Bare typed reservation has the separate identity-only contract below. Existing D-17 failed acquisition cleanup does not promise rollback of effects or arbitrary reservations in an already-live region. Nested constructor naming/access, partial construction and allocator-policy interaction require review before implementing an uncovered case. Explicit owner spelling cannot bypass readonly allocation checks or same-owner stored edges.
@@ -599,7 +601,7 @@ H-596 requires individual root initializers; H-597 accepts a construction-local 
 data Node { value:u64; }
 region State { count:u64; ref head:Node; ptr optional:Node; }
 
-owned region state:State <- make region State(4096u64 -> capacity) {
+own region state:State <- make region State(4096u64 -> capacity) {
     count <- 1u64;
     head = make Node { value <- 7u64; };
     optional = null;
@@ -621,7 +623,7 @@ The new resource has one cleanup responsibility from acquisition until successfu
 H-597 accepts an optional region binder that lets later initializers name already initialized roots and give initialization/allocation helpers the new owner explicitly:
 
 ```cod
-owned region result:State <-
+own region result:State <-
     make region r:State(4096u64 -> capacity) {
         count <- 1u64;
         head = make Node in r { value <- r.count; };
@@ -642,7 +644,7 @@ proc initialize(init region r:State) {
     r.optional = r.head;
 }
 
-owned region result:State <- make region r:State(4096u64 -> capacity) {
+own region result:State <- make region r:State(4096u64 -> capacity) {
     initialize(r);
 };
 ```
@@ -834,7 +836,7 @@ H-430 selects explicit replacement rather than automatic or in-place capacity gr
 H-432 proposes a unified intrinsic with an explicit capacity argument. The current candidate shape is:
 
 ```text
-func resize(r:owned region:R, new_cap:u64) -> owned region:R where {R}
+func resize(r:own region:R, new_cap:u64) -> own region:R where {R}
 ```
 
 [The resize contract in D-28](RegionalAndLexicalStorageRefactor.md#explicit-resize-consumes-and-replaces-the-region) owns the replacement/lifetime boundary. The input's cleanup responsibility transfers at callee entry after argument evaluation/conversion. Success returns ownership of the resized replacement; old direct/external views do not follow it. H-431 explicitly retains ordinary cleanup if failure occurs after entry: release what the callee still owns, with no input ownership restored to the caller. Failure before entry has not transferred the input merely because a call expression began evaluating.
@@ -851,7 +853,7 @@ D-16 fractions remain fixed valid bits with nonzero denominators. Storage repres
 
 ## Source migration
 
-H-386 selects one coordinated cutover after this design and the required representation integration are qualified. Use one semantic construction model: ordinary `make T [in o]` is distinct from whole-region `make region Root(...)`; a receiving variable’s `owned` qualifier cannot silently select allocation.
+H-386 selects one coordinated cutover after this design and the required representation integration are qualified. Use one semantic construction model: ordinary `make T [in o]` is distinct from whole-region `make region Root(...)`; a receiving variable’s `own` qualifier cannot silently select allocation.
 
 Use `make T(args) in arena` for placement in an existing writable region. Where `T` is a sum, name the selected data constructor. A named array keeps its length and fill inputs, for example `make Rates(4u64, 0.5f32) in @arena`. The result borrows the same owner, including for an empty array. Preserve the existing constructor, array size, capacity and failure checks. A function can pass a named lexical borrow as the owner under its ordinary permissions.
 
@@ -874,11 +876,11 @@ The construction basename is a hint within the fixed publication filesystem. It 
 ```cod
 region Catalog { count:u64; }
 
-owned region a:Catalog <- make region Catalog(4096u64 -> capacity) { count <- 3u64; };
+own region a:Catalog <- make region Catalog(4096u64 -> capacity) { count <- 3u64; };
 publish(a, "versions/v1.dbmr");
 
 # Illustrative parameter name for anonymous backing.
-owned region b:Catalog <- make region Catalog(
+own region b:Catalog <- make region Catalog(
     50_000_000u64 -> capacity, "versions/v2.dbmr" -> publish_hint
 ) { count <- 4u64; };
 publish(b, "versions/v2.dbmr");
