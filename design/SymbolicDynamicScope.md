@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 230 · Recorded: 2026-11-21 · Phase: language/application co-design.
+Design revision: 231 · Recorded: 2026-11-21 · Phase: language/application co-design.
 
 ## Design authority
+
+[D-14-REF-ARGUMENT](DesignAuthorityRegistry.md#d-14-ref-argument) and [H-OWNER-REF-ARGUMENT-20261121](../CHANGELOG.md#h-owner-ref-argument-20261121) cover [pointer reads and parameter owners](#pointer-reads-and-parameter-owners) and the grammar of `not null` in ref arguments at r231. P-668/P-669 distinguish caller-side reference selection from payload reads and boolean negation. Check named and positional arguments under the same signature and checked-failure rules.
 
 [H-GUARDS-AND-LOOP-DISCARD-20261121](../CHANGELOG.md#h-guards-and-loop-discard-20261121) confirms [single-return guards](#single-return-guards) at r230 under [D-10-RETURN-GUARD](DesignAuthorityRegistry.md#d-10-return-guard). P-664/P-665 connect readable control flow to C-41/C-63 and the existing result and cleanup contracts. Check a taken return, false continuation, separator and else binding, and rejection of a missing required value in both frontends.
 
@@ -1493,7 +1495,7 @@ For a fresh bits ptr initializer with no contextual owner, H-292’s materializa
 
 H-271 makes a variable read implicitly dereference its target. `ptr` names do not expose raw addresses or pointer arithmetic. The compiler retains referent provenance for assignment and explicit external borrowing even when the same name supplies loaded bits to an arithmetic expression. `=` rebinds only within the initializer-fixed owner; `<-` performs the admitted bits/ownership transfer. H-270/H-302 makes assignment-family results destination views: builtin `=` preserves access, while `<-` is read-only.
 
-H-272 makes a default parameter's target local to the callee scope. Default bits arguments are evaluated/copied, so editing the parameter leaves the caller's storage unchanged. The implemented ordinary-pointer subset is described in [D-14](RegionalOwnership.md#pointer-and-initialization-obligations). External borrowing requires the H-273-confirmed owner-generic annotation in D-14; a shared owner variable constrains the actual owner instance, not just its root type. Non-bits regional objects cannot be copied into the local scope. Whole-region consuming calls retain their single-owner and exceptional-cleanup obligations while their ptr declaration mapping is coordinated separately. H-273 permits omitting ptr in function/procedure parameter declarations without changing these semantics or their owner constraints. Local declarations still require ptr. These rules do not broaden a function's access to dynamic bindings.
+H-272 makes a default parameter's target local to the callee scope. Default bits arguments are evaluated/copied, so editing the parameter leaves the caller's storage unchanged. The implemented ordinary-pointer subset is described in [D-14](RegionalOwnership.md#pointer-and-initialization-obligations). External borrowing requires the H-273-confirmed owner-generic annotation in D-14; a shared owner variable constrains the actual owner instance, not just its root type. Non-bits regional objects cannot be copied into the local scope. Whole-region consuming calls retain their single-owner and exceptional-cleanup obligations while their ptr declaration mapping is coordinated separately. For ordinary [owner-qualified reference arguments](RegionalOwnership.md#owner-qualified-reference-arguments), `x:T in O` and `ref x:T in O` receive the same non-null target. Explicit `ptr x:T in O` permits nullable forwarding. The caller can select a possibly null reference with `not null p`, assuming its checked NPE obligation. These rules do not broaden a function's access to dynamic bindings.
 
 H-274 additionally requires region-specific owner parameters constrained by a root type, with the actual borrowed region available to the body. Such a function can invoke explicit-memory root-policy methods without reading a dynamic symbol. A generic owner parameter still accepts either a region or a lexical scope and does not by itself supply a region reference. H-275 confirms the region binder spelling and extends region-as-declaration to the whole language. [D-14](RegionalOwnership.md#region-as-a-declaration-keyword-throughout-the-language) keeps actual region references distinct from root-object ptr values, with result/symbol spelling proposals separately marked.
 
@@ -1613,6 +1615,8 @@ not not flag;          # Same as !!flag.
 not (p is null);       # Same as !(p is null), and p is not null.
 not flag && ready;     # Same grouping as (!flag) && ready.
 ```
+
+The call argument `not null p` uses the [owner-qualified reference arguments](RegionalOwnership.md#owner-qualified-reference-arguments) grammar. It produces the argument reference or raises checked NPE. Boolean negation continues to use its ordinary operand grammar.
 
 Unary not binds as tightly as !, so not a is b groups as (not a) is b; it does not mean not (a is b). The two-word a is not b remains a single identity comparison, equivalent to either parenthesized negation of a is b. Nullability refinement recognizes equivalent negated null tests without re-evaluating operands or retaining facts across invalidating writes. Acceptance covers both builtin spellings, nesting, shared method identity, explicit/intrinsic forms, mixed precedence, once-only side effects, null access and branch refinement. These are selected source rules, not a claim that the current parser accepts the new word spelling.
 
