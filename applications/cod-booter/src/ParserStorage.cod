@@ -74,6 +74,23 @@ func export_node() -> u8 { return 58u8; }
 func array_declaration_node() -> u8 { return 59u8; }
 func array_shape_node() -> u8 { return 60u8; }
 
+func exception_local_node() -> u8 { return 61u8; }
+func exception_parameter_node() -> u8 { return 62u8; }
+func exception_result_node() -> u8 { return 63u8; }
+func ref_local_node() -> u8 { return 64u8; }
+func ref_result_node() -> u8 { return 65u8; }
+func make_exception_node() -> u8 { return 66u8; }
+func make_named_node() -> u8 { return 67u8; }
+func construction_payload_node() -> u8 { return 68u8; }
+func field_initializer_node() -> u8 { return 69u8; }
+func capacity_placement_node() -> u8 { return 70u8; }
+func cause_placement_node() -> u8 { return 71u8; }
+func named_argument_node() -> u8 { return 72u8; }
+
+func field_access_node() -> u8 { return 73u8; }
+func readonly_ref_parameter_node() -> u8 { return 74u8; }
+func bodyless_defer_node() -> u8 { return 75u8; }
+
 func integer_arithmetic(kind:u8) -> bool {
     return kind == add_node() || kind == subtract_node() || kind == multiply_node() ||
         kind == divide_node() || kind == remainder_node();
@@ -100,6 +117,8 @@ func discarded_guard_result() -> u64 { return 1u64; }
 func procedure_definition() -> u64 { return 0u64; }
 func function_definition() -> u64 { return 1u64; }
 func readonly_declaration() -> u64 { return 1u64; }
+func explicit_owning_catch() -> u64 { return 2u64; }
+func borrowed_catch() -> u64 { return 4u64; }
 func no_node() -> u64 { return 18446744073709551615u64; }
 
 func is_function(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
@@ -193,3 +212,20 @@ export procedure_definition;
 export function_definition;
 export is_function;
 export no_node;
+export exception_local_node;
+export exception_parameter_node;
+export exception_result_node;
+export ref_local_node;
+export ref_result_node;
+export make_exception_node;
+export make_named_node;
+export construction_payload_node;
+export field_initializer_node;
+export capacity_placement_node;
+export cause_placement_node;
+export named_argument_node;
+export explicit_owning_catch;
+export borrowed_catch;
+export field_access_node;
+export readonly_ref_parameter_node;
+export bodyless_defer_node;

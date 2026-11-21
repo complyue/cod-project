@@ -18590,6 +18590,41 @@ class ScalarChecker {
     publish_module(source);
   }
 
+  static void require_implemented_source_forms(const Type &type, const Location &at, const char *holding_form) {
+    if (type.kind == Type::exception_holder) implementation_gap(at, holding_form);
+    if (type.target) require_implemented_source_forms(*type.target, at, "owning exception callable type");
+    for (const auto &parameter : type.parameters)
+      require_implemented_source_forms(parameter, at, "owning exception callable type");
+  }
+
+  static void require_implemented_source_forms(const Parameter &parameter) {
+    require_implemented_source_forms(parameter.type, parameter.at, "owning exception parameter");
+    if (!parameter.here) return;
+    for (const auto &input : parameter.here->parameters) require_implemented_source_forms(input);
+    require_implemented_source_forms(parameter.here->result, parameter.at, "owning exception result");
+  }
+
+  static void require_implemented_source_forms(const Form &form) {
+    for (const auto &parameter : form.parameters) require_implemented_source_forms(parameter);
+    if (form.result_type) require_implemented_source_forms(*form.result_type, form.at, "owning exception result");
+    if (!form.body) return;
+    const auto visit = [&](auto &&self, const Expression &expr) -> void {
+      using K = Expression::Kind;
+      if (expr.kind == K::exception_binding) implementation_gap(expr.at, "owning exception local");
+      if (expr.kind == K::make_exception) implementation_gap(expr.at, "owning make exception expression");
+      if (expr.kind == K::make_object && expr.constructor_arguments)
+        implementation_gap(expr.at, "ordinary constructor arguments");
+      if (expr.kind == K::handler && expr.catch_mode != Expression::CatchMode::owning)
+        implementation_gap(expr.at, expr.catch_mode == Expression::CatchMode::borrowed
+                            ? "explicit borrowed exception catch" : "explicit owning exception catch");
+      if (expr.annotation)
+        require_implemented_source_forms(*expr.annotation, expr.at, "owning exception callable type");
+      if (expr.definition) require_implemented_source_forms(*expr.definition);
+      for (const auto &child : expr.children) self(self, *child);
+    };
+    visit(visit, *form.body);
+  }
+
 public:
   CheckedProgram check(const SourceProgram &source) {
     modules_.resize(source.modules.size());
@@ -18597,6 +18632,7 @@ public:
     std::optional<Location> unsupported_here;
     for (const auto module : source.construction_order) {
       const ModuleLookup lookup(module_, module);
+      for (const auto &form : source.modules[module].forms) require_implemented_source_forms(*form);
       register_module(source.modules[module], print_symbol, unsupported_here);
     }
     check_native_type_names();
