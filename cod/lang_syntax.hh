@@ -430,7 +430,7 @@ struct EnumMember {
 struct Form {
   enum class Kind { symbol, symbol_from, function, procedure, data, region_definition, array, unit, using_units, global,
                     using_resource, import_resource, mixin_resource, export_resource, export_from_resource,
-                    expression, abstract_type, conformance, enumeration };
+                    expression, abstract_type, conformance, enumeration, native_handle_type };
   Kind kind;
   Location at;
   std::string name;
@@ -471,7 +471,7 @@ struct Form {
   SourceSpan span = {};
 
   bool publishes_definition() const {
-    return exporting && (kind == Kind::data || kind == Kind::array || kind == Kind::enumeration ||
+    return exporting && (kind == Kind::data || kind == Kind::native_handle_type || kind == Kind::array || kind == Kind::enumeration ||
                          kind == Kind::function || kind == Kind::procedure);
   }
   bool requires_explicit_return() const { return kind == Kind::procedure && !implicit_scope && !supplied_scope; }
@@ -2165,6 +2165,7 @@ public:
       auto start = peek();
       auto form = std::make_unique<Form>();
       form->at = start.at;
+      const auto native_handle_head = [&] { return is("handle") && is("type", 1); };
       if (take("export")) {
         if (is("from") && tokens_[cursor_ + 1].kind == TokenKind::string) {
           expect("from");
@@ -2175,7 +2176,7 @@ public:
           continue;
         }
         const auto next = peek().kind == TokenKind::end ? TokenKind::end : tokens_[cursor_ + 1].kind;
-        const bool named_type = (is("data") && (next == TokenKind::identifier || next == TokenKind::string)) ||
+        const bool named_type = native_handle_head() || (is("data") && (next == TokenKind::identifier || next == TokenKind::string)) ||
             ((is("array") || is("enum")) && next == TokenKind::identifier);
         const bool named_callable = (is("func") || is("function") || is("proc") || is("procedure")) && !callable_binding();
         if (is("import") || named_type || named_callable) {
@@ -2271,6 +2272,12 @@ public:
         type_separator();
         form->result_type = parse_type();
         expect(";");
+      } else if (native_handle_head()) {
+        expect("handle"); expect("type");
+        form->kind = Form::Kind::native_handle_type;
+        form->name = ordinary_name().text;
+        if (take("in")) form->native_owner_type = parse_type();
+        expect(";");
       } else if (((is("type") || is("data")) && tokens_[cursor_ + 1].kind == TokenKind::identifier) ||
                  (is("data") && tokens_[cursor_ + 1].kind == TokenKind::string) ||
                  (is("region") && tokens_[cursor_ + 1].kind == TokenKind::identifier && is("{", 2))) {
@@ -2284,19 +2291,9 @@ public:
           form->c_data = true;
         }
         form->name = ordinary_name().text;
-        if (form->c_data && take("in")) {
-          form->native_owner_type = parse_type();
-          expect(";");
-          append(std::move(form));
-          continue;
-        }
-        if (form->c_data && take(";")) {
-          append(std::move(form));
-          continue;
-        }
         if (take("<:")) form->parent_type = parse_type();
         if (!is("{")) {
-          if (form->c_data) fail(peek().at, "expected a brace body for a data \"C\" record");
+          if (form->c_data) fail(peek().at, "expected fields for a data \"C\" record; declare native handles with 'handle type'");
           if (data && !form->parent_type)
             fail(start.at, "a head-only data declaration requires an abstract parent");
           if (form->exporting) fail(start.at, "export requires a locally defined identity");
@@ -2326,7 +2323,7 @@ public:
           if (!is("}")) expect(";");
         }
         if (form->c_data && form->parameters.empty())
-          fail(start.at, "end a fieldless data \"C\" declaration with ';' instead of an empty body");
+          fail(start.at, "a data \"C\" record requires at least one field; declare native handles with 'handle type'");
         take(";");
       } else if (!callable_binding() && (is("function") || is("func") || is("procedure") || is("proc") || is("conversion"))) {
         callable(*form);

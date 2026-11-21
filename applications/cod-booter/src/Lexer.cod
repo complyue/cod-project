@@ -185,7 +185,7 @@ export func data_word(source:const SourceBytes in S, token:const Token in T) -> 
         source[first + 2u64] == 116u8 && source[first + 3u64] == 97u8; # d a t a
 }
 
-func type_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func type_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
     val first <- token.first;
     return identifier_width(token, 4u64) &&

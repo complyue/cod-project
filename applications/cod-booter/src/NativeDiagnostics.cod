@@ -1,8 +1,8 @@
 using "SourceStorage.cod" { SourceBytes, SourceLines, SourcePosition };
 using "SourceAccess.cod" locate_source_position;
 
-data "C" LauncherDiagnostics;
-export data "C" DiagnosticDestination in LauncherDiagnostics;
+handle type LauncherDiagnostics;
+export handle type DiagnosticDestination in LauncherDiagnostics;
 proc "C" write_diagnostic(handle destination:DiagnosticDestination in D, stage:u8, code:u32,
                           first_line:u64, first_column:u64, past_line:u64, past_column:u64,
                           related_line:u64, related_column:u64, os_error:u64) -> u8 where {owner D};

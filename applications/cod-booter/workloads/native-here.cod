@@ -1,4 +1,4 @@
-data "C" Revision;
+handle type Revision;
 array SourceBytes[u64]:u8;
 array LineStarts[u64]:u64;
 

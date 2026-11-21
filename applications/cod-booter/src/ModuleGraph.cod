@@ -26,7 +26,7 @@ using "Compiler.cod" ExpressionScratchPlan;
 using "ModuleDriver.cod" plan_module_source;
 using "CompilerStatus.cod" CompilerStatus { Complete, Rejected, ScratchFailed, SourceOpenFailed };
 
-data "C" ModuleFrame;
+handle type ModuleFrame;
 
 data ModuleProgress {
     identity:u64;
