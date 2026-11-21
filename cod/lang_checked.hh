@@ -389,6 +389,7 @@ class ScalarChecker {
   enum class ExpectedTypeUse { materialization, callable_result };
   enum class EvidenceRead { payload, target, projection, binding_slot, discarded, native_loan };
   enum class BindingUse { ordinary, exception_field, native_loan };
+  enum class NativeLoanContext { none, borrow, reborrow_owner };
   enum class IndexedUse { value_only, immediate_target };
   static ExpectedTypeUse expected_type_use(ArgumentMode mode) {
     return mode == ArgumentMode::value ? ExpectedTypeUse::callable_result : ExpectedTypeUse::materialization;
@@ -5487,35 +5488,27 @@ class ScalarChecker {
   }
   CheckedOperation check_handle_loan(const Expression &operand, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, bool reborrow_owner = false) {
-    const auto &source = ungrouped_expression(operand);
-    if (operand.spread || source.spread) implementation_gap(operand.at, "a spread native handle argument");
-    CheckedOperation value;
-    if (source.kind == Expression::Kind::make_borrowed_handle) {
-      value = check_attached_native_acquisition(source, instance, operations);
-    } else {
-      const auto &name = native_loan_source(operand);
-      const auto binding = lexical_.lookup(name.text);
-      if (!binding || bindings_->at(*binding).type.kind != Type::native_handle)
-        fail(name.at, "a borrowed handle parameter requires a lexical native handle");
-      value = read_binding(name, true, binding, BindingUse::native_loan);
-      if (value.type.owned) {
-        if (!reborrow_owner) implementation_gap(name.at, "reborrowing an owned native handle for an ordinary CoD parameter");
-        if (!value.place || !native_resource_owners_.contains(*value.place))
-          implementation_gap(name.at, "a C handle borrow without a direct native binding");
-        value.owners = {native_resource_owners_.at(*value.place)};
-      }
-      if (!value.place || !one_owner(value))
-        implementation_gap(name.at, "a native handle argument without one proven live owner");
-    }
-    for (auto *part = &operand;; part = part->children.front().get()) {
-      operations.insert_or_assign(part, value);
-      if (part == &source) break;
-    }
+    const auto context = reborrow_owner ? NativeLoanContext::reborrow_owner : NativeLoanContext::borrow;
+    check(operand, instance, operations, false, false, nullptr, ExpectedTypeUse::materialization, false, IndexedUse::value_only, context);
+    const auto &value = operations.at(&operand);
+    if (value.type == Type::never) return value;
+    if (value.type.kind != Type::native_handle || value.type.owned || !value.view || value.mixed_view || value.nullable_view)
+      fail(operand.at, "a borrowed handle parameter requires a native handle borrow");
+    if (!one_owner(value)) fail(operand.at, "a native handle argument requires one proven actual owner");
+    require_live_view(value, operand.at);
     return value;
   }
-  static std::optional<CheckedOperation::NativeHandleLoan> native_argument_loan(const CheckedOperation &value) {
-    if (!value.binding) return {};
-    return CheckedOperation::NativeHandleLoan{*value.binding, *value.place, value.type.owned};
+  CheckedOperation read_native_loan(const Expression &name, size_t binding, NativeLoanContext context) {
+    auto value = read_binding(name, true, binding, BindingUse::native_loan);
+    if (!value.type.owned) return value;
+    if (context != NativeLoanContext::reborrow_owner)
+      implementation_gap(name.at, "reborrowing an owned native handle for an ordinary CoD parameter");
+    if (!value.place || !native_resource_owners_.contains(*value.place))
+      implementation_gap(name.at, "a C handle borrow without a direct native binding");
+    value.owners = {native_resource_owners_.at(*value.place)};
+    value.type.owned = false;
+    value.reborrows_native_owner = true;
+    return value;
   }
   Type resolve_local_type(const Type &type, const CheckedInstance *instance, const Location &at,
                           bool product_view = false) const {
@@ -6417,14 +6410,20 @@ class ScalarChecker {
       fail(expr.at, "a function cannot invoke a procedure");
     if (!completes) { operation.type = Type::never; return; }
     for (const auto &owner : method.input_owners()) if (!owner.read_only) {
-      bool supplied = false, writable = false;
+      bool supplied = false, has_storage_input = false, writable_storage = false, writable_native = false;
       for (size_t i = 0; i < views.size(); ++i) if (parameter_at(method, i).owner == owner.name) {
+        const bool native = argument_mode(parameter_at(method, i)) == ArgumentMode::borrowed_handle;
+        has_storage_input |= !native;
         if (const auto actual = one_owner(views[i])) {
           supplied = true;
-          writable |= !const_owner(*actual);
+          if (native) writable_native |= !const_native_owner(*actual);
+          else writable_storage |= !const_owner(*actual);
         }
       }
-      if (supplied && !writable) fail(expr.at, "const owner cannot supply allocation access for '" + owner.name + "'");
+      if (supplied && has_storage_input && !writable_storage)
+        fail(expr.at, "const owner cannot supply allocation access for '" + owner.name + "'");
+      if (supplied && !has_storage_input && !writable_native)
+        fail(expr.at, "const owner cannot supply writable native access for '" + owner.name + "'");
     }
     const auto contract = callable_type(program_.methods[target.method], target.arguments, target.result,
         access_of(views), owners_of(views), &arguments);
@@ -15197,9 +15196,7 @@ class ScalarChecker {
       implementation_gap(expr.at, "deferred invocation of a C provider");
     CheckedOperation operation;
     operation.type = *native.contract.result.type;
-    auto &call = operation.native_call.emplace();
-    call.operation = id;
-    call.loans.resize(native.inputs.size());
+    operation.native_call = id;
     std::map<size_t, size_t> owners;
     const auto bind = [&](size_t role, std::optional<size_t> actual, const Location &at) {
       const auto &name = form.owner_parameters[role].name;
@@ -15225,7 +15222,6 @@ class ScalarChecker {
             (value.read_only || (actual && const_native_owner(*actual))))
           fail(operand.at, "readonly handle cannot supply a writable C provider owner");
         bind(*input.owner, actual, operand.at);
-        call.loans[i] = native_argument_loan(value);
       } else {
         const bool array = input.type.kind == Type::array;
         const auto type = check(operand, instance, operations, !array);
@@ -15279,7 +15275,7 @@ class ScalarChecker {
     finish_bound_here_invocation(expr, operation, read, discard);
     return operation;
   }
-  bool prepare_native_acquisition(CheckedOperation::NativeAcquisition &acquisition, CheckedInstance *instance,
+  bool prepare_native_acquisition(const CheckedOperation::NativeAcquisition &acquisition, CheckedInstance *instance,
                                   std::map<const Expression *, CheckedOperation> &operations) {
     const auto &initializer = *acquisition.initializer;
     if (checking_method_ && checking_method_->source->kind == Form::Kind::function)
@@ -15292,7 +15288,6 @@ class ScalarChecker {
     for (size_t i = 0; i < constructor.inputs.size(); ++i) {
       const auto &operand = *initializer.children[i];
       const auto &input = constructor.inputs[i];
-      std::optional<CheckedOperation::NativeHandleLoan> loan;
       if (input.owner) {
         const auto value = check_handle_loan(operand, instance, operations, true);
         if (value.type == Type::never) {
@@ -15310,14 +15305,12 @@ class ScalarChecker {
           const auto [known, first] = owners.try_emplace(*input.owner, *actual);
           if (!first && known->second != *actual)
             fail(operand.at, "C constructor arguments for owner '" + role.name + "' require one proven actual owner");
-          loan = native_argument_loan(value);
         }
       } else {
         const auto type = check(operand, instance, operations);
         if (type == Type::never) { completes = false; lexical_.live = false; }
         else transfer_type(type, input.type, operand.at);
       }
-      acquisition.loans.push_back(loan);
     }
     if (completes && constructor.failure)
       note_abrupt(initializer.at, {constructor.failure->identity, exception_id(ExceptionCategory::out_of_memory),
@@ -15342,7 +15335,7 @@ class ScalarChecker {
     if (!owner.place || !native_resource_owners_.contains(*owner.place))
       implementation_gap(expr.at, "attached native handle construction without a direct owning binding");
     if (owner.read_only) fail(expr.at, "a readonly native handle cannot attach a child");
-    CheckedOperation::NativeAcquisition acquisition{id, &expr, {}, native_argument_loan(owner)};
+    CheckedOperation::NativeAcquisition acquisition{id, &expr, owner.place};
     const bool completes = prepare_native_acquisition(acquisition, instance, operations);
     CheckedOperation operation;
     operation.type = completes ? native_handle_type(type, false) : Type{Type::never};
@@ -15451,7 +15444,8 @@ class ScalarChecker {
   Type check(const Expression &expr, CheckedInstance *instance,
              std::map<const Expression *, CheckedOperation> &operations, bool read = true, bool discard = false,
              const Type *expected = nullptr, ExpectedTypeUse expected_use = ExpectedTypeUse::materialization,
-             bool write_slot = false, IndexedUse indexed_use = IndexedUse::value_only) {
+             bool write_slot = false, IndexedUse indexed_use = IndexedUse::value_only,
+             NativeLoanContext native_loan = NativeLoanContext::none) {
     using K = Expression::Kind;
     CheckedOperation operation;
     if (checking_method_ && checking_method_->here_group &&
@@ -15626,7 +15620,15 @@ class ScalarChecker {
       operation.type = Type::null_ref; operation.view = operation.nullable_view = true; select_targets(operation, {null_target});
       if (!expr.owner_name.empty()) operation.owners = {expr.owner_name == "here" ? cleanup_scope_ : named_owner(expr.owner_name, expr.at)};
       break;
-    case K::name: operation = named_value(expr, callable_expectation(expected), read); break;
+    case K::name:
+      if (native_loan != NativeLoanContext::none) {
+        if (const auto binding = lexical_.lookup(expr.text); binding && bindings_->at(*binding).type.kind == Type::native_handle) {
+          operation = read_native_loan(expr, *binding, native_loan);
+          break;
+        }
+      }
+      operation = named_value(expr, callable_expectation(expected), read);
+      break;
     case K::callable: {
       const auto method = lexical_method(expr.definition.get());
       if (expr.definition->name.empty())
@@ -15940,9 +15942,13 @@ class ScalarChecker {
     case K::grouped: {
       const auto &operand = *expr.children.front();
       operation.type = check(operand, instance, operations, false, discard, expected, expected_use,
-          false, IndexedUse::immediate_target);
+          false, IndexedUse::immediate_target, native_loan);
       if (operation.type == Type::never) break;
       const auto &source = operations.at(&operand);
+      if (native_loan != NativeLoanContext::none && operation.type.kind == Type::native_handle) {
+        view(source);
+        break;
+      }
       const auto result = group_result(operation.type, source.view, source.nullable_view, source.mixed_view);
       if (result == GroupResult::unsupported)
         implementation_gap(expr.at, "parenthesized result with no proved value or nullable-target contract");
@@ -16044,12 +16050,14 @@ class ScalarChecker {
         }
         lexical_.scopes.back().declarations = false;
       }
-      const auto checked_yes = check(*expr.children[1], instance, operations, read && !value_join, discard, expected, expected_use);
+      const auto checked_yes = check(*expr.children[1], instance, operations, read && !value_join, discard, expected, expected_use,
+          false, IndexedUse::value_only, native_loan);
       const auto yes = return_test && !operations.at(&test).return_filter.can_match ? Type{Type::never} : checked_yes;
       auto yes_state = lexical_;
       lexical_ = before;
       refine(test, false, operations);
-      const auto no = check(*expr.children[2], instance, operations, read && !value_join, discard, expected, expected_use);
+      const auto no = check(*expr.children[2], instance, operations, read && !value_join, discard, expected, expected_use,
+          false, IndexedUse::value_only, native_loan);
       auto no_state = lexical_;
       auto &yes_fact = operations.at(expr.children[1].get()), &no_fact = operations.at(expr.children[2].get());
       const bool independent = condition != Type::never && yes == no && independent_scalar_conditional(yes, yes_fact.view, no_fact.view,
@@ -16109,12 +16117,13 @@ class ScalarChecker {
         operation.origins.insert(no_fact.origins.begin(), no_fact.origins.end());
         operation.owners = yes_fact.owners;
         operation.owners.insert(no_fact.owners.begin(), no_fact.owners.end());
-        if (scalar_type(operation.type) && operation.view && !operation.mixed_view && operation.owners.size() > 1) {
+        const bool native_result = operation.type.kind == Type::native_handle;
+        if ((scalar_type(operation.type) || native_result) && operation.view && !operation.mixed_view && operation.owners.size() > 1) {
           const auto owner = *operation.owners.begin();
           bool common = true;
           for (const auto other : operation.owners) {
             const auto relation = compare_owners(owner, other);
-            if (proving_ && validating_) require_conditional_owner(relation, expr.at);
+            if (native_result || (proving_ && validating_)) require_conditional_owner(relation, expr.at);
             common = common && relation == OwnerMatch::satisfied;
           }
           if (common) operation.owners = {owner};
@@ -16140,7 +16149,8 @@ class ScalarChecker {
       for (size_t i = 0; i < expr.children.size(); ++i) {
         const bool last = i + 1 == expr.children.size();
         operation.type = check(*expr.children[i], instance, operations, last ? read : true, last ? discard : true,
-                               last ? expected : nullptr, expected_use);
+                               last ? expected : nullptr, expected_use, false, IndexedUse::value_only,
+                               last ? native_loan : NativeLoanContext::none);
         exits = exits || operation.type == Type::never;
         if (exits) lexical_.live = false;
       }
@@ -16612,7 +16622,10 @@ class ScalarChecker {
     case K::make_owned_handle:
       implementation_gap(expr.at, "C handle acquisition outside a direct lexical owned handle initializer");
     case K::make_borrowed_handle:
-      implementation_gap(expr.at, "attached native handle construction outside a checked borrowed argument");
+      if (native_loan == NativeLoanContext::none)
+        implementation_gap(expr.at, "attached native handle construction outside a checked borrowed argument");
+      operation = check_attached_native_acquisition(expr, instance, operations);
+      break;
     case K::make_object: {
       operation = check_product_construction(expr, resolve_annotation(*expr.annotation, instance), instance, operations, {}, read && !discard);
       break;

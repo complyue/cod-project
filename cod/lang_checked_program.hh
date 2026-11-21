@@ -91,25 +91,15 @@ struct CheckedOperation {
   std::optional<size_t> place;
   std::optional<size_t> product_field;
   std::optional<size_t> exception_owner;
-  struct NativeHandleLoan {
-    size_t binding, place;
-    bool owned;
-    auto operator<=>(const NativeHandleLoan &) const = default;
-  };
   struct NativeAcquisition {
     size_t constructor;
     const Expression *initializer;
-    std::vector<std::optional<NativeHandleLoan>> loans;
-    std::optional<NativeHandleLoan> parent = {};
+    std::optional<size_t> parent_place = {};
     auto operator<=>(const NativeAcquisition &) const = default;
   };
   std::optional<NativeAcquisition> native_acquisition;
-  struct NativeCall {
-    size_t operation;
-    std::vector<std::optional<NativeHandleLoan>> loans;
-    auto operator<=>(const NativeCall &) const = default;
-  };
-  std::optional<NativeCall> native_call;
+  std::optional<size_t> native_call;
+  bool reborrows_native_owner = false;
   struct NativeHereCall {
     size_t operation, place, owner;
     auto operator<=>(const NativeHereCall &) const = default;
