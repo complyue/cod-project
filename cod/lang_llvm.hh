@@ -2709,7 +2709,7 @@ class LLVMEmission {
     case K::make_object: {
       auto *address = storage_.at(*fact.place);
       if (fact.operand_type.kind == Type::product) emit_product_initializers(expr, address);
-      else if (const auto *initializer = expr.value_initializer()) {
+      else if (const auto *initializer = expr.construction_initializer()) {
         auto *value = emit_expression(*initializer);
         if (!reachable()) return nullptr;
         assign_place(address, convert_result(expr, *initializer, value), expr, &CheckedOperation::operand_type);
@@ -2790,8 +2790,8 @@ class LLVMEmission {
     const auto schema_id = contexts_.front().at(&expr).operand_type.identity;
     auto *layout = product_layout(schema_id);
     const auto &schema = program_->schemas.at(schema_id);
-    for (const auto &initializer : expr.children) {
-      const auto &input = *initializer->children.front();
+    for (const auto &initializer : expr.initializer_items()) {
+      const auto &input = *initializer->children.back();
       const auto index = *contexts_.front().at(initializer.get()).product_field;
       const auto &member = schema.fields[index];
       const bool direct = member.storage == PlaceKind::value;

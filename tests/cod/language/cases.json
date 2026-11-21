@@ -1345,6 +1345,11 @@
     "stdout": ""
   },
   {
+    "file": "construction-blocks.cod",
+    "exit": 0,
+    "stdout": "42\ntrue\n8\n7\n11\n"
+  },
+  {
     "file": "ptr-initialization-path.cod",
     "exit": 2,
     "stdout": "",
