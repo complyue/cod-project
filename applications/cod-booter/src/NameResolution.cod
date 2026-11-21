@@ -639,7 +639,7 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
         val definition <- bindings[requested].declaration;
         record_initializer <- (kind == record_type() && nodes[nodes[definition].left].kind != data_parent_node()) ||
             (kind == ordinary_selection() && bindings[definition].imported_kind == record_export());
-        if (!record_initializer && !native_scalar(kind) && kind != builtin_void()) {
+        if (!record_initializer && !native_scalar(kind) && kind != builtin_void() && kind != enum_type()) {
             reject_name(state, at, unsupported_ordinary_construction());
             return;
         } else {};

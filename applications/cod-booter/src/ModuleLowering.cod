@@ -7,7 +7,8 @@ using "ParserStorage.cod" {
     deferred_call_node, deferred_block_node, discard_node, bool_node, compare_node,
     conditional_node, range_node, literal_range, nonempty_literal_range, less_words,
     logical_not_node, logical_and_node, logical_binary, skips_right, equal_words, return_node,
-    throw_node, case_node, case_arm_node, case_true_pattern, case_fallthrough_node, case_failure_node, break_node,
+    throw_node, case_node, case_arm_node, case_fallthrough_node, case_failure_node, break_node,
+    enum_declaration_node, type_assertion_node,
 };
 using "ExpressionParser.cod" ParseResult;
 using "NameResolution.cod" { NameBindings, NameWork, first_item, callable_head, exception_binding };
@@ -483,7 +484,7 @@ func lower_case_arm(nodes:const ExprNodes in N, names:const NameBindings in B, l
     val resumes <- mode == tests_case_arm();
     if (resumes) {
         val matched <- new_block(plan);
-        val expected <- if (nodes[pattern].number == case_true_pattern()) { 1u64 } else { 0u64 };
+        val expected <- facts[pattern].discriminator_code;
         command(code, plan, branch_equal(), discriminator, expected, matched, next);
         position(code, plan, state, matched);
     } else {};
@@ -842,7 +843,17 @@ func lower_expression(nodes:const ExprNodes in N, names:const NameBindings in B,
     if (!state.live || plan.diagnostic != 0u8) return;
     plan.node <- at;
     val kind <- nodes[at].kind;
-    if (kind == using_node() || kind == callable_node()) return;
+    if (kind == using_node() || kind == callable_node() || kind == enum_declaration_node()) return;
+    if (kind == type_assertion_node()) {
+        if (facts[at].enum_constant != 0u8) {
+            emit(code, plan, word_constant(), slot(at), facts[at].discriminator_code);
+        } else {
+            val operand <- nodes[at].left;
+            lower_node(nodes, names, links, facts, sites, code, plan, state, operand);
+            if (state.live) { emit(code, plan, copy_word(), slot(at), slot(operand)); } else {};
+        };
+        return;
+    } else {};
     if (kind == literal_node() || kind == bool_node()) {
         emit(code, plan, word_constant(), slot(at), nodes[at].number);
         return;
