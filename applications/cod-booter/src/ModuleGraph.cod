@@ -114,7 +114,7 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
         };
         stage <- 0u8; diagnostic <- 0u8; related_first <- no_node();
     };
-    if (!bind_parsed_module(source, nodes, spellings, published, selected, names, work, result)) {
+    if (!bind_parsed_module(source, nodes, spellings, published, selected, names, work, false, result)) {
         report_rejection(source, lines, diagnostic, result.stage, result.diagnostic,
                          result.frontend.diagnostic_first, result.frontend.diagnostic_past, result.related_first);
         return native_source_rejected();

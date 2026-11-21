@@ -304,6 +304,9 @@ func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, ref 
                   at:u64) -> u8 where {const owner N, const owner B, owner F} {
     val binding <- nodes[at].left;
     val initializer <- nodes[at].right;
+    val readonly <- if (nodes[binding].kind == typed_name_node() && nodes[binding].number == readonly_declaration()) {
+        1u8
+    } else { 0u8 };
     val type_name <- no_node();
     if (nodes[binding].kind == typed_name_node()) { (type_name <- nodes[binding].right):void; } else {};
     val required_owner <- no_node();
@@ -328,12 +331,14 @@ func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, ref 
         if (reserves_storage(nodes, initializer)) {
             if (facts[initializer].kind != value_kind) { return wrong_operand_type(); } else {};
             set_fact(facts, at, value_kind, local_place(), names[at].scope, 0u64, 0u8);
+            facts[at].target_readonly <- readonly;
             facts[at].reservation <- initializer;
             return 0u8;
         } else {};
         val diagnostic <- require_typed_bits(nodes, facts, initializer, value_kind);
         if (diagnostic != 0u8) { return diagnostic; } else {};
         set_fact(facts, at, value_kind, local_place(), names[at].scope, 0u64, 0u8);
+        facts[at].target_readonly <- readonly;
         return 0u8;
     } else {};
     val owner_site <- facts[initializer].owner;
@@ -347,10 +352,11 @@ func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, ref 
         if (facts[initializer].kind != declared_kind || facts[initializer].reception == independent_value()) {
             return unproved_operand();
         } else {};
-        if (facts[initializer].target_readonly != 0u8) { return expected_writable_place(); } else {};
+        if (facts[initializer].target_readonly != 0u8 && readonly == 0u8) { return expected_writable_place(); } else {};
     } else {};
     if (owner_site == no_node()) { return unproved_owner(); } else {};
     set_fact(facts, at, declared_kind, nullable_ptr(), owner_site, 0u64, 0u8);
+    facts[at].target_readonly <- readonly;
     facts[at].reservation <- facts[initializer].reservation;
     return 0u8;
 }

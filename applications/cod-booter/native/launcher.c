@@ -56,6 +56,7 @@ static const char *unsupported_source_form(uint32_t code) {
     case 36: return "writable owning exception catch";
     case 37: return "ordinary construction";
     case 38: return "field selection";
+    case 39: return "subscript expression";
     case 40: return "bodyless deferred exception handler";
     case 41: return "lexical callable value";
     case 42: return "throw with an explicit cause";
@@ -71,6 +72,7 @@ static const char *unsupported_source_form(uint32_t code) {
     case 63: return "supplier-owned allocation or defer in a single-brace here body";
     case 65: return "selection of an imported here signature";
     case 71: return "unproved native here feedback type";
+    case 74: return "array length query";
     default: return NULL;
     }
 }
@@ -106,6 +108,10 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: a call can supply only one trailing here body\n", stderr);
     else if (diagnostic->stage == 1 && diagnostic->code == 41)
         fputs(": error: a val parameter has independent storage and cannot declare 'in'\n", stderr);
+    else if (diagnostic->stage == 1 && diagnostic->code == 42)
+        fputs(": error: expected ']' after the subscript expression\n", stderr);
+    else if (diagnostic->stage == 1 && diagnostic->code == 43)
+        fputs(": error: unsupported intrinsic syntax, expected 'intrinsic (len)(array)'\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 13)
         fputs(": error: this module declaration is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 49)

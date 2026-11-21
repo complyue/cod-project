@@ -108,6 +108,8 @@ func here_receiver_node() -> u8 { return 90u8; }
 func continue_node() -> u8 { return 91u8; }
 func break_node() -> u8 { return 92u8; }
 func narrow_integer_node() -> u8 { return 93u8; }
+func index_access_node() -> u8 { return 94u8; }
+func array_length_node() -> u8 { return 95u8; }
 
 func handle_local(kind:u8) -> bool {
     return kind == owning_handle_local_node() || kind == borrowed_handle_local_node();
@@ -288,6 +290,8 @@ export capacity_placement_node;
 export cause_placement_node;
 export named_argument_node;
 export field_access_node;
+export index_access_node;
+export array_length_node;
 export bodyless_defer_node;
 export callable_local_node;
 export throw_with_cause_node;
