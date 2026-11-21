@@ -510,6 +510,9 @@ func set_result(ref facts:OperandFacts in F, at:u64, kind:u8) -> void where {own
     };
 }
 
+func explicit_discard() -> u8 { return 1u8; }
+func loop_discard() -> u8 { return 2u8; }
+
 # List entries carry the reached normal tail type. Explicit discard still
 # checks that type, without imposing a read of the tail's target.
 func check_sequence_item(nodes:const ExprNodes in N, ref facts:OperandFacts in F, at:u64) -> void
@@ -551,6 +554,7 @@ func merge_arm_result(nodes:const ExprNodes in N, ref facts:OperandFacts in F, a
     val kind <- facts[arm].kind;
     if (kind == 0u8) { return unproved_result_contract(); } else {};
     if (kind == never_result()) { return 0u8; } else {};
+    if (facts[at].discarded_result == loop_discard()) { return merge_result(facts, at, void_result()); } else {};
     if (facts[at].kind == 0u8) {
         copy_fact(facts, at, arm);
         return 0u8;
@@ -630,7 +634,7 @@ func merge_guard_result(nodes:const ExprNodes in N, ref facts:OperandFacts in F,
 
 func check_try_result(nodes:const ExprNodes in N, links:const NameWork in L, ref facts:OperandFacts in F, at:u64) -> u8
     where {const owner N, const owner L, owner F} {
-    val discard <- nodes[at].number == discarded_guard_result();
+    val discard <- nodes[at].number == discarded_guard_result() || facts[at].discarded_result == loop_discard();
     val diagnostic <- merge_guard_result(nodes, facts, at, nodes[at].left, discard);
     if (diagnostic != 0u8) { return diagnostic; } else {};
     val clause <- first_item(nodes, nodes[at].right);
@@ -869,9 +873,9 @@ func check_operand(nodes:const ExprNodes in N, names:const NameBindings in B, li
     return 0u8;
 }
 
-func discard_result(ref facts:OperandFacts in F, at:u64) -> void where {owner F} {
+func discard_result(ref facts:OperandFacts in F, at:u64, mode:u8) -> void where {owner F} {
     if (at == no_node()) { return; } else {};
-    facts[at].discarded_result <- 1u8;
+    facts[at].discarded_result <- mode;
     return;
 }
 
@@ -888,10 +892,11 @@ func inherit_result_use(ref facts:OperandFacts in F, parent:u64, child:u64) -> v
 func prepare_result_use(nodes:const ExprNodes in N, ref facts:OperandFacts in F, at:u64) -> void
     where {const owner N, owner F} {
     val kind <- nodes[at].kind;
-    if (kind == discard_node()) { discard_result(facts, nodes[at].left); return; } else {};
+    # An explicit discard still requires its operand to establish its type.
+    if (kind == discard_node()) { discard_result(facts, nodes[at].left, explicit_discard()); return; } else {};
     if (kind == range_node()) {
-        discard_result(facts, nodes[at].right);
-        discard_result(facts, nodes[at].number);
+        discard_result(facts, nodes[at].right, loop_discard());
+        discard_result(facts, nodes[at].number, loop_discard());
         return;
     } else {};
     if (kind == conditional_node()) {
