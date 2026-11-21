@@ -45,6 +45,10 @@ using "ParserStorage.cod" discard_node;
 using "ParserStorage.cod" bool_node;
 using "ParserStorage.cod" compare_node;
 using "ParserStorage.cod" conditional_node;
+using "ParserStorage.cod" range_node;
+using "ParserStorage.cod" range_header_node;
+using "ParserStorage.cod" literal_range;
+using "ParserStorage.cod" nonempty_literal_range;
 using "ParserStorage.cod" logical_not_node;
 using "ParserStorage.cod" logical_binary;
 using "ParserStorage.cod" skips_right;
@@ -63,6 +67,7 @@ using "NameResolution.cod" symbolic_selection;
 using "NameResolution.cod" callable_binding;
 using "NameResolution.cod" formal_binding;
 using "NameResolution.cod" local_binding;
+using "NameResolution.cod" loop_index;
 using "NameResolution.cod" exception_binding;
 using "ModuleExports.cod" SelectedExports;
 using "ModuleExports.cod" exception_type_export;
@@ -720,6 +725,37 @@ func check_comparison(nodes:const ExprNodes in N, ref facts:OperandFacts in F, a
     return 0u8;
 }
 
+func check_range_header(nodes:const ExprNodes in N, ref facts:OperandFacts in F, at:u64) -> u8
+    where {const owner N, owner F} {
+    val lower <- nodes[at].left;
+    val upper <- nodes[at].right;
+    val diagnostic <- if (facts[lower].kind != never_result()) { require_bits(nodes, facts, lower) } else { 0u8 };
+    if (diagnostic != 0u8) { return diagnostic; } else {};
+    if (facts[upper].kind != never_result()) {
+        diagnostic <- require_bits(nodes, facts, upper);
+        if (diagnostic != 0u8) { return diagnostic; } else {};
+    } else {};
+    # Reads use the current index word. It exposes no writable binding slot.
+    set_result(facts, at, scalar_u64());
+    return 0u8;
+}
+
+func check_range_result(nodes:const ExprNodes in N, ref facts:OperandFacts in F, at:u64) -> void
+    where {const owner N, owner F} {
+    val header <- nodes[at].left;
+    val lower <- nodes[header].left;
+    val upper <- nodes[header].right;
+    val empty <- nodes[at].number;
+    val body_continues <- facts[nodes[at].right].kind != never_result();
+    val empty_continues <- empty == no_node() || facts[empty].kind != never_result();
+    val continues <- if (literal_range(nodes, header)) {
+        if (nonempty_literal_range(nodes, header)) { body_continues } else { empty_continues }
+    } else { body_continues || empty_continues };
+    if (facts[lower].kind == never_result() || facts[upper].kind == never_result() || !continues) {
+        set_result(facts, at, never_result());
+    } else { only_void(facts, at); };
+}
+
 func check_explicit_discard(nodes:const ExprNodes in N, ref facts:OperandFacts in F, at:u64) -> u8
     where {const owner N, owner F} {
     val kind <- result_kind(nodes, facts, nodes[at].left, false);
@@ -750,7 +786,8 @@ func check_operand(nodes:const ExprNodes in N, names:const NameBindings in B, li
     if (kind == bool_node()) { set_result(facts, at, scalar_bool()); return 0u8; } else {};
     if (kind == name_node()) {
         val binding <- names[at].kind;
-        if (binding == formal_binding() || binding == local_binding() || binding == exception_binding()) {
+        if (binding == formal_binding() || binding == local_binding() || binding == exception_binding() ||
+            binding == loop_index()) {
             copy_fact(facts, at, names[at].declaration);
         } else {};
         return 0u8;
@@ -782,6 +819,8 @@ func check_operand(nodes:const ExprNodes in N, names:const NameBindings in B, li
     if (kind == full_scope_node()) { return check_scope_tail(nodes, facts, at); } else {};
     if (kind == try_node()) { return check_try_result(nodes, links, facts, at); } else {};
     if (kind == conditional_node()) { return check_conditional(nodes, facts, at); } else {};
+    if (kind == range_header_node()) { return check_range_header(nodes, facts, at); } else {};
+    if (kind == range_node()) { check_range_result(nodes, facts, at); return 0u8; } else {};
     if (kind == discard_node()) { return check_explicit_discard(nodes, facts, at); } else {};
     if (kind == return_node()) {
         val diagnostic <- check_return(nodes, names, facts, at);
@@ -817,6 +856,11 @@ func prepare_result_use(nodes:const ExprNodes in N, ref facts:OperandFacts in F,
     where {const owner N, owner F} {
     val kind <- nodes[at].kind;
     if (kind == discard_node()) { discard_result(facts, nodes[at].left); return; } else {};
+    if (kind == range_node()) {
+        discard_result(facts, nodes[at].right);
+        discard_result(facts, nodes[at].number);
+        return;
+    } else {};
     if (kind == conditional_node()) {
         val yes <- nodes[at].right;
         val no <- nodes[at].number;

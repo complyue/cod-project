@@ -32,6 +32,10 @@ using "ParserStorage.cod" discard_node;
 using "ParserStorage.cod" bool_node;
 using "ParserStorage.cod" compare_node;
 using "ParserStorage.cod" conditional_node;
+using "ParserStorage.cod" range_node;
+using "ParserStorage.cod" literal_range;
+using "ParserStorage.cod" nonempty_literal_range;
+using "ParserStorage.cod" less_words;
 using "ParserStorage.cod" logical_not_node;
 using "ParserStorage.cod" logical_and_node;
 using "ParserStorage.cod" logical_binary;
@@ -499,6 +503,63 @@ func lower_conditional(nodes:const ExprNodes in N, names:const NameBindings in B
     if (yes_continues || no_continues) { position(code, plan, state, joined); } else {};
 }
 
+func lower_range(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
+                 facts:const OperandFacts in F, sites:const CompletionSites in S, ref code:NativeCommands in C,
+                 ref plan:NativePlan in P, ref state:LoweringState in R, at:u64) -> void
+    where {const owner N, const owner B, const owner L, const owner F, const owner S, owner C, owner P, owner R} {
+    val header <- nodes[at].left;
+    val start <- nodes[header].left;
+    val limit <- nodes[header].right;
+    lower_bits(nodes, names, links, facts, sites, code, plan, state, start);
+    if (!state.live || plan.diagnostic != 0u8) { return; } else {};
+    lower_bits(nodes, names, links, facts, sites, code, plan, state, limit);
+    if (!state.live || plan.diagnostic != 0u8) { return; } else {};
+
+    val empty <- nodes[at].number;
+    val literal <- literal_range(nodes, header);
+    if (literal && !nonempty_literal_range(nodes, header)) {
+        if (empty != no_node()) { lower_node(nodes, names, links, facts, sites, code, plan, state, empty); } else {};
+        return;
+    } else {};
+
+    val index <- slot(header);
+    val condition <- slot(at);
+    val body <- new_block(plan);
+    val done <- new_block(plan);
+    val otherwise <- if (!literal && empty != no_node()) { new_block(plan) } else { done };
+    val one <- new_slot(plan);
+    emit(code, plan, word_constant(), one, 1u64);
+    emit(code, plan, copy_word(), index, slot(start));
+    if (literal) {
+        finish_block(code, plan, state, body);
+    } else {
+        command(code, plan, compare_words(), condition, index, slot(limit), less_words());
+        command(code, plan, branch_equal(), condition, 0u64, otherwise, body);
+    };
+    position(code, plan, state, body);
+    lower_node(nodes, names, links, facts, sites, code, plan, state, nodes[at].right);
+    if (plan.diagnostic != 0u8) { return; } else {};
+    val body_continues <- state.live;
+    if (body_continues) {
+        # The entry test proves index < limit <= max(u64). The step cannot overflow.
+        command(code, plan, checked_add(), index, index, one, arithmetic_fault());
+        command(code, plan, compare_words(), condition, index, slot(limit), less_words());
+        command(code, plan, branch_equal(), condition, 0u64, done, body);
+        state.live <- false;
+        {};
+    } else {};
+
+    val empty_continues <- !literal && empty == no_node();
+    if (otherwise != done) {
+        position(code, plan, state, otherwise);
+        lower_node(nodes, names, links, facts, sites, code, plan, state, empty);
+        if (plan.diagnostic != 0u8) { return; } else {};
+        empty_continues <- state.live;
+        if (empty_continues) { finish_block(code, plan, state, done); } else {};
+    } else {};
+    if (body_continues || empty_continues) { position(code, plan, state, done); } else {};
+}
+
 func lower_handlers(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                     facts:const OperandFacts in F, sites:const CompletionSites in S, ref code:NativeCommands in C,
                     ref plan:NativePlan in P, ref state:LoweringState in R, at:u64, next:u64, read_result:bool) -> bool
@@ -727,6 +788,7 @@ func lower_expression(nodes:const ExprNodes in N, names:const NameBindings in B,
         lower_conditional(nodes, names, links, facts, sites, code, plan, state, at, read_result);
         return;
     } else {};
+    if (kind == range_node()) { lower_range(nodes, names, links, facts, sites, code, plan, state, at); return; } else {};
     if (kind == call_node() || kind == behave_node()) {
         lower_call(nodes, names, links, facts, sites, code, plan, state, at);
         return;

@@ -23,6 +23,7 @@ using "Lexer.cod" typeof_word;
 using "Lexer.cod" from_word;
 using "Lexer.cod" rethrow_word;
 using "Lexer.cod" reserved_value_name;
+using "Lexer.cod" reserved_range_index_name;
 using "Lexer.cod" proc_word;
 using "Lexer.cod" func_word;
 using "Lexer.cod" region_word;
@@ -68,6 +69,8 @@ using "ParserStorage.cod" discarded_guard_result;
 using "ParserStorage.cod" discard_node;
 using "ParserStorage.cod" bool_node;
 using "ParserStorage.cod" conditional_node;
+using "ParserStorage.cod" range_node;
+using "ParserStorage.cod" range_header_node;
 using "ParserStorage.cod" logical_not_node;
 using "ParserStorage.cod" logical_and_node;
 using "ParserStorage.cod" logical_or_node;
@@ -97,6 +100,7 @@ using "Lexer.cod" null_word;
 using "Lexer.cod" return_word;
 using "Lexer.cod" void_word;
 using "Lexer.cod" if_word;
+using "Lexer.cod" for_word;
 using "Lexer.cod" else_word;
 using "Lexer.cod" true_word;
 using "Lexer.cod" false_word;
@@ -134,6 +138,7 @@ func expected_else() -> u8 { return 28u8; }
 func expected_exception_initializer() -> u8 { return 32u8; }
 func invalid_exception_placement() -> u8 { return 33u8; }
 func duplicate_exception_placement() -> u8 { return 34u8; }
+func expected_range_header() -> u8 { return 36u8; }
 
 func punct_at(source:const SourceBytes in S, tokens:const Tokens in T,
               at:u64, past:u64) -> u8 where {const owner S, const owner T} {
@@ -657,6 +662,49 @@ func parse_conditional(source:const SourceBytes in S, tokens:const Tokens in T,
     append_node(nodes, result, conditional_node(), first, nodes[no].past, no, condition, yes, first);
 }
 
+func parse_range(source:const SourceBytes in S, tokens:const Tokens in T,
+                 ref nodes:ExprNodes in A, ref result:ParseResult in R, past:u64) -> void
+    where {const owner S, const owner T, owner A, owner R} {
+    val first <- tokens[result.next].first;
+    result.next <- result.next + 1u64;
+    if (punct_at(source, tokens, result.next, past) != 40u8) { result.diagnostic <- expected_range_header(); return; } else {};
+    result.next <- result.next + 1u64;
+    if (result.next < past && reserved_range_index_name(source, tokens[result.next])) {
+        result.diagnostic <- expected_name();
+        return;
+    } else {};
+    if (!parse_identifier(source, tokens, nodes, result, past, expected_name())) { return; } else {};
+    val index <- result.root;
+    if (result.next >= past || !in_word(source, tokens[result.next])) { result.diagnostic <- expected_range_header(); return; } else {};
+    result.next <- result.next + 1u64;
+    parse_expression_at(source, tokens, nodes, result, past, 1u8);
+    if (result.diagnostic != 0u8) { return; } else {};
+    val lower <- result.root;
+    val separator <- result.next;
+    if (!punct_pair_at(source, tokens, separator, past, 46u8, 46u8)) { result.diagnostic <- expected_range_header(); return; } else {};
+    result.next <- separator + 1u64;
+    parse_expression_at(source, tokens, nodes, result, past, 1u8);
+    if (result.diagnostic != 0u8) { return; } else {};
+    val upper <- result.root;
+    if (punct_at(source, tokens, result.next, past) != 41u8) { result.diagnostic <- expected_close(); return; } else {};
+    append_node(nodes, result, range_header_node(), nodes[index].first, tokens[result.next].past,
+                index, lower, upper, tokens[separator].first);
+    if (result.diagnostic != 0u8) { return; } else {};
+    val header <- result.root;
+    result.next <- result.next + 1u64;
+    parse_block(source, tokens, nodes, result, past);
+    if (result.diagnostic != 0u8) { return; } else {};
+    val body <- result.root;
+    val empty <- no_node();
+    if (result.next < past && else_word(source, tokens[result.next])) {
+        result.next <- result.next + 1u64;
+        parse_block(source, tokens, nodes, result, past);
+        if (result.diagnostic != 0u8) { return; } else {};
+        (empty <- result.root):void;
+    } else {};
+    append_node(nodes, result, range_node(), first, nodes[result.root].past, empty, header, body, first);
+}
+
 func parse_exception_local(source:const SourceBytes in S, tokens:const Tokens in T,
                            ref nodes:ExprNodes in A, ref result:ParseResult in R,
                            past:u64, width:u64) -> void
@@ -740,6 +788,7 @@ func parse_primary(source:const SourceBytes in S, tokens:const Tokens in T,
     if (at >= past) { result.diagnostic <- expected_operand(); return; } else {};
     val first <- tokens[at].first;
     if (if_word(source, tokens[at])) { parse_conditional(source, tokens, nodes, result, past); return; } else {};
+    if (for_word(source, tokens[at])) { parse_range(source, tokens, nodes, result, past); return; } else {};
     if (defer_word(source, tokens[at])) {
         parse_defer(source, tokens, nodes, result, past);
         return;
