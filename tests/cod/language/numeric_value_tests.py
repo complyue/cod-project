@@ -17,6 +17,18 @@ for source in TYPES:
             '' if accepted else 'argument does not satisfy the callable view type')
 
 runner.CASES.update({
+ 'enum_places_keep_nominal_width_in_shared_bodies': (IO+'''
+    enum Small:u8 { SmallCode = 255; }
+    enum Wide:u64 { WideCode = 18446744073709551615; }
+    enum Signed:i64 { Low = -9223372036854775808; }
+    func roundtrip(value:T) -> const T where T {
+        val local <- value;
+        return local;
+    }
+    behave @print(roundtrip(SmallCode:Small) == (SmallCode:Small));
+    behave @print(roundtrip(WideCode:Wide) == (WideCode:Wide));
+    behave @print(roundtrip(Low:Signed) == (Low:Signed));
+    ''',0,'true\ntrue\ntrue\n',''),
  'primitive_places_keep_type_through_borrow_and_deferred_write': (IO+
     'proc write(ref target:T in O,replacement:T)->void where {T,owner O}{defer (<-)(target,replacement);return;}'
     'func borrow(ref target:T in O)->ref T in O where {T,owner O}{return target;}'

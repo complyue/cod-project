@@ -13585,9 +13585,10 @@ class ScalarChecker {
       }
       const bool handle = source.type.kind == Type::native_handle && !source.type.owned;
       const bool readonly_array = source.type.kind == Type::array && !source.value_binding && source.read_only;
-      if (source.alias || !source.selection.empty() || (!numeric(source.type) && !readonly_array && !handle) ||
+      const bool scalar = numeric(source.type) || source.type.kind == Type::enumeration;
+      if (source.alias || !source.selection.empty() || (!scalar && !readonly_array && !handle) ||
           (!source.value_binding && (source.nullable || (!source.read_only && !handle))))
-        implementation_gap(capture.at, "here access requires a numeric val or initialized readonly reference slot with stable storage");
+        implementation_gap(capture.at, "here access requires stable numeric or enum storage, a readonly array, or a borrowed handle");
       const auto &operand = scope_operand(base, capture);
       if (handle) check_handle_loan(operand, supplier, operations);
       else check(operand, supplier, operations, false);
@@ -18389,7 +18390,7 @@ class ScalarChecker {
                                                          : " parameters receive bits or a borrowed handle"));
         reject_c_type_payload(type, parameter.at);
         if (type.kind == Type::exception) fail(parameter.at, "an exception object is not a " + boundary + " bits argument");
-        if (!scalar_type(type) || type.kind == Type::enumeration)
+        if (!scalar_type(type))
           implementation_gap(parameter.at, boundary + " bits arguments outside the generated scalar profile");
       }
       inputs.push_back({type, role});
@@ -18434,8 +18435,9 @@ class ScalarChecker {
   void register_native_call(const Form &form) {
     const auto result = form.result_type ? resolve_type(*form.result_type) : Type{Type::void_type};
     if (form.symbolic || form.operation || form.explicit_captures || !form.type_parameters.empty() ||
-        !form.result_owner.empty() || !form.throws_types.empty() || (result != Type::uint8 && result != Type::void_type))
-      implementation_gap(form.at, "C operations outside the first nonthrowing u8 or void result profile");
+        !form.result_owner.empty() || !form.throws_types.empty() ||
+        (result != Type::uint8 && result != Type::void_type && result.kind != Type::enumeration))
+      implementation_gap(form.at, "C operations outside the nonthrowing u8, enum or void result profile");
     CheckedNativeOperation native;
     native.contract.source = &form;
     native.contract.module = module_;
@@ -18444,10 +18446,12 @@ class ScalarChecker {
     add_native_operation(std::move(native));
   }
   void register_native_here(const Form &form) {
+    const auto result = resolve_type(*form.result_type);
     if (form.symbolic || form.operation || form.explicit_captures || !form.type_parameters.empty() ||
-        !form.result_owner.empty() || !form.throws_types.empty() || resolve_type(*form.result_type) != Type::uint8 ||
+        !form.result_owner.empty() || !form.throws_types.empty() ||
+        (result != Type::uint8 && result.kind != Type::enumeration) ||
         form.parameters.size() != 2 || form.owner_parameters.size() != 1)
-      implementation_gap(form.at, "C here providers outside the first array and u8 profile");
+      implementation_gap(form.at, "C here providers outside the array loan and scalar feedback profile");
     const auto &role = form.owner_parameters.front();
     const auto &handle = form.parameters.back();
     const auto type = resolve_type(handle.type);
@@ -18463,11 +18467,13 @@ class ScalarChecker {
     auto &contract = native.contract;
     contract.source = &form;
     contract.module = module_;
-    contract.result.type = Type::uint8;
+    contract.result.type = result;
     contract.here.push_back(here_contract(contract, form.parameters.front()));
     const auto &here = contract.here.front();
-    if (here.inputs.empty() || here.labelled || !here.here.empty() || here.feedback || here.result.owner || here.result.type != Type::uint8)
-      implementation_gap(form.at, "C here provider requires an ordered array callback with u8 feedback");
+    if (here.inputs.empty() || here.labelled || !here.here.empty() || here.feedback || here.result.owner)
+      implementation_gap(form.at, "C here provider requires an ordered array callback with a scalar feedback value");
+    if (here.result.type != result)
+      fail(form.at, "C here feedback and provider result require the same scalar type");
     for (const auto &input : here.inputs) {
       if (input.type.kind != Type::array || input.mode != ArgumentMode::borrowed_ref || input.owner != 1)
         implementation_gap(form.at, "C here array inputs must share the handle's owner");
@@ -18766,8 +18772,7 @@ class ScalarChecker {
       }
       const auto id = program_.methods.size();
       if (form->c_linkage) {
-        if ((!scalar_type(*prepared.result.type) && *prepared.result.type != Type::void_type) ||
-            prepared.result.type->kind == Type::enumeration)
+        if (!scalar_type(*prepared.result.type) && *prepared.result.type != Type::void_type)
           implementation_gap(form->at, "C entry results other than direct scalars or void");
         program_.native_entries.push_back({id, std::move(native_inputs), *prepared.result.type});
       }

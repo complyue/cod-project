@@ -109,7 +109,7 @@ class LLVMEmission {
   };
   std::vector<llvm::Value *> arguments_, retained_types_;
   std::vector<llvm::AllocaInst *> storage_;
-  std::vector<std::set<Type::Kind>> storage_formats_;
+  std::vector<std::set<StorageFormat>> storage_formats_;
   // A checked place role and its native slots describe one lexical binding.
   // Context-dependent type/access facts stay in EmissionContext; physical
   // payload storage has its own indices, independently of bindings.
@@ -364,16 +364,13 @@ class LLVMEmission {
   // Views address the payload. Only non-primitive lexical values keep their
   // transport envelope in storage. A polymorphic slot can reserve space for
   // several formats, but each admitted activation accesses one checked type.
-  static Type::Kind place_format(Type::Kind kind) {
-    return scalar_type(Type{kind}) ? kind : Type::void_type;
-  }
-  llvm::Value *load_place(llvm::IRBuilder<> &builder, llvm::Value *address, Type::Kind format) {
-    if (format == Type::void_type) return builder.CreateLoad(scalar_, address);
-    const Type type{format};
+  llvm::Value *load_place(llvm::IRBuilder<> &builder, llvm::Value *address, StorageFormat format) {
+    if (format.kind == Type::void_type) return builder.CreateLoad(scalar_, address);
+    const auto type = format.type();
     return pack(builder, builder.CreateLoad(native_type(type), address), type);
   }
-  void store_place(llvm::Value *address, llvm::Value *value, Type::Kind format) {
-    b_.CreateStore(format == Type::void_type ? value : unpack(value, Type{format}), address);
+  void store_place(llvm::Value *address, llvm::Value *value, StorageFormat format) {
+    b_.CreateStore(format.kind == Type::void_type ? value : unpack(value, format.type()), address);
   }
   void store_incoming(size_t place, llvm::Value *value) {
     auto *address = storage_.at(place);
@@ -383,19 +380,19 @@ class LLVMEmission {
       return;
     }
     auto *done = block("storage.initialized");
-    auto *fallback = formats.contains(Type::void_type) ? block("storage.managed") : done;
+    auto *fallback = formats.contains(StorageFormat{}) ? block("storage.managed") : done;
     auto *select = b_.CreateSwitch(b_.CreateExtractValue(value, 1), fallback,
-                                   formats.size() - formats.contains(Type::void_type));
-    for (const auto format : formats) if (format != Type::void_type) {
+                                   formats.size() - formats.contains(StorageFormat{}));
+    for (const auto format : formats) if (format.kind != Type::void_type) {
       auto *selected = block("storage.bits");
-      select->addCase(b_.getInt32(tag(Type{format})), selected);
+      select->addCase(b_.getInt32(tag(format.type())), selected);
       b_.SetInsertPoint(selected);
       store_place(address, value, format);
       b_.CreateBr(done);
     }
     if (fallback != done) {
       b_.SetInsertPoint(fallback);
-      store_place(address, value, Type::void_type);
+      store_place(address, value, StorageFormat{});
       b_.CreateBr(done);
     }
     b_.SetInsertPoint(done);
@@ -677,7 +674,7 @@ class LLVMEmission {
     auto cases = choices(expr, {});
     std::erase_if(cases, [&](const auto &choice) { return choice.operation->*type == Type::never; });
     if (cases.empty()) throw std::logic_error("no checked payload type for reachable storage access");
-    const auto format = [&](const auto &choice) { return place_format((choice.operation->*type).kind); };
+    const auto format = [&](const auto &choice) { return StorageFormat{choice.operation->*type}; };
     const auto first = format(cases.front());
     if (std::all_of(cases.begin(), cases.end(), [&](const auto &choice) { return format(choice) == first; }))
       return access(first);
@@ -689,7 +686,7 @@ class LLVMEmission {
   void assign_place(llvm::Value *address, llvm::Value *value, const Expression &expr,
                     PlaceType type = &CheckedOperation::type) {
     access_place(expr, type, b_.getInt1Ty(), [&](auto format) {
-      if (format == Type::void_type) assign_value(address, value, expr.at);
+      if (format.kind == Type::void_type) assign_value(address, value, expr.at);
       else store_place(address, value, format);
       return b_.getTrue();
     });
@@ -858,8 +855,9 @@ class LLVMEmission {
         types.push_back(argument->getType());
       }
       llvm::AllocaInst *value = nullptr;
-      if (native.contract.result.type != Type::void_type) {
-        value = slot(b_.getInt8Ty(), "native.call.value");
+      const auto &result = *native.contract.result.type;
+      if (result != Type::void_type) {
+        value = slot(c_scalar_type(result), "native.call.value");
         arguments.push_back(value);
         types.push_back(b_.getPtrTy());
       }
@@ -871,7 +869,7 @@ class LLVMEmission {
       b_.SetInsertPoint(invalid);
       fail_path(ExceptionCategory::system, expr.at, b_.CreateGlobalString(location_text(expr.at) + ": invalid native provider status"));
       b_.SetInsertPoint(ready);
-      return value ? pack(load(value), Type::uint8) : empty_scalar();
+      return value ? pack(load(value), result) : empty_scalar();
     });
   }
   llvm::Function *native_here_bridge(const CheckedNativeOperation &native, llvm::StructType *frame) {
@@ -906,7 +904,8 @@ class LLVMEmission {
     body.CreateStore(outcome, body.CreateStructGEP(frame, state, 2));
     body.CreateRet(body.getInt32(static_cast<unsigned>(NativeHereStep::protected_completion)));
     body.SetInsertPoint(normal);
-    body.CreateStore(body.CreateTrunc(body.CreateExtractValue(outcome, {0, 0}), body.getInt8Ty()), bridge->getArg(2));
+    body.CreateStore(body.CreateTruncOrBitCast(body.CreateExtractValue(outcome, {0, 0}),
+                                             c_scalar_type(*native.contract.result.type)), bridge->getArg(2));
     body.CreateRet(body.getInt32(static_cast<unsigned>(NativeHereStep::value)));
     return bridge;
   }
@@ -931,7 +930,8 @@ class LLVMEmission {
       b_.CreateStore(selected_owner(operand), b_.CreateStructGEP(frame, state, 1));
       auto *completion = slot(b_.getInt32Ty(), "native.here.completion");
       b_.CreateStore(b_.getInt32(static_cast<unsigned>(NativeHereStep::invalid)), completion);
-      auto *value = slot(b_.getInt8Ty(), "native.here.value");
+      const auto &result_type = *native.contract.result.type;
+      auto *value = slot(c_scalar_type(result_type), "native.here.value");
       auto *status = b_.CreateCall(runtime(native_operation_name(native) + "_call", b_.getInt32Ty(),
           std::vector<llvm::Type *>(5, b_.getPtrTy())), {borrow, native_here_bridge(native, frame), state, completion, value});
       auto *step = load(completion);
@@ -947,7 +947,7 @@ class LLVMEmission {
       b_.SetInsertPoint(invalid);
       fail_path(ExceptionCategory::system, expr.at, b_.CreateGlobalString(location_text(expr.at) + ": invalid native callback or provider status"));
       b_.SetInsertPoint(success);
-      auto *ordinary_result = outcome(pack(load(value), Type::uint8), integer(0), integer(0), null_pointer());
+      auto *ordinary_result = outcome(pack(load(value), result_type), integer(0), integer(0), null_pointer());
       b_.CreateBr(done);
       b_.SetInsertPoint(done);
       auto *result = b_.CreatePHI(outcome_, 2);
@@ -2102,7 +2102,7 @@ class LLVMEmission {
   llvm::Value *captured_value(const CheckedOperation &fact, const Location &at) {
     if (fact.callable) return own_value(materialize(fact, fact.type, at));
     auto *address = binding_address(*fact.binding, fact.place);
-    return load_place(b_, address, place_format(fact.type.kind));
+    return load_place(b_, address, StorageFormat{fact.type});
   }
   llvm::StructType *image_layout(size_t captures) {
     auto fields = std::vector<llvm::Type *>{b_.getInt64Ty()}; fields.insert(fields.end(), captures, scalar_);
@@ -2929,7 +2929,7 @@ class LLVMEmission {
       llvm::Value *value = entry->getArg(reception.selected[i]);
       if (inputs.here_snapshots.contains(i)) {
         auto *address = body.CreateIntToPtr(body.CreateExtractValue(value, 0), body.getPtrTy());
-        value = load_place(body, address, place_format(instance.arguments.at(i).kind));
+        value = load_place(body, address, StorageFormat{instance.arguments.at(i)});
       }
       prepared.push_back(value);
     }
@@ -2965,7 +2965,7 @@ class LLVMEmission {
     body.CreateRet(body.CreateInsertValue(llvm::Constant::getNullValue(outcome_), borrowed, 7));
   }
   void begin(llvm::Function *function, const std::vector<CheckedStorage> &storage, const std::vector<CheckedBinding> &bindings,
-             const CheckedFrame &frame = {}, std::span<const std::set<Type::Kind>> storage_types = {}) {
+             const CheckedFrame &frame = {}, std::span<const std::set<StorageFormat>> storage_types = {}) {
     function_ = function; arguments_.clear(); retained_types_.clear(); parameter_values_.clear(); value_owners_.clear(); query_environment_ = nullptr; here_arguments_.clear(); pipeline_operands_.clear(); here_destination_ = nullptr; temporaries_ = nullptr;
     suspended_return_ = {};
     for (size_t i = 0; i < frame.inputs.size(); ++i) arguments_.push_back(function->getArg(i));
@@ -2995,14 +2995,14 @@ class LLVMEmission {
     for (size_t i = 0; i < storage.size(); ++i) {
       const auto &binding = storage[i];
       auto &formats = storage_formats_.emplace_back();
-      if (storage_types.empty()) formats.insert(place_format(binding.type.kind));
-      else for (const auto type : storage_types[i]) formats.insert(place_format(type));
+      if (storage_types.empty()) formats.emplace(binding.type);
+      else formats = storage_types[i];
       llvm::Type *layout = scalar_;
       if (binding.type.kind == Type::product) layout = product_layout(binding.type.identity);
       else if (binding.type.kind == Type::native_handle)
         layout = binding.type.owned ? static_cast<llvm::Type *>(b_.getInt64Ty()) : native_handle_pair();
-      else if (!formats.contains(Type::void_type))
-        layout = formats.size() == 1 ? native_type(Type{*formats.begin()}) : b_.getInt64Ty();
+      else if (!formats.contains(StorageFormat{}))
+        layout = formats.size() == 1 ? native_type(formats.begin()->type()) : b_.getInt64Ty();
       auto *place = binding.borrowed || binding.subobject ? nullptr : slot(layout, binding.name + ".storage");
       storage_.push_back(place);
       if (place && environments_ && layout == scalar_) initialize_value(place);
@@ -3214,7 +3214,7 @@ class LLVMEmission {
     auto *bridge = llvm::Function::Create(llvm::FunctionType::get(b_.getVoidTy(), types, false),
         llvm::GlobalValue::ExternalLinkage, native_entry_body_name(form), module_);
     for (size_t i = 0; i < entry.inputs.size(); ++i)
-      if (entry.inputs[i].type == Type::uint8 || entry.inputs[i].type == Type::boolean)
+      if (types[i]->isIntegerTy(8))
         bridge->addParamAttr(i, llvm::Attribute::ZExt);
     begin(bridge, {}, {});
     auto *nested = b_.CreateLoad(b_.getInt1Ty(), active);

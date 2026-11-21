@@ -728,6 +728,19 @@ struct CheckedProgram {
   }
 };
 
+// Primitive bits and enum bits are stored without the transport envelope.
+// Enum formats retain the domain needed to recover their width and tag.
+struct StorageFormat {
+  Type::Kind kind = Type::void_type;
+  size_t enum_identity = 0;
+  StorageFormat() = default;
+  explicit StorageFormat(const Type &type)
+      : kind(scalar_type(type) ? type.kind : Type::void_type),
+        enum_identity(type.kind == Type::enumeration ? type.identity : 0) {}
+  auto operator<=>(const StorageFormat &) const = default;
+  Type type() const { return {kind, {}, enum_identity}; }
+};
+
 struct CheckedBody {
   struct Context {
     const CheckedInstance *instance;
@@ -737,7 +750,7 @@ struct CheckedBody {
     }
   };
   std::vector<CheckedStorage> storage;
-  std::vector<std::set<Type::Kind>> storage_types;
+  std::vector<std::set<StorageFormat>> storage_types;
   CheckedFrame frame;
   // Conservative writable exposure of an invocation input. Unexposed saved
   // payloads can be observed without acquiring another complete image.
@@ -761,7 +774,7 @@ inline CheckedBody checked_body(const CheckedProgram &program, const CheckedMeth
         result.storage_types.emplace_back();
       }
       result.storage[entry->second].borrowed &= place.borrowed;
-      result.storage_types[entry->second].insert(place.type.kind);
+      result.storage_types[entry->second].emplace(place.type);
     };
     for (const auto &input : checked.frame.inputs) retain(checked.storage.at(input.place));
     for (const auto capture : checked.frame.captures) retain(checked.storage.at(capture));

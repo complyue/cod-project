@@ -63,37 +63,39 @@ static inline void cod_provider_write_view(cod_provider_text *header, cod_provid
         name, index, name, index);
 }
 
-static inline void cod_provider_here_signature(cod_provider_text *output, const char *name, const char *handle) {
+static inline void cod_provider_here_signature(cod_provider_text *output, const char *name, const char *handle, const char *type) {
     cod_provider_print(output, "cod_native_status cod_native_%s_call(const cod_native_%s_borrow *handle, "
-        "cod_native_%s_callback body, void *context, cod_native_here_step *completion, uint8_t *value)",
-        name, handle, name);
+        "cod_native_%s_callback body, void *context, cod_native_here_step *completion, %s *value)",
+        name, handle, name, type);
 }
 
 static inline void cod_provider_write_here(cod_provider_text *header, cod_provider_text *stubs, const char *name,
-                                           const char *handle, const cod_provider_view *views, size_t count) {
+                                           const char *handle, const cod_provider_view *views, size_t count,
+                                           const char *enum_type) {
+    const char *type = enum_type ? enum_type : "uint8_t";
     cod_provider_print(header, "typedef struct cod_native_%s_arrays {\n", name);
     for (size_t i = 0; i < count; ++i)
         cod_provider_print(header, "    cod_native_%s_view%zu array%zu;\n", name, i, i);
     cod_provider_print(header, "} cod_native_%s_arrays;\n"
-        "typedef cod_native_here_step (*cod_native_%s_callback)(void *context, const cod_native_%s_arrays *views, uint8_t *feedback);\n",
-        name, name, name);
+        "typedef cod_native_here_step (*cod_native_%s_callback)(void *context, const cod_native_%s_arrays *views, %s *feedback);\n",
+        name, name, name, type);
     for (size_t i = 0; i < count; ++i)
         cod_provider_print(stubs, "_Static_assert(offsetof(cod_native_%s_arrays, array%zu) == "
             "%zu * 2 * sizeof(uint64_t), \"unexpected native array offset\");\n", name, i, i);
 
-    cod_provider_here_signature(header, name, handle);
+    cod_provider_here_signature(header, name, handle, type);
     cod_provider_print(header, ";\n"
-        "cod_native_status cod_native_%s_impl(cod_native_%s_borrow handle, cod_native_%s_callback run, void *loan, uint8_t *value);\n"
+        "cod_native_status cod_native_%s_impl(cod_native_%s_borrow handle, cod_native_%s_callback run, void *loan, %s *value);\n"
         "int cod_native_%s_validate_impl(cod_native_%s_borrow handle, const cod_native_%s_arrays *views);\n\n",
-        name, handle, name, name, handle, name);
+        name, handle, name, type, name, handle, name);
 
     cod_provider_print(stubs, "typedef struct cod_native_%s_state {\n    cod_native_%s_borrow handle;\n"
         "    cod_native_%s_callback body;\n    void *context;\n    cod_native_here_step completion;\n} cod_native_%s_state;\n\n"
-        "static cod_native_here_step cod_native_%s_run(void *context, const cod_native_%s_arrays *views, uint8_t *feedback) {\n"
+        "static cod_native_here_step cod_native_%s_run(void *context, const cod_native_%s_arrays *views, %s *feedback) {\n"
         "    cod_native_%s_state *state = context;\n"
         "    if (state->completion != COD_NATIVE_HERE_VALUE) return state->completion;\n"
         "    if (!views || !feedback) return state->completion = COD_NATIVE_HERE_INVALID;\n",
-        name, handle, name, name, name, name, name);
+        name, handle, name, name, name, name, type, name);
     for (size_t i = 0; i < count; ++i) {
         char site[sizeof("views->array") + 3 * sizeof(size_t)];
         snprintf(site, sizeof(site), "views->array%zu", i);
@@ -102,19 +104,31 @@ static inline void cod_provider_write_here(cod_provider_text *header, cod_provid
         cod_provider_print(stubs, ") return state->completion = COD_NATIVE_HERE_INVALID;\n");
     }
     cod_provider_print(stubs, "    if (!cod_native_%s_validate_impl(state->handle, views)) "
-        "return state->completion = COD_NATIVE_HERE_INVALID;\n"
-        "    return state->completion = state->body(state->context, views, feedback);\n}\n\n", name);
-    cod_provider_here_signature(stubs, name, handle);
+        "return state->completion = COD_NATIVE_HERE_INVALID;\n", name);
+    if (enum_type) {
+        cod_provider_print(stubs, "    %s normal = 0;\n"
+            "    state->completion = state->body(state->context, views, &normal);\n"
+            "    if (state->completion != COD_NATIVE_HERE_VALUE) return state->completion;\n"
+            "    if (!%s_valid(normal)) return state->completion = COD_NATIVE_HERE_INVALID;\n"
+            "    *feedback = normal;\n    return COD_NATIVE_HERE_VALUE;\n}\n\n", type, type);
+    } else {
+        cod_provider_print(stubs, "    return state->completion = state->body(state->context, views, feedback);\n}\n\n");
+    }
+    cod_provider_here_signature(stubs, name, handle, type);
     cod_provider_print(stubs, " {\n"
         "    if (!handle || !body || !context || !completion || !value)\n"
         "        return COD_NATIVE_BOUNDARY_ERROR;\n"
         "    cod_native_%s_state state = {*handle, body, context, COD_NATIVE_HERE_VALUE};\n"
-        "    uint8_t result = 0;\n"
-        "    const cod_native_status status = cod_native_%s_impl(*handle, cod_native_%s_run, &state, &result);\n"
+        "    %s result = 0;\n"
+        "    const cod_native_status status = cod_native_%s_impl(*handle, cod_native_%s_run, &state, &result);\n",
+        name, type, name, name);
+    if (enum_type)
+        cod_provider_print(stubs, "    if (state.completion == COD_NATIVE_HERE_VALUE && status == COD_NATIVE_OK && !%s_valid(result))\n"
+            "        state.completion = COD_NATIVE_HERE_INVALID;\n", type);
+    cod_provider_print(stubs,
         "    *completion = state.completion;\n"
         "    if (state.completion == COD_NATIVE_HERE_VALUE && status == COD_NATIVE_OK) *value = result;\n"
-        "    return state.completion == COD_NATIVE_HERE_INVALID ? COD_NATIVE_BOUNDARY_ERROR : status;\n}\n\n",
-        name, name, name);
+        "    return state.completion == COD_NATIVE_HERE_INVALID ? COD_NATIVE_BOUNDARY_ERROR : status;\n}\n\n");
 }
 
 #endif

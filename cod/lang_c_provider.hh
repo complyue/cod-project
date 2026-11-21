@@ -3,6 +3,7 @@
 
 #include "lang_checked_program.hh"
 #include "native/provider_call.h"
+#include "native/provider_enum.h"
 
 #include <sstream>
 #include <string>
@@ -53,6 +54,54 @@ inline bool provider_stream_write(void *context, const char *text, size_t length
   return static_cast<bool>(static_cast<std::ostringstream *>(context)->write(text, length));
 }
 
+using NativeEnumNames = std::map<size_t, std::unique_ptr<char, decltype(&std::free)>>;
+
+inline cod_provider_scalar enum_backing(const Type &type) {
+  switch (type.kind) {
+  case Type::uint8: return cod_provider_u8;
+  case Type::uint32: return cod_provider_u32;
+  case Type::uint64: return cod_provider_u64;
+  case Type::integer: return cod_provider_i64;
+  default: throw std::logic_error("unchecked enum backing in a generated C provider");
+  }
+}
+
+inline NativeEnumNames emit_c_enums(const CheckedProgram &program, const std::string &entry_path,
+                                   cod_provider_text &header, cod_provider_text &stubs) {
+  NativeEnumNames names;
+  const auto emit = [&](const Type &type) {
+    if (type.kind != Type::enumeration || names.contains(type.identity)) return;
+    const auto &domain = program.enums.at(type.identity);
+    const auto path = std::filesystem::path(domain.source->at.filename()).generic_string();
+    std::unique_ptr<char, decltype(&std::free)> name{cod_provider_enum_name(entry_path.c_str(), path.c_str(),
+        domain.source->name.c_str()), std::free};
+    if (!name) throw std::bad_alloc{};
+    std::vector<cod_provider_enum_member> members;
+    for (size_t i = 0; i < domain.members.size(); ++i) {
+      const auto &member = domain.members[i];
+      members.push_back({domain.source->enum_members[i].name.text.c_str(), member.code, member.canonical == i});
+    }
+    cod_provider_write_enum(&header, &stubs, name.get(), enum_backing(domain.backing), members.data(), members.size());
+    names.emplace(type.identity, std::move(name));
+  };
+  for (const auto &constructor : program.native_constructors)
+    for (const auto &input : constructor.inputs) emit(input.type);
+  for (const auto &entry : program.native_entries) {
+    for (const auto &input : entry.inputs) emit(input.type);
+    emit(entry.result);
+  }
+  for (const auto &operation : program.native_operations) {
+    for (const auto &input : operation.inputs) emit(input.type);
+    emit(*operation.contract.result.type);
+  }
+  return names;
+}
+
+inline const char *provider_value_type(const Type &type, const NativeEnumNames &enums) {
+  if (type == Type::void_type) return nullptr;
+  return type.kind == Type::enumeration ? enums.at(type.identity).get() : provider_scalar(type);
+}
+
 inline cod_provider_view emit_c_view(const CheckedProgram &program, const Type &type, bool read_only,
                                      const std::string &name, size_t index, const NativeRowLayouts &layouts,
                                      cod_provider_text &header, cod_provider_text &stubs) {
@@ -71,7 +120,7 @@ inline cod_provider_view emit_c_view(const CheckedProgram &program, const Type &
 }
 
 inline void emit_c_here(const CheckedProgram &program, const CheckedNativeOperation &operation, const NativeRowLayouts &layouts,
-                        cod_provider_text &header, cod_provider_text &stubs) {
+                        const NativeEnumNames &enums, cod_provider_text &header, cod_provider_text &stubs) {
   const auto &name = operation.contract.source->name;
   std::vector<cod_provider_view> views;
   for (size_t i = 0; i < operation.arrays().size(); ++i) {
@@ -79,43 +128,46 @@ inline void emit_c_here(const CheckedProgram &program, const CheckedNativeOperat
     views.push_back(emit_c_view(program, input.type, input.read_only, name, i, layouts, header, stubs));
   }
   const auto &handle = operation.here_handle();
-  cod_provider_write_here(&header, &stubs, name.c_str(), handle.name.c_str(), views.data(), views.size());
+  const auto &result = *operation.contract.result.type;
+  cod_provider_write_here(&header, &stubs, name.c_str(), handle.name.c_str(), views.data(), views.size(),
+                          result.kind == Type::enumeration ? provider_value_type(result, enums) : nullptr);
 }
 
-inline cod_provider_argument describe_c_argument(const CheckedNativeInput &input) {
-  if (input.type.kind == Type::array) return {nullptr, cod_provider_argument_view, false, input.owner.value_or(0)};
-  return {input.owner ? input.type.name.c_str() : provider_scalar(input.type),
+inline cod_provider_argument describe_c_argument(const CheckedNativeInput &input, const NativeEnumNames &enums) {
+  if (input.type.kind == Type::array) return {nullptr, cod_provider_argument_view, false, input.owner.value_or(0), false};
+  return {input.owner ? input.type.name.c_str() : provider_value_type(input.type, enums),
           input.owner ? cod_provider_argument_handle : cod_provider_argument_scalar,
-          input.type == Type::boolean, input.owner.value_or(0)};
+          input.type == Type::boolean, input.owner.value_or(0), input.type.kind == Type::enumeration};
 }
 
 inline void emit_c_call(const CheckedProgram &program, const CheckedNativeOperation &operation, const NativeRowLayouts &layouts,
-                        cod_provider_text &header, cod_provider_text &stubs) {
+                        const NativeEnumNames &enums, cod_provider_text &header, cod_provider_text &stubs) {
   const auto &name = operation.contract.source->name;
   std::vector<cod_provider_argument> inputs;
   std::vector<cod_provider_view> views(operation.inputs.size());
   for (size_t i = 0; i < operation.inputs.size(); ++i) {
     const auto &input = operation.inputs[i];
-    inputs.push_back(describe_c_argument(input));
+    inputs.push_back(describe_c_argument(input, enums));
     if (input.type.kind == Type::array)
       views[i] = emit_c_view(program, input.type, true, name, i, layouts, header, stubs);
   }
   const auto &result = *operation.contract.result.type;
   const cod_provider_callable shape{
-      name.c_str(), inputs.data(), inputs.size(), result == Type::void_type ? nullptr : provider_scalar(result), 0};
+      name.c_str(), inputs.data(), inputs.size(), provider_value_type(result, enums), 0, result.kind == Type::enumeration};
   cod_provider_write_call(&header, &stubs, &shape, views.data());
 }
 
-inline void emit_c_entry(const CheckedNativeEntry &entry, const Form &form,
+inline void emit_c_entry(const CheckedNativeEntry &entry, const Form &form, const NativeEnumNames &enums,
                          cod_provider_text &header, cod_provider_text &stubs) {
   std::vector<cod_provider_argument> inputs;
-  for (const auto &input : entry.inputs) inputs.push_back(describe_c_argument(input));
+  for (const auto &input : entry.inputs) inputs.push_back(describe_c_argument(input, enums));
   const cod_provider_callable shape{form.name.c_str(), inputs.data(), inputs.size(),
-      entry.result == Type::void_type ? nullptr : provider_scalar(entry.result), form.owner_parameters.size()};
+      provider_value_type(entry.result, enums), form.owner_parameters.size(), entry.result.kind == Type::enumeration};
   cod_provider_write_entry(&header, &stubs, &shape);
 }
 
-inline NativeProviderFiles emit_native_providers(const CheckedProgram &program, const NativeRowLayouts &layouts) {
+inline NativeProviderFiles emit_native_providers(const CheckedProgram &program, const NativeRowLayouts &layouts,
+                                                const std::string &entry_path) {
   std::ostringstream header, stubs;
   cod_provider_text header_text{provider_stream_write, &header, false}, stubs_text{provider_stream_write, &stubs, false};
   cod_provider_begin(&header_text, &stubs_text);
@@ -125,6 +177,7 @@ inline NativeProviderFiles emit_native_providers(const CheckedProgram &program, 
   if (std::ranges::any_of(program.native_entries, [&](const auto &entry) {
         return !program.methods.at(entry.method).source->owner_parameters.empty();
       })) cod_provider_loan_preamble(&header_text);
+  const auto enums = emit_c_enums(program, entry_path, header_text, stubs_text);
 
   std::set<size_t> emitted_borrows;
   const auto emit_borrows = [&](const std::vector<CheckedNativeInput> &inputs) {
@@ -144,7 +197,7 @@ inline NativeProviderFiles emit_native_providers(const CheckedProgram &program, 
 
   for (const auto &constructor : program.native_constructors) {
     std::vector<cod_provider_argument> inputs;
-    for (const auto &input : constructor.inputs) inputs.push_back(describe_c_argument(input));
+    for (const auto &input : constructor.inputs) inputs.push_back(describe_c_argument(input, enums));
     std::vector<cod_provider_field> fields;
     if (constructor.failure) {
       const auto &schema = program.schemas.at(*program.exception_types.at(constructor.failure->identity).schema);
@@ -157,10 +210,11 @@ inline NativeProviderFiles emit_native_providers(const CheckedProgram &program, 
         fields.data(), fields.size()};
     cod_provider_write_constructor(&header_text, &stubs_text, &shape);
   }
-  for (const auto &entry : program.native_entries) emit_c_entry(entry, *program.methods.at(entry.method).source, header_text, stubs_text);
+  for (const auto &entry : program.native_entries)
+    emit_c_entry(entry, *program.methods.at(entry.method).source, enums, header_text, stubs_text);
   for (const auto &native : program.native_operations) {
-    if (native.has_here()) emit_c_here(program, native, layouts, header_text, stubs_text);
-    else emit_c_call(program, native, layouts, header_text, stubs_text);
+    if (native.has_here()) emit_c_here(program, native, layouts, enums, header_text, stubs_text);
+    else emit_c_call(program, native, layouts, enums, header_text, stubs_text);
   }
   cod_provider_end(&header_text);
   if (header_text.failed || stubs_text.failed || !header || !stubs)

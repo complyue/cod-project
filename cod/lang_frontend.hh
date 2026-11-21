@@ -45,7 +45,8 @@ public:
     for (const auto &module : source.modules) result.scanned_modules.push_back(module.path.string());
     for (const auto module : checked.execution_order) result.execution_order.push_back(source.modules[module].path.string());
     result.warnings = std::move(warnings); result.llvm_ir = std::move(text); result.bitcode = std::move(bitcode);
-    if (emit_providers) result.providers = emit_native_providers(checked, emission.provider_row_layouts());
+    if (emit_providers) result.providers = emit_native_providers(checked, emission.provider_row_layouts(),
+                                                                 source.modules.front().path.generic_string());
     result.native_library = !checked.native_entries.empty();
     return result;
   }
