@@ -1,10 +1,12 @@
 # UTF-8 strings and C string arguments
 
-Design revision 1 · 2026-11-21 · Qualified for UTF-8 text and the first synchronous native argument profile.
+Design revision 2 · 2026-11-21 · Qualified for UTF-8 text, owner-bound ADT fields and the first synchronous native argument profile.
 
 ## Design authority
 
 [D-07-UTF8](DesignAuthorityRegistry.md#d-07-utf8) covers the source and call rules below. The [project user](../CHANGELOG.md#h-utf8-native-text-20261121) requested built-in UTF-8 strings and C interoperability, selected direct compatible literals and explicit preparation for runtime text, and proposed `path:CString`. P-674/P-675 apply C-80 and charter §§4.3/6.3/8.1/12. A source-level filename passes through CoD to C with its spelling and actual owner intact. The [ordinary nonnumeric assertion](SymbolicDynamicScope.md#expression-type-conversion-and-assertion) supplies its failure policy. Acceptance in both compilers covers real object output, interior NUL, invalid native input and cleanup. Physical text layout, general collection APIs and non-UTF-8 locale integration have separate scope.
+
+[D-07-STRING-FIELDS](DesignAuthorityRegistry.md#d-07-string-fields) at r2 covers [field storage and transfer policy](#storage-and-transfer-policies). [H-STRING-TRANSFER-POLICY-20261121](../CHANGELOG.md#h-string-transfer-policy-20261121) records the user’s direction and their choice to require a visible method. P-676/P-677 apply C-55, D-22-INIT-PLACES, D-22-TRANSFER and D-28-ADT. Test a field installation, replacement while a prior CString is live, cross-owner materialization, and rejection when no applicable method exists. Libraries choose their allocation strategies. The physical representation and a general string-editing API have separate scope.
 
 ## Source text
 
@@ -15,6 +17,67 @@ A quoted runtime expression can supply a string wherever its backing lives long 
 The literal grammar accepts UTF-8 source characters, escaped quotes and backslashes, `\n`, `\r`, `\t`, `\0` and a Unicode scalar escape such as `\u{1F680}`. Malformed sequences, unknown escapes, unescaped newlines, surrogate escapes and values above U+10FFFF reject at the literal. Keep the module-path escape grammar and the exact foreign linkage marker `"C"` in their respective grammar positions. Inside a runtime literal `#` and `//` are text. The indexed source revision and its location table continue to use original byte offsets.
 
 Use `String` and `CString` as builtin type names in the ordinary type-name grammar. `CString` refines `String` with the property that its content contains no U+0000. Its encoded byte length excludes any native terminator. A `CString` can be passed onward as `CString` or widened to `String` under its existing owner. A binding declared as `String` uses the explicit assertion when a `CString` is required. A NUL-free literal can also directly initialize that argument. This contextual literal rule does not infer a narrower declared variable type or select overloads by scanning a runtime argument.
+
+## Storage and transfer policies
+
+When text participates in `destination <- source`, retain the ordinary `(<-)` overload family in the calling module world, including a method specialized for the destination’s allocation policy. This applies to text operands and to containing records. A compiler shortcut for `String` must preserve the method selected by ordinary dispatch, including its effects and failures. Allocation, interning, reuse and handling of overlapping transfers belong to the selected method. Access to the actual owners and permission to allocate follow the [graph-transfer contract](RegionalOwnership.md#root-policy-dispatch-and-actual-owner-arguments).
+
+For example, a manifest library can intern filenames in its destination region. Here `FilenamePool` describes the library’s required region roots and `intern_filename` is its own procedure. It returns a reference to immutable text in the supplied region.
+
+```cod
+data ManifestEntry { ref filename:const String; }
+
+proc (<-)(dst:ManifestEntry in D, src:const String in S) -> void
+    where {region D:FilenamePool, const owner S} {
+    dst.filename = intern_filename(D, src);
+}
+```
+
+The method may reuse an existing destination-owned string when the pool finds a match. The stored edge must belong to the same actual owner as `dst`; an independently owned input may then expire. Rebinding a writable field preserves earlier live borrows of the selected immutable text, including its `CString` refinement and an active C loan. An overload taking only a reference to an existing string has access to the selected text. Replacing a field binding requires access to the field’s place. The ordinary result contract permits a void method as above or a const view of the original destination. The layout and addressing rules cover [all four lexical and regional owner combinations](RegionalAndLexicalStorageRefactor.md#graph-transfer-with-growing-source-or-destination).
+
+### Direct String fields
+
+A nominal product may declare `name:String`, and a nominal sum may declare it in a constructor payload. Each active field is a required, non-null place for immutable text owned by the same actual owner as the containing instance. This rule applies when the ADT is allocated in a lexical scope or a region. Such a type is non-bits, including when a different alternative happens to be active. In a region, the published text and its backing must survive relocation with the region. A native address into a literal image, another region or a lexical invocation cannot serve as a stored regional edge. A lexical representation may differ while preserving owner and target identity.
+
+```cod
+data Entry { name:String; }
+data Finding = Named { name:String; } | Missing {};
+
+# An ordinary library method for installing text already owned by D.
+proc (<-)(init ref var out:const String in D, text:const String in D)
+    -> void where {const owner D} {
+    out = text;
+}
+```
+
+A read of `entry.name` selects its current immutable text. A compatible `ref` binding or successful `:CString` assertion retains that selected instance. Selecting the field as a destination can instead supply the writable field place to a method that explicitly declares it. In the example, `init ref var` permits selecting an uninitialized slot, requires a binding write before a read of that slot and on every successful completion, and works on an already initialized slot. The two `in D` operands require the same actual owner. The method returns `void`, so the transfer cannot be chained for a value. An ordinary target formal receives only the selected text; it cannot rebind the field. A readonly containing-object access cannot supply the writable place. These are the existing [declared place and initialization rules](ConstructionAndAcquisition.md#init-destinations-and-declared-place-aliasing).
+
+```cod
+# D owns both prior and next. The method above is visible.
+ref entry = make Entry in D { name <- prior; };
+ref old:const CString in D = entry.name:CString;
+entry.name <- next;
+# old still denotes prior, even if next contains an interior NUL.
+```
+
+`entry.name <- input` requires a visible, applicable `(<-)` method both in the construction initializer and on a later write. Use the containing module world's ordinary selection rules at the operation site. No applicable method gives a compile-time error. Equally good candidates give the ordinary ambiguity error. The compiler cannot silently allocate text, bind a same-owner source, or fall back after the selected policy throws. A library can explicitly provide a general method through ordinary module selection. Importing a policy once suffices for its eligible uses. A method returning a view still owes the original evaluated destination under the [ordinary result rule](RegionalOwnership.md#transfer-results-and-chaining); an unrelated newly allocated string cannot stand in for that result.
+
+A policy that already has a suitable destination-owned string can write the binding with `=`. A policy that needs independent text can explicitly use owner-directed construction, `make String(input) in D`, under a live allocation-capable owner D. Construction preserves the full UTF-8 sequence, including an interior NUL, and leaves the source usable. The constructed text can outlive a different source owner. A pool can avoid construction on a hit and return its existing destination-owned text. A writable binding alone grants no allocation through a readonly owner: the same-owner method above needs only `const owner D`. A writable containing object or a separately available allocating owner can supply the corresponding authority under the [ordinary owner rules](RegionalOwnership.md#owner-constness-and-allocation). Regional root-specific policies receive the actual instance; lexical destinations use their own owner.
+
+For example, a general library can select the following policy for a writable entry in either a lexical scope or a region. The containing entry supplies allocation authority in D.
+
+```cod
+proc (<-)(dst:Entry in D, input:const String in S) -> void
+    where {owner D, const owner S} {
+    dst.name = make String(input) in D;
+}
+```
+
+This method handles `entry <- input`. A call written `entry.name <- input` needs a method for the field operands. Defining one signature never silently enables the other. In a constructor, the enclosing instance need not be readable to initialize its field: the actual field owner is known from placement before it has a target. Only the active alternative's required fields must be initialized.
+
+Select the destination place once. Reading the RHS before a binding write may select the old text, including on self-transfer. Its owner must stay live throughout each use. Until a policy writes a replacement, an initialized field retains its old binding. If a method writes and then throws, the completed write and other effects follow ordinary exception semantics. A newly constructed ADT cannot be published as ready with an uninitialized required field. Pools may reuse backing only while preserving every live text selection and synchronous C loan. No per-string release action or allocation rollback follows from a field update.
+
+**Acceptance.** Exercise the same product in lexical and regional storage and an active sum field. Check first initialization, subsequent replacement, a same-owner pool hit, a cross-owner transfer whose source ends, and a region reopened or relocated with its text intact. Keep an earlier `CString` selected while replacing the field with text containing NUL and observe both values. Reject a missing policy on first and later transfer, an ambiguous pair, cross-owner `=`, a readonly destination, allocation without authority, and a policy returning normally without the promised init write. Test failure both before and after an allowed field write. The ordinary [storage and transfer rules](ConstructionAndAcquisition.md#storage-eligibility-and-payload-transfer) govern transfers of the enclosing ADT and C-layout records keep their recursively bits-only field rule.
 
 ## Borrowing text for a C call
 
