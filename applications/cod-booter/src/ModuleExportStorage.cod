@@ -16,5 +16,22 @@ data ModuleExport {
 }
 array ModuleExports[u64]:ModuleExport;
 
+# Each constructor header has parameter_kind 0. Its parameter records follow
+# in declaration order. Type identities refer to the defining module.
+data NativeConstructorRow {
+    defining_module:u64;
+    marker:u64;
+    parameter_count:u64;
+    parameter_kind:u8;
+    type_module:u64;
+    type_identity:u64;
+    owner_role:u64;
+    target_readonly:u8;
+    owner_readonly:u8;
+}
+array NativeConstructors[u64]:NativeConstructorRow;
+
 export ModuleExport;
 export ModuleExports;
+export NativeConstructorRow;
+export NativeConstructors;

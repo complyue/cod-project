@@ -66,7 +66,6 @@ static const char *unsupported_source_form(uint32_t code) {
     case 47: return "defer accumulating in an ordinary loop body";
     case 48: return "repeated lexical construction in an ordinary loop body";
     case 51: return "repeated handle acquisition in an ordinary loop body";
-    case 56: return "acquisition through an imported CType constructor signature";
     case 58: return "unproved C constructor operand type";
     case 63: return "supplier-owned allocation or defer in a single-brace here body";
     case 65: return "selection of an imported here signature";
