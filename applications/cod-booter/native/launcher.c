@@ -186,6 +186,16 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: duplicate enum member code\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 82)
         fputs(": error: duplicate enum member name\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 83)
+        fputs(": error: selected enum member conflicts with a module binding\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 84)
+        fputs(": error: this type assertion is outside the supported compiler profile\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 85)
+        fputs(": error: no such member of the asserted enum type\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 86)
+        fputs(": error: operand does not have the asserted enum type\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 87)
+        fputs(": error: the enum assertion operand's type remains unproved\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 20)
         fputs(": error: narrow integer execution is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 21)
@@ -208,6 +218,14 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: could not allocate dependency graph storage\n", stderr);
     else if (diagnostic->stage == 2 && diagnostic->code == module_depth_unproved)
         fputs(": error: dependency depth exceeds the current compiler profile\n", stderr);
+    else if (diagnostic->stage == 2 && diagnostic->code == 12)
+        fputs(": error: this import is outside the supported enum import profile\n", stderr);
+    else if (diagnostic->stage == 2 && diagnostic->code == 13)
+        fputs(": error: member selection requires a checked enum type\n", stderr);
+    else if (diagnostic->stage == 2 && diagnostic->code == 14)
+        fputs(": error: no such member of the selected enum type\n", stderr);
+    else if (diagnostic->stage == 2 && diagnostic->code == 15)
+        fputs(": error: conflicting enum member selections\n", stderr);
     else
         fprintf(stderr, ": error: %s failed (code %" PRIu32 ")\n", diagnostic_phase(diagnostic->stage), diagnostic->code);
     if (diagnostic->related.line)

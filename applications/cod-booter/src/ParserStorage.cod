@@ -117,9 +117,27 @@ export func export_from_node() -> u8 { return 96u8; }
 export func enum_declaration_node() -> u8 { return 97u8; }
 export func enum_member_node() -> u8 { return 98u8; }
 export func enum_integer_node() -> u8 { return 99u8; }
+export func import_node() -> u8 { return 100u8; }
+export func member_selector_node() -> u8 { return 101u8; }
+export func member_selection_item_node() -> u8 { return 102u8; }
+export func type_assertion_node() -> u8 { return 103u8; }
 
+export func local_module_selection(kind:u8) -> bool {
+    return kind == using_node() || kind == import_node();
+}
 export func module_selection(kind:u8) -> bool {
-    return kind == using_node() || kind == export_from_node();
+    return local_module_selection(kind) || kind == export_from_node();
+}
+
+export func selected_resource_name(nodes:const ExprNodes in N, site:u64) -> u64 where {const owner N} {
+    val selection <- nodes[site].right;
+    if (nodes[selection].kind == member_selector_node()) return nodes[selection].left;
+    return selection;
+}
+
+export func local_resource_name(nodes:const ExprNodes in N, site:u64) -> u64 where {const owner N} {
+    if (nodes[site].number != 0u64) return nodes[site].number - 1u64;
+    return selected_resource_name(nodes, site);
 }
 
 export func local_storage_binding(kind:u8) -> bool {

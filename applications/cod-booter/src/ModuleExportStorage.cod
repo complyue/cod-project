@@ -17,6 +17,7 @@ export data ModuleExport {
     shape:u8;
 }
 export array ModuleExports[u64]:ModuleExport;
+export func enum_type() -> u8 { return 26u8; }
 
 # An interface header has value_kind zero and precedes its entries. A here
 # operation lists its supplier, then receivers. A record lists its fields.
@@ -40,6 +41,7 @@ export data ModuleInterfaceRow {
     failure_identity:u64;
     name_first:u64;
     name_past:u64;
+    enum_code:u64;
 }
 export array ModuleInterfaces[u64]:ModuleInterfaceRow;
 
@@ -62,7 +64,8 @@ export func write_interface_header(row:ModuleInterfaceRow in R, defining_module:
     row.failure_module <- 0u64;
     row.failure_identity <- 0u64;
     row.name_first <- 0u64;
-    (row.name_past <- 0u64):void;
+    row.name_past <- 0u64;
+    (row.enum_code <- 0u64):void;
 }
 
 export func find_interface(interfaces:const ModuleInterfaces in I, defining_module:u64, declaration:u64) -> u64

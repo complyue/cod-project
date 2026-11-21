@@ -1,14 +1,16 @@
 using "SourceStorage.cod" SourceBytes;
 using "ParserStorage.cod" {
     ExprNodes, no_node, group_node, name_node, owned_type_node, typed_name_node, data_parent_node,
-    make_named_node, field_access_node,
+    make_named_node, field_access_node, enum_declaration_node, type_assertion_node, literal_node,
+    narrow_integer_node, bool_node,
 };
 using "NameResolution.cod" {
     NameBindings, NameWork, first_item, record_declaration, formal_binding, local_binding,
-    ordinary_selection, record_type, native_scalar,
+    ordinary_selection, record_type, native_scalar, enum_value, find_enum_member,
+    builtin_u64, builtin_u32, builtin_u8, builtin_bool,
 };
-using "ModuleExports.cod" { SelectedExports, same_name, record_export };
-using "ModuleExportStorage.cod" { ModuleInterfaces, find_interface, write_interface_header };
+using "ModuleExports.cod" { SelectedExports, same_name, record_export, enum_export, enum_spelling };
+using "ModuleExportStorage.cod" { ModuleInterfaces, find_interface, write_interface_header, enum_type };
 
 export func type_module(names:const NameBindings in B, selected:const SelectedExports in E,
                         marker:u64, current_module:u64) -> u64 where {const owner B, const owner E} {
@@ -29,6 +31,16 @@ data DeclaredType {
     identity:u64;
 }
 
+export data EnumAssertionResult {
+    diagnostic:u8;
+    node:u64;
+}
+
+export func unproved_type_assertion() -> u8 { return 84u8; }
+func missing_enum_member() -> u8 { return 85u8; }
+func incompatible_enum_assertion() -> u8 { return 86u8; }
+func unproved_enum_operand() -> u8 { return 87u8; }
+
 func describe_type(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
                    annotation:u64, current_module:u64, result:DeclaredType in R) -> bool
     where {const owner N, const owner B, const owner E, owner R} {
@@ -41,9 +53,15 @@ func describe_type(nodes:const ExprNodes in N, names:const NameBindings in B, se
         result.identity <- 0u64;
         return true;
     } else {};
-    if (kind != record_type() && (kind != ordinary_selection() ||
-        selected[names[marker].declaration].kind != record_export())) return false;
-    result.kind <- record_type();
+    val nominal <- kind;
+    if (kind == ordinary_selection()) {
+        val exported <- selected[names[marker].declaration].kind;
+        if (exported == record_export()) { (nominal <- record_type()):void; } else {
+            if (exported == enum_export()) { (nominal <- enum_type()):void; } else { return false; };
+        };
+    } else {};
+    if (nominal != record_type() && nominal != enum_type()) return false;
+    result.kind <- nominal;
     result.defining_module <- type_module(names, selected, marker, current_module);
     result.identity <- type_identity(names, selected, marker);
     return true;
@@ -93,6 +111,20 @@ func trace_type(source:const SourceBytes in S, nodes:const ExprNodes in N, names
                 at:u64, result:DeclaredType in R) -> bool
     where {const owner S, const owner N, const owner B, const owner E, const owner W, const owner P, const owner I, owner R} {
     val kind <- nodes[at].kind;
+    if (kind == literal_node() || kind == narrow_integer_node() || kind == bool_node()) {
+        result.kind <- if (kind == bool_node()) { builtin_bool() } else {
+            if (nodes[at].left == 8u64) { builtin_u8() } else {
+                if (nodes[at].left == 32u64) { builtin_u32() } else { builtin_u64() }
+            }
+        };
+        result.defining_module <- 0u64;
+        result.identity <- 0u64;
+        return true;
+    } else {};
+    if (kind == type_assertion_node()) {
+        if (work[at].value_kind != enum_type()) return false;
+        return describe_type(nodes, names, selected, nodes[at].right, 0u64, result);
+    } else {};
     if (kind == make_named_node())
         return describe_type(nodes, names, selected, nodes[at].left, 0u64, result);
     if (kind == group_node())
@@ -107,6 +139,13 @@ func trace_type(source:const SourceBytes in S, nodes:const ExprNodes in N, names
     if (kind != name_node()) return false;
     val binding <- names[at].kind;
     val declaration <- names[at].declaration;
+    if (binding == enum_value()) {
+        val head <- selected[declaration].enum_head;
+        result.kind <- enum_type();
+        result.defining_module <- interfaces[head].defining_module;
+        result.identity <- interfaces[head].declaration;
+        return true;
+    } else {};
     if (binding == formal_binding()) {
         val formal <- nodes[declaration].right;
         if (formal == no_node() || nodes[formal].kind != typed_name_node()) return false;
@@ -119,6 +158,62 @@ func trace_type(source:const SourceBytes in S, nodes:const ExprNodes in N, names
     val initializer <- nodes[declaration].right;
     if (initializer == no_node() || initializer >= at) return false;
     return trace_type(source, nodes, names, selected, work, spellings, interfaces, initializer, result);
+}
+
+func enum_assertion_failure(report:EnumAssertionResult in R, code:u8, at:u64) -> bool where {owner R} {
+    report.diagnostic <- code;
+    report.node <- at;
+    return false;
+}
+
+func check_enum_assertion(source:const SourceBytes in S, nodes:const ExprNodes in N, names:NameBindings in B,
+                          selected:const SelectedExports in E, work:NameWork in W,
+                          spellings:const SourceBytes in P, interfaces:const ModuleInterfaces in I,
+                          at:u64, report:EnumAssertionResult in R) -> bool
+    where {const owner S, const owner N, owner B, const owner E, owner W, const owner P, const owner I, owner R} {
+    ref wanted = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64; };
+    val annotation <- nodes[at].right;
+    if (!describe_type(nodes, names, selected, annotation, 0u64, wanted) || wanted.kind != enum_type())
+        return enum_assertion_failure(report, unproved_type_assertion(), annotation);
+    val operand <- nodes[at].left;
+    if (nodes[operand].kind == name_node() && names[operand].kind == 0u8) {
+        val member <- no_node();
+        if (wanted.defining_module == 0u64) {
+            member <- find_enum_member(source, nodes, operand, nodes[wanted.identity].right);
+            if (member == no_node()) return enum_assertion_failure(report, missing_enum_member(), operand);
+            names[at].declaration <- names[member].declaration;
+            (work[at].enum_code <- work[member].enum_code):void;
+        } else {
+            val head <- find_interface(interfaces, wanted.defining_module, wanted.identity);
+            if (head == no_node() || interfaces[head].interface_kind != enum_type())
+                return enum_assertion_failure(report, unproved_type_assertion(), annotation);
+            member <- enum_spelling(source, nodes[operand].first, nodes[operand].past, spellings, interfaces, head);
+            if (member == no_node()) return enum_assertion_failure(report, missing_enum_member(), operand);
+            names[at].declaration <- interfaces[member].declaration;
+            (work[at].enum_code <- interfaces[member].enum_code):void;
+        };
+        (names[at].kind <- enum_value()):void;
+    } else {
+        ref actual = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64; };
+        if (!trace_type(source, nodes, names, selected, work, spellings, interfaces, operand, actual))
+            return enum_assertion_failure(report, unproved_enum_operand(), operand);
+        if (actual.kind != enum_type() || actual.defining_module != wanted.defining_module || actual.identity != wanted.identity)
+            return enum_assertion_failure(report, incompatible_enum_assertion(), operand);
+    };
+    work[at].value_kind <- enum_type();
+    return true;
+}
+
+export func check_enum_assertions(source:const SourceBytes in S, nodes:const ExprNodes in N, names:NameBindings in B,
+                                 selected:const SelectedExports in E, work:NameWork in W,
+                                 spellings:const SourceBytes in P, interfaces:const ModuleInterfaces in I,
+                                 used:u64, report:EnumAssertionResult in R) -> bool
+    where {const owner S, const owner N, owner B, const owner E, owner W, const owner P, const owner I, owner R} {
+    for (at in 0u64 .. used) {
+        if (nodes[at].kind == type_assertion_node() &&
+            !check_enum_assertion(source, nodes, names, selected, work, spellings, interfaces, at, report)) return false;
+    };
+    return true;
 }
 
 export func prepare_projection_types(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B,
@@ -170,18 +265,51 @@ func stage_record(nodes:const ExprNodes in N, names:const NameBindings in B, sel
     return no_node();
 }
 
-# Member shape is available by an already resolved type identity. Publishing
-# it here does not introduce the record or its fields into module name lookup.
-export func publish_record_interfaces(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
+func stage_enum(nodes:const ExprNodes in N, names:const NameBindings in B, work:const NameWork in W,
+                declaration:u64, module:u64, start:u64, interfaces:ModuleInterfaces in I) -> u64
+    where {const owner N, const owner B, const owner W, owner I} {
+    val limit <- intrinsic (len)(interfaces);
+    if (start >= limit) return no_node();
+    val member <- first_item(nodes, nodes[declaration].right);
+    val row <- start + 1u64;
+    val name <- nodes[declaration].left;
+    val spelling <- no_node();
+    for (unused in 0u64 .. intrinsic (len)(nodes)) {
+        if (member == no_node()) {
+            write_interface_header(interfaces[start], module, declaration, enum_type(), 0u8, row - start - 1u64);
+            interfaces[start].element_kind <- names[nodes[declaration].number].kind;
+            interfaces[start].name_first <- nodes[name].first;
+            interfaces[start].name_past <- nodes[name].past;
+            return row;
+        } else {};
+        if (row >= limit) return no_node();
+        spelling <- nodes[member].right;
+        write_interface_header(interfaces[row], 0u64, names[member].declaration, 0u8, 0u8, 0u64);
+        interfaces[row].value_kind <- enum_type();
+        interfaces[row].enum_code <- work[member].enum_code;
+        interfaces[row].name_first <- nodes[spelling].first;
+        interfaces[row].name_past <- nodes[spelling].past;
+        member <- work[member].next;
+        row <- row + 1u64;
+    };
+    return no_node();
+}
+
+# Complete member shape is available by an already resolved defining identity.
+export func publish_type_interfaces(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
                                       work:const NameWork in W, used:u64, defining_module:u64, start:u64,
                                       interfaces:ModuleInterfaces in I) -> u64
     where {const owner N, const owner B, const owner E, const owner W, owner I} {
     val count <- start;
     for (at in 0u64 .. used) {
         if (record_declaration(nodes[at].kind)) {
-            count <- stage_record(nodes, names, selected, work, at, defining_module, count, interfaces);
-            if (count == no_node()) return count;
-        } else {};
+            (count <- stage_record(nodes, names, selected, work, at, defining_module, count, interfaces)):void;
+        } else {
+            if (nodes[at].kind == enum_declaration_node()) {
+                (count <- stage_enum(nodes, names, work, at, defining_module, count, interfaces)):void;
+            } else {};
+        };
+        if (count == no_node()) return count;
     };
     return count;
 }

@@ -14,7 +14,7 @@ using "ParserStorage.cod" {
     readonly_declaration, val_binding_node, ptr_binding_node, null_node, return_node,
     owned_type_node, discarded_guard_result, discard_node, bool_node, conditional_node, range_node,
     range_header_node, logical_not_node, logical_and_node, logical_or_node, compare_node,
-    equal_words, unequal_words, less_words, at_most_words, greater_words, at_least_words, no_node,
+    equal_words, unequal_words, less_words, at_most_words, greater_words, at_least_words, no_node, type_assertion_node,
 };
 using "Lexer.cod" {
     exception_word, own_word, handle_word, ref_word, make_word, typeof_word, from_word,
@@ -53,7 +53,6 @@ func expected_symbol() -> u8 { return 18u8; }
 export func expected_name() -> u8 { return 19u8; }
 export func expected_type() -> u8 { return 20u8; }
 func expected_binding_operator() -> u8 { return 21u8; }
-func unsupported_typed_expression() -> u8 { return 26u8; }
 func expected_condition_open() -> u8 { return 27u8; }
 func expected_exception_initializer() -> u8 { return 32u8; }
 func invalid_exception_placement() -> u8 { return 33u8; }
@@ -1412,14 +1411,17 @@ func parse_result_annotation(source:const SourceBytes in S, tokens:const Tokens 
         result.diagnostic <- expected_type();
         return;
     } else {};
-    if (!void_word(source, tokens[annotation])) {
-        result.diagnostic <- unsupported_typed_expression();
+    val operand <- result.root;
+    if (void_word(source, tokens[annotation])) {
+        append_node(nodes, result, discard_node(), nodes[operand].first, tokens[annotation].past,
+                    0u64, operand, no_node(), tokens[colon].first);
+        if (result.diagnostic == 0u8) { (result.next <- annotation + 1u64):void; } else {};
         return;
     } else {};
-    val operand <- result.root;
-    append_node(nodes, result, discard_node(), nodes[operand].first, tokens[annotation].past,
-                0u64, operand, no_node(), tokens[colon].first);
-    if (result.diagnostic == 0u8) { (result.next <- annotation + 1u64):void; } else {};
+    if (!parse_identifier(source, tokens, nodes, result, past, expected_type())) return;
+    val target <- result.root;
+    append_node(nodes, result, type_assertion_node(), nodes[operand].first, nodes[target].past,
+                0u64, operand, target, tokens[colon].first);
 }
 
 func parse_binary(source:const SourceBytes in S, tokens:const Tokens in T,

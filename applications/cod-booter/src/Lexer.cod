@@ -201,7 +201,7 @@ func unit_word(source:const SourceBytes in S, token:const Token in T) -> bool
         source[first + 3u64] == 116u8; # unit
 }
 
-func import_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func import_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
     val first <- token.first;
     return identifier_width(token, 6u64) &&

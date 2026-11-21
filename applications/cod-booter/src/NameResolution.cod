@@ -15,10 +15,12 @@ using "ParserStorage.cod" {
     narrow_integer_node, logical_not_node, logical_binary, block_node, full_scope_node,
     block_item_node, try_node, catch_clause_node, finally_clause_node, null_node, return_node,
     throw_node, local_storage_binding,
-    enum_declaration_node, enum_member_node, enum_integer_node,
+    enum_declaration_node, enum_member_node, enum_integer_node, type_assertion_node,
+    local_module_selection, local_resource_name,
 };
 using "ExpressionParser.cod" ParseResult;
-using "ModuleExports.cod" { SelectedExports, record_export };
+using "ModuleExports.cod" { SelectedExports, record_export, enum_member_export };
+using "ModuleExportStorage.cod" enum_type;
 
 export data NameBinding {
     kind:u8;
@@ -90,7 +92,7 @@ export func array_type() -> u8 { return 22u8; }
 export func loop_index() -> u8 { return 23u8; }
 export func handle_binding() -> u8 { return 24u8; }
 export func here_receiver_binding() -> u8 { return 25u8; }
-export func enum_type() -> u8 { return 26u8; }
+export func enum_value() -> u8 { return 27u8; }
 
 export func native_scalar(kind:u8) -> bool {
     return kind == builtin_u64() || kind == builtin_bool() || (kind >= builtin_u8() && kind <= builtin_f64());
@@ -126,6 +128,7 @@ func invalid_enum_code() -> u8 { return 79u8; }
 func invalid_enum_member_reference() -> u8 { return 80u8; }
 func repeated_enum_code() -> u8 { return 81u8; }
 func repeated_enum_name() -> u8 { return 82u8; }
+func conflicting_enum_selection() -> u8 { return 83u8; }
 export func expected_value_binding() -> u8 { return 14u8; }
 
 func reject_name(state:NameState in R, node:u64, diagnostic:u8) -> void where {owner R} {
@@ -188,7 +191,12 @@ func resolve_value(source:const SourceBytes in S, nodes:const ExprNodes in N, bi
                     work:const NameWork in W, state:NameState in R, name:u64) -> void
     where {const owner S, const owner N, owner B, const owner W, owner R} {
     val found <- lookup(source, nodes, work, name, 0u64, state.used);
-    if (found == no_node()) { reject_name(state, name, unresolved_name()); return; } else {};
+    if (found == no_node()) {
+        if (bindings[name].kind != enum_value()) { reject_name(state, name, unresolved_name()); } else {
+            if (nodes[name].kind == symbol_node()) { reject_name(state, name, expected_symbol_binding()); } else {};
+        };
+        return;
+    } else {};
     val kind <- bindings[found].kind;
     val declaration <- bindings[found].declaration;
     if (kind == c_handle_type() || kind == record_type() || kind == array_type() || kind == enum_type()) {
@@ -723,6 +731,15 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
         resolve_value(source, nodes, bindings, work, state, at);
         return;
     } else {};
+    if (kind == type_assertion_node()) {
+        resolve_type_name(source, nodes, bindings, work, state, nodes[at].right);
+        if (state.diagnostic != 0u8) return;
+        val operand <- nodes[at].left;
+        if (nodes[operand].kind == name_node() && bindings[operand].kind != enum_value() &&
+            lookup(source, nodes, work, operand, 0u64, state.used) == no_node()) return;
+        resolve_expression(source, nodes, bindings, work, state, operand);
+        return;
+    } else {};
     if (kind == block_node()) { resolve_list(source, nodes, bindings, work, state, nodes[at].left); return; } else {};
     if (kind == full_scope_node()) { resolve_full_scope(source, nodes, bindings, work, state, at, state.used); return; } else {};
     if (kind == try_node()) { resolve_try(source, nodes, bindings, work, state, at); return; } else {};
@@ -846,9 +863,8 @@ func register_module(source:const SourceBytes in S, nodes:const ExprNodes in N, 
         if (form_kind == enum_declaration_node()) {
             declare_name(source, nodes, bindings, work, state, nodes[form].left, form, enum_type(), duplicate_binding());
         } else {};
-        if (form_kind == using_node()) {
-            name <- nodes[form].right;
-            if (nodes[form].number != 0u64) { (name <- nodes[form].number - 1u64):void; } else {};
+        if (local_module_selection(form_kind)) {
+            name <- local_resource_name(nodes, form);
             kind <- if (nodes[name].kind == symbol_node()) { symbolic_selection() } else { ordinary_selection() };
             found <- lookup(source, nodes, work, name, 0u64, state.used);
             if (found != no_node() && bindings[found].kind == kind &&
@@ -1030,9 +1046,9 @@ func resolve_callable(source:const SourceBytes in S, nodes:const ExprNodes in N,
     (state.used <- state.module_names):void;
 }
 
-func earlier_enum_member(source:const SourceBytes in S, nodes:const ExprNodes in N, name:u64, prior:u64) -> u64
+export func find_enum_member(source:const SourceBytes in S, nodes:const ExprNodes in N, name:u64, tail:u64) -> u64
     where {const owner S, const owner N} {
-    val member <- prior;
+    val member <- tail;
     for (unused in 0u64 .. syntax_len(nodes)) {
         if (member == no_node() || same_name(source, nodes, name, nodes[member].right)) return member;
         member <- nodes[member].left;
@@ -1063,7 +1079,7 @@ func resolve_enum_member(source:const SourceBytes in S, nodes:const ExprNodes in
     where {const owner S, const owner N, owner B, owner W, owner R, owner E} {
     val prior <- nodes[member].left;
     val name <- nodes[member].right;
-    if (earlier_enum_member(source, nodes, name, prior) != no_node()) {
+    if (find_enum_member(source, nodes, name, prior) != no_node()) {
         reject_name(state, name, repeated_enum_name());
         return;
     } else {};
@@ -1091,7 +1107,7 @@ func resolve_enum_member(source:const SourceBytes in S, nodes:const ExprNodes in
                 (code <- magnitude):void;
             };
         } else {
-            val target <- earlier_enum_member(source, nodes, initializer, prior);
+            val target <- find_enum_member(source, nodes, initializer, prior);
             if (target == no_node()) { reject_name(state, initializer, invalid_enum_member_reference()); return; } else {};
             canonical <- bindings[target].declaration;
             (code <- work[target].enum_code):void;
@@ -1164,7 +1180,7 @@ func resolve_module_form(source:const SourceBytes in S, nodes:const ExprNodes in
     where {const owner S, const owner N, owner B, owner W, owner R} {
     val kind <- nodes[form].kind;
     if (!definitions) {
-        if (kind != callable_node() && kind != using_node() && !declaration_requires_native_output(kind)) {
+        if (kind != callable_node() && !local_module_selection(kind) && !declaration_requires_native_output(kind)) {
             resolve_expression(source, nodes, bindings, work, state, form);
         } else {};
         return;
@@ -1223,8 +1239,10 @@ export func resolve_module_names(source:const SourceBytes in S, nodes:const Expr
         return false;
     } else {};
     for (at in 0u64 .. tree.used) {
-        remember(bindings, at, no_node(), 0u8);
-        bindings[at].imported_kind <- if (nodes[at].kind == using_node()) { (selected[at].kind) } else { 0u8 };
+        if (selected[at].kind == enum_member_export()) {
+            remember(bindings, at, at, enum_value());
+        } else { remember(bindings, at, no_node(), 0u8); };
+        bindings[at].imported_kind <- if (local_module_selection(nodes[at].kind)) { (selected[at].kind) } else { 0u8 };
         bindings[at].guarded_local <- 0u8;
         bindings[at].scope <- no_node();
         bindings[at].guarded_local_link <- no_node();
@@ -1240,6 +1258,13 @@ export func resolve_module_names(source:const SourceBytes in S, nodes:const Expr
     val first <- first_item(nodes, nodes[tree.root].left);
     register_module(source, nodes, bindings, selected, work, state, first, declarations_only);
     if (state.diagnostic == 0u8) { register_native_procedures(source, nodes, bindings, work, state, first); } else {};
+    if (state.diagnostic == 0u8) {
+        for (slot in 0u64 .. state.used) {
+            if (selected[work[slot].active].kind == enum_member_export()) {
+                reject_name(state, work[slot].active, conflicting_enum_selection());
+            } else {};
+        };
+    } else {};
     if (state.diagnostic == 0u8) {
         state.module_names <- state.used;
         state.first <- state.used;

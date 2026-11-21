@@ -9,17 +9,19 @@ using "TokenBuffer.cod" ScanResult;
 using "ExpressionParser.cod" ParseResult;
 using "Frontend.cod" { FrontendResult, read_module };
 using "ModuleExportStorage.cod" { ModuleExports, ModuleInterfaces };
-using "ModuleExports.cod" { SelectedExports, next_module_dependency, prepare_module_dependencies };
+using "ModuleExports.cod" {
+    SelectedExports, next_module_dependency, prepare_module_dependencies, ExportResolutionResult, resolve_enum_selections,
+};
 using "ModuleFrontend.cod" {
-    ModuleBindingResult, bind_parsed_module, module_read_failed, module_binding_failed,
-    module_selection_failed,
+    ModuleBindingResult, select_parsed_module, bind_selected_module, module_read_failed, module_binding_failed,
+    module_selection_failed, binding_diagnostic,
 };
 using "NameResolution.cod" { NameBindings, NameWork };
 using "NativeDeclarations.cod" {
     ModulePublication, NativeDeclarationResult, check_module_interfaces, publish_interfaces,
     publish_module_exports,
 };
-using "DeclarationTypes.cod" { prepare_projection_types, publish_record_interfaces };
+using "DeclarationTypes.cod" { prepare_projection_types, publish_type_interfaces, EnumAssertionResult, check_enum_assertions };
 using "Compiler.cod" {
     ExpressionScratchPlan, native_complete, native_source_rejected, native_scratch_failed,
 };
@@ -91,6 +93,26 @@ proc discover_graph_dependencies(source:const SourceBytes in S, lines:const Sour
     return native_complete();
 }
 
+func bind_graph_names(source:const SourceBytes in S, nodes:const ExprNodes in W,
+                      spellings:const SourceBytes in W, published:const ModuleExports in W,
+                      interfaces:const ModuleInterfaces in W, selected:SelectedExports in W,
+                      names:NameBindings in W, work:NameWork in W, result:ModuleBindingResult in R) -> bool
+    where {const owner S, owner W, owner R} {
+    if (!select_parsed_module(source, nodes, spellings, published, selected, false, result)) return false;
+    ref members = make ExportResolutionResult { diagnostic <- 0u8; node <- no_node(); };
+    if (!resolve_enum_selections(source, nodes, result.frontend.tree.used, spellings, interfaces, selected, members)) {
+        binding_diagnostic(nodes, result, module_selection_failed(), members.diagnostic, members.node);
+        return false;
+    } else {};
+    if (!bind_selected_module(source, nodes, selected, names, work, false, result)) return false;
+    ref assertion = make EnumAssertionResult { diagnostic <- 0u8; node <- no_node(); };
+    if (!check_enum_assertions(source, nodes, names, selected, work, spellings, interfaces, result.frontend.tree.used, assertion)) {
+        binding_diagnostic(nodes, result, module_binding_failed(), assertion.diagnostic, assertion.node);
+        return false;
+    } else {};
+    return true;
+}
+
 proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in S,
                        handle diagnostic:DiagnosticDestination in D, nodes:const ExprNodes in W,
                        selected:SelectedExports in W, names:NameBindings in W, work:NameWork in W,
@@ -108,7 +130,7 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
         };
         stage <- 0u8; diagnostic <- 0u8; related_first <- no_node();
     };
-    if (!bind_parsed_module(source, nodes, spellings, published, selected, names, work, false, result)) {
+    if (!bind_graph_names(source, nodes, spellings, published, published_interfaces, selected, names, work, result)) {
         report_rejection(source, lines, diagnostic, result.stage, result.diagnostic,
                          result.frontend.diagnostic_first, result.frontend.diagnostic_past, result.related_first);
         return native_source_rejected();
@@ -135,8 +157,8 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
     } else {};
     val interfaces <- publish_interfaces(nodes, names, selected, work, used, publication.module_identity, staged_interfaces);
     if (interfaces != no_node()) {
-        (interfaces <- publish_record_interfaces(nodes, names, selected, work, used, publication.module_identity,
-                                                 interfaces, staged_interfaces)):void;
+        (interfaces <- publish_type_interfaces(nodes, names, selected, work, used, publication.module_identity,
+                                               interfaces, staged_interfaces)):void;
     } else {};
     if (interfaces == no_node()) {
         report_scratch_error(diagnostic, 1u32);
