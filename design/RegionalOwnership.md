@@ -1,8 +1,10 @@
 # CoD regional ownership: syntax, semantics and use
 
-Design revision: 130 · Recorded: 2026-11-21 · Status: design draft with scoped confirmed requirements.
+Design revision: 131 · Recorded: 2026-11-21 · Status: design draft with scoped confirmed requirements.
 
 ## Design authority
+
+[D-14-REF-ARGUMENT](DesignAuthorityRegistry.md#d-14-ref-argument), r131. [H-OWNER-REF-ARGUMENT-20261121](../CHANGELOG.md#h-owner-ref-argument-20261121) selects [the ordinary external ref formal and caller-side non-null selection](#owner-qualified-reference-arguments). P-668/P-669 derive the scope from C-65/C-72/C-95/C-63 and preserve ordered preparation, actual owner, target access, initialization and cleanup. Verify proven, null and changing selections in both frontends and migrate equivalent booter formals. Owner-free and dedicated parameter roles keep their contracts.
 
 [D-10-OWN-QUALIFIER](DesignAuthorityRegistry.md#d-10-own-qualifier) and [H-CONTEXTUAL-OWN-20261121](../CHANGELOG.md#h-contextual-own-20261121) cover the spelling of region ownership in declarations, consuming parameters and results at r130.
 
@@ -309,7 +311,7 @@ Non-bits regional objects cannot be implicitly copied into callee-local storage:
 
 ### Confirmed owner syntax
 
-H-273 confirms the owner-generic spelling required by H-271 and optional parameter modifiers. H-317 gives an explicit ptr with an external owner the additional nullable-forwarding contract. An omitted modifier retains the ordinary argument-read boundary; default bits targets remain callee-local. Ref/ptr do not introduce distinct referent type identities or nullability-based overload selection. Local bindings use ref/ptr; val selects independent bits storage.
+H-273 confirms the owner-generic spelling required by H-271. H-317 gives an explicit ptr with an external owner the additional nullable-forwarding contract. An omitted mode on an ordinary owner-qualified formal selects a non-null ref. Default owner-free bits targets remain callee-local. Ref/ptr do not introduce distinct referent type identities or nullability-based overload selection. Local bindings use ref/ptr; val selects independent bits storage.
 
 ```text
 # Both external targets must have the same owner instance.
@@ -325,11 +327,58 @@ function choose(a:Node in O, b:Node in O, second:bool)
   -> Node in O where {owner O};
 ```
 
-For example, `a:Node in O` and `ptr a:Node in O` are equivalent parameters. Likewise, `second:bool` and `ptr second:bool` both target a callee-local copy. This applies to function and procedure signatures, including signature-only declarations. These forms are confirmed source syntax. The prototype accepts both regional and lexical storage for generic owner constraints.
+For example, `a:Node in O` and `ref a:Node in O` are equivalent parameters. An explicit external ptr accepts absence. Likewise, `second:bool` and `ptr second:bool` both target a callee-local copy. This applies to function and procedure signatures, including signature-only declarations. These forms are confirmed source syntax. The prototype accepts both regional and lexical storage for generic owner constraints.
 
 `in O` associates a parameter or borrowed result with an owner variable. `where {owner O}` and `where {const owner O}` introduce a fixed lexical owner binding in the callable body, alongside but distinct from type parameters. The binding is inferred per invocation and cannot be rebound. It participates in ordinary nearest-name lookup: `@O` cannot bypass it to find an outer symbol. The fixed binding identity is distinct from the allocation-access qualifier: owner O permits allocation and const owner O forbids it under H-438. Neither extends a lifetime or grants intrinsic cleanup responsibility. H-437 shares necessary runtime owner information; no particular descriptor or ABI is mandatory. One O constrains all of its occurrences to one actual owner; distinct variables D and S do not assert inequality. A caller need not pass an owner-ID value: the compiler checks the arguments' tracked provenance. O is neither a type identity, a TLS symbol, nor a requirement for RTTI. The same source method can be specialized for different owner instances without erasing their distinction within a call.
 
 An annotation describes the referent's owner, not where the callee happens to store its pointer metadata. This permits deep forwarding and same-owner graph operations while preserving the original lifetime. Borrowed results must name an owner that survives the call; returning a view into default callee-local bits is invalid. A separate owner parameter can also represent an external lexical scope, so the mechanism is not limited to regions. A borrowed pointer's owner annotation never grants whole-region ownership or extraction rights.
+
+### Owner-qualified reference arguments
+
+For an ordinary formal, `x:T in O` means `ref x:T in O`. Both spellings bind the same non-null, initialized target under the same actual owner. They have one callable signature in declarations, definitions, callable types, forwarding and overload checking. Spelling both versions cannot introduce a second method. A target-qualified `x:const T in O` requires only readonly target access. A leading `const` restricts the local binding. Explicit `ptr x:T in O` can receive a null selection under its established owner. Presence alone does not rank overloads.
+
+```cod
+proc increment(n:u64 in O) -> void where {owner O} {
+    n <- n + 1u64;
+    return;
+}
+
+proc maybe_increment(ptr p:u64 in O) -> void where {owner O} {
+    if (p is not null) { increment(p); }
+    return;
+}
+
+proc require_increment(ptr p:u64 in O) -> void
+    throws NullPointerException where {owner O} {
+    increment(not null p);
+    return;
+}
+```
+
+At a ref argument, a plain actual requires proof of presence for the selection that reaches that argument. A ref supplies it directly. A ptr may supply it through its initializer or an applicable flow fact. Rebinding a tested slot or a possible write to it invalidates the fact for a later selection. An unproved plain `increment(p)` rejects even inside a matching catch or a callable declaring NPE.
+
+`not null` at the start of a supplied ref argument explicitly selects its operand in reference mode. Select the actual owner and locator exactly once in written argument order. On absence, raise checked `NullPointerException` at that argument. On presence, prepare the same reference with its target access. Selection adds no read of the selected payload. A field base, index or call needed to locate it still performs its own operations and checks. A dynamic ptr result such as `increment(not null choose(p))` calls `choose` once. Presence proven in advance permits eliding the check while preserving operand effects. A well-typed, owner-established ptr known to be null still throws when execution reaches the argument. For example, `ptr absent:u64 in O = null;` followed by `increment(not null absent);` takes the checked failure path. The literal itself needs its ordinary type and owner evidence.
+
+The prefix covers the supplied reference expression up to its argument boundary, before an optional named destination as in `increment(not null p -> n)`. Calls and selectors inside that expression use their ordinary grouping. Recognize the two words here when a distinct operand follows, then check that operand for reference selection. An owner qualifier immediately attached to a null literal still belongs to that literal. `p is not null` remains a boolean identity test, `not (p is null)` remains ordinary negation, and an ordinary `not` applied to a null literal retains its grammar. This form prepares an ordinary non-null ref input. Method lookup uses ordinary signature evidence. The prefix supplies no overload tie-breaker. Only the written word pair requests this preparation. Local initialization, return expressions and general value expressions retain their existing rules.
+
+Once prepared, the reference denotes its selected target even if a later argument rebinds the source slot. The target's actual owner must remain live and its locator resolvable through the call. A later ownership operation that invalidates that borrow rejects. Narrowing supplies only presence. Prove access, actual-owner compatibility and ordinary readable-target initialization independently. A selected reference grants neither a caller binding slot nor release responsibility. Dedicated `init`, `var`, handle and owner-free value forms retain their own contracts.
+
+```cod
+func first_value(x:const u64 in O, tag:u64) -> u64 where {const owner O} {
+    return x;
+}
+
+proc observe(ptr p:u64 in O, other:u64 in O) -> u64
+    throws NullPointerException where {owner O} {
+    return first_value(not null p, {{ p = other; return 0u64; }});
+}
+```
+
+If `p` selects a target holding 7 and `other` holds 9, `observe` returns 7. The later argument changes the slot used to select the first argument. Passing a null `p` instead throws before that rebinding or entry to `first_value`.
+
+A failed selection skips later arguments and callee entry. Earlier effects stand and caller-side temporaries follow ordinary cleanup. An owning formal transfers at successful entry. In a prepared `defer f(not null p)`, selection happens at registration. Failure registers no action. A successful registration retains the selected reference subject to the usual lifetime proof. A nonexecuting `typeof(f(not null p))` uses the same formal and operand contract for type evidence. The query performs no selection, throw or refinement of subsequent executable code. [Call entry and cleanup](ExceptionControl.md#e4--consuming-calls-and-results)
+
+**Compiler acceptance.** Check both spellings with writable arrays, records and readonly formals. Run a proven ptr, a known-null checked failure caught by the caller, and nullable forwarding to an explicit ptr. For a call with several arguments, observe earlier effects, the skipped later argument and cleanup on failure. On success, rebind the original slot in a later argument and observe the original target in the callee. Check an unstable presence proof, unreadied target, expired owner and readonly-to-writable attempt. Apply the same formal mode to callable matching, signature queries and direct, indirect and prepared calls wherever those paths are supported.
 
 ### Owner constness and allocation
 
@@ -413,7 +462,7 @@ The compiler needs to retain a pointer's target type, target storage, fixed owne
 
 The following details remain to be coordinated with the confirmed principle: general owner-bearing optional/result carrier storage; and parameter/result conversions that create new storage. An external-owner annotation cannot be treated as mere documentation while a conversion silently substitutes an unrelated local object. These are affected interfaces, not permission to silently introduce copyable regional objects or runtime owner dispatch. Symbolic effects retain their separate shadow/restore and no-extraction contracts; this pointer declaration rule does not authorize bare `@x = rhs` or `@x <- rhs`.
 
-Acceptance should demonstrate same-owner local rebinding and rejection across owners of identical types; implicit numeric reads without address arithmetic; a default bits parameter whose mutation leaves the caller unchanged; an owner-generic parameter whose permitted payload write is visible to the caller; same-owner checks through a deep helper call; and rejection of a borrowed result from callee-local storage. Including or omitting ptr in a parameter declaration must preserve its binding, dispatch and owner checks. H-270's destination-view/const-result cases remain necessary. K-429 records native checks for this bounded storage and call contract; the limits below remain explicit. Fixed-width fractions remain bits for storage/transfer purposes; this rule introduces no fraction implementation, layout or promotion policy.
+Acceptance should demonstrate same-owner local rebinding and rejection across owners of identical types; implicit numeric reads without address arithmetic; a default bits parameter whose mutation leaves the caller unchanged; an owner-generic parameter whose permitted payload write is visible to the caller; same-owner checks through a deep helper call; and rejection of a borrowed result from callee-local storage. Writing or omitting `ref` on an ordinary owner-qualified formal must yield identical binding, dispatch and owner checks. Explicit `ptr` retains nullable forwarding. H-270's destination-view/const-result cases remain necessary. K-429 records native checks for this bounded storage and call contract; the limits below remain explicit. Fixed-width fractions remain bits for storage/transfer purposes; this rule introduces no fraction implementation, layout or promotion policy.
 
 ### Pointer and initialization obligations
 

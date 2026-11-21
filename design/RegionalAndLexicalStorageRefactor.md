@@ -1,8 +1,10 @@
 # Regional and lexical storage: reference-model refactoring
 
-Design revision: 48 · Recorded: 2026-11-21 · Status: one-ADT placement and scoped storage semantics selected; complete layout, encoding, backend and implementation contracts remain under review.
+Design revision: 49 · Recorded: 2026-11-21 · Status: one-ADT placement and scoped storage semantics selected; complete layout, encoding, backend and implementation contracts remain under review.
 
 ## Design authority
+
+[D-14-REF-ARGUMENT](DesignAuthorityRegistry.md#d-14-ref-argument) and [H-OWNER-REF-ARGUMENT-20261121](../CHANGELOG.md#h-owner-ref-argument-20261121) apply the [identity rule](#null-uses-the-same-identity-relation) at r49 to caller-side checked reference selection. Under P-668/P-669 a successful selection preserves the exact live owner and locator, including across later arguments and legal relocation. A null test remains a boolean identity operation.
 
 [D-10-OWN-QUALIFIER](DesignAuthorityRegistry.md#d-10-own-qualifier) and [H-CONTEXTUAL-OWN-20261121](../CHANGELOG.md#h-contextual-own-20261121) cover the ownership qualifier in the `resize` signature and examples at r48.
 
@@ -188,7 +190,7 @@ H-440/H-441 uses `p is null` and `p is not null` for null/non-null testing. A ba
 
 Qualified null retains the pair of its actual owner and the null locator. Same-owner null references compare true; references belonging to distinct owners compare false even when both are null. Thus an explicit `p is null in Other` tests that particular owner/null pair, whereas `p is null` tests absence under p's own fixed owner. A non-null reference never equals the null locator. Comparisons may inspect separately proven owners without creating a mixed-owner reference or permitting cross-owner rebinding.
 
-Null testing preserves checked-NPE rules: only an actual target access creates that obligation. `p is not null` (equivalently `not (p is null)` or `!(p is null)`) can establish non-nullness for a stable selected reference; later rebinding or mutation invalidates the corresponding fact. Comparing a mutable field once does not make a later reload stable. `typeof(p is null)` and `typeof(p is not null)` determine bool without executing p or reading a target. There is no separate null-test intrinsic in the selected source design.
+A boolean null test inspects identity. Nullable payload access and explicit `not null` preparation of [owner-qualified reference arguments](RegionalOwnership.md#owner-qualified-reference-arguments) can each raise checked NPE. The latter selects the reference without accessing its payload. `p is not null` (equivalently `not (p is null)` or `!(p is null)`) can establish non-nullness for a stable selected reference; later rebinding or mutation invalidates the corresponding fact. Comparing a mutable field once does not make a later reload stable. `typeof(p is null)` and `typeof(p is not null)` determine bool without executing p or reading a target. There is no separate null-test intrinsic in the selected source design.
 
 ### Identity keys for graph libraries
 

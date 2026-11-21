@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-21 — Owner-qualified ref formals and checked selection at the call site
+
+<a id="h-owner-ref-argument-20261121"></a>
+**H-OWNER-REF-ARGUMENT-20261121.** In the [source-design chat](codex://threads/01a1fe3d-af02-7662-bb40-d06a93504a1d) on 2026-11-21 (America/Los_Angeles), the project user directed “`name:T in O` 默认是 `ref`；调用点已证明非空就直接传，否则显式写 `not null p`，只选择引用、不解引用，为 null 就在调用点抛 NPE。” They delegated review, both bootstrap frontends and migration of redundant booter formals. D-14-REF-ARGUMENT/P-668–P-669 (registry r1035) replaces H-273’s external omitted-ptr equivalence, preserves H-317 nullable forwarding and extends H-313 checked NPE to explicit selection. Definitions and evidence for the superseded preparation are at `869d747cf7ea32c4130bd1f43d0cca5045b60846:design/RegionalOwnership.md`, “Confirmed owner syntax”, and `869d747cf7ea32c4130bd1f43d0cca5045b60846:cod/lang_checked_program.hh`, `argument_mode`. The reviewed scope covers D-14r131, D-10r231, D-17r147, D-28r49 and the source capability reference r476. General expression narrowing and dedicated resource or initialization parameters are outside it.
+
 ## 2026-11-21 — Single-return guards and discarded loop results
 
 <a id="h-guards-and-loop-discard-20261121"></a>
