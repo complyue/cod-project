@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-21 — Use contextual `own` for ownership
+
+<a id="h-contextual-own-20261121"></a>
+**H-CONTEXTUAL-OWN-20261121.** In the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-21 (America/Los_Angeles), the project user explained “我主要考虑把 owned 留给用户可以做变量名” and approved contextual `own` with “好，按此落实”. D-10r228 and registry r1027 qualify D-10-OWN-QUALIFIER/P-648/P-649. `owned` is an ordinary identifier. `own` is contextual in already admitted ownership forms. This replaces the spelling under H-200, H-BOOTER-C-HANDLES-20261120 and H-EXCEPTION-DECL-OWNED-20261118. D-13r36, D-14r130, D-17r143, D-22r66, D-28r48 and interop r17 carry the spelling through their existing scopes. Ownership, borrow and cleanup semantics continue. Prior spelling at `bea24e17e0ae18a1e09c68789918cacb9921b1a5:design/RegionalOwnership.md`, “Region as a declaration keyword throughout the language”.
+
 ## 2026-11-20 — Spell lexical borrows and owner-bound CoD results
 
 <a id="k-booter-handle-bindings-20261120"></a>

@@ -1,8 +1,10 @@
 # CoD Regional Memory Vision and Implementation Tracker
 
-Design revision 35 · 2026-11-17
+Design revision 36 · 2026-11-21
 
 ## Design authority
+
+[D-10-OWN-QUALIFIER](DesignAuthorityRegistry.md#d-10-own-qualifier) and [H-CONTEXTUAL-OWN-20261121](../CHANGELOG.md#h-contextual-own-20261121) cover the qualifier in the illustrative region handoff at r36.
 
 - **Current capture-review reference:** [K-REPLACEMENT-EFFECTS-20261117](../CHANGELOG.md#k-replacement-effects-20261117) keeps the separate D-18 value-input qualification current. This file changes only review references; its semantic revision, governing value paths, constraints and acceptance are unchanged. The registry owns the current review scope.
 
@@ -191,7 +193,7 @@ H-170’s `Maybe<WorkPkg>` is illustrative. `WorkPkg` is the regional payload ro
 A more informative candidate is the following logical sum, with names and generic/type-definition syntax still provisional:
 
 ```text
-SendResult<P> = Accepted | LocalError { cause::SendError; owned region packet::P }
+SendResult<P> = Accepted | LocalError { cause::SendError; own region packet::P }
 ```
 
 `Accepted` means local acceptance only. The error arm supplies both the system error and the returned owner, allowing a retry decision without a hidden last-error effect. This sum directly serves H-168’s local-error feedback and H-170’s returned-region purpose; it is not a proposal for delivery receipts, retries inside the primitive or a general exception system. If error detail is intentionally unnecessary, a simpler intrinsic optional owner remains an alternative to discuss. Both owner-bearing outcomes must be intrinsic under H-196, not user-defined regional sums.

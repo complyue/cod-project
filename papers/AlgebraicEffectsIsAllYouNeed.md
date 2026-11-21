@@ -1,6 +1,6 @@
 # Algebraic Effects Is All You Need
 
-Working paper for author review · revised 19 November 2026
+Working paper for author review · revised 21 November 2026
 
 ## Abstract
 
@@ -185,7 +185,7 @@ data RouteNode =
 
 region RouteProgram { ref entry:RouteNode; }
 
-proc original_policy() -> owned region :RouteProgram {
+proc original_policy() -> own region :RouteProgram {
     return make region p:RouteProgram(4096u64 -> capacity) {
         ref ship_a = make Finish in p { destination <- 1u64; };
         ref ship_b = make Finish in p { destination <- 2u64; };
@@ -227,8 +227,8 @@ region CountDestination { destination:u64; }
 region Summary { count:u64; }
 
 proc edit(region instruction:const RedirectDecline, region base:const RouteProgram)
-    -> owned region :RouteProgram throws Exception {
-    owned region draft <- fork_route(base);
+    -> own region :RouteProgram throws Exception {
+    own region draft <- fork_route(base);
     ref target = unique_finish(draft, instruction.destination);
     ref request = unique_ask(draft, instruction.warehouse);
     assert request isa Ask;
@@ -251,7 +251,7 @@ region Orders { stock_a:u64; stock_b:u64; ptr first:Order; }
 data Decision { id:u64; destination:u64; ptr next:Decision; }
 region Decisions { ptr first:Decision; ptr last:Decision; }
 
-proc empty_decisions() -> owned region :Decisions {
+proc empty_decisions() -> own region :Decisions {
     return make region Decisions(4096u64 -> capacity) { first = null; last = null; };
 }
 
@@ -267,7 +267,7 @@ data Reply { order_id:u64; sku:u64; warehouse:u64; filled:bool; ptr next:Reply; 
 region RequestLog { ptr first:Reply; ptr last:Reply; }
 
 proc allocate(region policy:const RouteProgram, region input:const Orders,
-              region trace:RequestLog) -> owned region :Decisions {
+              region trace:RequestLog) -> own region :Decisions {
     val left_a <- input.stock_a;
     val left_b <- input.stock_b;
     effect @reserve_one(order_id:u64, sku:u64, warehouse:u64) -> bool {
@@ -283,7 +283,7 @@ proc allocate(region policy:const RouteProgram, region input:const Orders,
         return filled;
     };
 
-    owned region batch <- empty_decisions();
+    own region batch <- empty_decisions();
     for { val id <-; val sku <-; } := orders_in(input) {
         append_decision(batch, id, evaluate(policy.entry, id, sku));
     }
@@ -291,7 +291,7 @@ proc allocate(region policy:const RouteProgram, region input:const Orders,
 }
 
 proc report(region query:const CountDestination, region rows:const Decisions)
-    -> owned region :Summary {
+    -> own region :Summary {
     val total <- 0u64;
     for { val dest <- destination; } := decisions_in(rows) {
         if (dest == query.destination) { total <- total + 1u64; }
@@ -299,8 +299,8 @@ proc report(region query:const CountDestination, region rows:const Decisions)
     return make region Summary(4096u64 -> capacity) { count <- total; };
 }
 
-proc desk_batch(region rows:const Decisions) -> owned region :Decisions {
-    owned region desk <- empty_decisions();
+proc desk_batch(region rows:const Decisions) -> own region :Decisions {
+    own region desk <- empty_decisions();
     for { val id <-; val dest <- destination; } := decisions_in(rows) {
         if (dest == 0u64) { append_decision(desk, id, dest); }
     }
@@ -315,7 +315,7 @@ Each `allocate` invocation starts with fresh lexical stock counters. Its definit
 The fixture directory starts empty. Each `open_...` routine validates a published image against the named schema and returns an owned readonly mapping. `publish` consumes the private region and installs the complete image under a fresh filename. [DBMR construction and publication](../design/ConstructionAndAcquisition.md#publishing-a-newly-created-dbmr)
 
 ```cod
-proc sample_orders() -> owned region :Orders {
+proc sample_orders() -> own region :Orders {
     return make region d:Orders(4096u64 -> capacity) {
         stock_a <- 1u64;
         stock_b <- 1u64;
@@ -335,27 +335,27 @@ proc compare_revisions() throws Exception {
         destination <- 0u64;
     }, "query.dbmr");
 
-    owned region inputs <- open_orders("orders.dbmr");
-    owned region before <- open_route("policy-0.dbmr");
-    owned region change <- open_editor("edit.dbmr");
-    owned region query <- open_query("query.dbmr");
-    owned region trace0 <- empty_log();
-    owned region trace1 <- empty_log();
+    own region inputs <- open_orders("orders.dbmr");
+    own region before <- open_route("policy-0.dbmr");
+    own region change <- open_editor("edit.dbmr");
+    own region query <- open_query("query.dbmr");
+    own region trace0 <- empty_log();
+    own region trace1 <- empty_log();
 
     publish(allocate(before, inputs, trace0), "decisions-0.dbmr");
     publish(edit(change, before), "policy-1.dbmr");
-    owned region after <- open_route("policy-1.dbmr");
+    own region after <- open_route("policy-1.dbmr");
     publish(allocate(after, inputs, trace1), "decisions-1.dbmr");
 
-    owned region old_rows <- open_decisions("decisions-0.dbmr");
-    owned region new_rows <- open_decisions("decisions-1.dbmr");
+    own region old_rows <- open_decisions("decisions-0.dbmr");
+    own region new_rows <- open_decisions("decisions-1.dbmr");
     publish(report(query, old_rows), "summary-0.dbmr");
     publish(report(query, new_rows), "summary-1.dbmr");
     publish(desk_batch(new_rows), "desk.dbmr");
 
-    owned region old_summary <- open_summary("summary-0.dbmr");
-    owned region new_summary <- open_summary("summary-1.dbmr");
-    owned region desk <- open_decisions("desk.dbmr");
+    own region old_summary <- open_summary("summary-0.dbmr");
+    own region new_summary <- open_summary("summary-1.dbmr");
+    own region desk <- open_decisions("desk.dbmr");
     assert old_summary.count == 1u64;
     assert new_summary.count == 2u64;
     assert destination_for(old_rows, 41u64) == 1u64;
