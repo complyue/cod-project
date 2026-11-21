@@ -68,6 +68,8 @@ using "NativeCommands.cod" position_block;
 using "NativeCommands.cod" jump;
 using "NativeCommands.cod" branch_equal;
 using "NativeCommands.cod" branch_catchable;
+using "NativeCommands.cod" write_defer_flag;
+using "NativeCommands.cod" branch_if_unregistered;
 using "NativeCommands.cod" compare_words;
 using "NativeCommands.cod" word_constant;
 using "NativeCommands.cod" copy_word;
@@ -731,10 +733,10 @@ func lower_expression(nodes:const ExprNodes in N, names:const NameBindings in B,
     } else {};
     if (kind == deferred_call_node()) {
         prepare_arguments(nodes, names, links, facts, sites, code, plan, state, nodes[at].right);
-        if (state.live) { emit(code, plan, word_constant(), slot(at), 1u64); } else {};
+        if (state.live) { emit(code, plan, write_defer_flag(), slot(at), 1u64); } else {};
         return;
     } else {};
-    if (kind == deferred_block_node()) { emit(code, plan, word_constant(), slot(at), 1u64); return; } else {};
+    if (kind == deferred_block_node()) { emit(code, plan, write_defer_flag(), slot(at), 1u64); return; } else {};
     if (kind == try_node()) {
         lower_try(nodes, names, links, facts, sites, code, plan, state, at, read_result);
         return;
@@ -774,7 +776,7 @@ func initialize_defer_flags(sites:const CompletionSites in S, ref code:NativeCom
     val action <- sites[scope].last_defer;
     for (unused in 0u64 .. used) {
         if (action == no_node()) { return; } else {};
-        emit(code, plan, word_constant(), slot(action), 0u64);
+        emit(code, plan, write_defer_flag(), slot(action), 0u64);
         (action <- sites[action].previous_defer):void;
     };
 }
@@ -817,9 +819,9 @@ func drain_scope(nodes:const ExprNodes in N, names:const NameBindings in B, link
         if (action == no_node() || plan.diagnostic != 0u8) { return; } else {};
         invoke_block <- new_block(plan);
         next <- new_block(plan);
-        command(code, plan, branch_equal(), slot(action), 0u64, next, invoke_block);
+        command(code, plan, branch_if_unregistered(), slot(action), 0u64, next, invoke_block);
         position(code, plan, state, invoke_block);
-        emit(code, plan, word_constant(), slot(action), 0u64);
+        emit(code, plan, write_defer_flag(), slot(action), 0u64);
         if (nodes[action].kind == deferred_block_node()) {
             lower_delayed_block(nodes, names, links, facts, sites, code, plan, state, nodes[action].left, next);
         } else {
