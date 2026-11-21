@@ -93,6 +93,8 @@ array NameBindings[u64]:NameBinding;
 data NameWorkSlot {
     active:u64;
     next:u64;
+    call_result:u8;
+    expects_here:u8;
 }
 array NameWork[u64]:NameWorkSlot;
 

@@ -16,12 +16,15 @@ data ModuleExport {
 }
 array ModuleExports[u64]:ModuleExport;
 
-# Each constructor header has parameter_kind 0. Its parameter records follow
-# in declaration order. Type identities refer to the defining module.
-data NativeConstructorRow {
+# An interface header has parameter_kind zero. Its parameter records follow
+# in declaration order. A here operation lists its supplier, then receivers.
+# Both declarations and nominal types retain their defining-module identity.
+data NativeInterfaceRow {
     defining_module:u64;
-    marker:u64;
+    declaration:u64;
     parameter_count:u64;
+    interface_kind:u8;
+    result_kind:u8;
     parameter_kind:u8;
     type_module:u64;
     type_identity:u64;
@@ -29,9 +32,9 @@ data NativeConstructorRow {
     target_readonly:u8;
     owner_readonly:u8;
 }
-array NativeConstructors[u64]:NativeConstructorRow;
+array NativeInterfaces[u64]:NativeInterfaceRow;
 
 export ModuleExport;
 export ModuleExports;
-export NativeConstructorRow;
-export NativeConstructors;
+export NativeInterfaceRow;
+export NativeInterfaces;

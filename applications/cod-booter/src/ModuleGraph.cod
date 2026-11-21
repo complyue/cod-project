@@ -16,7 +16,7 @@ using "ExpressionParser.cod" ParseResult;
 using "Frontend.cod" FrontendResult;
 using "Frontend.cod" read_module;
 using "ModuleExportStorage.cod" ModuleExports;
-using "ModuleExportStorage.cod" NativeConstructors;
+using "ModuleExportStorage.cod" NativeInterfaces;
 using "ModuleExports.cod" SelectedExports;
 using "ModuleExports.cod" next_module_dependency;
 using "ModuleExports.cod" prepare_module_dependencies;
@@ -29,8 +29,8 @@ using "NameResolution.cod" NameBindings;
 using "NameResolution.cod" NameWork;
 using "NativeDeclarations.cod" ModulePublication;
 using "NativeDeclarations.cod" NativeDeclarationResult;
-using "NativeDeclarations.cod" check_imported_constructors;
-using "NativeDeclarations.cod" publish_constructors;
+using "NativeDeclarations.cod" check_selected_interfaces;
+using "NativeDeclarations.cod" publish_interfaces;
 using "NativeDeclarations.cod" publish_module_exports;
 using "Compiler.cod" ExpressionScratchPlan;
 using "Compiler.cod" native_complete;
@@ -46,7 +46,7 @@ data ModuleProgress {
     used:u64;
     root:u64;
     count:u64;
-    constructor_count:u64;
+    interface_count:u64;
     failed_first:u64;
     failed_past:u64;
 }
@@ -57,8 +57,8 @@ proc "C" graph_frame_use(
     here work(ref tokens:Tokens in W, ref nodes:ExprNodes in W, ref selected:SelectedExports in W,
               ref names:NameBindings in W, ref work:NameWork in W, ref staged:ModuleExports in W,
               ref progress:ModuleProgressRows in W, ref spellings:const SourceBytes in W,
-              ref published:const ModuleExports in W, ref staged_constructors:NativeConstructors in W,
-              ref published_constructors:const NativeConstructors in W) -> u8,
+              ref published:const ModuleExports in W, ref staged_interfaces:NativeInterfaces in W,
+              ref published_interfaces:const NativeInterfaces in W) -> u8,
     handle frame:ModuleFrame in W) -> u8 where {owner W};
 proc "C" remember_graph_dependency(handle frame:ModuleFrame in W, ref source:const SourceBytes in S,
                                     val site:u64, val first:u64, val past:u64) -> u8
@@ -110,7 +110,7 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
                        ref selected:SelectedExports in W, ref names:NameBindings in W, ref work:NameWork in W,
                        ref staged:ModuleExports in W, ref progress:ModuleProgressRows in W,
                        spellings:const SourceBytes in W, published:const ModuleExports in W,
-                       ref staged_constructors:NativeConstructors in W, published_constructors:const NativeConstructors in W) -> u8
+                       ref staged_interfaces:NativeInterfaces in W, published_interfaces:const NativeInterfaces in W) -> u8
     where {const owner S, owner D, owner W} {
     ref result = make ModuleBindingResult {
         frontend <- make FrontendResult {
@@ -128,7 +128,7 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
         return native_source_rejected();
     } else {};
     ref imported = make NativeDeclarationResult { diagnostic <- 0u8; node <- no_node(); };
-    if (!check_imported_constructors(nodes, names, selected, published_constructors, work, result.frontend.tree.used, imported)) {
+    if (!check_selected_interfaces(nodes, names, selected, published_interfaces, work, result.frontend.tree.used, imported)) {
         report_rejection(source, lines, diagnostic, module_binding_failed(), imported.diagnostic,
                          nodes[imported.node].first, nodes[imported.node].past, no_node());
         return native_source_rejected();
@@ -145,14 +145,14 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
         report_scratch_error(diagnostic, 1u32);
         return native_scratch_failed();
     } else {};
-    val constructors <- publish_constructors(nodes, names, selected, work, staged, count,
-                                             publication.module_identity, staged_constructors);
-    if (constructors == no_node()) {
+    val interfaces <- publish_interfaces(nodes, names, selected, work, staged, count,
+                                             publication.module_identity, staged_interfaces);
+    if (interfaces == no_node()) {
         report_scratch_error(diagnostic, 1u32);
         return native_scratch_failed();
     } else {};
     progress[0u64].count <- count;
-    progress[0u64].constructor_count <- constructors;
+    progress[0u64].interface_count <- interfaces;
     return native_complete();
 }
 
@@ -173,21 +173,21 @@ proc check_graph_revision(source:const SourceBytes in S, lines:const SourceLines
         report_scratch_error(diagnostic, prepared);
         return native_scratch_failed();
     } else {};
-    val parsed <- graph_frame_use(frame) (tokens, nodes, selected, names, work, staged, progress, spellings, published, constructors, contracts) => {
+    val parsed <- graph_frame_use(frame) (tokens, nodes, selected, names, work, staged, progress, spellings, published, interfaces, contracts) => {
         continue discover_graph_dependencies(source, lines, frame, diagnostic, tokens, nodes, selected, progress);
     };
     if (parsed != native_complete()) { return parsed; } else {};
     val followed:const u8 <- follow_graph_dependencies(frame);
     if (followed != 0u8) {
-        return graph_frame_use(frame) (tokens, nodes, selected, names, work, staged, progress, spellings, published, constructors, contracts) => {
+        return graph_frame_use(frame) (tokens, nodes, selected, names, work, staged, progress, spellings, published, interfaces, contracts) => {
             report_rejection(source, lines, diagnostic, module_selection_failed(), followed,
                              progress[0u64].failed_first, progress[0u64].failed_past, no_node());
             continue native_source_rejected();
         };
     } else {};
-    val checked <- graph_frame_use(frame) (tokens, nodes, selected, names, work, staged, progress, spellings, published, constructors, contracts) => {
+    val checked <- graph_frame_use(frame) (tokens, nodes, selected, names, work, staged, progress, spellings, published, interfaces, contracts) => {
         continue bind_graph_module(source, lines, diagnostic, nodes, selected, names, work,
-                                   staged, progress, spellings, published, constructors, contracts);
+                                   staged, progress, spellings, published, interfaces, contracts);
     };
     if (checked != native_complete()) { return checked; } else {};
     val committed <- commit_graph_exports(frame, source);
