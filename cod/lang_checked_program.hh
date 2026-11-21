@@ -119,6 +119,8 @@ struct CheckedOperation {
   std::uint64_t integer = 0;
   bool enum_literal = false;
   bool enum_assertion = false;
+  std::optional<std::uint64_t> case_code;
+  bool case_reaches_end = false;
   bool minimum_literal = false;
   ExceptionFacts exceptions;
   std::set<size_t> captures;

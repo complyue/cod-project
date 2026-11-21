@@ -161,7 +161,7 @@ inline std::vector<Token> tokenize(const std::shared_ptr<const IndexedSource> &r
         ++cursor;
       }
     }
-    if (std::string("(){}[];,:.+-*/%<>=!").find(c) == std::string::npos && punctuation.size() != 2)
+    if (std::string("(){}[];,:.+-*/%<>=!|").find(c) == std::string::npos && punctuation.size() != 2)
       fail(start, "unsupported character in CoD source");
     ++cursor;
     emit(TokenKind::punctuation, std::move(punctuation), offset);
@@ -315,7 +315,8 @@ struct Expression {
                     pointer_group, pointer, rebind, region_binding, callable, alias, capture_owner,
                     here_body, named_argument, break_value, continue_value, typed_expression, return_tail,
                     processor_composition, pipeline, here_binding, make_object, native_handle_binding, make_owned_handle, make_borrowed_handle,
-                    exception_binding, make_exception, rethrow_from };
+                    exception_binding, make_exception, rethrow_from, case_expression, case_arm,
+                    case_fallthrough, case_failure };
   enum class ExceptionPlacement { default_region, capacity, cause };
   Kind kind;
   Location at;
@@ -331,6 +332,7 @@ struct Expression {
   bool fixed_binding = false;
   bool read_only = false;
   bool scoped = false;
+  bool case_resumes = false;
   bool grouped_deferred_call = false;
   bool repeated_defer_registration = true;
   std::string declaration_kind = {};
@@ -511,7 +513,7 @@ inline bool explicit_query_intrinsic_name(std::string_view name) {
 
 inline bool expression_keyword(std::string_view name) {
   return name == "true" || name == "false" || name == "null" || name == "is" || name == "not" ||
-         name == "for" || name == "var" || name == "effect" ||
+         name == "for" || name == "case" || name == "var" || name == "effect" ||
          name == "perform" || name == "behave" || name == "if" || name == "procedure" ||
          name == "function" || name == "func" || name == "proc" || name == "global" || name == "symbol" ||
          name == "try" || name == "catch" || name == "finally" || name == "throw" || name == "return" || name == "defer" ||
@@ -537,6 +539,7 @@ class Parser {
   std::map<const Expression *, size_t> depths_;
   std::vector<size_t> right_paren_;
   bool parsing_handoff_ = false;
+  bool parsing_case_ = false;
   bool labelled_yield_ = false;
 
   struct ParseEntry {
@@ -1382,6 +1385,48 @@ class Parser {
     return handler;
   }
 
+  bool starts_case_arm() const {
+    if (!is("(")) return false;
+    const auto close = right_paren_[cursor_] - cursor_;
+    return is("|", close + 1) || (is("->", close + 1) && (is("{", close + 2) || is("throw", close + 2)));
+  }
+  Expr case_expression(const Token &token) {
+    using K = Expression::Kind;
+    auto result = make(K::case_expression, token);
+    result->children.push_back(expression());
+    expect("of");
+    expect("{");
+    const bool previous = std::exchange(parsing_case_, true);
+    while (!take("}")) {
+      if (peek().kind == TokenKind::end) fail(peek().at, "unterminated case body");
+      if (!starts_case_arm()) {
+        result->children.push_back(expression());
+      } else {
+        auto arm = make(K::case_arm, expect("("));
+        if (is(")")) arm->text = "_";
+        else {
+          const auto pattern = peek();
+          if (pattern.kind != TokenKind::identifier || !is(")", 1))
+            fail(pattern.at, "case pattern is outside the supported seed profile");
+          arm->text = tokens_[cursor_++].text;
+        }
+        expect(")");
+        if (take("|") && !is("->")) arm->children.push_back(expression(0, HereAttachment::immediate, false));
+        expect("->");
+        if (is("throw")) {
+          if (arm->text != "_" || !arm->children.empty())
+            fail(peek().at, "the unbraced throwing arm requires an unguarded catch-all");
+          arm->children.push_back(make(K::case_failure, expect("throw")));
+        } else arm->children.push_back(block());
+        result->children.push_back(finish(std::move(arm)));
+      }
+      if (!is("}")) expect(";");
+      else take(";");
+    }
+    parsing_case_ = previous;
+    return result;
+  }
+
   Expr primary(HereAttachment attachment, bool owner_projection) {
     const bool pipeline_operand = attachment == HereAttachment::pipeline_body;
     auto token = peek();
@@ -1570,7 +1615,10 @@ class Parser {
       return expr;
     }
     if (take("return")) return return_expression(token);
-    if (parsing_handoff_ && (is("break") || is("continue"))) {
+    if (take("case")) return case_expression(token);
+    if (parsing_case_ && is("fallthrough") && (is(";", 1) || is("}", 1)))
+      return make(Expression::Kind::case_fallthrough, expect("fallthrough"));
+    if ((parsing_handoff_ || parsing_case_) && (is("break") || is("continue"))) {
       ++cursor_;
       auto expr = make(token.text == "break" ? Expression::Kind::break_value : Expression::Kind::continue_value, token);
       if (!is(";") && !is("}")) expr->children.push_back(expression());
@@ -2014,20 +2062,35 @@ class Parser {
   enum class ReturnContext { module, callable, deferred };
   static void validate_explicit_scopes(Expression &expr, ReturnContext returning,
                                        bool iteration = false, bool deferred = false,
-                                       const Location *draining = nullptr, const ReceivingHeader *handoff = nullptr) {
+                                       const Location *draining = nullptr, const ReceivingHeader *handoff = nullptr,
+                                       bool case_body = false, bool arm_body = false, bool direct_fallthrough = false) {
     using K = Expression::Kind;
     if ((expr.kind == K::block || expr.kind == K::here_body) && expr.scoped) {
       iteration = deferred = false;
       draining = nullptr;
       handoff = nullptr;
+      case_body = false;
+      arm_body = false;
       returning = ReturnContext::callable;
     }
     if (expr.kind == K::return_test && returning != ReturnContext::deferred)
       fail(expr.at, "'if returning' requires deferred execution in a lexical return destination");
     if (expr.kind == K::return_test && !expr.binding.empty() && expr.declaration_kind.empty() && !expr.annotation)
       fail(expr.at, "a return pattern binding requires val, ref, ptr or a complete type annotation");
-    if (expr.kind == K::here_body && !expr.scoped) handoff = expr.receiving.get();
+    if (expr.kind == K::here_body && !expr.scoped) {
+      handoff = expr.receiving.get();
+      case_body = false;
+      arm_body = false;
+    }
+    if (expr.kind == K::case_fallthrough && !direct_fallthrough) {
+      if (!arm_body) fail(expr.at, "'fallthrough' requires an active case arm");
+      fail(expr.at, "nested case fallthrough is outside the supported seed profile");
+    }
     if (expr.kind == K::break_value || expr.kind == K::continue_value) {
+      if (case_body) {
+        if (expr.kind == K::continue_value) fail(expr.at, "'continue' cannot cross a case body");
+        fail(expr.at, "case break is outside the supported seed profile");
+      }
       if (!handoff) fail(expr.at, "'" + expr.text + "' requires an active single-brace here body");
       if (handoff->from_for && expr.kind == K::break_value && !expr.children.empty())
         fail(expr.at, "a generator for loop requires bare 'break'");
@@ -2049,14 +2112,27 @@ class Parser {
       fail(expr.at, "effect installation in a deferred block requires a nested explicit {{ ... }} scope");
     if (iteration && declaration)
       fail(expr.at, "a loop-body variable declaration requires a nested per-iteration {{ ... }} scope");
+    if (arm_body && declaration)
+      fail(expr.at, "a case-arm variable declaration requires a nested explicit {{ ... }} scope");
     if (handoff && declaration)
       fail(expr.at, "a here-body variable declaration requires a nested explicit {{ ... }} scope");
     for (size_t i = 0; i < expr.children.size(); ++i) {
       const bool loop_body = expr.kind == K::range_for && i >= 2;
       const bool deferred_body = expr.kind == K::deferred && expr.children.front()->kind == K::block;
       const auto child_returning = deferred_body && returning != ReturnContext::module ? ReturnContext::deferred : returning;
-      validate_explicit_scopes(*expr.children[i], child_returning, loop_body || iteration, deferred_body || deferred,
-          deferred_body ? &expr.at : draining, loop_body || deferred_body ? nullptr : handoff);
+      const bool case_item = expr.kind == K::case_expression && i != 0;
+      const bool selected_arm = expr.kind == K::case_arm && i + 1 == expr.children.size();
+      auto &child = *expr.children[i];
+      const bool arm_fallthrough = selected_arm && child.kind == K::block &&
+          !child.children.empty() && child.children.back()->kind == K::case_fallthrough;
+      if (arm_fallthrough && child.scoped)
+        fail(child.children.back()->at, "fallthrough after full-scope cleanup is outside the supported seed profile");
+      if (arm_fallthrough) expr.case_resumes = true;
+      const bool direct = expr.kind == K::block && direct_fallthrough && i + 1 == expr.children.size();
+      validate_explicit_scopes(child, child_returning, loop_body || iteration, deferred_body || deferred,
+          deferred_body ? &expr.at : draining, loop_body || deferred_body || case_item ? nullptr : handoff,
+          !loop_body && !deferred_body && (case_item || case_body),
+          !deferred_body && !case_item && (selected_arm || arm_body), direct || arm_fallthrough);
     }
     // A callable body executes in its own call scope, independently of where
     // its value is constructed. Loops inside it still need explicit scopes.

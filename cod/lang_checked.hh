@@ -2169,6 +2169,53 @@ class ScalarChecker {
     if (member == domain.spellings.end()) return {};
     return EnumValue{type, domain.members[member->second].canonical};
   }
+  struct CaseScan {
+    using Codes = std::set<std::uint64_t>;
+    Codes domain, remaining;
+    bool borrowed;
+
+    Codes match(std::optional<std::uint64_t> code) {
+      if (!code) return std::exchange(remaining, {});
+      if (remaining.erase(*code)) return {*code};
+      return {};
+    }
+    void invalidate(bool may_write) {
+      if (borrowed && may_write) remaining = domain;
+    }
+    void resume(const Codes &matched, bool may_write) {
+      if (matched.empty()) return;
+      remaining.insert(matched.begin(), matched.end());
+      invalidate(may_write);
+    }
+  };
+  static bool case_may_write(const Expression &expr) {
+    using K = Expression::Kind;
+    switch (expr.kind) {
+    case K::integer: case K::real: case K::boolean: case K::name: case K::null_ref:
+    case K::case_fallthrough: return false;
+    case K::block: case K::grouped: case K::field:
+      return std::ranges::any_of(expr.children, [](const auto &child) { return case_may_write(*child); });
+    default: return true;
+    }
+  }
+  CaseScan case_scan(const Type &subject, bool borrowed, const Location &at) const {
+    CaseScan::Codes codes;
+    if (subject == Type::boolean) codes = {0, 1};
+    else if (subject.kind == Type::enumeration) {
+      for (const auto &member : program_.enums.at(subject.identity).members) codes.insert(member.code);
+    } else implementation_gap(at, "case matching on a subject other than bool or enum");
+    return {codes, codes, borrowed};
+  }
+  std::optional<std::uint64_t> case_code(const Type &subject, const Expression &arm) const {
+    if (arm.text == "_") return {};
+    if (subject == Type::boolean) {
+      if (arm.text == "true" || arm.text == "false") return arm.text == "true";
+      fail(arm.at, "a bool case pattern requires true, false or a catch-all");
+    }
+    if (const auto member = enum_member(subject, arm.text))
+      return program_.enums.at(subject.identity).members.at(member->member).code;
+    fail(arm.at, "unknown member '" + arm.text + "' of enum '" + subject.name + "'");
+  }
   CheckedOperation enum_literal(const EnumValue &value) const {
     CheckedOperation result;
     result.type = value.type;
@@ -7989,6 +8036,84 @@ class ScalarChecker {
     if (argument == Type::boolean && mode != ArgumentMode::value && !readonly)
       type_boolean_write(expr, state, writable_slot ? EvidencePlaces{} : target.places);
   }
+  std::optional<Type> case_evidence(const Expression &expr, TypeEvidenceState &state, bool contextual,
+                                   const Type *expected, std::vector<Type> *alternatives,
+                                   ExpectedTypeUse expected_use, EvidenceRead read) const {
+    using K = Expression::Kind;
+    const auto &subject = *expr.children.front();
+    const auto type = type_evidence(subject, state, false, nullptr, nullptr, ExpectedTypeUse::materialization, true,
+                                    EvidenceRead::target);
+    if (!type || *type == Type::never) return type;
+    const auto selected = state.value;
+    const auto target = state.target;
+    if (selected.mixed_view || (selected.nullable && target.presence != TargetPresence::present))
+      implementation_gap(subject.at, "case matching on a mixed or possibly null subject");
+    auto scan = case_scan(*type, selected.view == true, subject.at);
+    bool reaches_end = true, unknown_result = false;
+    std::optional<Type> result;
+    std::optional<TypeEvidenceState> completed;
+    for (const auto &entry : std::span(expr.children).subspan(1)) {
+      const auto &item = *entry;
+      if (item.kind != K::case_arm) {
+        const bool reached = reaches_end && !scan.remaining.empty();
+        if (type_evidence(item, state, false, nullptr, nullptr, ExpectedTypeUse::materialization, reached,
+                          EvidenceRead::discarded) == Type::never && reached) reaches_end = false;
+        else if (reached) scan.invalidate(case_may_write(item));
+        continue;
+      }
+      const auto pattern = case_code(*type, item);
+      const auto matched = scan.match(pattern);
+      auto arm = state;
+      const bool match_reaches = reaches_end && !matched.empty();
+      const bool miss_reaches = reaches_end && !scan.remaining.empty();
+      if (scan.borrowed && pattern && match_reaches)
+        require_type_initialized(arm, target, {}, item.at);
+      bool body_reaches = match_reaches;
+      if (item.children.size() == 2) {
+        const auto &guard = *item.children.front();
+        const auto condition = type_evidence(guard, arm, false, nullptr, nullptr,
+                                             ExpectedTypeUse::materialization, match_reaches);
+        if (condition && *condition != Type::boolean && *condition != Type::never)
+          fail(guard.at, "case guard requires bool");
+        const auto proof = arm.target.branches;
+        auto declined = arm;
+        declined.selections.assume(proof, false);
+        arm.selections.assume(proof, true);
+        const bool guard_returns = match_reaches && condition != Type::never;
+        body_reaches = guard_returns && arm.selections.reachable(proof, true);
+        if (guard_returns && declined.selections.reachable(proof, false)) {
+          state = merge_reaching_evidence(std::move(state), std::move(declined), !miss_reaches, false);
+          scan.resume(matched, case_may_write(guard));
+        }
+      }
+      const auto &body = *item.children.back();
+      const auto value = type_evidence(body, arm, contextual && !item.case_resumes,
+          item.case_resumes ? nullptr : expected, item.case_resumes ? nullptr : alternatives,
+          expected_use, body_reaches, item.case_resumes || read == EvidenceRead::loop_discard ? EvidenceRead::discarded : read);
+      if (!body_reaches || value == Type::never) continue;
+      if (item.case_resumes) {
+        state = merge_reaching_evidence(std::move(state), std::move(arm), scan.remaining.empty(), false);
+        scan.resume(matched, case_may_write(body));
+        continue;
+      }
+      if (!value) unknown_result = true;
+      else {
+        if (*value != Type::void_type && (!scalar_type(*value) || arm.value.view == true || arm.value.mixed_view))
+          implementation_gap(body.at, "case arm result needs an independent scalar value");
+        if (result && *result != *value) fail(body.at, "case arms require one result type");
+        result = value;
+      }
+      if (completed) *completed = merge_reaching_evidence(std::move(*completed), std::move(arm), false, false);
+      else completed = std::move(arm);
+    }
+    const bool unmatched = reaches_end && !scan.remaining.empty();
+    if (unmatched && result && *result != Type::void_type)
+      fail(expr.at, "value case may finish without a result; provide a completing arm or a catch-all");
+    if (completed) state = merge_reaching_evidence(std::move(*completed), std::move(state), false, !unmatched);
+    if (unknown_result) return {};
+    return result.value_or(unmatched ? Type::void_type : Type::never);
+  }
+
   // Evidence only: no reads, captures, demands, storage or cleanup equations are created here.
   // Operand hints defer validation to ordered checking; required typeof queries validate their bounded source forms here.
   std::optional<Type> type_evidence(const Expression &expr, TypeEvidenceState &state, bool contextual = false,
@@ -10427,7 +10552,7 @@ class ScalarChecker {
       case K::integer: case K::real: case K::boolean: case K::return_test: case K::null_ref: case K::name: case K::symbol:
       case K::unary: case K::binary: case K::call: case K::value_call: case K::behave: case K::perform: case K::field: case K::index:
       case K::conditional: case K::block: case K::grouped: case K::transfer: case K::rebind: case K::typed_expression:
-      case K::make_object: break;
+      case K::make_object: case K::case_expression: case K::case_failure: case K::case_fallthrough: break;
       case K::callable:
         if (expr.definition->name.empty()) break;
         [[fallthrough]];
@@ -10920,6 +11045,12 @@ class ScalarChecker {
       view.storage_kind.reset();
       return type;
     }
+    case K::case_expression: return case_evidence(expr, state, contextual, expected, alternatives, expected_use, read);
+    case K::case_fallthrough: return Type::void_type;
+    case K::case_failure:
+      if (state.returns) state.returns->saw_throw = true;
+      note_type_exit(state, Completion::failure(exception_id(ExceptionCategory::unexpected_case)));
+      return Type::never;
     case K::conditional: {
       const bool observes_return = expr.children[0]->kind == K::return_test;
       const bool discarded_arms = read == EvidenceRead::loop_discard && !observes_return;
@@ -15654,6 +15785,91 @@ class ScalarChecker {
     }
     return operation;
   }
+  CheckedOperation check_case(const Expression &expr, CheckedInstance *instance,
+      std::map<const Expression *, CheckedOperation> &operations, bool read, bool discard,
+      const Type *expected, ExpectedTypeUse expected_use) {
+    using K = Expression::Kind;
+    CheckedOperation result;
+    const auto &subject = *expr.children.front();
+    const auto type = check(subject, instance, operations, false, false, nullptr, ExpectedTypeUse::materialization,
+                            false, IndexedUse::immediate_target);
+    result.type = Type::never;
+    if (type == Type::never) return result;
+    const auto selected = operations.at(&subject);
+    if (selected.mixed_view || selected.targets.contains(null_target))
+      implementation_gap(subject.at, "case matching on a mixed or possibly null subject");
+    auto scan = case_scan(type, selected.view, subject.at);
+    std::optional<LexicalState> completed;
+    const auto join_scan = [&](const LexicalState &other, bool current_exits, const Location &at) {
+      const auto current = std::move(lexical_);
+      join(other, false, current, current_exits, at);
+    };
+    for (const auto &entry : std::span(expr.children).subspan(1)) {
+      const auto &item = *entry;
+      lexical_.live &= !scan.remaining.empty();
+      if (item.kind != K::case_arm) {
+        check(item, instance, operations, true, true);
+        if (lexical_.live) scan.invalidate(case_may_write(item));
+        continue;
+      }
+
+      CheckedOperation header;
+      header.case_code = case_code(type, item);
+      const auto matched = scan.match(header.case_code);
+      auto missed = lexical_;
+      missed.live &= !scan.remaining.empty();
+      lexical_.live &= !matched.empty();
+      if (scan.borrowed && header.case_code) {
+        require_live_view(selected, item.at);
+        require_initialized(selected, item.at, "case subject");
+      }
+      if (item.children.size() == 2) {
+        const auto &guard = *item.children.front();
+        const auto condition = check(guard, instance, operations);
+        if (condition != Type::boolean && condition != Type::never) fail(guard.at, "case guard requires bool");
+        const auto evaluated = lexical_;
+        refine(guard, false, operations);
+        if (lexical_.live) scan.resume(matched, case_may_write(guard));
+        join_scan(missed, condition == Type::never, guard.at);
+        missed = lexical_;
+        lexical_ = evaluated;
+        refine(guard, true, operations);
+      }
+      const auto &body = *item.children.back();
+      const auto value = check(body, instance, operations, item.case_resumes || read, item.case_resumes || discard,
+                               item.case_resumes ? nullptr : expected, expected_use);
+      header.type = value;
+      operations.insert_or_assign(&item, std::move(header));
+      if (!lexical_.live) {
+        lexical_ = std::move(missed);
+        continue;
+      }
+      if (item.case_resumes) {
+        scan.resume(matched, case_may_write(body));
+        join_scan(missed, false, body.at);
+        continue;
+      }
+
+      const auto &fact = operations.at(&body);
+      if (value != Type::void_type && (!scalar_type(value) || fact.view || fact.mixed_view))
+        implementation_gap(body.at, "case arm result needs an independent scalar value");
+      if (result.type != Type::never && result.type != value) fail(body.at, "case arms require one result type");
+      result.type = value;
+      result.exceptions.merge(fact.exceptions);
+      if (completed) join_scan(*completed, false, body.at);
+      completed = std::move(lexical_);
+      lexical_ = std::move(missed);
+    }
+    result.case_reaches_end = lexical_.live && !scan.remaining.empty();
+    if (result.case_reaches_end) {
+      if (result.type == Type::never) result.type = Type::void_type;
+      else if (result.type != Type::void_type)
+        fail(expr.at, "value case may finish without a result; provide a completing arm or a catch-all");
+    }
+    if (completed) join_scan(*completed, !result.case_reaches_end, expr.at);
+    return result;
+  }
+
   Type check(const Expression &expr, CheckedInstance *instance,
              std::map<const Expression *, CheckedOperation> &operations, bool read = true, bool discard = false,
              const Type *expected = nullptr, ExpectedTypeUse expected_use = ExpectedTypeUse::materialization,
@@ -16204,6 +16420,14 @@ class ScalarChecker {
       operation.type = type == Type::never ? Type{Type::never} : Type{Type::void_type};
       break;
     }
+    case K::case_expression:
+      operation = check_case(expr, instance, operations, read, discard, expected, expected_use);
+      break;
+    case K::case_fallthrough: operation.type = Type::void_type; break;
+    case K::case_failure:
+      note_abrupt(expr.at, {exception_id(ExceptionCategory::unexpected_case)});
+      operation.type = Type::never;
+      break;
     case K::conditional: {
       const auto &test = *expr.children.front();
       const bool return_test = test.kind == K::return_test;
