@@ -13,6 +13,7 @@ using "OperandChecking.cod" OperandFacts;
 using "OperandChecking.cod" CallOwners;
 using "CompletionChecking.cod" CompletionSites;
 using "ModuleFrontend.cod" ModuleBindingResult;
+using "ModuleFrontend.cod" rejected_unsupported_declaration;
 using "NativeCommands.cod" NativeCommands;
 using "NativeCommands.cod" NativePlan;
 using "ModuleCompiler.cod" compile_module_commands;
@@ -119,6 +120,7 @@ func retain_rejection(nodes:const ExprNodes in N, ref result:NativeModuleResult 
     if (result.analysis.stage != 0u8) {
         result.rejected_first <- result.analysis.frontend.diagnostic_first;
         result.rejected_past <- result.analysis.frontend.diagnostic_past;
+        if (rejected_unsupported_declaration(result.analysis)) { return native_form_unsupported(); } else {};
         return native_source_rejected();
     } else {};
     if (result.plan.node != no_node()) {

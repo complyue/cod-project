@@ -63,6 +63,14 @@ func logical_or_node() -> u8 { return 47u8; }
 func subtract_node() -> u8 { return 48u8; }
 func divide_node() -> u8 { return 49u8; }
 func remainder_node() -> u8 { return 50u8; }
+func c_handle_type_node() -> u8 { return 51u8; }
+func c_procedure_node() -> u8 { return 52u8; }
+func handle_parameter_node() -> u8 { return 53u8; }
+func here_parameter_node() -> u8 { return 54u8; }
+func data_record_node() -> u8 { return 55u8; }
+func c_record_node() -> u8 { return 56u8; }
+func data_parent_node() -> u8 { return 57u8; }
+func export_node() -> u8 { return 58u8; }
 
 func integer_arithmetic(kind:u8) -> bool {
     return kind == add_node() || kind == subtract_node() || kind == multiply_node() ||
@@ -89,6 +97,7 @@ func at_least_words() -> u64 { return 5u64; }
 func discarded_guard_result() -> u64 { return 1u64; }
 func procedure_definition() -> u64 { return 0u64; }
 func function_definition() -> u64 { return 1u64; }
+func readonly_declaration() -> u64 { return 1u64; }
 func no_node() -> u64 { return 18446744073709551615u64; }
 
 func is_function(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
@@ -157,6 +166,15 @@ export logical_or_node;
 export subtract_node;
 export divide_node;
 export remainder_node;
+export c_handle_type_node;
+export c_procedure_node;
+export handle_parameter_node;
+export here_parameter_node;
+export data_record_node;
+export c_record_node;
+export data_parent_node;
+export export_node;
+export readonly_declaration;
 export integer_arithmetic;
 export logical_binary;
 export skips_right;

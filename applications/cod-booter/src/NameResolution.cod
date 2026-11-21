@@ -7,6 +7,11 @@ using "ParserStorage.cod" module_item_node;
 using "ParserStorage.cod" using_node;
 using "ParserStorage.cod" callable_node;
 using "ParserStorage.cod" callable_head_node;
+using "ParserStorage.cod" c_handle_type_node;
+using "ParserStorage.cod" c_procedure_node;
+using "ParserStorage.cod" data_record_node;
+using "ParserStorage.cod" c_record_node;
+using "ParserStorage.cod" export_node;
 using "ParserStorage.cod" is_function;
 using "ParserStorage.cod" parameter_node;
 using "ParserStorage.cod" ref_parameter_node;
@@ -103,6 +108,7 @@ func name_storage_exhausted() -> u8 { return 9u8; }
 func nested_defer_in_drain() -> u8 { return 10u8; }
 func declaration_in_deferred_group() -> u8 { return 11u8; }
 func dynamic_symbol_in_function() -> u8 { return 12u8; }
+func unsupported_module_declaration() -> u8 { return 13u8; }
 
 func reject_name(ref state:NameState in R, node:u64, diagnostic:u8) -> void where {owner R} {
     state.diagnostic <- diagnostic;
@@ -465,17 +471,24 @@ func register_module(source:const SourceBytes in S, nodes:const ExprNodes in N, 
     where {const owner S, const owner N, owner B, owner W, owner R} {
     val item <- first;
     val form <- no_node();
+    val form_kind <- 0u8;
     val name <- no_node();
     val kind <- ordinary_selection();
     for (unused in 0u64 .. syntax_len(nodes)) {
         if (item == no_node()) { return; } else {};
         form <- nodes[item].right;
-        if (nodes[form].kind == using_node()) {
+        form_kind <- nodes[form].kind;
+        if (form_kind == c_handle_type_node() || form_kind == c_procedure_node() || form_kind == data_record_node() ||
+            form_kind == c_record_node() || form_kind == export_node()) {
+            reject_name(state, form, unsupported_module_declaration());
+            return;
+        } else {};
+        if (form_kind == using_node()) {
             name <- nodes[form].right;
             kind <- if (nodes[name].kind == symbol_node()) { symbolic_selection() } else { ordinary_selection() };
             declare_name(source, nodes, bindings, work, state, name, form, kind, unproved_module_binding());
         } else {};
-        if (nodes[form].kind == callable_node()) {
+        if (form_kind == callable_node()) {
             name <- nodes[callable_head(nodes, form)].left;
             declare_name(source, nodes, bindings, work, state, name, form, callable_binding(), unproved_module_binding());
         } else {};
@@ -635,6 +648,7 @@ export invalid_module_tree;
 export name_storage_exhausted;
 export nested_defer_in_drain;
 export declaration_in_deferred_group;
+export unsupported_module_declaration;
 export first_item;
 export callable_head;
 export enclosing_callable;

@@ -59,6 +59,8 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fprintf(stderr, ": error: LLVM backend %s (code %" PRIu32 ")\n", llvm_error(diagnostic->code), diagnostic->code);
     else if (diagnostic->stage == 7)
         fprintf(stderr, ": error: compiler scratch %s (code %" PRIu32 ")\n", scratch_error(diagnostic->code), diagnostic->code);
+    else if (diagnostic->stage == 3 && diagnostic->code == 13)
+        fputs(": error: this module declaration is outside the supported compiler profile\n", stderr);
     else
         fprintf(stderr, ": error: %s failed (code %" PRIu32 ")\n", diagnostic_phase(diagnostic->stage), diagnostic->code);
     if (diagnostic->related.line)

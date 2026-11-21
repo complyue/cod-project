@@ -11,6 +11,7 @@ using "ModuleExports.cod" resolve_module_exports;
 using "NameResolution.cod" NameBindings;
 using "NameResolution.cod" NameWork;
 using "NameResolution.cod" NameResolutionResult;
+using "NameResolution.cod" unsupported_module_declaration;
 using "NameResolution.cod" resolve_module_names;
 using "OperandChecking.cod" OperandFacts;
 using "OperandChecking.cod" CallOwners;
@@ -32,6 +33,10 @@ func module_selection_failed() -> u8 { return 2u8; }
 func module_binding_failed() -> u8 { return 3u8; }
 func module_operands_failed() -> u8 { return 4u8; }
 func module_completion_failed() -> u8 { return 5u8; }
+
+func rejected_unsupported_declaration(result:const ModuleBindingResult in R) -> bool where {const owner R} {
+    return result.stage == module_binding_failed() && result.diagnostic == unsupported_module_declaration();
+}
 
 func binding_diagnostic(nodes:const ExprNodes in N, ref result:ModuleBindingResult in R,
                         stage:u8, diagnostic:u8, at:u64) -> void where {const owner N, owner R} {
@@ -118,4 +123,5 @@ export module_binding_failed;
 export module_operands_failed;
 export analyze_module_operands;
 export module_completion_failed;
+export rejected_unsupported_declaration;
 export analyze_module_completion;
