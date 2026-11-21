@@ -127,6 +127,7 @@ inline void emit_c_here(const CheckedProgram &program, const CheckedNativeOperat
 inline void emit_c_call(const CheckedProgram &program, const CheckedNativeOperation &operation, const NativeRowLayouts &layouts,
                         std::ostringstream &header, std::ostringstream &stubs) {
   const auto name = native_operation_name(operation);
+  const bool returns_value = operation.contract.result.type != Type::void_type;
   std::ostringstream boundary, implementation, arguments, checks;
   boundary << "cod_native_status " << name << "_call(";
   implementation << "cod_native_status " << name << "_impl(";
@@ -135,6 +136,11 @@ inline void emit_c_call(const CheckedProgram &program, const CheckedNativeOperat
     const auto &input = operation.inputs[i];
     const auto suffix = std::to_string(i);
     const auto arg = "arg" + suffix;
+    if (i) {
+      boundary << ", ";
+      implementation << ", ";
+      arguments << ", ";
+    }
     std::string type;
     if (input.type.kind == Type::array) {
       const auto element = emit_c_view(program, input.type, true, name, i, layouts, header, stubs);
@@ -152,22 +158,32 @@ inline void emit_c_call(const CheckedProgram &program, const CheckedNativeOperat
       if (input.type == Type::boolean)
         checks << "    if (" << arg << " > 1) return COD_NATIVE_BOUNDARY_ERROR;\n";
     }
-    if (input.owner) boundary << "const " << type << " *" << arg << ", ";
-    else boundary << type << ' ' << arg << ", ";
-    implementation << type << ' ' << arg << ", ";
+    if (input.owner) boundary << "const " << type << " *" << arg;
+    else boundary << type << ' ' << arg;
+    implementation << type << ' ' << arg;
     if (input.owner) arguments << '*';
-    arguments << arg << ", ";
+    arguments << arg;
   }
-  boundary << "uint8_t *value)";
-  implementation << "uint8_t *value)";
+  if (returns_value) {
+    const auto separator = operation.inputs.empty() ? "" : ", ";
+    boundary << separator << "uint8_t *value";
+    implementation << separator << "uint8_t *value";
+    arguments << separator << "&result";
+  } else if (operation.inputs.empty()) {
+    boundary << "void";
+    implementation << "void";
+  }
+  boundary << ')';
+  implementation << ')';
   header << boundary.str() << ";\n" << implementation.str() << ";\n\n";
-  stubs << boundary.str() << " {\n"
-        << "    if (!value) return COD_NATIVE_BOUNDARY_ERROR;\n" << checks.str()
-        << "    uint8_t result = 0;\n"
-        << "    const cod_native_status status = " << name << "_impl(" << arguments.str() << "&result);\n"
-        << "    if (status != COD_NATIVE_OK) return COD_NATIVE_BOUNDARY_ERROR;\n"
-        << "    *value = result;\n"
-        << "    return COD_NATIVE_OK;\n}\n\n";
+  stubs << boundary.str() << " {\n";
+  if (returns_value) stubs << "    if (!value) return COD_NATIVE_BOUNDARY_ERROR;\n";
+  stubs << checks.str();
+  if (returns_value) stubs << "    uint8_t result = 0;\n";
+  stubs << "    const cod_native_status status = " << name << "_impl(" << arguments.str() << ");\n"
+        << "    if (status != COD_NATIVE_OK) return COD_NATIVE_BOUNDARY_ERROR;\n";
+  if (returns_value) stubs << "    *value = result;\n";
+  stubs << "    return COD_NATIVE_OK;\n}\n\n";
 }
 
 inline void emit_c_entry(const CheckedNativeEntry &entry, const Form &form,
@@ -262,7 +278,10 @@ typedef struct cod_native_loan {
             << "               offsetof(" << borrow << ", owner) == sizeof(uint64_t), \"invalid " << borrow << " layout\");\n";
     }
   };
-  for (const auto &constructor : program.native_constructors) emit_borrows(constructor.inputs);
+  for (const auto &constructor : program.native_constructors) {
+    if (constructor.parent) emit_borrows({{*constructor.parent, {}}});
+    emit_borrows(constructor.inputs);
+  }
   for (const auto &entry : program.native_entries) emit_borrows(entry.inputs);
   for (const auto &native : program.native_operations)
     emit_borrows(native.inputs);
@@ -286,6 +305,11 @@ typedef struct cod_native_loan {
     const auto construct = [&](bool implementation) {
       std::ostringstream declaration;
       declaration << "cod_native_status " << construct_name << (implementation ? "_impl" : "") << '(';
+      if (constructor.parent) {
+        const auto type = provider_borrow(*constructor.parent);
+        if (implementation) declaration << type << " owner, ";
+        else declaration << "const " << type << " *owner, ";
+      }
       for (size_t i = 0; i < constructor.inputs.size(); ++i) {
         const auto &input = constructor.inputs[i];
         if (input.owner) {
@@ -302,10 +326,14 @@ typedef struct cod_native_loan {
     const auto destroy = "void " + destroy_name + "(uint64_t resource)";
     const auto destroy_impl = "void " + destroy_name + "_impl(uint64_t resource)";
     const auto boundary = construct(false);
-    header << boundary << ";\n" << destroy << ";\n"
-           << construct(true) << ";\n" << destroy_impl << ";\n\n";
+    header << boundary << ";\n";
+    if (!constructor.parent) header << destroy << ";\n";
+    header << construct(true) << ";\n";
+    if (!constructor.parent) header << destroy_impl << ";\n";
+    header << '\n';
 
     stubs << boundary << " {\n    if (!resource";
+    if (constructor.parent) stubs << " || !owner";
     if (schema) stubs << " || !error";
     for (size_t i = 0; i < constructor.inputs.size(); ++i) {
       const auto &input = constructor.inputs[i];
@@ -321,6 +349,7 @@ typedef struct cod_native_loan {
     stubs << "    uint64_t acquired = 0;\n";
     if (schema) stubs << "    " << failure << " reported = {0};\n";
     stubs << "    const cod_native_status status = " << construct_name << "_impl(";
+    if (constructor.parent) stubs << "*owner, ";
     for (size_t i = 0; i < constructor.inputs.size(); ++i)
       stubs << (constructor.inputs[i].owner ? "*" : "") << "arg" << i << ", ";
     stubs << "&acquired" << (schema ? ", &reported" : "") << ");\n"
@@ -331,8 +360,8 @@ typedef struct cod_native_loan {
         stubs << "        if (reported." << field.source->name << " > 1) return COD_NATIVE_BOUNDARY_ERROR;\n";
       stubs << "        *error = reported;\n        return status;\n    }\n";
     }
-    stubs << "    return COD_NATIVE_BOUNDARY_ERROR;\n}\n\n"
-          << destroy << " {\n    " << destroy_name << "_impl(resource);\n}\n\n";
+    stubs << "    return COD_NATIVE_BOUNDARY_ERROR;\n}\n\n";
+    if (!constructor.parent) stubs << destroy << " {\n    " << destroy_name << "_impl(resource);\n}\n\n";
   }
   for (const auto &entry : program.native_entries) emit_c_entry(entry, *program.methods.at(entry.method).source, header, stubs);
   for (const auto &native : program.native_operations) {

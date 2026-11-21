@@ -312,7 +312,7 @@ struct Expression {
                     try_scope, handler, raise, return_value, deferred, make_region, touch, effect_group, transfer, procedure_effect,
                     pointer_group, pointer, make_local, rebind, region_binding, callable, alias, capture_owner,
                     here_body, named_argument, break_value, continue_value, typed_expression, return_tail,
-                    processor_composition, pipeline, here_binding, make_object, native_handle_binding, make_owned_handle };
+                    processor_composition, pipeline, here_binding, make_object, native_handle_binding, make_owned_handle, make_borrowed_handle };
   Kind kind;
   Location at;
   std::string text;
@@ -1252,12 +1252,17 @@ class Parser {
       return expr;
     }
     if (take("make")) {
-      if (is("owned") && is("handle", 1)) {
-        expect("owned");
+      const bool owns_handle = is("owned") && is("handle", 1);
+      if (owns_handle || (is("handle") && is("(", 2))) {
+        if (owns_handle) expect("owned");
         expect("handle");
-        auto expr = make(Expression::Kind::make_owned_handle, token);
+        auto expr = make(owns_handle ? Expression::Kind::make_owned_handle : Expression::Kind::make_borrowed_handle, token);
         expr->annotation = Type{Type::named, ordinary_name().text};
         arguments(*expr, false);
+        if (!owns_handle) {
+          expect("in");
+          expr->owner_name = ordinary_name().text;
+        }
         return expr;
       }
       if (take("local")) {

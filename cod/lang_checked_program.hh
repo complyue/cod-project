@@ -100,6 +100,7 @@ struct CheckedOperation {
     size_t constructor;
     const Expression *initializer;
     std::vector<std::optional<NativeHandleLoan>> loans;
+    std::optional<NativeHandleLoan> parent = {};
     auto operator<=>(const NativeAcquisition &) const = default;
   };
   std::optional<NativeAcquisition> native_acquisition;
@@ -293,6 +294,7 @@ struct CheckedNativeConstructor {
   Type handle;
   std::vector<CheckedNativeInput> inputs;
   std::optional<Type> failure;
+  std::optional<Type> parent = {};
 };
 
 struct CheckedNativeEntry {

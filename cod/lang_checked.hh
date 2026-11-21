@@ -359,9 +359,11 @@ class ScalarChecker {
   bool external_owner(size_t owner) const {
     return std::any_of(external_owners_.begin(), external_owners_.end(), [&](const auto &entry) { return entry.second == owner; });
   }
+  bool const_native_owner(size_t owner) const {
+    return checking_method_ && external_owner(owner) && checking_method_->input_owners().at(null_target - 1 - owner).read_only;
+  }
   bool const_owner(size_t owner) const {
-    return native_owner_scopes_.contains(owner) || (checking_method_ && external_owner(owner) &&
-        checking_method_->input_owners().at(null_target - 1 - owner).read_only);
+    return native_owner_scopes_.contains(owner) || const_native_owner(owner);
   }
   bool owner_alive(size_t owner) const {
     if (const auto found = native_owner_scopes_.find(owner); found != native_owner_scopes_.end()) owner = found->second;
@@ -5458,8 +5460,12 @@ class ScalarChecker {
     if (declared.kind != Type::c_type_marker || constructed.kind != Type::c_type_marker)
       fail(expr.at, "owned handle acquisition requires a fieldless data \"C\" type");
     if (declared != constructed) fail(expr.at, "C handle constructor must match the declared owner type");
-    if (program_.schemas.at(constructed.identity).native_owner)
+    const bool attached = expr.kind == Expression::Kind::make_borrowed_handle;
+    const bool borrow_only = program_.schemas.at(constructed.identity).native_owner.has_value();
+    if (borrow_only && !attached)
       fail(expr.at, "borrow-only CType '" + constructed.name + "' cannot be acquired as an owned handle");
+    if (attached && !borrow_only)
+      fail(expr.at, "make handle requires a borrow-only CType with a declared owning CType");
     const auto constructor = std::ranges::find(program_.native_constructors, constructed, &CheckedNativeConstructor::handle);
     if (constructor == program_.native_constructors.end()) fail(expr.at, "no C constructor declared for '" + constructed.name + "'");
     if (constructor->inputs.size() != expr.children.size()) fail(expr.at, "wrong number of C constructor arguments");
@@ -5479,21 +5485,37 @@ class ScalarChecker {
   static bool matches_native_handle(const Type &type, const Type &marker) {
     return type.kind == Type::native_handle && type.identity == marker.identity;
   }
-  CheckedOperation check_handle_loan(const Expression &operand, std::map<const Expression *, CheckedOperation> &operations) {
-    const auto &name = native_loan_source(operand);
-    const auto binding = lexical_.lookup(name.text);
-    if (!binding || bindings_->at(*binding).type.kind != Type::native_handle)
-      fail(name.at, "a borrowed handle parameter requires a lexical native handle");
-    const auto value = read_binding(name, true, binding, BindingUse::native_loan);
-    if (value.type.owned)
-      implementation_gap(name.at, "reborrowing an owned native handle for an ordinary CoD parameter");
-    if (!value.place || !one_owner(value))
-      implementation_gap(name.at, "a native handle argument without one proven live owner");
+  CheckedOperation check_handle_loan(const Expression &operand, CheckedInstance *instance,
+      std::map<const Expression *, CheckedOperation> &operations, bool reborrow_owner = false) {
+    const auto &source = ungrouped_expression(operand);
+    if (operand.spread || source.spread) implementation_gap(operand.at, "a spread native handle argument");
+    CheckedOperation value;
+    if (source.kind == Expression::Kind::make_borrowed_handle) {
+      value = check_attached_native_acquisition(source, instance, operations);
+    } else {
+      const auto &name = native_loan_source(operand);
+      const auto binding = lexical_.lookup(name.text);
+      if (!binding || bindings_->at(*binding).type.kind != Type::native_handle)
+        fail(name.at, "a borrowed handle parameter requires a lexical native handle");
+      value = read_binding(name, true, binding, BindingUse::native_loan);
+      if (value.type.owned) {
+        if (!reborrow_owner) implementation_gap(name.at, "reborrowing an owned native handle for an ordinary CoD parameter");
+        if (!value.place || !native_resource_owners_.contains(*value.place))
+          implementation_gap(name.at, "a C handle borrow without a direct native binding");
+        value.owners = {native_resource_owners_.at(*value.place)};
+      }
+      if (!value.place || !one_owner(value))
+        implementation_gap(name.at, "a native handle argument without one proven live owner");
+    }
     for (auto *part = &operand;; part = part->children.front().get()) {
       operations.insert_or_assign(part, value);
-      if (part == &name) break;
+      if (part == &source) break;
     }
     return value;
+  }
+  static std::optional<CheckedOperation::NativeHandleLoan> native_argument_loan(const CheckedOperation &value) {
+    if (!value.binding) return {};
+    return CheckedOperation::NativeHandleLoan{*value.binding, *value.place, value.type.owned};
   }
   Type resolve_local_type(const Type &type, const CheckedInstance *instance, const Location &at,
                           bool product_view = false) const {
@@ -5591,11 +5613,12 @@ class ScalarChecker {
       case K::value_call: case K::symbol: case K::effect: case K::touch: case K::procedure_effect:
       case K::effect_group: case K::allocate: case K::make_region: case K::region_binding: case K::capture_owner:
       case K::processor_composition: case K::pipeline: case K::here_binding:
-      case K::native_handle_binding: case K::make_owned_handle:
+      case K::native_handle_binding: case K::make_owned_handle: case K::make_borrowed_handle:
         required.opaque_storage = true;
         break;
       default: break;
       }
+      if (expr.kind == K::make_borrowed_handle) use(expr.owner_name, expr.at, bound, query);
       if (expr.definition) {
         const auto &nested = *expr.definition;
         const auto &dependencies = free_bindings(nested);
@@ -10010,7 +10033,7 @@ class ScalarChecker {
   }
   CheckedOperation check_written_operand(const Expression &operand, ArgumentMode mode, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, bool aggregate_borrows = false) {
-    if (mode == ArgumentMode::borrowed_handle) return check_handle_loan(operand, operations);
+    if (mode == ArgumentMode::borrowed_handle) return check_handle_loan(operand, instance, operations);
     const auto type = check(operand, instance, operations, mode == ArgumentMode::value, false, nullptr, expected_type_use(mode));
     const auto &view = operations.at(&operand);
     if (type != Type::never) {
@@ -10173,6 +10196,36 @@ class ScalarChecker {
     }
     return completes ? *receiving.type : Type{Type::never};
   }
+  bool native_constructor_evidence(const CheckedNativeConstructor &constructor, const Expression &initializer,
+                                   TypeEvidenceState &state) const {
+    bool completes = true;
+    for (size_t i = 0; i < constructor.inputs.size(); ++i) {
+      const auto &input = constructor.inputs[i];
+      const auto &operand = *initializer.children[i];
+      if (input.owner && ungrouped_expression(operand).kind == Expression::Kind::name) {
+        const auto &source = native_loan_source(operand);
+        if (const auto type = state.bindings.find(source.text); state.required && type != state.bindings.end() &&
+            type->second && !matches_native_handle(*type->second, input.type))
+          fail(source.at, "C constructor requires a handle of type '" + input.type.name + "'");
+        continue;
+      }
+      const auto value = type_evidence(operand, state, false, nullptr, nullptr, ExpectedTypeUse::materialization, completes,
+          input.owner ? EvidenceRead::native_loan : EvidenceRead::payload);
+      completes = completes && value != Type::never;
+      if (state.required && value && *value != Type::never) {
+        if (input.owner) {
+          if (!matches_native_handle(*value, input.type))
+            fail(operand.at, "C constructor requires a handle of type '" + input.type.name + "'");
+        } else transfer_type(*value, input.type, operand.at);
+      }
+    }
+    if (completes && constructor.failure) {
+      note_type_allocation(state);
+      note_type_exit(state, Completion::failure(exception_id(ExceptionCategory::region_capacity_exceeded)));
+      note_type_failure(state, *constructor.failure);
+    }
+    return completes;
+  }
   std::optional<Type> query_evidence(const Expression &expr, TypeEvidenceState &state, ViewEvidence &view, TargetEvidence &target_facts,
                                      bool contextual, const Type *expected, std::vector<Type> *alternatives,
                                      ExpectedTypeUse expected_use, EvidenceRead read, bool joining) const {
@@ -10189,10 +10242,12 @@ class ScalarChecker {
         bool completes = true;
         for (size_t i = 0; i < operation.inputs.size(); ++i) {
           const auto &input = operation.inputs[i];
-          if (input.type.kind == Type::c_type_marker) continue;
-          const auto type = type_evidence(*expr.children[i], state, false, nullptr, nullptr,
+          const auto &operand = *expr.children[i];
+          const bool handle = input.type.kind == Type::c_type_marker;
+          if (handle && ungrouped_expression(operand).kind == K::name) continue;
+          const auto type = type_evidence(operand, state, false, nullptr, nullptr,
               ExpectedTypeUse::materialization, completes,
-              input.type.kind == Type::array ? EvidenceRead::target : EvidenceRead::payload);
+              handle ? EvidenceRead::native_loan : input.type.kind == Type::array ? EvidenceRead::target : EvidenceRead::payload);
           completes = completes && type != Type::never;
         }
         if (!completes) return Type::never;
@@ -10200,7 +10255,7 @@ class ScalarChecker {
       return operation.contract.result.type;
     }
     if (state.here_control && (expr.kind == K::deferred || expr.kind == K::make_local || expr.kind == K::make_object || expr.kind == K::make_region ||
-        expr.kind == K::native_handle_binding || expr.kind == K::make_owned_handle ||
+        expr.kind == K::native_handle_binding || expr.kind == K::make_owned_handle || expr.kind == K::make_borrowed_handle ||
         expr.kind == K::allocate || (expr.kind != K::return_test && expr.owner_name == "here")))
       implementation_gap(expr.at, "supplier-owned allocation, owner selection or defer from a here group");
     if (state.root_failure_covered.has_value() && expr.kind == K::deferred)
@@ -10590,27 +10645,7 @@ class ScalarChecker {
       const auto constructed = evidence_annotation(*initializer.annotation, state);
       if (!state.required && (declared.kind != Type::c_type_marker || constructed.kind != Type::c_type_marker)) return {};
       const auto &constructor = program_.native_constructors[select_native_constructor(declared, constructed, initializer)];
-      bool completes = true;
-      for (size_t i = 0; i < constructor.inputs.size(); ++i) {
-        const auto &input = constructor.inputs[i];
-        const auto &operand = *initializer.children[i];
-        if (input.owner) {
-          const auto &source = native_loan_source(operand);
-          if (const auto type = state.bindings.find(source.text); state.required && type != state.bindings.end() &&
-              type->second && !matches_native_handle(*type->second, input.type))
-            fail(source.at, "C constructor requires a handle of type '" + input.type.name + "'");
-        } else {
-          const auto value = type_evidence(operand, state, false, nullptr, nullptr, ExpectedTypeUse::materialization, completes);
-          completes = completes && value != Type::never;
-          if (state.required && value && *value != Type::never) transfer_type(*value, input.type, operand.at);
-        }
-      }
-      if (!completes) return Type::never;
-      if (constructor.failure) {
-        note_type_allocation(state);
-        note_type_exit(state, Completion::failure(exception_id(ExceptionCategory::region_capacity_exceeded)));
-        note_type_failure(state, *constructor.failure);
-      }
+      if (!native_constructor_evidence(constructor, initializer, state)) return Type::never;
       state.bindings[expr.text] = native_handle_type(declared, true);
       state.local_declarations[expr.text] = &expr;
       state.definitions.erase(expr.text);
@@ -10620,6 +10655,16 @@ class ScalarChecker {
     case K::make_owned_handle:
       if (state.required) implementation_gap(expr.at, "C handle acquisition outside a direct lexical owned handle initializer");
       return {};
+    case K::make_borrowed_handle: {
+      if (state.required && read != EvidenceRead::native_loan)
+        implementation_gap(expr.at, "attached native handle construction outside a checked borrowed argument");
+      const auto type = evidence_annotation(*expr.annotation, state);
+      if (!state.required && type.kind != Type::c_type_marker) return {};
+      const auto &constructor = program_.native_constructors[select_native_constructor(type, type, expr)];
+      if (!native_constructor_evidence(constructor, expr, state)) return Type::never;
+      view = {false, false, true};
+      return native_handle_type(type, false);
+    }
     case K::make_local: {
       const auto storage = local_storage_evidence(expr, state);
       return storage.completes ? storage.type : std::optional<Type>{Type::never};
@@ -13409,7 +13454,7 @@ class ScalarChecker {
           (!source.value_binding && (source.nullable || (!source.read_only && !handle))))
         implementation_gap(capture.at, "here access requires a numeric val or initialized readonly reference slot with stable storage");
       const auto &operand = scope_operand(base, capture);
-      if (handle) check_handle_loan(operand, operations);
+      if (handle) check_handle_loan(operand, supplier, operations);
       else check(operand, supplier, operations, false);
       const auto view = operations.at(&operand);
       const auto &type = view.type;
@@ -15167,19 +15212,20 @@ class ScalarChecker {
       const auto &operand = *expr.children[i];
       const auto &input = native.inputs[i];
       if (input.type.kind == Type::c_type_marker) {
-        const auto &source = native_loan_source(operand);
-        const auto binding = lexical_.lookup(source.text);
-        if (!binding || !matches_native_handle(bindings_->at(*binding).type, input.type))
-          fail(source.at, "C provider requires a handle of type '" + input.type.name + "'");
-        const auto value = read_binding(source, true, binding, BindingUse::native_loan);
-        if (!value.place || (value.type.owned && !native_resource_owners_.contains(*value.place)))
-          implementation_gap(source.at, "a C handle borrow without a direct native binding");
-        const auto actual = value.type.owned ? std::optional{native_resource_owners_.at(*value.place)} : one_owner(value);
+        const auto value = check_handle_loan(operand, instance, operations, true);
+        if (value.type == Type::never) {
+          operation.type = Type::never;
+          lexical_.live = false;
+          continue;
+        }
+        if (!matches_native_handle(value.type, input.type))
+          fail(operand.at, "C provider requires a handle of type '" + input.type.name + "'");
+        const auto actual = one_owner(value);
         if (!form.owner_parameters[*input.owner].read_only &&
-            (value.read_only || (!value.type.owned && actual && const_owner(*actual))))
-          fail(source.at, "readonly handle cannot supply a writable C provider owner");
-        bind(*input.owner, actual, source.at);
-        call.loans[i] = CheckedOperation::NativeHandleLoan{*value.binding, *value.place, value.type.owned};
+            (value.read_only || (actual && const_native_owner(*actual))))
+          fail(operand.at, "readonly handle cannot supply a writable C provider owner");
+        bind(*input.owner, actual, operand.at);
+        call.loans[i] = native_argument_loan(value);
       } else {
         const bool array = input.type.kind == Type::array;
         const auto type = check(operand, instance, operations, !array);
@@ -15233,41 +15279,39 @@ class ScalarChecker {
     finish_bound_here_invocation(expr, operation, read, discard);
     return operation;
   }
-  CheckedOperation check_native_acquisition(const Expression &expr, CheckedInstance *instance,
-                                            std::map<const Expression *, CheckedOperation> &operations) {
+  bool prepare_native_acquisition(CheckedOperation::NativeAcquisition &acquisition, CheckedInstance *instance,
+                                  std::map<const Expression *, CheckedOperation> &operations) {
+    const auto &initializer = *acquisition.initializer;
     if (checking_method_ && checking_method_->source->kind == Form::Kind::function)
-      fail(expr.at, "a function cannot invoke a C handle constructor procedure");
-    const auto &initializer = native_handle_initializer(expr);
-    const auto declared = resolve_annotation(*expr.annotation, instance);
-    const auto constructed = resolve_annotation(*initializer.annotation, instance);
-    const auto id = select_native_constructor(declared, constructed, initializer);
-    const auto &constructor = program_.native_constructors[id];
+      fail(initializer.at, "a function cannot invoke a C handle constructor procedure");
+    const auto &constructor = program_.native_constructors[acquisition.constructor];
     // A local native owner is distinct from its lexical lifetime scope and
     // from other acquisitions in that scope, even when their words coincide.
-    std::map<size_t, std::pair<bool, size_t>> owners;
-    CheckedOperation::NativeAcquisition acquisition{id, &initializer, {}};
+    std::map<size_t, size_t> owners;
     bool completes = true;
     for (size_t i = 0; i < constructor.inputs.size(); ++i) {
       const auto &operand = *initializer.children[i];
       const auto &input = constructor.inputs[i];
       std::optional<CheckedOperation::NativeHandleLoan> loan;
       if (input.owner) {
-        const auto &source = native_loan_source(operand);
-        const auto binding = lexical_.lookup(source.text);
-        if (!binding || !matches_native_handle(bindings_->at(*binding).type, input.type))
-          fail(source.at, "C constructor requires a handle of type '" + input.type.name + "'");
-        const auto value = read_binding(source, true, binding, BindingUse::native_loan);
-        const auto actual = one_owner(value);
-        if (!actual || !value.place) implementation_gap(source.at, "a C handle borrow without one proven live owner");
-        const auto &role = constructor.source->owner_parameters[*input.owner];
-        if (!role.read_only && const_owner(*actual)) fail(source.at, "const owner cannot supply a writable C constructor owner");
-        if (value.read_only && !constructor.source->parameters[i].read_only)
-          fail(source.at, "readonly handle cannot supply a writable C constructor argument");
-        const auto provenance = std::pair{value.type.owned, value.type.owned ? *value.place : *actual};
-        const auto [known, first] = owners.try_emplace(*input.owner, provenance);
-        if (!first && known->second != provenance)
-          fail(source.at, "C constructor arguments for owner '" + role.name + "' require one proven actual owner");
-        loan = CheckedOperation::NativeHandleLoan{*value.binding, *value.place, value.type.owned};
+        const auto value = check_handle_loan(operand, instance, operations, true);
+        if (value.type == Type::never) {
+          completes = false;
+          lexical_.live = false;
+        } else {
+          if (!matches_native_handle(value.type, input.type))
+            fail(operand.at, "C constructor requires a handle of type '" + input.type.name + "'");
+          const auto actual = one_owner(value);
+          if (!actual) implementation_gap(operand.at, "a C handle borrow without one proven live owner");
+          const auto &role = constructor.source->owner_parameters[*input.owner];
+          if (!role.read_only && const_native_owner(*actual)) fail(operand.at, "const owner cannot supply a writable C constructor owner");
+          if (value.read_only && !constructor.source->parameters[i].read_only)
+            fail(operand.at, "readonly handle cannot supply a writable C constructor argument");
+          const auto [known, first] = owners.try_emplace(*input.owner, *actual);
+          if (!first && known->second != *actual)
+            fail(operand.at, "C constructor arguments for owner '" + role.name + "' require one proven actual owner");
+          loan = native_argument_loan(value);
+        }
       } else {
         const auto type = check(operand, instance, operations);
         if (type == Type::never) { completes = false; lexical_.live = false; }
@@ -15278,6 +15322,42 @@ class ScalarChecker {
     if (completes && constructor.failure)
       note_abrupt(initializer.at, {constructor.failure->identity, exception_id(ExceptionCategory::out_of_memory),
                                    exception_id(ExceptionCategory::region_capacity_exceeded)});
+    return completes;
+  }
+  CheckedOperation check_attached_native_acquisition(const Expression &expr, CheckedInstance *instance,
+                                                     std::map<const Expression *, CheckedOperation> &operations) {
+    if (delayed_ || (checking_method_ && checking_method_->here_group))
+      implementation_gap(expr.at, "attached native handle construction in a deferred or supplied here body");
+    const auto type = resolve_annotation(*expr.annotation, instance);
+    const auto id = select_native_constructor(type, type, expr);
+    const auto &owner_type = *program_.native_constructors[id].parent;
+    const auto binding = lexical_.lookup(expr.owner_name);
+    if (!binding || !matches_native_handle(bindings_->at(*binding).type, owner_type) || !bindings_->at(*binding).type.owned)
+      fail(expr.at, "make handle requires a live owned '" + owner_type.name + "' handle");
+    Expression source{};
+    source.kind = Expression::Kind::name;
+    source.text = expr.owner_name;
+    source.at = expr.at;
+    const auto owner = read_binding(source, true, binding, BindingUse::native_loan);
+    if (!owner.place || !native_resource_owners_.contains(*owner.place))
+      implementation_gap(expr.at, "attached native handle construction without a direct owning binding");
+    if (owner.read_only) fail(expr.at, "a readonly native handle cannot attach a child");
+    CheckedOperation::NativeAcquisition acquisition{id, &expr, {}, native_argument_loan(owner)};
+    const bool completes = prepare_native_acquisition(acquisition, instance, operations);
+    CheckedOperation operation;
+    operation.type = completes ? native_handle_type(type, false) : Type{Type::never};
+    operation.view = true;
+    operation.owners = {native_resource_owners_.at(*owner.place)};
+    operation.native_acquisition = std::move(acquisition);
+    return operation;
+  }
+  CheckedOperation check_native_acquisition(const Expression &expr, CheckedInstance *instance,
+                                            std::map<const Expression *, CheckedOperation> &operations) {
+    const auto &initializer = native_handle_initializer(expr);
+    const auto declared = resolve_annotation(*expr.annotation, instance);
+    const auto constructed = resolve_annotation(*initializer.annotation, instance);
+    CheckedOperation::NativeAcquisition acquisition{select_native_constructor(declared, constructed, initializer), &initializer, {}};
+    const bool completes = prepare_native_acquisition(acquisition, instance, operations);
     const auto place = declare(expr.text, native_handle_type(declared, true), false, true, expr.at);
     const auto owner = next_scope_++;
     native_resource_owners_.emplace(place, owner);
@@ -15376,7 +15456,7 @@ class ScalarChecker {
     CheckedOperation operation;
     if (checking_method_ && checking_method_->here_group &&
         (expr.kind == K::deferred || expr.kind == K::make_local || expr.kind == K::make_object || expr.kind == K::make_region ||
-         expr.kind == K::native_handle_binding || expr.kind == K::make_owned_handle ||
+         expr.kind == K::native_handle_binding || expr.kind == K::make_owned_handle || expr.kind == K::make_borrowed_handle ||
          expr.kind == K::allocate || (expr.kind != K::return_test && expr.owner_name == "here")))
       implementation_gap(expr.at, "supplier-owned allocation, owner selection or defer from a here group");
     if (expr.spread) implementation_gap(expr.at, "spread arguments");
@@ -15731,7 +15811,7 @@ class ScalarChecker {
         const auto &operand = *expr.children[i];
         if (mode == ArgumentMode::borrowed_handle && &expr == prepared_call_)
           implementation_gap(operand.at, "native handles in deferred call operands");
-        const auto argument = mode == ArgumentMode::borrowed_handle ? check_handle_loan(operand, operations).type :
+        const auto argument = mode == ArgumentMode::borrowed_handle ? check_handle_loan(operand, instance, operations).type :
             check(operand, instance, operations, mode == ArgumentMode::value, false,
                   preparation.type ? &*preparation.type : nullptr, expected_type_use(mode), false,
                   mode == ArgumentMode::value ? IndexedUse::value_only : IndexedUse::immediate_target);
@@ -16531,6 +16611,8 @@ class ScalarChecker {
       break;
     case K::make_owned_handle:
       implementation_gap(expr.at, "C handle acquisition outside a direct lexical owned handle initializer");
+    case K::make_borrowed_handle:
+      implementation_gap(expr.at, "attached native handle construction outside a checked borrowed argument");
     case K::make_object: {
       operation = check_product_construction(expr, resolve_annotation(*expr.annotation, instance), instance, operations, {}, read && !discard);
       break;
@@ -18012,9 +18094,9 @@ class ScalarChecker {
       fail(form.at, "a C handle constructor requires a named, bodyless declaration without an explicit result or type parameters");
     if (std::ranges::any_of(program_.native_constructors, [&](const auto &existing) { return existing.handle == handle; }))
       implementation_gap(form.at, "multiple C constructor declarations for '" + handle.name + "'");
-    if (program_.schemas.at(handle.identity).native_owner)
-      implementation_gap(form.at, "constructors for attached native handle borrows");
     CheckedNativeConstructor constructor{&form, handle, checked_native_inputs(form, "C constructor"), {}};
+    if (const auto parent = program_.schemas.at(handle.identity).native_owner)
+      constructor.parent = Type{Type::c_type_marker, program_.schemas.at(*parent).source->name, *parent};
     if (!form.throws_types.empty()) {
       const auto type = resolve_type(form.throws_types.front());
       if (!nominal_exception(type)) implementation_gap(form.at, "C constructor failures other than a concrete library-defined exception");
@@ -18032,13 +18114,14 @@ class ScalarChecker {
     program_.native_operations.push_back(std::move(native));
   }
   void register_native_call(const Form &form) {
+    const auto result = form.result_type ? resolve_type(*form.result_type) : Type{Type::void_type};
     if (form.symbolic || form.operation || form.explicit_captures || !form.type_parameters.empty() ||
-        !form.result_owner.empty() || !form.throws_types.empty() || resolve_type(*form.result_type) != Type::uint8)
-      implementation_gap(form.at, "C operations outside the first nonthrowing u8 result profile");
+        !form.result_owner.empty() || !form.throws_types.empty() || (result != Type::uint8 && result != Type::void_type))
+      implementation_gap(form.at, "C operations outside the first nonthrowing u8 or void result profile");
     CheckedNativeOperation native;
     native.contract.source = &form;
     native.contract.module = module_;
-    native.contract.result.type = Type::uint8;
+    native.contract.result.type = result;
     native.inputs = checked_native_inputs(form, "C operation", true);
     add_native_operation(std::move(native));
   }
@@ -18085,6 +18168,7 @@ class ScalarChecker {
     };
     for (const auto &constructor : program_.native_constructors) {
       record(constructor.handle, constructor.source->at);
+      if (constructor.parent) record(*constructor.parent, constructor.source->at);
       for (const auto &input : constructor.inputs) if (input.owner) record(input.type, constructor.source->at);
     }
     std::set<std::string_view> entries;
@@ -18126,8 +18210,10 @@ class ScalarChecker {
     for (const auto &form : forms) {
       if (source.dependencies.contains(form.get())) continue;
       if (form->c_linkage && !form->body) {
-        if (!form->result_type) register_native_constructor(*form, source);
-        else if (!form->parameters.empty() && form->parameters.front().here) register_native_here(*form);
+        const auto type = module_names().types.find(form->name);
+        if (!form->result_type && type != module_names().types.end() && type->second.kind == Type::c_type_marker)
+          register_native_constructor(*form, source);
+        else if (form->result_type && !form->parameters.empty() && form->parameters.front().here) register_native_here(*form);
         else register_native_call(*form);
         continue;
       }
