@@ -3,7 +3,7 @@ using "std:exceptions" NullPointerException;
 data Node { value:i64; }
 data Link { ptr selected:Node; }
 region State { ptr link:Link; val tick:u64; }
-owned region state:State <- make State(capacity = 1024u64) { link = null; tick <- 3u64 };
+own region state:State <- make State(capacity = 1024u64) { link = null; tick <- 3u64 };
 ptr first = alloc state Node(5);
 ptr second = alloc state Node(9);
 ptr first_link = alloc state Link(first);

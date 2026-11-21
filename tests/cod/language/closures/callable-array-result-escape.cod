@@ -3,7 +3,7 @@ region Arena {count:u64;}
 function identity(values:Values in r)->Values in r where {region r:Arena} {return values}
 func selected=identity;
 ref escaped={{
- owned region arena:Arena <- make Arena(capacity=256u64){count <- 0u64};
+ own region arena:Arena <- make Arena(capacity=256u64){count <- 0u64};
  ref values=alloc arena Values(1u64,1.0f32);
  selected(values)
 }};

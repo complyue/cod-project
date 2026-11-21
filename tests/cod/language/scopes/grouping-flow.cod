@@ -45,17 +45,17 @@ proc observe(flag:bool) -> void {
 }
 observe(true);
 observe(false);
-proc acquire(capacity:u64) -> owned region :Pool {
+proc acquire(capacity:u64) -> own region :Pool {
   return try { make Pool(capacity=capacity) { tag <- 90u64 } }
   finally { behave @print(80u64); }
 }
 proc read_back(value:u64 in O, capacity:u64) -> u64 in O where {owner O} {
-  return try { owned region scratch:Pool <- make Pool(capacity=capacity) { tag <- 91u64 }; value }
+  return try { own region scratch:Pool <- make Pool(capacity=capacity) { tag <- 91u64 }; value }
   finally { behave @print(81u64); }
 }
-owned region retained:Pool <- acquire(128u64);
+own region retained:Pool <- acquire(128u64);
 behave @print(read_back(retained.tag, 128u64));
-try { owned region absent:Pool <- acquire(0u64); }
+try { own region absent:Pool <- acquire(0u64); }
 catch (error:const InvalidCapacityError) { behave @print(error.requested); };
 try { read_back(retained.tag, 0u64); {} }
 catch (error:const InvalidCapacityError) { behave @print(error.requested); };

@@ -10,7 +10,7 @@ using "stream-monitor.cod" record;
 
 # Concrete storage can carry fields beyond either helper's requirement.
 region Receiver { tag:u8; ticks:u64; ptr current:Packet; bytes:u64; }
-owned region receiver:Receiver <- make Receiver(capacity = 2048u64) {
+own region receiver:Receiver <- make Receiver(capacity = 2048u64) {
   tag <- 1u8; ticks <- 0u64; current = null; bytes <- 0u64
 };
 ref stream = alloc receiver Stream(17u64);

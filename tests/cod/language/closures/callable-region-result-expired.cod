@@ -2,6 +2,6 @@ region State {value:u64;}
 function echo(region r:State)->region :State in r {return r}
 func selected=echo;
 region escaped={{
- owned region temporary:State<-make State(capacity=256u64){value<-1u64};
+ own region temporary:State<-make State(capacity=256u64){value<-1u64};
  selected(temporary)
 }};

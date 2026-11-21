@@ -4,7 +4,7 @@ using "std:exceptions" NullPointerException;
 array Values[u32]:i64;
 data Node {value:i64;}
 data Holder {ptr items:Values; ptr node:Node;}
-owned region r:Holder <- make Holder(capacity=256u64){items = null;node = null};
+own region r:Holder <- make Holder(capacity=256u64){items = null;node = null};
 behave @assert(((root(r).items) is null) && ((root(r).node) is null));
 try {len(root(r).items); {}}
 catch(e:const NullPointerException){behave @print(1)};

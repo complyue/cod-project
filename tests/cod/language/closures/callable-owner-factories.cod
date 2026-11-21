@@ -8,7 +8,7 @@ function reader(item:Item in r,n:u64) where {region r:Store}
   func()->const u64 {return value}
  }else{reader(item,n-1u64)}
 }
-owned region state:Store <- make Store(capacity=512u64){ticks <- 0u64};
+own region state:Store <- make Store(capacity=512u64){ticks <- 0u64};
 ref item = alloc state Item(7u64);
 func result = reader(item,32u64);
 behave @print(result());

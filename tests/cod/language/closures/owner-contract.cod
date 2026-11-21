@@ -13,8 +13,8 @@ function both(region left:Counter, region right:Counter,
               action:(func()->const u64 with {region left, region right})) -> const u64 { return action() }
 function mode(action:func()->const u64) -> const u64 { return 0u64 }
 function mode(action:(func()->const u64 with {region r})) -> const u64 where {region r:Counter} { return 1u64 }
-owned region first:Counter <- make Counter(capacity = 128u64) { ticks <- 3u64 };
-owned region second:Extended <- make Extended(capacity = 128u64) { extra <- 1u8; ticks <- 7u64 };
+own region first:Counter <- make Counter(capacity = 128u64) { ticks <- 3u64 };
+own region second:Extended <- make Extended(capacity = 128u64) { extra <- 1u8; ticks <- 7u64 };
 func typed:(func()->const u64 with {region first}) = reader(first);
 func forwarded = generic(relay(typed));
 first.ticks <- 5u64;

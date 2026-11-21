@@ -21,7 +21,7 @@ behave @print(recursion(a,5u64));
 behave @print(a);
 data Node { value:u64; ptr next:Node; }
 region Arena { count:u64; ptr head:Node; }
-owned region arena:Arena <- make Arena(capacity=1024u64) { count <- 0u64; head = null };
+own region arena:Arena <- make Arena(capacity=1024u64) { count <- 0u64; head = null };
 ref tail = alloc arena Node(5u64,null);
 ref head = alloc arena Node(3u64,tail);
 arena.head = head;

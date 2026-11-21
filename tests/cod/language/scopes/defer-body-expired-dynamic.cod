@@ -1,6 +1,6 @@
 using symbol "std:io" @print;
 data Item {value:u64;}
-proc consume(owned region r:Item)->void {}
+proc consume(own region r:Item)->void {}
 region symbol @arena:Item;
 symbol @action:proc()->Item;
 proc run()->void {

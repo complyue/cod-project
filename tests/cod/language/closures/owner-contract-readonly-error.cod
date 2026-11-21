@@ -6,5 +6,5 @@ function mutate(action:(func()->const u64 with {region r})) -> void where {regio
   r.ticks <- 1u64;
   {}
 }
-owned region state:Counter <- make Counter(capacity = 128u64) { ticks <- 3u64 };
+own region state:Counter <- make Counter(capacity = 128u64) { ticks <- 3u64 };
 mutate(reader(state));

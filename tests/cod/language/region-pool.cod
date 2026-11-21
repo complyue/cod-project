@@ -15,7 +15,7 @@ for (stage in 0u64 .. 4u64) {{
   catch(error:const RegionCapacityExceededError) {}
 }};
 {
-  owned region arena:Pool <- create(8192u64, 4u32);
+  own region arena:Pool <- create(8192u64, 4u32);
   ref pool = root(arena);
   val occupation <- used_bytes(arena);
   for (i in 0u32 .. 4u32) {{

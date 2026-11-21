@@ -8,7 +8,7 @@ function readonly(region state:const State)->func()->const u64 with {region stat
 function select(a:T in O,b:T in O,second:bool)->T in O where {T,owner O} {
  return if(second){b}else{a}
 }
-owned region state:State <- make State(capacity=128u64){ticks <- 1u64};
+own region state:State <- make State(capacity=128u64){ticks <- 1u64};
 func first = writable(state);
 func second = readonly(state);
 func choose = select;

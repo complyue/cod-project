@@ -32,7 +32,7 @@ deepest <- 19u64;
 behave @print(a);
 region Arena { calls:u64; }
 array Values[u64]:f32;
-owned region arena:Arena <- make Arena(capacity=512u64) { calls <- 0u64 };
+own region arena:Arena <- make Arena(capacity=512u64) { calls <- 0u64 };
 ref values = alloc arena Values(4u64,1.0f32);
 function element(values:Values in r,index:u64)->f32 in r where {region r:Arena} {
  r.calls <- r.calls+1u64;

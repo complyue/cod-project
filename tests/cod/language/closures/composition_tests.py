@@ -33,7 +33,7 @@ def main():
         entry = scratch / "entry.cod"
         entry.write_text(f'using "{previous}" reader;\nusing symbol "std:io" @print;\n'
             'region Concrete { tag:u8; value:u64; spare:u64; }\n'
-            'owned region state:Concrete <- make Concrete(capacity = 256u64) { tag <- 1u8; value <- 5u64; spare <- 7u64 };\n'
+            'own region state:Concrete <- make Concrete(capacity = 256u64) { tag <- 1u8; value <- 5u64; spare <- 7u64 };\n'
             'func callback = reader(state);\nbehave @print(callback());\n'
             'state.value <- 21u64;\nbehave @print(callback());\n')
         start = time.monotonic()

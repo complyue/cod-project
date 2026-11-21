@@ -34,7 +34,7 @@ proc failure(region state:Item,n:u64)->func()->const u64 with {region state} {
   {{effect @arena<-make Item(capacity=if(n==3u64){0u64}else{256u64}){value<-n};return failure(state,n-1u64);}}
 }
 proc run()->void {
-  owned region state:Item<-make Item(capacity=256u64){value<-8u64};
+  own region state:Item<-make Item(capacity=256u64){value<-8u64};
   effect @arena<-make Item(capacity=256u64){value<-99u64};
   func result=walk(state,20u64);
   behave @print(result());

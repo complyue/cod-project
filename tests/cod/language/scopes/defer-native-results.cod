@@ -25,7 +25,7 @@ proc values(v:Values in r,n:u64)->Values where {region r:Item} {
   return v;
 }
 proc composition(flag:bool)->void {
-  owned region r:Item <-make Item(capacity=1024u64){value<-10u64};
+  own region r:Item <-make Item(capacity=1024u64){value<-10u64};
   proc first=proc()->Item {return root(r);};
   proc second=proc()->Item {return alloc r Item(11u64);};
   proc action=first;
@@ -77,7 +77,7 @@ proc maybe(region r:Item,present:bool)->ptr Item in r {
   return if(present){root(r)}else{null};
 }
 proc nullable()->void {
-  owned region r:Item <-make Item(capacity=256u64){value<-50u64};
+  own region r:Item <-make Item(capacity=256u64){value<-50u64};
   proc action=maybe;
   proc whole=down_owner;
   defer {{
@@ -92,11 +92,11 @@ proc nullable()->void {
 nullable();
 
 # Native owner forwarding retains the active symbolic installation.
-function keep(owned region r:Item)->owned region :Item {return r;}
+function keep(own region r:Item)->own region :Item {return r;}
 function installed_view(region r:Item)->Item {return root(r);}
 symbol @installed:Item;
 proc installed_owner()->void {
-  owned region r:Item<-make Item(capacity=256u64){value<-70u64};
+  own region r:Item<-make Item(capacity=256u64){value<-70u64};
   func transfer=keep;
   effect @arena <-transfer(r);
   effect @installed=installed_view(@arena);

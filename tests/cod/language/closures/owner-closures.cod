@@ -6,7 +6,7 @@ using "owner-closure-library.cod" reader;
 using "owner-closure-library.cod" current_reader;
 using "owner-closure-library.cod" apply;
 region State { val ticks:u64; ptr current:Node; }
-owned region state:State <- make State(capacity = 512u64) { ticks <- 3u64; current = null };
+own region state:State <- make State(capacity = 512u64) { ticks <- 3u64; current = null };
 func read = reader(state);
 behave @print(apply(read));
 state.ticks <- 9u64;

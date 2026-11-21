@@ -20,7 +20,7 @@ proc walk(n:u64,callback:proc(u64)->const u64)->proc(u64)->const u64 {
 proc run()->void {
   effect @bias<-99u64;
   proc first=proc(x:u64)->const u64 {
-    if(x==2u64){{owned region failed:Item<-make Item(capacity=0u64){value<-0u64};}}else{};
+    if(x==2u64){{own region failed:Item<-make Item(capacity=0u64){value<-0u64};}}else{};
     return @bias+x;
   };
   proc selected=walk(20u64,first);

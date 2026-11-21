@@ -129,7 +129,7 @@ try {{
   defer good(83u64);
   defer use(proc(x:u64)->void { bad(x, 0u64); }, 84u64);
 }} catch(e:const InvalidCapacityError) { behave @print(85u64); };
-proc owner_result(mode:u64) -> owned region :Packet {
+proc owner_result(mode:u64) -> own region :Packet {
   defer bad(86u64, if(mode == 1u64) {0u64} else {128u64});
   return make Packet(capacity=128u64){value<-87u64};
 }
@@ -138,7 +138,7 @@ proc callable_result(mode:u64) -> func()->const u64 {
   return func()->const u64 { return 89u64; };
 }
 for(i in 0u64 .. 2u64) {{
-  try { owned region result <- owner_result(i); behave @print(result.value); }
+  try { own region result <- owner_result(i); behave @print(result.value); }
   catch(e:const InvalidCapacityError) { behave @print(90u64); };
   try { func callback = callable_result(i); behave @print(callback()); }
   catch(e:const InvalidCapacityError) { behave @print(91u64); };
@@ -160,12 +160,12 @@ proc recovered_without_result() -> const u64 {
 }
 try { behave @print(recovered_without_result()); }
 catch(e:const MissingReturnError) { behave @print(96u64); };
-proc failed_replacement() -> owned region :Packet {
+proc failed_replacement() -> own region :Packet {
   defer {bad();};
   defer {return make Packet(capacity=128u64){value<-999u64};};
   return make Packet(capacity=128u64){value<-999u64};
 }
-try { owned region failed <- failed_replacement(); }
+try { own region failed <- failed_replacement(); }
 catch(e:const InvalidCapacityError) { behave @print(97u64); };
 proc failed_callback() -> func()->const u64 {
   defer {bad();};
@@ -178,7 +178,7 @@ catch(e:const InvalidCapacityError) { behave @print(98u64); };
   defer {behave @print(100u64);};
   defer {defer {behave @print(99u64);};};
 }};
-proc repeated_owner() -> owned region :Packet {
+proc repeated_owner() -> own region :Packet {
   for(i in 0u64 .. 1000u64) {defer {return make Packet(capacity=128u64){value<-30u64};};};
   return make Packet(capacity=128u64){value<-10u64};
 }
@@ -186,7 +186,7 @@ proc repeated_callback() -> func()->const u64 {
   for(i in 0u64 .. 1000u64) {defer {return func()->const u64 {return 60u64;};};};
   return func()->const u64 {return 40u64;};
 }
-{{ owned region result <- repeated_owner(); behave @print(result.value); }};
+{{ own region result <- repeated_owner(); behave @print(result.value); }};
 {{ func result = repeated_callback(); behave @print(result()); }};
 """
 
@@ -347,7 +347,7 @@ behave @print(9042u64);
 proc conditional_failure(yes:bool)->void {
   defer catch(e:const OutOfMemoryError) {behave @print(14u64);};
   if(yes) {
-    owned region r:Item <-make Item(capacity=256u64){value<-99u64};
+    own region r:Item <-make Item(capacity=256u64){value<-99u64};
     behave @print(9001u64);
     defer show_region(r);
   } else {};
@@ -360,7 +360,7 @@ proc verify_region(region r:Item)->void {
 proc conditional_stress(count:u64)->void {
   for(i in 0u64 .. count) {{
     if(i % 2u64 == 0u64) {
-      owned region r:Item <-make Item(capacity=256u64){value<-13u64};
+      own region r:Item <-make Item(capacity=256u64){value<-13u64};
       defer verify_region(r);
     } else {};
   }};
@@ -372,19 +372,19 @@ behave @print(9042u64);
             if name == 'defer-owned-arguments':
                 source += r'''
 proc registration_failure()->void {
-  owned region r:Item <-make Item(capacity=256u64){value<-23u64};
+  own region r:Item <-make Item(capacity=256u64){value<-23u64};
   defer catch(e:const OutOfMemoryError) {consume(r);};
   behave @print(9001u64);
   defer consume(r);
 }
 registration_failure();
 behave @print(9002u64);
-proc consume_verify(owned region r:Item)->void {
+proc consume_verify(own region r:Item)->void {
   if(root(r).value != 22u64) {behave @print(999u64);} else {};
 }
 proc owned_stress(count:u64)->void {
   for(i in 0u64..count) {{
-    owned region r:Item <-make Item(capacity=256u64){value<-22u64};
+    own region r:Item <-make Item(capacity=256u64){value<-22u64};
     defer consume_verify(r);
   }};
 }
@@ -396,7 +396,7 @@ behave @print(9042u64);
                 source += r'''
 using "std:exceptions" OutOfMemoryError;
 proc record_failure()->void {
-  owned region r:Item <-make Item(capacity=256u64){value<-40u64};
+  own region r:Item <-make Item(capacity=256u64){value<-40u64};
   proc action=proc()->Item {behave @print(999u64); return root(r);};
   defer catch(e:const OutOfMemoryError) {behave @print(41u64);};
   behave @print(9001u64);
@@ -405,7 +405,7 @@ proc record_failure()->void {
 record_failure();
 behave @print(9002u64);
 proc copy_failure()->void {
-  owned region r:Item <-make Item(capacity=256u64){value<-40u64};
+  own region r:Item <-make Item(capacity=256u64){value<-40u64};
   proc action=proc()->Item {behave @print(999u64); return root(r);};
   defer catch(e:const OutOfMemoryError) {behave @print(42u64);};
   behave @print(9011u64);
@@ -415,7 +415,7 @@ copy_failure();
 behave @print(9012u64);
 proc body_result_stress(count:u64)->void {
   for(i in 0u64..count) {{
-    owned region r:Item <-make Item(capacity=256u64){value<-43u64};
+    own region r:Item <-make Item(capacity=256u64){value<-43u64};
     proc action=proc()->Item {
       if(root(r).value != 43u64) {behave @print(999u64);} else {};
       return root(r);
@@ -470,7 +470,7 @@ behave @print(9042u64);
                 source += '''
 using "std:exceptions" OutOfMemoryError;
 proc registration_failure()->void {
-  owned region r:Item <-make Item(capacity=256u64){value<-60u64};
+  own region r:Item <-make Item(capacity=256u64){value<-60u64};
   proc view=proc()->Item {return root(r);};
   defer {{behave @print(view().value);}};
   behave @print(9001u64);
@@ -478,7 +478,7 @@ proc registration_failure()->void {
 }
 try {registration_failure();} catch(e:const OutOfMemoryError) {behave @print(9002u64);};
 proc copy_failure()->void {
-  owned region r:Item <-make Item(capacity=256u64){value<-61u64};
+  own region r:Item <-make Item(capacity=256u64){value<-61u64};
   proc view=proc()->Item {return root(r);};
   defer {{behave @print(view().value);}};
   behave @print(9011u64);
@@ -486,7 +486,7 @@ proc copy_failure()->void {
 }
 try {copy_failure();} catch(e:const OutOfMemoryError) {behave @print(9012u64);};
 proc repeated(count:u64)->void {
-  owned region r:Item <-make Item(capacity=256u64){value<-0u64};
+  own region r:Item <-make Item(capacity=256u64){value<-0u64};
   proc view=proc()->Item {return root(r);};
   for(i in 0u64..count) {{
     defer {{ref selected=view(); selected.value <-selected.value+1u64;}};

@@ -7,13 +7,13 @@ function reader(region r:State)->func()->const u64 with {region r} {
 function maker(region r:State)->(func()->(func()->const u64 with {region r}) with {region r}) {
   return func()->(func()->const u64 with {region r}) {return reader(r)}
 }
-function step(owned region work:State,
+function step(own region work:State,
     factory:(func()->(func()->const u64 with {region work}) with {region work}),n:u64)->const u64 {
   func current=factory();
   return if(n==0u64){0u64}else{
-    owned region next<-make State(capacity=256u64){value<-1u64};
+    own region next<-make State(capacity=256u64){value<-1u64};
     step(next,maker(next),n-1u64)
   }
 }
-owned region seed<-make State(capacity=256u64){value<-7u64};
+own region seed<-make State(capacity=256u64){value<-7u64};
 behave @print(step(seed,maker(seed),32u64));

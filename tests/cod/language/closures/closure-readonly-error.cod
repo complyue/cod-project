@@ -3,6 +3,6 @@ function writer(region state:const Counter) -> (func()->void with {region state}
   val var ticks -> state.ticks;
   return func [ticks] () -> void { ticks <- 1u64; {} }
 }
-owned region state:Counter <- make Counter(capacity = 128u64) { ticks <- 3u64 };
+own region state:Counter <- make Counter(capacity = 128u64) { ticks <- 3u64 };
 func callback = writer(state);
 callback();

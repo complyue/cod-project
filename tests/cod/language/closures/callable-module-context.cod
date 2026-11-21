@@ -51,6 +51,6 @@ behave @print(generic_adapted(1.0f64));
 using "callable-module-extension.cod" MethodState;
 using "callable-module-extension.cod" frozen_owner;
 using "callable-module-extension.cod" adapted_owner;
-owned region state:MethodState <- make MethodState(capacity=128u64){ticks <- 9u64};
+own region state:MethodState <- make MethodState(capacity=128u64){ticks <- 9u64};
 behave @print(frozen_owner(state));
 behave @print(adapted_owner(state));

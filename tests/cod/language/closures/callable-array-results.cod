@@ -4,7 +4,7 @@ array Values[u64]:f32;
 region Arena {count:u64;}
 function first(a:Values in r,b:Values in r)->Values in r where {region r:Arena} {return a}
 function second(a:Values in s,b:Values in s)->Values in s where {region s:Arena} {return b}
-owned region arena:Arena <- make Arena(capacity=2048u64){count <- 0u64};
+own region arena:Arena <- make Arena(capacity=2048u64){count <- 0u64};
 ref a=alloc arena Values(3u64,1.0f32);
 ref b=alloc arena Values(3u64,5.0f32);
 func selected=first;

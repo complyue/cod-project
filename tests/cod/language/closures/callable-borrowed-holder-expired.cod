@@ -4,8 +4,8 @@ function reader(region state:State)->func()->const u64 with {region state} {
  return func()->const u64 {return value}
 }
 function inspect(action:T in O,side:u64)->const bool where {T,owner O} {return true}
-function release(owned region state)->const u64 {return 0u64}
-owned region state:State <- make State(capacity=128u64){value <- 3u64};
+function release(own region state)->const u64 {return 0u64}
+own region state:State <- make State(capacity=128u64){value <- 3u64};
 func current = reader(state);
 func inspect_value = inspect;
 inspect_value(current,release(state));

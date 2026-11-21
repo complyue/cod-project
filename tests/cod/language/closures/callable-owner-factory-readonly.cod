@@ -4,7 +4,7 @@ function counter(value:const u64 in r) where {region r:Store}
  val var ticks:const u64 in r -> r.ticks;
  return func()->const u64 {return ticks}
 }
-owned region state:Store <- make Store(capacity=128u64){ticks <- 3u64};
+own region state:Store <- make Store(capacity=128u64){ticks <- 3u64};
 func factory=counter;
 func counted=factory(state.ticks);
 function mutate(action:func()->const u64 with {region r}) where {region r:Store} ->void {

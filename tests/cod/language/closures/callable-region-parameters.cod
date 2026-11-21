@@ -6,8 +6,8 @@ function alternate(region state:State, n:u64)->const u64 { state.ticks <- state.
 function walk(region state:State, n:u64)->const u64 {
  return if(n == 0u64) { state.ticks } else { state.ticks <- state.ticks + 1u64; walk(state, n - 1u64) }
 }
-owned region first:State <- make State(capacity=256u64) { ticks <- 10u64 };
-owned region second:Extended <- make Extended(capacity=256u64) { padding <- 99u64; ticks <- 20u64 };
+own region first:State <- make State(capacity=256u64) { ticks <- 10u64 };
+own region second:Extended <- make Extended(capacity=256u64) { padding <- 99u64; ticks <- 20u64 };
 func selected = step;
 for(i in 0u64 .. 2u64) {{
  behave @print(selected(first, 2u64));

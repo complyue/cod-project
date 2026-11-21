@@ -116,9 +116,9 @@ using "std:exceptions" OutOfMemoryError;
 using "std:exceptions" NullPointerException;
 data Packet {value:u64;}
 try {{
-try {{owned region invalid:Packet <- make Packet(capacity=0u64){value<-0u64}; {}}}
+try {{own region invalid:Packet <- make Packet(capacity=0u64){value<-0u64}; {}}}
 catch(seed) {{
-  owned region keep:Packet <- make Packet(capacity=16u64){value<-7u64};
+  own region keep:Packet <- make Packet(capacity=16u64){value<-7u64};
   for(i in 0 .. 2) {{
     try {{throw seed from seed}} catch(error:const OutOfMemoryError) {{
       behave @assert(error.cause_count == 0u64)
@@ -126,7 +126,7 @@ catch(seed) {{
   }};
   val first <- try {{throw seed from seed}} catch(error) {{error}};
   try {{
-    owned region inner:Packet <- make Packet(capacity=16u64){value<-0u64};
+    own region inner:Packet <- make Packet(capacity=16u64){value<-0u64};
     throw first from seed
   }} catch(error:const OutOfMemoryError) {{
     behave @assert(error.cause_count == 0u64);
@@ -320,16 +320,16 @@ using "std:exceptions" NullPointerException;
 using symbol "std:io" @assert;
 data Packet {value:u64;}
 data Saved {error:Exception;}
-try {owned region invalid:Packet <- make Packet(capacity=0u64){value<-0u64}; {}}
+try {own region invalid:Packet <- make Packet(capacity=0u64){value<-0u64}; {}}
 catch(seed) {
-  owned region saved:Saved <- make Saved(capacity=64u64){error<-seed};
+  own region saved:Saved <- make Saved(capacity=64u64){error<-seed};
   for(i in 0 .. 2) {{
     if(i == 1) {
       try {throw root(saved).error}
       catch(unexpected:const NullPointerException) {behave @assert(false);}
     } else {};
     val cause <- try {
-      owned region small:Packet <- make Packet(capacity=1u64){value<-0u64}; seed
+      own region small:Packet <- make Packet(capacity=1u64){value<-0u64}; seed
     } catch(error) {error};
     val chained <- try {throw seed from cause} catch(error) {error};
     setfield(root(saved), error, chained)

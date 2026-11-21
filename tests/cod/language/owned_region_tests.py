@@ -61,47 +61,47 @@ extern "C" void cod_lang_print_i64(std::int64_t step) {
 '''
 
 BASE = '''data Packet {sequence:u64;} region symbol state:Packet;
-function fresh()-> owned region :Packet {return make Packet(capacity=8u64){sequence<-1u64}}
-function drop(owned region p:Packet) -> void {}
+function fresh()-> own region :Packet {return make Packet(capacity=8u64){sequence<-1u64}}
+function drop(own region p:Packet) -> void {}
 function read(region p:Packet) -> u64 {return root(p).sequence}
 '''
 
 REJECTS = {
-    "stale-borrow-argument": ('data Node {value:u64;} function match(node:Node in O, value:u64) -> bool where {owner O} {return node.value == value} function compare() -> bool {owned region p:Packet <- make Packet(capacity=64u64){sequence<-1u64};ref n=alloc p Node(2u64); return match(n, {drop(p); 0u64})} compare();',
+    "stale-borrow-argument": ('data Node {value:u64;} function match(node:Node in O, value:u64) -> bool where {owner O} {return node.value == value} function compare() -> bool {own region p:Packet <- make Packet(capacity=64u64){sequence<-1u64};ref n=alloc p Node(2u64); return match(n, {drop(p); 0u64})} compare();',
                                    "requires a live owning region"),
-    "recursive-replacement-borrow": ('function replace(owned region p:Packet,n:u64)->owned region:Packet {return if(n==0u64){p}else{replace(fresh(),n-1u64)}} owned region p<-fresh(); ref v=root(p); owned region q<-replace(p,3u64); v.sequence;',
+    "recursive-replacement-borrow": ('function replace(own region p:Packet,n:u64)->own region:Packet {return if(n==0u64){p}else{replace(fresh(),n-1u64)}} own region p<-fresh(); ref v=root(p); own region q<-replace(p,3u64); v.sequence;',
                                      "requires a live owning region"),
-    "recursive-owner-alias": ('function next(ref v:Packet in p,owned region p:Packet,n:u64)->owned region:Packet {return if(n==0u64){p}else{next(v,fresh(),n-1u64)}} owned region p<-fresh(); next(root(p),p,3u64);',
+    "recursive-owner-alias": ('function next(ref v:Packet in p,own region p:Packet,n:u64)->own region:Packet {return if(n==0u64){p}else{next(v,fresh(),n-1u64)}} own region p<-fresh(); next(root(p),p,3u64);',
                               "requires the same actual owner"),
-    "callable-owner-argument": ('function callback(region r:Packet)->func()->const u64 with {region r} {val var sequence:u64 in r -> r.sequence; return func()->const u64 {return sequence}} function apply(owned region r:Packet,cb:func()->const u64 with {region r})->const u64 {return cb()} owned region first<-fresh(); owned region second<-fresh(); apply(second,callback(first));', "callable environment owner mismatch"),
-    "recursive-callback-readonly": ('function writable(region r:Packet)->func()->const u64 with {region r} {val var value:u64 in r -> r.sequence; return func()->const u64 {return value}} function readonly(region r:Packet)->func()->const u64 with {region r} {val var value:const u64 in r -> r.sequence; return func()->const u64 {return value}} function step(owned region r:Packet,cb:func()->const u64 with {region r},n:u64)->const u64 {region projected=cb -> r; projected.sequence<-cb(); return if(n==0u64){cb()}else{owned region next<-fresh(); step(next,readonly(next),n-1u64)}} owned region seed<-fresh(); step(seed,writable(seed),3u64);',
+    "callable-owner-argument": ('function callback(region r:Packet)->func()->const u64 with {region r} {val var sequence:u64 in r -> r.sequence; return func()->const u64 {return sequence}} function apply(own region r:Packet,cb:func()->const u64 with {region r})->const u64 {return cb()} own region first<-fresh(); own region second<-fresh(); apply(second,callback(first));', "callable environment owner mismatch"),
+    "recursive-callback-readonly": ('function writable(region r:Packet)->func()->const u64 with {region r} {val var value:u64 in r -> r.sequence; return func()->const u64 {return value}} function readonly(region r:Packet)->func()->const u64 with {region r} {val var value:const u64 in r -> r.sequence; return func()->const u64 {return value}} function step(own region r:Packet,cb:func()->const u64 with {region r},n:u64)->const u64 {region projected=cb -> r; projected.sequence<-cb(); return if(n==0u64){cb()}else{own region next<-fresh(); step(next,readonly(next),n-1u64)}} own region seed<-fresh(); step(seed,writable(seed),3u64);',
                                     "cannot transfer into a read-only destination view"),
-    "consumed-name": ('proc test()->void {owned region p:Packet <- fresh(); drop(p); read(p); {}} test();',
+    "consumed-name": ('proc test()->void {own region p:Packet <- fresh(); drop(p); read(p); {}} test();',
                       "owner has been consumed"),
-    "escaping-view": ('function bad() -> Packet {owned region p:Packet <- fresh(); return root(p)} bad();',
+    "escaping-view": ('function bad() -> Packet {own region p:Packet <- fresh(); return root(p)} bad();',
                       "result would outlive its owning scope"),
-    "ended-effect-owner": ('proc test()->void {owned region p:Packet <- fresh(); ref v=root(p); '
+    "ended-effect-owner": ('proc test()->void {own region p:Packet <- fresh(); ref v=root(p); '
                            '{{effect @state <- p; {}}}; v.sequence; {}} test();', "requires a live owning region"),
-    "conditional-consumption": ('proc test(flag:bool)->void {owned region p:Packet <- fresh(); '
+    "conditional-consumption": ('proc test(flag:bool)->void {own region p:Packet <- fresh(); '
                                 'if(flag){drop(p)}else{}; read(p); {}} test(true);', "owner has been consumed"),
-    "duplicate-move": ('function both(owned region a:Packet,owned region b:Packet) -> void{} '
-                       'proc test()->void {owned region p:Packet <- fresh(); both(p,p)} test();',
+    "duplicate-move": ('function both(own region a:Packet,own region b:Packet) -> void{} '
+                       'proc test()->void {own region p:Packet <- fresh(); both(p,p)} test();',
                        "cannot be consumed by multiple parameters"),
     "later-argument-move": ('function both(region a:Packet,b:u64) -> void{} '
-                            'proc test()->void {owned region p:Packet <- fresh(); both(p,{drop(p);1u64})} test();',
+                            'proc test()->void {own region p:Packet <- fresh(); both(p,{drop(p);1u64})} test();',
                             "owner has been consumed"),
-    "borrow-extraction": ('function bad(region p:Packet)-> owned region :Packet{return p} bad(fresh());',
-                          "expected owned region :"),
-    "dynamic-extraction": ('effect @state <- fresh(); drop(@state);', "expected owned region :"),
-    "repeated-move": ('proc test()->void {owned region p:Packet <- fresh(); for(i in 0..2){drop(p)}} test();',
+    "borrow-extraction": ('function bad(region p:Packet)-> own region :Packet{return p} bad(fresh());',
+                          "expected own region :"),
+    "dynamic-extraction": ('effect @state <- fresh(); drop(@state);', "expected own region :"),
+    "repeated-move": ('proc test()->void {own region p:Packet <- fresh(); for(i in 0..2){drop(p)}} test();',
                       "repeating loop cannot consume an owner"),
-    "mode-overload": ('function take(region p:Packet) -> void{} function take(owned region p:Packet) -> void{} '
+    "mode-overload": ('function take(region p:Packet) -> void{} function take(own region p:Packet) -> void{} '
                       'take(fresh());', "overloads differing only in owning versus borrowed mode"),
-    "exceptional-join": ('using "std:exceptions" InvalidCapacityError; proc test()->void {owned region p:Packet <- fresh(); '
+    "exceptional-join": ('using "std:exceptions" InvalidCapacityError; proc test()->void {own region p:Packet <- fresh(); '
                          'try {make Packet(capacity=0u64){sequence<-1u64}; drop(p); '
                          'make Packet(capacity=0u64){sequence<-1u64}; {}} '
                          'catch(e:const InvalidCapacityError){read(p);{}}} test();', "owner has been consumed"),
-    "owner-field": ('data Bad {owned region owner:Packet;} '
+    "owner-field": ('data Bad {own region owner:Packet;} '
                     'make Bad(capacity=64u64){owner<-fresh()};', "region handles cannot be stored in user data fields"),
     "missing-field": ('make Packet(capacity=8u64){};', "initialize every root field exactly once"),
     "duplicate-field": ('make Packet(capacity=8u64){sequence<-1u64; sequence<-2u64};', "duplicate root initializer"),

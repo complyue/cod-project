@@ -5,7 +5,7 @@ data Node { val count:i64; ptr next:Node; ptr number:i64; }
 data Link { val padding:i64; ref node:Node; ref number:i64; }
 function copy(val n:i64) -> const i64 { n <- 99; return n }
 function successor(n:Node in O) -> const i64 throws NullPointerException where {owner O} { return n.next.count }
-owned region r:Node <- make Node(capacity = 4096u64) { count <- 12; next = null; number = null };
+own region r:Node <- make Node(capacity = 4096u64) { count <- 12; next = null; number = null };
 {
   val a:i64 <- 3;
   ref alias = a;

@@ -17,7 +17,7 @@ function wrap(action:func()->const u64 with {region r}) where {region r:State}
   func inner = action;
   return func () -> const u64 { return inner() + 10u64 }
 }
-owned region state:State <- make State(capacity = 128u64) { flag <- true; value <- 7u64 };
+own region state:State <- make State(capacity = 128u64) { flag <- true; value <- 7u64 };
 func current = choose(state);
 func copied = current;
 func wrapper = wrap(current);
