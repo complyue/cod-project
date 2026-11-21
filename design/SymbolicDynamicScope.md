@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 229 · Recorded: 2026-11-21 · Phase: language/application co-design.
+Design revision: 230 · Recorded: 2026-11-21 · Phase: language/application co-design.
 
 ## Design authority
+
+[H-GUARDS-AND-LOOP-DISCARD-20261121](../CHANGELOG.md#h-guards-and-loop-discard-20261121) confirms [single-return guards](#single-return-guards) at r230 under [D-10-RETURN-GUARD](DesignAuthorityRegistry.md#d-10-return-guard). P-664/P-665 connect readable control flow to C-41/C-63 and the existing result and cleanup contracts. Check a taken return, false continuation, separator and else binding, and rejection of a missing required value in both frontends.
 
 [D-10-CONTEXTUAL-NAMES](DesignAuthorityRegistry.md#d-10-contextual-names) at r229 applies [H-LEXICAL-NAME-RELEASE-20261121](../CHANGELOG.md#h-lexical-name-release-20261121) to [clause words and lexical variable names](#clause-words-and-lexical-variable-names). P-652/P-653 connect readable domain names and predictable lookup to C-37/C-41 and the ordinary-name contract. Check binders, uses and clause boundaries in both frontends. Module publication, ownership and overload selection retain their own contracts.
 
@@ -832,7 +834,7 @@ proc tick() {
 }
 ```
 
-Here sample returns u64. The explicit bare return in tick supplies void result evidence. The call and its discard execute before that return. A receiver ignoring `sample()` likewise leaves sample’s signature intact. The operand must already be well typed: an outer discard cannot repair an unresolved overload, invalid owner or an incompatible normal-result join. Paths can explicitly discard at the point where their own results are established, as in `if (flag) { true : void } else { 17u64 : void }`. The existing [void generator feedback rule](RangedForAndGenerators.md#void-feedback-is-discarded-result-context) separately permits independently valid terminal alternatives of unlike types in that designated context.
+Here sample returns u64. The explicit bare return in tick supplies void result evidence. The call and its discard execute before that return. A receiver ignoring `sample()` likewise leaves sample’s signature intact. The operand must already be well typed: an outer discard cannot repair an unresolved overload, invalid owner or an incompatible normal-result join. Paths can explicitly discard at the point where their own results are established, as in `if (flag) { true : void } else { 17u64 : void }`. At a [loop body with no feedback](RangedForAndGenerators.md#loop-bodies-with-no-result-receiver), each terminal alternative can discard its own independently valid result. The loop therefore needs no common payload type for those alternatives.
 
 #### Type membership and branch refinement
 
@@ -958,6 +960,21 @@ The final `is not null` test reads reference identity without dereferencing its 
 A fact exists only on paths where the assertion succeeds. Catching its failure and continuing does not establish it; a join requires the fact on every reaching normal path. Cleanup that rebinds a relevant slot invalidates it normally. Assertions cannot initialize unread payload, recover expired owners or bypass readonly constraints. Operand dereferences before the final predicate still have ordinary NPE obligations; an assertion is not retrospective protection for them.
 
 **Acceptance:** both spellings; bool-only predicates; static success/failure; unresolved false predicates with optional diagnostic text and ordinary cleanup; once-only evaluation and retained effects; non-null ref use after success; rejection without a fact or after rebinding; no fact after a handled failure; no assertion-elision flag; unchanged owner/access/init, checked operand failures and numeric policy. Source inspection finds no assert handling in the current parser/checker, so this section is a plan, not implemented support. Complete grammar, proof coverage and diagnostic representation remain engineering work within the stated boundary.
+
+### Single-return guards
+
+An ordinary `if (condition)` accepts a braced group or a single unbraced `return` with its ordinary optional operand. A guard used for control alone may omit the empty `else`. Evaluate the condition once. On true, execute the selected return or group. When the alternative is omitted, a false condition continues at the next expression. The spelling applies equally to an early value return and to a bare return from a void procedure.
+
+```cod
+func first_index(done:bool, index:u64, limit:u64) -> u64 {
+    if (done) return index;
+    return limit;
+}
+```
+
+A single written semicolon suffices for the unbraced return and guard. The usual [semicolon omission rules](#semicolon-omission-and-syntax-ux) apply where the boundary is clear. An immediately following `else` still belongs to that `if`, as in `if (done) return index; else { limit }`. Without an `else`, the next expression starts normally. The ordinary block and separator rules admit a line break between the condition and the return. Only a single return receives the unbraced then-arm spelling. A nested conditional in a then arm still needs braces. A braced effect-only arm may omit its empty alternative under the same fallthrough rule. `if returning` keeps its separate deferred-execution grammar.
+
+An omitted alternative completes normally with no payload. A context that requires a value on that path rejects, including a value-taking initializer or a non-void feedback tail. The ordinary return still contributes to its lexical destination's result checks and runs that destination's cleanup. Inside a single-brace loop body the guard can return from the supplying callable. Inside `{{ ... }}` it returns from that full-scope invocation. [Callable result rules](CallableResultInference.md#results-of-proc-func-and-here-bodies)
 
 ### Semicolon omission and syntax UX
 

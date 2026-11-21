@@ -75,6 +75,9 @@ using "NativeCommands.cod" branch_equal;
 using "NativeCommands.cod" branch_catchable;
 using "NativeCommands.cod" write_defer_flag;
 using "NativeCommands.cod" branch_if_unregistered;
+using "NativeCommands.cod" unbind_local;
+using "NativeCommands.cod" bind_local;
+using "NativeCommands.cod" use_local;
 using "NativeCommands.cod" compare_words;
 using "NativeCommands.cod" word_constant;
 using "NativeCommands.cod" copy_word;
@@ -144,6 +147,16 @@ func storage_operation(ref code:NativeCommands in C, ref plan:NativePlan in P, o
                        reservation:u64, at:u64) -> void where {owner C, owner P} {
     val tag <- reservation_tag(reservation);
     command(code, plan, opcode, a, b, tag, if (tag == 0u64) { 0u64 } else { at });
+}
+
+func initialize_guarded_locals(names:const NameBindings in B, ref code:NativeCommands in C, ref plan:NativePlan in P,
+                                scope:u64) -> void where {const owner B, owner C, owner P} {
+    val declaration <- names[scope].guarded_local_link;
+    for (unused in 0u64 .. intrinsic (len)(names)) {
+        if (declaration == no_node()) { return; } else {};
+        storage_operation(code, plan, unbind_local(), 0u64, 0u64, declaration, declaration);
+        (declaration <- names[declaration].guarded_local_link):void;
+    };
 }
 
 func new_block(ref plan:NativePlan in P) -> u64 where {owner P} {
@@ -752,6 +765,9 @@ func lower_expression(nodes:const ExprNodes in N, names:const NameBindings in B,
     if (kind == name_node()) {
         val declaration <- names[at].declaration;
         if (!scalar_kind(facts[at].kind)) { plan.diagnostic <- native_unsupported(); return; } else {};
+        if (declaration != no_node() && names[declaration].guarded_local != 0u8) {
+            storage_operation(code, plan, use_local(), 0u64, 0u64, declaration, at);
+        } else {};
         val opcode <- if (facts[at].reception == local_place()) { place_address() } else { copy_word() };
         emit(code, plan, opcode, slot(at), slot(declaration));
         return;
@@ -785,6 +801,9 @@ func lower_expression(nodes:const ExprNodes in N, names:const NameBindings in B,
     } else {};
     if (local_storage_binding(kind)) {
         lower_binding(nodes, names, links, facts, sites, code, plan, state, at);
+        if (state.live && names[at].guarded_local != 0u8) {
+            storage_operation(code, plan, bind_local(), 0u64, 0u64, at, at);
+        } else {};
         return;
     } else {};
     if (kind == make_named_node()) {
@@ -939,6 +958,7 @@ func lower_full_scope(nodes:const ExprNodes in N, names:const NameBindings in B,
     state.return_slot <- destination;
     state.local_return <- false;
     initialize_defer_flags(sites, code, plan, scope, syntax_len(nodes));
+    initialize_guarded_locals(names, code, plan, scope);
     lower_list(nodes, names, links, facts, sites, code, plan, state, nodes[scope].left, destination, false);
     if (plan.diagnostic != 0u8) { return; } else {};
     val normal <- state.live || state.local_return;
@@ -983,6 +1003,7 @@ func lower_activation(nodes:const ExprNodes in N, names:const NameBindings in B,
     emit(code, plan, word_constant(), returned_word(), 0u64);
     if (check_return) { emit(code, plan, word_constant(), return_ready, 0u64); } else {};
     initialize_defer_flags(sites, code, plan, scope, syntax_len(nodes));
+    initialize_guarded_locals(names, code, plan, scope);
     if (program) {
         lower_list(nodes, names, links, facts, sites, code, plan, state, nodes[scope].left, no_node(), false);
     } else {
