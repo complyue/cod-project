@@ -14,6 +14,10 @@ CHECK_FIELD(name_past);
 CHECK_FIELD(identity);
 CHECK_FIELD(kind);
 CHECK_FIELD(checked);
+CHECK_FIELD(origin_module);
+CHECK_FIELD(owner_module);
+CHECK_FIELD(owner_identity);
+CHECK_FIELD(shape);
 #undef CHECK_FIELD
 _Static_assert(UINTPTR_MAX <= UINT64_MAX, "catalog handles require a pointer that fits in a handle word");
 

@@ -7,23 +7,17 @@ using "ParserStorage.cod" using_node;
 using "ParserStorage.cod" symbol_node;
 using "ExpressionParser.cod" ParseResult;
 
-# The provider keeps these offsets within its immutable spelling bytes. The
-# pair of kind and identity selects one published object.
-data ModuleExport {
-    module_first:u64;
-    module_past:u64;
-    name_first:u64;
-    name_past:u64;
-    identity:u64;
-    kind:u8;
-    checked:u8;
-}
-array ModuleExports[u64]:ModuleExport;
+using "ModuleExportStorage.cod" ModuleExport;
+using "ModuleExportStorage.cod" ModuleExports;
 
 data SelectedExport {
     identity:u64;
     kind:u8;
     checked:u8;
+    origin_module:u64;
+    owner_module:u64;
+    owner_identity:u64;
+    shape:u8;
 }
 array SelectedExports[u64]:SelectedExport;
 
@@ -34,6 +28,11 @@ data ExportResolutionResult {
 
 func exception_type_export() -> u8 { return 1u8; }
 func symbol_export() -> u8 { return 2u8; }
+func native_handle_export() -> u8 { return 3u8; }
+func record_export() -> u8 { return 4u8; }
+func array_export() -> u8 { return 5u8; }
+func nominal_exception_export() -> u8 { return 6u8; }
+func callable_export() -> u8 { return 7u8; }
 func print_export_identity() -> u64 { return 0u64; }
 func exception_root_identity() -> u64 { return 0u64; }
 func null_pointer_identity() -> u64 { return 4u64; }
@@ -72,12 +71,26 @@ func same_module_path(source:const SourceBytes in S, first:u64, past:u64,
     return position == close_quote;
 }
 
-func remember(ref selected:SelectedExports in R, at:u64, identity:u64, kind:u8, checked:u8) -> void
+func clear_selection(ref selected:SelectedExports in R, at:u64) -> void
     where {owner R} {
-    selected[at].identity <- identity;
-    selected[at].kind <- kind;
-    selected[at].checked <- checked;
-    return;
+    selected[at].identity <- 0u64;
+    selected[at].kind <- 0u8;
+    selected[at].checked <- 0u8;
+    selected[at].origin_module <- 0u64;
+    selected[at].owner_module <- 0u64;
+    selected[at].owner_identity <- 0u64;
+    (selected[at].shape <- 0u8):void;
+}
+
+func select_export(exports:const ModuleExports in E, row:u64, ref selected:SelectedExports in R, at:u64) -> void
+    where {const owner E, owner R} {
+    selected[at].identity <- exports[row].identity;
+    selected[at].kind <- exports[row].kind;
+    selected[at].checked <- exports[row].checked;
+    selected[at].origin_module <- exports[row].origin_module;
+    selected[at].owner_module <- exports[row].owner_module;
+    selected[at].owner_identity <- exports[row].owner_identity;
+    (selected[at].shape <- exports[row].shape):void;
 }
 
 func resolve_selection(source:const SourceBytes in S, nodes:const ExprNodes in N, site:u64,
@@ -93,11 +106,14 @@ func resolve_selection(source:const SourceBytes in S, nodes:const ExprNodes in N
     val path_past <- nodes[path].past;
     val diagnostic <- unproved_module_exports();
     for (at in 0u64 .. intrinsic (len)(exports)) {
-        if (same_module_path(source, path_first, path_past, spellings,
+        if (exports[at].kind != 0u8 &&
+            exports[at].module_first <= exports[at].module_past && exports[at].module_past <= intrinsic (len)(spellings) &&
+            exports[at].name_first <= exports[at].name_past && exports[at].name_past <= intrinsic (len)(spellings) &&
+            same_module_path(source, path_first, path_past, spellings,
                              exports[at].module_first, exports[at].module_past)) {
             if (same_name(source, name_first, name_past, spellings, exports[at].name_first, exports[at].name_past)) {
                 if (symbolic == (exports[at].kind == symbol_export())) {
-                    remember(selected, site, exports[at].identity, exports[at].kind, exports[at].checked);
+                    select_export(exports, at, selected, site);
                     return 0u8;
                 } else {};
                 (diagnostic <- wrong_export_kind()):void;
@@ -125,7 +141,7 @@ func resolve_module_exports(source:const SourceBytes in S, nodes:const ExprNodes
         return false;
     } else {};
     for (at in 0u64 .. tree.used) {
-        remember(selected, at, 0u64, 0u8, 0u8);
+        clear_selection(selected, at);
         if (nodes[at].kind == using_node()) {
             report.diagnostic <- resolve_selection(source, nodes, at, spellings, exports, selected);
             if (report.diagnostic != 0u8) {
@@ -150,6 +166,11 @@ export ExportResolutionResult;
 export resolve_module_exports;
 export exception_type_export;
 export symbol_export;
+export native_handle_export;
+export record_export;
+export array_export;
+export nominal_exception_export;
+export callable_export;
 export print_export_identity;
 export exception_root_identity;
 export null_pointer_identity;

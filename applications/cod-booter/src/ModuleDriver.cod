@@ -1,7 +1,7 @@
 using "SourceStorage.cod" SourceBytes;
 using "SourceStorage.cod" SourceLines;
 using "SourceStorage.cod" SourcePosition;
-using "SourceStorage.cod" locate_source_position;
+using "SourceAccess.cod" locate_source_position;
 using "ParserStorage.cod" Tokens;
 using "ParserStorage.cod" ExprNodes;
 using "ParserStorage.cod" no_node;
