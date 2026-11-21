@@ -37,7 +37,7 @@ module.exports = grammar({
       'const', 'continue', 'conversion', 'data', 'defer', 'effect', 'else',
       'export', 'fallback', 'finally', 'for', 'from', 'func', 'function',
       'global', 'here', 'if', 'import', 'in', 'intrinsic', 'is', 'isa', 'make',
-      'mixin', 'not', 'of', 'owned', 'owner', 'perform', 'proc', 'procedure',
+      'mixin', 'not', 'of', 'own', 'owner', 'perform', 'proc', 'procedure',
       'ptr', 'ref', 'region', 'return', 'returning', 'symbol', 'throw',
       'throws', 'touch', 'try', 'type', 'typeof', 'unit', 'units', 'using',
       'val', 'var', 'where', 'with', 'yield', 'yields',

@@ -64,7 +64,7 @@
         { "match": "\\b(?:try|catch|finally|throw|throws|defer)\\b", "name": "keyword.control.exception.cod" },
         { "match": "\\b(?:func|function|proc|procedure)\\b", "name": "storage.type.function.cod" },
         { "match": "\\b(?:val|var|ref|ptr|data|type|unit|array|global|symbol|here)\\b", "name": "storage.type.declaration.cod" },
-        { "match": "\\b(?:const|owned|owner|in|where|with|conversion|intrinsic)\\b", "name": "storage.modifier.cod" },
+        { "match": "\\b(?:const|own|owner|in|where|with|conversion|intrinsic)\\b", "name": "storage.modifier.cod" },
         { "match": "\\b(?:effect|perform|behave|touch)\\b", "name": "keyword.other.effect.cod" },
         { "match": "\\b(?:make|capacity|typeof)\\b", "name": "keyword.other.allocation.cod" },
         { "match": "\\b(?:is|not)\\b", "name": "keyword.operator.word.cod" },

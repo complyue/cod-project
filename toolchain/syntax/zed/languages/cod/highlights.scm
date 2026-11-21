@@ -17,7 +17,7 @@
 
 ((keyword) @keyword.declaration.cod
   (#any-of? @keyword.declaration.cod
-    "array" "data" "from" "func" "function" "global" "here" "in" "owner"
+    "array" "data" "from" "func" "function" "global" "here" "in" "own" "owner"
     "proc" "procedure" "ptr" "ref" "region" "symbol" "throws" "type" "unit"
     "units" "val" "var" "where" "yields"))
 

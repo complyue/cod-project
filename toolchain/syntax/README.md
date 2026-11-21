@@ -7,6 +7,8 @@ The editor grammars follow [D-10-ORDINARY-NAMES](../../design/DesignAuthorityReg
 - [`CoD.tmLanguage.json`](CoD.tmLanguage.json) is a TextMate grammar with scope `source.cod`, available for future Linguist submission. It is not registered with GitHub.
 - [`zed/`](zed/) contains the Tree-sitter grammar, extension metadata, and Zed queries for `.cod`. The grammar recognizes tokens and balanced groups for highlighting and bracket matching. It does not validate declarations, infer operator roles, or establish CoD source compatibility.
 
+For [contextual ownership](../../design/DesignAuthorityRegistry.md#d-10-own-qualifier) and [lexical names](../../design/DesignAuthorityRegistry.md#d-10-contextual-names), both previews highlight `own`, `from`, `throws`, `data`, `type`, `unit`, and `array` by spelling, even where CoD allows them as names. `owned` is an ordinary identifier and has no keyword highlight. For example, in [`contextual-own-calls.cod`](../../tests/cod/language/contextual-own-calls.cod), `own` still gets keyword styling when used as a callable or parameter name. Highlighting does not imply that a word is reserved.
+
 ## Activate in local Zed
 
 From the repository root on macOS or Linux:
