@@ -14,6 +14,7 @@ using "NativeDiagnostics.cod" DiagnosticDestination;
 using "NativeDiagnostics.cod" report_rejection;
 using "NativeDiagnostics.cod" report_source_open_error;
 using "NativeDiagnostics.cod" report_backend_error;
+using "NativeDiagnostics.cod" report_scratch_error;
 using "SourceStorage.cod" SourceBytes;
 using "SourceStorage.cod" SourceLines;
 using "ParserStorage.cod" Tokens;
@@ -142,7 +143,10 @@ proc compile_revision(source:const SourceBytes in S, lines:const SourceLines in 
             continue lower_object(source, lines, spellings, exports, output, diagnostic,
                                   tokens, nodes, selected, bindings, names, facts, owners, sites, commands);
         };
-    } catch (error:ScratchOpenException) { return native_scratch_failed(); }
+    } catch (error:ScratchOpenException) {
+        report_scratch_error(diagnostic, error.status);
+        return native_scratch_failed();
+    }
 }
 
 proc compile_object(handle input:Path in A, handle output:Path in A,

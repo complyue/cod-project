@@ -407,6 +407,7 @@ struct Form {
   bool alias_operation = false;
   bool c_data = false;
   bool c_linkage = false;
+  std::optional<Type> native_owner_type;
   std::vector<SymbolMapping> mappings;
   std::vector<UnitSelection> units;
   std::vector<Parameter> parameters;
@@ -1955,6 +1956,12 @@ public:
           form->c_data = true;
         }
         form->name = ordinary_name().text;
+        if (form->c_data && take("in")) {
+          form->native_owner_type = parse_type();
+          expect(";");
+          append(std::move(form));
+          continue;
+        }
         if (form->c_data && take(";")) {
           append(std::move(form));
           continue;

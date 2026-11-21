@@ -3,8 +3,9 @@ using "SourceStorage.cod" SourceLines;
 using "SourceStorage.cod" SourcePosition;
 using "SourceStorage.cod" locate_source_position;
 
-data "C" DiagnosticDestination;
-proc "C" write_diagnostic(handle destination:DiagnosticDestination in D, stage:u8, code:u8,
+data "C" LauncherDiagnostics;
+data "C" DiagnosticDestination in LauncherDiagnostics;
+proc "C" write_diagnostic(handle destination:DiagnosticDestination in D, stage:u8, code:u32,
                           first_line:u64, first_column:u64, past_line:u64, past_column:u64,
                           related_line:u64, related_column:u64, os_error:u64) -> u8 where {owner D};
 
@@ -24,12 +25,22 @@ proc report_rejection(source:const SourceBytes in S, lines:const SourceLines in 
 }
 
 proc report_source_open_error(handle diagnostic:DiagnosticDestination in D, os_error:u64) -> void where {owner D} {
-    (write_diagnostic(diagnostic, 0u8, 0u8, 0u64, 0u64, 0u64, 0u64, 0u64, 0u64, os_error)):void;
+    (write_diagnostic(diagnostic, 0u8, 0u32, 0u64, 0u64, 0u64, 0u64, 0u64, 0u64, os_error)):void;
+    return;
+}
+
+proc report_native_error(handle diagnostic:DiagnosticDestination in D, stage:u8, code:u32) -> void where {owner D} {
+    (write_diagnostic(diagnostic, stage, code, 0u64, 0u64, 0u64, 0u64, 0u64, 0u64, 0u64)):void;
     return;
 }
 
 proc report_backend_error(handle diagnostic:DiagnosticDestination in D, code:u8) -> void where {owner D} {
-    (write_diagnostic(diagnostic, 6u8, code, 0u64, 0u64, 0u64, 0u64, 0u64, 0u64, 0u64)):void;
+    report_native_error(diagnostic, 6u8, code);
+    return;
+}
+
+proc report_scratch_error(handle diagnostic:DiagnosticDestination in D, code:u32) -> void where {owner D} {
+    report_native_error(diagnostic, 7u8, code);
     return;
 }
 
@@ -37,3 +48,4 @@ export DiagnosticDestination;
 export report_rejection;
 export report_source_open_error;
 export report_backend_error;
+export report_scratch_error;

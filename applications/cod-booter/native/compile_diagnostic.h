@@ -15,7 +15,7 @@ typedef struct {
 
 typedef struct {
     uint8_t stage;
-    uint8_t code;
+    uint32_t code;
     cod_booter_position first;
     cod_booter_position past;
     cod_booter_position related;

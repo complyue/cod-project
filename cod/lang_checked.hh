@@ -5458,6 +5458,8 @@ class ScalarChecker {
     if (declared.kind != Type::c_type_marker || constructed.kind != Type::c_type_marker)
       fail(expr.at, "owned handle acquisition requires a fieldless data \"C\" type");
     if (declared != constructed) fail(expr.at, "C handle constructor must match the declared owner type");
+    if (program_.schemas.at(constructed.identity).native_owner)
+      fail(expr.at, "borrow-only CType '" + constructed.name + "' cannot be acquired as an owned handle");
     const auto constructor = std::ranges::find(program_.native_constructors, constructed, &CheckedNativeConstructor::handle);
     if (constructor == program_.native_constructors.end()) fail(expr.at, "no C constructor declared for '" + constructed.name + "'");
     if (constructor->inputs.size() != expr.children.size()) fail(expr.at, "wrong number of C constructor arguments");
@@ -17870,6 +17872,12 @@ class ScalarChecker {
     if (!count) return;
     auto schemas = std::span(program_.schemas).subspan(first);
     for (auto &schema : schemas) {
+      if (schema.source->native_owner_type) {
+        const auto owner = resolve_type(*schema.source->native_owner_type);
+        if (owner.kind != Type::c_type_marker || program_.schemas.at(owner.identity).source->native_owner_type)
+          fail(schema.source->at, "a borrowed native handle requires a fieldless owning CType");
+        schema.native_owner = owner.identity;
+      }
       if (schema.source->parent_type && resolve_type(*schema.source->parent_type) != exception_type(0))
         implementation_gap(schema.source->at, "data conformance other than a checked exception with parent Exception");
       std::set<std::string> names;
@@ -17943,10 +17951,18 @@ class ScalarChecker {
            return c_failure_field(field.source->name);
          })))) implementation_gap(at, "C array loans outside the u64-indexed scalar and numeric record profile");
   }
+  void constrain_native_owner(std::map<std::string, size_t> &roles, const Parameter &parameter, const Type &type) const {
+    const auto owner = program_.schemas.at(type.identity).native_owner.value_or(type.identity);
+    const auto [known, inserted] = roles.try_emplace(parameter.owner, owner);
+    if (!inserted && known->second != owner)
+      fail(parameter.at, "native owner role '" + parameter.owner + "' requires one CType, found '" +
+           program_.schemas.at(known->second).source->name + "' and '" + program_.schemas.at(owner).source->name + "'");
+  }
   std::vector<CheckedNativeInput> checked_native_inputs(const Form &form, const std::string &boundary,
                                                         bool readonly_arrays = false) const {
     std::vector<CheckedNativeInput> inputs;
     std::set<std::string> names;
+    std::map<std::string, size_t> native_owners;
     for (const auto &parameter : form.parameters) {
       if (!names.insert(parameter.name).second) fail(parameter.at, "duplicate " + boundary + " parameter name");
       if (parameter.here || parameter.variadic || parameter.automatic_conversion)
@@ -17961,6 +17977,7 @@ class ScalarChecker {
           fail(parameter.at, "C borrow requires a declared owner");
         if (handle && type.kind != Type::c_type_marker)
           fail(parameter.at, "handle parameter requires a fieldless data \"C\" type");
+        if (handle) constrain_native_owner(native_owners, parameter, type);
         if (array) {
           if (!owner->read_only || !parameter.read_only)
             implementation_gap(parameter.at, "C operation array loans other than readonly views under a const owner");
@@ -17995,6 +18012,8 @@ class ScalarChecker {
       fail(form.at, "a C handle constructor requires a named, bodyless declaration without an explicit result or type parameters");
     if (std::ranges::any_of(program_.native_constructors, [&](const auto &existing) { return existing.handle == handle; }))
       implementation_gap(form.at, "multiple C constructor declarations for '" + handle.name + "'");
+    if (program_.schemas.at(handle.identity).native_owner)
+      implementation_gap(form.at, "constructors for attached native handle borrows");
     CheckedNativeConstructor constructor{&form, handle, checked_native_inputs(form, "C constructor"), {}};
     if (!form.throws_types.empty()) {
       const auto type = resolve_type(form.throws_types.front());
@@ -18036,6 +18055,8 @@ class ScalarChecker {
       implementation_gap(form.at, "C here provider requires one borrowed handle with an established owner");
     if (handle.read_only && !role.read_only)
       fail(handle.at, "a readonly native handle cannot establish a writable provider owner");
+    if (program_.schemas.at(type.identity).native_owner)
+      implementation_gap(handle.at, "native here operations supplied by an attached child handle");
     CheckedNativeOperation native;
     native.inputs.push_back({type, 0});
     auto &contract = native.contract;
@@ -18245,6 +18266,7 @@ class ScalarChecker {
         prepared.throws_types.push_back(resolved);
       }
       std::set<std::string> names;
+      std::map<std::string, size_t> native_owners;
       for (size_t i = 0; i < prepared.here.size(); ++i)
         if (!names.insert(form->parameters[i].name).second) fail(form->parameters[i].at, "duplicate parameter name");
       for (const auto &parameter : prepared.input_parameters()) {
@@ -18262,6 +18284,7 @@ class ScalarChecker {
           const auto owner = std::ranges::find(prepared.input_owners(), parameter.owner, &OwnerParameter::name);
           if (owner == prepared.input_owners().end() || owner->root || owner->explicit_parameter)
             fail(parameter.at, "native handle parameter requires a declared owner");
+          constrain_native_owner(native_owners, parameter, marker);
           prepared.parameters.push_back(native_handle_type(marker, false));
           continue;
         }

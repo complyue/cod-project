@@ -1,6 +1,7 @@
 using "std:exceptions" Exception;
 
-data "C" Path;
+data "C" LauncherPaths;
+data "C" Path in LauncherPaths;
 data "C" SourceRevision;
 data SourceOpenException <: Exception { os_error:u64; }
 

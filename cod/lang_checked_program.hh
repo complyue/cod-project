@@ -274,6 +274,7 @@ struct CheckedSchema {
   const Form *source;
   std::vector<Field> fields;
   bool bits;
+  std::optional<size_t> native_owner = {};
 };
 
 struct CheckedArray {
