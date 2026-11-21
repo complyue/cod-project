@@ -818,10 +818,6 @@ class LLVMEmission {
     for (unsigned word = 0; word < 2; ++word) b_.CreateStore(resource, b_.CreateStructGEP(pair, view, word));
     return view;
   }
-  llvm::Value *native_handle_argument(const CheckedOperation::NativeHandleLoan &loan) {
-    auto *address = binding_address(loan.binding, loan.place);
-    return loan.owned ? native_reborrow(b_.CreateLoad(b_.getInt64Ty(), address)) : address;
-  }
   llvm::Value *native_scalar_argument(const Expression &operand, const Type &type) {
     auto *value = emit_expression(operand);
     if (!reachable()) return nullptr;
@@ -832,26 +828,21 @@ class LLVMEmission {
     });
   }
   llvm::Value *emit_native_call(const Expression &expr) {
-    std::map<CheckedOperation::NativeCall, std::vector<size_t>> alternatives;
+    std::map<size_t, std::vector<size_t>> alternatives;
     for (size_t i = 0; i < contexts_.size(); ++i)
       alternatives[*contexts_[i].at(&expr).native_call].push_back(i);
-    return contextual_value(expr, alternatives, "native.call", [&](const auto &call) -> llvm::Value * {
-      const auto &native = program_->native_operations.at(call.operation);
+    return contextual_value(expr, alternatives, "native.call", [&](size_t id) -> llvm::Value * {
+      const auto &native = program_->native_operations.at(id);
       std::vector<llvm::Value *> arguments;
       std::vector<llvm::Type *> types;
       for (size_t i = 0; i < native.inputs.size(); ++i) {
         const auto &input = native.inputs[i];
         const auto &operand = *expr.children[i];
         llvm::Value *argument;
-        if (const auto &loan = call.loans.at(i)) {
-          argument = native_handle_argument(*loan);
-        } else if (input.type.kind == Type::c_type_marker) {
+        if (input.owner) {
           argument = emit_expression(operand, Projection::target);
           if (!reachable()) return nullptr;
-        } else if (input.type.kind == Type::array) {
-          argument = emit_expression(operand, Projection::target);
-          if (!reachable()) return nullptr;
-          argument = checked_address(argument, operand, operand.at);
+          if (input.type.kind == Type::array) argument = checked_address(argument, operand, operand.at);
         } else {
           argument = native_scalar_argument(operand, input.type);
           if (!reachable()) return nullptr;
@@ -1661,10 +1652,7 @@ class LLVMEmission {
     }
     for (size_t i = 0; i < constructor.inputs.size(); ++i) {
       const auto &input = constructor.inputs[i];
-      if (const auto &loan = plan.loans.at(i)) {
-        arguments.push_back(native_handle_argument(*loan));
-        types.push_back(b_.getPtrTy());
-      } else if (input.owner) {
+      if (input.owner) {
         auto *value = emit_expression(*expr.children[i], Projection::target);
         if (!reachable()) return false;
         arguments.push_back(value);
@@ -1736,7 +1724,7 @@ class LLVMEmission {
       plans[*contexts_[i].at(&expr).native_acquisition].push_back(i);
     return contextual_value(expr, plans, "native.attach", [&](const auto &plan) {
       return temporary_scope(expr.at, b_.getPtrTy(), [&]() -> llvm::Value * {
-        auto *owner = native_handle_argument(*plan.parent);
+        auto *owner = native_reborrow(load(storage_.at(*plan.parent_place)));
         auto *pair = native_handle_pair();
         auto *owner_word = b_.CreateLoad(b_.getInt64Ty(), b_.CreateStructGEP(pair, owner, 1));
         auto *child = slot(pair, "native.child.borrow");
@@ -2403,13 +2391,18 @@ class LLVMEmission {
     }
     case K::name: {
       if (projection == Projection::slot) return binding_slot(*fact.binding);
-      std::map<std::optional<size_t>, std::vector<size_t>> alternatives;
-      for (size_t i = 0; i < contexts_.size(); ++i) alternatives[contexts_[i].at(&expr).captured_place].push_back(i);
-      auto *address = contextual_value(expr, alternatives, "storage.address", [&](std::optional<size_t> captured) {
+      std::map<std::pair<std::optional<size_t>, bool>, std::vector<size_t>> alternatives;
+      for (size_t i = 0; i < contexts_.size(); ++i) {
+        const auto &selected = contexts_[i].at(&expr);
+        alternatives[{selected.captured_place, selected.reborrows_native_owner}].push_back(i);
+      }
+      auto *address = contextual_value(expr, alternatives, "storage.address", [&](const auto &plan) -> llvm::Value * {
+        const auto &[captured, reborrow] = plan;
         const auto &selected = contexts_.front().at(&expr);
         auto *address = binding_address(*selected.binding, selected.place);
         if (captured && !bindings_.at(*selected.binding).value_binding)
           address = b_.CreateSelect(b_.CreateICmpEQ(address, null_pointer()), null_pointer(), storage_.at(*captured));
+        if (reborrow) return native_reborrow(b_.CreateLoad(b_.getInt64Ty(), address));
         return address;
       }, b_.getPtrTy());
       return read ? load_place(checked_address(address, expr, expr.at), expr) : address;
