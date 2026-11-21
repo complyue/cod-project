@@ -1,0 +1,183 @@
+using "SourceStorage.cod" SourceBytes;
+using "ParserStorage.cod" {
+    ExprNodes, no_node, group_node, name_node, owned_type_node, typed_name_node,
+    make_named_node, field_access_node,
+};
+using "NameResolution.cod" {
+    NameBindings, NameWork, first_item, record_declaration, formal_binding, local_binding,
+    ordinary_selection, record_type, native_scalar,
+};
+using "ModuleExports.cod" { SelectedExports, same_name, record_export };
+using "ModuleExportStorage.cod" { ModuleInterfaces, find_interface, write_interface_header };
+
+export func type_module(names:const NameBindings in B, selected:const SelectedExports in E,
+                        marker:u64, current_module:u64) -> u64 where {const owner B, const owner E} {
+    if (names[marker].kind == ordinary_selection()) return selected[names[marker].declaration].origin_module;
+    return current_module;
+}
+
+export func type_identity(names:const NameBindings in B, selected:const SelectedExports in E,
+                          marker:u64) -> u64 where {const owner B, const owner E} {
+    val declaration <- names[marker].declaration;
+    if (names[marker].kind == ordinary_selection()) return selected[declaration].identity;
+    return declaration;
+}
+
+data DeclaredType {
+    kind:u8;
+    defining_module:u64;
+    identity:u64;
+}
+
+func describe_type(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
+                   annotation:u64, current_module:u64, result:DeclaredType in R) -> bool
+    where {const owner N, const owner B, const owner E, owner R} {
+    if (annotation == no_node()) return false;
+    val marker <- if (nodes[annotation].kind == owned_type_node()) { (nodes[annotation].left) } else { annotation };
+    val kind <- names[marker].kind;
+    if (native_scalar(kind)) {
+        result.kind <- kind;
+        result.defining_module <- 0u64;
+        result.identity <- 0u64;
+        return true;
+    } else {};
+    if (kind != record_type() && (kind != ordinary_selection() ||
+        selected[names[marker].declaration].kind != record_export())) return false;
+    result.kind <- record_type();
+    result.defining_module <- type_module(names, selected, marker, current_module);
+    result.identity <- type_identity(names, selected, marker);
+    return true;
+}
+
+func local_member_type(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B,
+                       selected:const SelectedExports in E, work:const NameWork in W, name:u64, result:DeclaredType in R) -> bool
+    where {const owner S, const owner N, const owner B, const owner E, const owner W, owner R} {
+    val field <- first_item(nodes, nodes[result.identity].right);
+    val binding <- no_node();
+    val spelling <- no_node();
+    for (unused in 0u64 .. intrinsic (len)(nodes)) {
+        if (field == no_node()) return false;
+        binding <- nodes[field].right;
+        spelling <- nodes[binding].left;
+        if (same_name(source, nodes[name].first, nodes[name].past, source, nodes[spelling].first, nodes[spelling].past)) {
+            return describe_type(nodes, names, selected, nodes[binding].right, 0u64, result);
+        } else {};
+        field <- work[field].next;
+    };
+    return false;
+}
+
+func imported_member_type(source:const SourceBytes in S, nodes:const ExprNodes in N, spellings:const SourceBytes in P,
+                          interfaces:const ModuleInterfaces in I, name:u64, result:DeclaredType in R) -> bool
+    where {const owner S, const owner N, const owner P, const owner I, owner R} {
+    val head <- find_interface(interfaces, result.defining_module, result.identity);
+    if (head == no_node() || interfaces[head].interface_kind != record_type()) return false;
+    val first <- nodes[name].first;
+    val past <- nodes[name].past;
+    for (row in head + 1u64 .. head + 1u64 + interfaces[head].entry_count) {
+        if (same_name(source, first, past, spellings, interfaces[row].name_first, interfaces[row].name_past)) {
+            result.kind <- interfaces[row].value_kind;
+            result.defining_module <- interfaces[row].type_module;
+            result.identity <- interfaces[row].type_identity;
+            return true;
+        } else {};
+    };
+    return false;
+}
+
+# Follow only syntax and bound declarations here. The result carries the
+# nominal type, with no claim about target readiness or a readable loan.
+func trace_type(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B,
+                selected:const SelectedExports in E, work:const NameWork in W,
+                spellings:const SourceBytes in P, interfaces:const ModuleInterfaces in I,
+                at:u64, result:DeclaredType in R) -> bool
+    where {const owner S, const owner N, const owner B, const owner E, const owner W, const owner P, const owner I, owner R} {
+    val kind <- nodes[at].kind;
+    if (kind == make_named_node())
+        return describe_type(nodes, names, selected, nodes[at].left, 0u64, result);
+    if (kind == group_node())
+        return trace_type(source, nodes, names, selected, work, spellings, interfaces, nodes[at].left, result);
+    if (kind == field_access_node()) {
+        if (!trace_type(source, nodes, names, selected, work, spellings, interfaces, nodes[at].left, result) ||
+            result.kind != record_type()) return false;
+        if (result.defining_module == 0u64)
+            return local_member_type(source, nodes, names, selected, work, nodes[at].right, result);
+        return imported_member_type(source, nodes, spellings, interfaces, nodes[at].right, result);
+    } else {};
+    if (kind != name_node()) return false;
+    val binding <- names[at].kind;
+    val declaration <- names[at].declaration;
+    if (binding == formal_binding()) {
+        val formal <- nodes[declaration].right;
+        if (formal == no_node() || nodes[formal].kind != typed_name_node()) return false;
+        return describe_type(nodes, names, selected, nodes[formal].right, 0u64, result);
+    } else {};
+    if (binding != local_binding()) return false;
+    val local <- nodes[declaration].left;
+    if (nodes[local].kind == typed_name_node())
+        return describe_type(nodes, names, selected, nodes[local].right, 0u64, result);
+    val initializer <- nodes[declaration].right;
+    if (initializer == no_node() || initializer >= at) return false;
+    return trace_type(source, nodes, names, selected, work, spellings, interfaces, initializer, result);
+}
+
+export func prepare_projection_types(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B,
+                                     selected:const SelectedExports in E, work:NameWork in W,
+                                     spellings:const SourceBytes in P, interfaces:const ModuleInterfaces in I, used:u64)
+    where {const owner S, const owner N, const owner B, const owner E, owner W, const owner P, const owner I} {
+    ref result = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64; };
+    for (at in 0u64 .. used) {
+        if (nodes[at].kind == field_access_node() &&
+            trace_type(source, nodes, names, selected, work, spellings, interfaces, at, result) &&
+            native_scalar(result.kind)) {
+            (work[at].value_kind <- result.kind):void;
+        } else {};
+    };
+}
+
+func stage_record(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
+                  work:const NameWork in W, record:u64, defining_module:u64, count:u64, interfaces:ModuleInterfaces in I)
+    -> u64 where {const owner N, const owner B, const owner E, const owner W, owner I} {
+    val limit <- intrinsic (len)(interfaces);
+    if (count >= limit) return no_node();
+    val field <- first_item(nodes, nodes[record].right);
+    val next <- count + 1u64;
+    val binding <- no_node();
+    val spelling <- no_node();
+    ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64; };
+    for (unused in 0u64 .. intrinsic (len)(nodes)) {
+        if (field == no_node()) {
+            write_interface_header(interfaces[count], defining_module, record, record_type(), 0u8, next - count - 1u64);
+            return next;
+        } else {};
+        binding <- nodes[field].right;
+        spelling <- nodes[binding].left;
+        if (next >= limit || !describe_type(nodes, names, selected, nodes[binding].right, defining_module, type))
+            return no_node();
+        write_interface_header(interfaces[next], 0u64, 0u64, 0u8, 0u8, 0u64);
+        interfaces[next].value_kind <- type.kind;
+        interfaces[next].type_module <- type.defining_module;
+        interfaces[next].type_identity <- type.identity;
+        interfaces[next].name_first <- nodes[spelling].first;
+        interfaces[next].name_past <- nodes[spelling].past;
+        field <- work[field].next;
+        next <- next + 1u64;
+    };
+    return no_node();
+}
+
+# Member shape is available by an already resolved type identity. Publishing
+# it here does not introduce the record or its fields into module name lookup.
+export func publish_record_interfaces(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
+                                      work:const NameWork in W, used:u64, defining_module:u64, start:u64,
+                                      interfaces:ModuleInterfaces in I) -> u64
+    where {const owner N, const owner B, const owner E, const owner W, owner I} {
+    val count <- start;
+    for (at in 0u64 .. used) {
+        if (record_declaration(nodes[at].kind)) {
+            count <- stage_record(nodes, names, selected, work, at, defining_module, count, interfaces);
+            if (count == no_node()) return count;
+        } else {};
+    };
+    return count;
+}

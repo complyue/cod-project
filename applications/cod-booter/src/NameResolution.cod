@@ -36,7 +36,7 @@ export array NameBindings[u64]:NameBinding;
 export data NameWorkSlot {
     active:u64;
     next:u64;
-    call_result:u8;
+    value_kind:u8;
     expects_here:u8;
 }
 export array NameWork[u64]:NameWorkSlot;
