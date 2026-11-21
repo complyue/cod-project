@@ -23,6 +23,7 @@ using "ParserStorage.cod" integer_arithmetic;
 using "ParserStorage.cod" is_transfer;
 using "ParserStorage.cod" make_named_node;
 using "ParserStorage.cod" construction_body;
+using "ParserStorage.cod" reserves_storage;
 using "ParserStorage.cod" call_node;
 using "ParserStorage.cod" behave_node;
 using "ParserStorage.cod" deferred_call_node;
@@ -91,6 +92,7 @@ using "NativeCommands.cod" call_category;
 using "NativeCommands.cod" call_site;
 using "NativeCommands.cod" arithmetic_fault;
 using "NativeCommands.cod" slot;
+using "NativeCommands.cod" reservation_tag;
 
 data LoweringState {
     active_function:u64;
@@ -129,6 +131,12 @@ func command(ref code:NativeCommands in C, ref plan:NativePlan in P, opcode:u8,
 func emit(ref code:NativeCommands in C, ref plan:NativePlan in P, opcode:u8, a:u64, b:u64) -> void
     where {owner C, owner P} {
     command(code, plan, opcode, a, b, 0u64, 0u64);
+}
+
+func storage_operation(ref code:NativeCommands in C, ref plan:NativePlan in P, opcode:u8, a:u64, b:u64,
+                       reservation:u64, at:u64) -> void where {owner C, owner P} {
+    val tag <- reservation_tag(reservation);
+    command(code, plan, opcode, a, b, tag, if (tag == 0u64) { 0u64 } else { at });
 }
 
 func new_block(ref plan:NativePlan in P) -> u64 where {owner P} {
@@ -259,7 +267,9 @@ func lower_completed_bits(nodes:const ExprNodes in N, names:const NameBindings i
     lower_node(nodes, names, links, facts, sites, code, plan, state, at);
     if (!state.live || facts[at].reception == independent_value()) { return; } else {};
     require_target(nodes, facts, sites, code, plan, state, at);
-    if (state.live) { emit(code, plan, load_target(), slot(at), slot(at)); } else {};
+    if (state.live) {
+        storage_operation(code, plan, load_target(), slot(at), slot(at), facts[at].reservation, at);
+    } else {};
 }
 
 func lower_bits(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
@@ -285,10 +295,13 @@ func prepare_arguments(nodes:const ExprNodes in N, names:const NameBindings in B
         actual <- nodes[argument].right;
         if (facts[argument].reception == independent_value()) {
             lower_bits(nodes, names, links, facts, sites, code, plan, state, actual);
+            if (state.live) { emit(code, plan, copy_word(), slot(argument), slot(actual)); } else {};
         } else {
             lower_node(nodes, names, links, facts, sites, code, plan, state, actual);
+            if (state.live) {
+                storage_operation(code, plan, copy_word(), slot(argument), slot(actual), facts[actual].reservation, actual);
+            } else {};
         };
-        if (state.live) { emit(code, plan, copy_word(), slot(argument), slot(actual)); } else {};
         (argument <- links[argument].next):void;
     };
 }
@@ -348,7 +361,7 @@ func lower_binary(nodes:const ExprNodes in N, names:const NameBindings in B, lin
     lower_bits(nodes, names, links, facts, sites, code, plan, state, right);
     if (!state.live) { return; } else {};
     if (transfer) {
-        emit(code, plan, store_target(), slot(left), slot(right));
+        storage_operation(code, plan, store_target(), slot(left), slot(right), facts[left].reservation, left);
         emit(code, plan, copy_word(), slot(at), slot(left));
         return;
     } else {};
@@ -420,10 +433,12 @@ func lower_list(nodes:const ExprNodes in N, names:const NameBindings in B, links
     where {const owner N, const owner B, const owner L, const owner F, const owner S, owner C, owner P, owner R} {
     val item <- first_item(nodes, tail);
     val expression <- no_node();
+    val discarded_reservation <- false;
     for (unused in 0u64 .. syntax_len(nodes)) {
         if (item == no_node() || !state.live || plan.diagnostic != 0u8) { return; } else {};
         expression <- nodes[item].right;
-        if (scalar_kind(facts[item].kind) && facts[item].discarded_result == 0u8) {
+        discarded_reservation <- reserves_storage(nodes, expression) && (item != tail || destination == no_node());
+        if (!discarded_reservation && scalar_kind(facts[item].kind) && facts[item].discarded_result == 0u8) {
             if (facts[item].arm_result != 0u8 && !(read_result && item == tail)) {
                 lower_node(nodes, names, links, facts, sites, code, plan, state, expression);
             } else {
@@ -595,6 +610,10 @@ func lower_binding(nodes:const ExprNodes in N, names:const NameBindings in B, li
     where {const owner N, const owner B, const owner L, const owner F, const owner S, owner C, owner P, owner R} {
     val initializer <- nodes[at].right;
     if (nodes[at].kind == val_binding_node()) {
+        if (reserves_storage(nodes, initializer)) {
+            storage_operation(code, plan, place_address(), slot(initializer), slot(at), initializer, initializer);
+            return;
+        } else {};
         lower_bits(nodes, names, links, facts, sites, code, plan, state, initializer);
     } else {
         lower_node(nodes, names, links, facts, sites, code, plan, state, initializer);
@@ -607,10 +626,14 @@ func lower_construction(nodes:const ExprNodes in N, names:const NameBindings in 
                         ref plan:NativePlan in P, ref state:LoweringState in R, at:u64) -> void
     where {const owner N, const owner B, const owner L, const owner F, const owner S, owner C, owner P, owner R} {
     val body <- construction_body(nodes, at);
-    lower_bits(nodes, names, links, facts, sites, code, plan, state, body);
-    if (!state.live) { return; } else {};
     # The payload row supplies storage indexed separately from the result address.
     val storage <- slot(nodes[at].right);
+    if (body == no_node()) {
+        storage_operation(code, plan, place_address(), slot(at), storage, at, at);
+        return;
+    } else {};
+    lower_bits(nodes, names, links, facts, sites, code, plan, state, body);
+    if (!state.live) { return; } else {};
     emit(code, plan, copy_word(), storage, slot(body));
     emit(code, plan, place_address(), slot(at), storage);
 }
@@ -669,7 +692,8 @@ func lower_expression(nodes:const ExprNodes in N, names:const NameBindings in B,
     if (kind == group_node()) {
         val inside <- nodes[at].left;
         val used <- scalar_kind(facts[at].kind) && facts[at].discarded_result == 0u8;
-        if (used && facts[at].reception != nullable_ptr()) {
+        val projects_reservation <- facts[inside].reservation != no_node();
+        if ((used || projects_reservation) && facts[at].reception != nullable_ptr()) {
             lower_bits(nodes, names, links, facts, sites, code, plan, state, inside);
         } else {
             lower_node(nodes, names, links, facts, sites, code, plan, state, inside);

@@ -1,3 +1,5 @@
+using "ParserStorage.cod" no_node;
+
 # Compiler-private commands for constructing LLVM functions and basic blocks.
 # Each declaration has one activation body. Declarations let later-built
 # bodies refer to one another.
@@ -56,6 +58,17 @@ func call_site() -> u64 { return 4u64; }
 func arithmetic_fault() -> u64 { return 5u64; }
 func slot(node:u64) -> u64 { return node + 6u64; }
 
+# Before native verification, selected address, store, load and copy rows
+# can carry a reservation index plus one in c and the source node in d.
+# Initialization checking consumes those fields before the provider sees them.
+func reservation_tag(reservation:u64) -> u64 {
+    return if (reservation == no_node()) { 0u64 } else { reservation + 1u64 };
+}
+
+func initialization_access(opcode:u8) -> bool {
+    return opcode == place_address() || opcode == store_target() || opcode == load_target() || opcode == copy_word();
+}
+
 export NativeCommand;
 export NativeCommands;
 export NativePlan;
@@ -89,3 +102,5 @@ export call_category;
 export call_site;
 export arithmetic_fault;
 export slot;
+export reservation_tag;
+export initialization_access;

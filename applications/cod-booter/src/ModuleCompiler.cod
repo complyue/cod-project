@@ -11,9 +11,13 @@ using "OperandChecking.cod" CallOwners;
 using "CompletionChecking.cod" CompletionSites;
 using "ModuleFrontend.cod" ModuleBindingResult;
 using "ModuleFrontend.cod" analyze_module_completion;
+using "ModuleFrontend.cod" binding_diagnostic;
+using "ModuleFrontend.cod" module_completion_failed;
 using "NativeCommands.cod" NativeCommands;
 using "NativeCommands.cod" NativePlan;
 using "ModuleLowering.cod" lower_native_module;
+using "InitializationChecking.cod" InitializationResult;
+using "InitializationChecking.cod" check_native_initialization;
 
 # The mapped revision and all working buffers remain live through lowering.
 # Only successful completion publishes commands for native construction.
@@ -32,7 +36,13 @@ func compile_module_commands(source:const SourceBytes in S, ref tokens:Tokens in
     plan.node <- no_node();
     if (!analyze_module_completion(source, tokens, nodes, spellings, exports, selected, bindings,
                                    work, facts, owners, sites, report)) { return false; } else {};
-    return lower_native_module(nodes, report.frontend.tree, bindings, work, facts, sites, commands, plan);
+    if (!lower_native_module(nodes, report.frontend.tree, bindings, work, facts, sites, commands, plan)) { return false; } else {};
+    ref initialization = make InitializationResult { diagnostic <- 0u8; node <- no_node(); };
+    if (!check_native_initialization(commands, plan, initialization)) {
+        binding_diagnostic(nodes, report, module_completion_failed(), initialization.diagnostic, initialization.node);
+        return false;
+    } else {};
+    return true;
 }
 
 export compile_module_commands;

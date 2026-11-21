@@ -91,6 +91,8 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: this module declaration is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 5 && diagnostic->code == 12)
         fputs(": error: ref argument requires a proven non-null target\n", stderr);
+    else if (diagnostic->stage == 5 && diagnostic->code == 13)
+        fputs(": error: target must be initialized before this read or borrow\n", stderr);
     else if (diagnostic->stage == 2 && diagnostic->code == module_cycle_unproved)
         fputs(": error: cyclic module construction remains unproved\n", stderr);
     else if (diagnostic->stage == 2 && diagnostic->code == module_dependency_rejected)

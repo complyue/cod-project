@@ -12,6 +12,7 @@ using "ParserStorage.cod" ref_result_node;
 using "ParserStorage.cod" make_exception_node;
 using "ParserStorage.cod" make_named_node;
 using "ParserStorage.cod" construction_body;
+using "ParserStorage.cod" reserves_storage;
 using "ParserStorage.cod" construction_type_query_node;
 using "ParserStorage.cod" name_node;
 using "ParserStorage.cod" literal_node;
@@ -95,7 +96,7 @@ func first_extended_declaration(nodes:const ExprNodes in N, work:const NameWork 
 }
 
 func supported_construction_shape(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
-    if (construction_body(nodes, at) == no_node()) { return false; } else {};
+    if (construction_body(nodes, at) == no_node() && !reserves_storage(nodes, at)) { return false; } else {};
     val requested <- nodes[at].left;
     if (nodes[requested].kind != construction_type_query_node()) { return true; } else {};
     val subject <- nodes[nodes[requested].left].kind;
@@ -251,5 +252,6 @@ export module_binding_failed;
 export module_operands_failed;
 export analyze_module_operands;
 export module_completion_failed;
+export binding_diagnostic;
 export rejected_unsupported_declaration;
 export analyze_module_completion;
