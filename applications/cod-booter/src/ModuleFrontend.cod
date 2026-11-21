@@ -10,8 +10,6 @@ using "ParserStorage.cod" field_access_node;
 using "ParserStorage.cod" readonly_ref_parameter_node;
 using "ParserStorage.cod" owner_clause_node;
 using "ParserStorage.cod" catch_binding_node;
-using "ParserStorage.cod" borrowed_catch;
-using "ParserStorage.cod" explicit_owning_catch;
 using "SourceStorage.cod" SourceBytes;
 using "ParserStorage.cod" Tokens;
 using "ParserStorage.cod" ExprNodes;
@@ -100,11 +98,8 @@ func unsupported_source_form(nodes:const ExprNodes in N, at:u64) -> u8 where {co
     if (kind == readonly_ref_parameter_node() || (kind == owner_clause_node() && nodes[at].number == 2u64)) {
         return 39u8;
     } else {};
-    if (kind == catch_binding_node()) {
-        val mode <- nodes[at].number;
-        if (mode >= borrowed_catch()) { return 32u8; } else {};
-        if (mode >= explicit_owning_catch()) { return 31u8; } else {};
-        if (mode == 0u64 && nodes[at].right != no_node()) { return 36u8; } else {};
+    if (kind == catch_binding_node() && nodes[at].number == 0u64 && nodes[at].right != no_node()) {
+        return 36u8;
     } else {};
     return 0u8;
 }

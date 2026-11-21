@@ -50,8 +50,6 @@ static const char *unsupported_source_form(uint32_t code) {
     case 28: return "owning exception local";
     case 29: return "owning exception parameter";
     case 30: return "owning exception result";
-    case 31: return "explicit owning exception catch";
-    case 32: return "explicit borrowed exception catch";
     case 33: return "owning make exception expression";
     case 34: return "borrowed reference local";
     case 35: return "borrowed reference result";

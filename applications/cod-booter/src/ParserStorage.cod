@@ -117,8 +117,6 @@ func discarded_guard_result() -> u64 { return 1u64; }
 func procedure_definition() -> u64 { return 0u64; }
 func function_definition() -> u64 { return 1u64; }
 func readonly_declaration() -> u64 { return 1u64; }
-func explicit_owning_catch() -> u64 { return 2u64; }
-func borrowed_catch() -> u64 { return 4u64; }
 func no_node() -> u64 { return 18446744073709551615u64; }
 
 func is_function(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
@@ -224,8 +222,6 @@ export field_initializer_node;
 export capacity_placement_node;
 export cause_placement_node;
 export named_argument_node;
-export explicit_owning_catch;
-export borrowed_catch;
 export field_access_node;
 export readonly_ref_parameter_node;
 export bodyless_defer_node;
