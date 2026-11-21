@@ -117,6 +117,41 @@ func func_word(source:const SourceBytes in S, token:const Token in T) -> bool
         source[first + 2u64] == 110u8 && source[first + 3u64] == 99u8; # n c
 }
 
+func data_word(source:const SourceBytes in S, token:const Token in T) -> bool
+    where {const owner S, const owner T} {
+    val first <- token.first;
+    return identifier_width(token, 4u64) && source[first] == 100u8 && source[first + 1u64] == 97u8 &&
+        source[first + 2u64] == 116u8 && source[first + 3u64] == 97u8; # d a t a
+}
+
+func export_word(source:const SourceBytes in S, token:const Token in T) -> bool
+    where {const owner S, const owner T} {
+    val first <- token.first;
+    return identifier_width(token, 6u64) && source[first] == 101u8 && source[first + 1u64] == 120u8 &&
+        source[first + 2u64] == 112u8 && source[first + 3u64] == 111u8 &&
+        source[first + 4u64] == 114u8 && source[first + 5u64] == 116u8; # e x p o r t
+}
+
+func handle_word(source:const SourceBytes in S, token:const Token in T) -> bool
+    where {const owner S, const owner T} {
+    val first <- token.first;
+    return identifier_width(token, 6u64) && source[first] == 104u8 && source[first + 1u64] == 97u8 &&
+        source[first + 2u64] == 110u8 && source[first + 3u64] == 100u8 &&
+        source[first + 4u64] == 108u8 && source[first + 5u64] == 101u8; # h a n d l e
+}
+
+func here_word(source:const SourceBytes in S, token:const Token in T) -> bool
+    where {const owner S, const owner T} {
+    val first <- token.first;
+    return identifier_width(token, 4u64) && source[first] == 104u8 && source[first + 1u64] == 101u8 &&
+        source[first + 2u64] == 114u8 && source[first + 3u64] == 101u8; # h e r e
+}
+
+func c_linkage(source:const SourceBytes in S, token:const Token in T) -> bool
+    where {const owner S, const owner T} {
+    return token.kind == module_path() && token.past - token.first == 3u64 && source[token.first + 1u64] == 67u8; # "C"
+}
+
 func if_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
     return identifier_width(token, 2u64) && source[token.first] == 105u8 && source[token.first + 1u64] == 102u8;
@@ -479,6 +514,11 @@ export using_word;
 export symbol_word;
 export proc_word;
 export func_word;
+export data_word;
+export export_word;
+export handle_word;
+export here_word;
+export c_linkage;
 export if_word;
 export else_word;
 export true_word;

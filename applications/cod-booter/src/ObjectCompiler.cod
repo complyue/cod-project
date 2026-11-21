@@ -32,6 +32,7 @@ using "OperandChecking.cod" CallOwners;
 using "CompletionChecking.cod" CompletionSites;
 using "ModuleFrontend.cod" ModuleBindingResult;
 using "ModuleFrontend.cod" module_read_failed;
+using "ModuleFrontend.cod" rejected_unsupported_declaration;
 using "ModuleCompiler.cod" compile_module_commands;
 using "NativeCommands.cod" NativeCommands;
 using "NativeCommands.cod" NativePlan;
@@ -102,6 +103,7 @@ proc lower_object(source:const SourceBytes in S, lines:const SourceLines in S,
                         else { analysis.diagnostic };
             report_rejection(source, lines, diagnostic, analysis.stage, code, analysis.frontend.diagnostic_first,
                              analysis.frontend.diagnostic_past, analysis.related_first);
+            if (rejected_unsupported_declaration(analysis)) { return native_form_unsupported(); } else {};
             return native_source_rejected();
         } else {};
         val first <- no_node();

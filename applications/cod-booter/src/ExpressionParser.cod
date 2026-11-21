@@ -29,6 +29,7 @@ using "ParserStorage.cod" behave_node;
 using "ParserStorage.cod" throw_node;
 using "ParserStorage.cod" transfer_node;
 using "ParserStorage.cod" typed_name_node;
+using "ParserStorage.cod" readonly_declaration;
 using "ParserStorage.cod" val_binding_node;
 using "ParserStorage.cod" ptr_binding_node;
 using "ParserStorage.cod" null_node;
@@ -473,7 +474,7 @@ func parse_completion(source:const SourceBytes in S, tokens:const Tokens in T,
 
 func parse_binding_name(source:const SourceBytes in S, tokens:const Tokens in T,
                         ref nodes:ExprNodes in A, ref result:ParseResult in R,
-                        past:u64, require_type:bool) -> bool
+                        past:u64, require_type:bool, qualified:bool) -> bool
     where {const owner S, const owner T, owner A, owner R} {
     if (!parse_identifier(source, tokens, nodes, result, past, expected_name())) { return false; } else {};
     if (punct_at(source, tokens, result.next, past) != 58u8) { # ':'
@@ -483,6 +484,8 @@ func parse_binding_name(source:const SourceBytes in S, tokens:const Tokens in T,
     val name <- result.root;
     val colon <- tokens[result.next].first;
     result.next <- result.next + 1u64;
+    val readonly <- qualified && result.next < past && const_word(source, tokens[result.next]);
+    if (readonly) { (result.next <- result.next + 1u64):void; } else {};
     if (!parse_identifier(source, tokens, nodes, result, past, expected_type())) { return false; } else {};
     val annotation <- result.root;
     if (result.next < past && in_word(source, tokens[result.next])) {
@@ -496,7 +499,7 @@ func parse_binding_name(source:const SourceBytes in S, tokens:const Tokens in T,
         (annotation <- result.root):void;
     } else {};
     append_node(nodes, result, typed_name_node(), nodes[name].first, nodes[annotation].past,
-                0u64, name, annotation, colon);
+                if (readonly) { readonly_declaration() } else { 0u64 }, name, annotation, colon);
     return result.diagnostic == 0u8;
 }
 
@@ -506,7 +509,7 @@ func parse_local_binding(source:const SourceBytes in S, tokens:const Tokens in T
     where {const owner S, const owner T, owner A, owner R} {
     val first <- tokens[result.next].first;
     result.next <- result.next + 1u64;
-    if (!parse_binding_name(source, tokens, nodes, result, past, pointer)) { return; } else {};
+    if (!parse_binding_name(source, tokens, nodes, result, past, pointer, false)) { return; } else {};
     val binding <- result.root;
     val assignment <- result.next;
     val valid <- if (pointer) {
