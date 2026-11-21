@@ -15,6 +15,8 @@ using "ParserStorage.cod" {
     owned_type_node, discarded_guard_result, discard_node, bool_node, conditional_node, range_node,
     range_header_node, logical_not_node, logical_and_node, logical_or_node, compare_node,
     equal_words, unequal_words, less_words, at_most_words, greater_words, at_least_words, no_node, type_assertion_node,
+    case_node, case_arm_node, case_fallthrough_node, case_failure_node, case_pattern_node,
+    case_member_pattern, case_false_pattern, case_true_pattern, case_null_pattern,
 };
 using "Lexer.cod" {
     exception_word, own_word, handle_word, ref_word, make_word, typeof_word, from_word,
@@ -22,7 +24,7 @@ using "Lexer.cod" {
     func_word, region_word, capacity_word, identifier, integer_literal, punctuation, defer_word,
     catch_word, finally_word, try_word, const_word, behave_word, throw_word, symbol_name, in_word,
     ptr_word, val_word, null_word, return_word, void_word, if_word, for_word, continue_word,
-    break_word, else_word, true_word, false_word, not_word,
+    break_word, else_word, true_word, false_word, not_word, case_word, of_word, fallthrough_word,
 };
 using "SourceStorage.cod" { SourceBytes, Token };
 
@@ -32,6 +34,7 @@ export data ParseResult {
     root:u64;
     diagnostic:u8;
     supplied_here:bool;
+    case_control:bool;
 }
 
 func expected_operand() -> u8 { return 1u8; }
@@ -64,6 +67,10 @@ func expected_here_receiver() -> u8 { return 39u8; }
 func duplicate_here_body() -> u8 { return 40u8; }
 func expected_index_close() -> u8 { return 42u8; }
 func expected_array_length_query() -> u8 { return 43u8; }
+func expected_case_of() -> u8 { return 46u8; }
+func expected_case_arrow() -> u8 { return 47u8; }
+func unsupported_case_pattern() -> u8 { return 48u8; }
+func invalid_throwing_case_arm() -> u8 { return 49u8; }
 
 export func punct_at(source:const SourceBytes in S, tokens:const Tokens in T,
                      at:u64, past:u64) -> u8 where {const owner S, const owner T} {
@@ -213,13 +220,17 @@ func parse_defer(source:const SourceBytes in S, tokens:const Tokens in T,
 # Each block item links its preceding item and its own expression.
 func parse_block_item(source:const SourceBytes in S, tokens:const Tokens in T,
                       nodes:ExprNodes in A, result:ParseResult in R,
-                      past:u64, previous:u64, initializer:bool) -> bool
+                      past:u64, previous:u64, initializer:bool, case_arm:bool) -> bool
     where {const owner S, const owner T, owner A, owner R} {
     val label <- if (initializer) { initializer_label(source, tokens, result.next, past) } else { no_node() };
-    if (label == no_node()) {
-        parse_expression_at(source, tokens, nodes, result, past, 1u8);
+    if (case_arm) {
+        parse_case_arm(source, tokens, nodes, result, past);
     } else {
-        parse_initializer_assignment(source, tokens, nodes, result, past, label);
+        if (label == no_node()) {
+            parse_expression_at(source, tokens, nodes, result, past, 1u8);
+        } else {
+            parse_initializer_assignment(source, tokens, nodes, result, past, label);
+        };
     };
     if (result.diagnostic != 0u8) return false;
     val expression <- result.root;
@@ -279,7 +290,7 @@ func parse_braced_items(source:const SourceBytes in S, tokens:const Tokens in T,
             return;
         } else {};
         if (result.next >= past) { result.diagnostic <- expected_block_close(); return; } else {};
-        if (!parse_block_item(source, tokens, nodes, result, past, last, initializer)) return;
+        if (!parse_block_item(source, tokens, nodes, result, past, last, initializer, false)) return;
         last <- result.root;
     };
     (result.diagnostic <- expected_block_close()):void;
@@ -780,6 +791,132 @@ func parse_array_length(source:const SourceBytes in S, tokens:const Tokens in T,
     if (result.diagnostic == 0u8) { (result.next <- close + 1u64):void; } else {};
 }
 
+# A grouped expression or a call can also start with '('. Only the direct
+# case-arm delimiter selects the arm grammar.
+func starts_case_arm(source:const SourceBytes in S, tokens:const Tokens in T, first:u64, past:u64) -> bool
+    where {const owner S, const owner T} {
+    if (punct_at(source, tokens, first, past) != 40u8) return false; # '('
+    val depth <- 0u64;
+    val delimiter <- 0u8;
+    val following <- first;
+    for (at in first .. past) {
+        delimiter <- punct_at(source, tokens, at, past);
+        if (delimiter == 40u8) { (depth <- depth + 1u64):void; } else {};
+        if (delimiter == 41u8) {
+            depth <- depth - 1u64;
+            if (depth == 0u64) {
+                following <- at + 1u64;
+                if (punct_at(source, tokens, following, past) == 124u8) return true; # '|'
+                return punct_pair_at(source, tokens, following, past, 45u8, 62u8) &&
+                    (punct_at(source, tokens, following + 1u64, past) == 123u8 ||
+                     (following + 1u64 < past && throw_word(source, tokens[following + 1u64])));
+            } else {};
+        } else {};
+    };
+    return false;
+}
+
+func pattern_kind(source:const SourceBytes in S, token:const Token in T) -> u64
+    where {const owner S, const owner T} {
+    if (true_word(source, token)) return case_true_pattern();
+    if (false_word(source, token)) return case_false_pattern();
+    if (null_word(source, token)) return case_null_pattern();
+    return case_member_pattern();
+}
+
+func parse_case_arm(source:const SourceBytes in S, tokens:const Tokens in T, nodes:ExprNodes in A,
+                    result:ParseResult in R, past:u64) -> void
+    where {const owner S, const owner T, owner A, owner R} {
+    val first <- tokens[result.next].first;
+    val at <- result.next + 1u64;
+    result.next <- at;
+    val pattern <- no_node();
+    if (punct_at(source, tokens, at, past) != 41u8) {
+        if (at >= past || tokens[at].kind != identifier() || punct_at(source, tokens, at + 1u64, past) != 41u8) {
+            result.diagnostic <- unsupported_case_pattern();
+            return;
+        } else {};
+        if (tokens[at].past - tokens[at].first != 1u64 || source[tokens[at].first] != 95u8) { # '_'
+            append_node(nodes, result, case_pattern_node(), tokens[at].first, tokens[at].past,
+                        pattern_kind(source, tokens[at]), no_node(), no_node(), tokens[at].first);
+            if (result.diagnostic != 0u8) return;
+            (pattern <- result.root):void;
+        } else {};
+        (result.next <- at + 1u64):void;
+    } else {};
+    result.next <- result.next + 1u64;
+    val guard <- no_node();
+    if (punct_at(source, tokens, result.next, past) == 124u8) {
+        result.next <- result.next + 1u64;
+        if (!punct_pair_at(source, tokens, result.next, past, 45u8, 62u8)) {
+            parse_expression_at(source, tokens, nodes, result, past, 1u8);
+            if (result.diagnostic != 0u8) return;
+            (guard <- result.root):void;
+        } else {};
+    } else {};
+    val arrow <- result.next;
+    if (!punct_pair_at(source, tokens, arrow, past, 45u8, 62u8)) {
+        result.diagnostic <- expected_case_arrow();
+        return;
+    } else {};
+    val body_at <- arrow + 1u64;
+    result.next <- body_at;
+    if (body_at < past && throw_word(source, tokens[body_at])) {
+        if (pattern != no_node() || guard != no_node()) {
+            result.diagnostic <- invalid_throwing_case_arm();
+            return;
+        } else {};
+        append_node(nodes, result, case_failure_node(), tokens[body_at].first, tokens[body_at].past,
+                    0u64, no_node(), no_node(), tokens[body_at].first);
+        if (result.diagnostic != 0u8) return;
+        (result.next <- body_at + 1u64):void;
+    } else { parse_block(source, tokens, nodes, result, past); };
+    if (result.diagnostic != 0u8) return;
+    val body <- result.root;
+    append_node(nodes, result, case_arm_node(), first, nodes[body].past, guard, pattern, body, tokens[arrow].first);
+}
+
+func parse_case_items(source:const SourceBytes in S, tokens:const Tokens in T, nodes:ExprNodes in A,
+                      result:ParseResult in R, past:u64, subject:u64, first:u64) -> void
+    where {const owner S, const owner T, owner A, owner R} {
+    val open <- result.next;
+    if (punct_at(source, tokens, open, past) != 123u8) { result.diagnostic <- expected_block(); return; } else {};
+    val last <- no_node();
+    val close <- open;
+    val arm <- false;
+    result.next <- open + 1u64;
+    for (unused in result.next .. past + 1u64) {
+        close <- result.next;
+        if (punct_at(source, tokens, close, past) == 125u8) {
+            append_node(nodes, result, case_node(), first, tokens[close].past, 0u64, subject, last, first);
+            if (result.diagnostic == 0u8) { (result.next <- close + 1u64):void; } else {};
+            return;
+        } else {};
+        if (close >= past) { result.diagnostic <- expected_block_close(); return; } else {};
+        arm <- starts_case_arm(source, tokens, close, past);
+        if (!parse_block_item(source, tokens, nodes, result, past, last, false, arm)) return;
+        last <- result.root;
+    };
+    (result.diagnostic <- expected_block_close()):void;
+}
+
+func parse_case(source:const SourceBytes in S, tokens:const Tokens in T, nodes:ExprNodes in A,
+                result:ParseResult in R, past:u64) -> void
+    where {const owner S, const owner T, owner A, owner R} {
+    val first <- tokens[result.next].first;
+    result.next <- result.next + 1u64;
+    parse_expression_at(source, tokens, nodes, result, past, 1u8);
+    if (result.diagnostic != 0u8) return;
+    val subject <- result.root;
+    val at <- result.next;
+    if (at >= past || !of_word(source, tokens[at])) { result.diagnostic <- expected_case_of(); return; } else {};
+    val enclosing <- result.case_control;
+    result.case_control <- true;
+    result.next <- at + 1u64;
+    parse_case_items(source, tokens, nodes, result, past, subject, first);
+    (result.case_control <- enclosing):void;
+}
+
 func parse_primary(source:const SourceBytes in S, tokens:const Tokens in T,
                    nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
     where {const owner S, const owner T, owner A, owner R} {
@@ -787,6 +924,7 @@ func parse_primary(source:const SourceBytes in S, tokens:const Tokens in T,
     if (at >= past) { result.diagnostic <- expected_operand(); return; } else {};
     val first <- tokens[at].first;
     if (if_word(source, tokens[at])) { parse_conditional(source, tokens, nodes, result, past); return; } else {};
+    if (case_word(source, tokens[at])) { parse_case(source, tokens, nodes, result, past); return; } else {};
     if (for_word(source, tokens[at])) { parse_range(source, tokens, nodes, result, past); return; } else {};
     if (defer_word(source, tokens[at])) {
         parse_defer(source, tokens, nodes, result, past);
@@ -809,7 +947,13 @@ func parse_primary(source:const SourceBytes in S, tokens:const Tokens in T,
         parse_completion(source, tokens, nodes, result, past, return_node(), false);
         return;
     } else {};
-    if (result.supplied_here && (continue_word(source, tokens[at]) || break_word(source, tokens[at]))) {
+    if (result.case_control && fallthrough_word(source, tokens[at]) &&
+        (punct_at(source, tokens, at + 1u64, past) == 59u8 || punct_at(source, tokens, at + 1u64, past) == 125u8)) {
+        append_node(nodes, result, case_fallthrough_node(), first, tokens[at].past, 0u64, no_node(), no_node(), first);
+        if (result.diagnostic == 0u8) { (result.next <- at + 1u64):void; } else {};
+        return;
+    } else {};
+    if ((result.supplied_here || result.case_control) && (continue_word(source, tokens[at]) || break_word(source, tokens[at]))) {
         val handoff_kind <- if (continue_word(source, tokens[at])) { continue_node() } else { break_node() };
         parse_completion(source, tokens, nodes, result, past, handoff_kind, false);
         return;
@@ -1485,6 +1629,7 @@ export func reset_parse_result(first:u64, result:ParseResult in R) -> void where
     result.root <- 0u64;
     result.diagnostic <- 0u8;
     result.supplied_here <- false;
+    result.case_control <- false;
     return;
 }
 

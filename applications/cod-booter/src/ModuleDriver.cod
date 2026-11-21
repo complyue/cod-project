@@ -90,15 +90,15 @@ export proc compile_with_module_workspace(here work(tokens:u64, nodes:u64, comma
     result.plan.used <- 0u64;
     result.plan.diagnostic <- 0u8;
     val status <- plan_module_workspace(source, workspace);
-    if (status == Complete) {
-        defer { release(); };
-        (status <- work(workspace.source.token_count, workspace.source.node_capacity, workspace.commands)):void;
-    } else {
-        if (status == Rejected) {
+    case status of {
+        (Complete) -> {
+            defer { release(); };
+            (status <- work(workspace.source.token_count, workspace.source.node_capacity, workspace.commands)):void;
+        };
+        (Rejected) -> {
             result.rejected_first <- workspace.source.diagnostic_first;
-            result.rejected_past <- workspace.source.diagnostic_past;
-            {};
-        } else {};
+            (result.rejected_past <- workspace.source.diagnostic_past):void;
+        };
     };
     locate_source_position(source, lines, result.rejected_first, result.first_position);
     locate_source_position(source, lines, result.rejected_past, result.past_position);

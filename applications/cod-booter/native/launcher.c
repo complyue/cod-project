@@ -85,6 +85,7 @@ static const char *unsupported_source_form(uint32_t code) {
     case 71: return "unproved native here feedback type";
     case 74: return "array length query";
     case 76: return "ordinary here parameter lowering";
+    case 89: return "case expression lowering";
     default: return NULL;
     }
 }
@@ -130,6 +131,14 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: expected ',' or '}' after module selection\n", stderr);
     else if (diagnostic->stage == 1 && diagnostic->code == 45)
         fputs(": error: expected an enum member or its integer code\n", stderr);
+    else if (diagnostic->stage == 1 && diagnostic->code == 46)
+        fputs(": error: expected 'of' after the case subject\n", stderr);
+    else if (diagnostic->stage == 1 && diagnostic->code == 47)
+        fputs(": error: expected '->' after the case arm header\n", stderr);
+    else if (diagnostic->stage == 1 && diagnostic->code == 48)
+        fputs(": error: case pattern is outside the supported compiler profile\n", stderr);
+    else if (diagnostic->stage == 1 && diagnostic->code == 49)
+        fputs(": error: the unbraced throwing arm requires an unguarded catch-all\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 77)
         fputs(": error: catch annotation must name an exception type\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 7)
@@ -198,6 +207,20 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: the enum assertion operand's type remains unproved\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 88)
         fputs(": error: native here feedback must have the declared enum type\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 90)
+        fputs(": error: a case-arm declaration requires an explicit {{ ... }} scope\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 91)
+        fputs(": error: continue cannot cross a case body\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 92)
+        fputs(": error: fallthrough requires an active case arm\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 93)
+        fputs(": error: bool or nominal enum case subject type is unproved\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 94)
+        fputs(": error: case pattern does not match the subject type\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 95)
+        fputs(": error: no such member in the case subject's enum\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 96)
+        fputs(": error: case guard requires bool\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 20)
         fputs(": error: narrow integer execution is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 21)

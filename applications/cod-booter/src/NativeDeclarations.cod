@@ -1053,7 +1053,11 @@ func here_completion_destination(nodes:const ExprNodes in N, names:const NameBin
                                  work:const NameWork in W, at:u64) -> u64
     where {const owner N, const owner B, const owner W} {
     val kind <- nodes[at].kind;
-    if (kind == continue_node() || kind == break_node()) return names[at].declaration;
+    if (kind == continue_node() || kind == break_node()) {
+        val target <- names[at].declaration;
+        if (target != no_node() && nodes[target].kind == here_call_node()) return target;
+        return no_node();
+    } else {};
     val scope <- names[at].scope;
     if (kind == return_node() && scope != no_node() && nodes[scope].kind == full_scope_node())
         return work[scope].active;

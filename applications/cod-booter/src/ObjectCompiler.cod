@@ -65,7 +65,7 @@ proc lower_object(source:const SourceBytes in S, lines:const SourceLines in S,
     ref analysis = make ModuleBindingResult {
         frontend <- make FrontendResult {
             scan <- make ScanResult { used <- 0u64; next <- 0u64; complete <- false; invalid_source <- false; };
-            tree <- make ParseResult { next <- 0u64; used <- 0u64; root <- no_node(); diagnostic <- 0u8; supplied_here <- false; };
+            tree <- make ParseResult { next <- 0u64; used <- 0u64; root <- no_node(); diagnostic <- 0u8; supplied_here <- false; case_control <- false; };
             diagnostic_first <- 0u64;
             diagnostic_past <- 0u64;
         };

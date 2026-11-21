@@ -14,7 +14,7 @@ using "ParserStorage.cod" {
     make_borrowed_handle_node, here_call_node, here_receiver_node, break_node, continue_node,
     narrow_integer_node, logical_not_node, logical_binary, block_node, full_scope_node,
     block_item_node, try_node, catch_clause_node, finally_clause_node, null_node, return_node,
-    throw_node, local_storage_binding,
+    throw_node, local_storage_binding, case_node, case_arm_node, case_fallthrough_node, case_failure_node,
     enum_declaration_node, enum_member_node, enum_integer_node, type_assertion_node,
     local_module_selection, local_resource_name,
 };
@@ -64,6 +64,8 @@ data NameState {
     repeated:bool;
     here_group:bool;
     handoff:u64;
+    case_target:u64;
+    case_arm:u64;
     diagnostic:u8;
     failed_node:u64;
     enclosing_defer:u64;
@@ -131,6 +133,9 @@ func invalid_enum_member_reference() -> u8 { return 80u8; }
 func repeated_enum_code() -> u8 { return 81u8; }
 func repeated_enum_name() -> u8 { return 82u8; }
 func conflicting_enum_selection() -> u8 { return 83u8; }
+func declaration_in_case_arm() -> u8 { return 90u8; }
+func continue_crosses_case() -> u8 { return 91u8; }
+func missing_case_arm() -> u8 { return 92u8; }
 export func expected_value_binding() -> u8 { return 14u8; }
 
 func reject_name(state:NameState in R, node:u64, diagnostic:u8) -> void where {owner R} {
@@ -386,7 +391,7 @@ func resolve_list(source:const SourceBytes in S, nodes:const ExprNodes in N, bin
 }
 
 func resolve_full_scope(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
-                        work:NameWork in W, state:NameState in R, scope:u64, first_local:u64) -> void
+                        work:NameWork in W, state:NameState in R, scope:u64, first_local:u64, attached_arm:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     val used <- state.used;
     val first <- state.first;
@@ -397,6 +402,8 @@ func resolve_full_scope(source:const SourceBytes in S, nodes:const ExprNodes in 
     val repeated <- state.repeated;
     val here_group <- state.here_group;
     val handoff <- state.handoff;
+    val case_target <- state.case_target;
+    val case_arm <- state.case_arm;
     state.first <- first_local;
     state.scope_node <- scope;
     state.guard <- no_node();
@@ -405,6 +412,8 @@ func resolve_full_scope(source:const SourceBytes in S, nodes:const ExprNodes in 
     state.repeated <- false;
     state.here_group <- false;
     state.handoff <- no_node();
+    state.case_target <- no_node();
+    state.case_arm <- attached_arm;
     resolve_list(source, nodes, bindings, work, state, nodes[scope].left);
     state.used <- used;
     state.first <- first;
@@ -414,6 +423,8 @@ func resolve_full_scope(source:const SourceBytes in S, nodes:const ExprNodes in 
     state.repeated <- repeated;
     state.here_group <- here_group;
     state.handoff <- handoff;
+    state.case_target <- case_target;
+    state.case_arm <- case_arm;
     (state.guard <- guard):void;
 }
 
@@ -468,7 +479,7 @@ func resolve_try(source:const SourceBytes in S, nodes:const ExprNodes in N, bind
     (state.guard <- guard):void;
 }
 
-func local_declaration_allowed(state:NameState in R, at:u64) -> bool where {owner R} {
+func local_declaration_allowed(nodes:const ExprNodes in N, state:NameState in R, at:u64) -> bool where {const owner N, owner R} {
     if (state.delayed != no_node()) {
         reject_name(state, at, declaration_in_deferred_group());
         state.enclosing_defer <- state.delayed;
@@ -476,13 +487,17 @@ func local_declaration_allowed(state:NameState in R, at:u64) -> bool where {owne
     } else {};
     if (state.loop_arm) { reject_name(state, at, declaration_in_loop_arm()); return false; } else {};
     if (state.here_group) { reject_name(state, at, declaration_in_here_group()); return false; } else {};
+    if (state.case_arm != no_node() && nodes[nodes[state.case_arm].right].kind == block_node()) {
+        reject_name(state, at, declaration_in_case_arm());
+        return false;
+    } else {};
     return true;
 }
 
 func resolve_local(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
                    work:NameWork in W, state:NameState in R, at:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
-    if (!local_declaration_allowed(state, at)) return;
+    if (!local_declaration_allowed(nodes, state, at)) return;
     val binding <- nodes[at].left;
     resolve_annotation(source, nodes, bindings, work, state, binding);
     if (state.diagnostic != 0u8) return;
@@ -517,7 +532,7 @@ func resolve_handle_owner(source:const SourceBytes in S, nodes:const ExprNodes i
 func resolve_handle_local(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
                           work:NameWork in W, state:NameState in R, at:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
-    if (!local_declaration_allowed(state, at)) return;
+    if (!local_declaration_allowed(nodes, state, at)) return;
     val binding <- nodes[at].left;
     val annotation <- nodes[binding].right;
     val explicit_owner <- nodes[annotation].kind == owned_type_node();
@@ -569,9 +584,17 @@ func resolve_defer(source:const SourceBytes in S, nodes:const ExprNodes in N, bi
     } else {};
     if (state.repeated) { reject_name(state, at, unsupported_repeated_defer()); return; } else {};
     if (state.here_group) { reject_name(state, at, unsupported_here_group_storage()); return; } else {};
-    if (nodes[at].kind == deferred_block_node()) { state.delayed <- at; {}; } else {};
+    val case_target <- state.case_target;
+    val case_arm <- state.case_arm;
+    if (nodes[at].kind == deferred_block_node()) {
+        state.delayed <- at;
+        state.case_target <- no_node();
+        (state.case_arm <- no_node()):void;
+    } else {};
     resolve_expression(source, nodes, bindings, work, state, nodes[at].left);
     state.delayed <- no_node();
+    state.case_target <- case_target;
+    state.case_arm <- case_arm;
     return;
 }
 
@@ -648,10 +671,12 @@ func resolve_range(source:const SourceBytes in S, nodes:const ExprNodes in N, bi
     val enclosing_arm <- state.loop_arm;
     val repeated <- state.repeated;
     val handoff <- state.handoff;
+    val case_target <- state.case_target;
     state.first <- used;
     state.loop_arm <- true;
     state.repeated <- true;
     state.handoff <- no_node();
+    state.case_target <- no_node();
     declare_name(source, nodes, bindings, work, state, nodes[header].number, header, loop_index(), duplicate_binding());
     if (state.diagnostic == 0u8) {
         resolve_expression(source, nodes, bindings, work, state, nodes[at].right);
@@ -663,6 +688,7 @@ func resolve_range(source:const SourceBytes in S, nodes:const ExprNodes in N, bi
         resolve_expression(source, nodes, bindings, work, state, nodes[at].number);
     } else {};
     state.handoff <- handoff;
+    state.case_target <- case_target;
     (state.loop_arm <- enclosing_arm):void;
 }
 
@@ -704,14 +730,18 @@ func resolve_here_call(source:const SourceBytes in S, nodes:const ExprNodes in N
     val used <- state.used;
     val group <- state.here_group;
     val target <- state.handoff;
+    val case_target <- state.case_target;
+    val case_arm <- state.case_arm;
     state.first <- used;
     resolve_here_receivers(source, nodes, bindings, work, state, nodes[supplied].left);
     if (state.diagnostic == 0u8) {
         if (nodes[body].kind == full_scope_node()) {
             bindings[body].scope <- state.scope_node;
-            resolve_full_scope(source, nodes, bindings, work, state, body, used);
+            resolve_full_scope(source, nodes, bindings, work, state, body, used, no_node());
         } else {
             state.here_group <- true;
+            state.case_target <- no_node();
+            state.case_arm <- no_node();
             state.handoff <- at;
             resolve_expression(source, nodes, bindings, work, state, body);
         };
@@ -719,7 +749,47 @@ func resolve_here_call(source:const SourceBytes in S, nodes:const ExprNodes in N
     state.used <- used;
     state.first <- first;
     state.here_group <- group;
+    state.case_target <- case_target;
+    state.case_arm <- case_arm;
     (state.handoff <- target):void;
+}
+
+func resolve_case(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                  work:NameWork in W, state:NameState in R, at:u64) -> void
+    where {const owner S, const owner N, owner B, owner W, owner R} {
+    resolve_expression(source, nodes, bindings, work, state, nodes[at].left);
+    if (state.diagnostic != 0u8) return;
+    val handoff <- state.handoff;
+    val target <- state.case_target;
+    val arm <- state.case_arm;
+    val guard <- state.guard;
+    state.handoff <- no_node();
+    state.case_target <- at;
+    state.case_arm <- no_node();
+    state.guard <- at;
+    resolve_list(source, nodes, bindings, work, state, nodes[at].right);
+    state.handoff <- handoff;
+    state.case_target <- target;
+    state.case_arm <- arm;
+    (state.guard <- guard):void;
+}
+
+func resolve_case_arm(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                      work:NameWork in W, state:NameState in R, at:u64) -> void
+    where {const owner S, const owner N, owner B, owner W, owner R} {
+    # Pattern names use the subject's type and never enter ordinary lookup.
+    resolve_expression(source, nodes, bindings, work, state, nodes[at].number);
+    if (state.diagnostic != 0u8) return;
+    val body <- nodes[at].right;
+    if (nodes[body].kind == full_scope_node()) {
+        bindings[body].scope <- state.scope_node;
+        resolve_full_scope(source, nodes, bindings, work, state, body, state.used, at);
+        return;
+    } else {};
+    val enclosing <- state.case_arm;
+    state.case_arm <- at;
+    resolve_expression(source, nodes, bindings, work, state, body);
+    (state.case_arm <- enclosing):void;
 }
 
 func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
@@ -743,11 +813,25 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
         return;
     } else {};
     if (kind == block_node()) { resolve_list(source, nodes, bindings, work, state, nodes[at].left); return; } else {};
-    if (kind == full_scope_node()) { resolve_full_scope(source, nodes, bindings, work, state, at, state.used); return; } else {};
+    if (kind == full_scope_node()) { resolve_full_scope(source, nodes, bindings, work, state, at, state.used, no_node()); return; } else {};
     if (kind == try_node()) { resolve_try(source, nodes, bindings, work, state, at); return; } else {};
     if (kind == range_node()) { resolve_range(source, nodes, bindings, work, state, at); return; } else {};
     if (kind == here_call_node()) { resolve_here_call(source, nodes, bindings, work, state, at); return; } else {};
+    if (kind == case_node()) { resolve_case(source, nodes, bindings, work, state, at); return; } else {};
+    if (kind == case_arm_node()) { resolve_case_arm(source, nodes, bindings, work, state, at); return; } else {};
+    if (kind == case_failure_node()) return;
+    if (kind == case_fallthrough_node()) {
+        if (state.case_arm == no_node()) { reject_name(state, at, missing_case_arm()); return; } else {};
+        bindings[at].declaration <- state.case_arm;
+        return;
+    } else {};
     if (kind == continue_node() || kind == break_node()) {
+        if (state.case_target != no_node()) {
+            if (kind == continue_node()) { reject_name(state, at, continue_crosses_case()); return; } else {};
+            bindings[at].declaration <- state.case_target;
+            resolve_expression(source, nodes, bindings, work, state, nodes[at].left);
+            return;
+        } else {};
         if (state.handoff == no_node()) { reject_name(state, at, missing_here_control()); return; } else {};
         bindings[at].declaration <- state.handoff;
         resolve_expression(source, nodes, bindings, work, state, nodes[at].left);
@@ -1254,7 +1338,7 @@ export func resolve_module_names(source:const SourceBytes in S, nodes:const Expr
     ref state = make NameState {
         used <- 0u64; first <- 0u64; module_names <- 0u64; scope_node <- tree.root;
         delayed <- no_node(); guard <- no_node(); loop_arm <- false; repeated <- false;
-        here_group <- false; handoff <- no_node(); diagnostic <- 0u8;
+        here_group <- false; handoff <- no_node(); case_target <- no_node(); case_arm <- no_node(); diagnostic <- 0u8;
         failed_node <- no_node(); enclosing_defer <- no_node();
     };
     val first <- first_item(nodes, nodes[tree.root].left);

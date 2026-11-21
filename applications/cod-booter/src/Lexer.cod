@@ -273,7 +273,8 @@ export func reserved_value_name(source:const SourceBytes in S, token:const Token
         func_word(source, token) || proc_word(source, token) || ref_word(source, token) || ptr_word(source, token) ||
         val_word(source, token) || const_word(source, token) || make_word(source, token) || return_word(source, token) ||
         throw_word(source, token) || try_word(source, token) || catch_word(source, token) || finally_word(source, token) ||
-        defer_word(source, token) || if_word(source, token) || for_word(source, token) || behave_word(source, token);
+        defer_word(source, token) || if_word(source, token) || for_word(source, token) || case_word(source, token) ||
+        behave_word(source, token);
 }
 
 export func reserved_lexical_binder(source:const SourceBytes in S, token:const Token in T) -> bool
@@ -378,6 +379,28 @@ export func for_word(source:const SourceBytes in S, token:const Token in T) -> b
     val first <- token.first;
     return identifier_width(token, 3u64) &&
         source[first] == 102u8 && source[first + 1u64] == 111u8 && source[first + 2u64] == 114u8;
+}
+
+export func case_word(source:const SourceBytes in S, token:const Token in T) -> bool
+    where {const owner S, const owner T} {
+    val first <- token.first;
+    return identifier_width(token, 4u64) && source[first] == 99u8 && source[first + 1u64] == 97u8 &&
+        source[first + 2u64] == 115u8 && source[first + 3u64] == 101u8;
+}
+
+export func of_word(source:const SourceBytes in S, token:const Token in T) -> bool
+    where {const owner S, const owner T} {
+    return identifier_width(token, 2u64) && source[token.first] == 111u8 && source[token.first + 1u64] == 102u8;
+}
+
+export func fallthrough_word(source:const SourceBytes in S, token:const Token in T) -> bool
+    where {const owner S, const owner T} {
+    val first <- token.first;
+    return identifier_width(token, 11u64) &&
+        source[first] == 102u8 && source[first + 1u64] == 97u8 && source[first + 2u64] == 108u8 &&
+        source[first + 3u64] == 108u8 && source[first + 4u64] == 116u8 && source[first + 5u64] == 104u8 &&
+        source[first + 6u64] == 114u8 && source[first + 7u64] == 111u8 && source[first + 8u64] == 117u8 &&
+        source[first + 9u64] == 103u8 && source[first + 10u64] == 104u8;
 }
 
 export func continue_word(source:const SourceBytes in S, token:const Token in T) -> bool
@@ -665,12 +688,12 @@ func punctuation_width(first:u8, second:u8, third:u8) -> u64 {
         (first == less && (second == minus || second == colon || second == pipe ||
                            second == bang || second == dollar)))
         return 2u64;
-    # () {} [] ; , : . + - * / % < > = !
+    # () {} [] ; , : . + - * / % < > = ! |
     if (first == 40u8 || first == 41u8 || first == 123u8 || first == 125u8 ||
         first == 91u8 || first == 93u8 || first == 59u8 || first == 44u8 ||
         first == colon || first == dot || first == 43u8 || first == minus ||
         first == 42u8 || first == 47u8 || first == 37u8 ||
-        first == less || first == greater || first == equals || first == bang)
+        first == less || first == greater || first == equals || first == bang || first == pipe)
         return 1u64;
     return 0u64;
 }
