@@ -31,7 +31,11 @@ using "ParserStorage.cod" symbol_node;
 using "ParserStorage.cod" literal_node;
 using "ParserStorage.cod" group_node;
 using "ParserStorage.cod" integer_arithmetic;
-using "ParserStorage.cod" transfer_node;
+using "ParserStorage.cod" is_transfer;
+using "ParserStorage.cod" make_named_node;
+using "ParserStorage.cod" construction_body;
+using "ParserStorage.cod" construction_type_query_node;
+using "ParserStorage.cod" initializer_assignment_node;
 using "ParserStorage.cod" call_node;
 using "ParserStorage.cod" behave_node;
 using "ParserStorage.cod" argument_node;
@@ -128,6 +132,8 @@ func nested_defer_in_drain() -> u8 { return 10u8; }
 func declaration_in_deferred_group() -> u8 { return 11u8; }
 func dynamic_symbol_in_function() -> u8 { return 12u8; }
 func unsupported_module_declaration() -> u8 { return 13u8; }
+func unsupported_ordinary_construction() -> u8 { return 37u8; }
+func unsupported_initializer_rebind() -> u8 { return 46u8; }
 func expected_value_binding() -> u8 { return 14u8; }
 
 func reject_name(ref state:NameState in R, node:u64, diagnostic:u8) -> void where {owner R} {
@@ -465,6 +471,35 @@ func resolve_defer(source:const SourceBytes in S, nodes:const ExprNodes in N, re
     return;
 }
 
+func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
+                          ref work:NameWork in W, ref state:NameState in R, at:u64) -> void
+    where {const owner S, const owner N, owner B, owner W, owner R} {
+    if (state.delayed != no_node()) {
+        reject_name(state, at, declaration_in_deferred_group());
+        state.enclosing_defer <- state.delayed;
+        return;
+    } else {};
+    val requested <- nodes[at].left;
+    if (nodes[requested].kind == construction_type_query_node()) {
+        resolve_expression(source, nodes, bindings, work, state, nodes[requested].left);
+    } else {
+        resolve_type_name(source, nodes, bindings, work, state, requested, true);
+        if (state.diagnostic != 0u8) { return; } else {};
+        val kind <- bindings[requested].kind;
+        if (!native_scalar(kind) && kind != builtin_void()) {
+            reject_name(state, at, unsupported_ordinary_construction());
+            return;
+        } else {};
+    };
+    if (state.diagnostic != 0u8) { return; } else {};
+    val owner_name <- nodes[nodes[at].right].right;
+    if (owner_name != no_node()) {
+        resolve_owner(source, nodes, bindings, work, state, owner_name);
+        if (state.diagnostic != 0u8) { return; } else {};
+    } else {};
+    resolve_expression(source, nodes, bindings, work, state, construction_body(nodes, at));
+}
+
 func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
                          ref work:NameWork in W, ref state:NameState in R, at:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
@@ -495,6 +530,11 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
         resolve_local(source, nodes, bindings, work, state, at);
         return;
     } else {};
+    if (kind == make_named_node()) { resolve_construction(source, nodes, bindings, work, state, at); return; } else {};
+    if (kind == initializer_assignment_node() && !is_transfer(nodes, at)) {
+        reject_name(state, at, unsupported_initializer_rebind());
+        return;
+    } else {};
     if (kind == null_node()) {
         if (nodes[at].left != no_node()) { resolve_owner(source, nodes, bindings, work, state, nodes[at].left); } else {};
         return;
@@ -513,7 +553,7 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
         if (state.diagnostic == 0u8) { resolve_list(source, nodes, bindings, work, state, nodes[at].right); } else {};
         return;
     } else {};
-    if (integer_arithmetic(kind) || kind == compare_node() || kind == transfer_node() ||
+    if (integer_arithmetic(kind) || kind == compare_node() || is_transfer(nodes, at) ||
         logical_binary(kind)) {
         resolve_expression(source, nodes, bindings, work, state, nodes[at].left);
         if (state.diagnostic != 0u8) { return; } else {};
@@ -848,6 +888,7 @@ export name_storage_exhausted;
 export nested_defer_in_drain;
 export declaration_in_deferred_group;
 export unsupported_module_declaration;
+export unsupported_ordinary_construction;
 export expected_value_binding;
 export first_item;
 export callable_head;

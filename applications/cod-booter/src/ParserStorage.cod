@@ -107,6 +107,17 @@ func logical_binary(kind:u8) -> bool {
     return kind == logical_and_node() || kind == logical_or_node();
 }
 
+func is_transfer(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
+    val kind <- nodes[at].kind;
+    return kind == transfer_node() || (kind == initializer_assignment_node() && nodes[at].number == 0u64);
+}
+
+func construction_body(nodes:const ExprNodes in N, at:u64) -> u64 where {const owner N} {
+    val payload <- nodes[at].right;
+    if (nodes[payload].number == 2u64) { return nodes[payload].left; } else {};
+    return no_node();
+}
+
 func skips_right(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
     val left <- nodes[at].left;
     if (nodes[left].kind != bool_node()) { return false; } else {};
@@ -238,3 +249,5 @@ export throw_named_node;
 export rethrow_from_node;
 export construction_type_query_node;
 export initializer_assignment_node;
+export is_transfer;
+export construction_body;
