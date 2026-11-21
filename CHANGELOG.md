@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-21 — Exception ownership at the source and parser boundaries
+
+<a id="h-exception-bindings-20261121"></a>
+**H-EXCEPTION-BINDINGS-20261121.** In the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-21 (America/Los_Angeles), the project user specified “caught/made exception 是 owned，其它是 borrowed ref” and “语法上还是必须解析到位吧”. D-17r144, roadmap r21 and registry r1028 (D-17-EXCEPTION-BINDINGS/P-650/P-651) settle owning catch shorthand and require seed and booter syntax coverage. Explicit transfers and explicit ref catches follow the existing owner contract at `7a6b4548b7295734eeb8a2329fce2d9185122787:design/ExceptionControl.md`. Runtime qualification is unchanged. The request to review other keyword spellings commissions an audit.
+
 ## 2026-11-21 — Use contextual `own` for ownership
 
 <a id="h-contextual-own-20261121"></a>

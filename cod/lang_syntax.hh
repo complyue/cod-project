@@ -174,7 +174,7 @@ enum class ArgumentMode { value, borrowed_read, borrowed_ref, borrowed_ptr, borr
 struct Type {
   enum Kind { integer, uint8, uint32, uint64, boolean, void_type, procedure, float32, float64,
               named, unit, quantity, product, region_schema, region, regional, array, reference, null_ref, abstract_type, arguments, parameter,
-              exception, never, c_type_marker, native_handle };
+              exception, never, c_type_marker, native_handle, exception_holder };
   Kind kind;
   std::string name;
   size_t identity = 0;
@@ -251,6 +251,7 @@ inline bool widens(Type from, Type to) {
 }
 inline std::string type_name(const Type &type) {
   switch (type.kind) {
+  case Type::exception_holder: return "exception :" + type_name(*type.target);
   case Type::native_handle: return (type.owned ? "own handle " : "handle ") + type.name;
   case Type::integer: return "i64";
   case Type::uint8: return "u8";
@@ -312,7 +313,10 @@ struct Expression {
                     try_scope, handler, raise, return_value, deferred, make_region, touch, effect_group, transfer, procedure_effect,
                     pointer_group, pointer, make_local, rebind, region_binding, callable, alias, capture_owner,
                     here_body, named_argument, break_value, continue_value, typed_expression, return_tail,
-                    processor_composition, pipeline, here_binding, make_object, native_handle_binding, make_owned_handle, make_borrowed_handle };
+                    processor_composition, pipeline, here_binding, make_object, native_handle_binding, make_owned_handle, make_borrowed_handle,
+                    exception_binding, make_exception };
+  enum class CatchMode { owning, explicit_owning, borrowed };
+  enum class ExceptionPlacement { default_region, capacity, cause };
   Kind kind;
   Location at;
   std::string text;
@@ -333,6 +337,11 @@ struct Expression {
   std::unique_ptr<PipelineEndpoints> endpoints = {};
   bool initializer_block = false;
   SourceSpan span = {};
+  CatchMode catch_mode = CatchMode::owning;
+  bool declares_catch_owner = false;
+  bool constructor_arguments = false;
+  // An explicit placement operand follows the initializer operands in children.
+  ExceptionPlacement exception_placement = ExceptionPlacement::default_region;
   // A supplied body is stored after the written operands. It binds slot one.
   bool has_here_body() const { return !children.empty() && children.back()->kind == Kind::here_body; }
   bool inspects_return(bool binds_payload = false) const;
@@ -484,7 +493,7 @@ inline bool module_keyword(std::string_view name) {
 }
 
 class Parser {
-  enum class HereAttachment { immediate, for_body, pipeline_body };
+  enum class HereAttachment { immediate, for_body, pipeline_body, initializer_operand };
   std::vector<Token> tokens_;
   size_t cursor_ = 0;
   static constexpr size_t structure_limit = 128;
@@ -592,6 +601,19 @@ class Parser {
   }
   bool ownership_qualifier(const std::string &resource, size_t ahead = 0) const {
     return is("own", ahead) && is(resource, ahead + 1);
+  }
+  bool exception_binding_head(size_t ahead = 0) const {
+    return ownership_qualifier("exception", ahead) ||
+           (is("exception", ahead) && tokens_[cursor_ + ahead + 1].kind == TokenKind::identifier && is(":", ahead + 2));
+  }
+  void expect_exception_binder() {
+    take("own");
+    expect("exception");
+  }
+  static Type exception_holder(Type object) {
+    Type holder{Type::exception_holder};
+    holder.target = std::make_shared<Type>(std::move(object));
+    return holder;
   }
   bool take(const std::string &text) {
     if (!is(text)) return false;
@@ -774,6 +796,7 @@ class Parser {
         (is("{", close + 1 - cursor_) || here_header(close + 1 - cursor_));
     const bool labelled_yield = labelled_yield_ && expr.kind == Expression::Kind::call && expr.text == "yield";
     const bool named = (expr.kind == Expression::Kind::call && !expr.intrinsic) ||
+        expr.kind == Expression::Kind::make_exception || expr.kind == Expression::Kind::make_object ||
         (accepts_supplied_body(expr) && follows_call) || labelled_yield;
     expect("(");
     if (!take(")")) {
@@ -816,6 +839,13 @@ class Parser {
         !is("throws", 1) &&
         tokens_[cursor_ + 1].kind == TokenKind::identifier)) mode = tokens_[cursor_++].text;
     read_only = take("const");
+    if ((is("exception") && is(":", 1)) || ownership_qualifier("exception")) {
+      if (!mode.empty() || read_only) fail(peek().at, "expected an unqualified exception holder");
+      expect_exception_binder();
+      expect(":");
+      read_only = take("const");
+      return exception_holder(parse_type());
+    }
     if (is("region") || ownership_qualifier("region")) {
       if (read_only) fail(peek().at, "region target const belongs after the root annotation colon");
       const bool owned = take("own");
@@ -826,11 +856,13 @@ class Parser {
   }
   Parameter parameter_declaration(bool native_handles = false) {
     const bool fixed_binding = take("const");
+    const bool exception = exception_binding_head();
+    if (exception) expect_exception_binder();
     const bool owned_region = ownership_qualifier("region");
     if (owned_region) expect("own");
-    const bool regional = take("region");
+    const bool regional = !exception && take("region");
     std::string mode;
-    if (!regional && (is("ptr") || is("ref") || is("val") || (native_handles && is("handle") && !is(":", 1))))
+    if (!regional && !exception && (is("ptr") || is("ref") || is("val") || (native_handles && is("handle") && !is(":", 1))))
       mode = tokens_[cursor_++].text;
     auto param = value_name();
     Parameter parameter{param.text, Type::void_type, param.at, false, {}};
@@ -839,10 +871,12 @@ class Parser {
     else {
       type_separator();
       parameter.read_only = take("const");
-      parameter.type = parse_type(&parameter);
+      auto object = parse_type(&parameter);
+      parameter.type = exception ? exception_holder(std::move(object)) : std::move(object);
     }
     parameter.declaration_kind = mode;
     if (take("in")) parameter.owner = ordinary_name().text;
+    if (exception && !parameter.owner.empty()) fail(param.at, "an exception holder establishes its own owner");
     if (mode == "val" && !parameter.owner.empty()) fail(param.at, "a val parameter has callee-local bits storage, not an external owner");
     if (parameter.type == Type::void_type) fail(param.at, "a parameter must have a value type");
     parameter.variadic = take("...");
@@ -1198,6 +1232,67 @@ class Parser {
     }
   }
 
+  Expr exception_construction(const Token &token) {
+    auto expr = make(Expression::Kind::make_exception, token);
+    const auto object = ordinary_name();
+    expr->annotation = Type{Type::named, object.text};
+    expr->constructor_arguments = is("(");
+    if (expr->constructor_arguments) arguments(*expr, false);
+
+    Expr placement;
+    if (take("in")) {
+      expr->exception_placement = Expression::ExceptionPlacement::capacity;
+      expect("region");
+      expect("(");
+      placement = expression(0, HereAttachment::initializer_operand, false);
+      expect("->");
+      expect("capacity");
+      expect(")");
+    } else if (take("from")) {
+      expr->exception_placement = Expression::ExceptionPlacement::cause;
+      placement = expression(0, HereAttachment::initializer_operand);
+    }
+    if (is("in") || is("from")) fail(peek().at, "an exception construction has at most one placement clause");
+    if (!expr->constructor_arguments) {
+      expr->initializer_block = true;
+      field_initializers(*expr);
+    }
+    if (placement) expr->children.push_back(std::move(placement));
+    return expr;
+  }
+
+  Expr catch_handler(bool &catch_all) {
+    expect("(");
+    auto mode = Expression::CatchMode::owning;
+    if (take("ref")) mode = Expression::CatchMode::borrowed;
+    else if (exception_binding_head()) {
+      expect_exception_binder();
+      mode = Expression::CatchMode::explicit_owning;
+    }
+    auto handler = make(Expression::Kind::handler, value_name());
+    handler->catch_mode = mode;
+    if (mode != Expression::CatchMode::owning || is(":")) {
+      expect(":");
+      handler->read_only = take("const");
+      handler->annotation = parse_type();
+    } else catch_all = true;
+    if (mode == Expression::CatchMode::borrowed) {
+      expect("in");
+      handler->owner_name = ordinary_name().text;
+    }
+    expect(")");
+    if (mode == Expression::CatchMode::borrowed && take("where")) {
+      expect("{");
+      expect("owner");
+      const auto owner = ordinary_name();
+      if (owner.text != handler->owner_name) fail(owner.at, "a catch owner declaration must match the name after 'in'");
+      handler->declares_catch_owner = true;
+      expect("}");
+    }
+    handler->children.push_back(block());
+    return handler;
+  }
+
   Expr primary(HereAttachment attachment, bool owner_projection) {
     const bool pipeline_operand = attachment == HereAttachment::pipeline_body;
     auto token = peek();
@@ -1261,7 +1356,21 @@ class Parser {
       expr->children.push_back(expression());
       return expr;
     }
+    if (exception_binding_head()) {
+      expect_exception_binder();
+      auto expr = make(Expression::Kind::exception_binding, value_name());
+      expect(":");
+      expr->read_only = take("const");
+      expr->annotation = parse_type();
+      expect("<-");
+      expr->children.push_back(expression());
+      return expr;
+    }
     if (take("make")) {
+      if (is("exception") && tokens_[cursor_ + 1].kind == TokenKind::identifier && !is("in", 1) && !is("from", 1)) {
+        expect("exception");
+        return exception_construction(token);
+      }
       const bool owns_handle = ownership_qualifier("handle");
       if (owns_handle || (is("handle") && is("(", 2))) {
         if (owns_handle) expect("own");
@@ -1296,9 +1405,12 @@ class Parser {
         expect(")");
       } else {
         expr->annotation = Type{Type::named, expr->text};
-        if (is("("))
-          fail(peek().at, "micro-dispatch implementation gap: ordinary constructor arguments; this is not a language restriction");
+        if (is("(")) {
+          expr->constructor_arguments = true;
+          arguments(*expr, false);
+        }
         if (take("in")) expr->owner_name = ordinary_name().text;
+        if (expr->constructor_arguments) return expr;
         if (!is("{")) return expr;
         expr->initializer_block = true;
       }
@@ -1331,15 +1443,7 @@ class Parser {
       bool catch_all = false;
       while (take("catch")) {
         if (catch_all) fail(peek().at, "catch-all must be the final catch clause");
-        expect("(");
-        auto handler = make(Expression::Kind::handler, value_name());
-        if (take(":")) {
-          handler->read_only = take("const");
-          handler->annotation = parse_type();
-        } else catch_all = true;
-        expect(")");
-        handler->children.push_back(block());
-        expr->children.push_back(std::move(handler));
+        expr->children.push_back(catch_handler(catch_all));
       }
       if (take("finally")) expr->children.push_back(block());
       if (!deferred && expr->children.size() == 1) fail(token.at, "try requires catch, finally, or both");

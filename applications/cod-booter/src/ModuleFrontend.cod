@@ -1,3 +1,17 @@
+using "ParserStorage.cod" exception_local_node;
+using "ParserStorage.cod" bodyless_defer_node;
+using "ParserStorage.cod" exception_parameter_node;
+using "ParserStorage.cod" exception_result_node;
+using "ParserStorage.cod" ref_local_node;
+using "ParserStorage.cod" ref_result_node;
+using "ParserStorage.cod" make_exception_node;
+using "ParserStorage.cod" make_named_node;
+using "ParserStorage.cod" field_access_node;
+using "ParserStorage.cod" readonly_ref_parameter_node;
+using "ParserStorage.cod" owner_clause_node;
+using "ParserStorage.cod" catch_binding_node;
+using "ParserStorage.cod" borrowed_catch;
+using "ParserStorage.cod" explicit_owning_catch;
 using "SourceStorage.cod" SourceBytes;
 using "ParserStorage.cod" Tokens;
 using "ParserStorage.cod" ExprNodes;
@@ -42,7 +56,8 @@ func module_operands_failed() -> u8 { return 4u8; }
 func module_completion_failed() -> u8 { return 5u8; }
 
 func rejected_unsupported_declaration(result:const ModuleBindingResult in R) -> bool where {const owner R} {
-    return result.stage == module_binding_failed() && result.diagnostic == unsupported_module_declaration();
+    return result.stage == module_binding_failed() &&
+        (result.diagnostic == unsupported_module_declaration() || (result.diagnostic >= 28u8 && result.diagnostic <= 40u8));
 }
 
 func binding_diagnostic(nodes:const ExprNodes in N, ref result:ModuleBindingResult in R,
@@ -70,6 +85,52 @@ func first_extended_declaration(nodes:const ExprNodes in N, work:const NameWork 
     return no_node();
 }
 
+# The parsed modes remain available when the checked backend cannot use them.
+func unsupported_source_form(nodes:const ExprNodes in N, at:u64) -> u8 where {const owner N} {
+    val kind <- nodes[at].kind;
+    if (kind == exception_local_node()) { return 28u8; } else {};
+    if (kind == exception_parameter_node()) { return 29u8; } else {};
+    if (kind == exception_result_node()) { return 30u8; } else {};
+    if (kind == make_exception_node()) { return 33u8; } else {};
+    if (kind == ref_local_node()) { return 34u8; } else {};
+    if (kind == ref_result_node()) { return 35u8; } else {};
+    if (kind == make_named_node()) { return 37u8; } else {};
+    if (kind == field_access_node()) { return 38u8; } else {};
+    if (kind == bodyless_defer_node()) { return 40u8; } else {};
+    if (kind == readonly_ref_parameter_node() || (kind == owner_clause_node() && nodes[at].number == 2u64)) {
+        return 39u8;
+    } else {};
+    if (kind == catch_binding_node()) {
+        val mode <- nodes[at].number;
+        if (mode >= borrowed_catch()) { return 32u8; } else {};
+        if (mode >= explicit_owning_catch()) { return 31u8; } else {};
+        if (mode == 0u64 && nodes[at].right != no_node()) { return 36u8; } else {};
+    } else {};
+    return 0u8;
+}
+
+# Find the first unsupported source form by byte position, including headers
+# and enclosing constructs whose syntax is stored after their operands.
+func check_source_profile(nodes:const ExprNodes in N, used:u64, ref result:ModuleBindingResult in R) -> bool
+    where {const owner N, owner R} {
+    if (used > intrinsic (len)(nodes)) { return true; } else {};
+    val first <- no_node();
+    val cause <- 0u8;
+    val next <- 0u8;
+    for (at in 0u64 .. used) {
+        next <- unsupported_source_form(nodes, at);
+        if (next != 0u8 && (first == no_node() || nodes[at].first < nodes[first].first)) {
+            cause <- next;
+            (first <- at):void;
+        } else {};
+    };
+    if (first != no_node()) {
+        binding_diagnostic(nodes, result, module_binding_failed(), cause, first);
+        return false;
+    } else {};
+    return true;
+}
+
 # Bind the retained syntax against the dependency targets discovered for it.
 func bind_parsed_module(source:const SourceBytes in S, nodes:const ExprNodes in N,
                         spellings:const SourceBytes in B, exports:const ModuleExports in E,
@@ -79,6 +140,7 @@ func bind_parsed_module(source:const SourceBytes in S, nodes:const ExprNodes in 
     result.stage <- 0u8;
     result.diagnostic <- 0u8;
     result.related_first <- no_node();
+    if (!check_source_profile(nodes, result.frontend.tree.used, result)) { return false; } else {};
     ref publication = make ExportResolutionResult { diagnostic <- 0u8; node <- no_node(); };
     if (!resolve_module_exports(source, nodes, result.frontend.tree, spellings, exports, selected, publication)) {
         binding_diagnostic(nodes, result, module_selection_failed(), publication.diagnostic, publication.node);

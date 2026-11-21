@@ -45,6 +45,25 @@ static const char *scratch_error(uint32_t code) {
     }
 }
 
+static const char *unsupported_source_form(uint32_t code) {
+    switch (code) {
+    case 28: return "owning exception local";
+    case 29: return "owning exception parameter";
+    case 30: return "owning exception result";
+    case 31: return "explicit owning exception catch";
+    case 32: return "explicit borrowed exception catch";
+    case 33: return "owning make exception expression";
+    case 34: return "borrowed reference local";
+    case 35: return "borrowed reference result";
+    case 36: return "writable owning exception catch";
+    case 37: return "ordinary construction";
+    case 38: return "field selection";
+    case 39: return "readonly reference parameter or const callable owner";
+    case 40: return "bodyless deferred exception handler";
+    default: return NULL;
+    }
+}
+
 static void report(const char *input, uint8_t status, const cod_booter_diagnostic *diagnostic) {
     if (diagnostic->os_error) {
         fprintf(stderr, "%s: error: source open failed (system error %" PRIu64 ")\n", input, diagnostic->os_error);
@@ -54,6 +73,7 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fprintf(stderr, "%s: error: compilation failed (status %u)\n", input, (unsigned)status);
         return;
     }
+    const char *unsupported = diagnostic->stage == 3 ? unsupported_source_form(diagnostic->code) : NULL;
     fputs(input, stderr);
     if (diagnostic->first.line)
         fprintf(stderr, ":%" PRIu64 ":%" PRIu64, diagnostic->first.line, diagnostic->first.column);
@@ -61,6 +81,8 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fprintf(stderr, ": error: LLVM backend %s (code %" PRIu32 ")\n", llvm_error(diagnostic->code), diagnostic->code);
     else if (diagnostic->stage == 7)
         fprintf(stderr, ": error: compiler scratch %s (code %" PRIu32 ")\n", scratch_error(diagnostic->code), diagnostic->code);
+    else if (unsupported)
+        fprintf(stderr, ": error: %s is outside the supported compiler profile\n", unsupported);
     else if (diagnostic->stage == 3 && diagnostic->code == 13)
         fputs(": error: this module declaration is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 2 && diagnostic->code == module_cycle_unproved)
