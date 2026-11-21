@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-21 — Catch the holder and release contextual variable names
+
+<a id="h-catch-holder-only-20261121"></a>
+**H-CATCH-HOLDER-ONLY-20261121.** In the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-21 (America/Los_Angeles), the project user accepted “只允许 `catch` `exception`，不允许 `catch` `ref`” with “语法就是 `catch (e:SaveException)`”, and specified “`const E` 应是程序作者 opt-in”. Design review selected that option. D-17r145 / roadmap r22 / registry r1029 replace the header forms of H-CATCH-OWNER-TRANSFER-20261118 and H-EXCEPTION-BINDINGS-20261121 under P-650/P-651. The caught holder takes responsibility. `in e` supports ordinary borrows and payload allocation. The previous parser scope is at `d2236162828d6bc1716f59983ebb9c3c0400e955:design/ExceptionControl.md`, §Exception declarations and catch bindings.
+
+<a id="h-lexical-name-release-20261121"></a>
+**H-LEXICAL-NAME-RELEASE-20261121.** In the same chat on 2026-11-21 (America/Los_Angeles), the project user approved the keyword plan with “同意你的关键词释放规划，按你的建议落实”. D-10r229 / roadmap r22 / registry r1029 qualify D-10-CONTEXTUAL-NAMES/P-652/P-653. Make `from` and `throws` contextual and allow lexical variables named `data`, `type`, `unit` or `array`. This narrows the relevant H-150/H-153 reservations at `d2236162828d6bc1716f59983ebb9c3c0400e955:design/SymbolicDynamicScope.md`. The ten ordinary storage/traversal names retain their November 19 decision. Further releases remain outside this scope.
+
 ## 2026-11-21 — Exception ownership at the source and parser boundaries
 
 <a id="h-exception-bindings-20261121"></a>
