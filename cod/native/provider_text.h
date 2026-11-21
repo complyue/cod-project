@@ -42,6 +42,7 @@ typedef struct {
     cod_provider_argument_kind kind;
     bool boolean;
     uint64_t owner_role;
+    bool enum_value;
 } cod_provider_argument;
 
 typedef struct {
@@ -155,6 +156,7 @@ static inline void cod_provider_write_constructor(cod_provider_text *header, cod
         const cod_provider_argument *input = &shape->inputs[i];
         if (input->kind == cod_provider_argument_handle) cod_provider_print(stubs, " || !arg%zu", i);
         else if (input->boolean) cod_provider_print(stubs, " || arg%zu > 1", i);
+        else if (input->enum_value) cod_provider_print(stubs, " || !%s_valid(arg%zu)", input->type, i);
     }
     cod_provider_print(stubs, ") return COD_NATIVE_BOUNDARY_ERROR;\n");
     for (size_t i = 0; i < shape->input_count; ++i) {

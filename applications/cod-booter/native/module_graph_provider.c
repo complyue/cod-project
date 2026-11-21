@@ -380,8 +380,14 @@ static uint8_t run_module_graph(const char *input, const char *directory, cod_bo
         status = scratch_failed;
     }
     if (!status && directory) {
-        const uint32_t emitted = cod_booter_write_c_providers(directory, graph.interfaces, graph.interface_count,
-                                                               graph.spellings, graph.spelling_count);
+        const char **paths = calloc(graph.module_count, sizeof(*paths));
+        uint32_t emitted = provider_output_memory;
+        if (paths) {
+            for (size_t i = 0; i < graph.module_count; ++i) paths[i] = graph.modules[i].path;
+            emitted = cod_booter_write_c_providers(directory, graph.interfaces, graph.interface_count,
+                                                  graph.spellings, graph.spelling_count, paths, graph.module_count);
+            free(paths);
+        }
         if (emitted) {
             diagnostic->stage = provider_output_stage;
             diagnostic->code = emitted;

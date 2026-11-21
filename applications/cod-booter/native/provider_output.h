@@ -15,6 +15,6 @@ enum { provider_output_stage = 8 };
 
 uint32_t cod_booter_write_c_providers(const char *directory,
     const cod_native_graph_frame_use_row9 *rows, size_t row_count,
-    const unsigned char *spellings, size_t spelling_count);
+    const unsigned char *spellings, size_t spelling_count, const char *const *module_paths, size_t module_count);
 
 #endif

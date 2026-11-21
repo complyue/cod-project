@@ -9,6 +9,7 @@ typedef struct {
     size_t count;
     const char *result;
     size_t owner_count;
+    bool enum_result;
 } cod_provider_callable;
 
 static inline void cod_provider_loan_preamble(cod_provider_text *header) {
@@ -74,6 +75,8 @@ static inline void cod_provider_write_call(cod_provider_text *header, cod_provid
             }
             cod_provider_print(stubs, ") return COD_NATIVE_BOUNDARY_ERROR;\n");
         } else if (input->boolean) cod_provider_print(stubs, "    if (arg%zu > 1) return COD_NATIVE_BOUNDARY_ERROR;\n", i);
+        else if (input->enum_value)
+            cod_provider_print(stubs, "    if (!%s_valid(arg%zu)) return COD_NATIVE_BOUNDARY_ERROR;\n", input->type, i);
     }
     if (shape->result) cod_provider_print(stubs, "    %s result = 0;\n", shape->result);
     cod_provider_print(stubs, "    const cod_native_status status = cod_native_%s_impl(", shape->name);
@@ -82,6 +85,8 @@ static inline void cod_provider_write_call(cod_provider_text *header, cod_provid
                            shape->inputs[i].kind == cod_provider_argument_scalar ? "" : "*", i);
     if (shape->result) cod_provider_print(stubs, "%s&result", shape->count ? ", " : "");
     cod_provider_print(stubs, ");\n    if (status != COD_NATIVE_OK) return COD_NATIVE_BOUNDARY_ERROR;\n");
+    if (shape->enum_result)
+        cod_provider_print(stubs, "    if (!%s_valid(result)) return COD_NATIVE_BOUNDARY_ERROR;\n", shape->result);
     if (shape->result) cod_provider_print(stubs, "    *value = result;\n");
     cod_provider_print(stubs, "    return COD_NATIVE_OK;\n}\n\n");
 }
@@ -119,13 +124,20 @@ static inline void cod_provider_write_entry(cod_provider_text *header, cod_provi
             cod_provider_print(stubs, "    if (!arg%zu || arg%zu->owner != loan%" PRIu64 "->owner) return COD_NATIVE_BOUNDARY_ERROR;\n",
                                i, i, input->owner_role);
         else if (input->boolean) cod_provider_print(stubs, "    if (arg%zu > 1) return COD_NATIVE_BOUNDARY_ERROR;\n", i);
+        else if (input->enum_value)
+            cod_provider_print(stubs, "    if (!%s_valid(arg%zu)) return COD_NATIVE_BOUNDARY_ERROR;\n", input->type, i);
     }
+    if (shape->enum_result) cod_provider_print(stubs, "    %s result = 0;\n", shape->result);
     cod_provider_print(stubs, "    cod_native_%s_entry_body(", shape->name);
     for (size_t i = 0; i < shape->count; ++i) cod_provider_print(stubs, "%sarg%zu", i ? ", " : "", i);
     for (size_t i = 0; i < shape->owner_count; ++i)
         cod_provider_print(stubs, "%sloan%zu->activation", i || shape->count ? ", " : "", i);
-    if (shape->result) cod_provider_print(stubs, "%svalue", shape->count || shape->owner_count ? ", " : "");
-    cod_provider_print(stubs, ");\n    return COD_NATIVE_OK;\n}\n\n");
+    if (shape->result) cod_provider_print(stubs, "%s%s", shape->count || shape->owner_count ? ", " : "",
+                                          shape->enum_result ? "&result" : "value");
+    cod_provider_print(stubs, ");\n");
+    if (shape->enum_result)
+        cod_provider_print(stubs, "    if (!%s_valid(result)) return COD_NATIVE_BOUNDARY_ERROR;\n    *value = result;\n", shape->result);
+    cod_provider_print(stubs, "    return COD_NATIVE_OK;\n}\n\n");
 }
 
 #endif

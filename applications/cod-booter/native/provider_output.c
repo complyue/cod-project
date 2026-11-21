@@ -3,6 +3,7 @@
 #include "provider_output.h"
 #include "native/provider_names.h"
 #include "native/provider_call.h"
+#include "native/provider_enum.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -15,7 +16,7 @@
 enum {
     bits_u64 = 8, result_void = 9, bits_bool = 11, handle_type = 12, record_type = 13,
     constructor = 14, operation = 15, entry = 16, bits_u8 = 17, bits_u32 = 18,
-    bits_i64 = 19, bits_f32 = 20, bits_f64 = 21, array_type = 22,
+    bits_i64 = 19, bits_f32 = 20, bits_f64 = 21, array_type = 22, enum_type = 26,
 };
 typedef cod_native_graph_frame_use_row9 interface_row;
 
@@ -23,11 +24,15 @@ typedef struct {
     const interface_row *rows;
     size_t count;
     char **names;
+    char **enum_names;
+    const char *const *module_paths;
+    size_t module_count;
     bool *borrowed;
     cod_provider_argument *inputs;
     cod_provider_field *fields;
     cod_provider_view *views;
     uint64_t *offsets;
+    cod_provider_enum_member *members;
 } provider_interfaces;
 
 typedef struct {
@@ -99,6 +104,41 @@ static size_t find_declaration(const provider_interfaces *interfaces, uint64_t m
     return interfaces->count;
 }
 
+static uint32_t declare_enum(const provider_interfaces *interfaces, const interface_row *ref,
+                             cod_provider_text *header, cod_provider_text *stubs) {
+    const size_t id = find_declaration(interfaces, ref->type_module, ref->type_identity);
+    if (id == interfaces->count || !interfaces->names[id]) return provider_output_invalid;
+    if (interfaces->enum_names[id]) return 0;
+    const interface_row *domain = &interfaces->rows[id];
+    const uint8_t kind = domain->element_kind;
+    if (domain->interface_kind != enum_type || !domain->entry_count ||
+        !domain->defining_module || domain->defining_module > interfaces->module_count ||
+        (kind != bits_u8 && kind != bits_u32 && kind != bits_u64 && kind != bits_i64)) return provider_output_invalid;
+    for (size_t i = 0; i < domain->entry_count; ++i) {
+        const interface_row *member = domain + 1 + i;
+        const char *spelling = interfaces->names[id + 1 + i];
+        if (member->value_kind != enum_type || !spelling) return provider_output_invalid;
+        bool canonical = true;
+        for (size_t j = 0; j < i; ++j)
+            if (domain[1 + j].declaration == member->declaration) {
+                canonical = false;
+                break;
+            }
+        interfaces->members[i] = (cod_provider_enum_member){spelling, member->enum_code, canonical};
+    }
+    char *name = cod_provider_enum_name(interfaces->module_paths[0],
+        interfaces->module_paths[domain->defining_module - 1], interfaces->names[id]);
+    if (!name) return provider_output_memory;
+    interfaces->enum_names[id] = name;
+    cod_provider_write_enum(header, stubs, name, layout_for(kind)->scalar, interfaces->members, (size_t)domain->entry_count);
+    return 0;
+}
+
+static const char *enum_name(const provider_interfaces *interfaces, const interface_row *ref) {
+    const size_t id = find_declaration(interfaces, ref->type_module, ref->type_identity);
+    return id == interfaces->count ? NULL : interfaces->enum_names[id];
+}
+
 static uint32_t describe_borrow(const provider_interfaces *interfaces, const interface_row *reference,
                                 const char **type, cod_provider_text *header, cod_provider_text *stubs) {
     const size_t id = find_declaration(interfaces, reference->type_module, reference->type_identity);
@@ -125,7 +165,8 @@ static uint32_t describe_argument(const provider_interfaces *interfaces, const i
         argument->kind = cod_provider_argument_view;
         return 0;
     }
-    argument->type = scalar_spelling(input->value_kind);
+    argument->enum_value = input->value_kind == enum_type;
+    argument->type = argument->enum_value ? enum_name(interfaces, input) : scalar_spelling(input->value_kind);
     return argument->type ? 0 : provider_output_invalid;
 }
 
@@ -213,7 +254,10 @@ static uint32_t write_here_operation(const provider_interfaces *interfaces, size
     const interface_row *row = &interfaces->rows[at];
     const char *name = interfaces->names[at];
     const char *handle;
-    if (row[1].value_kind != handle_type || row->result_kind != bits_u8) return provider_output_invalid;
+    if (row[1].value_kind != handle_type ||
+        (row->result_kind != bits_u8 && row->result_kind != enum_type)) return provider_output_invalid;
+    const char *enum_type_name = row->result_kind == enum_type ? enum_name(interfaces, row) : NULL;
+    if (row->result_kind == enum_type && !enum_type_name) return provider_output_invalid;
     uint32_t status = describe_borrow(interfaces, row + 1, &handle, header, stubs);
     if (status) return status;
     const size_t count = (size_t)row->entry_count - 1;
@@ -221,7 +265,7 @@ static uint32_t write_here_operation(const provider_interfaces *interfaces, size
         status = write_view(interfaces, row + 2 + i, name, i, header, stubs);
         if (status) return status;
     }
-    cod_provider_write_here(header, stubs, name, handle, interfaces->views, count);
+    cod_provider_write_here(header, stubs, name, handle, interfaces->views, count, enum_type_name);
     return 0;
 }
 
@@ -229,10 +273,13 @@ static uint32_t write_callable(const provider_interfaces *interfaces, size_t at,
                                cod_provider_text *header, cod_provider_text *stubs) {
     const interface_row *row = &interfaces->rows[at];
     const bool inbound = row->interface_kind == entry;
+    const bool enum_result = row->result_kind == enum_type;
     const cod_provider_callable shape = {.name = interfaces->names[at], .inputs = interfaces->inputs,
-        .count = (size_t)row->entry_count, .result = scalar_spelling(row->result_kind), .owner_count = (size_t)row->owner_count};
+        .count = (size_t)row->entry_count,
+        .result = enum_result ? enum_name(interfaces, row) : scalar_spelling(row->result_kind),
+        .owner_count = (size_t)row->owner_count, .enum_result = enum_result};
     if ((!shape.result && row->result_kind != result_void) ||
-        (!inbound && shape.result && row->result_kind != bits_u8)) return provider_output_invalid;
+        (!inbound && shape.result && row->result_kind != bits_u8 && !enum_result)) return provider_output_invalid;
     for (size_t i = 0; i < shape.count; ++i) {
         const interface_row *input = row + 1 + i;
         cod_provider_argument *argument = interfaces->inputs + i;
@@ -306,6 +353,21 @@ static uint32_t format_files(const provider_interfaces *interfaces, cod_provider
     if (loans) cod_provider_loan_preamble(header);
 
     static const uint8_t groups[] = {constructor, entry, operation};
+    for (size_t group = 0; group < sizeof(groups) / sizeof(*groups); ++group) {
+        for (size_t i = 0; i < interfaces->count; i = next_interface(interfaces->rows, i)) {
+            const interface_row *row = &interfaces->rows[i];
+            if (row->interface_kind != groups[group]) continue;
+            for (size_t j = 0; j < row->entry_count; ++j) {
+                if (row[1 + j].value_kind != enum_type) continue;
+                const uint32_t status = declare_enum(interfaces, row + 1 + j, header, stubs);
+                if (status) return status;
+            }
+            if (row->result_kind == enum_type) {
+                const uint32_t status = declare_enum(interfaces, row, header, stubs);
+                if (status) return status;
+            }
+        }
+    }
     bool any_borrow = false;
     for (size_t group = 0; group < sizeof(groups) / sizeof(*groups); ++group) {
         for (size_t i = 0; i < interfaces->count; i = next_interface(interfaces->rows, i)) {
@@ -414,17 +476,21 @@ static uint32_t write_files(const char *directory, const provider_interfaces *in
 }
 
 uint32_t cod_booter_write_c_providers(const char *directory, const interface_row *rows, size_t row_count,
-                                    const unsigned char *spellings, size_t spelling_count) {
+                                    const unsigned char *spellings, size_t spelling_count,
+                                    const char *const *module_paths, size_t module_count) {
     size_t name_bytes;
     uint32_t status = validate_rows(rows, row_count, spelling_count, &name_bytes);
     if (status) return status;
     const size_t capacity = row_count ? row_count : 1;
     provider_interfaces interfaces = {.rows = rows, .count = row_count,
+        .module_paths = module_paths, .module_count = module_count,
         .names = calloc(capacity, sizeof(*interfaces.names)), .borrowed = calloc(capacity, sizeof(*interfaces.borrowed)),
+        .enum_names = calloc(capacity, sizeof(*interfaces.enum_names)),
+        .members = calloc(capacity, sizeof(*interfaces.members)),
         .inputs = calloc(capacity, sizeof(*interfaces.inputs)), .fields = calloc(capacity, sizeof(*interfaces.fields)),
         .views = calloc(capacity, sizeof(*interfaces.views)), .offsets = calloc(capacity, sizeof(*interfaces.offsets))};
     char *storage = malloc(name_bytes);
-    if (interfaces.names && interfaces.borrowed && interfaces.inputs && interfaces.fields &&
+    if (interfaces.names && interfaces.enum_names && interfaces.members && interfaces.borrowed && interfaces.inputs && interfaces.fields &&
         interfaces.views && interfaces.offsets && storage) {
         copy_names(&interfaces, spellings, storage);
         status = write_files(directory, &interfaces);
@@ -432,6 +498,10 @@ uint32_t cod_booter_write_c_providers(const char *directory, const interface_row
         status = provider_output_memory;
     }
     free(storage);
+    if (interfaces.enum_names)
+        for (size_t i = 0; i < row_count; ++i) free(interfaces.enum_names[i]);
+    free(interfaces.members);
+    free(interfaces.enum_names);
     free(interfaces.offsets);
     free(interfaces.views);
     free(interfaces.fields);
