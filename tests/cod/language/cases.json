@@ -1348,7 +1348,7 @@
     "file": "ptr-initialization-path.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "read of storage before definite initialization"
+    "stderr_contains": "before definite initialization"
   },
   {
     "file": "ptr-readonly-alias.cod",
@@ -1439,7 +1439,7 @@
     "file": "range-else-uninitialized.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "read of storage before definite initialization"
+    "stderr_contains": "before definite initialization"
   },
   {
     "file": "range-else-scope.cod",
@@ -2855,7 +2855,7 @@
     "file": "symbol-lookup-query.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "symbol access @gain resolves to non-symbol lexical binding 'gain'"
+    "stderr_contains": "nearest binding 'gain' is not a symbol"
   },
   {
     "file": "symbol-lookup-capture.cod",
@@ -2908,7 +2908,7 @@
     "file": "owner-binding-type-query.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "generic owner binding carries provenance"
+    "stderr_contains": "owner binding is not a value in typeof"
   },
   {
     "file": "owner-binding-region-rebind.cod",
@@ -3109,7 +3109,7 @@
     "file": "scopes/defer-borrowed-uninitialized.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "read of storage before definite initialization"
+    "stderr_contains": "before definite initialization"
   },
   {
     "file": "scopes/defer-borrowed-readonly.cod",

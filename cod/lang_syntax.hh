@@ -337,8 +337,14 @@ struct Expression {
   bool initializer_block = false;
   SourceSpan span = {};
   bool constructor_arguments = false;
+  bool construction_type_query = false;
   // An explicit placement operand follows the initializer operands in children.
   ExceptionPlacement exception_placement = ExceptionPlacement::default_region;
+  const Expression *value_initializer() const {
+    const auto index = construction_type_query ? 1u : 0u;
+    return initializer_block && children.size() > index && children[index]->kind == Kind::block
+        ? children[index].get() : nullptr;
+  }
   // A supplied body is stored after the written operands. It binds slot one.
   bool has_here_body() const { return !children.empty() && children.back()->kind == Kind::here_body; }
   bool inspects_return(bool binds_payload = false) const;
@@ -754,15 +760,7 @@ class Parser {
     }
     if (token.text == "ref" || token.text == "ptr" || token.text == "val")
       fail(token.at, "ref/ptr/val are declaration modifiers, not type constructors; name the target type directly");
-    Type type{Type::named, token.text};
-    if (token.text == "i64") type = Type::integer;
-    else if (token.text == "u8") type = Type::uint8;
-    else if (token.text == "u32") type = Type::uint32;
-    else if (token.text == "u64") type = Type::uint64;
-    else if (token.text == "bool") type = Type::boolean;
-    else if (token.text == "void") type = Type::void_type;
-    else if (token.text == "f32") type = Type::float32;
-    else if (token.text == "f64") type = Type::float64;
+    auto type = simple_type(token);
     if (take("(")) {
       auto unit = name(TokenKind::identifier);
       if (parameter) {
@@ -776,6 +774,18 @@ class Parser {
       annotated.target = std::make_shared<Type>(std::move(type));
       return annotated;
     }
+    return type;
+  }
+  static Type simple_type(const Token &token) {
+    Type type{Type::named, token.text};
+    if (token.text == "i64") type = Type::integer;
+    else if (token.text == "u8") type = Type::uint8;
+    else if (token.text == "u32") type = Type::uint32;
+    else if (token.text == "u64") type = Type::uint64;
+    else if (token.text == "bool") type = Type::boolean;
+    else if (token.text == "void") type = Type::void_type;
+    else if (token.text == "f32") type = Type::float32;
+    else if (token.text == "f64") type = Type::float64;
     return type;
   }
   void type_separator() { expect(":"); }
@@ -1230,6 +1240,15 @@ class Parser {
     }
   }
 
+  bool starts_field_initializer() const {
+    size_t field = 1;
+    while (is("(", field)) ++field;
+    if (tokens_[cursor_ + field].kind != TokenKind::identifier) return false;
+    for (size_t close = 0; close + 1 < field; ++close)
+      if (!is(")", field + 1 + close)) return false;
+    return is("<-", field * 2) || is("=", field * 2);
+  }
+
   Expr exception_construction(const Token &token) {
     auto expr = make(Expression::Kind::make_exception, token);
     const auto object = ordinary_name();
@@ -1363,6 +1382,7 @@ class Parser {
         return expr;
       }
       const bool legacy_region = is("(", 1) && is("capacity", 2) && is("=", 3);
+      const auto constructed = peek();
       auto expr = make(legacy_region ? Expression::Kind::make_region : Expression::Kind::make_object,
                        name(TokenKind::identifier));
       if (legacy_region) {
@@ -1372,8 +1392,12 @@ class Parser {
         expr->children.push_back(expression());
         expect(")");
       } else {
-        expr->annotation = Type{Type::named, expr->text};
-        if (is("(")) {
+        if (expr->text == "typeof" && take("(")) {
+          expr->construction_type_query = true;
+          expr->children.push_back(expression());
+          expect(")");
+        } else expr->annotation = simple_type(constructed);
+        if (!expr->construction_type_query && is("(")) {
           expr->constructor_arguments = true;
           arguments(*expr, false);
         }
@@ -1381,6 +1405,14 @@ class Parser {
         if (expr->constructor_arguments) return expr;
         if (!is("{")) return expr;
         expr->initializer_block = true;
+        if (expr->construction_type_query || expr->annotation->kind != Type::named ||
+            (!is("}", 1) && !starts_field_initializer())) {
+          // The attached braces supply a value and introduce no full lexical owner.
+          auto initializer = block();
+          if (initializer->scoped) fail(initializer->at, "use an ordinary initializer block after make");
+          expr->children.push_back(std::move(initializer));
+          return expr;
+        }
       }
       field_initializers(*expr);
       return expr;

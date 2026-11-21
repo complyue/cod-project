@@ -2146,13 +2146,15 @@ class LLVMEmission {
     return b_.CreateInsertValue(value, image, environment_field_);
   }
   llvm::Value *declare_local(const Expression &declaration) {
-    std::map<std::pair<bool, bool>, std::vector<size_t>> alternatives;
+    std::map<std::tuple<bool, bool, bool>, std::vector<size_t>> alternatives;
     for (size_t i = 0; i < contexts_.size(); ++i) {
       const auto &binding = contexts_[i].at(&declaration);
-      alternatives[{binding.view, binding.mixed_view}].push_back(i);
+      const auto &source = contexts_[i].at(declaration.children.front().get());
+      const bool same_place = binding.place && binding.place == source.place;
+      alternatives[{binding.view, binding.mixed_view, same_place}].push_back(i);
     }
     return contextual_value(declaration, alternatives, "storage", [&](auto mode) {
-      const auto [borrowed, mixed] = mode;
+      const auto [borrowed, mixed, same_place] = mode;
       const auto &binding = contexts_.front().at(&declaration);
       llvm::Value *address = binding.place ? static_cast<llvm::Value *>(storage_.at(*binding.place)) : null_pointer();
       if (environments_ && binding.place && storage_.at(*binding.place)->getAllocatedType() == scalar_)
@@ -2170,7 +2172,7 @@ class LLVMEmission {
         auto *selected = b_.CreatePHI(b_.getPtrTy(), 2, "storage.target");
         selected->addIncoming(target, existing); selected->addIncoming(address, constructed);
         address = selected;
-      } else if (borrowed) {
+      } else if (borrowed || same_place) {
         address = emit_expression(*declaration.children.front(), Projection::target);
         if (!reachable()) return static_cast<llvm::Value *>(nullptr);
       } else {
@@ -2706,9 +2708,15 @@ class LLVMEmission {
       return emit_attached_native_handle(expr);
     case K::make_object: {
       auto *address = storage_.at(*fact.place);
-      emit_product_initializers(expr, address);
+      if (fact.operand_type.kind == Type::product) emit_product_initializers(expr, address);
+      else if (const auto *initializer = expr.value_initializer()) {
+        auto *value = emit_expression(*initializer);
+        if (!reachable()) return nullptr;
+        assign_place(address, convert_result(expr, *initializer, value), expr, &CheckedOperation::operand_type);
+      }
       if (!reachable()) return nullptr;
-      return read ? empty_scalar() : address;
+      if (!read) return address;
+      return discard || fact.operand_type.kind == Type::product ? empty_scalar() : load_place(address, expr);
     }
     case K::raise: {
       if (expr.annotation) {
