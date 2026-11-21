@@ -1332,7 +1332,7 @@ class LLVMEmission {
   }
   void collect_cleanup(const Expression &expr, Scope &scope) {
     for (const auto &child : expr.children) collect_cleanup(*child, scope);
-    if (expr.kind == Expression::Kind::native_handle_binding) {
+    if (expr.kind == Expression::Kind::native_handle_binding && expr.binding == "<-") {
       std::set<size_t> constructors;
       for (const auto &context : contexts_) constructors.insert(context.at(&expr).native_acquisition->constructor);
       for (const auto id : constructors)
@@ -2705,6 +2705,19 @@ class LLVMEmission {
       return pack(field, Type::uint64);
     }
     case K::native_handle_binding: {
+      if (expr.binding == "=") {
+        auto *source = emit_expression(*expr.children.front(), Projection::target);
+        if (!reachable()) return nullptr;
+        std::map<size_t, std::vector<size_t>> alternatives;
+        for (size_t i = 0; i < contexts_.size(); ++i)
+          if (const auto place = contexts_[i].at(&expr).place) alternatives[*place].push_back(i);
+        auto *pair = native_handle_pair();
+        auto *value = b_.CreateLoad(pair, source);
+        return contextual_value(expr, alternatives, "native.borrow", [&](size_t place) {
+          b_.CreateStore(value, storage_.at(place));
+          return empty_scalar();
+        });
+      }
       std::map<std::pair<size_t, CheckedOperation::NativeAcquisition>, std::vector<size_t>> plans;
       for (size_t i = 0; i < contexts_.size(); ++i) {
         const auto &acquisition = contexts_[i].at(&expr);
@@ -2952,7 +2965,8 @@ class LLVMEmission {
       else for (const auto type : storage_types[i]) formats.insert(place_format(type));
       llvm::Type *layout = scalar_;
       if (binding.type.kind == Type::product) layout = product_layout(binding.type.identity);
-      else if (binding.type.kind == Type::native_handle && binding.type.owned) layout = b_.getInt64Ty();
+      else if (binding.type.kind == Type::native_handle)
+        layout = binding.type.owned ? static_cast<llvm::Type *>(b_.getInt64Ty()) : native_handle_pair();
       else if (!formats.contains(Type::void_type))
         layout = formats.size() == 1 ? native_type(Type{*formats.begin()}) : b_.getInt64Ty();
       auto *place = binding.borrowed || binding.subobject ? nullptr : slot(layout, binding.name + ".storage");

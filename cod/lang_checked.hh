@@ -389,7 +389,7 @@ class ScalarChecker {
   enum class ExpectedTypeUse { materialization, callable_result };
   enum class EvidenceRead { payload, target, projection, binding_slot, discarded, native_loan };
   enum class BindingUse { ordinary, exception_field, native_loan };
-  enum class NativeLoanContext { none, borrow, reborrow_owner };
+  enum class NativeLoanContext { none, borrow };
   enum class IndexedUse { value_only, immediate_target };
   static ExpectedTypeUse expected_type_use(ArgumentMode mode) {
     return mode == ArgumentMode::value ? ExpectedTypeUse::callable_result : ExpectedTypeUse::materialization;
@@ -5487,9 +5487,9 @@ class ScalarChecker {
     return type.kind == Type::native_handle && type.identity == marker.identity;
   }
   CheckedOperation check_handle_loan(const Expression &operand, CheckedInstance *instance,
-      std::map<const Expression *, CheckedOperation> &operations, bool reborrow_owner = false) {
-    const auto context = reborrow_owner ? NativeLoanContext::reborrow_owner : NativeLoanContext::borrow;
-    check(operand, instance, operations, false, false, nullptr, ExpectedTypeUse::materialization, false, IndexedUse::value_only, context);
+      std::map<const Expression *, CheckedOperation> &operations) {
+    check(operand, instance, operations, false, false, nullptr, ExpectedTypeUse::materialization, false,
+          IndexedUse::value_only, NativeLoanContext::borrow);
     const auto &value = operations.at(&operand);
     if (value.type == Type::never) return value;
     if (value.type.kind != Type::native_handle || value.type.owned || !value.view || value.mixed_view || value.nullable_view)
@@ -5498,11 +5498,9 @@ class ScalarChecker {
     require_live_view(value, operand.at);
     return value;
   }
-  CheckedOperation read_native_loan(const Expression &name, size_t binding, NativeLoanContext context) {
+  CheckedOperation read_native_loan(const Expression &name, size_t binding) {
     auto value = read_binding(name, true, binding, BindingUse::native_loan);
     if (!value.type.owned) return value;
-    if (context != NativeLoanContext::reborrow_owner)
-      implementation_gap(name.at, "reborrowing an owned native handle for an ordinary CoD parameter");
     if (!value.place || !native_resource_owners_.contains(*value.place))
       implementation_gap(name.at, "a C handle borrow without a direct native binding");
     value.owners = {native_resource_owners_.at(*value.place)};
@@ -10413,11 +10411,15 @@ class ScalarChecker {
         if (!state.validating_body) check_query_binding(expr.text, expr.at);
       }
       if (const auto found = state.bindings.find(expr.text); found != state.bindings.end() && !state.definitions.contains(expr.text)) {
-        if (state.required && found->second && found->second->kind == Type::native_handle && read != EvidenceRead::native_loan)
-          implementation_gap(expr.at, "an opaque C handle used outside a checked native operation");
         if (state.required && found->second && nominal_exception(*found->second) && read != EvidenceRead::projection)
           implementation_gap(expr.at, "use of an owned exception outside direct field selection");
         view = state.views.at(expr.text);
+        if (found->second && found->second->kind == Type::native_handle) {
+          if (state.required && read != EvidenceRead::native_loan)
+            implementation_gap(expr.at, "an opaque C handle used outside a checked native operation");
+          view.value_binding = false;
+          return native_handle_type(*found->second, false);
+        }
         target_facts = named_type_target(state, expr.text);
         return found->second;
       }
@@ -10639,16 +10641,35 @@ class ScalarChecker {
       return Type::void_type;
     }
     case K::native_handle_binding: {
-      const auto &initializer = native_handle_initializer(expr);
       const auto declared = evidence_annotation(*expr.annotation, state);
-      const auto constructed = evidence_annotation(*initializer.annotation, state);
-      if (!state.required && (declared.kind != Type::c_type_marker || constructed.kind != Type::c_type_marker)) return {};
-      const auto &constructor = program_.native_constructors[select_native_constructor(declared, constructed, initializer)];
-      if (!native_constructor_evidence(constructor, initializer, state)) return Type::never;
-      state.bindings[expr.text] = native_handle_type(declared, true);
+      if (declared.kind != Type::c_type_marker) {
+        if (state.required) fail(expr.at, "handle declaration requires a fieldless data \"C\" type");
+        return {};
+      }
+      const bool owned = expr.binding == "<-";
+      ViewEvidence binding{false, true, owned, EvidenceOwner::for_scope(expr), false, true};
+      if (owned) {
+        const auto &initializer = native_handle_initializer(expr);
+        const auto constructed = evidence_annotation(*initializer.annotation, state);
+        if (!state.required && constructed.kind != Type::c_type_marker) return {};
+        const auto &constructor = program_.native_constructors[select_native_constructor(declared, constructed, initializer)];
+        if (!native_constructor_evidence(constructor, initializer, state)) return Type::never;
+      } else {
+        const auto &initializer = *expr.children.front();
+        const auto supplied = type_evidence(initializer, state, false, nullptr, nullptr,
+                                            ExpectedTypeUse::materialization, true, EvidenceRead::native_loan);
+        if (supplied == Type::never) return Type::never;
+        if (state.required && supplied && !matches_native_handle(*supplied, declared))
+          fail(initializer.at, "handle initializer must have CType '" + declared.name + "'");
+        binding.owner = state.value.owner;
+        binding.read_only = state.value.read_only;
+      }
+      state.bindings[expr.text] = native_handle_type(declared, owned);
       state.local_declarations[expr.text] = &expr;
       state.definitions.erase(expr.text);
-      state.views[expr.text] = {false, false, true};
+      state.owner_bindings.erase(expr.text);
+      state.selections.remove_binding(expr.text);
+      state.views[expr.text] = binding;
       return Type::void_type;
     }
     case K::make_owned_handle:
@@ -10661,7 +10682,9 @@ class ScalarChecker {
       if (!state.required && type.kind != Type::c_type_marker) return {};
       const auto &constructor = program_.native_constructors[select_native_constructor(type, type, expr)];
       if (!native_constructor_evidence(constructor, expr, state)) return Type::never;
-      view = {false, false, true};
+      view = {false, true, false};
+      if (const auto owner = state.views.find(expr.owner_name); owner != state.views.end())
+        view.owner = owner->second.owner;
       return native_handle_type(type, false);
     }
     case K::make_local: {
@@ -11951,7 +11974,14 @@ class ScalarChecker {
       if (binding.owner_binding) state.owner_bindings[name] = *binding.owner_binding;
       else state.owner_bindings.erase(name);
       const auto found = lexical_.owners.find(binding.alias.value_or(id));
-      const auto owner = found != lexical_.owners.end() && found->second.size() == 1 ? std::optional<size_t>{*found->second.begin()} : std::nullopt;
+      auto owner = found != lexical_.owners.end() && found->second.size() == 1 ? std::optional<size_t>{*found->second.begin()} : std::nullopt;
+      if (binding.type.kind == Type::native_handle && binding.type.owned) {
+        owner.reset();
+        const auto targets = lexical_.targets.find(id);
+        if (targets != lexical_.targets.end() && targets->second.size() == 1)
+          if (const auto resource = native_resource_owners_.find(*targets->second.begin()); resource != native_resource_owners_.end())
+            owner = resource->second;
+      }
       std::optional<bool> slot_read_only;
       bool fixed = binding.fixed, first = true;
       const auto physical_selection = physical_slots({binding.alias.value_or(id)});
@@ -13420,12 +13450,12 @@ class ScalarChecker {
       arguments.push_back(type);
     }
     CheckedOperation::SuppliedHere supplied{};
-    const auto capture_owner = [&](size_t actual, const Location &at) {
+    const auto capture_owner = [&](size_t actual, const Location &at, bool native = false) {
       if (lexical_.live && !owner_alive(actual)) fail(at, "here access requires a live supplier owner");
       const auto found = std::ranges::find(owners, std::optional{actual});
       const auto role = std::distance(owners.begin(), found);
       if (found == owners.end()) {
-        add_owner(at, const_owner(actual));
+        add_owner(at, native ? const_native_owner(actual) : const_owner(actual));
         owners.push_back(actual);
         supplied.owners.push_back(actual);
       }
@@ -13467,14 +13497,14 @@ class ScalarChecker {
             return !missing_initialization(lexical_, place, selected_target(view, place, true)).empty();
           }))
         implementation_gap(capture.at, "here access to a slot without definite initialization at supply");
-      const auto role = capture_owner(*view.owners.begin(), capture.at);
+      const auto role = capture_owner(*view.owners.begin(), capture.at, handle);
       Parameter input{name, type, capture.at, false, {}};
       input.declaration_kind = handle ? "handle" : source.value_binding ? "ptr" : "ref";
       input.owner = inputs.owners.at(role).name;
       input.read_only = view.read_only;
       input.fixed_binding = view.fixed_binding;
       const auto ordinal = arguments.size();
-      if (source.value_binding) {
+      if (!handle && source.value_binding) {
         inputs.live_values.insert(ordinal);
         inputs.place_owners[ordinal].insert(role);
       } else if (!handle) {
@@ -15209,7 +15239,7 @@ class ScalarChecker {
       const auto &operand = *expr.children[i];
       const auto &input = native.inputs[i];
       if (input.type.kind == Type::c_type_marker) {
-        const auto value = check_handle_loan(operand, instance, operations, true);
+        const auto value = check_handle_loan(operand, instance, operations);
         if (value.type == Type::never) {
           operation.type = Type::never;
           lexical_.live = false;
@@ -15289,7 +15319,7 @@ class ScalarChecker {
       const auto &operand = *initializer.children[i];
       const auto &input = constructor.inputs[i];
       if (input.owner) {
-        const auto value = check_handle_loan(operand, instance, operations, true);
+        const auto value = check_handle_loan(operand, instance, operations);
         if (value.type == Type::never) {
           completes = false;
           lexical_.live = false;
@@ -15362,6 +15392,41 @@ class ScalarChecker {
     operation.place = place;
     operation.native_acquisition = std::move(acquisition);
     return operation;
+  }
+  CheckedOperation check_native_borrow_binding(const Expression &expr, CheckedInstance *instance,
+      std::map<const Expression *, CheckedOperation> &operations) {
+    const auto marker = resolve_annotation(*expr.annotation, instance);
+    if (marker.kind != Type::c_type_marker)
+      fail(expr.at, "handle declaration requires a fieldless data \"C\" type");
+    const auto &initializer = *expr.children.front();
+    const auto value = check_handle_loan(initializer, instance, operations);
+    CheckedOperation result;
+    if (value.type == Type::never) { result.type = Type::never; return result; }
+    if (!matches_native_handle(value.type, marker))
+      fail(initializer.at, "handle initializer must have CType '" + marker.name + "'");
+    const auto owner = *one_owner(value);
+    if (!expr.owner_name.empty()) {
+      const auto &name = expr.owner_name;
+      const auto binding = lexical_.lookup(name);
+      size_t selected;
+      if (binding && bindings_->at(*binding).type.kind == Type::native_handle && bindings_->at(*binding).type.owned) {
+        Expression source{};
+        source.kind = Expression::Kind::name;
+        source.at = expr.at;
+        source.text = name;
+        selected = *one_owner(read_native_loan(source, *binding));
+      } else selected = named_owner(name, expr.at);
+      if (compare_owners(owner, selected) != OwnerMatch::satisfied)
+        fail(initializer.at, "handle initializer does not have the declared actual owner '" + name + "'");
+    }
+    const auto place = declare(expr.text, value.type, value.read_only, true, expr.at);
+    const auto binding = storage(place).binding;
+    bindings_->at(binding).fixed = true;
+    lexical_.owners.at(binding) = {owner};
+    initialize(place);
+    result.type = Type::void_type;
+    result.place = place;
+    return result;
   }
   CheckedOperation check_product_construction(const Expression &expr, const Type &type, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, std::optional<size_t> destination = {}, bool read = false) {
@@ -15623,7 +15688,7 @@ class ScalarChecker {
     case K::name:
       if (native_loan != NativeLoanContext::none) {
         if (const auto binding = lexical_.lookup(expr.text); binding && bindings_->at(*binding).type.kind == Type::native_handle) {
-          operation = read_native_loan(expr, *binding, native_loan);
+          operation = read_native_loan(expr, *binding);
           break;
         }
       }
@@ -16617,7 +16682,8 @@ class ScalarChecker {
       break;
     }
     case K::native_handle_binding:
-      operation = check_native_acquisition(expr, instance, operations);
+      operation = expr.binding == "<-" ? check_native_acquisition(expr, instance, operations)
+                                       : check_native_borrow_binding(expr, instance, operations);
       break;
     case K::make_owned_handle:
       implementation_gap(expr.at, "C handle acquisition outside a direct lexical owned handle initializer");
