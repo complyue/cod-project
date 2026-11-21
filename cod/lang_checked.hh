@@ -389,7 +389,7 @@ class ScalarChecker {
   enum class ExpectedTypeUse { materialization, callable_result };
   enum class EvidenceRead { payload, target, projection, binding_slot, discarded, native_loan };
   enum class BindingUse { ordinary, exception_field, native_loan };
-  enum class NativeLoanContext { none, borrow };
+  enum class NativeLoanContext { none, borrow, discard_result };
   enum class IndexedUse { value_only, immediate_target };
   static ExpectedTypeUse expected_type_use(ArgumentMode mode) {
     return mode == ArgumentMode::value ? ExpectedTypeUse::callable_result : ExpectedTypeUse::materialization;
@@ -4515,6 +4515,10 @@ class ScalarChecker {
       operation.borrowed_result = operation.view = true;
       operation.read_only = !contract.const_views.empty() && contract.const_views.back();
       operation.owners = {owners.at(result_owner)};
+      if (operation.type.kind == Type::native_handle) {
+        require_live_view(operation, expr.at);
+        return;
+      }
       operation.initialization = CleanupEquations::Initialization{};
       for (const auto parameter : summary.returned.targets) {
         if (parameter == null_target) continue;
@@ -10448,6 +10452,10 @@ class ScalarChecker {
                                       expected_use, true, EvidenceRead::target, joining);
       if (!type || type == Type::never) return type;
       const auto &source = state.value;
+      if (type->kind == Type::native_handle && (read == EvidenceRead::target || read == EvidenceRead::discarded)) {
+        view = source;
+        return type;
+      }
       const auto result = group_result(*type, source.view.value_or(false), source.nullable, source.mixed_view);
       if (result == GroupResult::unsupported) {
         if (state.required) implementation_gap(expr.at, "parenthesized result with no proved value or nullable-target contract");
@@ -11820,9 +11828,11 @@ class ScalarChecker {
       const auto expected_use = state.supplied_invocation_result ? ExpectedTypeUse::callable_result : ExpectedTypeUse::materialization;
       std::vector<Type> tail_types;
       auto *evidence = !state.returns ? nullptr : tail ? &tail_types : &state.returns->types;
+      const bool native_result = expected_return && expected_return->kind == Type::native_handle;
       const auto result = expr.children.empty() ? std::optional<Type>{Type::void_type} :
           type_evidence(*expr.children.front(), state, false, expected_return, evidence,
-                        expected_use, true, state.borrowed_return ? EvidenceRead::target : EvidenceRead::payload);
+                        expected_use, true, native_result ? EvidenceRead::native_loan :
+                        state.borrowed_return ? EvidenceRead::target : EvidenceRead::payload);
       if (tail && (result == Type::void_type || result == Type::never)) return result;
       if (tail && state.returns)
         for (const auto &type : tail_types) if (type != Type::void_type) state.returns->types.push_back(type);
@@ -11840,7 +11850,7 @@ class ScalarChecker {
       if (result && result->kind == Type::procedure) note_type_allocation(state);
       if (result != Type::never) {
         TypeReturned returned;
-        if (state.borrowed_return) {
+        if (state.borrowed_return && !native_result) {
           const auto &contract = *state.borrowed_return;
           const auto owner = state.owner_bindings.at(contract.owner);
           const bool valid_owner = compare_owners(state.value.owner, owner, &state) == OwnerMatch::satisfied;
@@ -15686,7 +15696,7 @@ class ScalarChecker {
       if (!expr.owner_name.empty()) operation.owners = {expr.owner_name == "here" ? cleanup_scope_ : named_owner(expr.owner_name, expr.at)};
       break;
     case K::name:
-      if (native_loan != NativeLoanContext::none) {
+      if (native_loan == NativeLoanContext::borrow) {
         if (const auto binding = lexical_.lookup(expr.text); binding && bindings_->at(*binding).type.kind == Type::native_handle) {
           operation = read_native_loan(expr, *binding);
           break;
@@ -16010,7 +16020,7 @@ class ScalarChecker {
           false, IndexedUse::immediate_target, native_loan);
       if (operation.type == Type::never) break;
       const auto &source = operations.at(&operand);
-      if (native_loan != NativeLoanContext::none && operation.type.kind == Type::native_handle) {
+      if ((native_loan != NativeLoanContext::none || discard) && operation.type.kind == Type::native_handle) {
         view(source);
         break;
       }
@@ -16039,7 +16049,7 @@ class ScalarChecker {
       if (*expr.annotation != Type::void_type) implementation_gap(expr.at, "non-void expression conversion or assertion");
       const auto &operand = *expr.children.front();
       const auto type = check(operand, instance, operations, false, false, nullptr,
-          ExpectedTypeUse::materialization, false, IndexedUse::immediate_target);
+          ExpectedTypeUse::materialization, false, IndexedUse::immediate_target, NativeLoanContext::discard_result);
       if (type == Type::null_ref) fail(expr.at, "explicit discard requires an independently typed operand");
       require_live_view(operations.at(&operand), operand.at);
       operation.type = type == Type::never ? Type{Type::never} : Type{Type::void_type};
@@ -16625,6 +16635,25 @@ class ScalarChecker {
       const bool borrowed = contract.borrowed();
       const auto use = instance->result_supplied && !borrowed
           ? ExpectedTypeUse::callable_result : ExpectedTypeUse::materialization;
+      if (contract.native_borrow()) {
+        if (expr.children.empty()) fail(expr.at, "borrowed handle result requires an explicit return value");
+        const auto &operand = *expr.children.front();
+        const auto selected = check_handle_loan(operand, instance, operations);
+        if (selected.type != Type::never) {
+          if (selected.type != *contract.type) fail(operand.at, "borrowed handle return requires the declared CType");
+          const auto actual = *one_owner(selected);
+          if (compare_owners(actual, external_owners_.at(contract.owner)) != OwnerMatch::satisfied)
+            fail(operand.at, "borrowed handle result does not retain its declared input owner");
+          if (!contract.read_only && (selected.read_only || const_native_owner(actual)))
+            fail(operand.at, "readonly handle cannot supply a writable borrowed handle result");
+          operation.borrowed_result = true;
+          lexical_.returned = {false, {}, {}, {}};
+          note_abrupt(expr.at, {}, {1, true});
+        }
+        operation.type = Type::never;
+        operation.operand_type = *contract.type;
+        break;
+      }
       const auto value = expr.children.empty() ? Type{Type::void_type} :
           check(*expr.children[0], instance, operations, !borrowed, false, &*contract.type, use);
       if (tail && (value == Type::void_type || value == Type::never)) {
@@ -16688,7 +16717,7 @@ class ScalarChecker {
     case K::make_owned_handle:
       implementation_gap(expr.at, "C handle acquisition outside a direct lexical owned handle initializer");
     case K::make_borrowed_handle:
-      if (native_loan == NativeLoanContext::none)
+      if (native_loan != NativeLoanContext::borrow)
         implementation_gap(expr.at, "attached native handle construction outside a checked borrowed argument");
       operation = check_attached_native_acquisition(expr, instance, operations);
       break;
@@ -16997,6 +17026,8 @@ class ScalarChecker {
     }
     if (operation.indexed_target && (write_slot || (!read && indexed_use != IndexedUse::immediate_target)))
       implementation_gap(expr.at, "borrowing an indexed array element outside a direct projection, transfer or call");
+    if (operation.type.kind == Type::native_handle && native_loan == NativeLoanContext::none && !discard)
+      implementation_gap(expr.at, "using a borrowed handle result outside a checked native loan");
     if (operation.type == Type::never) lexical_.live = false;
     if (operation.view && !operation.selection_identity) operation.selection_identity = new_selection_identity();
     operations[&expr] = operation;
@@ -17296,7 +17327,7 @@ class ScalarChecker {
         for (const auto source : state.null_sources.at(binding))
           targets.null_sources.insert(source == null_target ? null_target : input_ordinal(source));
     });
-    if (!reason && checking_instance_->result.borrowed()) {
+    if (!reason && checking_instance_->result.borrowed() && !checking_instance_->result.native_borrow()) {
       auto returned = state.returned;
       returned.enter_initialization(initialization_frame());
       returned.initialize(state.initialized, state.selections);
@@ -18410,13 +18441,21 @@ class ScalarChecker {
       if (pipeline && pipeline->kind == PipelineOperator::Kind::source &&
           (!prepared.here.front().here.empty() || form->result_type != Type::void_type))
         implementation_gap(form->at, "a source-attachment method requires a generator result contract");
+      const bool handle_result = form->result_kind == "handle";
       if (form->result_type) {
         prepared.result.type = resolve_signature(*form->result_type);
-        reject_c_type_payload(*prepared.result.type, form->at);
+        if (handle_result) {
+          if (form->kind != Form::Kind::procedure || form->symbolic || !operation.empty() || lexical_methods_.contains(form))
+            implementation_gap(form->at, "borrowed handle results outside named CoD procedures");
+          if (prepared.result.type->kind != Type::c_type_marker)
+            fail(form->at, "handle result requires a fieldless data \"C\" type");
+          prepared.result.type = native_handle_type(*prepared.result.type, false);
+        } else reject_c_type_payload(*prepared.result.type, form->at);
       }
       prepared.result.owner = form->result_owner;
       if (!form->result_owner.empty()) {
-        prepared.result.mode = form->result_kind == "ptr" ? ResultMode::borrowed_ptr : ResultMode::borrowed_ref;
+        prepared.result.mode = handle_result ? ResultMode::borrowed_handle :
+            form->result_kind == "ptr" ? ResultMode::borrowed_ptr : ResultMode::borrowed_ref;
         prepared.result.read_only = form->result_const;
       }
       if (form->result_kind == "val" && prepared.result.type && !scalar_type(*prepared.result.type))
@@ -18424,7 +18463,7 @@ class ScalarChecker {
       if (prepared.result.type && !prepared.result.borrowed() && *prepared.result.type != Type::void_type && prepared.result.type->kind != Type::procedure && !scalar_type(*prepared.result.type)) {
         if (!form->result_const) implementation_gap(form->at, "default result mode for non-scalar or generic types");
       }
-      if (prepared.result.type) signature_type(prepared, *prepared.result.type, form->at, true, prepared.result.borrowed());
+      if (prepared.result.type && !handle_result) signature_type(prepared, *prepared.result.type, form->at, true, prepared.result.borrowed());
       for (const auto &type : form->throws_types) {
         const auto resolved = resolve_type(type);
         if (resolved.kind != Type::exception) fail(form->at, "throws contracts require selected exception types");
@@ -18456,6 +18495,16 @@ class ScalarChecker {
         prepared.parameters.push_back(resolve_signature(parameter.type));
         const auto mode = argument_mode(parameter);
         signature_type(prepared, prepared.parameters.back(), parameter.at, false, mode != ArgumentMode::value);
+      }
+      if (handle_result) {
+        const auto &owner = prepared.result.owner;
+        if (!native_owners.contains(owner))
+          fail(form->at, "handle result owner '" + owner + "' must be established by a handle input");
+        const auto handle = prepared.result.type->identity;
+        if (program_.schemas.at(handle).native_owner.value_or(handle) != native_owners.at(owner))
+          fail(form->at, "handle result CType does not match its declared input owner CType");
+        const auto parameter = std::ranges::find(prepared.input_owners(), owner, &OwnerParameter::name);
+        prepared.result.read_only |= parameter->read_only;
       }
       check_aggregate_owner_roles(prepared, prepared.parameters);
       for (const auto &parameter : form->type_parameters)
