@@ -1,12 +1,14 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 200
+Discussion revision: 201
 
-Recorded: 2026-11-19
+Recorded: 2026-11-21
 
 Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
+
+[D-07-ENUM](DesignAuthorityRegistry.md#d-07-enum), P-658/P-659, applies [the typed-enum decision](../CHANGELOG.md#h-typed-enum-20261121) at r201. A closed set of named bits values keeps application outcomes explicit across source modules and cases. Check declaration identity, lexical shadowing and complete coverage over distinct values. The scoped [enum contract](TypedEnums.md) records acceptance and the C boundary.
 
 [H-ORDINARY-NAMES-20261119](../CHANGELOG.md#h-ordinary-names-20261119) covers the naming and field-selection entries at r200 under [D-10-ORDINARY-NAMES](DesignAuthorityRegistry.md#d-10-ordinary-names).
 
@@ -236,6 +238,10 @@ A nominal data type owns its constructor overload family. Each data constructor 
 
 Adding a call operator leaves the initializer count of every constructor unchanged. A constructor overload alone cannot make a data value callable. See [named sum constructors](#named-sum-constructors) for the field contract and [functor receivers](#functor-receivers-and-callback-arguments) for receiver access and here arguments.
 
+#### Typed enums
+
+A [typed enum](TypedEnums.md#declaration-and-value-identity) declares a closed nominal bits type with named members. Two member names can denote one value for source compatibility. Select members using the type selector and match them in parenthesized case heads. An enum member requires no allocation or constructor call.
+
 #### Named sum constructors
 
 Each alternative of a nominal sum has a directly visible data constructor name. The same identity selects the alternative in `make Accepted(...)` and tests it in `r isa Accepted`. The predicate checks the active alternative without calling an initializer. An initialized null ptr tests false. A successful ptr test refines the target and non-null facts while the binding and the active alternative remain stable. The parent sum supplies the nominal result type.
@@ -381,7 +387,7 @@ An explicit `x : T` in the subject, guard or body is an ordinary expression. For
 
 Join normal arm results under the [conditional result rules](ConstructionAndAcquisition.md#conditional-results). A single-brace `return` exits the enclosing callable. A double-brace `return v;` supplies this arm’s result after its own cleanup, and execution continues with the case’s consumer. A normally completing double-brace value tail supplies the same local arm result. Prepare it before running the arm’s [full-scope cleanup](ExceptionControl.md#full-scopes-as-immediate-ordinary-calls). Do not return a reference to that invocation’s fresh storage. A reference to a sufficiently long-lived outer target retains its ordinary owner. An early case break also supplies a result. Paths that leave by an enclosing return, throw or arm fallthrough contribute no result to the join.
 
-**Exhaustive arms or an explicit fallback.** A value-producing case can omit the final unguarded catch-all when the checker proves that scanning cannot reach the end without a result or an ordinary exit. Two completing arms for true and false suffice for a stable Boolean. For a non-null closed sum, one completing arm for each declared constructor suffices. Count constructor identities from the whole sum definition, including alternatives outside an explicit import list. A nullable subject also requires coverage of null unless a valid non-null fact excludes it. Enumerating known descendants alone gives no completeness proof for an open abstract type.
+**Exhaustive arms or an explicit fallback.** A value-producing case can omit the final unguarded catch-all when the checker proves that scanning cannot reach the end without a result or an ordinary exit. Two completing arms for true and false suffice for a stable Boolean. For a closed enum, completing arms for its distinct [member identities](TypedEnums.md#names-and-case-matching) suffice, including when only some names were imported. For a non-null closed sum, one completing arm for each declared constructor suffices. Count constructor identities from the whole sum definition, including alternatives outside an explicit import list. A nullable subject also requires coverage of null unless a valid non-null fact excludes it. Enumerating known descendants alone gives no completeness proof for an open abstract type.
 
 ```cod
 func fee(expedited:bool) -> u64 {

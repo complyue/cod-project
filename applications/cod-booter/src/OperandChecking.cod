@@ -25,6 +25,7 @@ using "ParserStorage.cod" typed_name_node;
 using "ParserStorage.cod" owned_type_node;
 using "ParserStorage.cod" val_binding_node;
 using "ParserStorage.cod" ptr_binding_node;
+using "ParserStorage.cod" local_storage_binding;
 using "ParserStorage.cod" literal_node;
 using "ParserStorage.cod" name_node;
 using "ParserStorage.cod" null_node;
@@ -172,7 +173,7 @@ func only_void(ref facts:OperandFacts in F, at:u64) -> void where {owner F} {
 
 func require_typed_bits(nodes:const ExprNodes in N, ref facts:OperandFacts in F, operand:u64, kind:u8) -> u8
     where {const owner N, owner F} {
-    if (nodes[operand].kind == val_binding_node() || nodes[operand].kind == ptr_binding_node()) {
+    if (local_storage_binding(nodes[operand].kind)) {
         return unproved_operand();
     } else {};
     if (facts[operand].kind == 0u8) { return unproved_operand(); } else {};
@@ -304,11 +305,11 @@ func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, ref 
                   at:u64) -> u8 where {const owner N, const owner B, owner F} {
     val binding <- nodes[at].left;
     val initializer <- nodes[at].right;
-    val readonly <- if (nodes[binding].kind == typed_name_node() && nodes[binding].number == readonly_declaration()) {
-        1u8
-    } else { 0u8 };
     val type_name <- no_node();
     if (nodes[binding].kind == typed_name_node()) { (type_name <- nodes[binding].right):void; } else {};
+    val readonly <- if (type_name != no_node() && nodes[binding].number == readonly_declaration()) {
+        1u8
+    } else { 0u8 };
     val required_owner <- no_node();
     val value_binding <- nodes[at].kind == val_binding_node();
     if (type_name != no_node() && nodes[type_name].kind == owned_type_node()) {
@@ -317,7 +318,7 @@ func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, ref 
         (type_name <- nodes[type_name].left):void;
     } else {};
     val declared_kind <- if (type_name == no_node()) { 0u8 } else { declared_scalar(names[type_name].kind) };
-    if (declared_kind == 0u8 && (type_name != no_node() || !value_binding)) { return unproved_operand(); } else {};
+    if (declared_kind == 0u8 && type_name != no_node()) { return unproved_operand(); } else {};
     if (facts[initializer].kind == never_result()) {
         if (required_owner != no_node() && nodes[initializer].kind == make_named_node() &&
             required_owner != names[initializer].scope) {
@@ -341,22 +342,31 @@ func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, ref 
         facts[at].target_readonly <- readonly;
         return 0u8;
     } else {};
-    val owner_site <- facts[initializer].owner;
+    if (local_storage_binding(nodes[initializer].kind)) { return unproved_operand(); } else {};
+    val pointer <- nodes[at].kind == ptr_binding_node();
+    val reception <- if (pointer) { nullable_ptr() } else { borrowed_ref() };
+    val fresh <- facts[initializer].reception == independent_value();
+    val kind <- if (type_name == no_node()) { (facts[initializer].kind) } else { declared_kind };
+    val owner_site <- if (fresh) { (names[at].scope) } else { (facts[initializer].owner) };
     if (required_owner != no_node()) {
         if (owner_site != no_node() && owner_site != required_owner) {
             return owner_conflict(nodes, owner_site, required_owner);
         } else {};
         (owner_site <- required_owner):void;
     } else {};
-    if (facts[initializer].kind != null_literal()) {
-        if (facts[initializer].kind != declared_kind || facts[initializer].reception == independent_value()) {
+    if (facts[initializer].kind == null_literal()) {
+        if (!pointer) { return unproved_nonnull_borrow(); } else {};
+    } else {
+        if (!scalar_kind(kind) || facts[initializer].kind != kind) {
             return unproved_operand();
         } else {};
-        if (facts[initializer].target_readonly != 0u8 && readonly == 0u8) { return expected_writable_place(); } else {};
-    } else {};
+        if (type_name != no_node() && facts[initializer].target_readonly != 0u8 && readonly == 0u8) {
+            return expected_writable_place();
+        } else {};
+    };
     if (owner_site == no_node()) { return unproved_owner(); } else {};
-    set_fact(facts, at, declared_kind, nullable_ptr(), owner_site, 0u64, 0u8);
-    facts[at].target_readonly <- readonly;
+    set_fact(facts, at, kind, reception, owner_site, 0u64, 0u8);
+    facts[at].target_readonly <- if (type_name == no_node()) { (facts[initializer].target_readonly) } else { readonly };
     facts[at].reservation <- facts[initializer].reservation;
     return 0u8;
 }
@@ -416,7 +426,7 @@ func check_argument(nodes:const ExprNodes in N, ref facts:OperandFacts in F, ref
         set_result(facts, argument, kind);
         return 0u8;
     } else {};
-    if (nodes[actual].kind == val_binding_node() || nodes[actual].kind == ptr_binding_node() ||
+    if (local_storage_binding(nodes[actual].kind) ||
         facts[actual].kind == 0u8 || facts[actual].kind == null_literal()) { return unproved_operand(); } else {};
     if (facts[actual].kind != kind) { return wrong_operand_type(); } else {};
     val reception <- facts[actual].reception;
@@ -512,7 +522,7 @@ func check_sequence_item(nodes:const ExprNodes in N, ref facts:OperandFacts in F
     val expression <- nodes[at].right;
     if (facts[expression].kind == never_result()) { set_result(facts, at, never_result()); return; } else {};
     val kind <- void_result();
-    if (nodes[expression].kind != val_binding_node() && nodes[expression].kind != ptr_binding_node()) {
+    if (!local_storage_binding(nodes[expression].kind)) {
         if (facts[at].arm_result != 0u8 && scalar_kind(facts[expression].kind)) {
             copy_fact(facts, at, expression);
             return;
@@ -822,7 +832,7 @@ func check_operand(nodes:const ExprNodes in N, names:const NameBindings in B, li
         set_fact(facts, at, null_literal(), 0u8, owner_site, 0u64, 0u8);
         return 0u8;
     } else {};
-    if (kind == val_binding_node() || kind == ptr_binding_node()) { return check_local(nodes, names, facts, at); } else {};
+    if (local_storage_binding(kind)) { return check_local(nodes, names, facts, at); } else {};
     if (kind == make_named_node()) { return check_construction(nodes, names, facts, at); } else {};
     if (integer_arithmetic(kind) || kind == group_node()) {
         return check_numeric_expression(nodes, facts, at, kind);

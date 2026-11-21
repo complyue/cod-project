@@ -70,12 +70,15 @@ using "ParserStorage.cod" finally_clause_node;
 using "ParserStorage.cod" null_node;
 using "ParserStorage.cod" return_node;
 using "ParserStorage.cod" throw_node;
-using "ParserStorage.cod" val_binding_node;
-using "ParserStorage.cod" ptr_binding_node;
+using "ParserStorage.cod" local_storage_binding;
 using "ExpressionParser.cod" ParseResult;
+using "ModuleExports.cod" SelectedExports;
+using "ModuleExports.cod" record_export;
 
 data NameBinding {
     kind:u8;
+    # A using node records the category supplied by its checked export.
+    imported_kind:u8;
     declaration:u64;
     # Expressions record the full lexical scope that contains them.
     scope:u64;
@@ -578,6 +581,26 @@ func resolve_defer(source:const SourceBytes in S, nodes:const ExprNodes in N, re
     return;
 }
 
+func resolve_record_initializer(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
+                                 ref work:NameWork in W, ref state:NameState in R, body:u64) -> void
+    where {const owner S, const owner N, owner B, owner W, owner R} {
+    if (body == no_node()) { return; } else {};
+    val tail <- nodes[body].left;
+    val item <- first_item(nodes, tail);
+    val field <- no_node();
+    for (unused in 0u64 .. syntax_len(nodes)) {
+        if (item == no_node()) { return; } else {};
+        field <- nodes[item].right;
+        if (nodes[field].kind != initializer_assignment_node() || nodes[nodes[field].left].kind != name_node()) {
+            reject_name(state, field, unsupported_ordinary_construction());
+            return;
+        } else {};
+        resolve_expression(source, nodes, bindings, work, state, nodes[field].right);
+        if (state.diagnostic != 0u8 || item == tail) { return; } else {};
+        (item <- work[item].next):void;
+    };
+}
+
 func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
                           ref work:NameWork in W, ref state:NameState in R, at:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
@@ -589,13 +612,17 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
     if (state.repeated) { reject_name(state, at, unsupported_repeated_construction()); return; } else {};
     if (state.here_group) { reject_name(state, at, unsupported_here_group_storage()); return; } else {};
     val requested <- nodes[at].left;
+    val record_initializer <- false;
     if (nodes[requested].kind == construction_type_query_node()) {
         resolve_expression(source, nodes, bindings, work, state, nodes[requested].left);
     } else {
         resolve_type_name(source, nodes, bindings, work, state, requested);
         if (state.diagnostic != 0u8) { return; } else {};
         val kind <- bindings[requested].kind;
-        if (!native_scalar(kind) && kind != builtin_void()) {
+        val definition <- bindings[requested].declaration;
+        record_initializer <- (kind == record_type() && nodes[nodes[definition].left].kind != data_parent_node()) ||
+            (kind == ordinary_selection() && bindings[definition].imported_kind == record_export());
+        if (!record_initializer && !native_scalar(kind) && kind != builtin_void()) {
             reject_name(state, at, unsupported_ordinary_construction());
             return;
         } else {};
@@ -606,7 +633,10 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
         resolve_owner(source, nodes, bindings, work, state, owner_name);
         if (state.diagnostic != 0u8) { return; } else {};
     } else {};
-    resolve_expression(source, nodes, bindings, work, state, construction_body(nodes, at));
+    val body <- construction_body(nodes, at);
+    if (record_initializer) {
+        resolve_record_initializer(source, nodes, bindings, work, state, body);
+    } else { resolve_expression(source, nodes, bindings, work, state, body); };
 }
 
 func resolve_range(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
@@ -732,7 +762,7 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
         state.guarded <- guarded;
         return;
     } else {};
-    if (kind == val_binding_node() || kind == ptr_binding_node()) {
+    if (local_storage_binding(kind)) {
         resolve_local(source, nodes, bindings, work, state, at);
         return;
     } else {};
@@ -1057,20 +1087,22 @@ func resolve_module_bodies(source:const SourceBytes in S, nodes:const ExprNodes 
 # need one element per syntax node. A populated binding identifies a declaration
 # in the syntax buffer or a builtin kind. On failure, use only the diagnostic.
 func resolve_module_names(source:const SourceBytes in S, nodes:const ExprNodes in N, tree:const ParseResult in T,
-                           ref bindings:NameBindings in B, ref work:NameWork in W,
+                           selected:const SelectedExports in E, ref bindings:NameBindings in B, ref work:NameWork in W,
                            ref report:NameResolutionResult in R) -> bool
-    where {const owner S, const owner N, const owner T, owner B, owner W, owner R} {
+    where {const owner S, const owner N, const owner T, const owner E, owner B, owner W, owner R} {
     report.node <- no_node();
     report.enclosing_defer <- no_node();
     report.diagnostic <- invalid_module_tree();
     if (tree.diagnostic != 0u8 || tree.used == 0u64 || tree.used > syntax_len(nodes) ||
         tree.root != tree.used - 1u64 || nodes[tree.root].kind != module_node()) { return false; } else {};
-    if (intrinsic (len)(bindings) < tree.used || intrinsic (len)(work) < tree.used) {
+    if (intrinsic (len)(bindings) < tree.used || intrinsic (len)(work) < tree.used ||
+        intrinsic (len)(selected) < tree.used) {
         report.diagnostic <- name_storage_exhausted();
         return false;
     } else {};
     for (at in 0u64 .. tree.used) {
         remember(bindings, at, no_node(), 0u8);
+        bindings[at].imported_kind <- if (nodes[at].kind == using_node()) { (selected[at].kind) } else { 0u8 };
         bindings[at].scope <- no_node();
     };
     link_entries(nodes, work, tree.used);

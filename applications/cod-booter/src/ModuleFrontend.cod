@@ -7,7 +7,6 @@ using "ParserStorage.cod" exception_local_node;
 using "ParserStorage.cod" bodyless_defer_node;
 using "ParserStorage.cod" exception_parameter_node;
 using "ParserStorage.cod" exception_result_node;
-using "ParserStorage.cod" ref_local_node;
 using "ParserStorage.cod" ref_result_node;
 using "ParserStorage.cod" make_exception_node;
 using "ParserStorage.cod" make_named_node;
@@ -126,7 +125,6 @@ func unsupported_source_form(nodes:const ExprNodes in N, at:u64, emit_object:boo
     if (kind == exception_parameter_node()) { return 29u8; } else {};
     if (kind == exception_result_node()) { return 30u8; } else {};
     if (kind == make_exception_node()) { return 33u8; } else {};
-    if (kind == ref_local_node()) { return 34u8; } else {};
     if (kind == ref_result_node()) { return 35u8; } else {};
     if (kind == make_named_node() && !supported_construction_shape(nodes, at)) { return unsupported_ordinary_construction(); } else {};
     if (emit_object && kind == field_access_node()) { return 38u8; } else {};
@@ -182,7 +180,7 @@ func bind_parsed_module(source:const SourceBytes in S, nodes:const ExprNodes in 
         return false;
     } else {};
     ref names = make NameResolutionResult { diagnostic <- 0u8; node <- no_node(); enclosing_defer <- no_node(); };
-    if (!resolve_module_names(source, nodes, result.frontend.tree, bindings, work, names)) {
+    if (!resolve_module_names(source, nodes, result.frontend.tree, selected, bindings, work, names)) {
         binding_diagnostic(nodes, result, module_binding_failed(), names.diagnostic, names.node);
         if (names.enclosing_defer != no_node()) { result.related_first <- nodes[names.enclosing_defer].first; {}; } else {};
         return false;

@@ -41,7 +41,8 @@ using "ParserStorage.cod" null_node;
 using "ParserStorage.cod" name_node;
 using "ParserStorage.cod" ptr_binding_node;
 using "ParserStorage.cod" ptr_parameter_node;
-using "ParserStorage.cod" val_binding_node;
+using "ParserStorage.cod" ref_local_node;
+using "ParserStorage.cod" local_storage_binding;
 using "ExpressionParser.cod" ParseResult;
 using "NameResolution.cod" NameBindings;
 using "NameResolution.cod" NameWork;
@@ -108,6 +109,7 @@ func unproved_incoming_exception() -> u8 { return 9u8; }
 func unproved_throw_operand() -> u8 { return 10u8; }
 func unproved_caught_handoff() -> u8 { return 11u8; }
 func unproved_nonnull_argument() -> u8 { return 12u8; }
+func unproved_nonnull_binding() -> u8 { return 16u8; }
 
 func initialize_site(ref sites:CompletionSites in X, at:u64) -> void where {owner X} {
     sites[at].event <- 0u8;
@@ -237,7 +239,7 @@ func prepare_context(nodes:const ExprNodes in N, facts:const OperandFacts in F,
         } else {};
         return;
     } else {};
-    if (kind == val_binding_node() || kind == ptr_binding_node()) {
+    if (local_storage_binding(kind)) {
         inherit_context(sites, at, nodes[at].right, guard, incoming, replacing);
         return;
     } else {};
@@ -415,7 +417,7 @@ func operands_can_complete(nodes:const ExprNodes in N, sites:const CompletionSit
         kind == throw_node() || kind == return_node() || kind == deferred_call_node() || kind == logical_not_node()) {
         return can_continue(sites, nodes[at].left);
     } else {};
-    if (kind == val_binding_node() || kind == ptr_binding_node()) {
+    if (local_storage_binding(kind)) {
         return can_continue(sites, nodes[at].right);
     } else {};
     if (kind == make_named_node()) { return can_continue(sites, construction_body(nodes, at)); } else {};
@@ -533,6 +535,8 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
             return unproved_nonnull_argument();
         } else {};
     } else {};
+    if (kind == ref_local_node() && facts[nodes[at].right].reception == nullable_ptr() &&
+        sites[nodes[at].right].presence != present_target()) { return unproved_nonnull_binding(); } else {};
     if (kind == call_node()) { return check_call_completion(nodes, names, links, facts, sites, at, used); } else {};
     if (kind == deferred_call_node() || kind == deferred_block_node()) {
         record_registration(names, sites, at);

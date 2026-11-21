@@ -1,8 +1,10 @@
 # Native C providers, LLVM bindings and scoped cleanup
 
-Revision 17 · 2026-11-21 · Confirmed for the first booter: synchronous calls, scoped native handles, LLVM session ownership, C declaration direction, typed `SourceRevision` failure generation and declared owner CTypes for borrowed handles.
+Revision 18 · 2026-11-21 · Confirmed for the first booter: synchronous calls, scoped native handles, LLVM session ownership, C declaration direction, typed `SourceRevision` failure generation and declared owner CTypes for borrowed handles.
 
 ## Design authority
+
+[D-20-C-ENUM](../../../design/DesignAuthorityRegistry.md#d-20-c-enum) at r18 applies the [delegated enum review](../../../CHANGELOG.md#k-typed-enum-review-20261121) to by-value compiler status exchange. P-660/P-661 connect the checked declaration to matching C stubs. Acceptance validates actual codes on normal delivery, preserves protected completion and exercises the source-open failure path. Shared foreign storage and permanent ABI are separate.
 
 [D-10-OWN-QUALIFIER](../../../design/DesignAuthorityRegistry.md#d-10-own-qualifier) and [H-CONTEXTUAL-OWN-20261121](../../../CHANGELOG.md#h-contextual-own-20261121) cover the `own handle` binding and `make own handle` constructor spelling at r17.
 
@@ -18,6 +20,8 @@ Revision 17 · 2026-11-21 · Confirmed for the first booter: synchronous calls, 
 Checked CoD declarations define the required C behavior interfaces. The seed and booter derive equivalent C contracts and generate provider headers and stubs. Generated code adapts arguments, results and callbacks and performs enforceable boundary checks. Separate handwritten C implements the operations and upholds the native resource protocols. The first booter statically links its providers.
 
 Calls in both directions use synchronous `here` semantics. A body can use direct lexical access in its own supplying activation while that activation is live. Preserve actual owners, access permissions, bounded backing and ordinary or abrupt completion through each call. A provider keeps all lent backing valid for the entire callback, including across nested calls. A callback and its confined views cannot outlive the activation that supplies them. Ordinary feedback, provider failure and CoD abrupt completion remain distinct. Completion crosses the boundary with its original CoD meaning and observes the ordinary cleanup rules.
+
+For [enum arguments, results and normal feedback](../../../design/TypedEnums.md#generated-c-exchange), generate an exact-width carrier and namespaced constants. Validate C-originating normal values before exposing them as CoD enum values. For the [compiler status workload](../../../design/TypedEnums.md#first-workload-and-acceptance), the launcher receives codes 0–7 through the ordinary result channel.
 
 ## Native handles and C records
 
