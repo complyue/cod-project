@@ -28,6 +28,9 @@ using "ParserStorage.cod" readonly_declaration;
 using "ParserStorage.cod" typed_name_node;
 using "ParserStorage.cod" owned_type_node;
 using "ParserStorage.cod" name_node;
+using "ParserStorage.cod" field_access_node;
+using "ParserStorage.cod" index_access_node;
+using "ParserStorage.cod" array_length_node;
 using "ParserStorage.cod" symbol_node;
 using "ParserStorage.cod" literal_node;
 using "ParserStorage.cod" group_node;
@@ -755,7 +758,7 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
         return;
     } else {};
     if (kind == group_node() || kind == discard_node() || kind == return_node() || kind == throw_node() ||
-        kind == logical_not_node()) {
+        kind == logical_not_node() || kind == field_access_node() || kind == array_length_node()) {
         resolve_expression(source, nodes, bindings, work, state, nodes[at].left);
         return;
     } else {};
@@ -764,7 +767,7 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
         if (state.diagnostic == 0u8) { resolve_list(source, nodes, bindings, work, state, nodes[at].right); } else {};
         return;
     } else {};
-    if (integer_arithmetic(kind) || kind == compare_node() || is_transfer(nodes, at) ||
+    if (integer_arithmetic(kind) || kind == compare_node() || kind == index_access_node() || is_transfer(nodes, at) ||
         logical_binary(kind)) {
         resolve_expression(source, nodes, bindings, work, state, nodes[at].left);
         if (state.diagnostic != 0u8) { return; } else {};
