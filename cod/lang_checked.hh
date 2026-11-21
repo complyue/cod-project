@@ -2198,13 +2198,19 @@ class ScalarChecker {
     default: return true;
     }
   }
-  CaseScan case_scan(const Type &subject, bool borrowed, const Location &at) const {
+  CaseScan case_scan(const Type &subject, bool borrowed, const Expression &operand) const {
     CaseScan::Codes codes;
     if (subject == Type::boolean) codes = {0, 1};
     else if (subject.kind == Type::enumeration) {
       for (const auto &member : program_.enums.at(subject.identity).members) codes.insert(member.code);
-    } else implementation_gap(at, "case matching on a subject other than bool or enum");
-    return {codes, codes, borrowed};
+    } else implementation_gap(operand.at, "case matching on a subject other than bool or enum");
+    auto remaining = codes;
+    if (subject == Type::boolean && !borrowed) {
+      const auto *literal = &operand;
+      while (literal->kind == Expression::Kind::grouped) literal = literal->children.front().get();
+      if (literal->kind == Expression::Kind::boolean) remaining = {literal->text == "true"};
+    }
+    return {std::move(codes), std::move(remaining), borrowed};
   }
   std::optional<std::uint64_t> case_code(const Type &subject, const Expression &arm) const {
     if (arm.text == "_") return {};
@@ -4294,7 +4300,7 @@ class ScalarChecker {
   void finish_call(const Expression &expr, const Type &contract, const CallEffects &summary,
       const std::set<size_t> &reasons, const std::vector<Type> &arguments,
       const std::vector<CheckedOperation> &operands, CheckedOperation &operation, bool read, bool discard,
-      size_t offset = 0, bool immediate_scope = false) {
+      size_t offset = 0, bool immediate_scope = false, std::optional<LexicalState> *case_scan = nullptr) {
     const auto fields = product_inputs(arguments, expr.at);
     const bool prepared = &expr == prepared_call_;
     const bool embedded_updates = std::ranges::any_of(summary.binding_sources, [&](const auto &effect) {
@@ -4574,7 +4580,7 @@ class ScalarChecker {
       };
       const auto before = lexical_;
       std::optional<LexicalState> here_break;
-      for (const auto &[reason, effects] : operation.invocation) if (reason) {
+      for (const auto &[reason, effects] : operation.invocation) if (reason && !(case_scan && reason == 1)) {
         lexical_ = before; apply_invocation(reason, effects);
         const auto completion = Completion{reason, false};
         const bool scope_failure = immediate_scope && completion.exception() &&
@@ -4587,7 +4593,16 @@ class ScalarChecker {
         else note_abrupt(expr.at, completion.exception() ? std::set<size_t>{completion.category()} : std::set<size_t>{},
                          completion, scope_failure);
       }
-      lexical_ = before; apply_invocation(0, operation.invocation.at(0));
+      lexical_ = before;
+      if (case_scan) {
+        if (operation.invocation.contains(0)) {
+          apply_invocation(0, operation.invocation.at(0));
+          *case_scan = lexical_;
+          lexical_ = before;
+        }
+        if (operation.invocation.contains(1)) apply_invocation(1, operation.invocation.at(1));
+        else lexical_.live = false;
+      } else apply_invocation(0, operation.invocation.at(0));
       if (here_break) { const auto normal = lexical_; join(normal, false, *here_break, false, expr.at); }
     }
     const auto result_owner = contract.owners.empty() ? 0 : contract.owners.back();
@@ -5381,10 +5396,10 @@ class ScalarChecker {
     refine_known_bindings();
   }
   CheckedOperation finish_scope(CheckedOperation result, AbruptFlow &flow, AbruptFlow *outer,
-                                size_t scope, const Location &at) {
+                                size_t scope, const Location &at, std::optional<LexicalState> *case_scan = nullptr) {
     const auto body = lexical_;
     if (result.type != Type::never && lexical_.live) flow.paths.push_back({lexical_, {}, at, {0, false}});
-    std::vector<LexicalState> normals;
+    std::vector<LexicalState> normals, scans;
     std::vector<AbruptPath> exits;
     auto declared = flow.declared;
     std::optional<Type> normal_type;
@@ -5489,6 +5504,12 @@ class ScalarChecker {
         }
         state.input_facts.at(origin).queues[scope] = 0;
         if (!completion.reason) {
+          // Only normal entry to a case-arm drain reached its source
+          // fallthrough. A recovered earlier failure takes the result path.
+          if (case_scan && !path.completion.reason) {
+            scans.push_back(std::move(state));
+            continue;
+          }
           const auto type = path.completion.reason ? Type{Type::void_type} : result.type;
           if (normal_type && *normal_type != type)
             fail(at, "scope recovery has no original value; use an explicit return in the recovering handler");
@@ -5507,6 +5528,11 @@ class ScalarChecker {
     for (const auto &path : exits) {
       lexical_ = path.state;
       forward_abrupt(path);
+    }
+    if (!scans.empty()) {
+      join(body, true, scans.front(), false, at);
+      for (size_t i = 1; i < scans.size(); ++i) { const auto previous = lexical_; join(previous, false, scans[i], false, at); }
+      *case_scan = std::move(lexical_);
     }
     lexical_ = body;
     if (normals.empty()) { lexical_.live = false; result.type = Type::never; }
@@ -6857,9 +6883,12 @@ class ScalarChecker {
     result_probe_ = id;
     const auto completion = type_evidence(*method.source->body, state);
     result_probe_ = previous;
-    if (!method.source->requires_explicit_return() && !returns.value_obligation &&
+    if (!method.source->case_scan_scope && !method.source->requires_explicit_return() && !returns.value_obligation &&
         (completion || !returns.unresolved) && completion != Type::never && state.complete)
       returns.types.push_back(Type::void_type);
+    if (method.source->case_scan_scope && returns.types.empty() && !returns.unresolved &&
+        !returns.value_obligation && state.complete)
+      return {ResultContract{Type::void_type}};
     if (method.source->implicit_scope && completion == Type::never && state.complete &&
         returns.types.empty() && !returns.value_obligation && !returns.unresolved &&
         returns.saw_throw && !returns.unresolved_throw)
@@ -8036,6 +8065,13 @@ class ScalarChecker {
     if (argument == Type::boolean && mode != ArgumentMode::value && !readonly)
       type_boolean_write(expr, state, writable_slot ? EvidencePlaces{} : target.places);
   }
+  struct CaseScopeEvidence {
+    std::optional<QuerySelections> scan;
+    bool result = false;
+  };
+  static bool case_scan_scope(const Expression &arm) {
+    return arm.case_resumes && arm.children.back()->kind == Expression::Kind::value_call;
+  }
   std::optional<Type> case_evidence(const Expression &expr, TypeEvidenceState &state, bool contextual,
                                    const Type *expected, std::vector<Type> *alternatives,
                                    ExpectedTypeUse expected_use, EvidenceRead read) const {
@@ -8048,7 +8084,7 @@ class ScalarChecker {
     const auto target = state.target;
     if (selected.mixed_view || (selected.nullable && target.presence != TargetPresence::present))
       implementation_gap(subject.at, "case matching on a mixed or possibly null subject");
-    auto scan = case_scan(*type, selected.view == true, subject.at);
+    auto scan = case_scan(*type, selected.view == true, subject);
     bool reaches_end = true, unknown_result = false;
     std::optional<Type> result;
     std::optional<TypeEvidenceState> completed;
@@ -8087,11 +8123,23 @@ class ScalarChecker {
         }
       }
       const auto &body = *item.children.back();
-      const auto value = type_evidence(body, arm, contextual && !item.case_resumes,
-          item.case_resumes ? nullptr : expected, item.case_resumes ? nullptr : alternatives,
-          expected_use, body_reaches, item.case_resumes || read == EvidenceRead::loop_discard ? EvidenceRead::discarded : read);
+      const bool scoped = case_scan_scope(item);
+      const bool direct_scan = item.case_resumes && !scoped;
+      CaseScopeEvidence exits;
+      const auto value = type_evidence(body, arm, contextual && !direct_scan,
+          direct_scan ? nullptr : expected, direct_scan ? nullptr : alternatives,
+          expected_use, body_reaches, direct_scan || read == EvidenceRead::loop_discard ? EvidenceRead::discarded : read,
+          false, scoped ? &exits : nullptr);
       if (!body_reaches || value == Type::never) continue;
-      if (item.case_resumes) {
+      if (scoped) {
+        if (exits.scan) {
+          auto continued = arm;
+          continued.selections = std::move(*exits.scan);
+          state = merge_reaching_evidence(std::move(state), std::move(continued), scan.remaining.empty(), false);
+          scan.resume(matched, case_may_write(body));
+        }
+        if (!exits.result) continue;
+      } else if (direct_scan) {
         state = merge_reaching_evidence(std::move(state), std::move(arm), scan.remaining.empty(), false);
         scan.resume(matched, case_may_write(body));
         continue;
@@ -8119,7 +8167,8 @@ class ScalarChecker {
   std::optional<Type> type_evidence(const Expression &expr, TypeEvidenceState &state, bool contextual = false,
                                     const Type *expected = nullptr, std::vector<Type> *alternatives = nullptr,
                                     ExpectedTypeUse expected_use = ExpectedTypeUse::materialization, bool reached = true,
-                                    EvidenceRead read = EvidenceRead::payload, bool joining = false) const {
+                                    EvidenceRead read = EvidenceRead::payload, bool joining = false,
+                                    CaseScopeEvidence *case_scope = nullptr) const {
     using K = Expression::Kind;
     const ModuleLookup lookup(module_, state.method ? program_.methods[*state.method].module : module_);
     const ModuleLookup context(interpretation_, state.method ? program_.methods[*state.method].interpretation : interpretation_);
@@ -8136,7 +8185,7 @@ class ScalarChecker {
       state.initialization = TypeEvidenceState::InitializationCheck::suppressed;
     }
     const auto type = query_evidence(expr, state, view, target, contextual, expected,
-                                     alternatives ? &independent : nullptr, expected_use, read, joining);
+                                     alternatives ? &independent : nullptr, expected_use, read, joining, case_scope);
     if (state.checks_initialization() && !target.places.empty() && !target.initialized) {
       const auto reaching = state.selections.outcome(state.selections.selection_outcomes(target), true);
       target.initialized = state.selections.selection_initialized(target) ||
@@ -8159,7 +8208,7 @@ class ScalarChecker {
       state.deferred_queue = deferred_queue;
       state.initialization = initialization;
     }
-    if (alternatives && type != Type::never) {
+    if (alternatives && type != Type::never && (!case_scope || case_scope->result)) {
       if (type) alternatives->push_back(*type);
       else alternatives->insert(alternatives->end(), independent.begin(), independent.end());
     }
@@ -9866,7 +9915,7 @@ class ScalarChecker {
   }
   std::optional<Type> scope_callable_evidence(const Expression &callee, TypeEvidenceState &state,
                                               const Type *expected, bool probing_argument, TargetEvidence &returned,
-                                              bool joining) const {
+                                              bool joining, CaseScopeEvidence *case_scope = nullptr) const {
     const auto id = lexical_method(callee.definition.get(), state.method);
     const auto retained = callable_retained_types(id, &state);
     const auto result = retained ? scope_result(infer_result(id, {}, *retained, &state), expected, probing_argument) : ResultEvidence{};
@@ -9887,10 +9936,11 @@ class ScalarChecker {
           !view->second.read_only.value_or(false))
         writable_booleans.push_back(named_type_target(state, capture.name).places);
     }
-    if (state.required) {
+    if (state.required || case_scope) {
       const auto declaration = result_context(id, &state);
       auto body = body_evidence(id, {}, *retained, declaration);
-      body.required = body.validating_body = true;
+      body.required = state.required;
+      body.validating_body = true;
       body.root_failure_covered = state.root_failure_covered;
       if (!state.selections.initialization_reachable)
         body.initialization = TypeEvidenceState::InitializationCheck::suppressed;
@@ -10030,7 +10080,7 @@ class ScalarChecker {
       const auto first_local_observation = body.selections.observation_decisions ? body.selections.observation_decisions->next_observation : 0;
       TypeEvidenceExits exits;
       TypeDeferredFlow deferred;
-      const bool track_completion = state.checks_initialization() || !live_bindings.empty();
+      const bool track_completion = case_scope || state.checks_initialization() || !live_bindings.empty();
       if (track_return || body.checks_initialization() || track_completion) {
         body.deferred = &deferred;
         body.deferred_queue = 0;
@@ -10048,8 +10098,11 @@ class ScalarChecker {
       if (state.exits || body.deferred || !writable_booleans.empty()) body.exits = &exits;
       const auto completion = type_evidence(*callee.definition->body, body, false, nullptr, nullptr,
                                             ExpectedTypeUse::materialization, true, EvidenceRead::discarded);
-      TypeEvidenceExits completed;
-      if (body.deferred) {
+      TypeEvidenceExits completed, scan_paths;
+      if (case_scope) {
+        complete_type_deferred(deferred, {}, body, completion != Type::never, &scan_paths);
+        complete_type_deferred(deferred, exits, body, false, &completed);
+      } else if (body.deferred) {
         if (auto proof = complete_type_deferred(deferred, exits, body, completion != Type::never,
                 track_completion ? &completed : nullptr); track_return && !track_completion && proof) {
           proof->forget_observations(first_local_observation);
@@ -10066,7 +10119,7 @@ class ScalarChecker {
       if (track_completion) {
         std::optional<QuerySelections> normal;
         std::optional<PresenceBranches> boolean_returns = PresenceBranches{{}, {}};
-        for (const auto &outcome : completed.paths) {
+        const auto apply_outcome = [&](const TypeEvidenceExits::Path &outcome, bool scan_requested) {
           auto caller = state;
           if (state.checks_initialization())
             for (const auto &place : live_value_places)
@@ -10080,9 +10133,13 @@ class ScalarChecker {
             project_type_initialization(caller, outcome.state, exported, first_local_observation);
           }
           for (auto reason : outcome.reasons) {
-            if (reason == 0 && callee.definition->completion_requires_return(*body.invocation_result))
+            if (reason == 0 && !scan_requested && callee.definition->completion_requires_return(*body.invocation_result))
               reason = Completion::failure(exception_id(ExceptionCategory::missing_return)).reason;
-            if (reason <= 1) {
+            if (scan_requested && reason == 0) {
+              if (case_scope->scan) case_scope->scan->join_flow(caller.selections);
+              else case_scope->scan = caller.selections;
+            } else if (reason <= 1) {
+              if (case_scope) case_scope->result = true;
               if (track_return && reason == 1) {
                 auto proof = outcome.result.boolean.value_or(PresenceBranches{}).remap(exported);
                 proof.forget_observations(first_local_observation);
@@ -10092,7 +10149,9 @@ class ScalarChecker {
               else normal = caller.selections;
             } else if (state.exits) merge_type_exits(*state.exits, {reason}, caller);
           }
-        }
+        };
+        for (const auto &outcome : scan_paths.paths) apply_outcome(outcome, true);
+        for (const auto &outcome : completed.paths) apply_outcome(outcome, false);
         if (normal) state.selections = std::move(*normal);
         if (track_return) returned.branches = std::move(boolean_returns);
       } else if (state.exits) {
@@ -10426,7 +10485,7 @@ class ScalarChecker {
   }
   std::optional<Type> query_evidence(const Expression &expr, TypeEvidenceState &state, ViewEvidence &view, TargetEvidence &target_facts,
                                      bool contextual, const Type *expected, std::vector<Type> *alternatives,
-                                     ExpectedTypeUse expected_use, EvidenceRead read, bool joining) const {
+                                     ExpectedTypeUse expected_use, EvidenceRead read, bool joining, CaseScopeEvidence *case_scope) const {
     using K = Expression::Kind;
     if (expr.kind == K::call && !expr.intrinsic) if (const auto native = native_operation(expr.text, &state)) {
       const auto &operation = program_.native_operations[*native];
@@ -11466,7 +11525,7 @@ class ScalarChecker {
         }
         target = implicit ?
             scope_callable_evidence(callee, state, scope_expectation ? expected : nullptr,
-                                    scope_expectation && contextual && !state.required, target_facts, joining) : child(0);
+                                    scope_expectation && contextual && !state.required, target_facts, joining, case_scope) : child(0);
         local = true;
       } else if (!expr.intrinsic && state.complete) {
         if (state.required && state.bindings.contains(expr.text)) check_query_binding(expr.text, expr.at);
@@ -13271,7 +13330,7 @@ class ScalarChecker {
   }
   void check_scope_call(const Expression &expr, size_t method_id, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation, bool read, bool discard,
-      const Type *expected) {
+      const Type *expected, std::optional<LexicalState> *case_scan = nullptr) {
     auto &method = program_.methods[method_id];
     resolve_captures(method);
     const auto &dependencies = definition_dependencies(*method.source);
@@ -13370,7 +13429,19 @@ class ScalarChecker {
       deferred_actions_with_checked_scopes_.insert(*deferred_action_);
     auto reasons = direct_call_reasons(contract, effects);
     if (proving_ && effects.propagates_here_transfer) reasons.insert(Completion::protected_transfer);
-    finish_call(expr, contract, effects, reasons, arguments, views, operation, read, discard, 0, true);
+    if (case_scan) {
+      auto exits = effects.case_scope_exits;
+      if (!exits) {
+        auto probe = state;
+        CaseScopeEvidence evidence;
+        TargetEvidence returned;
+        scope_callable_evidence(*expr.children.front(), probe, expected, false, returned, false, &evidence);
+        exits = CallEffects::CaseScopeExits{evidence.scan.has_value(), evidence.result};
+      }
+      if (!exits->scan) reasons.erase(0);
+      if (exits->result) reasons.insert(1);
+    }
+    finish_call(expr, contract, effects, reasons, arguments, views, operation, read, discard, 0, true, case_scan);
     if (always_throws && &expr != prepared_call_) operation.type = Type::never;
   }
   void check_value_call(const Expression &expr, const Type &contract, size_t offset, CheckedInstance *instance,
@@ -15798,7 +15869,7 @@ class ScalarChecker {
     const auto selected = operations.at(&subject);
     if (selected.mixed_view || selected.targets.contains(null_target))
       implementation_gap(subject.at, "case matching on a mixed or possibly null subject");
-    auto scan = case_scan(type, selected.view, subject.at);
+    auto scan = case_scan(type, selected.view, subject);
     std::optional<LexicalState> completed;
     const auto join_scan = [&](const LexicalState &other, bool current_exits, const Location &at) {
       const auto current = std::move(lexical_);
@@ -15836,15 +15907,36 @@ class ScalarChecker {
         refine(guard, true, operations);
       }
       const auto &body = *item.children.back();
-      const auto value = check(body, instance, operations, item.case_resumes || read, item.case_resumes || discard,
-                               item.case_resumes ? nullptr : expected, expected_use);
+      const bool scoped = case_scan_scope(item);
+      std::optional<LexicalState> resumed;
+      Type value;
+      if (scoped) {
+        CheckedOperation call;
+        check_scope_call(body, lexical_method(body.children.front()->definition.get()), instance, operations,
+                         call, read, discard, expected_use == ExpectedTypeUse::callable_result ? expected : nullptr, &resumed);
+        value = call.type;
+        header.case_scope_returns = lexical_.live;
+        header.case_scope_resumes = resumed && resumed->live;
+        operations.insert_or_assign(&body, std::move(call));
+        if (header.case_scope_resumes) {
+          auto completed_arm = std::move(lexical_);
+          lexical_ = std::move(*resumed);
+          join_scan(missed, false, body.at);
+          missed = std::move(lexical_);
+          lexical_ = std::move(completed_arm);
+          scan.resume(matched, case_may_write(body));
+        }
+      } else {
+        value = check(body, instance, operations, item.case_resumes || read, item.case_resumes || discard,
+                      item.case_resumes ? nullptr : expected, expected_use);
+      }
       header.type = value;
       operations.insert_or_assign(&item, std::move(header));
       if (!lexical_.live) {
         lexical_ = std::move(missed);
         continue;
       }
-      if (item.case_resumes) {
+      if (item.case_resumes && !scoped) {
         scan.resume(matched, case_may_write(body));
         join_scan(missed, false, body.at);
         continue;
@@ -17952,7 +18044,9 @@ class ScalarChecker {
       if (has_feedback && end != Type::never && lexical_.live && !transfers_value(end, *instance.result.type))
         fail(method.body->at, "here body fallthrough requires feedback of type '" + type_name(*instance.result.type) + "'");
       completed.type = end == Type::never ? Type{Type::never} : Type{Type::void_type};
-      const auto completion = finish_scope(completed, flow, &outcomes, 0, method.at).type;
+      std::optional<LexicalState> case_scan;
+      const auto completion = finish_scope(completed, flow, &outcomes, 0, method.at,
+                                           method.case_scan_scope ? &case_scan : nullptr).type;
       const bool requires_return = method.completion_requires_return(*instance.result.type);
       if (validating_ && proving && requires_return && completion != Type::never &&
           warned_missing_return_.insert(instance.method).second)
@@ -17960,6 +18054,7 @@ class ScalarChecker {
             ? "procedure may finish without an explicit return" : "callable may finish without a result"});
       if (proving) {
         abrupt_ = nullptr;
+        if (method.case_scan_scope) observed_.case_scope_exits.emplace();
         // Complete capture preparation can fail before the body registers any
         // cleanup or establishes output facts. Retain this incoming outcome
         // for deferred invocation as well as ordinary calls, independently of
@@ -17968,11 +18063,20 @@ class ScalarChecker {
               [](const auto &capture) { return capture.type.kind == Type::procedure; }))
           observe_outcome(Completion::failure(exception_id(ExceptionCategory::out_of_memory)).reason, incoming);
         for (const auto requirement : outcomes.declared) note_declared(requirement);
-        if (completion != Type::never && lexical_.live)
-          observe_outcome(requires_return ? Completion::failure(exception_id(ExceptionCategory::missing_return)).reason : 0, lexical_);
+        if (case_scan) {
+          observed_.case_scope_exits->scan = true;
+          observe_outcome(0, *case_scan);
+        }
+        if (completion != Type::never && lexical_.live) {
+          if (observed_.case_scope_exits && !requires_return) observed_.case_scope_exits->result = true;
+          const auto reason = requires_return ? Completion::failure(exception_id(ExceptionCategory::missing_return)).reason :
+              method.case_scan_scope ? size_t{1} : size_t{0};
+          observe_outcome(reason, lexical_);
+        }
         const auto normal = lexical_;
         for (const auto &path : outcomes.paths) {
-          observe_outcome(path.completion.reason == 1 ? 0 : path.completion.reason, path.state);
+          if (observed_.case_scope_exits && path.completion.reason == 1) observed_.case_scope_exits->result = true;
+          observe_outcome(path.completion.reason == 1 && !method.case_scan_scope ? 0 : path.completion.reason, path.state);
           if (path.completion.protected_here() && !path.here_exit) observed_.propagates_outer_here_transfer = true;
           lexical_ = path.state; abrupt_ = nullptr;
           forward_abrupt(path);
@@ -18056,6 +18160,10 @@ class ScalarChecker {
       if (known.initialized != effects.initialized) { known.initialized = effects.initialized; changed = true; }
       if (known.uninitialized != effects.uninitialized) { known.uninitialized = effects.uninitialized; changed = true; }
       if (known.present != effects.present) { known.present = effects.present; changed = true; }
+      if (known.case_scope_exits != effects.case_scope_exits) {
+        known.case_scope_exits = effects.case_scope_exits;
+        changed = true;
+      }
       if (known.scope_checked_failures != effects.scope_checked_failures) {
         known.scope_checked_failures = effects.scope_checked_failures;
         changed = true;
