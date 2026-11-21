@@ -4,6 +4,7 @@
 #include "cod_region_storage.h"
 #include "lang_intrinsic_catalog.h"
 #include "module_graph.h"
+#include "provider_output.h"
 
 #include <errno.h>
 #include <stdbool.h>
@@ -352,7 +353,7 @@ cod_native_status cod_native_commit_graph_exports_impl(cod_native_ModuleFrame_bo
     return COD_NATIVE_OK;
 }
 
-uint8_t cod_booter_check_declarations(const char *input, cod_booter_diagnostic *diagnostic) {
+static uint8_t run_module_graph(const char *input, const char *directory, cod_booter_diagnostic *diagnostic) {
     *diagnostic = (cod_booter_diagnostic){0};
     char *path = realpath(input, NULL);
     if (!path) {
@@ -378,10 +379,27 @@ uint8_t cod_booter_check_declarations(const char *input, cod_booter_diagnostic *
         diagnostic->code = COD_REGION_STORAGE_NO_MEMORY;
         status = scratch_failed;
     }
+    if (!status && directory) {
+        const uint32_t emitted = cod_booter_write_c_providers(directory, graph.interfaces, graph.interface_count,
+                                                               graph.spellings, graph.spelling_count);
+        if (emitted) {
+            diagnostic->stage = provider_output_stage;
+            diagnostic->code = emitted;
+            status = emitted == provider_output_unsupported ? 2 : 1;
+        }
+    }
     for (size_t i = 0; i < graph.module_count; ++i) free(graph.modules[i].path);
     free(graph.modules);
     free(graph.exports);
     free(graph.interfaces);
     free(graph.spellings);
     return status;
+}
+
+uint8_t cod_booter_check_declarations(const char *input, cod_booter_diagnostic *diagnostic) {
+    return run_module_graph(input, NULL, diagnostic);
+}
+
+uint8_t cod_booter_emit_c_providers(const char *input, const char *directory, cod_booter_diagnostic *diagnostic) {
+    return run_module_graph(input, directory, diagnostic);
 }

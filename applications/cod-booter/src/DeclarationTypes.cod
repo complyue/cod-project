@@ -1,6 +1,6 @@
 using "SourceStorage.cod" SourceBytes;
 using "ParserStorage.cod" {
-    ExprNodes, no_node, group_node, name_node, owned_type_node, typed_name_node,
+    ExprNodes, no_node, group_node, name_node, owned_type_node, typed_name_node, data_parent_node,
     make_named_node, field_access_node,
 };
 using "NameResolution.cod" {
@@ -144,10 +144,14 @@ func stage_record(nodes:const ExprNodes in N, names:const NameBindings in B, sel
     val next <- count + 1u64;
     val binding <- no_node();
     val spelling <- no_node();
+    val head <- nodes[record].left;
+    val name <- if (nodes[head].kind == data_parent_node()) { (nodes[head].left) } else { head };
     ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64; };
     for (unused in 0u64 .. intrinsic (len)(nodes)) {
         if (field == no_node()) {
             write_interface_header(interfaces[count], defining_module, record, record_type(), 0u8, next - count - 1u64);
+            interfaces[count].name_first <- nodes[name].first;
+            interfaces[count].name_past <- nodes[name].past;
             return next;
         } else {};
         binding <- nodes[field].right;

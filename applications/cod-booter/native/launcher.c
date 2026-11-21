@@ -3,8 +3,10 @@
 #include "cod_region_storage.h"
 #include "compile_diagnostic.h"
 #include "module_graph.h"
+#include "provider_output.h"
 
 #include <inttypes.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -42,6 +44,18 @@ static const char *scratch_error(uint32_t code) {
     case COD_REGION_STORAGE_NO_MEMORY: return "out of memory";
     case COD_REGION_STORAGE_FULL: return "layout exceeds region capacity";
     default: return "allocation failed";
+    }
+}
+
+static const char *provider_error(uint32_t code) {
+    switch (code) {
+    case provider_output_unsupported: return "C operation and entry generation is outside the supported provider profile";
+    case provider_output_conflict: return "C provider declarations have conflicting native names";
+    case provider_output_invalid: return "C provider declaration metadata is incomplete";
+    case provider_output_io: return "could not publish the generated C provider files";
+    case provider_output_memory: return "could not allocate workspace for C provider generation";
+    case provider_output_reserved_name: return "failure payload field uses a reserved C name";
+    default: return "C provider generation failed";
     }
 }
 
@@ -93,6 +107,8 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fprintf(stderr, ": error: LLVM backend %s (code %" PRIu32 ")\n", llvm_error(diagnostic->code), diagnostic->code);
     else if (diagnostic->stage == 7)
         fprintf(stderr, ": error: compiler scratch %s (code %" PRIu32 ")\n", scratch_error(diagnostic->code), diagnostic->code);
+    else if (diagnostic->stage == provider_output_stage)
+        fprintf(stderr, ": error: %s\n", provider_error(diagnostic->code));
     else if (unsupported)
         fprintf(stderr, ": error: %s is outside the supported compiler profile\n", unsupported);
     else if (diagnostic->stage == 1 && diagnostic->code == 36)
@@ -200,9 +216,17 @@ static cod_native_status compile(const char *source, const char *object, cod_boo
 }
 
 int main(int argc, char **argv) {
-    if (argc != 3) {
-        fputs("usage: cod-booter SOURCE OUTPUT\n       cod-booter --check-declarations SOURCE\n", stderr);
+    const bool providers = argc > 1 && strcmp(argv[1], "--emit-c-provider") == 0;
+    if (argc != (providers ? 4 : 3)) {
+        fputs("usage: cod-booter SOURCE OUTPUT\n       cod-booter --check-declarations SOURCE\n"
+              "       cod-booter --emit-c-provider SOURCE DIRECTORY\n", stderr);
         return 64;
+    }
+    if (providers) {
+        cod_booter_diagnostic diagnostic;
+        const uint8_t status = cod_booter_emit_c_providers(argv[2], argv[3], &diagnostic);
+        if (status) report(argv[2], status, &diagnostic);
+        return status;
     }
     if (strcmp(argv[1], "--check-declarations") == 0) {
         cod_booter_diagnostic diagnostic;

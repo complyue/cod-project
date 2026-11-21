@@ -33,6 +33,9 @@ export data ModuleInterfaceRow {
     owner_role:u64;
     target_readonly:u8;
     owner_readonly:u8;
+    has_here:u8;
+    failure_module:u64;
+    failure_identity:u64;
     name_first:u64;
     name_past:u64;
 }
@@ -51,6 +54,9 @@ export func write_interface_header(row:ModuleInterfaceRow in R, defining_module:
     row.owner_role <- no_node();
     row.target_readonly <- 0u8;
     row.owner_readonly <- 0u8;
+    row.has_here <- 0u8;
+    row.failure_module <- 0u64;
+    row.failure_identity <- 0u64;
     row.name_first <- 0u64;
     (row.name_past <- 0u64):void;
 }

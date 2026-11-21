@@ -2,6 +2,7 @@
 #pragma once
 
 #include "lang_checked_program.hh"
+#include "native/provider_text.h"
 
 #include <sstream>
 #include <string>
@@ -9,8 +10,8 @@
 namespace cod::language {
 
 struct NativeProviderFiles {
-  static constexpr auto header_name = "cod_providers.h";
-  static constexpr auto stubs_name = "cod_providers.c";
+  static constexpr auto header_name = COD_PROVIDER_HEADER_NAME;
+  static constexpr auto stubs_name = COD_PROVIDER_STUBS_NAME;
   std::string header;
   std::string stubs;
 };
@@ -23,18 +24,20 @@ using NativeRowLayouts = std::map<size_t, NativeRowLayout>;
 
 inline const char *provider_scalar(const Type &type) {
   switch (type.kind) {
-  case Type::boolean: case Type::uint8: return "uint8_t";
-  case Type::uint32: return "uint32_t";
-  case Type::uint64: return "uint64_t";
-  case Type::integer: return "int64_t";
-  case Type::float32: return "float";
-  case Type::float64: return "double";
+  case Type::boolean: case Type::uint8: return cod_provider_scalar_spelling(cod_provider_u8);
+  case Type::uint32: return cod_provider_scalar_spelling(cod_provider_u32);
+  case Type::uint64: return cod_provider_scalar_spelling(cod_provider_u64);
+  case Type::integer: return cod_provider_scalar_spelling(cod_provider_i64);
+  case Type::float32: return cod_provider_scalar_spelling(cod_provider_f32);
+  case Type::float64: return cod_provider_scalar_spelling(cod_provider_f64);
   default: throw std::logic_error("unchecked scalar type in a generated C provider");
   }
 }
 
 inline std::string provider_borrow(const Type &handle) { return "cod_native_" + handle.name + "_borrow"; }
-enum class NativeStatus : unsigned { ok, failure, boundary_error };
+enum class NativeStatus : unsigned {
+  ok = cod_provider_native_ok, failure = cod_provider_native_failure, boundary_error = cod_provider_native_boundary_error,
+};
 enum class NativeHereStep : unsigned { value, protected_completion, invalid };
 inline std::string native_constructor_prefix(const Type &handle) { return "cod_native_" + handle.name; }
 inline std::string native_construct_name(const Type &handle) { return native_constructor_prefix(handle) + "_construct"; }
@@ -237,21 +240,11 @@ inline void emit_c_entry(const CheckedNativeEntry &entry, const Form &form,
 
 inline NativeProviderFiles emit_native_providers(const CheckedProgram &program, const NativeRowLayouts &layouts) {
   std::ostringstream header, stubs;
-  header << R"C(#ifndef COD_GENERATED_PROVIDERS_H
-#define COD_GENERATED_PROVIDERS_H
-
-#include <stdint.h>
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-typedef uint32_t cod_native_status;
-enum {
-)C" << "    COD_NATIVE_OK = " << static_cast<unsigned>(NativeStatus::ok)
-     << ",\n    COD_NATIVE_FAILURE = " << static_cast<unsigned>(NativeStatus::failure)
-     << ",\n    COD_NATIVE_BOUNDARY_ERROR = " << static_cast<unsigned>(NativeStatus::boundary_error) << "\n};\n\n";
-  stubs << "#include \"" << NativeProviderFiles::header_name << "\"\n#include <stddef.h>\n\n";
+  const auto write_text = +[](void *context, const char *text, size_t length) {
+    return static_cast<bool>(static_cast<std::ostringstream *>(context)->write(text, length));
+  };
+  cod_provider_text header_text{write_text, &header, false}, stubs_text{write_text, &stubs, false};
+  cod_provider_begin(&header_text, &stubs_text);
   if (std::ranges::any_of(program.native_operations, &CheckedNativeOperation::has_here))
     header << "typedef uint32_t cod_native_here_step;\nenum {\n"
            << "    COD_NATIVE_HERE_VALUE = " << static_cast<unsigned>(NativeHereStep::value) << ",\n"
@@ -272,10 +265,7 @@ typedef struct cod_native_loan {
   const auto emit_borrows = [&](const std::vector<CheckedNativeInput> &inputs) {
     for (const auto &input : inputs) {
       if (input.type.kind != Type::c_type_marker || !emitted_borrows.insert(input.type.identity).second) continue;
-      const auto borrow = provider_borrow(input.type);
-      header << "typedef struct " << borrow << " {\n    uint64_t payload;\n    uint64_t owner;\n} " << borrow << ";\n\n";
-      stubs << "_Static_assert(sizeof(" << borrow << ") == 2 * sizeof(uint64_t) &&\n"
-            << "               offsetof(" << borrow << ", owner) == sizeof(uint64_t), \"invalid " << borrow << " layout\");\n";
+      cod_provider_borrow(&header_text, &stubs_text, input.type.name.c_str());
     }
   };
   for (const auto &constructor : program.native_constructors) {
@@ -288,87 +278,31 @@ typedef struct cod_native_loan {
   if (!emitted_borrows.empty()) stubs << '\n';
 
   for (const auto &constructor : program.native_constructors) {
-    const auto failure = native_constructor_prefix(constructor.handle) + "_failure";
-    const auto construct_name = native_construct_name(constructor.handle);
-    const auto destroy_name = native_destroy_name(constructor.handle);
-    const CheckedSchema *schema = nullptr;
+    std::vector<cod_provider_argument> inputs;
+    for (const auto &input : constructor.inputs) {
+      inputs.push_back({input.owner ? input.type.name.c_str() : provider_scalar(input.type),
+                        input.owner.has_value(), input.type == Type::boolean, input.owner.value_or(0)});
+    }
+    std::vector<cod_provider_field> fields;
     if (constructor.failure) {
-      schema = &program.schemas.at(*program.exception_types.at(constructor.failure->identity).schema);
-      header << "/* Payload of the checked " << constructor.failure->name << " exception. */\n"
-             << "typedef struct " << failure << " {\n";
-      for (const auto &field : schema->fields)
-        header << "    " << provider_scalar(field.type) << ' ' << field.source->name << ";\n";
-      if (schema->fields.empty()) header << "    uint8_t reserved;\n";
-      header << "} " << failure << ";\n\n";
+      const auto &schema = program.schemas.at(*program.exception_types.at(constructor.failure->identity).schema);
+      for (const auto &field : schema.fields)
+        fields.push_back({provider_scalar(field.type), field.source->name.c_str(), field.type == Type::boolean});
     }
-
-    const auto construct = [&](bool implementation) {
-      std::ostringstream declaration;
-      declaration << "cod_native_status " << construct_name << (implementation ? "_impl" : "") << '(';
-      if (constructor.parent) {
-        const auto type = provider_borrow(*constructor.parent);
-        if (implementation) declaration << type << " owner, ";
-        else declaration << "const " << type << " *owner, ";
-      }
-      for (size_t i = 0; i < constructor.inputs.size(); ++i) {
-        const auto &input = constructor.inputs[i];
-        if (input.owner) {
-          if (!implementation) declaration << "const ";
-          declaration << provider_borrow(input.type) << (implementation ? " " : " *");
-        } else declaration << provider_scalar(input.type) << ' ';
-        declaration << "arg" << i << ", ";
-      }
-      declaration << "uint64_t *resource";
-      if (schema) declaration << ", " << failure << " *error";
-      declaration << ')';
-      return std::move(declaration).str();
-    };
-    const auto destroy = "void " + destroy_name + "(uint64_t resource)";
-    const auto destroy_impl = "void " + destroy_name + "_impl(uint64_t resource)";
-    const auto boundary = construct(false);
-    header << boundary << ";\n";
-    if (!constructor.parent) header << destroy << ";\n";
-    header << construct(true) << ";\n";
-    if (!constructor.parent) header << destroy_impl << ";\n";
-    header << '\n';
-
-    stubs << boundary << " {\n    if (!resource";
-    if (constructor.parent) stubs << " || !owner";
-    if (schema) stubs << " || !error";
-    for (size_t i = 0; i < constructor.inputs.size(); ++i) {
-      const auto &input = constructor.inputs[i];
-      if (input.owner) stubs << " || !arg" << i;
-      else if (input.type == Type::boolean) stubs << " || arg" << i << " > 1";
-    }
-    stubs << ") return COD_NATIVE_BOUNDARY_ERROR;\n";
-    std::map<size_t, size_t> first_owner_input;
-    for (size_t i = 0; i < constructor.inputs.size(); ++i) if (const auto owner = constructor.inputs[i].owner) {
-      const auto [first, inserted] = first_owner_input.try_emplace(*owner, i);
-      if (!inserted) stubs << "    if (arg" << first->second << "->owner != arg" << i << "->owner) return COD_NATIVE_BOUNDARY_ERROR;\n";
-    }
-    stubs << "    uint64_t acquired = 0;\n";
-    if (schema) stubs << "    " << failure << " reported = {0};\n";
-    stubs << "    const cod_native_status status = " << construct_name << "_impl(";
-    if (constructor.parent) stubs << "*owner, ";
-    for (size_t i = 0; i < constructor.inputs.size(); ++i)
-      stubs << (constructor.inputs[i].owner ? "*" : "") << "arg" << i << ", ";
-    stubs << "&acquired" << (schema ? ", &reported" : "") << ");\n"
-          << "    if (status == COD_NATIVE_OK) {\n        *resource = acquired;\n        return status;\n    }\n";
-    if (schema) {
-      stubs << "    if (status == COD_NATIVE_FAILURE) {\n";
-      for (const auto &field : schema->fields) if (field.type == Type::boolean)
-        stubs << "        if (reported." << field.source->name << " > 1) return COD_NATIVE_BOUNDARY_ERROR;\n";
-      stubs << "        *error = reported;\n        return status;\n    }\n";
-    }
-    stubs << "    return COD_NATIVE_BOUNDARY_ERROR;\n}\n\n";
-    if (!constructor.parent) stubs << destroy << " {\n    " << destroy_name << "_impl(resource);\n}\n\n";
+    const cod_provider_constructor shape{
+        constructor.handle.name.c_str(), constructor.parent ? constructor.parent->name.c_str() : nullptr,
+        inputs.data(), inputs.size(), constructor.failure ? constructor.failure->name.c_str() : nullptr,
+        fields.data(), fields.size()};
+    cod_provider_write_constructor(&header_text, &stubs_text, &shape);
   }
   for (const auto &entry : program.native_entries) emit_c_entry(entry, *program.methods.at(entry.method).source, header, stubs);
   for (const auto &native : program.native_operations) {
     if (native.has_here()) emit_c_here(program, native, layouts, header, stubs);
     else emit_c_call(program, native, layouts, header, stubs);
   }
-  header << "#ifdef __cplusplus\n}\n#endif\n\n#endif\n";
+  cod_provider_end(&header_text);
+  if (header_text.failed || stubs_text.failed || !header || !stubs)
+    throw std::runtime_error("could not format generated C providers");
   return {std::move(header).str(), std::move(stubs).str()};
 }
 
