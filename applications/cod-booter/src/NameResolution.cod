@@ -404,6 +404,7 @@ func resolve_list(source:const SourceBytes in S, nodes:const ExprNodes in N, ref
     val item <- first_item(nodes, tail);
     for (unused in 0u64 .. syntax_len(nodes)) {
         if (item == no_node()) { return; } else {};
+        bindings[item].scope <- state.scope_node;
         resolve_expression(source, nodes, bindings, work, state, nodes[item].right);
         if (state.diagnostic != 0u8 || item == tail) { return; } else {};
         (item <- work[item].next):void;
@@ -980,9 +981,9 @@ func resolve_formals(source:const SourceBytes in S, nodes:const ExprNodes in N, 
 }
 
 func resolve_here_formal(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
-                         ref work:NameWork in W, ref state:NameState in R, formal:u64) -> void
+                         ref work:NameWork in W, ref state:NameState in R, callback_entry:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
-    val callback <- signature_head(nodes, nodes[formal].right);
+    val callback <- signature_head(nodes, nodes[callback_entry].right);
     val enclosing_first <- state.first;
     val enclosing_used <- state.used;
     state.first <- enclosing_used;
@@ -993,7 +994,7 @@ func resolve_here_formal(source:const SourceBytes in S, nodes:const ExprNodes in
     state.first <- enclosing_first;
     state.used <- enclosing_used;
     # Only the callback's name enters the receiver's parameter scope.
-    declare_name(source, nodes, bindings, work, state, nodes[callback].left, formal, formal_binding(), duplicate_binding());
+    declare_name(source, nodes, bindings, work, state, nodes[callback].left, callback_entry, formal_binding(), duplicate_binding());
 }
 
 func has_owner_input(nodes:const ExprNodes in N, bindings:const NameBindings in B, work:const NameWork in W,
