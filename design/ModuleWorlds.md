@@ -1,8 +1,10 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 58 · Recorded: 2026-11-19 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 59 · Recorded: 2026-11-21 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
+
+[D-15-PUBLIC-SOURCE](DesignAuthorityRegistry.md#d-15-public-source), P-662/P-663, covers [definition-site export and grouped selection](#public-definitions-and-grouped-selections) at r59. [H-MODULE-SOURCE-STYLE-20261121](../CHANGELOG.md#h-module-source-style-20261121) establishes readable public definitions and source-grouped dependencies for the booter. Publication, selection grants, privacy and module initialization follow the individual operations. Check equivalent publication and lookup in both bootstrap compilers.
 
 - **Data call operators.** [H-FUNCTOR-PUBLICATION-20261119](../CHANGELOG.md#h-functor-publication-20261119) confirms the [source publication and merge rule](#publication-of-type-carried-call-operators) at r57 under [D-07-FUNCTOR-LOOKUP](DesignAuthorityRegistry.md#d-07-functor-lookup). C-10/C-35 and P-636/P-637 connect domain operations to nominal type identity and the module world that selected them. Check compatible extensions, repeated selection of one method, incompatible contributions from two adapters and world isolation. Native representation and implementation qualification are separate.
 
@@ -298,6 +300,38 @@ The following consequences preserve deterministic lookup without a richer arbitr
 - **Graph traversal does not activate modules:** retain existing once-only initialization and owner/capture rules. H-492 separately admits declaration-only module cycles; lookup traversal must terminate and retain public/private/identity distinctions. This does not itself authorize cyclic runtime initialization; the postpon proposal below remains under review. All private barriers and ambiguous winners remain compile-time diagnostics.
 
 This permits an intermediate dependency change or a new nearer binding to change a downstream implicit resolution. That is a consequence of implicit lookup; H-485's future use-site information can expose the path, and explicit source selection can state the intended dependency. No stability against arbitrary dependency edits is promised. Acceptance includes all four facade cases (absent, private without publication, local public, upstream public alongside local private), private aliases of the same original identity, peer barriers, diamond contexts, declaration-kind shadows, check-order independence and explicit-export/implicit-reachability distinction. Full graph representation, general distance proofs and source implementation remain separate; these rules add no runtime pointer or method-table protocol.
+
+### Public definitions and grouped selections
+
+Write `export` immediately before a named, publishable module-local definition. Examples from the booter source vocabulary:
+
+```cod
+export array SourceBytes[u64]:u8;
+
+export data SourcePosition {
+    line:u64;
+    column:u64;
+}
+
+using "SourceStorage.cod" { SourceBytes, SourceLines, SourcePosition };
+```
+
+The prefix publishes the same local identity that a separate `export name;` would publish after the declaration. This includes named `data`, `array`, `func`, `proc` and `enum` definitions. It applies to a foreign-marked declaration with a separately publishable identity under its existing rules, including a local `data "C"` or `proc "C"` declaration. Marking one method publishes its complete locally resolved callable family. Likewise a public type carries its existing constructors, methods or member table according to that type's contract. A private definition sharing only a foreign object's spelling cannot publish that foreign object by accident. Use the [publication-only re-export](#publication-only-re-export) when the public identity comes from upstream.
+
+The prefix applies to a declaration that has a single publishable name, including a named overload family. Anonymous forms, expressions, initializer blocks and individual fields have no such publication. Split a declaration of multiple independent identities when their visibility differs, or select them using standalone exports. Prefixing a declaration adds no initialization, repeats no method body and confers no additional extension grant. Existing `export name;`, `export from` and `export import` retain their uses and privacy checks.
+
+For several selections with one source and operation, place a comma-separated list **after the quoted module path**. Each item obeys the same source-name, destination-name and suffix grammar as a singleton of that operation. For example:
+
+```cod
+using "SourceStorage.cod" { SourceBytes, SourcePosition as Position };
+using "./Compiler.cod" { NativeError { Rejected, OpenFailed }, ExpressionScratchPlan };
+```
+
+The outer braces group public selections. The braces following NativeError select members *of that type*. The same distinction applies to sum constructors. Existing per-item `as`, `with methods` and a mixin's `with { ... }` symbol map attach only to their item, wherever that singleton already permits the combination. A parenthesized operator occupies one item. Commas inside a member selector and semicolons inside a symbol map belong to the nested production. Require at least one item, allow a trailing comma, and apply the existing statement-termination rules after the closing brace. The single-selection spelling remains idiomatic for one item.
+
+Expand the group into individual selections in written order with the same source module, verb and any shared verb qualifier. An `@symbol` item is admissible exactly where the corresponding standalone selection of that symbol is admissible. For `using symbol "m" { @a, @b as @local }`, both items use the symbol-selection operation. A group never changes symbol identity, installs a dynamic effect by itself, or makes `import symbol` or `mixin symbol` valid. Keep a different selection verb or qualifier in its own statement. The independent `symbol from` identity-selection and `using units` forms keep their existing grammar. A grouped `export import` applies publication to each imported item. There is no group-wide post-brace modifier.
+
+Repeated selections of the same identity/context, conflicting explicit names, private sources, adaptation, whole-family import and mixin mappings all receive the same outcome as their expanded source. A group neither resolves ambiguity by order nor initializes the source once per item. For migration, consolidate same-module items that express one purpose. Preserve semantically significant intervening declarations, selection order and business-meaningful separation. Identify an error at the offending item. Exercise both frontends on the migrated `applications/cod-booter/src` modules, including grouped lookup of sibling type names, private helpers, prefixed publication of an overloaded family, re-export under another name and generated C declarations. An unsupported underlying singleton retains its ordinary capability boundary.
 
 ### Publication-only re-export
 
