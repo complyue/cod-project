@@ -111,6 +111,7 @@ struct CheckedOperation {
   bool read_only = false;
   bool fixed_binding = false;
   bool view = false;
+  bool discarded_loop_view = false;
   // A checked element address or one of its inline fields. No fixed storage ID proves its identity.
   bool indexed_target = false;
   // The result may retain a ptr carrier even if the current target is present.
@@ -130,6 +131,8 @@ struct CheckedOperation {
   bool mixed_view = false;
   bool scalar_value_join = false;
   bool borrowed_result = false;
+  enum class CheckedRefPresence { proven, possible_absence, definite_absence };
+  CheckedRefPresence checked_ref_presence = CheckedRefPresence::proven;
   struct ReturnFilter {
     bool can_match = true;
     std::optional<std::pair<size_t, size_t>> owner_comparison;

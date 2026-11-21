@@ -1811,7 +1811,8 @@ class LLVMEmission {
   }
   static bool inert_argument(const Expression &expr) {
     using K = Expression::Kind;
-    return expr.kind == K::name || expr.kind == K::integer || expr.kind == K::real || expr.kind == K::boolean || expr.kind == K::null_ref;
+    return !expr.checked_ref_argument && (expr.kind == K::name || expr.kind == K::integer || expr.kind == K::real ||
+                                         expr.kind == K::boolean || expr.kind == K::null_ref);
   }
   llvm::Value *prepare_value(const Expression &expr, size_t index, llvm::Value *value) {
     const auto &child = contexts_.front().at(&expr).argument(expr, index);
@@ -2192,6 +2193,16 @@ class LLVMEmission {
     });
   }
   llvm::Value *emit_expression(const Expression &expr, Projection projection = Projection::value, bool discard = false) {
+    if (discard && projection == Projection::value &&
+        std::ranges::any_of(contexts_, [&](const auto &context) { return context.at(&expr).discarded_loop_view; })) {
+      std::map<bool, std::vector<size_t>> alternatives;
+      for (size_t i = 0; i < contexts_.size(); ++i)
+        alternatives[contexts_[i].at(&expr).discarded_loop_view].push_back(i);
+      return contextual_value(expr, alternatives, "discard.view", [&](bool view_only) -> llvm::Value * {
+        emit_expression(expr, view_only ? Projection::target : Projection::value, true);
+        return reachable() ? empty_scalar() : nullptr;
+      });
+    }
     const bool abrupt = std::all_of(contexts_.begin(), contexts_.end(), [&](const auto &context) { return context.at(&expr).type == Type::never; });
     // An abrupt mixed branch has no target/slot result. Retain its intermediate
     // value or view through cleanup without forcing the parent's result shape.
@@ -2218,6 +2229,19 @@ class LLVMEmission {
     if (abrupt) {
       if (reachable()) b_.CreateUnreachable();
       return nullptr;
+    }
+    if (expr.checked_ref_argument && projection == Projection::target && reachable()) {
+      using Presence = CheckedOperation::CheckedRefPresence;
+      std::map<Presence, std::vector<size_t>> alternatives;
+      for (size_t i = 0; i < contexts_.size(); ++i)
+        alternatives[contexts_[i].at(&expr).checked_ref_presence].push_back(i);
+      return contextual_value(expr, alternatives, "ref.selection", [&](Presence presence) -> llvm::Value * {
+        if (presence == Presence::definite_absence) {
+          fail_path(ExceptionCategory::null_pointer, *expr.checked_ref_argument);
+          return nullptr;
+        }
+        return checked_address(value, presence == Presence::possible_absence, *expr.checked_ref_argument);
+      }, b_.getPtrTy());
     }
     return value;
   }
@@ -2486,6 +2510,7 @@ class LLVMEmission {
       }
       b_.SetInsertPoint(join);
       if (incoming.empty()) { b_.CreateUnreachable(); return nullptr; }
+      if (discard) return read ? empty_scalar() : null_pointer();
       auto *result = b_.CreatePHI(read ? scalar_ : static_cast<llvm::Type *>(b_.getPtrTy()), incoming.size(), "if.value");
       for (const auto &[value, predecessor] : incoming) result->addIncoming(value, predecessor);
       return result;

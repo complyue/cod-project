@@ -324,6 +324,7 @@ struct Expression {
   std::optional<size_t> symbol_id;
   std::string binding;
   bool spread = false;
+  std::optional<Location> checked_ref_argument;
   std::optional<Type> annotation;
   std::shared_ptr<Form> definition = {};
   bool intrinsic = false;
@@ -420,7 +421,8 @@ struct SymbolMapping {
 struct Capture { std::string name; Location at; };
 struct Form {
   enum class Kind { symbol, symbol_from, function, procedure, data, region_definition, array, unit, using_units, global,
-                    using_resource, import_resource, mixin_resource, export_resource, expression, abstract_type, conformance };
+                    using_resource, import_resource, mixin_resource, export_resource, export_from_resource,
+                    expression, abstract_type, conformance };
   Kind kind;
   Location at;
   std::string name;
@@ -457,6 +459,9 @@ struct Form {
   Expr body;
   SourceSpan span = {};
 
+  bool publishes_definition() const {
+    return exporting && (kind == Kind::data || kind == Kind::array || kind == Kind::function || kind == Kind::procedure);
+  }
   bool requires_explicit_return() const { return kind == Kind::procedure && !implicit_scope && !supplied_scope; }
   bool returns_tail_value() const { return !supplied_group && (kind == Kind::function || implicit_scope || supplied_scope); }
   bool completion_requires_return(const Type &result) const {
@@ -705,6 +710,9 @@ class Parser {
   void resource(Form &form, bool symbolic) {
     if (peek().kind != TokenKind::string) fail(peek().at, "expected a quoted module path");
     form.path = tokens_[cursor_++].text;
+    resource_selection(form, symbolic);
+  }
+  void resource_selection(Form &form, bool symbolic) {
     form.symbolic = symbolic || peek().kind == TokenKind::symbol;
     const auto kind = form.symbolic ? TokenKind::symbol : TokenKind::identifier;
     form.name = form.symbolic ? name(kind).text : lexical_name(&form.operation).text;
@@ -713,6 +721,20 @@ class Parser {
     if (!form.explicit_alias) form.alias_operation = form.operation;
     if (form.alias_operation && identity_operation(form.alias))
       fail(form.at, "reference identity is an intrinsic operation and cannot be an imported user operation");
+  }
+  void resource_item(Form &form) {
+    resource_selection(form, form.using_symbol);
+    if (!take("with")) return;
+    if (form.kind != Form::Kind::mixin_resource)
+      fail(form.at, "a symbol map requires a mixed-in procedure");
+    expect("{");
+    while (!take("}")) {
+      auto local = name(TokenKind::symbol);
+      expect("as");
+      auto source = name(TokenKind::symbol);
+      form.mappings.push_back({local.text, source.text, local.at});
+      expect(";");
+    }
   }
   Type parse_type(Parameter *parameter = nullptr) {
     const auto at = peek().at;
@@ -806,7 +828,10 @@ class Parser {
   }
   void type_separator() { expect(":"); }
   Expr make(Expression::Kind kind, const Token &token) {
-    auto expression = std::make_unique<Expression>(Expression{kind, token.at, token.text, {}, {}, {}, false, {}});
+    auto expression = std::make_unique<Expression>();
+    expression->kind = kind;
+    expression->at = token.at;
+    expression->text = token.text;
     expression->span = token.at.span;
     depths_.erase(expression.get());
     return expression;
@@ -817,6 +842,12 @@ class Parser {
     expect(")");
     return field;
   }
+  bool starts_checked_ref_argument() const {
+    if (!is("not") || !is("null", 1) || is("in", 2) || is("is", 2)) return false;
+    const auto kind = tokens_[cursor_ + 2].kind;
+    return kind == TokenKind::identifier || kind == TokenKind::integer || kind == TokenKind::real ||
+           kind == TokenKind::symbol || is("(", 2) || is("{", 2) || is("!", 2);
+  }
   void arguments(Expression &expr, bool allow_supplied_body = true) {
     const auto close = right_paren_[cursor_];
     const bool follows_call = allow_supplied_body && close < tokens_.size() &&
@@ -825,13 +856,23 @@ class Parser {
     const bool named = (expr.kind == Expression::Kind::call && !expr.intrinsic) ||
         expr.kind == Expression::Kind::make_exception || expr.kind == Expression::Kind::make_object ||
         (accepts_supplied_body(expr) && follows_call) || labelled_yield;
+    const bool accepts_ref_argument = expr.kind == Expression::Kind::call || expr.kind == Expression::Kind::value_call ||
+        expr.kind == Expression::Kind::perform || expr.kind == Expression::Kind::behave;
     expect("(");
     if (!take(")")) {
       do {
         Expr argument;
         if (!named || !is("->")) {
+          std::optional<Location> checked_ref;
+          if (accepts_ref_argument && starts_checked_ref_argument()) {
+            checked_ref = expect("not").at;
+            expect("null");
+          }
           argument = expression(0, HereAttachment::immediate, !named);
+          argument->checked_ref_argument = std::move(checked_ref);
           argument->spread = take("...");
+          if (argument->checked_ref_argument && argument->spread)
+            fail(*argument->checked_ref_argument, "a checked ref selection supplies one ordinary argument");
         }
         if (named && take("->")) {
           const bool construction = expr.kind == Expression::Kind::make_object || expr.kind == Expression::Kind::make_exception;
@@ -902,6 +943,7 @@ class Parser {
     if (take("in")) parameter.owner = ordinary_name().text;
     if (exception && !parameter.owner.empty()) fail(param.at, "an exception holder establishes its own owner");
     if (mode == "val" && !parameter.owner.empty()) fail(param.at, "a val parameter has callee-local bits storage, not an external owner");
+    if (!regional && !exception && mode.empty() && !parameter.owner.empty()) parameter.declaration_kind = "ref";
     if (parameter.type == Type::void_type) fail(param.at, "a parameter must have a value type");
     parameter.variadic = take("...");
     return parameter;
@@ -1215,6 +1257,13 @@ class Parser {
     attach_body(*producer, std::move(header));
     return producer;
   }
+  Expr return_expression(const Token &token, bool guard_arm = false) {
+    auto expr = make(Expression::Kind::return_value, token);
+    if (!is(";") && !is("}") && !(guard_arm && is("else")))
+      expr->children.push_back(expression());
+    return finish(std::move(expr));
+  }
+
   Expr return_conditional(const Token &opening_if) {
     using K = Expression::Kind;
     const ParseEntry entry(recursion_, opening_if.at, "a return-state conditional");
@@ -1505,11 +1554,7 @@ class Parser {
       }
       return expr;
     }
-    if (take("return")) {
-      auto expr = make(Expression::Kind::return_value, token);
-      if (!is(";") && !is("}")) expr->children.push_back(expression());
-      return expr;
-    }
+    if (take("return")) return return_expression(token);
     if (parsing_handoff_ && (is("break") || is("continue"))) {
       ++cursor_;
       auto expr = make(token.text == "break" ? Expression::Kind::break_value : Expression::Kind::continue_value, token);
@@ -1610,13 +1655,21 @@ class Parser {
     }
     if (take("if")) {
       if (is("returning")) return return_conditional(token);
-      auto expr = make(Expression::Kind::conditional, token);
+      using K = Expression::Kind;
+      auto expr = make(K::conditional, token);
       expect("(");
       expr->children.push_back(expression());
       expect(")");
-      expr->children.push_back(block());
-      expect("else");
-      expr->children.push_back(block());
+      const bool single_return = is("return");
+      expr->children.push_back(single_return ? return_expression(expect("return"), true) : block());
+      if (single_return && is(";") && is("else", 1)) expect(";");
+      if (take("else")) expr->children.push_back(block());
+      else {
+        auto empty = make(K::block, token);
+        const auto end = expr->children.back()->span.past;
+        empty->at.span = empty->span = {end, end};
+        expr->children.push_back(std::move(empty));
+      }
       return expr;
     }
     if (is("{")) return block();
@@ -2020,7 +2073,19 @@ public:
       auto form = std::make_unique<Form>();
       form->at = start.at;
       if (take("export")) {
-        if (is("import")) {
+        if (is("from") && tokens_[cursor_ + 1].kind == TokenKind::string) {
+          expect("from");
+          form->kind = Form::Kind::export_from_resource;
+          resource(*form, false);
+          expect(";");
+          append(std::move(form));
+          continue;
+        }
+        const auto next = peek().kind == TokenKind::end ? TokenKind::end : tokens_[cursor_ + 1].kind;
+        const bool named_type = (is("data") && (next == TokenKind::identifier || next == TokenKind::string)) ||
+            (is("array") && next == TokenKind::identifier);
+        const bool named_callable = (is("func") || is("function") || is("proc") || is("procedure")) && !callable_binding();
+        if (is("import") || named_type || named_callable) {
           form->exporting = true;
         } else {
           form->kind = Form::Kind::export_resource;
@@ -2122,6 +2187,7 @@ public:
           if (form->c_data) fail(peek().at, "expected a brace body for a data \"C\" record");
           if (data && !form->parent_type)
             fail(start.at, "a head-only data declaration requires an abstract parent");
+          if (form->exporting) fail(start.at, "export requires a locally defined identity");
           form->kind = data ? Form::Kind::conformance : Form::Kind::abstract_type;
           expect(";");
           append(std::move(form));
@@ -2195,19 +2261,26 @@ public:
           if (!using_resource) fail(start.at, "combined symbol selection requires using; declare its destination first");
           form->using_symbol = true;
         }
-        resource(*form, form->using_symbol);
-        if (take("with")) {
-          if (form->kind != Form::Kind::mixin_resource)
-            fail(start.at, "a symbol map requires a mixed-in procedure");
-          expect("{");
-          while (!take("}")) {
-            auto local = name(TokenKind::symbol);
-            expect("as");
-            auto source = name(TokenKind::symbol);
-            form->mappings.push_back({local.text, source.text, local.at});
-            expect(";");
+        if (peek().kind != TokenKind::string) fail(peek().at, "expected a quoted module path");
+        form->path = tokens_[cursor_++].text;
+        if (take("{")) {
+          if (is("}")) fail(peek().at, "expected a selection in the module group");
+          while (true) {
+            auto item = std::make_unique<Form>();
+            item->at = peek().at;
+            item->kind = form->kind;
+            item->path = form->path;
+            item->using_symbol = form->using_symbol;
+            item->exporting = form->exporting;
+            resource_item(*item);
+            append(std::move(item));
+            if (!take(",") || is("}")) break;
           }
+          expect("}");
+          expect(";");
+          continue;
         }
+        resource_item(*form);
         expect(";");
       } else {
         form->kind = Form::Kind::expression;
