@@ -1784,7 +1784,10 @@ class ScalarChecker {
     bool preparing(const Expression &expr) const { return prepared_call && prepared_call->expression == &expr; }
     bool same_definition_inputs(const TypeEvidenceState &other) const {
       return bindings == other.bindings && symbol_shadows == other.symbol_shadows && views == other.views && lexical_here == other.lexical_here &&
-          owner_bindings == other.owner_bindings && owner_relations == other.owner_relations;
+          owner_bindings == other.owner_bindings && owner_relations == other.owner_relations &&
+          selections.bindings == other.selections.bindings && selections.facts == other.selections.facts &&
+          selections.equal_selections == other.selections.equal_selections &&
+          selections.possible_overlap == other.selections.possible_overlap;
     }
     struct Returns {
       std::vector<Type> types;
@@ -6776,6 +6779,45 @@ class ScalarChecker {
     if (!least) fail(at, "return alternatives have no unique least common result; provide an explicit result contract and valid conversions");
     return least;
   }
+  // Result inference for an immediate scope uses its invocation's entry
+  // selections. Name the projected slots locally so the result graph can
+  // reuse evidence across activations with the same entry facts.
+  static void retain_scope_result_selections(TypeEvidenceState &scope, const QuerySelections &caller) {
+    if (!caller.tracking) return;
+    std::map<EvidenceSlot, EvidenceSlot> slots;
+    auto &entry = scope.selections;
+    for (const auto &[name, view] : scope.views) {
+      if (view.value_binding == true || view.view != true) continue;
+      const auto binding = caller.bindings.find(name);
+      if (binding == caller.bindings.end() || !binding->second.slot) continue;
+      entry.tracking = true;
+      const auto [local, inserted] = slots.try_emplace(*binding->second.slot, name);
+      if (inserted) {
+        TargetEvidence target;
+        target.presence = caller.presence(binding->second);
+        entry.save_selection(local->second, std::move(target));
+      }
+      entry.bindings.emplace(name, EvidenceSelection{local->second, {local->second}});
+    }
+    const auto footprint = [&](const EvidenceSlot &slot) -> const EvidencePlaces & {
+      static const EvidencePlaces unknown;
+      const auto found = caller.footprints.find(slot);
+      return found == caller.footprints.end() ? unknown : found->second;
+    };
+    for (auto first = slots.begin(); first != slots.end(); ++first) {
+      EvidencePlaces same;
+      const auto *group = caller.selection_group(first->first);
+      for (auto second = std::next(first); second != slots.end(); ++second) {
+        if (group && group->contains(second->first)) same.insert(second->second);
+        if (caller.may_overlap(footprint(first->first), footprint(second->first))) {
+          entry.possible_overlap[first->second].insert(second->second);
+          entry.possible_overlap[second->second].insert(first->second);
+        }
+      }
+      entry.retain_selection(first->second, std::move(same));
+    }
+  }
+
   TypeEvidenceState result_context(size_t id, const TypeEvidenceState *supplied, bool normalize_owners = true) const {
     TypeEvidenceState context;
     const auto &method = *program_.methods[id].source;
@@ -6916,10 +6958,42 @@ class ScalarChecker {
     }
     return state;
   }
+  static bool contains_case(const Expression &expr) {
+    return expr.kind == Expression::Kind::case_expression ||
+        (expr.definition && expr.definition->implicit_scope && contains_case(*expr.definition->body)) ||
+        std::ranges::any_of(expr.children, [](const auto &child) { return contains_case(*child); });
+  }
+  static void seed_result_selections(TypeEvidenceState &state, const CheckedMethod &method) {
+    auto &selections = state.selections;
+    if (!selections.tracking && !contains_case(*method.source->body)) return;
+    selections.tracking = true;
+    selections.observation_decisions = std::make_shared<ObservationDecisions>();
+    const auto &inputs = method.scope_inputs;
+    for (size_t i = 0; i < method.input_parameters().size(); ++i) {
+      const auto &parameter = method.input_parameters()[i];
+      if (parameter.owner.empty() || (inputs && inputs->live_values.contains(i))) continue;
+      if (selections.bindings.contains(parameter.name)) continue;
+      if (inputs) for (const auto &[name, access] : inputs->place_access)
+        if (access.input == i && selections.bindings.contains(name)) {
+          selections.bindings.emplace(parameter.name, selections.bindings.at(name));
+          break;
+        }
+      if (selections.bindings.contains(parameter.name)) continue;
+      TargetEvidence target;
+      if (argument_mode(parameter) != ArgumentMode::borrowed_ptr || (inputs && inputs->nonnull.at(i)))
+        target.presence = TargetPresence::present;
+      selections.bind(parameter.name, i, std::move(target));
+    }
+    if (inputs) for (const auto &[name, access] : inputs->place_access)
+      if (const auto binding = selections.bindings.find(inputs->parameters[access.input].name);
+          binding != selections.bindings.end()) selections.bindings.insert_or_assign(name, binding->second);
+  }
+
   ResultEvidence sample_result(size_t id, bool complete = false) const {
     auto &obligation = result_obligations_[id];
     const auto &method = program_.methods[obligation.method];
     auto state = body_evidence(obligation.method, obligation.arguments, obligation.retained, obligation.context);
+    seed_result_selections(state, method);
     TypeEvidenceState::Returns returns;
     state.returns = &returns;
     const auto previous = result_probe_;
@@ -7038,7 +7112,9 @@ class ScalarChecker {
     // Optional call-effect proofs use established signatures. They must
     // not leave a speculative result-inference obligation in the main graph.
     if (type_call_proofs_) return {};
-    const auto context = result_context(method, state);
+    auto context = result_context(method, state);
+    if (definition.source->implicit_scope && state)
+      retain_scope_result_selections(context, state->selections);
     auto &candidates = method_result_obligations_[method];
     const auto found = std::find_if(candidates.begin(), candidates.end(), [&](size_t id) {
       const auto &node = result_obligations_[id];
@@ -10086,7 +10162,12 @@ class ScalarChecker {
           !view->second.read_only.value_or(false))
         writable_booleans.push_back(named_type_target(state, capture.name).places);
     }
-    if (state.required || case_scope) {
+    // Inference may already be following an observed entry selection.
+    // The immediate call can write its supplying slots before it returns.
+    const bool observes_bindings = state.selections.tracking && std::ranges::any_of(captures, [&](const auto &capture) {
+      return state.selections.bindings.contains(capture.name);
+    });
+    if (state.required || case_scope || observes_bindings) {
       const auto declaration = result_context(id, &state);
       auto body = body_evidence(id, {}, *retained, declaration);
       body.required = state.required;
@@ -13506,7 +13587,7 @@ class ScalarChecker {
     auto &method = program_.methods[method_id];
     resolve_captures(method);
     const auto &dependencies = definition_dependencies(*method.source);
-    const auto state = evidence_state(false, &dependencies);
+    const auto state = evidence_state(false, &dependencies, true);
     const auto retained = definition_retained(method_id, state);
     CheckedMethod::ScopeInputs inputs{};
     inputs.lexical_method = method_id;
