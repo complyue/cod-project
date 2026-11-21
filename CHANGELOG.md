@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-21 — Library transfer policies for text
+
+<a id="h-string-transfer-policy-20261121"></a>
+**H-STRING-TRANSFER-POLICY-20261121.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-21 (America/Los_Angeles), the project user asked to consider String fields in ADTs and specified “最好是把 `<-` overload 能力完整保留给自己做内存管理的 lib/app”. The user confirmed the immutable-target/writable-place distinction (“认同，按此细化落实”) and then explicitly chose “Require a visible transfer method” for `entry.name <- input` when no policy is supplied. D-07-STRING-FIELDS (UTF-8 strings r2 / registry r1040, P-676/P-677) applies these decisions to product and sum fields under either owner, using existing place, construction, method selection and lifetime rules. The CoD examples and checks are the design review’s application of those rules. The established UTF-8/C argument scope is at `08329a492e70bc4d5fc51086d895274e08e79d00:design/Utf8Strings.md`.
+
 ## 2026-11-21 — UTF-8 text at the C boundary
 
 <a id="h-utf8-native-text-20261121"></a>
