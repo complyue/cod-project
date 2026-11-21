@@ -7,12 +7,12 @@ func classify_present(subject:const bool in O) -> u64 where {const owner O} {
 func classify_bool(ptr subject:const bool in O) -> u64 where {const owner O} {
     return case subject of {
         (null) -> { 13u64 };
-        () -> {
+        () -> {{
             case subject of {
                 (true) -> { classify_present(subject) };
                 (false) -> { 12u64 };
             }
-        };
+        }};
     };
 }
 
