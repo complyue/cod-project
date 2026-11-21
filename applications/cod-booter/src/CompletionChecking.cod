@@ -527,7 +527,7 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
         return route_failure(nodes, names, links, facts, sites, at, used, null_pointer_identity(), 1u8, event);
     } else {};
     val kind <- nodes[at].kind;
-    if (kind == argument_node() && facts[at].reception == borrowed_ref()) {
+    if (kind == argument_node() && facts[at].reception == borrowed_ref() && facts[at].checked_borrow == 0u8) {
         val actual <- nodes[at].right;
         if (facts[actual].reception == nullable_ptr() && sites[actual].presence != present_target()) {
             return unproved_nonnull_argument();

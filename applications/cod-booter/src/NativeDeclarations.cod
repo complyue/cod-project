@@ -3,6 +3,7 @@ using "ParserStorage.cod" no_node;
 using "ParserStorage.cod" c_handle_type_node;
 using "ParserStorage.cod" c_record_node;
 using "ParserStorage.cod" c_procedure_node;
+using "ParserStorage.cod" callable_node;
 using "ParserStorage.cod" array_declaration_node;
 using "ParserStorage.cod" export_node;
 using "ParserStorage.cod" data_parent_node;
@@ -58,7 +59,6 @@ using "NameResolution.cod" ordinary_selection;
 using "NameResolution.cod" native_scalar;
 using "NameResolution.cod" builtin_bool;
 using "NameResolution.cod" builtin_u8;
-using "NameResolution.cod" builtin_u32;
 using "NameResolution.cod" builtin_u32;
 using "NameResolution.cod" builtin_u64;
 using "NameResolution.cod" builtin_i64;
@@ -361,9 +361,9 @@ func handle_owner(nodes:const ExprNodes in N, names:const NameBindings in B, sel
     (root.identity <- selected[target].owner_identity):void;
 }
 
-func check_c_argument(nodes:const ExprNodes in N, names:const NameBindings in B, ref work:NameWork in W,
-                      selected:const SelectedExports in E, parameter:u64, direction:u8,
-                      ref report:NativeDeclarationResult in R) -> void
+func check_native_argument(nodes:const ExprNodes in N, names:const NameBindings in B, ref work:NameWork in W,
+                           selected:const SelectedExports in E, parameter:u64, direction:u8,
+                           ref report:NativeDeclarationResult in R) -> void
     where {const owner N, const owner B, owner W, const owner E, owner R} {
     val mode <- nodes[parameter].kind;
     val binding <- nodes[parameter].right;
@@ -467,8 +467,23 @@ func check_c_arguments(nodes:const ExprNodes in N, names:const NameBindings in B
     val parameter <- first;
     for (unused in 0u64 .. intrinsic (len)(nodes)) {
         if (parameter == no_node()) { return; } else {};
-        check_c_argument(nodes, names, work, selected, parameter, direction, report);
+        check_native_argument(nodes, names, work, selected, parameter, direction, report);
         if (report.diagnostic != 0u8) { return; } else {};
+        (parameter <- work[parameter].next):void;
+    };
+}
+
+func check_handle_formals(nodes:const ExprNodes in N, names:const NameBindings in B, ref work:NameWork in W,
+                          selected:const SelectedExports in E, form:u64, ref report:NativeDeclarationResult in R) -> void
+    where {const owner N, const owner B, owner W, const owner E, owner R} {
+    val head <- signature_head(nodes, nodes[form].left);
+    val parameter <- first_item(nodes, nodes[head].right);
+    for (unused in 0u64 .. intrinsic (len)(nodes)) {
+        if (parameter == no_node()) { return; } else {};
+        if (nodes[parameter].kind == handle_parameter_node()) {
+            check_native_argument(nodes, names, work, selected, parameter, callable_binding(), report);
+            if (report.diagnostic != 0u8) { return; } else {};
+        } else {};
         (parameter <- work[parameter].next):void;
     };
 }
@@ -942,8 +957,12 @@ func check_native_declarations(nodes:const ExprNodes in N, ref names:NameBinding
     for (at in 0u64 .. used) {
         if (nodes[at].kind == c_procedure_node()) {
             check_c_procedure(nodes, names, work, selected, at, report);
-            if (report.diagnostic != 0u8) { return false; } else {};
-        } else {};
+        } else {
+            if (nodes[at].kind == callable_node()) {
+                check_handle_formals(nodes, names, work, selected, at, report);
+            } else {};
+        };
+        if (report.diagnostic != 0u8) { return false; } else {};
     };
     return check_handle_expressions(nodes, names, selected, work, used, report) &&
         check_here_calls(nodes, names, selected, work, used, report);

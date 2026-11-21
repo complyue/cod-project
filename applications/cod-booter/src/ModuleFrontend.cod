@@ -18,11 +18,10 @@ using "ParserStorage.cod" name_node;
 using "ParserStorage.cod" literal_node;
 using "ParserStorage.cod" bool_node;
 using "ParserStorage.cod" field_access_node;
-using "ParserStorage.cod" readonly_ref_parameter_node;
-using "ParserStorage.cod" owner_clause_node;
 using "ParserStorage.cod" catch_binding_node;
 using "ParserStorage.cod" handle_local;
 using "ParserStorage.cod" handle_construction;
+using "ParserStorage.cod" handle_parameter_node;
 using "ParserStorage.cod" here_call_node;
 using "SourceStorage.cod" SourceBytes;
 using "ParserStorage.cod" Tokens;
@@ -98,11 +97,12 @@ func first_extended_declaration(nodes:const ExprNodes in N, work:const NameWork 
     return no_node();
 }
 
-func has_native_expressions(nodes:const ExprNodes in N, used:u64) -> bool where {const owner N} {
+func uses_native_boundary(nodes:const ExprNodes in N, used:u64) -> bool where {const owner N} {
     val kind <- 0u8;
     for (at in 0u64 .. used) {
         kind <- nodes[at].kind;
-        if (handle_local(kind) || handle_construction(kind) || kind == here_call_node()) { return true; } else {};
+        if (handle_local(kind) || handle_construction(kind) || kind == handle_parameter_node() ||
+            kind == here_call_node()) { return true; } else {};
     };
     return false;
 }
@@ -132,9 +132,6 @@ func unsupported_source_form(nodes:const ExprNodes in N, at:u64) -> u8 where {co
     if (kind == throw_named_node()) { return 43u8; } else {};
     if (kind == rethrow_from_node()) { return 44u8; } else {};
     if (kind == named_argument_node()) { return 45u8; } else {};
-    if (kind == readonly_ref_parameter_node() || (kind == owner_clause_node() && nodes[at].number == 2u64)) {
-        return 39u8;
-    } else {};
     if (kind == catch_binding_node() && nodes[at].number == 0u64 && nodes[at].right != no_node()) {
         return 36u8;
     } else {};
@@ -185,7 +182,7 @@ func bind_parsed_module(source:const SourceBytes in S, nodes:const ExprNodes in 
         return false;
     } else {};
     if (first_extended_declaration(nodes, work, result.frontend.tree) != no_node() ||
-        has_native_expressions(nodes, result.frontend.tree.used)) {
+        uses_native_boundary(nodes, result.frontend.tree.used)) {
         ref declarations = make NativeDeclarationResult { diagnostic <- 0u8; node <- no_node(); };
         if (!check_native_declarations(nodes, bindings, work, selected, result.frontend.tree.used, declarations)) {
             binding_diagnostic(nodes, result, module_binding_failed(), declarations.diagnostic, declarations.node);

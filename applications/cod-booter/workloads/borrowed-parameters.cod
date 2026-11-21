@@ -1,0 +1,45 @@
+using symbol "std:io" @print;
+using "std:exceptions" NullPointerException;
+
+func read(source:const u64 in O) -> u64 where {const owner O} {
+    return source;
+}
+
+proc advance(ref destination:u64 in O, ref observed:const u64 in O) -> void where {const owner O} {
+    destination <- destination + 1u64;
+    behave @print(read(observed));
+    return;
+}
+
+proc show(value:const u64) -> void {
+    behave @print(value);
+    return;
+}
+
+proc next_argument() -> u64 {
+    behave @print(30u64);
+    return 40u64;
+}
+
+proc inspect(source:const u64 in O, other:u64) -> void where {const owner O} {
+    behave @print(source);
+    behave @print(other);
+    return;
+}
+
+proc dispatch(ptr source:const u64 in O) -> void throws NullPointerException where {const owner O} {
+    defer show(50u64);
+    inspect(source, next_argument());
+    return;
+}
+
+val target <- 19u64;
+advance(target, target);
+ptr absent:u64 = null in here;
+try {
+    dispatch(target);
+    dispatch(absent);
+} catch (error:const NullPointerException) {
+    behave @print(60u64);
+};
+behave @print(target);

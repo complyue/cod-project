@@ -56,7 +56,6 @@ static const char *unsupported_source_form(uint32_t code) {
     case 36: return "writable owning exception catch";
     case 37: return "ordinary construction";
     case 38: return "field selection";
-    case 39: return "readonly reference parameter or const callable owner";
     case 40: return "bodyless deferred exception handler";
     case 41: return "lexical callable value";
     case 42: return "throw with an explicit cause";
@@ -105,6 +104,8 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: expected another positional here receiver\n", stderr);
     else if (diagnostic->stage == 1 && diagnostic->code == 40)
         fputs(": error: a call can supply only one trailing here body\n", stderr);
+    else if (diagnostic->stage == 1 && diagnostic->code == 41)
+        fputs(": error: a val parameter has independent storage and cannot declare 'in'\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 13)
         fputs(": error: this module declaration is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 49)
@@ -141,8 +142,14 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: the selected C provider requires a trailing here body\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 70)
         fputs(": error: a function cannot call a C provider\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 72)
+        fputs(": error: const owner requires an input under that owner\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 73)
+        fputs(": error: owner requires a writable-target input under that owner\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 20)
         fputs(": error: narrow integer execution is outside the supported compiler profile\n", stderr);
+    else if (diagnostic->stage == 4 && diagnostic->code == 21)
+        fputs(": error: const owner cannot supply allocation access to the callee\n", stderr);
     else if (diagnostic->stage == 5 && diagnostic->code == 12)
         fputs(": error: ref argument requires a proven non-null target\n", stderr);
     else if (diagnostic->stage == 5 && diagnostic->code == 13)
