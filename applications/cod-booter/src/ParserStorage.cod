@@ -118,6 +118,10 @@ func construction_body(nodes:const ExprNodes in N, at:u64) -> u64 where {const o
     return no_node();
 }
 
+func reserves_storage(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
+    return nodes[at].kind == make_named_node() && nodes[nodes[at].right].number == 0u64;
+}
+
 func skips_right(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
     val left <- nodes[at].left;
     if (nodes[left].kind != bool_node()) { return false; } else {};
@@ -251,3 +255,4 @@ export construction_type_query_node;
 export initializer_assignment_node;
 export is_transfer;
 export construction_body;
+export reserves_storage;
