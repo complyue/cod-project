@@ -15,6 +15,8 @@ using "NativeCommands.cod" begin_function;
 using "NativeCommands.cod" declare_function;
 using "NativeCommands.cod" return_outcome;
 using "NativeCommands.cod" finish_program;
+using "NativeCommands.cod" write_defer_flag;
+using "NativeCommands.cod" branch_if_unregistered;
 
 data InitializationResult {
     diagnostic:u8;
@@ -43,32 +45,36 @@ func enqueue(ref code:NativeCommands in C, used:u64, visit:u64, at:u64, ref pend
     return true;
 }
 
-func enqueue_label(ref code:NativeCommands in C, used:u64, labels:u64, visit:u64, label:u64,
-                   ref pending:u64 in P) -> bool where {owner C, owner P} {
-    if (label >= labels) { return false; } else {};
-    return enqueue(code, used, visit, code[used + label].d, pending);
+func label_instruction(code:const NativeCommands in C, plan:const NativePlan in P, label:u64) -> u64
+    where {const owner C, const owner P} {
+    if (label >= plan.labels || code[plan.used + label].d == no_node()) { return plan.used; } else {};
+    return code[plan.used + label].d;
 }
 
-func enqueue_successors(ref code:NativeCommands in C, used:u64, labels:u64, visit:u64, at:u64,
-                        ref pending:u64 in P) -> bool where {owner C, owner P} {
+func successor(code:const NativeCommands in C, plan:const NativePlan in P, at:u64, second:bool, registration:u64) -> u64
+    where {const owner C, const owner P} {
     val opcode <- code[at].opcode;
-    if (opcode == return_outcome() || opcode == finish_program()) { return true; } else {};
-    if (opcode == begin_function() || opcode == declare_function()) { return false; } else {};
-    if (opcode == jump()) { return enqueue_label(code, used, labels, visit, code[at].a, pending); } else {};
-    if (opcode == branch_equal()) {
+    if (opcode == return_outcome() || opcode == finish_program()) { return no_node(); } else {};
+    if (opcode == begin_function() || opcode == declare_function()) { return plan.used; } else {};
+    if (opcode == branch_equal() || opcode == branch_if_unregistered()) {
+        val known <- registration;
         # A constant written immediately before this branch is in the same block.
-        if (at != 0u64 && code[at - 1u64].opcode == word_constant() && code[at - 1u64].a == code[at].a) {
-            val selected <- if (code[at - 1u64].b == code[at].b) { (code[at].c) } else { (code[at].d) };
-            return enqueue_label(code, used, labels, visit, selected, pending);
+        if (opcode == branch_equal() && at != 0u64 && code[at - 1u64].opcode == word_constant() &&
+            code[at - 1u64].a == code[at].a) {
+            (known <- code[at - 1u64].b):void;
         } else {};
-        return enqueue_label(code, used, labels, visit, code[at].c, pending) &&
-            enqueue_label(code, used, labels, visit, code[at].d, pending);
+        if (known != no_node()) {
+            if (second) { return no_node(); } else {};
+            return label_instruction(code, plan, if (known == code[at].b) { (code[at].c) } else { (code[at].d) });
+        } else {};
+        return label_instruction(code, plan, if (second) { (code[at].d) } else { (code[at].c) });
     } else {};
     if (opcode == branch_catchable()) {
-        return enqueue_label(code, used, labels, visit, code[at].b, pending) &&
-            enqueue_label(code, used, labels, visit, code[at].c, pending);
+        return label_instruction(code, plan, if (second) { (code[at].c) } else { (code[at].b) });
     } else {};
-    return enqueue(code, used, visit, at + 1u64, pending);
+    if (second) { return no_node(); } else {};
+    if (opcode == jump()) { return label_instruction(code, plan, code[at].a); } else {};
+    return at + 1u64;
 }
 
 # Follow only paths on which this reservation is still uninitialized. A
@@ -84,6 +90,7 @@ func check_reservation(ref code:NativeCommands in C, plan:const NativePlan in P,
     if (!enqueue(code, used, visit, reserve + 1u64, pending)) { return false; } else {};
     val at <- no_node();
     val opcode <- 0u8;
+    val next <- no_node();
     for (unused in 0u64 .. used) {
         if (pending == no_node()) { return true; } else {};
         at <- pending;
@@ -95,10 +102,135 @@ func check_reservation(ref code:NativeCommands in C, plan:const NativePlan in P,
             return false;
         } else {};
         if (opcode != store_target() || code[at].c != tag) {
-            if (!enqueue_successors(code, used, plan.labels, visit, at, pending)) { return false; } else {};
+            next <- successor(code, plan, at, false, no_node());
+            if (next != no_node() && !enqueue(code, used, visit, next, pending)) { return false; } else {};
+            next <- successor(code, plan, at, true, no_node());
+            if (next != no_node() && !enqueue(code, used, visit, next, pending)) { return false; } else {};
         } else {};
     };
     return pending == no_node();
+}
+
+data RegistrationFlow {
+    free_row:u64;
+    pending:u64;
+}
+
+# Immutable registration updates are shared by branches. Each update records
+# its prior history, the private flag slot and the new value. Missing values
+# leave both successors possible.
+func registration_value(code:const NativeCommands in C, history:u64, flag:u64) -> u64 where {const owner C} {
+    val update <- history;
+    for (unused in 0u64 .. intrinsic (len)(code)) {
+        if (update == no_node()) { return no_node(); } else {};
+        if (code[update].b == flag) { return code[update].c; } else {};
+        (update <- code[update].a):void;
+    };
+    return no_node();
+}
+
+func record_registration(ref code:NativeCommands in C, ref flow:RegistrationFlow in F,
+                         ref history:u64 in H, flag:u64, value:u64) -> bool where {owner C, owner F, owner H} {
+    if (registration_value(code, history, flag) == value) { return true; } else {};
+    val row <- flow.free_row;
+    if (row == intrinsic (len)(code)) { return false; } else {};
+    code[row].a <- history;
+    code[row].b <- flag;
+    code[row].c <- value;
+    history <- row;
+    flow.free_row <- row + 1u64;
+    return true;
+}
+
+# A path row holds the current instruction, the registration history and the
+# readiness of this reservation. Separate links index visited paths for the
+# instruction and pending work. A history may be shared without a copy.
+func schedule_path(ref code:NativeCommands in C, plan:const NativePlan in P, ref flow:RegistrationFlow in F,
+                   at:u64, history:u64, ready:u8) -> bool where {owner C, const owner P, owner F} {
+    if (at == no_node()) { return true; } else {};
+    if (at >= plan.used) { return false; } else {};
+    val index <- plan.used + at;
+    val previous <- code[index].c;
+    for (unused in 0u64 .. flow.free_row) {
+        if (previous == no_node()) {
+            if (flow.free_row == intrinsic (len)(code)) { return false; } else {};
+            code[flow.free_row].a <- at;
+            code[flow.free_row].b <- history;
+            code[flow.free_row].c <- code[index].c;
+            code[flow.free_row].d <- flow.pending;
+            code[flow.free_row].opcode <- ready;
+            code[index].c <- flow.free_row;
+            flow.pending <- flow.free_row;
+            flow.free_row <- flow.free_row + 1u64;
+            return true;
+        } else {};
+        if (code[previous].b == history && code[previous].opcode == ready) { return true; } else {};
+        (previous <- code[previous].c):void;
+    };
+    return false;
+}
+
+func activation_entry(code:const NativeCommands in C, plan:const NativePlan in P, at:u64) -> u64
+    where {const owner C, const owner P} {
+    val previous <- at;
+    for (unused in 0u64 .. at) {
+        previous <- previous - 1u64;
+        if (code[previous].opcode == begin_function()) { return label_instruction(code, plan, code[previous].b); } else {};
+    };
+    return plan.used;
+}
+
+# Refine a failed path proof from the activation entry, where each flag's
+# reset, registration and consumption appears in order. Check writes before
+# readiness is lost at a later reservation of the same place.
+func check_registered_paths(ref code:NativeCommands in C, plan:const NativePlan in P,
+                            ref result:InitializationResult in R, reserve:u64) -> bool
+    where {owner C, const owner P, owner R} {
+    val used <- plan.used;
+    val rows <- if (used >= plan.labels) { used } else { (plan.labels) };
+    val first <- used + rows;
+    for (at in used .. used + used) { (code[at].c <- no_node()):void; };
+    ref flow = make RegistrationFlow { free_row <- first; pending <- no_node(); };
+    if (first == intrinsic (len)(code)) {
+        result.diagnostic <- initialization_storage_exhausted();
+        return false;
+    } else {};
+    if (!schedule_path(code, plan, flow, activation_entry(code, plan, reserve), no_node(), 0u8)) { return false; } else {};
+    val tag <- code[reserve].c;
+    val row <- no_node();
+    val at <- no_node();
+    val history <- no_node();
+    val registration <- no_node();
+    val ready <- 0u8;
+    val opcode <- 0u8;
+    for (unused in first .. intrinsic (len)(code)) {
+        if (flow.pending == no_node()) { return true; } else {};
+        row <- flow.pending;
+        flow.pending <- code[row].d;
+        at <- code[row].a;
+        history <- code[row].b;
+        ready <- code[row].opcode;
+        opcode <- code[at].opcode;
+        if (initialization_access(opcode) && code[at].c == tag) {
+            if (needs_initialization(opcode) && ready == 0u8) {
+                result.node <- code[at].d;
+                return false;
+            } else {};
+            if (opcode == store_target()) { (ready <- 1u8):void; } else {};
+            if (opcode == place_address()) { (ready <- 0u8):void; } else {};
+        } else {};
+        if (opcode == write_defer_flag() && !record_registration(code, flow, history, code[at].a, code[at].b)) {
+            result.diagnostic <- initialization_storage_exhausted();
+            return false;
+        } else {};
+        registration <- if (opcode == branch_if_unregistered()) { registration_value(code, history, code[at].a) } else { no_node() };
+        if (!schedule_path(code, plan, flow, successor(code, plan, at, false, registration), history, ready) ||
+            !schedule_path(code, plan, flow, successor(code, plan, at, true, registration), history, ready)) {
+            if (flow.free_row == intrinsic (len)(code)) { (result.diagnostic <- initialization_storage_exhausted()):void; } else {};
+            return false;
+        } else {};
+    };
+    return flow.pending == no_node();
 }
 
 func prepare_flow(ref code:NativeCommands in C, plan:const NativePlan in P,
@@ -145,10 +277,14 @@ func check_native_initialization(ref code:NativeCommands in C, plan:const Native
     if (plan.used > intrinsic (len)(code)) { return false; } else {};
     val demand <- false;
     val annotated <- false;
+    val registrations <- false;
     for (at in 0u64 .. plan.used) {
         if (initialization_access(code[at].opcode) && code[at].c != 0u64) {
             annotated <- true;
             (demand <- demand || needs_initialization(code[at].opcode)):void;
+        } else {};
+        if (code[at].opcode == branch_if_unregistered() || code[at].opcode == write_defer_flag()) {
+            (registrations <- true):void;
         } else {};
     };
     if (demand) {
@@ -157,18 +293,26 @@ func check_native_initialization(ref code:NativeCommands in C, plan:const Native
         for (at in 0u64 .. plan.used) {
             if (code[at].opcode == place_address() && code[at].c != 0u64) {
                 tag <- code[at].c;
-                if (code[plan.used + tag - 1u64].opcode != 0u8 && !check_reservation(code, plan, result, at)) {
-                    return false;
+                if (code[plan.used + tag - 1u64].opcode != 0u8) {
+                    result.diagnostic <- invalid_initialization_flow();
+                    result.node <- no_node();
+                    if (!check_reservation(code, plan, result, at)) {
+                        if (!registrations || result.diagnostic != unproved_initialization() ||
+                            !check_registered_paths(code, plan, result, at)) { return false; } else {};
+                    } else {};
                 } else {};
             } else {};
         };
     } else {};
-    if (annotated) {
+    if (annotated || registrations) {
         for (at in 0u64 .. plan.used) {
             if (initialization_access(code[at].opcode)) { code[at].c <- 0u64; (code[at].d <- 0u64):void; } else {};
+            if (code[at].opcode == write_defer_flag()) { (code[at].opcode <- word_constant()):void; } else {};
+            if (code[at].opcode == branch_if_unregistered()) { (code[at].opcode <- branch_equal()):void; } else {};
         };
     } else {};
     result.diagnostic <- 0u8;
+    result.node <- no_node();
     return true;
 }
 

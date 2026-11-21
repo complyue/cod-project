@@ -48,6 +48,11 @@ func checked_remainder() -> u8 { return 22u8; }
 # Operands are the category slot, the handler search block, and the bypass block.
 func branch_catchable() -> u8 { return 23u8; }
 
+# The checker's private defer slots use ordinary word and branch operations
+# at the LLVM boundary. Their distinct roles allow control-flow proofs.
+func write_defer_flag() -> u8 { return 24u8; }
+func branch_if_unregistered() -> u8 { return 25u8; }
+
 # Internal outcome words. Zero denotes success. Fatal numeric failures
 # bypass language catches and still leave through the activation cleanup.
 func returned_word() -> u64 { return 0u64; }
@@ -95,6 +100,8 @@ export checked_subtract;
 export checked_divide;
 export checked_remainder;
 export branch_catchable;
+export write_defer_flag;
+export branch_if_unregistered;
 export returned_word;
 export pending_category;
 export pending_site;
