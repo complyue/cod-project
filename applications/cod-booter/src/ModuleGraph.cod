@@ -21,7 +21,7 @@ using "NativeDeclarations.cod" {
     ModulePublication, NativeDeclarationResult, prepare_module_calls, check_module_interfaces, publish_interfaces,
     publish_module_exports,
 };
-using "DeclarationTypes.cod" { prepare_native_operand_types, publish_type_interfaces, EnumAssertionResult, check_enum_assertions };
+using "DeclarationTypes.cod" { prepare_native_operand_types, publish_type_interfaces, DeclaredExpressionResult, check_declared_expressions };
 using "Compiler.cod" ExpressionScratchPlan;
 using "ModuleDriver.cod" plan_module_source;
 using "CompilerStatus.cod" CompilerStatus { Complete, Rejected, ScratchFailed, SourceOpenFailed };
@@ -61,7 +61,7 @@ proc discover_graph_dependencies(source:const SourceBytes in S, lines:const Sour
     where {const owner S, owner W, owner D, owner T} {
     ref result = make FrontendResult {
         scan <- make ScanResult { used <- 0u64; next <- 0u64; complete <- false; invalid_source <- false; };
-        tree <- make ParseResult { next <- 0u64; used <- 0u64; root <- no_node(); diagnostic <- 0u8; supplied_here <- false; };
+        tree <- make ParseResult { next <- 0u64; used <- 0u64; root <- no_node(); diagnostic <- 0u8; supplied_here <- false; case_control <- false; };
         diagnostic_first <- no_node(); diagnostic_past <- no_node();
     };
     if (!read_module(source, tokens, nodes, result)) {
@@ -110,9 +110,9 @@ func bind_graph_names(source:const SourceBytes in S, nodes:const ExprNodes in W,
         binding_diagnostic(nodes, result, module_binding_failed(), checked.diagnostic, checked.node);
         return false;
     } else {};
-    ref assertion = make EnumAssertionResult { diagnostic <- 0u8; node <- no_node(); };
-    if (!check_enum_assertions(source, nodes, names, selected, work, spellings, interfaces, used, assertion)) {
-        binding_diagnostic(nodes, result, module_binding_failed(), assertion.diagnostic, assertion.node);
+    ref expressions = make DeclaredExpressionResult { diagnostic <- 0u8; node <- no_node(); };
+    if (!check_declared_expressions(source, nodes, names, selected, work, spellings, interfaces, used, expressions)) {
+        binding_diagnostic(nodes, result, module_binding_failed(), expressions.diagnostic, expressions.node);
         return false;
     } else {};
     return true;
@@ -129,7 +129,7 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
         frontend <- make FrontendResult {
             scan <- make ScanResult { used <- 0u64; next <- 0u64; complete <- true; invalid_source <- false; };
             tree <- make ParseResult {
-                next <- 0u64; used <- progress[0u64].used; root <- progress[0u64].root; diagnostic <- 0u8; supplied_here <- false;
+                next <- 0u64; used <- progress[0u64].used; root <- progress[0u64].root; diagnostic <- 0u8; supplied_here <- false; case_control <- false;
             };
             diagnostic_first <- no_node(); diagnostic_past <- no_node();
         };

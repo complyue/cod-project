@@ -122,6 +122,18 @@ export func member_selector_node() -> u8 { return 101u8; }
 export func member_selection_item_node() -> u8 { return 102u8; }
 export func type_assertion_node() -> u8 { return 103u8; }
 
+# A case links the subject and a block-item list. An arm links an optional
+# pattern, the body and an optional guard. A catch-all has no pattern node.
+export func case_node() -> u8 { return 104u8; }
+export func case_arm_node() -> u8 { return 105u8; }
+export func case_fallthrough_node() -> u8 { return 106u8; }
+export func case_failure_node() -> u8 { return 107u8; }
+export func case_pattern_node() -> u8 { return 108u8; }
+export func case_member_pattern() -> u64 { return 0u64; }
+export func case_false_pattern() -> u64 { return 1u64; }
+export func case_true_pattern() -> u64 { return 2u64; }
+export func case_null_pattern() -> u64 { return 3u64; }
+
 export func local_module_selection(kind:u8) -> bool {
     return kind == using_node() || kind == import_node();
 }

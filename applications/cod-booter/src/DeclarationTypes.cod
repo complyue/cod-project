@@ -2,7 +2,8 @@ using "SourceStorage.cod" SourceBytes;
 using "ParserStorage.cod" {
     ExprNodes, no_node, group_node, name_node, owned_type_node, typed_name_node, data_parent_node,
     make_named_node, field_access_node, enum_declaration_node, type_assertion_node, literal_node,
-    narrow_integer_node, bool_node, call_node, here_call_node,
+    narrow_integer_node, bool_node, call_node, here_call_node, compare_node, logical_not_node, logical_binary,
+    case_node, case_arm_node, case_member_pattern, case_true_pattern, case_false_pattern, case_null_pattern,
 };
 using "NameResolution.cod" {
     NameBindings, NameWork, first_item, record_declaration, formal_binding, local_binding,
@@ -31,7 +32,7 @@ data DeclaredType {
     identity:u64;
 }
 
-export data EnumAssertionResult {
+export data DeclaredExpressionResult {
     diagnostic:u8;
     node:u64;
 }
@@ -40,6 +41,10 @@ export func unproved_type_assertion() -> u8 { return 84u8; }
 func missing_enum_member() -> u8 { return 85u8; }
 func incompatible_enum_assertion() -> u8 { return 86u8; }
 func unproved_enum_operand() -> u8 { return 87u8; }
+func unproved_case_subject() -> u8 { return 93u8; }
+func invalid_case_pattern_type() -> u8 { return 94u8; }
+func missing_case_member() -> u8 { return 95u8; }
+func invalid_case_guard_type() -> u8 { return 96u8; }
 
 func describe_type(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
                    annotation:u64, current_module:u64, result:DeclaredType in R) -> bool
@@ -111,8 +116,9 @@ func trace_type(source:const SourceBytes in S, nodes:const ExprNodes in N, names
                 at:u64, result:DeclaredType in R) -> bool
     where {const owner S, const owner N, const owner B, const owner E, const owner W, const owner P, const owner I, owner R} {
     val kind <- nodes[at].kind;
-    if (kind == literal_node() || kind == narrow_integer_node() || kind == bool_node()) {
-        result.kind <- if (kind == bool_node()) { builtin_bool() } else {
+    val boolean <- kind == bool_node() || kind == compare_node() || kind == logical_not_node() || logical_binary(kind);
+    if (kind == literal_node() || kind == narrow_integer_node() || boolean) {
+        result.kind <- if (boolean) { builtin_bool() } else {
             if (nodes[at].left == 8u64) { builtin_u8() } else {
                 if (nodes[at].left == 32u64) { builtin_u32() } else { builtin_u64() }
             }
@@ -169,60 +175,136 @@ func trace_type(source:const SourceBytes in S, nodes:const ExprNodes in N, names
     return trace_type(source, nodes, names, selected, work, spellings, interfaces, initializer, result);
 }
 
-func enum_assertion_failure(report:EnumAssertionResult in R, code:u8, at:u64) -> bool where {owner R} {
+func declared_expression_failure(report:DeclaredExpressionResult in R, code:u8, at:u64) -> bool where {owner R} {
     report.diagnostic <- code;
     report.node <- at;
     return false;
 }
 
+# Bind the spelling against the already selected domain. The name binding
+# and backing code refer to its canonical member regardless of spelling.
+func bind_enum_spelling(source:const SourceBytes in S, nodes:const ExprNodes in N, names:NameBindings in B,
+                        work:NameWork in W, spellings:const SourceBytes in P, interfaces:const ModuleInterfaces in I,
+                        spelling:u64, destination:u64, type:const DeclaredType in T) -> u8
+    where {const owner S, const owner N, owner B, owner W, const owner P, const owner I, const owner T} {
+    if (type.defining_module == 0u64) {
+        val local_member <- find_enum_member(source, nodes, spelling, nodes[type.identity].right);
+        if (local_member == no_node()) return missing_enum_member();
+        names[destination].declaration <- names[local_member].declaration;
+        work[destination].enum_code <- work[local_member].enum_code;
+        return 0u8;
+    } else {};
+    val head <- find_interface(interfaces, type.defining_module, type.identity);
+    if (head == no_node() || interfaces[head].interface_kind != enum_type())
+        return unproved_type_assertion();
+    val member <- enum_spelling(source, nodes[spelling].first, nodes[spelling].past, spellings, interfaces, head);
+    if (member == no_node()) return missing_enum_member();
+    names[destination].declaration <- interfaces[member].declaration;
+    work[destination].enum_code <- interfaces[member].enum_code;
+    return 0u8;
+}
+
+func remember_type(work:NameWork in W, at:u64, type:const DeclaredType in T) -> void
+    where {owner W, const owner T} {
+    work[at].value_kind <- type.kind;
+    work[at].value_module <- type.defining_module;
+    (work[at].value_identity <- type.identity):void;
+}
+
 func check_enum_assertion(source:const SourceBytes in S, nodes:const ExprNodes in N, names:NameBindings in B,
                           selected:const SelectedExports in E, work:NameWork in W,
                           spellings:const SourceBytes in P, interfaces:const ModuleInterfaces in I,
-                          at:u64, report:EnumAssertionResult in R) -> bool
+                          at:u64, report:DeclaredExpressionResult in R) -> bool
     where {const owner S, const owner N, owner B, const owner E, owner W, const owner P, const owner I, owner R} {
     ref wanted = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64; };
     val annotation <- nodes[at].right;
     if (!describe_type(nodes, names, selected, annotation, 0u64, wanted) || wanted.kind != enum_type())
-        return enum_assertion_failure(report, unproved_type_assertion(), annotation);
+        return declared_expression_failure(report, unproved_type_assertion(), annotation);
     val operand <- nodes[at].left;
     if (nodes[operand].kind == name_node() && names[operand].kind == 0u8) {
-        val member <- no_node();
-        if (wanted.defining_module == 0u64) {
-            member <- find_enum_member(source, nodes, operand, nodes[wanted.identity].right);
-            if (member == no_node()) return enum_assertion_failure(report, missing_enum_member(), operand);
-            names[at].declaration <- names[member].declaration;
-            (work[at].enum_code <- work[member].enum_code):void;
-        } else {
-            val head <- find_interface(interfaces, wanted.defining_module, wanted.identity);
-            if (head == no_node() || interfaces[head].interface_kind != enum_type())
-                return enum_assertion_failure(report, unproved_type_assertion(), annotation);
-            member <- enum_spelling(source, nodes[operand].first, nodes[operand].past, spellings, interfaces, head);
-            if (member == no_node()) return enum_assertion_failure(report, missing_enum_member(), operand);
-            names[at].declaration <- interfaces[member].declaration;
-            (work[at].enum_code <- interfaces[member].enum_code):void;
-        };
+        val code <- bind_enum_spelling(source, nodes, names, work, spellings, interfaces, operand, at, wanted);
+        if (code == missing_enum_member()) return declared_expression_failure(report, code, operand);
+        if (code != 0u8) return declared_expression_failure(report, code, annotation);
         (names[at].kind <- enum_value()):void;
     } else {
         ref actual = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64; };
         if (!trace_type(source, nodes, names, selected, work, spellings, interfaces, operand, actual))
-            return enum_assertion_failure(report, unproved_enum_operand(), operand);
+            return declared_expression_failure(report, unproved_enum_operand(), operand);
         if (actual.kind != enum_type() || actual.defining_module != wanted.defining_module || actual.identity != wanted.identity)
-            return enum_assertion_failure(report, incompatible_enum_assertion(), operand);
+            return declared_expression_failure(report, incompatible_enum_assertion(), operand);
     };
-    work[at].value_kind <- wanted.kind;
-    work[at].value_module <- wanted.defining_module;
-    work[at].value_identity <- wanted.identity;
+    remember_type(work, at, wanted);
     return true;
 }
 
-export func check_enum_assertions(source:const SourceBytes in S, nodes:const ExprNodes in N, names:NameBindings in B,
-                                 selected:const SelectedExports in E, work:NameWork in W,
-                                 spellings:const SourceBytes in P, interfaces:const ModuleInterfaces in I,
-                                 used:u64, report:EnumAssertionResult in R) -> bool
+func check_case_pattern(source:const SourceBytes in S, nodes:const ExprNodes in N, names:NameBindings in B,
+                        work:NameWork in W, spellings:const SourceBytes in P, interfaces:const ModuleInterfaces in I,
+                        pattern:u64, subject:const DeclaredType in T) -> u8
+    where {const owner S, const owner N, owner B, owner W, const owner P, const owner I, const owner T} {
+    val mode <- nodes[pattern].number;
+    if (subject.kind == builtin_bool()) {
+        if (mode != case_true_pattern() && mode != case_false_pattern()) return invalid_case_pattern_type();
+        (work[pattern].enum_code <- if (mode == case_true_pattern()) { 1u64 } else { 0u64 }):void;
+    } else {
+        if (subject.kind != enum_type()) return unproved_case_subject();
+        if (mode != case_member_pattern()) return invalid_case_pattern_type();
+        val code <- bind_enum_spelling(source, nodes, names, work, spellings, interfaces, pattern, pattern, subject);
+        if (code == missing_enum_member()) return missing_case_member();
+        if (code != 0u8) return unproved_case_subject();
+    };
+    remember_type(work, pattern, subject);
+    return 0u8;
+}
+
+func check_case_declaration(source:const SourceBytes in S, nodes:const ExprNodes in N, names:NameBindings in B,
+                            selected:const SelectedExports in E, work:NameWork in W,
+                            spellings:const SourceBytes in P, interfaces:const ModuleInterfaces in I,
+                            at:u64, report:DeclaredExpressionResult in R) -> bool
     where {const owner S, const owner N, owner B, const owner E, owner W, const owner P, const owner I, owner R} {
+    ref subject = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64; };
+    ref predicate = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64; };
+    val operand <- nodes[at].left;
+    # Null patterns retain their syntax. The flow checker will prove
+    # presence and readability for the execution of the other patterns.
+    val known <- trace_type(source, nodes, names, selected, work, spellings, interfaces, operand, subject);
+    val item <- first_item(nodes, nodes[at].right);
+    val arm <- no_node();
+    val pattern <- no_node();
+    val guard <- no_node();
+    val code <- 0u8;
+    for (unused in 0u64 .. intrinsic (len)(nodes)) {
+        if (item == no_node()) return true;
+        arm <- nodes[item].right;
+        if (nodes[arm].kind == case_arm_node()) {
+            pattern <- nodes[arm].left;
+            if (pattern != no_node() && nodes[pattern].number != case_null_pattern()) {
+                if (!known) return declared_expression_failure(report, unproved_case_subject(), operand);
+                code <- check_case_pattern(source, nodes, names, work, spellings, interfaces, pattern, subject);
+                if (code != 0u8) return declared_expression_failure(report, code, pattern);
+            } else {};
+            guard <- nodes[arm].number;
+            if (guard != no_node() &&
+                trace_type(source, nodes, names, selected, work, spellings, interfaces, guard, predicate) &&
+                predicate.kind != builtin_bool())
+                return declared_expression_failure(report, invalid_case_guard_type(), guard);
+        } else {};
+        item <- work[item].next;
+    };
+    return true;
+}
+
+export func check_declared_expressions(source:const SourceBytes in S, nodes:const ExprNodes in N, names:NameBindings in B,
+                                       selected:const SelectedExports in E, work:NameWork in W,
+                                       spellings:const SourceBytes in P, interfaces:const ModuleInterfaces in I,
+                                       used:u64, report:DeclaredExpressionResult in R) -> bool
+    where {const owner S, const owner N, owner B, const owner E, owner W, const owner P, const owner I, owner R} {
+    val kind <- 0u8;
     for (at in 0u64 .. used) {
-        if (nodes[at].kind == type_assertion_node() &&
+        kind <- nodes[at].kind;
+        if (kind == type_assertion_node() &&
             !check_enum_assertion(source, nodes, names, selected, work, spellings, interfaces, at, report)) return false;
+        if (kind == case_node() &&
+            !check_case_declaration(source, nodes, names, selected, work, spellings, interfaces, at, report)) return false;
     };
     return true;
 }
