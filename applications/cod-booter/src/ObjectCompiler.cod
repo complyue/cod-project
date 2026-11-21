@@ -53,7 +53,7 @@ proc write_object(handle output:Path in A, handle diagnostic:DiagnosticDestinati
                   commands:const NativeCommands in W, plan:const NativePlan in P) -> u8
     where {const owner A, const owner W, const owner P, owner D} {
     try {
-        owned handle session:LLVMSession <- make owned handle LLVMSession();
+        own handle session:LLVMSession <- make own handle LLVMSession();
         val constructed <- llvm_construct(session, commands, plan.used, plan.labels, plan.slots);
         if (constructed != 0u8) {
             report_backend_error(diagnostic, constructed);
@@ -139,7 +139,7 @@ proc compile_revision(source:const SourceBytes in S, lines:const SourceLines in 
         return planned;
     } else {};
     try {
-        owned handle scratch:Scratch <- make owned handle Scratch(workspace.source.token_count,
+        own handle scratch:Scratch <- make own handle Scratch(workspace.source.token_count,
             workspace.source.node_capacity, workspace.commands);
         return scratch_use(scratch) (tokens, nodes, selected, bindings, names, facts, owners, sites, commands) => {
             continue lower_object(source, lines, spellings, exports, output, diagnostic,
@@ -156,7 +156,7 @@ proc compile_object(handle input:Path in A, handle output:Path in A,
                     spellings:const SourceBytes in B, exports:const ModuleExports in B) -> u8
     where {const owner A, const owner B, owner D} {
     try {
-        owned handle source:SourceRevision <- make owned handle SourceRevision(input);
+        own handle source:SourceRevision <- make own handle SourceRevision(input);
         return source_use(source) (bytes, lines) => {
             continue compile_revision(bytes, lines, spellings, exports, output, diagnostic);
         };

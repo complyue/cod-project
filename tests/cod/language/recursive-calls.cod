@@ -38,9 +38,9 @@ behave @print(@bias);
 
 data Frame { depth:u64; }
 function fail_at_bottom(depth:u64) -> const u64 {
-  owned region frame:Frame <- make Frame(capacity = 128u64) { depth <- depth };
+  own region frame:Frame <- make Frame(capacity = 128u64) { depth <- depth };
   return if (depth == 0u64) {
-    owned region invalid:Frame <- make Frame(capacity = 0u64) { depth <- depth };
+    own region invalid:Frame <- make Frame(capacity = 0u64) { depth <- depth };
     0u64
   } else { fail_at_bottom(depth - 1u64) }
 }

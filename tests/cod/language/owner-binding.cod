@@ -8,7 +8,7 @@ function edit_root(value:Cell in r)->void where {region r:Pool} {root(r).id <- r
   val number:u64 <- 2u64;
   increment(number);
   behave @print(number);
-  owned region arena:Pool <- make Pool(capacity=512u64) {id <- 7u64};
+  own region arena:Pool <- make Pool(capacity=512u64) {id <- 7u64};
   ref cell = deref(alloc arena Cell(9u64));
   edit(cell);
   edit_root(cell);

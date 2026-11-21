@@ -1,7 +1,7 @@
 using symbol "std:io" @assert;
 using symbol "std:io" @print;
 region State { created:u64; called:u64; }
-owned region state <- make State(capacity=256u64) { created <- 0u64; called <- 0u64 };
+own region state <- make State(capacity=256u64) { created <- 0u64; called <- 0u64 };
 function build(region r:State) -> func()->const bool with {region r} {
   r.created <- r.created + 1u64;
   return func () -> const bool { r.called <- r.called + 1u64; return true }

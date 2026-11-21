@@ -23,7 +23,7 @@ try { behave @print(choose(number,true)); behave @print(choose(number,false)); }
 catch(e:const NullPointerException) { behave @print(17u64); };
 data Node { value:u64; ptr next:Node; }
 region Arena { ptr head:Node; }
-owned region arena:Arena <- make Arena(capacity=512u64) { head = null };
+own region arena:Arena <- make Arena(capacity=512u64) { head = null };
 ref tail = alloc arena Node(2u64,null);
 ref head = alloc arena Node(3u64,tail);
 arena.head = head;

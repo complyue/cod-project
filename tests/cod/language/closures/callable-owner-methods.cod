@@ -19,7 +19,7 @@ function access(action:func()->const u64, region state:const State, unused:u64)-
 symbol @bias:u64, @missing:u64;
 proc report(region state:State)->const u64 {return @missing}
 proc report(region state:const State)->const u64 {return state.ticks+@bias}
-owned region state:State <- make State(capacity=128u64){ticks <- 9u64};
+own region state:State <- make State(capacity=128u64){ticks <- 9u64};
 func current = reader(state);
 func see = inspect;
 func see_value = inspect_value;

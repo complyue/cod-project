@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 227 · Recorded: 2026-11-19 · Phase: language/application co-design.
+Design revision: 228 · Recorded: 2026-11-21 · Phase: language/application co-design.
 
 ## Design authority
+
+[D-10-OWN-QUALIFIER](DesignAuthorityRegistry.md#d-10-own-qualifier) and [H-CONTEXTUAL-OWN-20261121](../CHANGELOG.md#h-contextual-own-20261121) cover contextual `own` and ordinary identifier lookup at r228.
 
 [H-ORDINARY-NAMES-20261119](../CHANGELOG.md#h-ordinary-names-20261119) covers ordinary identifier lookup, field selection and the retained symbolic dependency form at r227 under [D-10-ORDINARY-NAMES](DesignAuthorityRegistry.md#d-10-ordinary-names). [H-STORAGE-HELPER-CONFIRMATION-20261119](../CHANGELOG.md#h-storage-helper-confirmation-20261119) confirms the storage-helper replacements and the treatment of user-defined overloads in that revision.
 
@@ -1267,7 +1269,7 @@ Caller-default failure precedes input ownership transfer; callee-default failure
 
 H-257 directs the compiler model toward LLVM register optimization. An evaluated bits value is an SSA value; a storage place denotes a typed address in a tracked owner. Reading a place produces the value at that point. Writing the place does not retroactively change that SSA value. A retained regional reference permits a subsequent read to observe intervening writes. Const non-bits access therefore does not imply immutable underlying memory.
 
-LLVM lowering uses typed places for referent, field and element access, with common read/write operations. Regional aggregate views retain their offsets and owners; relative reference fields keep their existing encoding. Bits operations and variadic argument selection do not require artificial memory cells. This internal separation does not introduce `owned`/`const`/`make` source syntax, change the assignment-result contract, extend owner lifetime or select RTTI. The complete ordinary-region lifecycle is the separately deferred fourth work package.
+LLVM lowering uses typed places for referent, field and element access, with common read/write operations. Regional aggregate views retain their offsets and owners; relative reference fields keep their existing encoding. Bits operations and variadic argument selection do not require artificial memory cells. This internal separation does not introduce `own`/`const`/`make` source syntax, change the assignment-result contract, extend owner lifetime or select RTTI. The complete ordinary-region lifecycle is the separately deferred fourth work package.
 
 ### Direct symbolic procedure declaration
 
@@ -1485,6 +1487,20 @@ The bounded grammar reserves `true`, `false`, `null`, `for`, `ptr`, `ref`, `val`
 Field selectors retain contextual identifier meaning: `record.true` selects the field, and `record.true <- value` writes a writable bits field. In an ordinary call `setfield(record, flag, value)`, `flag` is a value expression. Symbol names, module resource aliases, callable names, module globals, a general reserved-word policy and escaped identifiers retain their separate boundaries; this local decision supplies no escaping syntax or wider namespace rule.
 
 Acceptance checks inaccessible parameter/local/loop names before execution, including during dependency scanning, while preserving ordinary contextual names and field selectors. Rejection names the offending spelling and its source location. P-130 records the confirmed local constraint; the complete language contract remains pending-human.
+
+### Contextual ownership qualifier
+
+`own` qualifies an ownership form only where the grammar accepts it. A declaration can say `own region` or `own handle`, a consuming region parameter or an owning region result can say `own region`, and a native handle constructor uses `make own handle`. The same spelling applies to the existing explicit `own exception` form. Bare `exception` already carries ownership. Ordinary region construction uses `make region`.
+
+```cod
+proc deliver(own region owned:Packet) -> own region :Packet {
+    return owned;
+}
+
+func own(owned:u64) -> u64 { owned }
+```
+
+In `deliver`, `own` introduces a qualifier and `owned` names the parameter. In the second declaration, both words undergo ordinary name lookup. A parser recognizes the qualifier from its grammatical position and the following resource keyword. Names such as `own(...)`, `owned(...)`, `record.own`, or `own` before a colon retain their usual interpretation. There is no compatibility qualifier spelled `owned`. The `owner O` binder continues to identify the actual owner. All transfer, borrowing, access and cleanup checks follow the corresponding resource contract.
 
 ### Ordinary names for traversal and storage
 

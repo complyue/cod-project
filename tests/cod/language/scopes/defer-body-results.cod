@@ -24,7 +24,7 @@ proc dynamic_results()->void {
   }};
 }
 proc lexical_results(flag:bool)->void {
-  owned region r:Item <-make Item(capacity=256u64){value<-10u64};
+  own region r:Item <-make Item(capacity=256u64){value<-10u64};
   proc first=proc()->Item {behave @print(root(r).value); return root(r);};
   proc second=proc()->Item {behave @print(root(r).value + 1u64); return root(r);};
   proc choice=if(flag){first}else{second};
@@ -42,7 +42,7 @@ proc lexical_results(flag:bool)->void {
   behave @print(copy().value);
 }
 proc failures()->void {
-  owned region r:Item <-make Item(capacity=256u64){value<-30u64};
+  own region r:Item <-make Item(capacity=256u64){value<-30u64};
   proc action=proc()->Item {effect @scratch <-region(0u64); return root(r);};
   defer {behave @print(root(r).value);};
   defer catch(e:const InvalidCapacityError) {behave @print(32u64);};
@@ -79,7 +79,7 @@ proc body_descend(callback:proc()->const u64 with {region r},n:u64,region r:Item
   return body_descend(next,n-1u64,r,flag);
 }
 proc recursive_body_results(flag:bool)->void {
-  owned region r:Item <-make Item(capacity=256u64){value<-46u64};
+  own region r:Item <-make Item(capacity=256u64){value<-46u64};
   proc callback=body_factory(body_reader(r,flag),r);
   behave @print(body_descend(callback,3u64,r,flag));
   defer body_descend(callback,200u64,r,flag);

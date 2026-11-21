@@ -33,8 +33,8 @@ function create(region arena, capacity:u32) -> Pool throws NullPointerException 
   return pool
 }
 
-function create(bytes:u64, capacity:u32) -> owned region :Pool throws NullPointerException {
-  owned region arena:Pool <- make Pool(capacity = bytes) {
+function create(bytes:u64, capacity:u32) -> own region :Pool throws NullPointerException {
+  own region arena:Pool <- make Pool(capacity = bytes) {
     head <- Slot(0u32); payloads = null; links = null
   };
   ref pool = root(arena);

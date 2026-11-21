@@ -22,7 +22,7 @@ function reader(region state:State, n:u64)->func()->const u64 with {region state
   return if (n == 0u64) {{ func()->const u64 { return root(state).ticks } }}
   else {{ reader(state, n - 1u64) }}
 }
-owned region state:State <- make State(capacity = 8192u64) { ticks <- 17u64 };
+own region state:State <- make State(capacity = 8192u64) { ticks <- 17u64 };
 func read = reader(state, 12u64);
 behave @print(read());
 region projected:State = read -> state;

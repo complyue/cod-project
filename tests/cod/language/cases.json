@@ -10,6 +10,26 @@
     "stdout": "6\n4\n"
   },
   {
+    "file": "contextual-own-calls.cod",
+    "exit": 0,
+    "stdout": "6\n",
+    "stderr_contains": [
+      "declaration shadows outer binding 'owned'",
+      "declaration shadows outer binding 'own'"
+    ]
+  },
+  {
+    "file": "contextual-own-types.cod",
+    "exit": 0,
+    "stdout": "44\n"
+  },
+  {
+    "file": "contextual-own-retired.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "expected ';'"
+  },
+  {
     "file": "fraction-reserved.cod",
     "exit": 2,
     "stdout": "",
@@ -1784,7 +1804,7 @@
     "file": "closures/closure-projection-owner.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "expected owned region"
+    "stderr_contains": "expected own region"
   },
   {
     "file": "closures/closure-projection-name.cod",

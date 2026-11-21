@@ -1,8 +1,10 @@
 # Native C providers, LLVM bindings and scoped cleanup
 
-Revision 16 · 2026-11-20 · Confirmed for the first booter: synchronous calls, scoped native handles, LLVM session ownership, C declaration direction, typed `SourceRevision` failure generation and declared owner CTypes for borrowed handles.
+Revision 17 · 2026-11-21 · Confirmed for the first booter: synchronous calls, scoped native handles, LLVM session ownership, C declaration direction, typed `SourceRevision` failure generation and declared owner CTypes for borrowed handles.
 
 ## Design authority
+
+[D-10-OWN-QUALIFIER](../../../design/DesignAuthorityRegistry.md#d-10-own-qualifier) and [H-CONTEXTUAL-OWN-20261121](../../../CHANGELOG.md#h-contextual-own-20261121) cover the `own handle` binding and `make own handle` constructor spelling at r17.
 
 - **Generated providers.** [D-20-C-PROVIDERS](../../../design/DesignAuthorityRegistry.md#d-20-c-providers) covers [the generated boundary](#generated-c-providers-for-the-first-booter) under [H-BOOTER-GENERATED-C-20261120](../../../CHANGELOG.md#h-booter-generated-c-20261120) and [H-BOOTER-C-HANDLES-20261120](../../../CHANGELOG.md#h-booter-c-handles-20261120). P-642 continues C-80 under charter §§4.3, 6.3, 8.1 and 12. Checked CoD declarations make resource use reviewable and drive equivalent C headers and stubs from both compilers. Static providers and synchronous calls cover the first indexed source, working region and LLVM workload.
 - **Native handles and C records.** [D-20-C-HANDLES](../../../design/DesignAuthorityRegistry.md#d-20-c-handles), P-646/P-647 and [H-BOOTER-C-HANDLES-20261120](../../../CHANGELOG.md#h-booter-c-handles-20261120) cover [the scoped handle and record rules](#native-handles-and-c-records). [H-BOOTER-HANDLE-OWNER-CTYPE-20261120](../../../CHANGELOG.md#h-booter-handle-owner-ctype-20261120) qualifies [borrow-only declarations and actual owner binding](#declaring-and-borrowing-native-handles) at r15 under the same C-80/C-65 value path. Check two live instances of one owner CType, forwarding and a launcher entry with independent loans. [R16 continuity](../../../CHANGELOG.md#k-booter-handle-bindings-20261120) covers [initialization and ordinary CoD borrow results](#borrowed-handle-locals-and-results) under the same owner and access rules. Scoped ownership ties disposal to a live activation and makes actual C resource dependencies visible. Preserve the native C boundary, [D-28 interop](../../../design/DesignAuthorityRegistry.md#d-28-interop), [D-18 here parameters](../../../design/DesignAuthorityRegistry.md#d-18-here-param) and D-14/D-17 ownership and cleanup. Verify both borrowed handle words, loan confinement, valid record layout, and complete and partial acquisition paths.
@@ -21,7 +23,7 @@ Calls in both directions use synchronous `here` semantics. A body can use direct
 
 A fieldless `data "C"` declaration identifies a nominal CType for native handle construction. The marker is used in signatures and has no by-value record role. Each native handle payload is an opaque 64-bit word. CoD declares each constructor's parameters under the bits-or-handle rule. Generate C stubs for declared constructors and a disposal hook for CoD-owned resources. Handwritten C implements the resource operations.
 
-- `make owned handle SomeCType(...)` acquires an `owned handle`. It is an owner kind, subject to the lexical-variable-only ownership rule used for `owned region`. At scope exit, the owning variable releases the resource it still owns through the generated destructor stub. An owning handle cannot be a field.
+- `make own handle SomeCType(...)` acquires an `own handle`. It is an owner kind, subject to the lexical-variable-only ownership rule used for `own region`. At scope exit, the owning variable releases the resource it still owns through the generated destructor stub. An owning handle cannot be a field.
 - `make handle View(...) in oh` constructs a borrow under the actual live owner `oh` of the CType declared by `View`. The borrow carries no independent destruction responsibility. When creating the borrow also creates a native child requiring disposal, the provider attaches the child to `oh` before publishing the loan. The provider preserves the child's native dependencies for the duration of that loan.
 - A borrowed `handle in oh` crossing from CoD to C carries both opaque 64-bit words, one for its own payload and one for `oh`. They supply the native context even when a signature has no separate owner argument. The checked reference to the actual owner instance supplies the lifetime relationship. The words convey no proof of liveness or release authority.
 - Nonempty by-value `data "C"` records are recursively bits-only, including nested records. Borrowed handles can travel as explicit locals, arguments and results with their owner obligations. Native aggregates holding handles stay in C behind a typed handle. Native resources and their handle payloads are process-local.
@@ -38,11 +40,11 @@ data "C" ModuleView in LLVMSession;
 proc "C" ModuleView(val index:u64);
 proc "C" inspect_module(handle view:ModuleView in O) where {const owner O};
 
-# Inside a caller with a live owned handle session:LLVMSession:
+# Inside a caller with a live binding declared as own handle session:LLVMSession:
 inspect_module(make handle ModuleView(0u64) in session);
 ```
 
-The constructor takes its written arguments and receives the selected owner through `in session`. Check its declared owner CType, actual binding, access and lifetime before lending. The provider attaches any newly acquired disposable child to that instance before publishing the borrow. A borrow-only CType cannot be acquired with `make owned handle` or used as an owning CType for another declaration. Its borrow carries no destructor obligation. A fieldless owner CType can itself be borrowed. For example, `source_use(src)` passes the same owned `SourceRevision` to the ordinary `handle revision:SourceRevision in S` parameter and binds S to its actual owner. The caller keeps the release obligation.
+The constructor takes its written arguments and receives the selected owner through `in session`. Check its declared owner CType, actual binding, access and lifetime before lending. The provider attaches any newly acquired disposable child to that instance before publishing the borrow. A borrow-only CType cannot be acquired with `make own handle` or used as an owning CType for another declaration. Its borrow carries no destructor obligation. A fieldless owner CType can itself be borrowed. For example, `source_use(src)` passes the same owned `SourceRevision` to the ordinary `handle revision:SourceRevision in S` parameter and binds S to its actual owner. The caller keeps the release obligation.
 
 A borrow's C representation supplies its own opaque payload and the actual owner's opaque word. Inside CoD, several borrows may share one checked owner binding, and the compiler may materialize the owner word at the crossing. Locals, forwarding calls, results and synchronous `here` bodies preserve the binding selected when the borrow arose, while the selected owner remains live. Replacing a holder cannot retarget an earlier borrow. Selecting between two views of one session is valid. Selecting between views of two independent sessions into one result requires proof of a single actual owner under the [ordinary owner rules](../../../design/RegionalOwnership.md#pointer-variables-and-owner-generic-parameters). A matching CType or equal machine words cannot supply that proof.
 
@@ -115,7 +117,7 @@ proc "C" source_use(
 proc "C" compile_cli(handle path:Path in A, handle output:Path in A) -> u8
     where {const owner A} {
     try {
-        owned handle src:SourceRevision <- make owned handle SourceRevision(path);
+        own handle src:SourceRevision <- make own handle SourceRevision(path);
         return source_use(src) (bytes, lines) => {
             continue compile_revision(bytes, lines, output);
         };
@@ -125,7 +127,7 @@ proc "C" compile_cli(handle path:Path in A, handle output:Path in A) -> u8
 }
 ```
 
-**Constructor outcome.** Successful `make owned handle SourceRevision(path)` publishes one lexical owner. On acquisition failure, the C provider saves any error data needed by the declared exception and releases each resource it has already acquired exactly once, in dependency-safe order. After rollback the generated boundary raises the constructor’s declared CoD exception. The failed construction publishes no handle or loan and schedules no destructor for the unpublished owner. A checked failure must be caught or covered by the caller’s `throws` contract. In the example, the catch chooses the ordinary CLI status.
+**Constructor outcome.** Successful `make own handle SourceRevision(path)` publishes one lexical owner. On acquisition failure, the C provider saves any error data needed by the declared exception and releases each resource it has already acquired exactly once, in dependency-safe order. After rollback the generated boundary raises the constructor’s declared CoD exception. The failed construction publishes no handle or loan and schedules no destructor for the unpublished owner. A checked failure must be caught or covered by the caller’s `throws` contract. In the example, the catch chooses the ordinary CLI status.
 
 For `SourceRevision`, derive the typed C failure interface in the generated provider stub from the checked `throws SourceOpenException` and `data SourceOpenException <: Exception { os_error:u64; }`. The handwritten provider preserves `os_error` before cleanup can change the OS error state, releases the acquired prefix in dependency-safe order, and returns the preserved value through that interface. The generated adapter then performs the equivalent of `throw SourceOpenException { os_error <- code; };`. The raised failure owns its CoD storage. The caller receives an ordinary typed catch and reads `e.os_error`.
 

@@ -9,7 +9,7 @@ proc bad(x:u64, capacity:u64) -> void {
   effect @arena <- region(capacity);
 }
 func argument(capacity:u64) -> const u64 {
-  owned region p <- make Packet(capacity=capacity) {value<-0u64};
+  own region p <- make Packet(capacity=capacity) {value<-0u64};
   return 99u64;
 }
 proc use(action:proc(u64)->void, x:u64) -> void { action(x); }

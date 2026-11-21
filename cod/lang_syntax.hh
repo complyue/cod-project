@@ -251,7 +251,7 @@ inline bool widens(Type from, Type to) {
 }
 inline std::string type_name(const Type &type) {
   switch (type.kind) {
-  case Type::native_handle: return (type.owned ? "owned handle " : "handle ") + type.name;
+  case Type::native_handle: return (type.owned ? "own handle " : "handle ") + type.name;
   case Type::integer: return "i64";
   case Type::uint8: return "u8";
   case Type::uint32: return "u32";
@@ -282,7 +282,7 @@ inline std::string type_name(const Type &type) {
   case Type::unit: return type.name;
   case Type::named: case Type::product: case Type::region_schema: case Type::regional: case Type::array:
   case Type::abstract_type: case Type::c_type_marker: return type.name;
-  case Type::region: return std::string(type.owned ? "owned " : "") + "region" +
+  case Type::region: return std::string(type.owned ? "own " : "") + "region" +
                            (type.target ? " :" + type_name(*type.target) : "");
   case Type::reference: return "stored reference to " + type_name(*type.target);
   case Type::null_ref: return "null";
@@ -475,7 +475,7 @@ inline bool expression_keyword(std::string_view name) {
          name == "perform" || name == "behave" || name == "if" || name == "procedure" ||
          name == "function" || name == "func" || name == "proc" || name == "global" || name == "symbol" ||
          name == "try" || name == "catch" || name == "finally" || name == "throw" || name == "return" || name == "defer" || name == "from" ||
-         name == "val" || name == "ref" || name == "throws" || name == "make" || name == "owned" || name == "touch" || name == "ptr" || name == "typeof" || name == "intrinsic" || name == "const";
+         name == "val" || name == "ref" || name == "throws" || name == "make" || name == "touch" || name == "ptr" || name == "typeof" || name == "intrinsic" || name == "const";
 }
 
 inline bool module_keyword(std::string_view name) {
@@ -590,6 +590,9 @@ class Parser {
     return (token.kind == TokenKind::identifier || token.kind == TokenKind::punctuation) &&
            token.text == text;
   }
+  bool ownership_qualifier(const std::string &resource, size_t ahead = 0) const {
+    return is("own", ahead) && is(resource, ahead + 1);
+  }
   bool take(const std::string &text) {
     if (!is(text)) return false;
     ++cursor_;
@@ -680,8 +683,8 @@ class Parser {
       return type;
     }
     auto token = name(TokenKind::identifier);
-    if (token.text == "owned" || token.text == "region")
-      fail(token.at, "region is a declaration keyword; use 'region name:Root' or 'owned region name:Root', not a value-type annotation");
+    if (token.text == "region" || (token.text == "own" && is("region")))
+      fail(token.at, "region is a declaration keyword; use 'region name:Root' or 'own region name:Root'");
     if (token.text == "proc" || token.text == "procedure" || token.text == "func" || token.text == "function") {
       Type type{Type::procedure};
       type.pure_callable = token.text == "func" || token.text == "function";
@@ -813,9 +816,9 @@ class Parser {
         !is("throws", 1) &&
         tokens_[cursor_ + 1].kind == TokenKind::identifier)) mode = tokens_[cursor_++].text;
     read_only = take("const");
-    if (is("region") || is("owned")) {
+    if (is("region") || ownership_qualifier("region")) {
       if (read_only) fail(peek().at, "region target const belongs after the root annotation colon");
-      const bool owned = take("owned");
+      const bool owned = take("own");
       expect("region");
       return region_annotation(owned, &read_only);
     }
@@ -823,9 +826,9 @@ class Parser {
   }
   Parameter parameter_declaration(bool native_handles = false) {
     const bool fixed_binding = take("const");
-    const bool owned_region = take("owned");
+    const bool owned_region = ownership_qualifier("region");
+    if (owned_region) expect("own");
     const bool regional = take("region");
-    if (owned_region && !regional) fail(peek().at, "owned requires a region declaration");
     std::string mode;
     if (!regional && (is("ptr") || is("ref") || is("val") || (native_handles && is("handle") && !is(":", 1))))
       mode = tokens_[cursor_++].text;
@@ -1231,9 +1234,9 @@ class Parser {
       return expr;
     }
     if ((is("handle") && tokens_[cursor_ + 1].kind == TokenKind::identifier) ||
-        (is("owned") && is("handle", 1)) || (is("const") && is("owned", 1) && is("handle", 2))) {
+        ownership_qualifier("handle") || (is("const") && ownership_qualifier("handle", 1))) {
       const bool fixed = take("const");
-      const bool owned = take("owned");
+      const bool owned = take("own");
       expect("handle");
       auto expr = make(Expression::Kind::native_handle_binding, value_name());
       expr->fixed_binding = fixed;
@@ -1245,10 +1248,10 @@ class Parser {
       expr->children.push_back(expression());
       return expr;
     }
-    if (is("owned") || (is("region") && !is("(", 1)) ||
-        (is("const") && (is("owned", 1) || is("region", 1)))) {
+    if (ownership_qualifier("region") || (is("region") && !is("(", 1)) ||
+        (is("const") && (ownership_qualifier("region", 1) || is("region", 1)))) {
       const bool fixed_binding = take("const");
-      const bool owned = take("owned");
+      const bool owned = take("own");
       expect("region");
       auto expr = make(Expression::Kind::region_binding, value_name());
       expr->fixed_binding = fixed_binding;
@@ -1259,9 +1262,9 @@ class Parser {
       return expr;
     }
     if (take("make")) {
-      const bool owns_handle = is("owned") && is("handle", 1);
+      const bool owns_handle = ownership_qualifier("handle");
       if (owns_handle || (is("handle") && is("(", 2))) {
-        if (owns_handle) expect("owned");
+        if (owns_handle) expect("own");
         expect("handle");
         auto expr = make(owns_handle ? Expression::Kind::make_owned_handle : Expression::Kind::make_borrowed_handle, token);
         expr->annotation = Type{Type::named, ordinary_name().text};
@@ -1993,7 +1996,7 @@ public:
         expect("{");
         while (!take("}")) {
           const bool fixed_binding = take("const");
-          if (is("region") || (is("owned") && is("region", 1)))
+          if (is("region") || ownership_qualifier("region"))
             fail(peek().at, "region handles cannot be stored in user data fields");
           std::string mode;
           if (is("ref") || is("ptr") || is("val")) mode = tokens_[cursor_++].text;

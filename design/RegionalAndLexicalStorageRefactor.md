@@ -1,8 +1,10 @@
 # Regional and lexical storage: reference-model refactoring
 
-Design revision: 47 · Recorded: 2026-11-19 · Status: one-ADT placement and scoped storage semantics selected; complete layout, encoding, backend and implementation contracts remain under review.
+Design revision: 48 · Recorded: 2026-11-21 · Status: one-ADT placement and scoped storage semantics selected; complete layout, encoding, backend and implementation contracts remain under review.
 
 ## Design authority
+
+[D-10-OWN-QUALIFIER](DesignAuthorityRegistry.md#d-10-own-qualifier) and [H-CONTEXTUAL-OWN-20261121](../CHANGELOG.md#h-contextual-own-20261121) cover the ownership qualifier in the `resize` signature and examples at r48.
 
 - **Lexical product coverage.** [K-DEFERRED-SAVED-RECEIVER-20261119](../CHANGELOG.md#k-deferred-saved-receiver-20261119) continues the lexical ADT section under H-478, H-437, H-445, H-562 and [D-17-DEFER-CHECKS](DesignAuthorityRegistry.md#d-17-defer-checks). The [seed coverage](../tests/cod/language/README.md) records fixed lexical reference fields, finite-component readiness, ordinary call effects and finite invocation-time field paths through a saved deferred receiver, including same-owner storage allocated after registration. Proven invocation paths carry slot rebinding and physical initialization for each completion. Different saved receivers can establish the same result when all their paths reach the same destination. Calls that retain the same stable receiver can also share a proof across different possible starting slots. Each call follows its current field selections at invocation. Paths that skip a destination retain its entry selection and readiness obligations. Preserve actual owner, separate slot and referent readiness, and registration-time preparation under H-356. A failure before rebinding leaves cleanup with the selection already established on that path. A failed registration leaves the successful prefix eligible under the [deferred failure contract](ExceptionControl.md#when-a-defer-pass-cannot-publish-its-aggregate). The full layout, transport and storage contracts retain their existing qualifications.
 
@@ -298,7 +300,7 @@ Acceptance must compare optimized register/stack forms with materialized fragmen
 H-430/H-431 establishes explicit consuming replacement and ordinary owned-parameter cleanup. H-432 proposes one lossless intrinsic for both growth and shrinkage. The current candidate signature is:
 
 ```text
-func resize(r:owned region:R, new_cap:u64) -> owned region:R where {R}
+func resize(r:own region:R, new_cap:u64) -> own region:R where {R}
 ```
 
 The schematic signature makes the requested capacity explicit; exact generic/parameter spelling remains subject to source integration. Ordinary allocation cannot grow a region automatically, and resize does not preserve an old language region with live direct/external views. It consumes cleanup responsibility for the input and returns a replacement on success. This is a design contract under review, not current parser/compiler support.
@@ -309,7 +311,7 @@ The direct lifetime consequence of replacement is that the old region's lifetime
 # r is an owned region whose Root schema declares ref entry:Node.
 ref before = r.entry;
 # Reads/writes through before are valid while r remains live.
-owned region resized:Root <- resize(r, 65536u64);
+own region resized:Root <- resize(r, 65536u64);
 ref after = resized.entry;  # Fresh view associated with the returned owner.
 # r.entry rejects: r was consumed.
 # Using before after resize rejects: its target owner ended.

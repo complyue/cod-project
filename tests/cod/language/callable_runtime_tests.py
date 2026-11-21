@@ -180,7 +180,7 @@ using "std:exceptions" OutOfMemoryError;
 using "std:exceptions" InvalidCapacityError;
 data Packet { value:u64; }
 function later_argument(capacity:u64) -> const u64 {
-  owned region packet:Packet <- make Packet(capacity = capacity) { value <- 0u64 };
+  own region packet:Packet <- make Packet(capacity = capacity) { value <- 0u64 };
   return root(packet).value
 }
 function read_borrowed(action:func()->const u64 in O) -> const u64 where {owner O} { return action() }
@@ -212,7 +212,7 @@ behave @print(7002u64);
 using "std:exceptions" OutOfMemoryError;
 using "std:exceptions" InvalidCapacityError;
 function later_argument(capacity:u64) -> const u64 {
-  owned region temporary:State <- make State(capacity = capacity) { value <- 0u64 };
+  own region temporary:State <- make State(capacity = capacity) { value <- 0u64 };
   return root(temporary).value
 }
 func nested = func (x:u64) -> const u64 { return saved(x) + 1u64 };
@@ -258,7 +258,7 @@ effect @meter = recursive_meter;
 effect @copying = copying_meter;
 data Packet { value:u64; }
 function later_argument(capacity:u64) -> const u64 {
-  owned region packet:Packet <- make Packet(capacity = capacity) { value <- 0u64 };
+  own region packet:Packet <- make Packet(capacity = capacity) { value <- 0u64 };
   return root(packet).value
 }
 behave @print(6001u64);
@@ -397,7 +397,7 @@ behave @print(7002u64);
         recursive_arguments = directory / "closures/callable-recursive-factory-argument.cod"
         entry.write_text(recursive_arguments.read_text() + '''
 using "std:exceptions" OutOfMemoryError;
-owned region retained <- make State(capacity=256u64){value<-17u64};
+own region retained <- make State(capacity=256u64){value<-17u64};
 func saved=maker(retained);
 func copied=saved;
 behave @print(6001u64);
@@ -405,12 +405,12 @@ try {{ copied <- saved; {} }}
 catch(e:const OutOfMemoryError) {{ behave @print(6002u64); }};
 behave @print(6301u64);
 try {{
-  owned region failed <- make State(capacity=256u64){value<-1u64};
+  own region failed <- make State(capacity=256u64){value<-1u64};
   step(failed,maker(failed),16u64); {}
 }} catch(e:const OutOfMemoryError) {{ behave @print(6302u64); }};
 behave @print(6401u64);
 try {{
-  owned region failed <- make State(capacity=256u64){value<-1u64};
+  own region failed <- make State(capacity=256u64){value<-1u64};
   step(failed,maker(failed),16u64); {}
 }} catch(e:const OutOfMemoryError) {{ behave @print(6402u64); }};
 func stable=copied();
@@ -517,7 +517,7 @@ using "std:exceptions" OutOfMemoryError;
 using "std:exceptions" InvalidCapacityError;
 data Packet { value:u64; }
 function later_argument(capacity:u64) -> const u64 {
-  owned region packet:Packet <- make Packet(capacity = capacity) { value <- 0u64 };
+  own region packet:Packet <- make Packet(capacity = capacity) { value <- 0u64 };
   return root(packet).value
 }
 behave @print(6001u64);
@@ -649,9 +649,9 @@ stress();
         scalar_results = directory / "closures/callable-native-scalar-results.cod"
         entry.write_text(scalar_results.read_text() + '''
 using "std:exceptions" OutOfMemoryError;
-func keep(owned region r:Item)->owned region :Item {return r;}
+func keep(own region r:Item)->own region :Item {return r;}
 proc installed()->void {
-  owned region r:Item<-make Item(capacity=256u64){value<-50u64;other<-0u64};
+  own region r:Item<-make Item(capacity=256u64){value<-50u64;other<-0u64};
   effect @arena <-keep(r);
   proc view=proc()->u64 {return @arena.value;};
   ref output=view();
@@ -726,7 +726,7 @@ proc allocation_failure(region state:Item,n:u64)->func()->const u64 with {region
   }}
 }
 proc stress()->void {
-  owned region state:Item<-make Item(capacity=256u64){value<-8u64};
+  own region state:Item<-make Item(capacity=256u64){value<-8u64};
   effect @arena<-make Item(capacity=256u64){value<-99u64};
   func result=walk(state,8u64);
   behave @print(6001u64);
@@ -762,7 +762,7 @@ proc allocation_failure(region state:Item,n:u64)->Item {
   }}
 }
 proc stress()->void {
-  owned region state:Item<-make Item(capacity=256u64){value<-8u64;other<-0u64};
+  own region state:Item<-make Item(capacity=256u64){value<-8u64;other<-0u64};
   effect @arena<-make Item(capacity=256u64){value<-99u64;other<-0u64};
   ref result=record(state,8u64);
   proc selected=reverse;
@@ -1107,27 +1107,27 @@ behave @print(7002u64);
 using "std:exceptions" OutOfMemoryError;
 behave @print(6001u64);
 try {{func failed=selected;{}}} catch(e:const OutOfMemoryError){{behave @print(6002u64);}};
-try {{owned region rejected<-failing(31337u64,0u64);}}
+try {{own region rejected<-failing(31337u64,0u64);}}
 catch(e:const OutOfMemoryError){{behave @print(41u64);}};
 try {{
-  owned region seed<-make State(capacity=256u64){value<-7u64};
+  own region seed<-make State(capacity=256u64){value<-7u64};
   ref fixed=root(seed);
-  owned region unused<-rotate(fixed,fixed,seed,current_reader(seed),3u64,31337u64);
+  own region unused<-rotate(fixed,fixed,seed,current_reader(seed),3u64,31337u64);
   behave @assert(false);
 }} catch(e:const OutOfMemoryError) {};
 try {{
-  owned region seed<-make State(capacity=256u64){value<-7u64};
+  own region seed<-make State(capacity=256u64){value<-7u64};
   staged_step(seed,staged_reader(seed),3u64,31337u64,true);
   behave @assert(false);
 }} catch(e:const OutOfMemoryError) {};
 try {{
-  owned region seed<-make State(capacity=256u64){value<-7u64};
+  own region seed<-make State(capacity=256u64){value<-7u64};
   proc unused=staged_factory(seed,stable,staged_reader(seed),3u64,31337u64);
   behave @assert(false);
 }} catch(e:const OutOfMemoryError) {};
 behave @print(7001u64);
 behave @print(fold(i in 0u64..10000u64,total=0u64){{
-  owned region result<-selected(256u64,i%97u64);
+  own region result<-selected(256u64,i%97u64);
   total+result.value
 }});
 behave @print(7002u64);

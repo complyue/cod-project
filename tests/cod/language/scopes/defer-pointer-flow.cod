@@ -127,7 +127,7 @@ behave @print(returning());
 data Node {value:u64;}
 region Arena {value:u64;}
 proc region_pointers()->void {
-  owned region r:Arena <- make Arena(capacity=512u64){value <- 30u64};
+  own region r:Arena <- make Arena(capacity=512u64){value <- 30u64};
   ref first = alloc r Node(31u64);
   ref second = alloc r Node(32u64);
   ptr selected = first;
@@ -193,7 +193,7 @@ proc reader(region r:Arena)->func()->const u64 with {region r} {
   return func[r]()->const u64 {return r.value;};
 }
 {{
-  owned region r:Arena <- make Arena(capacity=512u64){value <- 39u64};
+  own region r:Arena <- make Arena(capacity=512u64){value <- 39u64};
   func callback = reader(r);
   behave @print(callback());
 }};

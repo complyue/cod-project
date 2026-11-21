@@ -41,18 +41,18 @@ proc failure(region state:Item,n:u64)->Item {
  if(n==0u64){return root(state);}else{};
  {{effect @arena<-make Item(capacity=if(n==3u64){0u64}else{256u64}){value<-n;other<-0u64};return failure(state,n-1u64);}}
 }
-proc fresh_owner(n:u64)->owned region :Item {
+proc fresh_owner(n:u64)->own region :Item {
  if(n==0u64){return make Item(capacity=256u64){value<-90u64;other<-0u64};}else{};
  {{effect @arena<-make Item(capacity=256u64){value<-n;other<-0u64};return fresh_owner(n-1u64);}}
 }
-proc relay_owner(owned region state:Item,n:u64)->owned region :Item {
+proc relay_owner(own region state:Item,n:u64)->own region :Item {
  if(n!=0u64){
   {{effect @arena<-make Item(capacity=256u64){value<-n;other<-0u64};return relay_owner(state,n-1u64);}}
  }else{};
  return state;
 }
 proc run()->void {
- owned region state:Item<-make Item(capacity=2048u64){value<-8u64;other<-0u64};
+ own region state:Item<-make Item(capacity=2048u64){value<-8u64;other<-0u64};
  effect @arena<-make Item(capacity=256u64){value<-99u64;other<-0u64};
  ref result=record(state,20u64);
  behave @print(result.value);
@@ -85,9 +85,9 @@ proc run()->void {
  try {val ignored<-missing;}catch(e:const NullPointerException){behave @print(82u64);};
  try {ref failed_record=failure(state,20u64);}catch(e:const InvalidCapacityError){behave @print(result.value);};
  behave @print(@arena.value);
- owned region delivered:Item<-fresh_owner(20u64);
+ own region delivered:Item<-fresh_owner(20u64);
  behave @print(delivered.value);
- owned region transferred:Item<-relay_owner(delivered,20u64);
+ own region transferred:Item<-relay_owner(delivered,20u64);
  transferred.value<-91u64;
  behave @print(transferred.value);
 }

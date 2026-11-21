@@ -1,0 +1,6 @@
+using symbol "std:io" @print;
+
+func own(owned:u64) -> u64 { return owned + 1u64; }
+func owned(own:u64) -> u64 { return own + 2u64; }
+
+behave @print(own(owned(3u64)));

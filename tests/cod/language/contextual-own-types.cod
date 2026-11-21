@@ -1,0 +1,8 @@
+using symbol "std:io" @print;
+
+data own { own:u64; owned:u64; }
+data owned { own:u64; }
+
+ref left = make own { own <- 9u64; owned <- 4u64; };
+ref right = make owned { own <- 31u64; };
+behave @print(left.own + left.owned + right.own);

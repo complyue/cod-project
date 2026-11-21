@@ -5463,12 +5463,12 @@ class ScalarChecker {
   }
   size_t select_native_constructor(const Type &declared, const Type &constructed, const Expression &expr) const {
     if (declared.kind != Type::c_type_marker || constructed.kind != Type::c_type_marker)
-      fail(expr.at, "owned handle acquisition requires a fieldless data \"C\" type");
+      fail(expr.at, "'make own handle' requires a fieldless data \"C\" type");
     if (declared != constructed) fail(expr.at, "C handle constructor must match the declared owner type");
     const bool attached = expr.kind == Expression::Kind::make_borrowed_handle;
     const bool borrow_only = program_.schemas.at(constructed.identity).native_owner.has_value();
     if (borrow_only && !attached)
-      fail(expr.at, "borrow-only CType '" + constructed.name + "' cannot be acquired as an owned handle");
+      fail(expr.at, "borrow-only CType '" + constructed.name + "' cannot be acquired with 'make own handle'");
     if (attached && !borrow_only)
       fail(expr.at, "make handle requires a borrow-only CType with a declared owning CType");
     const auto constructor = std::ranges::find(program_.native_constructors, constructed, &CheckedNativeConstructor::handle);
@@ -10666,7 +10666,7 @@ class ScalarChecker {
       return Type::void_type;
     }
     case K::make_owned_handle:
-      if (state.required) implementation_gap(expr.at, "C handle acquisition outside a direct lexical owned handle initializer");
+      if (state.required) implementation_gap(expr.at, "C handle acquisition outside a direct lexical 'own handle' initializer");
       return {};
     case K::make_borrowed_handle: {
       if (state.required && read != EvidenceRead::native_loan)
@@ -16702,7 +16702,7 @@ class ScalarChecker {
                                        : check_native_borrow_binding(expr, instance, operations);
       break;
     case K::make_owned_handle:
-      implementation_gap(expr.at, "C handle acquisition outside a direct lexical owned handle initializer");
+      implementation_gap(expr.at, "C handle acquisition outside a direct lexical 'own handle' initializer");
     case K::make_borrowed_handle:
       if (native_loan != NativeLoanContext::borrow)
         implementation_gap(expr.at, "attached native handle construction outside a checked borrowed argument");

@@ -25,7 +25,7 @@ function select_cursor(ref a:Cursor in state, ref b:Cursor in state, flag:bool)
     where {region state:State} -> func()->const u64 with {region state} throws NullPointerException {
   return if (flag) { following(a) } else { following(b) }
 }
-owned region state:State <- make State(capacity = 512u64) { choose_first <- true };
+own region state:State <- make State(capacity = 512u64) { choose_first <- true };
 ref first = alloc state CounterCell(1u64);
 ref second = alloc state CounterCell(2u64);
 func left = select(first, second, state.choose_first);
@@ -62,7 +62,7 @@ function pair(region later:State, region earlier:State)
     -> func()->const bool with {region later, region earlier} {
   return func [later, earlier] () -> const bool { return later.choose_first && earlier.choose_first }
 }
-owned region extra:State <- make State(capacity = 128u64) { choose_first <- false };
+own region extra:State <- make State(capacity = 128u64) { choose_first <- false };
 func paired = pair(extra, state);
 # Named roles must not be recovered from sorted region identities.
 behave @print((paired -> later).choose_first);

@@ -6,7 +6,7 @@ using "ObjectCompiler.cod" compile_object;
 
 proc "C" compile_cli(handle input:Path in A, handle output:Path in A,
                      handle diagnostic:DiagnosticDestination in D) -> u8 where {const owner A, owner D} {
-    owned handle catalog:IntrinsicCatalog <- make owned handle IntrinsicCatalog();
+    own handle catalog:IntrinsicCatalog <- make own handle IntrinsicCatalog();
     return catalog_use(catalog) (spellings, exports) => {
         continue compile_object(input, output, diagnostic, spellings, exports);
     };
