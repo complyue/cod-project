@@ -288,11 +288,13 @@ class LLVMEmission {
     if (type.kind == Type::product || type.kind == Type::native_handle) return nominal_base + type.identity;
     const auto array_base = nominal_base + program_->schemas.size();
     if (type.kind == Type::array) return array_base + type.identity;
+    const auto enum_base = array_base + program_->arrays.size();
+    if (type.kind == Type::enumeration) return enum_base + type.identity;
     if (type.kind == Type::procedure) {
       const auto found = std::find(callable_types_.begin(), callable_types_.end(), type);
       const auto id = std::distance(callable_types_.begin(), found);
       if (found == callable_types_.end()) callable_types_.push_back(type);
-      return array_base + program_->arrays.size() + id;
+      return enum_base + program_->enums.size() + id;
     }
     switch (type.kind) {
     case Type::integer: return 1; case Type::uint8: return 2; case Type::uint32: return 3;
@@ -309,6 +311,7 @@ class LLVMEmission {
     case Type::boolean: return b_.getInt1Ty(); case Type::float32: return b_.getFloatTy();
     case Type::float64: return b_.getDoubleTy();
     case Type::exception: return exception_;
+    case Type::enumeration: return native_type(program_->enums.at(type.identity).backing);
     default: throw std::logic_error("non-scalar native payload");
     }
   }
@@ -2289,6 +2292,19 @@ class LLVMEmission {
     const bool read = carries_value(projection);
     using K = Expression::Kind;
     const auto &fact = contexts_.front().at(&expr);
+    if (fact.enum_literal) {
+      std::map<std::pair<size_t, std::uint64_t>, std::vector<size_t>> alternatives;
+      for (size_t i = 0; i < contexts_.size(); ++i) {
+        const auto &member = contexts_[i].at(&expr);
+        alternatives[{member.type.identity, member.integer}].push_back(i);
+      }
+      return contextual_value(expr, alternatives, "enum.member", [&](const auto &member) {
+        const auto &[id, code] = member;
+        const Type type{Type::enumeration, program_->enums[id].source->name, id};
+        return pack(llvm::ConstantInt::get(llvm::cast<llvm::IntegerType>(native_type(type)), code), type);
+      });
+    }
+    if (fact.enum_assertion) return emit_expression(*expr.children.front(), projection, discard);
     if (fact.native_call)
       return temporary_scope(expr.at, scalar_, [&] {
         return program_->native_operations.at(*fact.native_call).has_here() ? emit_native_here(expr) : emit_native_call(expr);

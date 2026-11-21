@@ -30,6 +30,7 @@ export func record_export() -> u8 { return 4u8; }
 export func array_export() -> u8 { return 5u8; }
 export func nominal_exception_export() -> u8 { return 6u8; }
 export func callable_export() -> u8 { return 7u8; }
+export func enum_export() -> u8 { return 8u8; }
 export func print_export_identity() -> u64 { return 0u64; }
 export func exception_root_identity() -> u64 { return 0u64; }
 export func null_pointer_identity() -> u64 { return 4u64; }

@@ -3,11 +3,13 @@ using "Lexer.cod" {
     symbol_name, from_word, proc_word, func_word, ref_word, ptr_word, val_word, throws_word,
     where_word, owner_word, const_word, in_word, data_word, reserved_module_name,
     reserved_lexical_binder, array_word, export_word, handle_word, here_word, c_linkage,
+    enum_word, integer_literal,
 };
 using "ExpressionParser.cod" {
     exception_binder_width, ParseResult, punct_at, punct_pair_at, append_node, parse_identifier,
     callable_local_head, parse_symbol, parse_binding_name, parse_block, parse_next_expression,
     reset_parse_result, expected_name, expected_type,
+    integer_width, parse_integer_magnitude,
 };
 using "ParserStorage.cod" {
     exception_parameter_node, exception_result_node, ref_result_node, Tokens, ExprNodes,
@@ -17,6 +19,7 @@ using "ParserStorage.cod" {
     throws_clause_node, owner_clause_node, owned_type_node, c_handle_type_node, c_procedure_node,
     handle_parameter_node, here_parameter_node, data_record_node, c_record_node, data_parent_node,
     export_node, export_from_node, array_declaration_node, array_shape_node, readonly_declaration,
+    enum_declaration_node, enum_member_node, enum_integer_node,
 };
 using "SourceStorage.cod" SourceBytes;
 using "SourceAccess.cod" len as source_len;
@@ -31,6 +34,7 @@ func expected_array_shape() -> u8 { return 31u8; }
 func invalid_exception_owner() -> u8 { return 35u8; }
 func invalid_value_parameter_owner() -> u8 { return 41u8; }
 func expected_group_delimiter() -> u8 { return 44u8; }
+func expected_enum_member() -> u8 { return 45u8; }
 
 func parse_module_name(source:const SourceBytes in S, tokens:const Tokens in T,
                       nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> bool
@@ -515,6 +519,80 @@ func parse_array(source:const SourceBytes in S, tokens:const Tokens in T,
     append_node(nodes, result, array_declaration_node(), first, nodes[element].past, 0u64, name, shape, first);
 }
 
+func parse_enum_initializer(source:const SourceBytes in S, tokens:const Tokens in T,
+                            nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> bool
+    where {const owner S, const owner T, owner A, owner R} {
+    val first <- result.next;
+    val negative <- punct_at(source, tokens, first, past) == 45u8;
+    val at <- first + if (negative) { 1u64 } else { 0u64 };
+    if (at < past && tokens[at].kind == integer_literal()) {
+        val width <- integer_width(source, tokens[at]);
+        val magnitude <- parse_integer_magnitude(source, tokens[at], result, width);
+        if (result.diagnostic != 0u8) return false;
+        append_node(nodes, result, enum_integer_node(), tokens[first].first, tokens[at].past, magnitude,
+                    if (negative) { 1u64 } else { 0u64 }, width, tokens[first].first);
+        result.next <- at + 1u64;
+        return result.diagnostic == 0u8;
+    } else {};
+    if (!negative) return parse_module_name(source, tokens, nodes, result, past);
+    result.diagnostic <- expected_enum_member();
+    return false;
+}
+
+func parse_enum_member(source:const SourceBytes in S, tokens:const Tokens in T, nodes:ExprNodes in A,
+                       result:ParseResult in R, past:u64, previous:u64) -> bool
+    where {const owner S, const owner T, owner A, owner R} {
+    if (!parse_module_name(source, tokens, nodes, result, past)) return false;
+    val name <- result.root;
+    val initializer <- no_node();
+    if (punct_at(source, tokens, result.next, past) == 61u8) {
+        result.next <- result.next + 1u64;
+        if (!parse_enum_initializer(source, tokens, nodes, result, past)) return false;
+        (initializer <- result.root):void;
+    } else {};
+    if (punct_at(source, tokens, result.next, past) != 59u8) {
+        result.diagnostic <- expected_module_separator();
+        return false;
+    } else {};
+    val first <- nodes[name].first;
+    append_node(nodes, result, enum_member_node(), first, tokens[result.next].past, initializer, previous, name, first);
+    result.next <- result.next + 1u64;
+    return result.diagnostic == 0u8;
+}
+
+func parse_enum(source:const SourceBytes in S, tokens:const Tokens in T,
+                nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+    where {const owner S, const owner T, owner A, owner R} {
+    val first <- tokens[result.next].first;
+    result.next <- result.next + 1u64;
+    if (!parse_module_name(source, tokens, nodes, result, past)) return;
+    val name <- result.root;
+    if (punct_at(source, tokens, result.next, past) != 58u8) {
+        result.diagnostic <- expected_type();
+        return;
+    } else {};
+    result.next <- result.next + 1u64;
+    if (!parse_identifier(source, tokens, nodes, result, past, expected_type())) return;
+    val backing <- result.root;
+    if (punct_at(source, tokens, result.next, past) != 123u8) {
+        result.diagnostic <- expected_enum_member();
+        return;
+    } else {};
+    result.next <- result.next + 1u64;
+    val member <- no_node();
+    for (unused in result.next .. past) {
+        if (punct_at(source, tokens, result.next, past) == 125u8) {
+            if (member == no_node()) { result.diagnostic <- expected_enum_member(); return; } else {};
+            append_node(nodes, result, enum_declaration_node(), first, tokens[result.next].past, backing, name, member, first);
+            result.next <- result.next + 1u64;
+            return;
+        } else {};
+        if (!parse_enum_member(source, tokens, nodes, result, past, member)) return;
+        member <- result.root;
+    };
+    (result.diagnostic <- expected_enum_member()):void;
+}
+
 func parse_module_form(source:const SourceBytes in S, tokens:const Tokens in T,
                        nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
     where {const owner S, const owner T, owner A, owner R} {
@@ -535,6 +613,10 @@ func parse_module_form(source:const SourceBytes in S, tokens:const Tokens in T,
         parse_array(source, tokens, nodes, result, past);
         return;
     } else {};
+    if (enum_word(source, tokens[at]) && named_declaration) {
+        parse_enum(source, tokens, nodes, result, past);
+        return;
+    } else {};
     if (export_word(source, tokens[at])) {
         parse_publication(source, tokens, nodes, result, past);
         return;
@@ -549,7 +631,7 @@ func named_definition_head(source:const SourceBytes in S, tokens:const Tokens in
     return ((func_word(source, tokens[at]) || proc_word(source, tokens[at])) &&
             !callable_local_head(source, tokens, at, past)) ||
         (data_word(source, tokens[at]) && (next_kind == identifier() || next_kind == module_path())) ||
-        (array_word(source, tokens[at]) && next_kind == identifier());
+        ((array_word(source, tokens[at]) || enum_word(source, tokens[at])) && next_kind == identifier());
 }
 
 func parse_module_item(source:const SourceBytes in S, tokens:const Tokens in T,
@@ -575,7 +657,7 @@ func parse_module_item(source:const SourceBytes in S, tokens:const Tokens in T,
         (result.next <- result.next + 1u64):void;
     } else {
         val definition <- (kind == callable_node() || kind == c_procedure_node()) && nodes[form].right != no_node();
-        val delimited <- definition || kind == c_record_node() || kind == data_record_node();
+        val delimited <- definition || kind == c_record_node() || kind == data_record_node() || kind == enum_declaration_node();
         if (!delimited) { result.diagnostic <- expected_module_separator(); return false; } else {};
     };
     val first <- tokens[at].first;
