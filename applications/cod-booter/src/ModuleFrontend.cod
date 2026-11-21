@@ -5,7 +5,7 @@ using "ParserStorage.cod" {
     reserves_storage, construction_type_query_node, name_node, literal_node, bool_node,
     field_access_node, index_access_node, array_length_node, catch_binding_node, handle_local,
     handle_construction, handle_parameter_node, here_parameter_node, here_call_node, Tokens,
-    ExprNodes, no_node,
+    ExprNodes, no_node, type_assertion_node,
 };
 using "SourceStorage.cod" SourceBytes;
 using "Frontend.cod" { FrontendResult, read_module };
@@ -24,6 +24,7 @@ using "NativeDeclarations.cod" {
 };
 using "OperandChecking.cod" { OperandFacts, CallOwners, OperandCheckResult, check_module_operands };
 using "CompletionChecking.cod" { CompletionSites, CompletionCheckResult, check_module_completion };
+using "DeclarationTypes.cod" unproved_type_assertion;
 
 export data ModuleBindingResult {
     frontend:FrontendResult;
@@ -99,6 +100,7 @@ func unsupported_source_form(nodes:const ExprNodes in N, at:u64, emit_object:boo
     if (kind == make_exception_node()) return 33u8;
     if (kind == ref_result_node()) return 35u8;
     if (kind == make_named_node() && !supported_construction_shape(nodes, at)) return unsupported_ordinary_construction();
+    if (emit_object && kind == type_assertion_node()) return unproved_type_assertion();
     if (emit_object && kind == field_access_node()) return 38u8;
     if (emit_object && kind == index_access_node()) return 39u8;
     if (emit_object && kind == array_length_node()) return unsupported_array_length();
@@ -135,12 +137,11 @@ func check_source_profile(nodes:const ExprNodes in N, used:u64, emit_object:bool
     return true;
 }
 
-# Bind the retained syntax against the dependency targets discovered for it.
-export func bind_parsed_module(source:const SourceBytes in S, nodes:const ExprNodes in N,
-                               spellings:const SourceBytes in B, exports:const ModuleExports in E,
-                               selected:SelectedExports in X, bindings:NameBindings in Y,
-                               work:NameWork in W, emit_object:bool, result:ModuleBindingResult in R) -> bool
-    where {const owner S, const owner N, const owner B, const owner E, owner X, owner Y, owner W, owner R} {
+# Resolve resource selections in the retained syntax against its discovered dependencies.
+export func select_parsed_module(source:const SourceBytes in S, nodes:const ExprNodes in N,
+                                spellings:const SourceBytes in B, exports:const ModuleExports in E,
+                                selected:SelectedExports in X, emit_object:bool, result:ModuleBindingResult in R) -> bool
+    where {const owner S, const owner N, const owner B, const owner E, owner X, owner R} {
     result.stage <- 0u8;
     result.diagnostic <- 0u8;
     result.related_first <- no_node();
@@ -150,6 +151,13 @@ export func bind_parsed_module(source:const SourceBytes in S, nodes:const ExprNo
         binding_diagnostic(nodes, result, module_selection_failed(), publication.diagnostic, publication.node);
         return false;
     } else {};
+    return true;
+}
+
+export func bind_selected_module(source:const SourceBytes in S, nodes:const ExprNodes in N,
+                                 selected:const SelectedExports in X, bindings:NameBindings in Y,
+                                 work:NameWork in W, emit_object:bool, result:ModuleBindingResult in R) -> bool
+    where {const owner S, const owner N, const owner X, owner Y, owner W, owner R} {
     ref names = make NameResolutionResult { diagnostic <- 0u8; node <- no_node(); enclosing_defer <- no_node(); };
     if (!resolve_module_names(source, nodes, result.frontend.tree, selected, bindings, work, !emit_object, names)) {
         binding_diagnostic(nodes, result, module_binding_failed(), names.diagnostic, names.node);
@@ -190,7 +198,8 @@ export func bind_module(source:const SourceBytes in S, tokens:Tokens in T, nodes
         binding_diagnostic(nodes, result, module_selection_failed(), export_storage_exhausted(), no_node());
         return false;
     } else {};
-    return bind_parsed_module(source, nodes, spellings, exports, selected, bindings, work, true, result);
+    if (!select_parsed_module(source, nodes, spellings, exports, selected, true, result)) return false;
+    return bind_selected_module(source, nodes, selected, bindings, work, true, result);
 }
 
 # A successful operand analysis supplies the facts for checking completion.
