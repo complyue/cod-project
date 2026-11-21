@@ -295,6 +295,7 @@ struct CheckedNativeConstructor {
   std::vector<CheckedNativeInput> inputs;
   std::optional<Type> failure;
   std::optional<Type> parent = {};
+  std::optional<size_t> retained_parent = {};
 };
 
 struct CheckedNativeEntry {

@@ -10707,10 +10707,10 @@ class ScalarChecker {
       const auto &input = constructor.inputs[i];
       const auto &operand = *initializer.children[i];
       const auto value = type_evidence(operand, state, false, nullptr, nullptr, ExpectedTypeUse::materialization, completes,
-          input.owner ? EvidenceRead::native_loan : EvidenceRead::payload);
+          input.type.kind == Type::c_type_marker ? EvidenceRead::native_loan : EvidenceRead::payload);
       completes = completes && value != Type::never;
       if (state.required && value && *value != Type::never) {
-        if (input.owner) {
+        if (input.type.kind == Type::c_type_marker) {
           if (!matches_native_handle(*value, input.type))
             fail(operand.at, "C constructor requires a handle of type '" + input.type.name + "'");
         } else transfer_type(*value, input.type, operand.at);
@@ -16020,7 +16020,7 @@ class ScalarChecker {
     for (size_t i = 0; i < constructor.inputs.size(); ++i) {
       const auto &operand = *initializer.children[i];
       const auto &input = constructor.inputs[i];
-      if (input.owner) {
+      if (input.type.kind == Type::c_type_marker) {
         const auto value = check_handle_loan(operand, instance, operations);
         if (value.type == Type::never) {
           completes = false;
@@ -16030,6 +16030,16 @@ class ScalarChecker {
             fail(operand.at, "C constructor requires a handle of type '" + input.type.name + "'");
           const auto actual = one_owner(value);
           if (!actual) implementation_gap(operand.at, "a C handle borrow without one proven live owner");
+          if (constructor.retained_parent == i) {
+            const bool readonly = constructor.source->parameters[i].read_only;
+            if (!readonly && (value.read_only || const_native_owner(*actual)))
+              fail(operand.at, "readonly handle cannot supply a writable C constructor parent");
+            // The actual parent is live at preparation. A local parent was
+            // acquired before this fixed lexical owner, so reverse cleanup
+            // keeps it live until after the dependent destructor. An input
+            // loan lasts through this activation's cleanup.
+            continue;
+          }
           const auto &role = constructor.source->owner_parameters[*input.owner];
           if (!role.read_only && const_native_owner(*actual)) fail(operand.at, "const owner cannot supply a writable C constructor owner");
           if (value.read_only && !constructor.source->parameters[i].read_only)
@@ -19208,7 +19218,8 @@ class ScalarChecker {
            program_.schemas.at(known->second).source->name + "' and '" + program_.schemas.at(owner).source->name + "'");
   }
   std::vector<CheckedNativeInput> checked_native_inputs(const Form &form, const std::string &boundary,
-                                                        bool readonly_arrays = false) const {
+                                                        bool readonly_arrays = false,
+                                                        std::optional<size_t> retained_parent = {}) const {
     std::vector<CheckedNativeInput> inputs;
     std::set<std::string> names;
     std::map<std::string, size_t> native_owners;
@@ -19220,6 +19231,11 @@ class ScalarChecker {
       std::optional<size_t> role;
       const bool handle = parameter.declaration_kind == "handle";
       const bool array = readonly_arrays && parameter.declaration_kind == "ref" && type.kind == Type::array;
+      if (retained_parent == inputs.size()) {
+        if (type.kind != Type::c_type_marker) fail(parameter.at, "C constructor parent requires a 'handle type' name");
+        inputs.push_back({type, {}});
+        continue;
+      }
       if (handle || array) {
         const auto owner = std::ranges::find(form.owner_parameters, parameter.owner, &OwnerParameter::name);
         if (owner == form.owner_parameters.end() || owner->root || owner->explicit_parameter)
@@ -19262,9 +19278,17 @@ class ScalarChecker {
       fail(form.at, "a C handle constructor requires a named, bodyless declaration without an explicit result or type parameters");
     if (std::ranges::any_of(program_.native_constructors, [&](const auto &existing) { return existing.handle == handle; }))
       implementation_gap(form.at, "multiple C constructor declarations for '" + handle.name + "'");
-    CheckedNativeConstructor constructor{&form, handle, checked_native_inputs(form, "C constructor"), {}};
-    if (const auto parent = program_.schemas.at(handle.identity).native_owner)
+    const auto within = std::ranges::find_if(form.parameters, [](const auto &parameter) {
+      return parameter.declaration_kind == "handle" && parameter.name == "within" && parameter.owner.empty();
+    });
+    std::optional<size_t> retained_parent;
+    if (within != form.parameters.end()) retained_parent = std::distance(form.parameters.begin(), within);
+    CheckedNativeConstructor constructor{
+        &form, handle, checked_native_inputs(form, "C constructor", false, retained_parent), {}, {}, retained_parent};
+    if (const auto parent = program_.schemas.at(handle.identity).native_owner) {
+      if (retained_parent) fail(within->at, "a C constructor parent requires an owning handle type");
       constructor.parent = Type{Type::c_type_marker, program_.schemas.at(*parent).source->name, *parent};
+    }
     if (!form.throws_types.empty()) {
       const auto type = resolve_type(form.throws_types.front());
       if (!nominal_exception(type)) implementation_gap(form.at, "C constructor failures other than a concrete library-defined exception");
@@ -19344,7 +19368,8 @@ class ScalarChecker {
     for (const auto &constructor : program_.native_constructors) {
       record(constructor.handle, constructor.source->at);
       if (constructor.parent) record(*constructor.parent, constructor.source->at);
-      for (const auto &input : constructor.inputs) if (input.owner) record(input.type, constructor.source->at);
+      for (const auto &input : constructor.inputs)
+        if (input.type.kind == Type::c_type_marker) record(input.type, constructor.source->at);
     }
     std::set<std::string_view> entries;
     for (const auto &entry : program_.native_entries) {

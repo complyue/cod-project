@@ -9,6 +9,7 @@ using "ParserStorage.cod" {
     typed_name_node, val_binding_node, here_call_node, call_node, full_scope_node, continue_node,
     break_node, return_node, narrow_integer_node, is_function, owner_clause_node,
     result_clause_node, throws_clause_node, field_access_node, import_node, local_resource_name,
+    retained_parent_parameter,
 };
 using "NameResolution.cod" {
     NameBindings, NameWork, first_item, signature_head, signature_clause, record_declaration,
@@ -430,14 +431,27 @@ func check_c_callback(nodes:const ExprNodes in N, names:const NameBindings in B,
     };
 }
 
+func retains_parent(nodes:const ExprNodes in N, parameter:u64) -> bool where {const owner N} {
+    return nodes[parameter].kind == handle_parameter_node() && nodes[parameter].number == retained_parent_parameter();
+}
+
 func check_c_arguments(nodes:const ExprNodes in N, names:const NameBindings in B, work:NameWork in W,
-                       selected:const SelectedExports in E, first:u64, direction:u8,
+                       selected:const SelectedExports in E, first:u64, direction:u8, owning_constructor:bool,
                        report:NativeDeclarationResult in R) -> void
     where {const owner N, const owner B, owner W, const owner E, owner R} {
     val parameter <- first;
+    val marker <- no_node();
     for (unused in 0u64 .. intrinsic (len)(nodes)) {
         if (parameter == no_node()) return;
-        check_native_argument(nodes, names, work, selected, parameter, direction, report);
+        if (direction == c_constructor() && retains_parent(nodes, parameter)) {
+            marker <- nodes[nodes[parameter].right].right;
+            if (!owning_constructor || !native_handle_marker(names, selected, marker)) {
+                reject_declaration(report, parameter, invalid_native_parameter());
+                return;
+            } else {};
+        } else {
+            check_native_argument(nodes, names, work, selected, parameter, direction, report);
+        };
         if (report.diagnostic != 0u8) return;
         parameter <- work[parameter].next;
     };
@@ -507,7 +521,8 @@ func check_c_procedure(nodes:const ExprNodes in N, names:const NameBindings in B
         } else {};
         (callback <- first):void;
     } else {};
-    check_c_arguments(nodes, names, work, selected, parameter, direction, report);
+    val owning_constructor <- direction == c_constructor() && nodes[names[form].declaration].right == no_node();
+    check_c_arguments(nodes, names, work, selected, parameter, direction, owning_constructor, report);
     if (report.diagnostic != 0u8) return;
     if (callback != no_node()) {
         check_c_callback(nodes, names, work, selected, callback, work[callback].next, nodes[result].right, report);
@@ -620,6 +635,14 @@ func describe_parameter(nodes:const ExprNodes in N, names:const NameBindings in 
     val annotation <- nodes[binding].right;
     write_interface_header(row, 0u64, 0u64, 0u8, 0u8, 0u64);
     val mode <- nodes[formal].kind;
+    if (retains_parent(nodes, formal)) {
+        row.value_kind <- c_handle_type();
+        row.type_module <- type_module(names, selected, annotation, current_module);
+        row.type_identity <- type_identity(names, selected, annotation);
+        row.target_readonly <- if (nodes[binding].number != 0u64) { 1u8 } else { 0u8 };
+        row.owner_readonly <- row.target_readonly;
+        return;
+    } else {};
     if (mode == handle_parameter_node() || mode == ref_parameter_node()) {
         val marker <- nodes[annotation].left;
         val role <- names[nodes[annotation].right].declaration;
@@ -707,7 +730,7 @@ func check_imported_constructor(nodes:const ExprNodes in N, names:const NameBind
         operand <- nodes[actual].right;
         if (!match_constructor_parameter(nodes, names, selected, contracts[row], work, operand, loan, report))
             return;
-        if (contracts[row].value_kind == c_handle_type()) {
+        if (contracts[row].value_kind == c_handle_type() && contracts[row].owner_role != no_node()) {
             role <- contracts[row].owner_role;
             if (!shares_imported_owner(contracts, work, head + 1u64, row, first, role, loan.owner)) {
                 reject_declaration(report, operand, mismatched_actual_handle_owner());
@@ -746,7 +769,7 @@ func check_constructor_arguments(nodes:const ExprNodes in N, names:const NameBin
         operand <- nodes[actual].right;
         describe_parameter(nodes, names, selected, formal, 0u64, false, parameter);
         if (!match_constructor_parameter(nodes, names, selected, parameter, work, operand, loan, report)) return;
-        if (parameter.value_kind == c_handle_type()) {
+        if (parameter.value_kind == c_handle_type() && parameter.owner_role != no_node()) {
             owner <- parameter.owner_role;
             role_name <- nodes[owner].right;
             if (work[role_name].active == at && work[owner].active != loan.owner) {
