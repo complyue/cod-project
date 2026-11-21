@@ -1735,7 +1735,8 @@ class LLVMEmission {
       plans[*contexts_[i].at(&expr).native_acquisition].push_back(i);
     return contextual_value(expr, plans, "native.attach", [&](const auto &plan) {
       return temporary_scope(expr.at, b_.getPtrTy(), [&]() -> llvm::Value * {
-        auto *owner = native_reborrow(load(storage_.at(*plan.parent_place)));
+        auto *owner = plan.parent_borrow ? binding_address(*plan.parent_borrow, plan.parent_place)
+                                        : native_reborrow(load(storage_.at(*plan.parent_place)));
         auto *pair = native_handle_pair();
         auto *owner_word = b_.CreateLoad(b_.getInt64Ty(), b_.CreateStructGEP(pair, owner, 1));
         auto *child = slot(pair, "native.child.borrow");

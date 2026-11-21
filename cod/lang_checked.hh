@@ -224,6 +224,7 @@ class ScalarChecker {
   std::vector<CheckedBinding> *bindings_ = nullptr;
   std::map<size_t, std::vector<size_t>> scope_storage_;
   std::map<size_t, size_t> native_resource_owners_, native_owner_scopes_;
+  std::set<size_t> scope_native_owner_places_;
   std::map<const Expression *, size_t> checked_scope_owners_;
   bool proving_ = false;
   bool validating_ = false;
@@ -13501,7 +13502,7 @@ class ScalarChecker {
           candidate.here_reception != inputs.here_reception ||
           candidate.here_input_owners != inputs.here_input_owners || candidate.here_snapshots != inputs.here_snapshots ||
           candidate.nonnull != inputs.nonnull || candidate.live_values != inputs.live_values ||
-          candidate.live_bindings != inputs.live_bindings ||
+          candidate.live_bindings != inputs.live_bindings || candidate.native_owner_inputs != inputs.native_owner_inputs ||
           candidate.place_access != inputs.place_access || candidate.place_owners != inputs.place_owners ||
           candidate.overlapping_input_bindings != inputs.overlapping_input_bindings ||
           candidate.boolean_conditions != inputs.boolean_conditions ||
@@ -13533,13 +13534,15 @@ class ScalarChecker {
     profiles.push_back(id);
     return id;
   }
-  size_t scope_owner_role(CheckedMethod::ScopeInputs &inputs, std::vector<size_t> &owners, size_t actual, const Location &at) const {
+  size_t scope_owner_role(CheckedMethod::ScopeInputs &inputs, std::vector<size_t> &owners, size_t actual,
+                          const Location &at, bool native = false) const {
     if (lexical_.live && !owner_alive(actual)) fail(at, "full-scope input owner has ended");
     const auto found = std::ranges::find(owners, actual);
     const auto role = std::distance(owners.begin(), found);
     if (found == owners.end()) {
       owners.push_back(actual);
-      inputs.owners.push_back({"$scope.owner." + std::to_string(role), {}, at, false, const_owner(actual)});
+      const bool readonly = native ? const_native_owner(actual) : const_owner(actual);
+      inputs.owners.push_back({"$scope.owner." + std::to_string(role), {}, at, false, readonly});
     }
     return role;
   }
@@ -13742,6 +13745,24 @@ class ScalarChecker {
       Parameter parameter; parameter.name = capture.name; parameter.at = capture.at;
       parameter.declaration_kind = independent ? "val" : !live_value && source->requires_initialized ? "ref" : "ptr";
       const auto &operand = scope_operand(method_id, capture);
+      if (source && source->type.kind == Type::native_handle) {
+        auto view = check_handle_loan(operand, instance, operations);
+        const auto owner = *one_owner(view);
+        const auto role = scope_owner_role(inputs, operation.scope_owners, owner, capture.at, true);
+        parameter.declaration_kind = "handle";
+        parameter.owner = inputs.owners[role].name;
+        parameter.read_only = view.read_only;
+        parameter.fixed_binding = true;
+        if (source->type.owned || (view.place && scope_native_owner_places_.contains(*view.place)))
+          inputs.native_owner_inputs.insert(arguments.size());
+        inputs.nonnull.push_back(true);
+        inputs.parameters.push_back(std::move(parameter));
+        operation.argument_sources->push_back(&operand);
+        operation.arguments.push_back({ArgumentMode::borrowed_handle, view.type, false});
+        arguments.push_back(view.type);
+        views.push_back(std::move(view));
+        continue;
+      }
       const auto type = check(operand, instance, operations, independent);
       auto view = operations.at(&operand);
       if (!lexical_value_type(type) && !(live_binding && type.kind == Type::product))
@@ -16067,22 +16088,24 @@ class ScalarChecker {
     const auto id = select_native_constructor(type, type, expr);
     const auto &owner_type = *program_.native_constructors[id].parent;
     const auto binding = lexical_.lookup(expr.owner_name);
-    if (!binding || !matches_native_handle(bindings_->at(*binding).type, owner_type) || !bindings_->at(*binding).type.owned)
+    if (!binding || !matches_native_handle(bindings_->at(*binding).type, owner_type))
       fail(expr.at, "make handle requires a live owned '" + owner_type.name + "' handle");
     Expression source{};
     source.kind = Expression::Kind::name;
     source.text = expr.owner_name;
     source.at = expr.at;
-    const auto owner = read_binding(source, true, binding, BindingUse::native_loan);
-    if (!owner.place || !native_resource_owners_.contains(*owner.place))
-      implementation_gap(expr.at, "attached native handle construction without a direct owning binding");
-    if (owner.read_only) fail(expr.at, "a readonly native handle cannot attach a child");
-    CheckedOperation::NativeAcquisition acquisition{id, &expr, owner.place};
+    const auto owner = read_native_loan(source, *binding);
+    const bool projected_owner = owner.place && scope_native_owner_places_.contains(*owner.place);
+    if (!owner.reborrows_native_owner && !projected_owner)
+      fail(expr.at, "make handle requires a live owned '" + owner_type.name + "' handle");
+    if (owner.read_only || const_native_owner(*one_owner(owner)))
+      fail(expr.at, "a readonly native handle cannot attach a child");
+    CheckedOperation::NativeAcquisition acquisition{id, &expr, owner.place, projected_owner ? owner.binding : std::nullopt};
     const bool completes = prepare_native_acquisition(acquisition, instance, operations);
     CheckedOperation operation;
     operation.type = completes ? native_handle_type(type, false) : Type{Type::never};
     operation.view = true;
-    operation.owners = {native_resource_owners_.at(*owner.place)};
+    operation.owners = owner.owners;
     operation.native_acquisition = std::move(acquisition);
     return operation;
   }
@@ -18179,7 +18202,7 @@ class ScalarChecker {
       rebound_.clear(); payload_writes_ = {}; loop_states_.clear(); deferred_product_writes_.clear();
     }
     lexical_ = {}; cleanup_ = CleanupEquations{program_.exception_types}; scope_storage_.clear(); checked_scope_owners_.clear(); read_sites_.clear(); external_owners_.clear();
-    native_resource_owners_.clear(); native_owner_scopes_.clear();
+    native_resource_owners_.clear(); native_owner_scopes_.clear(); scope_native_owner_places_.clear();
     declared_sites_.clear(); declared_requirements_.clear();
     deferred_actions_with_checked_scopes_.clear();
     loop_controls_.clear(); delayed_controls_.clear(); deferred_inputs_.clear(); active_loops_.clear();
@@ -18465,6 +18488,8 @@ class ScalarChecker {
                                 value || live_value, parameter.at, !checking_method_->scope_inputs, &entry);
         const auto binding = storage_->at(id).binding;
         instance.frame.inputs.push_back({id, mode, live_binding || caller_bindings(*checking_method_)});
+        if (const auto &profile = checking_method_->scope_inputs; profile && profile->native_owner_inputs.contains(p))
+          scope_native_owner_places_.insert(id);
         if (const auto &profile = checking_method_->scope_inputs; profile && profile->place_owners.contains(p)) {
           auto &owners = bindings_->at(binding).place_owners;
           owners.clear();

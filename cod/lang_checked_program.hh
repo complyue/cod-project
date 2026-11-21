@@ -101,6 +101,7 @@ struct CheckedOperation {
     size_t constructor;
     const Expression *initializer;
     std::optional<size_t> parent_place = {};
+    std::optional<size_t> parent_borrow = {};
     auto operator<=>(const NativeAcquisition &) const = default;
   };
   std::optional<NativeAcquisition> native_acquisition;
@@ -593,6 +594,8 @@ struct CheckedMethod {
     std::set<size_t> live_values;
     // A reference input carries the supplier's binding slot.
     std::set<size_t> live_bindings;
+    // A direct scope capture borrows the supplying owner's native handle.
+    std::set<size_t> native_owner_inputs;
     // Several lexical names can designate one transported place.
     std::map<std::string, PlaceAccess> place_access;
     std::map<size_t, std::set<size_t>> place_owners;
