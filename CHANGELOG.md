@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-21 — Typed enums and checked by-value C exchange
+
+<a id="h-typed-enum-20261121"></a>
+**H-TYPED-ENUM-20261121.** On 2026-11-21 (America/Los_Angeles) in the [typed-enum chat](codex://threads/01a1fe3d-af02-7662-bb40-d06a93504a1d), the project user proposed a backed typed enum with generated C exchange, selected imports, typed member expressions and case matching. The user added “定义内部还允许起别名，实际值相同，exhaustiveness 检查时覆盖任意别名都行，用于用户程序的新旧并行过渡期。” They delegated qualification and implementation handoff: “从全面性角度把下关，祂考虑周全没什么问题的话交给主线落实”. This covers the feature and its review scope, with detailed choices attributable to the following design review.
+
+<a id="k-typed-enum-review-20261121"></a>
+**K-TYPED-ENUM-REVIEW-20261121.** The delegated [design review](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) qualifies D-07-ENUM and D-20-C-ENUM at enum r1, D-07r201 / interop r18 / registry r1032 (P-658–P-661). It resolves numbering, member lookup and coverage, by-value membership validation and invalid-code handling. The CLI also returns code 7 from `761ce948fef0e35cbe404c7bc3631358c86994a6:applications/cod-booter/src/ModuleDriver.cod`. Implementation and build configuration are distinct; shared native storage and permanent ABI remain outside this decision.
+
 ## 2026-11-21 — Name the static type of a catch binding
 
 <a id="k-catch-root-spelling-20261121"></a>
