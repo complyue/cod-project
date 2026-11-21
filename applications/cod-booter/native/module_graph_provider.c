@@ -287,12 +287,22 @@ cod_native_status cod_native_follow_graph_dependencies_impl(cod_native_ModuleFra
     return COD_NATIVE_OK;
 }
 
+static void append_spelling(module_graph *graph, const uint8_t *source, uint64_t *first, uint64_t *past) {
+    const size_t width = (size_t)(*past - *first);
+    if (width == 0) return;
+    memcpy(graph->spellings + graph->spelling_count, source + *first, width);
+    *first = graph->spelling_count;
+    graph->spelling_count += width;
+    *past = graph->spelling_count;
+}
+
 cod_native_status cod_native_commit_graph_exports_impl(cod_native_ModuleFrame_borrow handle,
     cod_native_commit_graph_exports_view1 source, uint8_t *status) {
     module_frame *frame = frame_from_handle(handle);
     if (!frame || frame->views_live || frame->progress.count > frame->nodes ||
         frame->progress.interface_count > frame->nodes) return COD_NATIVE_BOUNDARY_ERROR;
     const export_row *staged = frame_array(frame, 5);
+    const interface_row *staged_interfaces = frame_array(frame, 6);
     module_graph *graph = frame->graph;
     size_t spelling_end = graph->spelling_count;
     const size_t count = (size_t)frame->progress.count;
@@ -308,6 +318,13 @@ cod_native_status cod_native_commit_graph_exports_impl(cod_native_ModuleFrame_bo
         if (width > SIZE_MAX - spelling_end) return COD_NATIVE_OK;
         spelling_end += width;
     }
+    for (size_t i = 0; i < interface_count; ++i) {
+        if (staged_interfaces[i].name_first > staged_interfaces[i].name_past ||
+            staged_interfaces[i].name_past > source.count) return COD_NATIVE_BOUNDARY_ERROR;
+        const size_t width = (size_t)(staged_interfaces[i].name_past - staged_interfaces[i].name_first);
+        if (width > SIZE_MAX - spelling_end) return COD_NATIVE_OK;
+        spelling_end += width;
+    }
     *status = COD_REGION_STORAGE_NO_MEMORY;
     unsigned char *spellings = reserve(graph->spellings, &graph->spelling_capacity, spelling_end, 1);
     if (!spellings) return COD_NATIVE_OK;
@@ -320,17 +337,16 @@ cod_native_status cod_native_commit_graph_exports_impl(cod_native_ModuleFrame_bo
                                                 graph->interface_count + interface_count, sizeof(*interfaces));
         if (!interfaces) return COD_NATIVE_OK;
         graph->interfaces = interfaces;
-        memcpy(interfaces + graph->interface_count, frame_array(frame, 6), interface_count * sizeof(*interfaces));
-        graph->interface_count += interface_count;
     }
     for (size_t i = 0; i < count; ++i) {
         export_row row = staged[i];
-        const size_t width = (size_t)(row.name_past - row.name_first);
-        memcpy(graph->spellings + graph->spelling_count, source.base + row.name_first, width);
-        row.name_first = graph->spelling_count;
-        graph->spelling_count += width;
-        row.name_past = graph->spelling_count;
+        append_spelling(graph, source.base, &row.name_first, &row.name_past);
         graph->exports[graph->export_count++] = row;
+    }
+    for (size_t i = 0; i < interface_count; ++i) {
+        interface_row row = staged_interfaces[i];
+        append_spelling(graph, source.base, &row.name_first, &row.name_past);
+        graph->interfaces[graph->interface_count++] = row;
     }
     *status = COD_REGION_STORAGE_OK;
     return COD_NATIVE_OK;

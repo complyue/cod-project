@@ -8,7 +8,7 @@ using "ParserStorage.cod" { Tokens, ExprNodes, no_node };
 using "TokenBuffer.cod" ScanResult;
 using "ExpressionParser.cod" ParseResult;
 using "Frontend.cod" { FrontendResult, read_module };
-using "ModuleExportStorage.cod" { ModuleExports, NativeInterfaces };
+using "ModuleExportStorage.cod" { ModuleExports, ModuleInterfaces };
 using "ModuleExports.cod" { SelectedExports, next_module_dependency, prepare_module_dependencies };
 using "ModuleFrontend.cod" {
     ModuleBindingResult, bind_parsed_module, module_read_failed, module_binding_failed,
@@ -16,9 +16,10 @@ using "ModuleFrontend.cod" {
 };
 using "NameResolution.cod" { NameBindings, NameWork };
 using "NativeDeclarations.cod" {
-    ModulePublication, NativeDeclarationResult, check_selected_interfaces, publish_interfaces,
+    ModulePublication, NativeDeclarationResult, check_module_interfaces, publish_interfaces,
     publish_module_exports,
 };
+using "DeclarationTypes.cod" { prepare_projection_types, publish_record_interfaces };
 using "Compiler.cod" {
     ExpressionScratchPlan, native_complete, native_source_rejected, native_scratch_failed,
 };
@@ -42,8 +43,8 @@ proc "C" graph_frame_use(
     here work(ref tokens:Tokens in W, ref nodes:ExprNodes in W, ref selected:SelectedExports in W,
               ref names:NameBindings in W, ref work:NameWork in W, ref staged:ModuleExports in W,
               ref progress:ModuleProgressRows in W, ref spellings:const SourceBytes in W,
-              ref published:const ModuleExports in W, ref staged_interfaces:NativeInterfaces in W,
-              ref published_interfaces:const NativeInterfaces in W) -> u8,
+              ref published:const ModuleExports in W, ref staged_interfaces:ModuleInterfaces in W,
+              ref published_interfaces:const ModuleInterfaces in W) -> u8,
     handle frame:ModuleFrame in W) -> u8 where {owner W};
 proc "C" remember_graph_dependency(handle frame:ModuleFrame in W, ref source:const SourceBytes in S,
                                     val site:u64, val first:u64, val past:u64) -> u8
@@ -95,7 +96,7 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
                        selected:SelectedExports in W, names:NameBindings in W, work:NameWork in W,
                        staged:ModuleExports in W, progress:ModuleProgressRows in W,
                        spellings:const SourceBytes in W, published:const ModuleExports in W,
-                       staged_interfaces:NativeInterfaces in W, published_interfaces:const NativeInterfaces in W) -> u8
+                       staged_interfaces:ModuleInterfaces in W, published_interfaces:const ModuleInterfaces in W) -> u8
     where {const owner S, owner D, owner W} {
     ref result = make ModuleBindingResult {
         frontend <- make FrontendResult {
@@ -112,16 +113,18 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
                          result.frontend.diagnostic_first, result.frontend.diagnostic_past, result.related_first);
         return native_source_rejected();
     } else {};
-    ref imported = make NativeDeclarationResult { diagnostic <- 0u8; node <- no_node(); };
-    if (!check_selected_interfaces(nodes, names, selected, published_interfaces, work, result.frontend.tree.used, imported)) {
-        report_rejection(source, lines, diagnostic, module_binding_failed(), imported.diagnostic,
-                         nodes[imported.node].first, nodes[imported.node].past, no_node());
+    val used <- result.frontend.tree.used;
+    prepare_projection_types(source, nodes, names, selected, work, spellings, published_interfaces, used);
+    ref checked = make NativeDeclarationResult { diagnostic <- 0u8; node <- no_node(); };
+    if (!check_module_interfaces(nodes, names, selected, published_interfaces, work, used, checked)) {
+        report_rejection(source, lines, diagnostic, module_binding_failed(), checked.diagnostic,
+                         nodes[checked.node].first, nodes[checked.node].past, no_node());
         return native_source_rejected();
     } else {};
     ref publication = make ModulePublication { module_identity <- progress[0u64].identity; source_first <- 0u64; };
     val count <- 0u64;
     val conflict <- no_node();
-    if (!publish_module_exports(source, nodes, names, selected, publication, result.frontend.tree.used, staged, count, conflict)) {
+    if (!publish_module_exports(source, nodes, names, selected, publication, used, staged, count, conflict)) {
         if (conflict != no_node()) {
             report_rejection(source, lines, diagnostic, module_binding_failed(), 75u8,
                              nodes[conflict].first, nodes[conflict].past, no_node());
@@ -131,7 +134,11 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
         return native_scratch_failed();
     } else {};
     val interfaces <- publish_interfaces(nodes, names, selected, work, staged, count,
-                                             publication.module_identity, staged_interfaces);
+                                         publication.module_identity, staged_interfaces);
+    if (interfaces != no_node()) {
+        (interfaces <- publish_record_interfaces(nodes, names, selected, work, used, publication.module_identity,
+                                                 interfaces, staged_interfaces)):void;
+    } else {};
     if (interfaces == no_node()) {
         report_scratch_error(diagnostic, 1u32);
         return native_scratch_failed();

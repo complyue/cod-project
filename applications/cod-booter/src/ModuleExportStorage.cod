@@ -1,3 +1,5 @@
+using "ParserStorage.cod" no_node;
+
 # The name span and any builtin path span belong to the catalog's spelling
 # bytes. A source export names its publishing module independently of origin.
 export data ModuleExport {
@@ -16,20 +18,54 @@ export data ModuleExport {
 }
 export array ModuleExports[u64]:ModuleExport;
 
-# An interface header has parameter_kind zero. Its parameter records follow
-# in declaration order. A here operation lists its supplier, then receivers.
+# An interface header has value_kind zero and precedes its entries. A here
+# operation lists its supplier, then receivers. A record lists its fields.
 # Both declarations and nominal types retain their defining-module identity.
-export data NativeInterfaceRow {
+export data ModuleInterfaceRow {
     defining_module:u64;
     declaration:u64;
-    parameter_count:u64;
+    entry_count:u64;
     interface_kind:u8;
     result_kind:u8;
-    parameter_kind:u8;
+    value_kind:u8;
     type_module:u64;
     type_identity:u64;
     owner_role:u64;
     target_readonly:u8;
     owner_readonly:u8;
+    name_first:u64;
+    name_past:u64;
 }
-export array NativeInterfaces[u64]:NativeInterfaceRow;
+export array ModuleInterfaces[u64]:ModuleInterfaceRow;
+
+export func write_interface_header(row:ModuleInterfaceRow in R, defining_module:u64, declaration:u64,
+                                   kind:u8, result:u8, entries:u64) -> void where {owner R} {
+    row.defining_module <- defining_module;
+    row.declaration <- declaration;
+    row.entry_count <- entries;
+    row.interface_kind <- kind;
+    row.result_kind <- result;
+    row.value_kind <- 0u8;
+    row.type_module <- 0u64;
+    row.type_identity <- 0u64;
+    row.owner_role <- no_node();
+    row.target_readonly <- 0u8;
+    row.owner_readonly <- 0u8;
+    row.name_first <- 0u64;
+    (row.name_past <- 0u64):void;
+}
+
+export func find_interface(interfaces:const ModuleInterfaces in I, defining_module:u64, declaration:u64) -> u64
+    where {const owner I} {
+    val limit <- intrinsic (len)(interfaces);
+    val row <- 0u64;
+    val width <- 0u64;
+    for (unused in 0u64 .. limit) {
+        if (row >= limit || interfaces[row].value_kind != 0u8) return no_node();
+        width <- interfaces[row].entry_count;
+        if (width >= limit - row) return no_node();
+        if (interfaces[row].defining_module == defining_module && interfaces[row].declaration == declaration) return row;
+        row <- row + width + 1u64;
+    };
+    return no_node();
+}
